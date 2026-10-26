@@ -1,4 +1,4 @@
-//! One native observer feeds a bounded, per-call presentation worker.
+//! One per-call native observer feeds optional presentation and benchmark metadata.
 
 use std::{
     collections::VecDeque,
@@ -83,12 +83,7 @@ impl MonitorHandle {
         {
             pending.caller_phase = phase.to_owned();
         }
-        let initial = envelope.activity != Activity::Caller
-            && envelope.caller_phase.is_none()
-            && matches!(envelope.event, Event::Snapshot)
-            && envelope
-                .snapshot
-                .is_some_and(|snapshot| snapshot.sequence == 1);
+        let initial = MonitorContext::is_initial_snapshot(envelope);
         let forced = initial
             // A fast native batch still has one coherent final quantitative
             // sample, even when its regular sampling interval has not elapsed.
@@ -159,26 +154,57 @@ impl MonitorContext {
         options: &RustRedMonitorOptions,
         operation: impl FnOnce(Option<&mut Observer<'_>>) -> Result<T, VakintError>,
     ) -> Result<T, VakintError> {
-        if !options.enabled() {
+        // Collection is an explicit per-call option. The private log target
+        // controls delivery only; general log verbosity cannot enable an observer.
+        #[cfg(feature = "experimental-rustred")]
+        let benchmark = options.cache_hit_diagnostic;
+        #[cfg(not(feature = "experimental-rustred"))]
+        let benchmark = false;
+        if benchmark {
+            options.validate().map_err(|error| {
+                VakintError::EvaluationError(format!("invalid RustRed monitor options: {error}"))
+            })?;
+        }
+        if !options.enabled() && !benchmark {
             return operation(None);
         }
-        let mut context = Self::new(options);
-        let Some(handle) = context.handle.clone() else {
+        // Classification-only collection has no presenter, worker or JSON sink.
+        let mut context = options.enabled().then(|| Self::new(options));
+        let handle = context.as_ref().and_then(|context| context.handle.clone());
+        if options.enabled() && handle.is_none() {
             return operation(None);
-        };
+        }
         let phase_handle = handle.clone();
-        let mut callback = move |envelope: &Envelope<'_>| handle.observe(envelope);
-        let result = {
-            let mut observer = Observer::new(
+        let mut callback = move |envelope: &Envelope<'_>| {
+            #[cfg(feature = "experimental-rustred")]
+            if benchmark {
+                Self::log_benchmark_event(envelope);
+            }
+            match &handle {
+                Some(handle) => handle.observe(envelope),
+                None => Ok(Control::Continue),
+            }
+        };
+        let (result, observer_status) = {
+            let observation = if benchmark {
+                CandidateRoutedObservationOptions {
+                    interval: Duration::ZERO,
+                    max_frontier_frames: 0,
+                    max_path_nodes: 0,
+                }
+            } else {
                 CandidateRoutedObservationOptions {
                     interval: options.interval,
                     ..Default::default()
-                },
-                &mut callback,
-            );
+                }
+            };
+            let mut observer = Observer::new(observation, &mut callback);
             Self::native_phase(Some(&mut observer), "request_start");
             let result = operation(Some(&mut observer));
-            let phase = phase_handle.shared.pending().caller_phase.clone();
+            let phase = phase_handle
+                .as_ref()
+                .map(|handle| handle.shared.pending().caller_phase.clone())
+                .unwrap_or_default();
             let mut final_event = Envelope::new(Event::RequestFinished, "");
             final_event.activity = Activity::Caller;
             final_event.caller_phase = Some(&phase);
@@ -191,15 +217,123 @@ impl MonitorContext {
             final_event.snapshot = observer.last_snapshot();
             final_event.metrics = observer.last_metrics();
             observer.emit(final_event);
-            if let CandidateRoutedObserverStatus::Faulted(fault) = observer.status() {
-                phase_handle
-                    .shared
-                    .fault(format!("native observer disabled: {fault:?}"));
-            }
-            result
+            (result, observer.status())
         };
-        context.finish();
+        if let CandidateRoutedObserverStatus::Faulted(fault) = observer_status
+            && let Some(handle) = &phase_handle
+        {
+            handle
+                .shared
+                .fault(format!("native observer disabled: {fault:?}"));
+        }
+        #[cfg(feature = "experimental-rustred")]
+        if benchmark {
+            // A faulted/detached observer suppresses callbacks. Report its
+            // actual final state after dropping it, without replacing the math
+            // result if a custom logger panics during this last attempt.
+            let operation_succeeded = result.is_ok();
+            let _ = std::panic::catch_unwind(|| {
+                let document =
+                    Self::benchmark_finish_document(observer_status, operation_succeeded);
+                log::debug!(target: "vakint::benchmark_cache_hits", "{document}");
+            });
+        }
+        if let Some(context) = &mut context {
+            context.finish();
+        }
         result
+    }
+
+    fn is_initial_snapshot(envelope: &Envelope<'_>) -> bool {
+        envelope.activity != Activity::Caller
+            && envelope.caller_phase.is_none()
+            && matches!(envelope.event, Event::Snapshot)
+            && envelope
+                .snapshot
+                .is_some_and(|snapshot| snapshot.sequence == 1)
+    }
+
+    #[cfg(feature = "experimental-rustred")]
+    fn benchmark_work_document(work: CandidateRoutedWorkRef<'_>) -> serde_json::Value {
+        let (stage, owner) = match work {
+            CandidateRoutedWorkRef::Route(_) => ("route", None),
+            CandidateRoutedWorkRef::Apply { owner_sector, .. } => ("apply", Some(owner_sector)),
+        };
+        serde_json::json!({
+            "stage": stage,
+            "powers": work.target().powers(),
+            "owner_sector": owner,
+        })
+    }
+
+    #[cfg(feature = "experimental-rustred")]
+    fn benchmark_event_document(envelope: &Envelope<'_>) -> Option<serde_json::Value> {
+        if envelope.activity == Activity::Caller || envelope.caller_phase.is_some() {
+            return None;
+        }
+        let event = match envelope.event {
+            Event::Snapshot if Self::is_initial_snapshot(envelope) => "dispatch_start",
+            Event::NodeCompleted(rustred::solver::CandidateRoutedCompletionSource::BackingHit) => {
+                "backing_hit"
+            }
+            Event::RootCollected => "root_collected",
+            Event::CoreFinished => "dispatch_finish",
+            _ => return None,
+        };
+        let persistent = envelope.snapshot.map(|snapshot| {
+            let counters = snapshot.statistics.persistent_cache;
+            serde_json::json!({
+                "lookups": counters.lookups,
+                "route_hits": counters.route_hits,
+                "apply_hits": counters.apply_hits,
+                "requested_root_hits": counters.requested_root_hits,
+                "intermediate_hits": counters.intermediate_hits,
+                "misses": counters.misses,
+            })
+        });
+        let root = if matches!(envelope.event, Event::RootCollected) {
+            envelope.root.map(Self::benchmark_work_document)
+        } else {
+            None
+        };
+        Some(serde_json::json!({
+            "schema": "vakint.cache-hit-events.v1",
+            "event": event,
+            "family_fingerprint": envelope.family_fingerprint,
+            "sequence": envelope.sequence,
+            "work": envelope.current.map(Self::benchmark_work_document),
+            "rootwork": root,
+            "requested_roots": envelope.metrics.requested_roots,
+            "completed_roots": envelope.metrics.completed_roots,
+            "persistent": persistent,
+            "status": match envelope.status {
+                Status::Running => "running",
+                Status::Succeeded => "succeeded",
+                Status::Failed => "failed",
+            },
+        }))
+    }
+
+    #[cfg(feature = "experimental-rustred")]
+    fn log_benchmark_event(envelope: &Envelope<'_>) {
+        if let Some(document) = Self::benchmark_event_document(envelope) {
+            log::debug!(target: "vakint::benchmark_cache_hits", "{document}");
+        }
+    }
+
+    #[cfg(feature = "experimental-rustred")]
+    fn benchmark_finish_document(
+        observer_status: CandidateRoutedObserverStatus,
+        operation_succeeded: bool,
+    ) -> serde_json::Value {
+        serde_json::json!({
+            "schema": "vakint.cache-hit-events.v1",
+            "event": "observer_finish",
+            "sequence": null,
+            "observer_status": format!("{observer_status:?}"),
+            "operation_succeeded": operation_succeeded,
+            "interval_ns": 0,
+        })
     }
 
     pub(crate) fn native_phase(observer: Option<&mut Observer<'_>>, phase: &str) {
@@ -956,5 +1090,279 @@ mod tests {
         assert!(pending.display.current_key.is_none());
         assert!(pending.display.current_degrees.is_none());
         assert!(pending.display.quantitative_sample_at.is_none());
+    }
+}
+
+#[cfg(all(test, not(feature = "experimental-rustred")))]
+mod disabled_benchmark_tests {
+    use super::*;
+
+    #[test]
+    fn default_off_invokes_the_unobserved_operation_once() {
+        let mut calls = 0;
+        let value = MonitorContext::run(&RustRedMonitorOptions::default(), |observation| {
+            calls += 1;
+            assert!(observation.is_none());
+            Ok(17)
+        })
+        .unwrap();
+        assert_eq!(value, 17);
+        assert_eq!(calls, 1);
+    }
+}
+
+#[cfg(all(test, feature = "experimental-rustred"))]
+mod benchmark_tests {
+    use super::*;
+    use rustred::{
+        family::IntegralKey,
+        solver::{
+            CandidateRoutedApplicationPhase, CandidateRoutedApplicationSnapshot,
+            CandidateRoutedCompletionSource, CandidateRoutedObserverFault,
+        },
+    };
+
+    #[test]
+    fn diagnostic_observation_requires_explicit_opt_in_with_broad_debug_logger() {
+        const CHILD: &str = "VAKINT_TEST_EXPLICIT_CACHE_HIT_OBSERVATION";
+        if std::env::var_os(CHILD).is_none() {
+            // log::set_logger is process-global and set-once. Isolate this
+            // regression from other library tests that install test_log first.
+            let name = concat!(
+                module_path!(),
+                "::diagnostic_observation_requires_explicit_opt_in_with_broad_debug_logger"
+            );
+            let name = name.split_once("::").unwrap().1;
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args(["--exact", name, "--nocapture", "--test-threads=1"])
+                .env(CHILD, "1")
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "isolated logger regression failed: {}{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            assert!(String::from_utf8_lossy(&output.stdout).contains("1 passed; 0 failed"));
+            return;
+        }
+        struct BroadDebug;
+        impl log::Log for BroadDebug {
+            fn enabled(&self, _: &log::Metadata<'_>) -> bool {
+                true
+            }
+            fn log(&self, _: &log::Record<'_>) {}
+            fn flush(&self) {}
+        }
+        static LOGGER: BroadDebug = BroadDebug;
+        log::set_logger(&LOGGER).unwrap();
+        log::set_max_level(log::LevelFilter::Debug);
+        assert!(log::log_enabled!(target: "vakint::benchmark_cache_hits", log::Level::Debug));
+        let normal = RustRedMonitorOptions::default();
+        assert!(!normal.enabled());
+        assert!(!normal.cache_hit_diagnostic);
+        let mut calls = 0;
+        let value = MonitorContext::run(&normal, |observer| {
+            calls += 1;
+            assert!(observer.is_none());
+            Ok(17)
+        })
+        .unwrap();
+        assert_eq!((value, calls), (17, 1));
+        let diagnostic = RustRedMonitorOptions {
+            cache_hit_diagnostic: true,
+            ..Default::default()
+        };
+        assert!(!diagnostic.enabled());
+        assert!(diagnostic.progress_snapshot.is_none());
+        let mut calls = 0;
+        let value = MonitorContext::run(&diagnostic, |observer| {
+            calls += 1;
+            assert!(observer.is_some());
+            Ok(23)
+        })
+        .unwrap();
+        assert_eq!((value, calls), (23, 1));
+        let failure = MonitorContext::run::<()>(&diagnostic, |observer| {
+            assert!(observer.is_some());
+            Err(VakintError::EvaluationError(
+                "metadata-only sentinel".into(),
+            ))
+        })
+        .unwrap_err();
+        assert!(
+            matches!(failure, VakintError::EvaluationError(message) if message == "metadata-only sentinel")
+        );
+        let invalid = RustRedMonitorOptions {
+            cache_hit_diagnostic: true,
+            display: RustRedMonitorDisplay::Json,
+            progress_snapshot: Some("must-not-be-created.json".into()),
+            ..Default::default()
+        };
+        assert_eq!(
+            invalid.validate().unwrap_err().kind(),
+            std::io::ErrorKind::InvalidInput
+        );
+        let error = MonitorContext::run::<()>(&invalid, |_| {
+            panic!("invalid diagnostic must not execute operation")
+        })
+        .unwrap_err();
+        assert!(
+            matches!(error, VakintError::EvaluationError(message) if message.contains("cannot be combined"))
+        );
+    }
+
+    fn snapshot(sequence: u64) -> CandidateRoutedApplicationSnapshot {
+        let statistics = rustred::solver::CandidateRoutedApplicationStatistics {
+            persistent_cache: rustred::solver::CandidateRoutedPersistentCacheStatistics {
+                lookups: 7,
+                route_hits: 2,
+                apply_hits: 3,
+                requested_root_hits: 1,
+                intermediate_hits: 4,
+                misses: 2,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        CandidateRoutedApplicationSnapshot {
+            sequence,
+            elapsed: Duration::ZERO,
+            phase: CandidateRoutedApplicationPhase::Expansion,
+            status: Status::Running,
+            statistics,
+            unique_nodes: 0,
+            active_nodes: 0,
+            pending_frames: 0,
+            cached: Default::default(),
+            pinned: None,
+            eligible: None,
+        }
+    }
+
+    #[test]
+    fn benchmark_events_keep_full_work_identity_and_native_persistent_counters() {
+        // Deliberately exceed the UI preview's fifteen slots: the proof stream
+        // must retain the complete physical key and Apply owner, not a card.
+        let powers = (-2..16).collect::<Vec<i64>>();
+        let key = IntegralKey::try_new(powers.clone()).unwrap();
+        let owner = powers.iter().map(|power| *power > 0).collect::<Vec<_>>();
+        let mut event = Envelope::new(
+            Event::NodeCompleted(CandidateRoutedCompletionSource::BackingHit),
+            "fake-metadata-only",
+        );
+        event.sequence = 23;
+        event.snapshot = Some(snapshot(5));
+        event.current = Some(CandidateRoutedWorkRef::Apply {
+            owner_sector: &owner,
+            target: &key,
+        });
+        event.root = Some(CandidateRoutedWorkRef::Route(&key));
+        event.metrics.requested_roots = Some(2);
+        event.metrics.completed_roots = 1;
+        let document = MonitorContext::benchmark_event_document(&event).unwrap();
+        assert_eq!(document["schema"], "vakint.cache-hit-events.v1");
+        assert_eq!(document["event"], "backing_hit");
+        assert_eq!(document["family_fingerprint"], "fake-metadata-only");
+        assert_eq!(document["sequence"], 23);
+        assert_eq!(document["work"]["stage"], "apply");
+        assert_eq!(document["work"]["powers"], serde_json::json!(powers));
+        assert_eq!(document["work"]["owner_sector"], serde_json::json!(owner));
+        assert!(document["rootwork"].is_null());
+        assert_eq!(document["requested_roots"], 2);
+        assert_eq!(document["completed_roots"], 1);
+        assert_eq!(document["persistent"]["lookups"], 7);
+        assert_eq!(document["persistent"]["route_hits"], 2);
+        assert_eq!(document["persistent"]["apply_hits"], 3);
+        assert_eq!(document["persistent"]["requested_root_hits"], 1);
+        assert_eq!(document["persistent"]["intermediate_hits"], 4);
+        assert_eq!(document["persistent"]["misses"], 2);
+        assert_eq!(document["status"], "running");
+
+        event.event = Event::RootCollected;
+        event.current = Some(CandidateRoutedWorkRef::Route(&key));
+        let document = MonitorContext::benchmark_event_document(&event).unwrap();
+        assert_eq!(document["event"], "root_collected");
+        assert_eq!(document["rootwork"]["stage"], "route");
+        assert_eq!(document["rootwork"]["powers"], serde_json::json!(powers));
+        assert!(document["rootwork"]["owner_sector"].is_null());
+    }
+
+    #[test]
+    fn benchmark_filter_uses_the_native_initial_snapshot_and_only_backing_hits() {
+        let mut event = Envelope::new(Event::Snapshot, "fake-metadata-only");
+        event.snapshot = Some(snapshot(1));
+        assert_eq!(
+            MonitorContext::benchmark_event_document(&event).unwrap()["event"],
+            "dispatch_start"
+        );
+        event.snapshot = Some(snapshot(2));
+        assert!(MonitorContext::benchmark_event_document(&event).is_none());
+        for ignored in [
+            Event::ActivityStarted,
+            Event::CallerProgress,
+            Event::RequestFinished,
+            Event::NodeCompleted(CandidateRoutedCompletionSource::Computed),
+            Event::NodeCompleted(CandidateRoutedCompletionSource::RamHit),
+        ] {
+            event.event = ignored;
+            assert!(MonitorContext::benchmark_event_document(&event).is_none());
+        }
+        event.event = Event::CoreFinished;
+        event.status = Status::Failed;
+        assert_eq!(
+            MonitorContext::benchmark_event_document(&event).unwrap()["status"],
+            "failed"
+        );
+        event.caller_phase = Some("forwarded_summary");
+        assert!(MonitorContext::benchmark_event_document(&event).is_none());
+        event.caller_phase = None;
+        event.activity = Activity::Caller;
+        assert!(MonitorContext::benchmark_event_document(&event).is_none());
+    }
+
+    #[test]
+    fn missing_proof_metadata_is_explicit_null_instead_of_a_dropped_event() {
+        let mut event = Envelope::new(
+            Event::NodeCompleted(CandidateRoutedCompletionSource::BackingHit),
+            "fake-metadata-only",
+        );
+        let document = MonitorContext::benchmark_event_document(&event).unwrap();
+        assert_eq!(document["event"], "backing_hit");
+        assert!(document["work"].is_null());
+        assert!(document["rootwork"].is_null());
+        assert!(document["persistent"].is_null());
+        assert!(document["requested_roots"].is_null());
+        event.event = Event::RootCollected;
+        let document = MonitorContext::benchmark_event_document(&event).unwrap();
+        assert_eq!(document["event"], "root_collected");
+        assert!(document["rootwork"].is_null());
+    }
+
+    #[test]
+    fn finish_record_preserves_actual_observer_fault_detach_and_operation_failure() {
+        for (action, expected) in [
+            (Ok(Control::Continue), CandidateRoutedObserverStatus::Active),
+            (Ok(Control::Detach), CandidateRoutedObserverStatus::Detached),
+            (
+                Err(()),
+                CandidateRoutedObserverStatus::Faulted(CandidateRoutedObserverFault::CallbackError),
+            ),
+        ] {
+            let status = {
+                let mut callback = |_: &Envelope<'_>| action;
+                let mut observer = Observer::new(Default::default(), &mut callback);
+                observer.emit(Envelope::new(Event::CallerProgress, "fake-metadata-only"));
+                observer.status()
+            };
+            assert_eq!(status, expected);
+            let document = MonitorContext::benchmark_finish_document(status, false);
+            assert_eq!(document["event"], "observer_finish");
+            assert!(document["sequence"].is_null());
+            assert_eq!(document["observer_status"], format!("{expected:?}"));
+            assert_eq!(document["operation_succeeded"], false);
+            assert_eq!(document["interval_ns"], 0);
+        }
     }
 }

@@ -203,6 +203,581 @@ fn evidence(document: &Value, base: &Path, path: &str, hash: &str) -> Result<Pat
     Ok(path)
 }
 
+/// Full native work identity. A Route and an Apply of the same powers are
+/// different cache records; an Apply also carries its literal owner support.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(super) struct FrontierWork {
+    pub(super) stage: String,
+    pub(super) powers: Vec<i64>,
+    owner: Option<Vec<bool>>,
+}
+
+impl FrontierWork {
+    pub(super) fn route(powers: Vec<i64>) -> Result<Self> {
+        Self::parse(&json!({"stage":"route","powers":powers,"owner_sector":null}))
+    }
+
+    pub(super) fn parse(value: &Value) -> Result<Self> {
+        let stage = string(value, "stage")?.to_owned();
+        let powers: Vec<i64> = serde_json::from_value(value["powers"].clone())?;
+        ensure!(powers.len() == 15, "work identity must have fifteen axes");
+        ensure!(value.get("owner_sector").is_some(), "omitted owner support");
+        let owner = match stage.as_str() {
+            "route" => {
+                ensure!(
+                    value["owner_sector"].is_null(),
+                    "Route carries an Apply owner"
+                );
+                None
+            }
+            "apply" => {
+                let owner: Vec<bool> = serde_json::from_value(value["owner_sector"].clone())?;
+                ensure!(
+                    owner.len() == 15 && owner == Self::support(&powers),
+                    "Apply owner differs from literal support"
+                );
+                Some(owner)
+            }
+            _ => eyre::bail!("unknown cache work stage"),
+        };
+        Ok(Self {
+            stage,
+            powers,
+            owner,
+        })
+    }
+
+    fn support(powers: &[i64]) -> Vec<bool> {
+        powers.iter().map(|power| *power > 0).collect()
+    }
+
+    pub(super) fn document(&self) -> Value {
+        json!({"stage":self.stage,"powers":self.powers,"owner_sector":self.owner})
+    }
+}
+
+fn count(value: &Value, field: &str) -> Result<u64> {
+    value[field]
+        .as_u64()
+        .ok_or_else(|| eyre::eyre!("missing nonnegative counter {field}"))
+}
+
+/// A successful retained result can still contain unknown integrals. This
+/// optional capability requires actual closed outputs on both sides of its join.
+pub(super) fn validate_frontier_outputs(original: &Value, cached: &Value) -> Result<()> {
+    for receipt in [original, cached] {
+        ensure!(
+            receipt["retained_result_available"] == true
+                && receipt["catalogue_closure"]["closed"] == true
+                && receipt["catalogue_closure"]["unknown_count"] == 0
+                && receipt["catalogue_closure"]["unknown_masters"]
+                    .as_array()
+                    .is_some_and(Vec::is_empty),
+            "frontier capability requires complete catalogue-closed retained outputs"
+        );
+    }
+    Ok(())
+}
+
+/// Reconcile a lossless diagnostic with native per-dispatch counters. A latest
+/// monitor snapshot or a root union is deliberately insufficient evidence.
+pub(super) fn validate_hit_diagnostic(document: &Value) -> Result<Value> {
+    ensure!(
+        document["schema"] == "vakint.cache-hit-diagnostic.v1"
+            && document["interval_ns"] == 0
+            && document["success"] == true
+            && document.get("error").is_some_and(Value::is_null),
+        "incomplete cache-hit diagnostic"
+    );
+    let expected = count(document, "input_dispatch_count")?;
+    let mut dispatches = Vec::new();
+    let mut current: Option<Value> = None;
+    let mut roots = BTreeSet::new();
+    let mut hits = Vec::new();
+    let mut last_sequence = None;
+    let mut finished = false;
+    for event in array(document, "events")? {
+        ensure!(
+            !finished && event["schema"] == "vakint.cache-hit-events.v1",
+            "event after observer finish or wrong event schema"
+        );
+        let kind = string(event, "event")?;
+        if kind == "observer_finish" {
+            ensure!(
+                current.is_none()
+                    && event["observer_status"] == "Active"
+                    && event["operation_succeeded"] == true
+                    && event["interval_ns"] == 0
+                    && event.get("sequence").is_some_and(Value::is_null),
+                "observer detached, faulted or operation incomplete"
+            );
+            finished = true;
+            continue;
+        }
+        let sequence = count(event, "sequence")?;
+        ensure!(
+            last_sequence.is_none_or(|previous| sequence > previous),
+            "native event sequence is not increasing"
+        );
+        last_sequence = Some(sequence);
+        let family = string(event, "family_fingerprint")?;
+        ensure!(!family.trim().is_empty(), "omitted native family");
+        for field in [
+            "work",
+            "rootwork",
+            "requested_roots",
+            "completed_roots",
+            "persistent",
+            "status",
+        ] {
+            ensure!(
+                event.get(field).is_some(),
+                "omitted native event field {field}"
+            );
+        }
+        if !event["work"].is_null() {
+            FrontierWork::parse(&event["work"])?;
+        }
+        ensure!(
+            event["status"]
+                == if kind == "dispatch_finish" {
+                    "succeeded"
+                } else {
+                    "running"
+                },
+            "invalid native event status"
+        );
+        ensure!(
+            kind == "root_collected" || event["rootwork"].is_null(),
+            "unexpected root identity"
+        );
+        if kind == "dispatch_start" {
+            ensure!(current.is_none(), "nested or missing dispatch finish");
+            current = Some(json!({"ordinal":dispatches.len(),"family_fingerprint":family}));
+            roots.clear();
+            hits.clear();
+            continue;
+        }
+        let active = current
+            .as_ref()
+            .ok_or_else(|| eyre::eyre!("event without a dispatch start"))?;
+        ensure!(
+            active["family_fingerprint"] == family,
+            "dispatch family changed"
+        );
+        match kind {
+            "backing_hit" => hits.push(FrontierWork::parse(&event["work"])?),
+            "root_collected" => {
+                let root = FrontierWork::parse(&event["rootwork"])?;
+                let current = FrontierWork::parse(&event["work"])?;
+                ensure!(
+                    root.stage == "route" && current == root && roots.insert(root),
+                    "omitted, duplicate or non-Route collected root"
+                );
+            }
+            "dispatch_finish" => {
+                ensure!(event["status"] == "succeeded", "native dispatch failed");
+                let requested = count(event, "requested_roots")?;
+                ensure!(
+                    requested == count(event, "completed_roots")?
+                        && requested == u64::try_from(roots.len())?,
+                    "collected/requested/completed roots differ"
+                );
+                let persistent = &event["persistent"];
+                count(persistent, "lookups")?;
+                count(persistent, "misses")?;
+                let route = count(persistent, "route_hits")?;
+                let apply = count(persistent, "apply_hits")?;
+                ensure!(
+                    route == u64::try_from(hits.iter().filter(|hit| hit.stage == "route").count())?
+                        && apply
+                            == u64::try_from(
+                                hits.iter().filter(|hit| hit.stage == "apply").count()
+                            )?
+                        && route.checked_add(apply).is_some_and(|total| count(
+                            persistent,
+                            "requested_root_hits"
+                        )
+                        .ok()
+                        .and_then(
+                            |roots| roots.checked_add(count(persistent, "intermediate_hits").ok()?)
+                        ) == Some(total)),
+                    "lost cache-hit event or inconsistent native counters"
+                );
+                let mut normalized = current.take().unwrap();
+                normalized["seeds"] =
+                    json!(roots.iter().map(FrontierWork::document).collect::<Vec<_>>());
+                normalized["hits"] =
+                    json!(hits.iter().map(FrontierWork::document).collect::<Vec<_>>());
+                normalized["persistent"] = persistent.clone();
+                dispatches.push(normalized);
+            }
+            _ => eyre::bail!("unknown cache-hit event"),
+        }
+    }
+    ensure!(
+        finished && current.is_none() && u64::try_from(dispatches.len())? == expected,
+        "missing dispatch or observer completion"
+    );
+    let mut totals = serde_json::Map::new();
+    for field in [
+        "lookups",
+        "route_hits",
+        "apply_hits",
+        "requested_root_hits",
+        "intermediate_hits",
+        "misses",
+    ] {
+        let total = dispatches.iter().try_fold(0_u64, |total, dispatch| {
+            total
+                .checked_add(count(&dispatch["persistent"], field)?)
+                .ok_or_else(|| eyre::eyre!("persistent counter sum overflow"))
+        })?;
+        totals.insert(field.into(), json!(total));
+    }
+    Ok(
+        json!({"interval_ns":0,"input_dispatch_count":expected,"dispatches":dispatches,"persistent":totals}),
+    )
+}
+
+/// Only the labels needed to classify a native route result. Transport matrices
+/// remain owned and verified by Native, never interpreted by this proof reader.
+pub(super) struct FrontierSelection {
+    family: String,
+    owners: BTreeSet<Vec<bool>>,
+    routes: BTreeMap<Vec<bool>, Vec<bool>>,
+}
+
+impl FrontierSelection {
+    pub(super) fn parse(document: &Value, binding: &Value) -> Result<Self> {
+        let family = string(document, "family_fingerprint")?.to_owned();
+        ensure!(
+            binding["physical_arity"] == 15 && binding["family_fingerprint"] == family,
+            "selection family/arity differs from loaded application"
+        );
+        let mut owners = BTreeSet::new();
+        for row in array(document, "owners")? {
+            ensure!(
+                owners.insert(Self::mask(string(row, "mask")?)?),
+                "duplicate owner label"
+            );
+        }
+        ensure!(!owners.is_empty(), "missing native owners");
+        let mut routes = BTreeMap::new();
+        for row in array(document, "initial_frontier_routes")? {
+            let source = Self::mask(string(row, "source_mask")?)?;
+            let owner = Self::mask(string(row, "owner_mask")?)?;
+            ensure!(
+                owners.contains(&owner) && routes.insert(source, owner).is_none(),
+                "unknown route owner or duplicate route label"
+            );
+        }
+        Ok(Self {
+            family,
+            owners,
+            routes,
+        })
+    }
+
+    fn mask(value: &str) -> Result<Vec<bool>> {
+        ensure!(
+            value.len() == 15 && value.bytes().all(|byte| byte == b'0' || byte == b'1'),
+            "invalid fifteen-axis native mask"
+        );
+        Ok(value.bytes().map(|byte| byte == b'1').collect())
+    }
+
+    fn label(mask: &[bool]) -> String {
+        mask.iter()
+            .map(|active| if *active { '1' } else { '0' })
+            .collect()
+    }
+
+    pub(super) fn owner(&self, source: &FrontierWork) -> Result<(Vec<bool>, bool)> {
+        let support = FrontierWork::support(&source.powers);
+        if self.owners.contains(&support) {
+            return Ok((support, true));
+        }
+        Ok((
+            self.routes
+                .get(&support)
+                .cloned()
+                .ok_or_else(|| eyre::eyre!("missing native route label"))?,
+            false,
+        ))
+    }
+
+    pub(super) fn endpoint(&self, source: &FrontierWork, powers: Vec<i64>) -> Result<FrontierWork> {
+        let (owner, literal) = self.owner(source)?;
+        let support = FrontierWork::support(&powers);
+        ensure!(powers.len() == 15, "native endpoint has wrong arity");
+        if support == owner {
+            ensure!(
+                !literal || powers == source.powers,
+                "literal owner changed its key"
+            );
+            return Ok(FrontierWork {
+                stage: "apply".into(),
+                powers,
+                owner: Some(owner),
+            });
+        }
+        ensure!(
+            !literal
+                && support
+                    .iter()
+                    .zip(&owner)
+                    .all(|(child, owner)| !child || *owner)
+                && support.iter().filter(|active| **active).count()
+                    < FrontierWork::support(&source.powers)
+                        .iter()
+                        .filter(|active| **active)
+                        .count(),
+            "native endpoint is neither its owner nor a strict pinch"
+        );
+        FrontierWork::route(powers)
+    }
+
+    pub(super) fn step(
+        &self,
+        source: &FrontierWork,
+        edges: Vec<Value>,
+        guards: Vec<String>,
+    ) -> Result<Value> {
+        let zero = edges.is_empty();
+        // Loaded Native owners cannot overlap installed zero sectors. Unknown
+        // nonowner sources may still have a guarded exact zero before routing.
+        ensure!(
+            !zero || !self.owners.contains(&FrontierWork::support(&source.powers)),
+            "literal installed owner unexpectedly has a zero outcome"
+        );
+        let labels = if zero {
+            None
+        } else {
+            Some(self.owner(source)?)
+        };
+        Ok(
+            json!({"source":source.document(),"zero":zero,"edges":edges,"nonzero_conditions":guards,
+            "owner_label":labels.as_ref().map(|(owner,_)|Self::label(owner)),
+            "route_label":labels.as_ref().and_then(|(_,literal)|(!literal).then(|| Self::label(&FrontierWork::support(&source.powers))))}),
+        )
+    }
+
+    pub(super) fn document(&self) -> Value {
+        json!({"family_fingerprint":self.family,
+            "owners":self.owners.iter().map(|mask|json!({"mask":Self::label(mask)})).collect::<Vec<_>>(),
+            "initial_frontier_routes":self.routes.iter().map(|(source,owner)|json!({"source_mask":Self::label(source),"owner_mask":Self::label(owner)})).collect::<Vec<_>>()})
+    }
+}
+
+/// Independently check graph closure/reachability and join saved hits only after
+/// every root is known. Never infer a zero root count from incomplete evidence.
+pub(super) fn validate_frontier_certificate(
+    certificate: &Value,
+    normalized: &Value,
+    binding: &Value,
+    compiled: &Value,
+    trace_sha256: &str,
+) -> Result<Value> {
+    ensure!(
+        certificate["schema"] == "vakint.initial-routing-frontier-hit-proof.v1"
+            && certificate["complete"] == true
+            && certificate["reason"].is_null()
+            && certificate["semantic_binding"] == *binding
+            && certificate["compiled_cohort"] == *compiled
+            && sha256(certificate, "trace_sha256")? == trace_sha256,
+        "incomplete or mismatched frontier certificate"
+    );
+    // The outer OwnerProof pins the whole certificate and actual executable/
+    // source cohort. Its native outcomes are authenticated mapper output, not
+    // mathematical authority inferred from a structurally plausible graph.
+    ensure!(
+        compiled["mapper_source_sha256"]
+            == format!(
+                "{:x}",
+                Sha256::digest(include_bytes!("../authenticate_owner_roots.rs"))
+            ),
+        "recursive frontier requires this actual compiled mapper source"
+    );
+    // Mapper-recorded Native-selection provenance. Authority is the pinned
+    // whole proof plus exact compiled mapper/data/cohort chain, not standalone
+    // replay of transport matrices from the projected labels below.
+    sha256(certificate, "selection_sha256")?;
+    let selection = FrontierSelection::parse(&certificate["selection"], binding)?;
+    let observed = array(normalized, "dispatches")?;
+    let dispatches = array(certificate, "dispatches")?;
+    ensure!(
+        dispatches.len() == observed.len(),
+        "frontier omits a dispatch"
+    );
+    let mut derived = Vec::new();
+    for (proof, actual) in dispatches.iter().zip(observed) {
+        ensure!(
+            proof["ordinal"] == actual["ordinal"]
+                && proof["family_fingerprint"] == actual["family_fingerprint"]
+                && proof["family_fingerprint"] == selection.family
+                && proof["seeds"] == actual["seeds"],
+            "frontier dispatch or postcombine seed signature differs"
+        );
+        let seeds = array(actual, "seeds")?
+            .iter()
+            .map(FrontierWork::parse)
+            .collect::<Result<BTreeSet<_>>>()?;
+        ensure!(
+            proof["seed_sha256"]
+                == format!(
+                    "{:x}",
+                    Sha256::digest(serde_json::to_vec(&actual["seeds"])?)
+                ),
+            "frontier seed hash differs"
+        );
+        let mut steps = BTreeMap::new();
+        for step in array(proof, "steps")? {
+            let source = FrontierWork::parse(&step["source"])?;
+            ensure!(
+                source.stage == "route" && steps.insert(source, step).is_none(),
+                "duplicate step or illegal Apply expansion"
+            );
+        }
+        let mut visited = BTreeSet::new();
+        let mut frontier = BTreeSet::new();
+        let mut active = BTreeSet::new();
+        fn visit(
+            source: &FrontierWork,
+            selection: &FrontierSelection,
+            steps: &BTreeMap<FrontierWork, &Value>,
+            visited: &mut BTreeSet<FrontierWork>,
+            active: &mut BTreeSet<FrontierWork>,
+            frontier: &mut BTreeSet<FrontierWork>,
+        ) -> Result<()> {
+            frontier.insert(source.clone());
+            if visited.contains(source) {
+                return Ok(());
+            }
+            ensure!(
+                active.insert(source.clone()),
+                "cycle in initial routing frontier"
+            );
+            let step = steps
+                .get(source)
+                .ok_or_else(|| eyre::eyre!("missing reachable Route step"))?;
+            ensure!(
+                array(step, "nonzero_conditions")?.iter().all(|guard| guard
+                    .as_str()
+                    .is_some_and(|guard| !guard.trim().is_empty() && guard.trim() != "0")),
+                "invalid native ordered guard"
+            );
+            let edges = array(step, "edges")?;
+            ensure!(
+                step["zero"] == edges.is_empty(),
+                "zero outcome conflicts with native endpoints"
+            );
+            if edges.is_empty() {
+                ensure!(
+                    !selection
+                        .owners
+                        .contains(&FrontierWork::support(&source.powers))
+                        && step["owner_label"].is_null()
+                        && step["route_label"].is_null(),
+                    "zero outcome invents a routing label"
+                );
+            } else {
+                let (owner, literal) = selection.owner(source)?;
+                ensure!(
+                    step["owner_label"] == FrontierSelection::label(&owner)
+                        && step["route_label"]
+                            == if literal {
+                                Value::Null
+                            } else {
+                                json!(FrontierSelection::label(&FrontierWork::support(
+                                    &source.powers
+                                )))
+                            },
+                    "routing labels differ"
+                );
+                ensure!(
+                    !literal || edges.len() == 1,
+                    "literal owner is not identity"
+                );
+                let mut local = BTreeSet::new();
+                for edge in edges {
+                    let target = FrontierWork::parse(&edge["target"])?;
+                    ensure!(
+                        target == selection.endpoint(source, target.powers.clone())?
+                            && local.insert(target.clone())
+                            && !string(edge, "coefficient")?.trim().is_empty()
+                            && string(edge, "coefficient")?.trim() != "0"
+                            && (!literal || edge["coefficient"] == "1"),
+                        "invalid nonzero native routing edge"
+                    );
+                    frontier.insert(target.clone());
+                    if target.stage == "route" {
+                        visit(&target, selection, steps, visited, active, frontier)?;
+                    }
+                }
+            }
+            active.remove(source);
+            visited.insert(source.clone());
+            Ok(())
+        }
+        for seed in &seeds {
+            visit(
+                seed,
+                &selection,
+                &steps,
+                &mut visited,
+                &mut active,
+                &mut frontier,
+            )?;
+        }
+        ensure!(
+            visited.len() == steps.len(),
+            "extraneous unreachable routing step"
+        );
+        let claimed = array(proof, "frontier")?
+            .iter()
+            .map(FrontierWork::parse)
+            .collect::<Result<Vec<_>>>()?;
+        ensure!(
+            claimed == frontier.iter().cloned().collect::<Vec<_>>(),
+            "frontier union is missing, duplicate or extraneous"
+        );
+        let hits = array(actual, "hits")?
+            .iter()
+            .map(FrontierWork::parse)
+            .collect::<Result<Vec<_>>>()?;
+        let root = hits.iter().filter(|hit| frontier.contains(*hit)).count();
+        derived.push(json!({"ordinal":actual["ordinal"],"family_fingerprint":actual["family_fingerprint"],
+            "root_frontier_hits":root,"proper_descendant_hits":hits.len()-root,"observed_hits":hits.len(),"native_persistent":actual["persistent"]}));
+    }
+    Ok(
+        json!({"complete":true,"interpretation":"benchmark initial-routing-frontier v1; Native counters unchanged",
+        "dispatches":derived,"trace_sha256":trace_sha256}),
+    )
+}
+
+pub(super) fn declared_training_matches(certificate: &Value, workload: &Value) -> Result<Value> {
+    let mut matches = Vec::new();
+    for dispatch in array(certificate, "dispatches")? {
+        for work in array(dispatch, "frontier")? {
+            let work = FrontierWork::parse(work)?;
+            for training in array(workload, "training")? {
+                let powers: Vec<i64> = serde_json::from_value(training["powers"].clone())?;
+                ensure!(powers.len() == 15, "declared training key has wrong arity");
+                if work.powers == powers {
+                    matches.push(json!({"ordinal":dispatch["ordinal"],
+                        "training_id":string(training,"id")?,"work":work.document()}));
+                }
+            }
+        }
+    }
+    Ok(
+        json!({"scope":"exact-declared-training-powers-only","positive_matches":matches,
+        "absence_establishes_training_alias_disjointness":false,
+        "changes_workload_roles_or_exclusions":false}),
+    )
+}
+
 impl OwnerProof {
     fn read(workload: &Workload, workload_path: &Path) -> Result<Option<(Value, PathBuf, Value)>> {
         let Some(reference) = &workload.owner_proof else {
@@ -563,11 +1138,479 @@ impl OwnerProof {
     pub(super) fn correlations(&self) -> &Value {
         &self.correlations
     }
+
+    /// Optional v1 evidence is checked independently from the conservative
+    /// legacy owner sets. Its absence never upgrades legacy counter semantics.
+    fn validate_initial_frontier(&self, row: &Value, base: &Path) -> Result<Value> {
+        let proof = &row["initial_routing_frontier"];
+        let receipt_path = evidence(
+            proof,
+            base,
+            "cache_hit_receipt_path",
+            "cache_hit_receipt_sha256",
+        )?;
+        let receipt: Value = serde_json::from_slice(&fs::read(&receipt_path)?)?;
+        ensure!(
+            receipt["success"] == true
+                && receipt["worker_success"] == true
+                && receipt["fresh_process"] == true
+                && receipt["supervision"]["success"] == true
+                && receipt["supervision"]["exit_code"] == 0
+                && receipt["supervision"]["deadline_exhausted"] == false
+                && receipt["case_id"] == row["id"]
+                && receipt["input_sha256"] == row["input_sha256"]
+                && proof["input_sha256"] == row["input_sha256"]
+                && receipt["cache_statistics"]["binding"] == self.document["semantic_binding"]
+                && receipt["identity"]["data_manifest_sha256"]
+                    == self.document["data_manifest_sha256"]
+                && receipt["identity"]["executable_sha256"]
+                    == self.document["measurement_executable_sha256"]
+                && receipt["identity"]["workload_sha256"] == row["workload_sha256"]
+                && receipt["identity"]["source_census_sha256"] == row["source_census_sha256"],
+            "saved frontier diagnostic differs from original case/cohort"
+        );
+        let original_path = evidence(row, base, "receipt_path", "receipt_sha256")?;
+        let original: Value = serde_json::from_slice(&fs::read(original_path)?)?;
+        validate_frontier_outputs(&original, &receipt)?;
+        for (name, field) in [
+            ("value.symbolica", "value_sha256"),
+            ("guards.json", "guards_sha256"),
+        ] {
+            ensure!(
+                sha256(&receipt, field)? == sha256(&original, field)?
+                    && digest(&receipt_path.with_file_name(name))? == sha256(&receipt, field)?,
+                "diagnostic output/canonical guard set differs"
+            );
+        }
+        let trace = evidence(proof, base, "trace_path", "trace_sha256")?;
+        let from_receipt = resolved(
+            receipt_path.parent().unwrap_or(Path::new(".")),
+            string(&receipt["cache_hit_diagnostic"], "path")?,
+        );
+        ensure!(
+            trace == from_receipt
+                && sha256(&receipt["cache_hit_diagnostic"], "sha256")?
+                    == sha256(proof, "trace_sha256")?,
+            "frontier trace differs from successful receipt binding"
+        );
+        let normalized =
+            validate_hit_diagnostic(&serde_json::from_slice::<Value>(&fs::read(trace)?)?)?;
+        for field in [
+            "lookups",
+            "route_hits",
+            "apply_hits",
+            "requested_root_hits",
+            "intermediate_hits",
+            "misses",
+        ] {
+            ensure!(
+                normalized["persistent"][field] == receipt["cache_statistics"]["persistent"][field],
+                "saved dispatch counters differ from final raw receipt"
+            );
+        }
+        let mut derived = validate_frontier_certificate(
+            proof,
+            &normalized,
+            &self.document["semantic_binding"],
+            &self.document["compiled_cohort"],
+            sha256(proof, "trace_sha256")?,
+        )?;
+        ensure!(
+            proof["derived"] == derived,
+            "claimed derived hit counts differ from independent join"
+        );
+        if proof.get("declared_training_matches").is_some() {
+            let workload_path = evidence(row, base, "workload_path", "workload_sha256")?;
+            let workload: Value = serde_json::from_slice(&fs::read(workload_path)?)?;
+            let matches = declared_training_matches(proof, &workload)?;
+            ensure!(
+                proof["declared_training_matches"] == matches,
+                "declared training overlap differs"
+            );
+            derived["declared_training_matches"] = matches;
+        }
+        Ok(derived)
+    }
+
+    pub(super) fn initial_routing_frontier(&self, id: &str) -> Result<Value> {
+        let row = self.row(id)?;
+        if row.get("initial_routing_frontier").is_none() {
+            return Ok(Value::Null);
+        }
+        let base = Path::new(string(&self.identity, "path")?)
+            .parent()
+            .unwrap_or(Path::new("."));
+        Ok(match self.validate_initial_frontier(row, base) {
+            Ok(derived) => derived,
+            Err(error) => {
+                json!({"complete":false,"reason":error.to_string(),"scope":"unclassified",
+                "root_frontier_hits":null,"proper_descendant_hits":null})
+            }
+        })
+    }
+}
+
+#[cfg(test)]
+pub(super) fn hit_diagnostic_fixture() -> Value {
+    let route = json!({"stage":"route","powers":vec![1_i64;15],"owner_sector":null});
+    let apply = json!({"stage":"apply","powers":vec![1_i64;15],"owner_sector":vec![true;15]});
+    let event = |name: &str, sequence: u64| {
+        json!({"schema":"vakint.cache-hit-events.v1","event":name,
+        "sequence":sequence,"family_fingerprint":"fixture","work":null,"rootwork":null,
+        "requested_roots":null,"completed_roots":null,"persistent":null,"status":"running"})
+    };
+    let start = event("dispatch_start", 0);
+    let mut hit = event("backing_hit", 2);
+    hit["work"] = apply;
+    let mut root = event("root_collected", 3);
+    root["work"] = route.clone();
+    root["rootwork"] = route;
+    let mut finish = event("dispatch_finish", 4);
+    finish["status"] = json!("succeeded");
+    finish["requested_roots"] = json!(1);
+    finish["completed_roots"] = json!(1);
+    finish["persistent"] = json!({"lookups":1,"route_hits":0,"apply_hits":1,"requested_root_hits":0,"intermediate_hits":1,"misses":0});
+    json!({"schema":"vakint.cache-hit-diagnostic.v1","interval_ns":0,"input_dispatch_count":1,
+        "success":true,"error":null,"events":[start,hit,root,finish,
+            {"schema":"vakint.cache-hit-events.v1","event":"observer_finish","sequence":null,
+                "observer_status":"Active","operation_succeeded":true,"interval_ns":0}]})
 }
 
 #[cfg(test)]
 pub(super) mod tests {
     use super::*;
+
+    fn frontier_fixture(normalized: &Value) -> (Value, Value, Value) {
+        let binding = json!({"physical_arity":15,"family_fingerprint":"fixture"});
+        let compiled = json!({"native_revision":"4190f2c6f3158e3fc3cbcb1937e12e5971da9175",
+            "mapper_source_sha256":format!("{:x}",Sha256::digest(include_bytes!("../authenticate_owner_roots.rs")))});
+        let selection = FrontierSelection::parse(
+            &json!({"family_fingerprint":"fixture",
+            "owners":[{"mask":"111111111111111"}],"initial_frontier_routes":[]}),
+            &binding,
+        )
+        .unwrap();
+        let dispatches=normalized["dispatches"].as_array().unwrap().iter().map(|dispatch| {
+            let mut frontier=BTreeSet::new();
+            let steps=dispatch["seeds"].as_array().unwrap().iter().map(|seed|{
+                let source=FrontierWork::parse(seed).unwrap();
+                let target=selection.endpoint(&source,source.powers.clone()).unwrap();
+                frontier.insert(source.clone());frontier.insert(target.clone());
+                selection.step(&source,vec![json!({"target":target.document(),"coefficient":"1"})],vec!["d-2".into()]).unwrap()
+            }).collect::<Vec<_>>();
+            json!({"ordinal":dispatch["ordinal"],"family_fingerprint":"fixture","seeds":dispatch["seeds"],
+                "seed_sha256":format!("{:x}",Sha256::digest(serde_json::to_vec(&dispatch["seeds"]).unwrap())),
+                "steps":steps,"frontier":frontier.iter().map(FrontierWork::document).collect::<Vec<_>>()})
+        }).collect::<Vec<_>>();
+        (
+            json!({"schema":"vakint.initial-routing-frontier-hit-proof.v1","complete":true,"reason":null,
+            "selection":selection.document(),"selection_sha256":"a".repeat(64),"trace_sha256":"b".repeat(64),
+            "semantic_binding":binding,"compiled_cohort":compiled,"dispatches":dispatches}),
+            binding,
+            compiled,
+        )
+    }
+
+    #[test]
+    fn optional_frontier_refuses_missing_or_unclosed_outputs_and_event_fields() {
+        let closed = json!({"retained_result_available":true,"catalogue_closure":{
+            "closed":true,"unknown_count":0,"unknown_masters":[]}});
+        validate_frontier_outputs(&closed, &closed).unwrap();
+        for side in 0..2 {
+            for field in ["retained_result_available", "catalogue_closure"] {
+                let mut pair = [closed.clone(), closed.clone()];
+                pair[side].as_object_mut().unwrap().remove(field);
+                assert!(validate_frontier_outputs(&pair[0], &pair[1]).is_err());
+            }
+            for (field, value) in [
+                ("closed", json!(false)),
+                ("unknown_count", json!(1)),
+                ("unknown_masters", json!(["unknown"])),
+            ] {
+                let mut pair = [closed.clone(), closed.clone()];
+                pair[side]["catalogue_closure"][field] = value;
+                assert!(validate_frontier_outputs(&pair[0], &pair[1]).is_err());
+            }
+        }
+        for field in [
+            "work",
+            "rootwork",
+            "requested_roots",
+            "completed_roots",
+            "persistent",
+            "status",
+        ] {
+            let mut missing = hit_diagnostic_fixture();
+            missing["events"][0].as_object_mut().unwrap().remove(field);
+            assert!(validate_hit_diagnostic(&missing).is_err(), "{field}");
+        }
+    }
+
+    #[test]
+    fn collected_root_requires_its_current_clone_and_actual_mapper_authority() {
+        for current in [
+            Value::Null,
+            json!({"stage":"route","powers":vec![2_i64;15],"owner_sector":null}),
+        ] {
+            let mut missing = hit_diagnostic_fixture();
+            missing["events"][2]["work"] = current;
+            assert!(validate_hit_diagnostic(&missing).is_err());
+        }
+        let normalized = validate_hit_diagnostic(&hit_diagnostic_fixture()).unwrap();
+        let (mut proof, binding, mut compiled) = frontier_fixture(&normalized);
+        compiled["mapper_source_sha256"] = json!("f".repeat(64));
+        proof["compiled_cohort"] = compiled.clone();
+        assert!(
+            validate_frontier_certificate(
+                &proof,
+                &normalized,
+                &binding,
+                &compiled,
+                &"b".repeat(64)
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn declared_training_matches_report_only_exact_positive_stage_identities() {
+        let normalized = validate_hit_diagnostic(&hit_diagnostic_fixture()).unwrap();
+        let (proof, _, _) = frontier_fixture(&normalized);
+        let workload = json!({"training":[{"id":"selected","powers":vec![1_i64;15]},
+            {"id":"different","powers":vec![2_i64;15]}]});
+        let matches = declared_training_matches(&proof, &workload).unwrap();
+        assert_eq!(matches["scope"], "exact-declared-training-powers-only");
+        assert_eq!(matches["positive_matches"].as_array().unwrap().len(), 2);
+        assert!(
+            matches["positive_matches"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .all(|entry| entry["training_id"] == "selected")
+        );
+        assert_eq!(
+            matches["absence_establishes_training_alias_disjointness"],
+            false
+        );
+        assert_eq!(matches["changes_workload_roles_or_exclusions"], false);
+    }
+
+    #[test]
+    fn hit_stream_requires_every_dispatch_identity_counter_and_acknowledgement() {
+        let original = hit_diagnostic_fixture();
+        let normalized = validate_hit_diagnostic(&original).unwrap();
+        assert_eq!(
+            normalized["dispatches"][0]["seeds"]
+                .as_array()
+                .unwrap()
+                .len(),
+            1
+        );
+        for (path, value) in [
+            (vec!["events", "1", "work"], Value::Null),
+            (
+                vec!["events", "1", "work", "owner_sector"],
+                json!(vec![false; 15]),
+            ),
+            (vec!["events", "3", "persistent", "apply_hits"], json!(0)),
+            (vec!["events", "3", "completed_roots"], json!(0)),
+            (vec!["events", "4", "observer_status"], json!("Detached")),
+            (vec!["input_dispatch_count"], json!(2)),
+        ] {
+            let mut changed = original.clone();
+            let mut cursor = &mut changed;
+            for key in path {
+                cursor = if let Ok(index) = key.parse::<usize>() {
+                    &mut cursor[index]
+                } else {
+                    &mut cursor[key]
+                };
+            }
+            *cursor = value;
+            assert!(validate_hit_diagnostic(&changed).is_err());
+        }
+        let mut missing = original.clone();
+        missing["events"].as_array_mut().unwrap().remove(0);
+        assert!(validate_hit_diagnostic(&missing).is_err());
+        let mut duplicate = original.clone();
+        let root = duplicate["events"][2].clone();
+        duplicate["events"].as_array_mut().unwrap().insert(3, root);
+        assert!(validate_hit_diagnostic(&duplicate).is_err());
+        let mut dropped = original;
+        dropped["events"] = json!([dropped["events"][4]]);
+        assert!(validate_hit_diagnostic(&dropped).is_err());
+    }
+
+    #[test]
+    fn native_intermediate_apply_hit_is_frontier_root_without_rewriting_native_counters() {
+        let normalized = validate_hit_diagnostic(&hit_diagnostic_fixture()).unwrap();
+        let (proof, binding, compiled) = frontier_fixture(&normalized);
+        let joined = validate_frontier_certificate(
+            &proof,
+            &normalized,
+            &binding,
+            &compiled,
+            &"b".repeat(64),
+        )
+        .unwrap();
+        assert_eq!(joined["dispatches"][0]["root_frontier_hits"], 1);
+        assert_eq!(joined["dispatches"][0]["proper_descendant_hits"], 0);
+        assert_eq!(
+            joined["dispatches"][0]["native_persistent"]["requested_root_hits"],
+            0
+        );
+        assert_eq!(
+            joined["dispatches"][0]["native_persistent"]["intermediate_hits"],
+            1
+        );
+        for field in ["compiled_cohort", "semantic_binding", "trace_sha256"] {
+            let mut changed = proof.clone();
+            changed[field] = Value::Null;
+            assert!(
+                validate_frontier_certificate(
+                    &changed,
+                    &normalized,
+                    &binding,
+                    &compiled,
+                    &"b".repeat(64)
+                )
+                .is_err()
+            );
+        }
+        let mut changed = proof;
+        changed["dispatches"][0]["steps"][0]["edges"][0]["coefficient"] = json!("2");
+        assert!(
+            validate_frontier_certificate(
+                &changed,
+                &normalized,
+                &binding,
+                &compiled,
+                &"b".repeat(64)
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn join_uses_global_collected_roots_not_hit_or_caller_order() {
+        let mut trace = hit_diagnostic_fixture();
+        let mut a = vec![1_i64; 15];
+        a[0] = 2;
+        trace["events"][2]["rootwork"]["powers"] = json!(a.clone());
+        trace["events"][2]["work"]["powers"] = json!(a.clone());
+        let only_a = validate_hit_diagnostic(&trace).unwrap();
+        let (proof, binding, compiled) = frontier_fixture(&only_a);
+        assert_eq!(
+            validate_frontier_certificate(&proof, &only_a, &binding, &compiled, &"b".repeat(64))
+                .unwrap()["dispatches"][0]["proper_descendant_hits"],
+            1
+        );
+        let mut b = trace["events"][2].clone();
+        b["sequence"] = json!(4);
+        b["rootwork"]["powers"] = json!(vec![1_i64; 15]);
+        b["work"]["powers"] = json!(vec![1_i64; 15]);
+        trace["events"].as_array_mut().unwrap().insert(3, b);
+        trace["events"][4]["sequence"] = json!(5);
+        trace["events"][4]["requested_roots"] = json!(2);
+        trace["events"][4]["completed_roots"] = json!(2);
+        let batch = validate_hit_diagnostic(&trace).unwrap();
+        let (proof, binding, compiled) = frontier_fixture(&batch);
+        assert_eq!(
+            validate_frontier_certificate(&proof, &batch, &binding, &compiled, &"b".repeat(64))
+                .unwrap()["dispatches"][0]["root_frontier_hits"],
+            1
+        );
+        trace["events"][2]["rootwork"]["powers"] = json!(vec![1_i64; 15]);
+        trace["events"][2]["work"]["powers"] = json!(vec![1_i64; 15]);
+        trace["events"][3]["rootwork"]["powers"] = json!(a.clone());
+        trace["events"][3]["work"]["powers"] = json!(a);
+        assert_eq!(validate_hit_diagnostic(&trace).unwrap(), batch);
+    }
+
+    #[test]
+    fn zero_route_and_strict_permuted_pinch_preserve_stage_and_guards() {
+        let binding = json!({"physical_arity":15,"family_fingerprint":"fixture"});
+        let owner = "011000000000000";
+        let selection=FrontierSelection::parse(&json!({"family_fingerprint":"fixture","owners":[{"mask":owner},{"mask":"010000000000000"}],
+            "initial_frontier_routes":[{"source_mask":"110000000000000","owner_mask":owner}]}),&binding).unwrap();
+        let mut powers = vec![0; 15];
+        powers[0] = 1;
+        powers[1] = 1;
+        let source = FrontierWork::route(powers).unwrap();
+        let mut pinched = vec![0; 15];
+        pinched[1] = 1;
+        let endpoint = selection.endpoint(&source, pinched.clone()).unwrap();
+        assert_eq!(endpoint.stage, "route");
+        assert_eq!(
+            selection.endpoint(&endpoint, pinched).unwrap().stage,
+            "apply"
+        );
+        assert!(selection.step(&endpoint, vec![], vec![]).is_err());
+        let zero = selection
+            .step(
+                &FrontierWork::route(vec![0; 15]).unwrap(),
+                vec![],
+                vec!["d-3".into(), "d-2".into()],
+            )
+            .unwrap();
+        assert_eq!(zero["zero"], true);
+        assert!(zero["owner_label"].is_null());
+        assert_eq!(zero["nonzero_conditions"], json!(["d-3", "d-2"]));
+        let mut invalid = vec![0; 15];
+        invalid[0] = 1;
+        invalid[2] = 1;
+        assert!(selection.endpoint(&source, invalid).is_err());
+        assert!(FrontierSelection::parse(&json!({"family_fingerprint":"fixture","owners":[{"mask":owner},{"mask":owner}],"initial_frontier_routes":[]}),&binding).is_err());
+    }
+
+    #[test]
+    fn certificate_rejects_missing_extraneous_or_apply_expanded_steps() {
+        let normalized = validate_hit_diagnostic(&hit_diagnostic_fixture()).unwrap();
+        let (proof, binding, compiled) = frontier_fixture(&normalized);
+        for field in ["steps", "frontier", "seeds"] {
+            let mut changed = proof.clone();
+            changed["dispatches"][0][field] = json!([]);
+            assert!(
+                validate_frontier_certificate(
+                    &changed,
+                    &normalized,
+                    &binding,
+                    &compiled,
+                    &"b".repeat(64)
+                )
+                .is_err()
+            );
+        }
+        let mut changed = proof.clone();
+        let extra = changed["dispatches"][0]["steps"][0].clone();
+        changed["dispatches"][0]["steps"]
+            .as_array_mut()
+            .unwrap()
+            .push(extra);
+        assert!(
+            validate_frontier_certificate(
+                &changed,
+                &normalized,
+                &binding,
+                &compiled,
+                &"b".repeat(64)
+            )
+            .is_err()
+        );
+        let mut changed = proof;
+        changed["dispatches"][0]["steps"][0]["source"] =
+            changed["dispatches"][0]["steps"][0]["edges"][0]["target"].clone();
+        assert!(
+            validate_frontier_certificate(
+                &changed,
+                &normalized,
+                &binding,
+                &compiled,
+                &"b".repeat(64)
+            )
+            .is_err()
+        );
+    }
     fn expected_bindings() -> [(&'static str, Option<&'static str>); 5] {
         [
             (

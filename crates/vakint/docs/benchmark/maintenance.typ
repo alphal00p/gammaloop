@@ -420,6 +420,18 @@ python3 -m unittest discover -s crates/vakint/docs/benchmark \
 
 === Numerical summaries
 
+The #raw("measure_cache") collector has no per-worker deadline by default.
+An explicit positive #raw("--max-case-seconds N") enables a diagnostic budget
+over the whole fresh worker, including data/cache loading and result/guard
+serialization. Only that opt-in arms its watchdog and permits deadline-based
+termination. It is independent of the fast closure tests' 300-second ceiling.
+Without a completed measurement receipt, an interrupted unbounded attempt stays
+pending: a later supervisor refuses to start a duplicate or infer completion
+from elapsed time. Preserve it for independent terminal review. A bounded
+interrupted attempt retains the existing expired-attempt failure without retry.
+Final comparisons keep the complete frozen suite and a declared serialized
+window; a slow case is never silently dropped or retried.
+
 Medians and full observed ranges are recomputed from actual per-case samples.
 The coloured ratio is always *cached ÷ uncached* (four-loop cells remain
 *RustRed ÷ FMFT*), so green means faster. Do not average different physical inputs
@@ -437,6 +449,25 @@ counter extends campaign coverage or proves master closure. Incidental cached
 descendants remain distinct from explicitly selected starting training integrals
 and their direct owner aliases; this display qualification does not change the
 frozen held-out exclusions.
+
+The optional #raw("measure_cache --classify-cache-hits --repetitions 1")
+diagnostic requires #raw("experimental-rustred") and a read-only #raw("--cache").
+The flag explicitly sets #raw("RustRedMonitorOptions.cache_hit_diagnostic");
+its default is false. Registering a log sink alone never enables this observer.
+It runs one cached worker per frozen case, without a presenter or running
+capture. Its interval-zero observer records exact surviving postcombine roots
+and validated backing-hit identities, with complete per-dispatch reconciliation.
+The existing #raw("authenticate_owner_roots") mapper binds that successful
+receipt to an accepted same-cohort uncached receipt, follows only authenticated
+Route-to-Route/Apply transitions, and joins the saved hits offline. Apply-rule
+children are excluded. No second reduction is needed to create the certificate.
+Missing events, an incomplete routing frontier or an unknown transport leave
+classification unavailable. The versioned recursive certificate supplements
+the original direct-owner proof; claimed flags never upgrade historical proofs.
+Diagnostic timings include observation overhead and supply no performance
+medians, final comparison or training-selection authority. The full collector
+guard files retain their canonical sorted/deduplicated policy; they are not
+evidence of the Native internal condition-vector order.
 
 Loading, cache import, fresh graph preparation, lowering, deferred owner
 preparation, saved-application intervals, complete reduction and end-to-end time
