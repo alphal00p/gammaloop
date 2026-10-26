@@ -40,6 +40,7 @@ use symbolica::domains::rational::Rational;
 use thiserror::Error;
 
 mod chain;
+mod product;
 
 #[cfg(test)]
 thread_local! {
@@ -2217,15 +2218,38 @@ pub enum ProductPlan {
 }
 
 impl ProductPlan {
+    fn named(
+        left: &PartialStructure,
+        right: &PartialStructure,
+    ) -> Result<Self, TensorCompositionError> {
+        if left.canonical().is_scalar() || right.canonical().is_scalar() {
+            return Ok(Self::Scalar);
+        }
+        let candidates = compatible_pairs(left, right);
+        // Named slots determine every pairing, without the unresolved matching
+        // solver or any inspection of the tensor payloads.
+        for (position, pair) in candidates.iter().enumerate() {
+            if candidates[..position]
+                .iter()
+                .any(|previous| previous.left == pair.left || previous.right == pair.right)
+            {
+                return Err(TensorCompositionError::Ambiguous(candidates));
+            }
+        }
+        Ok(if candidates.is_empty() {
+            Self::Outer
+        } else {
+            Self::Contract(candidates)
+        })
+    }
+
     /// Canonicalize the free interface once every surviving port is named.
     /// Unresolved survivors retain the order of their admitted occurrences.
     fn free_interface(
-        left: &SymbolicTensor<PartialStructure>,
-        right: &SymbolicTensor<PartialStructure>,
+        left: &PartialStructure,
+        right: &PartialStructure,
         pairs: &[PortPair],
     ) -> PartialStructure {
-        let left = &left.structure;
-        let right = &right.structure;
         let left_positions = (0..left.canonical().order()).filter(|position| {
             let position = left.layout().canonical_to_logical_position(*position);
             !pairs.iter().any(|pair| pair.left == position)
@@ -2316,7 +2340,7 @@ impl ProductPlan {
                         "scalar multiplication requires a scalar operand".into(),
                     ));
                 }
-                let interface = Self::free_interface(left, right, &[]);
+                let interface = Self::free_interface(&left.structure, &right.structure, &[]);
                 let atom = left.expression.as_ref() * right.expression.as_ref();
                 if left.structure.has_unresolved_ports() || right.structure.has_unresolved_ports() {
                     validate_explicit_index_occurrences(&atom)?;
@@ -3024,8 +3048,11 @@ impl SymbolicTensor<PartialStructure> {
         if self.structure.has_unresolved_ports() || right.structure.has_unresolved_ports() {
             validate_explicit_index_occurrences(&atom)?;
         }
-        SymbolicTensor::from_normalized_parts(atom, ProductPlan::free_interface(self, right, &[]))
-            .validate_rewrite("outer", &[self, right])
+        SymbolicTensor::from_normalized_parts(
+            atom,
+            ProductPlan::free_interface(&self.structure, &right.structure, &[]),
+        )
+        .validate_rewrite("outer", &[self, right])
     }
 
     /// Contract pairs selected in the operands' public logical axis order.
@@ -3092,7 +3119,7 @@ impl SymbolicTensor<PartialStructure> {
                 shared_index(left_slot, right_slot, pair).map(|index| (pair, index))
             })
             .collect::<Result<Vec<_>, _>>()?;
-        let interface = ProductPlan::free_interface(self, right, &pairs);
+        let interface = ProductPlan::free_interface(&self.structure, &right.structure, &pairs);
         let dummies = OnceCell::new();
         let mut left_indices = HashMap::new();
         let mut right_indices = HashMap::new();
@@ -3432,25 +3459,10 @@ impl SymbolicTensor<PartialStructure> {
         if self.is_scalar() || right.is_scalar() {
             return Ok(ProductPlan::Scalar);
         }
-        let candidates = compatible_pairs(&self.structure, &right.structure);
         if Self::interface_is_named(&self.structure) && Self::interface_is_named(&right.structure) {
-            // Named slots determine every pairing. Their canonical storage
-            // already contains the complete interface; neither logical-slot
-            // reconstruction nor the unresolved matching solver is needed.
-            for (position, pair) in candidates.iter().enumerate() {
-                if candidates[..position]
-                    .iter()
-                    .any(|previous| previous.left == pair.left || previous.right == pair.right)
-                {
-                    return Err(TensorCompositionError::Ambiguous(candidates));
-                }
-            }
-            return Ok(if candidates.is_empty() {
-                ProductPlan::Outer
-            } else {
-                ProductPlan::Contract(candidates)
-            });
+            return ProductPlan::named(&self.structure, &right.structure);
         }
+        let candidates = compatible_pairs(&self.structure, &right.structure);
         let left_slots = self.structure.logical_slots();
         let right_slots = right.structure.logical_slots();
         // Repeated explicit labels fix their partners before unresolved ports are considered.
@@ -3641,9 +3653,11 @@ impl SymbolicTensor<PartialStructure> {
             // zero and scalar operations.
             let interface = match &plan {
                 ProductPlan::Scalar | ProductPlan::Outer => {
-                    ProductPlan::free_interface(self, right, &[])
+                    ProductPlan::free_interface(&self.structure, &right.structure, &[])
                 }
-                ProductPlan::Contract(pairs) => ProductPlan::free_interface(self, right, pairs),
+                ProductPlan::Contract(pairs) => {
+                    ProductPlan::free_interface(&self.structure, &right.structure, pairs)
+                }
                 ProductPlan::Compose(..) => unreachable!(),
             };
             let occurrences = ExplicitIndexOccurrences::product(&[self, right])?;
@@ -3836,6 +3850,7 @@ mod tests {
     use spenso::network::library::FunctionLibrary;
     use spenso::network::library::function_lib::Wrap;
     use spenso::network::parsing::{NetworkParse, ParseSettings};
+    use spenso::structure::abstract_index::DUMMY_INDEX_TAG;
     use spenso::structure::dimension::Dimension;
     use spenso::structure::partial::PartialIndex;
     use spenso::structure::representation::{ExtendibleReps, Minkowski, RepName};
@@ -3845,6 +3860,7 @@ mod tests {
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use std::sync::{Arc, Mutex};
     use symbolica::atom::Symbol;
+    use symbolica::domains::float::Float;
     use symbolica::{function, symbol};
 
     fn rep() -> Representation<LibraryRep> {
@@ -3876,6 +3892,555 @@ mod tests {
             atom,
             PartialStructure::from_logical_slots(logical_ports.iter().copied()),
         )
+    }
+
+    fn assert_many_matches_fold(
+        factors: &[&SymbolicTensor<PartialStructure>],
+    ) -> SymbolicTensor<PartialStructure> {
+        let expected = factors
+            .iter()
+            .try_fold(
+                SymbolicTensor::infer(Atom::one()).unwrap(),
+                |left, right| left.multiply(right),
+            )
+            .unwrap();
+        let actual = SymbolicTensor::multiply_many(factors.iter().copied()).unwrap();
+        assert_eq!(actual.expression, expected.expression);
+        assert_eq!(
+            actual.structure.logical_slots(),
+            expected.structure.logical_slots()
+        );
+        let actual_history = actual.explicit_index_occurrences().unwrap();
+        let expected_history = expected.explicit_index_occurrences().unwrap();
+        assert_eq!(
+            actual_history.oriented_entries().collect::<Vec<_>>(),
+            expected_history.oriented_entries().collect::<Vec<_>>()
+        );
+        assert_eq!(actual_history.selected_pair, expected_history.selected_pair);
+        actual
+    }
+
+    #[test]
+    fn multiply_many_empty_and_singleton_keep_seeded_scalar_semantics() {
+        test_support::test_initialize();
+        let one = assert_many_matches_fold(&[]);
+        assert_eq!(one.expression, Atom::one());
+        assert!(one.is_scalar());
+        let ports = [99709, 99701]
+            .map(|index| rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(index))));
+        let leaf = partial_tensor(SPENSO_TAG.tensor_symbol("many_singleton"), &ports, &ports);
+        let canonical = assert_many_matches_fold(&[&leaf]);
+        assert_ne!(
+            leaf.structure.logical_slots(),
+            canonical.structure.logical_slots()
+        );
+        assert_eq!(canonical.expression, leaf.expression);
+        for interface in [
+            leaf.structure.clone(),
+            PartialStructure::from_logical_slots([ports[0], ports[0]]),
+            PartialStructure::from_logical_slots([rep().slot(PartialIndex::open(0)), ports[1]]),
+        ] {
+            let zero = SymbolicTensor::from_declared_parts(Atom::Zero, interface).unwrap();
+            let product = assert_many_matches_fold(&[&zero]);
+            assert!(product.is_zero());
+            assert_eq!(product.rank(), 2);
+        }
+    }
+
+    #[test]
+    fn multiply_many_stops_at_the_first_none_from_non_fused_input() {
+        test_support::test_initialize();
+        let two = SymbolicTensor::infer(Atom::num(2)).unwrap();
+        let three = SymbolicTensor::infer(Atom::num(3)).unwrap();
+        let factors = || {
+            let mut steps = [Some(&two), None, Some(&three)].into_iter();
+            iter::from_fn(move || steps.next().flatten())
+        };
+        let expected = factors()
+            .try_fold(
+                SymbolicTensor::infer(Atom::one()).unwrap(),
+                |left, right| left.multiply(right),
+            )
+            .unwrap();
+        let actual = SymbolicTensor::multiply_many(factors()).unwrap();
+        assert_eq!(expected.expression, Atom::num(2));
+        assert!(actual.same_value(&expected));
+    }
+
+    #[test]
+    fn multiply_many_named_runs_preserve_factors_ports_and_future_collisions() {
+        test_support::test_initialize();
+        let ports = (99710..99719)
+            .map(|index| rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(index))))
+            .collect::<Vec<_>>();
+        let factors = ports
+            .windows(2)
+            .enumerate()
+            .map(|(position, pair)| {
+                let slots = [pair[1], pair[0]];
+                partial_tensor(
+                    SPENSO_TAG.tensor_symbol(&format!("many_named_{position}")),
+                    &slots,
+                    &slots,
+                )
+            })
+            .collect::<Vec<_>>();
+        let product = assert_many_matches_fold(&factors.iter().collect::<Vec<_>>());
+        assert_eq!(product.structure.logical_slots(), [ports[0], ports[8]]);
+        assert_eq!(
+            product.expression,
+            Atom::mul_many(factors.iter().map(|factor| &factor.expression))
+        );
+        let probe = partial_tensor(
+            SPENSO_TAG.tensor_symbol("many_probe"),
+            &ports[3..4],
+            &ports[3..4],
+        );
+        assert!(matches!(
+            product.multiply(&probe),
+            Err(TensorCompositionError::InvalidExplicitMultiplicity { occurrences: 3, .. })
+        ));
+        let x = Atom::var(symbol!("many_factor_x"));
+        let y = Atom::var(symbol!("many_factor_y"));
+        let scalar = SymbolicTensor::infer((&x + &y).pow(7)).unwrap();
+        let scaled = assert_many_matches_fold(&[&scalar, &product, &scalar]);
+        assert_eq!(scaled.expression, (&x + &y).pow(14) * product.expression);
+    }
+
+    #[test]
+    fn multiply_many_keeps_cancelled_and_zero_history_and_closed_scopes() {
+        test_support::test_initialize();
+        let slot = rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(99721)));
+        let a = partial_tensor(SPENSO_TAG.tensor_symbol("many_cancel_a"), &[slot], &[slot]);
+        let b = partial_tensor(SPENSO_TAG.tensor_symbol("many_cancel_b"), &[slot], &[slot]);
+        let pair = assert_many_matches_fold(&[&a, &b]);
+        let retained = rep().slot(AbstractIndex::Normal(99721));
+        // Subtraction binds each summand's internal pairs. A closed scalar
+        // exports no identities, even when its payload cancels to zero.
+        let closed_zero = pair.try_sub(&pair).unwrap();
+        assert_eq!(closed_zero.expression, Atom::Zero);
+        assert!(closed_zero.is_scalar());
+        assert_eq!(
+            closed_zero
+                .explicit_index_occurrences()
+                .unwrap()
+                .count(retained),
+            0
+        );
+        let scalar = SymbolicTensor::infer(Atom::num(2)).unwrap();
+        let scoped_zero = assert_many_matches_fold(&[&closed_zero, &scalar]);
+        let accepted = assert_many_matches_fold(&[&scoped_zero, &a]);
+        assert_eq!(accepted.expression, Atom::Zero);
+        assert_eq!(
+            accepted.structure.logical_slots(),
+            a.structure.logical_slots()
+        );
+        assert_eq!(
+            accepted
+                .explicit_index_occurrences()
+                .unwrap()
+                .count(retained),
+            1
+        );
+
+        // Multiplicative zero erases the payload while retaining both uses in
+        // this scope. This pair must still reject a subsequent third use.
+        let scalar_zero = SymbolicTensor::infer(Atom::Zero).unwrap();
+        let erased = assert_many_matches_fold(&[&pair, &scalar_zero, &scalar]);
+        assert_eq!(erased.expression, Atom::Zero);
+        assert!(erased.is_scalar());
+        assert_eq!(
+            erased.explicit_index_occurrences().unwrap().count(retained),
+            2
+        );
+        for result in [
+            erased.multiply(&a),
+            SymbolicTensor::multiply_many([&erased, &a]),
+        ] {
+            assert!(matches!(result,
+                Err(TensorCompositionError::InvalidExplicitMultiplicity { index, occurrences: 3 })
+                    if index == retained.aind()
+            ));
+        }
+        let nominal = SymbolicTensor::from_declared_parts(
+            Atom::Zero,
+            PartialStructure::from_logical_slots([slot]),
+        )
+        .unwrap();
+        assert!(matches!(
+            SymbolicTensor::multiply_many([&nominal, &a, &b]),
+            Err(TensorCompositionError::InvalidExplicitMultiplicity { occurrences: 3, .. })
+        ));
+        let scoped = SymbolicTensor::from_declared_parts(
+            Atom::one() + a.expression.pow(2),
+            PartialStructure::from_logical_slots([]),
+        )
+        .unwrap();
+        let product = assert_many_matches_fold(&[&scoped, &a, &scalar]);
+        assert_eq!(
+            product
+                .explicit_index_occurrences()
+                .unwrap()
+                .count(rep().slot(AbstractIndex::Normal(99721))),
+            1
+        );
+    }
+
+    #[test]
+    fn multiply_many_reports_the_first_prefix_and_plans_before_combined_history() {
+        test_support::test_initialize();
+        let index = AbstractIndex::Normal(99731);
+        let slot = rep().slot(PartialIndex::Explicit(index));
+        let a = partial_tensor(SPENSO_TAG.tensor_symbol("many_order_a"), &[slot], &[slot]);
+        let b = partial_tensor(SPENSO_TAG.tensor_symbol("many_order_b"), &[slot], &[slot]);
+        let invalid = SymbolicTensor::from_normalized_parts(
+            Atom::one(),
+            PartialStructure::from_logical_slots([slot]),
+        );
+        assert!(matches!(
+            SymbolicTensor::multiply_many([&a, &b, &a, &invalid]),
+            Err(TensorCompositionError::InvalidExplicitMultiplicity { index: failed, occurrences: 3 })
+                if failed == index
+        ));
+        assert!(invalid.proofs.validated.get().is_none());
+        let base: Representation<LibraryRep> = ColorFundamental {}.new_rep(3).cast();
+        let repeated = SymbolicTensor::from_declared_parts(
+            Atom::Zero,
+            PartialStructure::from_logical_slots([base.slot(PartialIndex::Explicit(index)); 2]),
+        )
+        .unwrap();
+        let dual = base.dual().slot(PartialIndex::Explicit(index));
+        let partner = partial_tensor(SPENSO_TAG.tensor_symbol("many_ambiguous"), &[dual], &[dual]);
+        assert!(matches!(
+            SymbolicTensor::multiply_many([&repeated, &partner, &invalid]),
+            Err(TensorCompositionError::Ambiguous(_))
+        ));
+        assert!(invalid.proofs.validated.get().is_none());
+        assert!(SymbolicTensor::multiply_many([&invalid, &repeated]).is_err());
+        let ports = [99739, 99733]
+            .map(|index| rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(index))));
+        let left = partial_tensor(
+            SPENSO_TAG.tensor_symbol("many_overflow_left"),
+            &ports,
+            &ports,
+        );
+        let right = partial_tensor(
+            SPENSO_TAG.tensor_symbol("many_overflow_right"),
+            &ports,
+            &ports,
+        );
+        assert!(matches!(
+            SymbolicTensor::multiply_many([&left, &right, &left]),
+            Err(TensorCompositionError::InvalidExplicitMultiplicity {
+                index: AbstractIndex::Normal(99733),
+                occurrences: 3
+            })
+        ));
+    }
+
+    #[test]
+    fn multiply_many_history_preserves_orientation_branch_bounds_and_selected_pair() {
+        test_support::test_initialize();
+        let base: Representation<LibraryRep> = ColorFundamental {}.new_rep(3).cast();
+        let index = AbstractIndex::Normal(99741);
+        let port = base.slot(PartialIndex::Explicit(index));
+        let v = partial_tensor(SPENSO_TAG.tensor_symbol("many_oriented"), &[port], &[port]);
+        let square = assert_many_matches_fold(&[&v, &v]);
+        assert_eq!(square.rank(), 2);
+        assert_eq!(square.expression, v.expression.pow(2));
+        let mut mixed = ExplicitIndexOccurrences::default();
+        mixed.add(base.dual().slot(index), 1);
+        mixed.add(base.slot(index), 1);
+        let mut bases = ExplicitIndexOccurrences::default();
+        bases.add(base.slot(index), 2);
+        mixed.branch_max(&bases);
+        mixed.selected_pair = true;
+        // Exercise the inherited branch bounds at their owner: both maxima
+        // can be present without their sum being the total multiplicity.
+        let carrier = SymbolicTensor::from_validated_parts(
+            Atom::one(),
+            PartialStructure::from_logical_slots([]),
+        );
+        let _ = carrier.proofs.occurrences.set(Arc::new(mixed));
+        let scalar = SymbolicTensor::infer(Atom::num(3)).unwrap();
+        let product = assert_many_matches_fold(&[&carrier, &scalar]);
+        let history = product.explicit_index_occurrences().unwrap();
+        assert_eq!(
+            history.oriented_entries().collect::<Vec<_>>(),
+            [(base.dual().slot(index), 2, 2, 1)]
+        );
+        assert!(history.selected_pair);
+    }
+
+    #[test]
+    fn multiply_many_uses_exact_dimension_keys_and_prefix_canonical_merges() {
+        test_support::test_initialize();
+        let dimensions = [
+            Dimension::Symbolic(symbol!("many_dimension_n").into()),
+            Dimension::Concrete(4),
+            Dimension::Symbolic(symbol!("many_dimension_m").into()),
+            Dimension::Concrete(2),
+        ];
+        let scope = symbol!("many_dimension_scope");
+        let factors = (0..48)
+            .map(|position| {
+                let dimension = dimensions[position % dimensions.len()];
+                let index = AbstractIndex::Normal(99750 + position / dimensions.len());
+                let index = if position % 3 == 0 {
+                    index.scoped(scope)
+                } else {
+                    index
+                };
+                let port = Representation {
+                    rep: rep().rep,
+                    dim: dimension,
+                }
+                .slot(PartialIndex::Explicit(index));
+                partial_tensor(
+                    SPENSO_TAG.tensor_symbol(&format!("many_dimension_{position}")),
+                    &[port],
+                    &[port],
+                )
+            })
+            .collect::<Vec<_>>();
+        let result = assert_many_matches_fold(&factors.iter().collect::<Vec<_>>());
+        assert_eq!(result.rank(), factors.len());
+        let history = result.explicit_index_occurrences().unwrap();
+        assert_eq!(history.entries().count(), factors.len());
+        assert!(history.entries().all(|(_, count)| count == 1));
+        let paired = assert_many_matches_fold(&[&result, &factors[22]]);
+        assert_eq!(paired.rank(), factors.len() - 1);
+        assert!(matches!(
+            paired.multiply(&factors[22]),
+            Err(TensorCompositionError::InvalidExplicitMultiplicity { occurrences: 3, .. })
+        ));
+    }
+
+    #[test]
+    fn multiply_many_flushes_before_compact_dot_exposed_by_scalar_cancellation() {
+        test_support::test_initialize();
+        let x = Atom::var(symbol!("many_dot_coefficient"));
+        let scalar = SymbolicTensor::infer(x.clone()).unwrap();
+        let inverse = SymbolicTensor::infer(x.pow(-1)).unwrap();
+        let port = rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(99771)));
+        let a = vector("many_dot_a", port);
+        let b = vector("many_dot_b", port);
+        let product = assert_many_matches_fold(&[&scalar, &a, &inverse, &b]);
+        assert!(matches!(product.expression.as_view(), AtomView::Fun(fun)
+            if fun.get_symbol() == SPENSO_TAG.dot));
+        assert!(matches!(
+            product.multiply(&a),
+            Err(TensorCompositionError::InvalidExplicitMultiplicity { occurrences: 3, .. })
+        ));
+    }
+
+    #[test]
+    fn multiply_many_dispatches_positional_contracts_open_wrappers_and_chains() {
+        test_support::test_initialize();
+        let scalar = SymbolicTensor::infer(Atom::num(2)).unwrap();
+        let a = tensor("many_positional_matrix", &[rep(), rep()]);
+        let b = tensor("many_positional_matrix_b", &[rep(), rep()]);
+        let c = tensor("many_positional_matrix_c", &[rep(), rep()]);
+        let chain = assert_many_matches_fold(&[&scalar, &a, &b, &c]);
+        assert_eq!(chain.rank(), 2);
+        let v = vector("many_positional_vector", rep().slot(PartialIndex::open(0)));
+        let w = vector(
+            "many_positional_vector_w",
+            rep().slot(PartialIndex::open(0)),
+        );
+        // Independent positional contractions allocate fresh hidden names in
+        // the same existing contractor. Payload and public ports remain exact.
+        let expected = [&v, &w, &scalar]
+            .into_iter()
+            .try_fold(
+                SymbolicTensor::infer(Atom::one()).unwrap(),
+                |left, right| left.multiply(right),
+            )
+            .unwrap();
+        let actual = SymbolicTensor::multiply_many([&v, &w, &scalar]).unwrap();
+        assert!(actual.is_scalar());
+        assert_eq!(actual.expression, expected.expression);
+        assert_eq!(
+            actual.structure.logical_slots(),
+            expected.structure.logical_slots()
+        );
+
+        // Include fixed source identities, including a name bearing the dummy
+        // tag. Only the contractor's newly allocated internal name may change.
+        let written =
+            AbstractIndex::try_from(AbstractIndex::new_dummy().to_atom().as_view()).unwrap();
+        let ports = [AbstractIndex::Normal(99781), written]
+            .map(|index| rep().slot(PartialIndex::Explicit(index)));
+        let spectator = partial_tensor(
+            SPENSO_TAG.tensor_symbol("many_positional_named_spectator"),
+            &ports,
+            &ports,
+        );
+        let source_history =
+            ExplicitIndexOccurrences::product(&[&v, &w, &scalar, &spectator]).unwrap();
+        let source_indices = source_history
+            .entries()
+            .map(|(slot, _)| slot.aind())
+            .collect::<HashSet<_>>();
+        let expected = expected.multiply(&spectator).unwrap();
+        let actual = SymbolicTensor::multiply_many([&actual, &spectator]).unwrap();
+        assert_eq!(actual.expression, expected.expression);
+        assert_eq!(
+            actual.structure.logical_slots(),
+            expected.structure.logical_slots()
+        );
+        let fresh_slot = |value: &SymbolicTensor<PartialStructure>| {
+            let history = value.explicit_index_occurrences().unwrap();
+            assert_eq!(
+                history
+                    .oriented_entries()
+                    .filter(|(slot, _, _, _)| source_indices.contains(&slot.aind()))
+                    .collect::<Vec<_>>(),
+                source_history.oriented_entries().collect::<Vec<_>>()
+            );
+            let fresh = history
+                .oriented_entries()
+                .filter(|(slot, _, _, _)| !source_indices.contains(&slot.aind()))
+                .collect::<Vec<_>>();
+            let [(slot, 2, 2, 0)] = fresh.as_slice() else {
+                panic!("one newly allocated internal pair must remain: {fresh:?}");
+            };
+            assert_eq!(slot.rep(), rep());
+            assert!(
+                slot.aind()
+                    .to_atom()
+                    .get_symbol()
+                    .unwrap()
+                    .has_tag(DUMMY_INDEX_TAG)
+            );
+            assert!(
+                !value
+                    .structure
+                    .logical_slots()
+                    .iter()
+                    .any(|port| port.aind == PartialIndex::Explicit(slot.aind()))
+            );
+            *slot
+        };
+        let expected_dummy = fresh_slot(&expected);
+        let actual_dummy = fresh_slot(&actual);
+        let renamed = actual
+            .explicit_index_occurrences()
+            .unwrap()
+            .mapped::<Infallible>(|slot| {
+                Ok(if slot.aind() == actual_dummy.aind() {
+                    slot.rep().slot(expected_dummy.aind())
+                } else {
+                    slot
+                })
+            })
+            .unwrap();
+        assert_eq!(
+            renamed.oriented_entries().collect::<Vec<_>>(),
+            expected
+                .explicit_index_occurrences()
+                .unwrap()
+                .oriented_entries()
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            renamed.selected_pair,
+            expected.explicit_index_occurrences().unwrap().selected_pair
+        );
+        for (value, dummy) in [(&expected, expected_dummy), (&actual, actual_dummy)] {
+            let port = dummy.rep().slot(PartialIndex::Explicit(dummy.aind()));
+            let probe = partial_tensor(
+                SPENSO_TAG.tensor_symbol("many_positional_capture_probe"),
+                &[port],
+                &[port],
+            );
+            let position = value
+                .structure
+                .logical_slots()
+                .iter()
+                .position(|port| port.aind == PartialIndex::Explicit(AbstractIndex::Normal(99781)))
+                .unwrap();
+            for result in [
+                value.multiply(&probe),
+                value.reindex_interface_ports(&HashMap::from([(position, dummy.aind())])),
+            ] {
+                assert!(matches!(result,
+                    Err(TensorCompositionError::InvalidExplicitMultiplicity { index, occurrences: 3 })
+                        if index == dummy.aind()
+                ));
+            }
+        }
+        let scope = symbol!("many_open_scope");
+        let marker = AbstractIndex::Open {
+            owner: 997,
+            axis: 0,
+        }
+        .scoped(scope);
+        let encoded = CookSettings::reversible()
+            .cook_function(marker.to_atom().as_fun_view().unwrap())
+            .unwrap();
+        let encoded = AbstractIndex::try_from(encoded.as_view()).unwrap();
+        for marker in [marker, encoded, encoded.scoped(scope)] {
+            let interface = PartialStructure::from_logical_slots([
+                rep().slot(PartialIndex::Explicit(marker)),
+                rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(3))),
+            ]);
+            let zero = SymbolicTensor::from_declared_parts(Atom::Zero, interface.clone()).unwrap();
+            let result = assert_many_matches_fold(&[&scalar, &zero, &scalar]);
+            assert_eq!(result.structure.logical_slots(), interface.logical_slots());
+        }
+    }
+
+    #[test]
+    fn multiply_many_keeps_rounded_coefficients_and_custom_callbacks_sequential() {
+        test_support::test_initialize();
+        let rounded = ["1.001", "0.4999", "1.003", "0.1", "0.7"].map(|value| {
+            SymbolicTensor::infer(Atom::num(Float::parse(value, Some(11)).unwrap())).unwrap()
+        });
+        for factor in &rounded {
+            assert!(factor.borrowed_parts().product_is_normalized());
+            assert!(!PortRewriteState::exact_arithmetic(
+                factor.expression.as_view()
+            ));
+        }
+        assert_many_matches_fold(&rounded.iter().collect::<Vec<_>>());
+        let unfinished = SymbolicTensor::from_declared_parts(
+            FunctionBuilder::new(SPENSO_TAG.bracket)
+                .add_arg(Atom::var(symbol!("many_unfinished_x")))
+                .add_arg(Atom::var(symbol!("many_unfinished_y")))
+                .finish(),
+            PartialStructure::from_logical_slots([]),
+        )
+        .unwrap();
+        assert!(!unfinished.borrowed_parts().product_is_normalized());
+        assert_many_matches_fold(&[&rounded[0], &unfinished, &rounded[1]]);
+        let calls = Arc::new(AtomicUsize::new(0));
+        let seen = Arc::clone(&calls);
+        let head = symbol!(
+            "many_custom_callback",
+            norm = move |_, _| {
+                seen.fetch_add(1, Ordering::Relaxed);
+            }
+        );
+        let callback =
+            SymbolicTensor::infer(FunctionBuilder::new(head).add_arg(3).finish()).unwrap();
+        assert!(!PortRewriteState::exact_arithmetic(
+            callback.expression.as_view()
+        ));
+        let exact = SymbolicTensor::infer(Atom::num(7)).unwrap();
+        calls.store(0, Ordering::Relaxed);
+        let expected = [&exact, &callback, &rounded[0], &exact]
+            .into_iter()
+            .try_fold(
+                SymbolicTensor::infer(Atom::one()).unwrap(),
+                |left, right| left.multiply(right),
+            )
+            .unwrap();
+        let expected_calls = calls.swap(0, Ordering::Relaxed);
+        let actual =
+            SymbolicTensor::multiply_many([&exact, &callback, &rounded[0], &exact]).unwrap();
+        assert!(actual.same_value(&expected));
+        assert_eq!(calls.load(Ordering::Relaxed), expected_calls);
     }
 
     #[test]

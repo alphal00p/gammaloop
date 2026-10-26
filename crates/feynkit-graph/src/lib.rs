@@ -700,13 +700,12 @@ impl FeynmanDiagram {
     fn fragment_numerator(
         graph: &HedgeGraph<DiagramEdge, DiagramVertex>,
     ) -> Result<SymbolicTensor<PartialStructure>, DiagramError> {
-        graph
-            .iter_edges()
-            .map(|(_, _, edge)| &edge.data.numerator)
-            .chain(graph.iter_nodes().map(|(_, _, vertex)| &vertex.numerator))
-            .try_fold(SymbolicTensor::infer(Atom::one())?, |product, factor| {
-                Ok((product * factor)?)
-            })
+        Ok(SymbolicTensor::multiply_many(
+            graph
+                .iter_edges()
+                .map(|(_, _, edge)| &edge.data.numerator)
+                .chain(graph.iter_nodes().map(|(_, _, vertex)| &vertex.numerator)),
+        )?)
     }
 
     /// Replace local numerator fragments in the finalized index frame and
@@ -3021,7 +3020,10 @@ impl DiagramSourceMap {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use spenso::structure::representation::Euclidean;
+    use spenso::tensor_symbol;
     use std::sync::Arc;
+    use symbolica::function;
 
     fn scalar_model() -> Arc<Model> {
         Arc::new(Model::from_json(
@@ -4401,6 +4403,68 @@ mod tests {
             diagram.with_numerator(SymbolicTensor::infer(Atom::num(7)).unwrap()),
             Err(DiagramError::MissingNumeratorAnchor)
         ));
+    }
+
+    #[test]
+    fn fragment_products_reconstruct_positional_interfaces_and_ranked_zero() {
+        let original = one_loop();
+        let vertex = original.vertices().next().unwrap().0;
+        let edge = original
+            .edges()
+            .find(|(_, _, data)| data.external.is_none())
+            .unwrap()
+            .0;
+        let matrix = NumeratorInterface::admit(
+            function!(
+                tensor_symbol!("feynkit_graph::fragment_positional_matrix"),
+                Minkowski {}.new_rep(4).to_symbolic([]),
+                Euclidean {}.new_rep(2).to_symbolic([])
+            ),
+            None,
+        )
+        .unwrap()
+        .permuted(&[1, 0])
+        .unwrap();
+        let zero = matrix.with_checked_expression(Atom::Zero).unwrap();
+        for fragment in [matrix, zero] {
+            let diagram = original
+                .clone()
+                .with_numerator_fragments(
+                    [(vertex, fragment)],
+                    [(edge, SymbolicTensor::infer(Atom::num(3)).unwrap())],
+                )
+                .unwrap();
+            let expected = diagram
+                .graph
+                .iter_edges()
+                .map(|(_, _, edge)| &edge.data.numerator)
+                .chain(
+                    diagram
+                        .graph
+                        .iter_nodes()
+                        .map(|(_, _, vertex)| &vertex.numerator),
+                )
+                .try_fold(
+                    SymbolicTensor::infer(Atom::one()).unwrap(),
+                    |product, factor| product.multiply(factor),
+                )
+                .unwrap();
+            assert!(diagram.numerator().same_value(&expected));
+            assert_eq!(diagram.numerator().rank(), 2);
+            for reconstructed in [
+                diagram.clone().with_numerator_fragments([], []).unwrap(),
+                FeynmanDiagram::from_json(diagram.model_arc(), &diagram.to_json().unwrap())
+                    .unwrap(),
+                FeynmanDiagram::from_dot(diagram.model_arc(), &diagram.to_dot().unwrap()).unwrap(),
+            ] {
+                assert!(reconstructed.numerator().same_value(&expected));
+                assert_eq!(
+                    reconstructed.numerator().structure().logical_slots(),
+                    expected.structure().logical_slots()
+                );
+                reconstructed.validate().unwrap();
+            }
+        }
     }
 
     #[test]
