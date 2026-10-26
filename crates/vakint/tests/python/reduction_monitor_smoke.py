@@ -36,7 +36,7 @@ def engine(**overrides):
         "evaluation_order": [
             VakintEvaluationMethod.new_rustred_method(master_mode="retain")
         ],
-        "epsilon_symbol": "ep",
+        "epsilon_symbol": E("ep", default_namespace="vakint"),
         "form_exe_path": "/monitor-python-test-must-not-use-form",
         "integral_normalization_factor": "FMFTandMATAD",
         "use_dot_product_notation": True,
