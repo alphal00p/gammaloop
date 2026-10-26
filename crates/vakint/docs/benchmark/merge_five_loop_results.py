@@ -41,6 +41,8 @@ STAGES = (
 )
 LIGHT_CACHE_LIMIT_BYTES = 95_000_000
 SOURCE_PROOF_LIMIT_BYTES = 100 * 1024 * 1024
+CUMULATIVE_SCHEMA = "vakint.cumulative-native-cache-report.v1"
+LIGHT_SCHEMA = "vakint.strict-light-cache-export-validation.v1"
 
 
 def require(ok, message):
@@ -196,23 +198,103 @@ def native_cache_identity(directory):
     identity["sha256"] = hashlib.sha256(
         json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
+    return validated_native_cache_identity(identity)
+
+
+def validated_native_cache_identity(identity):
+    """Check the same opaque index-metadata envelope for live and archived sources."""
+    require(
+        isinstance(identity, dict)
+        and set(identity) == {"schema", "layout", "indexes", "sha256"}
+        and identity["schema"] == "vakint.native-cache-index-identity.v1"
+        and identity["layout"] in ("pack", "bundle")
+        and isinstance(identity["indexes"], dict),
+        "invalid native index identity envelope",
+    )
+    indexes = identity["indexes"]
+    require(
+        set(indexes) == {"cache.rrindex"}
+        if identity["layout"] == "pack"
+        else (
+            "bundle.rrindex" in indexes
+            and len(indexes) > 1
+            and all(
+                isinstance(name, str)
+                and re.fullmatch(r"bindings/[0-9a-f]{64}/cache\.rrindex", name)
+                for name in indexes
+                if name != "bundle.rrindex"
+            )
+        ),
+        "native index identity has an invalid layout/path inventory",
+    )
+    require(
+        all(
+            isinstance(item, dict)
+            and set(item) == {"bytes", "sha256"}
+            and type(item["bytes"]) is int
+            and item["bytes"] > 0
+            and isinstance(item["sha256"], str)
+            and re.fullmatch(r"[0-9a-f]{64}", item["sha256"])
+            for item in indexes.values()
+        ),
+        "native index identity has invalid file lengths/digests",
+    )
+    envelope = {key: value for key, value in identity.items() if key != "sha256"}
+    require(
+        identity["sha256"]
+        == hashlib.sha256(
+            json.dumps(envelope, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest(),
+        "native index identity aggregate differs",
+    )
     return identity
 
 
 def cache_binding(producer):
     report = producer["raw_report"]
-    if report.get("schema") == "vakint.cumulative-native-cache-report.v1":
+    if report.get("schema") in (CUMULATIVE_SCHEMA, LIGHT_SCHEMA):
         return report["semantic_binding"]
     return report["preparation"]["options"]["single_file"]["binding"]
 
 
 def cache_identity(record):
+    if record.get("schema") == LIGHT_SCHEMA:
+        require(
+            record.get("cache_native_index_identity") is None
+            and record.get("cache_sha256") is None,
+            "light producer must retain its selected-file identity separately from its source",
+        )
+        return record["output"]["cache"]["sha256"]
     native = record.get("cache_native_index_identity")
     require(
         not (native is not None and record.get("cache_sha256") is not None),
         "ambiguous file/native cache identity",
     )
     return native if native is not None else record.get("cache_sha256")
+
+
+def light_attachment(statistics, producer):
+    """Current cached workers validate every selected file record before attaching it."""
+    if producer["raw_report"].get("schema") != LIGHT_SCHEMA:
+        return
+    require(
+        isinstance(statistics, dict)
+        and statistics.get("read_backing") is True
+        and isinstance(statistics.get("file"), dict)
+        and type(statistics["file"].get("records")) is int
+        and statistics["file"]["records"]
+        == producer["export_validation"]["unique_selected_records"]
+        and all(
+            type(statistics["file"].get(key)) is int
+            and statistics["file"][key]
+            == producer["raw_report"]["output"]["identity"][key]
+            for key in ("compressed_bytes", "decoded_bytes")
+        )
+        and same_json_value(statistics.get("binding"), cache_binding(producer))
+        and statistics.get("pack") is None
+        and statistics.get("running") is None,
+        "LIGHT consumer did not attach the exact strict selected file/count/binding",
+    )
 
 
 def artifact_binaries(artifact):
@@ -300,10 +382,105 @@ class ReportEvidence:
         self.used.add(str(Path(path).resolve()))
         return copy.deepcopy(record)
 
+    @staticmethod
+    def strict_record(reference, directory):
+        def unique(pairs):
+            result = {}
+            for key, value in pairs:
+                require(key not in result, "duplicate metadata JSON key")
+                result[key] = value
+            return result
+
+        require(isinstance(reference, dict), "missing hashed metadata reference")
+        candidate = Path(reference["path"])
+        candidate = candidate if candidate.is_absolute() else directory / candidate
+        require(
+            candidate.is_file() and not candidate.is_symlink(),
+            "metadata reference needs a regular file",
+        )
+        source, document = hashed_record(reference, directory)
+        require(
+            json.loads(source.read_text(), object_pairs_hook=unique) == document,
+            "metadata JSON differs",
+        )
+        return source, document
+
+    def light_cache_record(self, path, cache, physical_scope):
+        """A selected file is produced by strict export, never by a finite workload."""
+        path, report = self.strict_record(evidence(path), self.path.parent)
+        acceptance_path, acceptance = self.strict_record(
+            self.index.get("cache_requalification"), self.path.parent
+        )
+        relation_path, relation = self.strict_record(
+            acceptance.get("data_metadata_requalification"), acceptance_path.parent
+        )
+        source_manifest, _ = self.strict_record(
+            relation["source_manifest"], relation_path.parent
+        )
+        consumer_manifest, _ = self.strict_record(
+            relation["consumer_manifest"], relation_path.parent
+        )
+        root = consumer_manifest.parent
+        replacement = relation.get("prepared_cache_replacement", {})
+        require(
+            replacement.get("loop_count") == 5
+            and replacement.get("export_validation", {}).get("sha256") == digest(path)
+            and hashed_file(replacement["export_validation"], relation_path.parent)
+            == path,
+            "LIGHT producer differs from the dataset's selected export",
+        )
+        source_path, _ = self.strict_record(report["source"]["producer"], root)
+        _, native = self.strict_record(report["validation"]["receipt"], root)
+        source = cumulative_cache_record(
+            source_path,
+            None,
+            physical_scope,
+            source_identity=native["source_cache_native_index_identity"],
+        )
+        require(
+            source["status"] == "validated-committed-snapshot",
+            "LIGHT needs a validated source snapshot, not prefix preservation alone",
+        )
+        validation = self.light_cache_export(
+            path, report, source_manifest, root, source, self.strict_record
+        )
+        phases = validation["phase_seconds"]
+        export_phases = ("encode_selected_completed_cache", "write_selected_cache")
+        require(
+            Path(cache).is_file()
+            and not Path(cache).is_symlink()
+            and Path(cache).stat().st_size == validation["compressed_bytes"],
+            "LIGHT runtime file differs from its strict export",
+        )
+        require(
+            digest(cache) == validation["cache_sha256"],
+            "LIGHT runtime file differs from its strict export",
+        )
+        _, metadata = self.strict_record(report["output"]["metadata"], root)
+        self.light_cache_metadata(metadata, report, root)
+        return {
+            "evidence": evidence(path),
+            "cache_file": evidence(cache),
+            "raw_report": report,
+            "source_producer": source,
+            "export_validation": validation,
+            "status": "validated-strict-selected-file",
+            "production_seconds": {
+                "selection": None,
+                "preparation": phases.get("load_saved_application"),
+                "export": number(sum(phases[key] for key in export_phases))
+                if all(key in phases for key in export_phases)
+                else None,
+                "reimport": phases.get("reimport_selected_cache"),
+                "comparison": phases.get("compare_selected_native_visitor"),
+            },
+            "scope": "Selected records and file identity are validated; source HEAVY receipts remain separate. Export-tool timing and runtime performance are not inferred.",
+        }
+
     def cache_qualification(self, identity, producer, *, primary=False):
         """Check an accepted provenance bridge; never redo native authentication."""
         build = producer["raw_report"]
-        if build.get("schema") == "vakint.cumulative-native-cache-report.v1":
+        if build.get("schema") in (CUMULATIVE_SCHEMA, LIGHT_SCHEMA):
             return self.cumulative_cache_qualification(
                 identity, producer, primary=primary
             )
@@ -465,9 +642,11 @@ class ReportEvidence:
 
     def cumulative_cache_qualification(self, identity, producer, *, primary=False):
         """Require external native-import and consumer/exclusion acceptance."""
-        build = producer["raw_report"]
+        source = producer.get("source_producer", producer)
+        build = source["raw_report"]
+        light = producer["raw_report"].get("schema") == LIGHT_SCHEMA
         require(
-            cache_identity(identity) == build["cache_native_index_identity"],
+            cache_identity(identity) == cache_identity(producer["raw_report"]),
             "cumulative cache/data identity differs",
         )
         path, accepted = hashed_record(
@@ -494,8 +673,7 @@ class ReportEvidence:
             hashed_file(accepted["producer"], path.parent)
             == Path(producer["evidence"]["path"])
             and accepted["producer"]["sha256"] == producer["evidence"]["sha256"]
-            and accepted["cache_native_index_identity"]
-            == build["cache_native_index_identity"]
+            and cache_identity(accepted) == cache_identity(producer["raw_report"])
             and accepted["semantic_binding"] == build["semantic_binding"]
             and accepted["data_manifest_sha256"] == build["data_manifest_sha256"],
             "cumulative qualification references another producer/snapshot/binding",
@@ -568,53 +746,59 @@ class ReportEvidence:
             not training.intersection(held_out),
             "explicit starting training key is not held out",
         )
-        self.cumulative_source_exclusion(accepted, docs, producer, path.parent)
-        imported = self.cumulative_cache_import(
-            accepted.get("cache_import"), producer, cohort, path.parent
-        )
+        self.cumulative_source_exclusion(accepted, docs, source, path.parent)
+        if light:
+            imported = None
+            require(
+                accepted.get("cache_import", {}).get("sha256")
+                == producer["export_validation"]["native_validation"]["sha256"]
+                and hashed_file(accepted["cache_import"], path.parent)
+                == Path(producer["export_validation"]["native_validation"]["path"]),
+                "LIGHT qualification must bind its own strict export/reimport receipt",
+            )
+        else:
+            imported = self.cumulative_cache_import(
+                accepted.get("cache_import"), producer, cohort, path.parent
+            )
         metadata = None
         relation = accepted.get("data_metadata_requalification")
+        require(
+            not light or relation is not None,
+            "LIGHT requires source-bound dataset requalification",
+        )
         if relation is not None:
             metadata = self.data_metadata_requalification(
-                relation, identity, producer, accepted, docs, imported, path.parent
+                relation, identity, source, accepted, docs, imported, path.parent
             )
+            if light:
+                require(
+                    metadata["prepared_cache_replacement"]["export_validation"]
+                    == producer["evidence"]
+                    and metadata["prepared_cache_replacement"]["cache_sha256"]
+                    == cache_identity(identity),
+                    "LIGHT measurement uses another selected dataset export",
+                )
         else:
             require(
                 identity["data_manifest_sha256"] == build["data_manifest_sha256"],
                 "changed data identity requires explicit metadata requalification",
             )
-        return {
+        result = {
             "evidence": evidence(path),
             "raw_receipt": accepted,
-            "public_import": imported,
             "data_metadata_requalification": metadata,
         }
+        result["strict_export_reimport" if light else "public_import"] = (
+            producer["export_validation"] if light else imported
+        )
+        return result
 
     def data_metadata_requalification(
         self, reference, identity, producer, accepted, docs, imported, base
     ):
         """Compute the narrow release-metadata relation; preserve source identities."""
 
-        def unique(pairs):
-            result = {}
-            for key, value in pairs:
-                require(key not in result, "duplicate metadata JSON key")
-                result[key] = value
-            return result
-
-        def strict_record(reference, directory):
-            candidate = Path(reference["path"])
-            candidate = candidate if candidate.is_absolute() else directory / candidate
-            require(
-                candidate.is_file() and not candidate.is_symlink(),
-                "metadata reference needs a regular file",
-            )
-            source, document = hashed_record(reference, directory)
-            require(
-                json.loads(source.read_text(), object_pairs_hook=unique) == document,
-                "metadata JSON differs",
-            )
-            return source, document
+        strict_record = self.strict_record
 
         path, relation = strict_record(reference, base)
         require(
@@ -1189,6 +1373,29 @@ class ReportEvidence:
                 )
             hashed_file(item, root)
         native_path, native = record(validation["receipt"], root)
+        phases = native.get("phase_seconds", {})
+        require(
+            isinstance(phases, dict)
+            and set(phases)
+            <= {
+                "mandatory_admission",
+                "input_documents_and_indexes",
+                "load_saved_application",
+                "open_native_pack",
+                "compiled_artifact_identity",
+                "open_legacy_cache_file",
+                "compare_full_native_visitor",
+                "final_inputs_indexes_artifact_reference",
+                "encode_selected_completed_cache",
+                "write_selected_cache",
+                "reimport_selected_cache",
+                "compare_selected_native_visitor",
+                "selected_cache_output_identity",
+            },
+            "invalid Native producer phase timings",
+        )
+        for seconds in phases.values():
+            number(seconds)
         counts = ("selected_records", "reimported_records", "complete_records")
         zeroes = ("missing_keys", "partial_records")
         checks = (
@@ -1300,6 +1507,7 @@ class ReportEvidence:
             "cache_sha256": output["cache"]["sha256"],
             "compressed_bytes": output["cache"]["bytes"],
             "unique_selected_records": count,
+            "phase_seconds": phases,
             "scope": "Strict selected-cache dataset replacement only; no family coverage or light performance qualification.",
         }
 
@@ -2585,14 +2793,24 @@ def preserved_native_source(source, base):
     }
 
 
-def cumulative_cache_record(path, cache, physical_scope=None):
+def cumulative_cache_record(path, cache, physical_scope=None, *, source_identity=None):
     """Consume accepted snapshot evidence; a preserved prefix is not a finished run."""
     path = Path(path).resolve()
     report = read(path)
-    identity = native_cache_identity(cache)
+    require(
+        report.get("schema") == CUMULATIVE_SCHEMA, "unknown cumulative source schema"
+    )
+    if source_identity is None:
+        identity = native_cache_identity(cache)
+    else:
+        require(
+            cache is None and isinstance(source_identity, dict) and source_identity,
+            "archived source identity must remain distinct from a runtime cache directory",
+        )
+        identity = validated_native_cache_identity(source_identity)
     require(
         report["cache_sha256"] is None
-        and report["cache_native_index_identity"] == identity,
+        and same_json_value(report["cache_native_index_identity"], identity),
         "cumulative native indexes changed",
     )
     require(
@@ -2605,6 +2823,10 @@ def cumulative_cache_record(path, cache, physical_scope=None):
         == "vakint.postflight-real-union-prefix-proof-qualified.v1"
     )
     if preservation_only:
+        require(
+            cache is not None,
+            "archived LIGHT source needs native validation, not prefix preservation alone",
+        )
         require(
             validation.get("data_preservation_state") == "PASS"
             and validation.get("original_runtime_receipts_unchanged") is True,
@@ -2807,7 +3029,13 @@ def cumulative_cache_record(path, cache, physical_scope=None):
         )
     return {
         "evidence": evidence(path),
-        "cache_directory": str(Path(cache).resolve()),
+        **(
+            {"cache_directory": str(Path(cache).resolve())}
+            if cache is not None
+            else {
+                "source_index_evidence_scope": "Source receipts and the strict export's authenticated HEAVY index identity; the HEAVY payload was not re-read."
+            }
+        ),
         "raw_report": report,
         "validation": {
             "evidence": evidence(validation_path),
@@ -2828,6 +3056,12 @@ def cumulative_cache_record(path, cache, physical_scope=None):
 
 def build_record(path, cache, provenance=None, physical_scope=None):
     build = read(path)
+    if build.get("schema") == LIGHT_SCHEMA:
+        require(
+            provenance is not None,
+            "LIGHT producer requires its source-bound consumer evidence",
+        )
+        return provenance.light_cache_record(path, cache, physical_scope)
     if build.get("schema") == "vakint.cumulative-native-cache-report.v1":
         return cumulative_cache_record(path, cache, physical_scope)
     require(
@@ -2948,7 +3182,7 @@ def suite_record(path, kind, producer, provenance):
             "final collector must report catalogue closure separately from Retain success",
         )
         exposure = None
-        if build.get("schema") == "vakint.cumulative-native-cache-report.v1":
+        if build.get("schema") in (CUMULATIVE_SCHEMA, LIGHT_SCHEMA):
             exposure = requalification["raw_receipt"]["case_exposure"].get(case_id)
             require(
                 exposure in ("held-out", "tuning", "seen-starting-input")
@@ -3012,6 +3246,8 @@ def suite_record(path, kind, producer, provenance):
                 sample["cache_statistics"]["binding"] == cache_binding(producer),
                 "cache semantic binding mismatch",
             )
+            if sample["variant"] == "cached":
+                light_attachment(sample["cache_statistics"], producer)
             directory = (
                 path.parent
                 / f"case-{index:03}-{sample['sample']:02}-{sample['variant']}"
@@ -3020,11 +3256,9 @@ def suite_record(path, kind, producer, provenance):
                 read(directory / "measurement.json") == sample, "saved sample differs"
             )
             bundle = provenance.bind(directory / "measurement.json")
-            if build.get("schema") == "vakint.cumulative-native-cache-report.v1":
+            if build.get("schema") in (CUMULATIVE_SCHEMA, LIGHT_SCHEMA):
                 expected_cache = (
-                    build["cache_native_index_identity"]
-                    if sample["variant"] == "cached"
-                    else None
+                    cache_identity(build) if sample["variant"] == "cached" else None
                 )
                 require(
                     cache_identity(bundle["launcher"]) == expected_cache,
@@ -4076,6 +4310,11 @@ def main():
     )
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--select-current", action="store_true")
+    parser.add_argument(
+        "--select-tier",
+        choices=("heavy", "light"),
+        help="Select this authenticated cache tier alongside the other tier; retain the legacy singular selection",
+    )
     args = parser.parse_args()
     output = args.output.resolve()
     require(
@@ -4100,6 +4339,17 @@ def main():
         if args.build
         else None
     )
+    tier = (
+        {CUMULATIVE_SCHEMA: "heavy", LIGHT_SCHEMA: "light"}.get(
+            build["raw_report"].get("schema")
+        )
+        if build
+        else None
+    )
+    require(
+        args.select_tier is None or args.select_tier == tier,
+        "selected tier does not match the actual cache producer",
+    )
     run = {
         "schema": "vakint.five-loop-report-run.v1",
         "cache": build,
@@ -4114,6 +4364,8 @@ def main():
         "evidence_index": evidence(args.evidence),
         "scope": "Functional evidence is retained separately from eligible matched performance samples.",
     }
+    if tier is not None:
+        run["cache_tier"] = tier
     if scope_authorization is not None:
         run.update(
             physical_scope=physical_scope,
@@ -4129,12 +4381,13 @@ def main():
                 build is not None,
                 "primary performance requires its completed strict cache build",
             )
-            if (
-                build["raw_report"].get("schema")
-                == "vakint.cumulative-native-cache-report.v1"
-            ):
+            if build["raw_report"].get("schema") in (CUMULATIVE_SCHEMA, LIGHT_SCHEMA):
                 require(
-                    build["status"] == "validated-committed-snapshot",
+                    build["status"]
+                    in (
+                        "validated-committed-snapshot",
+                        "validated-strict-selected-file",
+                    ),
                     "primary performance needs semantic/import qualification, not prefix preservation",
                 )
                 acceptance_path, acceptance = hashed_record(
@@ -4148,10 +4401,10 @@ def main():
                     acceptance["consumer"]["compiled_cohort"], acceptance_path.parent
                 )
                 identity = {
-                    "cache_native_index_identity": primary[
+                    "cache_native_index_identity": primary.get(
                         "cache_native_index_identity"
-                    ],
-                    "cache_sha256": None,
+                    ),
+                    "cache_sha256": primary.get("cache_sha256"),
                     "data_manifest_sha256": primary["data_manifest_sha256"],
                     "workload_sha256": acceptance["consumer"]["final_workload"][
                         "sha256"
@@ -4171,6 +4424,14 @@ def main():
                 primary["cache_requalification"] = provenance.cache_qualification(
                     identity, build, primary=True
                 )
+                for record in primary["functional_records"]:
+                    if (
+                        record["performance_eligible"]
+                        and record["launcher"]["variant"] == "cached"
+                    ):
+                        light_attachment(
+                            record["raw_report"].get("saved_application_cache"), build
+                        )
                 require(
                     all(
                         row["evidence"]["artifact"]["sha256"]
@@ -4184,7 +4445,9 @@ def main():
                 cache_identity(primary) == cache_identity(build["raw_report"])
                 and (
                     primary["data_manifest_sha256"]
-                    == build["raw_report"]["data_manifest_sha256"]
+                    == build.get("source_producer", build)["raw_report"][
+                        "data_manifest_sha256"
+                    ]
                     or primary.get("cache_requalification", {}).get(
                         "data_metadata_requalification"
                     )
@@ -4207,6 +4470,54 @@ def main():
     runs[run_id] = run
     if args.select_current:
         merged["selected_five_loop_run"] = run_id
+    if args.select_tier is not None:
+        selections = merged.setdefault("selected_five_loop_runs", {})
+        require(
+            isinstance(selections, dict) and set(selections) <= {"heavy", "light"},
+            "invalid existing cache-tier selection",
+        )
+        for selected_tier, selected_id in selections.items():
+            require(
+                selected_id in runs
+                and runs[selected_id].get("cache_tier") == selected_tier
+                and runs[selected_id]
+                .get("cache", {})
+                .get("raw_report", {})
+                .get("schema")
+                == {"heavy": CUMULATIVE_SCHEMA, "light": LIGHT_SCHEMA}[selected_tier],
+                "existing cache-tier selection names another producer tier",
+            )
+        selections[args.select_tier] = run_id
+        shared_uncached = {}
+        for selected_id in selections.values():
+            selected_run = runs[selected_id]
+            scope = selected_run.get(
+                "physical_scope", {"required": list(PRIMARY), "deferred": []}
+            )
+            for primary in selected_run["primary"].values():
+                for record in primary["functional_records"]:
+                    if (
+                        not record["performance_eligible"]
+                        or record["launcher"]["variant"] != "uncached"
+                    ):
+                        continue
+                    refs = record["evidence"]
+                    signature = {
+                        "launcher": refs["launcher"]["sha256"],
+                        "artifact": refs["artifact"]["sha256"],
+                        "window": record["performance_evidence"]["window"]["sha256"],
+                        "physical_scope": {
+                            kind: sorted(cases)
+                            for kind, cases in validate_physical_scope(scope).items()
+                        },
+                    }
+                    previous = shared_uncached.setdefault(
+                        refs["record"]["sha256"], signature
+                    )
+                    require(
+                        same_json_value(previous, signature),
+                        "shared uncached primary must retain identical scope, launcher/cohort and accepted window",
+                    )
     output.parent.mkdir(parents=True, exist_ok=True)
     with output.open("x") as stream:
         json.dump(merged, stream, indent=2, allow_nan=False)

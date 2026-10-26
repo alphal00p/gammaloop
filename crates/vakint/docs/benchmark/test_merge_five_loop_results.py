@@ -6109,5 +6109,908 @@ class QualificationProjectionTests(unittest.TestCase):
             )
 
 
+class LightRuntimeProducerTests(unittest.TestCase):
+    """Compose existing opaque export, source, consumer and measurement receipts."""
+
+    def setUp(self):
+        self.light = LightMetadataRequalificationTests()
+        self.light.setUp()
+        self.addCleanup(self.light.doCleanups)
+        self.metadata = self.light.fixture
+        self.base = self.metadata.base
+        self.root = self.base.root
+        self.heavy_import = copy.deepcopy(self.metadata.accepted["cache_import"])
+        self.scope = {
+            "required": ["zero-momentum-diagnostic"],
+            "deferred": ["quadratic-four-rung-uv"],
+        }
+        self.scope_path = self.base.write(
+            "runtime-physical-scope.json",
+            {
+                "schema": "vakint.benchmark-physical-scope.v1",
+                "reason": "Synthetic q0-only measurement contract.",
+                "physical_scope": self.scope,
+            },
+        )
+        self.base.cache = self.light.cache
+        self.base.paired(case="zero-momentum-diagnostic")
+        self.refresh_runtime()
+
+    def attachment(self):
+        return {
+            "read_backing": True,
+            "file": {
+                "records": self.light.selection["unique_keys"],
+                "compressed_bytes": self.light.identity["compressed_bytes"],
+                "decoded_bytes": self.light.identity["decoded_bytes"],
+            },
+            "binding": copy.deepcopy(self.light.binding),
+            "pack": None,
+            "running": None,
+        }
+
+    def refresh_runtime(self):
+        """Rebind real fixture documents; no authoritative validator is replaced."""
+        self.light.refresh()
+        accepted = self.metadata.accepted
+        accepted.update(
+            producer=merge.evidence(self.light.export_path),
+            cache_sha256=merge.digest(self.light.cache),
+            cache_native_index_identity=None,
+            cache_import=merge.evidence(self.light.raw_path),
+        )
+        self.base.rebind_acceptance(
+            self.metadata.index,
+            self.metadata.acceptance,
+            lambda doc: doc.update(accepted),
+        )
+        identity = self.metadata.suite["identity"]
+        identity.update(
+            cache_sha256=merge.digest(self.light.cache),
+            cache_native_index_identity=None,
+        )
+        measurements = []
+        for reference, window in zip(self.base.records, self.base.window_rows):
+            path, launch_path = (
+                Path(reference[key]["path"]) for key in ("record", "launcher")
+            )
+            report, launch = merge.read(path), merge.read(launch_path)
+            cached = launch["variant"] == "cached"
+            if report.get("schema") == "vakint.qcd-ladder.benchmark.v1":
+                report["data_manifest_sha256"] = merge.digest(
+                    self.metadata.new_manifest
+                )
+                report["persistent_cache"] = str(self.light.cache) if cached else None
+                report["cache_native_index_identity"] = None
+                if cached:
+                    report["saved_application_cache"] = self.attachment()
+            else:
+                report["identity"] = copy.deepcopy(identity)
+                report["owner_proof"] = copy.deepcopy(identity["owner_proof"])
+                report["cache_statistics"]["binding"] = copy.deepcopy(
+                    self.light.binding
+                )
+                if cached:
+                    report["cache_statistics"].update(self.attachment())
+                measurements.append(report)
+            launch.update(
+                cache_sha256=merge.digest(self.light.cache) if cached else None,
+                cache_native_index_identity=None,
+            )
+            path.write_text(json.dumps(report))
+            launch_path.write_text(json.dumps(launch))
+            reference.update(
+                record=merge.evidence(path), launcher=merge.evidence(launch_path)
+            )
+            window.update(
+                report_sha256=merge.digest(path),
+                launcher_sha256=merge.digest(launch_path),
+            )
+        self.metadata.suite["measurements"] = measurements
+        self.suite_path = self.base.write(
+            "light-runtime-suite.json", self.metadata.suite
+        )
+        self.index = self.base.index()
+        index = merge.read(self.index)
+        index["cache_requalification"] = merge.evidence(self.metadata.acceptance)
+        self.index.write_text(json.dumps(index))
+
+    def producer(self):
+        return merge.build_record(
+            self.light.export_path,
+            self.light.cache,
+            merge.ReportEvidence(self.index),
+            self.scope,
+        )
+
+    def fresh(self):
+        fixture = LightRuntimeProducerTests()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        return fixture
+
+    def cli(self, name="light-output.json", *, base=None, tier="light"):
+        base = base or self.base.write("light-base.json", {})
+        output = self.root / name
+        argv = [
+            "adapter",
+            "--base",
+            str(base),
+            "--build",
+            str(self.light.export_path),
+            "--cache",
+            str(self.light.cache),
+            "--tuning",
+            str(self.suite_path),
+            "--evidence",
+            str(self.index),
+            "--physical-scope",
+            str(self.scope_path),
+            "--output",
+            str(output),
+        ]
+        if tier is not None:
+            argv.extend(["--select-tier", tier])
+        with patch("sys.argv", argv):
+            merge.main()
+        return output
+
+    def mutate_measurement(self, mutate, *, primary=False):
+        """Keep launcher/window hashes coherent so semantic attachment checks run."""
+        for reference, window in zip(self.base.records, self.base.window_rows):
+            path = Path(reference["record"]["path"])
+            report = merge.read(path)
+            is_primary = report.get("schema") == "vakint.qcd-ladder.benchmark.v1"
+            launch = merge.read(reference["launcher"]["path"])
+            if is_primary is primary and launch["variant"] == "cached":
+                mutate(report)
+                path.write_text(json.dumps(report))
+                reference["record"] = merge.evidence(path)
+                window["report_sha256"] = merge.digest(path)
+                if not primary:
+                    self.metadata.suite["measurements"] = [
+                        report
+                        if row["sample"] == report["sample"]
+                        and row["variant"] == "cached"
+                        else row
+                        for row in self.metadata.suite["measurements"]
+                    ]
+                break
+        self.suite_path.write_text(json.dumps(self.metadata.suite))
+        self.index = self.base.index()
+        document = merge.read(self.index)
+        document["cache_requalification"] = merge.evidence(self.metadata.acceptance)
+        self.index.write_text(json.dumps(document))
+
+    def alter_acceptance(self, mutate):
+        self.base.rebind_acceptance(self.index, self.metadata.acceptance, mutate)
+
+    def alter_archived_source(self, mutate, *, identity=None):
+        """Rehash source, Native, metadata and admission links without validating away a mutation."""
+        path = self.light.target / self.light.source_record["producer"]["path"]
+        source = merge.read(path)
+        mutate(source)
+        if identity is not None:
+            source["cache_native_index_identity"] = identity
+            validation_path = Path(source["validation"]["path"])
+            validation = merge.read(validation_path)
+            validation["cache_native_index_identity"] = identity
+            self.light.put(validation_path, validation)
+            source["validation"] = merge.evidence(validation_path)
+        self.light.put(path, source)
+        source_ref = self.light.ref(path)
+        metadata = merge.read(self.light.metadata)
+        exported = merge.read(self.light.export_path)
+        for record in (metadata["selection"]["source"], exported["source"]):
+            record["producer"] = source_ref
+            if identity is not None:
+                record["cache_native_index_identity"] = identity
+        self.light.put(self.light.metadata, metadata)
+        self.light.put(self.light.export_path, exported)
+        if identity is not None:
+            self.light.alter_raw(
+                lambda raw: raw.update(source_cache_native_index_identity=identity)
+            )
+        self.refresh_runtime()
+
+    @staticmethod
+    def identity_checksum(identity):
+        identity["sha256"] = hashlib.sha256(
+            json.dumps(
+                {key: value for key, value in identity.items() if key != "sha256"},
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode()
+        ).hexdigest()
+
+    def test_strict_light_is_a_runtime_producer_with_separate_heavy_source(self):
+        original = merge.read(self.light.export_path)
+        producer = self.producer()
+        self.assertEqual(producer["raw_report"], original)
+        self.assertEqual(
+            producer["raw_report"]["schema"],
+            "vakint.strict-light-cache-export-validation.v1",
+        )
+        self.assertNotIn("preparation", producer["raw_report"])
+        self.assertEqual(producer["cache_file"], merge.evidence(self.light.cache))
+        self.assertEqual(
+            merge.cache_identity(producer["raw_report"]), merge.digest(self.light.cache)
+        )
+        source = producer["source_producer"]
+        self.assertEqual(
+            source["raw_report"]["schema"], "vakint.cumulative-native-cache-report.v1"
+        )
+        self.assertNotEqual(
+            merge.cache_identity(source["raw_report"]),
+            merge.cache_identity(producer["raw_report"]),
+        )
+        self.assertNotIn("cache_directory", source)
+        self.assertIn(
+            "HEAVY payload was not re-read", source["source_index_evidence_scope"]
+        )
+        self.assertFalse(source["physical_examples_complete"])
+        self.assertTrue(
+            all(value is None for value in producer["production_seconds"].values())
+        )
+
+    def test_light_suite_and_q0_use_actual_file_identity_and_strict_reimport(self):
+        output = merge.read(self.cli())
+        run = output["five_loop_runs"][output["selected_five_loop_runs"]["light"]]
+        self.assertEqual(run["cache_tier"], "light")
+        self.assertEqual(run["tuning"]["rows"][0]["status"], "measured")
+        q0 = run["primary"]["zero-momentum-diagnostic"]
+        self.assertEqual(q0["status"], "measured")
+        self.assertEqual(run["primary"]["quadratic-four-rung-uv"]["status"], "deferred")
+        self.assertEqual(q0["cache_sha256"], merge.digest(self.light.cache))
+        self.assertIsNone(q0.get("cache_native_index_identity"))
+        self.assertEqual(
+            q0["cache_requalification"]["raw_receipt"]["cache_import"],
+            merge.evidence(self.light.raw_path),
+        )
+        self.assertEqual(
+            q0["cache_requalification"]["data_metadata_requalification"][
+                "prepared_cache_replacement"
+            ]["export_validation"],
+            merge.evidence(self.light.export_path),
+        )
+
+    def test_light_producer_requires_the_selected_export_and_its_own_file(self):
+        other_export = self.root / "other-export.json"
+        other_export.write_bytes(self.light.export_path.read_bytes())
+        with self.assertRaisesRegex(ValueError, "selected export"):
+            merge.build_record(
+                other_export, self.light.cache, merge.ReportEvidence(self.index)
+            )
+        wrong_file = self.root / "same-size-wrong-cache.gz"
+        wrong_file.write_bytes(b"X" * self.light.cache.stat().st_size)
+        with self.assertRaisesRegex(ValueError, "runtime file differs"):
+            merge.build_record(
+                self.light.export_path, wrong_file, merge.ReportEvidence(self.index)
+            )
+        with self.assertRaisesRegex(ValueError, "source-bound consumer evidence"):
+            merge.build_record(self.light.export_path, self.light.cache)
+
+    def test_light_requires_relation_admission_and_exact_native_reimport(self):
+        for mutation in ("relation", "admission", "import", "producer", "cache"):
+            with self.subTest(mutation=mutation):
+                case = self.fresh()
+                if mutation == "relation":
+                    case.alter_acceptance(
+                        lambda doc: doc.pop("data_metadata_requalification")
+                    )
+                elif mutation == "admission":
+                    admission = merge.read(case.light.admission_path)
+                    admission["accepted"] = False
+                    case.light.put(case.light.admission_path, admission)
+                    case.refresh_runtime()
+                elif mutation == "import":
+                    case.alter_acceptance(
+                        lambda doc, case=case: doc.update(
+                            cache_import=case.heavy_import
+                        )
+                    )
+                elif mutation == "producer":
+                    case.alter_acceptance(
+                        lambda doc, case=case: doc.update(
+                            producer=case.metadata.producer["evidence"]
+                        )
+                    )
+                else:
+                    case.alter_acceptance(lambda doc: doc.update(cache_sha256="0" * 64))
+                with self.assertRaises(ValueError):
+                    case.cli("must-not-exist.json")
+                self.assertFalse((case.root / "must-not-exist.json").exists())
+
+    def test_light_rejects_rebound_source_schema_and_source_identity(self):
+        self.alter_archived_source(
+            lambda source: source.update(schema="vakint.five-loop-cache-build.v2")
+        )
+        with self.assertRaisesRegex(ValueError, "cumulative.*schema"):
+            self.producer()
+        case = self.fresh()
+        identity = copy.deepcopy(
+            case.metadata.producer["raw_report"]["cache_native_index_identity"]
+        )
+        identity["indexes"]["cache.rrindex"]["bytes"] += 1
+        self.identity_checksum(identity)
+        case.light.alter_raw(
+            lambda raw: raw.update(source_cache_native_index_identity=identity)
+        )
+        case.refresh_runtime()
+        with self.assertRaisesRegex(ValueError, "native indexes changed"):
+            case.producer()
+
+    def test_archived_native_identity_rejects_coherently_rebound_bad_envelopes(self):
+        mutations = (
+            ("schema", lambda value: value.update(schema="unknown")),
+            ("layout", lambda value: value.update(layout="opaque")),
+            (
+                "traversal",
+                lambda value: value["indexes"].update(
+                    {"../cache.rrindex": value["indexes"].pop("cache.rrindex")}
+                ),
+            ),
+            (
+                "extra-index",
+                lambda value: value["indexes"].update(
+                    {"extra.rrindex": copy.deepcopy(value["indexes"]["cache.rrindex"])}
+                ),
+            ),
+            (
+                "bool-bytes",
+                lambda value: value["indexes"]["cache.rrindex"].update(bytes=True),
+            ),
+            (
+                "zero-bytes",
+                lambda value: value["indexes"]["cache.rrindex"].update(bytes=0),
+            ),
+            (
+                "uppercase-digest",
+                lambda value: value["indexes"]["cache.rrindex"].update(sha256="A" * 64),
+            ),
+            (
+                "short-digest",
+                lambda value: value["indexes"]["cache.rrindex"].update(sha256="a" * 63),
+            ),
+            ("aggregate", lambda value: value.update(sha256="0" * 64)),
+        )
+        for label, mutate in mutations:
+            with self.subTest(label=label):
+                case = self.fresh()
+                identity = copy.deepcopy(
+                    case.metadata.producer["raw_report"]["cache_native_index_identity"]
+                )
+                mutate(identity)
+                if label != "aggregate":
+                    self.identity_checksum(identity)
+                case.alter_archived_source(lambda source: None, identity=identity)
+                with self.assertRaisesRegex(ValueError, "native index identity"):
+                    case.producer()
+
+    def test_light_still_checks_heavy_source_exclusion_and_consumer_cohort(self):
+        for mutation in ("missing-source", "wrong-cohort", "owner-overlap"):
+            with self.subTest(mutation=mutation):
+                case = self.fresh()
+                acceptance = merge.read(case.metadata.acceptance)
+                if mutation == "missing-source":
+                    path = Path(acceptance["source_starting_keys"]["path"])
+                    document = merge.read(path)
+                    document["sources"] = []
+                    case.light.put(path, document)
+                    case.alter_acceptance(
+                        lambda doc, path=path: doc.update(
+                            source_starting_keys=merge.evidence(path)
+                        )
+                    )
+                elif mutation == "wrong-cohort":
+                    path = Path(acceptance["consumer"]["compiled_cohort"]["path"])
+                    document = merge.read(path)
+                    document["main_revision"] = "a" * 40
+                    case.light.put(path, document)
+                    case.alter_acceptance(
+                        lambda doc, path=path: doc["consumer"].update(
+                            compiled_cohort=merge.evidence(path)
+                        )
+                    )
+                else:
+                    path = Path(
+                        acceptance["consumer"]["training_route_qualification"]["path"]
+                    )
+                    document = merge.read(path)
+                    document["rows"][0]["owner_endpoints"][0]["powers"] = [4] * 15
+                    case.light.put(path, document)
+                    alias_path = Path(acceptance["consumer"]["alias_exclusion"]["path"])
+                    alias = merge.read(alias_path)
+                    alias["qualification"] = merge.evidence(path)
+                    case.light.put(alias_path, alias)
+                    case.alter_acceptance(
+                        lambda doc, path=path, alias_path=alias_path: doc[
+                            "consumer"
+                        ].update(
+                            training_route_qualification=merge.evidence(path),
+                            alias_exclusion=merge.evidence(alias_path),
+                        )
+                    )
+                with self.assertRaises(ValueError):
+                    case.cli("rejected.json")
+                self.assertFalse((case.root / "rejected.json").exists())
+
+    def test_cached_suite_and_q0_must_attach_the_exact_selected_file(self):
+        mutations = (
+            ("read-backing", lambda stats: stats.update(read_backing=False)),
+            ("count", lambda stats: stats["file"].update(records=3)),
+            ("bool-count", lambda stats: stats["file"].update(records=True)),
+            ("float-count", lambda stats: stats["file"].update(records=2.0)),
+            (
+                "compressed-bytes",
+                lambda stats: stats["file"].update(compressed_bytes=1),
+            ),
+            ("decoded-bytes", lambda stats: stats["file"].update(decoded_bytes=1)),
+            ("bool-bytes", lambda stats: stats["file"].update(decoded_bytes=True)),
+            ("float-bytes", lambda stats: stats["file"].update(decoded_bytes=512.0)),
+            ("binding", lambda stats: stats["binding"].update(physical_arity=True)),
+            (
+                "typed-binding",
+                lambda stats: stats["binding"].update(physical_arity=15.0),
+            ),
+            ("pack", lambda stats: stats.update(pack={"records": 2})),
+            ("running", lambda stats: stats.update(running={"records": 2})),
+            ("missing-file", lambda stats: stats.update(file=None)),
+        )
+        for primary in (False, True):
+            for label, mutate in mutations:
+                with self.subTest(primary=primary, mutation=label):
+                    case = self.fresh()
+                    key = "saved_application_cache" if primary else "cache_statistics"
+                    case.mutate_measurement(
+                        lambda row, mutate=mutate, key=key: mutate(row[key]),
+                        primary=primary,
+                    )
+                    with self.assertRaisesRegex(
+                        ValueError,
+                        "cache semantic binding mismatch"
+                        if label == "binding" and not primary
+                        else "LIGHT consumer.*selected file",
+                    ):
+                        case.cli("rejected-attachment.json")
+                    self.assertFalse((case.root / "rejected-attachment.json").exists())
+
+    def test_light_phase_costs_keep_distinct_source_instrumentation(self):
+        phases = {
+            "mandatory_admission": 91.0,
+            "load_saved_application": 2.0,
+            "encode_selected_completed_cache": 3.0,
+            "write_selected_cache": 5.0,
+            "reimport_selected_cache": 7.0,
+            "compare_selected_native_visitor": 11.0,
+            "selected_cache_output_identity": 101.0,
+        }
+        self.light.alter_raw(lambda native: native.update(phase_seconds=phases))
+        self.refresh_runtime()
+        producer = self.producer()
+        self.assertEqual(producer["export_validation"]["phase_seconds"], phases)
+        self.assertEqual(
+            producer["production_seconds"],
+            {
+                "selection": None,
+                "preparation": 2.0,
+                "export": 8.0,
+                "reimport": 7.0,
+                "comparison": 11.0,
+            },
+        )
+        for partial in (
+            {},
+            {"encode_selected_completed_cache": 3.0},
+            {"write_selected_cache": 5.0},
+            {"reimport_selected_cache": 0.0},
+        ):
+            with self.subTest(partial=partial):
+                case = self.fresh()
+                case.light.alter_raw(
+                    lambda native, partial=partial: native.update(phase_seconds=partial)
+                )
+                case.refresh_runtime()
+                costs = case.producer()["production_seconds"]
+                self.assertIsNone(costs["selection"])
+                self.assertIsNone(costs["preparation"])
+                self.assertIsNone(costs["export"])
+                self.assertIsNone(costs["comparison"])
+                self.assertEqual(
+                    costs["reimport"], partial.get("reimport_selected_cache")
+                )
+
+    def test_light_phase_costs_reject_invalid_or_uninstrumented_values(self):
+        malformed = [
+            None,
+            [],
+            "timings",
+            {"unknown": 1.0},
+            {"selection": 1.0},
+            {"output_publication": 1.0},
+        ]
+        malformed += [
+            {"load_saved_application": value}
+            for value in (True, -1.0, float("nan"), float("inf"), float("-inf"), "1")
+        ]
+        malformed.append(
+            {
+                "encode_selected_completed_cache": 1e308,
+                "write_selected_cache": 1e308,
+            }
+        )
+        for phases in malformed:
+            with self.subTest(phases=phases):
+                case = self.fresh()
+                case.light.alter_raw(
+                    lambda native, phases=phases: native.update(phase_seconds=phases)
+                )
+                case.refresh_runtime()
+                with self.assertRaises(ValueError):
+                    case.producer()
+
+    def test_tier_selections_preserve_both_runs_and_all_legacy_history(self):
+        history = {
+            "selected_reduction_run": "old-0",
+            "reduction_runs": {
+                f"old-{i}": {"raw": [i, i + 0.25, True, None]} for i in range(48)
+            },
+            "selected_five_loop_run": "LEGACY",
+            "five_loop_runs": {"LEGACY": {"raw": "unchanged"}},
+        }
+        base = self.base.write("tier-history.json", history)
+        original = base.read_bytes()
+        empty = self.base.write(
+            "heavy-producer-only-index.json",
+            {"schema": "vakint.five-loop-report-evidence.v1", "records": []},
+        )
+        heavy = self.root / "heavy-history.json"
+        with patch(
+            "sys.argv",
+            [
+                "adapter",
+                "--base",
+                str(base),
+                "--build",
+                self.metadata.producer["evidence"]["path"],
+                "--cache",
+                self.metadata.producer["cache_directory"],
+                "--evidence",
+                str(empty),
+                "--select-tier",
+                "heavy",
+                "--output",
+                str(heavy),
+            ],
+        ):
+            merge.main()
+        first = merge.read(heavy)
+        heavy_id = first["selected_five_loop_runs"]["heavy"]
+        result = merge.read(self.cli("both-tiers.json", base=heavy))
+        light_id = result["selected_five_loop_runs"]["light"]
+        self.assertNotEqual(heavy_id, light_id)
+        self.assertEqual(result["selected_five_loop_runs"]["heavy"], heavy_id)
+        self.assertEqual(
+            result["five_loop_runs"][heavy_id], first["five_loop_runs"][heavy_id]
+        )
+        self.assertEqual(result["five_loop_runs"][heavy_id]["cache_tier"], "heavy")
+        self.assertEqual(result["five_loop_runs"][light_id]["cache_tier"], "light")
+        self.assertEqual(result["selected_five_loop_run"], "LEGACY")
+        self.assertEqual(result["selected_reduction_run"], "old-0")
+        self.assertEqual(
+            result["five_loop_runs"]["LEGACY"], history["five_loop_runs"]["LEGACY"]
+        )
+        self.assertEqual(
+            json.dumps(result["reduction_runs"], sort_keys=True),
+            json.dumps(history["reduction_runs"], sort_keys=True),
+        )
+        self.assertEqual(len(result["reduction_runs"]), 48)
+        self.assertEqual(base.read_bytes(), original)
+        for invalid in (
+            {"other": heavy_id},
+            {"light": heavy_id},
+            {"heavy": "missing"},
+            [],
+        ):
+            with self.subTest(selection=invalid):
+                bad = self.base.write(
+                    "invalid-tier-history.json",
+                    {**first, "selected_five_loop_runs": invalid},
+                )
+                with self.assertRaisesRegex(ValueError, "cache-tier selection"):
+                    self.cli("bad-tier-output.json", base=bad)
+                self.assertFalse((self.root / "bad-tier-output.json").exists())
+        forged = copy.deepcopy(first)
+        forged["five_loop_runs"][heavy_id]["cache"]["raw_report"]["schema"] = (
+            "vakint.strict-light-cache-export-validation.v1"
+        )
+        forged_base = self.base.write("forged-tier-history.json", forged)
+        with self.assertRaisesRegex(ValueError, "cache-tier selection"):
+            self.cli("forged-tier-output.json", base=forged_base)
+        self.assertFalse((self.root / "forged-tier-output.json").exists())
+
+    def test_requested_tier_must_match_the_authenticated_producer_schema(self):
+        with self.assertRaisesRegex(ValueError, "selected tier.*actual cache producer"):
+            self.cli("wrong-tier.json", tier="heavy")
+        self.assertFalse((self.root / "wrong-tier.json").exists())
+        unselected = merge.read(self.cli("unselected-light.json", tier=None))
+        self.assertNotIn("selected_five_loop_runs", unselected)
+        self.assertEqual(
+            next(iter(unselected["five_loop_runs"].values()))["cache_tier"], "light"
+        )
+
+    def shared_q0_indexes(self):
+        """One accepted window, identical uncached references, distinct cached records."""
+        q0 = [
+            copy.deepcopy(ref)
+            for ref in self.base.records
+            if ref["case_id"] == "zero-momentum-diagnostic"
+        ]
+        uncached, cached = [], []
+        for ref in q0:
+            (
+                uncached
+                if merge.read(ref["launcher"]["path"])["variant"] == "uncached"
+                else cached
+            ).append(ref)
+        heavy_cached, added_rows = [], []
+        heavy = self.metadata.producer
+        for index, ref in enumerate(cached):
+            directory = self.root / f"heavy-q0-cached-{index}"
+            shutil.copytree(Path(ref["record"]["path"]).parent, directory)
+            report_path, launch_path = (
+                directory / "benchmark.json",
+                directory / "launch.json",
+            )
+            report, launch = merge.read(report_path), merge.read(launch_path)
+            report.update(
+                persistent_cache=heavy["cache_directory"],
+                cache_native_index_identity=heavy["raw_report"][
+                    "cache_native_index_identity"
+                ],
+                saved_application_cache={
+                    "read_backing": True,
+                    "file": None,
+                    "pack": {"records": 7},
+                    "running": None,
+                    "binding": self.light.binding,
+                },
+            )
+            launch.update(
+                cache_sha256=None,
+                cache_native_index_identity=report["cache_native_index_identity"],
+            )
+            report_path.write_text(json.dumps(report))
+            launch_path.write_text(json.dumps(launch))
+            new_ref = {
+                **ref,
+                "record": merge.evidence(report_path),
+                "launcher": merge.evidence(launch_path),
+            }
+            heavy_cached.append(new_ref)
+            row = copy.deepcopy(
+                next(
+                    row
+                    for row in self.base.window_rows
+                    if row["report_sha256"] == ref["record"]["sha256"]
+                )
+            )
+            row.update(
+                report_sha256=merge.digest(report_path),
+                launcher_sha256=merge.digest(launch_path),
+                started_unix_seconds=1300 + index * 100,
+                finished_unix_seconds=1350 + index * 100,
+            )
+            added_rows.append(row)
+        window = merge.read(self.root / "window.json")
+        window["samples"].extend(added_rows)
+        global_window = self.base.write("shared-q0-window.json", window)
+        heavy_acceptance = merge.read(self.metadata.acceptance)
+        heavy_acceptance.update(
+            producer=heavy["evidence"],
+            cache_sha256=None,
+            cache_native_index_identity=heavy["raw_report"][
+                "cache_native_index_identity"
+            ],
+            cache_import=self.heavy_import,
+        )
+        heavy_acceptance_path = self.base.write(
+            "heavy-q0-consumer-acceptance.json", heavy_acceptance
+        )
+        indexes = {}
+        for tier, records, accepted in (
+            ("heavy", uncached + heavy_cached, heavy_acceptance_path),
+            ("light", uncached + cached, self.metadata.acceptance),
+        ):
+            rows = copy.deepcopy(records)
+            for ref in rows:
+                ref["window"] = merge.evidence(global_window)
+            indexes[tier] = self.base.write(
+                f"shared-q0-{tier}-index.json",
+                {
+                    "schema": "vakint.five-loop-report-evidence.v1",
+                    "records": rows,
+                    "cache_requalification": merge.evidence(accepted),
+                },
+            )
+        return indexes, uncached, global_window
+
+    def shared_q0_cli(self, tier, index, name, *, base=None):
+        base = base or self.base.write("shared-q0-base.json", {})
+        producer, cache = (
+            (self.light.export_path, self.light.cache)
+            if tier == "light"
+            else (
+                self.metadata.producer["evidence"]["path"],
+                self.metadata.producer["cache_directory"],
+            )
+        )
+        output = self.root / name
+        with patch(
+            "sys.argv",
+            [
+                "adapter",
+                "--base",
+                str(base),
+                "--build",
+                str(producer),
+                "--cache",
+                str(cache),
+                "--evidence",
+                str(index),
+                "--physical-scope",
+                str(self.scope_path),
+                "--select-tier",
+                tier,
+                "--output",
+                str(output),
+            ],
+        ):
+            merge.main()
+        return merge.read(output)
+
+    def test_two_tiers_share_the_exact_uncached_q0_evidence_and_one_window(self):
+        indexes, uncached, window = self.shared_q0_indexes()
+        outputs = {
+            "heavy": self.shared_q0_cli("heavy", indexes["heavy"], "shared-heavy.json")
+        }
+        outputs["light"] = self.shared_q0_cli(
+            "light",
+            indexes["light"],
+            "shared-light.json",
+            base=self.root / "shared-heavy.json",
+        )
+        self.assertEqual(
+            set(outputs["light"]["selected_five_loop_runs"]), {"heavy", "light"}
+        )
+        baselines = []
+        for tier, index in indexes.items():
+            selected = outputs[tier]["selected_five_loop_runs"][tier]
+            run = outputs[tier]["five_loop_runs"][selected]
+            self.assertEqual(
+                run["primary"]["zero-momentum-diagnostic"]["status"], "measured"
+            )
+            rows = merge.read(index)["records"]
+            self.assertEqual(len(rows), 6)
+            self.assertTrue(
+                all(row["window"] == merge.evidence(window) for row in rows)
+            )
+            baselines.append(
+                [
+                    {key: row[key] for key in ("record", "launcher", "artifact")}
+                    for row in rows
+                    if merge.read(row["launcher"]["path"])["variant"] == "uncached"
+                ]
+            )
+        self.assertEqual(baselines[0], baselines[1])
+        self.assertEqual(len(baselines[0]), 3)
+        for ref in uncached:
+            for key in ("record", "launcher", "artifact"):
+                self.assertEqual(merge.digest(ref[key]["path"]), ref[key]["sha256"])
+
+    def test_shared_uncached_q0_still_requires_matching_scope_cohort_and_window(self):
+        for mutation in ("scope", "cohort", "window"):
+            with self.subTest(mutation=mutation):
+                case = self.fresh()
+                indexes, uncached, window_path = case.shared_q0_indexes()
+                index = merge.read(indexes["light"])
+                if mutation == "window":
+                    altered = merge.read(window_path)
+                    altered["cpu_affinity"] = "ANOTHER_CPU"
+                    mismatch = case.base.write(
+                        "mismatched-baseline-window.json", altered
+                    )
+                    index["records"][0]["window"] = merge.evidence(mismatch)
+                else:
+                    ref = uncached[0]
+                    path = Path(ref["record"]["path"])
+                    report = merge.read(path)
+                    if mutation == "scope":
+                        report["coefficient_representation"] = "factorized"
+                    else:
+                        report["source_commit"] = "a" * 40
+                    path.write_text(json.dumps(report))
+                    window = merge.read(window_path)
+                    for row in window["samples"]:
+                        if row["report_sha256"] == ref["record"]["sha256"]:
+                            row["report_sha256"] = merge.digest(path)
+                    window_path.write_text(json.dumps(window))
+                    for row in index["records"]:
+                        row["window"] = merge.evidence(window_path)
+                        if row["record"]["path"] == str(path):
+                            row["record"] = merge.evidence(path)
+                indexes["light"].write_text(json.dumps(index))
+                with self.assertRaises(ValueError):
+                    case.shared_q0_cli(
+                        "light", indexes["light"], "rejected-baseline.json"
+                    )
+                self.assertFalse((case.root / "rejected-baseline.json").exists())
+
+    def test_selected_tiers_cannot_reauthorize_shared_uncached_data_in_another_window(
+        self,
+    ):
+        indexes, uncached, global_window = self.shared_q0_indexes()
+        self.shared_q0_cli("heavy", indexes["heavy"], "selected-heavy.json")
+        other_window = merge.read(global_window)
+        other_window["finished_unix_seconds"] += 1000
+        other_path = self.base.write("independently-valid-window.json", other_window)
+        self.assertNotEqual(merge.digest(global_window), merge.digest(other_path))
+        index = merge.read(indexes["light"])
+        for row in index["records"]:
+            row["window"] = merge.evidence(other_path)
+        indexes["light"].write_text(json.dumps(index))
+        independent = self.shared_q0_cli(
+            "light", indexes["light"], "independent-light.json"
+        )
+        run = independent["five_loop_runs"][
+            independent["selected_five_loop_runs"]["light"]
+        ]
+        self.assertEqual(
+            run["primary"]["zero-momentum-diagnostic"]["status"], "measured"
+        )
+        for ref in uncached:
+            for field in ("record", "launcher", "artifact"):
+                self.assertEqual(merge.digest(ref[field]["path"]), ref[field]["sha256"])
+        with self.assertRaisesRegex(
+            ValueError, "shared uncached primary.*accepted window"
+        ):
+            self.shared_q0_cli(
+                "light",
+                indexes["light"],
+                "invalid-shared-selection.json",
+                base=self.root / "selected-heavy.json",
+            )
+        self.assertFalse((self.root / "invalid-shared-selection.json").exists())
+
+    def test_shared_scope_order_is_normalized_without_rewriting_recorded_scopes(self):
+        indexes, _, _ = self.shared_q0_indexes()
+        scope = {
+            "required": ["zero-momentum-diagnostic", "quadratic-four-rung-uv"],
+            "deferred": [],
+        }
+        document = merge.read(self.scope_path)
+        document["physical_scope"] = scope
+        self.scope_path.write_text(json.dumps(document))
+        heavy = self.shared_q0_cli("heavy", indexes["heavy"], "ordered-heavy.json")
+        heavy_id = heavy["selected_five_loop_runs"]["heavy"]
+        reversed_scope = {"required": list(reversed(scope["required"])), "deferred": []}
+        document["physical_scope"] = reversed_scope
+        self.scope_path = self.base.write("reordered-physical-scope.json", document)
+        both = self.shared_q0_cli(
+            "light",
+            indexes["light"],
+            "reordered-light.json",
+            base=self.root / "ordered-heavy.json",
+        )
+        light_id = both["selected_five_loop_runs"]["light"]
+        self.assertEqual(
+            both["five_loop_runs"][heavy_id], heavy["five_loop_runs"][heavy_id]
+        )
+        self.assertEqual(both["five_loop_runs"][heavy_id]["physical_scope"], scope)
+        self.assertEqual(
+            both["five_loop_runs"][light_id]["physical_scope"], reversed_scope
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -142,12 +142,28 @@ Refresh instructions: #raw("../../AGENTS.md").
 #let ingress = report.five_loop_dot_ingress_acceptance
 #let pending = report.five_loop_performance_status
 #let five-id = report.at("selected_five_loop_run", default: none)
-#let five = if five-id == none { none } else { report.five_loop_runs.at(five-id) }
-#let cumulative-cache = (five != none and five.cache != none and
-  five.cache.raw_report.at("schema", default: none) == "vakint.cumulative-native-cache-report.v1")
+#let tier-selections = report.at("selected_five_loop_runs", default: none)
+#let five-selections = if tier-selections == none { ((id: five-id, tier: none),) } else {
+  ("heavy", "light").filter(tier => tier in tier-selections).map(tier => (
+    id: tier-selections.at(tier), tier: tier,
+  ))
+}
+#let five-run(selection) = if selection.id == none { none } else { report.five_loop_runs.at(selection.id) }
+#let cache-schema(run) = if run == none or run.cache == none { none } else { run.cache.raw_report.at("schema", default: none) }
+#let tier-label(tier) = if tier == "heavy" { [HEAVY · native cache] } else { [LIGHT · selected gzip] }
+#for selection in five-selections.filter(item => item.tier != none) {
+  let run = five-run(selection)
+  assert(run.cache_tier == selection.tier)
+  assert(cache-schema(run) == if selection.tier == "heavy" {
+    "vakint.cumulative-native-cache-report.v1"
+  } else { "vakint.strict-light-cache-export-validation.v1" })
+}
+#let cumulative-cache = five-selections.any(selection => cache-schema(five-run(selection)) in (
+  "vakint.cumulative-native-cache-report.v1", "vakint.strict-light-cache-export-validation.v1",
+))
 #let physical-id = report.at("selected_physical_capture_run", default: none)
 #let physical = if physical-id == none { none } else { report.physical_capture_runs.at(physical-id) }
-#let primary(id) = if five == none { none } else { five.primary.at(id) }
+#let primary(run, id) = if run == none { none } else { run.primary.at(id) }
 #let physical-scope-note(run) = {
   let authorization = run.at("physical_scope_authorization", default: none)
   if authorization != none {
@@ -166,8 +182,8 @@ Refresh instructions: #raw("../../AGENTS.md").
 #let summary-time(value) = if value == none { [—] } else {
   [#timing(value.median_seconds) #text(7.5pt)[(#timing(value.min_seconds)–#timing(value.max_seconds))]]
 }
-#let primary-cell(id, variant) = {
-  let row = primary(id)
+#let primary-cell(run, id, variant) = {
+  let row = primary(run, id)
   if row == none or row.status != "measured" {
     if row != none and row.status == "deferred" { [Deferred] } else { [Pending] }
     if row != none and row.functional_records.len() > 0 {
@@ -198,7 +214,7 @@ Refresh instructions: #raw("../../AGENTS.md").
   #text(22pt, weight: "bold", fill: navy)[Five-loop validation and benchmarks]
   #v(0.2em)
   #text(11.5pt, fill: luma(80))[
-    #if five == none [Historical acceptance · performance measurements pending] else [Retained-master comparisons · functional evidence reported separately]
+    #if five-selections.all(selection => selection.id == none) [Historical acceptance · performance measurements pending] else [Retained-master comparisons · functional evidence reported separately]
   ]
 ]
 
@@ -248,29 +264,45 @@ claim. Earlier interrupted checks are not a timing baseline.
   set text(font: "DejaVu Sans", size: 9pt)
   set par(justify: false)
   table(
-    columns: (1.8fr, 1fr, 1fr),
-    inset: (x: 10pt, y: 11pt),
+    columns: (1.8fr, ..five-selections.map(_ => (1fr, 1fr)).flatten()),
+    inset: (x: 10pt, y: if tier-selections == none { 11pt } else { 8pt }),
     stroke: 0.4pt + luma(215),
     fill: (x, y) => if y == 0 { navy } else if x > 0 { rgb("#fff3dc") } else { pale },
     table.header(
       text(fill: white, weight: "bold")[Retained-master workload],
-      text(fill: white, weight: "bold")[No persistent cache],
-      text(fill: white, weight: "bold")[With persistent cache],
+      ..for selection in five-selections {
+        (
+          text(fill: white, weight: "bold")[#if selection.tier == none [No persistent cache] else [#upper(selection.tier)#linebreak()Uncached]],
+          text(fill: white, weight: "bold")[#if selection.tier == none [With persistent cache] else [#upper(selection.tier)#linebreak()Cached]],
+        )
+      },
     ),
     ..for case in pending.cases {
-      if case.id == "held-out-suite" {
-        (case.label, if five == none or five.held_out == none { [Pending] } else { [Individual rows below] },
-         if five == none or five.held_out == none { [Pending] } else { [Individual rows below] })
-      } else {
-        (case.label, primary-cell(case.id, "uncached"), primary-cell(case.id, "cached"))
-      }
+      (case.label, ..for selection in five-selections {
+        let five = five-run(selection)
+        if case.id == "held-out-suite" {
+          (if five == none or five.held_out == none { [Pending] } else { [Individual rows below] },
+           if five == none or five.held_out == none { [Pending] } else { [Individual rows below] })
+        } else {
+          (primary-cell(five, case.id, "uncached"), primary-cell(five, case.id, "cached"))
+        }
+      })
     },
   )
 }
 
-#if five != none {
-  v(0.3em)
-  physical-scope-note(five)
+#{
+  let shown-scopes = ()
+  for selection in five-selections.filter(item => item.id != none) {
+    let five = five-run(selection)
+    let authorization = five.at("physical_scope_authorization", default: none)
+    let digest = if authorization == none { none } else { authorization.evidence.sha256 }
+    if digest == none or digest not in shown-scopes {
+      v(0.3em)
+      physical-scope-note(five)
+      shown-scopes.push(digest)
+    }
+  }
 }
 
 #v(0.35em)
@@ -285,6 +317,8 @@ claim. Earlier interrupted checks are not a timing baseline.
   Multipliers are _cached ÷ uncached_, using the same colour scale as page 1.
   Functional runs, including the exploratory q0 cohort, never supply these medians.
   Cache preparation and held-out performance retain separate evidence.
+  #if tier-selections != none [Each tier retains its own matched uncached baseline;
+  no baseline or sample is inferred from the other tier.]
 ]
 
 #v(0.35em)
@@ -304,10 +338,15 @@ FeynKit #raw(pending.pending_upgrade.feynkit_owner_source_revision.slice(0, 12))
 acceptance was pending in that historical record. Full revisions: #raw("data/results.json").
 
 
-#if five != none {
+#for selection in five-selections.filter(item => item.id != none) {
+  let five-id = selection.id
+  let five = five-run(selection)
+  let cumulative-cache = cache-schema(five) == "vakint.cumulative-native-cache-report.v1"
+  let light-cache = cache-schema(five) == "vakint.strict-light-cache-export-validation.v1"
   pagebreak()
   set text(font: "Libertinus Serif", size: 9.5pt, fill: black)
   align(center)[#text(20pt, weight: "bold", fill: navy)[Five-loop evidence and timing ledger]]
+  if selection.tier != none { align(center)[#tier-label(selection.tier)] }
   v(0.35em)
   [Selected report: #raw(five-id). Raw reports and their hashed launcher/compiler
   receipts remain in JSON. Qualified performance additionally binds complete
@@ -317,7 +356,7 @@ acceptance was pending in that historical record. Full revisions: #raw("data/res
   v(0.4em)
   text(13pt, weight: "bold", fill: navy)[Primary workloads]
   for case in pending.cases.filter(case => case.id != "held-out-suite") {
-    let row = primary(case.id)
+    let row = primary(five, case.id)
     v(0.3em)
     [*#case.label:* #if row.status == "deferred" [Deferred; unmeasured in this scope.] else [#row.status.]]
     if row.functional_records.len() > 0 {
@@ -375,9 +414,59 @@ acceptance was pending in that historical record. Full revisions: #raw("data/res
     }
   }
   v(0.4em)
-  text(13pt, weight: "bold", fill: navy)[#if cumulative-cache [Cumulative native cache] else [Finite selected-cache preparation]]
+  text(13pt, weight: "bold", fill: navy)[#if light-cache [LIGHT selected-cache export] else if cumulative-cache [Cumulative native cache] else [Finite selected-cache preparation]]
   if five.cache == none {
     [ Pending: no completed final strict-cache receipt selected.]
+  } else if light-cache {
+    let cache = five.cache
+    let exported = cache.raw_report
+    let source = cache.source_producer
+    let validation = cache.export_validation
+    parbreak()
+    [Strict records selected from the preserved HEAVY collection. The export,
+    native reimport and source-selection admission retain their own evidence.]
+    v(0.25em)
+    table(columns: (1fr, 1.3fr, 1fr), inset: (x: 8pt, y: 10pt),
+      stroke: 0.4pt + luma(215),
+      fill: (x, y) => if y == 0 { navy } else { pale },
+      table.header(
+        text(fill: white, weight: "bold")[Selected unique records],
+        text(fill: white, weight: "bold")[Compressed bytes],
+        text(fill: white, weight: "bold")[Publication limit],
+      ),
+      text(14pt, weight: "bold")[#exported.selection.unique_keys],
+      [#exported.output.cache.bytes (#fixed(exported.output.cache.bytes / 1048576, 3) MiB)],
+      [95,000,000 bytes],
+    )
+    v(0.25em)
+    table(columns: (1fr, 1fr, 1fr, 1fr, 1fr), inset: 5pt, stroke: 0.4pt + luma(215),
+      fill: (x, y) => if y == 0 { pale } else { none },
+      table.header([*Selection s*], [*Preparation s*], [*Export s*], [*Reimport s*], [*Comparison s*]),
+      ..("selection", "preparation", "export", "reimport", "comparison").map(phase => {
+        let value = cache.production_seconds.at(phase, default: none)
+        if value == none { [—] } else { [#timing(value)] }
+      }),
+    )
+    v(0.2em)
+    text(8.5pt)[A dash means unmeasured. Preparation loads the producer's saved application;
+    export sums encoding and writing only when both are measured. Comparison checks
+    the reimported native records. Selection outside the helper remains unmeasured.
+    Costs belong to the native-validation producer cohort, separately from consumer
+    loading and reduction. File size and record count establish neither duration
+    nor completed physical work.]
+    parbreak()
+    text(8pt)[Cache SHA-256 #raw(exported.output.cache.sha256).
+    Export #raw(validation.export_validation.sha256.slice(0, 12));
+    strict native reimport #raw(validation.native_validation.sha256.slice(0, 12));
+    selection admission #raw(validation.selection_admission.sha256.slice(0, 12));
+    metadata #raw(exported.output.metadata.sha256.slice(0, 12)).
+    Exporter source #raw(exported.compiled_cohort.main_revision.slice(0, 12));
+    Native #raw(exported.compiled_cohort.native_revision.slice(0, 12));
+    Symbolica #raw(exported.compiled_cohort.kernel_revision.slice(0, 12)).
+    Original HEAVY producer #raw(source.evidence.sha256.slice(0, 12));
+    source index #raw(exported.source.cache_native_index_identity.sha256.slice(0, 12));
+    source dataset #raw(exported.source.data_manifest_sha256.slice(0, 12)).
+    These source identities remain distinct from each fresh consumer qualification.]
   } else if cumulative-cache {
     let cache = five.cache
     let inventory = cache.raw_report.inventory
@@ -459,7 +548,7 @@ acceptance was pending in that historical record. Full revisions: #raw("data/res
       }
     }
   }
-  if not cumulative-cache {
+  if not cumulative-cache and not light-cache {
     parbreak()
     text(8.5pt)[This finite selection retains its original producer and acceptance.
     The cumulative cache from physical-example reductions is a separate record;
@@ -548,6 +637,7 @@ acceptance was pending in that historical record. Full revisions: #raw("data/res
     if suite != none {
       pagebreak()
       text(18pt, weight: "bold", fill: navy)[#label]
+      if selection.tier != none { parbreak(); tier-label(selection.tier) }
       parbreak()
       [#suite.rows.len() distinct input rows · #suite.identity.repetitions fresh processes per mode.
       Times below are saved application minus owner preparation, not pure IBP.
@@ -555,14 +645,21 @@ acceptance was pending in that historical record. Full revisions: #raw("data/res
       if suite.at("cache_requalification", default: none) != none {
         parbreak()
         text(8pt)[Consumer source #raw(suite.identity.build_git_revision.slice(0, 12));
-        #if cumulative-cache [
+        #if light-cache [
+          LIGHT export #raw(five.cache.export_validation.export_validation.sha256.slice(0, 12));
+          original HEAVY producer #raw(five.cache.source_producer.evidence.sha256.slice(0, 12));
+          consumer dataset #raw(suite.identity.data_manifest_sha256.slice(0, 12)).
+        ] else if cumulative-cache [
           cumulative cache report #raw(five.cache.evidence.sha256.slice(0, 12)).
           Original producer identities remain in its #five.cache.sources.len() source receipts.
         ] else [
           original cache producer #raw(five.cache.raw_report.build_identity.build.git_revision.slice(0, 12)).
         ]
         Accepted requalification: #raw(suite.cache_requalification.evidence.sha256.slice(0, 12)).
-        #if cumulative-cache [
+        #if light-cache [
+          The actual LIGHT file, native identity and source-selection proof are bound
+          to this consumer qualification; HEAVY timings are not transferred.
+        ] else if cumulative-cache [
           Cache indexes, census, data-manifest hash and native binding are checked against
           the accepted consumer qualification.
         ] else [Cache, census, D40 data and Native semantic binding are unchanged.]]

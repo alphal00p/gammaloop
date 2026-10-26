@@ -131,10 +131,74 @@ retaining the old selection. Completed strict cache preparation can be included
 with #raw("--build build.json --cache cache.gz"); completed suites additionally
 use #raw("--held-out suite.json") and/or #raw("--tuning suite.json"). Suites require
 their exact cache build and proof/cohort bindings. Duplicate evidence runs fail.
-No root value or historical run is rewritten; only #raw("five_loop_runs") and an
-explicit #raw("selected_five_loop_run") are added. Review the new JSON and rendered
+No historical run is rewritten. Evidence is appended under #raw("five_loop_runs");
+the explicit selection fields choose which runs are displayed. Review the new JSON and rendered
 PDF before replacing the canonical trio together. Do not update canonical data
 while a measurement or source-freeze window is active.
+
+=== Display both cache tiers
+
+Use #raw("--select-tier heavy") for an authenticated cumulative native cache, or
+#raw("--select-tier light") for the actual selected gzip and its strict export
+proof. The adapter records #raw("cache_tier") on each run and updates only that
+tier's entry in #raw("selected_five_loop_runs: {heavy: runID, light: runID}"). It
+checks the actual cache representation; the flag does not relabel a finite
+training cache or create a missing measurement.
+
+```sh
+python3 crates/vakint/docs/benchmark/merge_five_loop_results.py \
+  --base /path/to/workspace/heavy-results.json \
+  --build /path/to/workspace/strict-light-export-validation.json \
+  --cache /path/to/immutable/light.rrcache.gz \
+  --tuning /path/to/workspace/light-tuning.json \
+  --held-out /path/to/workspace/light-held-out.json \
+  --evidence /path/to/workspace/light-evidence-index.json \
+  --physical-scope /path/to/workspace/physical-scope.json \
+  --select-tier light --output /path/to/workspace/both-tier-results.json
+```
+
+The input above already selects a genuine HEAVY run. Adding LIGHT preserves that
+selection, the legacy singular selector and all 48 four-loop observations.
+#raw("--select-current") continues to control #raw("selected_five_loop_run"). When
+the plural selector is absent, the report uses that existing single-run view.
+When present, each tier gets its own uncached/cached comparison and full timing
+ledger. Each ratio uses that tier's matched baseline. The same actual direct q0
+uncached references may serve both comparisons only when the existing validation
+accepts their identical source, data, input, limits and execution window; never
+copy or restamp a baseline. Suite baselines keep their tier-specific identities.
+
+LIGHT uses the genuine #raw("vakint.strict-light-cache-export-validation.v1")
+receipt as #raw("cache.raw_report"). Its compressed bytes and SHA-256 come from
+#raw("output.cache"), and its selected unique-record count from #raw("selection").
+The original validated cumulative cache stays under #raw("cache.source_producer");
+its source data and index identity are provenance, not the LIGHT consumer dataset.
+The exporter keeps its own compiled cohort. Export, native-validation,
+selection-admission and metadata hashes remain separately visible. Reporting the
+authenticated LIGHT file does not require reopening the full HEAVY payload.
+
+The LIGHT ledger has no invented finite-workload root counts. Its optional raw
+Native #raw("phase_seconds") map records finite, nonnegative monotonic durations
+for completed named intervals. Each named phase runs at most once per invocation. The adapter
+retains that map under #raw("cache.export_validation.phase_seconds") and projects
+the following #raw("cache.production_seconds") fields:
+
+- #raw("selection"): null; selection happens outside this helper.
+- #raw("preparation"): #raw("load_saved_application"), when measured.
+- #raw("export"): #raw("encode_selected_completed_cache") plus
+  #raw("write_selected_cache"), only when *both* phases are present.
+- #raw("reimport"): #raw("reimport_selected_cache"), when measured.
+- #raw("comparison"): #raw("compare_selected_native_visitor"), when measured.
+
+An absent phase or map leaves its projected cost null; render null as “—”. The
+helper does not invent #raw("selection") or #raw("output_publication") phases.
+Every duration belongs to the raw native-validation receipt's own producer cohort,
+even when the export wrapper or consumer has a different cohort. Never infer cost
+from file size, record count, a validation flag or a heavy producer's duration. Actual
+data/cache loading and reduction costs belong to fresh consumer samples,
+separately. Adding this optional timing contract does not establish that an
+export has run or that any phase has been measured.
+
+=== Cumulative cache provenance
 
 The same #raw("--build RECEIPT --cache PATH") accepts an authenticated
 #raw("vakint.cumulative-native-cache-report.v1") receipt with an immutable native
