@@ -13,9 +13,8 @@ def _():
     import os
 
     import marimo as mo
-    from symbolica.community.hepkit import FeynmanDiagram, Model
-
     from shared_gallery import Gallery
+    from symbolica.community.hepkit import FeynmanDiagram, Model
 
     return FeynmanDiagram, Gallery, Model, mo, os
 
@@ -156,6 +155,11 @@ def _(Gallery, mo):
                 "Reduction outside certification",
                 "Vakint still attempts individually justified reductions outside recorded coverage. After exact combination it warns about surviving non-catalogue integrals. Retain mode preserves those terms; master substitution reports unavailable data explicitly.",
             ),
+            Gallery.evidence_card(
+                mo,
+                "warning-controls",
+                "Recorded coverage advisory and completed reduction",
+            ),
         ]
     )
     return
@@ -168,7 +172,7 @@ def _(Gallery, mo):
             Gallery.section(
                 mo,
                 "03 / measurements",
-                "Uncached versus compact-cache reduction",
+                "Uncached versus cumulative-cache reduction",
                 "Verified scalar-input loading, external data, native reduction and cache attachment are measured separately. Fresh scientific preparation is independent validation.",
             ),
             Gallery.evidence_card(mo, "quadratic", "Complete quadratic fixture"),
@@ -226,7 +230,7 @@ def _(Gallery, mo, os):
             Gallery.note(
                 mo,
                 "May take substantial time",
-                "This invokes the compiled Rust reduction with the complete verified scalar input, preserving all contributions and projector conditions. It does not repeat graph generation, gamma traces or Taylor preparation. Reduction can still take minutes or hours; there is no default time cutoff. A single interactive run is not a controlled three-run benchmark.",
+                "This invokes the compiled Rust reduction with the complete verified scalar input, preserving all contributions and projector conditions. It reuses graph, trace and Taylor preparation and saves completed native work in a fresh per-run cache delta, including durable prefixes of failed reductions. Reduction can still take minutes or hours; there is no default time cutoff. A single interactive run is not a controlled three-run benchmark.",
             ),
             run_benchmark,
             mo.md(

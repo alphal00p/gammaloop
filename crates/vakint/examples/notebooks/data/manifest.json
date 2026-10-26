@@ -1,4 +1,9 @@
 {
   "schema": 1,
-  "receipts": {}
+  "receipts": {
+    "warning-controls": {
+      "path": "warning-controls.json",
+      "sha256": "531ef0da0945039e26fe72fa6a71308426fdb6f947f59369459dcbcdb5387694"
+    }
+  }
 }

@@ -123,6 +123,14 @@ class GalleryBenchmarkTests(unittest.TestCase):
                     self.environment["VAKINT_GALLERY_ARTIFACTS"],
                 )
                 self.assertNotIn("--cache", command)
+                self.assertIn("--running-cache-capture-only", command)
+                self.assertNotIn("--running-cache-no-read-delta", command)
+                self.assertEqual(
+                    command[command.index("--running-cache") + 1],
+                    str(work / "running-cache"),
+                )
+                self.assertTrue(work.is_dir())
+                self.assertFalse((work / "running-cache").exists())
                 self.assertEqual(
                     json.loads((work / "status.json").read_text()),
                     {"state": "starting"},
@@ -147,6 +155,25 @@ class GalleryBenchmarkTests(unittest.TestCase):
             command[command.index("--cache") + 1],
             self.environment["VAKINT_GALLERY_CACHE"],
         )
+        self.assertEqual(
+            command[command.index("--running-cache") + 1],
+            str(work / "running-cache"),
+        )
+        self.assertNotIn("--running-cache-capture-only", command)
+        self.assertNotIn("--running-cache-no-read-delta", command)
+
+    def test_cached_launch_accepts_an_immutable_native_directory(self):
+        cache = Path(self.environment["VAKINT_GALLERY_CACHE"])
+        cache.mkdir()
+        index = cache / "bundle.rrindex"
+        index.write_bytes(b"synthetic opaque native index")
+        before = index.read_bytes()
+        with patch("shared_gallery.subprocess.Popen"):
+            work = Path(Gallery.start_benchmark("quadratic", cached=True))
+        command = json.loads((work / "request.json").read_text())["command"]
+        self.assertEqual(command[command.index("--cache") + 1], str(cache))
+        self.assertEqual(index.read_bytes(), before)
+        self.assertEqual(list(cache.iterdir()), [index])
 
     def test_missing_cache_does_not_launch_uncached_instead(self):
         os.environ.pop("VAKINT_GALLERY_CACHE")
@@ -166,6 +193,11 @@ class GalleryBenchmarkTests(unittest.TestCase):
             self.assertEqual(work.parent, self.work.resolve())
             self.assertTrue((work / "request.json").is_file())
             self.assertNotEqual(work, self.prepared / "quadratic")
+            command = json.loads((work / "request.json").read_text())["command"]
+            self.assertEqual(
+                command[command.index("--running-cache") + 1],
+                str(work / "running-cache"),
+            )
 
     def test_held_lock_prevents_another_benchmark(self):
         self.work.mkdir()
@@ -241,10 +273,15 @@ class GalleryWorkerTests(unittest.TestCase):
         self.assertGreaterEqual(status["elapsed_seconds"], 0)
 
     def test_nonzero_exit_retains_failure_and_log(self):
+        capture = self.work / "running-cache"
+        capture.mkdir()
+        prefix = capture / "committed-prefix"
+        prefix.write_bytes(b"synthetic durable prefix")
         status = self.run_worker(result=17, output="synthetic native failure")
         self.assertEqual(status["state"], "failed")
         self.assertEqual(status["exit_code"], 17)
         self.assertIn("synthetic native failure", status["message"])
+        self.assertEqual(prefix.read_bytes(), b"synthetic durable prefix")
 
     def test_spawn_error_is_reported_and_releases_descriptor(self):
         status = self.run_worker(error=OSError("synthetic worker error"))
@@ -253,6 +290,31 @@ class GalleryWorkerTests(unittest.TestCase):
 
 
 class GalleryReceiptTests(unittest.TestCase):
+    def test_recorded_advisory_does_not_become_an_unknown_or_performance_claim(self):
+        mo = SimpleNamespace(
+            Html=lambda value: value,
+            vstack=lambda values: values,
+            accordion=lambda values: values,
+            json=lambda value: value,
+        )
+        with patch.dict(
+            os.environ,
+            {"VAKINT_GALLERY_EVIDENCE": str(Path(__file__).parent / "data")},
+        ):
+            record = Gallery.receipt("warning-controls")
+            card = Gallery.evidence_card(mo, "warning-controls", "Recorded advisory")
+        self.assertFalse(record["performance_claim"])
+        self.assertFalse(record["global_campaign_coverage_claim"])
+        self.assertFalse(record["unknown_residual_example"])
+        self.assertFalse(record["cancelled_residual_example"])
+        self.assertEqual(record["outcome"]["unknown_count"], 0)
+        rendered = repr(card[:3])
+        self.assertIn("reduction continued", rendered)
+        self.assertIn("outside the recorded shifted-index entry predicates", rendered)
+        self.assertIn("no unknown integrals", rendered)
+        self.assertIn("no performance, held-out or speedup claim", rendered)
+        self.assertNotIn("Native reduction · seconds", rendered)
+
     def test_running_snapshot_never_promotes_progress_to_reduction_timing(self):
         mo = SimpleNamespace(
             Html=lambda value: value,

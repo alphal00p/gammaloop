@@ -1,0 +1,52 @@
+{
+  "schema": "vakint.gallery.coverage-advisory.v1",
+  "case_id": "parent-31740-tuning",
+  "title": "An input triggering a coverage advisory still reduced completely",
+  "recorded_warning": "RustRed 5L: 3 scalar key(s) produced by numerator lowering are outside the recorded shifted-index entry predicates (data v0.1.2); reduction will be attempted, but complete reduction to the known masters is not guaranteed. First common-family powers: [1, 1, 1, 1, 2, 2, 1, 0, 1, 1, -1, 0, 0, 0, 0]",
+  "outcome": {
+    "catalogue_master_count": 13,
+    "unknown_count": 0,
+    "exact_value_and_exported_guard_set_parity": true,
+    "guard_count": 140735,
+    "native_ordered_guard_sequence_claim": false
+  },
+  "scope_note": "The reduction continued after this advisory and returned 13 declared catalogue identities with no unknown integrals. Its exact value and complete exported guard set agree with the uncached reference. This is one exposed tuning case with provisional owner mapping: the message concerns recorded lowered-entry predicates and does not prove the physical input is outside global campaign coverage. It is not an unknown-residual or cancellation example, and supplies no performance, held-out or speedup claim.",
+  "provenance": {
+    "compiled_vakint": "741ef3417140a6c7ded70222455265e499787100",
+    "rustred": "4190f2c6f3158e3fc3cbcb1937e12e5971da9175",
+    "build_profile": "ci-optim",
+    "executable_sha256": "14ba2da176792e7e994234cd3cc1e95ac02cb65352300b9df6667c8c83a67b6a",
+    "data_version": "v0.1.2",
+    "data_state": "Unpublished development checkout; manifest version is not a published release claim.",
+    "data_root_manifest_sha256": "794c0e4b44a1c6be1d78f8ebdbca188473678823ea1f3b821f70b63b2a6dd5a7",
+    "canonical_input_sha256": "247403f85581edbe53419f75a846c70ed46eb22ec5d4cab09b71002760bdc72f",
+    "value_sha256": "a0f756efb5ac9d55002c6d714500490bfd75a72f70dec7efc1e619a319954ad9",
+    "complete_exported_guard_set_sha256": "3e9fecdf5d24d9c0a7d6ff7df99f81d94657ea720a06d00f24eae69715e53f19",
+    "source_artifacts": {
+      "run1/case-cached/worker.log": {
+        "artifact": "workspace/5l-push/validation/native-large-cache-tuning-pilot-v2/run1/case-cached/worker.log",
+        "sha256": "6b085c023767c56c0024f561d879d38a99abfa8c935d7ce9da46e7d9fad343fe",
+        "bytes": 297
+      },
+      "functional-receipt.json": {
+        "artifact": "workspace/5l-push/validation/native-large-cache-tuning-pilot-v2/functional-receipt.json",
+        "sha256": "cf1e2b3be58c21ee0c7b8fd81dc751fb29a3ad8a965f4ac8e6269b76a5ab566f",
+        "bytes": 11117
+      },
+      "run1/case-cached/worker.json": {
+        "artifact": "workspace/5l-push/validation/native-large-cache-tuning-pilot-v2/run1/case-cached/worker.json",
+        "sha256": "cff8c4cb4f8aec72dbf1cc09f546890f677c301ce7735de3116faed1cc24aaca",
+        "bytes": 26585
+      },
+      "independent-receipt-admission.json": {
+        "artifact": "workspace/5l-push/validation/native-large-cache-tuning-pilot-v2/independent-receipt-admission.json",
+        "sha256": "088e6402dd536ee47d514a973e3a2fcb69ee3d72bbc1519985c18b9ce879d93c",
+        "bytes": 19904
+      }
+    }
+  },
+  "performance_claim": false,
+  "unknown_residual_example": false,
+  "cancelled_residual_example": false,
+  "global_campaign_coverage_claim": false
+}

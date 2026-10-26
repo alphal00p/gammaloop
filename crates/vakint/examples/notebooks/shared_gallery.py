@@ -305,6 +305,32 @@ class Gallery:
             ]
         )
         schema = receipt.get("schema") if isinstance(receipt, dict) else None
+        if schema == "vakint.gallery.coverage-advisory.v1":
+            outcome = receipt["outcome"]
+            return mo.vstack(
+                [
+                    cls.note(
+                        mo,
+                        "Recorded coverage advisory · reduction continued",
+                        receipt["recorded_warning"],
+                        pending=True,
+                    ),
+                    cls.metrics(
+                        mo,
+                        [
+                            (
+                                outcome["catalogue_master_count"],
+                                "declared master identities",
+                            ),
+                            (outcome["unknown_count"], "surviving unknown integrals"),
+                        ],
+                    ),
+                    cls.note(
+                        mo, "What this example establishes", receipt["scope_note"]
+                    ),
+                    details,
+                ]
+            )
         if schema == "vakint.gallery.physical-status.v1":
             native = receipt.get("running_cache", {})
             fields = [
@@ -505,9 +531,13 @@ class Gallery:
             str(work),
             "--prepared-input",
             str(prepared_input),
+            "--running-cache",
+            str(work / "running-cache"),
         ]
         if cached:
             command.extend(["--cache", os.environ["VAKINT_GALLERY_CACHE"]])
+        else:
+            command.append("--running-cache-capture-only")
         (work / "request.json").write_text(json.dumps({"command": command}))
         (work / "status.json").write_text(json.dumps({"state": "starting"}))
         try:

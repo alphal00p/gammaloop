@@ -1,4 +1,4 @@
-"""Exact numerator cancellation and the measured persistent-cache workload."""
+"""Exact numerator cancellation and cumulative persistent-cache evidence."""
 
 # Marimo cell outputs and generated return markers are intentional.
 # ruff: noqa: B018, PLR1711
@@ -278,31 +278,40 @@ def _(Gallery, mo):
             Gallery.section(
                 mo,
                 "03 / workload",
-                "A compact cache with useful descendants",
-                "Preparation captures completed native reduction nodes and their local conditions. Partial reductions are excluded.",
+                "Keep useful work from every reduction",
+                "Running capture saves completed native reduction nodes and their local conditions. Partial reductions are excluded.",
             ),
             Gallery.metrics(
                 mo,
                 [
-                    ("≤ 50 MiB", "compressed target"),
-                    ("10 hours", "maximum final reproducible build"),
+                    ("Cumulative", "physical examples and useful descendants"),
+                    ("Preserved", "every durable prefix, including failed runs"),
                     ("≥ 12", "held-out cases, frozen before selection"),
                 ],
             ),
             Gallery.evidence_card(
-                mo, "cache-build", "Completed cache workload and provenance"
+                mo, "cache-build", "Accumulated cache and source provenance"
             ),
             mo.md(r"""
         ```sh
-        build_cache --artifacts DATA --workload WORKLOAD.json \
-          --output cache5l.bin.gz --work-dir WORK \
-          --phase final --prepare-seconds 32400 --max-seconds 36000
+        five_loop_qcd_ladder --artifacts DATA --work-dir NEW_RUN \
+          --projection zero-momentum --prepared-input SAVED_INPUT \
+          --running-cache NEW_RUN/running-cache --running-cache-capture-only
         ```
 
-        The workload driver reuses Vakint's `prepare_cache()` API. This app never
-        starts cache production. Pilots are recorded separately from the final
-        build. One gzip-compressed native file is loaded with bounded
-        decompression, checksums, codec checks and campaign bindings.
+        A reduction can preserve its completed descendants even when persistent
+        cache reads are disabled. A cached run instead adds `--cache BASE` and
+        omits `--running-cache-capture-only`: it reads the immutable base and its
+        own fresh delta while saving new work. Each run keeps a separate delta;
+        a failure never discards its durable prefix.
+
+        Completed useful captures can be combined into an authenticated native
+        cache. Large caches are transported as checksummed release parts, each
+        below GitHub's asset limit, then installed as one native directory.
+        There is no aggregate size cap. Codec and campaign bindings still apply.
+        Vakint's `prepare_cache()` and `build_cache` workload driver remain
+        available for reproducible seed workloads. This app never starts a
+        cache-production job.
         """),
         ]
     )
@@ -324,8 +333,8 @@ def _(Gallery, mo):
             ),
             Gallery.note(
                 mo,
-                "Size exception is evidence-based",
-                "A single file above 50 MiB is permitted only for at least a 20% median quadratic-IBP improvement or tuning-suite geometric-mean improvement against the best ≤50 MiB candidate. The hard ceiling is 95 MiB; held-out results do not select the candidate.",
+                "Measure the cache that is actually distributed",
+                "Record source captures, raw record counts, decoded and compressed sizes, immutable index identities and final validation. Distinguish a fresh reuse of a captured physical input from held-out inputs, and distinguish persistent hits from same-process memoization. No speedup is inferred from cache size or live record counts.",
             ),
             Gallery.footer(mo),
         ]
