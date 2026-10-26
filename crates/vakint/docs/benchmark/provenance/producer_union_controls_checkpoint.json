@@ -1,0 +1,35 @@
+{
+  "schema": "vakint.native-union-controls-source-checkpoint-index.v1",
+  "archive": "vakint-5l-native-union-controls-20261026.tar.gz",
+  "archive_bytes": 31730,
+  "archive_sha256": "1545eaaa4988d0af2c2274d3fc1814e9a0a0d8db50ab04095364c849cdacc4b1",
+  "archive_manifest_sha256": "819b94ece4a59bb1cae3d46fc20e0e2b81132312de93e27aad75b22a5cd7b25d",
+  "members": 17,
+  "note": "producer_union_controls_checkpoint.typ",
+  "controller_source_sha256": "13ac9e28bcfc266215a433e9c93ecffb9028c1945d1fd88db2e5793ed1ab7e41",
+  "verifier_source_sha256": "34217373a427a7e3dc7f81d7dd12a44b67a2adca17b93892a635f4f393af3144",
+  "source_base_sha256": "2a8e732cdd907799ae0962580d44860876e54e89c9a479be66e1e7aa8fef3e30",
+  "additional_shared_source_sha256": "310ae1ab5c9472097249cbabcaacd5163271607e4bbb34341516b82105e2e253",
+  "dependency_archives": [
+    "7181cab1e015d1441b995864a95645267c05f2c6011745b5ce2686bdebad95ca",
+    "d2cc4a3e6407fac74ca0fb1706893e746f6a54d83d87c013fcad2ca9b8416fae"
+  ],
+  "historical_pilot_scope": "Prior N3 opaque-preservation pilot passed; aliases exactly three original sources, not a new HEAVY source or workload. No mathematical, distinct-key, source-independence, physical-example, performance or final-cache acceptance.",
+  "checks": {
+    "exact_historical_code_and_tests_preserved": true,
+    "derived_examples_explicitly_inactive": true,
+    "actual_source_members_and_checksums": true,
+    "two_archive_builds_byte_identical": true,
+    "normalized_regular_files_only": true,
+    "gzip_mtime_zero": true,
+    "archived_AST_only_tests_passed": 14,
+    "archived_AST_only_tests_failed": 0,
+    "historical_active_layout_test_not_executed": true,
+    "historical_test_expectations_unchanged": true,
+    "actual_Native_service_or_job_execution": false,
+    "actual_activation_controls_or_PID_tickets_included": false,
+    "independent_normalized_archive_rebuild_byte_identical": true
+  },
+  "scope": "SOURCE CHECKPOINT ONLY; no caches/indexes/chunks, raw proofs/scientific outputs, ELF/build outputs, environment/development license/credentials or actual runtime identities. Original five-source order retained; relocation needs fresh truthful source hashes/cohort/controls/admission. No fresh-host/full-CI/release/goal-completion claim.",
+  "independent_packaging_review_sha256": "a1f21654db8669da8705f8b85a126af3090b391ee0886a06dc05fccea07c8562"
+}
