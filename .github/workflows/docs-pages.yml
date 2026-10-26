@@ -398,7 +398,7 @@ jobs:
               dependency_args=(--dependency-wheel "${ufo_wheels[0]}")
             fi
             nix develop --command \
-              uv run --no-project --with marimo==0.24.0 python \
+              uv run --no-project --python 3.14 --with marimo==0.24.0 python \
               crates/linnet-py/examples/export_wasm.py \
               "${docs_args[@]}" \
               --wheel "${wheels[0]}" \

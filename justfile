@@ -226,7 +226,7 @@ docs-notebooks WHEEL PRODUCT="linnet" OUTPUT="docs/generated/notebooks" DEPENDEN
     if [ -n "$dependency_wheel" ]; then
         args+=(--dependency-wheel "$dependency_wheel")
     fi
-    uv run --no-project --with marimo==0.24.0 python \
+    uv run --no-project --python 3.14 --with marimo==0.24.0 python \
         crates/linnet-py/examples/export_wasm.py --docs {{ quote(PRODUCT) }} \
         --wheel {{ quote(WHEEL) }} \
         --output {{ quote(OUTPUT + "/products/" + PRODUCT + "/latest/assets/notebooks") }} \
