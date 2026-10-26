@@ -2110,6 +2110,1483 @@ class ReportContractTests(unittest.TestCase):
             self.warm_evaluate()
 
 
+class CumulativeCacheContractTests(unittest.TestCase):
+    """Opaque synthetic indexes and receipts only; no native codec or physics."""
+
+    setUp = ReportContractTests.setUp
+    write = ReportContractTests.write
+    index = ReportContractTests.index
+    sample = ReportContractTests.sample
+    paired = ReportContractTests.paired
+    synthetic_suite = ReportContractTests.synthetic_suite
+    strict_build = ReportContractTests.strict_build
+
+    def cumulative_fixture(self, completed=False):
+        cache = self.root / "native-pack"
+        cache.mkdir()
+        index = cache / "cache.rrindex"
+        index.write_text("OPAQUE SYNTHETIC INDEX; NOT A NATIVE CACHE")
+        source_workload = self.write(
+            "source-workload.json",
+            {
+                "schema": "vakint.five-loop-cache-workload.v1",
+                "training": [{"id": "SOURCE_TRAINING", "powers": [2] * 15}],
+            },
+        )
+        source_producer = self.write(
+            "source-producer.json",
+            {
+                "workload_sha256": merge.digest(source_workload),
+                "schema": "vakint.five-loop-cache-build.v2",
+                "complete": False,
+                "preparation": {
+                    "status": "failed",
+                    "completed_roots": 1,
+                    "total_roots": 3,
+                    "native_profile": {"strict": True, "unresolved_policy": "reject"},
+                },
+                "functional_acceptance": completed,
+                "process_zero_acceptance": completed,
+                "collector_exit_code": 0 if completed else 1,
+            },
+        )
+        native = {
+            "schema": "rustred.running-application-cache.v1",
+            "generation": 1,
+            "accepted_records": 5,
+            "committed_records": 5,
+            "pending_records": 0,
+            "pending_bytes": 0,
+            "writer_error": None,
+            "last_error": None,
+            "closed": completed,
+        }
+        capture = self.write(
+            "source-capture.json",
+            {"report": native, "flush_complete": completed, "close": {"error": None}},
+        )
+        snapshot = self.write(
+            "source-snapshot.json",
+            {
+                "schema": "rustred.running-application-cache-snapshot.v1",
+                "delta": {
+                    "generation": 1,
+                    "manifest_digest": "NATIVE-DIGEST-NOT-SHA256",
+                    "manifest_path": str(index),
+                    "manifest_bytes": index.stat().st_size,
+                },
+            },
+        )
+        barrier = self.write(
+            "source-barrier.json",
+            {
+                "schema": "vakint.native-cache-snapshot-barrier.v1",
+                "accepted": True,
+                "committed_snapshot": True,
+                "producer_completed": completed,
+                "producer": merge.evidence(source_producer),
+                "capture": merge.evidence(capture),
+                "snapshot": merge.evidence(snapshot),
+                "writer_fault": None,
+                "generation": 1,
+                "manifest_digest": "NATIVE-DIGEST-NOT-SHA256",
+                **{
+                    k: native[k]
+                    for k in (
+                        "accepted_records",
+                        "committed_records",
+                        "pending_records",
+                        "pending_bytes",
+                    )
+                },
+            },
+        )
+        source = {
+            "id": "physical-q0",
+            "kind": "running-capture",
+            "scope": "completed-example" if completed else "committed-prefix",
+            "producer": merge.evidence(source_producer),
+            "capture": merge.evidence(capture),
+            "snapshot": merge.evidence(snapshot),
+            "barrier": merge.evidence(barrier),
+            "index": merge.evidence(index),
+        }
+        report = {
+            "schema": "vakint.cumulative-native-cache-report.v1",
+            "cache_sha256": None,
+            "cache_native_index_identity": merge.native_cache_identity(cache),
+            "semantic_binding": {
+                "family_fingerprint": "TEST_FAMILY",
+                "physical_arity": 15,
+                "artifact_digest": [1] * 32,
+                "layer": "saved-application-route-apply-v1",
+            },
+            "data_manifest_sha256": "7" * 64,
+            "sources": [source],
+            "inventory": {
+                "compressed_bytes": 20_000_000_000,
+                "stored_record_references": 7,
+                "physical_chunks": 3,
+            },
+        }
+        validation = self.write(
+            "native-validation.json",
+            {
+                "schema": "vakint.cumulative-native-cache-validation.v1",
+                "accepted": True,
+                **{
+                    key: report[key]
+                    for key in (
+                        "cache_native_index_identity",
+                        "semantic_binding",
+                        "data_manifest_sha256",
+                        "sources",
+                        "inventory",
+                    )
+                },
+                "checks": {
+                    key: True
+                    for key in (
+                        "immutable_index_snapshot",
+                        "authenticated_chunks",
+                        "strict_completed_records_only",
+                        "authenticated_bindings",
+                        "committed_source_snapshots",
+                    )
+                },
+            },
+        )
+        report["validation"] = merge.evidence(validation)
+        path = self.write("cumulative-report.json", report)
+        return path, cache
+
+    def revise(self, report_path, name, mutate):
+        """Rebind enclosing test evidence, so semantic checks see the changed facts."""
+        report = merge.read(report_path)
+        source = report["sources"][0]
+        target = Path(source[name]["path"])
+        doc = merge.read(target)
+        mutate(doc)
+        target.write_text(json.dumps(doc))
+        source[name] = merge.evidence(target)
+        if name in ("producer", "capture", "snapshot"):
+            barrier_path = Path(source["barrier"]["path"])
+            barrier = merge.read(barrier_path)
+            barrier[name] = merge.evidence(target)
+            barrier_path.write_text(json.dumps(barrier))
+            source["barrier"] = merge.evidence(barrier_path)
+        self.refresh_validation(report_path, report)
+
+    def refresh_validation(self, path, report):
+        target = Path(report["validation"]["path"])
+        validation = merge.read(target)
+        for key in (
+            "cache_native_index_identity",
+            "semantic_binding",
+            "data_manifest_sha256",
+            "sources",
+            "inventory",
+        ):
+            validation[key] = report[key]
+        target.write_text(json.dumps(validation))
+        report["validation"] = merge.evidence(target)
+        path.write_text(json.dumps(report))
+
+    def test_prefix_stays_incomplete_without_aggregate_size_cap(self):
+        path, cache = self.cumulative_fixture()
+        result = merge.build_record(path, cache)
+        self.assertFalse(result["physical_examples_complete"])
+        self.assertFalse(result["performance_eligible"])
+        self.assertNotIn("preparation", result["raw_report"])
+        self.assertEqual(
+            result["raw_report"]["inventory"]["stored_record_references"], 7
+        )
+        self.assertFalse(
+            result["sources"][0]["receipts"]["producer"]["raw_receipt"]["complete"]
+        )
+        self.assertEqual(
+            result["raw_report"]["inventory"]["compressed_bytes"], 20_000_000_000
+        )
+
+    def test_failed_workload_cannot_become_completed_with_acceptance_booleans(self):
+        path, cache = self.cumulative_fixture(completed=True)
+        with self.assertRaisesRegex(ValueError, "failed finite workload"):
+            merge.build_record(path, cache)
+
+    def test_partial_source_cannot_be_relabelled_completed(self):
+        path, cache = self.cumulative_fixture()
+        report = merge.read(path)
+        report["sources"][0]["scope"] = "completed-example"
+        self.refresh_validation(path, report)
+        with self.assertRaisesRegex(ValueError, "partial source"):
+            merge.build_record(path, cache)
+
+    def test_snapshot_barrier_binds_actual_generation_and_counters(self):
+        for name, change in (
+            ("snapshot", lambda d: d["delta"].update(generation=2)),
+            ("capture", lambda d: d["report"].update(committed_records=4)),
+            ("barrier", lambda d: d.update(committed_snapshot=False)),
+        ):
+            with (
+                self.subTest(name=name),
+                tempfile.TemporaryDirectory(dir=self.root) as unused,
+            ):
+                old_root, self.root = self.root, Path(unused)
+                try:
+                    path, cache = self.cumulative_fixture()
+                    self.revise(path, name, change)
+                    with self.assertRaisesRegex(
+                        ValueError, "snapshot barrier|native capture"
+                    ):
+                        merge.build_record(path, cache)
+                finally:
+                    self.root = old_root
+
+    def test_changed_native_child_index_is_rejected(self):
+        path, cache = self.cumulative_fixture()
+        (cache / "cache.rrindex").write_text("CHANGED OPAQUE BYTES")
+        with self.assertRaisesRegex(ValueError, "indexes changed"):
+            merge.build_record(path, cache)
+
+    def test_wrong_native_binding_is_rejected_even_with_same_indexes(self):
+        path, cache = self.cumulative_fixture()
+        report = merge.read(path)
+        report["semantic_binding"]["physical_arity"] = 14
+        path.write_text(json.dumps(report))
+        with self.assertRaisesRegex(ValueError, "binding/source inventory"):
+            merge.build_record(path, cache)
+
+    def test_native_index_identity_is_location_independent_and_unambiguous(self):
+        _, cache = self.cumulative_fixture()
+        first = merge.native_cache_identity(cache)
+        second = self.root / "other-pack"
+        second.mkdir()
+        (second / "cache.rrindex").write_bytes((cache / "cache.rrindex").read_bytes())
+        self.assertEqual(first, merge.native_cache_identity(second))
+        (second / "bundle.rrindex").write_text("AMBIGUOUS")
+        with self.assertRaisesRegex(ValueError, "exactly one"):
+            merge.native_cache_identity(second)
+        (second / "bundle.rrindex").unlink()
+        (second / "cache.rrindex").unlink()
+        (second / "cache.rrindex").symlink_to(cache / "cache.rrindex")
+        with self.assertRaisesRegex(ValueError, "regular file"):
+            merge.native_cache_identity(second)
+
+    def test_native_bundle_hashes_all_sorted_child_indexes(self):
+        cache = self.root / "native-bundle"
+        cache.mkdir()
+        (cache / "bundle.rrindex").write_text("OPAQUE BUNDLE")
+        for name in ("f" * 64, "0" * 64):
+            child = cache / "bindings" / name
+            child.mkdir(parents=True)
+            (child / "cache.rrindex").write_text(name)
+        identity = merge.native_cache_identity(cache)
+        self.assertEqual(list(identity["indexes"]), sorted(identity["indexes"]))
+        before = identity["sha256"]
+        (cache / "bindings" / ("0" * 64) / "cache.rrindex").write_text("CHANGED")
+        self.assertNotEqual(before, merge.native_cache_identity(cache)["sha256"])
+
+    def test_old_completed_file_build_has_no_obsolete_size_gate(self):
+        path = self.strict_build()
+        report = merge.read(path)
+        report["within_50_mib_target"] = False
+        path.write_text(json.dumps(report))
+        self.assertEqual(merge.build_record(path, self.cache)["raw_report"], report)
+
+    def test_cumulative_append_preserves_all_historical_measurements(self):
+        path, cache = self.cumulative_fixture()
+        historical = {
+            "selected_reduction_run": "OLD",
+            "reduction_runs": {str(i): {"raw": [i]} for i in range(48)},
+            "selected_five_loop_run": "EXISTING",
+            "five_loop_runs": {"EXISTING": {"raw": "UNCHANGED"}},
+        }
+        base = self.write("historical.json", historical)
+        original = base.read_bytes()
+        output = self.root / "new.json"
+        with patch(
+            "sys.argv",
+            [
+                "adapter",
+                "--base",
+                str(base),
+                "--build",
+                str(path),
+                "--cache",
+                str(cache),
+                "--evidence",
+                str(self.index(False)),
+                "--output",
+                str(output),
+            ],
+        ):
+            merge.main()
+        self.assertEqual(base.read_bytes(), original)
+        new = merge.read(output)
+        self.assertEqual(new["reduction_runs"], historical["reduction_runs"])
+        self.assertEqual(new["selected_reduction_run"], "OLD")
+        self.assertEqual(new["selected_five_loop_run"], "EXISTING")
+        self.assertEqual(
+            new["five_loop_runs"]["EXISTING"], historical["five_loop_runs"]["EXISTING"]
+        )
+
+    def public_import_fixture(self, producer, cohort):
+        """Actual receipt schemas with opaque tiny test files; no import is run."""
+        prefix = "synthetic-public-import"
+        root = self.root / prefix
+        output = root / "run1/imported-native-bundle"
+        native = producer["raw_report"]["cache_native_index_identity"]
+        files = {"cache/" + name: item for name, item in native["indexes"].items()}
+        for name in native["indexes"]:
+            target = output / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes((Path(producer["cache_directory"]) / name).read_bytes())
+        total = producer["raw_report"]["inventory"]["compressed_bytes"]
+        count = producer["raw_report"]["inventory"]["physical_chunks"]
+        for index in range(count):
+            files[f"cache/chunks/TEST-{index}.rrchunk.gz"] = {
+                "bytes": total // count + (total % count if index == 0 else 0),
+                "sha256": "f" * 64,
+            }
+        descriptor = self.write(
+            prefix + "/descriptor.json",
+            {
+                "schema": "vakint.nativepack-transport.v1",
+                "loop_count": 5,
+                "binding": producer["raw_report"]["semantic_binding"],
+                "generation": 1,
+                "stored_record_references": producer["raw_report"]["inventory"][
+                    "stored_record_references"
+                ],
+                "files": files,
+                "parts": [{"archive_bytes": 42}],
+            },
+        )
+        core = self.write(prefix + "/TEST-NOT-A-CORE", {"TEST_ONLY": "CORE"})
+        wheel = self.write(prefix + "/TEST-NOT-A-WHEEL", {"TEST_ONLY": "WHEEL"})
+        sources = {
+            "vakint": cohort["main_revision"],
+            "rustred": cohort["native_revision"],
+            "official_kernel": cohort["kernel_revision"],
+        }
+        data_path = self.root / "public-import-data"
+        packet = self.write(
+            prefix + "/packet.json",
+            {
+                "schema": "vakint.public-native-large-prefix-import-source-packet.v1",
+                "unit": "SYNTHETIC-TEST-UNIT",
+                "whole_seconds": 3600,
+                "command": ["TEST-NOT-EXECUTED", "worker.py"],
+                "public_sources": sources,
+                "descriptor": merge.evidence(descriptor),
+                "fresh_destination": str(output),
+                "frozen_data": str(data_path),
+                "core": merge.evidence(core),
+                "wheel": merge.evidence(wheel),
+                "pinned_inputs": [
+                    merge.evidence(descriptor),
+                    merge.evidence(core),
+                    merge.evidence(wheel),
+                    merge.evidence(data_path / "manifest.json"),
+                ],
+            },
+        )
+        go = self.write(
+            prefix + "/root-go.json",
+            {
+                "decision": "GO_ONCE_EXACT_PUBLIC_IMPORT",
+                "packet_sha256": merge.digest(packet),
+                "unit": "SYNTHETIC-TEST-UNIT",
+                "whole_seconds": 3600,
+            },
+        )
+        indexes = {
+            name: item for name, item in files.items() if name.endswith(".rrindex")
+        }
+        namespaces = sum(name.startswith("cache/bindings/") for name in indexes)
+        imported = {
+            "format": "multipart_manifest",
+            "output": str(output),
+            "sha256": merge.digest(descriptor),
+            "archive_bytes": descriptor.stat().st_size + 42,
+            "extracted_bytes": sum(item["bytes"] for item in files.values()),
+            "entries": len(files),
+            "namespaces": namespaces,
+            "copied_bases": namespaces,
+            "copied_chunks": count,
+            "preserved_record_references": producer["raw_report"]["inventory"][
+                "stored_record_references"
+            ],
+            "compressed_bytes": total,
+            "index_bytes": sum(item["bytes"] for item in indexes.values()),
+            "transfer_buffer_bytes": 65536,
+        }
+        host = {
+            "sources": sources,
+            "core_sha256": merge.digest(core),
+            "wheel_sha256": merge.digest(wheel),
+            "mapped_core_paths": [str(core)],
+        }
+        host_path = self.write(prefix + "/run1/actual-host.json", host)
+        state = {str(loop): {"attached": False} for loop in range(1, 6)}
+        state["5"]["saved_application"] = {
+            "binding": producer["raw_report"]["semantic_binding"],
+            "read_backing": False,
+            "native": {"rule_applications": 0},
+            "persistent": {"lookups": 0, "captured_records": 0},
+        }
+        loaded = {
+            "path": str(data_path),
+            "version": "v-synthetic-import-only",
+            "load_prepared_caches": False,
+            "loops": [
+                {"loop_count": loop, "cache_loaded": False} for loop in range(1, 6)
+            ],
+        }
+        worker = self.write(
+            prefix + "/run1/worker-result.json",
+            {
+                "schema": "vakint.public-large-native-import.v1",
+                "state": "PASS",
+                "public_sources": sources,
+                "actual_host": str(host_path),
+                "data_report": loaded,
+                "import_report": imported,
+                "exact_native_files_verified": len(files),
+                "refused_repeat_preserved_full_output_and_cache_state": True,
+                "cache_attachment_performed": False,
+                "integral_reduction_or_numerical_master_evaluation": False,
+                "cache_coefficient_lookup_or_capture": False,
+                "repeat_refusal": {
+                    "type": "ValueError",
+                    "message": "destination already exists",
+                },
+                "final_attachment_state": state,
+            },
+        )
+        self.write(prefix + "/run1/public-import-report.json", imported)
+        self.write(prefix + "/run1/data-load-report.json", loaded)
+        self.write(prefix + "/run1/cache-state-before-repeat.json", state)
+        terminal_doc = {
+            "schema": "vakint.public-native-import-controller.v1",
+            "state": "PASS",
+            "worker_returncode": 0,
+            "packet_sha256": merge.digest(packet),
+            "root_go_sha256": merge.digest(go),
+            "worker_result": merge.evidence(worker),
+            "whole_elapsed_seconds": 1.0,
+            "whole_seconds": 3600,
+            "output": str(output),
+        }
+        terminal = self.write(prefix + "/run1/terminal-outcome.json", terminal_doc)
+        admission_doc = {
+            "packet_sha256": merge.digest(packet),
+            "frozen_inputs_and_host_hashes_verified": True,
+        }
+        admission = self.write(prefix + "/run1/admission.json", admission_doc)
+        invocation = self.write(
+            prefix + "/run1/invocation-start.json",
+            {
+                "packet_sha256": merge.digest(packet),
+                "command": ["TEST-NOT-EXECUTED", "worker.py"],
+                "pid": 22,
+                "controller_pid": 11,
+            },
+        )
+        launch = self.write(
+            prefix + "/actual-launch-receipt.json",
+            {
+                "schema": "vakint.public-large-native-import.actual-launch.v1",
+                "unit": "SYNTHETIC-TEST-UNIT",
+                "service": {
+                    "InvocationID": "SYNTHETIC-TEST-INVOCATION",
+                    "MainPID": "11",
+                },
+                "processes": [
+                    {"pid": 11, "start_ticks": 110},
+                    {"pid": 22, "start_ticks": 220},
+                ],
+                "admission": admission_doc,
+                "actual_host": host,
+                "artifact_sha256": {
+                    str(path): merge.digest(path)
+                    for path in (host_path, admission, invocation)
+                },
+            },
+        )
+        journal = self.write(
+            prefix + "/actual-invocation-journal.json",
+            [
+                {
+                    "USER_UNIT": "SYNTHETIC-TEST-UNIT",
+                    "USER_INVOCATION_ID": "SYNTHETIC-TEST-INVOCATION",
+                }
+            ],
+        )
+        observation = self.write(
+            prefix + "/actual-terminal-observation.json",
+            {
+                "schema": "vakint.public-native-import.actual-terminal-observation.v1",
+                "pidfd_completion_observed": True,
+                "saved_launch_and_journal_identity_joined": True,
+                "public_import_terminal_accepted": True,
+                "frozen_inputs_unchanged": True,
+                "current_service": {
+                    "ActiveState": "inactive",
+                    "Result": "success",
+                    "ExecMainStatus": "0",
+                    "InvocationID": "",
+                },
+                "unit": "SYNTHETIC-TEST-UNIT",
+                "invocation": "SYNTHETIC-TEST-INVOCATION",
+                "controller_terminal": terminal_doc,
+                "artifact_sha256": {
+                    str(path): merge.digest(path)
+                    for path in (packet, go, launch, journal, terminal, worker)
+                },
+            },
+        )
+        return merge.evidence(observation)
+
+    def native_suite_fixture(self):
+        self.records, self.window_rows = [], []
+        path, suite, _, _ = self.synthetic_suite()
+        suite["cases"][0]["id"] = "native-tuning-synthetic"
+        report_path, cache = self.cumulative_fixture()
+        data_path = self.write(
+            "public-import-data/manifest.json", {"version": "v-synthetic-import-only"}
+        )
+        source_report = merge.read(report_path)
+        source_report["data_manifest_sha256"] = merge.digest(data_path)
+        self.refresh_validation(report_path, source_report)
+        producer = merge.build_record(report_path, cache)
+        build = producer["raw_report"]
+        identity = suite["identity"]
+        identity["data_manifest_sha256"] = build["data_manifest_sha256"]
+        identity["cache_sha256"] = None
+        identity["cache_native_index_identity"] = build["cache_native_index_identity"]
+        binding = build["semantic_binding"]
+        cohort = identity["owner_proof"]["compiled_cohort"]
+        cohort["semantic_binding"] = binding
+        workload = {
+            "source_census_sha256": identity["source_census_sha256"],
+            "data_manifest_sha256": identity["data_manifest_sha256"],
+            "training": [],
+            "tuning": [
+                {
+                    "id": suite["cases"][0]["id"],
+                    "powers": [1] * 15,
+                    "public_input": "SYNTHETIC INPUT",
+                }
+            ],
+            "held_out": [],
+        }
+        proof_path = self.write(
+            "consumer-proof.json",
+            {
+                "compiled_cohort": cohort,
+                "semantic_binding": binding,
+                "data_manifest_sha256": build["data_manifest_sha256"],
+                "measurement_executable_sha256": merge.digest(self.binary),
+            },
+        )
+        identity["owner_proof"] = {
+            **merge.evidence(proof_path),
+            "compiled_cohort": cohort,
+        }
+        workload["owner_proof"] = merge.evidence(proof_path)
+        workload_path = self.write("consumer-workload.json", workload)
+        identity["workload_sha256"] = merge.digest(workload_path)
+        accepted = {
+            "schema": "vakint.cumulative-cache-consumer-requalification.v1",
+            "accepted": True,
+            "producer": merge.evidence(report_path),
+            "cache_native_index_identity": build["cache_native_index_identity"],
+            "semantic_binding": binding,
+            "data_manifest_sha256": build["data_manifest_sha256"],
+            "checks": {
+                key: True
+                for key in (
+                    "canonical_consumer_proof",
+                    "cache_import_validated",
+                    "source_capture_inventory_authenticated",
+                    "unchanged_selection",
+                    "training_raw_and_nonzero_owner_disjoint",
+                    "twelve_distinct_held_out_sets",
+                )
+            },
+            "consumer": {
+                "collector_artifacts": merge.evidence(self.artifact),
+                "compiled_cohort": merge.evidence(
+                    self.write("consumer-cohort.json", cohort)
+                ),
+                "final_workload": merge.evidence(workload_path),
+                "owner_proof": merge.evidence(proof_path),
+                **{
+                    name: merge.evidence(
+                        self.write(name + ".json", {"TEST_FILE_CONTRACT_ONLY": name})
+                    )
+                    for name in (
+                        "protected_union",
+                        "training_route_qualification",
+                        "alias_exclusion",
+                    )
+                },
+            },
+            "immutable_selection": merge.selected_inputs(workload),
+            "case_exposure": {suite["cases"][0]["id"]: "tuning"},
+        }
+        sources = build["sources"]
+        accepted["source_starting_keys"] = merge.evidence(
+            self.write(
+                "source-starting-keys.json",
+                {
+                    "schema": "vakint.cumulative-source-starting-keys.v1",
+                    "sources": [
+                        {
+                            "id": sources[0]["id"],
+                            "producer": sources[0]["producer"],
+                            "kind": "selected-workload",
+                            "inputs": merge.evidence(
+                                self.root / "source-workload.json"
+                            ),
+                        }
+                    ],
+                },
+            )
+        )
+        protected = self.write(
+            "protected_union.json",
+            {
+                "schema": "vakint.protected-raw-owner-union.v1",
+                "owner_proof": merge.evidence(proof_path),
+                "compiled_cohort": accepted["consumer"]["compiled_cohort"],
+                "raw_lowered_keys": [],
+                "direct_owner_keys": [],
+                "declared_case_powers": [],
+                "forbidden_direct_target_or_owner_keys": [],
+            },
+        )
+        routes = self.write(
+            "training_route_qualification.json",
+            {
+                "schema": "vakint.source-candidate-owner-qualification.v2",
+                "all_routes_succeeded": True,
+                "selected_rows_complete": True,
+                "compiled_cohort": cohort,
+                "semantic_binding": binding,
+                "rows": [
+                    {
+                        "raw_powers": [2] * 15,
+                        "route_success": True,
+                        "route_error": None,
+                        "owner_endpoints": [{"coefficient": "1", "powers": [3] * 15}],
+                    }
+                ],
+            },
+        )
+        aliases = self.write(
+            "alias_exclusion.json",
+            {
+                "schema": "vakint.source-candidate-external-protected-alias-exclusion.v1",
+                "qualification": merge.evidence(routes),
+                "protected_union": merge.evidence(protected),
+                "rows": [
+                    {
+                        "powers": [2] * 15,
+                        "route_complete_nonempty": True,
+                        "raw_protected_intersection": False,
+                        "owner_protected_intersections": [],
+                        "eligible_after_external_alias_exclusion": True,
+                    }
+                ],
+            },
+        )
+        accepted["consumer"].update(
+            protected_union=merge.evidence(protected),
+            training_route_qualification=merge.evidence(routes),
+            alias_exclusion=merge.evidence(aliases),
+        )
+        accepted["cache_import"] = self.public_import_fixture(producer, cohort)
+        acceptance = self.write("native-consumer-acceptance.json", accepted)
+        for sample, reference, window in zip(
+            suite["measurements"], self.records, self.window_rows
+        ):
+            sample["case_id"] = suite["cases"][0]["id"]
+            reference["case_id"] = sample["case_id"]
+            window["case_id"] = sample["case_id"]
+            sample["identity"] = identity
+            sample["owner_proof"] = identity["owner_proof"]
+            sample["cache_statistics"]["binding"] = binding
+            sample_path = Path(reference["record"]["path"])
+            sample_path.write_text(json.dumps(sample))
+            reference["record"] = merge.evidence(sample_path)
+            window["report_sha256"] = merge.digest(sample_path)
+            launcher_path = Path(reference["launcher"]["path"])
+            launcher = merge.read(launcher_path)
+            launcher["case_id"] = sample["case_id"]
+            launcher["cache_sha256"] = None
+            if sample["variant"] == "cached":
+                launcher["cache_native_index_identity"] = build[
+                    "cache_native_index_identity"
+                ]
+            launcher_path.write_text(json.dumps(launcher))
+            reference["launcher"] = merge.evidence(launcher_path)
+            window["launcher_sha256"] = merge.digest(launcher_path)
+        path.write_text(json.dumps(suite))
+        index = self.index()
+        doc = merge.read(index)
+        doc["cache_requalification"] = merge.evidence(acceptance)
+        index.write_text(json.dumps(doc))
+        return path, suite, producer, index, acceptance
+
+    def test_native_suite_requires_real_repeated_serialized_samples(self):
+        path, _, producer, index, _ = self.native_suite_fixture()
+        result = merge.suite_record(
+            path, "tuning", producer, merge.ReportEvidence(index)
+        )
+        self.assertEqual(result["rows"][0]["cache_exposure"], "tuning")
+        self.assertEqual(result["rows"][0]["intermediate_hits"], 3)
+        index_doc = merge.read(index)
+        del index_doc["records"][0]["window"]
+        index.write_text(json.dumps(index_doc))
+        with self.assertRaises((KeyError, ValueError)):
+            merge.suite_record(path, "tuning", producer, merge.ReportEvidence(index))
+
+    def test_native_prefix_alone_cannot_supply_consumer_qualification(self):
+        path, _, producer, index, _ = self.native_suite_fixture()
+        doc = merge.read(index)
+        del doc["cache_requalification"]
+        index.write_text(json.dumps(doc))
+        with self.assertRaisesRegex(ValueError, "hashed evidence reference"):
+            merge.suite_record(path, "tuning", producer, merge.ReportEvidence(index))
+
+    def test_native_consumer_binding_and_cohort_are_not_relabelled(self):
+        path, _, producer, index, acceptance = self.native_suite_fixture()
+        accepted = merge.read(acceptance)
+        accepted["semantic_binding"]["physical_arity"] = 14
+        acceptance.write_text(json.dumps(accepted))
+        doc = merge.read(index)
+        doc["cache_requalification"] = merge.evidence(acceptance)
+        index.write_text(json.dumps(doc))
+        with self.assertRaisesRegex(ValueError, "another producer/snapshot/binding"):
+            merge.suite_record(path, "tuning", producer, merge.ReportEvidence(index))
+
+    def test_native_single_sample_or_reused_process_cannot_be_performance(self):
+        path, suite, producer, index, _ = self.native_suite_fixture()
+        suite["identity"]["repetitions"] = 1
+        path.write_text(json.dumps(suite))
+        with self.assertRaisesRegex(ValueError, "three repetitions"):
+            merge.suite_record(path, "tuning", producer, merge.ReportEvidence(index))
+
+    def rebind_acceptance(self, index, acceptance, mutate):
+        doc = merge.read(acceptance)
+        mutate(doc)
+        acceptance.write_text(json.dumps(doc))
+        evidence = merge.read(index)
+        evidence["cache_requalification"] = merge.evidence(acceptance)
+        index.write_text(json.dumps(evidence))
+
+    def test_native_changed_consumer_cohort_fails(self):
+        path, _, producer, index, acceptance = self.native_suite_fixture()
+        doc = merge.read(acceptance)
+        cohort_path = Path(doc["consumer"]["compiled_cohort"]["path"])
+        cohort = merge.read(cohort_path)
+        cohort["main_revision"] = "a" * 40
+        cohort_path.write_text(json.dumps(cohort))
+        self.rebind_acceptance(
+            index,
+            acceptance,
+            lambda d: d["consumer"].update(compiled_cohort=merge.evidence(cohort_path)),
+        )
+        with self.assertRaisesRegex(ValueError, "proof/cohort/artifact"):
+            merge.suite_record(path, "tuning", producer, merge.ReportEvidence(index))
+
+    def test_native_guard_payload_and_fresh_process_are_enforced(self):
+        path, suite, producer, index, _ = self.native_suite_fixture()
+        guards = path.parent / "case-000-00-cached" / "guards.json"
+        original = guards.read_bytes()
+        guards.write_text('["DIFFERENT GUARD"]')
+        with self.assertRaisesRegex(ValueError, "result/guard sidecar"):
+            merge.suite_record(path, "tuning", producer, merge.ReportEvidence(index))
+        guards.write_bytes(original)
+        suite["measurements"][0]["fresh_process"] = False
+        path.write_text(json.dumps(suite))
+        with self.assertRaisesRegex(ValueError, "unsuccessful or mismatched sample"):
+            merge.suite_record(path, "tuning", producer, merge.ReportEvidence(index))
+
+    def test_native_seen_inputs_are_labelled_not_promoted_to_held_out(self):
+        path, suite, producer, index, acceptance = self.native_suite_fixture()
+        case_id = suite["cases"][0]["id"]
+        self.rebind_acceptance(
+            index,
+            acceptance,
+            lambda d: d["case_exposure"].update({case_id: "seen-starting-input"}),
+        )
+        result = merge.suite_record(
+            path, "tuning", producer, merge.ReportEvidence(index)
+        )
+        self.assertEqual(result["rows"][0]["cache_exposure"], "seen-starting-input")
+        accepted = merge.read(acceptance)
+        workload_path = Path(accepted["consumer"]["final_workload"]["path"])
+        workload = merge.read(workload_path)
+        workload["held_out"] = workload.pop("tuning")
+        workload["tuning"] = []
+        workload_path.write_text(json.dumps(workload))
+        identity = suite["identity"]
+        identity["workload_sha256"] = merge.digest(workload_path)
+        self.rebind_acceptance(
+            index,
+            acceptance,
+            lambda d: (
+                d["consumer"].update(final_workload=merge.evidence(workload_path)),
+                d.update(immutable_selection=merge.selected_inputs(workload)),
+            ),
+        )
+        with self.assertRaisesRegex(ValueError, "seen starting input"):
+            merge.ReportEvidence(index).cache_qualification(identity, producer)
+
+    def test_native_explicit_training_key_cannot_be_held_out_under_another_name(self):
+        _, suite, producer, index, acceptance = self.native_suite_fixture()
+        accepted = merge.read(acceptance)
+        workload_path = Path(accepted["consumer"]["final_workload"]["path"])
+        workload = merge.read(workload_path)
+        workload["training"] = [
+            {"id": "TRAINING", "powers": [1] * 15, "public_input": None}
+        ]
+        workload["held_out"] = [
+            {"id": "HIDDEN_ALIAS", "powers": [1] * 15, "public_input": None}
+        ]
+        workload_path.write_text(json.dumps(workload))
+        suite["identity"]["workload_sha256"] = merge.digest(workload_path)
+        self.rebind_acceptance(
+            index,
+            acceptance,
+            lambda d: (
+                d["consumer"].update(final_workload=merge.evidence(workload_path)),
+                d.update(immutable_selection=merge.selected_inputs(workload)),
+                d["case_exposure"].update(
+                    TRAINING="seen-starting-input", HIDDEN_ALIAS="held-out"
+                ),
+            ),
+        )
+        with self.assertRaisesRegex(ValueError, "starting training key"):
+            merge.ReportEvidence(index).cache_qualification(suite["identity"], producer)
+
+    def test_native_launcher_must_name_the_actual_snapshot(self):
+        path, _, producer, index, _ = self.native_suite_fixture()
+        doc = merge.read(index)
+        for record in doc["records"]:
+            launcher_path = Path(record["launcher"]["path"])
+            launcher = merge.read(launcher_path)
+            if launcher["variant"] == "cached":
+                launcher["cache_native_index_identity"]["sha256"] = "f" * 64
+                launcher_path.write_text(json.dumps(launcher))
+                record["launcher"] = merge.evidence(launcher_path)
+                break
+        index.write_text(json.dumps(doc))
+        with self.assertRaisesRegex(ValueError, "launcher native cache"):
+            merge.suite_record(path, "tuning", producer, merge.ReportEvidence(index))
+
+    def preserved_prefix_fixture(self):
+        path, cache = self.cumulative_fixture()
+        report = merge.read(path)
+        source = report["sources"][0]
+        index = cache / "cache.rrindex"
+        metadata = self.write(
+            "actual-shape-union-metadata.json",
+            {
+                "immutable_indices": [
+                    {"role": "old", "path": str(index), "bytes": index.stat().st_size}
+                ],
+                "metadata_only": True,
+                "run_concat_verified": True,
+                "generation": 1,
+                "compressed_bytes": report["inventory"]["compressed_bytes"],
+                "preserved_record_references": 7,
+            },
+        )
+        terminal = self.write(
+            "terminal-outcome.json",
+            {
+                "schema": "vakint.real-opaque-union-prefix-diagnostic.v1",
+                "state": "PASS",
+                "independent_verification": {
+                    "schema": "vakint.independent-opaque-union-prefix-preservation.v1",
+                    "state": "PASS",
+                    "every_captured_source_and_output_chunk_sha256_and_length_equal": True,
+                    "all_chunk_files_stable_during_reads": True,
+                    "native_exact_run_concatenation_verified": True,
+                    "completed_q0_or_final_cache_claimed": False,
+                    "semantic_qualification_or_cache_speedup_claimed": False,
+                },
+            },
+        )
+        binding = self.write(
+            "actual-shape-binding.json", {"original_build_receipt": source["producer"]}
+        )
+        proposal = self.write(
+            "actual-shape-proposal.json", {"binding": merge.evidence(binding)}
+        )
+        proof = self.write(
+            "actual-shape-prefix-proof.json",
+            {
+                "schema": "vakint.postflight-real-union-prefix-proof-qualified.v1",
+                "data_preservation_state": "PASS",
+                "original_runtime_receipts_unchanged": True,
+                "proposal": merge.evidence(proposal),
+                "output": str(cache),
+                "generation": 1,
+                **report["inventory"],
+                "artifacts": [
+                    merge.evidence(metadata),
+                    merge.evidence(terminal),
+                    merge.evidence(index),
+                ],
+            },
+        )
+        source.update(
+            kind="native-index-prefix",
+            prefix_role="old",
+            capture=merge.evidence(metadata),
+            snapshot=merge.evidence(index),
+            barrier=merge.evidence(proof),
+        )
+        source.pop("index")
+        report["validation"] = merge.evidence(proof)
+        path.write_text(json.dumps(report))
+        return path, cache, proof, terminal
+
+    def test_actual_union_prefix_shape_does_not_become_physical_completion(self):
+        path, cache, _, _ = self.preserved_prefix_fixture()
+        result = merge.build_record(path, cache)
+        self.assertEqual(result["status"], "preserved-committed-prefix")
+        self.assertFalse(result["physical_examples_complete"])
+        self.assertFalse(result["performance_eligible"])
+        self.assertFalse(
+            result["sources"][0]["receipts"]["producer"]["raw_receipt"]["complete"]
+        )
+
+    def test_actual_union_prefix_cannot_claim_semantics_or_final_q0(self):
+        path, cache, proof_path, terminal = self.preserved_prefix_fixture()
+        bad = merge.read(terminal)
+        bad["independent_verification"]["completed_q0_or_final_cache_claimed"] = True
+        terminal.write_text(json.dumps(bad))
+        proof = merge.read(proof_path)
+        proof["artifacts"] = [
+            merge.evidence(terminal) if Path(ref["path"]) == terminal else ref
+            for ref in proof["artifacts"]
+        ]
+        proof_path.write_text(json.dumps(proof))
+        report = merge.read(path)
+        report["validation"] = merge.evidence(proof_path)
+        report["sources"][0]["barrier"] = merge.evidence(proof_path)
+        path.write_text(json.dumps(report))
+        with self.assertRaisesRegex(ValueError, "limited scope"):
+            merge.build_record(path, cache)
+
+    def completed_source_fixture(self, job):
+        from test_merge_physical_capture_results import PhysicalCaptureContracts
+
+        physical = PhysicalCaptureContracts()
+        physical.setUp()
+        self.addCleanup(physical.doCleanups)
+        config = physical.producer if job == "q0" else physical.quadratic_fixture()
+        config_ref = (
+            physical.producer_config
+            if job == "q0"
+            else physical.file("quadratic.final.json", config)
+        )
+        done = (
+            physical.producer_done
+            if job == "q0"
+            else physical.run_fixture(config, config_ref, 13, 30.0, True)
+        )
+        root = Path(config["output_root"])
+        cache_path = root / "run" / "running-cache.json"
+        captured = merge.read(cache_path)
+        captured["report"].update(
+            schema="rustred.running-application-cache.v1", generation=3
+        )
+        cache_ref = physical.file(cache_path.relative_to(physical.root), captured)
+        completion_path = Path(done["path"])
+        completion = merge.read(completion_path)
+        completion["terminal_artifacts"]["running-cache.json"] = {
+            **cache_ref,
+            "exists": True,
+        }
+        completion["outputs"]["running_cache"]["report"] = cache_ref
+        completion_ref = physical.file(
+            completion_path.relative_to(physical.root), completion
+        )
+        path, cache = self.cumulative_fixture()
+        report = merge.read(path)
+        snapshot_path = root / "run" / "snapshot.json"
+        snapshot = merge.read(snapshot_path)
+        native = captured["report"]
+        source = report["sources"][0]
+        source.update(
+            scope="completed-example",
+            producer=completion_ref,
+            capture=cache_ref,
+            snapshot=merge.evidence(snapshot_path),
+            index=merge.evidence(snapshot["delta"]["manifest_path"]),
+            config=config_ref,
+        )
+        barrier = self.write(
+            "completed-source-barrier.json",
+            {
+                "schema": "vakint.native-cache-snapshot-barrier.v1",
+                "accepted": True,
+                "committed_snapshot": True,
+                "producer_completed": True,
+                "producer": source["producer"],
+                "capture": source["capture"],
+                "snapshot": source["snapshot"],
+                "writer_fault": None,
+                "generation": 3,
+                "manifest_digest": "a" * 64,
+                **{
+                    key: native[key]
+                    for key in (
+                        "accepted_records",
+                        "committed_records",
+                        "pending_records",
+                        "pending_bytes",
+                    )
+                },
+            },
+        )
+        source["barrier"] = merge.evidence(barrier)
+        self.refresh_validation(path, report)
+        return (
+            path,
+            cache,
+            physical,
+            completion,
+            completion_path,
+            report,
+            source,
+            barrier,
+        )
+
+    def test_completed_source_reuses_full_existing_physical_validation(self):
+        for job, case in (
+            ("q0", "zero-momentum-diagnostic"),
+            ("quadratic", "quadratic-four-rung-uv"),
+        ):
+            with (
+                self.subTest(job=job),
+                tempfile.TemporaryDirectory(dir=self.root) as temporary,
+            ):
+                original_root, self.root = self.root, Path(temporary)
+                try:
+                    (
+                        path,
+                        cache,
+                        physical,
+                        completion,
+                        completion_path,
+                        report,
+                        source,
+                        barrier,
+                    ) = self.completed_source_fixture(job)
+                    completed = merge.build_record(path, cache)
+                    self.assertTrue(completed["all_source_runs_completed"])
+                    self.assertEqual(completed["completed_physical_examples"], [case])
+                    self.assertFalse(completed["physical_examples_complete"])
+                    completion["functional_acceptance"] = False
+                    physical.file(
+                        completion_path.relative_to(physical.root), completion
+                    )
+                    source["producer"] = merge.evidence(completion_path)
+                    barrier_doc = merge.read(barrier)
+                    barrier_doc["producer"] = source["producer"]
+                    barrier.write_text(json.dumps(barrier_doc))
+                    source["barrier"] = merge.evidence(barrier)
+                    self.refresh_validation(path, report)
+                    with self.assertRaisesRegex(ValueError, "functional completion"):
+                        merge.build_record(path, cache)
+                finally:
+                    self.root = original_root
+
+    def test_native_omitted_source_keys_and_owner_aliases_are_rejected(self):
+        path, _, producer, index, acceptance = self.native_suite_fixture()
+        accepted = merge.read(acceptance)
+        routes_path = Path(accepted["consumer"]["training_route_qualification"]["path"])
+        routes = merge.read(routes_path)
+        routes["rows"] = []
+        routes_path.write_text(json.dumps(routes))
+        self.rebind_acceptance(
+            index,
+            acceptance,
+            lambda d: d["consumer"].update(
+                training_route_qualification=merge.evidence(routes_path)
+            ),
+        )
+        with self.assertRaisesRegex(ValueError, "omits source starting keys"):
+            merge.suite_record(path, "tuning", producer, merge.ReportEvidence(index))
+
+    def test_byte_preserved_prefix_cannot_supply_primary_performance(self):
+        report_path, cache, _, _ = self.preserved_prefix_fixture()
+        native = merge.native_cache_identity(cache)
+        self.paired()
+        for ref, window in zip(self.records, self.window_rows):
+            report_path_sample = Path(ref["record"]["path"])
+            launcher_path = Path(ref["launcher"]["path"])
+            report, launcher = merge.read(report_path_sample), merge.read(launcher_path)
+            if launcher["variant"] == "cached":
+                report.update(
+                    persistent_cache=str(cache), cache_native_index_identity=native
+                )
+                launcher.update(cache_sha256=None, cache_native_index_identity=native)
+            report_path_sample.write_text(json.dumps(report))
+            launcher_path.write_text(json.dumps(launcher))
+            ref.update(
+                record=merge.evidence(report_path_sample),
+                launcher=merge.evidence(launcher_path),
+            )
+            window.update(
+                report_sha256=merge.digest(report_path_sample),
+                launcher_sha256=merge.digest(launcher_path),
+            )
+        output = self.root / "must-not-exist.json"
+        base = self.write(
+            "base-empty.json", {"reduction_runs": {"historical": {"unchanged": True}}}
+        )
+        with (
+            patch(
+                "sys.argv",
+                [
+                    "adapter",
+                    "--base",
+                    str(base),
+                    "--build",
+                    str(report_path),
+                    "--cache",
+                    str(cache),
+                    "--evidence",
+                    str(self.index()),
+                    "--output",
+                    str(output),
+                ],
+            ),
+            self.assertRaisesRegex(ValueError, "not prefix preservation"),
+        ):
+            merge.main()
+        self.assertFalse(output.exists())
+
+    def test_primary_and_suite_keep_their_distinct_elf_identities(self):
+        _, suite, producer, index, acceptance = self.native_suite_fixture()
+        primary = self.root / "SYNTHETIC-PRIMARY-ELF"
+        primary.write_text("SYNTHETIC ONLY; DISTINCT FROM MEASUREMENT ELF")
+        artifact = merge.read(self.artifact)
+        artifact["artifacts"] = [
+            artifact.pop("binary"),
+            {"sha256": merge.digest(primary), "immutable_path": str(primary)},
+        ]
+        self.artifact.write_text(json.dumps(artifact))
+        self.rebind_acceptance(
+            index,
+            acceptance,
+            lambda d: d["consumer"].update(
+                collector_artifacts=merge.evidence(self.artifact)
+            ),
+        )
+        index_doc = merge.read(index)
+        for ref in index_doc["records"]:
+            ref["artifact"] = merge.evidence(self.artifact)
+        index.write_text(json.dumps(index_doc))
+        provenance = merge.ReportEvidence(index)
+        identity = copy.deepcopy(suite["identity"])
+        identity["executable_sha256"] = merge.digest(primary)
+        self.assertIsNotNone(
+            provenance.cache_qualification(identity, producer, primary=True)
+        )
+        with self.assertRaisesRegex(ValueError, "proof/cohort/artifact"):
+            provenance.cache_qualification(identity, producer)
+
+    def test_union_roles_cannot_hide_or_relabel_actual_sources(self):
+        for role in ("output", "q0", "omit-q0"):
+            with (
+                self.subTest(role=role),
+                tempfile.TemporaryDirectory(dir=self.root) as temporary,
+            ):
+                original_root, self.root = self.root, Path(temporary)
+                try:
+                    path, cache, proof_path, _ = self.preserved_prefix_fixture()
+                    report = merge.read(path)
+                    source = report["sources"][0]
+                    metadata_path = Path(source["capture"]["path"])
+                    metadata = merge.read(metadata_path)
+                    if role == "omit-q0":
+                        metadata["immutable_indices"].append(
+                            {**metadata["immutable_indices"][0], "role": "q0"}
+                        )
+                    else:
+                        metadata["immutable_indices"][0]["role"] = role
+                        source["prefix_role"] = role
+                    metadata_path.write_text(json.dumps(metadata))
+                    proof = merge.read(proof_path)
+                    proof["artifacts"] = [
+                        merge.evidence(metadata_path)
+                        if Path(ref["path"]) == metadata_path
+                        else ref
+                        for ref in proof["artifacts"]
+                    ]
+                    proof_path.write_text(json.dumps(proof))
+                    source.update(
+                        capture=merge.evidence(metadata_path),
+                        barrier=merge.evidence(proof_path),
+                    )
+                    report["validation"] = merge.evidence(proof_path)
+                    path.write_text(json.dumps(report))
+                    with self.assertRaisesRegex(
+                        ValueError,
+                        "not a source prefix|old producer|every captured source",
+                    ):
+                        merge.build_record(path, cache)
+                finally:
+                    self.root = original_root
+
+    def test_native_suite_cli_appends_without_rewriting_history(self):
+        suite_path, _, producer, index, _ = self.native_suite_fixture()
+        base = self.write(
+            "native-suite-base.json",
+            {
+                "selected_reduction_run": "HISTORICAL",
+                "reduction_runs": {"HISTORICAL": {"raw": [1, 2, 3]}},
+            },
+        )
+        historical = base.read_bytes()
+        output = self.root / "native-suite-output.json"
+        with patch(
+            "sys.argv",
+            [
+                "adapter",
+                "--base",
+                str(base),
+                "--build",
+                producer["evidence"]["path"],
+                "--cache",
+                producer["cache_directory"],
+                "--tuning",
+                str(suite_path),
+                "--evidence",
+                str(index),
+                "--output",
+                str(output),
+            ],
+        ):
+            merge.main()
+        result = merge.read(output)
+        self.assertEqual(base.read_bytes(), historical)
+        self.assertEqual(result["reduction_runs"], merge.read(base)["reduction_runs"])
+        report = next(iter(result["five_loop_runs"].values()))
+        self.assertEqual(report["tuning"]["rows"][0]["status"], "measured")
+        self.assertFalse(report["cache"]["physical_examples_complete"])
+
+    def alter_public_import(self, index, acceptance, relative, mutate):
+        """Rebind every outer hash so tests exercise parsed facts, not stale SHA."""
+        accepted = merge.read(acceptance)
+        observation_path = Path(accepted["cache_import"]["path"])
+        root = observation_path.parent
+        target = root / relative
+        value = merge.read(target)
+        mutate(value)
+        target.write_text(json.dumps(value))
+        packet_path, go_path = root / "packet.json", root / "root-go.json"
+        packet, go = merge.read(packet_path), merge.read(go_path)
+        if relative == "descriptor.json":
+            packet["descriptor"] = merge.evidence(target)
+            packet_path.write_text(json.dumps(packet))
+        go["packet_sha256"] = merge.digest(packet_path)
+        go_path.write_text(json.dumps(go))
+        admission_path, invocation_path = (
+            root / "run1/admission.json",
+            root / "run1/invocation-start.json",
+        )
+        admission, invocation = merge.read(admission_path), merge.read(invocation_path)
+        admission["packet_sha256"] = invocation["packet_sha256"] = merge.digest(
+            packet_path
+        )
+        admission_path.write_text(json.dumps(admission))
+        invocation_path.write_text(json.dumps(invocation))
+        worker_path, terminal_path = (
+            root / "run1/worker-result.json",
+            root / "run1/terminal-outcome.json",
+        )
+        worker, terminal = merge.read(worker_path), merge.read(terminal_path)
+        for name, document in (
+            ("public-import-report.json", worker["import_report"]),
+            ("data-load-report.json", worker["data_report"]),
+            ("cache-state-before-repeat.json", worker["final_attachment_state"]),
+        ):
+            (root / "run1" / name).write_text(json.dumps(document))
+        terminal.update(
+            packet_sha256=merge.digest(packet_path),
+            root_go_sha256=merge.digest(go_path),
+            worker_result=merge.evidence(worker_path),
+        )
+        terminal_path.write_text(json.dumps(terminal))
+        launch_path = root / "actual-launch-receipt.json"
+        launch = merge.read(launch_path)
+        launch["admission"] = admission
+        launch["actual_host"] = merge.read(root / "run1/actual-host.json")
+        launch["artifact_sha256"] = {
+            name: merge.digest(name) for name in launch["artifact_sha256"]
+        }
+        launch_path.write_text(json.dumps(launch))
+        observation = merge.read(observation_path)
+        observation["controller_terminal"] = terminal
+        observation["artifact_sha256"] = {
+            name: merge.digest(name) for name in observation["artifact_sha256"]
+        }
+        observation_path.write_text(json.dumps(observation))
+        self.rebind_acceptance(
+            index,
+            acceptance,
+            lambda d: d.update(cache_import=merge.evidence(observation_path)),
+        )
+
+    def test_import_check_boolean_alone_cannot_qualify(self):
+        _, suite, producer, index, acceptance = self.native_suite_fixture()
+        self.rebind_acceptance(index, acceptance, lambda d: d.pop("cache_import"))
+        with self.assertRaisesRegex(ValueError, "hashed evidence reference"):
+            merge.ReportEvidence(index).cache_qualification(suite["identity"], producer)
+
+    def test_public_import_derives_chunk_counts_from_descriptor(self):
+        _, suite, producer, index, acceptance = self.native_suite_fixture()
+        imported = merge.ReportEvidence(index).cache_qualification(
+            suite["identity"], producer
+        )["public_import"]
+        self.assertEqual(imported["raw_import_report"]["copied_chunks"], 3)
+        self.assertEqual(imported["raw_import_report"]["entries"], 4)
+        receipt = merge.read(acceptance)["cache_import"]
+        observed = merge.read(receipt["path"])
+        worker = observed["controller_terminal"]["worker_result"]
+        self.assertNotIn(
+            "all_both_indexes_and_18639_chunks_length_sha256_equal",
+            merge.read(worker["path"]),
+        )
+
+    def test_import_requires_actual_successful_worker_and_controller(self):
+        for relative, mutation in (
+            ("run1/worker-result.json", lambda d: d.update(state="FAIL")),
+            ("run1/terminal-outcome.json", lambda d: d.update(worker_returncode=1)),
+            (
+                "run1/terminal-outcome.json",
+                lambda d: d.update(whole_elapsed_seconds=3600),
+            ),
+        ):
+            with (
+                self.subTest(relative=relative),
+                tempfile.TemporaryDirectory(dir=self.root) as temporary,
+            ):
+                original_root, self.root = self.root, Path(temporary)
+                try:
+                    _, suite, producer, index, acceptance = self.native_suite_fixture()
+                    self.alter_public_import(index, acceptance, relative, mutation)
+                    with self.assertRaisesRegex(
+                        ValueError, "public import|actual public import"
+                    ):
+                        merge.ReportEvidence(index).cache_qualification(
+                            suite["identity"], producer
+                        )
+                finally:
+                    self.root = original_root
+
+    def test_import_descriptor_and_report_must_match_exact_snapshot(self):
+        changes = (
+            ("descriptor.json", lambda d: d["binding"].update(physical_arity=14)),
+            (
+                "descriptor.json",
+                lambda d: d["files"]["cache/cache.rrindex"].update(sha256="0" * 64),
+            ),
+            ("run1/worker-result.json", lambda d: d["import_report"].update(entries=1)),
+            (
+                "run1/worker-result.json",
+                lambda d: d.update(exact_native_files_verified=1),
+            ),
+        )
+        for relative, mutation in changes:
+            with (
+                self.subTest(relative=relative),
+                tempfile.TemporaryDirectory(dir=self.root) as temporary,
+            ):
+                original_root, self.root = self.root, Path(temporary)
+                try:
+                    _, suite, producer, index, acceptance = self.native_suite_fixture()
+                    self.alter_public_import(index, acceptance, relative, mutation)
+                    with self.assertRaisesRegex(
+                        ValueError,
+                        "descriptor names another|actual public import report",
+                    ):
+                        merge.ReportEvidence(index).cache_qualification(
+                            suite["identity"], producer
+                        )
+                finally:
+                    self.root = original_root
+
+    def test_import_host_and_data_provenance_cannot_be_substituted(self):
+        changes = (
+            (
+                "../public-import-data/manifest.json",
+                lambda d: d.update(version="WRONG-DATA-MANIFEST"),
+            ),
+            ("run1/actual-host.json", lambda d: d.update(core_sha256="0" * 64)),
+            (
+                "run1/worker-result.json",
+                lambda d: d["data_report"].update(version="WRONG-VERSION"),
+            ),
+            (
+                "run1/worker-result.json",
+                lambda d: d["final_attachment_state"]["5"]["saved_application"][
+                    "binding"
+                ].update(physical_arity=14),
+            ),
+            (
+                "run1/worker-result.json",
+                lambda d: d["final_attachment_state"]["5"]["saved_application"][
+                    "persistent"
+                ].update(lookups=1),
+            ),
+            (
+                "run1/worker-result.json",
+                lambda d: d.update(cache_attachment_performed=True),
+            ),
+        )
+        for relative, mutation in changes:
+            with (
+                self.subTest(relative=relative),
+                tempfile.TemporaryDirectory(dir=self.root) as temporary,
+            ):
+                original_root, self.root = self.root, Path(temporary)
+                try:
+                    _, suite, producer, index, acceptance = self.native_suite_fixture()
+                    self.alter_public_import(index, acceptance, relative, mutation)
+                    with self.assertRaisesRegex(
+                        ValueError,
+                        "host artifact|data/binding/attachment|actual public import report|another data manifest",
+                    ):
+                        merge.ReportEvidence(index).cache_qualification(
+                            suite["identity"], producer
+                        )
+                finally:
+                    self.root = original_root
+
+    def test_import_observer_cannot_hide_replacement_invocation(self):
+        _, suite, producer, index, acceptance = self.native_suite_fixture()
+        self.alter_public_import(
+            index,
+            acceptance,
+            "actual-terminal-observation.json",
+            lambda d: d["current_service"].update(InvocationID="OTHER-INVOCATION"),
+        )
+        with self.assertRaisesRegex(ValueError, "launch/journal identity"):
+            merge.ReportEvidence(index).cache_qualification(suite["identity"], producer)
+
+
 class QualificationProjectionTests(unittest.TestCase):
     """Synthetic metadata only: no actual native success or acceptance is issued."""
 

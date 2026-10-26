@@ -236,10 +236,11 @@ impl Options {
             if matches!(arg.as_str(), "--help" | "-h") {
                 println!(
                     "measure_cache --artifacts PATH --workload JSON --source-census FILE --work-dir PATH\n\
-                     [--cache FILE.gz] [--suite tuning|held-out] [--repetitions N] [--max-case-seconds N]\n\
+                     [--cache FILE.gz|NATIVE_DIRECTORY] [--suite tuning|held-out] [--repetitions N] [--max-case-seconds N]\n\
                      [--running-cache PATH] [--running-cache-capture-only] persist completed native records.\n\
                      PATH is a capture root; each case/sample/variant owns a separate native delta.\n\
                      Capture-only disables persistent reads and cannot be combined with --cache.\n\
+                     Held-out measurements forbid --running-cache and read --cache without modifying it.\n\
                      [--running-cache-no-read-delta] reads immutable bases only; requires --running-cache.\n\
                      [--provisional] permits legacy functional pilots without native key authentication.\n\
                      [--only-case ID] selects one frozen case and requires --provisional.\n\
@@ -315,6 +316,10 @@ impl Options {
             "cached worker needs --cache"
         );
         ensure!(
+            suite != "held-out" || running_cache.is_none(),
+            "held-out measurements require a read-only --cache and forbid --running-cache"
+        );
+        ensure!(
             !running_cache_capture_only || (running_cache.is_some() && cache.is_none()),
             "--running-cache-capture-only requires --running-cache and forbids --cache"
         );
@@ -359,7 +364,7 @@ impl Options {
             "cached_variant_persistent_loops":[5],
             "source_census_sha256":digest(&self.source_census)?,
             "data_manifest_sha256":digest(&self.artifacts.join("manifest.json"))?,
-            "cache_sha256":self.cache.as_ref().map(|path|digest(path)).transpose()?,
+            "cache_sha256":null,
             "executable_sha256":digest(&std::env::current_exe()?)?,
             "compiled_driver_sha256":format!("{:x}",Sha256::digest(include_bytes!("measure_cache.rs"))),
             "compiled_workload_schema_sha256":format!("{:x}",Sha256::digest(include_bytes!("build_cache/workload.rs"))),
@@ -374,6 +379,12 @@ impl Options {
             "cpu_affinity":fs::read_to_string("/proc/self/status").ok().and_then(|status|status.lines().find_map(|line|line.strip_prefix("Cpus_allowed_list:").map(str::trim).map(str::to_owned))),
             "rayon_num_threads":std::env::var("RAYON_NUM_THREADS").ok(),
         });
+        if let Some(path) = &self.cache {
+            match CacheIdentity::read(path)? {
+                CacheIdentity::File(sha256) => identity["cache_sha256"] = sha256.into(),
+                CacheIdentity::Native(indexes) => identity["cache_native_index_identity"] = indexes,
+            }
+        }
         if self.monitor.enabled() {
             identity["monitor"] = json!({
                 "display": match self.monitor.display {
@@ -396,6 +407,92 @@ impl Options {
             });
         }
         Ok(identity)
+    }
+}
+
+/// Index bytes commit to native bindings, generations, ordered runs and chunk
+/// hashes. The native loader validates their framing and any payload it uses;
+/// this metadata identity does not reread or certify unused chunk payloads.
+#[derive(Debug, PartialEq, Eq)]
+enum CacheIdentity {
+    File(String),
+    Native(Value),
+}
+
+impl CacheIdentity {
+    fn read(path: &Path) -> Result<Self> {
+        // Preserve the established single-file behavior, including file symlinks.
+        if fs::metadata(path)?.is_file() {
+            return Ok(Self::File(digest(path)?));
+        }
+        ensure!(
+            fs::symlink_metadata(path)?.is_dir(),
+            "cache must be a regular file or native directory"
+        );
+        let bundle = path.join("bundle.rrindex");
+        let pack = path.join("cache.rrindex");
+        // Dangling index symlinks are present invalid inputs, not a fallback.
+        let bundle = bundle.is_symlink() || bundle.try_exists()?;
+        let pack = pack.is_symlink() || pack.try_exists()?;
+        ensure!(
+            bundle != pack,
+            "native cache needs exactly one bundle or pack index"
+        );
+        let mut indexes = BTreeMap::new();
+        if bundle {
+            Self::index(path, "bundle.rrindex", &mut indexes)?;
+            let bindings = path.join("bindings");
+            ensure!(
+                fs::symlink_metadata(&bindings)?.is_dir(),
+                "native bindings must be a regular directory"
+            );
+            for entry in fs::read_dir(bindings)? {
+                let entry = entry?;
+                let name = entry.file_name();
+                let name = name
+                    .to_str()
+                    .ok_or_else(|| eyre::eyre!("invalid native namespace"))?;
+                ensure!(
+                    name.len() == 64
+                        && name
+                            .bytes()
+                            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+                        && entry.file_type()?.is_dir(),
+                    "native namespace must be a lowercase hash directory"
+                );
+                Self::index(
+                    path,
+                    &format!("bindings/{name}/cache.rrindex"),
+                    &mut indexes,
+                )?;
+            }
+            ensure!(indexes.len() > 1, "native bundle has no child indexes");
+        } else {
+            Self::index(path, "cache.rrindex", &mut indexes)?;
+        }
+        // Keep the aggregate stable even if a host enables serde_json/preserve_order.
+        let mut document = BTreeMap::from([
+            ("schema", json!("vakint.native-cache-index-identity.v1")),
+            ("layout", json!(if bundle { "bundle" } else { "pack" })),
+            ("indexes", json!(indexes)),
+        ]);
+        let sha256 = format!("{:x}", Sha256::digest(serde_json::to_vec(&document)?));
+        document.insert("sha256", sha256.into());
+        Ok(Self::Native(json!(document)))
+    }
+
+    fn index(root: &Path, relative: &str, indexes: &mut BTreeMap<String, Value>) -> Result<()> {
+        let path = root.join(relative);
+        let metadata = fs::symlink_metadata(&path)?;
+        ensure!(
+            metadata.is_file(),
+            "native index must be a regular file: {relative}"
+        );
+        indexes.insert(
+            relative.into(),
+            json!({"bytes":metadata.len(),"sha256":digest(&path)?}),
+        );
+        Ok(())
     }
 }
 
@@ -1328,6 +1425,155 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cache_file_identity_preserves_the_existing_digest() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("cache.rrcache.gz");
+        fs::write(&path, b"existing opaque single-file payload")?;
+        assert_eq!(
+            CacheIdentity::read(&path)?,
+            CacheIdentity::File(digest(&path)?)
+        );
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cache_file_identity_preserves_existing_symlink_support() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("cache.rrcache.gz");
+        let link = directory.path().join("cache-link.rrcache.gz");
+        fs::write(&path, b"existing opaque single-file payload")?;
+        std::os::unix::fs::symlink(&path, &link)?;
+        assert_eq!(CacheIdentity::read(&path)?, CacheIdentity::read(&link)?);
+        Ok(())
+    }
+
+    #[test]
+    fn native_pack_identity_reads_only_the_index_and_detects_changes() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let index = directory.path().join("cache.rrindex");
+        fs::write(&index, b"opaque native index generation one")?;
+        fs::create_dir(directory.path().join("chunks"))?;
+        fs::write(
+            directory.path().join("chunks/unused"),
+            b"not decoded or hashed",
+        )?;
+        let before = CacheIdentity::read(directory.path())?;
+        let CacheIdentity::Native(document) = &before else {
+            panic!("expected native identity")
+        };
+        assert_eq!(document["layout"], "pack");
+        assert_eq!(document["indexes"].as_object().unwrap().len(), 1);
+        fs::write(directory.path().join("chunks/unused"), b"still unused")?;
+        assert_eq!(before, CacheIdentity::read(directory.path())?);
+        fs::write(&index, b"opaque native index generation two")?;
+        assert_ne!(before, CacheIdentity::read(directory.path())?);
+        Ok(())
+    }
+
+    #[test]
+    fn native_bundle_identity_is_sorted_relocatable_and_binds_child_indexes() -> Result<()> {
+        let directories = [tempfile::tempdir()?, tempfile::tempdir()?];
+        let children = ["a".repeat(64), "b".repeat(64)];
+        for (number, directory) in directories.iter().enumerate() {
+            fs::write(
+                directory.path().join("bundle.rrindex"),
+                b"opaque namespace index",
+            )?;
+            for child in if number == 0 {
+                children.iter().collect::<Vec<_>>()
+            } else {
+                children.iter().rev().collect()
+            } {
+                let path = directory.path().join("bindings").join(child);
+                fs::create_dir_all(&path)?;
+                fs::write(path.join("cache.rrindex"), child)?;
+            }
+        }
+        let before = CacheIdentity::read(directories[0].path())?;
+        assert_eq!(before, CacheIdentity::read(directories[1].path())?);
+        let CacheIdentity::Native(document) = &before else {
+            panic!("expected native identity")
+        };
+        assert_eq!(document["layout"], "bundle");
+        assert_eq!(document["indexes"].as_object().unwrap().len(), 3);
+        fs::write(
+            directories[0]
+                .path()
+                .join("bindings")
+                .join(&children[0])
+                .join("cache.rrindex"),
+            b"appended child generation",
+        )?;
+        assert_ne!(before, CacheIdentity::read(directories[0].path())?);
+        Ok(())
+    }
+
+    #[test]
+    fn native_identity_rejects_incomplete_or_ambiguous_layouts() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        assert!(CacheIdentity::read(directory.path()).is_err());
+        fs::write(directory.path().join("bundle.rrindex"), b"opaque")?;
+        assert!(CacheIdentity::read(directory.path()).is_err());
+        let bindings = directory.path().join("bindings");
+        fs::create_dir(&bindings)?;
+        assert!(CacheIdentity::read(directory.path()).is_err());
+        let invalid = bindings.join("A".repeat(64));
+        fs::create_dir(&invalid)?;
+        fs::write(invalid.join("cache.rrindex"), b"opaque")?;
+        assert!(CacheIdentity::read(directory.path()).is_err());
+        fs::remove_dir_all(invalid)?;
+        let child = bindings.join("a".repeat(64));
+        fs::create_dir(&child)?;
+        assert!(CacheIdentity::read(directory.path()).is_err());
+        fs::write(child.join("cache.rrindex"), b"opaque")?;
+        assert!(CacheIdentity::read(directory.path()).is_ok());
+        fs::write(directory.path().join("cache.rrindex"), b"ambiguous")?;
+        assert!(CacheIdentity::read(directory.path()).is_err());
+        Ok(())
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn native_identity_refuses_symlinked_layout_entries_without_fallback() -> Result<()> {
+        use std::os::unix::fs::symlink;
+        let directory = tempfile::tempdir()?;
+        let outside = tempfile::tempdir()?;
+        fs::write(outside.path().join("cache.rrindex"), b"opaque")?;
+        let root_link = directory.path().join("root-link");
+        symlink(outside.path(), &root_link)?;
+        assert!(CacheIdentity::read(&root_link).is_err());
+        let pack = directory.path().join("cache.rrindex");
+        symlink(outside.path().join("cache.rrindex"), &pack)?;
+        assert!(CacheIdentity::read(directory.path()).is_err());
+        fs::remove_file(&pack)?;
+        fs::write(&pack, b"opaque")?;
+        symlink(
+            directory.path().join("missing-index"),
+            directory.path().join("bundle.rrindex"),
+        )?;
+        assert!(CacheIdentity::read(directory.path()).is_err());
+        fs::remove_file(&pack)?;
+        fs::remove_file(directory.path().join("bundle.rrindex"))?;
+        fs::write(directory.path().join("bundle.rrindex"), b"opaque")?;
+        symlink(outside.path(), directory.path().join("bindings"))?;
+        assert!(CacheIdentity::read(directory.path()).is_err());
+        fs::remove_file(directory.path().join("bindings"))?;
+        fs::create_dir(directory.path().join("bindings"))?;
+        let child = directory.path().join("bindings").join("a".repeat(64));
+        symlink(outside.path(), &child)?;
+        assert!(CacheIdentity::read(directory.path()).is_err());
+        fs::remove_file(&child)?;
+        fs::create_dir(&child)?;
+        symlink(
+            outside.path().join("cache.rrindex"),
+            child.join("cache.rrindex"),
+        )?;
+        assert!(CacheIdentity::read(directory.path()).is_err());
+        Ok(())
+    }
 
     #[test]
     fn retained_unknowns_remain_successful_but_cannot_claim_catalogue_closure() -> Result<()> {

@@ -12,6 +12,38 @@ The five-loop adapter #raw("merge_five_loop_results.py") extends those records;
 it neither runs reductions nor authenticates owner proofs. Its file-contract
 tests use synthetic temporary files, never measured or reference physics data.
 
+== Read-only native cache suite measurements
+
+#raw("measure_cache --cache PATH") accepts the existing compressed single file,
+a closed native bundle directory, or a closed standalone native pack directory.
+Held-out suites forbid #raw("--running-cache"): ordinary #raw("load_cache") may fill
+in-process memory but never captures records or modifies the supplied cache.
+Preserve all prefixes separately and benchmark an immutable completed snapshot.
+
+Single-file records retain their existing #raw("cache_sha256") field unchanged.
+Directories instead set #raw("cache_native_index_identity"), with SHA-256 and byte
+lengths for the top bundle index and every child native index, or the standalone
+pack index. Its aggregate SHA-256 hashes the compact JSON schema/layout/index
+record before adding the aggregate itself; relative names are sorted and cache
+location is excluded. The existing before/after identity check rejects changed
+indexes. This commits to native bindings, generations, ordered runs and referenced
+chunk hashes without hashing a multi-gigabyte payload for every worker. Native
+loading and lookup still validate bindings, framing and used chunks; this is not
+a claim that unused chunk payloads have been independently checked.
+
+Identity checks remain outside the reduction timer. The existing
+#raw("cache_loading_seconds") measures cache attachment separately, and native
+phase timings retain their documented combined scope: pure IBP and terminal
+substitution are not independently measured. Full public result comparison and
+the canonical sorted, deduplicated guard export remain unchanged; that guard
+export is not the native ordered guard sequence. Final performance acceptance
+still requires the separately recorded serialized window and matched repetitions.
+
+Public five-loop data loading validates and activates the staged saved application
+even when prepared-cache loading is disabled. Report that setup separately from
+cache import and attachment: import validates and installs a snapshot without
+attaching it. Individual formulas may still be prepared lazily during reduction.
+
 == Prepare the physical input once
 
 The complete quadratic numerator preparation is a separate measured stage. Build
@@ -76,6 +108,32 @@ No root value or historical run is rewritten; only #raw("five_loop_runs") and an
 explicit #raw("selected_five_loop_run") are added. Review the new JSON and rendered
 PDF before replacing the canonical trio together. Do not update canonical data
 while a measurement or source-freeze window is active.
+
+The same #raw("--build RECEIPT --cache PATH") accepts an authenticated
+#raw("vakint.cumulative-native-cache-report.v1") receipt with an immutable native
+cache directory. That receipt binds the collector's native index identity,
+semantic program binding, data-manifest hash, compressed-byte/chunk inventory,
+raw stored-reference count, original source receipts and hashed native validation.
+Stored references include shadowed entries and are never presented as unique keys.
+A retained incomplete source remains incomplete, even after successful opaque
+preservation or union into a new snapshot.
+
+Cumulative report rows distinguish #raw("preserved-committed-prefix") from
+#raw("validated-committed-snapshot"). They list individually validated completed
+physical examples; #raw("physical_examples_complete") requires both the
+zero-momentum diagnostic and the complete quadratic fixture. The separate
+#raw("all_source_runs_completed") also accounts for retained incomplete prefixes.
+Snapshot preservation alone has #raw("performance_eligible: false") and never
+supplies missing timings or pretends to be a completed finite cache workload.
+
+Final cumulative-cache suites additionally require an independently accepted
+#raw("vakint.cumulative-cache-consumer-requalification.v1") receipt. It binds the
+original source starting-key inventories and route/alias exclusion against the
+unchanged frozen owner sets, explicitly classifying exposed starting inputs.
+The existing exact result/guard, binding/cohort, twelve held-out sets, three fresh
+matched samples and serialized-window requirements remain in force. Useful
+incidental descendant and root hits stay visible. There is no aggregate
+50/95 MiB rejection, and none of the original four-loop history is rewritten.
 
 == File bindings and functional records
 

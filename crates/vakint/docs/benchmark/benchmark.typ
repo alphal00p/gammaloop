@@ -143,6 +143,8 @@ Refresh instructions: #raw("../../AGENTS.md").
 #let pending = report.five_loop_performance_status
 #let five-id = report.at("selected_five_loop_run", default: none)
 #let five = if five-id == none { none } else { report.five_loop_runs.at(five-id) }
+#let cumulative-cache = (five != none and five.cache != none and
+  five.cache.raw_report.at("schema", default: none) == "vakint.cumulative-native-cache-report.v1")
 #let physical-id = report.at("selected_physical_capture_run", default: none)
 #let physical = if physical-id == none { none } else { report.physical_capture_runs.at(physical-id) }
 #let primary(id) = if five == none { none } else { five.primary.at(id) }
@@ -255,7 +257,9 @@ claim. Earlier interrupted checks are not a timing baseline.
 #block(fill: pale, inset: 9pt, radius: 4pt, width: 100%)[
   #set text(9pt)
   *Eligibility and reading guide.* Primary cells require catalogue closure and
-  exact result/guard agreement, a completed strict cache, and at least three matched fresh processes per
+  exact result/guard agreement,
+  #if cumulative-cache [a validated snapshot of strictly completed records,] else [a completed strict cache,]
+  and at least three matched fresh processes per
   mode in one accepted serialized window, with fixed workers and affinity.
   Bold values are reduction seconds; small values give the full observed range.
   Multipliers are _cached ÷ uncached_, using the same colour scale as page 1.
@@ -351,9 +355,52 @@ acceptance was pending in that historical record. Full revisions: #raw("data/res
     }
   }
   v(0.4em)
-  text(13pt, weight: "bold", fill: navy)[Finite selected-cache preparation]
+  text(13pt, weight: "bold", fill: navy)[#if cumulative-cache [Cumulative native cache] else [Finite selected-cache preparation]]
   if five.cache == none {
     [ Pending: no completed final strict-cache receipt selected.]
+  } else if cumulative-cache {
+    let cache = five.cache
+    let inventory = cache.raw_report.inventory
+    assert(cache.status in ("preserved-committed-prefix", "validated-committed-snapshot"))
+    assert(not cache.performance_eligible)
+    parbreak()
+    [*#if cache.status == "preserved-committed-prefix" [Committed prefixes preserved.] else [Committed native snapshot validated.]*
+    Preservation and native validation are separate from completion of the source
+    reductions. Each source keeps its original receipt and provenance.]
+    v(0.25em)
+    table(columns: (1fr, 1fr, 1.2fr), inset: (x: 8pt, y: 8pt),
+      stroke: 0.4pt + luma(215),
+      fill: (x, y) => if y == 0 { navy } else { pale },
+      table.header(
+        text(fill: white, weight: "bold")[Stored references],
+        text(fill: white, weight: "bold")[Native chunks],
+        text(fill: white, weight: "bold")[Compressed bytes],
+      ),
+      text(12pt, weight: "bold")[#inventory.stored_record_references],
+      text(12pt, weight: "bold")[#inventory.physical_chunks],
+      [#inventory.compressed_bytes (#fixed(inventory.compressed_bytes / 1048576, 3) MiB)],
+    )
+    v(0.2em)
+    text(8.5pt)[Stored references may overlap or be shadowed; they are not a unique-key count.
+    No preparation duration or performance ratio is inferred from this inventory.]
+    v(0.25em)
+    table(columns: (2fr, 1fr), inset: 5pt, stroke: 0.4pt + luma(215),
+      fill: (x, y) => if x == 0 { pale } else { none },
+      ..pending.cases.filter(case => case.id != "held-out-suite").map(case => (
+        case.label,
+        if case.id in cache.completed_physical_examples { [Completion validated] } else { [Pending] },
+      )).flatten(),
+      [All retained source runs complete],
+      if cache.all_source_runs_completed { [Yes] } else { [Not established] },
+    )
+    v(0.2em)
+    text(8pt)[#cache.sources.len() original source receipt(s).
+    Both physical examples complete: #if cache.physical_examples_complete [yes.] else [not established.]
+    Snapshot identity #raw(cache.raw_report.cache_native_index_identity.sha256.slice(0, 12));
+    cache report #raw(cache.evidence.sha256.slice(0, 12));
+    validation #raw(cache.validation.evidence.sha256.slice(0, 12)).
+    Prefix-only sources remain prefix-only. Qualified timing comparisons require
+    their own accepted consumer, exact-parity and execution evidence.]
   } else {
     let build = five.cache.raw_report
     let file = build.preparation.options.single_file
@@ -390,10 +437,12 @@ acceptance was pending in that historical record. Full revisions: #raw("data/res
       }
     }
   }
-  parbreak()
-  text(8.5pt)[This finite selection retains its original producer and acceptance.
-  The cumulative cache from physical-example reductions is a separate record;
-  #if physical == none [accepted producer/reuse completion is pending.] else [see the physical capture supplement.]]
+  if not cumulative-cache {
+    parbreak()
+    text(8.5pt)[This finite selection retains its original producer and acceptance.
+    The cumulative cache from physical-example reductions is a separate record;
+    #if physical == none [accepted producer/reuse completion is pending.] else [see the physical capture supplement.]]
+  }
   v(0.4em)
   block(fill: pale, inset: 9pt, radius: 4pt)[
     *Timing boundaries.* Stages overlap; never sum them. Owner preparation is
@@ -484,9 +533,17 @@ acceptance was pending in that historical record. Full revisions: #raw("data/res
       if suite.at("cache_requalification", default: none) != none {
         parbreak()
         text(8pt)[Consumer source #raw(suite.identity.build_git_revision.slice(0, 12));
-        original cache producer #raw(five.cache.raw_report.build_identity.build.git_revision.slice(0, 12)).
+        #if cumulative-cache [
+          cumulative cache report #raw(five.cache.evidence.sha256.slice(0, 12)).
+          Original producer identities remain in its #five.cache.sources.len() source receipts.
+        ] else [
+          original cache producer #raw(five.cache.raw_report.build_identity.build.git_revision.slice(0, 12)).
+        ]
         Accepted requalification: #raw(suite.cache_requalification.evidence.sha256.slice(0, 12)).
-        Cache, census, D40 data and Native semantic binding are unchanged.]
+        #if cumulative-cache [
+          Cache indexes, census, data-manifest hash and native binding are checked against
+          the accepted consumer qualification.
+        ] else [Cache, census, D40 data and Native semantic binding are unchanged.]]
       }
       v(0.3em)
       table(columns: (1.5fr, 1fr, 1fr, 0.55fr, 0.8fr), inset: 5pt, stroke: 0.4pt + luma(215),

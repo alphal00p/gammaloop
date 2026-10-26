@@ -76,6 +76,7 @@ class PhysicalCaptureContracts(unittest.TestCase):
         self.producer = {
             "schema": "vakint.inactive-capture-physical-user-unit.v1",
             "job_id": "q0",
+            "projection": "zero-momentum",
             "performance_eligible": False,
             "output_root": str(self.root / "producer"),
             "prepared_input": prepared,
@@ -154,6 +155,7 @@ class PhysicalCaptureContracts(unittest.TestCase):
 
     def run_fixture(self, config, config_ref, pid, duration, producer):
         root = Path(config["output_root"])
+        prepared = config["prepared_input"]
         prefix = root.relative_to(self.root) / "run"
         result = self.file(prefix / "result.symbolica", b"full-fixture-result")
         guards = self.file(prefix / "nonzero-conditions.symbolica", b"D-4\n")
@@ -212,14 +214,14 @@ class PhysicalCaptureContracts(unittest.TestCase):
             "coefficient_representation": "sparse",
             "fresh_native_preparation": False,
             "preparation_seconds": None,
-            "projection": "zero-momentum-metric",
-            "contributions": 1,
+            "projection": prepared["manifest_projection"],
+            "contributions": prepared["contributions"],
             "prepared_input": {
-                "manifest_sha256": self.manifest["sha256"],
-                "manifest": self.manifest_data,
+                "manifest_sha256": prepared["manifest"]["sha256"],
+                "manifest": adapter.read(prepared["manifest"]["path"]),
             },
-            "input_sha256": self.input["sha256"],
-            "input_bytes": self.input["bytes"],
+            "input_sha256": prepared["input"]["sha256"],
+            "input_bytes": prepared["input"]["bytes"],
             "result_sha256": result["sha256"],
             "result_bytes": result["bytes"],
             "guards": {
@@ -263,7 +265,7 @@ class PhysicalCaptureContracts(unittest.TestCase):
         }
         report_ref = self.file(prefix / "benchmark.json", report)
         completion = {
-            "job_id": "q0",
+            "job_id": config["job_id"],
             "performance_eligible": False,
             "functional_acceptance": True,
             "process_zero_acceptance": True,
@@ -300,7 +302,51 @@ class PhysicalCaptureContracts(unittest.TestCase):
                 },
             },
         }
+        self.file(
+            root.relative_to(self.root) / "launch.json",
+            {
+                "job_id": config["job_id"],
+                "config_sha256": config_ref["sha256"],
+                "collector": completion["collector"],
+                "argv": [
+                    self.binary["path"],
+                    "--projection",
+                    config["projection"],
+                ],
+            },
+        )
         return self.file(root.relative_to(self.root) / "completion.json", completion)
+
+    def quadratic_fixture(self):
+        config = copy.deepcopy(self.producer)
+        config.update(
+            job_id="quadratic",
+            projection="quadratic",
+            output_root=str(self.root / "quadratic"),
+        )
+        prepared = config["prepared_input"]
+        prepared.update(
+            manifest_projection="quadratic-transverse",
+            contributions=21,
+            input=self.file(
+                "quadratic-prepared/vakint-input.symbolica", b"full-quadratic-fixture"
+            ),
+            guards=self.file(
+                "quadratic-prepared/projector-conditions.symbolica",
+                b"d-1\nd-2\nd-3\nd-4\nd-5\n",
+            ),
+        )
+        prepared["manifest"] = self.file(
+            "quadratic-prepared/prepared-input.json",
+            {
+                **self.manifest_data,
+                "projection": prepared["manifest_projection"],
+                "contributions": prepared["contributions"],
+                "input": prepared["input"],
+                "nonzero_conditions_file": prepared["guards"],
+            },
+        )
+        return config
 
     def refresh_bindings(self):
         """Rehash synthetic receipts so semantic failures cannot hide behind stale hashes."""
@@ -319,6 +365,11 @@ class PhysicalCaptureContracts(unittest.TestCase):
             prefix = Path(mode) / "run"
             completion = adapter.read(self.root / mode / "completion.json")
             completion["config_sha256"] = config_ref["sha256"]
+            launch_path = Path(mode) / "launch.json"
+            launch = adapter.read(self.root / launch_path)
+            launch["config_sha256"] = config_ref["sha256"]
+            launch["collector"] = completion["collector"]
+            self.file(launch_path, launch)
             report = adapter.read(self.root / prefix / "benchmark.json")
             cache = adapter.read(self.root / prefix / "running-cache.json")
             bound = completion["outputs"]["running_cache"]
@@ -380,6 +431,159 @@ class PhysicalCaptureContracts(unittest.TestCase):
             any("median" in key or "ratio" in key or "speedup" in key for key in run)
         )
         self.assertIsNone(run["pure_ibp_seconds"])
+
+    def test_completed_run_accepts_quadratic_only_with_explicit_job(self):
+        config = self.quadratic_fixture()
+        config_ref = self.file("quadratic.final.json", config)
+        self.run_fixture(config, config_ref, 13, 30.0, True)
+        run = adapter.completed_run(config_ref["path"], expected_job_id="quadratic")
+        self.assertEqual(run["config"]["job_id"], "quadratic")
+        self.assertEqual(run["report"]["projection"], "quadratic-transverse")
+        self.assertEqual(run["report"]["contributions"], 21)
+        self.assertFalse(run["completion"]["performance_eligible"])
+        with self.assertRaisesRegex(ValueError, "functional completion"):
+            adapter.completed_run(config_ref["path"])
+
+    def test_completed_run_rejects_unknown_expected_jobs(self):
+        for job in ("", "other", "Q0", "zero-momentum", None):
+            with (
+                self.subTest(job=job),
+                self.assertRaisesRegex(ValueError, "unknown physical job"),
+            ):
+                adapter.completed_run(self.producer_config["path"], expected_job_id=job)
+
+    def test_completed_run_rejects_job_and_projection_mismatches(self):
+        for job in ("q0", "quadratic"):
+            original = self.producer if job == "q0" else self.quadratic_fixture()
+            other = "quadratic" if job == "q0" else "q0"
+            for field, value in (
+                ("job_id", other),
+                ("job_id", "unrecognized"),
+                ("projection", "quadratic" if job == "q0" else "zero-momentum"),
+                ("projection", "unrecognized"),
+                ("prepared_input.manifest_projection", "quadratic-transverse"),
+                ("prepared_input.manifest_projection", "zero-momentum-metric"),
+                ("prepared_input.manifest_projection", "unrecognized"),
+            ):
+                config = copy.deepcopy(original)
+                target = config
+                keys = field.split(".")
+                for key in keys[:-1]:
+                    target = target[key]
+                if target[keys[-1]] == value:
+                    continue
+                target[keys[-1]] = value
+                with self.subTest(job=job, field=field, value=value):
+                    config_ref = self.file("candidate.final.json", config)
+                    self.run_fixture(config, config_ref, 13, 30.0, True)
+                    with self.assertRaisesRegex(
+                        ValueError, "functional completion|job/projection identity"
+                    ):
+                        adapter.completed_run(config_ref["path"], expected_job_id=job)
+            config_ref = self.file("candidate.final.json", original)
+            completion_ref = self.run_fixture(original, config_ref, 13, 30.0, True)
+            completion = adapter.read(completion_ref["path"])
+            completion["job_id"] = other
+            self.file(completion_ref["path"], completion)
+            with (
+                self.subTest(job=job, field="completion.job_id"),
+                self.assertRaisesRegex(ValueError, "functional completion"),
+            ):
+                adapter.completed_run(config_ref["path"], expected_job_id=job)
+
+    def test_quadratic_rejects_coherently_substituted_zero_momentum_fixture(self):
+        config = copy.deepcopy(self.producer)
+        config["job_id"] = "quadratic"
+        config_ref = self.file("quadratic.final.json", config)
+        self.run_fixture(config, config_ref, 13, 30.0, True)
+        with self.assertRaisesRegex(ValueError, "job/projection identity"):
+            adapter.completed_run(config_ref["path"], expected_job_id="quadratic")
+
+    def test_completed_run_rejects_missing_and_mismatched_launches(self):
+        for job in ("q0", "quadratic"):
+            config = self.producer if job == "q0" else self.quadratic_fixture()
+            config_ref = self.file("candidate.final.json", config)
+            self.run_fixture(config, config_ref, 13, 30.0, True)
+            launch_path = Path(config["output_root"]) / "launch.json"
+            original = adapter.read(launch_path)
+            launch_path.unlink()
+            with (
+                self.subTest(job=job, field="missing launch"),
+                self.assertRaises(FileNotFoundError),
+            ):
+                adapter.completed_run(config_ref["path"], expected_job_id=job)
+            binary = self.binary["path"]
+            projection = config["projection"]
+            for field, value in (
+                ("job_id", "quadratic" if job == "q0" else "q0"),
+                ("config_sha256", "0" * 64),
+                ("collector.pid", 14),
+                ("collector.start_ticks", 131),
+                ("argv", []),
+                ("argv", None),
+                ("argv", [binary]),
+                ("argv", [binary, "--projection"]),
+                ("argv", [binary, "--projection", "unrecognized"]),
+                (
+                    "argv",
+                    [
+                        binary,
+                        "--projection",
+                        "quadratic" if job == "q0" else "zero-momentum",
+                    ],
+                ),
+                (
+                    "argv",
+                    [binary, "--projection", projection, "--projection", projection],
+                ),
+                (
+                    "argv",
+                    [binary, "--projection", projection, "--projection=" + projection],
+                ),
+                ("argv", [binary, "--projection=" + projection]),
+                ("argv", [binary, "--projection", False]),
+                (
+                    "argv",
+                    [str(self.root / "other-collector"), "--projection", projection],
+                ),
+            ):
+                with self.subTest(job=job, field=field, value=value):
+                    launch = copy.deepcopy(original)
+                    target = launch
+                    keys = field.split(".")
+                    for key in keys[:-1]:
+                        target = target[key]
+                    target[keys[-1]] = value
+                    self.file(launch_path, launch)
+                    with self.assertRaisesRegex(ValueError, "physical launch"):
+                        adapter.completed_run(config_ref["path"], expected_job_id=job)
+
+    def test_quadratic_keeps_prepared_manifest_and_report_projection_checks(self):
+        config = self.quadratic_fixture()
+        manifest = adapter.read(config["prepared_input"]["manifest"]["path"])
+        manifest["projection"] = "zero-momentum-metric"
+        config["prepared_input"]["manifest"] = self.file(
+            config["prepared_input"]["manifest"]["path"], manifest
+        )
+        config_ref = self.file("quadratic.final.json", config)
+        self.run_fixture(config, config_ref, 13, 30.0, True)
+        with self.assertRaisesRegex(ValueError, "prepared manifest differs"):
+            adapter.completed_run(config_ref["path"], expected_job_id="quadratic")
+
+        config = self.quadratic_fixture()
+        config_ref = self.file("quadratic.final.json", config)
+        completion_ref = self.run_fixture(config, config_ref, 13, 30.0, True)
+        root = Path(config["output_root"])
+        report_path = root / "run/benchmark.json"
+        report = adapter.read(report_path)
+        report["projection"] = "zero-momentum-metric"
+        report_ref = self.file(report_path, report)
+        completion = adapter.read(completion_ref["path"])
+        completion["outputs"]["benchmark_sha256"] = report_ref["sha256"]
+        completion["terminal_artifacts"]["benchmark.json"].update(report_ref)
+        self.file(completion_ref["path"], completion)
+        with self.assertRaisesRegex(ValueError, "prepared-input identity differs"):
+            adapter.completed_run(config_ref["path"], expected_job_id="quadratic")
 
     def test_rejects_missing_completion(self):
         Path(self.reuse_done["path"]).unlink()

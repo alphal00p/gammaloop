@@ -1,8 +1,8 @@
-"""Append completed 5L cache, suite and paired-control evidence to a NEW report.
+"""Append authenticated 5L cache, suite and paired-control evidence to a NEW report.
 
 This is a report adapter, not an authenticator or a reduction runner. The native
 drivers own proof validation. Functional records never establish performance.
-Nothing is written unless every supplied completed receipt passes the checks.
+Nothing is written unless every supplied receipt passes its scoped checks.
 """
 
 from __future__ import annotations
@@ -12,6 +12,7 @@ import copy
 import hashlib
 import json
 import math
+import re
 import statistics
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -73,6 +74,71 @@ def hashed_file(reference, base):
 def hashed_record(reference, base):
     path = hashed_file(reference, base)
     return path, read(path)
+
+
+def native_cache_identity(directory):
+    """Match the collector's opaque index identity, without decoding native data."""
+    directory = Path(directory)
+    require(
+        directory.is_dir() and not directory.is_symlink(),
+        "native cache needs a regular directory",
+    )
+    bundle, pack = directory / "bundle.rrindex", directory / "cache.rrindex"
+    present = lambda path: path.exists() or path.is_symlink()
+    require(
+        present(bundle) != present(pack),
+        "native cache needs exactly one bundle or pack index",
+    )
+    names = ["cache.rrindex"]
+    if present(bundle):
+        bindings = directory / "bindings"
+        require(
+            bindings.is_dir() and not bindings.is_symlink(),
+            "invalid native bindings directory",
+        )
+        names = ["bundle.rrindex"]
+        for child in bindings.iterdir():
+            require(
+                re.fullmatch(r"[0-9a-f]{64}", child.name)
+                and child.is_dir()
+                and not child.is_symlink(),
+                "invalid native binding namespace",
+            )
+            names.append(f"bindings/{child.name}/cache.rrindex")
+        require(len(names) > 1, "native bundle has no child indexes")
+    indexes = {}
+    for name in sorted(names):
+        path = directory / name
+        require(
+            path.is_file() and not path.is_symlink(),
+            "native index needs a regular file",
+        )
+        indexes[name] = {"bytes": path.stat().st_size, "sha256": digest(path)}
+    identity = {
+        "schema": "vakint.native-cache-index-identity.v1",
+        "layout": "bundle" if present(bundle) else "pack",
+        "indexes": indexes,
+    }
+    identity["sha256"] = hashlib.sha256(
+        json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    return identity
+
+
+def cache_binding(producer):
+    report = producer["raw_report"]
+    if report.get("schema") == "vakint.cumulative-native-cache-report.v1":
+        return report["semantic_binding"]
+    return report["preparation"]["options"]["single_file"]["binding"]
+
+
+def cache_identity(record):
+    native = record.get("cache_native_index_identity")
+    require(
+        not (native is not None and record.get("cache_sha256") is not None),
+        "ambiguous file/native cache identity",
+    )
+    return native if native is not None else record.get("cache_sha256")
 
 
 def artifact_binaries(artifact):
@@ -160,9 +226,13 @@ class ReportEvidence:
         self.used.add(str(Path(path).resolve()))
         return copy.deepcopy(record)
 
-    def cache_qualification(self, identity, producer):
+    def cache_qualification(self, identity, producer, *, primary=False):
         """Check an accepted provenance bridge; never redo native authentication."""
         build = producer["raw_report"]
+        if build.get("schema") == "vakint.cumulative-native-cache-report.v1":
+            return self.cumulative_cache_qualification(
+                identity, producer, primary=primary
+            )
         require(
             all(
                 identity[key] == build[key]
@@ -318,6 +388,525 @@ class ReportEvidence:
         if projection is not None:
             result["qualification_projection"] = projection
         return result
+
+    def cumulative_cache_qualification(self, identity, producer, *, primary=False):
+        """Require external native-import and consumer/exclusion acceptance."""
+        build = producer["raw_report"]
+        require(
+            cache_identity(identity) == build["cache_native_index_identity"]
+            and identity["data_manifest_sha256"] == build["data_manifest_sha256"],
+            "cumulative cache/data identity differs",
+        )
+        path, accepted = hashed_record(
+            self.index.get("cache_requalification"), self.path.parent
+        )
+        require(
+            accepted.get("schema")
+            == "vakint.cumulative-cache-consumer-requalification.v1"
+            and accepted.get("accepted") is True
+            and all(
+                accepted.get("checks", {}).get(key) is True
+                for key in (
+                    "canonical_consumer_proof",
+                    "cache_import_validated",
+                    "source_capture_inventory_authenticated",
+                    "unchanged_selection",
+                    "training_raw_and_nonzero_owner_disjoint",
+                    "twelve_distinct_held_out_sets",
+                )
+            ),
+            "cumulative cache lacks accepted native consumer qualification",
+        )
+        require(
+            hashed_file(accepted["producer"], path.parent)
+            == Path(producer["evidence"]["path"])
+            and accepted["producer"]["sha256"] == producer["evidence"]["sha256"]
+            and accepted["cache_native_index_identity"]
+            == build["cache_native_index_identity"]
+            and accepted["semantic_binding"] == build["semantic_binding"]
+            and accepted["data_manifest_sha256"] == build["data_manifest_sha256"],
+            "cumulative qualification references another producer/snapshot/binding",
+        )
+        docs = {}
+        for name in (
+            "collector_artifacts",
+            "compiled_cohort",
+            "final_workload",
+            "owner_proof",
+            "protected_union",
+            "training_route_qualification",
+            "alias_exclusion",
+        ):
+            _, docs[name] = hashed_record(accepted["consumer"][name], path.parent)
+        workload, proof, cohort = (
+            docs[name] for name in ("final_workload", "owner_proof", "compiled_cohort")
+        )
+        refs = accepted["consumer"]
+        require(
+            refs["final_workload"]["sha256"] == identity["workload_sha256"]
+            and refs["owner_proof"]["sha256"]
+            == identity["owner_proof"]["sha256"]
+            == workload["owner_proof"]["sha256"]
+            and selected_inputs(workload) == accepted["immutable_selection"]
+            and workload["source_census_sha256"] == identity["source_census_sha256"]
+            and workload["data_manifest_sha256"]
+            == proof["data_manifest_sha256"]
+            == build["data_manifest_sha256"],
+            "cumulative qualification changed frozen workload/proof/data",
+        )
+        require(
+            cohort
+            == proof["compiled_cohort"]
+            == identity["owner_proof"]["compiled_cohort"]
+            and cohort["main_revision"] == identity["build_git_revision"]
+            and cohort["semantic_binding"]
+            == proof["semantic_binding"]
+            == build["semantic_binding"]
+            and all(
+                docs["collector_artifacts"]["stamps"].get(stamp) == cohort[field]
+                for field, stamp in COHORT_STAMPS
+            )
+            and (
+                primary
+                or identity["executable_sha256"]
+                == proof["measurement_executable_sha256"]
+            )
+            and proof["measurement_executable_sha256"]
+            in {row["sha256"] for row in artifact_binaries(docs["collector_artifacts"])}
+            and identity["executable_sha256"]
+            in {
+                row["sha256"] for row in artifact_binaries(docs["collector_artifacts"])
+            },
+            "cumulative consumer proof/cohort/artifact differs",
+        )
+        exposure = accepted["case_exposure"]
+        require(isinstance(exposure, dict), "missing explicit case exposure")
+        for kind, label in (
+            ("training", "seen-starting-input"),
+            ("held_out", "held-out"),
+        ):
+            require(
+                all(exposure.get(row["id"]) == label for row in workload[kind]),
+                "seen starting input cannot become held-out evidence",
+            )
+        training = {tuple(row["powers"]) for row in workload["training"]}
+        held_out = {tuple(row["powers"]) for row in workload["held_out"]}
+        require(
+            not training.intersection(held_out),
+            "explicit starting training key is not held out",
+        )
+        self.cumulative_source_exclusion(accepted, docs, producer, path.parent)
+        imported = self.cumulative_cache_import(
+            accepted.get("cache_import"), producer, cohort, path.parent
+        )
+        return {
+            "evidence": evidence(path),
+            "raw_receipt": accepted,
+            "public_import": imported,
+        }
+
+    def cumulative_cache_import(self, reference, producer, cohort, base):
+        """Bind the actual public-import job, not a declared import check flag."""
+        path, observed = hashed_record(reference, base)
+        require(
+            observed.get("schema")
+            == "vakint.public-native-import.actual-terminal-observation.v1"
+            and all(
+                observed.get(key) is True
+                for key in (
+                    "pidfd_completion_observed",
+                    "saved_launch_and_journal_identity_joined",
+                    "public_import_terminal_accepted",
+                    "frozen_inputs_unchanged",
+                )
+            )
+            and observed["current_service"]["ActiveState"] == "inactive"
+            and observed["current_service"]["Result"] == "success"
+            and observed["current_service"]["ExecMainStatus"] == "0",
+            "public cache import has no successful actual process completion",
+        )
+        pins = observed["artifact_sha256"]
+
+        def pinned(relative):
+            target = (path.parent / relative).resolve()
+            require(
+                str(target) in pins, "public import observation omits pinned evidence"
+            )
+            return hashed_record(
+                {"path": str(target), "sha256": pins[str(target)]}, path.parent
+            )
+
+        packet_path, packet = pinned("packet.json")
+        go_path, go = pinned("root-go.json")
+        _, launch = pinned("actual-launch-receipt.json")
+        _, journal = pinned("actual-invocation-journal.json")
+        terminal_path, terminal = pinned("run1/terminal-outcome.json")
+        worker_path, worker = hashed_record(
+            terminal["worker_result"], terminal_path.parent
+        )
+        require(
+            pins.get(str(worker_path)) == terminal["worker_result"]["sha256"],
+            "public import observation omits its worker receipt",
+        )
+        require(
+            terminal.get("schema") == "vakint.public-native-import-controller.v1"
+            and terminal.get("state") == "PASS"
+            and terminal.get("worker_returncode") == 0
+            and terminal.get("error") is None
+            and terminal["packet_sha256"] == digest(packet_path)
+            and terminal["root_go_sha256"] == digest(go_path)
+            and terminal == observed["controller_terminal"]
+            and number(terminal["whole_elapsed_seconds"])
+            < number(terminal["whole_seconds"]),
+            "public import controller/worker/packet completion differs",
+        )
+        require(
+            packet.get("schema")
+            == "vakint.public-native-large-prefix-import-source-packet.v1"
+            and go["packet_sha256"] == digest(packet_path)
+            and go["decision"] == "GO_ONCE_EXACT_PUBLIC_IMPORT"
+            and terminal["whole_seconds"]
+            == packet["whole_seconds"]
+            == go["whole_seconds"]
+            and go["unit"] == packet["unit"] == observed["unit"] == launch["unit"]
+            and launch.get("schema")
+            == "vakint.public-large-native-import.actual-launch.v1"
+            and launch["service"]["InvocationID"] == observed["invocation"]
+            and observed["current_service"].get("InvocationID", "")
+            in ("", observed["invocation"])
+            and journal
+            and all(
+                row.get("USER_UNIT") == observed["unit"]
+                and row.get("USER_INVOCATION_ID") == observed["invocation"]
+                for row in journal
+            ),
+            "public import actual launch/journal identity differs",
+        )
+        # These are the actual admission and child invocation, not a second
+        # eligibility decision. Native bytes remain authenticated by the importer.
+        launch_records = {}
+        for name in ("admission.json", "invocation-start.json", "actual-host.json"):
+            target = (path.parent / "run1" / name).resolve()
+            require(
+                str(target) in launch["artifact_sha256"],
+                "public import launch omits process/host evidence",
+            )
+            _, launch_records[name] = hashed_record(
+                {"path": str(target), "sha256": launch["artifact_sha256"][str(target)]},
+                path.parent,
+            )
+        admission, invocation = (
+            launch_records["admission.json"],
+            launch_records["invocation-start.json"],
+        )
+        require(
+            admission == launch["admission"]
+            and admission["packet_sha256"] == digest(packet_path)
+            and admission.get("frozen_inputs_and_host_hashes_verified") is True
+            and invocation["packet_sha256"] == digest(packet_path)
+            and invocation["command"] == packet["command"]
+            and invocation["controller_pid"] == int(launch["service"]["MainPID"])
+            and all(
+                any(
+                    row["pid"] == pid
+                    and type(row.get("start_ticks")) is int
+                    and row["start_ticks"] > 0
+                    for row in launch["processes"]
+                )
+                for pid in (invocation["pid"], invocation["controller_pid"])
+            ),
+            "public import actual admitted process differs",
+        )
+        descriptor_path, descriptor = hashed_record(
+            packet["descriptor"], packet_path.parent
+        )
+        build = producer["raw_report"]
+        require(
+            descriptor.get("schema") == "vakint.nativepack-transport.v1"
+            and descriptor["loop_count"] == 5
+            and descriptor["binding"] == build["semantic_binding"]
+            and {
+                name.removeprefix("cache/"): item
+                for name, item in descriptor["files"].items()
+                if name.endswith(".rrindex")
+            }
+            == build["cache_native_index_identity"]["indexes"],
+            "public import descriptor names another native snapshot/binding",
+        )
+        files = descriptor["files"]
+        chunks = {
+            name: item for name, item in files.items() if name.endswith(".rrchunk.gz")
+        }
+        indexes = {
+            name: item for name, item in files.items() if name.endswith(".rrindex")
+        }
+        namespaces = sum(name.startswith("cache/bindings/") for name in indexes)
+        expected = {
+            "format": "multipart_manifest",
+            "output": packet["fresh_destination"],
+            "sha256": digest(descriptor_path),
+            "archive_bytes": descriptor_path.stat().st_size
+            + sum(part["archive_bytes"] for part in descriptor["parts"]),
+            "extracted_bytes": sum(item["bytes"] for item in files.values()),
+            "entries": len(files),
+            "namespaces": namespaces,
+            "copied_bases": namespaces,
+            "copied_chunks": len(chunks),
+            "preserved_record_references": descriptor["stored_record_references"],
+            "compressed_bytes": sum(item["bytes"] for item in chunks.values()),
+            "index_bytes": sum(item["bytes"] for item in indexes.values()),
+            "transfer_buffer_bytes": 65536,
+        }
+        require(
+            worker.get("schema") == "vakint.public-large-native-import.v1"
+            and worker.get("state") == "PASS"
+            and worker["import_report"] == expected
+            and worker["exact_native_files_verified"] == len(files)
+            and worker.get("refused_repeat_preserved_full_output_and_cache_state")
+            is True
+            and worker.get("cache_attachment_performed") is False
+            and worker.get("integral_reduction_or_numerical_master_evaluation") is False
+            and worker.get("cache_coefficient_lookup_or_capture") is False
+            and worker["repeat_refusal"]["type"] == "ValueError"
+            and "destination already exists" in worker["repeat_refusal"]["message"]
+            and terminal["output"] == expected["output"]
+            and native_cache_identity(expected["output"])
+            == build["cache_native_index_identity"],
+            "actual public import report/inventory or scope differs",
+        )
+        require(
+            expected["preserved_record_references"]
+            == build["inventory"]["stored_record_references"]
+            and expected["compressed_bytes"] == build["inventory"]["compressed_bytes"]
+            and expected["copied_chunks"] == build["inventory"]["physical_chunks"],
+            "public import inventory differs from cumulative snapshot",
+        )
+        sources = packet["public_sources"]
+        host_path = Path(worker["actual_host"]).resolve()
+        require(
+            str(host_path) in launch["artifact_sha256"],
+            "public import launch omits actual host artifact",
+        )
+        host = read(
+            hashed_file(
+                {
+                    "path": str(host_path),
+                    "sha256": launch["artifact_sha256"][str(host_path)],
+                },
+                path.parent,
+            )
+        )
+        require(
+            worker["public_sources"]
+            == sources
+            == host["sources"]
+            == launch["actual_host"]["sources"]
+            and sources["rustred"] == cohort["native_revision"]
+            and sources["official_kernel"] == cohort["kernel_revision"]
+            and host == launch["actual_host"] == launch_records["actual-host.json"]
+            and host["core_sha256"] == packet["core"]["sha256"]
+            and host["wheel_sha256"] == packet["wheel"]["sha256"]
+            and host["mapped_core_paths"] == [packet["core"]["path"]],
+            "public import host artifact/native/kernel cohort differs",
+        )
+        manifest = Path(packet["frozen_data"]) / "manifest.json"
+        require(
+            digest(manifest) == build["data_manifest_sha256"],
+            "public import used another data manifest",
+        )
+        loaded = worker["data_report"]
+        state = worker["final_attachment_state"]
+        require(
+            read(worker_path.parent / "public-import-report.json")
+            == worker["import_report"]
+            and read(worker_path.parent / "data-load-report.json") == loaded
+            and read(worker_path.parent / "cache-state-before-repeat.json") == state
+            and Path(loaded["path"]).resolve() == Path(packet["frozen_data"]).resolve()
+            and loaded["version"] == read(manifest)["version"]
+            and loaded["load_prepared_caches"] is False
+            and {row["loop_count"] for row in loaded["loops"]} == set(range(1, 6))
+            and all(row["cache_loaded"] is False for row in loaded["loops"])
+            and set(state) == {str(loop) for loop in range(1, 6)}
+            and all(row["attached"] is False for row in state.values())
+            and state["5"]["saved_application"]["binding"] == build["semantic_binding"]
+            and state["5"]["saved_application"]["read_backing"] is False
+            and state["5"]["saved_application"]["native"]["rule_applications"] == 0
+            and state["5"]["saved_application"]["persistent"]["lookups"]
+            == state["5"]["saved_application"]["persistent"]["captured_records"]
+            == 0,
+            "public import data/binding/attachment state differs",
+        )
+        return {
+            "observation": evidence(path),
+            "terminal": evidence(terminal_path),
+            "worker": evidence(worker_path),
+            "packet": evidence(packet_path),
+            "raw_import_report": worker["import_report"],
+            "importer_sources": sources,
+            "scope": "Public import and native-byte preservation; attachment, physics and performance remain separate.",
+        }
+
+    def cumulative_source_exclusion(self, accepted, docs, producer, base):
+        """Check all explicit source roots against native route/protected facts."""
+        inventory_path, inventory = hashed_record(
+            accepted["source_starting_keys"], base
+        )
+        require(
+            inventory.get("schema") == "vakint.cumulative-source-starting-keys.v1",
+            "missing cumulative starting-key inventory",
+        )
+        expected = {row["id"]: row for row in producer["raw_report"]["sources"]}
+        rows = inventory["sources"]
+        require(
+            len(rows) == len(expected) and {row["id"] for row in rows} == set(expected),
+            "incomplete cumulative starting-key inventory",
+        )
+        starting = set()
+        for row in rows:
+            source = expected[row["id"]]
+            require(
+                row["producer"]["sha256"] == source["producer"]["sha256"],
+                "starting keys belong to another producer",
+            )
+            origin_path, origin = hashed_record(row["producer"], inventory_path.parent)
+            input_path, inputs = hashed_record(row["inputs"], inventory_path.parent)
+            if row["kind"] == "selected-workload":
+                require(
+                    inputs.get("schema") == "vakint.five-loop-cache-workload.v1"
+                    and origin.get("workload_sha256") == digest(input_path),
+                    "starting workload differs from actual producer",
+                )
+                starting.update(tuple(item["powers"]) for item in inputs["training"])
+            else:
+                require(
+                    row["kind"] == "physical-census"
+                    and inputs.get("schema") == "vakint.qcd-ladder.campaign-census.v1",
+                    "unknown starting-key source",
+                )
+                config, config_path = origin, origin_path
+                if source["scope"] == "completed-example":
+                    config_path, config = hashed_record(source["config"], base)
+                require(
+                    config.get("schema")
+                    == "vakint.inactive-capture-physical-user-unit.v1"
+                    and inputs["source_sha256"]
+                    == config["prepared_input"]["input"]["sha256"],
+                    "physical census differs from producer input",
+                )
+                scalar = hashed_file(
+                    config["prepared_input"]["input"],
+                    config_path.parent,
+                )
+                require(
+                    digest(scalar) == inputs["source_sha256"],
+                    "physical starting input changed",
+                )
+                starting.update(
+                    tuple(item["powers"]) for item in inputs["combined_roots"]
+                )
+        require(
+            starting
+            and all(
+                len(key) == 15 and all(type(power) is int for power in key)
+                for key in starting
+            ),
+            "invalid or empty source starting keys",
+        )
+        routes, protected, aliases = (
+            docs[name]
+            for name in (
+                "training_route_qualification",
+                "protected_union",
+                "alias_exclusion",
+            )
+        )
+        require(
+            routes.get("schema") == "vakint.source-candidate-owner-qualification.v2"
+            and routes.get("all_routes_succeeded") is True
+            and routes.get("selected_rows_complete") is True
+            and routes["compiled_cohort"] == docs["compiled_cohort"]
+            and routes["semantic_binding"]
+            == producer["raw_report"]["semantic_binding"],
+            "cumulative native route proof/cohort differs",
+        )
+        route_rows = routes["rows"]
+        require(
+            len(route_rows) == len(starting)
+            and {tuple(row["raw_powers"]) for row in route_rows} == starting,
+            "native route proof omits source starting keys",
+        )
+        require(
+            protected.get("schema") == "vakint.protected-raw-owner-union.v1"
+            and protected["owner_proof"]["sha256"]
+            == accepted["consumer"]["owner_proof"]["sha256"]
+            and protected["compiled_cohort"]["sha256"]
+            == accepted["consumer"]["compiled_cohort"]["sha256"],
+            "protected owner union belongs to another proof/cohort",
+        )
+        forbidden = {
+            tuple(key) for key in protected["forbidden_direct_target_or_owner_keys"]
+        }
+        require(
+            forbidden
+            == {
+                tuple(key)
+                for name in (
+                    "raw_lowered_keys",
+                    "direct_owner_keys",
+                    "declared_case_powers",
+                )
+                for key in protected[name]
+            },
+            "protected union omits declared/raw/owner keys",
+        )
+        required = set()
+        for row in docs["final_workload"]["held_out"]:
+            required.add(tuple(row["powers"]))
+            required.update(
+                tuple(key)
+                for name in ("protected_roots", "lowered_roots")
+                for key in row[name]
+            )
+        require(
+            required.issubset(forbidden),
+            "protected union omits frozen held-out input/owner keys",
+        )
+        require(
+            aliases.get("schema")
+            == "vakint.source-candidate-external-protected-alias-exclusion.v1"
+            and aliases["qualification"]["sha256"]
+            == accepted["consumer"]["training_route_qualification"]["sha256"]
+            and aliases["protected_union"]["sha256"]
+            == accepted["consumer"]["protected_union"]["sha256"],
+            "alias exclusion belongs to another route/protected proof",
+        )
+        require(
+            len(aliases["rows"]) == len(starting), "alias proof omits starting keys"
+        )
+        alias_rows = {tuple(row["powers"]): row for row in aliases["rows"]}
+        for row in route_rows:
+            raw = tuple(row["raw_powers"])
+            owners = {
+                tuple(endpoint["powers"])
+                for endpoint in row["owner_endpoints"]
+                if endpoint["coefficient"] != "0"
+            }
+            require(
+                row.get("route_success") is True
+                and row.get("route_error") is None
+                and owners
+                and raw not in forbidden
+                and not owners.intersection(forbidden),
+                "source starting/raw owner key overlaps held-out protection",
+            )
+            alias = alias_rows.get(raw, {})
+            require(
+                alias.get("route_complete_nonempty") is True
+                and alias.get("raw_protected_intersection") is False
+                and alias.get("owner_protected_intersections") == []
+                and alias.get("eligible_after_external_alias_exclusion") is True,
+                "native alias exclusion rejects source key",
+            )
 
     def qualification_projection(self, accepted, documents, base):
         """Authenticate unused training-prefix metadata, never project timings."""
@@ -1003,8 +1592,361 @@ def summarize(values):
     }
 
 
+def preserved_native_source(source, base):
+    """Read the actual opaque-union proof without promoting it to semantic acceptance."""
+    proof_path, proof = hashed_record(source["barrier"], base)
+    producer_path, producer = hashed_record(source["producer"], base)
+    metadata_path, metadata = hashed_record(source["capture"], base)
+    index = hashed_file(source["snapshot"], base)
+    require(
+        proof.get("schema") == "vakint.postflight-real-union-prefix-proof-qualified.v1"
+        and proof.get("data_preservation_state") == "PASS"
+        and proof.get("original_runtime_receipts_unchanged") is True,
+        "source lacks actual qualified union-prefix proof",
+    )
+    artifacts = {
+        str(hashed_file(ref, proof_path.parent)): ref for ref in proof["artifacts"]
+    }
+    require(
+        str(index) in artifacts and str(metadata_path) in artifacts,
+        "prefix snapshot/metadata not bound by union proof",
+    )
+    terminal = [
+        read(Path(name))
+        for name in artifacts
+        if Path(name).name == "terminal-outcome.json"
+    ]
+    require(len(terminal) == 1, "union proof lacks terminal receipt")
+    terminal = terminal[0]
+    verification = terminal["independent_verification"]
+    require(
+        terminal.get("schema") == "vakint.real-opaque-union-prefix-diagnostic.v1"
+        and terminal.get("state") == "PASS"
+        and verification.get("schema")
+        == "vakint.independent-opaque-union-prefix-preservation.v1"
+        and verification.get("state") == "PASS"
+        and all(
+            verification.get(key) is True
+            for key in (
+                "every_captured_source_and_output_chunk_sha256_and_length_equal",
+                "all_chunk_files_stable_during_reads",
+                "native_exact_run_concatenation_verified",
+            )
+        )
+        and verification.get("completed_q0_or_final_cache_claimed") is False
+        and verification.get("semantic_qualification_or_cache_speedup_claimed")
+        is False,
+        "prefix preservation must retain its actual limited scope",
+    )
+    rows = [
+        row
+        for row in metadata["immutable_indices"]
+        if row["role"] == source["prefix_role"]
+    ]
+    require(
+        len(rows) == 1
+        and Path(rows[0]["path"]).resolve() == index
+        and rows[0]["bytes"] == index.stat().st_size
+        and metadata.get("metadata_only") is True
+        and metadata.get("run_concat_verified") is True
+        and metadata["generation"] == proof["generation"]
+        and metadata["compressed_bytes"] == proof["compressed_bytes"]
+        and metadata["preserved_record_references"]
+        == proof["stored_record_references"],
+        "captured prefix metadata differs from actual union proof",
+    )
+    require(
+        source["scope"] == "committed-prefix",
+        "union-prefix proof cannot complete an example",
+    )
+    require(
+        source["prefix_role"] in ("old", "q0"), "union output is not a source prefix"
+    )
+    if producer.get("schema") == "vakint.five-loop-cache-build.v2":
+        require(source["prefix_role"] == "old", "old producer cannot claim q0 prefix")
+        proposal_path, proposal = hashed_record(proof["proposal"], proof_path.parent)
+        binding_path, binding = hashed_record(proposal["binding"], proposal_path.parent)
+        require(
+            hashed_file(binding["original_build_receipt"], binding_path.parent)
+            == producer_path
+            and producer.get("complete") is False
+            and producer["preparation"]["status"] != "complete"
+            and producer["preparation"]["native_profile"]["strict"] is True
+            and producer["preparation"]["native_profile"]["unresolved_policy"]
+            == "reject",
+            "prefix source must preserve its authenticated failed/incomplete producer",
+        )
+    else:
+        proposal_path, proposal = hashed_record(proof["proposal"], proof_path.parent)
+        require(
+            source["prefix_role"] == "q0"
+            and producer.get("schema")
+            == "vakint.inactive-capture-physical-user-unit.v1"
+            and any(
+                row["role"] == "q0"
+                and Path(row["path"]).resolve()
+                == Path(producer["running_cache_directory"]).resolve()
+                for row in proposal["inputs_newest_first"]
+            ),
+            "prefix producer is not a captured union input",
+        )
+    return {
+        **source,
+        "receipts": {
+            "producer": {"evidence": evidence(producer_path), "raw_receipt": producer},
+            "capture": {"evidence": evidence(metadata_path), "raw_receipt": metadata},
+            "snapshot": {"evidence": evidence(index)},
+            "barrier": {"evidence": evidence(proof_path), "raw_receipt": proof},
+        },
+    }
+
+
+def cumulative_cache_record(path, cache):
+    """Consume accepted snapshot evidence; a preserved prefix is not a finished run."""
+    path = Path(path).resolve()
+    report = read(path)
+    identity = native_cache_identity(cache)
+    require(
+        report["cache_sha256"] is None
+        and report["cache_native_index_identity"] == identity,
+        "cumulative native indexes changed",
+    )
+    require(
+        isinstance(report["semantic_binding"], dict) and report["semantic_binding"],
+        "missing cumulative native binding",
+    )
+    validation_path, validation = hashed_record(report["validation"], path.parent)
+    preservation_only = (
+        validation.get("schema")
+        == "vakint.postflight-real-union-prefix-proof-qualified.v1"
+    )
+    if preservation_only:
+        require(
+            validation.get("data_preservation_state") == "PASS"
+            and validation.get("original_runtime_receipts_unchanged") is True,
+            "invalid prefix preservation proof",
+        )
+        require(
+            Path(validation["output"]).resolve() == Path(cache).resolve(),
+            "prefix proof names another cache",
+        )
+        require(
+            report["inventory"]
+            == {
+                key: validation[key]
+                for key in (
+                    "compressed_bytes",
+                    "stored_record_references",
+                    "physical_chunks",
+                )
+            },
+            "prefix inventory differs from actual preservation proof",
+        )
+        artifacts = {
+            str(hashed_file(ref, validation_path.parent)): ref
+            for ref in validation["artifacts"]
+        }
+        for name, expected in identity["indexes"].items():
+            require(
+                artifacts.get(str((Path(cache) / name).resolve()), {}).get("sha256")
+                == expected["sha256"],
+                "prefix proof names another native index",
+            )
+    else:
+        require(
+            validation.get("schema") == "vakint.cumulative-native-cache-validation.v1"
+            and validation.get("accepted") is True
+            and all(
+                validation.get("checks", {}).get(key) is True
+                for key in (
+                    "immutable_index_snapshot",
+                    "authenticated_chunks",
+                    "strict_completed_records_only",
+                    "authenticated_bindings",
+                    "committed_source_snapshots",
+                )
+            ),
+            "cumulative snapshot lacks accepted native validation",
+        )
+        for key in (
+            "cache_native_index_identity",
+            "semantic_binding",
+            "data_manifest_sha256",
+            "sources",
+            "inventory",
+        ):
+            require(
+                validation[key] == report[key],
+                "cumulative validation snapshot/binding/source inventory differs",
+            )
+    inventory = report["inventory"]
+    for key in ("compressed_bytes", "stored_record_references", "physical_chunks"):
+        require(
+            type(inventory.get(key)) is int and inventory[key] > 0,
+            "invalid cumulative stored inventory",
+        )
+    sources, ids, completed_physical = [], set(), set()
+    require(report["sources"], "empty cumulative source inventory")
+    for source in report["sources"]:
+        require(
+            source["id"] not in ids
+            and source["scope"] in ("committed-prefix", "completed-example"),
+            "duplicate/invalid cumulative source",
+        )
+        ids.add(source["id"])
+        if source.get("kind") == "native-index-prefix":
+            require(
+                source["barrier"]["sha256"] == report["validation"]["sha256"]
+                if preservation_only
+                else True,
+                "prefix source belongs to another preservation proof",
+            )
+            sources.append(preserved_native_source(source, path.parent))
+            continue
+        require(
+            source.get("kind") == "running-capture", "unknown cumulative source kind"
+        )
+        docs = {}
+        for name in ("producer", "capture", "snapshot", "barrier"):
+            refpath, document = hashed_record(source[name], path.parent)
+            docs[name] = {"evidence": evidence(refpath), "raw_receipt": document}
+        barrier = docs["barrier"]["raw_receipt"]
+        require(
+            barrier.get("schema") == "vakint.native-cache-snapshot-barrier.v1"
+            and barrier.get("accepted") is True
+            and barrier.get("committed_snapshot") is True
+            and barrier.get("writer_fault") is None
+            and type(barrier.get("generation")) is int
+            and barrier["generation"] > 0
+            and isinstance(barrier.get("manifest_digest"), str)
+            and barrier["manifest_digest"],
+            "source lacks accepted committed snapshot barrier",
+        )
+        for name in ("producer", "capture", "snapshot"):
+            require(
+                hashed_file(
+                    barrier[name], Path(docs["barrier"]["evidence"]["path"]).parent
+                )
+                == Path(docs[name]["evidence"]["path"]),
+                "snapshot barrier names another source",
+            )
+        snapshot = docs["snapshot"]["raw_receipt"]
+        index_path = hashed_file(source["index"], path.parent)
+        require(
+            Path(snapshot["delta"]["manifest_path"]).resolve() == index_path
+            and snapshot["delta"]["manifest_bytes"] == index_path.stat().st_size,
+            "source snapshot index differs",
+        )
+        docs["index"] = {"evidence": evidence(index_path)}
+        capture = docs["capture"]["raw_receipt"]
+        native = capture.get("report", capture.get("native", capture))
+        require(
+            snapshot.get("schema") == "rustred.running-application-cache-snapshot.v1"
+            and snapshot["delta"]["generation"] == barrier["generation"]
+            and snapshot["delta"]["manifest_digest"] == barrier["manifest_digest"]
+            and native.get("schema") == "rustred.running-application-cache.v1"
+            and native.get("writer_error") is None
+            and native.get("last_error") is None
+            and native.get("generation") == barrier["generation"]
+            and all(
+                type(native.get(key)) is int and native[key] >= 0
+                for key in (
+                    "committed_records",
+                    "accepted_records",
+                    "pending_records",
+                    "pending_bytes",
+                )
+            )
+            and native["committed_records"] <= native["accepted_records"]
+            and all(
+                native.get(key) == barrier.get(key)
+                for key in (
+                    "accepted_records",
+                    "committed_records",
+                    "pending_records",
+                    "pending_bytes",
+                )
+            ),
+            "snapshot barrier differs from actual native capture/snapshot",
+        )
+        require(
+            barrier["producer_completed"] is (source["scope"] == "completed-example"),
+            "partial source cannot become completed example",
+        )
+        if source["scope"] == "completed-example":
+            require(
+                docs["producer"]["raw_receipt"].get("schema")
+                != "vakint.five-loop-cache-build.v2",
+                "failed finite workload cannot become completed physical example",
+            )
+            # Reuse the complete physical validator, including its actual input,
+            # ELF/source, output, full guards, close and supervisor bindings.
+            from merge_physical_capture_results import completed_run
+
+            config_path = hashed_file(source["config"], path.parent)
+            config = read(config_path)
+            jobs = {"zero-momentum-metric": "q0", "quadratic-transverse": "quadratic"}
+            projection = config["prepared_input"]["manifest_projection"]
+            require(projection in jobs, "unknown completed physical projection")
+            completed = completed_run(config_path, expected_job_id=jobs[projection])
+            require(
+                completed["completion"] == docs["producer"]["raw_receipt"]
+                and completed["cache_report"] == capture
+                and completed["cache_report"]["snapshot"] == snapshot,
+                "completed source differs from accepted physical run",
+            )
+            docs["config"] = {
+                "evidence": evidence(config_path),
+                "raw_receipt": completed["config"],
+            }
+            completed_physical.update(
+                case
+                for case, projection in PRIMARY.items()
+                if completed["report"]["projection"] == projection
+            )
+        sources.append({**source, "receipts": docs})
+    unions = {}
+    for source in sources:
+        if source.get("kind") == "native-index-prefix":
+            unions.setdefault(source["barrier"]["sha256"], []).append(source)
+    for group in unions.values():
+        expected_roles = {
+            row["role"]
+            for row in group[0]["receipts"]["capture"]["raw_receipt"][
+                "immutable_indices"
+            ]
+        } - {"output"}
+        roles = [row["prefix_role"] for row in group]
+        require(
+            len(roles) == len(set(roles)) and set(roles) == expected_roles,
+            "union must retain every captured source prefix exactly once",
+        )
+    return {
+        "evidence": evidence(path),
+        "cache_directory": str(Path(cache).resolve()),
+        "raw_report": report,
+        "validation": {
+            "evidence": evidence(validation_path),
+            "raw_receipt": validation,
+        },
+        "sources": sources,
+        "status": "preserved-committed-prefix"
+        if preservation_only
+        else "validated-committed-snapshot",
+        "all_source_runs_completed": all(
+            row["scope"] == "completed-example" for row in report["sources"]
+        ),
+        "completed_physical_examples": sorted(completed_physical),
+        "physical_examples_complete": set(PRIMARY).issubset(completed_physical),
+        "performance_eligible": False,
+        "scope": "Stored references may overlap; snapshot preservation does not establish producer completion, unique keys, or performance.",
+    }
+
+
 def build_record(path, cache, provenance=None):
     build = read(path)
+    if build.get("schema") == "vakint.cumulative-native-cache-report.v1":
+        return cumulative_cache_record(path, cache)
     require(
         build.get("schema") == "vakint.five-loop-cache-build.v2", "unknown build schema"
     )
@@ -1042,9 +1984,7 @@ def build_record(path, cache, provenance=None):
         and build["compressed_bytes"] == Path(cache).stat().st_size,
         "cache file differs from completed build",
     )
-    require(
-        build["within_50_mib_target"] is True, "size exception needs separate review"
-    )
+    # Historical size-target fields remain provenance, not an aggregate cap.
     producer = {
         "evidence": evidence(path),
         "cache_file": evidence(cache),
@@ -1124,6 +2064,14 @@ def suite_record(path, kind, producer, provenance):
             isinstance(case.get("catalogue_closure"), dict),
             "final collector must report catalogue closure separately from Retain success",
         )
+        exposure = None
+        if build.get("schema") == "vakint.cumulative-native-cache-report.v1":
+            exposure = requalification["raw_receipt"]["case_exposure"].get(case_id)
+            require(
+                exposure in ("held-out", "tuning", "seen-starting-input")
+                and (kind != "held-out" or exposure == "held-out"),
+                "seen starting input cannot become held-out evidence",
+            )
         output = {
             "id": case_id,
             "status": "measured",
@@ -1133,6 +2081,8 @@ def suite_record(path, kind, producer, provenance):
             "backing_reuse": case["backing_reuse"],
             "variants": {},
         }
+        if exposure is not None:
+            output["cache_exposure"] = exposure
         for sample in samples:
             key = (case_id, sample["variant"], sample["sample"])
             require(
@@ -1176,8 +2126,7 @@ def suite_record(path, kind, producer, provenance):
                 "wrong persistent backing",
             )
             require(
-                sample["cache_statistics"]["binding"]
-                == build["preparation"]["options"]["single_file"]["binding"],
+                sample["cache_statistics"]["binding"] == cache_binding(producer),
                 "cache semantic binding mismatch",
             )
             directory = (
@@ -1188,6 +2137,16 @@ def suite_record(path, kind, producer, provenance):
                 read(directory / "measurement.json") == sample, "saved sample differs"
             )
             bundle = provenance.bind(directory / "measurement.json")
+            if build.get("schema") == "vakint.cumulative-native-cache-report.v1":
+                expected_cache = (
+                    build["cache_native_index_identity"]
+                    if sample["variant"] == "cached"
+                    else None
+                )
+                require(
+                    cache_identity(bundle["launcher"]) == expected_cache,
+                    "suite launcher native cache identity differs",
+                )
             if requalification is not None:
                 require(
                     bundle["references"]["artifact"]["sha256"]
@@ -1695,18 +2654,26 @@ def primary_records(provenance):
                 },
                 "primary persistent cache policy differs",
             )
-            cache = launcher.get("cache_sha256")
+            cache = cache_identity(launcher)
             require(
                 (variant == "uncached" and cache is None)
-                or (
-                    variant == "cached" and isinstance(cache, str) and len(cache) == 64
-                ),
+                or (variant == "cached" and cache is not None),
                 "missing actual manual-cache identity",
             )
             if variant == "cached":
-                require(
-                    digest(report["persistent_cache"]) == cache, "primary cache changed"
-                )
+                if isinstance(cache, dict):
+                    require(
+                        report.get("cache_native_index_identity") == cache
+                        and native_cache_identity(report["persistent_cache"]) == cache,
+                        "primary native cache changed",
+                    )
+                else:
+                    require(
+                        isinstance(cache, str)
+                        and len(cache) == 64
+                        and digest(report["persistent_cache"]) == cache,
+                        "primary cache changed",
+                    )
             mode = record["input_mode"]
             require(
                 launcher.get("input_mode", "fresh") == mode,
@@ -1775,7 +2742,13 @@ def primary_records(provenance):
             "three matched fresh samples per mode required",
         )
         require(
-            len({cache for _, cache in samples["cached"].values()}) == 1,
+            len(
+                {
+                    json.dumps(cache, sort_keys=True)
+                    for _, cache in samples["cached"].values()
+                }
+            )
+            == 1,
             "primary samples used different caches",
         )
         first_report = next(iter(samples["uncached"].values()))[0]
@@ -1854,7 +2827,12 @@ def primary_records(provenance):
                 "stages": stages,
                 "preparation": preparation,
             }
-        item["cache_sha256"] = next(iter(samples["cached"].values()))[1]
+        selected_cache = next(iter(samples["cached"].values()))[1]
+        item["cache_sha256"] = (
+            selected_cache if isinstance(selected_cache, str) else None
+        )
+        if isinstance(selected_cache, dict):
+            item["cache_native_index_identity"] = selected_cache
         item["data_manifest_sha256"] = reports[0]["data_manifest_sha256"]
         item.update(
             status="measured",
@@ -2164,8 +3142,16 @@ def warm_reuse_records(provenance):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base", type=Path, required=True)
-    parser.add_argument("--build", type=Path)
-    parser.add_argument("--cache", type=Path)
+    parser.add_argument(
+        "--build",
+        type=Path,
+        help="Completed strict-build or authenticated cumulative-snapshot receipt",
+    )
+    parser.add_argument(
+        "--cache",
+        type=Path,
+        help="Single-file cache or immutable native cache directory",
+    )
     parser.add_argument("--held-out", type=Path)
     parser.add_argument("--tuning", type=Path)
     parser.add_argument(
@@ -2190,7 +3176,7 @@ def main():
     )
     require(
         not (args.held_out or args.tuning) or args.build,
-        "suite measurements require their strict cache build",
+        "suite measurements require their authenticated cache receipt",
     )
     provenance = ReportEvidence(args.evidence)
     require(args.build or provenance.records, "no report evidence supplied")
@@ -2218,8 +3204,59 @@ def main():
                 build is not None,
                 "primary performance requires its completed strict cache build",
             )
+            if (
+                build["raw_report"].get("schema")
+                == "vakint.cumulative-native-cache-report.v1"
+            ):
+                require(
+                    build["status"] == "validated-committed-snapshot",
+                    "primary performance needs semantic/import qualification, not prefix preservation",
+                )
+                acceptance_path, acceptance = hashed_record(
+                    provenance.index.get("cache_requalification"),
+                    provenance.path.parent,
+                )
+                _, workload = hashed_record(
+                    acceptance["consumer"]["final_workload"], acceptance_path.parent
+                )
+                _, cohort = hashed_record(
+                    acceptance["consumer"]["compiled_cohort"], acceptance_path.parent
+                )
+                identity = {
+                    "cache_native_index_identity": primary[
+                        "cache_native_index_identity"
+                    ],
+                    "cache_sha256": None,
+                    "data_manifest_sha256": primary["data_manifest_sha256"],
+                    "workload_sha256": acceptance["consumer"]["final_workload"][
+                        "sha256"
+                    ],
+                    "source_census_sha256": workload["source_census_sha256"],
+                    "owner_proof": {
+                        **acceptance["consumer"]["owner_proof"],
+                        "compiled_cohort": cohort,
+                    },
+                    "build_git_revision": cohort["main_revision"],
+                    "executable_sha256": next(
+                        row["raw_report"]["executable_sha256"]
+                        for row in primary["functional_records"]
+                        if row["performance_eligible"]
+                    ),
+                }
+                primary["cache_requalification"] = provenance.cache_qualification(
+                    identity, build, primary=True
+                )
+                require(
+                    all(
+                        row["evidence"]["artifact"]["sha256"]
+                        == acceptance["consumer"]["collector_artifacts"]["sha256"]
+                        for row in primary["functional_records"]
+                        if row["performance_eligible"]
+                    ),
+                    "primary artifact differs from accepted native consumer",
+                )
             require(
-                primary["cache_sha256"] == build["raw_report"]["cache_sha256"]
+                cache_identity(primary) == cache_identity(build["raw_report"])
                 and primary["data_manifest_sha256"]
                 == build["raw_report"]["data_manifest_sha256"],
                 "primary performance cache/data differs from completed build",

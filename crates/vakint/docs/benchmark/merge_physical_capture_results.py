@@ -35,7 +35,12 @@ def reference(item, base):
     return path
 
 
-def completed_run(config_path):
+def completed_run(config_path, *, expected_job_id="q0"):
+    projections = {
+        "q0": ("zero-momentum", "zero-momentum-metric"),
+        "quadratic": ("quadratic", "quadratic-transverse"),
+    }
+    require(expected_job_id in projections, "unknown physical job identity")
     config_path = Path(config_path).resolve()
     config = read(config_path)
     require(
@@ -47,7 +52,7 @@ def completed_run(config_path):
     completion_path = root / "completion.json"
     completion = read(completion_path)
     require(
-        config["job_id"] == completion["job_id"] == "q0"
+        config["job_id"] == completion["job_id"] == expected_job_id
         and config["performance_eligible"] is False
         and completion["performance_eligible"] is False
         and completion["functional_acceptance"] is True
@@ -57,6 +62,11 @@ def completed_run(config_path):
         and completion["pure_ibp_seconds"] is None
         and completion["native_child_restarted_or_signalled"] is False,
         "run lacks accepted immutable functional completion",
+    )
+    require(
+        (config["projection"], config["prepared_input"]["manifest_projection"])
+        == projections[expected_job_id],
+        "physical job/projection identity differs",
     )
     require(
         not completion.get("acceptance_error")
@@ -72,9 +82,32 @@ def completed_run(config_path):
         ),
         "missing actual process identity",
     )
+    launch_path = root / "launch.json"
+    launch = read(launch_path)
+    argv = launch["argv"]
+    require(
+        launch["job_id"] == expected_job_id
+        and launch["config_sha256"] == digest(config_path)
+        and all(
+            launch["collector"].get(key) == process[key]
+            for key in ("pid", "start_ticks")
+        )
+        and isinstance(argv, list)
+        and all(isinstance(arg, str) for arg in argv)
+        and argv.count("--projection") == 1
+        and not any(arg.startswith("--projection=") for arg in argv),
+        "physical launch identity/projection differs",
+    )
+    projection_index = argv.index("--projection") + 1
+    require(
+        projection_index < len(argv)
+        and argv[projection_index] == projections[expected_job_id][0],
+        "physical launch projection differs",
+    )
 
     cohort = config["validated_cohort"]
     binary = reference(cohort["executable"], config_path.parent)
+    require(argv[0] == str(binary), "physical launch executable differs")
     artifact_path = reference(cohort["artifact_receipt"], config_path.parent)
     artifact = read(artifact_path)
     for key, value, length in (
@@ -295,6 +328,7 @@ def completed_run(config_path):
         "evidence": {
             "config": evidence(config_path),
             "completion": evidence(completion_path),
+            "launch": evidence(launch_path),
             "artifact": evidence(artifact_path),
         },
     }
