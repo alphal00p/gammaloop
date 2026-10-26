@@ -57,9 +57,19 @@ class ExternalDataSmoke(unittest.TestCase):
             self.assertTrue(default["cache_available"])
             self.assertFalse(disabled["cache_loaded"])
             self.assertTrue(default["cache_loaded"])
+            self.assertIsNone(disabled["cache_source"])
+            self.assertEqual(default["cache_source"], "local")
             self.assertEqual(
-                {k: v for k, v in disabled.items() if k != "cache_loaded"},
-                {k: v for k, v in default.items() if k != "cache_loaded"},
+                {
+                    k: v
+                    for k, v in disabled.items()
+                    if k not in ("cache_loaded", "cache_source")
+                },
+                {
+                    k: v
+                    for k, v in default.items()
+                    if k not in ("cache_loaded", "cache_source")
+                },
             )
             loop_count = disabled["loop_count"]
             self.assertFalse(instance.cache_statistics(loop_count)["attached"])
