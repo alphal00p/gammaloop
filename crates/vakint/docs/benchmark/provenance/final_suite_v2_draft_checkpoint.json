@@ -1,0 +1,33 @@
+{
+  "schema": "vakint.draft-final-suite-source-checkpoint.v1",
+  "state": "HISTORICAL_DRAFT_ONLY_NOT_ACCEPTED_OR_FROZEN",
+  "archive": "vakint-5l-final-suite-v2-DRAFT-20261026.tar.gz",
+  "archive_bytes": 22160,
+  "archive_sha256": "39015480e2b9579b1b58b06086db576c4ec24731ee445f6041d0da51ea73020b",
+  "members": 5,
+  "archive_manifest_sha256": "f2bb64cbdc892ba19a8670d462e0f8cb62e8f7296210a911763aad406cf5f8c4",
+  "original_files": {
+    "make_proposal.py": {
+      "bytes": 14107,
+      "sha256": "17ae993771f827f48ed1d7f07548b1a5a05b4a2516a2278b669a5f3579697b29"
+    },
+    "proposal.json": {
+      "bytes": 39607,
+      "sha256": "3b878131c1840f40fb87506f21b8c08d95f2fa280e33a626061e0ede2e0a71bf"
+    },
+    "unmeasured-metadata-check.json": {
+      "bytes": 67314,
+      "sha256": "cb87ea97cf13de59faa5b5bfdfb16975ce1f51d338f8ede73cfa9ac74de29779"
+    }
+  },
+  "note": "final_suite_v2_draft_checkpoint.typ",
+  "authority": "None: not accepted, frozen, eligible for tuning, a measurement/selection authority, or an execution grant.",
+  "checks": {
+    "original_three_files_byte_exact": true,
+    "two_archives_byte_identical": true,
+    "normalized_regular_paths_and_checksums": true,
+    "python_AST_without_imports": true,
+    "draft_labels_preserved": true
+  },
+  "scope": "Source-only preservation. Existing original suite/workloads/results remain unchanged. No source edits, new design, Native execution, benchmark or scientific acceptance performed by packaging."
+}
