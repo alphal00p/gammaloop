@@ -114,6 +114,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for NumericalEvaluationResultWrapper {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[spenso_macros::track_usage(record_usage)]
 #[pymethods]
 impl NumericalEvaluationResultWrapper {
@@ -144,6 +145,10 @@ impl NumericalEvaluationResultWrapper {
     }
 
     /// Return Symbolica's `FormattedOutput`; keyword options are forwarded unchanged.
+    #[gen_stub(override_return_type(
+        type_repr = "symbolica.FormattedOutput",
+        imports = ("symbolica")
+    ))]
     #[pyo3(signature = (**options))]
     pub fn formatted(
         &self,
@@ -315,6 +320,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for VakintExpressionWrapper {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[spenso_macros::track_usage(record_usage)]
 #[pymethods]
 impl VakintExpressionWrapper {
@@ -324,6 +330,10 @@ impl VakintExpressionWrapper {
     }
 
     /// Return Symbolica's `FormattedOutput`; keyword options are forwarded unchanged.
+    #[gen_stub(override_return_type(
+        type_repr = "symbolica.FormattedOutput",
+        imports = ("symbolica")
+    ))]
     #[pyo3(signature = (**options))]
     pub fn formatted(
         &self,

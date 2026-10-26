@@ -16,7 +16,10 @@ use crate::{VakintExpression, diagram_integral::DiagramIntegralOptions};
 /// Kinematics.scalar_product notation. Spectator order defines numerical vector
 /// IDs. Parameter substitutions are simultaneous and must already be reflected
 /// in the family's physical denominators. No graph factor is inserted.
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[cfg_attr(
+    feature = "python_stubgen",
+    pyo3_stub_gen::derive::gen_stub_pyfunction(module = "symbolica.community.hepkit.vakint")
+)]
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pyfunction]
 #[pyo3(signature = (diagram, family, numerator, *, powers=None, parameter_substitutions=None, external_momenta=Vec::new()), text_signature = "(diagram, family, numerator, *, powers=None, parameter_substitutions=None, external_momenta=())")]
@@ -28,7 +31,6 @@ pub(crate) fn integral_from_diagram(
     powers: Option<&Bound<'_, PyAny>>,
     #[gen_stub(override_type(type_repr="typing.Mapping[symbolica.Expression, symbolica.Expression] | None", imports=("typing", "symbolica")))]
     parameter_substitutions: Option<&Bound<'_, PyMapping>>,
-    #[gen_stub(override_type(type_repr="typing.Sequence[symbolica.Expression]", imports=("typing", "symbolica")))]
     external_momenta: Vec<PythonExpression>,
 ) -> PyResult<VakintExpressionWrapper> {
     super::record_usage();
