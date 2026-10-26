@@ -106,7 +106,40 @@ mod gl20_frame_routing_tests {
                 )
                 .unwrap();
         }
-        builder.canonical_loop_momentum_basis().build().unwrap()
+        let diagram = builder.canonical_loop_momentum_basis().build().unwrap();
+        if let ExternalFrame::Paired { incoming, .. } = frame {
+            // Retained old-master cut 0 has internal vertices [1, 2, 4] on
+            // the left; native complete partitions also include attachment 7.
+            // Reverse the two sides when the mirrored fixture enters at 6.
+            let historical_left = [1, 2, 4, 7];
+            let incoming_on_historical_left = historical_left.contains(&incoming);
+            let (left, right): (Vec<DiagramHalfEdge>, Vec<DiagramHalfEdge>) =
+                diagram.half_edges().partition(|half| {
+                    let hedge = diagram.half_edge_id(*half).unwrap();
+                    let vertex = diagram.underlying().node_id(hedge).0;
+                    historical_left.contains(&vertex) == incoming_on_historical_left
+                });
+            let left_set = left.iter().copied().collect::<BTreeSet<_>>();
+            let right_set = right.iter().copied().collect::<BTreeSet<_>>();
+            assert!(left_set.is_disjoint(&right_set));
+            assert_eq!(left.len() + right.len(), diagram.half_edges().count());
+            assert_eq!(
+                left_set.union(&right_set).copied().collect::<BTreeSet<_>>(),
+                diagram.half_edges().collect::<BTreeSet<_>>()
+            );
+            let diagram = diagram.with_cut_partitions(vec![(left, right)]).unwrap();
+            assert_eq!(
+                diagram.cuts()[0]
+                    .cut
+                    .iter()
+                    .map(|half| half.edge)
+                    .collect::<BTreeSet<_>>(),
+                BTreeSet::from([EdgeId(2), EdgeId(6), EdgeId(9), EdgeId(11)])
+            );
+            diagram
+        } else {
+            diagram
+        }
     }
 
     fn assert_native_root(diagram: &FeynmanDiagram, expected: VertexId) {
@@ -260,6 +293,32 @@ mod gl20_frame_routing_tests {
                 .unwrap();
         }
         let disconnected = builder.canonical_loop_momentum_basis().build().unwrap();
+        // Fixture-only cut through the parallel component: the incoming
+        // attachment is on the left, and every remaining half-edge is right.
+        let (left, right): (Vec<DiagramHalfEdge>, Vec<DiagramHalfEdge>) =
+            disconnected.half_edges().partition(|half| {
+                let hedge = disconnected.half_edge_id(*half).unwrap();
+                disconnected.underlying().node_id(hedge).0 == vertices[0].0
+            });
+        let left_set = left.iter().copied().collect::<BTreeSet<_>>();
+        let right_set = right.iter().copied().collect::<BTreeSet<_>>();
+        assert!(left_set.is_disjoint(&right_set));
+        assert_eq!(left.len() + right.len(), disconnected.half_edges().count());
+        assert_eq!(
+            left_set.union(&right_set).copied().collect::<BTreeSet<_>>(),
+            disconnected.half_edges().collect::<BTreeSet<_>>()
+        );
+        let disconnected = disconnected
+            .with_cut_partitions(vec![(left, right)])
+            .unwrap();
+        assert_eq!(
+            disconnected.cuts()[0]
+                .cut
+                .iter()
+                .map(|half| half.edge)
+                .collect::<BTreeSet<_>>(),
+            BTreeSet::from([EdgeId(1), EdgeId(2)])
+        );
         assert_native_root(&disconnected, VertexId(0));
         assert_eq!(
             disconnected.loop_momentum_basis().tree_edges,

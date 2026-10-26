@@ -2,7 +2,9 @@
 
 This branch checkpoints the combined, source-reviewed GL20 compatibility
 candidate. The first focused Graph run failed with two passes and two failures.
-Generator contracts and the complete original GL20 regression did not run. This is a WIP source checkpoint; no GL20 fix, final review,
+Generator contracts and the complete original GL20 regression did not run. A
+separate test-only correction now installs the required cuts; its new gated run
+is pending at this checkpoint. This is a WIP source checkpoint; no GL20 fix, final review,
 Clippy, or full CI success is claimed. NixCI remains disabled and no production
 dependency pin changes.
 
@@ -68,6 +70,13 @@ validation call. This does not establish both complete flow contracts.
 The controller stopped at this gate. It did not compile the remaining owners,
 run Generator contracts, generate the original fixture, or evaluate its point.
 No retry ran. Source, fixture, and golden hashes passed the post-failure guard.
-The metadata omission needs a focused fixture correction before further
-validation. The complete GL20 result remains unproved. No five-loop physical
+A separate corrected-fixture cohort preserves that failed run and changes only
+the new Graph test child. It installs complete cut partitions through the
+existing `with_cut_partitions` constructor. The paired fixture uses retained
+historical cut 0, including both attachment crowns; its mirrored counterpart
+reverses the sides. The disconnected fixture uses an explicitly synthetic cut.
+All 18 prior assertions remain, with eight completeness and crossing assertions
+added. Production Graph and Generator sources are byte-identical to the first
+cohort. Independent source review passed; the corrected focused suites and the
+complete original GL20 result remain pending. No five-loop physical
 execution is involved.

@@ -1233,14 +1233,14 @@ summary = "Dated measurements and diagnostic records. Treat their results as exp
 [[section.note]]
 id = "gl20-physical-frame-routing-wip"
 title = "WIP: physical graph frame and paired routing root"
-summary = "A source-reviewed compatibility candidate with a focused fixture metadata failure; complete original GL20 regression remains unproved."
+summary = "A source-reviewed compatibility candidate with corrected focused cut fixtures; complete original GL20 regression remains unproved."
 source = "docs/architecture/gl20-physical-frame-routing-wip.typ"
 kind = "Correctness investigation"
-status = "WIP · focused fixture failure; original regression not run"
+status = "WIP · corrected focused fixtures; original regression pending"
 lifecycle = "investigation"
 owner = "unassigned"
 captured_at = "2026-10-26"
-evidence_revision = "sha256:9ffd8cd8f38c572140515c048bfba40929afa96ea716acfeb935f7995559e4fd"
+evidence_revision = "sha256:4ae93404669b503a93f06f5308cc2931cb49fcb06e29c52a5a4810e3750729a1"
 products = ["gammaloop", "feynkit"]
 topics = ["graph-ordering", "momentum-routing", "testing"]
 
