@@ -241,6 +241,13 @@ alone cannot supply those Native preservation checks. All original-source
 validators run before the new report directory is published; rejected evidence
 leaves no accepted report behind. The single-source strict-preparation command
 retains its existing behavior.
+An existing #raw("native-index-prefix") source joins its immutable binary index
+to the Native source snapshot and the historical proof's authenticated per-role
+census, rather than the earlier union's aggregate counts. Its failed strict
+producer remains incomplete and its scope remains #raw("committed-prefix").
+Every historical captured role must still be represented exactly once. Omitting
+an earlier q0 prefix requires separate actual same-writer containment authority;
+a later generation, larger inventory or matching path does not establish it.
 
 The union command also requires #raw("--data-manifest PATH") and
 #raw("--proof-root PATH"). The manifest's authenticated bytes supply report data
@@ -260,6 +267,12 @@ measurement to its hashed workload, exact tuning case and input, complete raw
 lowered-key list and current Native owner proof. Its original cohort and
 #raw("native_keys_authenticated: false") flag remain recorded; postcombine seeds cannot replace raw
 source roots or remove an overlap with protected held-out inputs.
+An optional hashed #raw("source_owner_proof") authenticates an exposed historical
+tuning case independently of the current eligible tuning selection. It must use
+the full current compiled cohort and artifacts, bind its own successful uncached
+worker and qualification workload, and preserve the captured source's exact input
+and raw roots. This source authority does not add a known-seen case to the final
+tuning or held-out sets; current route and protected-owner exclusion checks still apply.
 Compatible multi-source unions preserve each source's original data-manifest
 identity rather than rebasing it to the union report's data manifest.
 The existing #raw("physical-census") kind requires an actual
