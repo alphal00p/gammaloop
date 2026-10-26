@@ -1233,7 +1233,7 @@ summary = "Dated measurements and diagnostic records. Treat their results as exp
 [[section.note]]
 id = "gl20-physical-frame-routing-wip"
 title = "WIP: physical graph frame and paired routing root"
-summary = "A compatibility candidate whose focused contracts pass and physical event data match, while the unchanged original GL20 numerical snapshot still fails."
+summary = "A compatibility candidate with exact historical routing and event data, while the unchanged numerical snapshot fails and stored evaluator operation differences remain under investigation."
 source = "docs/architecture/gl20-physical-frame-routing-wip.typ"
 kind = "Correctness investigation"
 status = "WIP · focused contracts pass; original numerical snapshot fails"

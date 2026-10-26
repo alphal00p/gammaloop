@@ -95,3 +95,47 @@ not substituted for the current one. Stored numerator, evaluator IR, and
 operation ordering remain the next comparison boundary; no tolerance or golden
 change is proposed. No five-loop physical
 execution is involved.
+
+== Read-only state comparison
+
+A single read-only decode with the actual candidate writer libraries confirmed
+that the stored physical frame now equals the historical frame. Edge endpoints,
+particle species, native orientations, source and target attachments, and all
+four cut boundaries match. All 35 loop-momentum bases have exactly the same
+stored tree and integer K and P routing matrices, in the same index order. The
+automatic default is edges 4, 5, and 9, and all four effective channels match.
+Native diagram names and group-member numbers are reported as provenance rather
+than used to establish this match. Surface IDs retain a permutation with exact
+energy and external-shift correspondence.
+
+The stored CFF comparison found the same 144 ordered denominator-path lists as
+the baseline current state after the explicit external-shift map. The historical
+comparison still has 140 matching denominator-path multisets and the same four
+previously proved rational identities. This establishes neither identical
+floating-point operation order nor a cause for the remaining weight mismatch.
+
+The hydrated selected vertex couplings are GC_2, GC_3, GC_11, and GC_94; their stored values
+match the historical values. The two generic model couplings whose values differ
+are not read by any of the eight retained main eager programs. The old programs
+contain conditional instructions that are absent from the current programs.
+The historical override input is one in all 16 retained bare and 16 residue
+buffers, despite its zero initialization in the builder. Any later comparison
+must preserve that actual dispatched value. These are stored-state and source
+observations; causal attribution remains unproved. This decode performed no new
+sample evaluation, generation, preprocessing, or backend activation.
+
+== Completed diagnostic source checkpoint
+
+The source-only supplement in
+`docs/validation/gl20-2026-10-26/` preserves 43 completed decoder, comparison,
+trace, generation-witness, and reusable controller source files. The deterministic
+archive is 109296 bytes, with SHA256
+`ea893fed318da3f058c3b832470d39337ae9cef98ceba04fa48d5a089adb6e89`.
+The directory also retains a Typst manifest, a structured per-source hash
+manifest, and a plain checksum list. Source members are exact copies of the
+finished helper files; frozen runtime and source directories were not modified.
+
+The supplement excludes state payloads, generated outputs, binaries,
+environments, licence values, and bound activation records. It preserves source
+methods, including diagnostic failures, rather than declaring a reusable launch
+bundle or a resolved numerical cause. No helper is executed while packaging it.
