@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "source": "https://inspirehep.net",
-  "updated": "2026-10-22",
+  "updated": "2026-10-26",
   "api_url": "https://inspirehep.net/api/literature?sort=mostrecent&q=%28a+V.Hirschi.1+or+a+M.Fraaije.1+or+a+L.Huber.1+or+a+B.Ruijl.1+or+a+Kaapo.Seppanen.1+or+a+Zeno.Capatti.1%29",
   "authors": [
     {
@@ -404,7 +404,7 @@
       "venue": "Phys.Rev.D 111 (2025) 125002",
       "doi": "10.1103/PhysRevD.111.125002",
       "arxiv": "2412.10864",
-      "citations": 13,
+      "citations": 14,
       "types": [
         "article"
       ],
@@ -1737,7 +1737,7 @@
       "venue": "CERN Yellow Rep.Monogr. 7 (2019) 1",
       "doi": "10.23731/CYRM-2019-007.1",
       "arxiv": "1902.04070",
-      "citations": 328,
+      "citations": 329,
       "types": [
         "book chapter"
       ],
@@ -2626,7 +2626,7 @@
         "ben-ruijl"
       ],
       "arxiv": "1707.06453",
-      "citations": 439,
+      "citations": 443,
       "types": [
         "article"
       ],
@@ -3554,7 +3554,7 @@
       "venue": "JHEP 06 (2016) 060",
       "doi": "10.1007/JHEP06(2016)060",
       "arxiv": "1604.01363",
-      "citations": 57,
+      "citations": 58,
       "types": [
         "article"
       ],
@@ -3847,7 +3847,7 @@
       "venue": "JHEP 07 (2014) 079",
       "doi": "10.1007/JHEP07(2014)079",
       "arxiv": "1405.0301",
-      "citations": 10921,
+      "citations": 10926,
       "types": [
         "article"
       ],
