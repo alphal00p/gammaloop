@@ -1,9 +1,9 @@
 {
   "schema": "vakint.private-source-alias-helper-checkpoint-index.v1",
   "archive": "vakint-5l-source-alias-helper-20261026.tar.gz",
-  "archive_bytes": 22461,
-  "archive_sha256": "cacbb566536cd4e60d68a62eabbff8743bd50f060d10f424aed3024cec2662af",
-  "archive_manifest_sha256": "303965fd126e291c5881277e02d05f15f5ffeca2c709ecc227db46d5be2f388f",
+  "archive_bytes": 22500,
+  "archive_sha256": "44e67c80fa41eedbf56938dae80e527a4fbb543c0429cddca6426e2db0e77f58",
+  "archive_manifest_sha256": "1609b2bceda1d6c1c35cc164a86d685680ea8fb81e824c34402eb04931f5bcd3",
   "members": 8,
   "exact_original_files": 6,
   "note": "source_alias_checkpoint.typ",
@@ -17,5 +17,6 @@
     "rustfmt_check_original_sources": true,
     "typst_note_compile": true
   },
-  "scope": "Source-only auxiliary checkpoint. Recorded compile SEALED_NOT_EXECUTED; runtime/source-owner qualification PENDING. No full CI, runtime or final-release claim."
+  "scope": "Source-only auxiliary checkpoint of the 2026-10-26 17:44:40 UTC SEALED_NOT_EXECUTED build snapshot. No later runtime controls, proof or acceptance included; no full CI or final-release claim.",
+  "source_build_snapshot_utc": "2026-10-26T17:44:40.108239+00:00"
 }

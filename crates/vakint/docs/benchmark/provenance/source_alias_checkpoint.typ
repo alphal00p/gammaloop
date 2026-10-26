@@ -31,13 +31,15 @@ hashes in these frozen records describe the original private layout.
 
 == State and validation limits
 
-At backup time, the actual recorded compile state was
-#raw("SEALED_NOT_EXECUTED"), with zero Native executions and no recorded input
-drift. The sealed executable's recorded SHA256 was
+The source/build snapshot sealed at 2026-10-26 17:44:40 UTC records
+#raw("SEALED_NOT_EXECUTED"), with zero Native executions at that point and no
+recorded input drift. The sealed executable's recorded SHA256 was
 #raw("43861e6e373128c5dea9445ebd4faf732969f568cdfb7722b10b564428f3a12d").
 Runtime admission, source-owner qualification, and protected-alias exclusion
-remain #raw("PENDING"). The earlier readiness note describes the inspection
-before this compilation; it must not be read as a later runtime result.
+remain #raw("PENDING") in this source/build snapshot. No later runtime controls,
+proofs or acceptance are included by this backup. The earlier readiness note
+describes the inspection before this compilation; it must not be read as a
+later runtime result.
 No executable, RLIB, scientific proof, raw trace, runtime output, cache payload,
 private environment, or license configuration is included.
 
