@@ -25,7 +25,8 @@ attachments of the same vacuum factors can share an integral class. Parametric
 polynomial equality only proposes a line permutation. The existing Symbolica
 basis solver tests the remaining independent-edge orientations; FeynKit must
 verify the complete momentum map for numerator transport. No polynomial-only
-identification is accepted. The orientation allowance is an operational limit.
+identification is accepted. The orientation allowance is an explicit operational
+diagnostic, enforced only when matching diagnostics are enabled.
 
 Contractions use one graph quotient before rewriting propagator incidence.
 This matters for shared endpoints: for census sector 31746, contracting the
@@ -55,12 +56,13 @@ loads the selected artifact before attaching the immutable five-loop catalogue.
 publication and reports its topology count and preparation time afterward.
 
 `VakintSettings::rustred_application_options` controls the native application's
-operational allowances. The default coefficient cache retains RustRed's 1 GiB
-and 16-million aggregate term ceilings. Its default policy evicts inactive,
-completed results in least-recently-used order. Entries needed by pending
-combinations or the current result stay protected. A protected working set or
-single entry that cannot fit still produces a resource error, not a missing-rule
-or closure failure; large admitted workloads can require a larger allowance.
+operational allowances. The default coefficient cache has no payload-byte
+ceiling (`usize::MAX`), and count/work diagnostics are disabled. Its default
+policy evicts inactive, completed results in least-recently-used order when a
+configured ceiling requires it. Entries needed by pending combinations or the
+current result stay protected. Under an explicit byte ceiling or enabled
+diagnostic ceiling, a protected working set or single entry that cannot fit
+produces a resource error, not a missing-rule or closure failure.
 A different path or different options reloads
 the application, so an older cache cannot bypass tightened allowances.
 
@@ -82,11 +84,16 @@ hit/miss, invalidation, eviction and payload counters. The existing
 optional memo is bypassed, while failures from actual native admission propagate.
 
 For a byte-governed cache in Rust, set `max_cached_coefficient_bytes` on the
-options' `reduction_limits`, and set `max_cached_coefficient_terms` to
-`usize::MAX`. In Python, `rustred_cache_bytes` selects that behavior;
-`rustred_cache_terms` can explicitly add a separate aggregate term ceiling.
+options' `reduction_limits`; this ceiling is enforced without enabling count/work
+diagnostics. For a term ceiling, set `max_cached_coefficient_terms` and enable
+the limits' diagnostic profile with `with_diagnostics()`. Python's
+`rustred_cache_bytes` sets the byte ceiling without enabling diagnostics;
+supplying `rustred_cache_terms` enables the corresponding native diagnostic
+profile and sets its aggregate term ceiling. Enabling a diagnostic profile also
+activates its other configured count/work thresholds.
 For example `rustred_cache_bytes=32*1024**3` requests a 32 GiB coefficient cache.
-None of these settings enlarge the saved mathematical entry union.
+These are per-cache retained-payload allowances, not total process memory or RSS
+limits. None of these settings enlarge the saved mathematical entry union.
 
 Rust callers select the policy through
 `settings.rustred_application_options.cache_policy`, using
@@ -97,20 +104,24 @@ fail-on-limit, and the separate lower-factor cache retains its existing policy.
 
 `settings.rustred_scalar_numerator_limits` controls caller-numerator lowering
 in the saved five-loop frontend, both when choosing a verified witness and when
-applying it. Its native defaults are unchanged. The charged work allowance is
-`exact_algebra.max_term_operations` (16 million by default); Python exposes the
-optional `rustred_scalar_max_work` keyword. This is a per-lowering-call allowance,
-not a process-memory budget or a total across all matching candidates. Raising
-it never changes the entry union. Tightening it is checked before cached rule
-results can be used, without reloading the immutable package. The legacy
-one-through-four-loop programs and the separate factor-product policy are not
-configured by this setting.
+applying it. Its count/work diagnostics are disabled by default. Rust callers
+enable them with `with_diagnostics()` and configure
+`exact_algebra.max_term_operations`; supplying Python's optional
+`rustred_scalar_max_work` keyword enables that diagnostic profile and sets the
+work allowance. An enabled allowance applies per lowering call, not to process
+memory or the total across all matching candidates. It never changes the entry
+union. Tightening it is checked before cached rule results can be used, without
+reloading the immutable package. The legacy one-through-four-loop programs and
+the separate factor-product policy are not configured by this setting.
 
-`rustred_product_limits` separately bounds lower-factor sum-of-products work
-and its coefficient cache (default 1 GiB and 16 million terms). It is not an
-aggregate budget with the saved application's cache. Python exposes the
-corresponding `rustred_product_cache_bytes` and `rustred_product_cache_terms`
-options, with the same byte-only override convention. Changing either typed
+`rustred_product_limits` separately configures lower-factor sum-of-products work
+and its coefficient cache. It defaults to no payload-byte ceiling and disabled
+count/work diagnostics. Rust callers explicitly enable its diagnostic profile
+with `with_diagnostics()`. Python's `rustred_product_cache_bytes` sets an enforced
+byte ceiling without enabling diagnostics; supplying `rustred_product_cache_terms`
+enables the corresponding diagnostic profile and sets its aggregate term ceiling.
+These allowances are separate from the saved application's cache and do not
+form an aggregate RSS budget or change campaign coverage. Changing either typed
 limits setting replaces both owned sessions; no old cache bypasses new limits.
 The existing four-loop native program also retains its own operational policy;
 raising the outer product allowance does not relax that inner session's cache
@@ -177,7 +188,8 @@ by `rustred_application_owner_preparation_statistics`.
 
 Catalogue preparation, package import, owner preparation and reduction are
 separate stages. Owner programs are prepared lazily on first use; rule results
-and lower-factor products have separate bounded mutable caches. Input matching,
+and lower-factor products have separate mutable caches with independent
+operational allowances. Input matching,
 verified witness selection and numerator lowering still run for each request;
 a warm saved-rule cache does not imply that the whole frontend is cached.
 The family's native inverse scalar-product basis is reused during lowering.
@@ -192,21 +204,27 @@ total process memory or an RSS limit.
 RustRed combines scalar coefficients, spectators and common-mass factors before
 requesting admission for lowered keys. Thus an expanded denominator-cancelling
 numerator is admitted on its surviving endpoints; intermediate terms which
-cancel exactly do not need independent coverage. Every remaining nonzero key
-follows the package's authenticated route to its declared owner and must belong
-to the recorded entry union. A numerator's total momentum degree does not
-establish this. A squared momentum can leave both a denominator term and a mass
-term, which may occupy different entry domains.
+cancel exactly do not need independent coverage. Under the native strict
+entry-coverage policy, each remaining nonzero key must belong to the authenticated
+entry union.
+Neither a verified momentum map nor a numerator's total momentum degree
+establishes membership. A squared momentum can leave both a denominator term
+and a mass term, which may occupy different entry domains.
 Campaign coverage is advisory in Vakint's partial-reduction mode: outside the
 recorded union, emit a warning and apply only individually justified rules.
 Missing rules leave exact residual integrals. Final undeclared masters are listed
 with parent DOT references, and numerical evaluation reports unavailable values.
 Invalid guards, transports, malformed input and resource exhaustion remain errors.
+Strict cache preparation uses advisory entry coverage but requires complete
+reduction; a completely reduced input outside the recorded union can be cached.
 Strict product caches accept only complete lower-factor reductions; a typed
 missing-coverage result retains the exact parent terminal instead.
 There is no adapter-wide cutoff at a particular numerator degree or total
-denominator power. Native scalar-algebra, tensor-projector and verified-matching
-work limits are operational bounds, separate from the authenticated entry union.
+denominator power. Explicit scalar-algebra and verified-matching count/work
+limits apply only when their diagnostic profiles are enabled. Tensor-projector
+allowances remain separate operational controls. None of these controls enlarge
+the authenticated entry union.
+Algebraic validity, guards, transports and cycle checks remain mandatory.
 Cancellation is performed within each supplied numerator before admission;
 separately supplied integral roots are admitted individually, not accepted on
 the assumption that different unsupported roots will cancel later.
