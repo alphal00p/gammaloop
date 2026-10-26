@@ -23,6 +23,8 @@ use symbolica::atom::AtomCore;
     )
 )]
 mod owner_proof;
+#[path = "build_cache/resource_guard_admission.rs"]
+mod resource_guard_admission;
 #[path = "build_cache/workload.rs"]
 #[cfg_attr(
     not(test),
@@ -377,6 +379,7 @@ fn main() -> Result<()> {
         args.len() == 3,
         "usage: authenticate_owner_roots INPUT.json OUTPUT.json",
     )?;
+    resource_guard_admission::admit_from_task_env()?;
     let input_path = Path::new(&args[1]);
     let output = Path::new(&args[2]);
     check(!output.exists(), "preserve the existing proof output")?;
