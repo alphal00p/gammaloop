@@ -3967,6 +3967,133 @@ impl ResolvedProcess {
         ))
     }
 
+    /// Restore the paired incoming/outgoing momentum labels in rebuilt edge order.
+    ///
+    /// The legacy sewn-graph canonicalization assigns the first endpoint of
+    /// each pair to the incoming state after every skeleton pass. The physical
+    /// species belongs to the pair; changing its side conjugates only the
+    /// all-incoming species carried by the external edge.
+    fn canonicalize_paired_external_momenta_assignment(
+        &self,
+        graph: &mut Graph<ColoredNode, EdgeColor>,
+        model: &Model,
+    ) -> Result<(), GenerationError> {
+        if self.generation_type != GenerationType::CrossSection
+            || !self.symmetrize_left_right
+            || self.incoming.is_empty()
+        {
+            return Ok(());
+        }
+        let pair_count = self.incoming.len();
+        let external_count =
+            pair_count
+                .checked_mul(2)
+                .ok_or(GenerationError::ArithmeticOverflow(
+                    "paired external momentum labels",
+                ))?;
+        let physical_particles = self
+            .incoming
+            .iter()
+            .map(|particle| model.particle_id(&particle.name))
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut seen_indices = vec![false; external_count];
+        for node in graph.nodes() {
+            let ColoredNode::External(external) = &node.data else {
+                continue;
+            };
+            if external.index >= external_count || seen_indices[external.index] {
+                return Err(GenerationError::GraphConstruction(
+                    "paired external momentum assignment requires unique complete external indices"
+                        .to_owned(),
+                ));
+            }
+            seen_indices[external.index] = true;
+            let expected_state = if external.index < pair_count {
+                ExternalState::Incoming
+            } else {
+                ExternalState::Outgoing
+            };
+            if node.edges.len() != 1
+                || external.state != expected_state
+                || external.particle != physical_particles[external.index % pair_count]
+            {
+                return Err(GenerationError::GraphConstruction(
+                    "paired external momentum assignment found inconsistent external metadata"
+                        .to_owned(),
+                ));
+            }
+        }
+        if seen_indices.iter().any(|seen| !seen) {
+            return Err(GenerationError::GraphConstruction(
+                "paired external momentum assignment requires both endpoints of every pair"
+                    .to_owned(),
+            ));
+        }
+
+        let mut pair_occurrences = vec![0; pair_count];
+        let mut node_updates = Vec::with_capacity(external_count);
+        let mut edge_updates = Vec::with_capacity(external_count);
+        for (edge_index, edge) in graph.edges().iter().enumerate() {
+            let source = &graph.nodes()[edge.vertices.0].data;
+            let target = &graph.nodes()[edge.vertices.1].data;
+            let ColoredNode::External(external) = source else {
+                if matches!(target, ColoredNode::External(_)) {
+                    return Err(GenerationError::GraphConstruction(
+                        "paired external momentum assignment requires external-first rebuilt edges"
+                            .to_owned(),
+                    ));
+                }
+                continue;
+            };
+            if matches!(target, ColoredNode::External(_)) {
+                return Err(GenerationError::GraphConstruction(
+                    "paired external momentum assignment cannot join two external vertices"
+                        .to_owned(),
+                ));
+            }
+            let pair = external.index % pair_count;
+            let (index, state) = match pair_occurrences[pair] {
+                0 => (pair, ExternalState::Incoming),
+                1 => (pair_count + pair, ExternalState::Outgoing),
+                _ => {
+                    return Err(GenerationError::GraphConstruction(
+                        "paired external momentum assignment encountered a repeated endpoint"
+                            .to_owned(),
+                    ));
+                }
+            };
+            pair_occurrences[pair] += 1;
+            node_updates.push((
+                edge.vertices.0,
+                ColoredNode::External(ExternalNode {
+                    index,
+                    state,
+                    particle: physical_particles[pair],
+                }),
+            ));
+            if external.state != state {
+                let mut data = edge.data;
+                data.particle = model.particle_by_id(data.particle)?.antiparticle;
+                edge_updates.push((edge_index, data));
+            }
+        }
+        if pair_occurrences.iter().any(|count| *count != 2) {
+            return Err(GenerationError::GraphConstruction(
+                "paired external momentum assignment did not visit both endpoints of every pair"
+                    .to_owned(),
+            ));
+        }
+        // Commit only after all metadata and particle lookups have succeeded.
+        // Do not resort edges: this is the legacy post-rebuild assignment step.
+        for (node, data) in node_updates {
+            graph.set_node_data(node, data);
+        }
+        for (edge, data) in edge_updates {
+            graph.set_edge_data(edge, data);
+        }
+        Ok(())
+    }
+
     /// Choose the reduced-skeleton representative before any numerator
     /// indices are instantiated.
     ///
@@ -4264,6 +4391,7 @@ impl ResolvedProcess {
                 .add_edge(vertices.0, vertices.1, directed, data)
                 .map_err(|error| GenerationError::GraphConstruction(error.to_string()))?;
         }
+        self.canonicalize_paired_external_momenta_assignment(&mut result, model)?;
         Ok(result)
     }
 
@@ -8746,4 +8874,6 @@ mod tests {
         assert!(vertex_numerator.contains("gammalooprs::hedge"));
         assert!(vertex_numerator.contains("gammalooprs::hedge"));
     }
+
+    include!("focused-tests.rs");
 }
