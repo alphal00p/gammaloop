@@ -1,0 +1,289 @@
+{
+  "schema": "vakint.suite-v2-source-capsule.v1",
+  "state": "DRAFT_INACTIVE_SOURCE_CONTROLS_ONLY_NOT_QUALIFIED",
+  "base_commit": "a20b7d7d3cb3e6fff62734823bf3bca9552f6613",
+  "original_source_directory": "/shared/codex-1/vakint_rustred/workspace/final-suite-v2-qualification",
+  "archive": {
+    "path": "suite-v2-post-consolidation-source-20261026.tar.gz",
+    "bytes": 79340,
+    "sha256": "0a34c0f84a08661a9da95e3c648fa0e29e86235e6ee31aa155646b838601bb5e",
+    "decoded_tar_bytes": 1556480,
+    "decoded_tar_sha256": "e3edf71cab4345eb7e8c431bb812f80e89ca40736656e83e5ce25a83d1b67b53",
+    "member_count": 28,
+    "regular_files_only": true,
+    "format": "ustar+gzip",
+    "determinism": {
+      "sort": "explicit sorted whitelist",
+      "file_mode": "0644",
+      "mtime": 0,
+      "uid": 0,
+      "gid": 0,
+      "uname": "",
+      "gname": "",
+      "gzip_mtime": 0,
+      "gzip_filename": "",
+      "gzip_compresslevel": 9
+    }
+  },
+  "source_census": {
+    "actual_files": 29,
+    "requested_source_extensions": 27,
+    "additional_authored_patch": 1,
+    "archived_source_files": 28,
+    "excluded_generated_pdf": 1
+  },
+  "original_collector_cohort": {
+    "main_source_revision": "03ad1ecfd75b776723562ab2a17e1393b17ccd84",
+    "native_revision": "4190f2c6f3158e3fc3cbcb1937e12e5971da9175",
+    "symbolica_revision": "9cd57678d8817ec33c05cacba4925162f1c86b0b",
+    "measure_cache_elf_sha256": "319ddef4583481f4924d30c110eaee62f185d0c92a9f03f1a2680b08ada929c2",
+    "owner_mapper_elf_sha256": "6e5e1b8dd09064c607f07a07df1a6bb815f16e1b3286e0e86ceb742bdfb87108",
+    "scope": "Historical collector provenance only; no consolidated-source binary or runtime authority is inferred."
+  },
+  "acceptance_boundary": {
+    "native_qualification_executions": 0,
+    "new_builds": 0,
+    "source_input_identity_freeze_only": true,
+    "final_runtime_freeze": false,
+    "runtime_activation_authorized": false,
+    "mapper_receipts_for_new_cases_present": false,
+    "source_drift_acceptance_claimed": false,
+    "held_out_performance_claimed": false,
+    "source_controls_are_not_self_contained_runtime": true,
+    "workspace_absolute_references_preserved": true,
+    "requirements_before_any_future_activation": [
+      "Resolve GL20 and validate actual consolidated source/dependencies.",
+      "Create authenticated final-cohort build/ELF/stamp artifacts and newly materialized command controls; old03ad packets must not be relabeled.",
+      "Obtain fresh explicit Root runtime GO and preserve exact PIDFD/50GB MemAvailable admission guard.",
+      "Obtain genuine successful full uncached qualification outputs and complete guards, then genuine mapper receipts for the new cases.",
+      "Preserve existing known-seen controls outside eligible new tuning/held-out arrays; selection/performance acceptance remains separate."
+    ]
+  },
+  "preserved_earlier_capsule": {
+    "commit": "7decbbab8d7b8ca59417c770deceb5030d2404eb",
+    "unchanged": true,
+    "relationship": "Earlier proposal remains historical; this archive adds later inactive source controls and cohort hold addendum."
+  },
+  "exclusions": [
+    {
+      "path": "readiness.pdf",
+      "bytes": 32685,
+      "sha256": "b3f25e24af26e768eff299763de8119c2e19aaf8011cc9d86fa3eabe0e7ec144",
+      "reason": "Generated PDF; canonical readiness.typ is archived."
+    }
+  ],
+  "not_included": [
+    "Private environment/license/token/credential files",
+    "Native ELF/object/cache/index/application payloads",
+    "Runtime logs, journals or live worker/cache state",
+    "Historical external receipt payloads merely referenced by source-control JSON"
+  ],
+  "files": [
+    {
+      "path": "final-suite-v2-qualification/all-five-source-exclusion-input.json",
+      "source_relative_path": "all-five-source-exclusion-input.json",
+      "bytes": 1319256,
+      "sha256": "9d26e210c3b8c8eb240e318177d9a30b1dbe7ab4e155a30946e467213f91ff51",
+      "archive_mode": "0644"
+    },
+    {
+      "path": "final-suite-v2-qualification/candidate-input-freeze.json",
+      "source_relative_path": "candidate-input-freeze.json",
+      "bytes": 4290,
+      "sha256": "08211b3afff1b7fa2a944b33424d194d63a45494f38c00659a561af5c5e1eb8d",
+      "archive_mode": "0644"
+    },
+    {
+      "path": "final-suite-v2-qualification/collector-artifact-normalization/collector-artifacts.json",
+      "source_relative_path": "collector-artifact-normalization/collector-artifacts.json",
+      "bytes": 10458,
+      "sha256": "c39584031fb1a14fcb5a6520e82813e139af84c65c3b01b3f07ea3d02f3b8814",
+      "archive_mode": "0644"
+    },
+    {
+      "path": "final-suite-v2-qualification/collector-artifact-normalization/normalize.py",
+      "source_relative_path": "collector-artifact-normalization/normalize.py",
+      "bytes": 11954,
+      "sha256": "67eed9f995fbee4f025c31a4cb4c6a9589979357b2f9c72cd828249d7ad5996c",
+      "archive_mode": "0644"
+    },
+    {
+      "path": "final-suite-v2-qualification/collector-artifact-normalization/validation.json",
+      "source_relative_path": "collector-artifact-normalization/validation.json",
+      "bytes": 5284,
+      "sha256": "c676806feac12676c53f33af4d6fb11d320dacad486780a6b48f9ce7acdb9e23",
+      "archive_mode": "0644"
+    },
+    {
+      "path": "final-suite-v2-qualification/commands/new-heldout-uncached.json",
+      "source_relative_path": "commands/new-heldout-uncached.json",
+      "bytes": 9782,
+      "sha256": "d453669eaa378bbe203b1852ddf838e0fa837b3366556934e7630e6288dffc60",
+      "archive_mode": "0644"
+    },
+    {
+      "path": "final-suite-v2-qualification/commands/new-tuning-uncached.json",
+      "source_relative_path": "commands/new-tuning-uncached.json",
+      "bytes": 9844,
+      "sha256": "629e02d9d8e87cfcfb0d1f54f6ee326f5e524e5d1fb5a637af63d19c781f0e22",
+      "archive_mode": "0644"
+    },
+    {
+      "path": "final-suite-v2-qualification/configs/new-heldout.inactive.json",
+      "source_relative_path": "configs/new-heldout.inactive.json",
+      "bytes": 3013,
+      "sha256": "aa04e05a6f30905f7b9ae22ff545d7bef259f10898b2f5183e8ee01bf4d6faf2",
+      "archive_mode": "0644"
+    },
+    {
+      "path": "final-suite-v2-qualification/configs/new-tuning.inactive.json",
+      "source_relative_path": "configs/new-tuning.inactive.json",
+      "bytes": 3008,
+      "sha256": "1324ef2209439cbce331592e4de11f75004c67631ca9f45fa30774993908d06a",
+      "archive_mode": "0644"
+    },
+    {
+      "path": "final-suite-v2-qualification/execution-plan.inactive.json",
+      "source_relative_path": "execution-plan.inactive.json",
+      "bytes": 13298,
+      "sha256": "73d50a91862a5f7b039a1316fa09d83b0b9bcfb69f0aef5d7ec8e6308ea1792c",
+      "archive_mode": "0644"
+    },
+    {
+      "path": "final-suite-v2-qualification/existing-collector-capability.json",
+      "source_relative_path": "existing-collector-capability.json",
+      "bytes": 11475,
+      "sha256": "97cdb357868faed0bc1f33deff18b9124c44c9893b632318cea7efafe0b881be",
+      "archive_mode": "0644"
+    },
+    {
+      "path": "final-suite-v2-qualification/final-workload-v2-provisional.json",
+      "source_relative_path": "final-workload-v2-provisional.json",
+      "bytes": 18637,
+      "sha256": "ea3ee944f7241292c0c63127529b1f46a13a99f852855a8f9e0978ebc3b88bfd",
+      "archive_mode": "0644"
+    },
+    {
+      "path": "final-suite-v2-qualification/freeze-contract-review.json",
+      "source_relative_path": "freeze-contract-review.json",
+      "bytes": 12283,
+      "sha256": "165fbce97395e9444ddddc8002b8935c4179939cea7978cbc86e3ec2d0e3704e",
+      "archive_mode": "0644"
+    },
+    {
+      "path": "final-suite-v2-qualification/freeze_candidate_inputs.py",
+      "source_relative_path": "freeze_candidate_inputs.py",
+      "bytes": 13770,
+      "sha256": "cd68aa330dd7377549d23a8088012a3dc3a8e405c27a7d9091d5912a20c1655f",
+      "archive_mode": "0644"
+    },
+    {
+      "path": "final-suite-v2-qualification/frozen-auth-selection-protocol-v2.json",
+      "source_relative_path": "frozen-auth-selection-protocol-v2.json",
+      "bytes": 3780,
+      "sha256": "9feb353aa2455f86a3431b1ed34bb7ef2aa275f9d544c98c4147c74255d26b6f",
+      "archive_mode": "0644"
+    },
+    {
+      "path": "final-suite-v2-qualification/frozen-public-reserves-v2.json",
+      "source_relative_path": "frozen-public-reserves-v2.json",
+      "bytes": 4370,
+      "sha256": "5a7ff9cec80516b09f3ccca81fd2602ec2a39c34583b3f0ca6d2b4ce077936a5",
+      "archive_mode": "0644"
+    },
+    {
+      "path": "final-suite-v2-qualification/frozen-public-suites-v2.json",
+      "source_relative_path": "frozen-public-suites-v2.json",
+      "bytes": 11753,
+      "sha256": "78819a4dafefba3e967d6f1cd550c1a83de2db20c00496299b7bb40a34b4bd01",
+      "archive_mode": "0644"
+    },
+    {
+      "path": "final-suite-v2-qualification/launch-qualification.sh",
+      "source_relative_path": "launch-qualification.sh",
+      "bytes": 453,
+      "sha256": "780301dc58ab76d7cbfb2e90c97b1f9c725c7daae8361f569733f6edd0d6efed",
+      "archive_mode": "0644"
+    },
+    {
+      "path": "final-suite-v2-qualification/legacy-known-seen-source-authority.json",
+      "source_relative_path": "legacy-known-seen-source-authority.json",
+      "bytes": 1859,
+      "sha256": "6d6e5f52dc28677526a05ccadc769b0c6f2351dfce1564159c9703473f864b6a",
+      "archive_mode": "0644"
+    },
+    {
+      "path": "final-suite-v2-qualification/mapper-execution.pending.json",
+      "source_relative_path": "mapper-execution.pending.json",
+      "bytes": 4739,
+      "sha256": "756bc31b115536e1d7c8b7302d37df7ca787a12c5bdaff4a5144e185cf0344d8",
+      "archive_mode": "0644"
+    },
+    {
+      "path": "final-suite-v2-qualification/mapping-input-v2-template.json",
+      "source_relative_path": "mapping-input-v2-template.json",
+      "bytes": 16478,
+      "sha256": "4e52fa6a8debf1f508814202950e040d1516517b0c788d1e261b1f4fecf4fc7e",
+      "archive_mode": "0644"
+    },
+    {
+      "path": "final-suite-v2-qualification/post-consolidation-hold-addendum.json",
+      "source_relative_path": "post-consolidation-hold-addendum.json",
+      "bytes": 3194,
+      "sha256": "1ccc825251a94ae2d76fa6a9d7b9fa8ab2e1e4fdf62ced03452be184612c406f",
+      "archive_mode": "0644"
+    },
+    {
+      "path": "final-suite-v2-qualification/prepare_inactive_controls.py",
+      "source_relative_path": "prepare_inactive_controls.py",
+      "bytes": 10166,
+      "sha256": "566b5db1f74c4bc9bbab81fa93a99c2cf758dadcbcd58336ac6f23c222accbc3",
+      "archive_mode": "0644"
+    },
+    {
+      "path": "final-suite-v2-qualification/prior-call-feasibility.json",
+      "source_relative_path": "prior-call-feasibility.json",
+      "bytes": 3566,
+      "sha256": "26366a308f109e42e1ddd9eb8a94376825d981ac99b219b6581980cae7048136",
+      "archive_mode": "0644"
+    },
+    {
+      "path": "final-suite-v2-qualification/qualification_command_actor.py",
+      "source_relative_path": "qualification_command_actor.py",
+      "bytes": 18562,
+      "sha256": "fa92143b49d87d38cd67171c013fb31464919a2613b15d3bd41bcf146c0f4226",
+      "archive_mode": "0644"
+    },
+    {
+      "path": "final-suite-v2-qualification/readiness.typ",
+      "source_relative_path": "readiness.typ",
+      "bytes": 2468,
+      "sha256": "a3a8dbb105c53ece542c76ca43ab3d58cfea101d21e53861014f06b340d1d940",
+      "archive_mode": "0644"
+    },
+    {
+      "path": "final-suite-v2-qualification/small-actor-delta.patch",
+      "source_relative_path": "small-actor-delta.patch",
+      "bytes": 3399,
+      "sha256": "23196c8e69dd14d6f9807532c6f88798af28a33e13f829f3b189594c59fe1f93",
+      "archive_mode": "0644"
+    },
+    {
+      "path": "final-suite-v2-qualification/source-readiness.json",
+      "source_relative_path": "source-readiness.json",
+      "bytes": 1838,
+      "sha256": "92cde4308670e59f850b446323db8b31334fe5cf47e40065f30523a7835a696b",
+      "archive_mode": "0644"
+    }
+  ],
+  "verification": {
+    "all_members_match_original_sha256_and_lengths": true,
+    "two_independent_encodings_identical": true,
+    "all_members_extracted_and_hashed": true,
+    "source_bytes_unchanged_after_capture": true,
+    "regular_safe_relative_paths_only": true,
+    "all_json_parses": true,
+    "python_ast_parse_without_import": true,
+    "no_archived_script_import_or_execution": true
+  }
+}
