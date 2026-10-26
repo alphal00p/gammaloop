@@ -4554,6 +4554,65 @@ mod tests {
     }
 
     #[test]
+    fn multiply_many_restarts_named_staging_after_dot_and_scalar_zero() {
+        test_support::test_initialize();
+        let [i, j, k, l] = [99921, 99923, 99925, 99927].map(AbstractIndex::Normal);
+        let slot = |index| rep().slot(PartialIndex::Explicit(index));
+        let a = vector("storage_restart_a", slot(i));
+        let b = vector("storage_restart_b", slot(i));
+        let zero = SymbolicTensor::infer(Atom::Zero).unwrap();
+        let dot = a.multiply(&b).unwrap();
+        assert!(matches!(dot.expression.as_view(), AtomView::Fun(function)
+            if function.get_symbol() == SPENSO_TAG.dot));
+        assert!(!PortRewriteState::exact_arithmetic(
+            dot.expression.as_view()
+        ));
+        let t = partial_tensor(
+            SPENSO_TAG.tensor_symbol("storage_restart_t"),
+            &[slot(j), slot(k)],
+            &[slot(j), slot(k)],
+        );
+        let u = partial_tensor(
+            SPENSO_TAG.tensor_symbol("storage_restart_u"),
+            &[slot(j)],
+            &[slot(j)],
+        );
+        let v = partial_tensor(
+            SPENSO_TAG.tensor_symbol("storage_restart_v"),
+            &[slot(l)],
+            &[slot(l)],
+        );
+        let factors = [&a, &b, &zero, &t, &u, &v];
+        let expected = assert_many_matches_fold(&factors);
+        NAMED_PRODUCT_WORK.with(|work| work.set(Default::default()));
+        let actual = SymbolicTensor::multiply_many(factors).unwrap();
+        assert_eq!(
+            NAMED_PRODUCT_WORK.with(|work| work.get()).interface_builds,
+            2,
+            "the compact dot flushes the first batch; scalar zero permits another named batch"
+        );
+        assert!(actual.same_value(&expected));
+        assert_eq!(actual.expression, Atom::Zero);
+        assert_eq!(actual.structure.logical_slots(), [slot(k), slot(l)]);
+        let history = actual.explicit_index_occurrences().unwrap();
+        assert_eq!(history.entries().count(), 4);
+        for (index, count) in [(i, 2), (j, 2), (k, 1), (l, 1)] {
+            assert_eq!(history.count(rep().slot(index)), count);
+        }
+        for (index, probe) in [(i, &a), (j, &u)] {
+            for result in [
+                actual.multiply(probe),
+                SymbolicTensor::multiply_many([&actual, probe]),
+            ] {
+                assert!(matches!(result,
+                    Err(TensorCompositionError::InvalidExplicitMultiplicity { index: failed, occurrences: 3 })
+                        if failed == index
+                ));
+            }
+        }
+    }
+
+    #[test]
     fn multiply_many_flushes_before_compact_dot_exposed_by_scalar_cancellation() {
         test_support::test_initialize();
         let x = Atom::var(symbol!("many_dot_coefficient"));
