@@ -43,6 +43,11 @@ label = "Integrals"
 product = "vakint"
 role = "Integral-evaluation library"
 
+[[task]]
+label = "Diagrams"
+product = "feynkit"
+role = "Particle-physics toolkit"
+
 [[pillar]]
 label = "01 · Physics"
 title = "Local Unitarity"

@@ -429,7 +429,7 @@ let
           "$out/products/gammaloop/index.html"
         python3 scripts/check-docs-html.py "$out"
 
-        for product in gammaloop linnet spenso idenso vakint; do
+        for product in gammaloop linnet spenso idenso vakint feynkit; do
           test -s "$out/products/$product/snapshots/v0.3.4/.note"
         done
       '';
@@ -490,7 +490,7 @@ let
         cmp "$docs_pages_test/index.html" "$TMPDIR/portal-before-snapshot.html"
         cmp "$docs_pages_test/developers/.note" "$TMPDIR/developers-before-snapshot.note"
         cmp "$docs_pages_test/products/gammaloop/latest/.note" "$TMPDIR/latest-before-snapshot.note"
-        for product in gammaloop linnet spenso idenso vakint; do
+        for product in gammaloop linnet spenso idenso vakint feynkit; do
           test -s "$docs_pages_test/products/$product/snapshots/v0.3.4/.note"
         done
 
@@ -512,7 +512,7 @@ let
         test -s "$out/developers/assets/site.js"
         test -s "$out/developers/architecture/gammaloop-architecture/index.html"
         ${alphal00pDocsDeveloperAssertions "$out"}
-        for product in gammaloop linnet spenso idenso vakint; do
+        for product in gammaloop linnet spenso idenso vakint feynkit; do
           product_root="$out/products/$product"
           test -s "$product_root/index.html"
           test -s "$product_root/latest/index.html"

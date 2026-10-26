@@ -1217,7 +1217,7 @@ button[data-copy-target] { display: none; }
 }
 @keyframes notebook-spin { to { transform: rotate(360deg); } }
 .live-notebook-cells { min-width: 0; }
-.reference-copy-row:has(+ .live-notebook[data-linnet-notebook="python_quickstart"][data-notebook-state="active"]) { display: none; }
+.reference-copy-row:has(+ .live-notebook[data-notebook="python_quickstart"][data-notebook-state="active"]) { display: none; }
 /* Keep Typst artwork on light paper without recoloring its drawing semantics. */
 :is(.live-notebook, :host) :is(svg[width$="pt"], img[src^="data:image/svg+xml;"]) { display: block; max-width: 100%; height: auto; margin: 1rem auto; padding: .75rem; border-radius: .35rem; background: white; }
 .live-notebook marimo-island { display: block; min-width: 0; margin-block: .8rem; }

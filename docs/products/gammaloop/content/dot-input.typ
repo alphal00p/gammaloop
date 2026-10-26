@@ -18,7 +18,7 @@ Python and its dependencies; rendering then runs locally in your browser.
 #context if target() == "html" {
   html.elem("div", attrs: (
     class: "live-notebook",
-    "data-linnet-notebook": "physics_render_settings",
+    "data-notebook": "physics_render_settings",
     "aria-label": "Physics DOT rendering notebook",
   ))[
     #html.elem("p", attrs: (class: "live-notebook-fallback"))[

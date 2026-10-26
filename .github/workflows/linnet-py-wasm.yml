@@ -1,4 +1,4 @@
-name: Linnet Python WebAssembly
+name: Shared Symbolica notebook WebAssembly
 
 on:
   pull_request:
@@ -13,6 +13,11 @@ on:
       - 'crates/linnest/**'
       - 'crates/linnet/**'
       - 'crates/linnet-py/**'
+      - 'crates/feynkit*/**'
+      - 'crates/spenso*/**'
+      - 'crates/spynso3/**'
+      - 'crates/idenso/**'
+      - 'examples/notebooks/symbolica-host/**'
   push:
     branches:
       - main
@@ -33,18 +38,19 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: 1.98.1
           targets: wasm32-unknown-emscripten
 
       - uses: pypa/cibuildwheel@v4.2.0
         with:
-          package-dir: crates/linnet-py
+          package-dir: examples/notebooks/symbolica-host
         env:
           CIBW_BUILD: cp314-pyodide_wasm32
-          CIBW_ENVIRONMENT_PYODIDE: CARGO_PROFILE_RELEASE_LTO=thin CARGO_BUILD_JOBS=2
+          CIBW_ENVIRONMENT_PYODIDE: MATURIN_PEP517_ARGS='--locked --no-default-features --features wasm' RUSTFLAGS='' CARGO_PROFILE_RELEASE_LTO=thin CARGO_BUILD_JOBS=2
           CIBW_PLATFORM: pyodide
 
       - uses: actions/upload-artifact@v4
         with:
-          name: linnet-py-pyemscripten-wheel
+          name: symbolica-pyemscripten-wheel
           path: wheelhouse/*.whl
           if-no-files-found: error

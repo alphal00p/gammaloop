@@ -24,6 +24,21 @@ use super::{SiteBuilder, absolute_from, copy_tree, server::LiveServer};
 
 const QUIET_PERIOD: Duration = Duration::from_millis(100);
 const MAX_BATCH: Duration = Duration::from_millis(500);
+const FEYNKIT_PYTHON_CRATES: &[&str] = &[
+    "feynkit-py",
+    "feynkit-cff",
+    "feynkit-generator",
+    "feynkit-graph",
+    "feynkit-kinematics",
+    "feynkit-model",
+    "feynkit-tensor",
+    "feynkit-ufo",
+    "idenso",
+    "linnet",
+    "spenso",
+    "spenso-hep-lib",
+    "spenso-macros",
+];
 const LINNET_PYTHON_CRATES: &[&str] = &["linnet-py", "linnet"];
 const SPENSO_PYTHON_CRATES: &[&str] = &[
     "spynso3",
@@ -614,6 +629,12 @@ impl SiteBuilder {
         }
         for (owner, feature, component, crates) in [
             (
+                "feynkit",
+                "feynkit",
+                "feynkit-community",
+                FEYNKIT_PYTHON_CRATES,
+            ),
+            (
                 "gammaloop",
                 "gammaloop",
                 "gammaloop-python",
@@ -1006,6 +1027,28 @@ mod tests {
             LINNET_PYTHON_CRATES,
             false,
             &linnet_change,
+        ));
+        let feynkit_change = vec![PathBuf::from("crates/feynkit-tensor/src/lib.rs")];
+        assert!(exporter_matches_change(
+            "feynkit",
+            "feynkit",
+            FEYNKIT_PYTHON_CRATES,
+            false,
+            &feynkit_change,
+        ));
+        assert!(exporter_matches_change(
+            "all",
+            "feynkit",
+            FEYNKIT_PYTHON_CRATES,
+            false,
+            &linnet_change,
+        ));
+        assert!(!exporter_matches_change(
+            "vakint",
+            "feynkit",
+            FEYNKIT_PYTHON_CRATES,
+            false,
+            &feynkit_change,
         ));
         let gamma_change = vec![PathBuf::from("crates/gammalooprs/src/processes/mod.rs")];
         assert!(exporter_matches_change(

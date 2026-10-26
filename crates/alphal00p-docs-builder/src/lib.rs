@@ -1,4 +1,4 @@
-//! Build and validate the five independently rendered product manuals.
+//! Build and validate the six independently rendered product manuals.
 
 mod server;
 mod typst_render;
@@ -37,7 +37,14 @@ use tempfile::{Builder as TempDirBuilder, TempDir};
 use typst_render::{CliTypstRenderer, TypstRenderJob, TypstRenderer};
 use walkdir::WalkDir;
 
-const PRODUCT_IDS: [&str; 5] = ["gammaloop", "linnet", "spenso", "idenso", "vakint"];
+const PRODUCT_IDS: [&str; 6] = [
+    "gammaloop",
+    "linnet",
+    "spenso",
+    "idenso",
+    "vakint",
+    "feynkit",
+];
 const PORTAL_SCHEMA_VERSION: u32 = 2;
 const TALKS_SCHEMA_VERSION: u32 = 1;
 const DEVELOPER_SCHEMA_VERSION: u32 = 3;
@@ -2061,6 +2068,13 @@ impl SiteBuilder {
         let site = staging.path().join("site");
         fs::create_dir_all(&site)?;
         self.write_site_assets(&site)?;
+        let notebooks = self.root.join(format!(
+            "docs/generated/notebooks/products/{}/latest/assets/notebooks",
+            product.id
+        ));
+        if notebooks.is_dir() {
+            copy_tree(&notebooks, &site.join("assets/notebooks"))?;
+        }
 
         let metadata = self.metadata(product, options.channel, options.tag, &channel_path)?;
         fs::write(

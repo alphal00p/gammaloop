@@ -1,6 +1,6 @@
 # Documentation contributor entry point
 
-The GammaLoop, Linnet, Spenso, Idenso, and Vakint documentation is authored in
+The GammaLoop, FeynKit, Linnet, Spenso, Idenso, and Vakint documentation is authored in
 Typst and built by the workspace documentation crates. This compatibility
 README is an index, not a second copy of the manual. Read
 [`CONTRIBUTING.typ`](../CONTRIBUTING.typ) before editing documentation.
@@ -42,7 +42,7 @@ Python inventories, checked examples, source-format policy, links, and assets.
 It also reports developer-note ownership, review, and evidence reminders; site
 and watch builds enforce validity without repeating that maintenance audit.
 `docs-site <product>` produces an honest product-scoped preview. `docs-site
-all` builds the complete portal and all five products. Output defaults to
+all` builds the complete portal and all six products. Output defaults to
 `target/alphal00p-docs`; `docs-watch` continuously rebuilds one product and
 keeps the last successful preview available after an error. Use the `just`
 recipe for watching: it selects the optional embedded-Typst feature and its

@@ -22,6 +22,8 @@ on:
       - 'spenso-macros-v*'
       - 'spenso-hep-lib-v*'
       - 'spynso3-v*'
+      - 'feynkit-v*'
+      - 'feynkit-*-v*'
       - 'idenso-v*'
       - 'idenso-community-v*'
       - 'vakint-v*'
@@ -56,6 +58,7 @@ on:
       - 'crates/**'
       - 'docs/**'
       - 'examples/cli/**'
+      - 'examples/notebooks/**'
       - 'flake.lock'
       - 'flake.nix'
       - 'justfile'
@@ -233,7 +236,7 @@ jobs:
             python3 scripts/update-publications.py --keep-existing-on-error
 
       - id: docs
-        name: Build all five sites
+        name: Build all registered sites
         env:
           CACHEABLE_SNAPSHOT: ${{ steps.snapshot_source.outputs.cacheable }}
           CHANNEL: ${{ steps.release.outputs.channel }}
@@ -285,7 +288,7 @@ jobs:
             echo "seconds=$build_seconds"
             echo "cargo_producer=$cargo_producer"
           } >> "$GITHUB_OUTPUT"
-          echo "Reusable Cargo producer: $cargo_producer; five-site build: ${build_seconds}s"
+          echo "Reusable Cargo producer: $cargo_producer; documentation build: ${build_seconds}s"
 
       - id: notebook_source
         name: Select browser notebook support at the documented revision
@@ -296,6 +299,13 @@ jobs:
             && grep -Fq -- '"--docs"' crates/linnet-py/examples/export_wasm.py; then
             {
               echo "enabled=true"
+              if [ -f examples/notebooks/symbolica-host/pyproject.toml ]; then
+                echo "community=true"
+                echo "package=examples/notebooks/symbolica-host"
+              else
+                echo "community=false"
+                echo "package=crates/linnet-py"
+              fi
               echo "revision=$(git rev-parse HEAD)"
               echo "epoch=$(git log -1 --format=%ct)"
             } >> "$GITHUB_OUTPUT"
@@ -304,28 +314,29 @@ jobs:
           fi
 
       - id: notebook_wheel
-        name: Restore this revision's browser wheel
+        name: Restore this revision's shared notebook wheel
         if: steps.notebook_source.outputs.enabled == 'true'
         uses: actions/cache@v4
         with:
-          path: ${{ runner.temp }}/linnet-docs-wheel
-          key: linnet-docs-wheel-v1-${{ runner.os }}-cibuildwheel-4.2.0-${{ steps.notebook_source.outputs.revision }}
+          path: ${{ runner.temp }}/notebook-docs-wheel
+          key: notebook-docs-wheel-v2-${{ runner.os }}-rust-1.98.1-cibuildwheel-4.2.0-${{ steps.notebook_source.outputs.revision }}
 
       - name: Install the WebAssembly Rust target
         if: steps.notebook_source.outputs.enabled == 'true' && steps.notebook_wheel.outputs.cache-hit != 'true'
         uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: 1.98.1
           targets: wasm32-unknown-emscripten
 
       - name: Build and test the documented revision's browser wheel
         if: steps.notebook_source.outputs.enabled == 'true' && steps.notebook_wheel.outputs.cache-hit != 'true'
         uses: pypa/cibuildwheel@v4.2.0
         with:
-          package-dir: crates/linnet-py
-          output-dir: ${{ runner.temp }}/linnet-docs-wheel
+          package-dir: ${{ steps.notebook_source.outputs.package }}
+          output-dir: ${{ runner.temp }}/notebook-docs-wheel
         env:
           CIBW_BUILD: cp314-pyodide_wasm32
-          CIBW_ENVIRONMENT_PYODIDE: CARGO_PROFILE_RELEASE_LTO=thin CARGO_BUILD_JOBS=2 SOURCE_DATE_EPOCH=${{ steps.notebook_source.outputs.epoch }}
+          CIBW_ENVIRONMENT_PYODIDE: MATURIN_PEP517_ARGS='${{ steps.notebook_source.outputs.community == 'true' && '--locked --no-default-features --features wasm' || '' }}' RUSTFLAGS='' CARGO_PROFILE_RELEASE_LTO=thin CARGO_BUILD_JOBS=2 SOURCE_DATE_EPOCH=${{ steps.notebook_source.outputs.epoch }}
           CIBW_PLATFORM: pyodide
           SOURCE_DATE_EPOCH: ${{ steps.notebook_source.outputs.epoch }}
 
@@ -333,6 +344,7 @@ jobs:
         name: Bundle live notebooks with the documentation
         env:
           NOTEBOOKS_ENABLED: ${{ steps.notebook_source.outputs.enabled }}
+          COMMUNITY_NOTEBOOKS: ${{ steps.notebook_source.outputs.community }}
           DOCS_PATH: ${{ steps.docs.outputs.path }}
           CHANNEL: ${{ steps.release.outputs.channel }}
           SNAPSHOT_TAG: ${{ steps.release.outputs.snapshot_tag }}
@@ -345,7 +357,7 @@ jobs:
           fi
 
           shopt -s nullglob
-          wheels=("$RUNNER_TEMP/linnet-docs-wheel/"*.whl)
+          wheels=("$RUNNER_TEMP/notebook-docs-wheel/"*.whl)
           if [ "${#wheels[@]}" -ne 1 ]; then
             echo "Expected exactly one browser wheel for the documented revision" >&2
             exit 2
@@ -364,6 +376,16 @@ jobs:
             products+=(gammaloop)
             product_selection=true
           fi
+          if [ "$COMMUNITY_NOTEBOOKS" = true ] \
+            && [ -d "$staged_docs/products/feynkit/$channel_path" ]; then
+            products+=(feynkit)
+            nix develop --command just notebook-ufo-wheel "$RUNNER_TEMP/ufo-docs-wheel"
+            ufo_wheels=("$RUNNER_TEMP/ufo-docs-wheel/"*.whl)
+            if [ "${#ufo_wheels[@]}" -ne 1 ]; then
+              echo "Expected exactly one pinned UFO loader wheel" >&2
+              exit 2
+            fi
+          fi
           for product in "${products[@]}"; do
             # Manual snapshots use the exporter from the selected historical
             # revision, including its original Linnet-only boolean --docs flag.
@@ -371,11 +393,16 @@ jobs:
             if [ "$product_selection" = true ]; then
               docs_args+=("$product")
             fi
+            dependency_args=()
+            if [ "$product" = feynkit ]; then
+              dependency_args=(--dependency-wheel "${ufo_wheels[0]}")
+            fi
             nix develop --command \
               uv run --no-project --with marimo==0.24.0 python \
               crates/linnet-py/examples/export_wasm.py \
               "${docs_args[@]}" \
               --wheel "${wheels[0]}" \
+              "${dependency_args[@]}" \
               --output "$staged_docs/products/$product/$channel_path/assets/notebooks"
           done
           echo "path=$staged_docs" >> "$GITHUB_OUTPUT"
