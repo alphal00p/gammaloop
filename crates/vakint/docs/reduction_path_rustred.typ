@@ -232,3 +232,82 @@ Vakint `src/rustred_evaluation/factor_projection.rs:90–113`;
 `data.rs:1149–1178`.
 Revisions: Native `4190f2c6f3158e3fc3cbcb1937e12e5971da9175`;
 Vakint `d29eca063a33690c8395a8e0c34dca869847f987`.]
+
+#pagebreak()
+== Integral descent is stronger than template ordering
+
+RustRed checks a hierarchy of *instantiated integral keys*. Every surviving child
+of an applied formula must be strictly smaller than its target under the saved
+owner's mathematical ordering. Between owners, leaving the current support
+requires a proper pinch; verified transports preserve the number of active
+denominators. The detailed local order can include physical weighted degrees,
+numerator and dot excess, and coordinate tie breakers. *Rank alone is not a
+general progress measure.*
+
+These checks give a conditional termination argument for finite concrete inputs
+and finite branching, assuming each local algebra/transport operation finishes.
+They do not themselves establish that every nonmaster has an applicable rule,
+or that a single sweep through rule templates suffices.
+
+=== Why a fixed exhaustive template sweep can fail
+
+Consider the following schematic rewrite system, unrelated to the actual IBPs:
+
+#panel[
+  #grid(columns: (1fr, 1fr), column-gutter: 8mm,
+    [$A_n arrow.r B_(n-1)$ for $n >= 1$],
+    [$B_n arrow.r A_n$ for $n >= 0$])
+  #align(center)[$A_0$ is terminal; $mu(A_n)=2n$, $mu(B_n)=2n+1$.]
+]
+
+Every step strictly decreases $mu$, yet full reduction requires alternating
+the two templates:
+
+$ A_2 arrow.r B_1 arrow.r A_1 arrow.r B_0 arrow.r A_0. $
+
+Exhausting the first template and then the second leaves $A_1$ reducible.
+Reversing the template order leaves $B_1$ reducible. The graph of concrete
+instances is acyclic; the template graph has a cycle.
+
+One exhaustive sweep needs an additional triangularity property: *later templates
+must never create matches for earlier templates*. A dependency analysis could
+identify ordered phases and mutually dependent groups requiring local iteration.
+No such one-sweep template ordering has been established here for the campaign.
+
+=== The useful order is over the live weighted integrals
+
+Suppose routing and canonicalization have been incorporated into a common
+well-founded order, and each permitted rewrite satisfies
+
+$ K arrow.r sum_j c_j K_j, quad K_j < K. $
+
+A global frontier can then select its *greatest live key*, apply one valid rule,
+and immediately merge the children with all other live contributions. A key is
+not expanded while a larger parent capable of contributing to it remains.
+Consequently, each distinct key needs expansion at most once per request.
+
+#panel(fill: green)[
+  *Cancellation before work.* In the example on page 2, both $X$ and $Y$ are
+  greater than $U$. Process them before $U$: its coefficient becomes
+  $2-2=0$, so its complete descendant calculation is avoided. Exhausting one
+  template recursively could reach $U$ before the other parent contributes.
+]
+
+Exact combination requires canonical identities and compatible validity
+conditions. Branching can increase the number of live terms even while every
+child is smaller; the active collection's multiset order supplies the descent
+argument. A common order across owners is an implementation obligation, not
+something provided by sorting only on rank.
+
+Completed unit memoization already avoids much repeated work. A frontier adds
+the opportunity to skip globally cancelled branches and their large terminal
+maps, at the possible cost of a wider live expression. Contextual cancellation
+still supplies no reusable unit identity for the cancelled integral. Neither
+descent nor the frontier alone proves completeness of the master catalogue.
+
+#small[*Hierarchy audit.* Native `core/solver/candidate_reduction/evaluator.rs:161–189,266–301`;
+`core/solver/candidate_reduction/routed/trace.rs:89–109`;
+`core/sector/ordering/comparison.rs:44–111`;
+`docs/research/exact_finite_traversal_termination_2026-10-15.md:7–76`.
+This page states the conditional frontier argument; it does not describe an
+implemented global frontier or certify the campaign's template dependency graph.]
