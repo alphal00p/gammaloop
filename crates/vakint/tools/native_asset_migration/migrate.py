@@ -10,6 +10,11 @@ import struct
 import subprocess
 from pathlib import Path
 
+if not __debug__:
+    raise RuntimeError(
+        "Run without Python -O/PYTHONOPTIMIZE: migration assertions are required"
+    )
+
 OLD_REVISION = "a19c760dd567c239f30d87e4e924ca2f8b8457ab"
 NEW_REVISION = "f514a7fe1b19e851207f9421ef9a4a4157d5f0e5"
 
@@ -49,6 +54,12 @@ def build_bridge(source, label, work, bridge):
         ["git", "-C", str(source), "rev-parse", "HEAD"], text=True
     ).strip()
     assert revision == {"old": OLD_REVISION, "new": NEW_REVISION}[label], revision
+    dirty = subprocess.check_output(
+        ["git", "-C", str(source), "status", "--porcelain", "--untracked-files=no"],
+        text=True,
+    )
+    if dirty:
+        raise ValueError(f"Symbolica source checkout has tracked changes: {source}")
     package = work / label
     package.mkdir(parents=True, exist_ok=True)
     symbolica = json.dumps(str(source.resolve()))
