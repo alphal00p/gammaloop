@@ -294,3 +294,6 @@ __marimo__/
 
 # Downloaded official Vakint loop packs, wherever tests or callers install them.
 .vakint-external-data/
+
+# Generated notebook cells and shared browser wheels.
+/docs/generated/notebooks/

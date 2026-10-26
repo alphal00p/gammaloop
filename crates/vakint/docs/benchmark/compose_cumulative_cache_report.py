@@ -341,6 +341,31 @@ def compose_union(
                 ),
                 "union finite source differs from its preserved original snapshot",
             )
+        elif source["kind"] == "native-index-prefix":
+            preserved = reports.preserved_native_source(source, output)
+            summary = preserved["receipts"].get("native_summary")
+            reports.require(
+                summary is not None,
+                "union prefix lacks its authenticated Native per-role census",
+            )
+            summary = summary["raw_receipt"]
+            role = source["prefix_role"]
+            index = reports.hashed_file(source["snapshot"], output)
+            reports.require(
+                reports.digest(index) == frozen["manifest_sha256"]
+                and index.stat().st_size == frozen["manifest_bytes"]
+                and reports.same_json_value(
+                    {key: summary[f"{role}_census"][key] for key in fields}, actual
+                )
+                and reports.same_json_value(
+                    summary[f"{role}_snapshot"]["manifest_digest"],
+                    frozen["manifest_blake3"],
+                )
+                and reports.same_json_value(
+                    summary["binding"], native["semantic_binding"]
+                ),
+                "union prefix differs from its authenticated per-role census/snapshot/binding",
+            )
         else:
             reports.require(
                 source["kind"] == "running-capture", "unknown union logical source kind"

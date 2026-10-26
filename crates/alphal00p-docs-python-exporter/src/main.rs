@@ -72,14 +72,18 @@ fn main() -> Result<(), Box<dyn Error>> {
     normalized.push('\n');
     let mut outputs = vec![output];
     match component.as_str() {
-        "feynkit-community" => outputs.push(
+        "feynkit-community" => outputs.extend([
             PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join("../feynkit-py/python/symbolica/community/hepkit/__init__.pyi"),
-        ),
-        "linnet-graph" => outputs.push(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../../examples/notebooks/symbolica-host/python/symbolica/community/hepkit/__init__.pyi"),
+        ]),
+        "linnet-graph" => outputs.extend([
             PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join("../linnet-py/python/symbolica/community/graph/__init__.pyi"),
-        ),
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../../examples/notebooks/symbolica-host/python/symbolica/community/graph/__init__.pyi"),
+        ]),
         _ => {}
     }
     outputs.sort();

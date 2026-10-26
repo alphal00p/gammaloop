@@ -1,4 +1,4 @@
-//! Compile and runtime acceptance checks for examples in the five product sites.
+//! Compile and runtime acceptance checks for examples in the six product sites.
 //!
 //! The test module is generated from both neutral catalogs and authored Typst
 //! manuals. This keeps checked snippets and rendered snippets at one semantic

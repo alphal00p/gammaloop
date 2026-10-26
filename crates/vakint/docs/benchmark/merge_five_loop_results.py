@@ -471,6 +471,38 @@ class ReportEvidence:
         )
         return identity
 
+    @staticmethod
+    def owner_proof_worker(proof, row, proof_path):
+        """Bind an owner-proof row to its actual successful uncached worker."""
+        _, worker = ReportEvidence.strict_record(
+            {"path": row["receipt_path"], "sha256": row["receipt_sha256"]},
+            proof_path.parent,
+        )
+        require(
+            worker.get("schema") == "vakint.five-loop-cache-measurement.v1"
+            and worker.get("success") is True
+            and worker.get("worker_success") is True
+            and worker.get("fresh_process") is True
+            and worker.get("variant") == "uncached"
+            and type(worker.get("sample")) is int
+            and worker["sample"] == 0
+            and worker["supervision"]["success"] is True
+            and type(worker["supervision"]["exit_code"]) is int
+            and worker["supervision"]["exit_code"] == 0
+            and worker["supervision"]["deadline_exhausted"] is False
+            and worker["case_id"] == row["id"]
+            and worker["input_sha256"] == row["input_sha256"]
+            and worker["actual_lowered_roots"] == row["actual_lowered_roots"]
+            and worker["identity"]["data_manifest_sha256"]
+            == proof["data_manifest_sha256"]
+            and worker["identity"]["build_git_revision"]
+            == proof["compiled_cohort"]["main_revision"]
+            and worker["identity"]["executable_sha256"]
+            == proof["measurement_executable_sha256"],
+            "metadata proof worker receipt belongs to another dataset/cohort/input",
+        )
+        return worker
+
     def light_cache_record(self, path, cache, physical_scope):
         """A selected file is produced by strict export, never by a finite workload."""
         path, report = self.strict_record(evidence(path), self.path.parent)
@@ -1284,33 +1316,7 @@ class ReportEvidence:
                 "metadata proof is not bound to its own cohort/control inventory",
             )
             for row in proof["rows"]:
-                _, worker = strict_record(
-                    {"path": row["receipt_path"], "sha256": row["receipt_sha256"]},
-                    proof_path.parent,
-                )
-                require(
-                    worker.get("schema") == "vakint.five-loop-cache-measurement.v1"
-                    and worker.get("success") is True
-                    and worker.get("worker_success") is True
-                    and worker.get("fresh_process") is True
-                    and worker.get("variant") == "uncached"
-                    and type(worker.get("sample")) is int
-                    and worker["sample"] == 0
-                    and worker["supervision"]["success"] is True
-                    and type(worker["supervision"]["exit_code"]) is int
-                    and worker["supervision"]["exit_code"] == 0
-                    and worker["supervision"]["deadline_exhausted"] is False
-                    and worker["case_id"] == row["id"]
-                    and worker["input_sha256"] == row["input_sha256"]
-                    and worker["actual_lowered_roots"] == row["actual_lowered_roots"]
-                    and worker["identity"]["data_manifest_sha256"]
-                    == proof["data_manifest_sha256"]
-                    and worker["identity"]["build_git_revision"]
-                    == own_cohort["main_revision"]
-                    and worker["identity"]["executable_sha256"]
-                    == proof["measurement_executable_sha256"],
-                    "metadata proof worker receipt belongs to another dataset/cohort/input",
-                )
+                ReportEvidence.owner_proof_worker(proof, row, proof_path)
         fields = (
             "id",
             "logical_cohort",
@@ -1938,6 +1944,11 @@ class ReportEvidence:
                     "captured tuning measurement differs from its legacy workload/case/binding",
                 )
                 proof = docs["owner_proof"]
+                source_proof = row.get("source_owner_proof")
+                if source_proof is not None:
+                    proof_path, proof = ReportEvidence.strict_record(
+                        source_proof, inventory_path.parent
+                    )
                 require(
                     proof.get("schema") == "vakint.public-lowering-owner-map-proof.v1"
                     and same_json_value(
@@ -1954,6 +1965,80 @@ class ReportEvidence:
                 ]
                 require(len(matches) == 1, "captured tuning owner proof omits its case")
                 matched = matches[0]
+                if source_proof is not None:
+                    _, cohort = ReportEvidence.strict_record(
+                        {
+                            "path": proof["cohort_receipt_path"],
+                            "sha256": proof["cohort_receipt_sha256"],
+                        },
+                        proof_path.parent,
+                    )
+                    binaries = {
+                        item["sha256"]
+                        for item in artifact_binaries(docs["collector_artifacts"])
+                    }
+                    require(
+                        same_json_value(cohort, docs["compiled_cohort"])
+                        and proof["cohort_receipt_sha256"]
+                        == accepted["consumer"]["compiled_cohort"]["sha256"]
+                        and proof["kernel_revision"] == cohort["kernel_revision"]
+                        and proof["rustred_revision"] == cohort["native_revision"]
+                        and proof["mapper_git_revision"] == cohort["main_revision"]
+                        and all(
+                            proof[field] == cohort[field]
+                            for field in (
+                                "data_manifest_sha256",
+                                "loop_manifest_sha256",
+                                "application_sha256",
+                            )
+                        )
+                        and all(
+                            proof[field] == docs["owner_proof"][field]
+                            for field in (
+                                "mapper_executable_sha256",
+                                "measurement_executable_sha256",
+                            )
+                        )
+                        and proof["mapper_executable_sha256"] in binaries
+                        and proof["measurement_executable_sha256"] in binaries,
+                        "captured source owner proof differs from the current compiled authority",
+                    )
+                    worker = ReportEvidence.owner_proof_worker(
+                        proof, matched, proof_path
+                    )
+                    qualification_path, qualification = ReportEvidence.strict_record(
+                        {
+                            "path": matched["workload_path"],
+                            "sha256": matched["workload_sha256"],
+                        },
+                        proof_path.parent,
+                    )
+                    qualified_cases = [
+                        item
+                        for item in qualification["tuning"]
+                        if item["id"] == row["case_id"]
+                    ]
+                    require(
+                        qualification.get("schema")
+                        == "vakint.five-loop-cache-workload.v1"
+                        and len(qualified_cases) == 1
+                        and qualified_cases[0]["public_input"] == case["public_input"]
+                        and same_json_value(
+                            qualified_cases[0]["lowered_roots"], case["lowered_roots"]
+                        )
+                        and worker["identity"]["workload_sha256"]
+                        == digest(qualification_path)
+                        and worker["identity"]["source_census_sha256"]
+                        == qualification["source_census_sha256"]
+                        == matched["source_census_sha256"]
+                        and qualification["data_manifest_sha256"]
+                        == proof["data_manifest_sha256"]
+                        and same_json_value(
+                            worker["cache_statistics"]["binding"],
+                            proof["semantic_binding"],
+                        ),
+                        "captured source proof differs from its own qualification workload/input",
+                    )
                 require(
                     isinstance(case.get("public_input"), str)
                     and matched["logical_cohort"] == "tuning"
@@ -1984,8 +2069,9 @@ class ReportEvidence:
                     and same_json_value(roots, matched["actual_lowered_roots"]),
                     "captured tuning raw starting keys differ",
                 )
-                # Historical authentication flags remain false. This current
-                # proof binds the raw input; postcombine seeds cannot replace it.
+                # A same-cohort source proof authenticates exposed historical
+                # input without adding it to the current eligible tuning set.
+                # Historical flags and raw-source exclusion remain unchanged.
                 starting.update(tuple(key) for key in roots)
             else:
                 require(
@@ -2924,6 +3010,57 @@ def preserved_native_source(source, base):
             ),
             "prefix producer is not a captured union input",
         )
+    summaries = [
+        Path(name)
+        for name in artifacts
+        if Path(name).name == "native-union-summary.json"
+    ]
+    require(len(summaries) <= 1, "prefix proof has ambiguous Native summaries")
+    native_summary = {}
+    if summaries:
+        summary = read(summaries[0])
+        role = source["prefix_role"]
+        census = summary[f"{role}_census"]
+        snapshot = summary[f"{role}_snapshot"]
+        require(
+            summary.get("schema") == "vakint.native-cache-real-union-proof.v1"
+            and summary.get("native_union_publication_success") is True
+            and same_json_value(summary["native_structural_metadata_proof"], metadata)
+            and all(
+                type(census.get(key)) is int and census[key] >= 0
+                for key in (
+                    "generation",
+                    "runs",
+                    "chunk_references",
+                    "stored_record_references",
+                    "referenced_compressed_bytes",
+                    "manifest_bytes",
+                )
+            )
+            and Path(snapshot["manifest_path"]).resolve() == index
+            and snapshot["refresh_allowed"] is False
+            and snapshot["manifest_digest_algorithm"] == "blake3"
+            and type(snapshot["generation"]) is int
+            and snapshot["generation"] == census["generation"]
+            and type(snapshot["manifest_bytes"]) is int
+            and snapshot["manifest_bytes"]
+            == census["manifest_bytes"]
+            == rows[0]["bytes"]
+            and isinstance(snapshot["manifest_digest"], list)
+            and len(snapshot["manifest_digest"]) == 32
+            and all(
+                type(byte) is int and 0 <= byte <= 255
+                for byte in snapshot["manifest_digest"]
+            )
+            and bytes(snapshot["manifest_digest"]).hex() == rows[0]["native_blake3"],
+            "prefix Native per-role census/snapshot differs from its authenticated metadata",
+        )
+        native_summary = {
+            "native_summary": {
+                "evidence": evidence(summaries[0]),
+                "raw_receipt": summary,
+            }
+        }
     return {
         **source,
         "receipts": {
@@ -2931,6 +3068,7 @@ def preserved_native_source(source, base):
             "capture": {"evidence": evidence(metadata_path), "raw_receipt": metadata},
             "snapshot": {"evidence": evidence(index)},
             "barrier": {"evidence": evidence(proof_path), "raw_receipt": proof},
+            **native_summary,
         },
     }
 
@@ -3504,7 +3642,16 @@ def cumulative_cache_record(path, cache, physical_scope=None, *, source_identity
                 else True,
                 "prefix source belongs to another preservation proof",
             )
-            sources.append(preserved_native_source(source, path.parent))
+            preserved = preserved_native_source(source, path.parent)
+            summary = preserved["receipts"].get("native_summary")
+            require(
+                summary is None
+                or same_json_value(
+                    summary["raw_receipt"]["binding"], report["semantic_binding"]
+                ),
+                "preserved prefix differs from the cumulative binding",
+            )
+            sources.append(preserved)
             continue
         require(
             source.get("kind") == "running-capture", "unknown cumulative source kind"
