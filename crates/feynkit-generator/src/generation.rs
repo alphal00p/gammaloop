@@ -6,9 +6,9 @@ use std::{
 };
 
 use feynkit_graph::{
-    DiagramCut, DiagramCutSide, DiagramEdge, DiagramEndpoint, DiagramError, DiagramHalfEdge,
-    DiagramId, DiagramThresholdCandidate, DiagramVertex, EdgeId, ExternalState, FeynmanDiagram,
-    NumeratorInterface, VertexSlot,
+    CanonicalDiagramKey, DiagramCut, DiagramCutSide, DiagramEdge, DiagramEndpoint, DiagramError,
+    DiagramHalfEdge, DiagramId, DiagramThresholdCandidate, DiagramVertex, EdgeId, ExternalState,
+    FeynmanDiagram, NumeratorInterface, VertexSlot,
 };
 use feynkit_model::{Model, ModelError, Particle, ParticleId, VertexRule, VertexRuleId};
 use idenso::{
@@ -1680,6 +1680,14 @@ impl Generator {
                 return Ok::<_, GenerationError>(None);
             }
             let name = format!("{}{index:0width$}", options.graph_prefix);
+            let legacy_physical_order_key = if resolved.uses_legacy_physical_graph_order() {
+                Some(LegacyPhysicalGraphOrdKey::from_graph(
+                    &representative.graph,
+                    &self.model,
+                )?)
+            } else {
+                None
+            };
             let identical = comparison == representative;
             let signs = FermionSigns {
                 internal_loop_negative: grassmann_loop_count % 2 == 1,
@@ -1720,6 +1728,7 @@ impl Generator {
                 comparison,
                 representative,
                 reversed_edges,
+                legacy_physical_order_key,
             };
             let mut count = constructed.lock().unwrap();
             *count += 1;
@@ -1806,7 +1815,13 @@ impl Generator {
         }
         let mut keyed_diagrams = diagram_pairs
             .into_iter()
-            .map(|pair| Ok((pair.comparison.canonical_key()?, pair)))
+            .map(|mut pair| {
+                let key = match pair.legacy_physical_order_key.take() {
+                    Some(key) => DiagramPairOrderKey::LegacyPhysical(key),
+                    None => DiagramPairOrderKey::NativeCanonical(pair.comparison.canonical_key()?),
+                };
+                Ok((key, pair))
+            })
             .collect::<Result<Vec<_>, GenerationError>>()?;
         keyed_diagrams.sort_by(|left, right| left.0.cmp(&right.0));
         let width = keyed_diagrams
@@ -3506,6 +3521,76 @@ struct DiagramPair {
     comparison: FeynmanDiagram,
     representative: FeynmanDiagram,
     reversed_edges: BTreeSet<EdgeId>,
+    legacy_physical_order_key: Option<LegacyPhysicalGraphOrdKey>,
+}
+
+// Field order is the historical raw Graph Ord contract. In particular, the
+// incident edge vectors retain storage order; no finalized/canonical graph key
+// can recover this frame after the raw representative has been consumed.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+struct LegacyPhysicalGraphOrdKey {
+    nodes: Vec<LegacyPhysicalNodeOrd>,
+    edges: Vec<LegacyPhysicalEdgeOrd>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+struct LegacyPhysicalNodeOrd {
+    data: (i32, String),
+    incident_edges: Vec<usize>,
+    valence: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+struct LegacyPhysicalEdgeOrd {
+    vertices: (usize, usize),
+    directed: bool,
+    signed_pdg: i64,
+}
+
+impl LegacyPhysicalGraphOrdKey {
+    fn from_graph(
+        graph: &Graph<ColoredNode, EdgeColor>,
+        model: &Model,
+    ) -> Result<Self, GenerationError> {
+        let mut nodes = Vec::with_capacity(graph.nodes().len());
+        for node in graph.nodes() {
+            let data = match &node.data {
+                ColoredNode::External(external) => {
+                    let tag = external
+                        .index
+                        .checked_add(1)
+                        .and_then(|index| i32::try_from(index).ok())
+                        .ok_or(GenerationError::ArithmeticOverflow(
+                            "a physical graph external tag",
+                        ))?;
+                    (tag, "external".to_owned())
+                }
+                ColoredNode::Interaction(rule) => (0, model.vertex_rule_by_id(*rule)?.name.clone()),
+            };
+            nodes.push(LegacyPhysicalNodeOrd {
+                data,
+                incident_edges: node.edges.clone(),
+                valence: node.valence,
+            });
+        }
+        let mut edges = Vec::with_capacity(graph.edges().len());
+        for edge in graph.edges() {
+            edges.push(LegacyPhysicalEdgeOrd {
+                vertices: edge.vertices,
+                // Legacy rebuilt every canonical XS edge as directed before
+                // normalizing flow. Encode that convention only in this key.
+                directed: true,
+                signed_pdg: model.particle_by_id(edge.data.particle)?.pdg_code,
+            });
+        }
+        Ok(Self { nodes, edges })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+enum DiagramPairOrderKey {
+    LegacyPhysical(LegacyPhysicalGraphOrdKey),
+    NativeCanonical(CanonicalDiagramKey),
 }
 
 #[derive(Default)]
@@ -3967,6 +4052,139 @@ impl ResolvedProcess {
         ))
     }
 
+    fn uses_legacy_physical_graph_order(&self) -> bool {
+        self.generation_type == GenerationType::CrossSection
+            && self.symmetrize_left_right
+            && !self.incoming.is_empty()
+    }
+
+    /// Restore the paired incoming/outgoing momentum labels in rebuilt edge order.
+    ///
+    /// The legacy sewn-graph canonicalization assigns the first endpoint of
+    /// each pair to the incoming state after every skeleton pass. The physical
+    /// species belongs to the pair; changing its side conjugates only the
+    /// all-incoming species carried by the external edge.
+    fn canonicalize_paired_external_momenta_assignment(
+        &self,
+        graph: &mut Graph<ColoredNode, EdgeColor>,
+        model: &Model,
+    ) -> Result<(), GenerationError> {
+        if self.generation_type != GenerationType::CrossSection
+            || !self.symmetrize_left_right
+            || self.incoming.is_empty()
+        {
+            return Ok(());
+        }
+        let pair_count = self.incoming.len();
+        let external_count =
+            pair_count
+                .checked_mul(2)
+                .ok_or(GenerationError::ArithmeticOverflow(
+                    "paired external momentum labels",
+                ))?;
+        let physical_particles = self
+            .incoming
+            .iter()
+            .map(|particle| model.particle_id(&particle.name))
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut seen_indices = vec![false; external_count];
+        for node in graph.nodes() {
+            let ColoredNode::External(external) = &node.data else {
+                continue;
+            };
+            if external.index >= external_count || seen_indices[external.index] {
+                return Err(GenerationError::GraphConstruction(
+                    "paired external momentum assignment requires unique complete external indices"
+                        .to_owned(),
+                ));
+            }
+            seen_indices[external.index] = true;
+            let expected_state = if external.index < pair_count {
+                ExternalState::Incoming
+            } else {
+                ExternalState::Outgoing
+            };
+            if node.edges.len() != 1
+                || external.state != expected_state
+                || external.particle != physical_particles[external.index % pair_count]
+            {
+                return Err(GenerationError::GraphConstruction(
+                    "paired external momentum assignment found inconsistent external metadata"
+                        .to_owned(),
+                ));
+            }
+        }
+        if seen_indices.iter().any(|seen| !seen) {
+            return Err(GenerationError::GraphConstruction(
+                "paired external momentum assignment requires both endpoints of every pair"
+                    .to_owned(),
+            ));
+        }
+
+        let mut pair_occurrences = vec![0; pair_count];
+        let mut node_updates = Vec::with_capacity(external_count);
+        let mut edge_updates = Vec::with_capacity(external_count);
+        for (edge_index, edge) in graph.edges().iter().enumerate() {
+            let source = &graph.nodes()[edge.vertices.0].data;
+            let target = &graph.nodes()[edge.vertices.1].data;
+            let ColoredNode::External(external) = source else {
+                if matches!(target, ColoredNode::External(_)) {
+                    return Err(GenerationError::GraphConstruction(
+                        "paired external momentum assignment requires external-first rebuilt edges"
+                            .to_owned(),
+                    ));
+                }
+                continue;
+            };
+            if matches!(target, ColoredNode::External(_)) {
+                return Err(GenerationError::GraphConstruction(
+                    "paired external momentum assignment cannot join two external vertices"
+                        .to_owned(),
+                ));
+            }
+            let pair = external.index % pair_count;
+            let (index, state) = match pair_occurrences[pair] {
+                0 => (pair, ExternalState::Incoming),
+                1 => (pair_count + pair, ExternalState::Outgoing),
+                _ => {
+                    return Err(GenerationError::GraphConstruction(
+                        "paired external momentum assignment encountered a repeated endpoint"
+                            .to_owned(),
+                    ));
+                }
+            };
+            pair_occurrences[pair] += 1;
+            node_updates.push((
+                edge.vertices.0,
+                ColoredNode::External(ExternalNode {
+                    index,
+                    state,
+                    particle: physical_particles[pair],
+                }),
+            ));
+            if external.state != state {
+                let mut data = edge.data;
+                data.particle = model.particle_by_id(data.particle)?.antiparticle;
+                edge_updates.push((edge_index, data));
+            }
+        }
+        if pair_occurrences.iter().any(|count| *count != 2) {
+            return Err(GenerationError::GraphConstruction(
+                "paired external momentum assignment did not visit both endpoints of every pair"
+                    .to_owned(),
+            ));
+        }
+        // Commit only after all metadata and particle lookups have succeeded.
+        // Do not resort edges: this is the legacy post-rebuild assignment step.
+        for (node, data) in node_updates {
+            graph.set_node_data(node, data);
+        }
+        for (edge, data) in edge_updates {
+            graph.set_edge_data(edge, data);
+        }
+        Ok(())
+    }
+
     /// Choose the reduced-skeleton representative before any numerator
     /// indices are instantiated.
     ///
@@ -4264,6 +4482,7 @@ impl ResolvedProcess {
                 .add_edge(vertices.0, vertices.1, directed, data)
                 .map_err(|error| GenerationError::GraphConstruction(error.to_string()))?;
         }
+        self.canonicalize_paired_external_momenta_assignment(&mut result, model)?;
         Ok(result)
     }
 
@@ -8745,5 +8964,12 @@ mod tests {
             .to_plain_string();
         assert!(vertex_numerator.contains("gammalooprs::hedge"));
         assert!(vertex_numerator.contains("gammalooprs::hedge"));
+    }
+
+    mod gl20_frame_contracts {
+        use super::*;
+
+        include!("focused-tests.rs");
+        include!("physical-order-tests.rs");
     }
 }

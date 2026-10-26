@@ -1231,6 +1231,20 @@ title = "Engineering investigations"
 summary = "Dated measurements and diagnostic records. Treat their results as experiment context, not timeless API guarantees."
 
 [[section.note]]
+id = "gl20-physical-frame-routing-wip"
+title = "WIP: physical graph frame and paired routing root"
+summary = "A source-reviewed compatibility candidate with a focused fixture metadata failure; complete original GL20 regression remains unproved."
+source = "docs/architecture/gl20-physical-frame-routing-wip.typ"
+kind = "Correctness investigation"
+status = "WIP · focused fixture failure; original regression not run"
+lifecycle = "investigation"
+owner = "unassigned"
+captured_at = "2026-10-26"
+evidence_revision = "sha256:9ffd8cd8f38c572140515c048bfba40929afa96ea716acfeb935f7995559e4fd"
+products = ["gammaloop", "feynkit"]
+topics = ["graph-ordering", "momentum-routing", "testing"]
+
+[[section.note]]
 id = "symbolica-evaluation-domain-fix"
 title = "Symbolica evaluation-domain bug and fix"
 summary = "Historical thermal callback-dispatch fix for GammaLoop and Spenso numeric wrappers, including precision and original validation."
