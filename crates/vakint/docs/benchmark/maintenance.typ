@@ -138,6 +138,17 @@ matched samples and serialized-window requirements remain in force. Useful
 incidental descendant and root hits stay visible. There is no aggregate
 50/95 MiB rejection, and none of the original four-loop history is rewritten.
 
+Publishing the selected cache changes release-manifest hashes. A consumer may
+therefore supply #raw("data_metadata_requalification: {path, sha256}") pointing to
+a #raw("vakint.external-data-metadata-requalification.v1") relation. It binds the
+old and new manifests, the selected descriptor, and the frozen workload, owner
+proof and collector artifacts. The adapter verifies every original loop-pack
+payload and scientific field; only release/archive metadata and the selected
+descriptor may be added or changed. Source captures and import evidence retain
+their original identities. Fresh consumer proofs must belong to the new dataset
+and their own authenticated artifacts. This relation never retargets old receipts
+or permits mixing datasets within a fresh measurement comparison.
+
 == File bindings and functional records
 
 An evidence index has schema #raw("vakint.five-loop-report-evidence.v1") and a

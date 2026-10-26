@@ -3,6 +3,8 @@
 import copy
 import hashlib
 import json
+import os
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -2537,7 +2539,7 @@ class CumulativeCacheContractTests(unittest.TestCase):
         }
         loaded = {
             "path": str(data_path),
-            "version": "v-synthetic-import-only",
+            "version": merge.read(data_path / "manifest.json")["version"],
             "load_prepared_caches": False,
             "loops": [
                 {"loop_count": loop, "cache_loaded": False} for loop in range(1, 6)
@@ -2648,12 +2650,12 @@ class CumulativeCacheContractTests(unittest.TestCase):
         )
         return merge.evidence(observation)
 
-    def native_suite_fixture(self):
+    def native_suite_fixture(self, *, data_manifest=None):
         self.records, self.window_rows = [], []
         path, suite, _, _ = self.synthetic_suite()
         suite["cases"][0]["id"] = "native-tuning-synthetic"
         report_path, cache = self.cumulative_fixture()
-        data_path = self.write(
+        data_path = data_manifest or self.write(
             "public-import-data/manifest.json", {"version": "v-synthetic-import-only"}
         )
         source_report = merge.read(report_path)
@@ -3585,6 +3587,668 @@ class CumulativeCacheContractTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(ValueError, "launch/journal identity"):
             merge.ReportEvidence(index).cache_qualification(suite["identity"], producer)
+
+
+class MetadataRequalificationTests(unittest.TestCase):
+    """Synthetic manifest/opaque-payload parity; no native import or evaluation."""
+
+    def setUp(self):
+        self.base = CumulativeCacheContractTests()
+        self.base.setUp()
+        self.addCleanup(self.base.doCleanups)
+        self.root, self.write = self.base.root, self.base.write
+        self.source = self.root / "public-import-data"
+        root = {
+            "schema": "vakint.external-data.v1",
+            "version": "v0.1.2",
+            "loop_packs": [],
+            "provenance_assets": [],
+        }
+        for count in range(1, 6):
+            directory = self.source / f"{count}L"
+            files = {}
+            for name in (
+                "ibps/program.bin",
+                "masters.json",
+                "graphs/master.dot",
+                "cache/prepared.gz",
+            ):
+                payload = directory / name
+                payload.parent.mkdir(parents=True, exist_ok=True)
+                payload.write_text(f"SYNTHETIC {count}L {name}")
+                files[name] = {
+                    "sha256": merge.digest(payload),
+                    "bytes": payload.stat().st_size,
+                }
+            manifest = self.write(
+                f"public-import-data/{count}L/manifest.json",
+                {
+                    "schema": "vakint.external-data.loop.v1",
+                    "version": "v0.1.2",
+                    "loop_count": count,
+                    "normalization": "FMFTandMATAD",
+                    "coverage": {"predicate": "SYNTHETIC"},
+                    "cache": {"path": "cache/prepared.gz"},
+                    "masters": [{"id": "TEST"}],
+                    "ibps": {"path": "ibps/program.bin"},
+                    "files": files,
+                },
+            )
+            root["loop_packs"].append(
+                {
+                    "loop_count": count,
+                    "manifest": f"{count}L/manifest.json",
+                    "manifest_sha256": merge.digest(manifest),
+                    "archive": f"vakint-external-data-v0.1.2-{count}L.tar.gz",
+                    "archive_sha256": None,
+                    "archive_bytes": None,
+                }
+            )
+        self.old_manifest = self.write("public-import-data/manifest.json", root)
+        _, self.suite, self.producer, self.index, self.acceptance = (
+            self.base.native_suite_fixture(data_manifest=self.old_manifest)
+        )
+        self.accepted = merge.read(self.acceptance)
+        proof = merge.read(self.accepted["consumer"]["owner_proof"]["path"])
+        proof.update(
+            schema="vakint.public-lowering-owner-map-proof.v1",
+            application_sha256="a" * 64,
+            kernel_revision=proof["compiled_cohort"]["kernel_revision"],
+            mapper_executable_sha256=merge.digest(self.base.binary),
+            mapper_git_revision=proof["compiled_cohort"]["main_revision"],
+            mapper_profile="release",
+            mapper_rustc="SYNTHETIC",
+            mapper_source_sha256="c" * 64,
+            native_options="SYNTHETIC",
+            rustred_revision=proof["compiled_cohort"]["native_revision"],
+            rows=[
+                {
+                    "id": "native-tuning-synthetic",
+                    "logical_cohort": "tuning",
+                    "public_input_source_sha256": "d" * 64,
+                    "input_sha256": "f" * 64,
+                    "actual_lowered_roots": [[1] * 15],
+                    "protected_owner_roots": [[1] * 15],
+                    "protected_root_set_sha256": "e" * 64,
+                    "application_binding": proof["semantic_binding"],
+                    "complete_owner_transport": True,
+                    "reduction_succeeded": True,
+                    "mapping_error": None,
+                    "native_transports": [
+                        {
+                            "powers": [1] * 15,
+                            "nonzero_conditions": ["TEST_GUARD"],
+                            "owner_endpoints": [
+                                {"powers": [1] * 15, "coefficient": "1"}
+                            ],
+                        }
+                    ],
+                }
+            ],
+        )
+        proof["loop_manifest_sha256"] = root["loop_packs"][4]["manifest_sha256"]
+        proof["compiled_cohort"].update(
+            data_manifest_sha256=merge.digest(self.old_manifest),
+            loop_manifest_sha256=proof["loop_manifest_sha256"],
+        )
+        workload = merge.read(self.accepted["consumer"]["final_workload"]["path"])
+        for index in range(12):
+            key = [index + 4] * 15
+            case_id = f"frozen-held-out-{index}"
+            workload["held_out"].append(
+                {
+                    "id": case_id,
+                    "powers": key,
+                    "public_input": f"SYNTHETIC_HELD_OUT_{index}",
+                    "lowered_roots": [key],
+                    "protected_roots": [key],
+                }
+            )
+            row = copy.deepcopy(proof["rows"][0])
+            row.update(
+                id=case_id,
+                logical_cohort="held-out",
+                actual_lowered_roots=[key],
+                protected_owner_roots=[key],
+                native_transports=[
+                    {
+                        "powers": key,
+                        "nonzero_conditions": ["TEST_GUARD"],
+                        "owner_endpoints": [{"powers": key, "coefficient": "1"}],
+                    }
+                ],
+            )
+            proof["rows"].append(row)
+            self.accepted["case_exposure"][case_id] = "held-out"
+        self.write_workers(proof, "frozen")
+        self.frozen_proof = self.write("frozen-owner-proof.json", proof)
+        workload["owner_proof"] = merge.evidence(self.frozen_proof)
+        self.accepted["immutable_selection"] = merge.selected_inputs(workload)
+        workload["tuning"][0].update(
+            lowered_roots=[[1] * 15], protected_roots=[[1] * 15]
+        )
+        self.frozen_workload = self.write("frozen-workload.json", workload)
+        self.target = self.root / "published-data"
+        shutil.copytree(self.source, self.target)
+        packet = merge.read(
+            Path(self.accepted["cache_import"]["path"]).parent / "packet.json"
+        )
+        descriptor = Path(packet["descriptor"]["path"])
+        selected = {
+            "loop_count": 5,
+            "manifest": "5L/cache/running.json",
+            "manifest_sha256": merge.digest(descriptor),
+            "manifest_bytes": descriptor.stat().st_size,
+        }
+        (self.target / selected["manifest"]).write_bytes(descriptor.read_bytes())
+        root.update(version="v0.1.3", runtime_cache_snapshots=[selected])
+        for pack in root["loop_packs"]:
+            path = self.target / pack["manifest"]
+            loop = merge.read(path)
+            loop["version"] = "v0.1.3"
+            if pack["loop_count"] == 5:
+                loop["files"]["cache/running.json"] = {
+                    "sha256": selected["manifest_sha256"],
+                    "bytes": selected["manifest_bytes"],
+                }
+            path.write_text(json.dumps(loop))
+            pack.update(
+                manifest_sha256=merge.digest(path),
+                archive=f"vakint-external-data-v0.1.3-{pack['loop_count']}L.tar.gz",
+                archive_sha256="a" * 64,
+                archive_bytes=42,
+            )
+        self.new_manifest = self.write("published-data/manifest.json", root)
+        self.relation_path = self.write(
+            "metadata-relation.json",
+            {
+                "schema": "vakint.external-data-metadata-requalification.v1",
+                "source_manifest": merge.evidence(self.old_manifest),
+                "consumer_manifest": merge.evidence(self.new_manifest),
+                "runtime_cache_snapshot": selected,
+                "frozen_workload": merge.evidence(self.frozen_workload),
+                "frozen_owner_proof": merge.evidence(self.frozen_proof),
+                "frozen_collector_artifacts": self.accepted["consumer"][
+                    "collector_artifacts"
+                ],
+            },
+        )
+        self.consumer_proof = self.write("consumer-proof.json", proof)
+        self.consumer_workload = self.write("consumer-workload.json", workload)
+        self.refresh()
+
+    def write_workers(self, proof, role):
+        for index, row in enumerate(proof["rows"]):
+            worker = self.write(
+                f"{role}-workers/{index}.json",
+                {
+                    "schema": "vakint.five-loop-cache-measurement.v1",
+                    "success": True,
+                    "worker_success": True,
+                    "fresh_process": True,
+                    "variant": "uncached",
+                    "sample": 0,
+                    "supervision": {
+                        "success": True,
+                        "exit_code": 0,
+                        "deadline_exhausted": False,
+                    },
+                    "case_id": row["id"],
+                    "input_sha256": row["input_sha256"],
+                    "actual_lowered_roots": row["actual_lowered_roots"],
+                    "identity": {
+                        "data_manifest_sha256": proof["data_manifest_sha256"],
+                        "build_git_revision": proof["compiled_cohort"]["main_revision"],
+                        "executable_sha256": proof["measurement_executable_sha256"],
+                    },
+                },
+            )
+            row.update(receipt_path=str(worker), receipt_sha256=merge.digest(worker))
+
+    def refresh(self):
+        root = merge.read(self.new_manifest)
+        for pack in root["loop_packs"]:
+            pack["manifest_sha256"] = merge.digest(self.target / pack["manifest"])
+        self.new_manifest.write_text(json.dumps(root))
+        relation = merge.read(self.relation_path)
+        relation["consumer_manifest"] = merge.evidence(self.new_manifest)
+        self.relation_path.write_text(json.dumps(relation))
+        proof = merge.read(self.consumer_proof)
+        proof["data_manifest_sha256"] = merge.digest(self.new_manifest)
+        proof["loop_manifest_sha256"] = root["loop_packs"][4]["manifest_sha256"]
+        proof["compiled_cohort"].update(
+            data_manifest_sha256=proof["data_manifest_sha256"],
+            loop_manifest_sha256=proof["loop_manifest_sha256"],
+        )
+        self.write_workers(proof, "consumer")
+        self.consumer_proof.write_text(json.dumps(proof))
+        cohort_path = Path(self.accepted["consumer"]["compiled_cohort"]["path"])
+        cohort_path.write_text(json.dumps(proof["compiled_cohort"]))
+        self.accepted["consumer"]["compiled_cohort"] = merge.evidence(cohort_path)
+        route_path = Path(
+            self.accepted["consumer"]["training_route_qualification"]["path"]
+        )
+        route = merge.read(route_path)
+        route["compiled_cohort"] = proof["compiled_cohort"]
+        route_path.write_text(json.dumps(route))
+        self.accepted["consumer"]["training_route_qualification"] = merge.evidence(
+            route_path
+        )
+        workload = merge.read(self.consumer_workload)
+        workload.update(
+            data_manifest_sha256=merge.digest(self.new_manifest),
+            owner_proof=merge.evidence(self.consumer_proof),
+        )
+        self.consumer_workload.write_text(json.dumps(workload))
+        self.accepted["consumer"].update(
+            owner_proof=merge.evidence(self.consumer_proof),
+            final_workload=merge.evidence(self.consumer_workload),
+        )
+        union_path = Path(self.accepted["consumer"]["protected_union"]["path"])
+        union = merge.read(union_path)
+        union["owner_proof"] = merge.evidence(self.consumer_proof)
+        union["compiled_cohort"] = merge.evidence(cohort_path)
+        protected = [row["powers"] for row in workload["held_out"]]
+        union.update(
+            raw_lowered_keys=protected,
+            direct_owner_keys=protected,
+            declared_case_powers=protected,
+            forbidden_direct_target_or_owner_keys=protected,
+        )
+        union_path.write_text(json.dumps(union))
+        self.accepted["consumer"]["protected_union"] = merge.evidence(union_path)
+        alias_path = Path(self.accepted["consumer"]["alias_exclusion"]["path"])
+        alias = merge.read(alias_path)
+        alias["protected_union"] = merge.evidence(union_path)
+        alias["qualification"] = merge.evidence(route_path)
+        alias_path.write_text(json.dumps(alias))
+        self.accepted["consumer"]["alias_exclusion"] = merge.evidence(alias_path)
+        self.accepted["data_metadata_requalification"] = merge.evidence(
+            self.relation_path
+        )
+        self.suite["identity"].update(
+            data_manifest_sha256=merge.digest(self.new_manifest),
+            workload_sha256=merge.digest(self.consumer_workload),
+            owner_proof={
+                **merge.evidence(self.consumer_proof),
+                "compiled_cohort": proof["compiled_cohort"],
+            },
+        )
+        self.base.rebind_acceptance(
+            self.index, self.acceptance, lambda doc: doc.update(self.accepted)
+        )
+
+    def qualify(self):
+        return merge.ReportEvidence(self.index).cache_qualification(
+            self.suite["identity"], self.producer
+        )
+
+    def test_metadata_only_release_keeps_source_import_identity(self):
+        original = copy.deepcopy(self.producer["raw_report"])
+        qualified = self.qualify()
+        relation = qualified["data_metadata_requalification"]
+        self.assertEqual(relation["verified_original_files"], 20)
+        self.assertEqual(len(merge.read(self.frozen_workload)["held_out"]), 12)
+        self.assertEqual(len(merge.read(self.frozen_proof)["rows"]), 13)
+        self.assertNotEqual(
+            relation["source_manifest"]["sha256"],
+            relation["consumer_manifest"]["sha256"],
+        )
+        self.assertEqual(self.producer["raw_report"], original)
+        self.assertEqual(
+            merge.read(qualified["public_import"]["packet"]["path"])["frozen_data"],
+            str(self.source),
+        )
+
+    def test_changed_dataset_needs_explicit_relation(self):
+        self.base.rebind_acceptance(
+            self.index,
+            self.acceptance,
+            lambda doc: doc.pop("data_metadata_requalification"),
+        )
+        with self.assertRaisesRegex(ValueError, "explicit metadata requalification"):
+            self.qualify()
+
+    def change_loop(self, change, count=5):
+        path = self.target / f"{count}L/manifest.json"
+        loop = merge.read(path)
+        change(loop)
+        path.write_text(json.dumps(loop))
+        self.refresh()
+
+    def test_scientific_manifest_changes_are_rejected(self):
+        for key in ("normalization", "coverage", "cache", "masters", "ibps"):
+            with self.subTest(key=key):
+                case = MetadataRequalificationTests()
+                case.setUp()
+                self.addCleanup(case.doCleanups)
+                case.change_loop(
+                    lambda doc, key=key: doc.update({key: "ILLICIT CHANGE"})
+                )
+                with self.assertRaisesRegex(ValueError, "scientific semantics"):
+                    case.qualify()
+
+    def test_original_payload_bytes_cannot_change(self):
+        for name in (
+            "ibps/program.bin",
+            "masters.json",
+            "graphs/master.dot",
+            "cache/prepared.gz",
+        ):
+            with self.subTest(name=name):
+                case = MetadataRequalificationTests()
+                case.setUp()
+                self.addCleanup(case.doCleanups)
+                (case.target / "5L" / name).write_text("ILLICIT PAYLOAD CHANGE")
+                with self.assertRaisesRegex(ValueError, "payload bytes"):
+                    case.qualify()
+
+    def test_rehashed_payload_replacement_is_not_metadata(self):
+        payload = self.target / "5L/ibps/program.bin"
+        payload.write_text("ILLICIT BUT REHASHED PROGRAM")
+        self.change_loop(
+            lambda doc: doc["files"].update(
+                {
+                    "ibps/program.bin": {
+                        "sha256": merge.digest(payload),
+                        "bytes": payload.stat().st_size,
+                    }
+                }
+            )
+        )
+        with self.assertRaisesRegex(ValueError, "scientific file inventory"):
+            self.qualify()
+
+    def test_hidden_payloads_in_either_or_both_trees_are_rejected(self):
+        for both, declared in ((False, False), (True, False), (False, True)):
+            with self.subTest(both=both, declared=declared):
+                case = MetadataRequalificationTests()
+                case.setUp()
+                self.addCleanup(case.doCleanups)
+                hidden = case.target / "5L/hidden.bin"
+                hidden.write_text("UNDECLARED SYNTHETIC PAYLOAD")
+                if both:
+                    (case.source / "5L/hidden.bin").write_bytes(hidden.read_bytes())
+                if declared:
+                    case.change_loop(
+                        lambda doc, hidden=hidden: doc["files"].update(
+                            {
+                                "hidden.bin": {
+                                    "sha256": merge.digest(hidden),
+                                    "bytes": hidden.stat().st_size,
+                                }
+                            }
+                        )
+                    )
+                with self.assertRaisesRegex(
+                    ValueError, "hidden payload|scientific file inventory"
+                ):
+                    case.qualify()
+
+    def test_added_descriptor_requires_original_binding_and_index(self):
+        for field in ("binding", "index"):
+            with self.subTest(field=field):
+                case = MetadataRequalificationTests()
+                case.setUp()
+                self.addCleanup(case.doCleanups)
+                descriptor_path = case.target / "5L/cache/running.json"
+                descriptor = merge.read(descriptor_path)
+                if field == "binding":
+                    descriptor["binding"]["physical_arity"] = 14
+                else:
+                    descriptor["files"]["cache/cache.rrindex"]["sha256"] = "0" * 64
+                descriptor_path.write_text(json.dumps(descriptor))
+                root = merge.read(case.new_manifest)
+                selected = root["runtime_cache_snapshots"][0]
+                selected.update(
+                    manifest_sha256=merge.digest(descriptor_path),
+                    manifest_bytes=descriptor_path.stat().st_size,
+                )
+                case.new_manifest.write_text(json.dumps(root))
+                relation = merge.read(case.relation_path)
+                relation["runtime_cache_snapshot"] = selected
+                case.relation_path.write_text(json.dumps(relation))
+                case.change_loop(
+                    lambda doc, selected=selected: doc["files"].update(
+                        {
+                            "cache/running.json": {
+                                "sha256": selected["manifest_sha256"],
+                                "bytes": selected["manifest_bytes"],
+                            }
+                        }
+                    )
+                )
+                with self.assertRaisesRegex(ValueError, "cache descriptor differs"):
+                    case.qualify()
+
+    def test_frozen_case_and_owner_keys_cannot_be_transformed(self):
+        for field in ("powers", "lowered_roots", "protected_roots"):
+            with self.subTest(field=field):
+                case = MetadataRequalificationTests()
+                case.setUp()
+                self.addCleanup(case.doCleanups)
+                workload = merge.read(case.consumer_workload)
+                row = workload["tuning"][0]
+                if field == "powers":
+                    row[field][0] += 1
+                else:
+                    row[field][0][0] += 1
+                case.consumer_workload.write_text(json.dumps(workload))
+                case.accepted["immutable_selection"] = merge.selected_inputs(workload)
+                case.refresh()
+                with self.assertRaisesRegex(
+                    ValueError, "transformed frozen workload/owner keys"
+                ):
+                    case.qualify()
+
+    def test_native_transport_guards_and_executable_provenance_stay_exact(self):
+        for field in (
+            "native_transports",
+            "mapper_executable_sha256",
+            "compiled_cohort",
+            "reduction_succeeded",
+        ):
+            with self.subTest(field=field):
+                case = MetadataRequalificationTests()
+                case.setUp()
+                self.addCleanup(case.doCleanups)
+                frozen = merge.read(case.frozen_proof)
+                if field == "native_transports":
+                    frozen["rows"][0][field][0]["nonzero_conditions"] = [
+                        "CHANGED_GUARD"
+                    ]
+                elif field == "compiled_cohort":
+                    frozen[field]["main_revision"] = "a" * 40
+                elif field == "reduction_succeeded":
+                    frozen["rows"][0][field] = False
+                else:
+                    frozen[field] = "0" * 64
+                case.frozen_proof.write_text(json.dumps(frozen))
+                workload = merge.read(case.frozen_workload)
+                workload["owner_proof"] = merge.evidence(case.frozen_proof)
+                case.frozen_workload.write_text(json.dumps(workload))
+                relation = merge.read(case.relation_path)
+                relation.update(
+                    frozen_owner_proof=merge.evidence(case.frozen_proof),
+                    frozen_workload=merge.evidence(case.frozen_workload),
+                )
+                case.relation_path.write_text(json.dumps(relation))
+                case.refresh()
+                with self.assertRaisesRegex(
+                    ValueError,
+                    "proof/artifact/cohort|native owner transports/guards",
+                ):
+                    case.qualify()
+
+    def test_other_root_changes_and_extra_snapshot_refs_are_rejected(self):
+        root = merge.read(self.new_manifest)
+        root["provenance_assets"] = [{"archive": "ILLICIT NEW PAYLOAD"}]
+        self.new_manifest.write_text(json.dumps(root))
+        self.refresh()
+        with self.assertRaisesRegex(ValueError, "release semantics/provenance"):
+            self.qualify()
+        root["provenance_assets"] = []
+        root["runtime_cache_snapshots"].append(root["runtime_cache_snapshots"][0])
+        self.new_manifest.write_text(json.dumps(root))
+        self.refresh()
+        with self.assertRaisesRegex(ValueError, "exactly the selected"):
+            self.qualify()
+
+    def test_duplicate_keys_and_symlinked_payloads_are_rejected(self):
+        path = self.target / "5L/manifest.json"
+        path.write_text('{"version":"v9.9.9",' + path.read_text()[1:])
+        self.refresh()
+        with self.assertRaisesRegex(ValueError, "duplicate metadata JSON"):
+            self.qualify()
+        case = MetadataRequalificationTests()
+        case.setUp()
+        self.addCleanup(case.doCleanups)
+        payload = case.target / "5L/masters.json"
+        payload.unlink()
+        payload.symlink_to(case.source / "5L/masters.json")
+        with self.assertRaisesRegex(ValueError, "symlink"):
+            case.qualify()
+
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "requires POSIX named pipes")
+    def test_special_payload_is_rejected_without_reading_it(self):
+        os.mkfifo(self.target / "5L/hidden-pipe")
+        with self.assertRaisesRegex(ValueError, "special file"):
+            self.qualify()
+
+    def test_frozen_proof_cannot_be_rebound_from_another_dataset(self):
+        proof = merge.read(self.frozen_proof)
+        proof["data_manifest_sha256"] = "b" * 64
+        self.frozen_proof.write_text(json.dumps(proof))
+        workload = merge.read(self.frozen_workload)
+        workload.update(
+            data_manifest_sha256="b" * 64, owner_proof=merge.evidence(self.frozen_proof)
+        )
+        self.frozen_workload.write_text(json.dumps(workload))
+        relation = merge.read(self.relation_path)
+        relation.update(
+            frozen_owner_proof=merge.evidence(self.frozen_proof),
+            frozen_workload=merge.evidence(self.frozen_workload),
+        )
+        self.relation_path.write_text(json.dumps(relation))
+        self.refresh()
+        with self.assertRaisesRegex(ValueError, "proof names another dataset"):
+            self.qualify()
+
+    def test_metadata_relation_keeps_distinct_authenticated_code_cohorts(self):
+        proof = merge.read(self.frozen_proof)
+        proof["compiled_cohort"]["main_revision"] = "a" * 40
+        proof["mapper_git_revision"] = "a" * 40
+        binary = self.root / "OLD-SYNTHETIC-COLLECTOR"
+        binary.write_text("SYNTHETIC OLD COLLECTOR; NOT EXECUTABLE")
+        proof["measurement_executable_sha256"] = proof["mapper_executable_sha256"] = (
+            merge.digest(binary)
+        )
+        self.write_workers(proof, "distinct-frozen")
+        self.frozen_proof.write_text(json.dumps(proof))
+        workload = merge.read(self.frozen_workload)
+        workload["owner_proof"] = merge.evidence(self.frozen_proof)
+        self.frozen_workload.write_text(json.dumps(workload))
+        artifact = merge.read(self.base.artifact)
+        artifact["stamps"]["VAKINT_CACHE_BUILD_GIT_REVISION"] = "a" * 40
+        artifact["binary"] = {
+            "sha256": merge.digest(binary),
+            "immutable_path": str(binary),
+        }
+        frozen_artifact = self.write("old-collector-artifact.json", artifact)
+        relation = merge.read(self.relation_path)
+        relation.update(
+            frozen_owner_proof=merge.evidence(self.frozen_proof),
+            frozen_workload=merge.evidence(self.frozen_workload),
+            frozen_collector_artifacts=merge.evidence(frozen_artifact),
+        )
+        self.relation_path.write_text(json.dumps(relation))
+        self.refresh()
+        qualified = self.qualify()["data_metadata_requalification"]
+        self.assertEqual(
+            qualified["frozen_collector_artifacts"]["sha256"],
+            merge.digest(frozen_artifact),
+        )
+        self.assertNotEqual(
+            merge.read(self.frozen_proof)["compiled_cohort"]["main_revision"],
+            self.suite["identity"]["build_git_revision"],
+        )
+
+    def test_new_data_proof_cannot_reuse_old_worker_receipts(self):
+        qualified = self.qualify()
+        docs = {
+            name: merge.read(self.accepted["consumer"][name]["path"])
+            for name in ("final_workload", "owner_proof", "collector_artifacts")
+        }
+        docs["owner_proof"]["rows"] = merge.read(self.frozen_proof)["rows"]
+        with self.assertRaisesRegex(
+            ValueError, "worker receipt belongs to another dataset"
+        ):
+            merge.ReportEvidence(self.index).data_metadata_requalification(
+                merge.evidence(self.relation_path),
+                self.suite["identity"],
+                self.producer,
+                self.accepted,
+                docs,
+                qualified["public_import"],
+                self.acceptance.parent,
+            )
+
+    def test_all_fresh_samples_keep_new_dataset_identity(self):
+        suite = self.suite
+        index_doc = merge.read(self.index)
+        window_path = self.root / "window.json"
+        window = merge.read(window_path)
+        for sample, reference, observed in zip(
+            suite["measurements"], index_doc["records"], window["samples"]
+        ):
+            sample["owner_proof"] = suite["identity"]["owner_proof"]
+            sample_path = Path(reference["record"]["path"])
+            sample_path.write_text(json.dumps(sample))
+            reference["record"] = merge.evidence(sample_path)
+            observed["report_sha256"] = merge.digest(sample_path)
+        window_path.write_text(json.dumps(window))
+        for reference in index_doc["records"]:
+            reference["window"] = merge.evidence(window_path)
+        self.index.write_text(json.dumps(index_doc))
+        suite_path = self.root / "suite.json"
+        suite_path.write_text(json.dumps(suite))
+        measured = merge.suite_record(
+            suite_path, "tuning", self.producer, merge.ReportEvidence(self.index)
+        )
+        self.assertEqual(
+            measured["identity"]["data_manifest_sha256"],
+            merge.digest(self.new_manifest),
+        )
+        first = suite["measurements"][0]
+        first["identity"] = copy.deepcopy(first["identity"])
+        first["identity"]["data_manifest_sha256"] = merge.digest(self.old_manifest)
+        suite_path.write_text(json.dumps(suite))
+        with self.assertRaisesRegex(ValueError, "unsuccessful or mismatched sample"):
+            merge.suite_record(
+                suite_path, "tuning", self.producer, merge.ReportEvidence(self.index)
+            )
+
+    def test_worker_success_flags_cannot_hide_failed_original_process(self):
+        proof = merge.read(self.frozen_proof)
+        row = proof["rows"][0]
+        worker_path = Path(row["receipt_path"])
+        worker = merge.read(worker_path)
+        worker["supervision"]["exit_code"] = 1
+        worker_path.write_text(json.dumps(worker))
+        row["receipt_sha256"] = merge.digest(worker_path)
+        self.frozen_proof.write_text(json.dumps(proof))
+        workload = merge.read(self.frozen_workload)
+        workload["owner_proof"] = merge.evidence(self.frozen_proof)
+        self.frozen_workload.write_text(json.dumps(workload))
+        relation = merge.read(self.relation_path)
+        relation.update(
+            frozen_owner_proof=merge.evidence(self.frozen_proof),
+            frozen_workload=merge.evidence(self.frozen_workload),
+        )
+        self.relation_path.write_text(json.dumps(relation))
+        self.refresh()
+        with self.assertRaisesRegex(ValueError, "worker receipt belongs"):
+            self.qualify()
 
 
 class QualificationProjectionTests(unittest.TestCase):

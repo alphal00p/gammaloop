@@ -393,8 +393,7 @@ class ReportEvidence:
         """Require external native-import and consumer/exclusion acceptance."""
         build = producer["raw_report"]
         require(
-            cache_identity(identity) == build["cache_native_index_identity"]
-            and identity["data_manifest_sha256"] == build["data_manifest_sha256"],
+            cache_identity(identity) == build["cache_native_index_identity"],
             "cumulative cache/data identity differs",
         )
         path, accepted = hashed_record(
@@ -451,7 +450,7 @@ class ReportEvidence:
             and workload["source_census_sha256"] == identity["source_census_sha256"]
             and workload["data_manifest_sha256"]
             == proof["data_manifest_sha256"]
-            == build["data_manifest_sha256"],
+            == identity["data_manifest_sha256"],
             "cumulative qualification changed frozen workload/proof/data",
         )
         require(
@@ -499,10 +498,424 @@ class ReportEvidence:
         imported = self.cumulative_cache_import(
             accepted.get("cache_import"), producer, cohort, path.parent
         )
+        metadata = None
+        relation = accepted.get("data_metadata_requalification")
+        if relation is not None:
+            metadata = self.data_metadata_requalification(
+                relation, identity, producer, accepted, docs, imported, path.parent
+            )
+        else:
+            require(
+                identity["data_manifest_sha256"] == build["data_manifest_sha256"],
+                "changed data identity requires explicit metadata requalification",
+            )
         return {
             "evidence": evidence(path),
             "raw_receipt": accepted,
             "public_import": imported,
+            "data_metadata_requalification": metadata,
+        }
+
+    def data_metadata_requalification(
+        self, reference, identity, producer, accepted, docs, imported, base
+    ):
+        """Compute the narrow release-metadata relation; preserve source identities."""
+
+        def unique(pairs):
+            result = {}
+            for key, value in pairs:
+                require(key not in result, "duplicate metadata JSON key")
+                result[key] = value
+            return result
+
+        def strict_record(reference, directory):
+            candidate = Path(reference["path"])
+            candidate = candidate if candidate.is_absolute() else directory / candidate
+            require(
+                candidate.is_file() and not candidate.is_symlink(),
+                "metadata reference needs a regular file",
+            )
+            source, document = hashed_record(reference, directory)
+            require(
+                json.loads(source.read_text(), object_pairs_hook=unique) == document,
+                "metadata JSON differs",
+            )
+            return source, document
+
+        path, relation = strict_record(reference, base)
+        require(
+            relation.get("schema")
+            == "vakint.external-data-metadata-requalification.v1",
+            "unknown data metadata relation",
+        )
+        old_path, old = strict_record(relation["source_manifest"], path.parent)
+        new_path, new = strict_record(relation["consumer_manifest"], path.parent)
+        require(
+            digest(old_path) == producer["raw_report"]["data_manifest_sha256"]
+            and digest(new_path) == identity["data_manifest_sha256"],
+            "metadata relation names another source/consumer dataset",
+        )
+        require(
+            old["schema"] == new["schema"] == "vakint.external-data.v1"
+            and all(
+                isinstance(item["version"], str)
+                and re.fullmatch(
+                    r"v[0-9]+\.[0-9]+\.[0-9]+(?:[-+][A-Za-z0-9.-]+)?", item["version"]
+                )
+                for item in (old, new)
+            ),
+            "invalid release schema/version in metadata relation",
+        )
+        selected = relation["runtime_cache_snapshot"]
+        require(
+            set(selected)
+            == {"loop_count", "manifest", "manifest_sha256", "manifest_bytes"}
+            and type(selected["loop_count"]) is int
+            and selected["loop_count"] == 5
+            and re.fullmatch(
+                r"5L/cache/[A-Za-z0-9][A-Za-z0-9._-]*\.json", selected["manifest"]
+            )
+            and old.get("runtime_cache_snapshots", []) == []
+            and new.get("runtime_cache_snapshots") == [selected],
+            "metadata relation must add exactly the selected 5L cache reference",
+        )
+        descriptor_path, descriptor = strict_record(
+            {"path": selected["manifest"], "sha256": selected["manifest_sha256"]},
+            new_path.parent,
+        )
+        _, packet = hashed_record(imported["packet"], path.parent)
+        imported_descriptor = hashed_file(
+            packet["descriptor"], Path(imported["packet"]["path"]).parent
+        )
+        require(
+            type(selected["manifest_bytes"]) is int
+            and selected["manifest_bytes"] == descriptor_path.stat().st_size
+            and descriptor_path.read_bytes() == imported_descriptor.read_bytes()
+            and descriptor["binding"] == producer["raw_report"]["semantic_binding"]
+            and {
+                name.removeprefix("cache/"): item
+                for name, item in descriptor["files"].items()
+                if name.endswith(".rrindex")
+            }
+            == producer["raw_report"]["cache_native_index_identity"]["indexes"],
+            "metadata cache descriptor differs from authenticated import/binding/index identity",
+        )
+        old_packs, new_packs = old["loop_packs"], new["loop_packs"]
+        require(
+            [item["loop_count"] for item in old_packs]
+            == [item["loop_count"] for item in new_packs]
+            == list(range(1, 6)),
+            "metadata relation changed loop inventory/order",
+        )
+        changed = []
+        verified_files = 0
+
+        def record(pointer, before, after):
+            if before != after:
+                changed.append(
+                    {"pointer": pointer, "source": before, "consumer": after}
+                )
+
+        def payloads(directory):
+            result = {}
+            for payload in directory.rglob("*"):
+                require(
+                    not payload.is_symlink(), "metadata payload tree contains a symlink"
+                )
+                require(
+                    payload.is_file() or payload.is_dir(),
+                    "metadata payload tree contains a special file",
+                )
+                if payload.is_file() and payload != directory / "manifest.json":
+                    result[payload.relative_to(directory).as_posix()] = {
+                        "sha256": digest(payload),
+                        "bytes": payload.stat().st_size,
+                    }
+            return result
+
+        for count, (before_pack, after_pack) in enumerate(zip(old_packs, new_packs), 1):
+            manifest_name = f"{count}L/manifest.json"
+            require(
+                before_pack["manifest"] == after_pack["manifest"] == manifest_name,
+                "metadata relation changed loop manifest path",
+            )
+            require(
+                not (old_path.parent / f"{count}L").is_symlink()
+                and not (new_path.parent / f"{count}L").is_symlink(),
+                "metadata loop directory is a symlink",
+            )
+            source_path, source = strict_record(
+                {"path": manifest_name, "sha256": before_pack["manifest_sha256"]},
+                old_path.parent,
+            )
+            target_path, target = strict_record(
+                {"path": manifest_name, "sha256": after_pack["manifest_sha256"]},
+                new_path.parent,
+            )
+            require(
+                source["schema"] == target["schema"] == "vakint.external-data.loop.v1"
+                and source["loop_count"] == target["loop_count"] == count
+                and source["version"] == old["version"]
+                and target["version"] == new["version"],
+                "metadata loop schema/version differs",
+            )
+            source_files, target_files = source["files"], target["files"]
+            addition = (
+                {
+                    selected["manifest"].removeprefix("5L/"): {
+                        "sha256": selected["manifest_sha256"],
+                        "bytes": selected["manifest_bytes"],
+                    }
+                }
+                if count == 5
+                else {}
+            )
+            require(
+                not set(source_files).intersection(addition)
+                and target_files == {**source_files, **addition},
+                "metadata relation added/changed a scientific file inventory",
+            )
+            before_tree, after_tree = (
+                payloads(source_path.parent),
+                payloads(target_path.parent),
+            )
+            require(
+                before_tree == source_files and after_tree == target_files,
+                "metadata relation changed original payload bytes or added hidden payload",
+            )
+            verified_files += len(before_tree)
+            target_compare = copy.deepcopy(target)
+            target_compare.update(version=source["version"], files=source_files)
+            require(
+                target_compare == source,
+                "metadata relation changed loop scientific semantics",
+            )
+            for document, version in (
+                (before_pack, old["version"]),
+                (after_pack, new["version"]),
+            ):
+                require(
+                    document["archive"]
+                    == f"vakint-external-data-{version}-{count}L.tar.gz",
+                    "invalid release archive name",
+                )
+                archive_sha, archive_bytes = (
+                    document["archive_sha256"],
+                    document["archive_bytes"],
+                )
+                require(
+                    (archive_sha is None and archive_bytes is None)
+                    or (
+                        isinstance(archive_sha, str)
+                        and re.fullmatch(r"[0-9a-f]{64}", archive_sha)
+                        and type(archive_bytes) is int
+                        and archive_bytes > 0
+                    ),
+                    "invalid release archive identity",
+                )
+            pack_compare = copy.deepcopy(after_pack)
+            for key in (
+                "manifest_sha256",
+                "archive",
+                "archive_sha256",
+                "archive_bytes",
+            ):
+                record(
+                    f"/loop_packs/{count - 1}/{key}", before_pack[key], after_pack[key]
+                )
+                pack_compare[key] = before_pack[key]
+            require(
+                pack_compare == before_pack,
+                "metadata relation changed loop-pack semantics",
+            )
+            record(f"/{count}L/version", source["version"], target["version"])
+            if addition:
+                record(
+                    "/5L/files/" + next(iter(addition)),
+                    None,
+                    next(iter(addition.values())),
+                )
+        root_compare = copy.deepcopy(new)
+        root_compare.update(version=old["version"], loop_packs=old_packs)
+        if "runtime_cache_snapshots" in old:
+            root_compare["runtime_cache_snapshots"] = old["runtime_cache_snapshots"]
+        else:
+            root_compare.pop("runtime_cache_snapshots")
+        require(
+            root_compare == old,
+            "metadata relation changed other release semantics/provenance",
+        )
+        record("/version", old["version"], new["version"])
+        record(
+            "/runtime_cache_snapshots",
+            old.get("runtime_cache_snapshots"),
+            new["runtime_cache_snapshots"],
+        )
+        _, frozen_workload = strict_record(relation["frozen_workload"], path.parent)
+        frozen_proof_path, frozen_proof = strict_record(
+            relation["frozen_owner_proof"], path.parent
+        )
+        require(
+            frozen_workload["owner_proof"]["sha256"]
+            == relation["frozen_owner_proof"]["sha256"],
+            "metadata frozen workload/proof mismatch",
+        )
+        workload_compare = copy.deepcopy(docs["final_workload"])
+        workload_compare.update(
+            data_manifest_sha256=frozen_workload["data_manifest_sha256"],
+            owner_proof=frozen_workload["owner_proof"],
+        )
+        require(
+            workload_compare == frozen_workload
+            and selected_inputs(frozen_workload) == accepted["immutable_selection"],
+            "metadata relation transformed frozen workload/owner keys",
+        )
+        require(
+            frozen_workload["data_manifest_sha256"]
+            == frozen_proof["data_manifest_sha256"]
+            == digest(old_path)
+            and docs["final_workload"]["data_manifest_sha256"]
+            == docs["owner_proof"]["data_manifest_sha256"]
+            == digest(new_path),
+            "metadata frozen/consumer proof names another dataset",
+        )
+        require(
+            frozen_proof["loop_manifest_sha256"] == old_packs[4]["manifest_sha256"]
+            and docs["owner_proof"]["loop_manifest_sha256"]
+            == new_packs[4]["manifest_sha256"],
+            "metadata proof names another loop manifest",
+        )
+        old_cohort = frozen_proof["compiled_cohort"]
+        frozen_artifact_path, frozen_artifact = hashed_record(
+            relation["frozen_collector_artifacts"], path.parent
+        )
+        require(
+            all(
+                frozen_artifact["stamps"].get(stamp) == old_cohort[field]
+                and isinstance(old_cohort[field], str)
+                and re.fullmatch(
+                    r"[0-9a-fA-F]{64}"
+                    if field.endswith("_sha256")
+                    else r"[0-9a-fA-F]{40}",
+                    old_cohort[field],
+                )
+                for field, stamp in COHORT_STAMPS
+            )
+            and frozen_proof["kernel_revision"] == old_cohort["kernel_revision"]
+            and frozen_proof["rustred_revision"] == old_cohort["native_revision"]
+            and frozen_proof["mapper_git_revision"] == old_cohort["main_revision"]
+            and frozen_proof["measurement_executable_sha256"]
+            in {item["sha256"] for item in artifact_binaries(frozen_artifact)}
+            and frozen_proof["mapper_executable_sha256"]
+            in {item["sha256"] for item in artifact_binaries(frozen_artifact)},
+            "metadata frozen proof/artifact/cohort differs",
+        )
+        for item in artifact_binaries(frozen_artifact):
+            if item.get("immutable_path") and Path(item["immutable_path"]).exists():
+                require(
+                    digest(item["immutable_path"]) == item["sha256"],
+                    "metadata frozen executable changed",
+                )
+        for field, expected in (
+            ("data_manifest_sha256", digest(old_path)),
+            ("loop_manifest_sha256", old_packs[4]["manifest_sha256"]),
+        ):
+            if field in old_cohort:
+                require(
+                    old_cohort[field] == expected,
+                    "metadata frozen cohort names another dataset/loop manifest",
+                )
+        consumer_proof_path = hashed_file(accepted["consumer"]["owner_proof"], base)
+        controls = [
+            row["id"]
+            for group in ("tuning", "held_out")
+            for row in frozen_workload[group]
+        ]
+        for proof, artifact, proof_path in (
+            (frozen_proof, frozen_artifact, frozen_proof_path),
+            (docs["owner_proof"], docs["collector_artifacts"], consumer_proof_path),
+        ):
+            own_cohort = proof["compiled_cohort"]
+            binaries = {item["sha256"] for item in artifact_binaries(artifact)}
+            require(
+                proof["kernel_revision"] == own_cohort["kernel_revision"]
+                and proof["rustred_revision"] == own_cohort["native_revision"]
+                and proof["mapper_git_revision"] == own_cohort["main_revision"]
+                and proof["mapper_executable_sha256"] in binaries
+                and proof["measurement_executable_sha256"] in binaries
+                and [row["id"] for row in proof["rows"]] == controls,
+                "metadata proof is not bound to its own cohort/control inventory",
+            )
+            for row in proof["rows"]:
+                _, worker = strict_record(
+                    {"path": row["receipt_path"], "sha256": row["receipt_sha256"]},
+                    proof_path.parent,
+                )
+                require(
+                    worker.get("schema") == "vakint.five-loop-cache-measurement.v1"
+                    and worker.get("success") is True
+                    and worker.get("worker_success") is True
+                    and worker.get("fresh_process") is True
+                    and worker.get("variant") == "uncached"
+                    and type(worker.get("sample")) is int
+                    and worker["sample"] == 0
+                    and worker["supervision"]["success"] is True
+                    and type(worker["supervision"]["exit_code"]) is int
+                    and worker["supervision"]["exit_code"] == 0
+                    and worker["supervision"]["deadline_exhausted"] is False
+                    and worker["case_id"] == row["id"]
+                    and worker["input_sha256"] == row["input_sha256"]
+                    and worker["actual_lowered_roots"] == row["actual_lowered_roots"]
+                    and worker["identity"]["data_manifest_sha256"]
+                    == proof["data_manifest_sha256"]
+                    and worker["identity"]["build_git_revision"]
+                    == own_cohort["main_revision"]
+                    and worker["identity"]["executable_sha256"]
+                    == proof["measurement_executable_sha256"],
+                    "metadata proof worker receipt belongs to another dataset/cohort/input",
+                )
+        fields = (
+            "id",
+            "logical_cohort",
+            "public_input_source_sha256",
+            "input_sha256",
+            "actual_lowered_roots",
+            "protected_owner_roots",
+            "protected_root_set_sha256",
+            "application_binding",
+            "complete_owner_transport",
+            "reduction_succeeded",
+            "mapping_error",
+            "native_transports",
+        )
+        require(
+            frozen_proof["schema"]
+            == docs["owner_proof"]["schema"]
+            == "vakint.public-lowering-owner-map-proof.v1"
+            and frozen_proof["semantic_binding"]
+            == docs["owner_proof"]["semantic_binding"]
+            == producer["raw_report"]["semantic_binding"]
+            and all(
+                row["reduction_succeeded"] is True
+                for proof in (frozen_proof, docs["owner_proof"])
+                for row in proof["rows"]
+            )
+            and [{key: row[key] for key in fields} for row in frozen_proof["rows"]]
+            == [
+                {key: row[key] for key in fields} for row in docs["owner_proof"]["rows"]
+            ],
+            "metadata relation transformed frozen native owner transports/guards",
+        )
+        return {
+            "evidence": evidence(path),
+            "source_manifest": evidence(old_path),
+            "consumer_manifest": evidence(new_path),
+            "verified_original_files": verified_files,
+            "computed_metadata_changes": changed,
+            "frozen_workload": relation["frozen_workload"],
+            "frozen_owner_proof": relation["frozen_owner_proof"],
+            "frozen_collector_artifacts": evidence(frozen_artifact_path),
+            "scope": "Dataset metadata parity only; original source/import/physics provenance and all other consumer qualifications remain distinct.",
         }
 
     def cumulative_cache_import(self, reference, producer, cohort, base):
@@ -3257,8 +3670,14 @@ def main():
                 )
             require(
                 cache_identity(primary) == cache_identity(build["raw_report"])
-                and primary["data_manifest_sha256"]
-                == build["raw_report"]["data_manifest_sha256"],
+                and (
+                    primary["data_manifest_sha256"]
+                    == build["raw_report"]["data_manifest_sha256"]
+                    or primary.get("cache_requalification", {}).get(
+                        "data_metadata_requalification"
+                    )
+                    is not None
+                ),
                 "primary performance cache/data differs from completed build",
             )
     identity = json.dumps(
