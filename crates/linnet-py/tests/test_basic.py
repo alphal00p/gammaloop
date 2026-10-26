@@ -4,6 +4,7 @@ import gc
 import inspect
 import json
 import re
+import sys
 import unittest
 import weakref
 from dataclasses import dataclass
@@ -1358,7 +1359,7 @@ class TestHedgeGraphTopology(unittest.TestCase):
                 with self.assertRaisesRegex(
                     ValueError, "powerset at rank 64 is not representable"
                 ):
-                    large_cycle_space.all_cycles(max_results=2**64 - 1)
+                    large_cycle_space.all_cycles(max_results=sys.maxsize * 2 + 1)
 
                 bond = graph.find_bond(min_size=1, max_size=1)
                 self.assertIsInstance(bond, lp.Subgraph)
