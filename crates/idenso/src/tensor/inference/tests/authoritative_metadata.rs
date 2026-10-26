@@ -200,7 +200,7 @@ fn dual_free_dimension_mapping_preserves_orientation_and_later_collision_history
 }
 
 #[test]
-fn admitted_arithmetic_keeps_logical_ports_and_composes_without_observation() {
+fn admitted_arithmetic_owns_canonical_named_ports_and_composes_without_observation() {
     test_support::test_initialize();
     let minkowski = LibraryRep::from(Minkowski {}).new_rep(4);
     let indices = [99479, 99477].map(AbstractIndex::Normal);
@@ -249,7 +249,7 @@ fn admitted_arithmetic_keeps_logical_ports_and_composes_without_observation() {
     assert!(cancelled.is_zero());
     assert!(scaled_zero.is_zero());
     for result in [sum, difference, negated, weighted, cancelled, scaled_zero] {
-        assert_eq!(result.structure.logical_slots(), ports);
+        assert_eq!(result.structure.logical_slots(), [ports[1], ports[0]]);
         let occurrences = result.explicit_index_occurrences().unwrap();
         assert_eq!(occurrences.entries().count(), 2);
         for slot in slots {

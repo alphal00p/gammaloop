@@ -202,7 +202,7 @@ mod tests {
         ExplicitIndexOccurrences, SymbolicTensor, TENSOR_ARCHIVE_MAGIC, TENSOR_ARCHIVE_VERSION,
     };
     use crate::representations::ColorFundamental;
-    use crate::tensor::composition::TensorCompositionError;
+    use crate::tensor::composition::{MatrixChannel, TensorCompositionError};
     use crate::test_support;
     use base64::Engine;
     use base64::engine::general_purpose::STANDARD;
@@ -212,7 +212,9 @@ mod tests {
     use spenso::structure::partial::{
         OpenPortId, PartialIndex, PartialStructure, PartialStructureExt,
     };
-    use spenso::structure::representation::{Euclidean, LibrarySlot, Minkowski, RepName};
+    use spenso::structure::representation::{
+        Euclidean, LibraryRep, LibrarySlot, Minkowski, RepName, Representation,
+    };
     use spenso::structure::slot::IsAbstractSlot;
     use spenso::{bracket, tensor_symbol};
     use std::env;
@@ -222,6 +224,115 @@ mod tests {
     use symbolica::atom::{Atom, AtomCore, Symbol};
     use symbolica::state::{State, StateMap};
     use symbolica::{function, symbol};
+
+    #[test]
+    fn tensor_archive_preserves_detached_zero_channel_inference_convention() {
+        test_support::test_initialize();
+        let minkowski = Minkowski {}.new_rep(4).to_lib();
+        let euclidean = Euclidean {}.new_rep(4).to_lib();
+        let fundamental = ColorFundamental {}.new_rep(3).to_lib();
+        let port = |representation: Representation<LibraryRep>, index| {
+            representation.slot(PartialIndex::Explicit(AbstractIndex::Normal(index)))
+        };
+        let cases = [
+            (
+                SymbolicTensor::composite_interface([port(minkowski, 90), port(minkowski, 30)]),
+                Some(MatrixChannel {
+                    input: 0,
+                    output: 1,
+                }),
+            ),
+            (
+                PartialStructure::from_logical_slots([
+                    port(fundamental.dual(), 30),
+                    port(fundamental, 90),
+                ]),
+                Some(MatrixChannel {
+                    input: 1,
+                    output: 0,
+                }),
+            ),
+            (
+                SymbolicTensor::composite_interface([
+                    port(minkowski, 90),
+                    port(minkowski, 30),
+                    port(euclidean, 9),
+                    port(euclidean, 8),
+                ]),
+                None,
+            ),
+        ];
+        for (interface, expected) in cases {
+            let source = SymbolicTensor::from_declared_parts(Atom::Zero, interface).unwrap();
+            assert_eq!(source.matrix_channel(), expected);
+            let bytes = bincode::encode_to_vec(&source, config::standard()).unwrap();
+            let (decoded, consumed): (SymbolicTensor<PartialStructure>, _) =
+                bincode::decode_from_slice_with_context(
+                    &bytes,
+                    config::standard(),
+                    StateMap::default(),
+                )
+                .unwrap();
+            assert_eq!(consumed, bytes.len());
+            assert_eq!(decoded, source);
+            assert_eq!(decoded.matrix_channel(), expected);
+        }
+    }
+
+    #[test]
+    fn tensor_archive_preserves_canonical_composite_axes_and_zero_history() {
+        test_support::test_initialize();
+        let representation = Minkowski {}.new_rep(4).to_lib();
+        let ports = [98197, 98191]
+            .map(|index| representation.slot(PartialIndex::Explicit(AbstractIndex::Normal(index))));
+        let atom = function!(
+            tensor_symbol!("archive_composite_axes"),
+            representation
+                .slot::<AbstractIndex, _>(AbstractIndex::Normal(98197))
+                .to_atom(),
+            representation
+                .slot::<AbstractIndex, _>(AbstractIndex::Normal(98191))
+                .to_atom()
+        );
+        let leaf = SymbolicTensor::from_declared_parts(
+            atom.clone(),
+            PartialStructure::from_logical_slots(ports),
+        )
+        .unwrap();
+        let scalar = SymbolicTensor::infer(Atom::num(2)).unwrap();
+        let probe = SymbolicTensor::infer(function!(
+            tensor_symbol!("archive_composite_probe"),
+            representation
+                .slot::<AbstractIndex, _>(AbstractIndex::Normal(98191))
+                .to_atom()
+        ))
+        .unwrap();
+        for source in [
+            leaf.multiply(&scalar).unwrap(),
+            leaf.try_sub(&leaf).unwrap(),
+        ] {
+            assert_eq!(source.structure.logical_slots(), [ports[1], ports[0]]);
+            let bytes = bincode::encode_to_vec(&source, config::standard()).unwrap();
+            let (decoded, consumed): (SymbolicTensor<PartialStructure>, _) =
+                bincode::decode_from_slice_with_context(
+                    &bytes,
+                    config::standard(),
+                    StateMap::default(),
+                )
+                .unwrap();
+            assert_eq!(consumed, bytes.len());
+            assert_eq!(decoded, source);
+            assert_eq!(decoded.presentation_atom(), source.expression);
+            let contracted = decoded.multiply(&probe).unwrap();
+            assert_eq!(contracted.structure.logical_slots(), [ports[0]]);
+            assert!(matches!(
+                contracted.multiply(&probe),
+                Err(TensorCompositionError::InvalidExplicitMultiplicity { occurrences: 3, .. })
+            ));
+        }
+        assert_eq!(leaf.structure.logical_slots(), ports);
+        assert_eq!(leaf.expression, atom);
+    }
 
     #[test]
     fn tensor_archive_preserves_ranked_zero_and_logical_open_port_order() {

@@ -186,7 +186,7 @@ impl<R: RepName<Dual = R>, Aind: AbsInd> TensorStructure for OrderedStructure<R,
             .map(|(s, index)| s.reindex(*index))
             .collect::<Canonicalized<Self>>();
         let (target, layout) = canonicalized.into_parts();
-        if !layout.representation_permutation().is_identity() {
+        if !layout.representation_is_identity() {
             return Err(StructureError::InvalidIndexPermutation(
                 "reindexing changed representation order".to_string(),
             ));
@@ -194,7 +194,7 @@ impl<R: RepName<Dual = R>, Aind: AbsInd> TensorStructure for OrderedStructure<R,
         let pending = PendingIndexPermutation::checked(
             &source,
             &target.structure,
-            layout.index_permutation().clone(),
+            layout.into_index_permutation(),
         )?;
         Ok(Reindexed::from_parts(target, pending))
     }
@@ -264,6 +264,63 @@ impl<R: RepName, Aind> Default for OrderedStructure<R, Aind> {
 // }
 
 impl<R: RepName, Aind: AbsInd> OrderedStructure<R, Aind> {
+    // Sort usize positions in both paths, as legacy admission did. Sorting Slots
+    // directly can use a different comparison schedule for symbolic dimension
+    // ties, whose comparison is not a total order. These scratch orders become
+    // admission history only when the caller explicitly constructs a layout.
+    fn canonicalize(&mut self) -> (Vec<usize>, Vec<usize>) {
+        let mut representation_order: Vec<_> = (0..self.structure.len()).collect();
+        representation_order.sort_by_key(|&position| self.structure[position].rep);
+        self.reorder_slots(&representation_order);
+        self.update_partitions();
+
+        let mut index_order: Vec<_> = (0..self.structure.len()).collect();
+        index_order.sort_by_key(|&position| &self.structure[position]);
+        self.reorder_slots(&index_order);
+        (representation_order, index_order)
+    }
+
+    // The position list is a sorted permutation of 0..len produced above, with
+    // source positions indexed by destination. Swapping consecutive positions
+    // around each cycle applies it without constructing its inverse mapping.
+    fn reorder_slots(&mut self, positions: &[usize]) {
+        let Some(first_moved) = positions
+            .iter()
+            .enumerate()
+            .position(|(position, &source)| position != source)
+        else {
+            return;
+        };
+        let mut visited = vec![false; positions.len()];
+        for start in first_moved..positions.len() {
+            if visited[start] {
+                continue;
+            }
+            let mut current = start;
+            visited[current] = true;
+            let mut next = positions[current];
+            while next != start {
+                self.structure.swap(current, next);
+                current = next;
+                visited[current] = true;
+                next = positions[current];
+            }
+        }
+    }
+
+    fn update_partitions(&mut self) {
+        self.base_start = self
+            .structure
+            .iter()
+            .position(|slot| !slot.rep.rep.is_self_dual())
+            .unwrap_or(usize::MAX);
+        self.dual_start = self
+            .structure
+            .iter()
+            .position(|slot| slot.rep.rep.is_dual() && !slot.rep.rep.is_self_dual())
+            .unwrap_or(usize::MAX);
+    }
+
     pub fn dual_slice(&self) -> &[Slot<R, Aind>] {
         if self.dual_start >= self.structure.len() {
             &self.structure[0..0]
@@ -335,58 +392,19 @@ impl<S: RepName, R: From<S> + RepName, Aind: AbsInd> FromIterator<Slot<S, Aind>>
 impl<R: RepName, Aind: AbsInd> From<Vec<Slot<R, Aind>>>
     for Canonicalized<OrderedStructure<R, Aind>>
 {
-    fn from(mut structure: Vec<Slot<R, Aind>>) -> Self {
-        let rep_permutation = Permutation::sort_by_key(&structure, |a| a.rep);
-        rep_permutation.apply_slice_in_place(&mut structure);
-
-        if structure.is_empty() {
-            return Canonicalized::from_parts(
-                OrderedStructure {
-                    structure,
-                    base_start: usize::MAX,
-                    dual_start: usize::MAX,
-                },
-                CanonicalLayout::from_permutations(rep_permutation, Permutation::id(0)),
-            );
-        }
-
-        let mut base_start =
-            if structure[0].rep.rep.is_base() && !structure[0].rep.rep.is_self_dual() {
-                0
-            } else {
-                usize::MAX
-            };
-        let mut dual_start =
-            if structure[0].rep.rep.is_dual() && !structure[0].rep.rep.is_self_dual() {
-                base_start = 0;
-                0
-            } else {
-                usize::MAX
-            };
-
-        for i in 0..(structure.len() - 1) {
-            if structure[i].rep.rep.is_self_dual() && !structure[i + 1].rep.rep.is_self_dual() {
-                base_start = i + 1;
-            }
-
-            if structure[i].rep.rep.is_base()
-                && !structure[i + 1].rep.rep.is_self_dual()
-                && structure[i + 1].rep.rep.is_dual()
-            {
-                dual_start = i + 1;
-            }
-        }
-
-        let index_permutation = Permutation::sort(&structure);
-        index_permutation.apply_slice_in_place(&mut structure);
+    fn from(structure: Vec<Slot<R, Aind>>) -> Self {
+        let mut canonical = OrderedStructure {
+            structure,
+            ..OrderedStructure::default()
+        };
+        let (representation_order, index_order) = canonical.canonicalize();
 
         Canonicalized::from_parts(
-            OrderedStructure {
-                structure,
-                base_start,
-                dual_start,
-            },
-            CanonicalLayout::from_permutations(rep_permutation, index_permutation),
+            canonical,
+            CanonicalLayout::from_permutations(
+                Permutation::from_inv(representation_order),
+                Permutation::from_inv(index_order),
+            ),
         )
     }
 }
@@ -428,6 +446,99 @@ impl<R: RepName, Aind: AbsInd> OrderedStructure<R, Aind> {
     /// [`DenseTensor`]: crate::tensors::data::DenseTensor
     pub fn new(structure: Vec<Slot<R, Aind>>) -> Canonicalized<Self> {
         Canonicalized::from(structure)
+    }
+
+    /// Merges already selected free-slot occurrences into a canonical result.
+    ///
+    /// This retains every supplied occurrence, including matching slots and
+    /// same-oriented duplicates; it never infers a contraction. Stable sorting
+    /// first groups representations and then orders full slots, exactly as at
+    /// admission, including ties involving symbolic dimensions. The result owns
+    /// its canonical axes and records no history of the supplied slot order.
+    /// This operation does not reorder any associated tensor component data.
+    ///
+    /// ```
+    /// use spenso::structure::OrderedStructure;
+    /// use spenso::structure::representation::{Euclidean, RepName};
+    ///
+    /// let i = Euclidean {}.new_slot(3, 1);
+    /// let j = Euclidean {}.new_slot(3, 2);
+    /// let merged = OrderedStructure::<Euclidean>::merge_slots([j, i, i]);
+    /// assert_eq!(merged.self_dual_slice(), [i, i, j]);
+    /// ```
+    #[must_use]
+    pub fn merge_slots(slots: impl IntoIterator<Item = Slot<R, Aind>>) -> Self {
+        let mut result = Self {
+            structure: slots.into_iter().collect(),
+            ..Self::default()
+        };
+        let _ = result.canonicalize();
+        result
+    }
+
+    /// Keeps the specified canonical-storage positions and merges their occurrences.
+    ///
+    /// Positions identify axes to keep, not remove, and their supplied order
+    /// determines stable ties before canonical sorting. Repeated positions retain
+    /// repeated occurrences. No contraction or matching is inferred.
+    ///
+    /// # Panics
+    ///
+    /// Panics if a selected position is outside this structure's canonical storage.
+    ///
+    /// ```
+    /// use spenso::structure::{OrderedStructure, SlotIndex};
+    /// use spenso::structure::representation::{Euclidean, RepName};
+    ///
+    /// let i = Euclidean {}.new_slot(3, 1);
+    /// let j = Euclidean {}.new_slot(3, 2);
+    /// let source = OrderedStructure::<Euclidean>::new(vec![j, i]).into_canonical();
+    /// assert_eq!(source.select([SlotIndex(0)]).self_dual_slice(), [i]);
+    /// ```
+    #[must_use]
+    pub fn select(&self, positions: impl IntoIterator<Item = SlotIndex>) -> Self {
+        Self::merge_slots(
+            positions
+                .into_iter()
+                .map(|position| self.structure[position.0]),
+        )
+    }
+
+    /// Merges selected free occurrences from two canonical structures.
+    ///
+    /// Both selections name positions to keep in their operand's canonical
+    /// storage. Left occurrences precede right occurrences before the stable
+    /// two-stage sort. Matching slots and same-oriented duplicates remain free;
+    /// the caller owns the contraction selection. No input-order maps are stored.
+    ///
+    /// # Panics
+    ///
+    /// Panics if a selected position is outside its operand's canonical storage.
+    ///
+    /// ```
+    /// use spenso::structure::{OrderedStructure, SlotIndex};
+    /// use spenso::structure::representation::{Euclidean, RepName};
+    ///
+    /// let i = Euclidean {}.new_slot(3, 1);
+    /// let left = OrderedStructure::<Euclidean>::new(vec![i]).into_canonical();
+    /// let right = OrderedStructure::<Euclidean>::new(vec![i]).into_canonical();
+    /// let merged = left.merge_selected(&right, [SlotIndex(0)], [SlotIndex(0)]);
+    /// assert_eq!(merged.self_dual_slice(), [i, i]);
+    /// ```
+    #[must_use]
+    pub fn merge_selected(
+        &self,
+        other: &Self,
+        left_positions: impl IntoIterator<Item = SlotIndex>,
+        right_positions: impl IntoIterator<Item = SlotIndex>,
+    ) -> Self {
+        let left = left_positions
+            .into_iter()
+            .map(|position| self.structure[position.0]);
+        let right = right_positions
+            .into_iter()
+            .map(|position| other.structure[position.0]);
+        Self::merge_slots(left.chain(right))
     }
 
     pub fn to_named<N, A>(self, name: N, args: Option<A>) -> NamedStructure<N, A, R, Aind> {
@@ -953,14 +1064,240 @@ impl<R: RepName<Dual = R>, Aind: AbsInd> StructureContract for OrderedStructure<
 #[cfg(test)]
 pub mod test {
     use linnet::half_edge::subgraph::SubSetLike;
+    #[cfg(feature = "shadowing")]
+    use linnet::permutation::Permutation;
 
+    #[cfg(feature = "shadowing")]
+    use symbolica::symbol;
+
+    #[cfg(feature = "shadowing")]
+    use crate::structure::abstract_index::AbstractIndex;
+    #[cfg(feature = "shadowing")]
+    use crate::structure::dimension::Dimension;
+    use crate::structure::representation::{Euclidean, LibraryRep, Lorentz, Minkowski, RepName};
+    #[cfg(feature = "shadowing")]
+    use crate::structure::slot::Slot;
+    use crate::structure::slot::{DualSlotTo, IsAbstractSlot};
     use crate::structure::{
-        Canonicalized, MergeInfo, StructureContract, TensorStructure,
-        representation::{Euclidean, LibraryRep, Lorentz, Minkowski, RepName},
-        slot::{DualSlotTo, IsAbstractSlot},
+        Canonicalized, MergeInfo, SlotIndex, StructureContract, TensorStructure,
     };
 
     use super::OrderedStructure;
+
+    #[test]
+    fn selected_survivor_merge_retains_matches_and_same_oriented_duplicates() {
+        let self_dual = Euclidean {}.new_slot(4, 0).to_lib();
+        let upper = Lorentz {}.new_slot(4, 1).to_lib();
+        let lower = upper.dual();
+        let left =
+            OrderedStructure::<LibraryRep>::new(vec![upper, self_dual, upper]).into_canonical();
+        let right = OrderedStructure::<LibraryRep>::new(vec![lower, upper, self_dual, lower])
+            .into_canonical();
+        let merged = left.merge_selected(
+            &right,
+            (0..left.order()).map(SlotIndex),
+            (0..right.order()).map(SlotIndex),
+        );
+
+        assert_eq!(merged.self_dual_slice(), [self_dual, self_dual]);
+        assert_eq!(merged.base_slice(), [upper, upper, upper]);
+        assert_eq!(merged.dual_slice(), [lower, lower]);
+        assert_eq!(merged.order(), left.order() + right.order());
+    }
+
+    #[test]
+    fn survivor_selection_keeps_canonical_positions_and_repeated_occurrences() {
+        let self_dual = Euclidean {}.new_slot(4, 0).to_lib();
+        let upper = Lorentz {}.new_slot(4, 1).to_lib();
+        let lower = upper.dual();
+        let admitted = OrderedStructure::<LibraryRep>::new(vec![lower, self_dual, upper]);
+        assert_eq!(admitted.layout().logical_to_canonical_position(0), 2);
+        let selected = admitted
+            .canonical()
+            .select([SlotIndex(2), SlotIndex(0), SlotIndex(2)]);
+
+        assert_eq!(selected.self_dual_slice(), [self_dual]);
+        assert!(selected.base_slice().is_empty());
+        assert_eq!(selected.dual_slice(), [lower, lower]);
+        assert!(admitted.canonical().select([]).is_scalar());
+    }
+
+    #[test]
+    fn survivor_selection_rebuilds_partitions_after_removing_whole_kinds() {
+        let self_dual = Euclidean {}.new_slot(4, 0).to_lib();
+        let upper = Lorentz {}.new_slot(4, 1).to_lib();
+        let lower = upper.dual();
+        let source =
+            OrderedStructure::<LibraryRep>::new(vec![lower, upper, self_dual]).into_canonical();
+        for positions in [vec![], vec![0], vec![1], vec![2], vec![0, 2], vec![1, 2]] {
+            let selected = source.select(positions.iter().copied().map(SlotIndex));
+            let expected = Canonicalized::from(
+                positions
+                    .into_iter()
+                    .map(|position| source.structure[position])
+                    .collect::<Vec<_>>(),
+            )
+            .into_canonical();
+            assert_eq!(selected, expected);
+            assert_eq!(selected.self_dual_slice(), expected.self_dual_slice());
+            assert_eq!(selected.base_slice(), expected.base_slice());
+            assert_eq!(selected.dual_slice(), expected.dual_slice());
+        }
+    }
+
+    #[cfg(feature = "shadowing")]
+    #[test]
+    fn selected_survivors_preserve_stable_two_stage_symbolic_dimension_ties() {
+        let symbolic_a = Dimension::from(symbol!("selected_survivor_dimension_a"));
+        let symbolic_b = Dimension::from(symbol!("selected_survivor_dimension_b"));
+        let slot = |dimension, index| -> Slot<LibraryRep> {
+            Euclidean {}
+                .new_rep(dimension)
+                .slot(AbstractIndex::Normal(index))
+                .to_lib()
+        };
+        let tied = [slot(symbolic_b, 2), slot(symbolic_a, 2)];
+        let input = vec![
+            Lorentz {}.new_slot(3, 4).to_lib().dual(),
+            tied[0],
+            slot(4.into(), 3),
+            slot(2.into(), 0),
+            tied[1],
+            slot(symbolic_a, 1),
+            Lorentz {}.new_slot(3, 4).to_lib(),
+        ];
+        for rotation in 0..input.len() {
+            let mut slots = input.clone();
+            slots.rotate_left(rotation);
+            let expected = Canonicalized::from(slots.clone()).into_canonical();
+            let merged = OrderedStructure::merge_slots(slots);
+            assert_eq!(merged, expected);
+            assert_eq!(merged.base_slice(), expected.base_slice());
+            assert_eq!(merged.dual_slice(), expected.dual_slice());
+        }
+        let tied_result = OrderedStructure::merge_slots(tied);
+        assert_eq!(tied_result.self_dual_slice(), tied);
+        let reversed = tied_result.select([SlotIndex(1), SlotIndex(0)]);
+        assert_eq!(reversed.self_dual_slice(), [tied[1], tied[0]]);
+        let merged = tied_result.merge_selected(&reversed, [SlotIndex(0)], [SlotIndex(0)]);
+        assert_eq!(merged.self_dual_slice(), tied);
+    }
+
+    #[cfg(feature = "shadowing")]
+    #[test]
+    fn twenty_one_symbolic_slots_keep_the_legacy_position_sort_order() {
+        let symbolic = Dimension::from(symbol!("legacy_position_sort_dimension"));
+        let dimensions = [
+            2.into(),
+            symbolic,
+            symbolic,
+            2.into(),
+            1.into(),
+            symbolic,
+            symbolic,
+            1.into(),
+        ];
+        let slots: Vec<Slot<LibraryRep>> = dimensions
+            .into_iter()
+            .chain([symbolic; 13])
+            .map(|dimension| {
+                Euclidean {}
+                    .new_rep(dimension)
+                    .slot(AbstractIndex::Normal(0))
+                    .to_lib()
+            })
+            .collect();
+        let expected: Vec<_> = [
+            1.into(),
+            2.into(),
+            symbolic,
+            symbolic,
+            symbolic,
+            symbolic,
+            1.into(),
+            2.into(),
+        ]
+        .into_iter()
+        .chain([symbolic; 13])
+        .collect();
+        let admitted = OrderedStructure::new(slots.clone());
+        let merged = OrderedStructure::merge_slots(slots.clone());
+        assert_eq!(
+            admitted
+                .canonical()
+                .external_dims_iter()
+                .collect::<Vec<_>>(),
+            expected
+        );
+        assert_eq!(merged.external_dims_iter().collect::<Vec<_>>(), expected);
+        assert_eq!(
+            admitted
+                .layout()
+                .canonical_to_logical(&admitted.canonical().structure),
+            slots,
+        );
+    }
+
+    #[cfg(feature = "shadowing")]
+    #[test]
+    fn larger_symbolic_survivor_orders_match_legacy_sorting_and_admission_history() {
+        let symbolic_a = Dimension::from(symbol!("large_legacy_position_dimension_a"));
+        let symbolic_b = Dimension::from(symbol!("large_legacy_position_dimension_b"));
+        let prefix = [
+            2.into(),
+            symbolic_a,
+            symbolic_b,
+            2.into(),
+            1.into(),
+            symbolic_b,
+            symbolic_a,
+            1.into(),
+        ];
+        for order in [20, 21, 22, 32, 63, 64, 65, 127, 128, 129, 257] {
+            for reverse in [false, true] {
+                let mut slots: Vec<Slot<LibraryRep>> = prefix
+                    .into_iter()
+                    .chain([symbolic_a, symbolic_b].into_iter().cycle())
+                    .take(order)
+                    .map(|dimension| {
+                        Euclidean {}
+                            .new_rep(dimension)
+                            .slot(AbstractIndex::Normal(0))
+                            .to_lib()
+                    })
+                    .collect();
+                if reverse {
+                    slots.reverse();
+                }
+                // Keep the original admission pipeline as an independent oracle:
+                // both stable sorts operate on usize positions inside Permutation.
+                let mut expected = slots.clone();
+                let representation = Permutation::sort_by_key(&expected, |slot| slot.rep);
+                representation.apply_slice_in_place(&mut expected);
+                let index = Permutation::sort(&expected);
+                index.apply_slice_in_place(&mut expected);
+
+                let admitted = OrderedStructure::new(slots.clone());
+                assert_eq!(admitted.canonical().structure, expected);
+                assert_eq!(admitted.layout().canonical_to_logical(&expected), slots,);
+                let merged = OrderedStructure::merge_slots(slots);
+                assert_eq!(merged.structure, expected);
+            }
+        }
+    }
+
+    #[test]
+    #[should_panic]
+    fn survivor_selection_rejects_out_of_bounds_positions() {
+        let _ = OrderedStructure::<LibraryRep>::empty().select([SlotIndex(0)]);
+    }
+
+    #[test]
+    #[should_panic]
+    fn selected_survivor_merge_rejects_out_of_bounds_positions() {
+        let empty = OrderedStructure::<LibraryRep>::empty();
+        let _ = empty.merge_selected(&empty, [], [SlotIndex(0)]);
+    }
 
     #[test]
     fn partial_trace_preserves_partitions_for_contraction() {

@@ -8,6 +8,7 @@ use idenso::color::CS;
 use idenso::dirac;
 use idenso::dirac::AGS;
 use idenso::epsilon::EPSILON_SYMBOL;
+use idenso::tensor::composition::MatrixChannel;
 use idenso::tensor::inference::{InterfaceInference, TensorInferenceError};
 use idenso::tensor::{SymbolicTensor, composition};
 use pyo3::IntoPyObjectExt;
@@ -4779,32 +4780,54 @@ fn chain(
             .structure
             .matrix_channel()
             .ok_or_else(|| PyValueError::new_err("chain factors have no unique matrix channel"))?;
+        let slots = first.structure.structure().logical_slots();
+        let input = slots[first_channel.input];
+        let output = slots[first_channel.output];
         let mut value = first.chain_form(first_channel)?;
+        // A zero intermediate keeps the selected roles even without chain syntax.
+        let mut channel = MatrixChannel {
+            input: 0,
+            output: 1,
+        }
+        .remap_output(input, output, value.structure.structure())
+        .map_err(|error| PyValueError::new_err(error.to_string()))?;
         for factor in factors {
             let factor = factor.extract::<ConvertibleToSpensoNet>()?.to_net();
             let factor_channel = factor.structure.matrix_channel().ok_or_else(|| {
                 PyValueError::new_err("chain factors have no unique matrix channel")
             })?;
+            let input = value.structure.structure().logical_slots()[channel.input];
+            let output = factor.structure.structure().logical_slots()[factor_channel.output];
             value = value.compose(
                 ConvertibleToSpensoNet(factor),
-                (0, 1),
+                (channel.input, channel.output),
                 (factor_channel.input, factor_channel.output),
             )?;
+            channel = MatrixChannel {
+                input: 0,
+                output: 1,
+            }
+            .remap_output(input, output, value.structure.structure())
+            .map_err(|error| PyValueError::new_err(error.to_string()))?;
         }
         let slots = value.structure.structure().logical_slots();
-        if start_slot.slot.rep() != slots[0].rep() || end_slot.slot.rep() != slots[1].rep() {
+        if start_slot.slot.rep() != slots[channel.input].rep()
+            || end_slot.slot.rep() != slots[channel.output].rep()
+        {
             return Err(PyValueError::new_err(
                 "chain endpoints are incompatible with the factor channel",
             ));
         }
-        let value = if start_slot.slot.aind() == end_slot.slot.aind() {
-            value.trace(Some((0, 1)))
+        let mut value = if start_slot.slot.aind() == end_slot.slot.aind() {
+            value.trace(Some((channel.input, channel.output)))
         } else {
             value.set_port_indices(&HashMap::from([
-                (0, start_slot.slot.aind()),
-                (1, end_slot.slot.aind()),
+                (channel.input, start_slot.slot.aind()),
+                (channel.output, end_slot.slot.aind()),
             ]))
         }?;
+        value.structure = value.structure.canonicalize_named_interface();
+        value.materialized = value.materialized.canonicalize_named_interface();
         return Py::new(py, value).map(TensorDispatch::Network);
     }
 
@@ -5462,12 +5485,14 @@ submit! {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::AtomsOrFloats;
     use idenso::representations;
     use idenso::representations::{Bispinor, ColorAdjoint, ColorFundamental};
     use idenso::tensor::composition::TensorCompositionError;
     use idenso::{IndexTooling, IndexToolingError};
     use spenso::broadcast_symbol;
     use spenso::structure::dimension::Dimension;
+    use spenso::structure::partial::PartialSlot;
     use spenso::structure::representation::{ExtendibleReps, Minkowski, RepName};
     use symbolica::atom::{AtomCore, FunctionBuilder};
     use symbolica::symbol;
@@ -7826,7 +7851,7 @@ mod tests {
                 };
                 let quotient = quotient.borrow(py);
                 assert_eq!(*quotient.atom(), &expression / &divisor);
-                assert_eq!(quotient.interface().logical_slots(), ports);
+                assert_eq!(quotient.interface().logical_slots(), [ports[1], ports[0]]);
                 assert_eq!(numerator.borrow(py).interface().logical_slots(), ports);
                 let error = TensorExpression::__rtruediv__(
                     numerator.bind(py).borrow(),
@@ -8251,6 +8276,311 @@ mod tests {
             assert!(
                 matches!(indexed.atom().as_view(), AtomView::Fun(function) if function.get_symbol() == SPENSO_TAG.trace)
             );
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn network_chain_constructor_tracks_named_endpoints_and_final_axis_order() {
+        representations::initialize();
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let matrix = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(3));
+            let spectator = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(2));
+            let endpoint =
+                |index| matrix.slot(PartialIndex::Explicit(AbstractIndex::Normal(index)));
+            let spectator = spectator.slot(PartialIndex::Explicit(AbstractIndex::Normal(1)));
+            let network = |name: &str, ports: Vec<PartialSlot>, values: Vec<f64>| {
+                let name = SPENSO_TAG.tensor_symbol(name);
+                let interface = PartialStructure::from_logical_slots(ports);
+                let atom = FunctionBuilder::new(name)
+                    .add_args(
+                        interface
+                            .logical_slots()
+                            .into_iter()
+                            .map(composition::port_atom),
+                    )
+                    .finish();
+                let descriptor = SymbolicTensor::from_declared_parts(atom, interface).unwrap();
+                let expression = TensorExpression::from_known_parts(
+                    py,
+                    descriptor.expression().clone(),
+                    descriptor.structure().clone(),
+                    Some(name),
+                    Vec::new(),
+                )?;
+                SpensoNet::from_tensor(Spensor::dense(
+                    expression.bind(py).as_any().extract()?,
+                    AtomsOrFloats::Floats(values),
+                )?)
+            };
+            let values_a = (1..=18).map(f64::from).collect::<Vec<_>>();
+            let values_b = (1..=9).map(f64::from).collect::<Vec<_>>();
+            let values_c = (0..9).map(|i| f64::from(2 * i - 3)).collect::<Vec<_>>();
+            let left = network(
+                "network_constructor_named_chain_left",
+                vec![endpoint(9), endpoint(3), spectator],
+                values_a.clone(),
+            )?;
+            let middle = network(
+                "network_constructor_named_chain_middle",
+                vec![endpoint(3), endpoint(5)],
+                values_b.clone(),
+            )?;
+            let right = network(
+                "network_constructor_named_chain_right",
+                vec![endpoint(5), endpoint(7)],
+                values_c.clone(),
+            )?;
+            let start = matrix.slot(AbstractIndex::Normal(11));
+            let end = matrix.slot(AbstractIndex::Normal(13));
+            let expected = SymbolicTensor::chain(
+                matrix.slot(AbstractIndex::Normal(9)),
+                matrix.slot(AbstractIndex::Normal(7)),
+                &[
+                    left.structure.clone(),
+                    middle.structure.clone(),
+                    right.structure.clone(),
+                ],
+            )
+            .unwrap();
+            // The symbolic chain fills unresolved endpoints; explicit endpoint
+            // renaming uses the same admitted reindexing owner as the network.
+            let channel = expected.matrix_channel().unwrap();
+            let expected = expected
+                .reindex_interface_ports(&HashMap::from([
+                    (channel.input, start.aind()),
+                    (channel.output, end.aind()),
+                ]))
+                .unwrap()
+                .canonicalize_named_interface();
+            let factors = PyTuple::new(
+                py,
+                [
+                    Py::new(py, left)?,
+                    Py::new(py, middle)?,
+                    Py::new(py, right)?,
+                ],
+            )?;
+            let TensorDispatch::Network(result) = chain(
+                py,
+                SpensoSlot { slot: start },
+                SpensoSlot { slot: end },
+                &factors,
+            )?
+            else {
+                panic!("component factors must produce a tensor network")
+            };
+            let mut result = result.borrow_mut(py);
+            let expected_slots = [spectator, endpoint(11), endpoint(13)];
+            assert_eq!(result.structure.expression(), expected.expression());
+            assert_eq!(result.structure.structure().logical_slots(), expected_slots);
+            assert_eq!(
+                result.materialized.structure().logical_slots(),
+                expected_slots
+            );
+            let actual = result.network.graph.dangling_indices();
+            assert_eq!(actual.len(), expected_slots.len());
+            for slot in expected_slots {
+                let PartialIndex::Explicit(index) = slot.aind else {
+                    unreachable!("the expected named chain ports are explicit")
+                };
+                assert!(actual.contains(&slot.rep().slot(index).to_lib()));
+            }
+            assert_eq!(
+                result.structure.matrix_channel(),
+                Some(composition::MatrixChannel {
+                    input: 1,
+                    output: 2
+                })
+            );
+            result.execute(None, None, None, ExecutionMode::All)?;
+            let result = Py::new(py, result.result_tensor(None)?)?;
+            for mu in 0..2 {
+                for i in 0..3 {
+                    for j in 0..3 {
+                        let expected = (0..3)
+                            .flat_map(|k| (0..3).map(move |l| (k, l)))
+                            .map(|(k, l)| {
+                                values_a[(i * 3 + k) * 2 + mu]
+                                    * values_b[k * 3 + l]
+                                    * values_c[l * 3 + j]
+                            })
+                            .sum::<f64>();
+                        assert_eq!(
+                            result.bind(py).get_item((mu, i, j))?.extract::<f64>()?,
+                            expected
+                        );
+                    }
+                }
+            }
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn network_chain_constructor_carries_reversed_roles_through_a_cancelled_factor() {
+        representations::initialize();
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let matrix = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(3));
+            let spectator = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(2));
+            let endpoint =
+                |index| matrix.slot(PartialIndex::Explicit(AbstractIndex::Normal(index)));
+            let spectator =
+                |index| spectator.slot(PartialIndex::Explicit(AbstractIndex::Normal(index)));
+            let network = |name: &str, ports: Vec<PartialSlot>, values: Vec<f64>| {
+                let name = SPENSO_TAG.tensor_symbol(name);
+                let interface = PartialStructure::from_logical_slots(ports);
+                let atom = FunctionBuilder::new(name)
+                    .add_args(
+                        interface
+                            .logical_slots()
+                            .into_iter()
+                            .map(composition::port_atom),
+                    )
+                    .finish();
+                let descriptor = SymbolicTensor::from_declared_parts(atom, interface).unwrap();
+                let expression = TensorExpression::from_known_parts(
+                    py,
+                    descriptor.expression().clone(),
+                    descriptor.structure().clone(),
+                    Some(name),
+                    Vec::new(),
+                )?;
+                SpensoNet::from_tensor(Spensor::dense(
+                    expression.bind(py).as_any().extract()?,
+                    AtomsOrFloats::Floats(values),
+                )?)
+            };
+            let factor = |name, input, output, index| {
+                network(
+                    name,
+                    vec![endpoint(input), endpoint(output), spectator(index)],
+                    (1..=18).map(f64::from).collect(),
+                )
+            };
+            let first = factor("network_cancelled_chain_first", 90, 50, 7)?;
+            let middle = factor("network_cancelled_chain_middle", 50, 30, 11)?;
+            let middle = middle.clone().add_network(middle, true)?;
+            assert_eq!(
+                middle.structure.structure().logical_slots(),
+                [spectator(11), endpoint(30), endpoint(50)]
+            );
+            let detached = middle.structure.matrix_channel().unwrap();
+            assert_eq!(
+                detached,
+                MatrixChannel {
+                    input: 1,
+                    output: 2
+                }
+            );
+            let error = first
+                .compose(
+                    ConvertibleToSpensoNet(middle.clone()),
+                    (0, 1),
+                    (detached.input, detached.output),
+                )
+                .err()
+                .expect("the detached 30 -> 50 channel cannot accept the preceding output 50");
+            assert!(
+                error
+                    .to_string()
+                    .contains("do not carry the same abstract index"),
+                "{error}"
+            );
+            // A detached self-dual zero takes its direction from its public
+            // axes. Select 50 -> 30 before the builder canonicalizes them again.
+            let middle = middle.permute_axes(vec![2, 1, 0])?;
+            let selected = [endpoint(50), endpoint(30), spectator(11)];
+            assert_eq!(middle.structure.structure().logical_slots(), selected);
+            assert_eq!(middle.materialized.structure().logical_slots(), selected);
+            assert_eq!(
+                middle.structure.matrix_channel(),
+                Some(MatrixChannel {
+                    input: 0,
+                    output: 1
+                })
+            );
+            let last = factor("network_cancelled_chain_last", 30, 10, 13)?;
+            let factors = PyTuple::new(
+                py,
+                [
+                    Py::new(py, first)?,
+                    Py::new(py, middle)?,
+                    Py::new(py, last)?,
+                ],
+            )?;
+            let TensorDispatch::Network(result) = chain(
+                py,
+                SpensoSlot {
+                    slot: matrix.slot(AbstractIndex::Normal(90)),
+                },
+                SpensoSlot {
+                    slot: matrix.slot(AbstractIndex::Normal(10)),
+                },
+                &factors,
+            )?
+            else {
+                panic!("component factors must produce a tensor network")
+            };
+            let mut result = result.borrow_mut(py);
+            let expected = [
+                spectator(7),
+                spectator(11),
+                spectator(13),
+                endpoint(10),
+                endpoint(90),
+            ];
+            assert!(result.structure.expression().is_zero());
+            assert!(result.materialized.expression().is_zero());
+            assert_eq!(result.structure.structure().logical_slots(), expected);
+            assert_eq!(result.materialized.structure().logical_slots(), expected);
+            let actual = result.network.graph.dangling_indices();
+            assert_eq!(actual.len(), expected.len());
+            for slot in expected {
+                let PartialIndex::Explicit(index) = slot.aind else {
+                    unreachable!("the expected zero-chain ports are named")
+                };
+                assert!(actual.contains(&slot.rep().slot(index).to_lib()));
+            }
+            let probe = network(
+                "network_cancelled_chain_internal_probe",
+                vec![endpoint(30)],
+                vec![2., 5., 7.],
+            )?;
+            let error = result
+                .clone()
+                .multiply_network(probe)
+                .err()
+                .expect("a cancelled internal index must retain its two occurrences");
+            assert!(
+                error
+                    .to_string()
+                    .contains("more than two compatible tensor ports"),
+                "{error}"
+            );
+            result.execute(None, None, None, ExecutionMode::All)?;
+            let result = Py::new(py, result.result_tensor(None)?)?;
+            for mu in 0..2 {
+                for nu in 0..2 {
+                    for rho in 0..2 {
+                        for output in 0..3 {
+                            for input in 0..3 {
+                                assert_eq!(
+                                    result
+                                        .bind(py)
+                                        .get_item((mu, nu, rho, output, input))?
+                                        .extract::<f64>()?,
+                                    0.
+                                );
+                            }
+                        }
+                    }
+                }
+            }
             Ok(())
         })
         .unwrap();

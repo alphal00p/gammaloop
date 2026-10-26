@@ -7927,7 +7927,7 @@ mod tests {
                     .collect::<Vec<_>>();
                 assert_eq!(
                     expected_indices,
-                    [hedges[1], hedges[0]].map(|hedge| {
+                    [hedges[0].min(hedges[1]), hedges[0].max(hedges[1])].map(|hedge| {
                         PartialIndex::Explicit(AbstractIndex::Named(
                             symbols::hedge_index().into(),
                             hedge,
@@ -7935,8 +7935,8 @@ mod tests {
                         ))
                     })
                 );
-                // Canonical free interfaces do not rewrite the tensor leaf
-                // whose authored arguments were just checked above.
+                // Composite axes are canonical; exact payload comparisons
+                // below retain the authored leaf argument order.
                 let expected = expected.canonicalize_named_interface();
                 assert_eq!(
                     actual.expression().as_view().get_data(),
@@ -8003,7 +8003,7 @@ mod tests {
                     .collect::<Vec<_>>();
                 assert_eq!(
                     expected_indices,
-                    [hedges[1], hedges[0]].map(|hedge| {
+                    [hedges[0].min(hedges[1]), hedges[0].max(hedges[1])].map(|hedge| {
                         PartialIndex::Explicit(AbstractIndex::Named(
                             symbols::hedge_index().into(),
                             hedge,

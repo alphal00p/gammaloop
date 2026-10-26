@@ -57,7 +57,7 @@ use symbolica::{atom::FunctionBuilder, domains::float::Complex as SymComplex};
 use crate::{display, expression::TensorExpression, library::SpensorFunctionLibrary};
 use idenso::tensor::{
     SymbolicTensor,
-    composition::{self, ProductPlan},
+    composition::{self, MatrixChannel, ProductPlan},
     inference::InterfaceInference,
 };
 
@@ -334,7 +334,7 @@ impl SpensoNet {
             .iter()
             .map(|factor| factor.structure.clone())
             .collect::<Vec<_>>();
-        let structure =
+        let (structure, channel) =
             SymbolicTensor::project_factors(&sources, kind).map_err(composition_error)?;
         // Give spectator ports stable identities across permutations. Aligning
         // anonymous axes by position would exchange the spectator data as well.
@@ -343,48 +343,109 @@ impl SpensoNet {
                 .iter()
                 .flat_map(|factor| [&factor.structure, &factor.materialized]),
         );
+        let owner = AbstractIndex::fresh_open_owner();
+        let mut spectators = HashMap::new();
+        let mut materialized_sources = Vec::with_capacity(factors.len());
+        let mut channels = Vec::with_capacity(factors.len());
         for factor in &mut factors {
             let channel = factor.structure.matrix_channel().ok_or_else(|| {
                 composition_error(composition::TensorCompositionError::NoMatrixChannel)
             })?;
-            let replacements = factor
-                .structure
-                .structure()
-                .logical_slots()
-                .iter()
-                .enumerate()
-                .filter(|(position, slot)| {
-                    *position != channel.input
-                        && *position != channel.output
-                        && matches!(slot.aind, PartialIndex::Open(_))
-                })
-                .map(|(position, _)| (position, indices.fresh_index()))
-                .collect();
+            let slots = factor.semantic_slots();
+            let input = slots[channel.input];
+            let output = slots[channel.output];
+            let mut replacements = HashMap::new();
+            let mut correspondence = HashMap::new();
+            for (position, slot) in slots.into_iter().enumerate() {
+                if position != channel.input
+                    && position != channel.output
+                    && matches!(slot.aind, PartialIndex::Open(_))
+                {
+                    let index = indices.fresh_index();
+                    let marker = AbstractIndex::Open {
+                        owner,
+                        axis: spectators.len(),
+                    };
+                    spectators.insert(marker, index);
+                    replacements.insert(position, index);
+                    correspondence.insert(position, marker);
+                }
+            }
+            // This projection follows the semantic axis roles. Open storage
+            // markers keep that correspondence through structure merging even
+            // when the computation's named spectator labels sort differently.
+            materialized_sources.push(
+                factor
+                    .structure
+                    .reindex_interface_ports(&correspondence)
+                    .map_err(composition_error)?,
+            );
             *factor = factor.set_port_indices(&replacements)?;
+            channels.push(
+                channel
+                    .remap_output(input, output, factor.structure.structure())
+                    .map_err(composition_error)?,
+            );
         }
         let terms = kind
             .permutations(factors.len())
             .ok_or_else(|| PyValueError::new_err("factor projector normalization is too large"))?;
-        let endpoints = HashMap::from([(0, indices.fresh_index()), (1, indices.fresh_index())]);
-        let mut result: Option<Self> = None;
+        let slots = structure.structure().logical_slots();
+        let endpoint = |position: usize| match slots[position].aind {
+            PartialIndex::Explicit(index) => index,
+            PartialIndex::Open(_) => indices.fresh_index(),
+        };
+        let input = endpoint(channel.input);
+        let output = endpoint(channel.output);
+        let (materialized, materialized_channel) =
+            SymbolicTensor::project_factors(&materialized_sources, kind)
+                .map_err(composition_error)?;
+        let mut result: Option<(Self, MatrixChannel)> = None;
         for (coefficient, order) in terms {
             let first = factors[order[0]].clone();
-            let channel = first.structure.matrix_channel().ok_or_else(|| {
-                composition_error(composition::TensorCompositionError::NoMatrixChannel)
-            })?;
+            let channel = channels[order[0]];
+            let slots = first.semantic_slots();
+            let selected_input = slots[channel.input];
+            let selected_output = slots[channel.output];
             let mut term = first.chain_form(channel)?;
+            // Zero may erase the syntax that identified these endpoint roles.
+            let mut channel = MatrixChannel {
+                input: 0,
+                output: 1,
+            }
+            .remap_output(selected_input, selected_output, term.structure.structure())
+            .map_err(composition_error)?;
             for index in &order[1..] {
                 let factor = factors[*index].clone();
-                let channel = factor.structure.matrix_channel().ok_or_else(|| {
-                    composition_error(composition::TensorCompositionError::NoMatrixChannel)
-                })?;
+                let right_channel = channels[*index];
+                let selected_input = term.semantic_slots()[channel.input];
+                let selected_output = factor.semantic_slots()[right_channel.output];
                 term = term.compose(
                     ConvertibleToSpensoNet(factor),
-                    (0, 1),
                     (channel.input, channel.output),
+                    (right_channel.input, right_channel.output),
                 )?;
+                channel = MatrixChannel {
+                    input: 0,
+                    output: 1,
+                }
+                .remap_output(selected_input, selected_output, term.structure.structure())
+                .map_err(composition_error)?;
             }
-            term = term.set_port_indices(&endpoints)?;
+            let slots = term.semantic_slots();
+            let selected_input = slots[channel.input]
+                .rep()
+                .slot(PartialIndex::Explicit(input));
+            let selected_output = slots[channel.output]
+                .rep()
+                .slot(PartialIndex::Explicit(output));
+            term = term.set_port_indices(&HashMap::from([
+                (channel.input, input),
+                (channel.output, output),
+            ]))?;
+            channel = channel
+                .remap_output(selected_input, selected_output, term.structure.structure())
+                .map_err(composition_error)?;
             let scalar = TensorExpression::from_structured(
                 py,
                 SymbolicTensor::new(coefficient, PartialStructure::from_logical_slots([])),
@@ -393,8 +454,11 @@ impl SpensoNet {
                 ArithmeticStructure::Tensor(scalar),
                 None,
             )?)?;
+            channel = channel
+                .remap_output(selected_input, selected_output, term.structure.structure())
+                .map_err(composition_error)?;
             result = Some(match result {
-                Some(sum) => {
+                Some((sum, sum_channel)) => {
                     // Permuting matrix factors must not permute the public
                     // spectator axes. Their explicit identities determine the
                     // alignment before the component networks are added.
@@ -412,28 +476,49 @@ impl SpensoNet {
                             })
                         })
                         .collect::<PyResult<Vec<_>>>()?;
-                    sum.add_network(term.permute_axes(axes)?, false)?
+                    let slots = sum.semantic_slots();
+                    let selected_input = slots[sum_channel.input];
+                    let selected_output = slots[sum_channel.output];
+                    let sum = sum.add_network(term.permute_axes(axes)?, false)?;
+                    let channel = sum_channel
+                        .remap_output(selected_input, selected_output, sum.structure.structure())
+                        .map_err(composition_error)?;
+                    (sum, channel)
                 }
-                None => term,
+                None => (term, channel),
             });
         }
-        let mut result = result.expect("a nonempty factor group has at least one permutation");
+        let (mut result, channel) =
+            result.expect("a nonempty factor group has at least one permutation");
         // Computation is a sum of networks, while both semantic descriptions
         // retain a single projected channel that can be composed again.
-        let replacements = result
-            .materialized
+        let slots = result.semantic_slots();
+        let PartialIndex::Explicit(input) = slots[channel.input].aind else {
+            unreachable!("projected endpoints have explicit computation identities")
+        };
+        let PartialIndex::Explicit(output) = slots[channel.output].aind else {
+            unreachable!("projected endpoints have explicit computation identities")
+        };
+        let replacements = materialized
             .structure()
             .logical_slots()
-            .iter()
+            .into_iter()
             .enumerate()
             .map(|(position, slot)| {
-                let PartialIndex::Explicit(index) = slot.aind else {
-                    unreachable!("network-facing ports are explicit")
+                let index = if position == materialized_channel.input {
+                    input
+                } else if position == materialized_channel.output {
+                    output
+                } else {
+                    let PartialIndex::Explicit(index) = slot.aind else {
+                        unreachable!("projected spectators have explicit identities")
+                    };
+                    spectators.get(&index).copied().unwrap_or(index)
                 };
                 (position, index)
             })
             .collect();
-        result.materialized = structure
+        result.materialized = materialized
             .reindex_interface_ports(&replacements)
             .map_err(composition_error)?;
         result.structure = structure;
@@ -653,19 +738,15 @@ impl SpensoNet {
                 "addition requires compatible tensor interfaces"
             }));
         }
-        let pairs = self
+        // Shared Open identities keep unresolved axes positional in both views.
+        // Named aliases would canonicalize only the materialized result.
+        let left_indices = self
             .structure
-            .structure()
-            .open_positions()
-            .into_iter()
-            .map(|position| composition::PortPair {
-                left: position,
-                right: position,
-            })
-            .collect::<Vec<_>>();
-        let (left_indices, right_indices) = self
+            .graph_port_indices(&HashMap::new())
+            .map_err(composition_error)?;
+        let right_indices = right
             .structure
-            .aligned_indices(&right.structure, &pairs)
+            .graph_port_indices(&left_indices)
             .map_err(composition_error)?;
         self = self.relabel_ports(&left_indices)?;
         right = right.relabel_ports(&right_indices)?;
@@ -2646,6 +2727,7 @@ mod tests {
     use crate::AtomsOrFloats;
     use idenso::{dirac::AGS, representations::initialize};
     use spenso::network::parsing::ParseSettings;
+    use spenso::shadowing::FactorProjector;
     use spenso::structure::partial::PartialSlot;
     use spenso::structure::{
         OrderedStructure, TensorStructure,
@@ -3301,6 +3383,540 @@ mod tests {
             let result = Py::new(py, result.result_tensor(None)?)?;
             assert_eq!(result.bind(py).get_item(0)?.extract::<f64>()?, 4272.);
             assert_eq!(result.bind(py).get_item(1)?.extract::<f64>()?, 8934.);
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn named_arithmetic_canonicalizes_axes_without_changing_leaf_components() {
+        initialize();
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let representation = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(2));
+            let named =
+                |index| representation.slot(PartialIndex::Explicit(AbstractIndex::Normal(index)));
+            let network = |name: &str, ports: Vec<PartialSlot>, values: Vec<f64>| {
+                let (descriptor, name) = tensor_descriptor(name, ports);
+                let expression = TensorExpression::from_known_parts(
+                    py,
+                    descriptor.expression().clone(),
+                    descriptor.structure().clone(),
+                    Some(name),
+                    Vec::new(),
+                )?;
+                SpensoNet::from_tensor(Spensor::dense(
+                    expression.bind(py).as_any().extract()?,
+                    AtomsOrFloats::Floats(values),
+                )?)
+            };
+            let left = network(
+                "network_named_arithmetic_left",
+                vec![named(9), named(3)],
+                vec![1., 2., 3., 4.],
+            )?;
+            let right = network(
+                "network_named_arithmetic_right",
+                vec![named(3), named(9)],
+                vec![10., 20., 30., 40.],
+            )?;
+            let left_expression = left.structure.expression().clone();
+            let right_expression = right.structure.expression().clone();
+            assert_eq!(left.semantic_slots(), [named(9), named(3)]);
+            assert_eq!(left.materialized.expression(), &left_expression);
+
+            let scalar = TensorExpression::from_structured(
+                py,
+                SymbolicTensor::infer(Atom::num(2)).unwrap(),
+            )?;
+            let doubled = left.clone().multiply_network(SpensoNet::from_arithmetic(
+                ArithmeticStructure::Tensor(scalar),
+                None,
+            )?)?;
+            let negated = left.__neg__()?;
+            let sum = left.clone().add_network(right, false)?;
+            assert_eq!(
+                doubled.structure.expression(),
+                &(Atom::num(2) * &left_expression)
+            );
+            assert_eq!(negated.structure.expression(), &(-&left_expression));
+            assert_eq!(
+                sum.structure.expression(),
+                &(&left_expression + right_expression)
+            );
+
+            for (mut result, expected) in [
+                (doubled, [[2., 6.], [4., 8.]]),
+                (negated, [[-1., -3.], [-2., -4.]]),
+                (sum.clone(), [[11., 23.], [32., 44.]]),
+            ] {
+                assert_eq!(result.semantic_slots(), [named(3), named(9)]);
+                assert_eq!(
+                    result.materialized.structure().logical_slots(),
+                    [named(3), named(9)]
+                );
+                result.execute(None, None, None, ExecutionMode::All)?;
+                let result = Py::new(py, result.result_tensor(None)?)?;
+                for (row, values) in expected.into_iter().enumerate() {
+                    for (column, value) in values.into_iter().enumerate() {
+                        assert_eq!(
+                            result.bind(py).get_item((row, column))?.extract::<f64>()?,
+                            value
+                        );
+                    }
+                }
+            }
+
+            let probe = network(
+                "network_named_arithmetic_probe",
+                vec![named(3)],
+                vec![2., 5.],
+            )?;
+            let mut contracted = sum.contract_ports(ConvertibleToSpensoNet(probe), 0, 0)?;
+            assert_eq!(contracted.semantic_slots(), [named(9)]);
+            assert_eq!(
+                contracted.materialized.structure().logical_slots(),
+                [named(9)]
+            );
+            contracted.execute(None, None, None, ExecutionMode::All)?;
+            let result = Py::new(py, contracted.result_tensor(None)?)?;
+            assert_eq!(result.bind(py).get_item(0)?.extract::<f64>()?, 182.);
+            assert_eq!(result.bind(py).get_item(1)?.extract::<f64>()?, 266.);
+
+            let zero = left.clone().add_network(left, true)?;
+            assert!(zero.structure.expression().is_zero());
+            assert!(zero.materialized.expression().is_zero());
+            assert_eq!(zero.semantic_slots(), [named(3), named(9)]);
+            assert_eq!(
+                zero.materialized.structure().logical_slots(),
+                [named(3), named(9)]
+            );
+            assert_eq!(zero.network.graph.dangling_indices().len(), 2);
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn named_chain_channels_follow_endpoints_past_spectators_after_scaling() {
+        initialize();
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let matrix = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(3));
+            let spectator = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(2));
+            let endpoint =
+                |index| matrix.slot(PartialIndex::Explicit(AbstractIndex::Normal(index)));
+            let spectator = spectator.slot(PartialIndex::Explicit(AbstractIndex::Normal(1)));
+            let network = |name: &str, ports: Vec<PartialSlot>, values: Vec<f64>| {
+                let (descriptor, name) = tensor_descriptor(name, ports);
+                let expression = TensorExpression::from_known_parts(
+                    py,
+                    descriptor.expression().clone(),
+                    descriptor.structure().clone(),
+                    Some(name),
+                    Vec::new(),
+                )?;
+                SpensoNet::from_tensor(Spensor::dense(
+                    expression.bind(py).as_any().extract()?,
+                    AtomsOrFloats::Floats(values),
+                )?)
+            };
+            let values = (1..=18).map(f64::from).collect::<Vec<_>>();
+            let left = network(
+                "network_named_spectator_chain_left",
+                vec![endpoint(9), endpoint(3), spectator],
+                values.clone(),
+            )?;
+            let left = left.chain_form(composition::MatrixChannel {
+                input: 0,
+                output: 1,
+            })?;
+            assert_eq!(left.semantic_slots(), [spectator, endpoint(3), endpoint(9)]);
+            let mut projected =
+                SpensoNet::project_factors(py, vec![left.clone()], FactorProjector::Symmetric)?;
+            assert_eq!(projected.semantic_slots(), left.semantic_slots());
+            assert_eq!(
+                projected.materialized.structure().logical_slots(),
+                left.semantic_slots()
+            );
+            projected.execute(None, None, None, ExecutionMode::All)?;
+            let result = Py::new(py, projected.result_tensor(None)?)?;
+            for mu in 0..2 {
+                for j in 0..3 {
+                    for i in 0..3 {
+                        assert_eq!(
+                            result.bind(py).get_item((mu, j, i))?.extract::<f64>()?,
+                            values[(i * 3 + j) * 2 + mu]
+                        );
+                    }
+                }
+            }
+            let scalar = TensorExpression::from_structured(
+                py,
+                SymbolicTensor::infer(Atom::num(2)).unwrap(),
+            )?;
+            let left = left.multiply_network(SpensoNet::from_arithmetic(
+                ArithmeticStructure::Tensor(scalar),
+                None,
+            )?)?;
+            let channel = left.structure.matrix_channel().unwrap();
+            assert_eq!(
+                channel,
+                composition::MatrixChannel {
+                    input: 2,
+                    output: 1
+                }
+            );
+            assert_eq!(left.materialized.matrix_channel(), Some(channel));
+
+            let right_values = (1..=9).map(f64::from).collect::<Vec<_>>();
+            let right = network(
+                "network_named_spectator_chain_right",
+                vec![endpoint(3), endpoint(5)],
+                right_values.clone(),
+            )?;
+            let product = left.compose(
+                ConvertibleToSpensoNet(right),
+                (channel.input, channel.output),
+                (0, 1),
+            )?;
+            assert_eq!(
+                product.semantic_slots(),
+                [spectator, endpoint(5), endpoint(9)]
+            );
+            assert_eq!(
+                product.materialized.structure().logical_slots(),
+                product.semantic_slots()
+            );
+            assert_eq!(product.structure.matrix_channel(), Some(channel));
+            let component = |mu: usize, j: usize, i: usize| {
+                2. * (0..3)
+                    .map(|k| values[(i * 3 + k) * 2 + mu] * right_values[k * 3 + j])
+                    .sum::<f64>()
+            };
+            let mut executed = product.clone();
+            executed.execute(None, None, None, ExecutionMode::All)?;
+            let result = Py::new(py, executed.result_tensor(None)?)?;
+            for mu in 0..2 {
+                for j in 0..3 {
+                    for i in 0..3 {
+                        assert_eq!(
+                            result.bind(py).get_item((mu, j, i))?.extract::<f64>()?,
+                            component(mu, j, i),
+                        );
+                    }
+                }
+            }
+
+            let index = AbstractIndex::Normal(77);
+            let mut closed = product.set_port_indices(&HashMap::from([
+                (channel.input, index),
+                (channel.output, index),
+            ]))?;
+            assert_eq!(closed.semantic_slots(), [spectator]);
+            assert_eq!(closed.materialized.structure().logical_slots(), [spectator]);
+            closed.execute(None, None, None, ExecutionMode::All)?;
+            let result = Py::new(py, closed.result_tensor(None)?)?;
+            for mu in 0..2 {
+                assert_eq!(
+                    result.bind(py).get_item(mu)?.extract::<f64>()?,
+                    (0..3).map(|i| component(mu, i, i)).sum::<f64>(),
+                );
+            }
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn projected_spectators_keep_semantic_and_materialized_roles_after_coefficients() {
+        initialize();
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let matrix = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(3));
+            let spectator = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(2));
+            let network = |name: &str, ports: Vec<PartialSlot>, values: Vec<f64>| {
+                let (descriptor, name) = tensor_descriptor(name, ports);
+                let expression = TensorExpression::from_known_parts(
+                    py,
+                    descriptor.expression().clone(),
+                    descriptor.structure().clone(),
+                    Some(name),
+                    Vec::new(),
+                )?;
+                SpensoNet::from_tensor(Spensor::dense(
+                    expression.bind(py).as_any().extract()?,
+                    AtomsOrFloats::Floats(values),
+                )?)
+            };
+            let values_a = (1..=18).map(f64::from).collect::<Vec<_>>();
+            let values_b = (0..18).map(|i| f64::from(2 * i - 3)).collect::<Vec<_>>();
+            for (label, left_spectator, right_spectator, kind, sign) in [
+                (
+                    "open",
+                    PartialIndex::open(2),
+                    PartialIndex::open(3),
+                    FactorProjector::Symmetric,
+                    1.,
+                ),
+                (
+                    "named",
+                    PartialIndex::Explicit(AbstractIndex::Normal(9)),
+                    PartialIndex::Explicit(AbstractIndex::Normal(3)),
+                    FactorProjector::Antisymmetric,
+                    -1.,
+                ),
+            ] {
+                let left = network(
+                    &format!("network_projected_spectator_{label}_left"),
+                    vec![
+                        matrix.slot(PartialIndex::open(0)),
+                        matrix.slot(PartialIndex::open(1)),
+                        spectator.slot(left_spectator),
+                    ],
+                    values_a.clone(),
+                )?;
+                let right = network(
+                    &format!("network_projected_spectator_{label}_right"),
+                    vec![
+                        matrix.slot(PartialIndex::open(0)),
+                        matrix.slot(PartialIndex::open(1)),
+                        spectator.slot(right_spectator),
+                    ],
+                    values_b.clone(),
+                )?;
+                let (expected, _) = SymbolicTensor::project_factors(
+                    &[left.structure.clone(), right.structure.clone()],
+                    kind,
+                )
+                .unwrap();
+                let projected = SpensoNet::project_factors(py, vec![left, right], kind)?;
+                assert_eq!(projected.structure.expression(), expected.expression());
+                assert_eq!(
+                    projected.semantic_slots(),
+                    expected.structure().logical_slots()
+                );
+                let channel = projected.structure.matrix_channel().unwrap();
+                assert_ne!(channel.input, channel.output);
+                assert_eq!(projected.materialized.matrix_channel(), Some(channel));
+                let materialized_slots = projected.materialized.structure().logical_slots();
+                for (position, slot) in materialized_slots.iter().enumerate() {
+                    assert!(
+                        materialized_slots[..position]
+                            .iter()
+                            .all(|other| other.aind != slot.aind)
+                    );
+                }
+                for (semantic, materialized) in projected
+                    .semantic_slots()
+                    .iter()
+                    .zip(projected.materialized.structure().logical_slots())
+                {
+                    assert_eq!(semantic.rep(), materialized.rep());
+                    if let PartialIndex::Explicit(index) = semantic.aind {
+                        assert_eq!(materialized.aind, PartialIndex::Explicit(index));
+                    }
+                }
+                let component = |i: usize, j: usize, mu: usize, nu: usize| {
+                    (0..3)
+                        .map(|k| {
+                            (values_a[(i * 3 + k) * 2 + mu] * values_b[(k * 3 + j) * 2 + nu]
+                                + sign
+                                    * values_b[(i * 3 + k) * 2 + nu]
+                                    * values_a[(k * 3 + j) * 2 + mu])
+                                / 2.
+                        })
+                        .sum::<f64>()
+                };
+                let mut executed = projected.clone();
+                executed.execute(None, None, None, ExecutionMode::All)?;
+                let result = Py::new(py, executed.result_tensor(None)?)?;
+                for i in 0..3 {
+                    for j in 0..3 {
+                        for mu in 0..2 {
+                            for nu in 0..2 {
+                                assert_eq!(
+                                    result.bind(py).get_item((i, j, mu, nu))?.extract::<f64>()?,
+                                    component(i, j, mu, nu),
+                                );
+                            }
+                        }
+                    }
+                }
+                let probe = network(
+                    &format!("network_projected_spectator_{label}_probe"),
+                    vec![matrix.slot(PartialIndex::open(0))],
+                    vec![2., 5., 7.],
+                )?;
+                let mut contracted =
+                    projected.contract_ports(ConvertibleToSpensoNet(probe), channel.output, 0)?;
+                assert_eq!(contracted.structure.rank(), 3);
+                assert_eq!(contracted.materialized.rank(), 3);
+                contracted.execute(None, None, None, ExecutionMode::All)?;
+                let result = Py::new(py, contracted.result_tensor(None)?)?;
+                for i in 0..3 {
+                    for mu in 0..2 {
+                        for nu in 0..2 {
+                            assert_eq!(
+                                result.bind(py).get_item((i, mu, nu))?.extract::<f64>()?,
+                                (0..3)
+                                    .map(|j| component(i, j, mu, nu) * [2., 5., 7.][j])
+                                    .sum::<f64>(),
+                            );
+                        }
+                    }
+                }
+                let mut traced = projected.trace(None)?;
+                assert_eq!(traced.structure.rank(), 2);
+                assert_eq!(traced.materialized.rank(), 2);
+                traced.execute(None, None, None, ExecutionMode::All)?;
+                let result = Py::new(py, traced.result_tensor(None)?)?;
+                let named = label == "named";
+                for mu in 0..2 {
+                    for nu in 0..2 {
+                        let axes = if named { (nu, mu) } else { (mu, nu) };
+                        assert_eq!(
+                            result.bind(py).get_item(axes)?.extract::<f64>()?,
+                            (0..3).map(|i| component(i, i, mu, nu)).sum::<f64>(),
+                        );
+                    }
+                }
+            }
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn zero_factor_projection_keeps_selected_channel_roles_with_ambiguous_spectators() {
+        initialize();
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let matrix = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(3));
+            let spectator = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(2));
+            let factor = |name| {
+                let (descriptor, name) = tensor_descriptor(
+                    name,
+                    [
+                        matrix.slot(PartialIndex::open(0)),
+                        matrix.slot(PartialIndex::open(1)),
+                        spectator.slot(PartialIndex::open(2)),
+                    ],
+                );
+                SpensoNet::from_tensor(data_tensor(descriptor, name))
+            };
+            let left = factor("network_zero_projector_left")?;
+            let right = factor("network_zero_projector_right")?;
+            let live = SpensoNet::project_factors(
+                py,
+                vec![left.clone(), right.clone()],
+                FactorProjector::Symmetric,
+            )
+            .expect("the initial live projection must preserve its channel and spectators");
+            let zero = right.clone().add_network(right, true)?;
+            let expected_factor = [
+                matrix.slot(PartialIndex::open(0)),
+                matrix.slot(PartialIndex::open(1)),
+                spectator.slot(PartialIndex::open(2)),
+            ];
+            assert_eq!(zero.semantic_slots(), expected_factor);
+            let materialized_factor = zero.materialized.structure().logical_slots();
+            assert_eq!(materialized_factor.len(), expected_factor.len());
+            let zero_ports = zero.network.graph.dangling_indices();
+            assert_eq!(zero_ports.len(), expected_factor.len());
+            for (position, expected) in expected_factor.iter().enumerate() {
+                let actual = materialized_factor[position];
+                assert_eq!(
+                    actual.rep(),
+                    expected.rep(),
+                    "cancelled factor axis {position}"
+                );
+                let PartialIndex::Explicit(index @ AbstractIndex::Open { .. }) = actual.aind else {
+                    panic!("cancelled unresolved axes must retain Open graph identities")
+                };
+                assert!(zero_ports.contains(&actual.rep().slot(index).to_lib()));
+            }
+            let projected =
+                SpensoNet::project_factors(py, vec![left, zero], FactorProjector::Symmetric)
+                    .expect("projection of a cancelled factor must retain the selected channel");
+            let expected = [
+                matrix.slot(PartialIndex::open(0)),
+                matrix.slot(PartialIndex::open(1)),
+                spectator.slot(PartialIndex::open(2)),
+                spectator.slot(PartialIndex::open(3)),
+            ];
+            assert!(projected.structure.expression().is_zero());
+            assert!(projected.materialized.expression().is_zero());
+            assert_eq!(projected.semantic_slots(), expected);
+            // Both representations have a compatible pair. A detached zero
+            // cannot rediscover which pair the projector selected internally.
+            assert_eq!(projected.structure.matrix_channel(), None);
+            assert_eq!(projected.materialized.matrix_channel(), None);
+            let materialized_slots = projected.materialized.structure().logical_slots();
+            assert_eq!(materialized_slots.len(), expected.len());
+            let actual = projected.network.graph.dangling_indices();
+            assert_eq!(actual.len(), expected.len());
+            for (position, (semantic, materialized)) in
+                expected.iter().zip(&materialized_slots).enumerate()
+            {
+                assert_eq!(semantic.rep(), materialized.rep());
+                let PartialIndex::Explicit(index) = materialized.aind else {
+                    unreachable!("network-facing zero ports are explicit")
+                };
+                assert!(actual.contains(&materialized.rep().slot(index).to_lib()));
+                assert!(
+                    materialized_slots[..position]
+                        .iter()
+                        .all(|other| other.aind != materialized.aind)
+                );
+            }
+
+            let restored = projected.clone().add_network(live, false)?;
+            assert!(!restored.structure.expression().is_zero());
+            assert_eq!(restored.semantic_slots(), expected);
+            assert_eq!(
+                restored.structure.matrix_channel(),
+                Some(composition::MatrixChannel {
+                    input: 0,
+                    output: 1
+                })
+            );
+            restored.validate_graph_interface()?;
+
+            let (probe, name) = tensor_descriptor(
+                "network_zero_projector_endpoint_probe",
+                [matrix.slot(PartialIndex::open(0))],
+            );
+            let probe = SpensoNet::from_tensor(data_tensor(probe, name))?;
+            let contracted = projected.contract_ports(ConvertibleToSpensoNet(probe), 1, 0)?;
+            assert_eq!(
+                contracted.semantic_slots(),
+                [
+                    matrix.slot(PartialIndex::open(0)),
+                    spectator.slot(PartialIndex::open(1)),
+                    spectator.slot(PartialIndex::open(2))
+                ]
+            );
+            assert_eq!(contracted.network.graph.dangling_indices().len(), 3);
+            contracted.validate_graph_interface()?;
+
+            let mut traced = projected.trace(Some((0, 1)))?;
+            assert_eq!(
+                traced.semantic_slots(),
+                [
+                    spectator.slot(PartialIndex::open(0)),
+                    spectator.slot(PartialIndex::open(1))
+                ]
+            );
+            assert_eq!(traced.materialized.rank(), 2);
+            assert_eq!(traced.network.graph.dangling_indices().len(), 2);
+            traced.execute(None, None, None, ExecutionMode::All)?;
+            let result = Py::new(py, traced.result_tensor(None)?)?;
+            for mu in 0..2 {
+                for nu in 0..2 {
+                    assert_eq!(result.bind(py).get_item((mu, nu))?.extract::<f64>()?, 0.);
+                }
+            }
             Ok(())
         })
         .unwrap();

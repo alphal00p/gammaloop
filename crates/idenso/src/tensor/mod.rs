@@ -85,7 +85,7 @@ impl<S: TensorInterface> FunctionLibrary<SymbolicTensor<S>, Atom> for Wrap {
         }
         Ok(SymbolicTensor {
             proofs: tensor.proofs.algebra_result(),
-            structure: tensor.structure,
+            structure: tensor.structure.into_algebra_result(),
             is_composite: true,
             is_metric: false,
             expression,
@@ -1077,7 +1077,7 @@ impl<Aind: AbsInd + ParseableAind> Concretize<SymbolicTensor<OrderedStructure<Li
     }
 }
 
-impl<S> std::ops::Neg for SymbolicTensor<S> {
+impl<S: TensorInterface> std::ops::Neg for SymbolicTensor<S> {
     type Output = SymbolicTensor<S>;
 
     fn neg(self) -> Self::Output {
@@ -1086,7 +1086,7 @@ impl<S> std::ops::Neg for SymbolicTensor<S> {
             expression: -self.expression,
             is_composite: true,
             is_metric: self.is_metric,
-            structure: self.structure,
+            structure: self.structure.into_algebra_result(),
         }
     }
 }

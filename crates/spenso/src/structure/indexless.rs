@@ -215,7 +215,7 @@ impl<T: RepName<Dual = T>, Aind: AbsInd> TensorStructure for IndexLess<T, Aind> 
             .collect::<Vec<_>>();
         let canonicalized = source.clone().into_iter().collect::<Canonicalized<_>>();
         let (target, layout) = canonicalized.into_parts();
-        if !layout.representation_permutation().is_identity() {
+        if !layout.representation_is_identity() {
             return Err(StructureError::InvalidIndexPermutation(
                 "reindexing changed representation order".to_string(),
             ));
@@ -224,7 +224,7 @@ impl<T: RepName<Dual = T>, Aind: AbsInd> TensorStructure for IndexLess<T, Aind> 
         let pending = PendingIndexPermutation::checked(
             &source,
             &target_slots,
-            layout.index_permutation().clone(),
+            layout.into_index_permutation(),
         )?;
         Ok(Reindexed::from_parts(target, pending))
     }

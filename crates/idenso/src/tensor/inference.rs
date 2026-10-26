@@ -100,11 +100,23 @@ pub(super) struct BorrowedTensorParts<'a> {
 /// index types are matched against existing result slots; metadata remains the
 /// authority for their identities, including the nominal slots of zero.
 pub(super) trait TensorInterface {
+    /// Transfer the current free interface to algebra, retaining positional
+    /// bindings while dropping a named leaf's admission-layout history.
+    fn into_algebra_result(self) -> Self;
+
     #[cfg(debug_assertions)]
     fn to_partial_interface(&self, expression: &Atom) -> InferenceResult<PartialStructure>;
 }
 
 impl TensorInterface for PartialStructure {
+    fn into_algebra_result(self) -> Self {
+        if SymbolicTensor::interface_is_named(&self) {
+            Canonicalized::identity(self.into_canonical())
+        } else {
+            self
+        }
+    }
+
     #[cfg(debug_assertions)]
     fn to_partial_interface(&self, _expression: &Atom) -> InferenceResult<PartialStructure> {
         Ok(self.clone())
@@ -112,6 +124,18 @@ impl TensorInterface for PartialStructure {
 }
 
 impl TensorInterface for IndexedStructure {
+    fn into_algebra_result(self) -> Self {
+        if self
+            .canonical()
+            .external_indices_iter()
+            .all(|index| SymbolicTensor::index_is_named(PartialIndex::Explicit(index)))
+        {
+            Canonicalized::identity(self.into_canonical())
+        } else {
+            self
+        }
+    }
+
     #[cfg(debug_assertions)]
     fn to_partial_interface(&self, _expression: &Atom) -> InferenceResult<PartialStructure> {
         Ok(self.clone().into_partial())
@@ -119,6 +143,10 @@ impl TensorInterface for IndexedStructure {
 }
 
 impl<A: AbsInd + ParseableAind> TensorInterface for OrderedStructure<LibraryRep, A> {
+    fn into_algebra_result(self) -> Self {
+        self
+    }
+
     #[cfg(debug_assertions)]
     fn to_partial_interface(&self, expression: &Atom) -> InferenceResult<PartialStructure> {
         let mut interface = self.clone();
@@ -1773,7 +1801,8 @@ impl SymbolicTensor<PartialStructure> {
         Ok(self.multiply(&scalar)?)
     }
 
-    /// Add tensors with compatible logical interfaces, retaining the left order.
+    /// Add tensors with compatible interfaces. Named results use canonical axes;
+    /// unresolved occurrences retain their established logical correspondence.
     /// See the [example](SymbolicTensor).
     ///
     /// # Errors
@@ -1789,7 +1818,7 @@ impl SymbolicTensor<PartialStructure> {
         }
         let result = Self::from_validated_parts(
             &self.expression + &right.expression,
-            self.structure.clone(),
+            self.structure.clone().into_algebra_result(),
         );
         // Each summand binds its internal pairs. Only the shared public ports
         // remain visible to subsequent products, including a ranked zero.
@@ -1819,7 +1848,7 @@ impl SymbolicTensor<PartialStructure> {
         }
         let result = Self::from_validated_parts(
             &self.expression - &right.expression,
-            self.structure.clone(),
+            self.structure.clone().into_algebra_result(),
         );
         let mut occurrences = self.explicit_index_occurrences()?.scoped(&self.structure);
         occurrences.branch_max(&right.explicit_index_occurrences()?.scoped(&right.structure));
@@ -3160,7 +3189,7 @@ impl InterfaceInference {
                     "cannot add a scalar expression to a non-scalar tensor",
                 ));
             }
-            return Ok(expected);
+            return Ok(expected.into_algebra_result());
         }
 
         if let AtomView::Mul(product) = atom {
@@ -3179,7 +3208,8 @@ impl InterfaceInference {
                     "expression does not contain valid tagged Spenso tensor syntax",
                 ));
             }
-            return Self::merge_explicit_interface_sequence(&interfaces);
+            return Self::merge_explicit_interface_sequence(&interfaces)
+                .map(TensorInterface::into_algebra_result);
         }
 
         if let AtomView::Pow(power) = atom {
@@ -3217,7 +3247,8 @@ impl InterfaceInference {
                         "tensor projectors require at least one tensor operand",
                     ));
                 }
-                return Self::merge_explicit_interface_sequence(&interfaces);
+                return Self::merge_explicit_interface_sequence(&interfaces)
+                    .map(TensorInterface::into_algebra_result);
             }
 
             if symbol == SPENSO_TAG.bracket {
@@ -3233,7 +3264,8 @@ impl InterfaceInference {
                         "ordered tensor products require at least one tensor operand",
                     ));
                 }
-                return Self::merge_explicit_interface_sequence(&interfaces);
+                return Self::merge_explicit_interface_sequence(&interfaces)
+                    .map(TensorInterface::into_algebra_result);
             }
 
             let compact_metric = symbol == ETS.metric
@@ -3363,7 +3395,9 @@ impl InterfaceInference {
                         "broadcast function `{symbol}` does not contain a structured tensor argument"
                     )));
                 }
-                return self.infer_view(argument);
+                return self
+                    .infer_view(argument)
+                    .map(TensorInterface::into_algebra_result);
             }
 
             if let Some(structure) = self.builtin_tensor_structure(symbol, &arguments, false)? {
@@ -3424,7 +3458,7 @@ impl InterfaceInference {
                     interfaces.push(self.infer_view(*factor)?);
                 }
                 let spectators = Self::merge_explicit_interface_sequence(&interfaces)?;
-                return Ok(PartialStructure::from_logical_slots(
+                return Ok(SymbolicTensor::composite_interface(
                     exposed.into_iter().chain(spectators.logical_slots()),
                 ));
             } else if symbol == SPENSO_TAG.trace {
@@ -3447,7 +3481,8 @@ impl InterfaceInference {
                     self.validate_builtin_placeholder_channels(factor, representation, dual)?;
                     interfaces.push(self.infer_view(factor)?);
                 }
-                return Self::merge_explicit_interface_sequence(&interfaces);
+                return Self::merge_explicit_interface_sequence(&interfaces)
+                    .map(TensorInterface::into_algebra_result);
             } else if symbol.has_tag(&SPENSO_TAG.tensor) {
                 self.validate_tensor_metadata(function)?;
                 if unmaterialized_tensor_leaf {
@@ -3690,7 +3725,7 @@ impl InterfaceInference {
         if exponent.numerator() % 2 == 0 {
             return Ok(PartialStructure::from_logical_slots([]));
         }
-        Ok(interface.clone())
+        Ok(interface.clone().into_algebra_result())
     }
 
     /// Delay replacement storage until a child changes; the common explicit
@@ -3847,13 +3882,18 @@ impl InterfaceInference {
             }
         }
 
-        Ok(PartialStructure::from_logical_slots(
-            slots
-                .into_iter()
-                .enumerate()
-                .filter(|(position, _)| !contracted.contains(position))
-                .map(|(_, slot)| slot),
-        ))
+        // The root admission pass must retain an untouched leaf's declaration.
+        // Enclosing algebra can consume that existing layout without creating
+        // another temporary pair of sorting permutations.
+        if interfaces.len() == 1 && contracted.is_empty() {
+            return Ok(interfaces[0].clone());
+        }
+        let survivors = slots
+            .into_iter()
+            .enumerate()
+            .filter(|(position, _)| !contracted.contains(position))
+            .map(|(_, slot)| slot);
+        Ok(SymbolicTensor::composite_interface(survivors))
     }
 }
 
@@ -5885,7 +5925,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn checked_addition_preserves_left_order_and_typed_zero_without_reinference() {
+    fn checked_addition_owns_canonical_axes_and_typed_zero_without_reinference() {
         let representation = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(3));
         let slots = [73111, 73113]
             .map(|index| representation.slot(PartialIndex::Explicit(AbstractIndex::Normal(index))));
@@ -5908,11 +5948,11 @@ pub(crate) mod tests {
         assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
         assert_eq!(
             sum.structure.logical_slots(),
-            left.structure.logical_slots()
+            left.structure.canonical().external_structure()
         );
         assert_eq!(
             zero.structure.logical_slots(),
-            left.structure.logical_slots()
+            left.structure.canonical().external_structure()
         );
         assert!(zero.expression.is_zero());
         let scalar = SymbolicTensor::<PartialStructure>::new(

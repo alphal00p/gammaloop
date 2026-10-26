@@ -77,7 +77,7 @@ impl PyFactorProjector {
                 symbolic.push(TensorOperand::extract(&factor)?.into_structured()?);
             }
         }
-        let structure = SymbolicTensor::project_factors(&symbolic, kind)
+        let (structure, _) = SymbolicTensor::project_factors(&symbolic, kind)
             .map_err(|error| PyValueError::new_err(error.to_string()))?;
         let network = if concrete {
             let factors = factors
