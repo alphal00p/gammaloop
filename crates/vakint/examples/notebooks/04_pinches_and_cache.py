@@ -1,7 +1,7 @@
 """Exact numerator cancellation and cumulative persistent-cache evidence."""
 
-# Marimo cell outputs and generated return markers are intentional.
-# ruff: noqa: B018, PLR1711
+# Marimo generated return markers are intentional.
+# ruff: noqa: PLR1711
 import marimo
 
 __generated_with = "0.25.2"
@@ -192,14 +192,41 @@ def _(
 @app.cell(hide_code=True)
 def _(
     Gallery,
+    cancelling_numerator,
     closure_seconds,
+    difference,
     mo,
+    source_graph,
+    source_integral,
+    source_result,
+    target_graph,
+    target_integral,
+    target_result,
 ):
+    # Keep native widgets and their virtual ESM files owned by this result cell.
+    # Tab changes select existing HTML without invalidating its creator.
     closure_view = mo.ui.tabs(
         {
-            "The identity": "",
-            "Retained-master results": "",
-            "Independent native graphs": "",
+            "The identity": mo.vstack(
+                [
+                    mo.md("**Cancelling numerator**"),
+                    mo.as_html(cancelling_numerator),
+                    mo.md("**Source and target integrands**"),
+                    mo.as_html(source_integral),
+                    mo.as_html(target_integral),
+                ]
+            ),
+            "Retained-master results": mo.vstack(
+                [
+                    mo.as_html(source_result),
+                    mo.as_html(target_result),
+                    mo.md("**Difference**"),
+                    mo.as_html(difference),
+                ]
+            ),
+            "Independent native graphs": mo.hstack(
+                [mo.as_html(source_graph), mo.as_html(target_graph)]
+            ),
         }
     )
     mo.vstack(
@@ -215,39 +242,6 @@ def _(
         ]
     )
     return (closure_view,)
-
-
-@app.cell(hide_code=True)
-def _(
-    cancelling_numerator,
-    closure_view,
-    difference,
-    mo,
-    source_graph,
-    source_integral,
-    source_result,
-    target_graph,
-    target_integral,
-    target_result,
-):
-    if closure_view.value == "Independent native graphs":
-        closure_panel = mo.hstack([mo.as_html(source_graph), mo.as_html(target_graph)])
-    elif closure_view.value == "Retained-master results":
-        closure_panel = mo.vstack(
-            [source_result, target_result, mo.md("**Difference**"), difference]
-        )
-    else:
-        closure_panel = mo.vstack(
-            [
-                mo.md("**Cancelling numerator**"),
-                cancelling_numerator,
-                mo.md("**Source and target integrands**"),
-                source_integral,
-                target_integral,
-            ]
-        )
-    closure_panel
-    return
 
 
 @app.cell(hide_code=True)

@@ -1,5 +1,6 @@
 """Gallery launch and display contracts; no native host or subprocesses run."""
 
+import ast
 import fcntl
 import hashlib
 import json
@@ -10,7 +11,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import benchmark_job
 from shared_gallery import Gallery
@@ -380,6 +381,85 @@ class GalleryReceiptTests(unittest.TestCase):
             self.assertIsNotNone(row["Seconds"])
             self.assertNotIn("Native trace contraction", row["Stage"])
         self.assertIsNone(receipt["preparation_seconds"])
+
+
+class GalleryClosurePresentationTests(unittest.TestCase):
+    def setUp(self):
+        self.path = Gallery.directory / "04_pinches_and_cache.py"
+        self.tree = ast.parse(self.path.read_text())
+        self.cell = next(
+            cell
+            for cell in self.tree.body
+            if isinstance(cell, ast.FunctionDef)
+            and any(
+                isinstance(node, ast.Name)
+                and isinstance(node.ctx, ast.Store)
+                and node.id == "closure_view"
+                for node in ast.walk(cell)
+            )
+        )
+
+    def test_tab_selection_does_not_invalidate_native_widget_owner(self):
+        self.assertNotIn("closure_view", [arg.arg for arg in self.cell.args.args])
+        self.assertFalse(
+            any(
+                isinstance(node, ast.Attribute)
+                and isinstance(node.value, ast.Name)
+                and node.value.id == "closure_view"
+                for node in ast.walk(self.tree)
+            )
+        )
+
+    def test_all_native_panels_are_prepared_before_tab_selection(self):
+        self.cell.decorator_list = []
+        namespace = {}
+        # Only the display cell runs, with fake HTML and no native host.
+        exec(  # noqa: S102
+            compile(
+                ast.Module(body=[self.cell], type_ignores=[]), str(self.path), "exec"
+            ),
+            namespace,
+        )
+        render = Mock(side_effect=lambda value: ("html", value))
+        mo = SimpleNamespace(
+            as_html=render,
+            md=lambda value: value,
+            vstack=lambda values: values,
+            hstack=lambda values: values,
+            ui=SimpleNamespace(
+                tabs=lambda contents: SimpleNamespace(
+                    contents=contents, value="The identity"
+                )
+            ),
+        )
+        arguments = {arg.arg: object() for arg in self.cell.args.args}
+        arguments.update(
+            mo=mo,
+            Gallery=SimpleNamespace(metrics=lambda *_: "metrics"),
+            closure_seconds=0.1,
+        )
+        (tabs,) = namespace["_"](**arguments)
+        native_names = (
+            "cancelling_numerator",
+            "source_integral",
+            "target_integral",
+            "source_result",
+            "target_result",
+            "difference",
+            "source_graph",
+            "target_graph",
+        )
+        self.assertEqual(render.call_count, len(native_names))
+        for name in native_names:
+            render.assert_any_call(arguments[name])
+        self.assertEqual(
+            list(tabs.contents),
+            ["The identity", "Retained-master results", "Independent native graphs"],
+        )
+        for label in tabs.contents:
+            tabs.value = label
+            self.assertTrue(tabs.contents[tabs.value])
+        self.assertEqual(render.call_count, len(native_names))
 
 
 class GalleryFooterTests(unittest.TestCase):
