@@ -1,5 +1,12 @@
 //! Fresh-process public-evaluator measurements of a frozen cache suite.
 #[path = "build_cache/owner_proof.rs"]
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Shared mapper creates frontier steps; measurement only validates saved proofs"
+    )
+)]
 mod owner_proof;
 #[path = "build_cache/workload.rs"]
 mod workload;
@@ -10,7 +17,10 @@ use std::{
     io::{Read, Write},
     path::{Path, PathBuf},
     process::{Command, Stdio},
-    sync::Mutex,
+    sync::{
+        Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
@@ -34,6 +44,9 @@ struct Stages {
     input_roots: BTreeSet<Vec<i64>>,
     input_roots_seen: bool,
     input_roots_error: Option<String>,
+    input_dispatch_count: u64,
+    hit_events: Vec<Value>,
+    hit_error: Option<String>,
 }
 
 impl Stages {
@@ -49,8 +62,61 @@ impl Stages {
             "invalid input-root telemetry arity"
         );
         self.input_roots_seen = true;
+        self.input_dispatch_count = self
+            .input_dispatch_count
+            .checked_add(1)
+            .ok_or_else(|| eyre::eyre!("input dispatch counter overflow"))?;
         self.input_roots.extend(roots);
         Ok(())
+    }
+
+    fn capture_hit_event(&mut self, message: &str) -> Result<()> {
+        let event: Value = serde_json::from_str(message)?;
+        ensure!(
+            event["schema"] == "vakint.cache-hit-events.v1",
+            "unknown cache-hit telemetry schema"
+        );
+        self.hit_events.try_reserve(1)?;
+        self.hit_events.push(event);
+        Ok(())
+    }
+
+    fn hit_diagnostic(&self, success: bool) -> Value {
+        json!({
+            "schema":"vakint.cache-hit-diagnostic.v1",
+            "interval_ns":0,"input_dispatch_count":self.input_dispatch_count,
+            "events":self.hit_events,
+            "error":self.hit_error.as_ref().or(self.input_roots_error.as_ref()),
+            "success":success,
+            "diagnostic_only":true,
+            "timing_scope":"Lossless observation overhead; not an unobserved performance sample",
+        })
+    }
+
+    fn save_hit_diagnostic(&self, directory: &Path, success: bool) -> Value {
+        let document = self.hit_diagnostic(success);
+        let validation = owner_proof::validate_hit_diagnostic(&document);
+        let mut receipt = json!({
+            "path":"cache-hit-events.json","sha256":null,
+            "diagnostic_only":true,"interval_ns":0,
+            "stream_complete":validation.is_ok(),
+            "classification_available":false,
+            "classification_requires":"Same-cohort recursive mapper certificate and offline hit join",
+            "error":validation.as_ref().err().map(ToString::to_string),
+        });
+        let path = directory.join("cache-hit-events.json");
+        // Evidence is published only after the full buffered stream has been
+        // written, synced and atomically renamed. Failure never invents counts
+        // or replaces the mathematical outcome with a telemetry error.
+        match write_json(&path, &document).and_then(|()| digest(&path)) {
+            Ok(hash) => receipt["sha256"] = hash.into(),
+            Err(error) => {
+                receipt["stream_complete"] = false.into();
+                receipt["error"] =
+                    format!("cache-hit evidence could not be committed: {error}").into();
+            }
+        }
+        receipt
     }
 
     fn authenticate(
@@ -92,6 +158,8 @@ impl Stages {
 }
 
 struct StageLogger(Mutex<Stages>);
+// Configuration of the existing dedicated logger, not a reducer callback registry.
+static CLASSIFY_CACHE_HITS: AtomicBool = AtomicBool::new(false);
 static LOGGER: StageLogger = StageLogger(Mutex::new(Stages {
     seconds: BTreeMap::new(),
     lowered: Vec::new(),
@@ -99,10 +167,42 @@ static LOGGER: StageLogger = StageLogger(Mutex::new(Stages {
     input_roots: BTreeSet::new(),
     input_roots_seen: false,
     input_roots_error: None,
+    input_dispatch_count: 0,
+    hit_events: Vec::new(),
+    hit_error: None,
 }));
+
+struct ClassificationLogging;
+
+impl ClassificationLogging {
+    fn enter(enabled: bool) -> Self {
+        CLASSIFY_CACHE_HITS.store(enabled, Ordering::Relaxed);
+        Self
+    }
+}
+
+impl Drop for ClassificationLogging {
+    fn drop(&mut self) {
+        CLASSIFY_CACHE_HITS.store(false, Ordering::Relaxed);
+    }
+}
+
+impl StageLogger {
+    fn stages(&self) -> std::sync::MutexGuard<'_, Stages> {
+        self.0.lock().unwrap_or_else(|poison| {
+            let mut stages = poison.into_inner();
+            stages.hit_error = Some("cache-hit logger mutex was poisoned".into());
+            stages
+        })
+    }
+}
 
 impl log::Log for StageLogger {
     fn enabled(&self, metadata: &log::Metadata<'_>) -> bool {
+        if metadata.target() == "vakint::benchmark_cache_hits" {
+            return cfg!(feature = "experimental-rustred")
+                && CLASSIFY_CACHE_HITS.load(Ordering::Relaxed);
+        }
         metadata.level() <= log::Level::Warn
             || matches!(
                 metadata.target(),
@@ -115,7 +215,16 @@ impl log::Log for StageLogger {
             return;
         }
         let message = record.args().to_string();
-        if let Ok(mut stages) = self.0.lock() {
+        {
+            let mut stages = self.stages();
+            if record.target() == "vakint::benchmark_cache_hits" {
+                if stages.hit_error.is_none()
+                    && let Err(error) = stages.capture_hit_event(&message)
+                {
+                    stages.hit_error = Some(error.to_string());
+                }
+                return;
+            }
             if record.target() == "vakint::cache_workload" {
                 if let Err(error) = stages.capture_input_roots(&message) {
                     stages.input_roots_error = Some(error.to_string());
@@ -161,7 +270,7 @@ struct Options {
     work_dir: PathBuf,
     suite: String,
     repetitions: usize,
-    max_case_seconds: u64,
+    max_case_seconds: Option<u64>,
     case_id: Option<String>,
     variant: String,
     worker: bool,
@@ -170,48 +279,113 @@ struct Options {
     provisional: bool,
     only_case: Option<String>,
     monitor: RustRedMonitorOptions,
+    classify_cache_hits: bool,
 }
 
 impl Options {
-    fn arm_worker_watchdog(&self) -> Result<Value> {
-        let deadline = self
-            .worker_deadline
-            .ok_or_else(|| eyre::eyre!("worker requires an absolute supervisor deadline"))?;
-        let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs_f64();
-        let remaining = (deadline - now).min(self.max_case_seconds as f64);
-        ensure!(
-            deadline.is_finite() && remaining.is_finite() && remaining > 0.0,
-            "worker deadline has expired or is invalid"
-        );
-        std::thread::Builder::new()
-            .name("measurement-deadline".into())
-            .spawn(move || {
-                let started = Instant::now();
-                let allowance = Duration::from_secs_f64(remaining);
-                loop {
-                    let remaining = allowance.saturating_sub(started.elapsed());
-                    let expired = SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .map_or(true, |now| now.as_secs_f64() >= deadline);
-                    if remaining.is_zero() || expired {
-                        std::process::exit(124);
-                    }
-                    std::thread::sleep(remaining.min(Duration::from_secs(1)));
-                }
+    fn case_deadline(&self, now: f64) -> Result<Option<f64>> {
+        ensure!(now.is_finite(), "invalid supervisor clock");
+        self.max_case_seconds
+            .map(|seconds| {
+                ensure!(seconds > 0, "positive diagnostic deadline required");
+                Ok(now + seconds as f64)
             })
-            .context("start independent measurement watchdog")?;
+            .transpose()
+    }
+
+    fn worker_allowance(&self, now: f64) -> Result<Option<Duration>> {
+        match (self.max_case_seconds, self.worker_deadline) {
+            (None, None) => Ok(None),
+            (Some(seconds), Some(deadline)) => {
+                let remaining = (deadline - now).min(seconds as f64);
+                ensure!(
+                    seconds > 0 && deadline.is_finite() && now.is_finite() && remaining > 0.0,
+                    "worker diagnostic deadline has expired or is invalid"
+                );
+                Ok(Some(Duration::try_from_secs_f64(remaining)?))
+            }
+            _ => bail!("worker deadline must match the explicit diagnostic budget"),
+        }
+    }
+
+    fn deadline_exhausted(
+        &self,
+        deadline: Option<f64>,
+        elapsed: Duration,
+        now: f64,
+    ) -> Result<bool> {
+        match (self.max_case_seconds, deadline) {
+            (None, None) => Ok(false),
+            (Some(seconds), Some(deadline)) => {
+                ensure!(
+                    seconds > 0 && deadline.is_finite() && now.is_finite(),
+                    "invalid diagnostic deadline"
+                );
+                Ok(elapsed >= Duration::from_secs(seconds) || now >= deadline)
+            }
+            _ => bail!("supervisor deadline must match the explicit diagnostic budget"),
+        }
+    }
+
+    fn interrupted_supervision(&self, active: &Value, now: f64) -> Result<Value> {
+        if self.max_case_seconds.is_none() {
+            bail!(
+                "an unbounded worker may still be active; preserve the interrupted attempt \
+                 until its terminal completion is independently verified"
+            );
+        }
+        let deadline = active["deadline_unix_seconds"]
+            .as_f64()
+            .ok_or_else(|| eyre::eyre!("invalid active diagnostic deadline"))?;
+        ensure!(
+            deadline.is_finite() && now.is_finite() && now >= deadline,
+            "an interrupted supervisor's worker may still be active; preserve its diagnostic deadline"
+        );
+        Ok(
+            json!({"success":false,"interrupted":true,"deadline_exhausted":true,
+            "error":"interrupted attempt retained without retry"}),
+        )
+    }
+
+    fn arm_worker_watchdog(&self) -> Result<Value> {
         let active: Value = serde_json::from_slice(&fs::read(self.work_dir.join("running.json"))?)?;
         ensure!(
-            active["deadline_unix_seconds"].as_f64() == Some(deadline)
+            active.get("deadline_unix_seconds") == Some(&json!(self.worker_deadline))
                 && active["case_id"].as_str() == self.case_id.as_deref()
                 && active["variant"] == self.variant
                 && active["sample"].as_u64() == self.sample.map(|sample| sample as u64),
             "worker has no matching durable active case"
         );
+        let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs_f64();
+        if let Some(allowance) = self.worker_allowance(now)? {
+            let deadline = self
+                .worker_deadline
+                .ok_or_else(|| eyre::eyre!("bounded worker requires a supervisor deadline"))?;
+            std::thread::Builder::new()
+                .name("measurement-deadline".into())
+                .spawn(move || {
+                    let started = Instant::now();
+                    loop {
+                        let remaining = allowance.saturating_sub(started.elapsed());
+                        let expired = SystemTime::now()
+                            .duration_since(UNIX_EPOCH)
+                            .map_or(true, |now| now.as_secs_f64() >= deadline);
+                        if remaining.is_zero() || expired {
+                            std::process::exit(124);
+                        }
+                        std::thread::sleep(remaining.min(Duration::from_secs(1)));
+                    }
+                })
+                .context("start independent diagnostic measurement watchdog")?;
+        }
         Ok(active["identity"].clone())
     }
 
     fn parse() -> Result<Option<Self>> {
+        Self::parse_args(std::env::args().skip(1))
+    }
+
+    fn parse_args(mut args: impl Iterator<Item = String>) -> Result<Option<Self>> {
         let mut artifacts = None;
         let mut workload = None;
         let mut source_census = None;
@@ -222,16 +396,16 @@ impl Options {
         let mut work_dir = None;
         let mut suite = "tuning".to_owned();
         let mut repetitions = 3;
-        let mut max_case_seconds = 300;
+        let mut max_case_seconds: Option<u64> = None;
         let mut case_id = None;
         let mut variant = "uncached".to_owned();
         let mut worker = false;
         let mut sample = None;
-        let mut worker_deadline = None;
+        let mut worker_deadline: Option<f64> = None;
         let mut provisional = false;
         let mut only_case = None;
         let mut monitor = RustRedMonitorOptions::default();
-        let mut args = std::env::args().skip(1);
+        let mut classify_cache_hits = false;
         while let Some(arg) = args.next() {
             if matches!(arg.as_str(), "--help" | "-h") {
                 println!(
@@ -244,12 +418,16 @@ impl Options {
                      [--running-cache-no-read-delta] reads immutable bases only; requires --running-cache.\n\
                      [--provisional] permits legacy functional pilots without native key authentication.\n\
                      [--only-case ID] selects one frozen case and requires --provisional.\n\
-                     Every case/sample/variant runs in a fresh process. Default: three samples, 300s each.\n\
+                     Every case/sample/variant runs in a fresh process. Default: three samples, no deadline.\n\
+                     --max-case-seconds N opts into a positive diagnostic budget for the whole worker.\n\
                      Omit --cache for an uncached baseline; final cache comparisons require three samples.\n\
                      [--monitor] [--progress-snapshot PATH] [--progress-interval-seconds N]\n\
                      Monitoring defaults off; --monitor needs progress-tui and uses worker work-dir/monitor.json.\n\
                      A snapshot path enables native JSON without a TUI; interval defaults to 1s.\n\
                      Monitored timings include diagnostic observation overhead.\n\
+                     [--classify-cache-hits] records a lossless diagnostic for offline owner mapping.\n\
+                     Requires experimental-rustred, --cache and --repetitions 1; runs only the cached variant.\n\
+                     Forbids presentation, running capture and performance claims.\n\
                      Run with fixed affinity in a serialized measurement window."
                 );
                 return Ok(None);
@@ -274,6 +452,10 @@ impl Options {
                 monitor.display = RustRedMonitorDisplay::Tui;
                 continue;
             }
+            if arg == "--classify-cache-hits" {
+                classify_cache_hits = true;
+                continue;
+            }
             let value = args
                 .next()
                 .ok_or_else(|| eyre::eyre!("missing value for {arg}"))?;
@@ -286,7 +468,7 @@ impl Options {
                 "--work-dir" => work_dir = Some(value.into()),
                 "--suite" => suite = value,
                 "--repetitions" => repetitions = value.parse()?,
-                "--max-case-seconds" => max_case_seconds = value.parse()?,
+                "--max-case-seconds" => max_case_seconds = Some(value.parse()?),
                 "--case-id" => case_id = Some(value),
                 "--only-case" => only_case = Some(value),
                 "--variant" => variant = value,
@@ -304,8 +486,8 @@ impl Options {
             "unknown suite"
         );
         ensure!(
-            repetitions > 0 && max_case_seconds > 0,
-            "positive repetition/deadline required"
+            repetitions > 0 && max_case_seconds.is_none_or(|seconds| seconds > 0),
+            "positive repetitions and an optional positive diagnostic deadline required"
         );
         ensure!(
             matches!(variant.as_str(), "uncached" | "cached"),
@@ -331,6 +513,35 @@ impl Options {
             only_case.is_none() || provisional,
             "--only-case requires --provisional; final comparisons use the complete frozen suite"
         );
+        #[cfg(feature = "experimental-rustred")]
+        {
+            monitor.cache_hit_diagnostic = classify_cache_hits;
+        }
+        ensure!(
+            !classify_cache_hits || cfg!(feature = "experimental-rustred"),
+            "--classify-cache-hits requires experimental-rustred"
+        );
+        ensure!(
+            !classify_cache_hits || !monitor.enabled(),
+            "lossless cache-hit classification cannot be combined with presentation"
+        );
+        ensure!(
+            !classify_cache_hits
+                || (cache.is_some() && repetitions == 1 && running_cache.is_none()),
+            "classification requires one cached diagnostic and forbids running capture"
+        );
+        ensure!(
+            !classify_cache_hits || !worker || variant == "cached",
+            "a classification worker must use the cached variant"
+        );
+        ensure!(
+            worker_deadline.is_none_or(|deadline| deadline.is_finite()),
+            "finite worker diagnostic deadline required"
+        );
+        ensure!(
+            !worker || max_case_seconds.is_some() == worker_deadline.is_some(),
+            "worker deadline must match the explicit diagnostic budget"
+        );
         monitor.validate()?;
         Ok(Some(Self {
             artifacts: artifacts.ok_or_else(|| eyre::eyre!("--artifacts is required"))?,
@@ -353,6 +564,7 @@ impl Options {
             provisional,
             only_case,
             monitor,
+            classify_cache_hits,
         }))
     }
 
@@ -376,6 +588,7 @@ impl Options {
             "build_git_revision":option_env!("VAKINT_CACHE_BUILD_GIT_REVISION"),
             "suite":self.suite,"repetitions":self.repetitions,"max_case_seconds":self.max_case_seconds,
             "provisional":self.provisional,"only_case":self.only_case,
+            "cache_hit_diagnostic":self.classify_cache_hits,
             "cpu_affinity":fs::read_to_string("/proc/self/status").ok().and_then(|status|status.lines().find_map(|line|line.strip_prefix("Cpus_allowed_list:").map(str::trim).map(str::to_owned))),
             "rayon_num_threads":std::env::var("RAYON_NUM_THREADS").ok(),
         });
@@ -396,6 +609,14 @@ impl Options {
                 "default_snapshot": "worker-work-dir/monitor.json",
                 "interval_seconds": self.monitor.interval.as_secs_f64(),
                 "diagnostic_timing": true,
+            });
+        }
+        if self.classify_cache_hits {
+            identity["cache_hit_diagnostic_scope"] = json!({
+                "capability":"vakint.initial-routing-frontier-hit-proof.v1",
+                "interval_ns":0,"presentation":false,
+                "requires_offline_recursive_mapper":true,
+                "performance_claim_allowed":false,
             });
         }
         if let Some(path) = &self.running_cache {
@@ -706,20 +927,21 @@ fn measure(options: &Options, root: &Root, identity: &Value, workload: &Workload
         );
         let owner_proof_seconds = proof_started.elapsed().as_secs_f64();
         let owners_before = engine.rustred_application_owner_preparation_statistics()?;
-        *LOGGER
-            .0
-            .lock()
-            .map_err(|error| eyre::eyre!(error.to_string()))? = Stages::default();
+        *LOGGER.stages() = Stages::default();
         let started = Instant::now();
-        let outcome = if options.monitor.enabled() {
-            let mut monitor = options.monitor.clone();
-            if monitor.display == RustRedMonitorDisplay::Tui && monitor.progress_snapshot.is_none()
-            {
-                monitor.progress_snapshot = Some(options.work_dir.join("monitor.json"));
+        let outcome = {
+            let _logging = ClassificationLogging::enter(options.classify_cache_hits);
+            if options.monitor.enabled() || options.classify_cache_hits {
+                let mut monitor = options.monitor.clone();
+                if monitor.display == RustRedMonitorDisplay::Tui
+                    && monitor.progress_snapshot.is_none()
+                {
+                    monitor.progress_snapshot = Some(options.work_dir.join("monitor.json"));
+                }
+                engine.evaluate_rustred_symbolic_with_monitor(&settings, input.as_view(), &monitor)
+            } else {
+                engine.evaluate_rustred_symbolic(&settings, input.as_view())
             }
-            engine.evaluate_rustred_symbolic_with_monitor(&settings, input.as_view(), &monitor)
-        } else {
-            engine.evaluate_rustred_symbolic(&settings, input.as_view())
         };
         let evaluation_seconds = started.elapsed().as_secs_f64();
         // The native flush is the durability acknowledgement on success and ordinary
@@ -837,11 +1059,7 @@ fn measure(options: &Options, root: &Root, identity: &Value, workload: &Workload
             .preparation_time
             .saturating_sub(owners_before.preparation_time)
             .as_secs_f64();
-        let stages = LOGGER
-            .0
-            .lock()
-            .map_err(|error| eyre::eyre!(error.to_string()))
-            .map_err(&mut preserve_reduction_error)?;
+        let stages = LOGGER.stages();
         let saved_seconds = stages
             .seconds
             .get("saved_rule_application")
@@ -888,6 +1106,22 @@ fn measure(options: &Options, root: &Root, identity: &Value, workload: &Workload
         if let Some(running_cache) = &running_cache_receipt {
             receipt["running_cache"] = running_cache.clone();
             receipt["running_cache_attached"] = running_cache_attached.into();
+        }
+        if options.classify_cache_hits {
+            receipt["cache_hit_diagnostic"] =
+                stages.save_hit_diagnostic(&options.work_dir, outcome.is_some());
+            receipt["performance_claim_allowed"] = false.into();
+        }
+        if let Some(proof) = &proof {
+            let evidence = proof.initial_routing_frontier(&root.id).unwrap_or_else(
+                |error| json!({"complete":false,"scope":"unclassified","reason":error.to_string()}),
+            );
+            if !evidence.is_null() {
+                receipt["owner_frontier_evidence"] = json!({
+                    "scope":"Bound saved diagnostic only; not classification of this request or its timings",
+                    "evidence":evidence,
+                });
+            }
         }
         let authentication = stages.authenticate(
             &root.lowered_roots,
@@ -1144,7 +1378,9 @@ fn main() -> Result<()> {
     } else {
         write_json(&identity_path, &identity)?;
     }
-    let variants: &[&str] = if options.cache.is_some() {
+    let variants: &[&str] = if options.classify_cache_hits {
+        &["cached"]
+    } else if options.cache.is_some() {
         &["uncached", "cached"]
     } else {
         &["uncached"]
@@ -1164,19 +1400,11 @@ fn main() -> Result<()> {
                     let supervision = if active_path.exists() {
                         let active: Value = serde_json::from_slice(&fs::read(&active_path)?)?;
                         validate_receipt(&active, &identity, &root.id, variant, sample)?;
-                        let deadline = active["deadline_unix_seconds"]
-                            .as_f64()
-                            .ok_or_else(|| eyre::eyre!("invalid active worker deadline"))?;
-                        ensure!(
-                            deadline.is_finite() && now >= deadline,
-                            "an interrupted supervisor's worker may still be active; preserve its deadline"
-                        );
-                        json!({"success":false,"interrupted":true,"deadline_exhausted":true,
-                            "error":"interrupted attempt retained without retry"})
+                        options.interrupted_supervision(&active, now)?
                     } else {
                         let started = Instant::now();
                         let wall_started = SystemTime::now();
-                        let deadline = now + options.max_case_seconds as f64;
+                        let deadline = options.case_deadline(now)?;
                         write_json(
                             &active_path,
                             &json!({
@@ -1195,7 +1423,8 @@ fn main() -> Result<()> {
                         } else {
                             None
                         };
-                        let launched = Command::new(std::env::current_exe()?)
+                        let mut command = Command::new(std::env::current_exe()?);
+                        command
                             .args(std::env::args_os().skip(1))
                             .arg("--worker")
                             .arg("--case-id")
@@ -1203,9 +1432,11 @@ fn main() -> Result<()> {
                             .arg("--variant")
                             .arg(variant)
                             .arg("--sample")
-                            .arg(sample.to_string())
-                            .arg("--worker-deadline")
-                            .arg(deadline.to_string())
+                            .arg(sample.to_string());
+                        if let Some(deadline) = deadline {
+                            command.arg("--worker-deadline").arg(deadline.to_string());
+                        }
+                        let launched = command
                             .arg("--work-dir")
                             .arg(&directory)
                             .stdin(Stdio::null())
@@ -1220,12 +1451,11 @@ fn main() -> Result<()> {
                                     viewer.bind_worker_pid(child_pid);
                                 }
                                 let (status, expired) = loop {
-                                    let expired = started.elapsed()
-                                        >= Duration::from_secs(options.max_case_seconds)
-                                        || SystemTime::now()
-                                            .duration_since(UNIX_EPOCH)?
-                                            .as_secs_f64()
-                                            >= deadline;
+                                    let expired = options.deadline_exhausted(
+                                        deadline,
+                                        started.elapsed(),
+                                        SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs_f64(),
+                                    )?;
                                     if let Some(status) = child.try_wait()? {
                                         break (status, expired);
                                     }
@@ -1238,11 +1468,12 @@ fn main() -> Result<()> {
                                     }
                                     std::thread::sleep(Duration::from_millis(200));
                                 };
+                                #[cfg(feature = "progress-tui")]
                                 drop(viewer);
                                 let wall_finished = SystemTime::now();
                                 json!({"success":status.success() && !expired,
                                     "exit_code":status.code(),"exit_status":status.to_string(),
-                                    "deadline_exhausted":expired || status.code()==Some(124),
+                                    "deadline_exhausted":expired || (options.max_case_seconds.is_some() && status.code()==Some(124)),
                                     "elapsed_seconds":started.elapsed().as_secs_f64(),
                                     "child_pid":child_pid,"supervisor_pid":supervisor_pid,
                                     "started_unix_seconds":wall_started.duration_since(UNIX_EPOCH)?.as_secs_f64(),
@@ -1250,6 +1481,7 @@ fn main() -> Result<()> {
                                     "interval_scope":"supervisor pre-spawn setup through supervisor-observed worker completion"})
                             }
                             Err(error) => {
+                                #[cfg(feature = "progress-tui")]
                                 drop(viewer);
                                 json!({"success":false,"launch_error":error.to_string(),
                                     "elapsed_seconds":started.elapsed().as_secs_f64()})
@@ -1269,7 +1501,7 @@ fn main() -> Result<()> {
                     receipt["success"] =
                         (receipt["success"] == true && supervision["success"] == true).into();
                     if supervision["success"] != true {
-                        receipt["supervisor_error"] = "worker did not exit successfully within its deadline; retained without retry; inspect supervision and worker.log".into();
+                        receipt["supervisor_error"] = "worker did not exit successfully; retained without retry; inspect supervision and worker.log".into();
                         if receipt["error"].is_null() {
                             receipt["error"] = receipt["supervisor_error"].clone();
                         }
@@ -1294,13 +1526,23 @@ fn main() -> Result<()> {
             .collect::<Vec<_>>();
         let successful = complete_samples(&selected, variants, options.repetitions)
             && selected.iter().all(|receipt| receipt["success"] == true);
-        let exact = successful
+        let exact = !options.classify_cache_hits
+            && successful
             && selected.iter().all(|receipt| {
                 receipt["value_sha256"] == selected[0]["value_sha256"]
                     && receipt["guards_sha256"] == selected[0]["guards_sha256"]
             });
         let mut row =
             json!({"id":root.id,"successful":successful,"exact_output_and_guard_parity":exact});
+        if options.classify_cache_hits {
+            // One cached diagnostic cannot compare its output with itself.
+            // The mapper binds a prior accepted same-cohort uncached receipt.
+            row["exact_output_and_guard_parity"] = Value::Null;
+            row["hit_stream_complete"] = selected
+                .iter()
+                .all(|receipt| receipt["cache_hit_diagnostic"]["stream_complete"] == true)
+                .into();
+        }
         // Missing or failed samples cannot establish closure. A completed
         // retained expression may still contain correctly reported unknowns.
         row["catalogue_closure"] = if successful {
@@ -1341,10 +1583,13 @@ fn main() -> Result<()> {
             .sum::<u64>();
         row["requested_root_hits"] = root_hits.into();
         row["intermediate_hits"] = intermediate_hits.into();
+        row["diagnostic_only"] = options.classify_cache_hits.into();
         row["backing_reuse"] = if root_hits > 0 {
             "incidental-requested-root-hit"
         } else if intermediate_hits > 0 {
-            "intermediate-only"
+            // The legacy Native counter includes Apply records for requested
+            // roots. Only a complete recursive frontier proof can separate them.
+            "root-scope-unclassified"
         } else {
             "no-backing-hit"
         }
@@ -1357,6 +1602,7 @@ fn main() -> Result<()> {
                 .collect::<Vec<_>>();
             samples.sort_by(f64::total_cmp);
             if successful
+                && !options.classify_cache_hits
                 && samples.len() == options.repetitions
                 && samples
                     .iter()
@@ -1385,9 +1631,13 @@ fn main() -> Result<()> {
         cases.push(row);
     }
     let complete = !cases.is_empty()
-        && cases
-            .iter()
-            .all(|case| case["exact_output_and_guard_parity"] == true);
+        && cases.iter().all(|case| {
+            if options.classify_cache_hits {
+                case["successful"] == true && case["hit_stream_complete"] == true
+            } else {
+                case["exact_output_and_guard_parity"] == true
+            }
+        });
     let ratios = cases
         .iter()
         .filter_map(|case| case["uncached_over_cached_ratio"].as_f64())
@@ -1413,7 +1663,7 @@ fn main() -> Result<()> {
         && identity["cpu_affinity"].is_string();
     write_json(
         &options.work_dir.join("summary.json"),
-        &json!({"schema":"vakint.five-loop-cache-suite.v1","identity":identity,"complete":complete,"cases":cases,"measurements":measurements,"geometric_mean_uncached_over_cached_ratio":geometric_mean,"provisional":options.provisional,"native_keys_authenticated":authenticated,"execution_provenance_complete":provenance_complete,"final_held_out_comparison":authenticated && provenance_complete && options.suite=="held-out" && options.cache.is_some() && options.repetitions>=3,"selection_allowed":authenticated && provenance_complete && options.suite=="tuning" && options.cache.is_some() && options.repetitions>=3}),
+        &json!({"schema":"vakint.five-loop-cache-suite.v1","identity":identity,"complete":complete,"cases":cases,"measurements":measurements,"geometric_mean_uncached_over_cached_ratio":geometric_mean,"provisional":options.provisional,"diagnostic_only":options.classify_cache_hits,"native_keys_authenticated":authenticated,"execution_provenance_complete":provenance_complete,"final_held_out_comparison":!options.classify_cache_hits && authenticated && provenance_complete && options.suite=="held-out" && options.cache.is_some() && options.repetitions>=3,"selection_allowed":!options.classify_cache_hits && authenticated && provenance_complete && options.suite=="tuning" && options.cache.is_some() && options.repetitions>=3}),
     )?;
     ensure!(
         complete,
@@ -1425,6 +1675,357 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn parsed_options(extra: &[&str]) -> Result<Options> {
+        let mut args = vec![
+            "--artifacts",
+            "data",
+            "--workload",
+            "workload.json",
+            "--source-census",
+            "census.json",
+            "--work-dir",
+            "measurement",
+        ];
+        args.extend_from_slice(extra);
+        Options::parse_args(args.into_iter().map(str::to_owned))?
+            .ok_or_else(|| eyre::eyre!("unexpected help request"))
+    }
+
+    #[test]
+    fn collector_defaults_to_unbounded_non_diagnostic_execution() -> Result<()> {
+        let options = parsed_options(&[])?;
+        assert_eq!(options.repetitions, 3);
+        assert_eq!(options.max_case_seconds, None);
+        assert_eq!(options.case_deadline(100.0)?, None);
+        assert_eq!(options.worker_allowance(100.0)?, None);
+        assert!(!options.classify_cache_hits);
+        assert!(!options.monitor.enabled());
+        #[cfg(feature = "experimental-rustred")]
+        assert!(!options.monitor.cache_hit_diagnostic);
+        assert!(!options.deadline_exhausted(None, Duration::from_secs(u64::MAX), f64::MAX)?);
+        Ok(())
+    }
+
+    #[test]
+    fn explicit_positive_budget_bounds_both_clocks_and_worker_allowance() -> Result<()> {
+        let mut options = parsed_options(&["--max-case-seconds", "30"])?;
+        assert_eq!(options.max_case_seconds, Some(30));
+        let deadline = options.case_deadline(100.0)?;
+        assert_eq!(deadline, Some(130.0));
+        options.worker_deadline = deadline;
+        assert_eq!(
+            options.worker_allowance(110.0)?,
+            Some(Duration::from_secs(20))
+        );
+        assert_eq!(
+            options.worker_allowance(90.0)?,
+            Some(Duration::from_secs(30))
+        );
+        assert!(!options.deadline_exhausted(deadline, Duration::from_secs(29), 129.0)?);
+        assert!(options.deadline_exhausted(deadline, Duration::from_secs(30), 100.0)?);
+        assert!(options.deadline_exhausted(deadline, Duration::ZERO, 130.0)?);
+        assert!(options.worker_allowance(130.0).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn cli_rejects_invalid_budget_and_inconsistent_worker_deadlines() {
+        for args in [
+            vec!["--max-case-seconds", "0"],
+            vec!["--max-case-seconds", "-1"],
+            vec!["--max-case-seconds", "NaN"],
+            vec!["--max-case-seconds"],
+            vec!["--worker", "--max-case-seconds", "30"],
+            vec!["--worker", "--worker-deadline", "130"],
+            vec![
+                "--worker",
+                "--max-case-seconds",
+                "30",
+                "--worker-deadline",
+                "NaN",
+            ],
+            vec![
+                "--worker",
+                "--max-case-seconds",
+                "30",
+                "--worker-deadline",
+                "inf",
+            ],
+        ] {
+            assert!(
+                parsed_options(&args).is_err(),
+                "accepted invalid arguments {args:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn deadline_policy_rejects_unpaired_or_nonfinite_state() -> Result<()> {
+        let mut options = parsed_options(&[])?;
+        options.worker_deadline = Some(130.0);
+        assert!(options.worker_allowance(100.0).is_err());
+        assert!(
+            options
+                .deadline_exhausted(Some(130.0), Duration::ZERO, 100.0)
+                .is_err()
+        );
+        options.max_case_seconds = Some(30);
+        options.worker_deadline = None;
+        assert!(options.worker_allowance(100.0).is_err());
+        assert!(
+            options
+                .deadline_exhausted(None, Duration::ZERO, 100.0)
+                .is_err()
+        );
+        assert!(
+            options
+                .deadline_exhausted(Some(f64::NAN), Duration::ZERO, 100.0)
+                .is_err()
+        );
+        assert!(options.case_deadline(f64::INFINITY).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn interrupted_unbounded_attempt_never_infers_expiry_or_retries() -> Result<()> {
+        let options = parsed_options(&[])?;
+        for active in [
+            json!({"deadline_unix_seconds":null}),
+            json!({"deadline_unix_seconds":1}),
+        ] {
+            let error = options
+                .interrupted_supervision(&active, f64::MAX)
+                .err()
+                .unwrap();
+            assert!(
+                error
+                    .to_string()
+                    .contains("terminal completion is independently verified")
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn interrupted_bounded_attempt_preserves_existing_no_retry_failure() -> Result<()> {
+        let options = parsed_options(&["--max-case-seconds", "30"])?;
+        let active = json!({"deadline_unix_seconds":130.0});
+        assert!(options.interrupted_supervision(&active, 129.0).is_err());
+        let supervision = options.interrupted_supervision(&active, 130.0)?;
+        assert_eq!(supervision["success"], false);
+        assert_eq!(supervision["interrupted"], true);
+        assert_eq!(supervision["deadline_exhausted"], true);
+        assert_eq!(
+            supervision["error"],
+            "interrupted attempt retained without retry"
+        );
+        assert!(options.interrupted_supervision(&json!({}), 200.0).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn unbounded_worker_requires_matching_durable_active_identity() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let mut options = parsed_options(&["--worker", "--case-id", "case", "--sample", "0"])?;
+        options.work_dir = directory.path().into();
+        let mut active = json!({"identity":{"frozen":"identity"},"case_id":"case",
+            "variant":"uncached","sample":0,"deadline_unix_seconds":null});
+        write_json(&directory.path().join("running.json"), &active)?;
+        assert_eq!(options.arm_worker_watchdog()?, active["identity"]);
+        active
+            .as_object_mut()
+            .unwrap()
+            .remove("deadline_unix_seconds");
+        write_json(&directory.path().join("running.json"), &active)?;
+        assert!(options.arm_worker_watchdog().is_err());
+        active["deadline_unix_seconds"] = Value::Null;
+        active["case_id"] = "different".into();
+        write_json(&directory.path().join("running.json"), &active)?;
+        assert!(options.arm_worker_watchdog().is_err());
+        Ok(())
+    }
+
+    #[cfg(feature = "experimental-rustred")]
+    #[test]
+    fn classification_cli_explicitly_opts_into_lossless_monitor_events() -> Result<()> {
+        let options = parsed_options(&[
+            "--classify-cache-hits",
+            "--cache",
+            "native-cache",
+            "--repetitions",
+            "1",
+        ])?;
+        assert!(options.classify_cache_hits);
+        assert!(options.monitor.cache_hit_diagnostic);
+        assert!(!options.monitor.enabled());
+        assert_eq!(options.max_case_seconds, None);
+        for args in [
+            vec!["--classify-cache-hits", "--repetitions", "1"],
+            vec!["--classify-cache-hits", "--cache", "native-cache"],
+            vec![
+                "--classify-cache-hits",
+                "--cache",
+                "native-cache",
+                "--repetitions",
+                "1",
+                "--progress-snapshot",
+                "progress.json",
+            ],
+            vec![
+                "--classify-cache-hits",
+                "--cache",
+                "native-cache",
+                "--repetitions",
+                "1",
+                "--running-cache",
+                "delta",
+            ],
+        ] {
+            assert!(
+                parsed_options(&args).is_err(),
+                "accepted invalid diagnostic arguments {args:?}"
+            );
+        }
+        Ok(())
+    }
+
+    #[cfg(not(feature = "experimental-rustred"))]
+    #[test]
+    fn classification_cli_rejects_builds_without_experimental_diagnostics() {
+        assert!(
+            parsed_options(&[
+                "--classify-cache-hits",
+                "--cache",
+                "native-cache",
+                "--repetitions",
+                "1"
+            ])
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn lossless_hit_buffer_preserves_multiplicity_and_dispatch_boundaries() -> Result<()> {
+        let document = owner_proof::hit_diagnostic_fixture();
+        let mut stages = Stages::default();
+        stages.capture_input_roots(&json!({"phase":"input_roots","roots":[]}).to_string())?;
+        for event in document["events"].as_array().unwrap() {
+            stages.capture_hit_event(&event.to_string())?;
+        }
+        assert_eq!(stages.hit_diagnostic(true), {
+            let mut expected = document;
+            expected["diagnostic_only"] = true.into();
+            expected["timing_scope"] =
+                "Lossless observation overhead; not an unobserved performance sample".into();
+            expected
+        });
+        assert!(owner_proof::validate_hit_diagnostic(&stages.hit_diagnostic(true)).is_ok());
+        let hit = stages
+            .hit_events
+            .iter()
+            .find(|event| event["event"] == "backing_hit")
+            .unwrap()
+            .clone();
+        stages.capture_hit_event(&hit.to_string())?;
+        // Duplicate delivery is retained and fails reconciliation, not deduplicated away.
+        assert_eq!(
+            stages
+                .hit_events
+                .iter()
+                .filter(|event| event["event"] == "backing_hit")
+                .count(),
+            2
+        );
+        assert!(owner_proof::validate_hit_diagnostic(&stages.hit_diagnostic(true)).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn missing_dispatch_and_cancelled_reduction_never_become_complete() -> Result<()> {
+        let document = owner_proof::hit_diagnostic_fixture();
+        let mut stages = Stages::default();
+        stages.hit_events = document["events"].as_array().unwrap().clone();
+        assert!(owner_proof::validate_hit_diagnostic(&stages.hit_diagnostic(true)).is_err());
+        stages.capture_input_roots(&json!({"phase":"input_roots","roots":[]}).to_string())?;
+        assert!(owner_proof::validate_hit_diagnostic(&stages.hit_diagnostic(false)).is_err());
+        stages.hit_error = Some("a telemetry record could not be retained".into());
+        assert!(owner_proof::validate_hit_diagnostic(&stages.hit_diagnostic(true)).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn collected_seeds_are_not_reconstructed_from_the_unweighted_input_union() -> Result<()> {
+        let document = owner_proof::hit_diagnostic_fixture();
+        let first = vec![1_i64; 15];
+        let second = vec![2_i64; 15];
+        let mut stages = Stages::default();
+        stages.capture_input_roots(
+            &json!({"phase":"input_roots","roots":[first.clone(),second]}).to_string(),
+        )?;
+        stages.hit_events = document["events"].as_array().unwrap().clone();
+        let observed = owner_proof::validate_hit_diagnostic(&stages.hit_diagnostic(true))?;
+        // The raw logger cannot encode coefficient cancellation. Only the
+        // native collected-root stream supplies the surviving combined seeds.
+        assert_eq!(stages.input_roots.len(), 2);
+        assert_eq!(
+            observed["dispatches"][0]["seeds"].as_array().unwrap().len(),
+            1
+        );
+        assert_eq!(
+            observed["dispatches"][0]["seeds"][0]["powers"],
+            json!(first)
+        );
+        stages.input_dispatch_count = u64::MAX;
+        assert!(
+            stages
+                .capture_input_roots(&json!({"phase":"input_roots","roots":[]}).to_string())
+                .is_err()
+        );
+        assert_eq!(stages.input_dispatch_count, u64::MAX);
+        Ok(())
+    }
+
+    #[test]
+    fn hit_evidence_commit_failure_keeps_classification_unavailable() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let mut stages = Stages::default();
+        let document = owner_proof::hit_diagnostic_fixture();
+        stages.hit_events = document["events"].as_array().unwrap().clone();
+        stages.input_dispatch_count = 1;
+        let committed = stages.save_hit_diagnostic(directory.path(), true);
+        assert_eq!(committed["stream_complete"], true);
+        assert_eq!(committed["classification_available"], false);
+        assert_eq!(
+            committed["sha256"],
+            digest(&directory.path().join("cache-hit-events.json"))?
+        );
+        let blocker = directory.path().join("not-a-directory");
+        fs::write(&blocker, b"preserve prior data")?;
+        let failed = stages.save_hit_diagnostic(&blocker, true);
+        assert_eq!(failed["stream_complete"], false);
+        assert_eq!(failed["classification_available"], false);
+        assert!(failed["sha256"].is_null());
+        assert!(
+            failed["error"]
+                .as_str()
+                .unwrap()
+                .contains("could not be committed")
+        );
+        assert_eq!(fs::read(&blocker)?, b"preserve prior data");
+        assert_eq!(stages.hit_diagnostic(true)["success"], true);
+        Ok(())
+    }
+
+    #[test]
+    fn classification_log_admission_is_released_on_scope_exit() {
+        assert!(!CLASSIFY_CACHE_HITS.load(Ordering::Relaxed));
+        {
+            let _guard = ClassificationLogging::enter(true);
+            assert!(CLASSIFY_CACHE_HITS.load(Ordering::Relaxed));
+        }
+        assert!(!CLASSIFY_CACHE_HITS.load(Ordering::Relaxed));
+    }
 
     #[test]
     fn cache_file_identity_preserves_the_existing_digest() -> Result<()> {

@@ -7,12 +7,35 @@ use rustred_app::{
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     fs::{self, File},
     io::{Read, Write},
     path::Path,
 };
 use symbolica::atom::AtomCore;
+
+#[path = "build_cache/owner_proof.rs"]
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "The mapper produces frontier certificates; consumers own legacy proof loading"
+    )
+)]
+mod owner_proof;
+#[path = "build_cache/workload.rs"]
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "The mapper shares the existing workload types; selection validation is owned by the proof reader"
+    )
+)]
+mod workload;
+use hash as digest;
+use owner_proof::{
+    FrontierSelection, FrontierWork, validate_frontier_certificate, validate_hit_diagnostic,
+};
 
 fn check(ok: bool, why: &str) -> Result<()> {
     ensure!(ok, "{why}");
@@ -168,6 +191,185 @@ fn validate_data(input: &Value) -> Result<()> {
         )?;
     }
     Ok(())
+}
+
+fn certify_dispatch(
+    prepared: &rustred_app::PreparedSavedApplication<15>,
+    selection: &FrontierSelection,
+    dispatch: &Value,
+) -> Result<Value> {
+    fn visit(
+        source: FrontierWork,
+        prepared: &rustred_app::PreparedSavedApplication<15>,
+        selection: &FrontierSelection,
+        active: &mut BTreeSet<FrontierWork>,
+        steps: &mut BTreeMap<FrontierWork, Value>,
+        frontier: &mut BTreeSet<FrontierWork>,
+    ) -> Result<()> {
+        frontier.insert(source.clone());
+        if steps.contains_key(&source) {
+            return Ok(());
+        }
+        check(active.insert(source.clone()), "active routing cycle")?;
+        let mapped =
+            prepared.route_entry_to_owner(&IntegralKey::try_new(source.powers.clone())?)?;
+        let mut edges = Vec::new();
+        for (endpoint, coefficient) in mapped.terms() {
+            if coefficient.is_zero() {
+                continue;
+            }
+            let target = selection.endpoint(&source, endpoint.powers().to_vec())?;
+            edges.push(json!({"target":target.document(),"coefficient":coefficient.to_expression().to_canonical_string()}));
+            frontier.insert(target.clone());
+            if target.stage == "route" {
+                visit(target, prepared, selection, active, steps, frontier)?;
+            }
+        }
+        let guards = mapped
+            .nonzero_conditions()
+            .iter()
+            .map(|guard| guard.to_expression().to_canonical_string())
+            .collect();
+        let step = selection.step(&source, edges, guards)?;
+        active.remove(&source);
+        steps.insert(source, step);
+        Ok(())
+    }
+    let mut steps = BTreeMap::new();
+    let mut frontier = BTreeSet::new();
+    for seed in dispatch["seeds"]
+        .as_array()
+        .ok_or_else(|| eyre::eyre!("missing collected seeds"))?
+    {
+        visit(
+            FrontierWork::parse(seed)?,
+            prepared,
+            selection,
+            &mut BTreeSet::new(),
+            &mut steps,
+            &mut frontier,
+        )?;
+    }
+    Ok(
+        json!({"ordinal":dispatch["ordinal"],"family_fingerprint":dispatch["family_fingerprint"],"seeds":dispatch["seeds"],
+        "seed_sha256":format!("{:x}",Sha256::digest(serde_json::to_vec(&dispatch["seeds"])?)),
+        "steps":steps.into_values().collect::<Vec<_>>(),"frontier":frontier.iter().map(FrontierWork::document).collect::<Vec<_>>()}),
+    )
+}
+
+/// Join one already completed cached diagnostic, never repeat its reduction.
+/// The legacy uncached receipt and its conservative owner sets remain intact.
+fn initial_frontier(
+    case: &Value,
+    reference: &Value,
+    input: &Value,
+    binding: &Value,
+    compiled: &Value,
+    prepared: &rustred_app::PreparedSavedApplication<15>,
+    bound_files: &mut Vec<(std::path::PathBuf, String)>,
+) -> Result<Value> {
+    let Some(path) = case["cache_hit_receipt_path"].as_str() else {
+        check(
+            case["cache_hit_receipt_sha256"].is_null(),
+            "cache-hit receipt hash has no path",
+        )?;
+        return Ok(Value::Null);
+    };
+    let path = Path::new(path);
+    let receipt_hash = required_hash(case, "cache_hit_receipt_sha256")?;
+    check(
+        hash(path)? == receipt_hash,
+        "saved diagnostic receipt changed",
+    )?;
+    let receipt = read(path)?;
+    owner_proof::validate_frontier_outputs(reference, &receipt)?;
+    check(
+        receipt["success"] == true
+            && receipt["worker_success"] == true
+            && receipt["fresh_process"] == true
+            && receipt["supervision"]["success"] == true
+            && receipt["supervision"]["exit_code"] == 0
+            && receipt["supervision"]["deadline_exhausted"] == false
+            && receipt["case_id"] == reference["case_id"]
+            && receipt["input_sha256"] == reference["input_sha256"]
+            && receipt["identity"]["workload_sha256"] == reference["identity"]["workload_sha256"]
+            && receipt["identity"]["source_census_sha256"]
+                == reference["identity"]["source_census_sha256"]
+            && receipt["identity"]["data_manifest_sha256"] == input["data_manifest_sha256"]
+            && receipt["identity"]["executable_sha256"] == input["measurement_executable_sha256"]
+            && receipt["cache_statistics"]["binding"] == *binding,
+        "saved diagnostic differs from complete case/cohort/application",
+    )?;
+    for (file, field) in [
+        ("value.symbolica", "value_sha256"),
+        ("guards.json", "guards_sha256"),
+    ] {
+        let output = path.with_file_name(file);
+        check(
+            hash(&output)? == required_hash(&receipt, field)? && receipt[field] == reference[field],
+            "saved diagnostic output or canonical guard-set file differs",
+        )?;
+        bound_files.push((output, required_hash(&receipt, field)?.to_owned()));
+    }
+    let trace_ref = &receipt["cache_hit_diagnostic"];
+    let trace_path = Path::new(required(trace_ref, "path")?);
+    let trace_path = if trace_path.is_absolute() {
+        trace_path.to_owned()
+    } else {
+        path.parent().unwrap_or(Path::new(".")).join(trace_path)
+    };
+    let trace_hash = required_hash(trace_ref, "sha256")?;
+    check(hash(&trace_path)? == trace_hash, "saved hit stream changed")?;
+    bound_files.push((path.to_owned(), receipt_hash.to_owned()));
+    bound_files.push((trace_path.clone(), trace_hash.to_owned()));
+    let mut certificate = json!({"schema":"vakint.initial-routing-frontier-hit-proof.v1","complete":false,"reason":null,
+        "trace_path":trace_path,"trace_sha256":trace_hash,"cache_hit_receipt_path":path,"cache_hit_receipt_sha256":receipt_hash,
+        "semantic_binding":binding,"compiled_cohort":compiled,"input_sha256":receipt["input_sha256"],
+        "selection_sha256":format!("{:x}",Sha256::digest(prepared.selection_json().as_bytes())),
+        "selection":null,"dispatches":[],"derived":null});
+    let build = (|| -> Result<()> {
+        let normalized = validate_hit_diagnostic(&read(&trace_path)?)?;
+        for field in [
+            "lookups",
+            "route_hits",
+            "apply_hits",
+            "requested_root_hits",
+            "intermediate_hits",
+            "misses",
+        ] {
+            check(
+                normalized["persistent"][field] == receipt["cache_statistics"]["persistent"][field],
+                "diagnostic dispatch counters differ from final raw receipt",
+            )?;
+        }
+        let selection =
+            FrontierSelection::parse(&serde_json::from_str(prepared.selection_json())?, binding)?;
+        certificate["selection"] = selection.document();
+        let dispatches = normalized["dispatches"]
+            .as_array()
+            .ok_or_else(|| eyre::eyre!("missing normalized dispatches"))?;
+        certificate["dispatches"] = json!(
+            dispatches
+                .iter()
+                .map(|dispatch| certify_dispatch(prepared, &selection, dispatch))
+                .collect::<Result<Vec<_>>>()?
+        );
+        certificate["complete"] = json!(true);
+        certificate["derived"] = validate_frontier_certificate(
+            &certificate,
+            &normalized,
+            binding,
+            compiled,
+            trace_hash,
+        )?;
+        Ok(())
+    })();
+    if let Err(error) = build {
+        certificate["complete"] = json!(false);
+        certificate["reason"] = json!(error.to_string());
+        certificate["derived"] = json!({"complete":false,"root_frontier_hits":null,"proper_descendant_hits":null,"scope":"unclassified"});
+    }
+    Ok(certificate)
 }
 fn main() -> Result<()> {
     let args = std::env::args().collect::<Vec<_>>();
@@ -394,7 +596,37 @@ fn main() -> Result<()> {
         }
         let protected = protected.into_iter().collect::<Vec<_>>();
         let signature = format!("{:x}", Sha256::digest(serde_json::to_vec(&protected)?));
-        rows.push(json!({"id":id,"logical_cohort":case["logical_cohort"],"receipt_path":path,"receipt_sha256":receipt_hash,"workload_path":workload_path,"workload_sha256":case["workload_sha256"],"source_census_path":source_census,"source_census_sha256":workload["source_census_sha256"],"application_binding":binding,"input_sha256":receipt["input_sha256"],"public_input_source_sha256":case["public_input_source_sha256"],"actual_lowered_roots":keys,"protected_owner_roots":protected,"protected_root_set_sha256":signature,"complete_owner_transport":mapping_error.is_none(),"mapping_error":mapping_error,"native_transports":transports,"reduction_succeeded":true,"measurement_claim_allowed":false}));
+        let mut frontier = match initial_frontier(
+            case,
+            &receipt,
+            &input,
+            &binding,
+            &cohort,
+            &prepared,
+            &mut bound_files,
+        ) {
+            Ok(frontier) => frontier,
+            Err(error) => json!({"schema":"vakint.initial-routing-frontier-hit-proof.v1",
+                "complete":false,"reason":error.to_string(),"semantic_binding":binding,
+                "compiled_cohort":cohort,"derived":{"complete":false,"scope":"unclassified",
+                    "root_frontier_hits":null,"proper_descendant_hits":null}}),
+        };
+        if frontier["complete"] == true {
+            match owner_proof::declared_training_matches(&frontier, &workload) {
+                Ok(matches) => frontier["declared_training_matches"] = matches,
+                Err(error) => {
+                    frontier["complete"] = json!(false);
+                    frontier["reason"] = json!(error.to_string());
+                    frontier["derived"] = json!({"complete":false,"scope":"unclassified",
+                        "root_frontier_hits":null,"proper_descendant_hits":null});
+                }
+            }
+        }
+        let mut row = json!({"id":id,"logical_cohort":case["logical_cohort"],"receipt_path":path,"receipt_sha256":receipt_hash,"workload_path":workload_path,"workload_sha256":case["workload_sha256"],"source_census_path":source_census,"source_census_sha256":workload["source_census_sha256"],"application_binding":binding,"input_sha256":receipt["input_sha256"],"public_input_source_sha256":case["public_input_source_sha256"],"actual_lowered_roots":keys,"protected_owner_roots":protected,"protected_root_set_sha256":signature,"complete_owner_transport":mapping_error.is_none(),"mapping_error":mapping_error,"native_transports":transports,"reduction_succeeded":true,"measurement_claim_allowed":false});
+        if !frontier.is_null() {
+            row["initial_routing_frontier"] = frontier;
+        }
+        rows.push(row);
     }
     validate_data(&input)?;
 

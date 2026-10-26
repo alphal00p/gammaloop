@@ -16,9 +16,9 @@ use symbolica::atom::Atom;
 use vakint::{
     EvaluationMethod, EvaluationOrder, LoopNormalizationFactor, MasterSymbol,
     OfficialExternalDataOptions, RustRedCachePreparationOptions, RustRedCacheRoot,
-    RustRedCacheWorkload, RustRedEvaluationOptions, RustRedMasterMode, RustRedMonitorDisplay,
-    RustRedMonitorOptions, Vakint, VakintExpression, VakintSettings,
-    diagram_integral::DiagramIntegralOptions, vakint_parse,
+    RustRedCacheWorkload, RustRedEvaluationOptions, RustRedMasterMode, RustRedMonitorOptions,
+    Vakint, VakintExpression, VakintSettings, diagram_integral::DiagramIntegralOptions,
+    vakint_parse,
 };
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
@@ -39,10 +39,10 @@ fn settings(mode: RustRedMasterMode) -> VakintSettings {
 fn snapshot_options(path: &Path) -> RustRedMonitorOptions {
     RustRedMonitorOptions {
         // A destination alone opts in. Terminal output remains disabled.
-        display: RustRedMonitorDisplay::Off,
         progress_snapshot: Some(path.to_owned()),
         interval: Duration::ZERO,
         no_color: true,
+        ..Default::default()
     }
 }
 

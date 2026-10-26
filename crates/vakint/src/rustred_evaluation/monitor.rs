@@ -26,6 +26,10 @@ pub struct RustRedMonitorOptions {
     /// Minimum native safe-boundary interval, not a CAS heartbeat deadline.
     pub interval: Duration,
     pub no_color: bool,
+    /// Explicit lossless benchmark metadata collection. Logger verbosity never
+    /// enables this diagnostic. Presentation and snapshots must remain off.
+    #[cfg(feature = "experimental-rustred")]
+    pub cache_hit_diagnostic: bool,
 }
 
 impl Default for RustRedMonitorOptions {
@@ -35,6 +39,8 @@ impl Default for RustRedMonitorOptions {
             progress_snapshot: None,
             interval: Duration::from_secs(1),
             no_color: false,
+            #[cfg(feature = "experimental-rustred")]
+            cache_hit_diagnostic: false,
         }
     }
 }
@@ -53,6 +59,13 @@ impl RustRedMonitorOptions {
     }
 
     pub fn validate(&self) -> io::Result<()> {
+        #[cfg(feature = "experimental-rustred")]
+        if self.cache_hit_diagnostic && self.enabled() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "lossless cache-hit diagnostics cannot be combined with presentation or snapshots",
+            ));
+        }
         if self.display == RustRedMonitorDisplay::Tui && !cfg!(feature = "progress-tui") {
             return Err(io::Error::new(
                 io::ErrorKind::Unsupported,
