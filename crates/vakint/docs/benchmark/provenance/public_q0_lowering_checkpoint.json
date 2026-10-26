@@ -1,0 +1,24 @@
+{
+  "schema": "vakint.public-q0-lowering-source-checkpoint.v1",
+  "archive": "vakint-5l-public-q0-lowering-source-20261026.tar.gz",
+  "archive_bytes": 74278,
+  "archive_sha256": "88cba73930a240456a36077c5478386dba138ec08a6c26091f45c2e2313a75da",
+  "members": 20,
+  "archive_manifest_sha256": "f6e4393b900ad132b45c7b3b0994a4c9fecb67632d0a20b0cd42495c9fcdc7a0",
+  "base_main_revision": "03ad1ecfd75b776723562ab2a17e1393b17ccd84",
+  "private_source_snapshot_sha256": "bfe0dc784735c3d7604782afe8a068e71fe0bfc9e70ae3c1478dda4372cf45bb",
+  "native_revision": "4190f2c6f3158e3fc3cbcb1937e12e5971da9175",
+  "kernel_revision": "9cd57678d8817ec33c05cacba4925162f1c86b0b",
+  "diagnostic_source_sha256": "adbdbe03ae093ae63a3bf4ccc00b9658711385f1f7d7c02973707bacad05336b",
+  "source_audit_sha256": "1f14e94b2d4b2f402f308798b158e09607e9e019680acc3d74582b5d4d516408",
+  "note": "public_q0_lowering_checkpoint.typ",
+  "checks": {
+    "source_member_checksums": true,
+    "two_archives_byte_identical": true,
+    "safe_normalized_regular_paths": true,
+    "included_imported_helper_source": true,
+    "python_AST_syntax": true,
+    "no_payloads_credentials_or_active_controls": true
+  },
+  "scope": "Source-only auxiliary development checkpoint; actual runtime scientific receipts remain in private workspace, no fullCI/finalrelease/active490observation claim. New-suite proposal is separate and not frozen."
+}
