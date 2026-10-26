@@ -423,8 +423,20 @@ python3 -m unittest discover -s crates/vakint/docs/benchmark \
 Medians and full observed ranges are recomputed from actual per-case samples.
 The coloured ratio is always *cached ÷ uncached* (four-loop cells remain
 *RustRed ÷ FMFT*), so green means faster. Do not average different physical inputs
-into an unlabeled “suite median”. Raw counters distinguish requested-root and
-intermediate cache hits; neither extends campaign coverage or proves master closure.
+into an unlabeled “suite median”. Preserve raw cache counters and the collector's
+#raw("backing_reuse") label as provenance; derive the displayed scope separately.
+In the audited Native #raw("4190f2c6f315") implementation,
+#raw("requested_root_hits") recognizes requested *Route* records only.
+#raw("intermediate_hits") also includes requested-owner *Apply* hits, so a zero
+root counter does not prove intermediate-only or proper-descendant-only reuse.
+A positive root counter proves some exact requested-root reuse; other-hit scope
+remains unclassified. Report this conservatively unless separate authenticated
+initial-frontier evidence establishes the finer scope. A revision string, claimed
+label or unvalidated additional field does not establish that evidence. Neither
+counter extends campaign coverage or proves master closure. Incidental cached
+descendants remain distinct from explicitly selected starting training integrals
+and their direct owner aliases; this display qualification does not change the
+frozen held-out exclusions.
 
 Loading, cache import, fresh graph preparation, lowering, deferred owner
 preparation, saved-application intervals, complete reduction and end-to-end time

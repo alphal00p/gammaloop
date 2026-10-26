@@ -2656,13 +2656,30 @@ def suite_record(path, kind, producer, provenance):
         cached_samples = [row for row in samples if row["variant"] == "cached"]
         for field in ("requested_root_hits", "intermediate_hits"):
             require(
-                sum(
+                type(case[field]) is int
+                and case[field] >= 0
+                and all(
+                    type(row["cache_statistics"]["persistent"][field]) is int
+                    and row["cache_statistics"]["persistent"][field] >= 0
+                    for row in cached_samples
+                )
+                and sum(
                     row["cache_statistics"]["persistent"][field]
                     for row in cached_samples
                 )
                 == case[field],
                 "driver cache-hit aggregate differs",
             )
+        # Preserve the collector's counters and label above as reported evidence.
+        # In Native419, requested_root_hits counts Route records only: a requested
+        # owner's Apply hit is classified as intermediate. Neither a revision
+        # string nor that legacy label proves proper-descendant-only reuse.
+        output["cache_hit_scope"] = {
+            "some_exact_requested_root_reuse_proven": case["requested_root_hits"] > 0,
+            "other_hits": (
+                "unclassified" if case["intermediate_hits"] > 0 else "none-observed"
+            ),
+        }
         u = output["variants"]["uncached"]["metrics"]["ibp_excluding_owner_seconds"][
             "median_seconds"
         ]

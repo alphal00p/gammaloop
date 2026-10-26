@@ -678,6 +678,98 @@ class ReportContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "compiled cohort differs"):
             merge.suite_record(path, "tuning", build, evidence)
 
+    def suite_with_hit_counts(self, roots=0, others=1):
+        path, suite, producer, _ = self.synthetic_suite()
+        suite["cases"][0].update(
+            requested_root_hits=3 * roots,
+            intermediate_hits=3 * others,
+            backing_reuse="intermediate-only",
+        )
+        for sample, reference, window in zip(
+            suite["measurements"], self.records, self.window_rows
+        ):
+            if sample["variant"] == "cached":
+                sample["cache_statistics"]["persistent"].update(
+                    requested_root_hits=roots, intermediate_hits=others
+                )
+            sample_path = Path(reference["record"]["path"])
+            sample_path.write_text(json.dumps(sample))
+            reference["record"] = merge.evidence(sample_path)
+            window["report_sha256"] = merge.digest(sample_path)
+        path.write_text(json.dumps(suite))
+        return path, suite, producer
+
+    def test_zero_route_root_hits_do_not_prove_intermediate_only_reuse(self):
+        path, suite, producer = self.suite_with_hit_counts()
+        result = merge.suite_record(
+            path, "tuning", producer, merge.ReportEvidence(self.index())
+        )
+        row = result["rows"][0]
+        self.assertEqual(row["requested_root_hits"], 0)
+        self.assertEqual(row["intermediate_hits"], 3)
+        self.assertEqual(row["backing_reuse"], "intermediate-only")
+        self.assertEqual(result["raw_suite"], suite)
+        self.assertEqual(
+            row["cache_hit_scope"],
+            {
+                "some_exact_requested_root_reuse_proven": False,
+                "other_hits": "unclassified",
+            },
+        )
+
+    def test_positive_route_root_hits_prove_some_but_not_all_root_reuse(self):
+        path, _, producer = self.suite_with_hit_counts(roots=1)
+        result = merge.suite_record(
+            path, "tuning", producer, merge.ReportEvidence(self.index())
+        )
+        self.assertEqual(
+            result["rows"][0]["cache_hit_scope"],
+            {
+                "some_exact_requested_root_reuse_proven": True,
+                "other_hits": "unclassified",
+            },
+        )
+
+    def test_no_hits_remain_no_observed_reuse_despite_reported_label(self):
+        path, _, producer = self.suite_with_hit_counts(others=0)
+        result = merge.suite_record(
+            path, "tuning", producer, merge.ReportEvidence(self.index())
+        )
+        self.assertEqual(
+            result["rows"][0]["cache_hit_scope"],
+            {
+                "some_exact_requested_root_reuse_proven": False,
+                "other_hits": "none-observed",
+            },
+        )
+
+    def test_unknown_revision_or_claim_cannot_authenticate_finer_hit_scope(self):
+        path, suite, producer = self.suite_with_hit_counts()
+        # The fixture's Native revision is deliberately synthetic, not an
+        # allowlisted release. Unvalidated future-looking labels are not proof.
+        suite["cases"][0].update(
+            cache_hit_scope={"other_hits": "proper-descendants-only"},
+            initial_frontier_authenticated=True,
+            backing_reuse="proper-descendants-only",
+        )
+        path.write_text(json.dumps(suite))
+        result = merge.suite_record(
+            path, "tuning", producer, merge.ReportEvidence(self.index())
+        )
+        self.assertEqual(result["raw_suite"], suite)
+        self.assertEqual(
+            result["rows"][0]["cache_hit_scope"]["other_hits"], "unclassified"
+        )
+
+    def test_noninteger_root_counter_cannot_attest_exact_root_reuse(self):
+        path, suite, producer = self.suite_with_hit_counts(roots=1)
+        suite["cases"][0]["requested_root_hits"] = 3.0
+        path.write_text(json.dumps(suite))
+        with self.assertRaisesRegex(ValueError, "cache-hit aggregate differs"):
+            merge.suite_record(
+                path, "tuning", producer, merge.ReportEvidence(self.index())
+            )
+
     def test_suite_window_cannot_invent_supervisor_timestamps_or_process_ids(self):
         path, _, producer, _ = self.synthetic_suite()
         for field in (

@@ -548,7 +548,7 @@ acceptance was pending in that historical record. Full revisions: #raw("data/res
       v(0.3em)
       table(columns: (1.5fr, 1fr, 1fr, 0.55fr, 0.8fr), inset: 5pt, stroke: 0.4pt + luma(215),
         fill: (x, y) => if y == 0 { pale } else { none },
-        table.header([*Input*], [*Uncached s*], [*Cached s*], [*Ratio*], [*Unknowns / hits*]),
+        table.header([*Input*], [*Uncached s*], [*Cached s*], [*Ratio*], [*Unknowns / R + U*]),
         ..suite.rows.map(row => {
           let u = row.variants.uncached.metrics.ibp_excluding_owner_seconds
           let c = row.variants.cached.metrics.ibp_excluding_owner_seconds
@@ -556,12 +556,19 @@ acceptance was pending in that historical record. Full revisions: #raw("data/res
           (text(8pt, row.id), summary-time(u), summary-time(c),
            table.cell(fill: if r != none and r > 0 { ratio-fill(r) } else { none },
              if r == none { [—] } else { [×#multiplier(r)] }),
-           [#row.catalogue_closure.unknown_count / #row.requested_root_hits + #row.intermediate_hits])
+           [#row.catalogue_closure.unknown_count / #row.requested_root_hits + #row.intermediate_hits
+             #linebreak()
+             #text(7pt)[#if row.requested_root_hits > 0 [Some root reuse.]
+               #if row.intermediate_hits > 0 [Other scope unknown.]
+               #if row.requested_root_hits == 0 and row.intermediate_hits == 0 [No backing hits.]]])
         }).flatten(),
       )
       v(0.3em)
-      [Hits show requested-root + intermediate hits summed over cached samples;
-      unknowns are the exact combined final inventory. Catalogue closure is independent
+      [R counts requested Route-record hits; U counts other hits, summed over cached
+      samples. U may include requested-owner Apply hits as well as descendants;
+      R = 0 does not prove intermediate-only reuse. No finer scope is inferred from
+      a revision or the collector's legacy label. Unknowns are the exact combined
+      final inventory. Catalogue closure is independent
       of retained-result success. No median across different physical inputs is reported.]
       v(0.4em)
       text(13pt, weight: "bold", fill: navy)[Stage ledger]
