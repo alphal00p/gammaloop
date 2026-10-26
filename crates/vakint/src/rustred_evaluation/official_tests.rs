@@ -1,4 +1,6 @@
 use super::*;
+#[path = "official_nativepack_tests.rs"]
+mod nativepack;
 use std::{
     collections::BTreeMap,
     net::TcpListener,

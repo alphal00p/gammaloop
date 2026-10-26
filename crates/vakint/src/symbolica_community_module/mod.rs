@@ -842,6 +842,9 @@ impl VakintWrapper {
                 record.set_item("path", item.path)?;
                 record.set_item("cache_available", item.cache_available)?;
                 record.set_item("cache_loaded", item.cache_loaded)?;
+                record.set_item("cache_path", item.cache_path)?;
+                record.set_item("cache_format", item.cache_format)?;
+                record.set_item("cache_source", item.cache_source)?;
                 record.set_item("source", item.source)?;
                 loops.append(record)?;
             }

@@ -6,10 +6,10 @@ use rustred_app::CachePreparationStatus;
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, io::Cursor, sync::atomic::AtomicBool, time::Instant};
 
-struct Fixture {
+pub(in crate::rustred_evaluation) struct Fixture {
     scratch: tempfile::TempDir,
-    engine: Vakint,
-    source: PathBuf,
+    pub(in crate::rustred_evaluation) engine: Vakint,
+    pub(in crate::rustred_evaluation) source: PathBuf,
     archive: PathBuf,
     options: RustRedCacheTransferOptions,
 }
@@ -102,7 +102,7 @@ impl Fixture {
         }));
     }
 
-    fn assert_imported_records(&self, output: &Path) {
+    pub(in crate::rustred_evaluation) fn assert_imported_records(&self, output: &Path) {
         let (_, program) = program(&self.engine, 1).unwrap();
         let bindings = [program.binding().clone()];
         let imported =
@@ -451,14 +451,14 @@ fn explicit_loopback_http_download_matches_local_import_and_refuses_large_respon
     }
 }
 
-struct MultipartFixture {
-    fixture: Fixture,
-    descriptor: PathBuf,
-    manifest: Value,
+pub(in crate::rustred_evaluation) struct MultipartFixture {
+    pub(in crate::rustred_evaluation) fixture: Fixture,
+    pub(in crate::rustred_evaluation) descriptor: PathBuf,
+    pub(in crate::rustred_evaluation) manifest: Value,
 }
 
 impl MultipartFixture {
-    fn new() -> Self {
+    pub(in crate::rustred_evaluation) fn new() -> Self {
         let fixture = Fixture::new();
         let mut files = BTreeMap::new();
         Self::inventory(&fixture.source, Path::new("cache"), &mut files);
@@ -467,7 +467,7 @@ impl MultipartFixture {
         let binding = program.binding();
         let bundle = SavedApplicationCacheBundle::open_generated(
             &fixture.source,
-            &[binding.clone()],
+            std::slice::from_ref(binding),
             Default::default(),
         )
         .unwrap();
@@ -532,7 +532,7 @@ impl MultipartFixture {
         json!({"bytes":bytes.len(),"sha256":format!("{:x}",Sha256::digest(bytes))})
     }
 
-    fn part_path(&self, part: usize) -> PathBuf {
+    pub(in crate::rustred_evaluation) fn part_path(&self, part: usize) -> PathBuf {
         self.fixture
             .scratch
             .path()
@@ -1245,4 +1245,40 @@ fn multipart_http_download_verifies_parts_and_bounds_redirects() {
         );
         multipart.fixture.assert_no_staging();
     }
+}
+
+#[test]
+fn official_multipart_uses_http_timeout_without_a_default_compute_deadline() {
+    let fixture = MultipartFixture::new();
+    let manifest = NativePackManifest::parse(&fs::read(&fixture.descriptor).unwrap(), 1).unwrap();
+    let options = manifest
+        .official_options(
+            [0; 32],
+            fs::metadata(&fixture.descriptor).unwrap().len(),
+            Duration::from_secs(1),
+        )
+        .unwrap();
+    assert!(!options.complete_operation_timeout);
+    let output = fixture.fixture.output();
+    let mut transfer = Transfer::new(&fixture.fixture.engine, 1, &output, &options).unwrap();
+    transfer.started = Instant::now().checked_sub(Duration::from_secs(2)).unwrap();
+    transfer.tick().unwrap();
+    let explicit = RustRedCacheTransferOptions::multipart_manifest([0; 32]);
+    assert!(explicit.complete_operation_timeout);
+    let output = fixture.fixture.output();
+    let mut explicit_transfer =
+        Transfer::new(&fixture.fixture.engine, 1, &output, &explicit).unwrap();
+    explicit_transfer.started = Instant::now()
+        .checked_sub(Duration::from_secs(3601))
+        .unwrap();
+    assert!(explicit_transfer.tick().is_err());
+    let error = symbolica::utils::resources::ResourceBudget::new(
+        symbolica::utils::resources::ResourceLimits {
+            max_process_rss_bytes: None,
+            max_elapsed: Some(Duration::ZERO),
+        },
+    )
+    .run(|| transfer.tick())
+    .unwrap_err();
+    assert_eq!(error.kind(), AppErrorKind::Limit);
 }

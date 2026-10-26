@@ -41,7 +41,7 @@ pub use save::{RustRedCacheSaveMode, RustRedCacheSaveOptions, RustRedCacheSaveRe
 
 #[cfg(all(unix, not(target_arch = "wasm32")))]
 #[path = "cache_transfer.rs"]
-mod transfer;
+pub(super) mod transfer;
 #[cfg(all(unix, not(target_arch = "wasm32")))]
 pub use transfer::{RustRedCacheTransferOptions, RustRedCacheTransferReport};
 

@@ -485,6 +485,26 @@ the five-loop single-file implementation described above.
 
 == Explicit import and download
 
+An explicit `load_official_external_data` call also installs the release's
+selected cumulative NativePack when `load_prepared_caches=True` (the default).
+Its root `runtime_cache_snapshots` reference and loop inventory authenticate
+the descriptor; the existing multipart transport authenticates every part and
+native file before activation. A selected snapshot supersedes that loop's
+legacy prepared cache. Aggregate allowances follow the authenticated inventory
+and current resource policy, independently of the ordinary loop-pack bounds.
+Official loading retains its per-HTTP timeout without a default whole-copy or
+reuse compute deadline. Explicit multipart import/download keeps its separately
+documented complete-operation timeout.
+
+Installed snapshots live under `cache-snapshots/DESCRIPTOR_SHA256` in the
+immutable dataset directory. Repeated loading authenticates and reuses them
+offline, without decompression. `load_prepared_caches=False` validates descriptor
+bytes without downloading parts or attaching caches. A supplied checkout is
+always read-only and network-free: missing selected native files produce a
+precise error; populate that path explicitly through the APIs below or disable
+prepared-cache loading. Per-loop reports distinguish `cache_path`,
+`cache_format` and `cache_source` from the ordinary pack's installation source.
+
 On Linux and macOS, `import_cache` and `download_cache` publish an independently
 validated native snapshot for one through five loops into a new directory.
 The default `format="archive"` requires the SHA-256 of a trusted USTAR gzip
@@ -519,6 +539,9 @@ uses explicit part URLs or names relative to the manifest URL, and permits up to
 eight redirects. `max_manifest_bytes` optionally raises the manifest read limit; aggregate
 transfer, extraction, temporary-space and entry allowances remain explicit.
 The parts contain unchanged native cache bytes, not another reduction codec.
+A descriptor binds one native program. The four-loop pack has multiple program
+bindings and continues to use its ordinary bundled prepared cache; a singular
+multipart descriptor for that pack is refused explicitly.
 
 ```python
 report = engine.import_cache(

@@ -130,6 +130,9 @@ Final cumulative-cache suites additionally require an independently accepted
 #raw("vakint.cumulative-cache-consumer-requalification.v1") receipt. It binds the
 original source starting-key inventories and route/alias exclusion against the
 unchanged frozen owner sets, explicitly classifying exposed starting inputs.
+Its #raw("cache_import") reference must bind the successful public-import
+observation for the same descriptor, native indexes, data and kernel; import
+validation remains separate from attachment and reduction measurements.
 The existing exact result/guard, binding/cohort, twelve held-out sets, three fresh
 matched samples and serialized-window requirements remain in force. Useful
 incidental descendant and root hits stay visible. There is no aggregate

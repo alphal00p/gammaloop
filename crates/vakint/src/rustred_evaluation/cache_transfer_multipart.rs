@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 const SCHEMA: &str = "vakint.nativepack-transport.v1";
 const MAX_PART_BYTES: u64 = 1_800_000_000;
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Binding {
     artifact_digest: [u8; 32],
@@ -30,14 +30,14 @@ impl Binding {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct FileIdentity {
     bytes: u64,
     sha256: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct Part {
     kind: String,
@@ -49,9 +49,9 @@ pub(super) struct Part {
     url: Option<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(super) struct Manifest {
+pub(in crate::rustred_evaluation) struct Manifest {
     schema: String,
     loop_count: usize,
     binding: Binding,
@@ -116,6 +116,147 @@ fn native_path(value: &str) -> Result<bool, AppError> {
 }
 
 impl Manifest {
+    pub(in crate::rustred_evaluation) const FORMAT: &str = SCHEMA;
+
+    pub(in crate::rustred_evaluation) fn parse(
+        bytes: &[u8],
+        loop_count: usize,
+    ) -> Result<Self, AppError> {
+        let manifest: Self = serde_json::from_slice(bytes).map_err(input_error)?;
+        manifest.validate(loop_count)?;
+        Ok(manifest)
+    }
+
+    pub(in crate::rustred_evaluation) fn validate_program(
+        &self,
+        engine: &Vakint,
+    ) -> Result<(), VakintError> {
+        let bindings = engine.native_cache_bindings(self.loop_count)?;
+        if bindings.len() != 1 {
+            return Err(operation(input_error(
+                "multipart descriptors require one native binding; this loop pack needs multiple bindings, so use its ordinary prepared-cache bundle",
+            )).into());
+        }
+        if bindings != [self.binding.native()] {
+            return Err(operation(input_error(
+                "multipart namespace differs from the authenticated program",
+            ))
+            .into());
+        }
+        Ok(())
+    }
+
+    /// Official aggregate allowances follow the authenticated inventory rather
+    /// than the unrelated size of one ordinary loop archive.
+    pub(in crate::rustred_evaluation) fn official_options(
+        &self,
+        expected_sha256: [u8; 32],
+        manifest_bytes: u64,
+        timeout: Duration,
+    ) -> Result<RustRedCacheTransferOptions, AppError> {
+        let overflow = || limit_error("official cache inventory size overflow");
+        let extracted = self.files.values().try_fold(0u64, |sum, file| {
+            sum.checked_add(file.bytes).ok_or_else(overflow)
+        })?;
+        let archives = self.parts.iter().try_fold(manifest_bytes, |sum, part| {
+            sum.checked_add(part.archive_bytes).ok_or_else(overflow)
+        })?;
+        // The verified native copy coexists with extracted files and one held
+        // archive. This deliberately conservative grant includes every archive.
+        let temporary = extracted
+            .checked_mul(2)
+            .and_then(|n| n.checked_add(archives))
+            .ok_or_else(overflow)?;
+        let mut options = RustRedCacheTransferOptions::multipart_manifest(expected_sha256);
+        options.complete_operation_timeout = false;
+        options.max_manifest_bytes = manifest_bytes;
+        options.max_archive_bytes = archives;
+        options.max_extracted_bytes = extracted;
+        options.max_entries = self.files.len();
+        options.max_temporary_bytes = temporary;
+        options.timeout = timeout;
+        options.storage.max_disk_bytes = extracted;
+        Ok(options)
+    }
+
+    /// Reuse authenticates every installed native file without downloading,
+    /// decompressing, importing coefficient state or changing the snapshot.
+    pub(in crate::rustred_evaluation) fn validate_directory(
+        &self,
+        directory: &Path,
+    ) -> Result<(), AppError> {
+        let parent = directory
+            .parent()
+            .ok_or_else(|| input_error("official cache snapshot needs a parent directory"))?;
+        let metadata = fs::symlink_metadata(parent).map_err(input_error)?;
+        if !metadata.is_dir() || metadata.file_type().is_symlink() {
+            return Err(input_error(
+                "invalid official cache snapshot parent directory",
+            ));
+        }
+        let mut buffer = [0u8; BUFFER_BYTES];
+        for (relative, identity) in &self.files {
+            checkpoint()?;
+            let mut path = directory.to_owned();
+            if !fs::symlink_metadata(&path).map_err(input_error)?.is_dir() {
+                return Err(input_error(
+                    "official cache snapshot is not a regular directory",
+                ));
+            }
+            for component in Path::new(relative.strip_prefix("cache/").unwrap()).components() {
+                path.push(component);
+                if fs::symlink_metadata(&path)
+                    .map_err(input_error)?
+                    .file_type()
+                    .is_symlink()
+                {
+                    return Err(input_error("symlink in official cache snapshot"));
+                }
+            }
+            let metadata = fs::symlink_metadata(&path).map_err(input_error)?;
+            if !metadata.is_file() || metadata.len() != identity.bytes {
+                return Err(input_error("installed cache file length/type differs"));
+            }
+            let mut input = File::open(path).map_err(input_error)?;
+            let mut hash = Sha256::new();
+            let mut count = 0u64;
+            loop {
+                checkpoint()?;
+                let read = input.read(&mut buffer).map_err(input_error)?;
+                if read == 0 {
+                    break;
+                }
+                count = count
+                    .checked_add(read as u64)
+                    .ok_or_else(|| limit_error("cache length overflow"))?;
+                if count > identity.bytes {
+                    return Err(input_error(
+                        "installed cache grew beyond its authenticated length",
+                    ));
+                }
+                hash.update(&buffer[..read]);
+            }
+            if count != identity.bytes || format!("{:x}", hash.finalize()) != identity.sha256 {
+                return Err(input_error("installed cache file SHA256/length differs"));
+            }
+        }
+        let binding = self.binding.native();
+        let bundle = SavedApplicationCacheBundle::open_generated(
+            directory,
+            std::slice::from_ref(&binding),
+            Default::default(),
+        )?;
+        let reader = bundle.open_reader(&binding)?;
+        if reader.generation() != self.generation
+            || reader.statistics().records as u64 != self.stored_record_references
+        {
+            return Err(input_error(
+                "installed native generation/reference census differs from descriptor",
+            ));
+        }
+        Ok(())
+    }
+
     fn validate(&self, loop_count: usize) -> Result<(), AppError> {
         if self.schema != SCHEMA
             || self.loop_count != loop_count
@@ -239,6 +380,9 @@ impl Transfer<'_> {
         operation: impl FnOnce() -> Result<RustRedCacheTransferReport, VakintError>,
     ) -> Result<RustRedCacheTransferReport, VakintError> {
         self.tick().map_err(super::operation)?;
+        if !self.options.complete_operation_timeout {
+            return operation();
+        }
         symbolica::utils::resources::ResourceBudget::new(
             symbolica::utils::resources::ResourceLimits {
                 max_process_rss_bytes: None,
@@ -321,7 +465,11 @@ impl Transfer<'_> {
             .tls_connector(Arc::new(tls))
             .https_only(!loopback_test)
             .redirects(8)
-            .timeout(self.options.timeout.saturating_sub(self.started.elapsed()))
+            .timeout(if self.options.complete_operation_timeout {
+                self.options.timeout.saturating_sub(self.started.elapsed())
+            } else {
+                self.options.timeout
+            })
             .build()
             .get(url)
             .set("Accept-Encoding", "identity")
@@ -367,19 +515,11 @@ impl Transfer<'_> {
         if sha256 != self.options.expected_sha256 {
             return Err(operation(input_error("multipart manifest SHA-256 mismatch")).into());
         }
-        let manifest: Manifest = serde_json::from_slice(&bytes)
-            .map_err(input_error)
-            .map_err(operation)?;
-        manifest.validate(self.loop_count).map_err(operation)?;
+        let manifest = Manifest::parse(&bytes, self.loop_count).map_err(operation)?;
         // Bind before fetching any large part, under the SAME operation budget.
         // Saved-program authentication is never replaced by descriptor metadata.
-        let bindings = self.bindings()?;
-        if bindings != [manifest.binding.native()] {
-            return Err(operation(input_error(
-                "multipart namespace differs from the authenticated program",
-            ))
-            .into());
-        }
+        manifest.validate_program(self.engine)?;
+        let bindings = [manifest.binding.native()];
         let mut archive_bytes = bytes.len() as u64;
         drop(bytes);
         let mut declared_archives = archive_bytes;

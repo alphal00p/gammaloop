@@ -19,6 +19,7 @@ use std::{
 
 #[path = "cache_transfer_multipart.rs"]
 mod multipart;
+pub(in crate::rustred_evaluation) use multipart::Manifest as NativePackManifest;
 
 const BUFFER_BYTES: usize = 64 * 1024;
 // Conventional tar writers pad the final record to twenty 512-byte blocks.
@@ -30,6 +31,9 @@ const TAR_PADDING_BYTES: u64 = 10 * 1024;
 #[derive(Clone, Debug)]
 pub struct RustRedCacheTransferOptions {
     multipart_manifest: bool,
+    /// Explicit transfers retain their complete-operation deadline. Official
+    /// loading keeps its existing per-HTTP timeout and ambient resource budget.
+    complete_operation_timeout: bool,
     pub expected_sha256: [u8; 32],
     /// Enable entry-count diagnostics for ordinary single-archive transfers.
     /// Multipart manifests always enforce their aggregate entry allowance.
@@ -52,6 +56,7 @@ impl RustRedCacheTransferOptions {
     pub fn new(expected_sha256: [u8; 32]) -> Self {
         Self {
             multipart_manifest: false,
+            complete_operation_timeout: true,
             expected_sha256,
             diagnostics_enabled: false,
             max_manifest_bytes: 16 * 1024 * 1024,
@@ -91,6 +96,28 @@ pub struct RustRedCacheTransferReport {
 }
 
 impl Vakint {
+    fn native_cache_bindings(
+        &self,
+        loop_count: usize,
+    ) -> Result<Vec<rustred::persistence::application_cache::ApplicationCacheBinding>, VakintError>
+    {
+        if loop_count == 5 {
+            let application = self.five_loop_cache_application()?;
+            let prepared = application
+                .prepared
+                .lock()
+                .map_err(|_| operation(input_error("saved application lock poisoned")))?;
+            Ok(vec![prepared.cache_binding(application.cache_digest)])
+        } else if loop_count == 4 {
+            Ok(super::super::four_loop::cache::programs(self)?
+                .iter()
+                .map(|program| program.binding().clone())
+                .collect())
+        } else {
+            Ok(vec![program(self, loop_count)?.1.binding().clone()])
+        }
+    }
+
     /// Import a gzip tar, or a multipart manifest selected by the options.
     /// Local multipart archives are regular sibling files named by the manifest.
     /// Verify the required input checksum and native files before publishing an
@@ -239,7 +266,10 @@ impl<'a> Transfer<'a> {
 
     fn tick(&self) -> Result<(), AppError> {
         checkpoint()?;
-        if self.options.multipart_manifest && self.started.elapsed() >= self.options.timeout {
+        if self.options.multipart_manifest
+            && self.options.complete_operation_timeout
+            && self.started.elapsed() >= self.options.timeout
+        {
             return Err(limit_error("complete multipart transfer deadline exceeded"));
         }
         Ok(())
@@ -249,23 +279,7 @@ impl<'a> Transfer<'a> {
         &self,
     ) -> Result<Vec<rustred::persistence::application_cache::ApplicationCacheBinding>, VakintError>
     {
-        if self.loop_count == 5 {
-            let application = self.engine.five_loop_cache_application()?;
-            let prepared = application
-                .prepared
-                .lock()
-                .map_err(|_| operation(input_error("saved application lock poisoned")))?;
-            Ok(vec![prepared.cache_binding(application.cache_digest)])
-        } else if self.loop_count == 4 {
-            Ok(super::super::four_loop::cache::programs(self.engine)?
-                .iter()
-                .map(|program| program.binding().clone())
-                .collect())
-        } else {
-            Ok(vec![
-                program(self.engine, self.loop_count)?.1.binding().clone(),
-            ])
-        }
+        self.engine.native_cache_bindings(self.loop_count)
     }
 
     fn receive(&self, mut input: impl Read) -> Result<RustRedCacheTransferReport, VakintError> {
@@ -343,20 +357,21 @@ impl<'a> Transfer<'a> {
                 limits,
             )
         };
-        let (writer, copied) = if self.options.multipart_manifest {
-            self.tick().map_err(operation)?;
-            let remaining = self.options.timeout.saturating_sub(self.started.elapsed());
-            symbolica::utils::resources::ResourceBudget::new(
-                symbolica::utils::resources::ResourceLimits {
-                    max_process_rss_bytes: None,
-                    max_elapsed: Some(remaining),
-                },
-            )
-            .run(copy)
-        } else {
-            copy()
-        }
-        .map_err(operation)?;
+        let (writer, copied) =
+            if self.options.multipart_manifest && self.options.complete_operation_timeout {
+                self.tick().map_err(operation)?;
+                let remaining = self.options.timeout.saturating_sub(self.started.elapsed());
+                symbolica::utils::resources::ResourceBudget::new(
+                    symbolica::utils::resources::ResourceLimits {
+                        max_process_rss_bytes: None,
+                        max_elapsed: Some(remaining),
+                    },
+                )
+                .run(copy)
+            } else {
+                copy()
+            }
+            .map_err(operation)?;
         drop(writer);
         if census
             .expected_native_inventory
@@ -452,7 +467,7 @@ fn limit_error(message: &str) -> AppError {
 
 #[cfg(test)]
 #[path = "cache_transfer_tests.rs"]
-mod tests;
+pub(in crate::rustred_evaluation) mod tests;
 
 fn checkpoint() -> Result<(), AppError> {
     symbolica::utils::resources::checkpoint().map_err(AppError::resource)
