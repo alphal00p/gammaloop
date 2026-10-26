@@ -612,6 +612,33 @@ Render a workspace copy of #raw("benchmark.typ") beside the candidate
 still render as Pending. For layout tests, synthetic populated JSON/PDF must be
 marked prominently as test fixtures and must never replace measured data.
 
+A previously completed finite preparation enters a cumulative cache as
+#raw("kind: strict-preparation, scope: completed-preparation"). Keep its original
+producer data identity and cohort, accepted output, preserved native indexes,
+and a separately authenticated full Native/GZIP source-parity run. That run
+must validate every source record and its ordered guards under the current
+owner; a selected subset cannot qualify the entire source. Its actual successful
+guarded supervision and own compiler artifact remain required evidence.
+Finite preparation completion never completes a physical example or qualifies
+final held-out exclusions, cache selection, publication, or performance.
+
+#raw("compose_cumulative_cache_report.py") composes this existing evidence into
+the ordinary cumulative report and validation receipt. It checks the actual
+read-only source indexes but neither copies chunks nor imports coefficients.
+The source JSON names the seven hashed documents #raw("producer"),
+#raw("acceptance"), #raw("preservation"), #raw("native_validation"),
+#raw("native_supervision"), #raw("native_artifacts"), and #raw("inventory"),
+beside its unique ID, kind, and scope. Use a new output directory; preserve
+failed attempts and original receipts. An unchanged source index/inventory
+allows an already validated selected export to retain its original identity.
+
+```sh
+python3 crates/vakint/docs/benchmark/compose_cumulative_cache_report.py \
+  --source /path/to/workspace/provenance/source.json \
+  --cache /path/to/workspace/preserved-native-bundle \
+  --output-directory /path/to/workspace/provenance/new-cumulative-report
+```
+
 ```sh
 python3 -m unittest discover -s crates/vakint/docs/benchmark \
   -p 'test_merge_five_loop_results.py'

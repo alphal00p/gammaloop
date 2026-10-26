@@ -160,7 +160,10 @@ def native_cache_identity(directory):
         "native cache needs a regular directory",
     )
     bundle, pack = directory / "bundle.rrindex", directory / "cache.rrindex"
-    present = lambda path: path.exists() or path.is_symlink()
+
+    def present(path):
+        return path.exists() or path.is_symlink()
+
     require(
         present(bundle) != present(pack),
         "native cache needs exactly one bundle or pack index",
@@ -317,6 +320,31 @@ COHORT_STAMPS = (
         "VAKINT_CACHE_BUILD_NATIVE_SOURCE_SNAPSHOT_SHA256",
     ),
 )
+
+
+def validate_compiled_artifact(observed, artifact):
+    """Bind a Native reader to its own build, independently of its producer."""
+    cohort = observed["compiled_cohort"]
+    require(
+        all(
+            artifact["stamps"].get(stamp) == cohort[field]
+            and isinstance(cohort[field], str)
+            and re.fullmatch(
+                r"[0-9a-f]{64}" if field.endswith("_sha256") else r"[0-9a-f]{40}",
+                cohort[field],
+            )
+            for field, stamp in COHORT_STAMPS
+        )
+        and observed["executable_sha256"]
+        in {item["sha256"] for item in artifact_binaries(artifact)},
+        "Native reader artifact or own compiled cohort differs",
+    )
+    for item in artifact_binaries(artifact):
+        if item.get("immutable_path") and Path(item["immutable_path"]).exists():
+            require(
+                digest(item["immutable_path"]) == item["sha256"],
+                "Native reader executable changed",
+            )
 
 
 def selected_inputs(workload):
@@ -1477,29 +1505,7 @@ class ReportEvidence:
         )
         for observed in (report, native):
             _, artifact = record(observed["collector_artifacts"], root)
-            cohort = observed["compiled_cohort"]
-            require(
-                all(
-                    artifact["stamps"].get(stamp) == cohort[field]
-                    and isinstance(cohort[field], str)
-                    and re.fullmatch(
-                        r"[0-9a-f]{64}"
-                        if field.endswith("_sha256")
-                        else r"[0-9a-f]{40}",
-                        cohort[field],
-                    )
-                    for field, stamp in COHORT_STAMPS
-                )
-                and observed["executable_sha256"]
-                in {item["sha256"] for item in artifact_binaries(artifact)},
-                "light exporter/reader artifact or own compiled cohort differs",
-            )
-            for item in artifact_binaries(artifact):
-                if item.get("immutable_path") and Path(item["immutable_path"]).exists():
-                    require(
-                        digest(item["immutable_path"]) == item["sha256"],
-                        "light exporter/reader executable changed",
-                    )
+            validate_compiled_artifact(observed, artifact)
         return {
             "export_validation": evidence(path),
             "native_validation": evidence(native_path),
@@ -2793,6 +2799,189 @@ def preserved_native_source(source, base):
     }
 
 
+def strict_preparation_source(source, base):
+    """Join an original finite preparation to its later full Native check.
+
+    Preserve both cohorts and the producer's original data identity. A
+    selected-key reimport cannot replace the full source-parity receipt.
+    Completing this finite preparation never completes a physical example.
+    """
+    require(
+        source.get("kind") == "strict-preparation"
+        and source.get("scope") == "completed-preparation",
+        "finite preparation must retain its own source kind and scope",
+    )
+    documents = {}
+    for name in (
+        "producer",
+        "acceptance",
+        "preservation",
+        "native_validation",
+        "native_supervision",
+        "native_artifacts",
+        "inventory",
+    ):
+        path, document = hashed_record(source[name], base)
+        documents[name] = {"evidence": evidence(path), "raw_receipt": document}
+    producer, accepted, preserved, native, supervised, artifact, inventory = (
+        documents[name]["raw_receipt"] for name in documents
+    )
+    preparation = producer["preparation"]
+    roots = preparation["total_roots"]
+    single_file = preparation["options"]["single_file"]
+    count = single_file["records"]
+    original_cohort = producer["owner_proof"]["compiled_cohort"]
+    require(
+        producer.get("schema") == "vakint.five-loop-cache-build.v2"
+        and producer.get("complete") is True
+        and producer.get("publishable") is True
+        and isinstance(producer.get("data_manifest_sha256"), str)
+        and re.fullmatch(r"[0-9a-f]{64}", producer["data_manifest_sha256"])
+        and producer["data_manifest_sha256"]
+        == original_cohort["data_manifest_sha256"]
+        == producer["build_identity"]["data_manifest_sha256"]
+        and producer["build_identity"]["build"]["git_revision"]
+        == original_cohort["main_revision"]
+        and preparation["status"] == "complete"
+        and type(roots) is int
+        and roots > 0
+        and same_json_value(preparation["completed_roots"], roots)
+        and all(
+            preparation.get(key) is None
+            for key in ("failure", "resource_failure", "checkpoint_failure")
+        )
+        and preparation["native_profile"]["strict"] is True
+        and preparation["native_profile"]["unresolved_policy"] == "reject"
+        and producer["supervision"]["success"] is True
+        and producer["supervision"]["hard_deadline_exhausted"] is False
+        and type(count) is int
+        and count > 0,
+        "finite Native source lacks an actually completed strict preparation",
+    )
+    require(
+        accepted.get("schema") == "vakint.strict-complete-small-candidate-acceptance.v1"
+        and accepted.get("state") == "STRICT_COMPLETE_CANDIDATE_NOT_FINAL_SELECTION"
+        and accepted["reports"]["build"]["sha256"] == source["producer"]["sha256"]
+        and same_json_value(
+            [
+                accepted["selected_training_roots"],
+                accepted["completed_strict_roots"],
+                accepted["record_count"],
+            ],
+            [roots, roots, count],
+        )
+        and accepted["cache_file"]["sha256"] == producer["cache_sha256"]
+        and accepted["cache_file"]["decoded_sha256"] == single_file["decoded_sha256"]
+        and same_json_value(
+            accepted["cache_file"]["native_identity"], single_file["identity"]
+        ),
+        "finite source acceptance differs from its actual producer",
+    )
+    require(
+        preserved.get("schema") == "vakint.accepted-small-native-cache-preservation.v1"
+        and preserved.get("state") == "PASS_STORAGE_PRESERVATION"
+        and all(
+            preserved.get(key) is True
+            for key in (
+                "all_source_and_destination_compressed_bytes_equal",
+                "all_gzip_members_crc_lengths_hashes_and_header_bindings_valid",
+                "all_original_sources_stable",
+                "all_output_inodes_independent",
+                "read_only_preserved_bundle",
+            )
+        )
+        and single_file["checkpoint_path"] == preserved["original_bundle"]
+        and preserved["accepted_gzip"]["sha256"] == producer["cache_sha256"]
+        and same_json_value(preserved["stored_record_references"], count),
+        "finite source lost its original checkpoint/storage lineage",
+    )
+    identity = inventory["cache_native_index_identity"]
+    recorded_indexes = {
+        row["relative_path"]: {
+            "sha256": row["sha256"],
+            "bytes": row["destination"]["bytes"],
+        }
+        for row in preserved["indices"]
+    }
+    require(
+        same_json_value(recorded_indexes, identity["indexes"])
+        and native.get("schema")
+        == "vakint.strict-cache-source-parity-native-validation.v1"
+        and native.get("success") is True
+        and same_json_value(native["source_cache_native_index_identity"], identity)
+        and native["source_inventory_sha256"] == source["inventory"]["sha256"]
+        and same_json_value(native["semantic_binding"], single_file["binding"])
+        and native["application_sha256"]
+        == producer["owner_proof"]["compiled_cohort"]["application_sha256"]
+        and native["legacy_cache_sha256"] == producer["cache_sha256"]
+        and same_json_value(
+            [
+                native[key]
+                for key in (
+                    "native_unique_records",
+                    "legacy_validated_records",
+                    "source_native_stored_record_references",
+                )
+            ],
+            [count, count, count],
+        )
+        and same_json_value(native["source_native_generation"], preserved["generation"])
+        and same_json_value([native["missing_keys"], native["partial_records"]], [0, 0])
+        and all(
+            native.get(key) is True
+            for key in (
+                "exact_record_and_ordered_guard_equality",
+                "declared_terminal_validation",
+                "source_unchanged",
+            )
+        )
+        and native.get("functional_IBP_comparison") is False
+        and native.get("new_reduction_or_capture") is False
+        and same_json_value(native["codec_state_format"], 6)
+        and native["collector_artifacts"]["sha256"]
+        == source["native_artifacts"]["sha256"],
+        "finite source lacks full bound current-owner Native/ordered-guard parity",
+    )
+    validate_compiled_artifact(native, artifact)
+    admission = native["resource_guard_admission"]
+    require(
+        supervised.get("schema") == "vakint.guarded-small-native-gzip-source-parity.v1"
+        and supervised.get("accepted") is True
+        and same_json_value(supervised["worker_exit_code"], 0)
+        and supervised["errors"] == []
+        and supervised["raw_validation"]["sha256"]
+        == source["native_validation"]["sha256"]
+        and admission.get("admitted") is True
+        and admission.get("schema") == "vakint.resource-guard-admission.v1"
+        and same_json_value(admission, supervised["admission_receipt"])
+        and same_json_value(
+            admission["worker"],
+            {
+                **{
+                    key: supervised["worker"][key]
+                    for key in ("pid", "start_ticks", "uid")
+                },
+                "executable_sha256": native["executable_sha256"],
+            },
+        )
+        and supervised["registration"]["signals_sent"] == []
+        and supervised["guard_after_worker_exit"]["ActiveState"] == "inactive",
+        "finite Native source lacks its actual successful guarded validation run",
+    )
+    return {
+        **source,
+        "receipts": documents,
+        "original_producer_cohort": original_cohort,
+        "current_validation_cohort": native["compiled_cohort"],
+        "inventory_counts": {
+            "compressed_bytes": preserved["compressed_chunk_bytes"],
+            "stored_record_references": count,
+            "physical_chunks": preserved["chunks"],
+        },
+        "scope_note": "Completed finite strict preparation; no completed physical example or final selection.",
+    }
+
+
 def cumulative_cache_record(path, cache, physical_scope=None, *, source_identity=None):
     """Consume accepted snapshot evidence; a preserved prefix is not a finished run."""
     path = Path(path).resolve()
@@ -2896,10 +3085,43 @@ def cumulative_cache_record(path, cache, physical_scope=None, *, source_identity
     for source in report["sources"]:
         require(
             source["id"] not in ids
-            and source["scope"] in ("committed-prefix", "completed-example"),
+            and (
+                source.get("kind") == "strict-preparation"
+                and source["scope"] == "completed-preparation"
+                or source.get("kind") != "strict-preparation"
+                and source["scope"] in ("committed-prefix", "completed-example")
+            ),
             "duplicate/invalid cumulative source",
         )
         ids.add(source["id"])
+        if source.get("kind") == "strict-preparation":
+            prepared = strict_preparation_source(source, path.parent)
+            require(
+                same_json_value(
+                    prepared["receipts"]["native_validation"]["raw_receipt"][
+                        "semantic_binding"
+                    ],
+                    report["semantic_binding"],
+                ),
+                "finite preparation differs from the cumulative binding",
+            )
+            if len(report["sources"]) == 1:
+                require(
+                    same_json_value(
+                        prepared["receipts"]["inventory"]["raw_receipt"][
+                            "cache_native_index_identity"
+                        ],
+                        report["cache_native_index_identity"],
+                    )
+                    and same_json_value(prepared["inventory_counts"], inventory)
+                    and prepared["receipts"]["producer"]["raw_receipt"][
+                        "data_manifest_sha256"
+                    ]
+                    == report["data_manifest_sha256"],
+                    "one-source finite report substituted its snapshot, inventory or original data",
+                )
+            sources.append(prepared)
+            continue
         if source.get("kind") == "native-index-prefix":
             require(
                 source["barrier"]["sha256"] == report["validation"]["sha256"]
@@ -3046,7 +3268,8 @@ def cumulative_cache_record(path, cache, physical_scope=None, *, source_identity
         if preservation_only
         else "validated-committed-snapshot",
         "all_source_runs_completed": all(
-            row["scope"] == "completed-example" for row in report["sources"]
+            row["scope"] in ("completed-example", "completed-preparation")
+            for row in report["sources"]
         ),
         **physical_completion(completed_physical, physical_scope),
         "performance_eligible": False,
