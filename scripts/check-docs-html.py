@@ -4,12 +4,13 @@
 from __future__ import annotations
 
 import ast
+import json
+import math
 import re
 import sys
 from collections import Counter
 from html.parser import HTMLParser
 from pathlib import Path
-
 
 VOID_ELEMENTS = {
     "area",
@@ -41,6 +42,7 @@ class DocumentAudit(HTMLParser):
         self.label_targets: set[str] = set()
         self.labelled_controls: list[tuple[str, dict[str, str], bool]] = []
         self.references: list[tuple[str, str]] = []
+        self.inspection_actions: list[tuple[str, dict[str, object]]] = []
         self.doctype = False
         self.html_language = ""
         self.html_classes: set[str] = set()
@@ -107,7 +109,20 @@ class DocumentAudit(HTMLParser):
             )
 
         href = attributes.get("href", "") if tag == "a" else ""
-        if href.startswith("#") and len(href) > 1:
+        if href.startswith("#linnet-") and "?" in href:
+            svg = next(
+                (
+                    ancestor
+                    for ancestor in reversed(ancestors)
+                    if ancestor["tag"] == "svg"
+                ),
+                None,
+            )
+            if svg is None or not self._valid_inspection_action(href):
+                self.errors.append(f"invalid SVG inspection action: {href}")
+            else:
+                self.inspection_actions.append((href, svg))
+        elif href.startswith("#") and len(href) > 1:
             self.references.append(("href", href[1:]))
         for attribute in ("aria-controls", "aria-labelledby"):
             for target in attributes.get(attribute, "").split():
@@ -146,6 +161,7 @@ class DocumentAudit(HTMLParser):
             "attributes": attributes,
             "text": [],
             "has_header": False,
+            "closed": False,
             "python_example": (
                 tag == "code"
                 and attributes.get("data-lang") == "python"
@@ -186,6 +202,7 @@ class DocumentAudit(HTMLParser):
         if matching is None:
             return
         node = self.stack[matching]
+        node["closed"] = True
         del self.stack[matching:]
         text = " ".join("".join(node["text"]).split())
         attributes = node["attributes"]
@@ -231,6 +248,11 @@ class DocumentAudit(HTMLParser):
         for attribute, target in self.references:
             if target not in self.ids:
                 self.errors.append(f'{attribute} references missing id="{target}"')
+        for href, svg in self.inspection_actions:
+            if not svg["closed"]:
+                self.errors.append(
+                    f"SVG inspection action has no closed SVG scope: {href}"
+                )
         for tag, attributes, inside_label in self.labelled_controls:
             labelled_by = attributes.get("aria-labelledby", "").split()
             labelled = (
@@ -272,6 +294,88 @@ class DocumentAudit(HTMLParser):
         elif self.primary_navigation_links < 3:
             self.errors.append("the portal primary navigation has fewer than three ordinary links")
         return self.errors
+
+    @staticmethod
+    def _valid_inspection_action(href: str) -> bool:
+        """Check Linnest's typed inspection URI, rather than a DOM fragment.
+
+        HTMLParser has already decoded attribute entities once. This matches
+        the native link validator's metadata contract; it does not authenticate
+        a graph or require complete boundary/dangling inspection records.
+        """
+        match = re.fullmatch(r"#linnet-(node|edge|halfedge)-([0-9]+)\?(.*)", href, re.DOTALL)
+        if match is None:
+            return False
+        kind, identity, payload = match.groups()
+        identity = identity.lstrip("0") or "0"
+        if len(identity) > 20 or len(identity) == 20 and identity > str(2**64 - 1):
+            return False
+        identity = int(identity)
+
+        def reject_non_finite(value: str) -> None:
+            raise ValueError(f"non-JSON numerical literal: {value}")
+
+        def json_float(value: str) -> float:
+            result = float(value)
+            if not math.isfinite(result):
+                raise ValueError("JSON number exceeds the native finite range")
+            return result
+
+        def json_integer(value: str) -> int | float:
+            result = int(value)
+            # serde_json retains negative zero as a float, and promotes integer
+            # tokens outside its signed/unsigned ranges to finite floats.
+            if value == "-0" or not -(2**63) <= result <= 2**64 - 1:
+                return json_float(value)
+            return result
+
+        try:
+            fields = json.loads(
+                payload,
+                parse_constant=reject_non_finite,
+                parse_float=json_float,
+                parse_int=json_integer,
+            )
+        except (ValueError, RecursionError):
+            return False
+        if not isinstance(fields, dict):
+            return False
+
+        def index(value: object) -> bool:
+            return type(value) is int and 0 <= value <= 2**64 - 1
+
+        def endpoint(key: str) -> bool:
+            return key in fields and (fields[key] is None or index(fields[key]))
+
+        if kind == "node":
+            edges = fields.get("edges")
+            return (
+                isinstance(edges, list)
+                and all(index(edge) for edge in edges)
+                and (
+                    "node" not in fields
+                    or index(fields["node"])
+                    and fields["node"] == identity
+                )
+            )
+        if (
+            not index(fields.get("edge"))
+            or not endpoint("source")
+            or not endpoint("sink")
+            or fields.get("orientation") not in ("default", "reversed", "undirected")
+        ):
+            return False
+        if kind == "edge":
+            return fields["edge"] == identity and (
+                "half-edge" not in fields or index(fields["half-edge"])
+            )
+        return (
+            index(fields.get("half-edge"))
+            and fields["half-edge"] == identity
+            and index(fields.get("node"))
+            and endpoint("pair")
+            and fields.get("flow") in ("source", "sink")
+        )
 
     @staticmethod
     def _has_accessible_name(attributes: dict[str, str]) -> bool:

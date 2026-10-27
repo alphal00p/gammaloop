@@ -103,6 +103,7 @@ let
         repositoryDocumentationSources
         (workspaceRoot + "/docs")
         (workspaceRoot + "/scripts/check-docs-html.py")
+        (workspaceRoot + "/scripts/test_check_docs_html.py")
         (workspaceRoot + "/scripts/render-docs-svg-assets.sh")
         (workspaceRoot + "/scripts/update-docs-pages.sh")
         (workspaceRoot + "/examples/api/python")
@@ -331,6 +332,7 @@ let
     if timestamp == "" then toString self.lastModified else timestamp;
 
   alphal00pDocsValidationCommands = ''
+    python3 -m unittest discover -s scripts -p 'test_check_docs_html.py'
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-catalogs --features ${lib.escapeShellArg documentationCatalogFeatures} --bin alphal00p-docs-gammaloop-reference -- --check
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-catalogs --features ${lib.escapeShellArg documentationCatalogFeatures} --bin alphal00p-docs-vakint-reference -- --check
     cargo test --locked --profile ${docsCargoProfile} -p alphal00p-docs-examples

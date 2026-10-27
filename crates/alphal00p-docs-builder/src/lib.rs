@@ -6944,7 +6944,7 @@ fn render_api_overloads(
         if let Some(docs) = &overload.docs {
             body.push_str(&render_doc_text_omitting_parameters(
                 docs,
-                6,
+                (overload_heading + 1).clamp(4, 6),
                 overload
                     .members
                     .iter()
@@ -7300,19 +7300,48 @@ fn render_python_example(content: &[&str]) -> String {
     }
 
     if content
-        .first()
-        .is_some_and(|line| line.trim_start().starts_with(">>>"))
+        .iter()
+        .any(|line| line.trim_start().starts_with(">>>"))
     {
-        let source = content
+        let mut remaining = content;
+        let mut rendered = String::new();
+        while let Some(start) = remaining
             .iter()
-            .filter_map(|line| {
-                let line = line.trim_start();
-                line.strip_prefix(">>>")
-                    .or_else(|| line.strip_prefix("..."))
-                    .map(|line| line.strip_prefix(' ').unwrap_or(line))
-            })
-            .collect::<Vec<_>>();
-        return render_code(&source);
+            .position(|line| line.trim_start().starts_with(">>>"))
+        {
+            rendered.push_str(&render_prose_blocks(
+                &remaining[..start],
+                DocFormat::PythonDocstring,
+            ));
+            remaining = &remaining[start..];
+            let source = remaining
+                .iter()
+                .map_while(|line| {
+                    let line = line.trim_start();
+                    line.strip_prefix(">>>")
+                        .or_else(|| line.strip_prefix("..."))
+                        .map(|line| line.strip_prefix(' ').unwrap_or(line))
+                })
+                .collect::<Vec<_>>();
+            rendered.push_str(&render_code(&source));
+            remaining = &remaining[source.len()..];
+
+            // A doctest's expected output ends at a blank line or the next
+            // prompt. Keep it visible without making it copyable Python.
+            let output_end = remaining
+                .iter()
+                .position(|line| line.trim().is_empty() || line.trim_start().starts_with(">>>"))
+                .unwrap_or(remaining.len());
+            if output_end > 0 {
+                rendered.push_str(&format!(
+                    "<pre><code data-lang=\"text\">{}</code></pre>",
+                    escape_html(&remaining[..output_end].join("\n")),
+                ));
+            }
+            remaining = &remaining[output_end..];
+        }
+        rendered.push_str(&render_prose_blocks(remaining, DocFormat::PythonDocstring));
+        return rendered;
     }
     if let Some(code_start) = content
         .iter()
@@ -10499,6 +10528,102 @@ mod tests {
                 .contains("<code data-lang=\"python\">def main():\n    return 1\nmain()</code>")
         );
         assert!(!rendered.contains("&gt;&gt;&gt;"));
+    }
+
+    #[test]
+    fn python_doctest_examples_preserve_leading_prose_and_output() {
+        let rendered = render_doc_text(
+            &alphal00p_docs_schema::DocText::new(
+                DocFormat::PythonDocstring,
+                "Examples\n--------\nUsing the setup in the ``Amplitude`` class example:\n\n>>> result = amplitude.expression()\n>>> result\n<operator>",
+            ),
+            3,
+        );
+
+        assert!(
+            rendered
+                .contains("<p>Using the setup in the <code>Amplitude</code> class example:</p>")
+        );
+        assert!(
+            rendered.contains(
+                "<code data-lang=\"python\">result = amplitude.expression()\nresult</code>"
+            )
+        );
+        assert!(rendered.contains("<code data-lang=\"text\">&lt;operator&gt;</code>"));
+        assert!(!rendered.contains("&gt;&gt;&gt;"));
+    }
+
+    #[test]
+    fn python_doctest_examples_keep_interleaved_explanations() {
+        let rendered = render_doc_text(
+            &alphal00p_docs_schema::DocText::new(
+                DocFormat::PythonDocstring,
+                "Examples\n--------\nFirst evaluate the complete word.\n\n>>> def evaluate():\n...     return 1\n>>> evaluate()\n1\n\nThe alternative form represents the same tensor.\n\n>>> values = [\n...     1,\n...     2,\n... ]\n>>> len(values)\n2\n\nBoth forms retain their external indices.",
+            ),
+            3,
+        );
+
+        assert!(rendered.contains("<p>First evaluate the complete word.</p>"));
+        assert!(rendered.contains(
+            "<code data-lang=\"python\">def evaluate():\n    return 1\nevaluate()</code>"
+        ));
+        assert!(rendered.contains("<code data-lang=\"text\">1</code>"));
+        assert!(rendered.contains("<p>The alternative form represents the same tensor.</p>"));
+        assert!(rendered.contains(
+            "<code data-lang=\"python\">values = [\n    1,\n    2,\n]\nlen(values)</code>"
+        ));
+        assert!(rendered.contains("<code data-lang=\"text\">2</code>"));
+        assert!(rendered.contains("<p>Both forms retain their external indices.</p>"));
+        assert!(!rendered.contains("&gt;&gt;&gt;"));
+    }
+
+    #[test]
+    fn python_doctest_output_stops_at_the_next_prompt() {
+        let rendered = render_doc_text(
+            &alphal00p_docs_schema::DocText::new(
+                DocFormat::PythonDocstring,
+                "Examples\n--------\n>>> evaluate(None)\nTraceback (most recent call last):\n...\nValueError: <invalid>\n>>> evaluate(1)\n1",
+            ),
+            3,
+        );
+
+        assert!(rendered.contains("<code data-lang=\"python\">evaluate(None)</code>"));
+        assert!(rendered.contains(
+            "<code data-lang=\"text\">Traceback (most recent call last):\n...\nValueError: &lt;invalid&gt;</code>"
+        ));
+        assert!(rendered.contains("<code data-lang=\"python\">evaluate(1)</code>"));
+        assert!(rendered.contains("<code data-lang=\"text\">1</code>"));
+    }
+
+    #[test]
+    fn python_overload_doc_sections_follow_the_overload_heading() {
+        let mut overload = DocMember::new("run", DocMemberKind::Overload);
+        overload.signature = Some("def run(value: int) -> int:".to_owned());
+        overload.docs = Some(alphal00p_docs_schema::DocText::new(
+            DocFormat::PythonDocstring,
+            "Returns\n-------\nint\n    A processed value.\n\nExamples\n--------\n>>> run(1)\n2",
+        ));
+        let mut parameter = DocMember::new("value", DocMemberKind::Parameter);
+        parameter.signature = Some("int".to_owned());
+        overload.members.push(parameter);
+
+        for (level, doc_heading) in [(2, 5), (3, 6)] {
+            let mut rendered = String::new();
+            render_api_overloads(
+                std::slice::from_ref(&overload),
+                "run",
+                level,
+                &BTreeMap::new(),
+                &mut rendered,
+            );
+
+            for title in ["Returns", "Examples", "Parameters"] {
+                assert!(rendered.contains(&format!("<h{doc_heading}>{title}</h{doc_heading}>")));
+            }
+            if level == 2 {
+                assert!(!rendered.contains("<h6>"));
+            }
+        }
     }
 
     #[test]

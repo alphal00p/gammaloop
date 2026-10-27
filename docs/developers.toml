@@ -1238,7 +1238,9 @@ end_anchor = "documentationRegistry = builtins.fromTOML"
 # notebooks now accompany their source links in the terminal documentation
 # closure. The .py filters exclude generated wheels/caches; Rust producer
 # inputs, features and artifact ownership are unchanged.
-digest = "432d714485625bba225446e22d794618c4e53516"
+# Reviewed 2026-10-27: Stage the focused HTML checker regression suite with
+# its existing script; source ownership and reusable Cargo inputs are unchanged.
+digest = "be18c77376d4761d4f64a745d350c13c40788644"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"
@@ -1289,7 +1291,9 @@ end_anchor = "\nin\n{\n  inherit"
 # Reviewed 2026-10-27: The note records one Community host wheel, runtime
 # font-resource handoff, canonical coupled stubs, and all six product routes;
 # static publication and snapshot checks are preserved.
-digest = "f3c994aa67db21e66f4ef424632a1faca425d954"
+# Reviewed 2026-10-27: Pages preflight runs the focused HTML checker
+# regressions; snapshot checks and producer boundaries remain unchanged.
+digest = "34121aba70d27d0375836a04838c3f2be3d6c54f"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"
