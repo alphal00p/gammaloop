@@ -36,7 +36,7 @@ class NativeBuild:
             raise RuntimeError(f"SHA256 mismatch for {url}")
         return data
 
-    def run(self, jobs, wasm=False):
+    def run(self, jobs):
         source = self.output / f"ogdf-{OGDF_COMMIT}"
         if not source.exists():
             archive = self.fetch(
@@ -64,25 +64,10 @@ class NativeBuild:
             raise RuntimeError(
                 "CMake is required; use a development shell or set CMAKE"
             )
-        configure = [cmake]
-        if wasm:
-            emcmake = os.environ.get("EMCMAKE") or shutil.which("emcmake")
-            if not emcmake:
-                raise RuntimeError("Emscripten is required for --wasm; set EMCMAKE")
-            configure.insert(0, emcmake)
-            # Toolchain adaptation only; OGDF graph algorithms are unchanged.
-            compiler = source / "cmake/compiler-specifics.cmake"
-            original = 'if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang" AND NOT ${CMAKE_SYSTEM_PROCESSOR} MATCHES "^arm")'
-            patched = original.replace(" AND NOT ${", " AND NOT EMSCRIPTEN AND NOT ${")
-            text = compiler.read_text()
-            if original not in text and patched not in text:
-                raise RuntimeError("Pinned OGDF compiler configuration has changed")
-            compiler.write_text(text.replace(original, patched))
-        build = self.output / ("build-wasm" if wasm else "build")
-        target = "ec-layout" if wasm else "ec-spqr"
+        build = self.output / "build"
         subprocess.run(
-            configure
-            + [
+            [
+                cmake,
                 "-S",
                 str(Path(__file__).parent),
                 "-B",
@@ -99,15 +84,14 @@ class NativeBuild:
                 "--build",
                 str(build),
                 "--target",
-                target,
+                "ec-spqr",
                 "-j",
                 str(jobs),
             ],
             check=True,
         )
-        filename = "ec-layout.wasm" if wasm else "ec-spqr"
-        binary = self.output / filename
-        shutil.copy2(build / filename, binary)
+        binary = self.output / "ec-spqr"
+        shutil.copy2(build / "ec-spqr", binary)
         print(binary)
 
 
@@ -119,13 +103,10 @@ if __name__ == "__main__":
         help="Build cache directory (default: target/ec-planarity-native in the workspace)",
     )
     parser.add_argument("--jobs", type=int, default=min(8, os.cpu_count() or 1))
-    parser.add_argument(
-        "--wasm", action="store_true", help="Build the standalone Typst plugin"
-    )
     args = parser.parse_args()
     if args.jobs < 1:
         parser.error("--jobs must be positive")
     output = args.output
     if output is None:
         output = Path(__file__).resolve().parents[4] / "target/ec-planarity-native"
-    NativeBuild(output).run(args.jobs, wasm=args.wasm)
+    NativeBuild(output).run(args.jobs)

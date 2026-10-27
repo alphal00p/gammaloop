@@ -1,0 +1,127 @@
+{
+  "schema": 1,
+  "date": "2026-10-27",
+  "reviewed_head": "d5862a8e11cf4563efbbb666e7a7062fd8eddef7",
+  "original_implementation": "e59f02f7fba73bf1608486033f9cac5c7079733a",
+  "fix_change": "qvzqmytzroomtzxqvkynmqxxwmxvlrlo",
+  "bookmark": "generation-drawing-ports",
+  "status": "P2 correction implemented; awaiting NEW independent Astra review; not integrated",
+  "review_response": {
+    "round": 1,
+    "verdict": "REQUEST_CHANGES",
+    "finding": "P2: removed plugin GPL clause remains in Typst package metadata and actual Nix bundle",
+    "response": "Corrected exact source15-intended expression to MIT AND Apache-2.0 AND BSD-3-Clause. Retained all required Clarabel/NetworkX notices. Added assertions on actual sdist and extracted API manifests and the delivered Nix package manifest.",
+    "regression": "New exact-expression requirement rejects the prior actual Nix bundle; corrected source archive, extraction and rebuilt Nix bundle pass.",
+    "scope": "No geometry, mark engine, solver, Rust implementation, widget/static display or dependency lock changes."
+  },
+  "source_mapping": {
+    "source15": "711f9440b323166cbba92df4bea632b20121aa06",
+    "original_port_commit": "e59f02f7fba73bf1608486033f9cac5c7079733a",
+    "metadata_followup_change": "qvzqmytzroomtzxqvkynmqxxwmxvlrlo",
+    "source16": "9e737a18274991e8dc0542f777a6063acaf72fe8",
+    "source16_disposition": "Original reviewed implementation unchanged",
+    "source38": "15dd7e1b188dad112d7887bdc6d769125b2697a1",
+    "source38_disposition": "Deferred until reviewed source17/18 shared mark engine AND remaining prerequisites through port36. Then replace geometry and remove obsolete Tiptoe ownership together, rebuild/inspect and obtain new review. WP11 remains incomplete."
+  },
+  "validation": [
+    {
+      "command": "nix develop -c ... just sync-drawing-assets",
+      "result": "Passed; canonical recipe realizes the affected bundle and installs/compares its WASM bytes. No redundant --rebuild or unrelated SVG generation."
+    },
+    {
+      "command": "nix build .#checks.x86_64-linux.linnest-wasm --out-link target/drawing-round1-fix/wasm-check",
+      "result": "Passed; NEW delivered license-expression assertion, notice comparisons, WASM byte comparisons and wasm-tools validation."
+    },
+    {
+      "command": "python3 tests/packaging/test_drawing_notices.py -v inside Nix development environment",
+      "result": "All 4 passed; includes NEW parsed metadata assertions in actual sdist and API extraction; fixture wheel remains packaging-only validation."
+    },
+    {
+      "command": "just fmt --check inside Nix development environment",
+      "result": "Passed."
+    },
+    {
+      "command": "Nix-store Ruff 0.16.3 format --check tests/packaging/test_drawing_notices.py",
+      "result": "Passed."
+    },
+    {
+      "command": "typst compile --root . --creation-timestamp 0 docs/architecture/generation-drawing-ports.typ target/drawing-round1-fix/note.pdf inside Nix development environment",
+      "result": "Passed."
+    },
+    {
+      "command": "Compare Nix derivation source and delivered bundle against checkout; parse metadata with tomllib; validate affected registry scopes/titles",
+      "result": "All 1350 source files match. Only typst.toml differs from prior reviewed Nix source. Correct expression delivered, GPL plugin absent, retained notices byte-identical, all prior artifact hashes unchanged; 5 registry scopes pass."
+    }
+  ],
+  "artifact_identities": {
+    "nix_derivation": "/nix/store/qiq9qj3jhs1774b46z54fpn392y1lnax-linnest-wasm-0.1.0.drv",
+    "nix_source": "/nix/store/50chzgp3ff5cmm1bwa8d6b8aa30chs57-source",
+    "nix_output": "/nix/store/fi4nkn8gma6p5dwipzlx2syzs4ls1wib-linnest-wasm-0.1.0",
+    "matching_source_files": 1350,
+    "changed_source_files_since_review": [
+      "crates/linnest/typst/typst.toml"
+    ],
+    "delivered_license_expression": "MIT AND Apache-2.0 AND BSD-3-Clause",
+    "metadata_sha256": "1d168d083b81937145b85076274a5fb2dce8e94e704c01d90324f3bd5f4ee398",
+    "all_prior_artifact_hashes_unchanged": true,
+    "wasm_sha256": {
+      "linnest": "95bf0dc606a6f0da3b008213c12ee780a1c7d8c5b0841b9d6a040ec385380cb2",
+      "kurvst": "be52a473a0dbbd4e95c54e32b025a134dd45062aa2e76a1a2094a13df8286192"
+    },
+    "notices_byte_identical": true,
+    "registry_scopes_verified": 5
+  },
+  "source_sha256": {
+    "crates/linnest/typst/typst.toml": "1d168d083b81937145b85076274a5fb2dce8e94e704c01d90324f3bd5f4ee398",
+    "tests/packaging/test_drawing_notices.py": "eab770a19235345f1c87c7e1ea0f4c27fdb4aeff9d29ebef89ae43626e8cdc45",
+    "nix/rust-workspace.nix": "2c4d1932703b81695f471eb6adcd37cda23ed9d4417b982b13777d27f5aff874",
+    "docs/architecture/generation-drawing-ports.typ": "8a211a346ca4cd507c1ebd71defdb874cf877a457d47780801276b89854b2867"
+  },
+  "prior_evidence": "Prior drawing/receipt.json, prior logs/PNG evidence and target/astra-drawing-round1 remain unchanged. This receipt is the metadata-fix addendum, not a replacement claim for prior full drawing checks.",
+  "validation_not_repeated": "No Rust, geometry, SVG or PDF code/bytes changed. Prior independent 283 geometry/Clinnet tests, 19 native SVG tests, runtime tests, Clippy and reproducibility evidence are retained; no redundant full layout/asset run.",
+  "limitations": [
+    "NEW independent Astra review remains required; no self-integration.",
+    "WP11 remains incomplete. Source38 awaits reviewed transplant plus remaining prerequisites through port36.",
+    "Full native/Pyodide host, restored standalone and external Community artifacts remain final-integration gates. No final wheels are claimed from fixtures."
+  ],
+  "environment": {
+    "nixci_enable": false,
+    "locks": "Cargo.lock and flake.lock unchanged; kernel pin unchanged",
+    "jobs": 2,
+    "license": "Existing export preserved, otherwise silently loaded current user configuration; no secrets printed or committed",
+    "shared_envrc": "absent; no direnv hook required"
+  },
+  "retained": [
+    "Own workspace and generation-drawing-ports bookmark for review",
+    "Prior independent review evidence target/astra-drawing-round1, original drawing evidence, this fix receipt/logs and bundle result link",
+    "Shared build caches untouched"
+  ],
+  "cleanup": "Own temporary fix scratch and packaging fixtures removed after evidence capture; prior review artifacts preserved; no task-owned background process retained.",
+  "changed_files": [
+    "crates/linnest/typst/typst.toml",
+    "docs/architecture/evidence/generation-integration/drawing/round1-fix/bundle.log",
+    "docs/architecture/evidence/generation-integration/drawing/round1-fix/format.log",
+    "docs/architecture/evidence/generation-integration/drawing/round1-fix/note.log",
+    "docs/architecture/evidence/generation-integration/drawing/round1-fix/packaging.log",
+    "docs/architecture/evidence/generation-integration/drawing/round1-fix/payload-verification.json",
+    "docs/architecture/evidence/generation-integration/drawing/round1-fix/prior-payload-rejection.log",
+    "docs/architecture/evidence/generation-integration/drawing/round1-fix/python-format.log",
+    "docs/architecture/evidence/generation-integration/drawing/round1-fix/receipt.json",
+    "docs/architecture/evidence/generation-integration/drawing/round1-fix/round1-review.json",
+    "docs/architecture/evidence/generation-integration/drawing/round1-fix/wasm-check.log",
+    "docs/architecture/generation-drawing-ports.typ",
+    "nix/rust-workspace.nix",
+    "tests/packaging/test_drawing_notices.py"
+  ],
+  "evidence_sha256": {
+    "bundle.log": "9464a53e4daf37cd0daaaeb42f50edc10a5da3ffac6c4f240981125db29d14e8",
+    "format.log": "1dadf1b63f3fc19e19b1e9fb9a6c3f7772d8ba250861dcced4346f892ae2fca3",
+    "note.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "packaging.log": "a6662efd466166435ec85534ceaa988a6bd0a4daf5967c5e250f25491f1e215f",
+    "payload-verification.json": "37aec93333d7fec536d3058f8751206fcba597eaf2d1ca2907160f9d924558b0",
+    "prior-payload-rejection.log": "c2a97119d72d0fe60ca55e40346c0e4d183e647321205f0f2ec4719856c8a322",
+    "python-format.log": "fd2299c9f1c6dc869070883e281051bfe93aacf66c1a3b0069f45b4aa410ca50",
+    "round1-review.json": "c5d1e05960b6e7c12c4cb787d615b8e5c4b669f25363fab45fef0b01209fc3a6",
+    "wasm-check.log": "ea8f196b51d652b7637bea6ead9b1855f12412cf4ab4f0493d04c4da00c75bc3"
+  }
+}

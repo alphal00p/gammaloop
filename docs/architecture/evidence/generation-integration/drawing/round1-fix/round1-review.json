@@ -1,0 +1,100 @@
+{
+  "review": "Astra ROUND1 independent read-only review",
+  "range": "74cebf6c8f673f5849b26afe55fa98035d5eba1d..d5862a8e11cf4563efbbb666e7a7062fd8eddef7",
+  "implementation_commit": "e59f02f7fba73bf1608486033f9cac5c7079733a",
+  "verified_at": "2026-10-27",
+  "artifact_hashes": 9,
+  "evidence_hashes": 22,
+  "implementation_files": 37,
+  "all_implementation_files_match_reviewed_commit": true,
+  "source16_semantic_equivalence": "Only Rust import, Debug derive, documentation and ContactPolicy enum adaptations differ from 9e737a18274991e8dc0542f777a6063acaf72fe8 in label_placement.rs",
+  "approved_notice_selector_identical_to": "00df0507ded2b2ddce45b38e58311a0f8ea120c1",
+  "nix_derivation": "/nix/store/k8g4l0k3r1vipnh1sp1wjpfc471wz4i1-linnest-wasm-0.1.0.drv",
+  "nix_source": "/nix/store/ggiiz5dhbih8c70gflinmza0p50m2kh8-source",
+  "nix_source_files_identical": 1350,
+  "nix_output": "/nix/store/dqnks5k3dmjqchy0cg3dq34d7k56f205-linnest-wasm-0.1.0",
+  "nix_payload_matches_checkout": true,
+  "nix_payload_has_ec_layout": false,
+  "independent_reproductions": {
+    "docs/assets/graphs/portal-graph-epem-ttbar-cut-light.svg": "5bb41acfb69ae6e02d0e541c85f5961c103bca403cec93fada92f5b18852a50a",
+    "docs/assets/graphs/portal-graph-epem-ttbar-cut-dark.svg": "92b0861e2c2537d0acaaf885ed2b199893d39603447d5e73702d6943b81a7996",
+    "crates/linnest/typst/docs/manual.pdf": "c7bb1fd94f3b19c91da689efc3c77992a54d01436753290aab888de27b24d26e"
+  },
+  "visual_inspection": "Both retained PNG themes viewed; no obvious new text/mark collision. Shared source38 marks are absent and not certified.",
+  "registry": "New note titles and affected verified scope digests pass",
+  "finding": {
+    "severity": "P2",
+    "blocking": true,
+    "path": "crates/linnest/typst/typst.toml",
+    "line": 7,
+    "summary": "The replay retains the GPL clause removed by source15; the exact Nix payload contains the stale declaration, contradicting Clinnet CHANGELOG line 12.",
+    "required_expression": "MIT AND Apache-2.0 AND BSD-3-Clause"
+  },
+  "verdict": "REQUEST_CHANGES",
+  "validation": [
+    {
+      "command": "cargo nextest run --locked -p kurvst -p linnest -p clinnet --cargo-profile dev-optim --no-fail-fast",
+      "result": "283 passed (245 geometry/layout and 38 Clinnet); 1 fixture-rewriting test skipped",
+      "log": "geometry-layout-clinnet.log",
+      "run_id": "8a4d17a3-54f0-4a51-8165-235e3355b678"
+    },
+    {
+      "command": "cargo nextest run --locked -p linnest --features svg --lib --cargo-profile dev-optim --no-fail-fast -E test(svg::)",
+      "result": "19 passed; 191 unrelated tests filtered/skipped",
+      "log": "native-svg.log",
+      "run_id": "be841fdc-2c43-40fd-b795-439a2d6bfb6f"
+    },
+    {
+      "command": "python3 tests/packaging/test_drawing_notices.py -v",
+      "result": "4 passed; actual sdist and API embedding, host fixture wheel payload, metadata and RECORD",
+      "log": "packaging.log"
+    },
+    {
+      "command": "python3 crates/linnest/layout/native/test_wasm.py -v",
+      "result": "3 passed",
+      "log": "typst-runtime.log"
+    },
+    {
+      "command": "cargo clippy --locked -p kurvst -p linnest -p clinnet --all-targets --profile dev-optim -- --deny warnings",
+      "result": "passed; 2 unchanged vendored Clarabel warnings",
+      "log": "clippy.log"
+    },
+    {
+      "command": "just fmt --check",
+      "result": "passed",
+      "log": "format.log"
+    },
+    {
+      "command": "nix build .#checks.x86_64-linux.linnest-wasm --no-link --cores 2 --max-jobs 1",
+      "result": "passed; cached exact-source result",
+      "log": "wasm-check.log"
+    }
+  ],
+  "source38": {
+    "source": "15dd7e1b188dad112d7887bdc6d769125b2697a1",
+    "status": "correctly deferred, not approved as implemented",
+    "prerequisite": "Reviewed staged source17/source18 plus format fixup cfe9e8d103b3d2a4ebf1f276f61d8d6980e3d054 introduces shared Kurvst marks.rs/mark.typ/exports and Tiptoe ownership. Respect manifest replay dependencies (port-36 before port-38).",
+    "follow_up": "Port first-principles geometry after prerequisites, replace shared implementation and consumers, remove Tiptoe notices only together with replaced code, rebuild canonical outputs, inspect marks and receive fresh independent review."
+  },
+  "integration_requirements": [
+    "Correct shipped Typst license expression; add a focused manifest assertion to existing payload checks; rebuild bundle and refresh affected evidence before new Astra review and integration.",
+    "Replay this reconciled slice without importing old blobs or resurrecting ec-layout; retain common selector, Clarabel and NetworkX bytes and #209/#210 behavior.",
+    "Full native/Pyodide host wheels, restored standalone Linnet license-files/payload metadata checks, and external Community artifacts remain final gates; do not claim WP11 complete."
+  ],
+  "limits": [
+    "No full physics, full documentation publication suite, full API crate build/Clippy, complete native/Pyodide runtime wheel or external Community checks.",
+    "Inspected both changed gallery PNGs and reproduced both changed SVGs and Linnest manual; no independent rebuild of all 34 SVGs or WASM repeat rebuild because exact-source artifacts were unambiguously verified."
+  ],
+  "final_integrity": "All 37 implementation files, recorded artifact/evidence hashes, lockfiles, NixCI setting and drawing bookmark unchanged from reviewed head.",
+  "retained": "Review logs/provenance in target/astra-drawing-round1; existing source evidence, output symlink and useful shared build caches preserved. Duplicate scratch renders deleted.",
+  "processes": "All review-owned test/build sessions completed; no background process retained.",
+  "review_log_sha256": {
+    "packaging.log": "3368ea381890f618c80a88942239405e6ff140a5fd087b99c51d8b3473f266d1",
+    "format.log": "1dadf1b63f3fc19e19b1e9fb9a6c3f7772d8ba250861dcced4346f892ae2fca3",
+    "native-svg.log": "8ea30629fa86212d85a22346020ba974efc925c7bfaacb18abf82b70c00a653d",
+    "typst-runtime.log": "c9157c21ca4a33610db8f25450f21dd3b293fc636d9ec49af8a21c590728f875",
+    "clippy.log": "4cc1145f2d012223227e336b92ed7350e79a0ba4dda98c0b132bc29ad59511b4",
+    "wasm-check.log": "9464a53e4daf37cd0daaaeb42f50edc10a5da3ffac6c4f240981125db29d14e8",
+    "geometry-layout-clinnet.log": "137b71f4d501400d4f3d6484502f8be562a7384631bb5eb26f34d824af798063"
+  }
+}

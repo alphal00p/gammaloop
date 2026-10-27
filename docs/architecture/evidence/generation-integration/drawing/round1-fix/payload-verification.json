@@ -1,0 +1,18 @@
+{
+  "nix_derivation": "/nix/store/qiq9qj3jhs1774b46z54fpn392y1lnax-linnest-wasm-0.1.0.drv",
+  "nix_source": "/nix/store/50chzgp3ff5cmm1bwa8d6b8aa30chs57-source",
+  "nix_output": "/nix/store/fi4nkn8gma6p5dwipzlx2syzs4ls1wib-linnest-wasm-0.1.0",
+  "matching_source_files": 1350,
+  "changed_source_files_since_review": [
+    "crates/linnest/typst/typst.toml"
+  ],
+  "delivered_license_expression": "MIT AND Apache-2.0 AND BSD-3-Clause",
+  "metadata_sha256": "1d168d083b81937145b85076274a5fb2dce8e94e704c01d90324f3bd5f4ee398",
+  "all_prior_artifact_hashes_unchanged": true,
+  "wasm_sha256": {
+    "linnest": "95bf0dc606a6f0da3b008213c12ee780a1c7d8c5b0841b9d6a040ec385380cb2",
+    "kurvst": "be52a473a0dbbd4e95c54e32b025a134dd45062aa2e76a1a2094a13df8286192"
+  },
+  "notices_byte_identical": true,
+  "registry_scopes_verified": 5
+}

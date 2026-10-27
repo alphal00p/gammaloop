@@ -1,0 +1,10 @@
+{
+  "path": "crates/gammaloop-api/src/templates.rs",
+  "owner": "gammaloop-draw-style-migration",
+  "scope": "whole file: no end_anchor in registry",
+  "baseline": "74cebf6c8f673f5849b26afe55fa98035d5eba1d",
+  "previous_registered_digest": "3dca6f84cadbe237f3beaa7ab05e11cea309cd41",
+  "actual_digest": "cb2de3f5d9713ed285244573ecf76acaf59a4b5f",
+  "production_before_cfg_test_byte_identical": true,
+  "diff": "Only test exclusions and license-byte assertions changed; reviewed full source diff before attesting"
+}

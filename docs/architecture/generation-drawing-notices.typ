@@ -1,0 +1,84 @@
+= Generation drawing notice delivery
+
+== Scope and ownership
+
+This is the notices portion of WP11, implementing the accepted decision to retain
+Clarabel. The original notice change was independently approved before this
+drawing replay; this reconciled slice awaits its own review. The original base is
+`3f0df2a870806076820786994d4883decec8e9e3`; historical M7 findings and frozen v4
+`e0a779808174c64057fecfd062c948b8de8e5c1f` are provenance, not present-day
+artifact validation. Solver replacement, label placement and the kkumutpy port
+are separate work.
+
+Clarabel is enabled by Linnet's `drawing` feature and consumed by Linnest,
+Linnet's Python bindings and the local Symbolica notebook host, including its
+`wasm` feature selection. Linnest's `ec_seed/coordinates.rs` contains the
+NetworkX-derived coordinate algorithm. These source and feature relationships,
+rather than searches for binary symbols, establish notice requirements.
+
+At this base `crates/linnet-py` is an rlib, with no standalone wheel manifest or
+extension-module entrypoint. The historical standalone wheel cannot be rebuilt
+from this checkout. The in-repository wheel owner is
+`examples/notebooks/symbolica-host`, which owns both native and Pyodide builds.
+The separately maintained Symbolica Community distribution is outside this
+repository; its packager must collect the same notices when consuming these
+crates. No external repository was modified.
+
+== Delivery
+
+The complete Clarabel license, including the University of Oxford copyright,
+comes from `vendor/clarabel/LICENSE.md`. The complete BSD notice and contributor
+credits come from `crates/linnest/layout/native/LICENSE.networkx`. Delivery copies
+are byte-identical to these sources. There is no separate Clarabel NOTICE file
+in the vendored source. The subsequent drawing replay removes the unused OGDF
+Typst plugin and its `LICENSE.ec-layout`; the local-only native reference engine
+remains. The Rust coordinate implementation still requires its NetworkX notice.
+
+The Typst package now carries `LICENSE.networkx` beside `linnest.wasm` and declares
+BSD-3-Clause in its package license expression. The shared
+`crates/linnest/build_assets.rs` selector always includes root package licenses,
+so both Clinnet and GammaLoop extraction carry the same notice bytes alongside
+their embedded plugins. Existing MIT package licenses accompany Linnest and
+Kurvst too. Nix source filters, bundle installation and reconstructed drawing
+inputs retain these files. The root GammaLoop sdist explicitly includes them.
+
+The local Symbolica host uses Maturin's `project.license-files` with `licenses/*`.
+This ships readable notices under wheel `.dist-info/licenses/` and advertises
+them through `License-File` metadata. Copies live in that existing conventional
+packaging location; no general license framework or runtime notice API was added.
+
+== Focused validation and limits
+
+The structured #link("evidence/generation-drawing-notices/receipt.json")[receipt]
+records commands, outcomes, source/output hashes and retained logs. Packaging
+regression coverage compiles the actual GammaLoop build script and extraction
+module in a small Cargo fixture, then compares extracted license and plugin bytes.
+A second fixture builds a wheel using the real host Python tree, pyproject and
+licenses with only a small substitute Rust module; it verifies license contents,
+metadata and RECORD hashes. This validates packaging, not the full host runtime.
+Clinnet tests exercise production embedding and staging. The Nix WASM check
+compares licenses in its built bundle against their authoritative sources and
+validates the plugins. The original notice-only change did not regenerate WASM. The subsequent drawing
+replay rebuilds the bundles from its current sources.
+The source archive test also verifies all four package/license payloads.
+Targeted Clippy, changed-file Rust formatting, Python formatting and Typst
+compilation pass. The original workspace-wide `just fmt --check` recorded pre-existing
+formatting drift in `crates/linnet/src/permutation.rs`. The drawing replay
+passes the current workspace-wide formatting check.
+The modified Rust follows the current repository policy with no departures.
+
+Real host metadata was inspected for native and Emscripten targets. The native
+fixture wheel was also passed through the production Pyodide compression script,
+which preserves its payload bytes. This is not a compiled Pyodide host wheel,
+nor a standalone Linnet wheel. Final integration must inspect the complete
+native/Pyodide host wheels and any restored standalone wheel, and verify the
+external Community packager includes both notices. Historical standalone
+`license-files = ["LICENSE", "licenses/*"]` can retain its owner: when replay
+restores that wheel, add Clarabel to its license directory and verify NetworkX
+against the authoritative source. Do not restore the obsolete standalone
+distribution as part of this notice-only change.
+
+The original workspace and bookmark `generation-drawing-notices` are retained
+unchanged. The drawing replay preserves the common license selector and
+NetworkX/Clarabel files; see #link("generation-drawing-ports.typ")[its receipt]
+for current validation and deferred mark-engine work.

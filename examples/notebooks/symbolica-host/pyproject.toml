@@ -6,6 +6,7 @@ build-backend = "maturin"
 name = "symbolica"
 version = "3.0.1"
 requires-python = ">=3.10"
+license-files = ["licenses/*"]
 dependencies = ["anywidget>=0.9,<1; sys_platform == 'emscripten'"]
 
 [project.optional-dependencies]

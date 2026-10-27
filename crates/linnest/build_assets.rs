@@ -78,6 +78,12 @@ pub fn embed_typst_packages(
                     && path.extension().is_some_and(|extension| extension == "typ"))
                     || path == Path::new("typst.toml")
                     || path == Path::new(&wasm)
+                    // Licenses accompany every embedded copy of the package.
+                    || path == Path::new("LICENSE")
+                    || path.file_name().is_some_and(|name| {
+                        path.parent() == Some(Path::new(""))
+                            && name.to_string_lossy().starts_with("LICENSE.")
+                    })
                     || additional_files.iter().any(|file| path == Path::new(file))
             },
         )?;

@@ -13,6 +13,43 @@ title = "Implemented architecture"
 summary = "How the current runtime, physics layers, parsers, and symbolic engines are organized."
 
 [[section.note]]
+id = "generation-drawing-ports"
+title = "Generation drawing ports"
+summary = "Independent plugin removal and contact-first label replay, approved notice preservation, and the deferred shared mark-engine prerequisite."
+source = "docs/architecture/generation-drawing-ports.typ"
+kind = "Implementation record"
+status = "Source15/16 implemented; source38 deferred; independent review pending"
+lifecycle = "investigation"
+owner = "unassigned"
+reviewed_at = "2026-10-27"
+review_ref = "74cebf6c8f673f5849b26afe55fa98035d5eba1d"
+products = ["gammaloop", "linnet", "feynkit"]
+topics = ["drawing", "packaging", "licenses"]
+review_triggers = ["crates/linnest/**", "crates/kurvst/**", "just/drawing.just", "nix/rust-workspace.nix"]
+
+[[section.note]]
+id = "generation-drawing-notices"
+title = "Generation drawing notice delivery"
+summary = "WP11 notice ownership, packaged payload validation and external distribution prerequisites."
+source = "docs/architecture/generation-drawing-notices.typ"
+kind = "Implementation record"
+status = "Approved notices; reconciled replay pending review"
+lifecycle = "current"
+owner = "unassigned"
+reviewed_at = "2026-10-27"
+review_ref = "3f0df2a870806076820786994d4883decec8e9e3"
+products = ["gammaloop", "linnet", "feynkit"]
+topics = ["drawing", "packaging", "licenses"]
+review_triggers = ["crates/linnest/build_assets.rs", "examples/notebooks/symbolica-host/pyproject.toml", "nix/rust-workspace.nix"]
+
+[[section.note.scope]]
+path = "crates/linnest/build_assets.rs"
+symbol = "embed_typst_packages"
+anchor = "pub fn embed_typst_packages("
+# Replay preserves the approved common root-license selector byte-for-byte.
+digest = "6cec3a4971faa783e0497c89ed9f614443f1117b"
+
+[[section.note]]
 id = "gammaloop-architecture"
 title = "GammaLoop architecture"
 summary = "Application shell, domain core, state lifecycle, integration and event pipelines, persistence, concurrency, and tests."
@@ -634,7 +671,8 @@ anchor = "pub fn extract_templates<P: AsRef<Path>>"
 # Reviewed 2026-10-15: Embedding now uses include_dir while retaining canonical
 # generated asset paths and shared drawing callbacks. This migration record remains
 # historical below its implemented preface.
-digest = "3dca6f84cadbe237f3beaa7ab05e11cea309cd41"
+# Drawing integration: approved test-only package-layout attestation; production extraction unchanged.
+digest = "cb2de3f5d9713ed285244573ecf76acaf59a4b5f"
 
 [[section.note]]
 id = "gammaloop-drawing-architecture"
@@ -1977,7 +2015,8 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # Reviewed 2026-10-25: browser CI declares native fixture and browser-script source
 # ownership, with pinned Chromium/Playwright/AnyWidget/Marimo runtime tools. The
 # separate nextest group reuses per-crate producers; ci.typ records this added coverage.
-digest = "5bb33f0636444ee9a41e219d9b0c9d7a0afccdbb"
+# Drawing integration: approved ec-layout input removal; common notices and source-filter ownership retained.
+digest = "f446dbf3636e9a5f4736fca0fe724a134ab28300"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"

@@ -1,0 +1,409 @@
+{
+  "schema": 1,
+  "task": "WP11 notices only; retain Clarabel",
+  "date": "2026-10-27",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-drawing-notices",
+  "bookmark": "generation-drawing-notices",
+  "change_id": "rpvkvznnmvznwwpwqsvruxkvvymtnxlo",
+  "base_commit": "3f0df2a870806076820786994d4883decec8e9e3",
+  "frozen_comparison_commit": "e0a779808174c64057fecfd062c948b8de8e5c1f",
+  "independent_review": "pending parent Astra review; no self-approval or integration",
+  "source_licenses": [
+    {
+      "path": "vendor/clarabel/LICENSE.md",
+      "bytes": 10779,
+      "sha256": "6e2f382771f8aab58e4868ddd0afe0c2fefe6b54f9681493a9c3d0f32906cfe1"
+    },
+    {
+      "path": "crates/linnest/layout/native/LICENSE.networkx",
+      "bytes": 1763,
+      "sha256": "6025f323ea29dc2f0ee0abd9523bf910186f55b0e148e6ebf646c55566278e2e"
+    }
+  ],
+  "notice_sources": {
+    "clarabel": "complete vendored Apache-2.0 text with Copyright 2022 University of Oxford Control Group; no separate NOTICE in vendor/clarabel",
+    "networkx": "complete BSD-3-Clause license including 2004-2026 NetworkX Developers copyright and contributor credits"
+  },
+  "ownership": {
+    "standalone_linnet_py": "Not a wheel target at this base: crates/linnet-py is an rlib, no pyproject or standalone feature. Frozen v4 has a historical wheel; it was inspected read-only with jj file show, not restored.",
+    "local_symbolica_host": "examples/notebooks/symbolica-host owns native and Pyodide wheel packaging. Cargo inverse dependency trees confirm Clarabel through Linnet in native and wasm feature selections.",
+    "networkx": "Rust port in crates/linnest/src/ec_seed/coordinates.rs; native reference header has same provenance. Both are source-based requirements, not inferred from binary symbol scans.",
+    "api": "crates/gammaloop-api/build.rs uses shared embed_typst_packages; production Assets extraction tested in an isolated Cargo fixture.",
+    "typst": "Linnest package and Nix linnest-wasm bundle include the notices; GPL ec-layout plugin and its existing license remain unchanged."
+  },
+  "commands": [
+    {
+      "command": "nix develop --profile target/notice-validation/dev-profile -c ...; subsequent commands use nix develop target/notice-validation/dev-profile -c ...",
+      "result": "pinned Nix development environment retained; no CARGO_TARGET_DIR override; no shared envrc exists"
+    },
+    {
+      "command": "DRAWING_NOTICE_ARTIFACTS=\"$PWD/target/notice-validation/wheels\" python3 tests/packaging/test_drawing_notices.py -v",
+      "result": "4/4 passed: upstream byte copies, actual API build/extraction fixture, actual GammaLoop sdist payload, host packaging fixture wheel metadata/content/RECORD"
+    },
+    {
+      "command": "cargo nextest run --locked -p clinnet --lib -E \"test(embedded_packages_include_nested_sources) | test(default_staging_preserves_user_template_bundle)\"",
+      "result": "2/2 passed; run e3fb3e2e-7ef5-4162-89cc-a027d108caed"
+    },
+    {
+      "command": "cargo clippy --locked -p clinnet --lib --tests -- -D warnings",
+      "result": "passed"
+    },
+    {
+      "command": "nix build .#linnest-wasm .#checks.x86_64-linux.linnest-wasm --out-link target/notice-validation/final-bundle --print-build-logs",
+      "result": "passed; canonical Nix bundle plus wasm-tools validation and 4 exact license comparisons; existing vendored Clarabel lifetime warnings retained"
+    },
+    {
+      "command": "maturin pep517 write-dist-info --locked --manifest-path examples/notebooks/symbolica-host/Cargo.toml --metadata-directory target/notice-validation/host-metadata",
+      "result": "passed; actual native metadata inspected"
+    },
+    {
+      "command": "PATH=\"/nix/store/74fhhnnahdc7m1pzqcxx5b0mfzla5fmd-emscripten-6.0.9/bin:$PATH\" maturin pep517 write-dist-info --locked --manifest-path examples/notebooks/symbolica-host/Cargo.toml --target wasm32-unknown-emscripten --metadata-directory target/notice-validation/host-wasm-metadata",
+      "result": "passed; actual Emscripten metadata inspected. Initial attempt lacked emcc; corrected with the already-realized pinned Emscripten toolchain. Legacy platform tag warning is metadata-only, not a publishable Pyodide wheel certification."
+    },
+    {
+      "command": "maturin sdist --manifest-path crates/gammaloop-api/Cargo.toml --out target/notice-validation/sdist",
+      "result": "passed; 4 archive members inspected. Initial invocation without manifest path failed on the virtual workspace; corrected without changing unrelated project configuration."
+    },
+    {
+      "command": "/nix/store/0bq2kpdgy8kimy82pzpjjw787h1sx6a9-python3-3.14.6-env/bin/python3 examples/notebooks/symbolica-host/compress_wheel.py target/notice-validation/wheels/*.whl target/notice-validation/compressed",
+      "result": "passed; all archive member bytes preserved, including licenses and RECORD; compression fixture retains native tag and is not a Pyodide module build"
+    },
+    {
+      "command": "just fmt --check",
+      "result": "failed on pre-existing, unchanged crates/linnet/src/permutation.rs formatting only; no unrelated edits made"
+    },
+    {
+      "command": "rustfmt --check --edition 2021 crates/linnest/build_assets.rs crates/gammaloop-api/src/templates.rs; rustfmt --check --edition 2024 crates/clinnet/build.rs crates/clinnet/src/lib.rs",
+      "result": "passed; manual Rust policy diff review found no departures"
+    },
+    {
+      "command": "ruff format --check tests/packaging/test_drawing_notices.py",
+      "result": "passed using realized Nix ruff 0.16.3"
+    },
+    {
+      "command": "typst compile docs/architecture/generation-drawing-notices.typ target/notice-validation/generation-drawing-notices.pdf; Python tomllib registry/title check; nix eval --file nix-ci.nix enable",
+      "result": "passed; one registered matching title; NixCI false"
+    }
+  ],
+  "inspected_artifacts": {
+    "actual_host_metadata": [
+      {
+        "variant": "host-metadata",
+        "scope": "actual host metadata only; no full host module compiled",
+        "wheel_metadata": "Wheel-Version: 1.0\nGenerator: maturin (1.15.0)\nRoot-Is-Purelib: false\nTag: cp310-abi3-linux_x86_64\n",
+        "files": [
+          {
+            "path": "target/notice-validation/host-metadata/symbolica-3.0.1.dist-info/licenses/licenses/clarabel-LICENSE",
+            "bytes": 10779,
+            "sha256": "6e2f382771f8aab58e4868ddd0afe0c2fefe6b54f9681493a9c3d0f32906cfe1"
+          },
+          {
+            "path": "target/notice-validation/host-metadata/symbolica-3.0.1.dist-info/licenses/licenses/networkx-LICENSE",
+            "bytes": 1763,
+            "sha256": "6025f323ea29dc2f0ee0abd9523bf910186f55b0e148e6ebf646c55566278e2e"
+          }
+        ]
+      },
+      {
+        "variant": "host-wasm-metadata",
+        "scope": "actual host metadata only; no full host module compiled",
+        "wheel_metadata": "Wheel-Version: 1.0\nGenerator: maturin (1.15.0)\nRoot-Is-Purelib: false\nTag: cp310-abi3-emscripten_6_0_9_wasm32\n",
+        "files": [
+          {
+            "path": "target/notice-validation/host-wasm-metadata/symbolica-3.0.1.dist-info/licenses/licenses/clarabel-LICENSE",
+            "bytes": 10779,
+            "sha256": "6e2f382771f8aab58e4868ddd0afe0c2fefe6b54f9681493a9c3d0f32906cfe1"
+          },
+          {
+            "path": "target/notice-validation/host-wasm-metadata/symbolica-3.0.1.dist-info/licenses/licenses/networkx-LICENSE",
+            "bytes": 1763,
+            "sha256": "6025f323ea29dc2f0ee0abd9523bf910186f55b0e148e6ebf646c55566278e2e"
+          }
+        ]
+      }
+    ],
+    "host_fixture_wheel": {
+      "path": "target/notice-validation/wheels/symbolica-3.0.1-cp310-abi3-linux_x86_64.whl",
+      "bytes": 1786544,
+      "sha256": "e1e456980cd78fdb3268e7dfb224f166b68db4213d7e547fda72bb7874f3e3ad",
+      "scope": "real host pyproject/Python tree/licenses, small replacement PyO3 module; not full host runtime",
+      "members": [
+        {
+          "member": "symbolica-3.0.1.dist-info/licenses/licenses/clarabel-LICENSE",
+          "bytes": 10779,
+          "sha256": "6e2f382771f8aab58e4868ddd0afe0c2fefe6b54f9681493a9c3d0f32906cfe1"
+        },
+        {
+          "member": "symbolica-3.0.1.dist-info/licenses/licenses/networkx-LICENSE",
+          "bytes": 1763,
+          "sha256": "6025f323ea29dc2f0ee0abd9523bf910186f55b0e148e6ebf646c55566278e2e"
+        }
+      ]
+    },
+    "compressed_fixture_wheel": {
+      "path": "target/notice-validation/compressed/symbolica-3.0.1-cp310-abi3-linux_x86_64.whl",
+      "bytes": 1373353,
+      "sha256": "a6609fd0c0a96297880e9a888df6ea6d3375474b98ce2965dce9a21593b75657",
+      "scope": "production compression script; all member bytes identical to uncompressed fixture wheel"
+    },
+    "gammaloop_source_archive": {
+      "path": "target/notice-validation/sdist/gammaloop-0.3.4.tar.gz",
+      "bytes": 14254926,
+      "sha256": "81c3e5bb17a18f1419cc5cd9671a1b5e6ff0c00d7a3a3db101092d309fa3183c",
+      "members": [
+        {
+          "member": "gammaloop-0.3.4/crates/linnest/typst/LICENSE.clarabel",
+          "bytes": 10779,
+          "sha256": "6e2f382771f8aab58e4868ddd0afe0c2fefe6b54f9681493a9c3d0f32906cfe1"
+        },
+        {
+          "member": "gammaloop-0.3.4/crates/linnest/typst/LICENSE.networkx",
+          "bytes": 1763,
+          "sha256": "6025f323ea29dc2f0ee0abd9523bf910186f55b0e148e6ebf646c55566278e2e"
+        },
+        {
+          "member": "gammaloop-0.3.4/crates/linnest/typst/LICENSE",
+          "bytes": 1079,
+          "sha256": "397f68dfabb4c82acba023b23a640974a8444f8fca6a6655475ea3c3f902f22a"
+        },
+        {
+          "member": "gammaloop-0.3.4/crates/kurvst/typst/LICENSE",
+          "bytes": 1079,
+          "sha256": "397f68dfabb4c82acba023b23a640974a8444f8fca6a6655475ea3c3f902f22a"
+        }
+      ]
+    },
+    "canonical_nix_bundle": {
+      "path": "/nix/store/cbyafzabk1d7mjyvwj9402qyp6v6m4fx-linnest-wasm-0.1.0",
+      "check_output": "/nix/store/why7xlbyykzl6vbpphrpvh8ia2gjy39x-linnest-wasm-check",
+      "files": [
+        {
+          "path": "/nix/store/cbyafzabk1d7mjyvwj9402qyp6v6m4fx-linnest-wasm-0.1.0/templates/crates/linnest/typst/LICENSE.clarabel",
+          "bytes": 10779,
+          "sha256": "6e2f382771f8aab58e4868ddd0afe0c2fefe6b54f9681493a9c3d0f32906cfe1"
+        },
+        {
+          "path": "/nix/store/cbyafzabk1d7mjyvwj9402qyp6v6m4fx-linnest-wasm-0.1.0/templates/crates/linnest/typst/LICENSE.networkx",
+          "bytes": 1763,
+          "sha256": "6025f323ea29dc2f0ee0abd9523bf910186f55b0e148e6ebf646c55566278e2e"
+        },
+        {
+          "path": "/nix/store/cbyafzabk1d7mjyvwj9402qyp6v6m4fx-linnest-wasm-0.1.0/templates/crates/linnest/typst/LICENSE",
+          "bytes": 1079,
+          "sha256": "397f68dfabb4c82acba023b23a640974a8444f8fca6a6655475ea3c3f902f22a"
+        },
+        {
+          "path": "/nix/store/cbyafzabk1d7mjyvwj9402qyp6v6m4fx-linnest-wasm-0.1.0/templates/crates/kurvst/typst/LICENSE",
+          "bytes": 1079,
+          "sha256": "397f68dfabb4c82acba023b23a640974a8444f8fca6a6655475ea3c3f902f22a"
+        }
+      ]
+    },
+    "wasm_hashes": [
+      {
+        "tracked_unchanged_from_base": {
+          "path": "crates/linnest/typst/linnest.wasm",
+          "bytes": 5250405,
+          "sha256": "219ec5f66f9b5b3783d95bde289be04ad63288e237d9c747f3a7d6c90b16fde4"
+        },
+        "canonical_nix_build": {
+          "path": "/nix/store/cbyafzabk1d7mjyvwj9402qyp6v6m4fx-linnest-wasm-0.1.0/linnest.wasm",
+          "bytes": 5250501,
+          "sha256": "2b04fc35112b3ecbe381e57d39b9eb8fb2b36c1a312efc5e793f743499a0d140"
+        }
+      },
+      {
+        "tracked_unchanged_from_base": {
+          "path": "crates/kurvst/typst/kurvst.wasm",
+          "bytes": 603431,
+          "sha256": "20160e806a3a9ef5510ef56d12eee786a2fd2315ea09f952c713f42ff8b9e3e5"
+        },
+        "canonical_nix_build": {
+          "path": "/nix/store/cbyafzabk1d7mjyvwj9402qyp6v6m4fx-linnest-wasm-0.1.0/kurvst.wasm",
+          "bytes": 603445,
+          "sha256": "be52a473a0dbbd4e95c54e32b025a134dd45062aa2e76a1a2094a13df8286192"
+        }
+      }
+    ],
+    "api_fixture": "actual API build.rs and templates.rs compiled/executed; extracted 4 notices and both plugins compared exactly, then temporary fixture removed"
+  },
+  "remaining_limits": [
+    "Independent Astra review required before replay; implementation does not self-integrate.",
+    "Complete native and Pyodide host extension wheels were not compiled here. Recheck final integrated host wheels; metadata and packaging fixture coverage are not runtime or release certification.",
+    "No standalone Linnet wheel can be built from this base. If integration restores frozen-v4 standalone packaging, retain its license-files owner, include Clarabel plus NetworkX in its licenses directory, and inspect the actual wheel.",
+    "External Symbolica Community packager must include the exact Clarabel and NetworkX source license texts in its own native/Pyodide distribution license payload and metadata. External source/packaging repositories were not mutated.",
+    "Full physics tests, full API test binary, publication, uploads and pushes are outside this notice lane. The actual API production extraction path is covered by the small fixture."
+  ],
+  "replay": "Replay this single change onto the accepted integration only after Astra review. Resolve docs/developers.toml note insertion against parent additions. Later ec-layout removal should preserve root-license selection and standalone NetworkX/Clarabel notices while dropping obsolete ec-layout-specific inputs. Reconcile restored standalone wheel ownership rather than recreating removed interfaces on this base.",
+  "retained": {
+    "artifacts": "target/notice-validation contains fixture wheels, sdist, metadata, logs, rendered note and Nix result/dev-profile roots for review. Ordinary Cargo outputs/shared caches preserved. Scratch fixture trees removed by TemporaryDirectory.",
+    "processes": "none after completion"
+  },
+  "logs": [
+    {
+      "path": "target/notice-validation/changed-rust-format.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "target/notice-validation/clinnet-test.log",
+      "bytes": 445,
+      "sha256": "85baf02d4fbb062d1b6d7fbb694ddfd7a82f1fa3fbf29ffb126b5214683fec68"
+    },
+    {
+      "path": "target/notice-validation/clippy-tests.log",
+      "bytes": 172,
+      "sha256": "914107441637750fb7c34051fbaafe0b9b1b0d501258455f52f370c2da260697"
+    },
+    {
+      "path": "target/notice-validation/clippy.log",
+      "bytes": 1644,
+      "sha256": "b4aa3f7ea302267f8a743ede3038df0874609bc80e75eaec5c46d30f6c5e284c"
+    },
+    {
+      "path": "target/notice-validation/compressed.log",
+      "bytes": 124,
+      "sha256": "71841f82745325644c6fe53f477ff4a7e8ac639203d8552795fa3768c78d0dae"
+    },
+    {
+      "path": "target/notice-validation/final-bundle.log",
+      "bytes": 8571,
+      "sha256": "99b969b070ab4f62be42d5193d570c44f7443673554e366683317b1b31d267e5"
+    },
+    {
+      "path": "target/notice-validation/fmt.log",
+      "bytes": 1854,
+      "sha256": "785501097eb9fc40aab02d0c00f0ebb9fc8f9e8998363d0a36dfa08b854d2a6d"
+    },
+    {
+      "path": "target/notice-validation/host-metadata.log",
+      "bytes": 221,
+      "sha256": "5dd51c4621ce6b34e0ec1944774430276cf3917207376e7c991df23bebf814fd"
+    },
+    {
+      "path": "target/notice-validation/host-native-dependency.log",
+      "bytes": 8185,
+      "sha256": "6e6e28204912e5ee5fc382b811aa1e692e2435827687c24698775707024451bb"
+    },
+    {
+      "path": "target/notice-validation/host-wasm-dependency.log",
+      "bytes": 8185,
+      "sha256": "6e6e28204912e5ee5fc382b811aa1e692e2435827687c24698775707024451bb"
+    },
+    {
+      "path": "target/notice-validation/host-wasm-metadata.log",
+      "bytes": 521,
+      "sha256": "d42d5c4724007b6c01ce106bec393b5c8ae0e1c73a63121965ab5e02132807aa"
+    },
+    {
+      "path": "target/notice-validation/nixci.log",
+      "bytes": 6,
+      "sha256": "2ed27c1421e6928dbe13dbfdb5c59e1045b30341fe7ebe05700006bc5ac572c0"
+    },
+    {
+      "path": "target/notice-validation/packaging-test.log",
+      "bytes": 477,
+      "sha256": "234dc797a1426fcc0b4a4af4e78d735bc7ec6f480369f517085771b6246a3646"
+    },
+    {
+      "path": "target/notice-validation/python-format.log",
+      "bytes": 25,
+      "sha256": "fd2299c9f1c6dc869070883e281051bfe93aacf66c1a3b0069f45b4aa410ca50"
+    },
+    {
+      "path": "target/notice-validation/sdist.log",
+      "bytes": 4631,
+      "sha256": "b2b8be506c2d05bb95b3d066ae6075c2c79f2bae560b7324e470f6a55bdbd867"
+    },
+    {
+      "path": "target/notice-validation/typst.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "target/notice-validation/wasm-check.log",
+      "bytes": 8326,
+      "sha256": "cda90b26b5809a3d738540372a35014aaa00cdc64ea56d556362148f71857eef"
+    },
+    {
+      "path": "target/notice-validation/wheel-test.log",
+      "bytes": 301,
+      "sha256": "49ab6deddfcb69f4d4d77028ed635aeab8f424564ff41978cb8a44b47844475d"
+    }
+  ],
+  "changed_files": [
+    "crates/clinnet/build.rs",
+    "crates/clinnet/src/lib.rs",
+    "crates/gammaloop-api/src/templates.rs",
+    "crates/linnest/build_assets.rs",
+    "crates/linnest/typst/LICENSE.networkx",
+    "crates/linnest/typst/typst.toml",
+    "docs/architecture/evidence/generation-drawing-notices/receipt.json",
+    "docs/architecture/generation-drawing-notices.typ",
+    "docs/developers.toml",
+    "examples/notebooks/symbolica-host/licenses/clarabel-LICENSE",
+    "examples/notebooks/symbolica-host/licenses/networkx-LICENSE",
+    "examples/notebooks/symbolica-host/pyproject.toml",
+    "nix/rust-workspace.nix",
+    "pyproject.toml",
+    "tests/packaging/test_drawing_notices.py"
+  ],
+  "implementation_sources": [
+    {
+      "path": "crates/clinnet/build.rs",
+      "sha256": "64bb0458bd35bd29bce276309e5a2227655de2373df59db45c74b058e2ff5293"
+    },
+    {
+      "path": "crates/clinnet/src/lib.rs",
+      "sha256": "5272cc2100679b790e586851692f029ed6abdf1fb8fc23b9414ef693d2c9573d"
+    },
+    {
+      "path": "crates/gammaloop-api/src/templates.rs",
+      "sha256": "6f1af77edc756a509f208deff40309b0b3f9c030a8ee0fa1a28ec8d2490d1bc3"
+    },
+    {
+      "path": "crates/linnest/build_assets.rs",
+      "sha256": "563cb2fe49034d946366cdd723f1f7fa779ec6494de9a898717c4a01cccd3936"
+    },
+    {
+      "path": "crates/linnest/typst/LICENSE.networkx",
+      "sha256": "6025f323ea29dc2f0ee0abd9523bf910186f55b0e148e6ebf646c55566278e2e"
+    },
+    {
+      "path": "crates/linnest/typst/typst.toml",
+      "sha256": "795ecf448fea7d58e03fea450ff44f11a1738eda13479bd2f27ad9d1543d297c"
+    },
+    {
+      "path": "docs/architecture/generation-drawing-notices.typ",
+      "sha256": "2b28a7262c43e63abbbbff292f3a5d3c68355d96ae7a1a89ad15a72e1ab1f049"
+    },
+    {
+      "path": "docs/developers.toml",
+      "sha256": "aa3ab71324fdb30d5fea85bbf5485e7ec86abafca0bcd6022e6e7c7638a228ff"
+    },
+    {
+      "path": "examples/notebooks/symbolica-host/licenses/clarabel-LICENSE",
+      "sha256": "6e2f382771f8aab58e4868ddd0afe0c2fefe6b54f9681493a9c3d0f32906cfe1"
+    },
+    {
+      "path": "examples/notebooks/symbolica-host/licenses/networkx-LICENSE",
+      "sha256": "6025f323ea29dc2f0ee0abd9523bf910186f55b0e148e6ebf646c55566278e2e"
+    },
+    {
+      "path": "examples/notebooks/symbolica-host/pyproject.toml",
+      "sha256": "0133058efb8a23bff904dfd41ec047913af10882c26189a8fbf978ddcbb5ea9d"
+    },
+    {
+      "path": "nix/rust-workspace.nix",
+      "sha256": "fbc55bbc7b962e7fb2b2cd5ed91d8bdd67ee230a30ff009fb75fbbb66ccfc479"
+    },
+    {
+      "path": "pyproject.toml",
+      "sha256": "84079f7a8ea5b121ee054ced5ade0a11ca5389d68d5e13be8a725eb5d3ce8e9c"
+    },
+    {
+      "path": "tests/packaging/test_drawing_notices.py",
+      "sha256": "52956bc1a6dbfbb0cdf3f61db33d2e1122d0a13b5cdba395e0b1fe70541bf338"
+    }
+  ]
+}

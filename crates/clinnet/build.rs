@@ -1,4 +1,6 @@
-use std::{env, fs::File, path::PathBuf};
+use std::env;
+use std::fs::File;
+use std::path::PathBuf;
 
 #[path = "../linnest/build_assets.rs"]
 mod build_assets;
@@ -15,10 +17,6 @@ fn main() -> std::io::Result<()> {
         &manifest.join("templates"),
         |_| true,
     )?;
-    build_assets::embed_typst_packages(
-        &mut output,
-        &manifest.join(".."),
-        &["ec-layout.wasm", "LICENSE.ec-layout", "LICENSE.clarabel"],
-    )?;
+    build_assets::embed_typst_packages(&mut output, &manifest.join(".."), &[])?;
     Ok(())
 }

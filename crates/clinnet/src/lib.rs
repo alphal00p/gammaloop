@@ -879,6 +879,12 @@ mod tests {
 
     #[test]
     fn embedded_packages_include_nested_sources() {
+        assert!(LINNEST_PACKAGE_ASSETS.get_file("ec-layout.wasm").is_none());
+        assert!(
+            LINNEST_PACKAGE_ASSETS
+                .get_file("LICENSE.ec-layout")
+                .is_none()
+        );
         assert!(
             LINNEST_PACKAGE_ASSETS
                 .get_file("src/impl/draw.typ")
@@ -890,7 +896,8 @@ mod tests {
                 .is_some()
         );
         assert!(KURVST_PACKAGE_ASSETS.get_file("src/impl.typ").is_some());
-        for name in ["ec-layout.wasm", "LICENSE.ec-layout", "LICENSE.clarabel"] {
+        // linnest.wasm compiles Clarabel and NetworkX-derived code.
+        for name in ["LICENSE.clarabel", "LICENSE.networkx"] {
             assert!(
                 !LINNEST_PACKAGE_ASSETS
                     .get_file(name)
@@ -910,9 +917,9 @@ mod tests {
                             "typst.toml"
                                 | "linnest.wasm"
                                 | "kurvst.wasm"
-                                | "ec-layout.wasm"
-                                | "LICENSE.ec-layout"
                                 | "LICENSE.clarabel"
+                                | "LICENSE.networkx"
+                                | "LICENSE"
                         )
                     )
             }));
@@ -981,6 +988,34 @@ mod tests {
                 .join("src/impl/subgraph.typ")
                 .is_file()
         );
+        for (package, name, expected) in [
+            (
+                LINNEST_PACKAGE_DIR,
+                "LICENSE.clarabel",
+                include_bytes!("../../linnest/typst/LICENSE.clarabel").as_slice(),
+            ),
+            (
+                LINNEST_PACKAGE_DIR,
+                "LICENSE.networkx",
+                include_bytes!("../../linnest/typst/LICENSE.networkx").as_slice(),
+            ),
+            (
+                LINNEST_PACKAGE_DIR,
+                "LICENSE",
+                include_bytes!("../../linnest/typst/LICENSE").as_slice(),
+            ),
+            (
+                KURVST_PACKAGE_DIR,
+                "LICENSE",
+                include_bytes!("../../kurvst/typst/LICENSE").as_slice(),
+            ),
+        ] {
+            assert_eq!(
+                fs::read(base.join(DEFAULT_TEMPLATE_SUBDIR).join(package).join(name)).unwrap(),
+                expected,
+                "{package}/{name}"
+            );
+        }
         fs::remove_dir_all(base).unwrap();
     }
 
@@ -1316,7 +1351,18 @@ mod tests {
             .unwrap();
 
         // Drawing supplied geometry must not load the unused EC seed plugin.
-        fs::remove_file(templates.join(LINNEST_PACKAGE_DIR).join("ec-layout.wasm")).unwrap();
+        assert!(
+            !templates
+                .join(LINNEST_PACKAGE_DIR)
+                .join("ec-layout.wasm")
+                .exists()
+        );
+        assert!(
+            !templates
+                .join(LINNEST_PACKAGE_DIR)
+                .join("LICENSE.ec-layout")
+                .exists()
+        );
         let precomputed = templates.join("precomputed-without-ec.typ");
         fs::write(
             &precomputed,

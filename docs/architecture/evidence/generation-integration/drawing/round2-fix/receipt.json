@@ -1,0 +1,67 @@
+{
+  "schema": 1,
+  "date": "2026-10-27",
+  "reviewed_head": "f181870f4423fa6013c0307e4df7cade57eaac38",
+  "fix_change": "pwowvnrptzopqmzmomontywsxomsppss",
+  "bookmark": "generation-drawing-ports",
+  "status": "Registry P2 corrected; awaiting fresh independent Astra review; no integration",
+  "review_response": {
+    "original_license_P2": "CLOSED by Astra round 2; delivered expression remains exactly MIT AND Apache-2.0 AND BSD-3-Clause",
+    "new_registry_P2": "Fixed with dated test-only no-architecture-impact attestation and calculated whole-file digest cb2de3f5d9713ed285244573ecf76acaf59a4b5f",
+    "owner": "gammaloop-draw-style-migration, source docs/architecture/gammaloop-draw-style-migration-example.typ",
+    "attestation_basis": "Inspected complete templates.rs diff from approved prefix 74cebf6c. All production source before #[cfg(test)] is byte-identical. Only tests changed: LICENSE is no longer excluded and delivered MIT/Clarabel/NetworkX license bytes are asserted. No extraction API, destination, callback or runtime architecture change in this file.",
+    "prior_registered_digest": "3dca6f84cadbe237f3beaa7ab05e11cea309cd41",
+    "validation_scope": "Enumerated EVERY registered scope whose path appears in the cumulative drawing diff from 74cebf6c, including templates.rs. All 6 pass. Three affected note titles also pass."
+  },
+  "checks": [
+    {
+      "command": "Pinned Nix Python 3.13.12 and Git: exact owner scope algorithm, dynamically selected cumulative changed paths",
+      "result": "6/6 verified scopes match using UTF-8 whole-file or exact anchor/end-anchor slice and git hash-object --stdin; anchor safety/uniqueness/order verified; 3 note titles match."
+    },
+    {
+      "command": "Pinned Nix Python: parse registry/package TOML; compare delivered package bytes and preserved artifact hashes",
+      "result": "27 delivered files match checkout; all 9 prior artifact hashes match; package metadata SHA256 unchanged at 1d168d083b81937145b85076274a5fb2dce8e94e704c01d90324f3bd5f4ee398; approved license remains exact."
+    },
+    {
+      "command": "Pinned Nix Typst 0.15.1 compile --root . --creation-timestamp 0 docs/architecture/generation-drawing-ports.typ target/drawing-round2-fix/note.pdf",
+      "result": "Passed, exit 0."
+    }
+  ],
+  "code_changes": "None. Only registry comments/digest, existing registered drawing note and additive review evidence change. Runtime/templates.rs, metadata, notices, WASM, SVGs, PDFs and locks are unchanged.",
+  "not_repeated": "No geometry tests, wheel tests, Clippy or WASM/asset rebuild: this is a registry-only correction; prior code/artifact validation remains preserved.",
+  "limitations": [
+    "Fresh independent Astra review required before integration. WP11 is not complete.",
+    "Source38 remains deferred through reviewed source17/18 transplant and remaining prerequisites through port36, followed by joint mark geometry/obsolete Tiptoe replacement, rebuild/inspection and review.",
+    "Full native/Pyodide, restored standalone and external Community final artifact gates remain open. No final wheels claimed."
+  ],
+  "source_sha256": {
+    "docs/developers.toml": "2269b337de453d711fbce07e6f632be71b464832253e523a5519716b2ba04604",
+    "docs/architecture/generation-drawing-ports.typ": "0bf867e62638f5d7109f013b9b2ddd5c78bbc5e7d02d953dcb16e37e064e3cb3"
+  },
+  "evidence_sha256": {
+    "attestation-basis.json": "914e0a57ee1e40a1474ced942f18927033cb9a553c95c62c980cb0b520e8bd5d",
+    "manifest-verification.json": "71b6ccb049cae8fccac953be9da27c287aea04b6143d78c5f81ef60f03a4c9d7",
+    "round2-review.json": "36c6198abdcdddc32836a71c516fad874819c0296c7aeb729e60eb075b3e2351",
+    "scope-validation.json": "670fad53a2c9f71147ea9b852600f89a83bc6e30659ec44a9005723f93e8bad6",
+    "typst.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "retained": [
+    "Task workspace/bookmark for review",
+    "All prior drawing receipts/artifacts and independent target/astra-drawing-round1 and target/astra-drawing-round2 evidence unchanged",
+    "This focused receipt, attestation calculation, exact scope results and copied round2 review provenance",
+    "Existing bundle result link and shared caches untouched"
+  ],
+  "cleanup": "Own round2 fix scratch removed after durable evidence capture. No task-owned processes retained; no secrets loaded or printed.",
+  "nixci_enable": false,
+  "frozen_refs": "Untouched; only generation-drawing-ports updated; no push/publication",
+  "changed_files": [
+    "docs/architecture/evidence/generation-integration/drawing/round2-fix/attestation-basis.json",
+    "docs/architecture/evidence/generation-integration/drawing/round2-fix/manifest-verification.json",
+    "docs/architecture/evidence/generation-integration/drawing/round2-fix/receipt.json",
+    "docs/architecture/evidence/generation-integration/drawing/round2-fix/round2-review.json",
+    "docs/architecture/evidence/generation-integration/drawing/round2-fix/scope-validation.json",
+    "docs/architecture/evidence/generation-integration/drawing/round2-fix/typst.log",
+    "docs/architecture/generation-drawing-ports.typ",
+    "docs/developers.toml"
+  ]
+}

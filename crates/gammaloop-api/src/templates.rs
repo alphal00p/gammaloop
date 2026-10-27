@@ -102,9 +102,29 @@ mod tests {
         assert!(!templates.join("kurvst.wasm").exists());
         assert!(!templates.join("curve.typ").exists());
         for package in [LINNEST_PACKAGE_DIR, KURVST_PACKAGE_DIR] {
-            for excluded in ["docs", "examples", "benches", "README.md", "LICENSE"] {
+            for excluded in ["docs", "examples", "benches", "README.md"] {
                 assert!(!templates.join(package).join(excluded).exists());
             }
+        }
+        for (relative, expected) in [
+            (
+                "crates/linnest/typst/LICENSE",
+                include_bytes!("../../linnest/typst/LICENSE").as_slice(),
+            ),
+            (
+                "crates/linnest/typst/LICENSE.clarabel",
+                include_bytes!("../../linnest/typst/LICENSE.clarabel").as_slice(),
+            ),
+            (
+                "crates/linnest/typst/LICENSE.networkx",
+                include_bytes!("../../linnest/typst/LICENSE.networkx").as_slice(),
+            ),
+            (
+                "crates/kurvst/typst/LICENSE",
+                include_bytes!("../../kurvst/typst/LICENSE").as_slice(),
+            ),
+        ] {
+            assert_eq!(fs::read(templates.join(relative))?, expected, "{relative}");
         }
 
         Assets::extract_justfile(tempdir.path())?;

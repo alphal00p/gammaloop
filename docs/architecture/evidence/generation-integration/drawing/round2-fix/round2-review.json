@@ -1,0 +1,177 @@
+{
+  "review": "Independent Astra ROUND2, read-only",
+  "head": "f181870f4423fa6013c0307e4df7cade57eaac38",
+  "base": "d5862a8e11cf4563efbbb666e7a7062fd8eddef7",
+  "change": "qvzqmytzroomtzxqvkynmqxxwmxvlrlo",
+  "bookmark": "generation-drawing-ports",
+  "changed_files": [
+    "crates/linnest/typst/typst.toml",
+    "docs/architecture/evidence/generation-integration/drawing/round1-fix/bundle.log",
+    "docs/architecture/evidence/generation-integration/drawing/round1-fix/format.log",
+    "docs/architecture/evidence/generation-integration/drawing/round1-fix/note.log",
+    "docs/architecture/evidence/generation-integration/drawing/round1-fix/packaging.log",
+    "docs/architecture/evidence/generation-integration/drawing/round1-fix/payload-verification.json",
+    "docs/architecture/evidence/generation-integration/drawing/round1-fix/prior-payload-rejection.log",
+    "docs/architecture/evidence/generation-integration/drawing/round1-fix/python-format.log",
+    "docs/architecture/evidence/generation-integration/drawing/round1-fix/receipt.json",
+    "docs/architecture/evidence/generation-integration/drawing/round1-fix/round1-review.json",
+    "docs/architecture/evidence/generation-integration/drawing/round1-fix/wasm-check.log",
+    "docs/architecture/generation-drawing-ports.typ",
+    "nix/rust-workspace.nix",
+    "tests/packaging/test_drawing_notices.py"
+  ],
+  "tracked_files_checked_against_head": 50,
+  "receipt_hashes_verified": {
+    "new_sources": 4,
+    "new_evidence": 9,
+    "prior_artifacts": 9,
+    "prior_evidence": 22,
+    "prior_review_logs": 7
+  },
+  "nix_derivation": "/nix/store/qiq9qj3jhs1774b46z54fpn392y1lnax-linnest-wasm-0.1.0.drv",
+  "nix_source": "/nix/store/50chzgp3ff5cmm1bwa8d6b8aa30chs57-source",
+  "nix_output": "/nix/store/fi4nkn8gma6p5dwipzlx2syzs4ls1wib-linnest-wasm-0.1.0",
+  "nix_check_derivation": "/nix/store/cc53pb5hq8063h08kglp9n1sc7axd9zi-linnest-wasm-check.drv",
+  "matching_source_files": 1350,
+  "source_delta": [
+    "crates/linnest/typst/typst.toml"
+  ],
+  "matching_payload_files": 27,
+  "payload_delta": [
+    "templates/crates/linnest/typst/typst.toml"
+  ],
+  "delivered_license": "MIT AND Apache-2.0 AND BSD-3-Clause",
+  "delivered_metadata_sha256": "1d168d083b81937145b85076274a5fb2dce8e94e704c01d90324f3bd5f4ee398",
+  "prior_payload_rejected": true,
+  "corrected_payload_accepted": true,
+  "notices_and_common_selector_match_approved_commit": [
+    "vendor/clarabel/LICENSE.md",
+    "crates/linnest/layout/native/LICENSE.networkx",
+    "crates/linnest/typst/LICENSE.clarabel",
+    "crates/linnest/typst/LICENSE.networkx",
+    "crates/linnest/typst/LICENSE",
+    "crates/kurvst/typst/LICENSE",
+    "examples/notebooks/symbolica-host/licenses/clarabel-LICENSE",
+    "examples/notebooks/symbolica-host/licenses/networkx-LICENSE",
+    "crates/linnest/build_assets.rs"
+  ],
+  "prior_evidence_preserved": true,
+  "deferred_source38_untouched": true,
+  "verified_registry_scopes": [
+    {
+      "note": "generation-drawing-notices",
+      "path": "crates/linnest/build_assets.rs",
+      "digest": "6cec3a4971faa783e0497c89ed9f614443f1117b"
+    },
+    {
+      "note": "nix-crane-cache-reuse",
+      "path": "nix/rust-workspace.nix",
+      "digest": "6ae7769a5fab0c19db4004118a07e14882b6f4af"
+    },
+    {
+      "note": "nix-crane-cache-reuse",
+      "path": "nix/rust-workspace.nix",
+      "digest": "f446dbf3636e9a5f4736fca0fe724a134ab28300"
+    },
+    {
+      "note": "nix-crane-cache-reuse",
+      "path": "nix/rust-workspace.nix",
+      "digest": "311d8dbf20da058cf60c74c651491629d7eb6ce6"
+    },
+    {
+      "note": "nix-crane-cache-reuse",
+      "path": "nix/rust-workspace.nix",
+      "digest": "e70efccc2a78b7ab7b002facfefa375418e590f0"
+    }
+  ],
+  "registry_findings": [
+    {
+      "note": "gammaloop-draw-style-migration",
+      "path": "crates/gammaloop-api/src/templates.rs",
+      "expected": "3dca6f84cadbe237f3beaa7ab05e11cea309cd41",
+      "actual": "cb2de3f5d9713ed285244573ecf76acaf59a4b5f"
+    }
+  ],
+  "transient_nix_evaluation": {
+    "status": "Canceled; superseded by exact-source cached check after packaging fixture cleanup",
+    "derivation": "/nix/store/8mh4g7k911dn7qwxy3vq733vqhyq78l7-linnest-wasm-0.1.0.drv",
+    "extra_temporary_sources": [
+      "target/notice-validation/tmpzofq3xvs/Cargo.lock",
+      "target/notice-validation/tmpzofq3xvs/Cargo.toml",
+      "target/notice-validation/tmpzofq3xvs/pyproject.toml",
+      "target/notice-validation/tmpzofq3xvs/src/lib.rs"
+    ]
+  },
+  "verdict": "REQUEST_CHANGES",
+  "original_P2": {
+    "path": "crates/linnest/typst/typst.toml",
+    "line": 7,
+    "status": "CLOSED",
+    "reason": "Actual delivered metadata has the exact required expression; packaging assertions and Nix payload check cover it; notices unchanged."
+  },
+  "findings": [
+    {
+      "severity": "P2",
+      "blocking": true,
+      "path": "docs/developers.toml",
+      "line": 668,
+      "summary": "Stale drawing migration verified scope blocks documentation validation.",
+      "scope_path": "crates/gammaloop-api/src/templates.rs",
+      "registered_digest": "3dca6f84cadbe237f3beaa7ab05e11cea309cd41",
+      "actual_digest": "cb2de3f5d9713ed285244573ecf76acaf59a4b5f",
+      "origin": "Cumulative original drawing slice; baseline 74cebf6c matched the registered digest, d5862a8e and f181870f have the changed digest. Missed by ROUND1; not introduced by the metadata correction.",
+      "effect": "The non-watch validator in crates/alphal00p-docs-builder/src/lib.rs lines 943-1007 hashes the full file when no end_anchor is specified and bails on mismatch.",
+      "requested_fix": "Record an owner review or test-only no-impact attestation and update the digest; validate every affected scope including templates.rs and refresh the scoped receipt."
+    }
+  ],
+  "validation": [
+    {
+      "command": "nix develop --no-write-lock-file -c python3 tests/packaging/test_drawing_notices.py -v",
+      "result": "4 passed; 31.734 seconds"
+    },
+    {
+      "command": "nix build --no-write-lock-file .#checks.x86_64-linux.linnest-wasm --no-link --cores 2 --max-jobs 1",
+      "result": "Passed; cached exact-source check; no repeat WASM build completed"
+    },
+    {
+      "command": "Independent delivered bundle comparison and TOML parsing",
+      "result": "1350 retained source files and all 27 payload files match checkout; only manifest differs from ROUND1; prior stale payload rejected; exact new payload accepted"
+    },
+    {
+      "command": "Receipt, artifact, prior evidence, approved notice and tracked-file verification",
+      "result": "All hashes and inventories pass; notices/common selector byte-identical to approved 00df0507; 50 affected files/invariants checked against reviewed head"
+    },
+    {
+      "command": "just fmt --check; Nix-store Ruff 0.16.3 format --check tests/packaging/test_drawing_notices.py",
+      "result": "Both passed"
+    },
+    {
+      "command": "typst compile --root . --creation-timestamp 0 docs/architecture/generation-drawing-ports.typ target/astra-drawing-round2/note.pdf",
+      "result": "Passed"
+    },
+    {
+      "command": "Affected registry titles/anchors/digests; independent git hash-object check",
+      "result": "Two note titles and 5 scopes pass; 1 additional affected scope fails (finding above). Full documentation suite was not run."
+    }
+  ],
+  "limits": [
+    "Prior 283 geometry/Clinnet, 19 SVG and runtime/Clippy validations were not rerun; unchanged implementation and artifact hashes retain their applicability.",
+    "No full physics, full documentation suite, production native/Pyodide or external Community builds. Fixture wheel tests certify notice packaging only."
+  ],
+  "future_gates": [
+    "Hold cumulative source15/16 plus approved notices for the scoped registry correction and fresh review.",
+    "Source38 remains deferred until reviewed source17/18 and remaining prerequisites through port36, then replace geometry/remove Tiptoe ownership together, rebuild and inspect assets, and obtain new review. WP11 incomplete.",
+    "Full native/Pyodide wheels, restored standalone license-files metadata/payload validation, and external Community artifact checks remain final integration gates."
+  ],
+  "final_integrity": "Reviewed head/change/bookmark, tracked files, locks and NixCI setting preserved; no fixes or integration.",
+  "review_log_sha256": {
+    "packaging.log": "c382277f0e49b247e7df5f426be3e7efb95fe4de6addc8d334cf09b3824f1dfe",
+    "wasm-check.log": "2f6cfc26813a4050c8d6b2d5a856f618443987cf42fd73948d17ca1a33d7e089",
+    "format.log": "1dadf1b63f3fc19e19b1e9fb9a6c3f7772d8ba250861dcced4346f892ae2fca3",
+    "python-format.log": "fd2299c9f1c6dc869070883e281051bfe93aacf66c1a3b0069f45b4aa410ca50",
+    "note.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "transient-fixture-evaluation.log": "30017d12bce21ac09ecdcb8afa3db5e9b490e3af180983d0ae1444cf59f1e636"
+  },
+  "retained": "ROUND2 logs, independent verifier/provenance and Nix derivation evidence retained in target/astra-drawing-round2 for correction/review; ROUND1 and original evidence untouched; shared caches preserved.",
+  "processes": "All review-owned test/build sessions completed or canceled; no background process retained."
+}

@@ -1,0 +1,8 @@
+{
+  "bundle": "/nix/store/fi4nkn8gma6p5dwipzlx2syzs4ls1wib-linnest-wasm-0.1.0",
+  "delivered_license": "MIT AND Apache-2.0 AND BSD-3-Clause",
+  "metadata_sha256": "1d168d083b81937145b85076274a5fb2dce8e94e704c01d90324f3bd5f4ee398",
+  "prior_artifact_hashes_verified": 9,
+  "delivered_files_matching_checkout": 27,
+  "runtime_templates_byte_identical_to_reviewed_head": true
+}

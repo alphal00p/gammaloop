@@ -12,21 +12,20 @@ Direct Typst, Python rendering and CLI drawings call `graph_impred_seed` in
 `linnest.wasm`: a Rust port of this engine (`crates/linnest/src/ec_seed`) with
 the same request and result protocol, whose own SPQR decomposition replaces
 OGDF. This native engine remains the reference: given its SPQR
-decompositions, the port reproduces its seeds bit for bit. The standalone
-`ec-layout.wasm` plugin imports only the two Typst plugin protocol functions.
+decompositions, the port reproduces its seeds bit for bit. It links the
+GPL-licensed OGDF, so it is only built locally and never distributed.
 
 `build.py` downloads checksum-verified pinned dependencies and builds a native
 JSON-lines executable at `target/ec-planarity-native/ec-spqr`. It needs Python
-3.11+, CMake, and a C++17 compiler. `build.py --wasm` also needs Emscripten and
-Binaryen, and produces `ec-layout.wasm`. Build caches and downloaded sources stay
+3.11+, CMake, and a C++17 compiler. Build caches and downloaded sources stay
 under `target/`. Set `EC_SPQR_BINARY` to override the executable used by the
 Python reference implementation.
 
 == Seed initialization
 
-The WASM `initialize` export accepts JSON with `diagram`, optional `scale`
-(default `2.4`), and optional `external_sides` (default `true`). The native
-executable dispatches to initialization when the request contains `diagram`.
+The executable dispatches to initialization when the request contains
+`diagram`, with optional `scale` (default `2.4`) and optional `external_sides`
+(default `true`).
 The diagram contains native graph topology, external flow and embedding
 constraints; `graph_impred_diagram` prepares it from a Linnest graph snapshot.
 

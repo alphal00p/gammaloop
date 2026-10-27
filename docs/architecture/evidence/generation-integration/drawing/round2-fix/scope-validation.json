@@ -1,0 +1,69 @@
+{
+  "method": "Equivalent exact owner calculation from alphal00p-docs-builder/src/lib.rs: UTF-8 read, unique anchors, full file without end_anchor or [anchor,end_anchor) slice, git hash-object --stdin, exact digest comparison. Scope enumeration is selected from all paths changed since approved drawing prefix, not a hand-picked list.",
+  "scopes": [
+    {
+      "note": "generation-drawing-notices",
+      "path": "crates/linnest/build_assets.rs",
+      "symbol": "embed_typst_packages",
+      "anchor": "pub fn embed_typst_packages(",
+      "end_anchor": null,
+      "digest": "6cec3a4971faa783e0497c89ed9f614443f1117b",
+      "matches": true
+    },
+    {
+      "note": "gammaloop-draw-style-migration",
+      "path": "crates/gammaloop-api/src/templates.rs",
+      "symbol": "gammaloop_api::templates::Assets::extract_templates",
+      "anchor": "pub fn extract_templates<P: AsRef<Path>>",
+      "end_anchor": null,
+      "digest": "cb2de3f5d9713ed285244573ecf76acaf59a4b5f",
+      "matches": true
+    },
+    {
+      "note": "nix-crane-cache-reuse",
+      "path": "nix/rust-workspace.nix",
+      "symbol": "workspace manifest inputs; documentation source inputs are scoped separately",
+      "anchor": "workspaceDependencyManifestFiles =",
+      "end_anchor": "cargoGraphGenerationSrc =",
+      "digest": "6ae7769a5fab0c19db4004118a07e14882b6f4af",
+      "matches": true
+    },
+    {
+      "note": "nix-crane-cache-reuse",
+      "path": "nix/rust-workspace.nix",
+      "symbol": "workspace package source ownership",
+      "anchor": "documentationCatalogAnnotatedItemSourcePaths =",
+      "end_anchor": "workspacePackageExtraSourceRootsForSourcePackages =",
+      "digest": "f446dbf3636e9a5f4736fca0fe724a134ab28300",
+      "matches": true
+    },
+    {
+      "note": "nix-crane-cache-reuse",
+      "path": "nix/rust-workspace.nix",
+      "symbol": "nextestPackageGroups documentation runtime tools",
+      "anchor": "nextestPackageGroups =",
+      "end_anchor": "sortedUnique =",
+      "digest": "311d8dbf20da058cf60c74c651491629d7eb6ce6",
+      "matches": true
+    },
+    {
+      "note": "nix-crane-cache-reuse",
+      "path": "nix/rust-workspace.nix",
+      "symbol": "nextestRuntimeSrcFor",
+      "anchor": "nextestRuntimeSrcFor =",
+      "end_anchor": "nextestFeatureArgsFor =",
+      "digest": "e70efccc2a78b7ab7b002facfefa375418e590f0",
+      "matches": true
+    }
+  ],
+  "titles": [
+    "generation-drawing-ports",
+    "generation-drawing-notices",
+    "gammaloop-draw-style-migration"
+  ],
+  "tools": {
+    "python": "/nix/store/0r6k8xa2kgqyp3r4v2w7yrb80ma2iawm-python3-3.13.12/bin/python3",
+    "git": "/nix/store/8yjpgadavqdwphcd2kw4dfvxmgdp5sb3-git-2.55.0/bin/git",
+    "typst": "/nix/store/5f1a3n27fy3y8pf6snxr2sbzwhk9brr2-typst-0.15.1-env/bin/typst"
+  }
+}

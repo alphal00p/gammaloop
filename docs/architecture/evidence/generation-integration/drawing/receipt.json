@@ -1,0 +1,396 @@
+{
+  "schema": 1,
+  "date": "2026-10-27",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports",
+  "bookmark": "generation-drawing-ports",
+  "status": "held for new independent Astra review; no integration or publication",
+  "base": "74cebf6c8f673f5849b26afe55fa98035d5eba1d",
+  "implementation_commit": "e59f02f7fba73bf1608486033f9cac5c7079733a",
+  "implementation_change": "snvmvumxyuywtsqyxymqlwtkortkwntt",
+  "evidence_change": "zplsnmrkssnmotmonrmoxxlotnylxuzm",
+  "source_mapping": [
+    {
+      "source": "00df0507ded2b2ddce45b38e58311a0f8ea120c1",
+      "disposition": "approved prerequisite replayed and reconciled",
+      "new_commit": "e59f02f7fba73bf1608486033f9cac5c7079733a",
+      "details": "Exact license texts and common selector retained; original source workspace/bookmark unchanged. Docs now describe plugin removal and have a required verified code scope."
+    },
+    {
+      "source_order": 15,
+      "source": "711f9440b323166cbba92df4bea632b20121aa06",
+      "disposition": "reconciled",
+      "new_commit": "e59f02f7fba73bf1608486033f9cac5c7079733a",
+      "details": "Unused GPL ec-layout plugin/build/artifact removed, native seed and local reference engine retained; embedding, sync, Nix filters, model style and render checks reconciled with approved notices."
+    },
+    {
+      "source_order": 16,
+      "source": "9e737a18274991e8dc0542f777a6063acaf72fe8",
+      "disposition": "reconciled",
+      "new_commit": "e59f02f7fba73bf1608486033f9cac5c7079733a",
+      "details": "Contact-first costs and contained-arrow pruning ported, regression assertions preserved; named contact policy/debug support/imports follow Rust policy. WASM and actual affected renders rebuilt, no historical output copied."
+    },
+    {
+      "source_order": 38,
+      "source": "15dd7e1b188dad112d7887bdc6d769125b2697a1",
+      "disposition": "deferred: missing prerequisite, no partial engine port",
+      "new_commit": null,
+      "details": "Base lacks shared Kurvst marks.rs, mark.typ, exports and Tiptoe notices. The source17/18 net resolved transplant introduces these and the SVG consumers; importing that unit is explicitly outside this slice. Apply source38 after that prerequisite and then rebuild/inspect its mark outputs and remove only obsolete Tiptoe notices."
+    }
+  ],
+  "implementation_changed_files": [
+    {
+      "status": "M",
+      "path": "assets/embedded/drawing/justfile"
+    },
+    {
+      "status": "M",
+      "path": "crates/clinnet/CHANGELOG.typ"
+    },
+    {
+      "status": "M",
+      "path": "crates/clinnet/build.rs"
+    },
+    {
+      "status": "M",
+      "path": "crates/clinnet/src/lib.rs"
+    },
+    {
+      "status": "M",
+      "path": "crates/gammaloop-api/src/templates.rs"
+    },
+    {
+      "status": "M",
+      "path": "crates/gammalooprs/src/model/canonical.rs"
+    },
+    {
+      "status": "M",
+      "path": "crates/kurvst/typst/kurvst.wasm"
+    },
+    {
+      "status": "M",
+      "path": "crates/linnest/build_assets.rs"
+    },
+    {
+      "status": "M",
+      "path": "crates/linnest/layout/native/CMakeLists.txt"
+    },
+    {
+      "status": "M",
+      "path": "crates/linnest/layout/native/build.py"
+    },
+    {
+      "status": "M",
+      "path": "crates/linnest/layout/native/embedding.hpp"
+    },
+    {
+      "status": "D",
+      "path": "crates/linnest/layout/native/plugin.cpp"
+    },
+    {
+      "status": "M",
+      "path": "crates/linnest/layout/native/protocol.typ"
+    },
+    {
+      "status": "M",
+      "path": "crates/linnest/layout/native/test_wasm.py"
+    },
+    {
+      "status": "M",
+      "path": "crates/linnest/src/ec_seed/mod.rs"
+    },
+    {
+      "status": "M",
+      "path": "crates/linnest/src/label_placement.rs"
+    },
+    {
+      "status": "D",
+      "path": "crates/linnest/typst/LICENSE.ec-layout"
+    },
+    {
+      "status": "A",
+      "path": "crates/linnest/typst/LICENSE.networkx"
+    },
+    {
+      "status": "M",
+      "path": "crates/linnest/typst/docs/manual.pdf"
+    },
+    {
+      "status": "M",
+      "path": "crates/linnest/typst/docs/manual.typ"
+    },
+    {
+      "status": "D",
+      "path": "crates/linnest/typst/ec-layout.wasm"
+    },
+    {
+      "status": "M",
+      "path": "crates/linnest/typst/linnest.wasm"
+    },
+    {
+      "status": "M",
+      "path": "crates/linnest/typst/typst.toml"
+    },
+    {
+      "status": "A",
+      "path": "docs/architecture/evidence/generation-drawing-notices/receipt.json"
+    },
+    {
+      "status": "A",
+      "path": "docs/architecture/generation-drawing-notices.typ"
+    },
+    {
+      "status": "A",
+      "path": "docs/architecture/generation-drawing-ports.typ"
+    },
+    {
+      "status": "M",
+      "path": "docs/assets/graphs/portal-graph-epem-ttbar-cut-dark.svg"
+    },
+    {
+      "status": "M",
+      "path": "docs/assets/graphs/portal-graph-epem-ttbar-cut-light.svg"
+    },
+    {
+      "status": "M",
+      "path": "docs/developers.toml"
+    },
+    {
+      "status": "M",
+      "path": "docs/products/gammaloop/content/changelog.typ"
+    },
+    {
+      "status": "A",
+      "path": "examples/notebooks/symbolica-host/licenses/clarabel-LICENSE"
+    },
+    {
+      "status": "A",
+      "path": "examples/notebooks/symbolica-host/licenses/networkx-LICENSE"
+    },
+    {
+      "status": "M",
+      "path": "examples/notebooks/symbolica-host/pyproject.toml"
+    },
+    {
+      "status": "M",
+      "path": "just/drawing.just"
+    },
+    {
+      "status": "M",
+      "path": "nix/rust-workspace.nix"
+    },
+    {
+      "status": "M",
+      "path": "pyproject.toml"
+    },
+    {
+      "status": "A",
+      "path": "tests/packaging/test_drawing_notices.py"
+    }
+  ],
+  "validation": [
+    {
+      "command": "cargo nextest run --locked -p kurvst -p linnest --cargo-profile dev-optim --no-fail-fast",
+      "result": "245 passed; 1 fixture-rewriting test skipped",
+      "log": "geometry-layout.log",
+      "exit_code": 0
+    },
+    {
+      "command": "cargo nextest run --locked -p clinnet --cargo-profile dev-optim --no-fail-fast",
+      "result": "38 passed; 0 skipped; includes production embedding, staging and public Typst rendering",
+      "log": "clinnet.log",
+      "exit_code": 0
+    },
+    {
+      "command": "cargo nextest run --locked -p clinnet --lib --cargo-profile dev-optim -E \"test(embedded_packages_include_nested_sources) or test(default_staging_preserves_user_template_bundle)\"",
+      "result": "2 passed against final rebuilt bundles; 12 unrelated lib tests filtered out",
+      "log": "clinnet-notices-final.log",
+      "exit_code": 0
+    },
+    {
+      "command": "python3 tests/packaging/test_drawing_notices.py -v",
+      "result": "4 passed against final assets; fixtures verify packaging, not full runtime wheels",
+      "log": "packaging-final.log",
+      "exit_code": 0
+    },
+    {
+      "command": "cargo clippy --locked -p kurvst -p linnest -p clinnet --all-targets --profile dev-optim -- --deny warnings",
+      "result": "passed; unchanged vendored Clarabel emits 2 lifetime-syntax warnings as a dependency",
+      "log": "clippy.log",
+      "exit_code": 0
+    },
+    {
+      "command": "just fmt --check",
+      "result": "passed",
+      "log": "workspace-format.log",
+      "exit_code": 0
+    },
+    {
+      "command": "rustfmt --check --config skip_children=true, using edition 2021 for Linnest/API and 2024 for Clinnet/GammaLoop changed files",
+      "result": "passed",
+      "log": "changed-format.log",
+      "exit_code": 0
+    },
+    {
+      "command": "ruff format --check tests/packaging/test_drawing_notices.py crates/linnest/layout/native/build.py crates/linnest/layout/native/test_wasm.py",
+      "result": "3 files passed; Ruff 0.16.3 from existing Nix store because dev shell omits ruff",
+      "log": "python-format.log",
+      "exit_code": 0
+    },
+    {
+      "command": "just sync-drawing-assets",
+      "result": "passed; canonical Nix WASM build and installed byte comparisons",
+      "log": "assets-final.log",
+      "exit_code": 0
+    },
+    {
+      "command": "nix build .#checks.x86_64-linux.linnest-wasm --out-link target/drawing-validation/wasm-check",
+      "result": "passed; bundle byte checks, all notices, wasm-tools validation",
+      "log": "wasm-check.log",
+      "exit_code": 0
+    },
+    {
+      "command": "nix build .#linnest-wasm --rebuild --no-link --cores 2 --max-jobs 1",
+      "result": "passed; independent rebuild compared equal by Nix",
+      "log": "wasm-reproducibility.log",
+      "exit_code": 0
+    },
+    {
+      "command": "just docs-svg-assets",
+      "result": "passed; all 34 canonical website SVG outputs regenerated, only the two expected epem-ttbar-cut files differ",
+      "log": "svg-assets.log",
+      "exit_code": 0
+    },
+    {
+      "command": "scripts/render-docs-svg-assets.sh target/drawing-validation/reproduced; cmp every SVG against installed output",
+      "result": "34/34 byte-identical",
+      "log": "svg-reproducibility.log",
+      "exit_code": 0
+    },
+    {
+      "command": "python3 crates/linnest/layout/native/test_wasm.py -v",
+      "result": "3 passed; actual WASM runtime, seed pins/physical carriers, explicit anchors, carrier invalidation",
+      "log": "typst-layout.log",
+      "exit_code": 0
+    },
+    {
+      "command": "typst compile --features html --root . --creation-timestamp 0 crates/linnest/typst/docs/manual.typ crates/linnest/typst/docs/manual.pdf",
+      "result": "passed",
+      "log": "manual-with-html.log",
+      "exit_code": 0
+    },
+    {
+      "command": "repeat manual compile to target/drawing-validation/manual-reproduced.pdf and cmp",
+      "result": "byte-identical",
+      "log": "manual-reproducibility.log",
+      "exit_code": 0
+    },
+    {
+      "command": "typst compile --root . --creation-timestamp 0 each drawing architecture note",
+      "result": "both passed",
+      "log": "notes.log",
+      "exit_code": 0
+    }
+  ],
+  "corrected_invocations": [
+    {
+      "command": "typst compile without --features html for Linnest manual",
+      "exit_code": 1,
+      "log": "manual.log",
+      "reason": "Existing html.frame at line 51 is also present in the base; the required HTML feature corrected the invocation without changing the manual examples."
+    }
+  ],
+  "manual_inspection": {
+    "artifacts": [
+      "epem-ttbar-cut.png",
+      "epem-ttbar-cut-dark.png"
+    ],
+    "result": "Viewed actual renders in both themes; labels and existing arrowheads remain legible with no obvious new text contacts. No source38 geometry exists on this base, so this does not certify its marks."
+  },
+  "notices": {
+    "common_selector": "byte-identical to approved 00df0507 build_assets.rs",
+    "copy_checks": "All Clarabel and NetworkX delivered texts match their authoritative vendor/native sources byte-for-byte. No notice from a retained dependency was removed."
+  },
+  "build": {
+    "nix_wasm_output": "/nix/store/dqnks5k3dmjqchy0cg3dq34d7k56f205-linnest-wasm-0.1.0",
+    "jobs": 2,
+    "nextest_threads": 2,
+    "license": "preserved exported value or silently loaded user configuration; never printed or committed",
+    "nixci_enable": false,
+    "locks": "Cargo.lock and flake.lock unchanged; Symbolica kernel 1a1829b1f3d0a88b53b44085b3b9f34ef77945b3 retained",
+    "policy": "Modified Rust reviewed against current design/import/precision rules; drawing geometry is an intentional f64 boundary. No new factorization/physics path or policy departure."
+  },
+  "artifact_sha256": {
+    "crates/linnest/typst/linnest.wasm": "95bf0dc606a6f0da3b008213c12ee780a1c7d8c5b0841b9d6a040ec385380cb2",
+    "crates/kurvst/typst/kurvst.wasm": "be52a473a0dbbd4e95c54e32b025a134dd45062aa2e76a1a2094a13df8286192",
+    "crates/linnest/typst/docs/manual.pdf": "c7bb1fd94f3b19c91da689efc3c77992a54d01436753290aab888de27b24d26e",
+    "docs/assets/graphs/portal-graph-epem-ttbar-cut-dark.svg": "92b0861e2c2537d0acaaf885ed2b199893d39603447d5e73702d6943b81a7996",
+    "docs/assets/graphs/portal-graph-epem-ttbar-cut-light.svg": "5bb41acfb69ae6e02d0e541c85f5961c103bca403cec93fada92f5b18852a50a",
+    "crates/linnest/typst/LICENSE.clarabel": "6e2f382771f8aab58e4868ddd0afe0c2fefe6b54f9681493a9c3d0f32906cfe1",
+    "crates/linnest/typst/LICENSE.networkx": "6025f323ea29dc2f0ee0abd9523bf910186f55b0e148e6ebf646c55566278e2e",
+    "examples/notebooks/symbolica-host/licenses/clarabel-LICENSE": "6e2f382771f8aab58e4868ddd0afe0c2fefe6b54f9681493a9c3d0f32906cfe1",
+    "examples/notebooks/symbolica-host/licenses/networkx-LICENSE": "6025f323ea29dc2f0ee0abd9523bf910186f55b0e148e6ebf646c55566278e2e"
+  },
+  "limitations": [
+    "Source38 awaits the staged shared-mark-engine prerequisite and independent review; do not mark it integrated.",
+    "Standalone linnet-py wheel packaging is absent on this base. When restored, require license-files = [\"LICENSE\", \"licenses/*\"] plus Clarabel/NetworkX payload and metadata checks.",
+    "Full native and Pyodide host runtime wheels and external Community package notices remain final-integration checks; fixture wheels are not runtime certification.",
+    "No full physics, full documentation publication suite, full API crate Clippy/build or external artifact check was run in this bounded drawing slice. API embedding/extraction is compiled and exercised by the packaging fixture.",
+    "Solver replacement, kkumutpy, particle(momentum), staged/gallery API ports, publication and historical cleanup remain out of scope."
+  ],
+  "retained": [
+    "Own JJ workspace and generation-drawing-ports bookmark for independent review/continuation",
+    "Implementation and evidence commits, exact generated assets, concise Typst note, these logs/receipts and actual-render PNGs",
+    "Nix output link result for exact rebuilt bundles; useful compiled build caches and all shared caches preserved"
+  ],
+  "processes": "All task-owned build/test commands completed; no background server or watcher retained",
+  "evidence_files": [
+    "docs/architecture/evidence/generation-integration/drawing/assets-final.log",
+    "docs/architecture/evidence/generation-integration/drawing/changed-format.log",
+    "docs/architecture/evidence/generation-integration/drawing/clinnet-notices-final.log",
+    "docs/architecture/evidence/generation-integration/drawing/clinnet.log",
+    "docs/architecture/evidence/generation-integration/drawing/clippy.log",
+    "docs/architecture/evidence/generation-integration/drawing/epem-ttbar-cut-dark.png",
+    "docs/architecture/evidence/generation-integration/drawing/epem-ttbar-cut.png",
+    "docs/architecture/evidence/generation-integration/drawing/geometry-layout.log",
+    "docs/architecture/evidence/generation-integration/drawing/manual-reproducibility.log",
+    "docs/architecture/evidence/generation-integration/drawing/manual-with-html.log",
+    "docs/architecture/evidence/generation-integration/drawing/manual.log",
+    "docs/architecture/evidence/generation-integration/drawing/notes.log",
+    "docs/architecture/evidence/generation-integration/drawing/packaging-final.log",
+    "docs/architecture/evidence/generation-integration/drawing/python-format.log",
+    "docs/architecture/evidence/generation-integration/drawing/render-dark.log",
+    "docs/architecture/evidence/generation-integration/drawing/render-inspection.log",
+    "docs/architecture/evidence/generation-integration/drawing/svg-assets.log",
+    "docs/architecture/evidence/generation-integration/drawing/svg-reproducibility.log",
+    "docs/architecture/evidence/generation-integration/drawing/typst-layout.log",
+    "docs/architecture/evidence/generation-integration/drawing/wasm-check.log",
+    "docs/architecture/evidence/generation-integration/drawing/wasm-reproducibility.log",
+    "docs/architecture/evidence/generation-integration/drawing/workspace-format.log",
+    "docs/architecture/evidence/generation-integration/drawing/receipt.json"
+  ],
+  "evidence_sha256": {
+    "assets-final.log": "e1105a3c786f85b585987e52090a8ce28409ce9bd6f917c36bef78187566d704",
+    "changed-format.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "clinnet-notices-final.log": "96fa4a1440efd3ff91530029e5632271d5c79eecad45f3d84ea52db791788686",
+    "clinnet.log": "c6a3f6098ec8e31ff0775100b0cfc2aa983ec2f912c108ef395c56da17eb5073",
+    "clippy.log": "b45a2c41dc433139cadc265abf915635f3b1143746ad2fca1344d41bc484e8ea",
+    "epem-ttbar-cut-dark.png": "ebc7e03e99ba50aba945583ba6c0127c6bb7a3247c90c87e3ec0f02e66861f8a",
+    "epem-ttbar-cut.png": "e57bcb44924be6e9fc5a97d3a0cc059af1e160f269346fd1c4b4b70164652411",
+    "geometry-layout.log": "5e28bc14af22557117b3fe7d486403e2ad8f9bf0d3934de0e5b91d29452db018",
+    "manual-reproducibility.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "manual-with-html.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "manual.log": "b17bc01e299b0f4c41cb82cc2dfd4b47816298c30173b28a4093a54380953c41",
+    "notes.log": "1fd05347da07ab08f2f1095479509f5752b9a512483221ff3671a2d0a50d8a77",
+    "packaging-final.log": "aa5d6f4235f5160f00eeacaa90d0c7fa472fd0aea4c70c4ad73abddee097b0a1",
+    "python-format.log": "eee76f865de5a9f2456950f710ae5d5f9b5bd0ea02aa54f614c5eed6642a0bfd",
+    "render-dark.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "render-inspection.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "svg-assets.log": "3757b81634c5214999d42eb1e2fed267cce6f6e2bcbdc138d6ee6210ae5e3913",
+    "svg-reproducibility.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "typst-layout.log": "5c43b28884261645f9abd239e56ede1c4e8e5aad6d7dd8ce57a693957166b21f",
+    "wasm-check.log": "f55a8ec49d682151174b76c6358b512483f82f4435174334372088deaaf66da1",
+    "wasm-reproducibility.log": "bb41f9fd54b23d17e2b349c214442816501c4f968903bb8748fe232644bf0f5c",
+    "workspace-format.log": "1dadf1b63f3fc19e19b1e9fb9a6c3f7772d8ba250861dcced4346f892ae2fca3"
+  },
+  "cleanup": "Removed task-owned staging patches/rejects, exported-environment/license-loading helpers, duplicate scratch renders/logs and packaging temporary fixtures after archiving useful review evidence. No shared cache, donor, main or other task workspace was changed."
+}

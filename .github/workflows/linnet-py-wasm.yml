@@ -20,6 +20,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check source drawing notice packaging regressions
+        run: python3 tests/packaging/test_drawing_notices.py -v
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.98.1
