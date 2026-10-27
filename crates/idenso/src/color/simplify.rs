@@ -1,3 +1,4 @@
+use crate::representations::COLOR_REPRESENTATIONS;
 use itertools::Itertools;
 use std::cell::{Cell, RefCell};
 use std::collections::VecDeque;
@@ -194,12 +195,7 @@ impl ColorSimplifySettings {
         if let Some(region) = observed.region(value) {
             return region.identity_candidates() & COLOR != 0;
         }
-        TensorCollectFilter::Reps([
-            ColorFundamental {}.into(),
-            ColorAdjoint {}.into(),
-            ColorSextet {}.into(),
-        ])
-        .matches(value)
+        TensorCollectFilter::Reps(*COLOR_REPRESENTATIONS).matches(value)
     }
 }
 
@@ -255,11 +251,7 @@ impl SymbolicTensor<PartialStructure> {
                 // colour connections are prerequisites of this identity;
                 // the shared contractor preserves the other representations.
                 let contraction = ContractSettings {
-                    representations: Some(&[
-                        ColorFundamental {}.into(),
-                        ColorAdjoint {}.into(),
-                        ColorSextet {}.into(),
-                    ]),
+                    representations: Some(&*COLOR_REPRESENTATIONS),
                     collect_chains: false,
                     collect_traces: false,
                     ..Default::default()
@@ -4344,13 +4336,8 @@ fn atom_contains_fundamental_line(expr: AtomView<'_>) -> bool {
 fn color_node_search(expr: AtomView<'_>, skip_invariants: bool) -> bool {
     let mut slots = SlotMatcher::default();
     let mut selected = false;
-    // Converting a representation takes spenso's global registry lock, so
-    // build the filter once per search rather than once per visited function.
-    let colour = TensorCollectFilter::Reps([
-        ColorAdjoint {}.into(),
-        ColorFundamental {}.into(),
-        ColorSextet {}.into(),
-    ]);
+    // Reuse the representation owner's identities for each search.
+    let colour = TensorCollectFilter::Reps(*COLOR_REPRESENTATIONS);
     expr.visitor(&mut |node| {
         if selected || !matches!(slots.classify(node), SlotMatch::Other) {
             return false;

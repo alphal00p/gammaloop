@@ -1,14 +1,24 @@
-use spenso::{
-    network::{library::symbolic::ETS, tags::SPENSO_TAG},
-    structure::{
-        abstract_index::AIND_SYMBOLS,
-        representation::{Euclidean, Lorentz, Minkowski, RepName},
-    },
-};
+use std::sync::LazyLock;
+
+use spenso::network::library::symbolic::ETS;
+use spenso::network::tags::SPENSO_TAG;
+use spenso::structure::abstract_index::AIND_SYMBOLS;
+use spenso::structure::representation::{Euclidean, LibraryRep, Lorentz, Minkowski, RepName};
 use spenso_macros::SimpleRepresentation;
 use symbolica::atom::Atom;
 
-use super::{color::CS, dirac::AGS, rep_symbols::RS};
+use crate::color::CS;
+use crate::dirac::AGS;
+use crate::rep_symbols::RS;
+
+/// Representations whose identities are owned by the colour algebra.
+pub(crate) static COLOR_REPRESENTATIONS: LazyLock<[LibraryRep; 3]> = LazyLock::new(|| {
+    [
+        ColorFundamental {}.into(),
+        ColorAdjoint {}.into(),
+        ColorSextet {}.into(),
+    ]
+});
 
 #[rustfmt::skip]
 #[derive(SimpleRepresentation)]

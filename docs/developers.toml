@@ -829,7 +829,9 @@ anchor = "pub fn initialize() {"
 # initialization still registers the same representations.
 # Reviewed 2026-09-29: the retired metric-rewrite dummy symbol is no longer
 # initialized; public representation and identity symbol ownership is unchanged.
-digest = "894b3ff3a258e79254b687b0d1d6d4229ddf2daa"
+# Integration review intent: preserve authoritative metadata and the current owner;
+# scoped source reconciliation and regression results are recorded in WP3 units03-07.
+digest = "08709ccab3fc16aefd7a2dde044d4ee4e1455b23"
 
 [[section.note.scope]]
 path = "crates/idenso/src/lib.rs"
@@ -997,7 +999,9 @@ anchor = "pub(crate) struct DomainObservations {"
 # callback-sensitive validation. The note distinguishes admitted facts from explicit
 # component execution.
 # Reviewed 2026-10-16: The architecture records completed observation sharing during the initial walk while every occurrence is scanned and counted.
-digest = "27c32f90af7aeed625ec0def5ca8f727dd7e3477"
+# Integration review intent: preserve authoritative metadata and the current owner;
+# scoped source reconciliation and regression results are recorded in WP3 units03-07.
+digest = "93939c57f0d943d4f7cedb9e0dcabf1f6cce848c"
 
 
 [[section.note.scope]]
@@ -1043,7 +1047,9 @@ anchor = "    fn simplify_product("
 # captured summand dummies; metrics and disabled traces are color algebra as before
 # the retained-component change, and row prerequisites follow the planner's status rule.
 # Reviewed 2026-10-23: Certified color rows and final weights use the shared collector; external metrics certify terminal rows, metric-only sums remain arithmetic, and local facts are cleared before planner publication.
-digest = "34dfbdb59da43b47aa9966b4ae168452ddaa554d"
+# Integration review intent: preserve authoritative metadata and the current owner;
+# scoped source reconciliation and regression results are recorded in WP3 units03-07.
+digest = "bb23f00b2ef8aa04b79c3dfd4eb7ca1af690c198"
 
 [[section.note.scope]]
 path = "crates/idenso/src/tensor/collection/collected.rs"
@@ -1733,7 +1739,9 @@ symbol = "DomainObservations::finish_observation"
 anchor = "fn finish_observation("
 # Reviewed 2026-10-16: completed duplicate scopes share immutable observations;
 # every occurrence remains inspected and counted. Massif and RSS evidence is recorded.
-digest = "27c32f90af7aeed625ec0def5ca8f727dd7e3477"
+# Integration review intent: preserve authoritative metadata and the current owner;
+# scoped source reconciliation and regression results are recorded in WP3 units03-07.
+digest = "93939c57f0d943d4f7cedb9e0dcabf1f6cce848c"
 
 [[section.note.scope]]
 path = "crates/feynkit-generator/src/grouping.rs"
