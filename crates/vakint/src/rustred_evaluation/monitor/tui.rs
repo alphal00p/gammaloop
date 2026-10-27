@@ -447,7 +447,7 @@ mod tests {
             "usable / unused",
             "MemTotal",
             "sample age",
-            "Full symbolic expression size",
+            "Caller Atom bytes / stored summands",
             "unknown",
             "Current canonical R / A / D",
         ] {

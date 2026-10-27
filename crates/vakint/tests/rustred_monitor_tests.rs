@@ -101,7 +101,13 @@ fn ordinary_one_loop_monitor_defaults_are_off_and_path_alone_is_observational() 
         engine.evaluate_with_monitor(&settings, input.as_view(), &options)?,
         reference
     );
-    assert!(latest(&path, "succeeded")?.get("stale").is_none());
+    let latest = latest(&path, "succeeded")?;
+    assert!(latest.get("stale").is_none());
+    let size = &latest["monitor"]["caller_expression"];
+    assert_eq!(size["phase"], "evaluation_output");
+    assert_eq!(size["encoded_bytes"], reference.as_view().get_byte_size());
+    assert_eq!(size["stored_summands"], reference.nterms());
+    assert!(latest["monitor"]["stored_symbolic_state"].is_null());
     assert_eq!(
         fs::read_dir(directory.path())?
             .map(|entry| entry.map(|entry| entry.path()))
@@ -224,6 +230,17 @@ fn five_loop_monitor_preserves_full_results_and_final_substitution_errors() -> R
     );
     let request = latest(&path, "succeeded")?;
     assert_eq!(request["core"]["status"], "succeeded");
+    assert_eq!(request["stored_state"]["unstarted_roots"], 0);
+    assert_eq!(request["stored_state"]["deferred_rule_maps"], 0);
+    assert_eq!(
+        request["stored_state"]["deferred_child_integral_occurrences"],
+        0
+    );
+    assert!(request["stored_state"]["collected_output_integrals"].is_u64());
+    assert_eq!(
+        request["monitor"]["caller_expression"]["encoded_bytes"],
+        ordinary.as_view().get_byte_size()
+    );
 
     let reference = engine.evaluate_rustred_symbolic(&settings, fixture.cancelled.as_view())?;
     let observed = engine.evaluate_rustred_symbolic_with_monitor(

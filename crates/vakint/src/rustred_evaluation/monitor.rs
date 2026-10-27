@@ -1,5 +1,6 @@
 //! Per-call presentation of native progress; never a reduction or cache owner.
 
+use rustred::solver::CandidateRoutedStoredState;
 use std::{
     collections::VecDeque,
     io::{self, Write},
@@ -207,6 +208,24 @@ pub(super) struct DisplaySnapshot {
     pub resources: ResourceUsage,
     pub resource_sample_at: Option<Duration>,
     pub native_observed_at: Option<Duration>,
+    pub stored_state: Option<StoredStateSample>,
+    pub caller_expression: Option<CallerExpressionSample>,
+}
+
+/// Separate owner scopes, never a globally combined algebraic expression.
+#[derive(Clone, Debug)]
+pub(super) struct StoredStateSample {
+    pub counts: CandidateRoutedStoredState,
+    pub family_fingerprint: String,
+    pub sampled_at: Duration,
+}
+
+#[derive(Clone, Debug)]
+pub(super) struct CallerExpressionSample {
+    pub encoded_bytes: usize,
+    pub stored_summands: Option<usize>,
+    pub phase: String,
+    pub sampled_at: Duration,
 }
 
 /// OS observations, independent of native progress or coefficient payloads.
@@ -357,6 +376,22 @@ impl MonitorState {
             "phase": self.latest.phase,
             "status": format!("{:?}", live.status),
             "resources": self.live_resources(now),
+            "stored_symbolic_state": self.latest.stored_state.as_ref().map(|sample| serde_json::json!({
+                "scope": "native stored partitions; overlapping occurrences, not a global expression",
+                "family_fingerprint": sample.family_fingerprint,
+                "sample_age_seconds": now.saturating_sub(sample.sampled_at).as_secs_f64(),
+                "unstarted_roots": sample.counts.unstarted_roots,
+                "deferred_rule_maps": sample.counts.deferred_rule_maps,
+                "deferred_child_integral_occurrences": sample.counts.deferred_child_integral_occurrences,
+                "collected_output_integrals": sample.counts.collected_output_integrals,
+            })),
+            "caller_expression": self.latest.caller_expression.as_ref().map(|sample| serde_json::json!({
+                "scope": "materialized caller Atom; encoded bytes exclude symbol metadata",
+                "phase": sample.phase,
+                "encoded_bytes": sample.encoded_bytes,
+                "stored_summands": sample.stored_summands,
+                "sample_age_seconds": now.saturating_sub(sample.sampled_at).as_secs_f64(),
+            })),
             "estimates": live.estimates,
             "view": self.view(now),
         })
@@ -505,10 +540,7 @@ impl MonitorState {
             ),
         ];
         complexity.extend(snapshot.complexity.iter().cloned());
-        complexity.push((
-            "Full symbolic expression size".into(),
-            "unknown / never formatted for monitoring".into(),
-        ));
+        complexity.extend(self.symbolic_state_rows(now));
         let resources = self.live_resources(now);
         let mut cache = vec![
             (
@@ -652,6 +684,53 @@ impl MonitorState {
             path: snapshot.path.clone(),
             events: snapshot.events.clone(),
         }
+    }
+
+    fn symbolic_state_rows(&self, now: Duration) -> Vec<(String, String)> {
+        let count = |value: Option<usize>| {
+            value.map_or_else(|| "unknown".into(), |value| value.to_string())
+        };
+        let caller = self.latest.caller_expression.as_ref();
+        let native = self.latest.stored_state.as_ref();
+        vec![
+            (
+                "Caller Atom bytes / stored summands".into(),
+                caller.map_or_else(
+                    || "unobserved".into(),
+                    |sample| format!("{} / {} · {} · age {}", sample.encoded_bytes,
+                        count(sample.stored_summands), sample.phase,
+                        seconds(now.saturating_sub(sample.sampled_at))),
+                ),
+            ),
+            (
+                "Native unstarted roots / output keys".into(),
+                native.map_or_else(
+                    || "unobserved".into(),
+                    |sample| format!("{} / {}", count(sample.counts.unstarted_roots),
+                        count(sample.counts.collected_output_integrals)),
+                ),
+            ),
+            (
+                "Native deferred maps / child occurrences".into(),
+                native.map_or_else(
+                    || "unobserved".into(),
+                    |sample| format!("{} / {}", count(sample.counts.deferred_rule_maps),
+                        count(sample.counts.deferred_child_integral_occurrences)),
+                ),
+            ),
+            (
+                "Stored-state scope / sample age".into(),
+                native.map_or_else(
+                    || "no native stored-state sample".into(),
+                    |sample| format!("{} · {}", sample.family_fingerprint,
+                        seconds(now.saturating_sub(sample.sampled_at))),
+                ),
+            ),
+            (
+                "Symbolic size conventions".into(),
+                "Stored partitions overlap; no combined global expression. Atom bytes exclude symbol metadata; Native coefficient bytes are clone bounds.".into(),
+            ),
+        ]
     }
 
     fn estimates(&self, age: Duration) -> Vec<(String, String)> {

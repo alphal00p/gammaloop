@@ -264,6 +264,7 @@ impl Vakint {
             MonitorContext::native_phase(
                 observation.as_deref_mut(),
                 "saved_application_preparation",
+                None,
             );
             return self.saved_application(settings)?.evaluate(
                 settings,
@@ -272,7 +273,7 @@ impl Vakint {
                 observation.as_deref_mut(),
             );
         }
-        MonitorContext::native_phase(observation, "lower_loop_reduction_unobserved");
+        MonitorContext::native_phase(observation, "lower_loop_reduction_unobserved", None);
         if integral_specs.canonical_topology.get_integral().n_loops == 4 {
             return four_loop::evaluate(self, settings, numerator, integral_specs, options);
         }

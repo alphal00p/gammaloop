@@ -760,7 +760,11 @@ impl Vakint {
         // allowance. It must not eat the supervisor's finalization reserve.
         let setup_elapsed = started.elapsed();
         resolved.time_limit = resolved.time_limit.saturating_sub(setup_elapsed);
-        MonitorContext::native_phase(backend.observation.as_deref_mut(), "strict_cache_roots");
+        MonitorContext::native_phase(
+            backend.observation.as_deref_mut(),
+            "strict_cache_roots",
+            None,
+        );
         let mut report = prepare_application_cache(
             &workload,
             &resolved,
@@ -776,6 +780,7 @@ impl Vakint {
             MonitorContext::native_phase(
                 backend.observation.as_deref_mut(),
                 "cache_compaction_and_validation",
+                None,
             );
             if cancellation.load(Ordering::Relaxed) {
                 report.status = CachePreparationStatus::Cancelled;
