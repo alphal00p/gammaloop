@@ -1,5 +1,13 @@
 = Generation integration numeric comparison slice
 
+Integration status: Astra round 2 approved the cumulative lane tip `25442024`,
+closing P2/P3 after independent 34 tests and four-backend adversarial controls.
+The full approved patch is now integrated on source03–07 base `9e2c4c23`; a new
+independent Astra review is required on the combined prerequisite candidate.
+The imported lane receipt preserves historical pre-approval wording; forward
+status and combined checks are in
+`evidence/generation-integration/wp3/prerequisites08-14.json`.
+
 == Scope and source mapping
 
 This independent WP3 slice ports source units 08 and 09 onto approved prefix
@@ -83,4 +91,6 @@ hashes also pass. Exact commands, result excerpts and finding responses are in
 the receipt and results file. No full physics suite, performance benchmark, push
 or publication belongs to this correctness slice. The workspace, named bookmark,
 first Astra review/reproducer and correction logs are retained for a new
-independent Astra review. Parent integration remains blocked on that approval.
+independent Astra review at that historical handoff. Astra round 2 subsequently
+approved the correction; integration review is now tracked in the prerequisite
+receipt.

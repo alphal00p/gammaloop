@@ -1,9 +1,13 @@
 = Generation scalar admission shortcut
 
-Status: implementation slice awaiting independent Astra review, 2026-10-27.
+Status: isolated scalar patch `872e84b2` approved by Astra round 1, 2026-10-27.
+It is now integrated on approved source03–07 base `9e2c4c23`; the combined
+prerequisite candidate requires a new independent Astra review.
+Original lane receipt below preserves its pre-approval state; forward status and
+combined checks are in `evidence/generation-integration/wp3/prerequisites08-14.json`.
 Source: `14aff3bbdceb6687459efe4abcb96e9d760146f5` (source14, \#191).
 Base: `74cebf6c8f673f5849b26afe55fa98035d5eba1d`.
-Workspace and bookmark: `generation-scalar-admission`; change `rokpmnuw`.
+Original workspace and bookmark: `generation-scalar-admission`; change `rokpmnuw`.
 
 == Boundary and disposition
 

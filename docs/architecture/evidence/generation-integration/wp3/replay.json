@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "status": "incomplete WP3; source03–07 Astra round1 requested P3 macro import correction; corrected candidate awaits NEW independent Astra review",
+  "status": "incomplete WP3; source03–07 approved by Astra coordinator; prerequisite08/09,13,14 integration candidate awaits NEW independent Astra review",
   "fixed_target": {
     "commit": "3f0df2a870806076820786994d4883decec8e9e3",
     "tree": "3c91ba47525c627fbc02d79f5afa1d58aa7c5b66",
@@ -83,7 +83,7 @@
       "planned_unit": "port-03",
       "planned_order": 3,
       "reason": "Port spectator component planning onto current authoritative tensor metadata; preserve spectator invariance and mutation regressions.",
-      "status": "implemented; Astra round1 P3 macro import correction applied, NEW independent review pending",
+      "status": "approved at9e2c4c23 by Astra coordinator round2; R1 sole P3 closed",
       "new_commit": "f6ba968d51644c360a2be32118fba1d193110d0e",
       "new_change": "snvrxlvztxmkypnqynrxoryqzqtrmtnq",
       "reconciliation": [
@@ -99,7 +99,7 @@
       "planned_unit": "port-04",
       "planned_order": 4,
       "reason": "Port scoped partner copies alongside planner; preserve non-colour epsilon bounds, scopes and signed transport.",
-      "status": "implemented; Astra round1 P3 macro import correction applied, NEW independent review pending",
+      "status": "approved at9e2c4c23 by Astra coordinator round2; R1 sole P3 closed",
       "new_commit": "b2da32765318cac573e908fed5f0af9319141503",
       "new_change": "ssylqpprunqktzynznnqzzztvytwyrvo",
       "reconciliation": [
@@ -116,7 +116,7 @@
       "planned_unit": "port-05",
       "planned_order": 5,
       "reason": "Reconcile shared colour representations and scoped-contraction docs with #209 tensor ownership; do not restore old interfaces.",
-      "status": "implemented; Astra round1 P3 macro import correction applied, NEW independent review pending",
+      "status": "approved at9e2c4c23 by Astra coordinator round2; R1 sole P3 closed",
       "new_commit": "df66f21394ed47a86e8cbf0b9d8da5c9b47cc7bc",
       "new_change": "rtwnvzwvmrsvqpmosxsorywvkkovsvlo",
       "reconciliation": [
@@ -133,7 +133,7 @@
       "planned_unit": "port-06",
       "planned_order": 6,
       "reason": "Preserve fixed coupling and factor-head registration order inside staged construction; do not undo #209 template admission.",
-      "status": "implemented; Astra round1 P3 macro import correction applied, NEW independent review pending",
+      "status": "approved at9e2c4c23 by Astra coordinator round2; R1 sole P3 closed",
       "new_commit": "56aa1c91cd0d9573a03c5122769c02ae0364e9e3",
       "new_change": "sosnkvsmokxxuqzyqoolqszplspyotyz",
       "reconciliation": [
@@ -150,7 +150,7 @@
       "planned_unit": "port-07",
       "planned_order": 7,
       "reason": "Port canonical inferred port order through current NumeratorInterface::translate; preserve declared order and hidden index history from #209.",
-      "status": "implemented; Astra round1 P3 macro import correction applied, NEW independent review pending",
+      "status": "approved at9e2c4c23 by Astra coordinator round2; R1 sole P3 closed",
       "new_commit": "f689e5b61c8b4dcc80c6d983b442e89b7a5c9852",
       "new_change": "oxotlonowrvstkrppyqrrzsmonywxssu",
       "reconciliation": [
@@ -168,7 +168,23 @@
       "planned_unit": "port-08",
       "planned_order": 8,
       "reason": "Retain circular complex-phase comparison and relative phase tolerance; independent of metadata migration.",
-      "status": "pending integration; isolated numeric lane completed, awaiting Astra approval"
+      "status": "integrated from approved intent; combined candidate awaits NEW independent Astra review",
+      "new_change": "sznqnqyrwwzyvzsqwxxvknlowkppsmxu",
+      "new_commit": "3dd25d67d4009e663e05186a573da2a4c1381383",
+      "approved_input": {
+        "final_commit": "254420243792a63270c80a451884422bbc4000d9",
+        "baseline": "74cebf6c8f673f5849b26afe55fa98035d5eba1d",
+        "cumulative_production_commits": [
+          "19e0e9c27642523e0a430cdba0259d380e65c4f7",
+          "c72726011f70640f1e20495f4f62d969afef6743"
+        ],
+        "review": "Astra round2 APPROVE; P2/P3 closed; independent34tests and4backend adversarial controls; supplied by coordinator"
+      },
+      "reconciliation": [
+        "Integrate full cumulative code and lane evidence, not evidence-only final commit. utils/mod.rs byte-identical to approved final lane.",
+        "Preserve native tiny signed circular residuals before directed reference normalization; source09 strict imaginary-to-zero, norm and underflow behavior unchanged.",
+        "Retain lane receipts as historical records; forward approvals and integrated checks live in prerequisites08-14.json. Registry note appended beside current owners without replacing existing scoped digests."
+      ]
     },
     {
       "commit": "0eb460fd62c3b7fbd2a244ba13d8f38b60fbfad6",
@@ -178,7 +194,23 @@
       "planned_unit": "port-09",
       "planned_order": 9,
       "reason": "Retain imaginary-against-zero real ApproxEq correction; not supplied by phase-wraparound PR alone.",
-      "status": "pending integration; isolated numeric lane completed, awaiting Astra approval"
+      "status": "integrated from approved intent; combined candidate awaits NEW independent Astra review",
+      "new_change": "sznqnqyrwwzyvzsqwxxvknlowkppsmxu",
+      "new_commit": "3dd25d67d4009e663e05186a573da2a4c1381383",
+      "approved_input": {
+        "final_commit": "254420243792a63270c80a451884422bbc4000d9",
+        "baseline": "74cebf6c8f673f5849b26afe55fa98035d5eba1d",
+        "cumulative_production_commits": [
+          "19e0e9c27642523e0a430cdba0259d380e65c4f7",
+          "c72726011f70640f1e20495f4f62d969afef6743"
+        ],
+        "review": "Astra round2 APPROVE; P2/P3 closed; independent34tests and4backend adversarial controls; supplied by coordinator"
+      },
+      "reconciliation": [
+        "Integrate full cumulative code and lane evidence, not evidence-only final commit. utils/mod.rs byte-identical to approved final lane.",
+        "Preserve native tiny signed circular residuals before directed reference normalization; source09 strict imaginary-to-zero, norm and underflow behavior unchanged.",
+        "Retain lane receipts as historical records; forward approvals and integrated checks live in prerequisites08-14.json. Registry note appended beside current owners without replacing existing scoped digests."
+      ]
     },
     {
       "commit": "314a7f5349092a4b95944cae4abdb32d204da515",
@@ -188,7 +220,9 @@
       "planned_unit": null,
       "planned_order": null,
       "reason": "Actual merged #175 is an ancestor of target; do not layer the dev-shell copy. Whole-commit patch IDs differ because merged #175 additionally changes .config/nextest.toml; flake.nix delta is byte-identical.",
-      "status": "pending"
+      "status": "accounted for per approved WP2; no new code replay",
+      "accounting_evidence": "wp2/base-manifest.json; Astra WP2 round2 approval",
+      "new_commit": null
     },
     {
       "commit": "1de750c53193f573ed2cd6885a9dbeba065367d1",
@@ -198,7 +232,9 @@
       "planned_unit": null,
       "planned_order": null,
       "reason": "Actual merged #176 is an ancestor of target; keep its run-card session behavior without duplicate copy.",
-      "status": "pending"
+      "status": "accounted for per approved WP2; no new code replay",
+      "accounting_evidence": "wp2/base-manifest.json; Astra WP2 round2 approval",
+      "new_commit": null
     },
     {
       "commit": "b5e3c5e6a062da219d98384bf2cffdcc38dcd200",
@@ -208,7 +244,9 @@
       "planned_unit": null,
       "planned_order": null,
       "reason": "Drop the first isolated-product proof (nxmztorq). Redesigned #177 and final #210 complete colour algebra beside indexed spectators; not patch-equivalent to this first copy.",
-      "status": "pending"
+      "status": "accounted for per approved WP2; no new code replay",
+      "accounting_evidence": "wp2/base-manifest.json; Astra WP2 round2 approval",
+      "new_commit": null
     },
     {
       "commit": "07c14f18d432788d113ac4d1a443e21b3e8345d8",
@@ -218,7 +256,13 @@
       "planned_unit": "port-13",
       "planned_order": 10,
       "reason": "Retain intent of rendered ExecutionMode.Single docstring assertion; adapt to current #209 stub/display surface without weakening asserted rendering.",
-      "status": "pending"
+      "status": "integrated from approved intent; combined candidate awaits NEW independent Astra review",
+      "new_change": "xoomrtlllnvymwsyuoukzqqonpkpvxny",
+      "new_commit": "739b1f6a0066e7661327be439aaf3f69dcfb5c86",
+      "reconciliation": [
+        "Exact two-line source delta applies to current #209 docs-python-exporter. Existing test incorrectly expected retired numpydoc variant line although current generated spynso3.pyi renders a ClassVar followed by attribute docstring.",
+        "Preserve full asserted Single: typing.ClassVar[ExecutionMode] and exact smallest-degree semantics; reject retired Execute one contraction at a time anywhere. No API/generated stub changes or assertion weakening."
+      ]
     },
     {
       "commit": "14aff3bbdceb6687459efe4abcb96e9d760146f5",
@@ -228,9 +272,9 @@
       "planned_unit": "port-14",
       "planned_order": 11,
       "reason": "#191 remains open and its plain-scalar shortcut is absent on target. Adapt eligibility and proof construction to #209 authoritative metadata; compare shortcut with full admission, including all registered symbols. Never overwrite #193 templates or resurrect obsolete TensorProofs fields.",
-      "status": "pending later assigned integration; isolated scalar-admission port approved by Astra",
+      "status": "integrated from approved intent; combined candidate awaits NEW independent Astra review",
       "approved_external_port": {
-        "status": "APPROVED externally; not integrated in this slice",
+        "status": "Astra round1 APPROVED; now integrated, combined candidate pending review",
         "commit": "872e84b2b5bb875264c9eb476c5af47154f66b18",
         "bookmark": "generation-scalar-admission",
         "reviewer": "Astra",
@@ -241,7 +285,15 @@
           "lazy fresh-index allocation"
         ],
         "measurement": "Only zero versus one discovery calls measured; no wider performance claim"
-      }
+      },
+      "new_change": "kqqnukqvlntskupxpqookzuqxumluntq",
+      "new_commit": "c5d0380c9c7f8e33c77e918f477708b525a61775",
+      "reconciliation": [
+        "inference.rs and scalar_admission.rs byte-identical to approved872e84b2; no overlapping03–07 inference code delta required.",
+        "Existing from_validated_parts and authoritative history/proof owner retained; fallback full admission, malformed tensor/index protection, normalization callbacks and declared ordering unchanged.",
+        "Reconcile current registry inference scope digest without discarding03–07 owner records; add reviewed lane note.",
+        "Fixed-key hashing and lazy fresh-index allocation remain deferred. Only zero versus one interface discovery calls measured; no end-to-end speedup claim."
+      ]
     },
     {
       "commit": "711f9440b323166cbba92df4bea632b20121aa06",
@@ -565,7 +617,7 @@
     }
   ],
   "validation": {
-    "status": "prefix and source03–07 focused checks completed; full rebuilt-tip matrix pending",
+    "status": "Combined prerequisite focused controls passed; NEW independent review required; full rebuilt-tip WP3 matrix pending",
     "logs": "target/wp3",
     "notes": [
       "Initial isolated feynkit-model test lacked native feature and failed in Numerica before tests; the later corrected native invocation passed, with no pin change.",
@@ -698,7 +750,36 @@
       "Entire rebuilt-tip validation matrix and final integration review"
     ],
     "slice_receipt": "units03-07.json",
-    "slice_result": "215 Idenso + 138 graph + 65 model/generator/gauge selected tests passed; workspace Clippy, fmt, Typst, kernel isolation and integrity checks passed. Full rebuilt-tip matrix pending."
+    "slice_result": "215 Idenso + 138 graph + 65 model/generator/gauge selected tests passed; workspace Clippy, fmt, Typst, kernel isolation and integrity checks passed. Full rebuilt-tip matrix pending.",
+    "prerequisite_receipt": "prerequisites08-14.json",
+    "prerequisite_result": [
+      {
+        "name": "combined",
+        "status": "passed",
+        "log": "target/wp3-prerequisites08-14/combined-tests.log",
+        "sha256": "ed89b80588fd2581b9be4d4453560031ead6eafc018ccebe375412396c3617c8",
+        "run_id": "041328c4-844d-4f37-8e67-5af7af6260e8",
+        "selected": 572,
+        "passed": 572,
+        "runtime": "13.252s",
+        "excluded_by_filter": 2491,
+        "ignored_selected": 0,
+        "inventory": "target/wp3-prerequisites08-14/combined-inventory.json"
+      },
+      {
+        "name": "exporter",
+        "status": "passed",
+        "log": "target/wp3-prerequisites08-14/exporter-tests.log",
+        "sha256": "67c4b505c0e8c9dc057d4d2c910fa870ee9445d86e6b03e5a3e06d002015f940",
+        "run_id": "2241530b-41e8-4eda-8afd-e6a1735b9186",
+        "selected": 2,
+        "passed": 2,
+        "runtime": "0.065s",
+        "excluded_by_filter": 2,
+        "ignored_selected": 0,
+        "inventory": "target/wp3-prerequisites08-14/exporter-inventory.json"
+      }
+    ]
   },
   "deferred": [
     "WP4 names",
@@ -708,7 +789,7 @@
     "WP10 M-rebuild measurement",
     "Final native/Pyodide/Community distribution certification"
   ],
-  "processes": "None. All task tests, builds, docs checks and inventory captures completed; logs/binary identities retained in target/wp3-units03-07.",
+  "processes": "None. All task builds, tests, Clippy, docs and inventory captures completed; artifacts retained.",
   "extra_prerequisite": {
     "change": "txxpwnnvymmwqprmxvqtnmzvzqyskwmm",
     "commit": "52ac2eee4a1487bc79014c4f33f22b2854f80090",
@@ -742,10 +823,11 @@
   },
   "parallel_lanes": {
     "numeric08-09": {
-      "status": "completed externally; Astra review pending; not integrated"
+      "status": "Astra round2 APPROVED; cumulative patch integrated, combined candidate review pending",
+      "commit": "254420243792a63270c80a451884422bbc4000d9"
     },
     "scalar14": {
-      "status": "APPROVED externally; not integrated in this slice",
+      "status": "Astra round1 APPROVED; scoped patch integrated, combined candidate review pending",
       "commit": "872e84b2b5bb875264c9eb476c5af47154f66b18",
       "bookmark": "generation-scalar-admission",
       "reviewer": "Astra",
@@ -758,7 +840,7 @@
       "measurement": "Only zero versus one discovery calls measured; no wider performance claim"
     },
     "drawing15-16-38": {
-      "status": "isolated implementation lane; not integrated"
+      "status": "Not integrated.15/16 held on narrow registry digest fix despite license fix passing;38 awaits reviewed transplant and prerequisites through port36."
     },
     "sampling27-28-29": {
       "status": "isolated implementation lane; not integrated"
@@ -778,7 +860,16 @@
     "receipt": "target/astra-slice03-07-round1/review.json",
     "receipt_sha256": "a48f3a2335eb81bbdeeba00ddfa4a157cb04aded4b01466d63cdb59ff46247ac",
     "correction": "Two macro calls now use module-scope tensor_symbol import; definitions/arguments/assertions unchanged",
-    "next_gate": "NEW independent Astra review before further implementation/integration",
-    "fix_receipt": "units03-07-policy-fix.json"
+    "next_gate": "Source03–07 approved integration base; NEW independent Astra review of prerequisite integration candidate required",
+    "fix_receipt": "units03-07-policy-fix.json",
+    "round2": {
+      "reviewer": "Astra coordinator (independent of Sol implementer)",
+      "verdict": "APPROVE",
+      "commit": "9e2c4c23f3c48fb5df41edd2f5880097867dd117",
+      "receipt": "target/astra-coordinator-units03-07-r2/review.json",
+      "receipt_sha256": "607664937b8e3ad4423f28dbdc0f0df44ec81d58139dba281a5e965c9427713f",
+      "scope": "Exact import-only correction, code bytes and retained affected test/fmt/integrity hashes verified; prior independent418 tests had no semantic findings",
+      "task_id": null
+    }
   }
 }

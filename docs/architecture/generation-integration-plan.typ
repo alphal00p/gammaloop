@@ -206,24 +206,26 @@ own workspace. Bounded: one regression, one bisect, one written verdict.
 
 === WP3 Rebuild v5
 <wp3>
-- #strong[Slice review status 2026-10-27:] Astra approved the corrected initial
-  prefix at `74cebf6c`, closing P1 raw admission/checked rewriting and P3 structured
-  error propagation with no remaining findings. Independent 18 generator and
-  5 model/gauge tests plus the 8-case probe passed. Source units 03–07 are now
-  implemented: spectator planning, scoped partner copies, shared colour
-  representations, deterministic registration and canonical inferred ports.
-  Current metadata, declared port order, hidden-zero history and owner transport
-  remain authoritative. Astra slice round 1 found only a P3 macro-import policy issue and no
-  semantic findings; its independent 418 tests and integrity checks passed.
-  The two calls now use a module-scope import, preserving their definitions and
-  assertions. The corrected slice awaits a NEW independent Astra review before
-  further implementation or integration. See
-  `evidence/generation-integration/wp3/units03-07.json` and `wp3/replay.json`.
-  Source14's external scalar patch `872e84b2` is approved for later assigned
-  integration; fixed-key hashing and lazy fresh-index allocation remain deferred,
-  with only zero versus one discovery calls measured. Other parallel work is not
-  integrated here. Remaining ports, harness corrections and the full rebuilt-tip
-  matrix are pending; M-rebuild is not claimed.
+- #strong[Prerequisite slice status 2026-10-27:] Astra coordinator approved
+  source03–07 at `9e2c4c23`, closing the sole P3 macro-import finding. The
+  independent semantic review passed 418 tests with no semantic findings; the
+  coordinator verified the exact correction and retained check hashes without
+  inventing a delegated review task. Initial raw-admission protections remain
+  approved and intact.
+  The cumulative approved numeric08/09 patch (including production `19e0e9c2`
+  and precision correction `c7272601`, evidence tip `25442024`) and scoped scalar14
+  patch `872e84b2` are integrated on this base. Source13 now asserts the actual
+  rendered `ExecutionMode.Single` attribute docstring. Sources10/11 are accounted
+  for as upstream drops and12 as superseded by \#210, per approved WP2 evidence.
+  Combined checks passed: 572 owner/control tests and two Spenso exporter tests,
+  relevant all-target Clippy, formatting, kernel isolation, Typst and integrity
+  checks. This prerequisite candidate awaits a NEW independent Astra review.
+  Fixed-key hashing and lazy fresh-index allocation remain deferred; only zero
+  versus one discovery calls were established, with no end-to-end speedup claim.
+  Drawing15/16 remain held on a narrow registry fix;38 awaits the reviewed
+  transplant and prerequisites through port36. No drawing, sampling or benchmark
+  work is integrated here. Full rebuilt-tip validation and M-rebuild remain
+  pending. See `evidence/generation-integration/wp3/prerequisites08-14.json`.
 
 - `jj duplicate` the v4 chain (`kursouxx::kpslpwqz`) onto the WP2 base; do not
   rebase in place, so the 19 live workspaces on older lines stay valid.

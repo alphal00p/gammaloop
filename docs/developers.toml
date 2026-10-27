@@ -940,7 +940,10 @@ end_anchor = "    /// Scope explicit indices"
 # Reviewed 2026-10-23: Cooking and slot failures retain typed causes through mapped metadata operations. The syntax observer and authoritative admission boundaries remain unchanged.
 # No-impact attestation 2026-10-23: direct error-constructor mapping preserves representation-dimension inference.
 # Reviewed 2026-10-24: dimension mapping retains its metadata-authoritative release path and checks user callback free-index preservation in debug builds.
-digest = "baaf9cb6ea598edc83c1135da5ebb0d0394d0505"
+# Integration review intent: retain authoritative scalar/history publication and
+# map-dimension ownership; approved source14 and combined owner checks are
+# recorded in WP3 prerequisites08-14.
+digest = "602ecc787c95ff01a067ed58736127940627a9cb"
 
 [[section.note.scope]]
 path = "crates/idenso/src/tensor/contract.rs"
