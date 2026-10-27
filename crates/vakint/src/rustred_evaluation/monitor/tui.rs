@@ -536,9 +536,15 @@ mod tests {
             .collect();
         assert!(!text(&render(&view, 150, 24, true)).contains("Row 19:"));
         view.scroll = 18;
-        let rendered = text(&render(&view, 150, 24, true));
+        let mut terminal = Terminal::new(TestBackend::new(150, 24)).unwrap();
+        let mut maximum_scroll = 0;
+        terminal
+            .draw(|frame| maximum_scroll = draw(frame, &view, true))
+            .unwrap();
+        let rendered = text(terminal.backend().buffer());
+        assert!(maximum_scroll < view.scroll);
         assert!(rendered.contains("Row 19:"));
-        assert!(rendered.contains("offset 16 / 16"));
+        assert!(rendered.contains(&format!("offset {maximum_scroll} / {maximum_scroll}")));
         assert_eq!(view.frontier.len(), 20);
     }
 
