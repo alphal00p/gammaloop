@@ -120,11 +120,24 @@ fn pr6_finite_and_linear_terms_match_independent_tadpole_times_five_line_results
             &fmft.settings,
         )
         .unwrap();
-        assert_eq!(&actual.re, &measured.value().re);
-        let oracle_error = independent.norm() * &tolerance;
+        let exported = measured
+            .to_atom()
+            .unwrap()
+            .evaluate_with_prec(&HashMap::<Atom, Complex<Float>>::new(), bits)
+            .unwrap();
+        assert_eq!(&actual.re, &exported.re);
+        assert_eq!(&actual.im, &exported.im);
+        let oracle_error = independent.to_rational().abs() * tolerance.to_rational();
+        let source_error =
+            measured.precision().real().absolute_error().to_rational() + oracle_error;
+        let raw_center = measured.value().re.to_rational();
+        assert!((raw_center.clone() - independent.to_rational()).abs() <= source_error);
+        // Checked export rounds the midpoint; include that exact shift in the
+        // public value's bound without changing the source or oracle accuracy.
+        let export_rounding = (actual.re.to_rational() - raw_center).abs();
         assert!(
-            (actual.re - &independent).norm()
-                <= measured.precision().real().absolute_error().clone() + oracle_error
+            (actual.re.to_rational() - independent.to_rational()).abs()
+                <= source_error + export_rounding
         );
         assert!(warnings.iter().any(|warning| {
             warning
