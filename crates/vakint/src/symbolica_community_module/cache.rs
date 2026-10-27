@@ -28,6 +28,81 @@ use crate::{
     RustRedCacheWorkload, RustRedMonitorDisplay, RustRedMonitorOptions, Vakint,
 };
 
+/// Explicit native single-file transport and decoded-store grants. Ordinary
+/// construction retains the compact distribution defaults.
+#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
+#[pyclass(
+    name = "CacheFileOptions",
+    module = "symbolica.community.hepkit.vakint",
+    frozen,
+    from_py_object
+)]
+#[derive(Clone)]
+pub struct CacheFileOptionsWrapper {
+    pub(super) native: crate::RustRedCacheFileOptions,
+}
+
+impl super::ModuleInit for CacheFileOptionsWrapper {}
+
+#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[pymethods]
+impl CacheFileOptionsWrapper {
+    #[new]
+    #[pyo3(signature = (*, max_compressed_bytes=None, max_decoded_bytes=None, max_index_bytes=None, decoded_directory=None))]
+    fn new(
+        max_compressed_bytes: Option<u64>,
+        max_decoded_bytes: Option<u64>,
+        max_index_bytes: Option<u64>,
+        decoded_directory: Option<PathBuf>,
+    ) -> PyResult<Self> {
+        let mut native = crate::RustRedCacheFileOptions {
+            decoded_directory,
+            ..Default::default()
+        };
+        let addressable = |value| {
+            usize::try_from(value).map_err(|_| {
+                pyo3::exceptions::PyValueError::new_err(
+                    "cache byte grant exceeds this platform's address space",
+                )
+            })
+        };
+        if let Some(value) = max_compressed_bytes {
+            native.limits.max_compressed_bytes = addressable(value)?;
+        }
+        if let Some(value) = max_decoded_bytes {
+            native.limits = native
+                .limits
+                .with_decoded_bytes(addressable(value)?)
+                .map_err(native_error)?;
+        }
+        if let Some(value) = max_index_bytes {
+            native.limits.chunk.max_index_owned_bytes = addressable(value)?;
+        }
+        Ok(Self { native })
+    }
+
+    #[getter]
+    fn max_compressed_bytes(&self) -> usize {
+        self.native.limits.max_compressed_bytes
+    }
+
+    #[getter]
+    fn max_decoded_bytes(&self) -> usize {
+        self.native.limits.max_decoded_bytes()
+    }
+
+    #[getter]
+    fn max_index_bytes(&self) -> usize {
+        self.native.limits.chunk.max_index_owned_bytes
+    }
+
+    #[getter]
+    fn decoded_directory(&self) -> Option<PathBuf> {
+        self.native.decoded_directory.clone()
+    }
+}
+
 /// Independent native I/O control; it never borrows a prepared reduction owner.
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(

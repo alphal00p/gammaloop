@@ -86,6 +86,7 @@ macro_rules! define_vakint_python_surface {
 define_vakint_python_surface! {
     VakintWrapper,
     cache::RunningCacheControlWrapper,
+    cache::CacheFileOptionsWrapper,
     NumericalEvaluationResultWrapper,
     VakintExpressionWrapper,
     VakintEvaluationMethodWrapper,
@@ -1260,7 +1261,7 @@ impl VakintWrapper {
     /// Attach an exact read-only native cache bundle. Omitted settings preserve
     /// the active RAM, work, eviction and lookup policies. A new attachment
     /// uses native defaults, not preparation's larger RAM default.
-    #[pyo3(signature = (n_loops, path, *, ram_bytes=None, disk_bytes=None, cache_policy=None, lookup_budget_policy=None, cache_terms=None, cache_integrals=None, max_rule_applications=None))]
+    #[pyo3(signature = (n_loops, path, *, ram_bytes=None, disk_bytes=None, cache_policy=None, lookup_budget_policy=None, cache_terms=None, cache_integrals=None, max_rule_applications=None, file_options=None))]
     #[allow(clippy::too_many_arguments)]
     pub fn load_cache(
         &mut self,
@@ -1274,10 +1275,14 @@ impl VakintWrapper {
         cache_terms: Option<usize>,
         cache_integrals: Option<usize>,
         max_rule_applications: Option<usize>,
+        file_options: Option<PyRef<'_, cache::CacheFileOptionsWrapper>>,
     ) -> PyResult<()> {
         resources::run_committing(self.settings.rustred_resources, || {
             cache::check_loops(n_loops)?;
-            let mut options = crate::RustRedCacheLoadOptions::default();
+            let mut options = crate::RustRedCacheLoadOptions {
+                file_options: file_options.map(|options| options.native.clone()),
+                ..Default::default()
+            };
             if ram_bytes.is_some()
                 || cache_terms.is_some()
                 || cache_integrals.is_some()
@@ -1318,7 +1323,7 @@ impl VakintWrapper {
     /// `read_delta=False` reads only the pinned bases and snapshots. The returned
     /// control can report or checkpoint while evaluation holds the engine.
     /// Queue and checkpoint options use the native defaults when omitted.
-    #[pyo3(signature = (n_loops, path, *, read_backing=true, read_delta=true, base_paths=None, snapshots=None, disk_bytes=None, max_pending_records=None, max_pending_bytes=None, batch_records=None, batch_bytes=None, checkpoint_interval_seconds=None))]
+    #[pyo3(signature = (n_loops, path, *, read_backing=true, read_delta=true, base_paths=None, snapshots=None, disk_bytes=None, max_pending_records=None, max_pending_bytes=None, batch_records=None, batch_bytes=None, checkpoint_interval_seconds=None, file_options=None))]
     #[allow(clippy::too_many_arguments)]
     pub fn attach_running_cache(
         &mut self,
@@ -1335,10 +1340,11 @@ impl VakintWrapper {
         batch_records: Option<usize>,
         batch_bytes: Option<usize>,
         checkpoint_interval_seconds: Option<f64>,
+        file_options: Option<PyRef<'_, cache::CacheFileOptionsWrapper>>,
     ) -> PyResult<cache::RunningCacheControlWrapper> {
         resources::run_committing(self.settings.rustred_resources, || {
             cache::check_loops(n_loops)?;
-            let options = cache::running_options(
+            let mut options = cache::running_options(
                 py,
                 read_backing,
                 read_delta,
@@ -1351,6 +1357,7 @@ impl VakintWrapper {
                 batch_bytes,
                 checkpoint_interval_seconds,
             )?;
+            options.file_options = file_options.map(|options| options.native.clone());
             let engine = self.vakint.clone();
             let control = py
                 .detach(move || engine.attach_running_cache(n_loops, path, &options))
@@ -1364,7 +1371,7 @@ impl VakintWrapper {
 
     /// Resume an existing incremental native cache; never create a new delta.
     /// This has the same read policy and queue options as `attach_running_cache`.
-    #[pyo3(signature = (n_loops, path, *, read_backing=true, read_delta=true, base_paths=None, snapshots=None, disk_bytes=None, max_pending_records=None, max_pending_bytes=None, batch_records=None, batch_bytes=None, checkpoint_interval_seconds=None))]
+    #[pyo3(signature = (n_loops, path, *, read_backing=true, read_delta=true, base_paths=None, snapshots=None, disk_bytes=None, max_pending_records=None, max_pending_bytes=None, batch_records=None, batch_bytes=None, checkpoint_interval_seconds=None, file_options=None))]
     #[allow(clippy::too_many_arguments)]
     pub fn load_running_cache(
         &mut self,
@@ -1381,10 +1388,11 @@ impl VakintWrapper {
         batch_records: Option<usize>,
         batch_bytes: Option<usize>,
         checkpoint_interval_seconds: Option<f64>,
+        file_options: Option<PyRef<'_, cache::CacheFileOptionsWrapper>>,
     ) -> PyResult<cache::RunningCacheControlWrapper> {
         resources::run_committing(self.settings.rustred_resources, || {
             cache::check_loops(n_loops)?;
-            let options = cache::running_options(
+            let mut options = cache::running_options(
                 py,
                 read_backing,
                 read_delta,
@@ -1397,6 +1405,7 @@ impl VakintWrapper {
                 batch_bytes,
                 checkpoint_interval_seconds,
             )?;
+            options.file_options = file_options.map(|options| options.native.clone());
             let engine = self.vakint.clone();
             let control = py
                 .detach(move || engine.load_running_cache(n_loops, path, &options))
@@ -1410,7 +1419,7 @@ impl VakintWrapper {
 
     /// Attach immutable bases and frozen native descriptors without a writer.
     /// Frozen generations do not refresh, and evaluation captures no records.
-    #[pyo3(signature = (n_loops, *, base_paths=None, snapshots=None, disk_bytes=None))]
+    #[pyo3(signature = (n_loops, *, base_paths=None, snapshots=None, disk_bytes=None, file_options=None))]
     pub fn load_cache_snapshot(
         &mut self,
         py: Python<'_>,
@@ -1418,12 +1427,14 @@ impl VakintWrapper {
         base_paths: Option<Vec<PathBuf>>,
         snapshots: Option<Vec<Py<PyDict>>>,
         disk_bytes: Option<u64>,
+        file_options: Option<PyRef<'_, cache::CacheFileOptionsWrapper>>,
     ) -> PyResult<()> {
         resources::run_committing(self.settings.rustred_resources, || {
             cache::check_loops(n_loops)?;
-            let options = cache::running_options(
+            let mut options = cache::running_options(
                 py, true, false, base_paths, snapshots, disk_bytes, None, None, None, None, None,
             )?;
+            options.file_options = file_options.map(|options| options.native.clone());
             let engine = self.vakint.clone();
             py.detach(move || engine.load_cache_snapshot(n_loops, &options))
                 .map_err(vakint_to_python_error)
@@ -1462,10 +1473,11 @@ impl VakintWrapper {
     }
 
     /// Explicitly save `resident-roots` or a portable `full-snapshot`.
-    /// The latter copies captured bases without coefficient decoding, then
-    /// writes the resident overlay and requires a new destination. Partial
-    /// reports distinguish base-copy success from overlay completion.
-    #[pyo3(signature = (n_loops, output_path, *, mode, disk_bytes=None, resume=false))]
+    /// A full snapshot includes captured bases and completed resident nodes.
+    /// Five loops stream one shared-table file; a running writer must already
+    /// be closed. Lower loops retain native byte-copy/checkpoint reporting.
+    /// Every full snapshot requires a new destination.
+    #[pyo3(signature = (n_loops, output_path, *, mode, disk_bytes=None, resume=false, file_options=None))]
     pub fn save_cache(
         &self,
         py: Python<'_>,
@@ -1474,6 +1486,7 @@ impl VakintWrapper {
         mode: &str,
         disk_bytes: Option<u64>,
         resume: bool,
+        file_options: Option<PyRef<'_, cache::CacheFileOptionsWrapper>>,
     ) -> PyResult<Py<PyDict>> {
         resources::run_committing(self.settings.rustred_resources, || {
             cache::check_loops(n_loops)?;
@@ -1481,6 +1494,9 @@ impl VakintWrapper {
             let mut options = crate::RustRedCacheSaveOptions::default();
             options.disk_bytes = disk_bytes;
             options.resume = resume;
+            if let Some(file_options) = file_options {
+                options = options.with_file_options(file_options.native.clone());
+            }
             let engine = self.vakint.clone();
             let report = py
                 .detach(move || engine.save_cache(n_loops, output_path, mode, &options))
