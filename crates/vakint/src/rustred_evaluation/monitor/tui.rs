@@ -24,6 +24,12 @@ use ratatui::{
 
 use super::{MonitorState, MonitorStatus, MonitorView, UiAction};
 
+const ACCENT_BLUE: Color = Color::Rgb(138, 188, 255);
+const ACCENT_CYAN: Color = Color::Rgb(115, 215, 225);
+const ACCENT_GREEN: Color = Color::Rgb(125, 215, 165);
+const ACCENT_AMBER: Color = Color::Rgb(240, 200, 120);
+const ACCENT_MAGENTA: Color = Color::Rgb(210, 165, 235);
+
 // A process-local UI claim, never a reducer or observer lock.
 static TERMINAL_CLAIMED: AtomicBool = AtomicBool::new(false);
 
@@ -241,7 +247,7 @@ fn panel(title: String, no_color: bool) -> Block<'static> {
         } else {
             Style::default().fg(Color::DarkGray)
         })
-        .title(Line::from(title).style(highlighted(Color::LightBlue, no_color)))
+        .title(Line::from(title).style(highlighted(ACCENT_BLUE, no_color)))
 }
 
 fn muted(no_color: bool) -> Style {
@@ -262,21 +268,17 @@ fn metric_style(label: &str, value: &str, no_color: bool) -> Style {
         return muted(no_color).add_modifier(Modifier::ITALIC);
     }
     let color = match label {
-        "Current canonical native key" | "Caller Atom bytes / stored summands" => {
-            Color::LightMagenta
-        }
-        "Current canonical R / A / D" | "Elapsed at observation" => Color::LightCyan,
-        "Roots collected / selected" | "Completed unique identities (not closure)" => {
-            Color::LightGreen
-        }
+        "Current canonical native key" | "Caller Atom bytes / stored summands" => ACCENT_MAGENTA,
+        "Current canonical R / A / D" | "Elapsed at observation" => ACCENT_CYAN,
+        "Roots collected / selected" | "Completed unique identities (not closure)" => ACCENT_GREEN,
         "Active unique identities"
         | "Pending operational frames"
         | "Pending unique identities"
         | "Native root output terms (sampled)"
         | "Native unstarted roots / output keys"
-        | "Native deferred maps / child occurrences" => Color::LightYellow,
-        "Process RSS / peak" | "Host MemAvailable / MemFree" | "Host MemTotal" => Color::LightBlue,
-        _ if label.ends_with("ETA") || label.starts_with("Max seen canonical") => Color::LightCyan,
+        | "Native deferred maps / child occurrences" => ACCENT_AMBER,
+        "Process RSS / peak" | "Host MemAvailable / MemFree" | "Host MemTotal" => ACCENT_BLUE,
+        _ if label.ends_with("ETA") || label.starts_with("Max seen canonical") => ACCENT_CYAN,
         _ => return Style::default(),
     };
     highlighted(color, no_color)
@@ -286,9 +288,17 @@ fn rows<'a>(values: &'a [(String, String)], no_color: bool) -> Vec<Line<'a>> {
     values
         .iter()
         .map(|(label, value)| {
+            let split = value
+                .find(" (")
+                .into_iter()
+                .chain(value.find(" · "))
+                .min()
+                .unwrap_or(value.len());
+            let (primary, qualifier) = value.split_at(split);
             Line::from(vec![
                 Span::styled(format!("{label}: "), muted(no_color)),
-                Span::styled(value.as_str(), metric_style(label, value, no_color)),
+                Span::styled(primary, metric_style(label, value, no_color)),
+                Span::styled(qualifier, muted(no_color)),
             ])
         })
         .collect()
@@ -393,7 +403,7 @@ fn draw_compact(frame: &mut Frame<'_>, area: Rect, view: &MonitorView, no_color:
         ("Complexity · scoped", &view.complexity),
         ("Estimates · supplied model", &view.estimates),
     ] {
-        lines.push(Line::from(title).style(highlighted(Color::LightBlue, no_color)));
+        lines.push(Line::from(title).style(highlighted(ACCENT_BLUE, no_color)));
         lines.extend(rows(values, no_color));
         lines.push(Line::default());
     }
@@ -579,15 +589,16 @@ mod tests {
             ("Discovered-frontier ETA".into(), "warmup / unknown".into()),
         ];
         let buffer = render(&view, 220, 80, false);
-        for (value, expected) in [
-            ("7.2s", Color::LightCyan),
-            ("123", Color::LightGreen),
-            ("456", Color::LightYellow),
-            ("12.5 GiB", Color::LightBlue),
-            ("Route [2,1]", Color::LightMagenta),
-            ("0 / 3 / 3", Color::LightCyan),
-            ("42.0s (local observed work)", Color::LightCyan),
-            ("warmup / unknown", Color::Gray),
+        for (value, expected, modifier) in [
+            ("7.2s", Color::Rgb(115, 215, 225), Modifier::BOLD),
+            ("123", Color::Rgb(125, 215, 165), Modifier::BOLD),
+            ("456", Color::Rgb(240, 200, 120), Modifier::BOLD),
+            ("12.5 GiB", Color::Rgb(138, 188, 255), Modifier::BOLD),
+            ("Route [2,1]", Color::Rgb(210, 165, 235), Modifier::BOLD),
+            ("0 / 3 / 3", Color::Rgb(115, 215, 225), Modifier::BOLD),
+            ("42.0s", Color::Rgb(115, 215, 225), Modifier::BOLD),
+            ("(local observed work)", Color::Gray, Modifier::empty()),
+            ("warmup / unknown", Color::Gray, Modifier::ITALIC),
         ] {
             let characters = value.chars().map(|ch| ch.to_string()).collect::<Vec<_>>();
             let rendered = buffer
@@ -601,19 +612,11 @@ mod tests {
                 })
                 .expect(value);
             assert!(rendered.iter().all(|cell| cell.fg == expected), "{value}");
-            if value.contains("unknown") {
-                assert!(
-                    rendered
-                        .iter()
-                        .all(|cell| cell.modifier.contains(Modifier::ITALIC))
-                );
-            } else {
-                assert!(
-                    rendered
-                        .iter()
-                        .all(|cell| cell.modifier.contains(Modifier::BOLD))
-                );
-            }
+            assert!(rendered.iter().all(|cell| {
+                cell.modifier
+                    .intersection(Modifier::BOLD | Modifier::ITALIC)
+                    == modifier
+            }));
         }
         let plain = render(&view, 220, 80, true);
         assert!(
