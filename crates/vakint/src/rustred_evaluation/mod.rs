@@ -203,6 +203,7 @@ impl Vakint {
             settings,
             integral_specs.canonical_topology.get_integral().n_loops,
             options.master_mode,
+            None,
         )
     }
 
@@ -212,11 +213,12 @@ impl Vakint {
         settings: &VakintSettings,
         loop_count: usize,
         mode: RustRedMasterMode,
+        observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
     ) -> Result<Atom, VakintError> {
         let data = self.rustred_data()?;
         let announced = self.announced_bare_masters()?;
         let result = if mode == RustRedMasterMode::Retain {
-            data.masters.retain(raw, &announced)
+            data.masters.retain(raw, &announced, observation)
         } else {
             if !announced.is_empty() {
                 data.masters

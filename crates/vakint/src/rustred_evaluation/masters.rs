@@ -15,7 +15,9 @@ use symbolica::id::Replacement;
 use symbolica::poly::series::SeriesDepth;
 
 use super::data::{FileReference, LoopData, checked_bytes, failure};
-use super::{RustRedEvaluationError, RustRedMasterMode};
+use super::{
+    CandidateRoutedApplicationObserver, MonitorContext, RustRedEvaluationError, RustRedMasterMode,
+};
 use crate::utils::vakint_macros::{vk_parse, vk_symbol};
 use crate::{VakintError, VakintSettings, get_integer_from_atom};
 
@@ -550,8 +552,26 @@ impl MasterCatalog {
         issues
     }
 
-    pub(super) fn retain(&self, raw: Atom, announced: &BareMasterDeclarations) -> Atom {
+    pub(super) fn retain(
+        &self,
+        raw: Atom,
+        announced: &BareMasterDeclarations,
+        mut observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
+    ) -> Atom {
+        let started = std::time::Instant::now();
+        MonitorContext::native_phase(
+            observation.as_deref_mut(),
+            "retained_catalogue_exact_combination",
+            Some(raw.as_view()),
+        );
         let raw = combine_exact(raw);
+        log::debug!(target: "vakint::saved_application", "phase=retained_catalogue_exact_combination elapsed_seconds={:.6}", started.elapsed().as_secs_f64());
+        let started = std::time::Instant::now();
+        MonitorContext::native_phase(
+            observation,
+            "retained_catalogue_classification",
+            Some(raw.as_view()),
+        );
         let unresolved = self.unresolved(&raw, false, announced);
         if !unresolved.is_empty() {
             log::warn!(
@@ -560,6 +580,7 @@ impl MasterCatalog {
                 unresolved.join("\n  - ")
             );
         }
+        log::debug!(target: "vakint::saved_application", "phase=retained_catalogue_classification elapsed_seconds={:.6}", started.elapsed().as_secs_f64());
         raw
     }
 
@@ -649,7 +670,7 @@ impl MasterCatalog {
         mode: RustRedMasterMode,
     ) -> Result<Atom, VakintError> {
         if mode == RustRedMasterMode::Retain {
-            return Ok(self.retain(raw, &BTreeMap::new()));
+            return Ok(self.retain(raw, &BTreeMap::new(), None));
         }
         let raw = combine_exact(raw);
         self.require_coefficients(&raw, &BTreeMap::new())?;
@@ -1074,7 +1095,7 @@ mod tests {
             },
         )]);
         assert!(catalog.unresolved(&declared, false, &announced).is_empty());
-        assert_eq!(catalog.retain(declared.clone(), &announced), declared);
+        assert_eq!(catalog.retain(declared.clone(), &announced, None), declared);
         let error = catalog
             .require_coefficients(&declared, &announced)
             .unwrap_err()
@@ -1098,6 +1119,60 @@ mod tests {
         let zero = vk_parse!("ep^-2*((1-ep)^-1-1-ep)-(1-ep)^-1").unwrap();
         let combined = combine_exact(zero * declared);
         assert!(catalog.require_coefficients(&combined, &announced).is_ok());
+    }
+
+    #[test]
+    fn retained_postprocessing_phases_preserve_exact_cancellation_and_detachment() {
+        use rustred::solver::{
+            CandidateRoutedApplicationEnvelope, CandidateRoutedApplicationObserver,
+            CandidateRoutedObservationOptions, CandidateRoutedObserverControl,
+            CandidateRoutedObserverStatus,
+        };
+        let (catalog, master) = catalog(Some("5/2"), 30);
+        let unknown = catalog.symbol("unannounced-phase-control", &[2]);
+        let zero = vk_parse!("ep^-2*((1-ep)^-1-1-ep)-(1-ep)^-1").unwrap();
+        let raw = &master + zero * unknown;
+        for detach in [false, true] {
+            let mut phases = Vec::new();
+            {
+                let mut callback = |event: &CandidateRoutedApplicationEnvelope<'_>| {
+                    phases.push(event.caller_phase.unwrap().to_owned());
+                    Ok(if detach {
+                        CandidateRoutedObserverControl::Detach
+                    } else {
+                        CandidateRoutedObserverControl::Continue
+                    })
+                };
+                let mut observer = CandidateRoutedApplicationObserver::new(
+                    CandidateRoutedObservationOptions {
+                        interval: std::time::Duration::ZERO,
+                        ..Default::default()
+                    },
+                    &mut callback,
+                );
+                assert_eq!(
+                    catalog.retain(raw.clone(), &BTreeMap::new(), Some(&mut observer)),
+                    master,
+                );
+                assert_eq!(
+                    observer.status(),
+                    if detach {
+                        CandidateRoutedObserverStatus::Detached
+                    } else {
+                        CandidateRoutedObserverStatus::Active
+                    },
+                );
+            }
+            let expected = if detach {
+                vec!["retained_catalogue_exact_combination"]
+            } else {
+                vec![
+                    "retained_catalogue_exact_combination",
+                    "retained_catalogue_classification",
+                ]
+            };
+            assert_eq!(phases, expected);
+        }
     }
 
     #[test]

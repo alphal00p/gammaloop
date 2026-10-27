@@ -2537,6 +2537,7 @@ impl VakintTerm {
                         settings,
                         loop_count,
                         mode,
+                        None,
                     )?;
                     mode == RustRedMasterMode::Numerical
                 }
@@ -4461,6 +4462,7 @@ impl VakintExpression {
                     settings,
                     loop_count,
                     mode,
+                    observation.as_deref_mut(),
                 )?;
                 if mode == RustRedMasterMode::Numerical {
                     numerical += numerator;

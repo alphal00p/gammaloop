@@ -623,7 +623,10 @@ anchor = "pub struct Vakint {"
 # Reviewed 2026-10-27: explicit cache-file grants are independent of runtime
 # cache policies. Phase observers sample existing input, substitution and output
 # Atoms; the documented observation scopes and reduction ownership are unchanged.
-digest = "9a1e3a0e281b5030c35028a43b3b69c4004ee318"
+# Reviewed 2026-10-27 against 5749ba8a: existing request observers now reach
+# retained catalogue postprocessing; unobserved callers pass None. Numerical
+# operations, mode selection, guards and returned values remain unchanged.
+digest = "a24995fe572ee3e2f16b8c80454e8687789bbde1"
 
 [[section.note.scope]]
 path = "crates/vakint/src/lorentz.rs"
@@ -732,7 +735,10 @@ anchor = "pub(crate) struct MasterCatalog {"
 # from unknown residuals, requires available coefficients in Symbolic and
 # Numerical modes, and requires matching graph packs for bare application
 # identities.
-digest = "4b40902fb5a80796931698c05a6a590b4c817b30"
+# Reviewed 2026-10-27 against 5749ba8a: retained exact combination and catalogue
+# classification expose separate timing spans and caller phases. Cancellation
+# still precedes residual classification; detachment changes diagnostics only.
+digest = "a127f24ea93531c37104cfe3a0369e9eaf85bddb"
 
 [[section.note.scope]]
 path = "crates/vakint/src/precision.rs"

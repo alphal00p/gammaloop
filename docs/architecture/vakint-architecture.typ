@@ -168,6 +168,18 @@ and native observer, reporting phases, counters, bounded frontier samples, and i
 process and system memory observations. Any ETA remains a diagnostic estimate. Detaching the
 terminal display does not cancel the calculation.
 
+Five-loop retained evaluation also reports guard and coefficient materialization,
+normalization and notation conversion, both outer and catalogue exact-combination
+passes, and residual catalogue classification. These caller phases continue after
+native reduction finishes; they inspect existing Atom headers rather than creating
+another expression for monitoring. Each recorded stage duration is one completed
+span, with repeated calls retained separately. `detailed_evaluation_total` includes
+its reduction and materialization children plus callee cleanup;
+`retained_finalization_total` includes the catalogue combination and classification
+children. Add only the explicitly listed disjoint spans when comparing their sum
+with public evaluation time. Never add a parent to its children or label an
+unassigned residual as pure IBP time.
+
 Symbolic sizes follow the objects actually stored by each owner. The caller reports the
 encoded byte length and stored summands of its existing Atom at phase boundaries, without
 formatting or constructing another expression. Native reports unstarted coalesced roots,
