@@ -12,10 +12,27 @@ candidate rules (20,381,288 compressed bytes before the codec migration below). 
 The migration and timing sections below retain their historical measurements;
 their 59,636-rule payload is not the current generated package.
 
+## Symbolica state format 11 migration (2026-10-26)
+
+All 15 embedded native payloads now use Symbolica state format 11, matching
+`f514a7fe`. The old native decoder and current native encoder transported all
+395,955 coefficient frames and 74 catalog values through exact portable
+records. Numerator/denominator integer coefficients, exponent vectors and
+complete ordered variable maps are unchanged; catalog canonical text is
+identical. Every non-algebra section and dictionary position is preserved.
+No rule generation or master-value recomputation was performed.
+
+The [migration receipt](../codec-migration-2026-10-26.json) records input/output
+hashes, frame counts and exact portable-record hashes. The
+[offline bridge](../../../tools/native_asset_migration/README.md) reproduces
+the migration and verifies all records with a fresh current decoder. The
+`rustred_asset_compatibility_tests` target remains the runtime replay and
+catalog-coverage gate described below.
+
 ## Symbolica 3.0 codec migration (2026-10-05)
 
-All 15 embedded native payloads now use Symbolica export format 6 and atom
-format 1, matching the pinned Symbolica `98794d0d` stack. This is transport
+This earlier migration moved all 15 embedded native payloads to Symbolica
+export format 6 and atom format 1, matching the Symbolica `98794d0d` stack. It was transport
 migration, not a rule-generation or master-value update. The RustRed envelope,
 family geometry, rule/source records, terminal keys and normalization relations
 are unchanged. Stored-byte hashes and native validation counts are recorded in
