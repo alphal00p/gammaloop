@@ -1295,7 +1295,11 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # Reviewed 2026-10-27: The portable thirteen-case Vakint qualification fixture
 # and its five authenticated gzip provenance records are compile-time test
 # inputs. Production data ownership and dependency artifacts are unchanged.
-digest = "1010d74ea3599a01c3b068af40f3468b6676eb0e"
+# Reviewed 2026-10-27: Vakint's saved zero-momentum coefficient consumer,
+# Python helper package, and authenticated payloads are runtime-test inputs.
+# They follow the documented package-owned fixture boundary without changing
+# production sources or reusable compilation artifacts.
+digest = "53b221934b7181de663077d4391169c89e0c2d15"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"
