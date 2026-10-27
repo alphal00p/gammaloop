@@ -279,7 +279,9 @@ anchor = "pub struct FeynmanDiagram {"
 # validation, prefactor replacement and topology/routing ownership are retained.
 # Reviewed 2026-10-23: Cooking, index and slot causes remain typed in DiagramError; scene configuration has a distinct diagnostic. Retained tensor and serialization ownership remain unchanged.
 # No-impact attestation 2026-10-23: boxed tensor error sources preserve graph ownership and error semantics.
-digest = "2cbc7e6e672b92c090ee9052f5bf062fbf3f8bfa"
+# Integration review intent: preserve authoritative metadata and the current owner;
+# scoped source reconciliation and regression results are recorded in WP3 units03-07.
+digest = "2d8a36f8ae16bf33adf8ba933a7f58f25f02ba0a"
 
 [[section.note.scope]]
 path = "crates/feynkit-tensor/src/lib.rs"

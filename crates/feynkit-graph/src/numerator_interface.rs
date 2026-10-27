@@ -88,7 +88,7 @@ impl NumeratorInterface {
         };
         let expression = cook(&expression)?;
         let Some(interface) = interface else {
-            return Ok(SymbolicTensor::infer(expression)?);
+            return Self::canonical_ports(SymbolicTensor::infer(expression)?);
         };
         let mut matcher = SlotMatcher::default();
         let ports = interface
@@ -116,6 +116,36 @@ impl NumeratorInterface {
         Ok(SymbolicTensor::from_declared_parts(
             expression,
             PartialStructure::from_logical_slots(ports),
+        )?)
+    }
+
+    /// Order an inferred explicit interface by decoded source notation. Anonymous
+    /// axes retain their positional meaning. The native permutation owner keeps
+    /// index identities and collision history, including those hidden by zero.
+    pub(crate) fn canonical_ports(
+        tensor: SymbolicTensor<PartialStructure>,
+    ) -> Result<SymbolicTensor<PartialStructure>, DiagramError> {
+        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        let mut ports = Vec::new();
+        for (position, slot) in tensor.structure().logical_slots().into_iter().enumerate() {
+            let PartialIndex::Explicit(index) = slot.aind else {
+                return Ok(tensor);
+            };
+            let port = slot.rep().slot::<AbstractIndex, _>(index).to_atom();
+            ports.push((
+                cooking.uncook(port.as_view()).to_canonical_string(),
+                position,
+            ));
+        }
+        if ports.is_sorted_by(|(left, _), (right, _)| left <= right) {
+            return Ok(tensor);
+        }
+        ports.sort_by(|(left, _), (right, _)| left.cmp(right));
+        Ok(tensor.permuted(
+            &ports
+                .into_iter()
+                .map(|(_, position)| position)
+                .collect::<Vec<_>>(),
         )?)
     }
 
@@ -163,6 +193,8 @@ impl NumeratorInterface {
     /// Native indices and individual reversible labels share one injective map,
     /// including indices carried only by a zero. The original expression is
     /// translated once; checked tensor parts retain the established port order.
+    /// This includes declarations whose order happens to look canonical: the
+    /// inference boundary, not transport, owns any canonicalization.
     /// See [`NumeratorInterface`] for constructing a zero with retained ports.
     ///
     /// # Errors
@@ -368,6 +400,7 @@ impl<'de> Deserialize<'de> for NumeratorInterface {
 mod tests {
     use super::*;
     use crate::symbols;
+    use idenso::tensor::composition::TensorCompositionError;
     use spenso::structure::representation::{Euclidean, Minkowski, RepName};
     use spenso::tensor_symbol;
     use std::sync::Arc;
@@ -375,6 +408,122 @@ mod tests {
     use symbolica::function;
     use symbolica::id::Replacement;
     use symbolica::symbol;
+
+    #[test]
+    fn inferred_ports_are_independent_of_symbol_registration_order() {
+        let vector = |head, owner: usize| {
+            let index = function!(symbols::hedge_index(), owner, 1);
+            function!(head, Minkowski {}.new_rep(4).to_symbolic([index]))
+        };
+        let ports = |first, second| {
+            NumeratorInterface::admit(vector(first, 1) * vector(second, 2), None)
+                .unwrap()
+                .structure()
+                .logical_slots()
+        };
+        let a = tensor_symbol!("feynkit_graph::port_order_a");
+        let b = tensor_symbol!("feynkit_graph::port_order_b");
+        let d = tensor_symbol!("feynkit_graph::port_order_d");
+        let c = tensor_symbol!("feynkit_graph::port_order_c");
+        assert_eq!(ports(a, b), ports(c, d));
+    }
+
+    #[test]
+    fn transport_preserves_canonical_declarations_and_inferred_axis_mapping() {
+        let index = |owner: usize| function!(symbols::hedge_index(), owner, 1);
+        let port = |owner| Minkowski {}.new_rep(4).to_symbolic([index(owner)]);
+        let matrix = tensor_symbol!("feynkit_graph::transported_matrix");
+        let source = function!(matrix, port(1), port(2));
+        let declare = |owners: [usize; 2]| Some(NumeratorInterface(owners.map(port).to_vec()));
+        let swap = |atom: &Atom| {
+            Ok::<_, DiagramError>(atom.replace_multiple([
+                Replacement::new(index(1).to_pattern(), index(2)),
+                Replacement::new(index(2).to_pattern(), index(1)),
+            ]))
+        };
+        for (interface, mapped_order) in [
+            (None, [2, 1]),
+            (declare([1, 2]), [2, 1]),
+            (declare([2, 1]), [1, 2]),
+        ] {
+            let tensor = NumeratorInterface::admit(source.clone(), interface).unwrap();
+            let mapped = NumeratorInterface::translate(&tensor, swap).unwrap();
+            let expected =
+                NumeratorInterface::admit(swap(&source).unwrap(), declare(mapped_order)).unwrap();
+            assert!(mapped.same_value(&expected));
+        }
+    }
+
+    #[test]
+    fn canonical_inferred_layout_retains_zero_collision_history() {
+        let [a, b, dummy] = [
+            AbstractIndex::Named(symbols::hedge_index().into(), 2, 1),
+            AbstractIndex::Named(symbols::hedge_index().into(), 1, 1),
+            AbstractIndex::Named(symbols::vertex_index().into(), 7, 99),
+        ];
+        let port = |index: AbstractIndex| Minkowski {}.new_rep(4).to_symbolic([index.to_atom()]);
+        let left = tensor_symbol!("feynkit_graph::canonical_history_left");
+        let right = tensor_symbol!("feynkit_graph::canonical_history_right");
+        let source = NumeratorInterface::admit(
+            function!(left, port(a), port(dummy)) * function!(right, port(dummy), port(b)),
+            None,
+        )
+        .unwrap()
+        .permuted(&[1, 0])
+        .unwrap();
+        // Rewrite one established carrier to its exact algebraic zero. Adding
+        // separate carriers would instead scope each summand's internal pairs.
+        let zero = source
+            .with_checked_expression(source.expression() - source.expression())
+            .unwrap();
+        let history = zero.explicit_indices().unwrap().collect::<HashSet<_>>();
+        let ordered = NumeratorInterface::canonical_ports(zero).unwrap();
+        assert!(ordered.is_zero());
+        assert_eq!(ordered.rank(), 2);
+        assert_eq!(
+            ordered
+                .structure()
+                .logical_slots()
+                .into_iter()
+                .map(|slot| slot.aind)
+                .collect::<Vec<_>>(),
+            [b, a].map(PartialIndex::Explicit)
+        );
+        assert_eq!(
+            ordered.explicit_indices().unwrap().collect::<HashSet<_>>(),
+            history
+        );
+        // Probe the retained native identities, not a separately encoded
+        // source label. The rewrite and permutation must keep the bound pair.
+        let public = ordered
+            .structure()
+            .logical_slots()
+            .into_iter()
+            .filter_map(|slot| match slot.aind {
+                PartialIndex::Explicit(index) => Some(index),
+                PartialIndex::Open(_) => None,
+            })
+            .collect::<HashSet<_>>();
+        let bound = history.difference(&public).copied().collect::<Vec<_>>();
+        assert_eq!(bound.len(), 1, "the closed pair retains its bound identity");
+        for retained_dummy in bound {
+            let slot = Minkowski {}
+                .new_rep(4)
+                .to_lib()
+                .slot::<AbstractIndex, _>(retained_dummy)
+                .to_atom();
+            let probe = SymbolicTensor::infer(function!(
+                tensor_symbol!("feynkit_graph::canonical_history_probe"),
+                slot
+            ))
+            .unwrap();
+            assert!(
+                matches!(ordered.multiply(&probe),
+                Err(TensorCompositionError::InvalidExplicitMultiplicity { index, occurrences: 3 }) if index == retained_dummy),
+                "retained index {retained_dummy:?}"
+            );
+        }
+    }
 
     #[test]
     fn source_codec_preserves_anonymous_axes_and_ranked_zero() {

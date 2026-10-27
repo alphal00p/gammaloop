@@ -440,6 +440,15 @@ The shared `NumeratorInterface` codec owns source admission and export. Live
 diagram-to-runtime conversion copies the existing carriers; it does not pass
 them through that codec again. Diagram DOT/JSON retains expression strings and
 adds ordered interface metadata only when the expression cannot recover it.
+Without a declared interface, admission orders explicit ports by decoded source
+notation rather than Symbolica's registration-dependent term order. Aggregate
+fragment products use the same inferred order. The native permutation owner
+retains index history and typed zeros; anonymous axes keep their positions.
+Translation preserves the established axis correspondence for both inferred and
+declared carriers, including canonical-looking declarations. A declaration's
+provenance cannot be inferred from its current sort order. Aggregate validation
+matches named ports by label, so differently ordered explicit declarations retain
+their order on import.
 `num_interface` describes node, edge and aggregate numerator ports;
 `numerator_prefactor_interface` and `projector_interface` describe the two
 graph-wide factors. `GlobalPrefactor`'s own JSON uses `num_interface` and

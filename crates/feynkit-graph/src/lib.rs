@@ -700,12 +700,13 @@ impl FeynmanDiagram {
     fn fragment_numerator(
         graph: &HedgeGraph<DiagramEdge, DiagramVertex>,
     ) -> Result<SymbolicTensor<PartialStructure>, DiagramError> {
-        Ok(SymbolicTensor::multiply_many(
+        let numerator = SymbolicTensor::multiply_many(
             graph
                 .iter_edges()
                 .map(|(_, _, edge)| &edge.data.numerator)
                 .chain(graph.iter_nodes().map(|(_, _, vertex)| &vertex.numerator)),
-        )?)
+        )?;
+        NumeratorInterface::canonical_ports(numerator)
     }
 
     /// Replace local numerator fragments in the finalized index frame and
@@ -1971,6 +1972,7 @@ impl FeynmanDiagram {
                 .exact_fallback(true);
             if !coefficients.into_iter().all(|(tensor, coefficient)| {
                 tensor.is_zero()
+                    || coefficient.is_zero()
                     || coefficient.is_scalar()
                         && coefficient.expression().check_zero_with(&zero_settings)
                             == symbolica::id::ConditionResult::True
@@ -4176,6 +4178,67 @@ mod tests {
         }
         assert!(diagram.to_json().unwrap().contains("num_interface"));
         assert!(diagram.to_dot().unwrap().contains("num_interface"));
+    }
+
+    #[test]
+    fn fragment_products_export_their_ports_without_metadata() {
+        let original = one_loop();
+        let [left, right] = [0, 1].map(|position| original.vertices().nth(position).unwrap().0);
+        // Concatenation puts the left port first. Canonical order and, with the
+        // right head registered first, Symbolica's term order both put it last.
+        let right_head = tensor_symbol!("feynkit_graph::fragment_port_right");
+        let left_head = tensor_symbol!("feynkit_graph::fragment_port_left");
+        let vector = |head, owner: usize| {
+            let index = function!(symbols::hedge_index(), owner, 1);
+            NumeratorInterface::admit(
+                function!(head, Minkowski {}.new_rep(4).to_symbolic([index])),
+                None,
+            )
+            .unwrap()
+        };
+        let diagram = original
+            .with_numerator_fragments(
+                [(left, vector(left_head, 2)), (right, vector(right_head, 1))],
+                [],
+            )
+            .unwrap();
+        assert!(NumeratorInterface::export(diagram.numerator()).1.is_none());
+        assert!(!diagram.to_json().unwrap().contains("num_interface"));
+        assert!(!diagram.to_dot().unwrap().contains("num_interface"));
+        for restored in [
+            FeynmanDiagram::from_json(diagram.model_arc(), &diagram.to_json().unwrap()).unwrap(),
+            FeynmanDiagram::from_dot(diagram.model_arc(), &diagram.to_dot().unwrap()).unwrap(),
+        ] {
+            assert!(restored.numerator().same_value(diagram.numerator()));
+        }
+    }
+
+    #[test]
+    fn imports_aggregates_that_declare_their_ports_in_another_order() {
+        let original = one_loop();
+        let [left, right] = [0, 1].map(|position| original.vertices().nth(position).unwrap().0);
+        let head = tensor_symbol!("feynkit_graph::declared_port_order");
+        let port = |owner: usize| {
+            let index = function!(symbols::hedge_index(), owner, 1);
+            Minkowski {}.new_rep(4).to_symbolic([index])
+        };
+        let vector = |owner| NumeratorInterface::admit(function!(head, port(owner)), None).unwrap();
+        let diagram = original
+            .with_numerator_fragments([(left, vector(1)), (right, vector(2))], [])
+            .unwrap();
+        let (expression, _) = NumeratorInterface::export(diagram.numerator());
+        // Artifacts written by other processes or versions may list the
+        // aggregate's ports in either order; both describe the same numerator.
+        for owners in [[1, 2], [2, 1]] {
+            let interface = NumeratorInterface(owners.map(port).to_vec());
+            let declared =
+                NumeratorInterface::admit(expression.clone(), Some(interface.clone())).unwrap();
+            let mut source = diagram.serde_view();
+            source.num_interface = Some(interface);
+            let source = serde_json::to_string(&source).unwrap();
+            let restored = FeynmanDiagram::from_json(diagram.model_arc(), &source).unwrap();
+            assert!(restored.numerator().same_value(&declared));
+        }
     }
 
     #[test]
