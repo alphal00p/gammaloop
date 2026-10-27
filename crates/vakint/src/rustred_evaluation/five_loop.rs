@@ -14,7 +14,7 @@ use std::{
     sync::{Arc, LazyLock, Mutex},
 };
 
-use super::monitor::{MonitorContext, RustRedMonitorOptions};
+use super::monitor::{MonitorContext, RustRedMonitorOptions, RustRedMonitorScope};
 use rustred::algebra::Coefficient;
 use rustred::family::IntegralKey;
 use rustred::input::{Compiler, Limits, LoweringLimits, TextProject, TextPropagator};
@@ -646,6 +646,19 @@ impl Vakint {
         monitor: &RustRedMonitorOptions,
     ) -> Result<RustRedSymbolicEvaluation, VakintError> {
         MonitorContext::run(monitor, |observation, progress| {
+            self.evaluate_rustred_symbolic_observed(settings, input, observation, progress)
+        })
+    }
+
+    /// Retain exact masters inside an existing caller-owned job monitor.
+    /// Returning completes this API call; the outer job scope remains active.
+    pub fn evaluate_rustred_symbolic_in_scope(
+        &self,
+        settings: &VakintSettings,
+        input: AtomView,
+        scope: &mut RustRedMonitorScope<'_, '_>,
+    ) -> Result<RustRedSymbolicEvaluation, VakintError> {
+        scope.evaluate(|observation, progress| {
             self.evaluate_rustred_symbolic_observed(settings, input, observation, progress)
         })
     }

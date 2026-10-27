@@ -1,4 +1,4 @@
-//! One per-call native observer feeds optional presentation and benchmark metadata.
+//! One scoped native observer feeds optional presentation and benchmark metadata.
 
 use std::{
     collections::VecDeque,
@@ -22,8 +22,9 @@ use rustred::solver::{
 use symbolica::atom::AtomView;
 
 use super::{
-    CallerExpressionSample, DisplaySnapshot, FrontierCount, MonitorState, MonitorStatus,
-    RustRedMonitorDisplay, RustRedMonitorOptions, StoredStateSample,
+    ApiStatus, CallerExpressionSample, DisplaySnapshot, FrontierCount, MonitorState, MonitorStatus,
+    NativeCollectionSample, RustRedMonitorDisplay, RustRedMonitorOptions, ScopeKind,
+    StoredStateSample,
 };
 use crate::VakintError;
 
@@ -48,16 +49,29 @@ struct Shared {
     stopping: AtomicBool,
     started: Instant,
     publisher_owner: u64,
+    scope_kind: ScopeKind,
 }
 
 impl Shared {
     fn new() -> Self {
+        Self::scoped(ScopeKind::Api)
+    }
+
+    fn scoped(kind: ScopeKind) -> Self {
+        let mut pending = Pending::default();
+        pending.display.scope_kind = kind;
+        pending.display.api_status = if kind == ScopeKind::Api {
+            ApiStatus::Running
+        } else {
+            ApiStatus::NotStarted
+        };
         Self {
-            pending: Mutex::new(Pending::default()),
+            pending: Mutex::new(pending),
             active: AtomicBool::new(true),
             stopping: AtomicBool::new(false),
             started: Instant::now(),
             publisher_owner: super::publication::FileLease::next_owner(),
+            scope_kind: kind,
         }
     }
 
@@ -249,6 +263,102 @@ pub(crate) struct MonitorContext {
     worker: Option<JoinHandle<()>>,
 }
 
+/// One caller-thread monitor for preparation, reduction and final durable output.
+/// Native observer types and symbolic values never leave this borrowed scope.
+pub struct RustRedMonitorScope<'scope, 'observer> {
+    observation: Option<&'scope mut Observer<'observer>>,
+    progress: Option<&'scope CallerProgress>,
+    handle: Option<MonitorHandle>,
+    _caller_thread: std::marker::PhantomData<std::rc::Rc<()>>,
+}
+
+/// An actual completed/total caller loop, sharing its scope's existing owner.
+pub struct RustRedMonitorWork<'scope> {
+    inner: Option<CallerPhase<'scope>>,
+}
+
+impl RustRedMonitorWork<'_> {
+    pub fn completed(&mut self, completed: usize) {
+        if let Some(inner) = &mut self.inner {
+            inner.completed(completed);
+        }
+    }
+}
+
+impl RustRedMonitorScope<'_, '_> {
+    /// Errors from the operation are returned unchanged. Only invalid monitor
+    /// options require conversion from VakintError. Omission starts no workers.
+    pub fn run<T, E>(
+        options: &RustRedMonitorOptions,
+        operation: impl FnOnce(&mut RustRedMonitorScope<'_, '_>) -> Result<T, E>,
+    ) -> Result<T, E>
+    where
+        E: From<VakintError>,
+    {
+        options.validate().map_err(|error| {
+            E::from(VakintError::EvaluationError(format!(
+                "invalid RustRed monitor options: {error}"
+            )))
+        })?;
+        #[cfg(feature = "experimental-rustred")]
+        if options.cache_hit_diagnostic {
+            return Err(E::from(VakintError::EvaluationError("lossless cache-hit diagnostics use their existing per-API scope, not a caller job scope".into())));
+        }
+        MonitorContext::run_scoped(options, ScopeKind::Job, |observation, progress, handle| {
+            operation(&mut RustRedMonitorScope {
+                observation,
+                progress,
+                handle,
+                _caller_thread: std::marker::PhantomData,
+            })
+        })
+    }
+
+    /// Identify the current operation without inventing a work counter or ETA.
+    pub fn phase(&mut self, phase: &str) {
+        MonitorContext::native_phase(self.observation.as_deref_mut(), phase, None);
+    }
+
+    /// Read only the existing Atom's headers on its current owning thread.
+    pub fn expression_phase(&mut self, phase: &str, expression: AtomView<'_>) {
+        MonitorContext::native_phase(self.observation.as_deref_mut(), phase, Some(expression));
+    }
+
+    pub fn work_phase(&mut self, phase: &str, total: usize, unit: &str) -> RustRedMonitorWork<'_> {
+        self.phase(phase);
+        RustRedMonitorWork {
+            inner: self.progress.map(|owner| owner.phase(phase, total, unit)),
+        }
+    }
+
+    pub(crate) fn evaluate<T>(
+        &mut self,
+        operation: impl FnOnce(
+            Option<&mut Observer<'_>>,
+            Option<&CallerProgress>,
+        ) -> Result<T, VakintError>,
+    ) -> Result<T, VakintError> {
+        self.api_status(ApiStatus::Running);
+        let result = operation(self.observation.as_deref_mut(), self.progress);
+        self.api_status(if result.is_ok() {
+            ApiStatus::Succeeded
+        } else {
+            ApiStatus::Failed
+        });
+        result
+    }
+
+    fn api_status(&self, status: ApiStatus) {
+        if let Some(handle) = &self.handle {
+            let mut pending = handle.shared.pending();
+            pending.display.api_status = status;
+            pending.dirty = true;
+            drop(pending);
+            let _ = handle.wake.try_send(());
+        }
+    }
+}
+
 impl MonitorContext {
     pub(crate) fn run<T>(
         options: &RustRedMonitorOptions,
@@ -257,6 +367,23 @@ impl MonitorContext {
             Option<&CallerProgress>,
         ) -> Result<T, VakintError>,
     ) -> Result<T, VakintError> {
+        Self::run_scoped(options, ScopeKind::Api, |observation, progress, _| {
+            operation(observation, progress)
+        })
+    }
+
+    fn run_scoped<T, E>(
+        options: &RustRedMonitorOptions,
+        kind: ScopeKind,
+        operation: impl FnOnce(
+            Option<&mut Observer<'_>>,
+            Option<&CallerProgress>,
+            Option<MonitorHandle>,
+        ) -> Result<T, E>,
+    ) -> Result<T, E>
+    where
+        E: From<VakintError>,
+    {
         // Collection is an explicit per-call option. The private log target
         // controls delivery only; general log verbosity cannot enable an observer.
         #[cfg(feature = "experimental-rustred")]
@@ -265,17 +392,25 @@ impl MonitorContext {
         let benchmark = false;
         if benchmark {
             options.validate().map_err(|error| {
-                VakintError::EvaluationError(format!("invalid RustRed monitor options: {error}"))
+                E::from(VakintError::EvaluationError(format!(
+                    "invalid RustRed monitor options: {error}"
+                )))
             })?;
         }
         if !options.enabled() && !benchmark {
-            return operation(None, None);
+            return operation(None, None, None);
         }
         // Classification-only collection has no presenter, worker or JSON sink.
-        let mut context = options.enabled().then(|| Self::new(options));
+        let mut context = options.enabled().then(|| {
+            if kind == ScopeKind::Api {
+                Self::new(options)
+            } else {
+                Self::new_scoped(options, kind)
+            }
+        });
         let handle = context.as_ref().and_then(|context| context.handle.clone());
         if options.enabled() && handle.is_none() {
-            return operation(None, None);
+            return operation(None, None, None);
         }
         let phase_handle = handle.clone();
         let progress = handle.clone().map(|handle| CallerProgress { handle });
@@ -304,7 +439,7 @@ impl MonitorContext {
             };
             let mut observer = Observer::new(observation, &mut callback);
             Self::native_phase(Some(&mut observer), "request_start", None);
-            let result = operation(Some(&mut observer), progress.as_ref());
+            let result = operation(Some(&mut observer), progress.as_ref(), phase_handle.clone());
             let phase = phase_handle
                 .as_ref()
                 .map(|handle| handle.shared.pending().caller_phase.clone())
@@ -474,7 +609,15 @@ impl MonitorContext {
     }
 
     fn new(options: &RustRedMonitorOptions) -> Self {
-        let shared = Arc::new(Shared::new());
+        Self::new_scoped(options, ScopeKind::Api)
+    }
+
+    fn new_scoped(options: &RustRedMonitorOptions, kind: ScopeKind) -> Self {
+        let shared = Arc::new(if kind == ScopeKind::Api {
+            Shared::new()
+        } else {
+            Shared::scoped(kind)
+        });
         let (wake, receiver) = mpsc::sync_channel(1);
         let handle = MonitorHandle {
             shared: Arc::clone(&shared),
@@ -557,6 +700,12 @@ fn worker_with_publisher(
     ) -> io::Result<super::publication::SnapshotPublisher>,
 ) {
     let mut state = MonitorState::default();
+    state.latest.scope_kind = shared.scope_kind;
+    state.latest.api_status = if shared.scope_kind == ScopeKind::Api {
+        ApiStatus::Running
+    } else {
+        ApiStatus::NotStarted
+    };
     let file_enabled = options.progress_snapshot.is_some();
     let mut stderr_json = false;
     #[cfg(feature = "progress-tui")]
@@ -645,6 +794,7 @@ fn worker_with_publisher(
                 state.observe(display, shared.started.elapsed());
             } else {
                 state.latest.caller_work = display.caller_work;
+                state.latest.api_status = display.api_status;
             }
             if let Some(document) = document {
                 last_document = Some(document);
@@ -812,7 +962,9 @@ fn update_display(pending: &mut Pending, envelope: &Envelope<'_>, detail: bool, 
         match envelope.status {
             Status::Failed => MonitorStatus::Failed,
             Status::Succeeded
-                if display.phase.contains("cancelled") || display.phase.contains("incomplete") =>
+                if display.scope_kind == ScopeKind::Api
+                    && (display.phase.contains("cancelled")
+                        || display.phase.contains("incomplete")) =>
             {
                 MonitorStatus::Partial
             }
@@ -822,6 +974,13 @@ fn update_display(pending: &mut Pending, envelope: &Envelope<'_>, detail: bool, 
     } else {
         MonitorStatus::Running
     };
+    if outer_finished && display.scope_kind == ScopeKind::Api {
+        display.api_status = if envelope.status == Status::Succeeded {
+            ApiStatus::Succeeded
+        } else {
+            ApiStatus::Failed
+        };
+    }
     let admission_start = MonitorContext::is_saved_admission_start(envelope);
     if initial || admission_start {
         display.native_epoch = display.native_epoch.saturating_add(1);
@@ -829,6 +988,8 @@ fn update_display(pending: &mut Pending, envelope: &Envelope<'_>, detail: bool, 
         display.quantitative_sample_sequence = 0;
         display.pending_unique = None;
         display.stored_state = None;
+        display.native_collection = None;
+        display.native_collection_sample_at = None;
     }
     if admission_start {
         display.native_observed_at = None;
@@ -854,6 +1015,41 @@ fn update_display(pending: &mut Pending, envelope: &Envelope<'_>, detail: bool, 
             phase: phase.to_owned(),
             sampled_at: envelope.elapsed,
         });
+    }
+    if envelope.caller_phase.is_none()
+        && envelope.snapshot.is_some()
+        && matches!(
+            envelope.activity,
+            Activity::RootCollection | Activity::RootMaterialization
+        )
+    {
+        let current = envelope.activity == Activity::RootCollection
+            && envelope.status == Status::Running
+            && !matches!(
+                envelope.event,
+                Event::RootCollected | Event::CoreFinished | Event::RequestFinished
+            );
+        display.native_collection = Some(NativeCollectionSample {
+            completed_roots: envelope
+                .metrics
+                .requested_roots
+                .map(|_| envelope.metrics.completed_roots as u64),
+            total_roots: envelope.metrics.requested_roots.map(|v| v as u64),
+            contribution_index: current
+                .then_some(envelope.complexity.contribution_index)
+                .flatten(),
+            contribution_total: current
+                .then_some(envelope.complexity.contribution_total)
+                .flatten(),
+            source: match envelope.activity {
+                Activity::RootCollection => "native root collection",
+                _ => "native root materialization",
+            }
+            .into(),
+            sequence: envelope.sequence,
+            sample_age_seconds: Some(0.0),
+        });
+        display.native_collection_sample_at = Some(envelope.elapsed);
     }
     if envelope.activity != Activity::Caller
         && envelope.caller_phase.is_none()
@@ -2071,6 +2267,146 @@ mod tests {
     }
 
     #[test]
+    fn collection_activity_counters_do_not_depend_on_or_refresh_the_frontier_census() {
+        use rustred::solver::{
+            CandidateRoutedApplicationPhase, CandidateRoutedApplicationSnapshot,
+        };
+        // Actual native envelope fields, without a frontier projection, reduction
+        // or any symbolic payload. The coherent rate tuple is deliberately older.
+        let mut pending = Pending::default();
+        pending.display.quantitative_sample_at = Some(Duration::from_secs(10));
+        pending.display.quantitative_sample_sequence = 1;
+        pending.display.completed_roots = Some(1);
+        pending.display.total_roots = Some(1750);
+        pending.display.completed_unique = Some(5);
+        let mut envelope = Envelope::new(Event::ActivityStarted, "native-family");
+        envelope.activity = Activity::RootCollection;
+        envelope.snapshot = Some(CandidateRoutedApplicationSnapshot {
+            sequence: 42,
+            elapsed: Duration::from_secs(30),
+            phase: CandidateRoutedApplicationPhase::RootCollection,
+            status: Status::Running,
+            statistics: Default::default(),
+            unique_nodes: 20,
+            active_nodes: 1,
+            pending_frames: 12,
+            cached: Default::default(),
+            pinned: None,
+            eligible: None,
+        });
+        envelope.sequence = 42;
+        envelope.elapsed = Duration::from_secs(30);
+        envelope.metrics.requested_roots = Some(1750);
+        envelope.metrics.completed_roots = 177;
+        envelope.complexity.contribution_index = Some(3);
+        envelope.complexity.contribution_total = Some(153);
+        update_display(&mut pending, &envelope, false, false);
+        let sample = pending.display.native_collection.as_ref().unwrap();
+        assert_eq!(
+            (sample.completed_roots, sample.total_roots),
+            (Some(177), Some(1750))
+        );
+        assert_eq!(
+            (sample.contribution_index, sample.contribution_total),
+            (Some(3), Some(153))
+        );
+        assert_eq!(sample.sequence, 42);
+        assert_eq!(
+            pending.display.native_collection_sample_at,
+            Some(Duration::from_secs(30))
+        );
+        assert_eq!(
+            pending.display.quantitative_sample_at,
+            Some(Duration::from_secs(10))
+        );
+        assert_eq!(pending.display.quantitative_sample_sequence, 1);
+        assert_eq!(pending.display.completed_roots, Some(1));
+        assert_eq!(pending.display.completed_unique, Some(5));
+        assert!(!pending.display.request_finished);
+        assert_eq!(pending.display.status, MonitorStatus::Running);
+
+        // A saved/caller summary can repeat native fields without being a new
+        // native observation. It must not refresh collection age or counters.
+        envelope.caller_phase = Some("saved_terminal_forward");
+        envelope.sequence = 43;
+        envelope.elapsed = Duration::from_secs(40);
+        envelope.metrics.completed_roots = 999;
+        update_display(&mut pending, &envelope, true, false);
+        assert_eq!(
+            pending.display.native_collection.as_ref().unwrap().sequence,
+            42
+        );
+        assert_eq!(
+            pending.display.native_collection_sample_at,
+            Some(Duration::from_secs(30))
+        );
+        let mut state = MonitorState::default();
+        state.observe(pending.display.clone(), Duration::from_secs(100));
+        assert_eq!(
+            state.presentation(Duration::from_secs(136))["native_collection"]["sample_age_seconds"],
+            46.0
+        );
+        assert_eq!(pending.display.quantitative_sample_sequence, 1);
+
+        envelope.caller_phase = None;
+        envelope.event = Event::RootCollected;
+        envelope.sequence = 44;
+        envelope.elapsed = Duration::from_secs(50);
+        envelope.metrics.completed_roots = 178;
+        update_display(&mut pending, &envelope, false, false);
+        let sample = pending.display.native_collection.as_ref().unwrap();
+        assert_eq!(sample.completed_roots, Some(178));
+        assert!(sample.contribution_index.is_none() && sample.contribution_total.is_none());
+        assert!(!pending.display.request_finished);
+        envelope.event = Event::CoreFinished;
+        envelope.status = Status::Succeeded;
+        update_display(&mut pending, &envelope, false, false);
+        let sample = pending.display.native_collection.as_ref().unwrap();
+        assert!(sample.contribution_index.is_none() && sample.contribution_total.is_none());
+        assert!(!pending.display.request_finished);
+        envelope.status = Status::Running;
+        envelope.activity = Activity::RootMaterialization;
+        envelope.event = Event::ActivityStarted;
+        envelope.sequence = 45;
+        envelope.metrics.requested_roots = None;
+        update_display(&mut pending, &envelope, false, false);
+        let sample = pending.display.native_collection.as_ref().unwrap();
+        assert!(sample.completed_roots.is_none() && sample.total_roots.is_none());
+        assert!(sample.contribution_index.is_none() && sample.contribution_total.is_none());
+
+        envelope.activity = Activity::Admission;
+        envelope.caller_phase = Some("entry_admission");
+        envelope.snapshot = None;
+        update_display(&mut pending, &envelope, false, false);
+        assert!(pending.display.native_collection.is_none());
+        assert!(pending.display.native_collection_sample_at.is_none());
+        // A new native epoch also clears any prior collection observation.
+        envelope.activity = Activity::RootCollection;
+        envelope.caller_phase = None;
+        // No actual native snapshot: copied/default counters stay unobserved.
+        update_display(&mut pending, &envelope, false, false);
+        assert!(pending.display.native_collection.is_none());
+        envelope.snapshot = Some(CandidateRoutedApplicationSnapshot {
+            sequence: 46,
+            elapsed: Duration::from_secs(50),
+            phase: CandidateRoutedApplicationPhase::RootCollection,
+            status: Status::Running,
+            statistics: Default::default(),
+            unique_nodes: 20,
+            active_nodes: 1,
+            pending_frames: 12,
+            cached: Default::default(),
+            pinned: None,
+            eligible: None,
+        });
+        update_display(&mut pending, &envelope, false, false);
+        assert!(pending.display.native_collection.is_some());
+        envelope.activity = Activity::Expansion;
+        update_display(&mut pending, &envelope, false, true);
+        assert!(pending.display.native_collection.is_none());
+    }
+
+    #[test]
     fn fast_core_finish_retains_final_counts_before_outer_caller_finish() {
         use rustred::solver::{
             CandidateRoutedApplicationPhase, CandidateRoutedApplicationSnapshot,
@@ -2504,6 +2840,159 @@ mod benchmark_tests {
 mod responsiveness_tests {
     use super::*;
 
+    fn wait_job_document(
+        path: &std::path::Path,
+        predicate: impl Fn(&serde_json::Value) -> bool,
+    ) -> serde_json::Value {
+        let deadline = Instant::now() + Duration::from_secs(4);
+        loop {
+            if let Ok(bytes) = std::fs::read(path)
+                && let Ok(document) = serde_json::from_slice(&bytes)
+                && predicate(&document)
+            {
+                return document;
+            }
+            assert!(Instant::now() < deadline, "job lifecycle was not published");
+            thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    #[test]
+    fn default_off_job_runs_once_and_preserves_its_original_error() {
+        let mut calls = 0;
+        let error = RustRedMonitorScope::run(&RustRedMonitorOptions::default(), |scope| {
+            calls += 1;
+            scope.phase("prepared_input_loading");
+            scope.evaluate(|observer, progress| {
+                assert!(observer.is_none() && progress.is_none());
+                Ok(17)
+            })?;
+            Err::<(), _>(VakintError::EvaluationError("original close error".into()))
+        })
+        .unwrap_err();
+        assert_eq!(calls, 1);
+        assert!(
+            matches!(error, VakintError::EvaluationError(text) if text == "original close error")
+        );
+    }
+
+    #[test]
+    fn job_owner_spans_loading_api_status_only_updates_and_durable_output() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("job.json");
+        let options = RustRedMonitorOptions {
+            progress_snapshot: Some(path.clone()),
+            interval: Duration::from_secs(60),
+            ..Default::default()
+        };
+        let value = RustRedMonitorScope::run(&options, |scope| {
+            scope.phase("prepared_input_loading");
+            let first =
+                wait_job_document(&path, |d| d["monitor"]["phase"] == "prepared_input_loading");
+            assert_eq!(first["monitor"]["scope_kind"], "job");
+            assert_eq!(first["monitor"]["api_status"], "NotStarted");
+            assert_eq!(first["monitor"]["job_finished"], false);
+            let owner = first["monitor"]["request_sequence"].clone();
+            let result = scope.evaluate(|observer, _| {
+                MonitorContext::native_phase(observer, "retained_output", None);
+                // Force consumption of the final API phase before its private
+                // status-only update; that update must not need another event.
+                wait_job_document(&path, |d| {
+                    d["monitor"]["phase"] == "retained_output"
+                        && d["monitor"]["api_status"] == "Running"
+                });
+                Ok(17)
+            })?;
+            let api = wait_job_document(&path, |d| d["monitor"]["api_status"] == "Succeeded");
+            assert_eq!(api["monitor"]["status"], "Running");
+            assert_eq!(api["monitor"]["job_finished"], false);
+            assert_eq!(api["monitor"]["request_sequence"], owner);
+            scope.phase("result_expression_serialization");
+            let output = wait_job_document(&path, |d| {
+                d["monitor"]["phase"] == "result_expression_serialization"
+            });
+            assert_eq!(output["monitor"]["status"], "Running");
+            assert_eq!(output["monitor"]["api_status"], "Succeeded");
+            assert_eq!(output["monitor"]["request_sequence"], owner);
+            scope.phase("incomplete_record_cleanup");
+            Ok::<_, VakintError>(result)
+        })
+        .unwrap();
+        assert_eq!(value, 17);
+        let done = wait_job_document(&path, |d| d["monitor"]["job_finished"] == true);
+        assert_eq!(done["monitor"]["status"], "Succeeded");
+        assert_eq!(done["monitor"]["api_status"], "Succeeded");
+    }
+
+    #[test]
+    fn job_errors_before_and_after_api_keep_their_failure_boundary() {
+        for boundary in ["loading", "api", "close"] {
+            let directory = tempfile::tempdir().unwrap();
+            let path = directory.path().join("failed-job.json");
+            let options = RustRedMonitorOptions {
+                progress_snapshot: Some(path.clone()),
+                ..Default::default()
+            };
+            let error = RustRedMonitorScope::run(&options, |scope| {
+                scope.phase("prepared_input_loading");
+                if boundary != "loading" {
+                    scope.phase("retained_api_evaluation");
+                    scope.evaluate(|_, _| {
+                        if boundary == "api" {
+                            Err(VakintError::EvaluationError("original job error".into()))
+                        } else {
+                            Ok(17)
+                        }
+                    })?;
+                    scope.phase("running_cache_close");
+                }
+                Err::<(), _>(VakintError::EvaluationError("original job error".into()))
+            })
+            .unwrap_err();
+            assert!(
+                matches!(error, VakintError::EvaluationError(text) if text == "original job error")
+            );
+            let done = wait_job_document(&path, |d| d["monitor"]["job_finished"] == true);
+            assert_eq!(done["monitor"]["status"], "Failed");
+            assert_eq!(
+                done["monitor"]["api_status"],
+                match boundary {
+                    "loading" => "NotStarted",
+                    "api" => "Failed",
+                    _ => "Succeeded",
+                }
+            );
+            assert_eq!(
+                done["monitor"]["phase"],
+                match boundary {
+                    "loading" => "prepared_input_loading",
+                    "api" => "retained_api_evaluation",
+                    _ => "running_cache_close",
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn early_preparation_success_never_claims_the_reduction_api_ran() {
+        for stage in ["diagram_dressing", "prepared_input_report"] {
+            let directory = tempfile::tempdir().unwrap();
+            let path = directory.path().join("prepared.json");
+            let options = RustRedMonitorOptions {
+                progress_snapshot: Some(path.clone()),
+                ..Default::default()
+            };
+            RustRedMonitorScope::run(&options, |scope| {
+                scope.phase(stage);
+                Ok::<_, VakintError>(())
+            })
+            .unwrap();
+            let done = wait_job_document(&path, |d| d["monitor"]["job_finished"] == true);
+            assert_eq!(done["monitor"]["api_status"], "NotStarted");
+            assert_eq!(done["monitor"]["status"], "Succeeded");
+        }
+    }
+
     #[cfg(target_os = "linux")]
     #[test]
     fn attachment_sampling_starts_unbound_and_retains_one_worker_identity() {
@@ -2856,6 +3345,78 @@ mod responsiveness_tests {
         assert!(!crossterm::terminal::is_raw_mode_enabled().unwrap());
         println!("PTY_DONE:{scenario}");
         std::io::stdout().flush().unwrap();
+    }
+
+    #[cfg(all(feature = "progress-tui", target_os = "linux"))]
+    #[test]
+    #[ignore = "requires the actual >35-second job-scope PTY controller"]
+    fn real_pty_job_scope_covers_preparation_and_post_api_silence() {
+        use std::io::Write;
+        let scenario = std::env::var("VAKINT_MONITOR_PTY_SCENARIO").unwrap();
+        assert!(matches!(
+            scenario.as_str(),
+            "job-preparation" | "job-output"
+        ));
+        let descriptor = std::env::var("VAKINT_MONITOR_PTY_CONTROL_FD")
+            .unwrap()
+            .parse::<u32>()
+            .unwrap();
+        let mut signals = std::fs::OpenOptions::new()
+            .write(true)
+            .open(format!("/proc/self/fd/{descriptor}"))
+            .unwrap();
+        let path =
+            std::path::PathBuf::from(std::env::var_os("VAKINT_MONITOR_PTY_SNAPSHOT").unwrap());
+        let options = RustRedMonitorOptions {
+            display: RustRedMonitorDisplay::Tui,
+            progress_snapshot: Some(path.clone()),
+            interval: Duration::from_secs(60),
+            ..Default::default()
+        };
+        let result = RustRedMonitorScope::run(&options, |scope| {
+            if scenario == "job-output" {
+                assert_eq!(
+                    scope.evaluate(|observer, _| {
+                        MonitorContext::native_phase(observer, "retained_output", None);
+                        Ok(17)
+                    })?,
+                    17
+                );
+                scope.phase("result_expression_serialization");
+            } else {
+                scope.phase("prepared_input_loading");
+            }
+            let entered = Instant::now();
+            while !crossterm::terminal::is_raw_mode_enabled().unwrap() {
+                assert!(entered.elapsed() < Duration::from_secs(3));
+                thread::sleep(Duration::from_millis(10));
+            }
+            writeln!(signals, "PTY_READY:{scenario}").unwrap();
+            signals.flush().unwrap();
+            let silent = Instant::now();
+            while crossterm::terminal::is_raw_mode_enabled().unwrap() {
+                assert!(silent.elapsed() < Duration::from_secs(48));
+                thread::sleep(Duration::from_millis(10));
+            }
+            assert!(silent.elapsed() >= Duration::from_secs(35));
+            writeln!(signals, "PTY_DETACHED:{scenario}").unwrap();
+            signals.flush().unwrap();
+            let mut line = String::new();
+            io::stdin().read_line(&mut line).unwrap();
+            assert_eq!(line.trim(), "continue");
+            if scenario == "job-preparation" {
+                assert_eq!(scope.evaluate(|_, _| Ok(17))?, 17);
+            }
+            scope.phase("running_cache_close");
+            scope.phase("final_durable_report");
+            std::fs::write(path.parent().unwrap().join("completed-job.json"), b"17\n").unwrap();
+            Ok::<_, VakintError>(17)
+        })
+        .unwrap();
+        assert_eq!(result, 17);
+        assert!(!crossterm::terminal::is_raw_mode_enabled().unwrap());
+        writeln!(signals, "PTY_DONE:{scenario}").unwrap();
+        signals.flush().unwrap();
     }
 
     #[cfg(unix)]

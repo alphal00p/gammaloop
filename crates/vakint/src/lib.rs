@@ -53,7 +53,8 @@ pub use rustred_evaluation::cache::{RustRedCacheTransferOptions, RustRedCacheTra
 pub use rustred_evaluation::five_loop::{RustRedSymbolicEvaluation, RustRedWitnessCacheStatistics};
 use rustred_evaluation::monitor::MonitorContext;
 pub use rustred_evaluation::monitor::{
-    RustRedMonitorDisplay, RustRedMonitorOptions, RustRedSnapshotViewer,
+    RustRedMonitorDisplay, RustRedMonitorOptions, RustRedMonitorScope, RustRedMonitorWork,
+    RustRedSnapshotViewer,
 };
 #[cfg(all(unix, not(target_arch = "wasm32")))]
 pub use rustred_evaluation::{

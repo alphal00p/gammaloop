@@ -70,7 +70,7 @@ use std::{
 
 #[cfg(feature = "progress-tui")]
 use super::{
-    MonitorStatus, MonitorView, ResourceUsage, UiAction,
+    MonitorStatus, MonitorView, NativeCollectionSample, ResourceUsage, UiAction,
     runtime::{ResourceBinding, ResourceTask},
     tui,
 };
@@ -105,6 +105,8 @@ struct PublishedView {
     native_document_age_seconds: Option<f64>,
     #[serde(default)]
     resources: Option<ResourceUsage>,
+    #[serde(default)]
+    native_collection: Option<NativeCollectionSample>,
 }
 
 #[cfg(feature = "progress-tui")]
@@ -287,6 +289,16 @@ impl SnapshotReader {
 
 #[cfg(feature = "progress-tui")]
 impl PublishedView {
+    fn collection_rows(&self, publication_age: Option<Duration>) -> Vec<(String, String)> {
+        let mut sample = self.native_collection.clone().unwrap_or_default();
+        sample.sample_age_seconds = sample
+            .sample_age_seconds
+            .and_then(|age| Duration::try_from_secs_f64(age).ok())
+            .zip(publication_age)
+            .map(|(age, publication)| age.saturating_add(publication).as_secs_f64());
+        sample.rows()
+    }
+
     fn bind_resources(&self, binding: &ResourceBinding) -> bool {
         let Some(expected) = self.worker_start_ticks else {
             // A legacy record can still be inspected, but supplies no identity.
@@ -519,6 +531,7 @@ impl ActiveViewer {
                 native_quantitative_sample_age_seconds: None,
                 native_document_age_seconds: None,
                 resources: None,
+                native_collection: None,
             }),
             received_at: Instant::now(),
             publication_age: None,
@@ -692,9 +705,19 @@ impl ActiveViewer {
         view.overview
             .retain(|(label, _)| !live_rows.iter().any(|(live, _)| label == live));
         view.overview.extend(live_rows);
+        let collection_rows = self.latest.collection_rows(publication_age);
+        view.overview
+            .retain(|(label, _)| !collection_rows.iter().any(|(live, _)| label == live));
+        view.overview.extend(collection_rows);
         for (label, value) in &self.latest.view.overview {
-            if matches!(label.as_str(), "Caller phase progress" | "Request finished")
-                && let Some(row) = view.overview.iter_mut().find(|(name, _)| name == label)
+            if matches!(
+                label.as_str(),
+                "Caller phase progress"
+                    | "Request finished"
+                    | "Monitor scope"
+                    | "Reduction API status"
+                    | "Whole job finished"
+            ) && let Some(row) = view.overview.iter_mut().find(|(name, _)| name == label)
             {
                 row.1 = value.clone();
             }
@@ -823,6 +846,56 @@ mod tests {
             publication_age: None,
             fault: None,
         }
+    }
+
+    #[test]
+    fn collection_source_age_advances_without_refreshing_frontier_or_legacy_clocks() {
+        let mut document = snapshot(42, 10.0);
+        document["monitor"]["native_collection"] = serde_json::json!({
+            "completed_roots":177, "total_roots":1750,
+            "contribution_index":3, "contribution_total":153,
+            "source":"native root collection", "sequence":42,
+            "sample_age_seconds":2.0
+        });
+        let envelope: SnapshotEnvelope = serde_json::from_value(document).unwrap();
+        let mut published = envelope.monitor.unwrap();
+        let frontier = published.view.frontier.clone();
+        let rows = published.collection_rows(Some(Duration::from_secs(36)));
+        let row = |label: &str| {
+            rows.iter()
+                .find(|(name, _)| name == label)
+                .unwrap()
+                .1
+                .as_str()
+        };
+        assert_eq!(
+            row("Current collection completed roots / total"),
+            "177 / 1750"
+        );
+        assert!(
+            row("Contribution currently assembled (index / total)")
+                .contains("3 / 153 · current item, not completed work")
+        );
+        assert_eq!(
+            row("Collection source / sample age"),
+            "native root collection / 38.0s"
+        );
+        assert_eq!(published.view.frontier, frontier);
+        assert_eq!(published.native_quantitative_sample_age_seconds, Some(0.0));
+        assert!(
+            published
+                .collection_rows(None)
+                .iter()
+                .any(|(label, value)| label == "Collection source / sample age"
+                    && value.ends_with("unknown"))
+        );
+        published.native_collection = None;
+        assert!(
+            published
+                .collection_rows(Some(Duration::from_secs(36)))
+                .iter()
+                .all(|(_, value)| value.contains("unknown"))
+        );
     }
 
     #[test]

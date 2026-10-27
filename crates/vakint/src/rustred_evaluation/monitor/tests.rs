@@ -793,7 +793,7 @@ fn completed_native_frontier_never_finishes_or_zeroes_the_public_postprocessing_
             .contains("1 / 58 master products materialized")
     );
     assert_eq!(
-        row(&view.overview, "Native roots collected / selected"),
+        row(&view.overview, "Native roots at frontier census"),
         "1 / 1"
     );
     assert!(
@@ -808,4 +808,82 @@ fn completed_native_frontier_never_finishes_or_zeroes_the_public_postprocessing_
             .as_bool()
             .unwrap()
     );
+}
+
+#[test]
+fn frozen_job_keeps_api_and_whole_job_completion_distinct() {
+    let mut state = MonitorState::default();
+    let mut event = snapshot(10, 7, 7, 1);
+    event.scope_kind = ScopeKind::Job;
+    event.api_status = ApiStatus::Running;
+    event.native_work_active = false;
+    state.observe(event, Duration::from_secs(10));
+    state.apply(UiAction::ToggleFreeze, Duration::from_secs(10));
+    state.latest.api_status = ApiStatus::Succeeded;
+    state.latest.phase = "result_expression_serialization".into();
+    let serializing = state.view(Duration::from_secs(46));
+    assert!(serializing.frozen);
+    assert_eq!(serializing.status, MonitorStatus::Running);
+    assert_eq!(
+        row(&serializing.overview, "Reduction API status"),
+        "Succeeded"
+    );
+    assert_eq!(row(&serializing.overview, "Whole job finished"), "false");
+    state.latest.request_finished = true;
+    state.latest.status = MonitorStatus::Succeeded;
+    let finished = state.view(Duration::from_secs(47));
+    assert_eq!(finished.status, MonitorStatus::Succeeded);
+    assert_eq!(row(&finished.overview, "Whole job finished"), "true");
+}
+
+#[test]
+fn frozen_frontier_keeps_collection_work_and_its_independent_age_live() {
+    let mut state = MonitorState::default();
+    state.observe(snapshot(10, 20, 5, 1), Duration::from_secs(100));
+    state.apply(UiAction::ToggleFreeze, Duration::from_secs(100));
+    let frozen_frontier = state.view(Duration::from_secs(100)).frontier;
+    let mut notice = state.latest.clone();
+    notice.elapsed = Duration::from_secs(30);
+    notice.sequence += 1;
+    notice.native_collection = Some(NativeCollectionSample {
+        completed_roots: Some(177),
+        total_roots: Some(1750),
+        contribution_index: Some(3),
+        contribution_total: Some(153),
+        source: "native root collection".into(),
+        sequence: 42,
+        sample_age_seconds: Some(0.0),
+    });
+    notice.native_collection_sample_at = Some(Duration::from_secs(30));
+    state.observe(notice, Duration::from_secs(120));
+    let view = state.view(Duration::from_secs(156));
+    assert!(view.frozen);
+    assert_eq!(view.frontier, frozen_frontier);
+    assert_eq!(
+        row(&view.overview, "Native roots at frontier census"),
+        "1 / 5"
+    );
+    assert_eq!(
+        row(&view.overview, "Current collection completed roots / total"),
+        "177 / 1750"
+    );
+    assert!(
+        row(
+            &view.overview,
+            "Contribution currently assembled (index / total)"
+        )
+        .contains("3 / 153 · current item, not completed work")
+    );
+    assert_eq!(
+        row(&view.overview, "Collection source / sample age"),
+        "native root collection / 36.0s"
+    );
+    let document = state.presentation(Duration::from_secs(156));
+    assert_eq!(document["native_collection"]["sample_age_seconds"], 36.0);
+    assert_eq!(
+        state.latest.quantitative_sample_at,
+        Some(Duration::from_secs(10))
+    );
+    assert!(!state.latest.request_finished);
+    assert_eq!(view.status, MonitorStatus::Running);
 }

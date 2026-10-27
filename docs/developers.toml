@@ -629,7 +629,10 @@ anchor = "pub struct Vakint {"
 # Reviewed 2026-10-27: the same per-request monitor also supplies a private
 # caller-progress capability; this ordinary entry point keeps its native observer
 # and ignores that capability. Evaluation, expressions and guards are unchanged.
-digest = "04ed33295840a8a4cf109e275c4f109c3708983a"
+# Reviewed 2026-10-27: the public exports add the opaque borrowed job monitor
+# scope and its completed-work wrapper. This file changes only those exports;
+# evaluation, expression ownership, resource budgets and guards are unchanged.
+digest = "43a5e4af2339904bfbb2c1723cf7535630366598"
 
 [[section.note.scope]]
 path = "crates/vakint/src/lorentz.rs"
