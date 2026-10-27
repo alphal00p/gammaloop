@@ -6,7 +6,8 @@ fn snapshot(seconds: u64, entered: u64, completed: u64, roots: u64) -> DisplaySn
         elapsed: Duration::from_secs(seconds),
         quantitative_sample_at: Some(Duration::from_secs(seconds)),
         quantitative_sample_sequence: seconds + 1,
-        phase: "coefficient_combination".into(),
+        phase: "native coefficient combination".into(),
+        native_work_active: true,
         unique_entered: entered,
         completed_unique: Some(completed),
         completion_attempts: Some(completed),
@@ -117,7 +118,7 @@ fn proc_memory_missing_malformed_units_duplicates_and_overflow_stay_unknown() {
 }
 
 #[test]
-fn display_freeze_does_not_freeze_live_resource_json_or_its_age() {
+fn display_freeze_keeps_resources_and_status_live_in_view_and_json() {
     let mut state = MonitorState::default();
     state.observe(snapshot(0, 3, 1, 0), Duration::ZERO);
     state.latest.resources = ResourceUsage::from_proc("VmRSS: 1 kB", "MemAvailable: 2 kB");
@@ -144,7 +145,7 @@ fn display_freeze_does_not_freeze_live_resource_json_or_its_age() {
     state.observe(failed, Duration::from_secs(6));
     let frozen = state.view(Duration::from_secs(7));
     assert!(frozen.frozen);
-    assert!(row(&frozen.cache, "Process RSS / peak").starts_with("1.0 KiB /"));
+    assert!(row(&frozen.cache, "Process RSS / peak").starts_with("3.0 KiB /"));
     let live = serde_json::to_value(state.live_resources(Duration::from_secs(7))).unwrap();
     assert_eq!(live["rss_bytes"], 3 * 1024);
     assert_eq!(live["mem_available_bytes"], 4 * 1024);
@@ -152,7 +153,8 @@ fn display_freeze_does_not_freeze_live_resource_json_or_its_age() {
     assert_eq!(live["guard"]["status"], "latched_abort");
     assert_eq!(live["guard"]["report_age_seconds"], 2.0);
     assert!(
-        row(&frozen.cache, "Local guard state / current-PID coverage").starts_with("unknown /")
+        row(&frozen.cache, "Local guard state / current-PID coverage")
+            .starts_with("latched_abort /")
     );
     let stale = state.live_resources(Duration::from_secs(9));
     assert_eq!(stale.guard.status, "unknown");
@@ -161,7 +163,7 @@ fn display_freeze_does_not_freeze_live_resource_json_or_its_age() {
     assert_eq!(published["status"], "Failed");
     assert_eq!(published["phase"], "synthetic_failed_finalization");
     assert_eq!(published["view"]["frozen"], true);
-    assert_eq!(published["view"]["status"], "Running");
+    assert_eq!(published["view"]["status"], "Failed");
     let estimates: Vec<(String, String)> =
         serde_json::from_value(published["estimates"].clone()).unwrap();
     assert_eq!(row(&estimates, "Estimate sample age"), "7.0s");
@@ -707,4 +709,103 @@ fn current_canonical_degrees_are_not_maxima_or_physical_input_ranks() {
     );
     assert!(row(&view.complexity, "Current canonical native key").contains("unknown"));
     assert_eq!(row(&view.complexity, "Max seen canonical R"), "99");
+}
+
+#[test]
+fn phase_clock_and_resources_remain_live_while_native_panels_are_frozen() {
+    let mut state = MonitorState::default();
+    let mut event = snapshot(10, 7, 3, 1);
+    event.phase = "retained_outer_exact_combination".into();
+    event.native_work_active = false;
+    event.phase_started_at = Duration::from_secs(10);
+    state.observe(event, Duration::from_secs(20));
+    state.apply(UiAction::ToggleFreeze, Duration::from_secs(20));
+    state.latest.resources.rss_bytes = Some(12345);
+    state.latest.resource_sample_at = Some(Duration::from_secs(56));
+    let view = state.view(Duration::from_secs(56));
+    assert!(view.frozen);
+    assert!(view.subtitle.contains("active 36.0s"));
+    assert!(view.subtitle.contains("event age 36.0s"));
+    assert!(row(&view.cache, "Process RSS / peak").contains("12.1 KiB"));
+    assert!(state.presentation(Duration::from_secs(56))["caller_work"].is_null());
+    assert_eq!(
+        state.presentation(Duration::from_secs(56))["phase_elapsed_seconds"],
+        36.0
+    );
+    assert_eq!(
+        state.presentation(Duration::from_secs(56))["event_age_seconds"],
+        36.0
+    );
+    assert_eq!(state.latest.completed_unique, Some(3));
+}
+
+#[test]
+fn completed_native_frontier_never_finishes_or_zeroes_the_public_postprocessing_eta() {
+    let mut state = MonitorState::default();
+    let mut first = snapshot(0, 7, 0, 0);
+    first.total_roots = Some(1);
+    state.observe(first, Duration::from_secs(90));
+    let mut core = snapshot(10, 7, 7, 1);
+    core.total_roots = Some(1);
+    core.pending_unique.as_mut().unwrap().count = 0;
+    core.native_observed_at = Some(Duration::from_secs(10));
+    core.native_work_active = false;
+    core.status = MonitorStatus::Succeeded;
+    state.observe(core, Duration::from_secs(100));
+    let just_finished = state.view(Duration::from_secs(100));
+    assert_eq!(just_finished.status, MonitorStatus::Running);
+    assert!(
+        just_finished
+            .estimates
+            .iter()
+            .filter(|(label, _)| label.ends_with("ETA"))
+            .all(|(_, value)| value.contains("indeterminate"))
+    );
+    state.apply(UiAction::ToggleFreeze, Duration::from_secs(100));
+    let mut caller = state.latest.clone();
+    caller.phase = "retained_coefficient_materialization".into();
+    caller.phase_started_at = Duration::from_secs(11);
+    caller.elapsed = Duration::from_secs(11);
+    caller.sequence += 1;
+    caller.status = MonitorStatus::Running;
+    caller.caller_work = Some(CallerWork {
+        phase: caller.phase.clone(),
+        completed: 1,
+        total: 58,
+        unit: "master products materialized".into(),
+        sampled_at: Duration::from_secs(101),
+    });
+    state.observe(caller, Duration::from_secs(101));
+    let view = state.view(Duration::from_secs(137));
+    assert!(view.frozen);
+    assert_eq!(view.status, MonitorStatus::Running);
+    assert!(
+        view.subtitle
+            .contains("retained coefficient materialization")
+            && view.subtitle.contains("active 36.0s")
+    );
+    assert_eq!(
+        row(&view.overview, "Phase"),
+        "retained_coefficient_materialization"
+    );
+    assert!(
+        row(&view.overview, "Caller phase progress")
+            .contains("1 / 58 master products materialized")
+    );
+    assert_eq!(
+        row(&view.overview, "Native roots collected / selected"),
+        "1 / 1"
+    );
+    assert!(
+        view.estimates
+            .iter()
+            .filter(|(label, _)| label.ends_with("ETA"))
+            .all(|(_, value)| value.contains("indeterminate"))
+    );
+    assert!(row(&view.estimates, "Estimate scope").contains("excludes caller postprocessing"));
+    assert!(
+        !state.presentation(Duration::from_secs(137))["native_work_active"]
+            .as_bool()
+            .unwrap()
+    );
 }

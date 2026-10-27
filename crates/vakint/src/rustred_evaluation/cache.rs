@@ -270,7 +270,7 @@ impl Vakint {
         observer: impl FnMut(&CachePreparationReport) -> Result<(), rustred_app::AppError>,
         monitor: &RustRedMonitorOptions,
     ) -> Result<CachePreparationReport, VakintError> {
-        MonitorContext::run(monitor, |mut observation| {
+        MonitorContext::run(monitor, |mut observation, _progress| {
             let result = self.prepare_cache_observed(
                 loop_count,
                 output.as_ref(),

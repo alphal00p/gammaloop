@@ -196,7 +196,7 @@ pub(super) fn draw(frame: &mut Frame<'_>, view: &MonitorView, no_color: bool) ->
         return 0;
     }
     let [header, body, footer] = Layout::vertical([
-        Constraint::Length(4),
+        Constraint::Length(if area.width < 88 { 8 } else { 6 }),
         Constraint::Min(0),
         Constraint::Length(1),
     ])
@@ -214,10 +214,11 @@ pub(super) fn draw(frame: &mut Frame<'_>, view: &MonitorView, no_color: bool) ->
         status_line.push(Span::raw("  |  display frozen; reduction continues"));
     }
     frame.render_widget(
-        Paragraph::new(vec![
-            Line::from(status_line),
-            Line::from(view.subtitle.as_str()),
-        ])
+        Paragraph::new(
+            std::iter::once(Line::from(status_line))
+                .chain(view.subtitle.lines().map(Line::from))
+                .collect::<Vec<_>>(),
+        )
         .block(panel(view.title.clone(), no_color))
         .wrap(Wrap { trim: false }),
         header,
@@ -427,13 +428,13 @@ fn draw_help(frame: &mut Frame<'_>, area: Rect, no_color: bool) {
     frame.render_widget(
         Paragraph::new(
             "q              Detach this display; reduction continues\n\
-             space          Freeze / resume only the display\n\
+             space          Freeze native panels; clocks and memory stay live\n\
              ↑ / ↓          Scroll all observation panels\n\
              PgUp / PgDn    Scroll by a page\n\
              ?              Close this help\n\n\
-             Age measures time since a native observation. Long native\n\
-             operations need not emit a heartbeat. Estimates are supplied\n\
-             by the model, not a percentage of an unknown dependency DAG.",
+             Observer, native and OS sample ages have distinct clocks.\n\
+             Opaque work is indeterminate; the UI heartbeat stays live.\n\
+             ETA is not a percentage of an unknown dependency DAG.",
         )
         .block(panel("Monitor help".into(), no_color))
         .wrap(Wrap { trim: false }),
@@ -529,6 +530,17 @@ mod tests {
             assert!(rendered.contains(label), "missing {label}: {rendered}");
         }
         assert!(rendered.contains("Local observations"));
+    }
+
+    #[test]
+    fn live_phase_and_resource_headlines_remain_separate_lines() {
+        let mut view = view();
+        view.subtitle = "active phase 36.0s\nRSS 12 MiB / host available 400 GiB".into();
+        let rendered = text(&render(&view, 220, 24, false));
+        let rows = rendered.lines().collect::<Vec<_>>();
+        assert!(rows[2].contains("active phase 36.0s"));
+        assert!(!rows[2].contains("RSS"));
+        assert!(rows[3].contains("RSS 12 MiB / host available 400 GiB"));
     }
 
     #[test]

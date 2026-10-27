@@ -8,13 +8,14 @@ use std::{
     time::Duration,
 };
 
+mod publication;
 mod runtime;
 #[cfg(test)]
 mod tests;
 #[cfg(feature = "progress-tui")]
 mod tui;
 mod viewer;
-pub(crate) use runtime::MonitorContext;
+pub(crate) use runtime::{CallerProgress, MonitorContext};
 pub use viewer::RustRedSnapshotViewer;
 
 /// Optional diagnostics for a single call. Omission leaves observation disabled.
@@ -102,25 +103,56 @@ impl<W: Write> SnapshotWriter<W> {
 /// Atomically replace the latest native JSON, without a consumer-owned schema.
 pub(super) struct LatestJsonFile {
     destination: Option<PathBuf>,
+    lease: Option<publication::FileLease>,
 }
 
 impl LatestJsonFile {
+    #[cfg(test)]
     pub(super) fn from_options(options: &RustRedMonitorOptions) -> Self {
+        Self::from_owner(options, publication::FileLease::next_owner())
+    }
+
+    fn from_owner(options: &RustRedMonitorOptions, owner: u64) -> Self {
         Self {
             destination: options.progress_snapshot.clone(),
+            lease: options
+                .progress_snapshot
+                .as_deref()
+                .map(|path| publication::FileLease::with_owner(path, owner)),
         }
     }
 
+    #[cfg(test)]
     pub(super) fn write(&self, native: &serde_json::Value) -> io::Result<()> {
-        self.write_with(|file| {
-            serde_json::to_writer(&mut *file, native)?;
-            file.write_all(b"\n")
-        })
+        self.write_if(native, &std::sync::atomic::AtomicBool::new(true))
     }
 
+    fn write_if(
+        &self,
+        native: &serde_json::Value,
+        active: &std::sync::atomic::AtomicBool,
+    ) -> io::Result<()> {
+        self.write_with_check(
+            |file| {
+                serde_json::to_writer(&mut *file, native)?;
+                file.write_all(b"\n")
+            },
+            active,
+        )
+    }
+
+    #[cfg(test)]
     fn write_with(
         &self,
         write: impl FnOnce(&mut std::fs::File) -> io::Result<()>,
+    ) -> io::Result<()> {
+        self.write_with_check(write, &std::sync::atomic::AtomicBool::new(true))
+    }
+
+    fn write_with_check(
+        &self,
+        write: impl FnOnce(&mut std::fs::File) -> io::Result<()>,
+        active: &std::sync::atomic::AtomicBool,
     ) -> io::Result<()> {
         let Some(destination) = self.destination.as_ref() else {
             return Ok(());
@@ -135,6 +167,16 @@ impl LatestJsonFile {
             write(temporary.as_file_mut())?;
             temporary.as_file_mut().flush()?;
             temporary.as_file().sync_all()?;
+            let lease = self
+                .lease
+                .as_ref()
+                .expect("destination owns a publication lease");
+            let _commit = lease.commit();
+            // Recheck AFTER write/flush/sync. Superseded or detached publishers
+            // must never commit a delayed old snapshot over a newer owner.
+            if !active.load(std::sync::atomic::Ordering::Acquire) || !lease.is_current() {
+                return Ok(());
+            }
             // Sibling persist replaces atomically. On failure its owned tempfile
             // is dropped and removed; no fallible step follows publication.
             temporary
@@ -144,7 +186,7 @@ impl LatestJsonFile {
         }
         #[cfg(not(all(unix, not(target_arch = "wasm32"))))]
         {
-            let _ = (destination, write);
+            let _ = (destination, write, active);
             Err(io::Error::new(
                 io::ErrorKind::Unsupported,
                 "atomic monitor snapshots are unavailable on this target",
@@ -190,6 +232,9 @@ pub(super) struct DisplaySnapshot {
     pub sequence: u64,
     pub elapsed: Duration,
     pub phase: String,
+    pub phase_started_at: Duration,
+    pub native_work_active: bool,
+    pub caller_work: Option<CallerWork>,
     pub status: MonitorStatus,
     pub request_finished: bool,
     pub unique_entered: u64,
@@ -212,6 +257,16 @@ pub(super) struct DisplaySnapshot {
     pub caller_expression: Option<CallerExpressionSample>,
 }
 
+/// Caller loop units are distinct from native integrals and frontier metrics.
+#[derive(Clone, Debug)]
+pub(super) struct CallerWork {
+    pub phase: String,
+    pub completed: usize,
+    pub total: usize,
+    pub unit: String,
+    pub sampled_at: Duration,
+}
+
 /// Separate owner scopes, never a globally combined algebraic expression.
 #[derive(Clone, Debug)]
 pub(super) struct StoredStateSample {
@@ -231,6 +286,12 @@ pub(super) struct CallerExpressionSample {
 /// OS observations, independent of native progress or coefficient payloads.
 #[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
 pub(super) struct ResourceUsage {
+    pub process_pid: Option<u32>,
+    pub process_start_ticks: Option<u64>,
+    #[serde(default)]
+    pub process_identity_verified: bool,
+    pub cpu_seconds: Option<f64>,
+    pub cpu_percent: Option<f64>,
     pub rss_bytes: Option<u64>,
     pub peak_rss_bytes: Option<u64>,
     pub mem_total_bytes: Option<u64>,
@@ -276,7 +337,120 @@ impl Default for ResourceGuardView {
     }
 }
 
+impl ResourceGuardView {
+    pub(super) fn rows(&self) -> Vec<(String, String)> {
+        vec![
+            (
+                "Local guard state / current-PID coverage".into(),
+                format!(
+                    "{} / {}",
+                    self.status,
+                    if self.current_process_covered {
+                        "reported armed; PID/start matched"
+                    } else {
+                        "unverified"
+                    }
+                ),
+            ),
+            (
+                "Guard MemAvailable floor / report age".into(),
+                format!(
+                    "{} / {} (explicit local policy only)",
+                    ResourceUsage::display_bytes(self.threshold_bytes),
+                    self.report_age_seconds
+                        .map_or_else(|| "unknown".into(), |age| format!("{age:.1}s"))
+                ),
+            ),
+            (
+                "Guard registered workers (reported)".into(),
+                if self.registered_slots.is_empty() {
+                    "unknown".into()
+                } else {
+                    self.registered_slots.join("; ")
+                },
+            ),
+        ]
+    }
+}
+
 impl ResourceUsage {
+    pub(super) fn headline(&self) -> String {
+        format!(
+            "RSS {} · host available {} / free {} · CPU {} · OS age {}",
+            if self.process_identity_verified {
+                Self::display_bytes(self.rss_bytes)
+            } else {
+                "unverified/exited".into()
+            },
+            Self::display_bytes(self.mem_available_bytes),
+            Self::display_bytes(self.mem_free_bytes),
+            self.cpu_percent
+                .map_or_else(|| "unknown".into(), |cpu| format!("{cpu:.1}%")),
+            self.sample_age_seconds
+                .map_or_else(|| "unknown".into(), |age| format!("{age:.1}s"))
+        )
+    }
+
+    pub(super) fn rows(&self) -> Vec<(String, String)> {
+        vec![
+            (
+                "Worker PID / start identity".into(),
+                format!(
+                    "{} / {} · {}",
+                    self.process_pid
+                        .map_or_else(|| "unknown".into(), |pid| pid.to_string()),
+                    self.process_start_ticks
+                        .map_or_else(|| "unknown".into(), |start| start.to_string()),
+                    if self.process_identity_verified {
+                        "verified live OS target"
+                    } else {
+                        "unverified or exited; not a live-process claim"
+                    }
+                ),
+            ),
+            (
+                "Process CPU usage".into(),
+                self.cpu_percent.map_or_else(
+                    || "unknown / awaiting two OS samples".into(),
+                    |value| format!("{value:.1}% (all process threads; 100% = one CPU)"),
+                ),
+            ),
+            (
+                "Process RSS / peak".into(),
+                format!(
+                    "{} / {} (current / process peak; not payload)",
+                    ResourceUsage::display_bytes(self.rss_bytes),
+                    ResourceUsage::display_bytes(self.peak_rss_bytes)
+                ),
+            ),
+            (
+                "Host MemAvailable / MemFree".into(),
+                format!(
+                    "{} / {} (usable / unused)",
+                    ResourceUsage::display_bytes(self.mem_available_bytes),
+                    ResourceUsage::display_bytes(self.mem_free_bytes)
+                ),
+            ),
+            (
+                "Host MemTotal".into(),
+                ResourceUsage::display_bytes(self.mem_total_bytes),
+            ),
+            (
+                "Memory units / raw values".into(),
+                "IEC units; exact bytes retained in resources JSON".into(),
+            ),
+            (
+                "OS memory source / sample age".into(),
+                format!(
+                    "{} / {}",
+                    self.source.as_deref().unwrap_or("unavailable"),
+                    self.sample_age_seconds
+                        .map_or_else(|| "unknown".into(), |age| format!("{age:.1}s"))
+                ),
+            ),
+        ]
+    }
+
     /// Rounded display only; serialized observations retain exact byte counts.
     fn display_bytes(bytes: Option<u64>) -> String {
         let Some(bytes) = bytes else {
@@ -295,6 +469,11 @@ impl ResourceUsage {
     #[cfg(any(target_os = "linux", test))]
     fn from_proc(status: &str, meminfo: &str) -> Self {
         let mut sample = Self {
+            process_pid: None,
+            process_start_ticks: None,
+            process_identity_verified: false,
+            cpu_seconds: None,
+            cpu_percent: None,
             rss_bytes: Self::proc_bytes(status, "VmRSS"),
             peak_rss_bytes: Self::proc_bytes(status, "VmHWM"),
             mem_total_bytes: Self::proc_bytes(meminfo, "MemTotal"),
@@ -389,8 +568,19 @@ impl MonitorState {
         let live = self.live_view(now);
         serde_json::json!({
             "phase": self.latest.phase,
+            "native_work_active": self.latest.native_work_active,
+            "phase_elapsed_seconds": (!self.latest.phase.is_empty()).then(|| self.observation_age(self.latest.phase_started_at, now).as_secs_f64()),
+            "event_age_seconds": (!self.latest.phase.is_empty()).then(|| now.saturating_sub(self.received_at).as_secs_f64()),
+            "native_observation_age_seconds": self.latest.native_observed_at.map(|at| self.observation_age(at, now).as_secs_f64()),
+            "native_quantitative_sample_age_seconds": self.latest.quantitative_sample_at.map(|at| self.observation_age(at, now).as_secs_f64()),
+            "caller_work": self.latest.caller_work.as_ref().map(|work| serde_json::json!({
+                "scope": "current caller loop units; not native integral/frontier counts",
+                "phase": work.phase, "completed": work.completed, "total": work.total, "unit": work.unit,
+                "sample_age_seconds": now.saturating_sub(work.sampled_at).as_secs_f64(),
+            })),
             "status": format!("{:?}", live.status),
             "resources": self.live_resources(now),
+            "resource_sample_elapsed_seconds": self.latest.resource_sample_at.map(|at| at.as_secs_f64()),
             "stored_symbolic_state": self.latest.stored_state.as_ref().map(|sample| serde_json::json!({
                 "scope": "native stored partitions; overlapping occurrences, not a global expression",
                 "family_fingerprint": sample.family_fingerprint,
@@ -514,7 +704,39 @@ impl MonitorState {
     }
 
     pub(super) fn view(&self, now: Duration) -> MonitorView {
-        let mut view = self.frozen.clone().unwrap_or_else(|| self.live_view(now));
+        let live = self.live_view(now);
+        let mut view = self.frozen.clone().unwrap_or_else(|| live.clone());
+        // Freezing native panels never freezes liveness, resources or estimates.
+        if self.frozen.is_some() {
+            view.subtitle = live.subtitle;
+            view.status = live.status;
+            view.estimates = live.estimates;
+            for (label, value) in live.overview {
+                if matches!(
+                    label.as_str(),
+                    "Phase"
+                        | "Active phase elapsed"
+                        | "Caller phase progress"
+                        | "Elapsed at observation"
+                        | "Snapshot age"
+                        | "Last native observation age"
+                        | "Request finished"
+                ) {
+                    if let Some(row) = view.overview.iter_mut().find(|(name, _)| name == &label) {
+                        row.1 = value;
+                    }
+                }
+            }
+            let resources = self.live_resources(now);
+            let rows = resources
+                .rows()
+                .into_iter()
+                .chain(resources.guard.rows())
+                .collect::<Vec<_>>();
+            view.cache
+                .retain(|(label, _)| !rows.iter().any(|(current, _)| current == label));
+            view.cache.splice(0..0, rows);
+        }
         view.frozen = self.frozen.is_some();
         view.show_help = self.show_help;
         view.scroll = self.scroll;
@@ -566,79 +788,23 @@ impl MonitorState {
         complexity.extend(snapshot.complexity.iter().cloned());
         complexity.extend(self.symbolic_state_rows(now));
         let resources = self.live_resources(now);
-        let mut cache = vec![
-            (
-                "Process RSS / peak".into(),
-                format!(
-                    "{} / {} (current / process peak; not payload)",
-                    ResourceUsage::display_bytes(resources.rss_bytes),
-                    ResourceUsage::display_bytes(resources.peak_rss_bytes)
-                ),
-            ),
-            (
-                "Host MemAvailable / MemFree".into(),
-                format!(
-                    "{} / {} (usable / unused)",
-                    ResourceUsage::display_bytes(resources.mem_available_bytes),
-                    ResourceUsage::display_bytes(resources.mem_free_bytes)
-                ),
-            ),
-            (
-                "Host MemTotal".into(),
-                ResourceUsage::display_bytes(resources.mem_total_bytes),
-            ),
-            (
-                "Memory units / raw values".into(),
-                "IEC units; exact bytes retained in resources JSON".into(),
-            ),
-            (
-                "OS memory source / sample age".into(),
-                format!(
-                    "{} / {}",
-                    resources.source.as_deref().unwrap_or("unavailable"),
-                    resources
-                        .sample_age_seconds
-                        .map_or_else(|| "unknown".into(), |age| format!("{age:.1}s"))
-                ),
-            ),
-        ];
-        cache.push((
-            "Local guard state / current-PID coverage".into(),
-            format!(
-                "{} / {}",
-                resources.guard.status,
-                if resources.guard.current_process_covered {
-                    "reported armed; PID/start matched"
-                } else {
-                    "unverified"
-                }
-            ),
-        ));
-        cache.push((
-            "Guard MemAvailable floor / report age".into(),
-            format!(
-                "{} / {} (explicit local policy only)",
-                ResourceUsage::display_bytes(resources.guard.threshold_bytes),
-                resources
-                    .guard
-                    .report_age_seconds
-                    .map_or_else(|| "unknown".into(), |age| format!("{age:.1}s"))
-            ),
-        ));
-        cache.push((
-            "Guard registered workers (reported)".into(),
-            if resources.guard.registered_slots.is_empty() {
-                "unknown".into()
-            } else {
-                resources.guard.registered_slots.join("; ")
-            },
-        ));
+        let mut cache = resources.rows();
+        cache.extend(resources.guard.rows());
         cache.extend(snapshot.cache.iter().cloned());
         MonitorView {
             title: "RustRed · request".into(),
-            subtitle:
-                "Local observations; future discoveries and other backend phases are unobserved"
-                    .into(),
+            subtitle: format!(
+                "Local observations · {} · active {} · event age {} · UI heartbeat {}\n{}",
+                if snapshot.phase.is_empty() {
+                    "Starting monitor".into()
+                } else {
+                    snapshot.phase.replace('_', " ")
+                },
+                seconds(self.observation_age(snapshot.phase_started_at, now)),
+                seconds(age),
+                seconds(now),
+                resources.headline()
+            ),
             // A native core can finish before saved terminal substitution.
             status: if snapshot.status == MonitorStatus::Succeeded && !snapshot.request_finished {
                 MonitorStatus::Running
@@ -650,6 +816,28 @@ impl MonitorState {
             scroll: 0,
             overview: vec![
                 ("Phase".into(), snapshot.phase.clone()),
+                (
+                    "Active phase elapsed".into(),
+                    seconds(self.observation_age(snapshot.phase_started_at, now)),
+                ),
+                (
+                    "Caller phase progress".into(),
+                    snapshot.caller_work.as_ref().map_or_else(
+                        || {
+                            "Indeterminate; this stage exposes no completed/total work counter"
+                                .into()
+                        },
+                        |work| {
+                            format!(
+                                "{} / {} {} · sample age {}",
+                                work.completed,
+                                work.total,
+                                work.unit,
+                                seconds(now.saturating_sub(work.sampled_at))
+                            )
+                        },
+                    ),
+                ),
                 ("Elapsed at observation".into(), seconds(snapshot.elapsed)),
                 ("Snapshot age".into(), seconds(age)),
                 (
@@ -664,7 +852,7 @@ impl MonitorState {
                     snapshot.request_finished.to_string(),
                 ),
                 (
-                    "Roots collected / selected".into(),
+                    "Native roots collected / selected".into(),
                     format!(
                         "{} / {}",
                         count(snapshot.completed_roots),
@@ -765,7 +953,8 @@ impl MonitorState {
         let mut rows = vec![
             (
                 "Estimate scope".into(),
-                "Observed local work only; future discovery excluded".into(),
+                "Native dispatch only; excludes caller postprocessing; future discovery excluded"
+                    .into(),
             ),
             (
                 "Estimate sample age".into(),
@@ -789,6 +978,19 @@ impl MonitorState {
                 "Low confidence: heuristic; no remaining-work certificate or global bound".into(),
             ),
         ];
+        if !self.latest.native_work_active
+            || self.latest.request_finished
+            || self.latest.status != MonitorStatus::Running
+        {
+            rows[2].1 =
+                "indeterminate / unknown · no active native dispatch; caller work is separate"
+                    .into();
+            rows[3].1 =
+                "indeterminate / unknown · no active native dispatch; caller work is separate"
+                    .into();
+            rows[4].1 = "last native sample only".into();
+            return rows;
+        }
         let (Some(first), Some(last)) = (self.samples.front(), self.samples.back()) else {
             return rows;
         };

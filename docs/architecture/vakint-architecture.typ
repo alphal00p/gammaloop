@@ -165,13 +165,35 @@ Optional request resources impose caller-selected process-RSS and elapsed-time c
 omitted ceilings and count diagnostics remain disabled. Cooperative checkpoints cannot provide
 a hard deadline inside an opaque call. `evaluate_with_monitor` uses the ordinary reduction path
 and native observer, reporting phases, counters, bounded frontier samples, and independent
-process and system memory observations. Any ETA remains a diagnostic estimate. Detaching the
-terminal display does not cancel the calculation.
+process CPU and system memory observations. The presentation and OS heartbeat refresh at
+least once per second independently of native sampling or an opaque symbolic call. A
+coalescing JSON sink receives these views independently; a blocked sink remains visibly stale
+to its read-only attachment instead of blocking input or pretending to publish new data.
+Phase elapsed time, caller-event age, native sample age and OS sample age have separate clocks;
+heartbeats do not advance native counters or imply algebraic progress. Guard/coefficient
+materialization reports actual guards processed and master products materialized.
+Rate-limited coefficient updates also read the existing partial contribution's stored
+summands and encoded bytes on its owning thread; they never scan or send its Atom. Opaque calls remain explicitly
+indeterminate, and any native ETA remains a diagnostic estimate. Frozen native panels retain
+live status, phase clocks and resources. Detaching the terminal does not cancel calculation.
 
-Five-loop retained evaluation also reports guard and coefficient materialization,
-normalization and notation conversion, both outer and catalogue exact-combination
-passes, and residual catalogue classification. These caller phases continue after
-native reduction finishes; they inspect existing Atom headers rather than creating
+A bounded latest-value publisher owns blocking snapshot I/O separately from the terminal.
+It preserves atomic replacement and checks cancellation and destination ownership immediately
+before commit. A stalled final publication is canceled after a short diagnostic drain instead
+of blocking the scientific result; telemetry errors remain in the monitor's fault state.
+Shutdown never delivers a synchronous logger warning through a potentially blocked sink.
+External attachments read/parse snapshots separately from their existing process-resource
+task, so a stalled snapshot read cannot stop resource sampling. Live process resources require
+the bound worker PID and start time to match; exited, reused or legacy-unverified targets
+retain explicitly aged recorded values, while host memory can refresh independently. Input
+and drawing remain responsive when producer updates stop. If OS sampling itself stalls,
+the displayed sample age continues to grow instead of claiming fresh memory readings.
+
+Five-loop retained evaluation also reports coverage/mass batching (with actual lowered
+keys checked), guard and coefficient materialization, normalization and notation conversion,
+both outer and catalogue exact-combination passes, residual catalogue classification,
+result packing and natural completed-batch cleanup. Caller phases cover work before
+and after native reduction; monitoring inspects existing Atom headers rather than creating
 another expression for monitoring. Each recorded stage duration is one completed
 span, with repeated calls retained separately. `detailed_evaluation_total` includes
 its reduction and materialization children plus callee cleanup;

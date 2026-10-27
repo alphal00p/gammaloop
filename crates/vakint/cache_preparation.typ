@@ -333,7 +333,18 @@ Monitoring defaults off. `evaluate_rustred_symbolic` and `prepare_cache` accept
 `progress_interval_seconds`. JSON mode requires a snapshot path; a path also
 enables JSON observation when display is off. The TUI
 requires the `progress-tui` feature. Pressing `q` detaches the display and does
-not cancel reduction or stop cache capture. Observation adds overhead and does
+not cancel reduction or stop cache capture. The interval controls native sampling;
+independent presentation and process CPU/memory heartbeats refresh at most one
+second apart. JSON publication coalesces on its I/O owner; blocked publication
+is visibly stale in the read-only attachment. The header shows the active phase and its elapsed time. Work
+without a completion counter is explicitly indeterminate. Freezing panels leaves
+clocks and resources live; an external attachment remains responsive to stale
+snapshots. Their snapshot reader and process-resource task are independent, so a
+blocked snapshot read cannot stop OS updates. Sampling delays remain visible as increasing
+sample ages. Slow snapshot I/O never holds the terminal, and a stalled final
+publication is canceled without changing the calculation. Telemetry faults remain in the
+monitor owner; shutdown never synchronously logs through a potentially blocked stderr.
+Observation adds overhead and does
 not establish master closure or an estimate of remaining work.
 
 The #link("examples/measure_cache.rs")[suite measurement driver] runs each

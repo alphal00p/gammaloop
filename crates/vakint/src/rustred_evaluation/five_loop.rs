@@ -96,6 +96,25 @@ pub struct RustRedSymbolicEvaluation {
     pub families: BTreeMap<Atom, String>,
 }
 
+/// Declared before batch locals, so its diagnostic runs after their natural drop.
+/// It retains no algebraic value and is armed only on completed batch paths.
+#[derive(Default)]
+struct RetainedBatchCleanup(Option<std::time::Instant>);
+
+impl RetainedBatchCleanup {
+    fn arm(&mut self) {
+        self.0 = Some(std::time::Instant::now());
+    }
+}
+
+impl Drop for RetainedBatchCleanup {
+    fn drop(&mut self) {
+        if let Some(started) = self.0 {
+            log::debug!(target: "vakint::saved_application", "phase=retained_batch_cleanup elapsed_seconds={:.6}", started.elapsed().as_secs_f64());
+        }
+    }
+}
+
 pub(crate) struct SavedApplication {
     pub(super) prepared: Mutex<PreparedSavedApplication<15>>,
     pub(super) cache_digest: [u8; 32],
@@ -616,7 +635,7 @@ impl Vakint {
         settings: &VakintSettings,
         input: AtomView,
     ) -> Result<RustRedSymbolicEvaluation, VakintError> {
-        self.evaluate_rustred_symbolic_observed(settings, input, None)
+        self.evaluate_rustred_symbolic_observed(settings, input, None, None)
     }
 
     /// Retain exact five-loop masters and guards with optional per-call diagnostics.
@@ -626,8 +645,8 @@ impl Vakint {
         input: AtomView,
         monitor: &RustRedMonitorOptions,
     ) -> Result<RustRedSymbolicEvaluation, VakintError> {
-        MonitorContext::run(monitor, |observation| {
-            self.evaluate_rustred_symbolic_observed(settings, input, observation)
+        MonitorContext::run(monitor, |observation, progress| {
+            self.evaluate_rustred_symbolic_observed(settings, input, observation, progress)
         })
     }
 
@@ -636,12 +655,15 @@ impl Vakint {
         settings: &VakintSettings,
         input: AtomView,
         mut observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
+        progress: Option<&super::monitor::CallerProgress>,
     ) -> Result<RustRedSymbolicEvaluation, VakintError> {
         settings.with_resource_budget(|| {
+            let setup_started = std::time::Instant::now();
             MonitorContext::native_phase(observation.as_deref_mut(), "saved_application_preparation", Some(input));
             self.validate_settings(settings)?;
             let application = self.saved_application(settings)?;
             let mut expression = VakintExpression::try_from(input)?;
+            log::debug!(target: "vakint::saved_application", "phase=frontend_setup elapsed_seconds={:.6}", setup_started.elapsed().as_secs_f64());
             log::debug!(target: "vakint::five_loop_match", "phase=symbolic_input input={input}");
             let canonical_started = std::time::Instant::now();
             MonitorContext::native_phase(observation.as_deref_mut(), "canonicalization", None);
@@ -661,10 +683,12 @@ impl Vakint {
             let mut value = Atom::Zero;
             let mut conditions = BTreeSet::new();
             let mut families = BTreeMap::new();
+            let split_started = std::time::Instant::now();
             let expression = Atom::from(expression);
             MonitorContext::native_phase(observation.as_deref_mut(), "scalar_input", Some(expression.as_view()));
             let terms = VakintExpression::split_integrals(expression.as_view())?;
             drop(expression);
+            log::debug!(target: "vakint::saved_application", "phase=scalar_input_split elapsed_seconds={:.6}", split_started.elapsed().as_secs_f64());
             for mut term in terms {
                 symbolica::utils::resources::checkpoint()?;
                 let matching_started = std::time::Instant::now();
@@ -673,14 +697,17 @@ impl Vakint {
                     .match_rustred_input(settings, term.integral.as_view(), term.numerator.as_view())?
                     .ok_or_else(|| failure("input has no registered topology match"))?;
                 log::debug!(target: "vakint::saved_application", "phase=frontend_admitted_witness_search elapsed_seconds={:.6}", matching_started.elapsed().as_secs_f64());
+                let replacement_started = std::time::Instant::now();
+                MonitorContext::native_phase(observation.as_deref_mut(), "numerator_replacement", None);
                 matched.apply_replacement_rules()?;
                 term.apply_scalar_numerator_replacement_rules(&matched, settings)?;
+                log::debug!(target: "vakint::saved_application", "phase=numerator_replacement elapsed_seconds={:.6}", replacement_started.elapsed().as_secs_f64());
                 log::debug!(target: "vakint::five_loop_match", "phase=symbolic_candidate_numerator numerator={}", term.numerator);
                 // This parent span includes callee cleanup. Its recorded
                 // subphases must not be added to it as disjoint durations.
                 let detailed_started = std::time::Instant::now();
                 let result =
-                    application.evaluate_detailed(&tensor_settings, term.numerator.as_view(), &matched, observation.as_deref_mut());
+                    application.evaluate_detailed(&tensor_settings, term.numerator.as_view(), &matched, observation.as_deref_mut(), progress);
                 log::debug!(target: "vakint::saved_application", "phase=detailed_evaluation_total elapsed_seconds={:.6}", detailed_started.elapsed().as_secs_f64());
                 let result = result?;
                 let merge_started = std::time::Instant::now();
@@ -707,12 +734,16 @@ impl Vakint {
             );
             log::debug!(target: "vakint::saved_application", "phase=retained_finalization_total elapsed_seconds={:.6}", finalization_started.elapsed().as_secs_f64());
             let value = value?;
-            MonitorContext::native_phase(observation, "retained_output", Some(value.as_view()));
-            Ok(RustRedSymbolicEvaluation {
+            let packing_started = std::time::Instant::now();
+            MonitorContext::native_phase(observation.as_deref_mut(), "retained_public_result_packing", Some(value.as_view()));
+            let result = RustRedSymbolicEvaluation {
                 value,
                 nonzero_conditions: conditions.into_iter().collect(),
                 families,
-            })
+            };
+            log::debug!(target: "vakint::saved_application", "phase=public_result_packing elapsed_seconds={:.6}", packing_started.elapsed().as_secs_f64());
+            MonitorContext::native_phase(observation, "retained_output", Some(result.value.as_view()));
+            Ok(result)
         })
     }
 }
@@ -874,7 +905,7 @@ impl SavedApplication {
         observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
     ) -> Result<Atom, VakintError> {
         Ok(self
-            .evaluate_detailed(settings, numerator, matched, observation)?
+            .evaluate_detailed(settings, numerator, matched, observation, None)?
             .value)
     }
 
@@ -884,6 +915,7 @@ impl SavedApplication {
         numerator: AtomView,
         matched: &ReplacementRules,
         mut observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
+        progress: Option<&super::monitor::CallerProgress>,
     ) -> Result<RustRedSymbolicEvaluation, VakintError> {
         MonitorContext::native_phase(observation.as_deref_mut(), "scalar_lowering", None);
         let lowering_started = std::time::Instant::now();
@@ -917,10 +949,23 @@ impl SavedApplication {
             "phase=scalar_lowered target={:?} lowered_count={} lowered_keys_prefix={:?}",
             input.target.powers(), lowering.terms().len(),
             lowering.terms().iter().take(8).map(|term| term.integral().powers()).collect::<Vec<_>>());
+        let batching_started = std::time::Instant::now();
+        MonitorContext::native_phase(
+            observation.as_deref_mut(),
+            "coverage_mass_batching",
+            Some(input.numerator.as_view()),
+        );
+        let mut coverage_progress = progress.map(|owner| {
+            owner.phase(
+                "coverage_mass_batching",
+                lowering.terms().len(),
+                "lowered keys checked",
+            )
+        });
         let mut batches = BTreeMap::<(Atom, i64), Vec<(IntegralKey, Coefficient)>>::new();
         let mut uncovered = BTreeSet::new();
         let mut mass_exponent_origin = None;
-        for term in lowering.terms() {
+        for (index, term) in lowering.terms().iter().enumerate() {
             if !application
                 .routed_entry_is_admitted(term.integral())
                 .map_err(native_failure)?
@@ -958,6 +1003,9 @@ impl SavedApplication {
                 .entry(channel)
                 .or_default()
                 .push((term.integral().clone(), term.coefficient().clone()));
+            if let Some(progress) = &mut coverage_progress {
+                progress.completed(index + 1);
+            }
         }
         if let Some(first) = uncovered.first() {
             log::warn!(
@@ -971,9 +1019,16 @@ impl SavedApplication {
         let epsilon = Atom::var(vk_symbol!(settings.epsilon_symbol.as_str()));
         let physical_dimension = Atom::num(4) - Atom::num(2) * &epsilon;
         let mut value = Atom::Zero;
+        log::debug!(target: "vakint::saved_application", "phase=coverage_mass_batching elapsed_seconds={:.6}", batching_started.elapsed().as_secs_f64());
         // Caller-owned scalar and mass poles remain conditions even when their
         // weighted integral cancels. They are separate from saved-program
         // guards, whose authenticated coefficient context is d-only.
+        let lowering_guards_started = std::time::Instant::now();
+        MonitorContext::native_phase(
+            observation.as_deref_mut(),
+            "lowering_guard_materialization",
+            None,
+        );
         let mut conditions = lowering
             .nonzero_conditions()
             .iter()
@@ -983,8 +1038,10 @@ impl SavedApplication {
                     .with(physical_dimension.to_pattern())
             })
             .collect::<BTreeSet<_>>();
+        log::debug!(target: "vakint::saved_application", "phase=lowering_guard_materialization elapsed_seconds={:.6}", lowering_guards_started.elapsed().as_secs_f64());
         let mut families = BTreeMap::new();
         for ((spectator, exponent), terms) in batches {
+            let mut cleanup = RetainedBatchCleanup::default();
             let application_started = std::time::Instant::now();
             MonitorContext::native_phase(
                 observation.as_deref_mut(),
@@ -1087,6 +1144,9 @@ impl SavedApplication {
             let normalized = match normalized {
                 Ok(normalized) => normalized,
                 Err(rustred::reduction::terminal_normalization::VacuumProductReductionError::UnresolvedFactor { family, target }) => {
+                    log::debug!(target: "vakint::saved_application", "phase=terminal_geometry_and_lower_factors elapsed_seconds={:.6}", products_started.elapsed().as_secs_f64());
+                    let fallback_started = std::time::Instant::now();
+                    MonitorContext::native_phase(observation.as_deref_mut(), "unprojected_terminal_materialization", None);
                     log::warn!("RustRed lower-factor coverage is incomplete for {family} {:?}; retaining the exact parent terminals", target.powers());
                     // Preserve the original reduced sum and its complete guards;
                     // no failed or partially normalized product enters a cache.
@@ -1103,6 +1163,9 @@ impl SavedApplication {
                     }
                     let mass_power = Atom::num((loop_count as i64, 2)) * &physical_dimension + Atom::num(exponent);
                     value += original * spectator * input.mass_squared.clone().pow(mass_power);
+                    log::debug!(target: "vakint::saved_application", "phase=unprojected_terminal_materialization elapsed_seconds={:.6}", fallback_started.elapsed().as_secs_f64());
+                    MonitorContext::native_phase(observation.as_deref_mut(), "retained_batch_cleanup", None);
+                    cleanup.arm();
                     continue;
                 }
                 Err(error) => return Err(native_failure(error).into()),
@@ -1114,7 +1177,14 @@ impl SavedApplication {
                 "retained_guard_materialization",
                 None,
             );
-            for condition in normalized.nonzero_conditions() {
+            let mut guard_progress = progress.map(|owner| {
+                owner.phase(
+                    "retained_guard_materialization",
+                    normalized.nonzero_conditions().len(),
+                    "guards processed",
+                )
+            });
+            for (index, condition) in normalized.nonzero_conditions().iter().enumerate() {
                 let condition = condition.to_expression();
                 if condition.is_zero()
                     || condition
@@ -1131,6 +1201,9 @@ impl SavedApplication {
                         .replace(dimension.to_pattern())
                         .with(physical_dimension.to_pattern()),
                 );
+                if let Some(progress) = &mut guard_progress {
+                    progress.completed(index + 1);
+                }
             }
             log::debug!(target: "vakint::saved_application", "phase=retained_guard_materialization elapsed_seconds={:.6}", guards_started.elapsed().as_secs_f64());
             let coefficients_started = std::time::Instant::now();
@@ -1139,7 +1212,14 @@ impl SavedApplication {
                 "retained_coefficient_materialization",
                 Some(contribution.as_view()),
             );
-            for (product, coefficient) in normalized.terms() {
+            let mut coefficient_progress = progress.map(|owner| {
+                owner.phase(
+                    "retained_coefficient_materialization",
+                    normalized.terms().len(),
+                    "master products materialized",
+                )
+            });
+            for (index, (product, coefficient)) in normalized.terms().iter().enumerate() {
                 let master = product
                     .iter()
                     .map(|factor| {
@@ -1156,11 +1236,31 @@ impl SavedApplication {
                     .replace(dimension.to_pattern())
                     .with(physical_dimension.to_pattern())
                     * master;
+                if let Some(progress) = &mut coefficient_progress {
+                    progress.completed_expression(
+                        index + 1,
+                        contribution.as_view(),
+                        observation.as_deref_mut(),
+                    );
+                }
             }
             log::debug!(target: "vakint::saved_application", "phase=retained_coefficient_materialization elapsed_seconds={:.6}", coefficients_started.elapsed().as_secs_f64());
+            let mass_started = std::time::Instant::now();
+            MonitorContext::native_phase(
+                observation.as_deref_mut(),
+                "retained_batch_mass_assembly",
+                Some(contribution.as_view()),
+            );
             let mass_power =
                 Atom::num((loop_count as i64, 2)) * &physical_dimension + Atom::num(exponent);
             value += contribution * spectator * input.mass_squared.clone().pow(mass_power);
+            log::debug!(target: "vakint::saved_application", "phase=retained_batch_mass_assembly elapsed_seconds={:.6}", mass_started.elapsed().as_secs_f64());
+            MonitorContext::native_phase(
+                observation.as_deref_mut(),
+                "retained_batch_cleanup",
+                None,
+            );
+            cleanup.arm();
         }
         if !matches!(input.mass_squared.as_view(), AtomView::Num(_)) {
             conditions.insert(input.mass_squared);
@@ -1180,16 +1280,24 @@ impl SavedApplication {
             Vakint::convert_from_dot_notation(value.as_view())
         };
         log::debug!(target: "vakint::saved_application", "phase=retained_normalization_and_notation elapsed_seconds={:.6}", normalization_started.elapsed().as_secs_f64());
+        let packing_started = std::time::Instant::now();
         MonitorContext::native_phase(
-            observation,
-            "normalized_retained_output",
+            observation.as_deref_mut(),
+            "retained_detailed_result_packing",
             Some(value.as_view()),
         );
-        Ok(RustRedSymbolicEvaluation {
+        let result = RustRedSymbolicEvaluation {
             value,
             nonzero_conditions: conditions.into_iter().collect(),
             families,
-        })
+        };
+        log::debug!(target: "vakint::saved_application", "phase=detailed_result_packing elapsed_seconds={:.6}", packing_started.elapsed().as_secs_f64());
+        MonitorContext::native_phase(
+            observation,
+            "normalized_retained_output",
+            Some(result.value.as_view()),
+        );
+        Ok(result)
     }
 }
 
@@ -1497,7 +1605,7 @@ mod tests {
             .unwrap();
         assert_scalar_limit(
             application
-                .evaluate_detailed(&strict, term.numerator.as_view(), &matched, None)
+                .evaluate_detailed(&strict, term.numerator.as_view(), &matched, None, None)
                 .unwrap_err(),
         );
         let after = vakint.rustred_application_cache_statistics().unwrap();

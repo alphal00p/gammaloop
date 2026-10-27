@@ -4,7 +4,7 @@ use std::{
     collections::VecDeque,
     io,
     sync::{
-        Arc, Mutex,
+        Arc, Mutex, OnceLock,
         atomic::{AtomicBool, Ordering},
         mpsc::{self, SyncSender},
     },
@@ -22,8 +22,8 @@ use rustred::solver::{
 use symbolica::atom::AtomView;
 
 use super::{
-    CallerExpressionSample, DisplaySnapshot, FrontierCount, LatestJsonFile, MonitorState,
-    MonitorStatus, RustRedMonitorDisplay, RustRedMonitorOptions, SnapshotWriter, StoredStateSample,
+    CallerExpressionSample, DisplaySnapshot, FrontierCount, MonitorState, MonitorStatus,
+    RustRedMonitorDisplay, RustRedMonitorOptions, StoredStateSample,
 };
 use crate::VakintError;
 
@@ -32,6 +32,7 @@ struct Pending {
     display: DisplaySnapshot,
     document: Option<serde_json::Value>,
     dirty: bool,
+    native_dirty: bool,
     caller_phase: String,
     last_document_at: Option<Duration>,
     events: VecDeque<String>,
@@ -46,13 +47,32 @@ struct Shared {
     active: AtomicBool,
     stopping: AtomicBool,
     started: Instant,
+    publisher_owner: u64,
 }
 
 impl Shared {
+    fn new() -> Self {
+        Self {
+            pending: Mutex::new(Pending::default()),
+            active: AtomicBool::new(true),
+            stopping: AtomicBool::new(false),
+            started: Instant::now(),
+            publisher_owner: super::publication::FileLease::next_owner(),
+        }
+    }
+
     fn pending(&self) -> std::sync::MutexGuard<'_, Pending> {
         self.pending
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    fn try_pending(&self) -> Option<std::sync::MutexGuard<'_, Pending>> {
+        match self.pending.try_lock() {
+            Ok(pending) => Some(pending),
+            Err(std::sync::TryLockError::Poisoned(error)) => Some(error.into_inner()),
+            Err(std::sync::TryLockError::WouldBlock) => None,
+        }
     }
 
     fn fault(&self, message: String) {
@@ -130,20 +150,97 @@ impl MonitorHandle {
             }));
         }
         update_display(&mut pending, envelope, due, initial);
-        // Forced activity notices can be very frequent. Their cheap display
-        // metadata is coalesced; native JSON is projected only at this cadence.
+        pending.native_dirty = true;
+        pending.dirty = true;
+        drop(pending);
+        let _ = self.wake.try_send(());
+        // Project borrowed native metadata outside the presentation lock. A
+        // slow projection cannot prevent clocks, OS sampling or detach input.
         if due {
             let document = rustred_app::saved_application_observation_document(envelope);
+            let mut pending = self.shared.pending();
             if matches!(envelope.event, Event::CycleDetected) {
                 pending.last_cycle = Some(document.clone());
             }
             pending.document = Some(document);
             pending.last_document_at = Some(envelope.elapsed);
+            pending.dirty = true;
         }
-        pending.dirty = true;
-        drop(pending);
         let _ = self.wake.try_send(());
         Ok(Control::Continue)
+    }
+}
+
+/// Caller-owned loop telemetry from the existing per-call presentation owner.
+/// It carries no expressions, callbacks, native cache or reduction capability.
+pub(crate) struct CallerProgress {
+    handle: MonitorHandle,
+}
+
+impl CallerProgress {
+    pub(crate) fn phase(&self, phase: &str, total: usize, unit: &str) -> CallerPhase<'_> {
+        let mut progress = CallerPhase {
+            owner: self,
+            phase: phase.to_owned(),
+            total,
+            unit: unit.to_owned(),
+            last: Instant::now(),
+        };
+        progress.publish(0);
+        progress
+    }
+}
+
+pub(crate) struct CallerPhase<'a> {
+    owner: &'a CallerProgress,
+    phase: String,
+    total: usize,
+    unit: String,
+    last: Instant,
+}
+
+impl CallerPhase<'_> {
+    pub(crate) fn completed(&mut self, completed: usize) {
+        if completed == self.total || self.last.elapsed() >= Duration::from_secs(1) {
+            self.publish(completed);
+        }
+    }
+
+    pub(crate) fn completed_expression(
+        &mut self,
+        completed: usize,
+        expression: AtomView<'_>,
+        observer: Option<&mut Observer<'_>>,
+    ) {
+        if completed == self.total || self.last.elapsed() >= Duration::from_secs(1) {
+            // A real completed caller item, not a UI heartbeat. Read the
+            // existing partial contribution's headers on its owning thread.
+            MonitorContext::native_phase(observer, &self.phase, Some(expression));
+            self.publish(completed);
+        }
+    }
+
+    fn publish(&mut self, completed: usize) {
+        let handle = &self.owner.handle;
+        if !handle.shared.active.load(Ordering::Relaxed) {
+            return;
+        }
+        let mut pending = handle.shared.pending();
+        if pending.display.phase != self.phase || completed > self.total {
+            return;
+        }
+        pending.display.caller_work = Some(super::CallerWork {
+            phase: self.phase.clone(),
+            completed,
+            total: self.total,
+            unit: self.unit.clone(),
+            sampled_at: handle.shared.started.elapsed(),
+        });
+        // A caller counter does not refresh a native event/rate clock.
+        pending.dirty = true;
+        self.last = Instant::now();
+        drop(pending);
+        let _ = handle.wake.try_send(());
     }
 }
 
@@ -155,7 +252,10 @@ pub(crate) struct MonitorContext {
 impl MonitorContext {
     pub(crate) fn run<T>(
         options: &RustRedMonitorOptions,
-        operation: impl FnOnce(Option<&mut Observer<'_>>) -> Result<T, VakintError>,
+        operation: impl FnOnce(
+            Option<&mut Observer<'_>>,
+            Option<&CallerProgress>,
+        ) -> Result<T, VakintError>,
     ) -> Result<T, VakintError> {
         // Collection is an explicit per-call option. The private log target
         // controls delivery only; general log verbosity cannot enable an observer.
@@ -169,15 +269,16 @@ impl MonitorContext {
             })?;
         }
         if !options.enabled() && !benchmark {
-            return operation(None);
+            return operation(None, None);
         }
         // Classification-only collection has no presenter, worker or JSON sink.
         let mut context = options.enabled().then(|| Self::new(options));
         let handle = context.as_ref().and_then(|context| context.handle.clone());
         if options.enabled() && handle.is_none() {
-            return operation(None);
+            return operation(None, None);
         }
         let phase_handle = handle.clone();
+        let progress = handle.clone().map(|handle| CallerProgress { handle });
         let mut callback = move |envelope: &Envelope<'_>| {
             #[cfg(feature = "experimental-rustred")]
             if benchmark {
@@ -203,7 +304,7 @@ impl MonitorContext {
             };
             let mut observer = Observer::new(observation, &mut callback);
             Self::native_phase(Some(&mut observer), "request_start", None);
-            let result = operation(Some(&mut observer));
+            let result = operation(Some(&mut observer), progress.as_ref());
             let phase = phase_handle
                 .as_ref()
                 .map(|handle| handle.shared.pending().caller_phase.clone())
@@ -373,12 +474,7 @@ impl MonitorContext {
     }
 
     fn new(options: &RustRedMonitorOptions) -> Self {
-        let shared = Arc::new(Shared {
-            pending: Mutex::new(Pending::default()),
-            active: AtomicBool::new(true),
-            stopping: AtomicBool::new(false),
-            started: Instant::now(),
-        });
+        let shared = Arc::new(Shared::new());
         let (wake, receiver) = mpsc::sync_channel(1);
         let handle = MonitorHandle {
             shared: Arc::clone(&shared),
@@ -404,9 +500,11 @@ impl MonitorContext {
                 worker: Some(worker),
             },
             Err(error) => {
-                log::warn!("RustRed monitor could not start: {error}");
+                handle
+                    .shared
+                    .fault(format!("monitor could not start: {error}"));
                 Self {
-                    handle: None,
+                    handle: Some(handle),
                     worker: None,
                 }
             }
@@ -420,14 +518,15 @@ impl MonitorContext {
         }
         if let Some(worker) = self.worker.take()
             && worker.join().is_err()
+            && let Some(handle) = &self.handle
         {
-            log::warn!("RustRed monitor worker unwound; scientific result is unchanged");
+            handle
+                .shared
+                .fault("monitor worker unwound; scientific result is unchanged".into());
         }
-        if let Some(handle) = &self.handle
-            && let Some(fault) = &handle.shared.pending().fault
-        {
-            log::warn!("RustRed monitor telemetry stopped: {fault}");
-        }
+        // A detached publisher may still own stderr's global lock. Delivering
+        // a synchronous logger warning here could wait on that same sink and
+        // undo the bounded diagnostic shutdown. Keep faults in the owner state.
         self.handle = None;
     }
 }
@@ -439,8 +538,25 @@ impl Drop for MonitorContext {
 }
 
 fn worker(shared: Arc<Shared>, receiver: mpsc::Receiver<()>, options: RustRedMonitorOptions) {
+    worker_with_publisher(
+        shared,
+        receiver,
+        options,
+        super::publication::SnapshotPublisher::new,
+    );
+}
+
+fn worker_with_publisher(
+    shared: Arc<Shared>,
+    receiver: mpsc::Receiver<()>,
+    options: RustRedMonitorOptions,
+    make_publisher: impl FnOnce(
+        &RustRedMonitorOptions,
+        bool,
+        u64,
+    ) -> io::Result<super::publication::SnapshotPublisher>,
+) {
     let mut state = MonitorState::default();
-    let file = LatestJsonFile::from_options(&options);
     let file_enabled = options.progress_snapshot.is_some();
     let mut stderr_json = false;
     #[cfg(feature = "progress-tui")]
@@ -469,45 +585,67 @@ fn worker(shared: Arc<Shared>, receiver: mpsc::Receiver<()>, options: RustRedMon
     if options.display == RustRedMonitorDisplay::Json && !file_enabled {
         stderr_json = true;
     }
-    let mut stream = SnapshotWriter::new(io::stderr());
+    let publisher = match make_publisher(&options, stderr_json, shared.publisher_owner) {
+        Ok(publisher) => publisher,
+        Err(error) => {
+            shared.fault(error.to_string());
+            return;
+        }
+    };
     let no_color = options.no_color || std::env::var_os("NO_COLOR").is_some();
     let mut last_document = None;
     let mut last_cycle = None;
     let mut last_node_completion = None;
     let mut document_received = Duration::ZERO;
     let mut last_publish = None::<Instant>;
-    let mut last_resource_sample = None::<Instant>;
+    let heartbeat = options
+        .interval
+        .clamp(Duration::from_millis(100), Duration::from_secs(1));
     // Task-scoped presentation input only, captured once. This never arms a guard.
     let guard_snapshot =
         std::env::var_os("VAKINT_RESOURCE_GUARD_SNAPSHOT").map(std::path::PathBuf::from);
+    let resources = ResourceTask::new(
+        std::process::id(),
+        guard_snapshot,
+        heartbeat,
+        shared.started,
+    )
+    .ok();
     loop {
         if !shared.stopping.load(Ordering::Relaxed) {
             let _ = receiver.recv_timeout(Duration::from_millis(50));
         }
         let update = {
-            let mut pending = shared.pending();
-            if pending.dirty {
-                pending.dirty = false;
-                let force_publish = pending.force_publish;
-                pending.force_publish = false;
-                Some((
-                    pending.display.clone(),
-                    pending.document.take(),
-                    pending.last_cycle.clone(),
-                    pending.last_node_completion.clone(),
-                    force_publish,
-                ))
-            } else {
-                None
-            }
+            shared.try_pending().and_then(|mut pending| {
+                if pending.dirty {
+                    pending.dirty = false;
+                    let force_publish = pending.force_publish;
+                    pending.force_publish = false;
+                    let native_dirty = std::mem::take(&mut pending.native_dirty);
+                    Some((
+                        native_dirty,
+                        pending.display.clone(),
+                        pending.document.take(),
+                        pending.last_cycle.clone(),
+                        pending.last_node_completion.clone(),
+                        force_publish,
+                    ))
+                } else {
+                    None
+                }
+            })
         };
         let mut force_publish = false;
-        if let Some((mut display, document, cycle, completion, force)) = update {
+        if let Some((native_dirty, mut display, document, cycle, completion, force)) = update {
             force_publish = force;
             // A native notice does not reset the independent OS sample or its age.
             display.resources = state.latest.resources.clone();
             display.resource_sample_at = state.latest.resource_sample_at;
-            state.observe(display, shared.started.elapsed());
+            if native_dirty {
+                state.observe(display, shared.started.elapsed());
+            } else {
+                state.latest.caller_work = display.caller_work;
+            }
             if let Some(document) = document {
                 last_document = Some(document);
                 document_received = shared.started.elapsed();
@@ -515,17 +653,9 @@ fn worker(shared: Arc<Shared>, receiver: mpsc::Receiver<()>, options: RustRedMon
             last_cycle = cycle;
             last_node_completion = completion;
         }
-        if force_publish
-            || shared.stopping.load(Ordering::Relaxed)
-            || last_resource_sample.is_none_or(|last| {
-                last.elapsed() >= options.interval.max(Duration::from_millis(100))
-            })
-        {
-            // Presentation-thread I/O only; no native progress/rate sample is added.
-            state.latest.resources = resource_usage(guard_snapshot.as_deref());
-            state.latest.resource_sample_at =
-                cfg!(target_os = "linux").then(|| shared.started.elapsed());
-            last_resource_sample = Some(Instant::now());
+        if let Some((sample, sampled_at)) = resources.as_ref().and_then(ResourceTask::take) {
+            state.latest.resources = sample;
+            state.latest.resource_sample_at = Some(sampled_at);
         }
         #[cfg(feature = "progress-tui")]
         if terminal.is_some() {
@@ -555,44 +685,49 @@ fn worker(shared: Arc<Shared>, receiver: mpsc::Receiver<()>, options: RustRedMon
         }
         #[cfg(not(feature = "progress-tui"))]
         let _ = no_color;
-        let refresh_due = last_publish
-            .is_none_or(|last| last.elapsed() >= options.interval.max(Duration::from_millis(100)));
-        if (force_publish || refresh_due || shared.stopping.load(Ordering::Relaxed))
-            && let Some(native) = &last_document
-        {
-            let mut document = native.clone();
+        let refresh_due = last_publish.is_none_or(|last| last.elapsed() >= heartbeat);
+        if force_publish || refresh_due || shared.stopping.load(Ordering::Relaxed) {
+            let mut document = last_document
+                .clone()
+                .unwrap_or_else(|| serde_json::json!({}));
             // Only the nested visual view may be frozen, never status/ETA/resources.
             let mut monitor = state.presentation(shared.started.elapsed());
             monitor["scope"] =
                 "observational consumer presentation; native fields unchanged".into();
+            monitor["request_sequence"] = shared.publisher_owner.into();
             monitor["worker_pid"] = std::process::id().into();
+            monitor["worker_start_ticks"] = serde_json::json!(
+                state
+                    .latest
+                    .resources
+                    .process_identity_verified
+                    .then_some(state.latest.resources.process_start_ticks)
+                    .flatten()
+            );
             monitor["published_unix_seconds"] = serde_json::json!(
                 std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .ok()
                     .map(|value| value.as_secs_f64())
             );
-            monitor["native_document_age_seconds"] = shared
-                .started
-                .elapsed()
-                .saturating_sub(document_received)
-                .as_secs_f64()
-                .into();
+            monitor["native_document_age_seconds"] =
+                serde_json::json!(last_document.as_ref().map(|_| {
+                    shared
+                        .started
+                        .elapsed()
+                        .saturating_sub(document_received)
+                        .as_secs_f64()
+                }));
             monitor["last_cycle"] = serde_json::json!(last_cycle);
             monitor["last_node_completion"] = serde_json::json!(last_node_completion);
             monitor["global_remaining_work_certificate"] = false.into();
             document["monitor"] = monitor;
-            if let Err(error) = file.write(&document).and_then(|()| {
-                if stderr_json {
-                    stream.write(&document)
-                } else {
-                    Ok(())
-                }
-            }) {
-                shared.fault(error.to_string());
-                break;
-            }
+            publisher.publish(document);
             last_publish = Some(Instant::now());
+        }
+        if let Some(error) = publisher.error() {
+            shared.fault(error);
+            break;
         }
         if !shared.active.load(Ordering::Relaxed) {
             break;
@@ -600,7 +735,7 @@ fn worker(shared: Arc<Shared>, receiver: mpsc::Receiver<()>, options: RustRedMon
         // The final callback can arrive while a previous frame is being
         // written. Finish only after its queued final document is drained.
         if shared.stopping.load(Ordering::Relaxed) {
-            if !shared.pending().dirty {
+            if shared.try_pending().is_some_and(|pending| !pending.dirty) {
                 break;
             }
             continue;
@@ -610,6 +745,9 @@ fn worker(shared: Arc<Shared>, receiver: mpsc::Receiver<()>, options: RustRedMon
         if let Some(published) = last_publish {
             thread::sleep(Duration::from_millis(50).saturating_sub(published.elapsed()));
         }
+    }
+    if let Some(fault) = publisher.finish() {
+        shared.fault(fault);
     }
 }
 
@@ -656,9 +794,18 @@ fn update_display(pending: &mut Pending, envelope: &Envelope<'_>, detail: bool, 
     if let Some(age) = envelope.native_summary_age {
         display.native_observed_at = Some(envelope.elapsed.saturating_sub(age));
     }
-    display.phase = envelope
+    let phase = envelope
         .caller_phase
         .map_or_else(|| format!("native {:?}", envelope.activity), str::to_owned);
+    if display.phase != phase {
+        display.phase_started_at = envelope.elapsed;
+        display.caller_work = None;
+    }
+    display.phase = phase;
+    display.native_work_active = envelope.activity != Activity::Caller
+        && envelope.caller_phase.is_none()
+        && envelope.status == Status::Running
+        && !matches!(envelope.event, Event::CoreFinished | Event::RequestFinished);
     let outer_finished = envelope.activity == Activity::Caller && envelope.request_finished;
     display.request_finished = outer_finished;
     display.status = if outer_finished {
@@ -895,22 +1042,266 @@ fn update_display(pending: &mut Pending, envelope: &Envelope<'_>, detail: bool, 
     display.events = pending.events.iter().cloned().collect();
 }
 
-fn resource_usage(guard_snapshot: Option<&std::path::Path>) -> super::ResourceUsage {
-    #[cfg(target_os = "linux")]
-    {
-        let status = std::fs::read_to_string("/proc/self/status").unwrap_or_default();
-        let meminfo = std::fs::read_to_string("/proc/meminfo").unwrap_or_default();
-        let mut sample = super::ResourceUsage::from_proc(&status, &meminfo);
-        if let Some(path) = guard_snapshot {
-            sample.guard = GuardBinding { path }.sample();
+/// Existing resource sampling on an I/O owner, with one completed sample slot.
+/// A blocked guard file or OS read cannot own the terminal or its shutdown.
+pub(super) struct ResourceTask {
+    latest: Arc<Mutex<Option<(super::ResourceUsage, Duration)>>>,
+    stopped: Arc<AtomicBool>,
+    #[cfg(any(feature = "progress-tui", test))]
+    binding: Arc<OnceLock<u64>>,
+    _worker: JoinHandle<()>,
+}
+
+/// The snapshot reader can authenticate a target without retaining its sampler.
+#[cfg(any(feature = "progress-tui", test))]
+#[derive(Clone)]
+pub(super) struct ResourceBinding {
+    identity: Arc<OnceLock<u64>>,
+    stopped: Arc<AtomicBool>,
+}
+
+#[cfg(any(feature = "progress-tui", test))]
+impl ResourceBinding {
+    pub(super) fn try_bind_start_ticks(&self, start: u64) -> bool {
+        if self.stopped.load(Ordering::Acquire) {
+            return false;
         }
-        sample
+        let _ = self.identity.set(start);
+        !self.stopped.load(Ordering::Acquire) && self.identity.get() == Some(&start)
+    }
+
+    #[cfg(test)]
+    pub(super) fn bound_start_ticks(&self) -> Option<u64> {
+        self.identity.get().copied()
+    }
+}
+
+impl ResourceTask {
+    fn new(
+        pid: u32,
+        guard: Option<std::path::PathBuf>,
+        interval: Duration,
+        started: Instant,
+    ) -> io::Result<Self> {
+        Self::spawn(pid, guard, interval, started, false)
+    }
+
+    #[cfg(any(feature = "progress-tui", test))]
+    pub(super) fn new_attachment(pid: u32, started: Instant) -> io::Result<Self> {
+        Self::spawn(pid, None, Duration::from_secs(1), started, true)
+    }
+
+    #[cfg(any(feature = "progress-tui", test))]
+    pub(super) fn binding(&self) -> ResourceBinding {
+        ResourceBinding {
+            identity: Arc::clone(&self.binding),
+            stopped: Arc::clone(&self.stopped),
+        }
+    }
+
+    fn spawn(
+        pid: u32,
+        guard: Option<std::path::PathBuf>,
+        interval: Duration,
+        started: Instant,
+        attachment: bool,
+    ) -> io::Result<Self> {
+        let latest = Arc::new(Mutex::new(None));
+        let stopped = Arc::new(AtomicBool::new(false));
+        let binding = Arc::new(OnceLock::new());
+        let output = Arc::clone(&latest);
+        let stop = Arc::clone(&stopped);
+        let identity = Arc::clone(&binding);
+        let worker = thread::Builder::new()
+            .name("vakint-monitor-resources".into())
+            .spawn(move || {
+                let mut sampler = if attachment {
+                    ResourceSampler::unbound(pid)
+                } else {
+                    ResourceSampler::new(pid)
+                };
+                while !stop.load(Ordering::Acquire) {
+                    if let Some(start) = identity.get() {
+                        sampler.bind_start_ticks(*start);
+                    }
+                    // Conservative age starts before OS and possibly slow guard I/O.
+                    let sampled_at = started.elapsed();
+                    let sample = resource_usage(&mut sampler, guard.as_deref());
+                    if stop.load(Ordering::Acquire) {
+                        break;
+                    }
+                    if let Ok(mut latest) = output.try_lock() {
+                        *latest = Some((sample, sampled_at));
+                    }
+                    thread::sleep(interval);
+                }
+            })?;
+        Ok(Self {
+            latest,
+            stopped,
+            #[cfg(any(feature = "progress-tui", test))]
+            binding,
+            _worker: worker,
+        })
+    }
+
+    pub(super) fn take(&self) -> Option<(super::ResourceUsage, Duration)> {
+        self.latest.try_lock().ok()?.take()
+    }
+}
+
+impl Drop for ResourceTask {
+    fn drop(&mut self) {
+        self.stopped.store(true, Ordering::Release);
+    }
+}
+
+/// A target-process OS sampler; no native or symbolic state is retained.
+pub(super) struct ResourceSampler {
+    pid: u32,
+    #[cfg(target_os = "linux")]
+    previous: Option<(u64, u64, Instant)>,
+    #[cfg(target_os = "linux")]
+    identity: Option<u64>,
+}
+
+impl ResourceSampler {
+    fn unbound(pid: u32) -> Self {
+        Self {
+            pid,
+            #[cfg(target_os = "linux")]
+            previous: None,
+            #[cfg(target_os = "linux")]
+            identity: None,
+        }
+    }
+
+    pub(super) fn new(pid: u32) -> Self {
+        Self {
+            pid,
+            #[cfg(target_os = "linux")]
+            previous: None,
+            #[cfg(target_os = "linux")]
+            identity: (pid == std::process::id())
+                .then(|| Self::current_start_ticks(pid))
+                .flatten(),
+        }
+    }
+
+    pub(super) fn bind_start_ticks(&mut self, expected: u64) {
+        #[cfg(target_os = "linux")]
+        {
+            if self.identity != Some(expected) {
+                self.previous = None;
+            }
+            self.identity = Some(expected);
+        }
+        #[cfg(not(target_os = "linux"))]
+        let _ = expected;
+    }
+
+    #[cfg(test)]
+    pub(super) fn bound_start_ticks(&self) -> Option<u64> {
+        #[cfg(target_os = "linux")]
+        {
+            self.identity
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            None
+        }
+    }
+
+    pub(super) fn current_start_ticks(pid: u32) -> Option<u64> {
+        #[cfg(target_os = "linux")]
+        {
+            std::fs::read_to_string(format!("/proc/{pid}/stat"))
+                .ok()
+                .and_then(|text| Self::cpu_ticks(&text))
+                .map(|(start, _)| start)
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = pid;
+            None
+        }
+    }
+
+    pub(super) fn sample(&mut self) -> super::ResourceUsage {
+        #[cfg(target_os = "linux")]
+        {
+            let base = format!("/proc/{}", self.pid);
+            let status = std::fs::read_to_string(format!("{base}/status")).unwrap_or_default();
+            let meminfo = std::fs::read_to_string("/proc/meminfo").unwrap_or_default();
+            let mut sample = super::ResourceUsage::from_proc(&status, &meminfo);
+            sample.process_pid = Some(self.pid);
+            sample.process_start_ticks = self.identity;
+            let measured = std::fs::read_to_string(format!("{base}/stat"))
+                .ok()
+                .and_then(|text| Self::cpu_ticks(&text));
+            if let Some((start, ticks)) =
+                measured.filter(|(start, _)| self.identity == Some(*start))
+            {
+                sample.process_identity_verified = true;
+                sample.source = Some(format!(
+                    "Linux {base}/status + /proc/meminfo + stat; PID/start verified"
+                ));
+                let now = Instant::now();
+                let frequency = rustix::param::clock_ticks_per_second() as f64;
+                sample.cpu_seconds = Some(ticks as f64 / frequency);
+                if let Some((previous_start, previous_ticks, previous_at)) = self.previous {
+                    let elapsed = now.duration_since(previous_at).as_secs_f64();
+                    if previous_start == start && elapsed > 0.0 && ticks >= previous_ticks {
+                        sample.cpu_percent =
+                            Some(100.0 * (ticks - previous_ticks) as f64 / frequency / elapsed);
+                    }
+                }
+                self.previous = Some((start, ticks, now));
+            } else {
+                // A PID alone is not identity. Keep host observations fresh but
+                // never adopt a missing/reused/unverified target's process data.
+                sample.rss_bytes = None;
+                sample.peak_rss_bytes = None;
+                sample.source =
+                    Some("Linux /proc/meminfo; target PID/start unverified or exited".into());
+                self.previous = None;
+            }
+            sample.sample_age_seconds = Some(0.0);
+            sample
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            let _ = self.pid;
+            super::ResourceUsage::default()
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    fn cpu_ticks(stat: &str) -> Option<(u64, u64)> {
+        // comm may itself contain spaces or ')'; fields start after its last ')'.
+        let (_, fields) = stat.rsplit_once(')')?;
+        let fields = fields.split_whitespace().collect::<Vec<_>>();
+        if matches!(fields.first().copied(), Some("Z" | "X")) {
+            return None;
+        }
+        let user = fields.get(11)?.parse::<u64>().ok()?;
+        let system = fields.get(12)?.parse::<u64>().ok()?;
+        Some((fields.get(19)?.parse().ok()?, user.checked_add(system)?))
+    }
+}
+
+fn resource_usage(
+    sampler: &mut ResourceSampler,
+    guard_snapshot: Option<&std::path::Path>,
+) -> super::ResourceUsage {
+    let mut sample = sampler.sample();
+    #[cfg(target_os = "linux")]
+    if let Some(path) = guard_snapshot {
+        sample.guard = GuardBinding { path }.sample();
     }
     #[cfg(not(target_os = "linux"))]
-    {
-        let _ = guard_snapshot;
-        super::ResourceUsage::default()
-    }
+    let _ = guard_snapshot;
+    sample
 }
 
 #[cfg(target_os = "linux")]
@@ -1418,14 +1809,14 @@ mod tests {
         let path = directory.path().join("resources.json");
         let options = RustRedMonitorOptions {
             progress_snapshot: Some(path.clone()),
-            interval: Duration::from_millis(100),
+            interval: Duration::from_secs(60),
             ..Default::default()
         };
-        let failure = MonitorContext::run::<()>(&options, |mut observer| {
+        let failure = MonitorContext::run::<()>(&options, |mut observer, _progress| {
             // Real OS sampling/file publication; synthetic control events only.
             // No saved application, coefficient, cache or reduction is loaded.
             MonitorContext::native_phase(observer.as_deref_mut(), "synthetic_busy_phase", None);
-            let deadline = Instant::now() + Duration::from_secs(5);
+            let deadline = Instant::now() + Duration::from_secs(8);
             let first = loop {
                 if let Ok(bytes) = std::fs::read(&path) {
                     let document: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
@@ -1436,31 +1827,57 @@ mod tests {
                 assert!(Instant::now() < deadline, "resource publication timed out");
                 thread::sleep(Duration::from_millis(5));
             };
+            let first_sample = first["monitor"]["resource_sample_elapsed_seconds"]
+                .as_f64()
+                .unwrap();
+            let mut sample_clocks = vec![first_sample];
             let refreshed = loop {
                 let document: serde_json::Value =
                     serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
-                if document["monitor"]["published_unix_seconds"]
-                    .as_f64()
-                    .unwrap()
-                    > first["monitor"]["published_unix_seconds"].as_f64().unwrap()
-                    && document["monitor"]["native_document_age_seconds"]
-                        .as_f64()
-                        .unwrap()
-                        >= 0.1
+                if let Some(sample) =
+                    document["monitor"]["resource_sample_elapsed_seconds"].as_f64()
                 {
-                    break document;
+                    if sample > *sample_clocks.last().unwrap() {
+                        sample_clocks.push(sample);
+                    }
+                    if sample_clocks.len() >= 3 && sample - first_sample >= 1.5 {
+                        break document;
+                    }
                 }
                 assert!(
                     Instant::now() < deadline,
-                    "independent OS refresh timed out"
+                    "independent OS sample clock did not advance across multiple heartbeats"
                 );
                 thread::sleep(Duration::from_millis(5));
             };
             assert!(
+                sample_clocks
+                    .windows(2)
+                    .all(|samples| samples[1] > samples[0])
+            );
+            assert!(
                 refreshed["monitor"]["resources"]["sample_age_seconds"]
                     .as_f64()
                     .unwrap()
-                    < 0.1
+                    <= 2.5,
+                "independent resource sample is stale: {}",
+                refreshed["monitor"]["resources"]
+            );
+            assert!(
+                refreshed["monitor"]["published_unix_seconds"]
+                    .as_f64()
+                    .unwrap()
+                    > first["monitor"]["published_unix_seconds"].as_f64().unwrap()
+            );
+            assert_eq!(
+                refreshed["sequence"], first["sequence"],
+                "heartbeat invented observer progress"
+            );
+            assert!(
+                refreshed["monitor"]["native_document_age_seconds"]
+                    .as_f64()
+                    .unwrap()
+                    >= 1.5
             );
             assert!(refreshed["monitor"]["last_cycle"].is_null());
             let mut cycle = Envelope::new(Event::CycleDetected, "synthetic-resource-fixture");
@@ -1555,7 +1972,7 @@ mod tests {
             interval: Duration::from_secs(60),
             ..Default::default()
         };
-        let result = MonitorContext::run(&options, |mut observer| {
+        let result = MonitorContext::run(&options, |mut observer, _progress| {
             let deadline = Instant::now() + Duration::from_secs(5);
             while !path.exists() {
                 assert!(
@@ -1661,12 +2078,7 @@ mod tests {
         };
         // Only fake envelopes and the bounded in-memory pending queue; no
         // solver, worker thread, terminal, file, sleep or reduction is started.
-        let shared = Arc::new(Shared {
-            pending: Mutex::new(Pending::default()),
-            active: AtomicBool::new(true),
-            stopping: AtomicBool::new(false),
-            started: Instant::now(),
-        });
+        let shared = Arc::new(Shared::new());
         let (wake, _receiver) = mpsc::sync_channel(1);
         let handle = MonitorHandle {
             shared: Arc::clone(&shared),
@@ -1818,11 +2230,14 @@ mod disabled_benchmark_tests {
     #[test]
     fn default_off_invokes_the_unobserved_operation_once() {
         let mut calls = 0;
-        let value = MonitorContext::run(&RustRedMonitorOptions::default(), |observation| {
-            calls += 1;
-            assert!(observation.is_none());
-            Ok(17)
-        })
+        let value = MonitorContext::run(
+            &RustRedMonitorOptions::default(),
+            |observation, _progress| {
+                calls += 1;
+                assert!(observation.is_none());
+                Ok(17)
+            },
+        )
         .unwrap();
         assert_eq!(value, 17);
         assert_eq!(calls, 1);
@@ -1881,7 +2296,7 @@ mod benchmark_tests {
         assert!(!normal.enabled());
         assert!(!normal.cache_hit_diagnostic);
         let mut calls = 0;
-        let value = MonitorContext::run(&normal, |observer| {
+        let value = MonitorContext::run(&normal, |observer, _progress| {
             calls += 1;
             assert!(observer.is_none());
             Ok(17)
@@ -1895,14 +2310,14 @@ mod benchmark_tests {
         assert!(!diagnostic.enabled());
         assert!(diagnostic.progress_snapshot.is_none());
         let mut calls = 0;
-        let value = MonitorContext::run(&diagnostic, |observer| {
+        let value = MonitorContext::run(&diagnostic, |observer, _progress| {
             calls += 1;
             assert!(observer.is_some());
             Ok(23)
         })
         .unwrap();
         assert_eq!((value, calls), (23, 1));
-        let failure = MonitorContext::run::<()>(&diagnostic, |observer| {
+        let failure = MonitorContext::run::<()>(&diagnostic, |observer, _progress| {
             assert!(observer.is_some());
             Err(VakintError::EvaluationError(
                 "metadata-only sentinel".into(),
@@ -1922,7 +2337,7 @@ mod benchmark_tests {
             invalid.validate().unwrap_err().kind(),
             std::io::ErrorKind::InvalidInput
         );
-        let error = MonitorContext::run::<()>(&invalid, |_| {
+        let error = MonitorContext::run::<()>(&invalid, |_, _| {
             panic!("invalid diagnostic must not execute operation")
         })
         .unwrap_err();
@@ -2082,5 +2497,468 @@ mod benchmark_tests {
             assert_eq!(document["operation_succeeded"], false);
             assert_eq!(document["interval_ns"], 0);
         }
+    }
+}
+
+#[cfg(test)]
+mod responsiveness_tests {
+    use super::*;
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn attachment_sampling_starts_unbound_and_retains_one_worker_identity() {
+        let started = Instant::now();
+        let task = ResourceTask::new_attachment(std::process::id(), started).unwrap();
+        let binding = task.binding();
+        let deadline = Instant::now() + Duration::from_secs(4);
+        let initial = loop {
+            if let Some((sample, _)) = task.take() {
+                break sample;
+            }
+            assert!(Instant::now() < deadline);
+            thread::sleep(Duration::from_millis(5));
+        };
+        assert!(initial.mem_available_bytes.is_some());
+        assert!(!initial.process_identity_verified && initial.rss_bytes.is_none());
+        assert!(binding.bound_start_ticks().is_none());
+        let start = ResourceSampler::current_start_ticks(std::process::id()).unwrap();
+        assert!(binding.try_bind_start_ticks(start));
+        assert!(binding.try_bind_start_ticks(start));
+        assert!(!binding.try_bind_start_ticks(start + 1));
+        loop {
+            if let Some((sample, at)) = task.take()
+                && sample.process_identity_verified
+            {
+                assert_eq!(sample.process_start_ticks, Some(start));
+                assert!(sample.rss_bytes.is_some());
+                assert!(started.elapsed().saturating_sub(at) <= Duration::from_millis(2500));
+                break;
+            }
+            assert!(Instant::now() < deadline);
+            thread::sleep(Duration::from_millis(5));
+        }
+        drop(task);
+        assert!(!binding.try_bind_start_ticks(start));
+    }
+
+    #[test]
+    fn pending_native_lock_does_not_block_heartbeat_or_os_samples() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("locked.json");
+        let shared = Arc::new(Shared::new());
+        let (wake, receiver) = mpsc::sync_channel(1);
+        let locked = shared.pending();
+        let worker_shared = Arc::clone(&shared);
+        let options = RustRedMonitorOptions {
+            progress_snapshot: Some(path.clone()),
+            interval: Duration::from_secs(60),
+            ..Default::default()
+        };
+        let presenter = thread::spawn(move || worker(worker_shared, receiver, options));
+        let deadline = Instant::now() + Duration::from_secs(4);
+        let mut first = None;
+        loop {
+            if let Ok(bytes) = std::fs::read(&path) {
+                let document: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+                let time = document["monitor"]["published_unix_seconds"]
+                    .as_f64()
+                    .unwrap();
+                if let Some(first) = first {
+                    if time - first >= 0.9 {
+                        assert!(document["monitor"]["event_age_seconds"].is_null());
+                        #[cfg(target_os = "linux")]
+                        assert!(document["monitor"]["resources"]["rss_bytes"].is_u64());
+                        break;
+                    }
+                } else {
+                    first = Some(time);
+                }
+            }
+            assert!(
+                Instant::now() < deadline,
+                "locked producer starved independent heartbeat"
+            );
+            thread::sleep(Duration::from_millis(10));
+        }
+        drop(locked);
+        shared.stopping.store(true, Ordering::Release);
+        wake.try_send(()).unwrap();
+        presenter.join().unwrap();
+    }
+
+    #[test]
+    fn caller_counts_never_refresh_native_or_phase_event_clocks() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("caller.json");
+        let options = RustRedMonitorOptions {
+            progress_snapshot: Some(path.clone()),
+            interval: Duration::from_secs(60),
+            ..Default::default()
+        };
+        MonitorContext::run(&options, |mut observer, progress| {
+            MonitorContext::native_phase(
+                observer.as_deref_mut(),
+                "retained_guard_materialization",
+                None,
+            );
+            let mut progress =
+                progress
+                    .unwrap()
+                    .phase("retained_guard_materialization", 7, "guards processed");
+            thread::sleep(Duration::from_millis(1100));
+            progress.completed(7);
+            let deadline = Instant::now() + Duration::from_secs(3);
+            loop {
+                if let Ok(bytes) = std::fs::read(&path) {
+                    let document: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+                    if document["monitor"]["caller_work"]["completed"] == 7 {
+                        assert_eq!(document["monitor"]["caller_work"]["total"], 7);
+                        assert!(document["monitor"]["event_age_seconds"].as_f64().unwrap() >= 1.0);
+                        assert!(
+                            document["monitor"]["phase_elapsed_seconds"]
+                                .as_f64()
+                                .unwrap()
+                                >= 1.0
+                        );
+                        assert!(document["monitor"]["last_cycle"].is_null());
+                        break;
+                    }
+                }
+                assert!(
+                    Instant::now() < deadline,
+                    "caller-loop counter was not published"
+                );
+                thread::sleep(Duration::from_millis(10));
+            }
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn coefficient_progress_samples_existing_partial_atom_headers() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("partial-atom.json");
+        let options = RustRedMonitorOptions {
+            progress_snapshot: Some(path.clone()),
+            ..Default::default()
+        };
+        let atom = crate::utils::vakint_macros::vk_parse!("partial_header_x+2").unwrap();
+        MonitorContext::run(&options, |mut observer, owner| {
+            MonitorContext::native_phase(
+                observer.as_deref_mut(),
+                "retained_coefficient_materialization",
+                None,
+            );
+            let mut phase = owner.unwrap().phase(
+                "retained_coefficient_materialization",
+                2,
+                "master products materialized",
+            );
+            phase.completed_expression(2, atom.as_view(), observer.as_deref_mut());
+            Ok(())
+        })
+        .unwrap();
+        let document: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+        assert_eq!(
+            document["monitor"]["caller_expression"]["encoded_bytes"],
+            atom.as_view().get_byte_size()
+        );
+        assert_eq!(
+            document["monitor"]["caller_expression"]["stored_summands"],
+            atom.as_view().nterms()
+        );
+        assert_eq!(document["monitor"]["caller_work"]["completed"], 2);
+        assert_eq!(
+            document["monitor"]["caller_work"]["unit"],
+            "master products materialized"
+        );
+        assert_eq!(document["monitor"]["native_work_active"], false);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn process_cpu_parser_respects_comm_and_checked_counters() {
+        let mut fields = vec!["0"; 20];
+        fields[0] = "R";
+        fields[11] = "123";
+        fields[12] = "7";
+        fields[19] = "901";
+        let stat = format!("42 (a name ) with spaces) {}", fields.join(" "));
+        assert_eq!(ResourceSampler::cpu_ticks(&stat), Some((901, 130)));
+        for state in ["Z", "X"] {
+            fields[0] = state;
+            assert!(
+                ResourceSampler::cpu_ticks(&format!("42 (fixture) {}", fields.join(" "))).is_none()
+            );
+        }
+        fields[0] = "R";
+        fields[12] = "18446744073709551615";
+        assert!(
+            ResourceSampler::cpu_ticks(&format!("42 (fixture) {}", fields.join(" "))).is_none()
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn pid_start_mismatch_or_exit_preserves_only_fresh_host_memory() {
+        let pid = std::process::id();
+        let start = ResourceSampler::current_start_ticks(pid).unwrap();
+        let mut sampler = ResourceSampler::new(pid);
+        let valid = sampler.sample();
+        assert!(valid.process_identity_verified && valid.rss_bytes.is_some());
+        sampler.bind_start_ticks(start + 1);
+        for _ in 0..2 {
+            let stale = sampler.sample();
+            assert!(
+                !stale.process_identity_verified
+                    && stale.rss_bytes.is_none()
+                    && stale.cpu_seconds.is_none()
+            );
+            assert!(stale.mem_available_bytes.is_some());
+            assert_eq!(sampler.bound_start_ticks(), Some(start + 1));
+        }
+        let mut missing = ResourceSampler::new(u32::MAX);
+        missing.bind_start_ticks(start);
+        let exited = missing.sample();
+        assert!(!exited.process_identity_verified && exited.rss_bytes.is_none());
+        assert!(exited.mem_available_bytes.is_some());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn exited_unreaped_child_is_not_a_live_resource_target() {
+        let mut child = std::process::Command::new(std::env::current_exe().unwrap())
+            .arg("--help")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+        let deadline = Instant::now() + Duration::from_secs(3);
+        let start = loop {
+            let stat = std::fs::read_to_string(format!("/proc/{}/stat", child.id())).unwrap();
+            let (_, fields) = stat.rsplit_once(')').unwrap();
+            let fields = fields.split_whitespace().collect::<Vec<_>>();
+            if fields[0] == "Z" {
+                break fields[19].parse::<u64>().unwrap();
+            }
+            assert!(
+                Instant::now() < deadline,
+                "owned help-only child did not exit"
+            );
+            thread::sleep(Duration::from_millis(5));
+        };
+        let mut sampler = ResourceSampler::new(child.id());
+        sampler.bind_start_ticks(start);
+        let sample = sampler.sample();
+        assert!(
+            !sample.process_identity_verified
+                && sample.rss_bytes.is_none()
+                && sample.cpu_seconds.is_none()
+        );
+        assert!(sample.mem_available_bytes.is_some());
+        assert!(child.wait().unwrap().success());
+    }
+
+    #[cfg(all(feature = "progress-tui", unix, not(target_arch = "wasm32")))]
+    #[test]
+    #[ignore = "requires a fresh controlling PTY and the >35-second responsiveness controller"]
+    fn real_pty_silent_or_blocked_publisher_keeps_controls_live() {
+        use std::io::Write;
+        let scenario = std::env::var("VAKINT_MONITOR_PTY_SCENARIO").unwrap();
+        assert!(matches!(
+            scenario.as_str(),
+            "embedded-silence" | "blocked-publisher"
+        ));
+        assert!(!crossterm::terminal::is_raw_mode_enabled().unwrap());
+        let shared = Arc::new(Shared::new());
+        let (wake, receiver) = mpsc::sync_channel(1);
+        let handle = MonitorHandle {
+            shared: Arc::clone(&shared),
+            wake,
+            interval: Duration::from_secs(60),
+        };
+        let options = RustRedMonitorOptions {
+            display: RustRedMonitorDisplay::Tui,
+            progress_snapshot: if scenario == "embedded-silence" {
+                Some(
+                    std::env::var_os("VAKINT_MONITOR_PTY_SNAPSHOT")
+                        .unwrap()
+                        .into(),
+                )
+            } else {
+                None
+            },
+            interval: Duration::from_secs(60),
+            ..Default::default()
+        };
+        let (release, resume) = mpsc::channel();
+        let blocked = scenario == "blocked-publisher";
+        let worker_shared = Arc::clone(&shared);
+        let presenter = thread::spawn(move || {
+            worker_with_publisher(
+                worker_shared,
+                receiver,
+                options,
+                move |options, stderr, owner| {
+                    if !blocked {
+                        return super::super::publication::SnapshotPublisher::new(
+                            options, stderr, owner,
+                        );
+                    }
+                    let mut resume = Some(resume);
+                    super::super::publication::SnapshotPublisher::spawn(
+                        move |_document, _active| {
+                            if let Some(resume) = resume.take() {
+                                println!("PTY_SINK_BLOCKED:blocked-publisher");
+                                std::io::stdout().flush().unwrap();
+                                resume.recv().unwrap();
+                                println!("PTY_SINK_RELEASED:blocked-publisher");
+                                std::io::stdout().flush().unwrap();
+                            }
+                            Ok(())
+                        },
+                    )
+                },
+            )
+        });
+        let mut context = MonitorContext {
+            handle: Some(handle.clone()),
+            worker: Some(presenter),
+        };
+        let mut callback = |envelope: &Envelope<'_>| handle.observe(envelope);
+        let mut observer = Observer::new(Default::default(), &mut callback);
+        MonitorContext::native_phase(Some(&mut observer), "synthetic_opaque_call", None);
+        let entered = Instant::now();
+        while !crossterm::terminal::is_raw_mode_enabled().unwrap() {
+            assert!(entered.elapsed() < Duration::from_secs(3));
+            thread::sleep(Duration::from_millis(10));
+        }
+        println!("PTY_READY:{scenario}");
+        std::io::stdout().flush().unwrap();
+        let started = Instant::now();
+        while crossterm::terminal::is_raw_mode_enabled().unwrap() {
+            assert!(
+                started.elapsed() < Duration::from_secs(48),
+                "controller did not detach"
+            );
+            thread::sleep(Duration::from_millis(10));
+        }
+        assert!(
+            started.elapsed() >= Duration::from_secs(35),
+            "producer did not stay silent for >35s"
+        );
+        println!("PTY_DETACHED:{scenario}");
+        std::io::stdout().flush().unwrap();
+        let mut line = String::new();
+        std::io::stdin().read_line(&mut line).unwrap();
+        assert_eq!(line.trim(), "continue");
+        let _ = release.send(());
+        MonitorContext::native_phase(Some(&mut observer), "synthetic_opaque_call_finished", None);
+        context.finish();
+        assert!(!crossterm::terminal::is_raw_mode_enabled().unwrap());
+        println!("PTY_DONE:{scenario}");
+        std::io::stdout().flush().unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[ignore = "requires the synthetic controller's full undrained stderr pipe"]
+    fn blocked_stderr_and_enabled_logger_do_not_block_scientific_completion() {
+        use std::io::Write;
+        use std::sync::atomic::AtomicUsize;
+
+        struct StderrLogger;
+        static LOG_CALLS: AtomicUsize = AtomicUsize::new(0);
+        static LOGGER: StderrLogger = StderrLogger;
+        impl log::Log for StderrLogger {
+            fn enabled(&self, metadata: &log::Metadata<'_>) -> bool {
+                metadata.level() <= log::Level::Warn
+            }
+            fn log(&self, record: &log::Record<'_>) {
+                if self.enabled(record.metadata()) {
+                    LOG_CALLS.fetch_add(1, Ordering::Relaxed);
+                    writeln!(io::stderr(), "{}", record.args()).unwrap();
+                }
+            }
+            fn flush(&self) {}
+        }
+        log::set_logger(&LOGGER).unwrap();
+        log::set_max_level(log::LevelFilter::Warn);
+        assert!(log::log_enabled!(log::Level::Warn));
+
+        let shared = Arc::new(Shared::new());
+        let (wake, receiver) = mpsc::sync_channel(1);
+        let handle = MonitorHandle {
+            shared: Arc::clone(&shared),
+            wake,
+            interval: Duration::from_secs(60),
+        };
+        let options = RustRedMonitorOptions {
+            display: RustRedMonitorDisplay::Json,
+            interval: Duration::from_secs(60),
+            ..Default::default()
+        };
+        let (entered, ready) = mpsc::channel();
+        let worker_shared = Arc::clone(&shared);
+        let presenter = thread::spawn(move || {
+            worker_with_publisher(
+                worker_shared,
+                receiver,
+                options,
+                move |_options, stderr_json, _owner| {
+                    assert!(stderr_json);
+                    let mut entered = Some(entered);
+                    super::super::publication::SnapshotPublisher::spawn(move |document, _active| {
+                        let stderr = io::stderr();
+                        let mut locked = stderr.lock();
+                        if let Some(entered) = entered.take() {
+                            entered.send(()).unwrap();
+                        }
+                        // The controller filled this actual pipe before
+                        // launching us and cannot drain it until completion.
+                        let mut stream = super::super::SnapshotWriter::new(&mut locked);
+                        stream.write(document)
+                    })
+                },
+            )
+        });
+        let mut context = MonitorContext {
+            handle: Some(handle.clone()),
+            worker: Some(presenter),
+        };
+        let mut callback = |envelope: &Envelope<'_>| handle.observe(envelope);
+        let mut observer = Observer::new(Default::default(), &mut callback);
+        MonitorContext::native_phase(Some(&mut observer), "synthetic_stderr_call", None);
+        ready.recv_timeout(Duration::from_secs(2)).unwrap();
+        println!("STDERR_WRITER_LOCKED");
+        io::stdout().flush().unwrap();
+        // The only scientific operation in this synthetic control is exact.
+        let scientific_result = 17;
+        let started = Instant::now();
+        context.finish();
+        assert!(started.elapsed() < Duration::from_secs(1));
+        assert_eq!(scientific_result, 17);
+        assert_eq!(LOG_CALLS.load(Ordering::Relaxed), 0);
+        assert!(
+            handle
+                .shared
+                .pending()
+                .fault
+                .as_deref()
+                .is_some_and(|fault| fault.contains("did not drain"))
+        );
+        println!("STDERR_SCIENTIFIC_COMPLETE:17");
+        io::stdout().flush().unwrap();
+        let mut line = String::new();
+        io::stdin().read_line(&mut line).unwrap();
+        assert_eq!(line.trim(), "continue");
+        // Delivery succeeds once the controller drains the pipe, proving that
+        // the enabled logger really uses the blocked stderr sink.
+        log::warn!("STDERR_LOGGER_CONFIRMED_AFTER_DRAIN");
+        assert_eq!(LOG_CALLS.load(Ordering::Relaxed), 1);
+        println!("STDERR_DONE");
+        io::stdout().flush().unwrap();
     }
 }

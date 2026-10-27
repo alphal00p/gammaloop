@@ -44,6 +44,38 @@ struct StageLogger {
     phases: Mutex<BTreeMap<String, Vec<f64>>>,
     cache_hits: Mutex<CacheHitDiagnostic>,
 }
+
+impl StageLogger {
+    fn stage_accounting() -> serde_json::Value {
+        json!({
+            "samples":"Every stages[name] entry is one completed span; repeated calls append samples. Sum samples within a phase, never all phases together.",
+            "disjoint_evaluation_spans":[
+                "frontend_setup","frontend_canonicalization","frontend_tensor_prepass",
+                "scalar_input_split","frontend_admitted_witness_search","numerator_replacement",
+                "detailed_evaluation_total","caller_result_merge","retained_outer_exact_combination",
+                "retained_finalization_total","public_result_packing"
+            ],
+            "nested_spans":{
+                "detailed_evaluation_total":[
+                    "parent_transport_and_scalar_lowering","coverage_mass_batching",
+                    "lowering_guard_materialization","saved_rule_application",
+                    "terminal_geometry_and_lower_factors","retained_guard_materialization",
+                    "retained_coefficient_materialization","unprojected_terminal_materialization",
+                    "retained_batch_mass_assembly","retained_batch_cleanup",
+                    "retained_normalization_and_notation","detailed_result_packing"
+                ],
+                "retained_finalization_total":[
+                    "retained_catalogue_exact_combination","retained_catalogue_classification"
+                ]
+            },
+            "unassigned":"Public evaluation minus disjoint spans and detailed/finalization totals minus their own children remain raw uninstrumented control, logging and caller cleanup time. Report each residual explicitly; no residual is a pure IBP estimate.",
+            "saved_rule_application_scope":"The complete saved call includes cache lookup/decode/validation when used, entry transport, weighted exact assembly, saved terminal substitution and running-cache flush. Cache hits do not imply IBP rule applications; inspect the recorded work counters.",
+            "loading_scope":"Initial loading_stages are captured before evaluation. Preparation spans may recur inside frontend_setup after a representation reload; products_prepared includes family_verified. Never add these overlapping spans to measured loading or evaluation wall totals.",
+            "path_scope":"Successful and fallback batch spans append independently. Unprojected terminal materialization is a fallback path; cleanup is measured after existing batch locals naturally drop. Failed operations may omit completed spans."
+        })
+    }
+}
+
 static LOGGER: StageLogger = StageLogger {
     phases: Mutex::new(BTreeMap::new()),
     cache_hits: Mutex::new(CacheHitDiagnostic::new()),
@@ -917,26 +949,7 @@ fn main() -> fixture::Result<()> {
             "pure_ibp_seconds":null,"terminal_substitution_seconds":null,
             "separate_native_phase_durations_available":false,
             "phase_duration_estimates_by_subtraction":false,
-            "stage_accounting":{
-                "samples":"Every stages[name] entry is one completed span; repeated calls append samples. Sum samples within a phase, never all phases together.",
-                "disjoint_evaluation_spans":[
-                    "frontend_canonicalization","frontend_tensor_prepass",
-                    "frontend_admitted_witness_search","detailed_evaluation_total",
-                    "caller_result_merge","retained_outer_exact_combination",
-                    "retained_finalization_total"
-                ],
-                "nested_spans":{
-                    "detailed_evaluation_total":[
-                        "parent_transport_and_scalar_lowering","saved_rule_application",
-                        "terminal_geometry_and_lower_factors","retained_guard_materialization",
-                        "retained_coefficient_materialization","retained_normalization_and_notation"
-                    ],
-                    "retained_finalization_total":[
-                        "retained_catalogue_exact_combination","retained_catalogue_classification"
-                    ]
-                },
-                "unassigned":"Public evaluation minus disjoint spans still includes setup, replacements, integral splitting and caller cleanup; detailed total minus its children includes batching, assembly and callee cleanup. Neither residual is a pure IBP estimate."
-            }
+            "stage_accounting":StageLogger::stage_accounting()
         });
         let known = engine
             .master_symbols()?
@@ -1228,9 +1241,17 @@ mod cache_classification_tests {
             cache_hits: Mutex::new(CacheHitDiagnostic::new()),
         };
         for (phase, seconds) in [
+            ("frontend_setup", 1.0),
+            ("coverage_mass_batching", 2.0),
+            ("coverage_mass_batching", 3.0),
             ("retained_guard_materialization", 2.0),
             ("retained_guard_materialization", 3.0),
-            ("detailed_evaluation_total", 7.0),
+            ("retained_batch_cleanup", 0.5),
+            ("detailed_evaluation_total", 12.0),
+            ("retained_finalization_total", 5.0),
+            ("retained_catalogue_exact_combination", 3.0),
+            ("retained_catalogue_classification", 1.0),
+            ("public_result_packing", 0.5),
         ] {
             logger.log(
                 &log::Record::builder()
@@ -1241,8 +1262,45 @@ mod cache_classification_tests {
             );
         }
         let phases = logger.phases.lock().unwrap();
+        assert_eq!(phases["coverage_mass_batching"], [2.0, 3.0]);
         assert_eq!(phases["retained_guard_materialization"], [2.0, 3.0]);
-        assert_eq!(phases["detailed_evaluation_total"], [7.0]);
+        assert_eq!(phases["detailed_evaluation_total"], [12.0]);
+        let accounting = StageLogger::stage_accounting();
+        let disjoint = accounting["disjoint_evaluation_spans"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|phase| phase.as_str().unwrap())
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            disjoint.len(),
+            accounting["disjoint_evaluation_spans"]
+                .as_array()
+                .unwrap()
+                .len()
+        );
+        let mut nested = BTreeSet::new();
+        for (parent, children) in accounting["nested_spans"].as_object().unwrap() {
+            assert!(disjoint.contains(parent.as_str()));
+            for child in children.as_array().unwrap() {
+                let child = child.as_str().unwrap();
+                assert!(!disjoint.contains(child));
+                assert!(nested.insert(child));
+            }
+        }
+        let accounted = disjoint
+            .iter()
+            .filter_map(|phase| phases.get(*phase))
+            .flatten()
+            .sum::<f64>();
+        assert_eq!(accounted, 18.5);
+        assert!(phases.values().flatten().sum::<f64>() > accounted);
+        assert!(
+            accounting["unassigned"]
+                .as_str()
+                .unwrap()
+                .contains("explicitly")
+        );
         assert!(logger.cache_hits.lock().unwrap().hit_events.is_empty());
     }
 
