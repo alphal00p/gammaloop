@@ -721,10 +721,9 @@ impl MonitorState {
                         | "Snapshot age"
                         | "Last native observation age"
                         | "Request finished"
-                ) {
-                    if let Some(row) = view.overview.iter_mut().find(|(name, _)| name == &label) {
-                        row.1 = value;
-                    }
+                ) && let Some(row) = view.overview.iter_mut().find(|(name, _)| name == &label)
+                {
+                    row.1 = value;
                 }
             }
             let resources = self.live_resources(now);
