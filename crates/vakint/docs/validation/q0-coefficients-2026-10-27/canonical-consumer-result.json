@@ -1,0 +1,79 @@
+{
+  "status": "PASS",
+  "master_symbols": 55,
+  "master_products": 58,
+  "scalar_coefficients": 449,
+  "retained_native_file_bytes": 1321201,
+  "retained_text_bytes": 6683821,
+  "epsilon_minimum": -6,
+  "epsilon_maximum": 5,
+  "remainder_starts_at": 6,
+  "remainder_scope": "each scalar coefficient of a formal master product",
+  "minimum_exported_nonzero_decimal_digits": 300,
+  "minimum_tracked_nonzero_decimal_digits": 330,
+  "component_storage_bits": [
+    998,
+    1104
+  ],
+  "precision_warnings": 0,
+  "master_values_evaluated": false,
+  "numerical_evaluations": 0,
+  "actual_consumer_cohort": {
+    "Community": "646b4a60543d977fdbd3b4a83aa715c7f03cbf5d",
+    "Vakint": "9c095d462f62fea61551581a7bca17d54fe04c7f",
+    "Native": "419",
+    "kernel": "9cd57678d8817ec33c05cacba4925162f1c86b0b",
+    "PyO3": "0.28.3",
+    "final_Main_acceptance": false
+  },
+  "not_final_Main_acceptance": true,
+  "installed_native_files": {
+    "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/community-official-cache-loader-host/venv/lib/python3.14/site-packages/symbolica/core.abi3.so": "6dab93d10509d213681dc5a95effd1b6cdc10c9d60f29a9aebf46f8f7ad95df5"
+  },
+  "Python_feature_base": "da901e0f87670fbed5d47660c42f6f30ba89d506",
+  "Python_sources": [
+    {
+      "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/vakint-q0-coefficient-artifacts-20261027/crates/vakint/tests/python/precision_inspection_smoke.py",
+      "sha256": "e56449c07bffb07994538a510f2483d026c86ca752b619bba46e9e6d7bf12d95",
+      "bytes": 27244
+    },
+    {
+      "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/vakint-q0-coefficient-artifacts-20261027/crates/vakint/examples/five_loop_q0_coefficients.py",
+      "sha256": "d46186dfc76320bbedcc5d7ba33b812f65f83a46335dd5803d68edc74b059d31",
+      "bytes": 2688
+    },
+    {
+      "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/vakint-q0-coefficient-artifacts-20261027/crates/vakint/examples/q0_coefficients/__init__.py",
+      "sha256": "d3c3dacc6f76170207275963998bc779651f6104b7e5813339b8ce9962ae60ea",
+      "bytes": 187
+    },
+    {
+      "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/vakint-q0-coefficient-artifacts-20261027/crates/vakint/examples/q0_coefficients/artifacts.py",
+      "sha256": "07b287a76bb04cd6eba4ae26fab3662cf404b10ffacdbd6e1e20b1c0983f7279",
+      "bytes": 17349
+    },
+    {
+      "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/vakint-q0-coefficient-artifacts-20261027/crates/vakint/examples/q0_coefficients/generate.py",
+      "sha256": "4772185e76cfb8cc6eba794a396c16138aea0b5537f75559402d53433be00ef9",
+      "bytes": 20213
+    },
+    {
+      "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/vakint-q0-coefficient-artifacts-20261027/crates/vakint/examples/q0_coefficients/series.py",
+      "sha256": "0fbef0e2f41ba9ed2ca6f6c3eae3bfaa5a8ddccde86bbfdc29999d3049829093",
+      "bytes": 23502
+    },
+    {
+      "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/q0-coeff-publication-20261027/run_community2.py",
+      "sha256": "7c32529a6f9d5919ecf9421402875341d96e6b842116c7f27c381ca939b608a6",
+      "bytes": 1901
+    },
+    {
+      "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/q0-coeff-publication-20261027/control_smoke2.py",
+      "sha256": "810f2bac66c084ff019862813df578abd6a4c737c574302247ac4119407e07cb",
+      "bytes": 4638
+    }
+  ],
+  "site_packages_modified": false,
+  "IBP_runs": 0,
+  "cache_reads": 0
+}

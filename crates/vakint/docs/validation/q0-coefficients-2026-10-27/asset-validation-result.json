@@ -1,0 +1,79 @@
+{
+  "schema": "vakint.q0-actual-coefficient-artifact-validation.v1",
+  "status": "PASS",
+  "artifact_directory": "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/q0-master-coefficient-artifacts-20261027/export-metadata-repair1/artifacts-run1",
+  "provenance_sha256": "941d5a2e888557e8cabd8e8ab118935e95631be0a16110bd28a41e49436db36a",
+  "authenticated_input": {
+    "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/physics/capture-enabled-physical-user-units-20261025/q0-optimized-capture-run1/run/result.symbolica",
+    "sha256": "da909dc0b8f199a9ce46c27368bd2d1c88b277d72e765ab70f9a83680caa1212",
+    "bytes": 6683821
+  },
+  "postprocess_host": {
+    "path": "/shared/codex-1/vakint_rustred/workspace/build/vakint-combined-cache-monitor-a7f/ci-optim/libvakint_hepkit_standalone.so",
+    "sha256": "67937cb5291d0470f9f6475fc856240584af7ac7c3f2ef109c452adcd59209bb",
+    "bytes": 211219392
+  },
+  "files_checked": {
+    "coefficient-table.json": {
+      "bytes": 4842059,
+      "sha256": "2e7624955a01f50a78a07e2f62ce05197b4e66fa4d2d25c90dd416b9deea2e8e"
+    },
+    "q0-coefficients-300digits-through-epsilon5.atom": {
+      "bytes": 64763,
+      "sha256": "63987cf3773e78a9a07a199462717cd6900a1bd5898cbccd4abb1ec0ffc60680"
+    },
+    "q0-coefficients-300digits-through-epsilon5.expr": {
+      "bytes": 152801,
+      "sha256": "77d1e6dc95b8c9c3fe5c7426581c29c86f87e0631bd9432606b8dc035770fab8"
+    },
+    "q0-coefficients-exact-through-epsilon5.atom": {
+      "bytes": 54344,
+      "sha256": "788ce01d6851bb30bbca5faee203c839ed3a14ba82eadc2d8f4008e4043105c2"
+    },
+    "q0-coefficients-exact-through-epsilon5.expr": {
+      "bytes": 223867,
+      "sha256": "eedc233a37e3b86c0f25b52b3051b0e46070ed2d7a96fa953e4952c57d0977b4"
+    },
+    "q0-retained.atom": {
+      "bytes": 1321201,
+      "sha256": "2a29e8c1169ea709aa406ba355f6dca88139f8f2ed2069821f0e898f6d368be4"
+    },
+    "q0-retained.expr": {
+      "bytes": 6683821,
+      "sha256": "da909dc0b8f199a9ce46c27368bd2d1c88b277d72e765ab70f9a83680caa1212"
+    }
+  },
+  "every_file_below_100MiB": true,
+  "individual_masters": 55,
+  "master_products": 58,
+  "numerical_coefficients": 449,
+  "components_checked": 898,
+  "exact_zero_components": 449,
+  "minimum_tracked_nonzero_digits": 330,
+  "minimum_exported_nonzero_digits": 300,
+  "recorded_component_binary_precisions": [
+    998,
+    1104
+  ],
+  "JSON_reconstructed_Atom_equals_native": true,
+  "GC_11_power": 10,
+  "maximum_epsilon_power": 5,
+  "remainder_starts_at": 6,
+  "remainder_scope": "each scalar coefficient of a formal master-product; masters stay unexpanded",
+  "original_expression_hashed_without_reparsing": true,
+  "exact_symbolic_text_roundtrip": {
+    "status": "PASS",
+    "bytes": 223867,
+    "caller_maximum_bytes": 223867
+  },
+  "numeric_expr_is_display_only_and_was_not_parsed": true,
+  "uncertainty_metadata_preserved_without_remeasurement": true,
+  "discarded_working_guard_digits_recovered": false,
+  "numerical_evaluations": 0,
+  "IBP_runs": 0,
+  "cache_reads": 0,
+  "producer_receipt_sha256": "d2a19ea05794b66d7f9af61504b377f27008b3534bdad51b26816a0c5ce540af",
+  "plan_sha256": "be8b021abab680b9e30f494b60a9e117321d8d989fb3e2370612e0dddfd9b4fa",
+  "validator_source_sha256": "d4e9758a03ce3a44315aa5d67802f5c99cffc0a63ef487de75e403c99f4d54c1",
+  "lossless_loader_source_sha256": "9f434160e2ad18adb745aa12d286454e890064a4feb24543ef1998080e547d9f"
+}

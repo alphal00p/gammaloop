@@ -1,12 +1,20 @@
 """Exercise the installed, coherent Symbolica/Vakint extension without FORM."""
 
+import copy
+import hashlib
 import json
 import os
+import re
+import shutil
+import sys
+import tempfile
 import unittest
+from fractions import Fraction
 from pathlib import Path
 from unittest.mock import patch
 
 if os.environ.get("VAKINT_TEST_HOST") == "standalone":
+    import vakint_hepkit_standalone as core
     from vakint_hepkit_standalone import (
         ComplexFloat,
         ConstantSymbol,
@@ -17,9 +25,23 @@ if os.environ.get("VAKINT_TEST_HOST") == "standalone":
         Vakint,
     )
 else:
+    import symbolica as core
     from symbolica import ComplexFloat, E, Float
     from symbolica.community.hepkit import FeynmanDiagram
     from symbolica.community.hepkit.vakint import ConstantSymbol, MasterSymbol, Vakint
+
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "examples"))
+try:
+    from q0_coefficients import CoefficientArtifactError, SavedQ0Result
+    from q0_coefficients.artifacts import (
+        reconstruct_coefficient_table,
+        require_raw_equal,
+    )
+    from q0_coefficients.generate import Q0Generator
+    from q0_coefficients.series import probe as q0_series_probe
+finally:
+    sys.path.pop(0)
 
 
 class PrecisionInspectionSmoke(unittest.TestCase):
@@ -268,6 +290,219 @@ class PrecisionInspectionSmoke(unittest.TestCase):
             result.to_expression(),
             self.engine.numerical_result_from_expression(E("3/2")).to_expression(),
         )
+
+
+class SavedQ0ArtifactSmoke(unittest.TestCase):
+    """Inspect the accepted result offline; never regenerate the physical fixture."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.saved = SavedQ0Result.load(api=core)
+
+    def test_actual_bundle_is_lossless_without_regeneration(self):
+        with patch.object(
+            Q0Generator,
+            "generate",
+            side_effect=AssertionError("loading must not regenerate coefficients"),
+        ):
+            saved = SavedQ0Result.load(api=core)
+            report = saved.verify()
+        self.assertEqual(report["status"], "PASS")
+        self.assertEqual(report["numerical_evaluations"], 0)
+        self.assertFalse(report["master_values_evaluated"])
+        self.assertEqual(report["master_symbols"], 55)
+        self.assertEqual(report["master_products"], 58)
+        self.assertEqual(report["scalar_coefficients"], 449)
+        self.assertEqual(report["epsilon_maximum"], 5)
+        self.assertEqual(report["remainder_starts_at"], 6)
+        self.assertEqual(report["component_storage_bits"], [998, 1104])
+        self.assertEqual(report["minimum_tracked_nonzero_decimal_digits"], 330)
+        self.assertEqual(report["minimum_exported_nonzero_decimal_digits"], 300)
+        native = saved.expression("numerical", format="native")
+        require_raw_equal(
+            native,
+            saved.expression("numerical", format="json"),
+            "accepted numerical JSON/native precision parity",
+        )
+        require_raw_equal(
+            native,
+            reconstruct_coefficient_table(saved.coefficient_table, api=core),
+            "public exact-ratio reconstruction",
+        )
+        self.assertEqual(
+            hashlib.sha256(saved.display_text("retained").encode()).hexdigest(),
+            "da909dc0b8f199a9ce46c27368bd2d1c88b277d72e765ab70f9a83680caa1212",
+        )
+        coupling = E("UFO::GC_11")
+        self.assertEqual(
+            [monomial for monomial, _ in native.coefficient_list(coupling)],
+            [coupling**10],
+        )
+
+    def test_all_recorded_component_bounds_and_coefficientwise_orders(self):
+        table = self.saved.coefficient_table
+        self.assertEqual(table["cutoff"]["included_maximum_power"], 5)
+        self.assertEqual(table["cutoff"]["remainder_starts_at"], 6)
+        self.assertFalse(table["unknown_master_values_evaluated"])
+        self.assertFalse(table["normalization_applied_again"])
+        components = exact_zeros = 0
+        for row in table["products"]:
+            self.assertEqual(row["requested_decimal_precision"], 300)
+            self.assertEqual(row["fixed_guard_decimal_digits"], 32)
+            self.assertEqual(row["automatic_retries"], 0)
+            self.assertEqual(
+                row["remainder"], {"coefficientwise": True, "epsilon_power": 6}
+            )
+            self.assertEqual(row["exact_recurrence_check"]["status"], "PASS")
+            self.assertGreaterEqual(
+                row["exact_recurrence_check"]["remainder_order_at_least"], 6
+            )
+            for number in row["coefficients"]:
+                self.assertLessEqual(number["epsilon_power"], 5)
+                for part in ("real", "imaginary"):
+                    component = number[part]
+                    center = component["center_exact_ratio"]
+                    center = Fraction(
+                        int(center["numerator"]), int(center["denominator"])
+                    )
+                    error = component[
+                        "absolute_error_exact_ratio_including_export_rounding"
+                    ]
+                    error = Fraction(int(error["numerator"]), int(error["denominator"]))
+                    self.assertGreaterEqual(error, 0)
+                    self.assertTrue(component["error_quality"])
+                    components += 1
+                    if component["exact_zero"]:
+                        self.assertEqual(center, 0)
+                        self.assertEqual(error, 0)
+                        self.assertEqual(component["float_binary_precision"], 1104)
+                        exact_zeros += 1
+                    else:
+                        self.assertEqual(component["float_binary_precision"], 998)
+                        self.assertGreaterEqual(
+                            component["tracked_significant_digits"], 330
+                        )
+                        self.assertEqual(
+                            component["exported_reliable_decimal_digits_at_least"], 300
+                        )
+                        self.assertLessEqual(error * 10**300, abs(center) - error)
+        self.assertEqual(components, 898)
+        self.assertEqual(exact_zeros, 449)
+
+    def test_metadata_properties_return_independent_copies(self):
+        table = self.saved.coefficient_table
+        provenance = self.saved.provenance
+        before_table = copy.deepcopy(table)
+        before_provenance = copy.deepcopy(provenance)
+        table["products"][0]["coefficients"][0]["real"]["float_binary_precision"] = 2
+        provenance["artifacts"].clear()
+        self.assertEqual(self.saved.coefficient_table, before_table)
+        self.assertEqual(self.saved.provenance, before_provenance)
+        self.assertEqual(self.saved.summary()["scalar_coefficients"], 449)
+
+    def test_formats_are_explicit_and_numeric_text_is_only_a_display(self):
+        self.assertIn("RustRedMaster", self.saved.display_text())
+        for variant, format, message in (
+            ("unknown", "native", "unknown expression variant"),
+            ("retained", "pickle", "unknown expression format"),
+            ("retained", "json", "numerical scalar coefficients only"),
+            ("numerical", "text", "human display"),
+        ):
+            with (
+                self.subTest(variant=variant, format=format),
+                self.assertRaisesRegex(CoefficientArtifactError, message),
+            ):
+                self.saved.expression(variant, format=format)
+
+    def test_corrupted_native_payload_never_falls_back_to_other_formats(self):
+        with tempfile.TemporaryDirectory(prefix="vakint-q0-corrupt-") as temporary:
+            directory = Path(temporary) / "copy"
+            shutil.copytree(self.saved.directory, directory)
+            saved = SavedQ0Result.load(directory, api=core)
+            path = directory / "q0-coefficients-300digits-through-epsilon5.atom"
+            payload = bytearray(path.read_bytes())
+            payload[-1] ^= 1
+            path.write_bytes(payload)
+            self.assertTrue(path.with_suffix(".expr").is_file())
+            with self.assertRaisesRegex(CoefficientArtifactError, "checksum mismatch"):
+                saved.expression("numerical", format="native")
+            with (
+                patch.object(
+                    Q0Generator,
+                    "generate",
+                    side_effect=AssertionError(
+                        "corruption must not trigger regeneration"
+                    ),
+                ),
+                self.assertRaisesRegex(CoefficientArtifactError, "checksum mismatch"),
+            ):
+                SavedQ0Result.load(directory, api=core)
+
+    def test_exact_zero_storage_precision_is_part_of_raw_atom_identity(self):
+        real = Float.from_ratio(1, 8, precision=998)
+        preserved = core.Expression.num(
+            ComplexFloat(real, Float.from_ratio(0, 1, precision=1104))
+        )
+        shortened = core.Expression.num(
+            ComplexFloat(real, Float.from_ratio(0, 1, precision=998))
+        )
+        self.assertEqual(preserved, shortened)  # Numeric equality is by exact value.
+        with self.assertRaisesRegex(CoefficientArtifactError, "exact-zero storage"):
+            require_raw_equal(preserved, shortened, "exact-zero storage changed")
+
+    def test_factorwise_exact_controls_cover_poles_and_cancellation(self):
+        report = q0_series_probe(core)
+        self.assertEqual(report["status"], "PASS")
+        self.assertEqual(len(report["cases"]), 7)
+        self.assertEqual(report["numerical_evaluations"], 0)
+        self.assertEqual(
+            report["cases"]["sixth_order_pole"]["normalization_depth_required"], 11
+        )
+        cancelled = report["cases"]["cancelled_through_cutoff"]
+        self.assertGreaterEqual(cancelled["valuation_lower_bound"], 6)
+        self.assertFalse(cancelled["identically_zero_proven"])
+        for case in report["cases"].values():
+            self.assertGreaterEqual(case["remainder_order_at_least"], 6)
+
+    def test_public_generator_handles_one_synthetic_master_product_without_ibps(self):
+        first_product = self.saved.coefficient_table["products"][0]["master_product"]
+        master_text = re.search(r"vakint::\{\}::RustRedMaster\([^()]*\)", first_product)
+        self.assertIsNotNone(master_text)
+        master = E(master_text.group())
+        epsilon, gamma = E("vakint::ε"), E("symbolica::γ")
+        mass, coupling = E("vakint::mUV"), E("UFO::GC_11")
+        retained = (
+            coupling**10
+            * mass**2
+            * (mass**2) ** (-5 * epsilon)
+            * master**2
+            * E("𝑒") ** (-5 * gamma * epsilon)
+            * epsilon**-6
+        )
+        with tempfile.TemporaryDirectory(prefix="vakint-q0-synthetic-") as temporary:
+            source = Path(temporary) / "synthetic-formal-input.expr"
+            source.write_text(retained.to_canonical_string())
+            output = Path(temporary) / "generated"
+            result = Q0Generator(core, Vakint).generate(source, output)
+            self.assertEqual(result, output)
+            saved = SavedQ0Result.load(output, api=core)
+            report = saved.verify()
+            self.assertEqual(report["master_symbols"], 1)
+            self.assertEqual(report["master_products"], 1)
+            self.assertEqual(report["scalar_coefficients"], 12)
+            self.assertEqual(report["epsilon_minimum"], -6)
+            self.assertEqual(report["epsilon_maximum"], 5)
+            self.assertEqual(report["remainder_starts_at"], 6)
+            self.assertFalse(report["master_values_evaluated"])
+            row = saved.coefficient_table["products"][0]
+            require_raw_equal(
+                E(row["master_product"]), master**2, "master multiplicity"
+            )
+            self.assertEqual(
+                row["exact_recurrence_check"]["normalization_depth_required"], 11
+            )
+            with self.assertRaisesRegex(ValueError, "fresh"):
+                Q0Generator(core, Vakint).generate(source, output)
 
 
 @unittest.skipUnless(

@@ -563,6 +563,9 @@
   workspacePackageExtraSourceRoots.runtimeTest = {
     vakint = [
       "crates/vakint/data"
+      "crates/vakint/examples/five_loop_q0_coefficients.py"
+      "crates/vakint/examples/q0_coefficients"
+      "crates/vakint/examples/data/five_loop_q0"
     ];
     "alphal00p-docs-builder" = [
       "assets/embedded/drawing/templates"

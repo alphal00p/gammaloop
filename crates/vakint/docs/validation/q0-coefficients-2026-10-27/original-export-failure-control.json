@@ -1,0 +1,36 @@
+{
+  "schema": "vakint.q0-coefficient-factorwise-control.v1",
+  "status": "FAILED",
+  "plan_sha256": "72bc3196773bfaca0b956b4d66f9dec6a91c1a46d8e7b627956498a0fcb2646e",
+  "root_go_sha256": "2b8b5d87e5a0701eada4789339ed3b50e2462d2952e87d5e25f0197801b322ca",
+  "command": [
+    "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/consolidated-python-host-ed265/venv/bin/python",
+    "-B",
+    "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/q0-master-coefficient-artifacts-20261027/factorwise-successor1/generate_factorwise.py",
+    "--plan",
+    "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/q0-master-coefficient-artifacts-20261027/factorwise-successor1/plan.json",
+    "--plan-sha256",
+    "72bc3196773bfaca0b956b4d66f9dec6a91c1a46d8e7b627956498a0fcb2646e",
+    "--output",
+    "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/q0-master-coefficient-artifacts-20261027/factorwise-successor1/artifacts-run1"
+  ],
+  "cpus": [
+    180,
+    181,
+    182,
+    183
+  ],
+  "math_threads": 1,
+  "free_ram_floor_bytes": 110000000000,
+  "no_IBP_or_cache_io": true,
+  "signals_sent": [],
+  "pid": 2384241,
+  "start_ticks": 115693832,
+  "returncode": 1,
+  "error": "ValueError: postprocessor failed; source and failed output prefix preserved",
+  "elapsed_seconds": 5.009116414003074,
+  "minimum_machine_available_bytes": 759006359552,
+  "maximum_observed_rss_bytes": 122130432,
+  "maximum_observed_vmhwm_bytes": 122130432,
+  "memory_scope": "One-second exact owned PIDFD/start-tick samples; observed maxima may miss the final peak; no new process RAM quota."
+}

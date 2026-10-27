@@ -1,4 +1,8 @@
 //! Prepare the complete physical five-loop source, or reuse its verified scalar input.
+//!
+//! The saved zero-momentum result can be inspected or expanded through epsilon^5
+//! without repeating IBPs using `five_loop_q0_coefficients.py`. Its master products
+//! stay formal; see `docs/five_loop_q0_coefficients.typ` for the precision contract.
 #[path = "build_cache/cache_file_args.rs"]
 mod cache_file_args;
 #[path = "build_cache/cache_hit_capture.rs"]
