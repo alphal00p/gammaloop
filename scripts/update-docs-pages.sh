@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-readonly products=(gammaloop linnet spenso idenso vakint)
+readonly products=(gammaloop linnet spenso idenso vakint feynkit)
 
 usage() {
     echo "usage: $0 <latest|snapshot> <build-root> <gh-pages-worktree> [snapshot-tag]" >&2
