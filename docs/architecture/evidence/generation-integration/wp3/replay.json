@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "status": "incomplete WP3 prefix; focused P1/P3 fix awaits NEW independent Astra review",
+  "status": "incomplete WP3; approved initial prefix, source03–07 implemented and awaiting NEW independent Astra slice review",
   "fixed_target": {
     "commit": "3f0df2a870806076820786994d4883decec8e9e3",
     "tree": "3c91ba47525c627fbc02d79f5afa1d58aa7c5b66",
@@ -30,7 +30,7 @@
       "planned_unit": "port-01",
       "planned_order": 1,
       "reason": "Port ghost model A and momentum-conservation reduction plus BRST fixtures onto current model/template owner; retain quartet correctness assertions.",
-      "status": "ported; focused P1/P3 correction awaits NEW independent Astra prefix review",
+      "status": "approved by Astra at corrected prefix 74cebf6c; P1/P3 closed",
       "reconciliation": [
         "Use existing #209 interaction_expression underneath admitted templates; do not restore monolithic admission.",
         "Finalized-reference delta limited to three momentum strings; preserve current target symbol-tag spelling.",
@@ -60,7 +60,8 @@
         "corrected_input": "Shortest P1-P2 rule with equal-flow aliasing; exact zero occurs only during specialization after shared admission. Existing assertions unchanged."
       },
       "new_commit": "821c0e7544f183dd5385d4f3933b4fe2cb57090b",
-      "fix_change": "roqrmktytlytvoorvoqynmvkumqnpqkp"
+      "fix_change": "roqrmktytlytvoorvoqynmvkumqnpqkp",
+      "fix_commit": "74cebf6c8f673f5849b26afe55fa98035d5eba1d"
     },
     {
       "commit": "098ed36d9f06a2db7bdba367acdd753787f99446",
@@ -82,7 +83,13 @@
       "planned_unit": "port-03",
       "planned_order": 3,
       "reason": "Port spectator component planning onto current authoritative tensor metadata; preserve spectator invariance and mutation regressions.",
-      "status": "pending"
+      "status": "implemented; NEW independent Astra source03–07 slice review pending",
+      "new_commit": "f6ba968d51644c360a2be32118fba1d193110d0e",
+      "new_change": "snvrxlvztxmkypnqynrxoryqzqtrmtnq",
+      "reconciliation": [
+        "Spectator planning is grafted onto existing authoritative regional metadata; algebra_preserves_leaf_interfaces and all selected tensor metadata checks remain. Spectators cannot mutate through selected component binding.",
+        "Retain independent spectator invariance, four-gluon-shaped spectator and literal selected-tensor comparisons."
+      ]
     },
     {
       "commit": "1ebce5ed1e7396bd28686e5236f8862930a33523",
@@ -92,7 +99,14 @@
       "planned_unit": "port-04",
       "planned_order": 4,
       "reason": "Port scoped partner copies alongside planner; preserve non-colour epsilon bounds, scopes and signed transport.",
-      "status": "pending"
+      "status": "implemented; NEW independent Astra source03–07 slice review pending",
+      "new_commit": "b2da32765318cac573e908fed5f0af9319141503",
+      "new_change": "ssylqpprunqktzynznnqzzztvytwyrvo",
+      "reconciliation": [
+        "Unrestricted/mixed partner copies bind only non-colour antisymmetric slots and only within linear sum/product scopes; no descent into nested argument/power scopes.",
+        "#210 explicitly colour-only requests must still distribute their permitted colour partner sums. Existing nonempty representations mask identifies that owner; permits excludes all foreign Lorentz ports. This is reconciled within this unit, not a later conflicted fix.",
+        "Retain signed transport, non-colour epsilon bounds/scopes and #210 colour cancellation assertions; no graph-wide expansion."
+      ]
     },
     {
       "commit": "19ccf3a6fe86c382480c02d93d6d8b984c85ffd0",
@@ -102,7 +116,14 @@
       "planned_unit": "port-05",
       "planned_order": 5,
       "reason": "Reconcile shared colour representations and scoped-contraction docs with #209 tensor ownership; do not restore old interfaces.",
-      "status": "pending"
+      "status": "implemented; NEW independent Astra source03–07 slice review pending",
+      "new_commit": "df66f21394ed47a86e8cbf0b9d8da5c9b47cc7bc",
+      "new_change": "rtwnvzwvmrsvqpmosxsorywvkkovsvlo",
+      "reconciliation": [
+        "Share canonical COLOR_REPRESENTATIONS at the representation owner across slot masks, colour seed selection, row prerequisites/search and domain observations.",
+        "The obsolete source tensor/simplification.rs COLOR planner switch is not replayed: #210 already delegates to ColorSimplifySettings::selects_identity_seed. Reconcile the representation list in that actual current owner. Fundamental-only partial masks remain unchanged.",
+        "Retain deferred non-colour contraction regressions and assert explicit colour-only requests leave all five non-colour fixtures unchanged; docs describe the scoped owner exception."
+      ]
     },
     {
       "commit": "ab40b7dc7daebe140ed97c18fc6acddda230eb47",
@@ -112,7 +133,14 @@
       "planned_unit": "port-06",
       "planned_order": 6,
       "reason": "Preserve fixed coupling and factor-head registration order inside staged construction; do not undo #209 template admission.",
-      "status": "pending"
+      "status": "implemented; NEW independent Astra source03–07 slice review pending",
+      "new_commit": "56aa1c91cd0d9573a03c5122769c02ae0364e9e3",
+      "new_change": "sosnkvsmokxxuqzyqoolqszplspyotyz",
+      "reconciliation": [
+        "Register couplings in model order after parameters and initialize six shared factor-head symbols deterministically; use same symbol in grouping.",
+        "Retain all approved raw admission/checked rewrite/template/cache paths. Fresh-process test compares all 464 printed numerators/overall factors at 1 and 32 threads and after Born generation. This does not complete required rebuilt-tip 1/8/32 registration controls.",
+        "try_symbol returns a textual SmartString error at this kernel; invalid coupling names route into existing ModelError::SymbolicParse. No structured source is stringified."
+      ]
     },
     {
       "commit": "db7590285613f55a36f3b2e955e70e7785c27f49",
@@ -122,7 +150,15 @@
       "planned_unit": "port-07",
       "planned_order": 7,
       "reason": "Port canonical inferred port order through current NumeratorInterface::translate; preserve declared order and hidden index history from #209.",
-      "status": "pending"
+      "status": "implemented; NEW independent Astra source03–07 slice review pending",
+      "new_commit": "f689e5b61c8b4dcc80c6d983b442e89b7a5c9852",
+      "new_change": "oxotlonowrvstkrppyqrrzsmonywxssu",
+      "reconciliation": [
+        "Canonicalize only at known inference boundaries (admit(None) and fragment multiplication), by decoded reversible source notation using existing tensor.permuted; retain admitted interface and index history.",
+        "NumeratorInterface::translate implementation stays authoritative and unchanged, preserving axis correspondence for declared order, including canonical-looking declarations. Do not replay source heuristic that guesses inferred provenance from sortedness and reorders declared layouts. Declared admission bypasses canonicalization.",
+        "Do not restore obsolete from_normalized_parts metadata rebuilding or speculative thread-local key cache. Keep checked carrier and Open ports intact.",
+        "Regression coverage includes exact imported declared aggregate ordering/roundtrip, inferred registration order, both declared orders through owner translation, hidden bound-index zero history and third-occurrence collision rejection. Exact zero coefficient validates different explicit layouts without expanding numerators."
+      ]
     },
     {
       "commit": "2e77886cde8d72e1e063cafced9a2738811abf20",
@@ -132,7 +168,7 @@
       "planned_unit": "port-08",
       "planned_order": 8,
       "reason": "Retain circular complex-phase comparison and relative phase tolerance; independent of metadata migration.",
-      "status": "pending"
+      "status": "pending integration; isolated numeric lane completed, awaiting Astra approval"
     },
     {
       "commit": "0eb460fd62c3b7fbd2a244ba13d8f38b60fbfad6",
@@ -142,7 +178,7 @@
       "planned_unit": "port-09",
       "planned_order": 9,
       "reason": "Retain imaginary-against-zero real ApproxEq correction; not supplied by phase-wraparound PR alone.",
-      "status": "pending"
+      "status": "pending integration; isolated numeric lane completed, awaiting Astra approval"
     },
     {
       "commit": "314a7f5349092a4b95944cae4abdb32d204da515",
@@ -192,7 +228,20 @@
       "planned_unit": "port-14",
       "planned_order": 11,
       "reason": "#191 remains open and its plain-scalar shortcut is absent on target. Adapt eligibility and proof construction to #209 authoritative metadata; compare shortcut with full admission, including all registered symbols. Never overwrite #193 templates or resurrect obsolete TensorProofs fields.",
-      "status": "pending"
+      "status": "pending later assigned integration; isolated scalar-admission port approved by Astra",
+      "approved_external_port": {
+        "status": "APPROVED externally; not integrated in this slice",
+        "commit": "872e84b2b5bb875264c9eb476c5af47154f66b18",
+        "bookmark": "generation-scalar-admission",
+        "reviewer": "Astra",
+        "validation": "120 inference tests, Clippy and fmt independently passed",
+        "scope": "Scalar admission; no API or declared-order change; normal inference.rs/registry reconciliation and post-integration checks required when assigned",
+        "deferred": [
+          "fixed-key hashing",
+          "lazy fresh-index allocation"
+        ],
+        "measurement": "Only zero versus one discovery calls measured; no wider performance claim"
+      }
     },
     {
       "commit": "711f9440b323166cbba92df4bea632b20121aa06",
@@ -516,11 +565,11 @@
     }
   ],
   "validation": {
-    "status": "focused prefix checks completed; full WP3 exit matrix pending",
+    "status": "prefix and source03–07 focused checks completed; full rebuilt-tip matrix pending",
     "logs": "target/wp3",
     "notes": [
       "Initial isolated feynkit-model test lacked native feature and failed in Numerica before tests; the later corrected native invocation passed, with no pin change.",
-      "Workspace fmt check reports inherited permutation.rs drift; changed-file formatting passed.",
+      "Historical first formatting run failed on inherited permutation drift; corrected prefix formatting subsequently passed. Preserve original logs as history.",
       "Zero selected tests, timeouts and skips are not passes."
     ],
     "completed": [
@@ -647,7 +696,9 @@
       "Approved notices port, packaging workflow wiring and applicable checks",
       "Four-loop, SM thread and fresh-process registration harness corrections",
       "Entire rebuilt-tip validation matrix and final integration review"
-    ]
+    ],
+    "slice_receipt": "units03-07.json",
+    "slice_result": "215 Idenso + 138 graph + 65 model/generator/gauge selected tests passed; workspace Clippy, fmt, Typst, kernel isolation and integrity checks passed. Full rebuilt-tip matrix pending."
   },
   "deferred": [
     "WP4 names",
@@ -657,7 +708,7 @@
     "WP10 M-rebuild measurement",
     "Final native/Pyodide/Community distribution certification"
   ],
-  "processes": "No task build/test processes retained; all launched checks completed.",
+  "processes": "None. All task tests, builds, docs checks and inventory captures completed; logs/binary identities retained in target/wp3-units03-07.",
   "extra_prerequisite": {
     "change": "txxpwnnvymmwqprmxvqtnmzvzqyskwmm",
     "commit": "52ac2eee4a1487bc79014c4f33f22b2854f80090",
@@ -667,7 +718,7 @@
       "crates/linnet/src/permutation.rs"
     ]
   },
-  "cleanup": "Removed task-owned patch previews, patch backup and Typst PDFs. Retain logs, registry/ref integrity outputs and shared compiler/test artifacts for continuation and review. Shared caches and other workspaces untouched.",
+  "cleanup": "Task-owned superseded patch scratch and temporary PDFs removed after validation; useful command scripts, logs, inventories and binary identities retained in target/wp3-units03-07. Original review/archive logs and shared caches untouched.",
   "rust_policy": "New/substantially modified code reviewed for owner reuse, factorization, exact constants and import placement. Existing interaction/admission/cache owner retained; no production compatibility path or broad lint suppression added. Imported test helpers retain local factor ownership; no graph numerator expansion introduced. No intended departure from mandatory Rust policy.",
   "prefix_review": {
     "round": 1,
@@ -680,7 +731,40 @@
     ],
     "source": "Coordinator brief; retained target/review-wp3-prefix-round1 evidence",
     "fix_receipt": "prefix-fix-round1.json",
-    "next_gate": "NEW independent Astra prefix re-review before source03 or later units",
-    "fix_status": "Implementation and focused validation complete; NEW independent Astra re-review pending"
+    "next_gate": "NEW independent Astra source03–07 slice review before further implementation/integration",
+    "fix_status": "APPROVED by Astra at 74cebf6c; P1/P3 closed, no remaining findings",
+    "corrected_approval": {
+      "commit": "74cebf6c8f673f5849b26afe55fa98035d5eba1d",
+      "reviewer": "Astra",
+      "verdict": "APPROVED",
+      "basis": "Coordinator supplied approval; independent 18 generator + 5 model/gauge tests and 8-case probe passed; no invented review task ID"
+    }
+  },
+  "parallel_lanes": {
+    "numeric08-09": {
+      "status": "completed externally; Astra review pending; not integrated"
+    },
+    "scalar14": {
+      "status": "APPROVED externally; not integrated in this slice",
+      "commit": "872e84b2b5bb875264c9eb476c5af47154f66b18",
+      "bookmark": "generation-scalar-admission",
+      "reviewer": "Astra",
+      "validation": "120 inference tests, Clippy and fmt independently passed",
+      "scope": "Scalar admission; no API or declared-order change; normal inference.rs/registry reconciliation and post-integration checks required when assigned",
+      "deferred": [
+        "fixed-key hashing",
+        "lazy fresh-index allocation"
+      ],
+      "measurement": "Only zero versus one discovery calls measured; no wider performance claim"
+    },
+    "drawing15-16-38": {
+      "status": "isolated implementation lane; not integrated"
+    },
+    "sampling27-28-29": {
+      "status": "isolated implementation lane; not integrated"
+    },
+    "benchmark-preparation": {
+      "status": "separate preparation; M-rebuild not claimed"
+    }
   }
 }

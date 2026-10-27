@@ -1764,7 +1764,9 @@ anchor = "pub(crate) fn group_diagrams("
 # canonical serializer; grouping identities and comparison rules are unchanged.
 # Reviewed 2026-10-25: merged color-only index-label regression coverage retains
 # the direct simplify_algebra call and canonical GroupingIndex serialization.
-digest = "b17edcfeef2c2328f0abedfa9921d8ccf2771e21"
+# Integration review intent: preserve authoritative metadata and the current owner;
+# scoped source reconciliation and regression results are recorded in WP3 units03-07.
+digest = "7c402dd069754864108f236abdf155e9a1ab4f6e"
 
 [[section.note]]
 id = "nix-crane-cache-reuse"

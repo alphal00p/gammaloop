@@ -206,19 +206,21 @@ own workspace. Bounded: one regression, one bisect, one written verdict.
 
 === WP3 Rebuild v5
 <wp3>
-- #strong[Prefix review status 2026-10-27:] Astra round 1 requested changes on
-  `5226894e..a677fcf8`: momentum reduction preceded raw-rule index validation
-  and admission, and two gauge-test conversions stringified structured errors.
-  The focused fix admits unreduced rules before any shortening, retaining
-  interface/history through the existing checked rewrite. Shortening applies to
-  shared intrinsic templates; dynamic rules keep one unreduced actual-owner
-  admission, preserving callbacks and compact-index allocation.
-  Complete-cancellation, malformed-summand and invalid-index regressions cover
-  the missing cases. This incomplete WP3 prefix awaits a new independent Astra
-  review before source03 or any later unit. Unit 02's alignment intent remains
-  satisfied by the accepted base; old pins and WASM are not replayed. Remaining
-  integration ports, harness corrections and the full rebuilt-tip matrix are
-  pending. See `evidence/generation-integration/wp3/replay.json`.
+- #strong[Slice review status 2026-10-27:] Astra approved the corrected initial
+  prefix at `74cebf6c`, closing P1 raw admission/checked rewriting and P3 structured
+  error propagation with no remaining findings. Independent 18 generator and
+  5 model/gauge tests plus the 8-case probe passed. Source units 03–07 are now
+  implemented: spectator planning, scoped partner copies, shared colour
+  representations, deterministic registration and canonical inferred ports.
+  Current metadata, declared port order, hidden-zero history and owner transport
+  remain authoritative. This slice awaits a NEW independent Astra review before
+  further implementation or integration. See
+  `evidence/generation-integration/wp3/units03-07.json` and `wp3/replay.json`.
+  Source14's external scalar patch `872e84b2` is approved for later assigned
+  integration; fixed-key hashing and lazy fresh-index allocation remain deferred,
+  with only zero versus one discovery calls measured. Other parallel work is not
+  integrated here. Remaining ports, harness corrections and the full rebuilt-tip
+  matrix are pending; M-rebuild is not claimed.
 
 - `jj duplicate` the v4 chain (`kursouxx::kpslpwqz`) onto the WP2 base; do not
   rebase in place, so the 19 live workspaces on older lines stay valid.

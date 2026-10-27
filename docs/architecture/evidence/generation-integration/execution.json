@@ -7,7 +7,7 @@
   "workspace": "/shared/lcnbr/dev/gammaloop/generation-integration-plan",
   "base_commit": "3f0df2a870806076820786994d4883decec8e9e3",
   "plan_commit": "4374f72027b75df9ff95c5c7a725ee75beac27a8",
-  "implementation_change": "ynkllqowwqltnkoszlpwqtxyrumpsupr",
+  "implementation_change": "tvotsrruvzottmomuxqqxvywpvorpvzk",
   "implementation_bookmark": "generation-integration",
   "preserved_plan_bookmark": "generation-integration-plan",
   "author": {
@@ -15,7 +15,7 @@
     "email": "im@lcnbr.ch"
   },
   "settled": {
-    "normalization": "symmetrized gg\u2192ggg total 57/8 INCLUDING 2!\u00b73! symmetry division",
+    "normalization": "symmetrized gg→ggg total 57/8 INCLUDING 2!·3! symmetry division",
     "memory": "measure current integration full-mode memory first, then propose justified limit; no pre-authorized <=1.2x ceiling",
     "solver": "retain Clarabel and ship required notices; replacement solver separate",
     "upstream": "#209 merged in accepted base; #193 admission through #209; #210 supersedes #177",
@@ -73,11 +73,40 @@
       "scope": "Four packaging and two Clinnet tests; Nix WASM and license output; 49 hashes; byte-exact notices; not final wheel certification or all WP11"
     },
     "WP3": {
-      "status": "in-progress",
+      "status": "in-progress; source03–07 review candidate",
       "pre_rebuild_ref": "generation-integration-pre-rebuild",
       "pre_rebuild_commit": "5226894ee1af61797e6b819d7e801a22bf17bace",
       "ancestry": "Reviewed planning/evidence chain descends from fixed target 3f0df2a8 and is retained as non-code base.",
-      "review": "Astra initial-prefix round 1 REQUEST_CHANGES; focused P1/P3 fix awaits NEW independent prefix review before source03. No nested agents."
+      "review": "Initial prefix corrected at 74cebf6c APPROVED by Astra, no remaining findings (P1/P3 closed); source03–07 implemented, NEW independent Astra slice review required before next step.",
+      "slice_receipt": "wp3/units03-07.json",
+      "approved_prefix": "74cebf6c8f673f5849b26afe55fa98035d5eba1d",
+      "parallel_lanes": {
+        "numeric08-09": {
+          "status": "completed externally; Astra review pending; not integrated"
+        },
+        "scalar14": {
+          "status": "APPROVED externally; not integrated in this slice",
+          "commit": "872e84b2b5bb875264c9eb476c5af47154f66b18",
+          "bookmark": "generation-scalar-admission",
+          "reviewer": "Astra",
+          "validation": "120 inference tests, Clippy and fmt independently passed",
+          "scope": "Scalar admission; no API or declared-order change; normal inference.rs/registry reconciliation and post-integration checks required when assigned",
+          "deferred": [
+            "fixed-key hashing",
+            "lazy fresh-index allocation"
+          ],
+          "measurement": "Only zero versus one discovery calls measured; no wider performance claim"
+        },
+        "drawing15-16-38": {
+          "status": "isolated implementation lane; not integrated"
+        },
+        "sampling27-28-29": {
+          "status": "isolated implementation lane; not integrated"
+        },
+        "benchmark-preparation": {
+          "status": "separate preparation; M-rebuild not claimed"
+        }
+      }
     }
   }
 }
