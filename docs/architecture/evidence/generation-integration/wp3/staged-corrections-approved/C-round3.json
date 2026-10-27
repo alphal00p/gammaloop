@@ -1,0 +1,546 @@
+{
+  "verdict": "APPROVE",
+  "status": "Completed NEW independent bounded round3; stop after review. No integration, publication, tracked edits, ref writes or nested agents.",
+  "scope": "C2-R2 and cumulative graph-slice closure C1/C2/B1/E1/E2/E3/E5 only; no whole-candidate/WP3/distribution/physics/benchmark approval.",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-staged-graph-fixes",
+  "candidate": "4b60161dd503bc870434a9ae6951003bc1dc2132",
+  "code_commit": "1a68c9a8a5d16f2a195aa5808173764549d06e01",
+  "code_change": "qskszmoqrzrpkmkrwotqnpvqvprzkpzl",
+  "evidence_change": "rmuyknuntktuknupzzqspxssspptrykx",
+  "reviewed_parent": "891d7d569a408fb6e7056254802a45173ef2cf26",
+  "bookmark": "generation-staged-graph-fixes",
+  "findings": [],
+  "assigned_finding_closure": {
+    "C1": {
+      "status": "CLOSED",
+      "locations": [
+        "crates/linnet-py/src/graph.rs:752",
+        "crates/linnet-py/src/graph.rs:1574",
+        "crates/linnet-py/src/render.rs:103",
+        "crates/linnet-py/src/topology.rs:1889"
+      ],
+      "basis": "Audited all live view constructor/resolver call sites across graph, mutations, topology, algorithms and render. Live views use element_epoch, topology selections/traversal snapshots and callback mutation guards use revision. map resets both counters on its independent owner; fresh node/half-edge resolution and selector callbacks preserve the same owner. New regression matrix and six independent operation sequences pass, including stale/foreign checks and subsequent map/split on derived graphs. No NodeStore compatibility restoration.",
+      "round3_basis": "Previous independent closure retained after exact source-delta audit; runtime/owner/feature implementations unchanged. Round2 controls are reused, not claimed as rerun."
+    },
+    "C2": {
+      "status": "CLOSED",
+      "locations": [
+        "crates/linnet-py/src/lib.rs:50",
+        "crates/linnet-py/src/graph/algorithms.rs:174",
+        "crates/linnet-py/src/graph/algorithms.rs:223",
+        "crates/linnet-py/src/graph/algorithms.rs:245",
+        "crates/linnet-py/tests/test_algorithms.py:191",
+        "crates/alphal00p-docs-python-exporter/src/main.rs:722",
+        "docs/products/linnet/content/api.typ:76"
+      ],
+      "basis": "Round2 closed the retained-consumer/staged-API migrations except C2-R2. Canonical _LabelKey now returns existing _Key = Hashable | Expression; all eight callback positions across canonize/is_isomorphic/canonize_edges resolve to that type in each of three canonical generated copies. The parent annotations fail the identical resolved-type oracle. PayloadKeys explicitly supports these kinds; canonical-order restrictions on other hashable keys remain documented. Rendering aliases and runtime acceptance remain unchanged. Product prose corrected through its existing source. New retained test and exporter assertion add coverage without changing any previous assertions. Fresh native probes cover bytes, nested tuples, frozenset, stable custom keys and expressions, role-sensitive inequality, exact callback counts, payload identity and edge order. All eight positions preserve exception identity and unhashable-key rejection."
+    },
+    "B1": {
+      "status": "CLOSED",
+      "locations": [
+        "crates/feynkit-py/src/generation/tests.rs:1278",
+        "crates/linnet-py/src/graph/generate.rs:579",
+        "crates/linnet-py/src/graph/generate.rs:712"
+      ],
+      "basis": "Terminal callback asserts GenerationDiagramView, distinct live DiagramView owner, and nonzero completed concrete fields. Independently observed four checks on actual Particle instances with PDG codes 11,11,13,13. All 18 isolated controls pass, including expiry, GC, exceptions, calling-thread behavior and selection.",
+      "round3_basis": "Previous independent closure retained after exact source-delta audit; runtime/owner/feature implementations unchanged. Round2 controls are reused, not claimed as rerun."
+    },
+    "E1": {
+      "status": "CLOSED",
+      "locations": [
+        "crates/alphal00p-docs-python-exporter/src/main.rs:162",
+        "crates/alphal00p-docs-python-exporter/src/main.rs:705",
+        "crates/linnet-py/src/bin/stubgen.rs:17"
+      ],
+      "basis": "Production/exporter tests and stubgen use canonical_stub and supported destinations. Native NodeSpec/EdgeSpec/HalfEdgeSpec and factory APIs remain. No old stub/PythonModule/standalone fallback was reintroduced. Exact Linnet --tests feature check, two contract tests and graph owner --check pass. C2-R2 concerns the canonical metadata content, not exporter ownership/build closure.",
+      "round3_basis": "Previous independent closure retained after exact source-delta audit; runtime/owner/feature implementations unchanged. Round2 controls are reused, not claimed as rerun."
+    },
+    "E2": {
+      "status": "CLOSED",
+      "locations": [
+        "crates/alphal00p-docs-python-exporter/src/main.rs:439"
+      ],
+      "basis": "Single module-scope PyModule import and minimal required traits; exact gammaloop --tests build and all three relevant exporter tests pass.",
+      "round3_basis": "Previous independent closure retained after exact source-delta audit; runtime/owner/feature implementations unchanged. Round2 controls are reused, not claimed as rerun."
+    },
+    "E3": {
+      "status": "CLOSED",
+      "locations": [
+        "docs/products/registry.toml:75"
+      ],
+      "basis": "Registry uses actual native,python_stubgen features. Independently resolved Cargo metadata and compiled no-default-features native,python_stubgen. No obsolete community or standalone feature restored.",
+      "round3_basis": "Previous independent closure retained after exact source-delta audit; runtime/owner/feature implementations unchanged. Round2 controls are reused, not claimed as rerun."
+    },
+    "E5": {
+      "status": "CLOSED",
+      "locations": [
+        "crates/gammaloop-api/src/python.rs:77"
+      ],
+      "basis": "Required IntoPyObject trait restored at production module scope; four primitive conversion paths compile with real GammaLoop Python/python_stubgen features. Gamma exporter verifies runtime registration/signatures and unchanged Gamma docs stub.",
+      "round3_basis": "Previous independent closure retained after exact source-delta audit; runtime/owner/feature implementations unchanged. Round2 controls are reused, not claimed as rerun."
+    }
+  },
+  "cumulative_integration_handoff": {
+    "status": "APPROVED FOR COORDINATOR INTEGRATION WITH OTHER APPROVED CORRECTION LANES",
+    "from_exclusive": "817b5886a50276efea05ab860d22016e1fb0c203",
+    "to_inclusive": "4b60161dd503bc870434a9ae6951003bc1dc2132",
+    "includes_required_previous_code_commit": "ba37538752f6cd1af30c0cbe6be5549c86405d74",
+    "new_alias_commit_alone_is_not_the_cumulative_fix": true,
+    "changed_paths": [
+      "crates/alphal00p-docs-python-exporter/src/main.rs",
+      "crates/feynkit-py/python/symbolica/community/hepkit/__init__.pyi",
+      "crates/feynkit-py/src/generation.rs",
+      "crates/feynkit-py/src/generation/results.rs",
+      "crates/feynkit-py/src/generation/tests.rs",
+      "crates/gammaloop-api/src/python.rs",
+      "crates/linnet-py/examples/rendering_api.py",
+      "crates/linnet-py/python/symbolica/community/graph/__init__.pyi",
+      "crates/linnet-py/src/bin/stubgen.rs",
+      "crates/linnet-py/src/graph.rs",
+      "crates/linnet-py/src/graph/generate.rs",
+      "crates/linnet-py/src/lib.rs",
+      "crates/linnet-py/src/render.rs",
+      "crates/linnet-py/src/topology.rs",
+      "crates/linnet-py/tests/test_algorithms.py",
+      "crates/linnet-py/tests/test_basic.py",
+      "crates/linnet-py/tests/test_view_epochs.py",
+      "docs/api/python/feynkit-community.pyi",
+      "docs/api/python/linnet-graph.pyi",
+      "docs/architecture/evidence/generation-integration/wp3/graph-fixes.json",
+      "docs/architecture/generation-staged-python-fixes.typ",
+      "docs/developers.toml",
+      "docs/products/linnet/content/api.typ",
+      "docs/products/registry.toml",
+      "examples/notebooks/symbolica-host/python/symbolica/community/graph/__init__.pyi",
+      "examples/notebooks/symbolica-host/python/symbolica/community/hepkit/__init__.pyi"
+    ],
+    "condition": "Run integrated-tip checks and aggregate A/B/D/E4 review; this reviewer made no integration or publication action."
+  },
+  "code_and_proof_audit": {
+    "pipeline_comparison": "The native PayloadKeys->dense key IDs/ranks->canonizer route is unchanged. The first changed boundary is Python static callback metadata in STUB_TYPE_ALIASES, consumed by canonical_stub and exporter/package/docs/host copies. Runtime acceptance is checked using the same Cargo-verified bindings. No topology, algorithm, physics or numeric mechanism is changed.",
+    "metadata_owner": "Existing linnet_py::canonical_stub and STUB_TYPE_ALIASES reused. No generated-only edit, legacy fallback or compatibility API.",
+    "renderer_separation": "Identity audit proves each generated graph file and lib.rs differ from the reviewed parent only in _LabelKey return alias. _ExpressionLabel/_RealLabel and all rendering signatures remain byte-identical; resolved _ExpressionLabel type equality independently passes.",
+    "test_strength": "AST comparison proves all old AlgorithmsTests assertions unchanged; exactly one test added. New test uses actual native callbacks with nonzero counts, expected symmetry2 and payload identity. Additional independent probe distinguishes each colored role and checks exception propagation. No snapshots or physics fixtures changed.",
+    "regeneration": "Fresh exact-feature Cargo exporter test and --check reproduce all three tracked graph stubs through the canonical owner; exporter output destination loop audited.",
+    "rust_policy": "Two Rust changes are one existing metadata alias and one additional existing test assertion. No new abstraction/import/helper, clone/ownership/precision/error-policy change, lint suppression or policy departure. Scoped Clippy/format logs for exact changed source verified and inspected, not rerun."
+  },
+  "independent_checks": {
+    "retained_python": {
+      "count": 6,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0
+    },
+    "additional_native_positive_matrix": [
+      {
+        "kind": "bytes",
+        "api_checks": 3,
+        "role_inequality_checks": 3,
+        "edge_order_and_payload_identity": true,
+        "per_api_callback_census": true
+      },
+      {
+        "kind": "nested_tuple",
+        "api_checks": 3,
+        "role_inequality_checks": 3,
+        "edge_order_and_payload_identity": true,
+        "per_api_callback_census": true
+      },
+      {
+        "kind": "frozenset",
+        "api_checks": 3,
+        "role_inequality_checks": 3,
+        "edge_order_and_payload_identity": true,
+        "per_api_callback_census": true
+      },
+      {
+        "kind": "custom_hashable",
+        "api_checks": 3,
+        "role_inequality_checks": 3,
+        "edge_order_and_payload_identity": true,
+        "per_api_callback_census": true
+      },
+      {
+        "kind": "expression",
+        "api_checks": 3,
+        "role_inequality_checks": 3,
+        "edge_order_and_payload_identity": true,
+        "per_api_callback_census": true
+      }
+    ],
+    "additional_negative_callback_positions": [
+      {
+        "api": "canonize",
+        "role": "node_key",
+        "original_callback_exception": true,
+        "unhashable_rejected": true
+      },
+      {
+        "api": "canonize",
+        "role": "edge_key",
+        "original_callback_exception": true,
+        "unhashable_rejected": true
+      },
+      {
+        "api": "canonize",
+        "role": "half_edge_key",
+        "original_callback_exception": true,
+        "unhashable_rejected": true
+      },
+      {
+        "api": "is_isomorphic",
+        "role": "node_key",
+        "original_callback_exception": true,
+        "unhashable_rejected": true
+      },
+      {
+        "api": "is_isomorphic",
+        "role": "edge_key",
+        "original_callback_exception": true,
+        "unhashable_rejected": true
+      },
+      {
+        "api": "is_isomorphic",
+        "role": "half_edge_key",
+        "original_callback_exception": true,
+        "unhashable_rejected": true
+      },
+      {
+        "api": "canonize_edges",
+        "role": "edge_key",
+        "original_callback_exception": true,
+        "unhashable_rejected": true
+      },
+      {
+        "api": "canonize_edges",
+        "role": "half_edge_key",
+        "original_callback_exception": true,
+        "unhashable_rejected": true
+      }
+    ],
+    "generated_annotation_resolution": [
+      {
+        "path": "crates/linnet-py/python/symbolica/community/graph/__init__.pyi",
+        "resolved_callback_positions": [
+          "canonize.edge_key",
+          "canonize.half_edge_key",
+          "canonize.node_key",
+          "canonize_edges.edge_key",
+          "canonize_edges.half_edge_key",
+          "is_isomorphic.edge_key",
+          "is_isomorphic.half_edge_key",
+          "is_isomorphic.node_key"
+        ],
+        "new_contract_passes": true,
+        "parent_contract_fails_same_oracle": true,
+        "rendering_label_type_unchanged": true
+      },
+      {
+        "path": "docs/api/python/linnet-graph.pyi",
+        "resolved_callback_positions": [
+          "canonize.edge_key",
+          "canonize.half_edge_key",
+          "canonize.node_key",
+          "canonize_edges.edge_key",
+          "canonize_edges.half_edge_key",
+          "is_isomorphic.edge_key",
+          "is_isomorphic.half_edge_key",
+          "is_isomorphic.node_key"
+        ],
+        "new_contract_passes": true,
+        "parent_contract_fails_same_oracle": true,
+        "rendering_label_type_unchanged": true
+      },
+      {
+        "path": "examples/notebooks/symbolica-host/python/symbolica/community/graph/__init__.pyi",
+        "resolved_callback_positions": [
+          "canonize.edge_key",
+          "canonize.half_edge_key",
+          "canonize.node_key",
+          "canonize_edges.edge_key",
+          "canonize_edges.half_edge_key",
+          "is_isomorphic.edge_key",
+          "is_isomorphic.half_edge_key",
+          "is_isomorphic.node_key"
+        ],
+        "new_contract_passes": true,
+        "parent_contract_fails_same_oracle": true,
+        "rendering_label_type_unchanged": true
+      }
+    ],
+    "parent_negative_type_control": "All eight parent callback annotations in each of three copies reject the expected Hashable|Expression return-type oracle; corrected annotations pass. This is resolved typing-object equality, not substring matching.",
+    "host_original_assertions": "Existing standalone native generation/graph/CFF/kinematics host continues unchanged and passes1 test, zero ignored. Temporary package aliases and sys.path restored. Hook failures would produce a marker and fail the driver; a missing probe-result is a failure.",
+    "exporter_tests": {
+      "passed": 2,
+      "failures": 0,
+      "ignored": 0,
+      "features": "linnet,feynkit",
+      "tests": [
+        "tests::linnet_package_and_docs_share_the_typed_stub_info_surface",
+        "tests::linnet_stub_keeps_aliases_before_import_like_docstrings"
+      ]
+    },
+    "canonical_owner_check": {
+      "passed": true,
+      "copies": 3,
+      "owner": "linnet_py::canonical_stub",
+      "paths": [
+        "crates/linnet-py/python/symbolica/community/graph/__init__.pyi",
+        "docs/api/python/linnet-graph.pyi",
+        "examples/notebooks/symbolica-host/python/symbolica/community/graph/__init__.pyi"
+      ]
+    },
+    "exact_commands": [
+      {
+        "name": "native-host",
+        "command": [
+          "/common/build-cache/lcnbr/44/087dd61ba278c7/ci-optim/deps/feynkit_py-5e1f27f915ae78c9",
+          "--exact",
+          "tests::standalone_python_pipeline_covers_generation_graphs_cff_and_kinematics",
+          "--test-threads=1",
+          "--nocapture"
+        ],
+        "exit_code": 0
+      },
+      {
+        "name": "exporter-tests",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--profile",
+          "ci-optim",
+          "-p",
+          "alphal00p-docs-python-exporter",
+          "--features",
+          "linnet,feynkit",
+          "--",
+          "tests::linnet_",
+          "--test-threads=1"
+        ],
+        "exit_code": 0
+      },
+      {
+        "name": "canonical-stub-check",
+        "command": [
+          "cargo",
+          "run",
+          "--locked",
+          "--profile",
+          "ci-optim",
+          "-p",
+          "alphal00p-docs-python-exporter",
+          "--features",
+          "linnet,feynkit",
+          "--",
+          "linnet-graph",
+          "docs/api/python/linnet-graph.pyi",
+          "--check"
+        ],
+        "exit_code": 0
+      }
+    ],
+    "host_build": "cargo test --locked --profile ci-optim -p feynkit-py --lib --features python_stubgen,pyo3/auto-initialize,linnet-py/default --no-run --message-format=json; exit0, exact workspace artifact and SHA verified",
+    "source_evidence_audit": {
+      "all_81_scope_digests_unchanged": true,
+      "mismatches": 27,
+      "new_drift": 0,
+      "title_matches": [
+        "docs/architecture/generation-staged-python-fixes.typ"
+      ],
+      "historical_23_code_hashes_match_nominated_revision": 23,
+      "native_control_binary": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/linnet-7d8f725f1a9b558a",
+      "native_control_sha256": "4051f0848252d06be9b830ce48b3735fe9d62e54e74a3598ac06cb5e44324b86",
+      "native_tests_reused_not_rerun": 338,
+      "original_native_logs_verified": 3,
+      "cumulative_files": [
+        "crates/alphal00p-docs-python-exporter/src/main.rs",
+        "crates/feynkit-py/python/symbolica/community/hepkit/__init__.pyi",
+        "crates/feynkit-py/src/generation.rs",
+        "crates/feynkit-py/src/generation/results.rs",
+        "crates/feynkit-py/src/generation/tests.rs",
+        "crates/gammaloop-api/src/python.rs",
+        "crates/linnet-py/examples/rendering_api.py",
+        "crates/linnet-py/python/symbolica/community/graph/__init__.pyi",
+        "crates/linnet-py/src/bin/stubgen.rs",
+        "crates/linnet-py/src/graph.rs",
+        "crates/linnet-py/src/graph/generate.rs",
+        "crates/linnet-py/src/lib.rs",
+        "crates/linnet-py/src/render.rs",
+        "crates/linnet-py/src/topology.rs",
+        "crates/linnet-py/tests/test_algorithms.py",
+        "crates/linnet-py/tests/test_basic.py",
+        "crates/linnet-py/tests/test_view_epochs.py",
+        "docs/api/python/feynkit-community.pyi",
+        "docs/api/python/linnet-graph.pyi",
+        "docs/architecture/evidence/generation-integration/wp3/graph-fixes.json",
+        "docs/architecture/generation-staged-python-fixes.typ",
+        "docs/developers.toml",
+        "docs/products/linnet/content/api.typ",
+        "docs/products/registry.toml",
+        "examples/notebooks/symbolica-host/python/symbolica/community/graph/__init__.pyi",
+        "examples/notebooks/symbolica-host/python/symbolica/community/hepkit/__init__.pyi"
+      ],
+      "protected_changes": [],
+      "nix_ci_enabled": false,
+      "scoped_clippy_rust_python_format": "R3 source/log hashes verified; passing logs inspected, not rerun"
+    },
+    "static_type_checker_limit": "Not run; resolved generated aliases/annotations using actual native Expression class, not string comparison."
+  },
+  "reused_checks": {
+    "round2_review": "target/astra-graph-r2-20261027/review.json",
+    "round2_review_sha256": "75d1f10eec66876c0f88c02bee64c93a35e37885c016e99ec52b354d1cb77129",
+    "retained_python": "77 previous passing tests with zero skips, including epoch/view and 210/278/845 oracle controls; six focused tests executed in round3, not the full suite.",
+    "callback_controls": "18 previous isolated controls, including four concrete terminal Particle checks; not rerun in round3.",
+    "native_controls": "338 (211+115+12), original native source unchanged since817b; retained binary SHA and three original independent log SHA values verified; not rerun.",
+    "feature_and_exporter_matrix": "Previous exact Linnet/Gamma --tests and explicit native,python_stubgen feature checks, three Gamma exporter tests, one HEP reexport test, HEP owner snapshots preserved. Only two Linnet exporter tests and three graph owner snapshots freshly rechecked in round3.",
+    "static": "R3 scoped Clippy and Rust/Python format PASS logs match exact reviewed source; no fresh lint/format execution claimed.",
+    "mutable_cache_caveat": "No assumption that historical intermediate rlibs remain identical. Exact Cargo build validates the nominated host, whose SHA matches recorded prior/current host. No target override/manual seeding/deletion."
+  },
+  "identity": {
+    "tip": "4b60161dd503bc870434a9ae6951003bc1dc2132",
+    "code": "1a68c9a8a5d16f2a195aa5808173764549d06e01",
+    "parent": "891d7d569a408fb6e7056254802a45173ef2cf26",
+    "tracked_blobs_verified": 3350,
+    "changed_files": [
+      "crates/alphal00p-docs-python-exporter/src/main.rs",
+      "crates/linnet-py/python/symbolica/community/graph/__init__.pyi",
+      "crates/linnet-py/src/lib.rs",
+      "crates/linnet-py/tests/test_algorithms.py",
+      "docs/api/python/linnet-graph.pyi",
+      "docs/architecture/evidence/generation-integration/wp3/graph-fixes.json",
+      "docs/architecture/generation-staged-python-fixes.typ",
+      "docs/products/linnet/content/api.typ",
+      "examples/notebooks/symbolica-host/python/symbolica/community/graph/__init__.pyi"
+    ],
+    "file_hashes": {
+      "crates/alphal00p-docs-python-exporter/src/main.rs": "575510d847483d726d3b6a0aad9f6696468e6dbcf722ce0112250720372c6041",
+      "crates/linnet-py/python/symbolica/community/graph/__init__.pyi": "477e03af0b1b104ba5a9b8ffad4ec5efa9f5cfce5e0a5043a039efd80820a224",
+      "crates/linnet-py/src/lib.rs": "f55dd38032b864d74d6e8e6c8d9e0b2d69a116abd713257837b3504ee529438d",
+      "crates/linnet-py/tests/test_algorithms.py": "9102135cc798a5ba19406c6097f341413791cf42f874a48f96907823a3d61a08",
+      "docs/api/python/linnet-graph.pyi": "477e03af0b1b104ba5a9b8ffad4ec5efa9f5cfce5e0a5043a039efd80820a224",
+      "docs/architecture/evidence/generation-integration/wp3/graph-fixes.json": "8fbc8baac138cbd004db679768a355b84417ad1c619e9bc063d56257106b1b2c",
+      "docs/architecture/generation-staged-python-fixes.typ": "b44def611697d4cdef861905cd69d12d6cf515dab50fc408c0d224eee08ac1be",
+      "docs/products/linnet/content/api.typ": "86f01a1cf46a0f13c5ded20cace8372df7541af18120f3d9935034bd717556f6",
+      "examples/notebooks/symbolica-host/python/symbolica/community/graph/__init__.pyi": "477e03af0b1b104ba5a9b8ffad4ec5efa9f5cfce5e0a5043a039efd80820a224"
+    },
+    "all_existing_algorithm_assertions_preserved": true,
+    "runtime_rust_unchanged": true,
+    "rendering_aliases_unchanged": true,
+    "r3_code_hashes_verified": 7,
+    "r3_check_log_hashes_verified": 8,
+    "r2_check_log_hashes_verified": 30,
+    "original_receipts_verified": [
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-staged-r1-graph/review.json",
+        "sha256": "a88fef71d571d385d4dce55c9c43b1c7dee9e5e2053478656b69d6e683ba094f"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-staged-r1-downstream/review.json",
+        "sha256": "7b3f6545258b76d50416f11d108dcce09763b2890a5adaebb01562e1b8064a40"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-staged-r1-e/review.json",
+        "sha256": "c883f47b11741e062e95ccb66a20eb538b951e2a48cf65885f2e2e81ce01bfed"
+      }
+    ],
+    "host": "/common/build-cache/lcnbr/44/087dd61ba278c7/ci-optim/deps/feynkit_py-5e1f27f915ae78c9",
+    "host_sha256": "148e41bc9c8e1132ab207e1acc83875a5f7dee3fd0706d7cfdde142b95eb8862",
+    "jj_state": "4b60161dd503bc870434a9ae6951003bc1dc2132 rmuyknuntktuknupzzqspxssspptrykx\n"
+  },
+  "cargo_verified_host": {
+    "artifact": {
+      "reason": "compiler-artifact",
+      "package_id": "path+file:///shared/lcnbr/dev/gammaloop/generation-staged-graph-fixes/crates/feynkit-py#0.1.0",
+      "manifest_path": "/shared/lcnbr/dev/gammaloop/generation-staged-graph-fixes/crates/feynkit-py/Cargo.toml",
+      "target": {
+        "kind": [
+          "lib"
+        ],
+        "crate_types": [
+          "lib"
+        ],
+        "name": "feynkit_py",
+        "src_path": "/shared/lcnbr/dev/gammaloop/generation-staged-graph-fixes/crates/feynkit-py/src/lib.rs",
+        "edition": "2024",
+        "doc": true,
+        "doctest": true,
+        "test": true
+      },
+      "profile": {
+        "opt_level": "2",
+        "debuginfo": 0,
+        "debug_assertions": true,
+        "overflow_checks": true,
+        "test": true
+      },
+      "features": [
+        "default",
+        "native",
+        "python_stubgen",
+        "ufo"
+      ],
+      "filenames": [
+        "/common/build-cache/lcnbr/44/087dd61ba278c7/ci-optim/deps/feynkit_py-5e1f27f915ae78c9"
+      ],
+      "executable": "/common/build-cache/lcnbr/44/087dd61ba278c7/ci-optim/deps/feynkit_py-5e1f27f915ae78c9",
+      "fresh": true
+    },
+    "sha256": "148e41bc9c8e1132ab207e1acc83875a5f7dee3fd0706d7cfdde142b95eb8862"
+  },
+  "environment": {
+    "python": "3.13.15 (main, Aug  5 2026, 12:25:43) [GCC 15.3.0]",
+    "python_executable": "/nix/store/xarzifw3nq4jwzan0ynllhp2nz067sa7-python3-3.13.14-env/bin/python",
+    "devshell": "/nix/store/j7qzy1qjcra1yzjq49xg31yggrv02b61-nix-shell-env.drv",
+    "shell_output_present": true,
+    "nix_sources_unchanged": true,
+    "shared_envrc": false,
+    "cargo_build_jobs": "2",
+    "cargo_target_dir": null,
+    "mypy_available": false,
+    "pyright_available": false
+  },
+  "receipt_accuracy": "R3 seven implementation/generated hashes and eight check-log hashes verified. Top-level historical23 code hashes still match their explicit ba375387 code revision; they are not misrepresented as final hashes. All30 round2 log hashes and all three original C/B/E review receipt hashes verified. New Typst title matches registry. All81 scoped digest results unchanged,27 mismatches remain, no new drift.",
+  "limits_and_pending": [
+    "No whole-candidate or whole-WP3 approval; no source19+ or naming/route/Classes authorization.",
+    "A/B/D/E4 corrections are independently owned and being combined elsewhere; their integration is not certified by this read-only graph-slice review. Three historical frame assertions and distinct consumer B2 are not re-adjudicated here; representation diagnostics are not physics proof.",
+    "Source30 compile-time producer closure and source31 seven inherited plus20 scope/anchor issues remain outside this approval; no full five-product documentation certificate.",
+    "Full rebuilt-tip WP3 matrix, five fresh a_ddx, BRST, combined CoolQM/epem, numeric/sampling, final measurements and applicable exact physics/frame proofs remain coordinator gates.",
+    "Native test-host registration and temporary package scaffolding are not installed-wheel, external Community, native/Pyodide/WASM, browser/manual or final distribution certification.",
+    "No external mypy/pyright run: generated aliases and all eight callback annotations were resolved to real Python typing objects with actual native numeric/Expression classes and checked against the expected contract.",
+    "No full nauty, DOT corpus integration, benchmark or full physics execution; no numerator expansion, blind snapshot change or numeric-only proof."
+  ],
+  "required_postintegration_checks": [
+    "Integrate cumulative817b..4b60161d, including ba375387, into the combined approved correction candidate; the new alias commit alone omits the earlier fixes.",
+    "On that integrated tip, rerun actual native retained graph/view/epoch regressions, hashable-key callbacks and the nonzero terminal concrete-particle assertion/isolated callback controls.",
+    "On that integrated tip, run supported Linnet and Gamma exporter --tests feature checks and relevant2/3 contract tests, HEP reexport control, explicit native/python_stubgen feature check as applicable, and all six graph/HEP canonical package/docs/host checks.",
+    "Aggregate this cumulative graph approval with A/B/D/E4 integration review; retain all other pending WP3/source30/source31/physics/distribution gates before advancing scope."
+  ],
+  "retained_artifacts": "target/astra-graph-r3-20261027 contains independent probes, commands, resolved-type/native results, source/host identities, log hashes and this receipt for review/reproduction. Original implementation and prior review evidence/shared caches preserved.",
+  "processes_retained": [],
+  "cleanup": "All review processes completed. No unused source scratch, transient checkout or background service. Only useful ignored review evidence retained.",
+  "tracked_integrity": "All3350 tracked blobs match4b60161dd503bc870434a9ae6951003bc1dc2132; exact9-file R3 and26-file cumulative inventory verified. JJ working-copy change/bookmark unchanged. Main/other workspaces, locks/kernel/NixCI=false/Clarabel/notices/physics fixtures preserved. No tracked edits or reference mutations.",
+  "artifact_sha256": {
+    "identity.log": "e18a4be25255e51d6f4eafa6477b680c22c6fb863aea60db4749703cc7e414d6",
+    "final-identity.log": "e18a4be25255e51d6f4eafa6477b680c22c6fb863aea60db4749703cc7e414d6",
+    "identity.json": "fe9069c3db9e4b112279136df8210da24715ecac01d7daa3b05de00af3f6958f",
+    "scope-audit.json": "0df15238280e1376dd81131add62846bf11898e45cd2938f8e607d64cfb53b9b",
+    "verified-host.json": "ae906384b1fd3371b4916a1799f93c89aa2143cff49db305d67d545fd01e7d6e",
+    "evidence-audit.py": "8648918a1bb796b01b01f92cea9e451b1a0f03877989efcbef8eaa8f68b2a5e6",
+    "identity.py": "5b715db5cab5f4f77102048ca137917cf9ec072e2a194b6c82b01e28f069fef1",
+    "canonical-stub-check.log": "366ff8b93dfdf97d500ed617d3f1b91fa5a7217701565ac047e781d45e443874",
+    "write-review.py": "52103f87556f17658ce2ff2d939222a274c98e2445e6f74cb3d984c3a57bc474",
+    "probe.py": "af03d5548e6138045b7736516e0baa2c34dc1d56c6842cb70d2fb7e07712cdc9",
+    "environment.json": "2270f286a9ce52cfaf0a09d01a171705f8c6adbd70aef4944464ceb80dcdd410",
+    "exporter-tests.log": "b0e38c035eb0883096c362b0332a72b2cf1f3c526fbf2adb1cc435bb7098e999",
+    "host-build.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "host-build.log": "83f201310d0032af877d7a96bb51bfdc748f47942684c20d21169050c5cd093e",
+    "run-checks.py": "2f3129193fd19a83e6228a7dabf4132e3ae94bfbece9b1b5fff3150c5b75168c",
+    "checks.json": "73a137818028f60543ac0af879936760bdf164935182429558adf4f896f904bc",
+    "retained-python.log": "89929234b8a7fcf6f8c842b90011a2672e059825de5e15ac096eb4c8c97a6129",
+    "native-host.log": "5f10cd051128f7bd148f8c0f8d30d1fe871176f2619dd936cfcf960c1d26acda",
+    "evidence-audit.json": "bb00fae9088f8c5a91f6755e23077415f626711a518b281e81e4fae342cce896",
+    "probe-result.json": "b3dffd1d683e0102ee7987542be73ed484782a7dcee71582a962387044364139",
+    "hook/sitecustomize.py": "164b625e35e865e86186397cb41c05ba8dc5770ec70951ecab0fa6ee75a76266"
+  }
+}

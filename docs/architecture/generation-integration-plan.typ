@@ -235,7 +235,7 @@ own workspace. Bounded: one regression, one bisect, one written verdict.
   round2 approves isolated `b1061d7` only, available for later integration.
   Original atomic candidate remains frozen at `817b5886`. Approved cumulative
   A1, consumer B2/B3 and D1–D3 are combined on approved E4 for NEW independent
-  review; graph/Python approval is still pending. No source19 starts; WP3 remains incomplete.
+  review, including newly approved cumulative graph/Python `4b60161d`. No source19 starts; WP3 remains incomplete.
   Source38 awaits the reviewed transplant and prerequisites through port36.
   Approved input25/36 and cumulative sampling27–29 remain separate for later
   integration; no benchmark milestone is claimed. Full rebuilt-tip validation

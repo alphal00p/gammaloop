@@ -1,0 +1,448 @@
+{
+  "verdict": "REQUEST_CHANGES",
+  "status": "Completed independent read-only round 2; stop after review; no integration or publication",
+  "scope": "C1/C2/B1/E1/E2/E3/E5 only; no whole-candidate or WP3 approval",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-staged-graph-fixes",
+  "candidate": "891d7d569a408fb6e7056254802a45173ef2cf26",
+  "code_commit": "ba37538752f6cd1af30c0cbe6be5549c86405d74",
+  "parent": "817b5886a50276efea05ab860d22016e1fb0c203",
+  "findings": [
+    {
+      "id": "C2-R2",
+      "parent_finding": "C2",
+      "severity": "P2",
+      "summary": "Canonicalization still publishes the retired expression-label callback type instead of the native hashable-key contract",
+      "file": "crates/linnet-py/src/lib.rs",
+      "line": 50,
+      "related": [
+        {
+          "file": "crates/linnet-py/src/graph/algorithms.rs",
+          "line": 174
+        },
+        {
+          "file": "crates/linnet-py/src/graph/algorithms.rs",
+          "line": 223
+        },
+        {
+          "file": "crates/linnet-py/src/graph/algorithms.rs",
+          "line": 245
+        },
+        {
+          "file": "crates/linnet-py/python/symbolica/community/graph/__init__.pyi",
+          "line": 127
+        },
+        {
+          "file": "docs/products/linnet/content/api.typ",
+          "line": 76
+        }
+      ],
+      "details": "The newly supplied _Key alias is typing.Hashable | Expression, but _LabelKey still returns _ExpressionLabel. canonize, is_isomorphic, and canonize_edges all use _LabelKey. _ExpressionLabel only covers the old expression-convertible labels and excludes bytes, arbitrary hashable tuples and stable custom key types which the current native PayloadKeys owner accepts. All three generated graph copies contain the restrictive annotation. The product prose still says expression-compatible payloads. This is residual C2 metadata migration debt, not one of the separately deferred 27 scope/anchor mismatches.",
+      "reproducer": "Against the freshly rebuilt actual native bindings, a two-node/one-edge graph with object payloads succeeds with node_key=lambda _: b\"node\", edge_key=lambda _: b\"edge\", half_edge_key=lambda _: b\"port\" in canonize and is_isomorphic; canonize_edges also accepts the byte-valued edge/half-edge callbacks. The generated callback type excludes these return values.",
+      "impact": "The shipped type surface incorrectly rejects supported canonicalization callbacks for static consumers and describes the previous expression-only contract. No runtime topology or physics failure is asserted.",
+      "evidence": "alias-result.json; alias-host.log; alias_probe.py; actual host SHA256 in runtime-binary.json",
+      "required_fix": "Use the current native key type in the canonicalization callback metadata, keeping rendering/expression-label typing separate. Update the expression-only product sentence, regenerate all three graph copies through canonical_stub, and add a regression that checks the supported hashable callback contract. Do not restore obsolete compatibility APIs."
+    }
+  ],
+  "assigned_finding_closure": {
+    "C1": {
+      "status": "CLOSED",
+      "locations": [
+        "crates/linnet-py/src/graph.rs:752",
+        "crates/linnet-py/src/graph.rs:1574",
+        "crates/linnet-py/src/render.rs:103",
+        "crates/linnet-py/src/topology.rs:1889"
+      ],
+      "basis": "Audited all live view constructor/resolver call sites across graph, mutations, topology, algorithms and render. Live views use element_epoch, topology selections/traversal snapshots and callback mutation guards use revision. map resets both counters on its independent owner; fresh node/half-edge resolution and selector callbacks preserve the same owner. New regression matrix and six independent operation sequences pass, including stale/foreign checks and subsequent map/split on derived graphs. No NodeStore compatibility restoration."
+    },
+    "C2": {
+      "status": "PARTIAL; OPEN C2-R2",
+      "basis": "Removed-API consumers, single native forest tests, staged Theory/Legs/Plan migration, generated package/docs/host files and numeric/macro-name imports are fixed. All selected retained tests pass. Remaining canonicalization callback alias/prose mismatch prevents full closure."
+    },
+    "B1": {
+      "status": "CLOSED",
+      "locations": [
+        "crates/feynkit-py/src/generation/tests.rs:1278",
+        "crates/linnet-py/src/graph/generate.rs:579",
+        "crates/linnet-py/src/graph/generate.rs:712"
+      ],
+      "basis": "Terminal callback asserts GenerationDiagramView, distinct live DiagramView owner, and nonzero completed concrete fields. Independently observed four checks on actual Particle instances with PDG codes 11,11,13,13. All 18 isolated controls pass, including expiry, GC, exceptions, calling-thread behavior and selection."
+    },
+    "E1": {
+      "status": "CLOSED",
+      "locations": [
+        "crates/alphal00p-docs-python-exporter/src/main.rs:162",
+        "crates/alphal00p-docs-python-exporter/src/main.rs:705",
+        "crates/linnet-py/src/bin/stubgen.rs:17"
+      ],
+      "basis": "Production/exporter tests and stubgen use canonical_stub and supported destinations. Native NodeSpec/EdgeSpec/HalfEdgeSpec and factory APIs remain. No old stub/PythonModule/standalone fallback was reintroduced. Exact Linnet --tests feature check, two contract tests and graph owner --check pass. C2-R2 concerns the canonical metadata content, not exporter ownership/build closure."
+    },
+    "E2": {
+      "status": "CLOSED",
+      "locations": [
+        "crates/alphal00p-docs-python-exporter/src/main.rs:439"
+      ],
+      "basis": "Single module-scope PyModule import and minimal required traits; exact gammaloop --tests build and all three relevant exporter tests pass."
+    },
+    "E3": {
+      "status": "CLOSED",
+      "locations": [
+        "docs/products/registry.toml:75"
+      ],
+      "basis": "Registry uses actual native,python_stubgen features. Independently resolved Cargo metadata and compiled no-default-features native,python_stubgen. No obsolete community or standalone feature restored."
+    },
+    "E5": {
+      "status": "CLOSED",
+      "locations": [
+        "crates/gammaloop-api/src/python.rs:77"
+      ],
+      "basis": "Required IntoPyObject trait restored at production module scope; four primitive conversion paths compile with real GammaLoop Python/python_stubgen features. Gamma exporter verifies runtime registration/signatures and unchanged Gamma docs stub."
+    }
+  },
+  "independent_checks": {
+    "retained_python": {
+      "tests": 77,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0
+    },
+    "callback_controls": {
+      "passed": 18,
+      "zero_test_or_skipped_credit": false,
+      "results": "callbacks.json",
+      "terminal": {
+        "count": 4,
+        "particle_pdg_codes": [
+          11,
+          11,
+          13,
+          13
+        ],
+        "generation_class": "GenerationDiagramView",
+        "live_class": "DiagramView",
+        "distinct": true
+      }
+    },
+    "extended_epoch_controls": {
+      "operations": [
+        "add_node",
+        "add_edge",
+        "reverse",
+        "orientation",
+        "reorder_nodes",
+        "reorder_edges"
+      ],
+      "details": "All four map callbacks together; exact callback census; topology expiry versus element identity; derived/copy map/split; traversal by name/index/view; relationship views and foreign half-edge rejection."
+    },
+    "build_and_exporter_checks": [
+      {
+        "name": "binding-freshness",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--profile",
+          "ci-optim",
+          "-p",
+          "feynkit-py",
+          "--lib",
+          "--features",
+          "python_stubgen,pyo3/auto-initialize,linnet-py/default",
+          "--no-run",
+          "--message-format=json"
+        ],
+        "exit_code": 0,
+        "expected_executed_tests": null,
+        "passed": true
+      },
+      {
+        "name": "linnet-check",
+        "command": [
+          "cargo",
+          "check",
+          "--locked",
+          "--profile",
+          "ci-optim",
+          "-p",
+          "alphal00p-docs-python-exporter",
+          "--features",
+          "linnet",
+          "--tests"
+        ],
+        "exit_code": 0,
+        "expected_executed_tests": null,
+        "passed": true
+      },
+      {
+        "name": "linnet-tests",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--profile",
+          "ci-optim",
+          "-p",
+          "alphal00p-docs-python-exporter",
+          "--features",
+          "linnet",
+          "--",
+          "tests::linnet_",
+          "--test-threads=1"
+        ],
+        "exit_code": 0,
+        "expected_executed_tests": 2,
+        "passed": true
+      },
+      {
+        "name": "gamma-check",
+        "command": [
+          "cargo",
+          "check",
+          "--locked",
+          "--profile",
+          "ci-optim",
+          "-p",
+          "alphal00p-docs-python-exporter",
+          "--features",
+          "gammaloop",
+          "--tests"
+        ],
+        "exit_code": 0,
+        "expected_executed_tests": null,
+        "passed": true
+      },
+      {
+        "name": "gamma-tests",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--profile",
+          "ci-optim",
+          "-p",
+          "alphal00p-docs-python-exporter",
+          "--features",
+          "gammaloop",
+          "--",
+          "tests::gammaloop_",
+          "--test-threads=1"
+        ],
+        "exit_code": 0,
+        "expected_executed_tests": 3,
+        "passed": true
+      },
+      {
+        "name": "product-native-check",
+        "command": [
+          "cargo",
+          "check",
+          "--locked",
+          "--profile",
+          "ci-optim",
+          "-p",
+          "linnet-py",
+          "--no-default-features",
+          "--features",
+          "native,python_stubgen"
+        ],
+        "exit_code": 0,
+        "expected_executed_tests": null,
+        "passed": true
+      },
+      {
+        "name": "hep-reexports",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--profile",
+          "ci-optim",
+          "-p",
+          "alphal00p-docs-python-exporter",
+          "--features",
+          "linnet,feynkit",
+          "--",
+          "tests::feynkit_runtime_surface_uses_canonical_shared_reexports",
+          "--exact",
+          "--test-threads=1"
+        ],
+        "exit_code": 0,
+        "expected_executed_tests": 1,
+        "passed": true
+      },
+      {
+        "name": "graph-stub-check",
+        "command": [
+          "cargo",
+          "run",
+          "--locked",
+          "--profile",
+          "ci-optim",
+          "-p",
+          "alphal00p-docs-python-exporter",
+          "--features",
+          "linnet,feynkit",
+          "--",
+          "linnet-graph",
+          "docs/api/python/linnet-graph.pyi",
+          "--check"
+        ],
+        "exit_code": 0,
+        "expected_executed_tests": null,
+        "passed": true
+      },
+      {
+        "name": "hep-stub-check",
+        "command": [
+          "cargo",
+          "run",
+          "--locked",
+          "--profile",
+          "ci-optim",
+          "-p",
+          "alphal00p-docs-python-exporter",
+          "--features",
+          "linnet,feynkit",
+          "--",
+          "feynkit-community",
+          "docs/api/python/feynkit-community.pyi",
+          "--check"
+        ],
+        "exit_code": 0,
+        "expected_executed_tests": null,
+        "passed": true
+      }
+    ],
+    "generated_stubs": {
+      "copies_checked": 6,
+      "owners": [
+        "linnet_py::canonical_stub",
+        "feynkit_py::stub_source"
+      ],
+      "result": "Exact package/docs/host byte comparisons pass; residual semantic alias defect reported separately."
+    },
+    "runtime_surface": {
+      "graph_public_classes_functions": 104,
+      "hep_public_classes_functions": 110,
+      "signature_shapes_examined": 613,
+      "exact_shapes": 607,
+      "intentional_differences": 6,
+      "details": "Five closed handwritten drawing signatures (TextLabel and four factories) are accepted through validated **kwargs; one narrower LTD overload of integrate_energy intentionally omits CFF-only optional arguments. These are not obsolete owners or failures. Shape census is not a proof of annotation semantics: C2-R2 was found by separately auditing the key aliases. Actual frontend class names/modules and retained Spec classes verified; HEP Bridges/Classes reexports are exact graph-owned objects.",
+      "raw": "runtime-surface.json"
+    },
+    "alias_regression": "Fresh native byte-key positive reproducer and exact generated-alias audit; alias-result.json. No external static type checker run.",
+    "documentation_scope_audit": {
+      "scopes": 81,
+      "mismatches_before": 27,
+      "mismatches_after": 27,
+      "new_drift": 0,
+      "result": "scope-audit.json"
+    }
+  },
+  "reused_checks": {
+    "native_controls": {
+      "passed": 338,
+      "groups": [
+        211,
+        115,
+        12
+      ],
+      "binary": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/linnet-7d8f725f1a9b558a",
+      "sha256": "4051f0848252d06be9b830ce48b3735fe9d62e54e74a3598ac06cb5e44324b86",
+      "basis": "crates/linnet and relevant native/environment sources are unchanged from817b; native binary hash and original independent review identity match; all selected logs have positive executed counts and no ignored tests. No new native-suite execution claimed."
+    },
+    "scoped_clippy_and_format": "Verified existing final log hashes against unchanged final source; not rerun. Manual changed-code Rust-policy audit performed. No new policy departure identified; existing vendored Clarabel unused-import/lifetime warnings remain.",
+    "negative_frozen_matrix": "Implementation receipt reports 1 failure and32 errors on frozen bindings; this review did not rerun that negative matrix or count it as fresh evidence.",
+    "verified_correction_log_hashes": 14,
+    "details": "reused-evidence.json"
+  },
+  "test_migrations_review": {
+    "generation": "210/278/845 oracles preserved and executed. Four-leg phi3 retains exact canonical forms and [1,1,1] symmetry factors, with serial/parallel equality and expired borrowed-view checks. Two-leg L0 phi3 is mathematically infeasible for nonempty cubic interaction trees and the staged planner explicitly reports infeasibility.",
+    "cuts": "Native all_cuts contract at crates/linnet/src/half_edge.rs:2260 and exhaustive node-partition oracle at half_edge/tests.rs agree: each side component must contain a terminal. Original terminal-free request remains an empty oracle; new source terminal e gives nontrivial complete-partition coverage. No blind count replacement.",
+    "dot": "Retained native escaping supports trailing backslash. New test demands exact payload round-trip; malformed IDs, direction and duplicate-name rejection remain.",
+    "views": "Append-one-node/edge and orientation/reversal preserve element identity; topology snapshots still expire by revision. Reorder/split/connect/owning renumbering invalidate element views. Old storage-backend comparisons are replaced with explicit topology/payload assertions on the sole owner.",
+    "physics": "No physics fixture/snapshot expectation changed in this correction."
+  },
+  "identity": {
+    "tracked_file_blobs_match": 3350,
+    "changed_files": 26,
+    "implementation_generated_files": 23,
+    "evidence_note_registry_files": 3,
+    "all_23_implementation_sha256_match": true,
+    "fresh_host": {
+      "path": "/common/build-cache/lcnbr/44/087dd61ba278c7/ci-optim/deps/feynkit_py-5e1f27f915ae78c9",
+      "sha256": "148e41bc9c8e1132ab207e1acc83875a5f7dee3fd0706d7cfdde142b95eb8862",
+      "matches_implementation_receipt": true
+    },
+    "intermediate_cache_caveat": "Initial cached liblinnet_py-e7fd1156c02d9937.rlib did not match its archived receipt hash; that artifact was not accepted as reusable evidence. Exact feature/source Cargo rebuild succeeded and reproduced the nominated test-host SHA256 byte-for-byte. Fresh feature checks/exporter tests independently certify the final code. Initial mismatch is retained in initial-identity.json; do not claim every mutable intermediate cache file still has its archived hash.",
+    "protected": "No changes to Cargo manifests/locks, Nix/kernel/Tydenso/host alignment, Clarabel/notices, physics snapshots or test reference fixtures. NixCI=false retained.",
+    "environment": "Verified realized Nix devshell /nix/store/j7qzy1qjcra1yzjq49xg31yggrv02b61-nix-shell-env.drv; existing flake/Nix/lock sources unchanged. License silently preserved/loaded. No shared .envrc present. Used configured /common/build-cache/lcnbr/44/087dd61ba278c7 via normal Cargo commands; no target override, manual seeding or deletion.",
+    "records": [
+      "initial-identity.json",
+      "runtime-binary.json",
+      "final-identity.json"
+    ]
+  },
+  "limits_and_pending": [
+    "No whole-candidate/WP3 approval, parent integration, publication or source19+ authorization.",
+    "Three historical frame assertions and distinct consumer B2 remain outside this correction; representation diagnostics are not physics proof. A/B/D fixes and E4 are not reapproved here.",
+    "Source30 compile-time closure and source31 seven inherited plus20 staged scope issues remain pending; no full five-product docs certificate.",
+    "Full rebuilt-tip WP3 matrix, five fresh a_ddx, BRST, combined CoolQM/epem, numerical/sampling and measurements remain pending.",
+    "Actual native registration was exercised through the unchanged standalone host with temporary package scaffolding restored afterward; no installed wheel, external Community, native/Pyodide/WASM or browser/manual distribution certification.",
+    "No full nauty, DOT corpus integration executable, benchmark or full physics suite executed. No graph numerator expansion or numeric-only proof used."
+  ],
+  "required_next_checks": [
+    "Correct C2-R2 through native canonicalization metadata and regenerate graph package/docs/host stubs; recheck bytes/tuple callback typing against actual runtime and canonical owner --check. Preserve all passing original assertions.",
+    "Obtain a new independent bounded review of that correction; unchanged closed findings may reuse this receipt with exact source identities.",
+    "After parent integration, rerun the actual binding epoch/callback regressions, nonzero terminal assertion, supported exporter feature tests and six owner stub checks against the integrated tip, then aggregate all assigned reviews and outstanding gates before advancing scope."
+  ],
+  "tracked_integrity": "All3350 tracked blobs match891d7d56 at completion; working-copy change, candidate parent and task bookmark remain unchanged. No tracked edits, VCS ref changes, nested agents or parent mutations.",
+  "retained_artifacts": "target/astra-graph-r2-20261027 contains unique ignored review receipt, exact commands, independent probes, identities and logs for continuation. Original/correction evidence and shared caches preserved.",
+  "processes_retained": [],
+  "cleanup": "All own check/driver processes completed. No unused temporary checkout, source edits, transient generated assets or background services remain. Retained probes/logs are needed for review/reproduction.",
+  "original_review_receipts": [
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-staged-r1-graph/review.json",
+      "sha256": "a88fef71d571d385d4dce55c9c43b1c7dee9e5e2053478656b69d6e683ba094f"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-staged-r1-downstream/review.json",
+      "sha256": "7b3f6545258b76d50416f11d108dcce09763b2890a5adaebb01562e1b8064a40"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-staged-r1-e/review.json",
+      "sha256": "c883f47b11741e062e95ccb66a20eb538b951e2a48cf65885f2e2e81ce01bfed"
+    }
+  ],
+  "logs": {
+    "alias-host.log": "bf1b8286f15d5c5c03e915c129d2289a5b0403c89f68dddf9015a87e8e5bae04",
+    "binding-freshness.log": "ca34002321caaf8f07be324c8089165971212ace2f7a4d3aeacdba7a435d675b",
+    "callback-generation-tests-automatic_progress_tracks_marimo_lifecycle.log": "589f7ea3971ea1de6c04a178306227b5951487887fead660120ade64367af531",
+    "callback-generation-tests-compact_html_reports_discovery_without_demanding_numerators.log": "188fb49a08cbcec1ff4fc345b76c69ec247c6de17d5df6424f9fe6cd2a1d4b33",
+    "callback-generation-tests-display_only_generation_keeps_progress_and_native_regions.log": "6d54578afb4be76d0f504ab77e173a2467a8a0e0a2cbcb4023d6b405af64e7a6",
+    "callback-generation-tests-generation_defaults_leave_numerator_grouping_opt_in.log": "4a6187dbfb841cc47e46cb047b5cf0759d6a9014ffa36eeb8c0c65f9e718c9bd",
+    "callback-generation-tests-group_member_wrapper_fits_wasm_allocator_alignment.log": "9a96bddb11f4ea2aeefb748320981f098c73327e613b6344c072f7fe9e6fbb1f",
+    "callback-generation-tests-minimal_output_preserves_physics_and_explicit_id_demands.log": "35cd90718b3d25c3fb57b0d12b78ae1f318892454c193d52d821833c3e04b836",
+    "callback-generation-tests-process_metadata_and_selectors_are_typed_and_round_trip.log": "44d28bd12e7d55e1729e88519bbb82ddfe2d581bcd9c67b1a6d83927eb17b36b",
+    "callback-generation-tests-progress_and_partial_filters_use_the_calling_python_thread.log": "b5dff137fb0ab4f4f356a2bff23c6c23a34d2e49569a686a78c18062334e89b8",
+    "callback-generation-tests-python_flavour_classes_preserve_physics_assignments_and_ranked_fields.log": "cc690c7bd47bd69aff796bda0961911f066b5a63467b65d06b8de0530dfa8517",
+    "callback-generation-tests-python_signals_interrupt_both_generation_entry_points.log": "5f1afbd67f45bb90959b98786372e56d6331b9158582aa255718c2aaa1a1433c",
+    "callback-generation-tests-python_typed_hooks_prune_like_rust_hooks.log": "26d8339a4368f5aba383c8fb1437fb996e6edb7325fe2a9eaf30803b9b5e2672",
+    "callback-generation-tests-request_decorators_preserve_dispatch_gc_and_heredity_contracts.log": "28617fe616161ee0c88e2b16124ceed22d193e15e6f4f6a04952b0c36b598ef6",
+    "callback-generation-tests-staged_python_amplitude_preserves_squared_pairs_after_selection_and_grouping.log": "a3b0deaf0ba85530c51b49abe2fbe15d9243009dc779f9cf16da718719138c39",
+    "callback-generation-tests-staged_python_selection_uses_run_progress_cancellation_and_errors.log": "833ca7fae84af659c04c7a25902138c47d7dcdb2f7d83d6ab33508ae325c5006",
+    "callback-generation-tests-worker_permission_keeps_progress_on_caller_and_preserves_failures_and_gc.log": "8b7e57b911134bf0ff6018d1c7042eb9b1d126a7fd6c423d268302b027c1dfd1",
+    "callback-graph-tests-apply_feynman_rules_returns_the_ruled_diagram.log": "f9f41e69266593bd8872f0edf311cc95886ba9fd09d8df3106d956392e8a1673",
+    "callback-tests-standalone_python_errors_keep_their_public_types_and_module_isolation.log": "b46604e00aaf73192125859c9ee22cd4e6fc71f74f4dab4b828a0e63287c5ddf",
+    "callback-tests-standalone_python_pipeline_covers_generation_graphs_cff_and_kinematics.log": "9a19164ec0f399556274a33b19b407954aaf029d070896233e639fefdb85ca90",
+    "gamma-check.log": "2d037109c78e16a5ed30fee7966486d64fa0133768528b16a2ad91679afda03f",
+    "gamma-tests.log": "e93608d9f396a09a0f18363031b4843fb9bb9b2fd8a229584e48fa1f44f13f1b",
+    "graph-stub-check.log": "31d407cbf9a718d1d96e3020cc4a7d17f350d3aff50861794be4a5155e0ca319",
+    "hep-reexports.log": "afacf5b17e7be4c85eafa27f7b06324b09466bb0bb86b60d6dd33523fcca6ae4",
+    "hep-stub-check.log": "5095e832b27302a6f9dbabc09782dc156e0c68440ba1419f49d154f812e50c60",
+    "linnet-check.log": "f554d87bff56c2061d399f2e5ad6bf230d7b826b79a669372bac4f265f25a318",
+    "linnet-tests.log": "af37f65c30bff5ca073d2b041c41edb09f43cdcccec1bcea24d49c9c09010960",
+    "product-native-check.log": "5e031cf68df6819598ce6b04f37fda8e68953cdf930317046649a07cb17d77f3",
+    "retained-python.log": "66262ee57cb74adfd4e0040875b975a5301561a1d7039d30bfde3579c3d7b69c",
+    "runtime-host.log": "feb32390b564452b540e68d74c3e20908b358335a2930216ca05e7ea4c4b9290"
+  }
+}

@@ -60,9 +60,10 @@ payloads. Four packaging regressions pass with exact bytes and fixture-wheel
 License-File/RECORD checks. These are not final native, Pyodide, standalone or
 external Community wheel certifications. Those gates remain pending.
 
-== Validation status
+== Initial candidate validation status
 
-The focused staged/graph/model/admission/template/Python selection passed 283
+At code `f2640286` / initial evidence candidate `817b5886`, the focused
+staged/graph/model/admission/template/Python selection passed 283
 tests. The combined numeric/inference/graph/model/template/gauge controls passed
 627 tests, native topology/parser controls 211, and seven current-payload oracle
 controls passed. The drawing/Python selection passed 458 of 460; the two bounded
@@ -70,7 +71,8 @@ consumer fixes subsequently passed their targeted reruns. These selections
 overlap and must not be summed as independent coverage.
 Selected targets compiled with locked dependencies; independent scope E found
 GammaLoop Python and exporter feature compilation failures (E1/E2/E5).
-These are correction-lane work, not passing targets.
+At `817b5886` these targets did not pass. Their approved corrections and
+combined validation are recorded separately below.
 the root, Tydenso and host lock updates contain necessary workspace edges and
 retain kernel `1a1829b1`. Kernel isolation and canonical Hakari verification pass.
 The CI graph is regenerated with top-level NixCI disabled. Full rebuilt-tip
@@ -93,7 +95,7 @@ and exact validated fingerprints. All 34 SVGs reproduce byte-for-byte; the
 representative light/dark PNGs are retained; the committed Kurvst PDF is stale.
 
 
-== Independent review and metadata correction
+== Initial independent review and metadata correction
 
 The durable exact review receipts and all findings are indexed in
 `evidence/generation-integration/wp3/staged-evidence-correction.json`.
@@ -101,16 +103,19 @@ A1 hidden scalar-history transport is assigned to the transport lane.
 C1 live-view epochs, C2 retained Python tests/stubs, B1 callback guard and
 E1/E2/E3/E5 exporter/feature/import failures are assigned to the graph lane.
 B2 exact-frame consumer routing and B3 anonymous runtime boundaries belong to
-the parser lane. None of those correction branches is integrated here.
+the parser lane. At metadata-only correction `edabf052` none of those branches was integrated;
+the subsequent combined candidate is described below.
 Scope D round2 independently approves `b1061d7`, closing D1 recipe notices,
 D2 clean CI bootstrap and D3 imports on its isolated branch only. Its five
 packaging and three WASM checks and reused Rust/Clippy evidence are recorded
-separately; this is available for later combined integration.
+separately; that scoped approval enabled its subsequent combined integration.
 
 E4 excludes mutable execution/replay receipts from the code-file hash set and
 binds their exact finalized bytes to frozen revision `817b5886`. Remaining
 code hashes retain their explicit `f2640286` meaning. This metadata correction
-requires NEW independent Astra review; candidate bookmarks remain at `817b5886`.
+received independent Astra coordinator approval at `edabf052`. The original
+staged bookmark remains at `817b5886`; the combined candidate requires its own
+NEW independent Astra review.
 It changes no production bytes and does not relabel old validation as a run
 against corrected production. Frozen inventories remain historical; a separate
 metadata-only file inventory describes this correction.
@@ -137,7 +142,8 @@ A1 at `39e88ddf` (code `7918d2a6`), consumer B2/B3 at `5ac772ac`
 and E4 at `edabf052` each received scoped independent approval. Their exact
 reviews and cumulative source-to-code mappings are retained in
 `evidence/generation-integration/wp3/staged-combined-corrections.json`.
-The combined code is `1263f4fd`; original `817b5886` remains frozen.
+The A/B/D code is `1263f4fd`; final combined graph/Python code is `d109e898`.
+Original `817b5886` remains frozen.
 Owner notes and original lane receipts retain their historical revision meaning.
 
 The combined correction always transports hidden scalar history in finalization,
@@ -147,7 +153,47 @@ The exact reference migration retains the immutable old reference and certified
 signed local factors, affine frames, cuts, denominators and weights. It does not
 expand graph numerators or close the three historical frame-hash failures.
 
-Graph/Python corrections through `4b60161d` are not integrated: final C2 round3
-approval remains pending.
+The cumulative graph/Python corrections through `4b60161d` received Astra
+round3 approval and are now integrated at code `d109e898`. This includes initial
+`ba375387` and the alias correction `1a68c9a8`; the evidence tip alone was not
+replayed. Binding epochs, nonzero terminal callbacks, native Hashable/Expression
+key metadata and actual supported exporter/stub owners retain the approved bytes.
 Sources22–24 are approved for later ordered replay after21; they are not included.
 This combined candidate requires NEW independent Astra review before source19.
+
+
+== Combined correction validation
+
+The combined correction selections pass: 139 native owner/template/admission
+controls, 49 runtime consumer controls, 103 drawing controls, eight numerical
+comparison controls and the explicitly selected native model conservation test.
+The final-source reference capture matches all 20 certified native/runtime/
+denominator inputs. The exact certificate rerun on the rebuilt integrated
+binding host passes, with eight deliberate corruptions rejected. The ignored
+original-pair GL028/034 regression passes explicitly with exact/ignored flags.
+Its scope remains the original 4D SU(3) identity, not all grouping physics.
+
+The rebuilt binding host passes 78 retained Python tests, six extended epoch
+sequences, 18 isolated callback controls and the six focused key regressions.
+The nonzero terminal guard observes four concrete particles. All 24 key callback
+annotation positions across three stub copies resolve correctly. The signature
+census retains 607 exact shapes and the same six intentional handwritten
+contracts documented by the approved review. These overlapping selections must
+not be added as independent coverage.
+
+Supported Linnet and GammaLoop exporter test features compile; their two and
+three contract tests pass, as does the HEP reexport test. All six canonical
+package/docs/host owner checks pass. The explicit native/python-stub
+feature check also passes. Five packaging/notice/upgrade checks pass against the combined
+sources; final distribution inspection remains a separate gate. Relevant Clippy,
+Rust/Python formatting, kernel isolation, Hakari, Typst, titles and owned scopes
+pass. There are still seven inherited plus 20 additional registry mismatches.
+
+One bare model command failed before tests because it omitted the existing
+native backend feature selection; its failure log is retained. The unchanged
+test passes through the approved native graph/generator package selection.
+No kernel pin, dependency, expectation or production change was made for that
+invocation error. Four pre-existing graph-numerator-expansion parser helpers
+remain omitted. All correction findings have scoped branch approvals; this
+combined candidate still requires NEW independent Astra integration review.
+No source19 or later implementation is started, and WP3 remains incomplete.

@@ -7,7 +7,7 @@
   "workspace": "/shared/lcnbr/dev/gammaloop/generation-integration-plan",
   "base_commit": "3f0df2a870806076820786994d4883decec8e9e3",
   "plan_commit": "4374f72027b75df9ff95c5c7a725ee75beac27a8",
-  "implementation_change": "zvnxkyswsytpvzqlsxrpnwuwknwmrtmo",
+  "implementation_change": "wznkvqlumpuxkzytqqnlwvzvrnypmktk",
   "implementation_bookmark": "generation-integration",
   "preserved_plan_bookmark": "generation-integration-plan",
   "author": {
@@ -160,8 +160,8 @@
     "verdict": "REQUEST_CHANGES",
     "candidate": "817b5886a50276efea05ab860d22016e1fb0c203",
     "aggregate_receipt": "wp3/staged-evidence-correction.json",
-    "E4": "metadata-only correction awaiting NEW independent review",
-    "D_round2": "Scoped APPROVE b1061d715bca86d2d29df0f108576c001a29b22a; not integrated",
+    "E4": "APPROVED independently by Astra coordinator at edabf052; metadata base preserved",
+    "D_round2": "Scoped APPROVE b1061d7; cumulative correction now integrated; new combined review required",
     "pending_gates": [
       "Three newly imported historical frame hash assertions FAIL; representation diagnostic only, not physics proof or B2 routing closure.",
       "Source31: seven inherited and twenty new scope/anchor mismatches; Kurvst PDF stale.",
@@ -173,10 +173,13 @@
     ]
   },
   "combined_staged_corrections": {
-    "status": "Combined approved A1+B2/B3+D on approved E4; validation in progress; NEW independent review before19",
-    "code_commit": "1263f4fdbdffeb48a16a6c835c056e4e99c0d135",
+    "status": "All approved A/B/C/D/E4 combined checks complete; NEW independent Astra integration review required before19",
+    "code_commit": "d109e898ecf569eeab1b568ce80462ee6094e58d",
     "receipt": "docs/architecture/evidence/generation-integration/wp3/staged-combined-corrections.json",
-    "graph_python": "not integrated; final approval pending",
-    "later_projector": "735d599a approved, only later after21"
-  }
+    "graph_python": "4b60161d approved Astra round3; cumulative ba375387 plus1a68c9a8 integrated",
+    "later_projector": "735d599a approved, only later after21",
+    "candidate_bookmark": "generation-integration-corrected-staged",
+    "candidate_change": "pmnstxxwwwkzvyuxyzmsmswtutnkzkmy"
+  },
+  "implementation_code_commit": "d109e898ecf569eeab1b568ce80462ee6094e58d"
 }
