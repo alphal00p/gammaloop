@@ -206,7 +206,10 @@ anchor = "pub fn generate("
 # Generation/cache admission and axis-order ownership remain as documented; new regressions compare direct and template transport.
 # Reviewed intent 2026-10-27: port FeynRules momentum reduction through the existing
 # admitted interaction owner; literal model data and metadata transport remain authoritative.
-digest = "5b7c7a6fb72f82db945343d2edc0cc1cf81a4b8e"
+# Reviewed intent 2026-10-27 prefix fix: admit unreduced rules before checked
+# conservation rewriting, retaining the static template's interface/history.
+# Dynamic rules retain one actual-owner admission and compact materialization.
+digest = "8f5aa53995929e5e0572635cdb09d5764095b86d"
 
 [[section.note.scope]]
 path = "crates/feynkit-model/src/model.rs"

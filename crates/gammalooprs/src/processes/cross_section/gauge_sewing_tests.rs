@@ -269,9 +269,7 @@ impl CutKinematics {
                 numerator.expression(),
                 "cut vector without metric"
             );
-            physical.underlying[*edge].num.value = numerator
-                .with_checked_expression(replaced)
-                .map_err(|error| eyre::eyre!("{error}"))?;
+            physical.underlying[*edge].num.value = numerator.with_checked_expression(replaced)?;
         }
         Ok((covariant, Some(value(&physical)?)))
     }
@@ -762,8 +760,7 @@ fn massive_tau_covariant_cuts_satisfy_the_brst_quartet_identity() -> Result<()> 
                 };
                 let projector = &graph.global_prefactor.projector;
                 graph.global_prefactor.projector = projector
-                    .with_checked_expression(projector.expression().replace_multiple(&[sum]))
-                    .map_err(|error| eyre::eyre!("{error}"))?;
+                    .with_checked_expression(projector.expression().replace_multiple(&[sum]))?;
             }
             let cuts = supergraph.process_valid_cuts(
                 &model,

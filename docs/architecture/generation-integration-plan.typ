@@ -206,14 +206,19 @@ own workspace. Bounded: one regression, one bisect, one written verdict.
 
 === WP3 Rebuild v5
 <wp3>
-- #strong[Implementation checkpoint 2026-10-27:] source unit 01 is ported through
-  the current admitted interaction owner. Focused model and six template/BRST
-  tests, kernel isolation, workspace Clippy and formatting passed after bounded
-  fixture and inherited validation-gate repairs. Unit 02's alignment intent is
-  satisfied by the accepted base; its old pin and WASM are not replayed. The
-  remaining source units, approved regression/notices ports, required harness
-  corrections and full rebuilt-tip matrix are still pending. This is not a
-  rebuilt candidate or M-rebuild. See `evidence/generation-integration/wp3/replay.json`.
+- #strong[Prefix review status 2026-10-27:] Astra round 1 requested changes on
+  `5226894e..a677fcf8`: momentum reduction preceded raw-rule index validation
+  and admission, and two gauge-test conversions stringified structured errors.
+  The focused fix admits unreduced rules before any shortening, retaining
+  interface/history through the existing checked rewrite. Shortening applies to
+  shared intrinsic templates; dynamic rules keep one unreduced actual-owner
+  admission, preserving callbacks and compact-index allocation.
+  Complete-cancellation, malformed-summand and invalid-index regressions cover
+  the missing cases. This incomplete WP3 prefix awaits a new independent Astra
+  review before source03 or any later unit. Unit 02's alignment intent remains
+  satisfied by the accepted base; old pins and WASM are not replayed. Remaining
+  integration ports, harness corrections and the full rebuilt-tip matrix are
+  pending. See `evidence/generation-integration/wp3/replay.json`.
 
 - `jj duplicate` the v4 chain (`kursouxx::kpslpwqz`) onto the WP2 base; do not
   rebase in place, so the 19 live workspaces on older lines stay valid.

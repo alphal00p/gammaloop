@@ -322,10 +322,18 @@ parser. Compact model input instantiates missing model rules and the default
 external-state projector while retaining explicitly supplied local factors,
 including literal zero or one. Native topology parsing alone does not apply
 Feynman rules; rule construction belongs to the generator's explicit extension.
-It instantiates each Lorentz structure in the shortest form that vertex
-momentum conservation allows (`LorentzStructure::reduced_by_momentum_conservation`),
-so the FeynRules ghost rule `P(3,2) + P(3,3)` becomes `-P(3,1)`; the model keeps
-the literal UFO expression.
+Rule construction first localizes and admits the unreduced interaction, checking
+all indices and additive tensor interfaces. Only then does vertex momentum
+conservation shorten its Lorentz structures
+(`LorentzStructure::reduced_by_momentum_conservation`): the FeynRules ghost rule
+`P(3,2) + P(3,3)` becomes `-P(3,1)`, while the model keeps the literal UFO
+expression. The checked rewrite retains the admitted interface and index history,
+including when a complete momentum sum becomes zero. Static templates retain the
+unreduced rule's label universe before this rewrite and localize it through the
+existing shared transport owner. Dynamic rules keep one unreduced actual-owner
+admission, preserving callback execution and fresh compact-index allocation;
+shortening is restricted to intrinsic templates.
+Reduction cannot hide malformed summands or invalid leg indices.
 Compact and runtime source annotations pass graph-specific momentum checks
 before tensor admission. Graph-wide validation borrows the retained tensor
 payload and scalar overall factor, checking all `Q3` structures before `Q`

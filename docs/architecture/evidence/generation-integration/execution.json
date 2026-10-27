@@ -77,7 +77,7 @@
       "pre_rebuild_ref": "generation-integration-pre-rebuild",
       "pre_rebuild_commit": "5226894ee1af61797e6b819d7e801a22bf17bace",
       "ancestry": "Reviewed planning/evidence chain descends from fixed target 3f0df2a8 and is retained as non-code base.",
-      "review": "New independent Astra review required before WP4; no nested agents."
+      "review": "Astra initial-prefix round 1 REQUEST_CHANGES; focused P1/P3 fix awaits NEW independent prefix review before source03. No nested agents."
     }
   }
 }

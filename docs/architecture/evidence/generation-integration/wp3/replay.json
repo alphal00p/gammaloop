@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "status": "validated initial prefix only; WP3 incomplete; no rebuilt candidate",
+  "status": "incomplete WP3 prefix; focused P1/P3 fix awaits NEW independent Astra review",
   "fixed_target": {
     "commit": "3f0df2a870806076820786994d4883decec8e9e3",
     "tree": "3c91ba47525c627fbc02d79f5afa1d58aa7c5b66",
@@ -30,7 +30,7 @@
       "planned_unit": "port-01",
       "planned_order": 1,
       "reason": "Port ghost model A and momentum-conservation reduction plus BRST fixtures onto current model/template owner; retain quartet correctness assertions.",
-      "status": "ported; focused validation passed; remaining WP3 integration pending",
+      "status": "ported; focused P1/P3 correction awaits NEW independent Astra prefix review",
       "reconciliation": [
         "Use existing #209 interaction_expression underneath admitted templates; do not restore monolithic admission.",
         "Finalized-reference delta limited to three momentum strings; preserve current target symbol-tag spelling.",
@@ -59,7 +59,8 @@
         "excluded": "No different template cache, localization or hidden-history mechanism: those owners remain shared. The old fixture used nonconserving synthetic momenta.",
         "corrected_input": "Shortest P1-P2 rule with equal-flow aliasing; exact zero occurs only during specialization after shared admission. Existing assertions unchanged."
       },
-      "new_commit": "821c0e7544f183dd5385d4f3933b4fe2cb57090b"
+      "new_commit": "821c0e7544f183dd5385d4f3933b4fe2cb57090b",
+      "fix_change": "roqrmktytlytvoorvoqynmvkumqnpqkp"
     },
     {
       "commit": "098ed36d9f06a2db7bdba367acdd753787f99446",
@@ -518,7 +519,7 @@
     "status": "focused prefix checks completed; full WP3 exit matrix pending",
     "logs": "target/wp3",
     "notes": [
-      "Initial isolated feynkit-model test lacked native feature and failed in Numerica before tests; corrected native invocation is running, no pin change.",
+      "Initial isolated feynkit-model test lacked native feature and failed in Numerica before tests; the later corrected native invocation passed, with no pin change.",
       "Workspace fmt check reports inherited permutation.rs drift; changed-file formatting passed.",
       "Zero selected tests, timeouts and skips are not passes."
     ],
@@ -564,7 +565,7 @@
         "skipped_by_filter": 1742,
         "failure": "interaction_templates_preserve_rank_when_incident_momenta_cancel: synthetic P1+P2 becomes -P3 before aliasing",
         "log": "target/wp3/port01-templates-brst.log",
-        "response": "Correct fixture without changing any assertion; corrected --lib run active."
+        "response": "Correct fixture without changing any assertion; the later corrected --lib run passed (6 selected tests)."
       },
       {
         "check": "initial workspace Clippy",
@@ -616,7 +617,7 @@
         "selected": 0,
         "exit_code": 4,
         "log": "target/wp3/validation-gates-timing-tests.log",
-        "response": "Enable the existing reference-cases feature and rerun; corrected run active."
+        "response": "Enable the existing reference-cases feature and rerun; the later corrected run passed (3 selected tests)."
       },
       {
         "check": "preserved source, plan and pre-rebuild refs",
@@ -667,5 +668,19 @@
     ]
   },
   "cleanup": "Removed task-owned patch previews, patch backup and Typst PDFs. Retain logs, registry/ref integrity outputs and shared compiler/test artifacts for continuation and review. Shared caches and other workspaces untouched.",
-  "rust_policy": "New/substantially modified code reviewed for owner reuse, factorization, exact constants and import placement. Existing interaction/admission/cache owner retained; no production compatibility path or broad lint suppression added. Imported test helpers retain local factor ownership; no graph numerator expansion introduced. No intended departure from mandatory Rust policy."
+  "rust_policy": "New/substantially modified code reviewed for owner reuse, factorization, exact constants and import placement. Existing interaction/admission/cache owner retained; no production compatibility path or broad lint suppression added. Imported test helpers retain local factor ownership; no graph numerator expansion introduced. No intended departure from mandatory Rust policy.",
+  "prefix_review": {
+    "round": 1,
+    "reviewer": "Astra",
+    "verdict": "REQUEST_CHANGES",
+    "reviewed_range": "5226894ee1af61797e6b819d7e801a22bf17bace..a677fcf880d315951b101ffb06c001140777403e",
+    "findings": [
+      "P1: reduction before raw index validation/admission could erase rank, malformed summands and invalid indices",
+      "P3: two gauge-test conversions stringified structured errors"
+    ],
+    "source": "Coordinator brief; retained target/review-wp3-prefix-round1 evidence",
+    "fix_receipt": "prefix-fix-round1.json",
+    "next_gate": "NEW independent Astra prefix re-review before source03 or later units",
+    "fix_status": "Implementation and focused validation complete; NEW independent Astra re-review pending"
+  }
 }

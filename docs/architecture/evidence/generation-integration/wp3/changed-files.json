@@ -1,5 +1,5 @@
 {
-  "scope": "All initial-prefix changes since the reviewed pre-rebuild ref, including prerequisite repairs and receipts",
+  "scope": "All WP3 initial-prefix changes since reviewed pre-rebuild ref, including focused prefix fix",
   "files": [
     "assets/models/json/sm/sm.json",
     "assets/models/ufo/sm/lorentz.py",
@@ -22,6 +22,7 @@
     "docs/architecture/evidence/generation-integration/wp2/validation-matrix.json",
     "docs/architecture/evidence/generation-integration/wp3/changed-files.json",
     "docs/architecture/evidence/generation-integration/wp3/completed-log-hashes.json",
+    "docs/architecture/evidence/generation-integration/wp3/prefix-fix-round1.json",
     "docs/architecture/evidence/generation-integration/wp3/replay.json",
     "docs/architecture/feynkit-merge-readiness.typ",
     "docs/architecture/generation-integration-plan.typ",
@@ -31,5 +32,19 @@
     "docs/products/feynkit/content/feyncalc-coverage.typ",
     "tests/resources/graphs/addbar.dot",
     "tests/resources/graphs/epemttbar.dot"
-  ]
+  ],
+  "prefix_fix_round1": {
+    "base": "a677fcf880d315951b101ffb06c001140777403e",
+    "files": [
+      "crates/feynkit-generator/src/generation.rs",
+      "crates/gammalooprs/src/processes/cross_section/gauge_sewing_tests.rs",
+      "docs/architecture/architecture-current.typ",
+      "docs/architecture/evidence/generation-integration/execution.json",
+      "docs/architecture/evidence/generation-integration/wp3/changed-files.json",
+      "docs/architecture/evidence/generation-integration/wp3/prefix-fix-round1.json",
+      "docs/architecture/evidence/generation-integration/wp3/replay.json",
+      "docs/architecture/generation-integration-plan.typ",
+      "docs/developers.toml"
+    ]
+  }
 }
