@@ -1,69 +1,94 @@
-use std::ops::AddAssign;
-
+use self::composition::ExplicitIndexOccurrences;
+#[cfg(debug_assertions)]
+use self::inference::InterfaceInference;
+use self::inference::TensorInterface;
+use crate::NetworkToolingError;
+use delegate::delegate;
 use linnet::half_edge::subgraph::subset::SubSet;
-use spenso::{
-    algebra::ScalarMul,
-    contraction::{Contract, ContractionError, Trace},
-    iterators::IteratableTensor,
-    network::{
-        ExecutionResult, Network, Ref, Sequential, SmallestDegree, TensorNetworkError,
-        library::{
-            DummyKey, DummyLibrary, FunctionLibrary, FunctionLibraryError,
-            function_lib::Wrap,
-            symbolic::{ETS, ExplicitKey, TensorLibrary},
-        },
-        parsing::{
-            ParseSettings, ShadowedStructure, StrictTensorFilter, StructureFromAtom,
-            StructureInferenceMode, TensorFromExpression, TensorLibraryFor,
-        },
-        store::NetworkStore,
-    },
-    shadowing::{Concretize, symbolica_utils::SpensoPrintSettings},
-    structure::{
-        ApplyPendingIndexPermutation, CanonicalLayout, Canonicalized, HasName, HasStructure,
-        MergeInfo, NamedStructure, OrderedStructure, PendingIndexPermutation, Reindexed,
-        ScalarStructure, ScalarTensor, SlotIndex, StructureContract, TensorIdentity, TensorShell,
-        TensorStructure, ToSymbolic,
-        abstract_index::AIND_SYMBOLS,
-        concrete_index::{ExpandedIndex, FlatIndex},
-        representation::{LibraryRep, LibrarySlot},
-        slot::{AbsInd, DualSlotTo, DummyAind, IsAbstractSlot, ParseableAind},
-    },
-    tensors::parametric::MixedTensor,
+use spenso::algebra::ScalarMul;
+use spenso::bracket;
+use spenso::contraction::{Contract, ContractionError, Trace};
+use spenso::iterators::IteratableTensor;
+use spenso::network::library::function_lib::Wrap;
+use spenso::network::library::symbolic::{ETS, ExplicitKey, TensorLibrary};
+use spenso::network::library::{DummyKey, DummyLibrary, FunctionLibrary, FunctionLibraryError};
+use spenso::network::parsing::{
+    ParseSettings, ShadowedStructure, StrictTensorFilter, StructureFromAtom, TensorFromExpression,
+    TensorLibraryFor,
 };
+use spenso::network::store::NetworkStore;
+use spenso::network::tags::SPENSO_TAG;
+use spenso::network::{
+    ExecutionResult, Network, Ref, Sequential, SmallestDegree, TensorNetworkError,
+};
+use spenso::shadowing::Concretize;
+use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
+use spenso::structure::abstract_index::{AIND_SYMBOLS, AbstractIndex};
+use spenso::structure::concrete_index::{ExpandedIndex, FlatIndex};
+use spenso::structure::dimension::Dimension;
+use spenso::structure::partial::PartialStructure;
+use spenso::structure::representation::{LibraryRep, LibrarySlot, Representation};
+use spenso::structure::slot::{
+    AbsInd, DualSlotTo, DummyAind, IsAbstractSlot, ParseableAind, SlotMatcher,
+};
+use spenso::structure::{
+    ApplyPendingIndexPermutation, CanonicalLayout, Canonicalized, HasName, HasStructure,
+    IndexedStructure, MergeInfo, NamedStructure, OrderedStructure, PendingIndexPermutation,
+    Reindexed, ScalarStructure, ScalarTensor, SlotIndex, StructureContract, StructureError,
+    TensorIdentity, TensorShell, TensorStructure, ToSymbolic,
+};
+use spenso::tensors::parametric::MixedTensor;
+use std::ops::AddAssign;
+use std::sync::{Arc, OnceLock};
+use symbolica::atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol};
+use symbolica::function;
 use symbolica_utils::{AtomPrintExt, IntoArgs, IntoSymbol};
 
-use delegate::delegate;
-use spenso::structure::StructureError;
-use spenso::structure::abstract_index::AbstractIndex;
-use spenso::structure::dimension::Dimension;
-use spenso::structure::representation::Representation;
-
-use symbolica::{
-    atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol},
-    function,
-};
-
-use crate::NetworkToolingError;
-
 mod canonicalize;
-pub(crate) use canonicalize::remove_antisymmetric_zero_terms;
+mod collection;
+#[cfg(test)]
+pub(crate) use collection::SELECTED_OPENS;
+pub(crate) use collection::{CollectedOutput, CollectedPolynomial, CollectionMode};
+pub mod composition;
+mod indexed;
+pub mod inference;
+mod network;
+#[cfg(feature = "bincode")]
+mod persistence;
+mod replacement;
+pub mod simplification;
+pub use replacement::TensorRule;
 
 #[cfg(test)]
 pub mod tests;
 
-impl<Aind: AbsInd> FunctionLibrary<SymbolicTensor<Aind>, Atom> for Wrap {
+impl<S: TensorInterface> FunctionLibrary<SymbolicTensor<S>, Atom> for Wrap {
     type Key = Symbol;
     fn apply(
         &self,
         key: &Self::Key,
-        tensor: SymbolicTensor<Aind>,
-    ) -> eyre::Result<SymbolicTensor<Aind>, FunctionLibraryError<Self::Key>> {
+        tensor: SymbolicTensor<S>,
+    ) -> eyre::Result<SymbolicTensor<S>, FunctionLibraryError<Self::Key>> {
+        let expression = function!(*key, &tensor.expression);
+        #[cfg(debug_assertions)]
+        if !InterfaceInference::intrinsic_normalization_head(*key)
+            || !InterfaceInference::normalization_is_intrinsic(tensor.expression.as_view())
+        {
+            let structure = tensor.structure.to_partial_interface(&expression);
+            TensorProofs::assert_normalization_preserves_interface(
+                "Wrap::apply",
+                &[&tensor.expression],
+                &expression,
+                structure.as_ref(),
+                Some(*key),
+            );
+        }
         Ok(SymbolicTensor {
-            structure: tensor.structure,
+            proofs: tensor.proofs.algebra_result(),
+            structure: tensor.structure.into_algebra_result(),
             is_composite: true,
             is_metric: false,
-            expression: function!(*key, tensor.expression),
+            expression,
         })
     }
 
@@ -76,12 +101,18 @@ impl<Aind: AbsInd> FunctionLibrary<SymbolicTensor<Aind>, Atom> for Wrap {
     }
 }
 
-impl<Aind: ParseableAind + AbsInd + DummyAind> StructureFromAtom for SymbolicTensor<Aind> {
+impl<Aind: ParseableAind + AbsInd + DummyAind> StructureFromAtom
+    for SymbolicTensor<OrderedStructure<LibraryRep, Aind>>
+{
     fn structure_from_atom(
         value: AtomView<'_>,
-        mode: StructureInferenceMode,
+        matcher: &mut SlotMatcher,
     ) -> Result<Canonicalized<Self>, StructureError> {
-        let structure = OrderedStructure::<LibraryRep, Aind>::structure_from_atom(value, mode)?;
+        let structure = OrderedStructure::<LibraryRep, Aind>::structure_from_atom(value, matcher)?;
+        let occurrences = ExplicitIndexOccurrences::from_atom(value, matcher);
+        occurrences
+            .validate()
+            .map_err(|error| StructureError::ParsingError(error.to_string()))?;
         Ok(structure.map_canonical(|structure| {
             let (is_composite, is_metric) = if let AtomView::Fun(f) = value {
                 (false, f.get_symbol() == ETS.metric)
@@ -89,6 +120,11 @@ impl<Aind: ParseableAind + AbsInd + DummyAind> StructureFromAtom for SymbolicTen
                 (true, false)
             };
             SymbolicTensor {
+                proofs: TensorProofs {
+                    validated: OnceLock::from(true),
+                    occurrences: OnceLock::from(Arc::new(occurrences)),
+                    ..TensorProofs::default()
+                },
                 structure,
                 is_composite,
                 is_metric,
@@ -98,53 +134,159 @@ impl<Aind: ParseableAind + AbsInd + DummyAind> StructureFromAtom for SymbolicTen
     }
 }
 
-impl<Aind, K, Lib, FunLib>
-    TensorFromExpression<SymbolicTensor<Aind>, Atom, K, Symbol, Aind, Lib, FunLib>
-    for SymbolicTensor<Aind>
+impl<'src, Aind, E, Sc, K, Lib, FunLib>
+    TensorFromExpression<'src, OrderedStructure<LibraryRep, Aind>, Sc, K, Symbol, Aind, Lib, FunLib>
+    for SymbolicTensor<OrderedStructure<LibraryRep, Aind>, E>
 where
     Aind: AbsInd + DummyAind + ParseableAind,
+    E: AtomCore + From<E::Output> + From<Atom> + From<AtomView<'src>>,
     K: std::fmt::Display,
-    Lib: TensorLibraryFor<SymbolicTensor<Aind>, SymbolicTensor<Aind>, Key = K>,
-    FunLib: FunctionLibrary<SymbolicTensor<Aind>, Atom, Key = Symbol>,
+    Lib: TensorLibraryFor<OrderedStructure<LibraryRep, Aind>, Self, Key = K>,
+    FunLib: FunctionLibrary<Self, Sc, Key = Symbol>,
 {
     fn tensor_from_expression(
-        expression: AtomView<'_>,
-        structure: Canonicalized<SymbolicTensor<Aind>>,
+        expression: AtomOrView<'src>,
+        structure: Canonicalized<OrderedStructure<LibraryRep, Aind>>,
         _tensor_library: &Lib,
         _function_library: &FunLib,
         _settings: &ParseSettings,
-    ) -> Result<Self, TensorNetworkError<K, Symbol>>
-    where
-        K: std::fmt::Display,
-        Symbol: std::fmt::Display,
-    {
-        let mut tensor = structure.into_canonical();
+    ) -> Result<Canonicalized<Self>, TensorNetworkError<K, Symbol>> {
+        <Self as TensorFromExpression<
+            'src,
+            OrderedStructure<LibraryRep, Aind>,
+            Sc,
+            K,
+            Symbol,
+            Aind,
+            Lib,
+            FunLib,
+        >>::tensor_from_leaf(expression, structure)
+    }
 
-        let (is_composite, is_metric) = if let AtomView::Fun(fun) = expression {
+    fn tensor_from_leaf(
+        expression: AtomOrView<'src>,
+        structure: Canonicalized<OrderedStructure<LibraryRep, Aind>>,
+    ) -> Result<Canonicalized<Self>, TensorNetworkError<K, Symbol>> {
+        let occurrences =
+            ExplicitIndexOccurrences::from_atom(expression.as_view(), &mut SlotMatcher::default());
+        occurrences
+            .validate()
+            .map_err(|error| TensorNetworkError::Other(eyre::eyre!(error)))?;
+        let (is_composite, is_metric) = if let AtomView::Fun(fun) = expression.as_view() {
             (false, fun.get_symbol() == ETS.metric)
         } else {
             (true, false)
         };
-        tensor.expression = expression.to_owned();
-        tensor.is_composite = is_composite;
-        tensor.is_metric = is_metric;
-        Ok(tensor)
+        let expression = match expression {
+            AtomOrView::View(view) => view.into(),
+            owned => owned.into_owned().into(),
+        };
+        Ok(structure.map_canonical(|structure| Self {
+            proofs: TensorProofs {
+                validated: OnceLock::from(true),
+                occurrences: OnceLock::from(Arc::new(occurrences)),
+                ..TensorProofs::default()
+            },
+            structure,
+            expression,
+            is_metric,
+            is_composite,
+        }))
     }
 }
 
-/// A fully symbolic tensor, with no concrete values.
+/// A symbolic expression together with its tensor structure.
 ///
-/// This tensor is used to represent the structure of a tensor, and is used to perform symbolic contraction.
-/// Currently contraction is just a multiplication of the atoms, but in the future this will ensure that internal indices are independent accross the contraction.
+/// The default ordered, explicit-index structure supports network execution.
+/// A [`spenso::structure::partial::PartialStructure`] also retains logical port
+/// order and occurrence-local unresolved indices for positional composition.
+/// The structure is independent of the expression, so a zero can retain its rank.
+/// Tensor metadata is authoritative after admission. Algebra derives the
+/// result's ports and scoped index uses from its operands; simplification of
+/// the symbolic payload does not erase that construction history. Raw inputs
+/// and arbitrary replacements must use a checked admission boundary. A callback
+/// used by ordinary algebra must preserve the admitted tensor meaning.
+/// The payload defaults to `Atom`; borrowed views use the same tensor carrier.
 ///
-/// It can also serve as a tensor structure while retaining the symbolic
-/// expression and the ordered external-index structure across transformations.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SymbolicTensor<Aind: AbsInd = AbstractIndex> {
-    pub structure: OrderedStructure<LibraryRep, Aind>,
-    pub is_metric: bool,
-    pub is_composite: bool,
-    pub expression: symbolica::atom::Atom,
+/// # Example
+///
+/// Admission separates a tensor's public ports from its scalar coefficients.
+/// In particular, cancellation retains the rank and later contractions remain typed.
+///
+/// ```
+/// use idenso::tensor::SymbolicTensor;
+/// use idenso::tensor::inference::TensorInferenceError;
+/// use spenso::structure::abstract_index::AbstractIndex;
+/// use spenso::structure::representation::{Euclidean, RepName};
+/// use spenso::structure::slot::IsAbstractSlot;
+/// use spenso::tensor_symbol;
+/// use symbolica::atom::Atom;
+/// use symbolica::function;
+///
+/// let port = Euclidean {}
+///     .new_rep(3)
+///     .to_lib()
+///     .slot::<AbstractIndex, _>(AbstractIndex::Normal(7));
+/// let vector = SymbolicTensor::infer(function!(tensor_symbol!("docs::vector"), port.to_atom()))?;
+/// let zero = vector.try_sub(&vector)?;
+/// assert!(zero.is_zero());
+/// assert_eq!(zero.rank(), 1);
+/// assert!(zero.multiply(&vector)?.is_scalar());
+/// assert_eq!(vector.try_add(&vector)?.rank(), 1);
+/// let two = SymbolicTensor::infer(Atom::num(2))?;
+/// assert!(vector.pow(&two)?.is_scalar());
+/// assert_eq!(vector.multiply(&two)?.rank(), 1);
+///
+/// // Raw parts must be admitted before they are used as authoritative metadata.
+/// let admitted = SymbolicTensor::from_declared_parts(
+///     vector.expression().clone(), vector.structure().clone(),
+/// )?;
+/// assert!(admitted.same_value(&vector));
+/// let nominal_zero = SymbolicTensor::from_produced_parts(Atom::Zero, vector.structure().clone())?;
+/// assert_eq!(nominal_zero.finish_parts()?.rank(), 1);
+/// # Ok::<(), TensorInferenceError>(())
+/// ```
+///
+/// Value comparisons exclude provenance and retained index-occurrence history.
+/// `same_value` and `Hash` compare the symbolic value and logical port order;
+/// `PartialEq` also compares the stored structure and classification flags.
+/// Equal values can therefore carry different collision histories or completion
+/// proofs. Consumers reusing such facts must compare the established facts too,
+/// rather than treating value equality as a metadata certificate.
+///
+/// With the `bincode` feature, tensor archives are trusted GammaLoop state files.
+/// Decode trusts stored interface and index-history metadata without observing the
+/// payload again. Symbolica's Atom decoder is not safe for untrusted bytes; the
+/// archive magic and version distinguish supported state files, not a security boundary.
+#[derive(Debug, Clone)]
+pub struct SymbolicTensor<S = OrderedStructure<LibraryRep, AbstractIndex>, E = Atom> {
+    pub(crate) structure: S,
+    pub(crate) is_metric: bool,
+    pub(crate) is_composite: bool,
+    pub(crate) expression: E,
+    pub(crate) proofs: TensorProofs,
+}
+
+/// Authoritative tensor metadata and payload-specific derived facts. Raw
+/// mutation drops both; certified algebra retains metadata and drops caches
+/// whose contents describe the previous payload.
+#[derive(Clone, Default)]
+pub(crate) struct TensorProofs {
+    pub(super) validated: OnceLock<bool>,
+    pub(super) intrinsic: OnceLock<bool>,
+    /// Tensor product finishing is inert and there are no unresolved factor
+    /// occurrences which ordinary multiplication could reorder or coalesce.
+    pub(super) normalized_product: OnceLock<bool>,
+    pub(crate) occurrences: OnceLock<Arc<ExplicitIndexOccurrences>>,
+    pub(super) algebra: OnceLock<bool>,
+    pub(super) rewrite: OnceLock<bool>,
+    pub(super) contracted: bool,
+    pub(super) frontier: simplification::ReductionStatus,
+    pub(super) shallow_graph: OnceLock<Result<std::sync::Arc<SymbolicNet<AbstractIndex>>, String>>,
+    pub(super) leaf_interfaces: OnceLock<spenso::network::parsing::LeafInterfaceCache>,
+    pub(super) observations:
+        OnceLock<std::sync::Arc<simplification::observation::DomainObservations>>,
+    pub(super) reduction: Option<simplification::ReductionRecord>,
 }
 
 impl std::fmt::Debug for TensorProofs {
@@ -352,9 +494,24 @@ impl<Aind: AbsInd> spenso::network::TensorCommonFactor<Atom>
 {
 }
 
-impl<Aind: AbsInd> ScalarTensor for SymbolicTensor<Aind> {
+impl<Aind: AbsInd> ScalarTensor for SymbolicTensor<OrderedStructure<LibraryRep, Aind>> {
+    /// # Panics
+    /// Panics if the supplied scalar has invalid explicit-index multiplicities.
     fn new_scalar(scalar: Self::Scalar) -> Self {
+        // This is fresh scalar intake, not a transfer of an existing carrier.
+        // Structured scalar payloads can retain internal pairs even when their
+        // free interface is empty; do not replace that history by an empty mask.
+        let occurrences =
+            ExplicitIndexOccurrences::from_atom(scalar.as_view(), &mut SlotMatcher::default());
+        occurrences
+            .validate()
+            .expect("scalar tensor producer requires valid index multiplicities");
         SymbolicTensor {
+            proofs: TensorProofs {
+                validated: OnceLock::from(true),
+                occurrences: OnceLock::from(Arc::new(occurrences)),
+                ..TensorProofs::default()
+            },
             structure: OrderedStructure::scalar_structure(),
             is_metric: false,
             is_composite: false,
@@ -363,9 +520,14 @@ impl<Aind: AbsInd> ScalarTensor for SymbolicTensor<Aind> {
     }
 }
 
-impl<Aind: AbsInd> ScalarStructure for SymbolicTensor<Aind> {
+impl<Aind: AbsInd> ScalarStructure for SymbolicTensor<OrderedStructure<LibraryRep, Aind>> {
     fn scalar_structure() -> Self {
         SymbolicTensor {
+            proofs: TensorProofs {
+                validated: OnceLock::from(true),
+                occurrences: OnceLock::from(Arc::default()),
+                ..TensorProofs::default()
+            },
             structure: OrderedStructure::scalar_structure(),
             is_metric: false,
             is_composite: false,
@@ -950,15 +1112,16 @@ impl<Aind: AbsInd + ParseableAind> Concretize<SymbolicTensor<OrderedStructure<Li
     }
 }
 
-impl<Aind: AbsInd> std::ops::Neg for SymbolicTensor<Aind> {
-    type Output = SymbolicTensor<Aind>;
+impl<S: TensorInterface> std::ops::Neg for SymbolicTensor<S> {
+    type Output = SymbolicTensor<S>;
 
     fn neg(self) -> Self::Output {
         Self {
+            proofs: self.proofs.algebra_result(),
             expression: -self.expression,
             is_composite: true,
             is_metric: self.is_metric,
-            structure: self.structure,
+            structure: self.structure.into_algebra_result(),
         }
     }
 }
@@ -987,8 +1150,8 @@ impl<Aind: AbsInd> AddAssign<&SymbolicTensor<OrderedStructure<LibraryRep, Aind>>
     }
 }
 
-impl<Aind: AbsInd> ScalarMul<Atom> for SymbolicTensor<Aind> {
-    type Output = SymbolicTensor<Aind>;
+impl<Aind: AbsInd> ScalarMul<Atom> for SymbolicTensor<OrderedStructure<LibraryRep, Aind>> {
+    type Output = Self;
 
     fn scalar_mul(&self, rhs: &Atom) -> Option<Self::Output> {
         Some(Self {

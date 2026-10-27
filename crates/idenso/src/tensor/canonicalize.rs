@@ -5,35 +5,40 @@
 //! incidence graph so that a negative automorphism of antisymmetric tensor
 //! slots can be detected. Symbolica still owns the final dummy-index names and
 //! expression rebuilding.
-
-use std::collections::BTreeMap;
-
-use linnet::half_edge::{
-    NodeIndex,
-    involution::{Hedge, HedgePair},
-    tree::SimpleTraversalTree,
-};
+use super::{SymbolicNet, SymbolicTensor};
+use crate::{CanonicalizationError, IndexTooling};
+use linnet::half_edge::NodeIndex;
+use linnet::half_edge::involution::{Hedge, HedgePair};
+use linnet::half_edge::subgraph::{ModifySubSet, SuBitGraph};
+use linnet::half_edge::tree::SimpleTraversalTree;
 use linnet::permutation::Permutation;
 use linnet::tree::child_pointer::ParentChildStore;
-use spenso::{
-    network::{
-        graph::{NetworkEdge, NetworkLeaf, NetworkNode, NetworkOp},
-        parsing::ParseSettings,
-    },
-    structure::{
-        HasName, TensorStructure,
-        representation::{LibraryRep, LibrarySlot, RepName, Representation},
-        slot::{AbsInd, DummyAind, IsAbstractSlot, ParseableAind},
-    },
-};
-use symbolica::{
-    atom::{Atom, AtomCore, AtomView, Symbol},
-    graph::{Graph, HiddenData},
-};
+use spenso::network::graph::{NetworkEdge, NetworkLeaf, NetworkNode, NetworkOp};
+use spenso::network::store::NetworkStoreAccess;
+use spenso::structure::abstract_index::AbstractIndex;
+use spenso::structure::partial::PartialStructure;
+use spenso::structure::representation::{LibraryRep, LibrarySlot, RepName, Representation};
+use spenso::structure::slot::{AbsInd, DualSlotTo, IsAbstractSlot, ParseableAind};
+use spenso::structure::{HasName, OrderedStructure, TensorStructure};
+use std::collections::BTreeMap;
+use symbolica::atom::{Atom, AtomView, Symbol};
+use symbolica::graph::{Graph, HiddenData};
 
-use crate::{CookSettings, Cookable};
-
-use super::{SymbolicNet, SymbolicNetParse, SymbolicTensor};
+impl SymbolicTensor<PartialStructure> {
+    /// Canonically label internal indices while retaining the ordered external interface.
+    ///
+    /// The shared network canonicalizer owns signed zeros and dummy labels. The
+    /// tensor finisher preserves typed zeros. Debug builds check the user-normalizer
+    /// free-index preservation contract.
+    pub fn canonize(&self) -> Result<Self, CanonicalizationError> {
+        let expression = self
+            .expression
+            .canonize::<AbstractIndex>(AbstractIndex::Dummy)?;
+        // Canonicalization chooses new dummy identities, so this is an index
+        // construction boundary rather than scalar algebra on the old names.
+        Ok(self.with_materialized_expression("canonize", expression)?)
+    }
+}
 
 const CYCLE_SYMMETRY_MARKER: usize = usize::MAX - 2;
 

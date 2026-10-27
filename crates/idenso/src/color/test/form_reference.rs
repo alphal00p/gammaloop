@@ -1,5 +1,8 @@
 use super::*;
-use crate::shorthands::{UndoShorthands, chain::Chain};
+use crate::{
+    coad,
+    shorthands::{UndoShorthands, chain::Chain},
+};
 use insta::assert_snapshot;
 use spenso::{antisym, g, mink, shadowing::IntoAtom, structure::representation::RepName};
 use symbolica::{function, symbol};

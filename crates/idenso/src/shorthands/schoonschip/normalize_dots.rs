@@ -294,8 +294,45 @@ impl DotNormalizer {
         Some(Atom::mul_many(scalar_factors))
     }
 
-    pub(crate) fn metric_shorthand_to_dot(view: AtomView<'_>) -> Atom {
-        view.to_owned().replace_multiple(&*METRIC_DOT_PRODUCT)
+    fn normalize_nested_vector(&mut self, function: FunView<'_>) -> Option<Atom> {
+        let inner = self.slots.vector_argument(function)?;
+        let compact = match inner {
+            AtomView::Fun(inner_function) => self.slots.vector_argument(inner_function)?.to_owned(),
+            AtomView::Add(_) | AtomView::Mul(_) => {
+                // The materializer already owns same-space vector sums and
+                // scalar-weighted products. Keep the complete operand intact;
+                // only expose the contraction hidden in the outer vector.
+                let (_, representation) = self
+                    .slots
+                    .compact_vector_sequence::<AbstractIndex>(std::iter::once((0, inner)), false)?;
+                representation.to_symbolic([])
+            }
+            _ => return None,
+        };
+        let representation = self.slots.compact_representation(compact.as_view())?;
+        if !representation.is_base() {
+            return None;
+        }
+        if self.admission_only {
+            let mut intrinsic = true;
+            function.as_view().visitor(&mut |value| {
+                if let AtomView::Fun(function) = value {
+                    let symbol = function.get_symbol();
+                    intrinsic &=
+                        crate::tensor::inference::InterfaceInference::intrinsic_normalization_head(
+                            symbol,
+                        );
+                }
+                intrinsic
+            });
+            if !intrinsic {
+                return None;
+            }
+        }
+        // The compact final argument identifies even an untagged inner vector;
+        // the outer function must have the rank-one tag checked by the caller.
+        let outer = Self::replace_last_argument(function, compact);
+        Some(function!(self.metric, outer, inner))
     }
 
     fn permits(&mut self, slot: AtomView<'_>) -> bool {

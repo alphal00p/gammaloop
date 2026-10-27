@@ -1,7 +1,7 @@
 #import "../../shared.typ": callout
 
 #let tutorial = [
-= Tutorial
+= A controlled identity pass
 
 This tutorial uses Idenso's methods on Spenso `TensorExpression` to contract one four-dimensional Minkowski
 metric tensor with a vector. It is intentionally small: the point is to establish the registered
@@ -62,10 +62,10 @@ abstract: the registered Minkowski metric supplies index compatibility, but this
 not substitute a numerical signature. Printed output can vary with the installed Symbolica
 version; inspect the expression structure instead of comparing exact text.
 
-#callout("Verification scope and cost", [
-  The docs harness compiles this Python source without importing native modules; it syntax-checks
-  the environment probe without running it. Execute both steps in a provisioned community-module
-  environment to verify the rank-one invariant. The script should take seconds after startup;
+#callout("Run here or locally", [
+  Use Run example to execute `metric_first.py` in your browser and check the rank-one invariant.
+  To run it locally, first install a Symbolica build containing the tensor community module,
+  then run the environment probe and script above. The script should take seconds after startup;
   building or installing Symbolica community modules is the expensive prerequisite and may take
   substantially longer.
 ])

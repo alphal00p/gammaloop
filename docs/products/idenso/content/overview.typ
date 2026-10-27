@@ -1,7 +1,11 @@
 #import "../../shared.typ": callout, developer-link, product-link
 
 #let overview = [
-= Overview
+#context if target() == "html" {
+  html.elem("span", attrs: (id: "overview"))[]
+} else {
+  heading(level: 1)[Overview]
+}
 
 Idenso is the symbolic identity and simplification layer for tensors encoded in the form that
 Spenso can parse from Symbolica expressions. It provides representation symbols, index

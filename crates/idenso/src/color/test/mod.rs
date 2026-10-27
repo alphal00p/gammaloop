@@ -32,8 +32,44 @@ use super::*;
 
 use crate::test_support::{TestReps, test_initialize};
 
+// Main's formal-color references retain their original mathematical
+// dimensions. Admit them through the existing reversible payload interface,
+// then restore the notation after the typed algebra operation.
+fn simplify_formal_color(expression: &Atom, settings: ColorSimplifySettings) -> Atom {
+    let cooking = crate::CookSettings::reversible().with_representation_payloads(true, true);
+    let admitted = cooking.try_cook(expression.as_view()).unwrap();
+    let simplified = SymbolicTensor::infer(admitted)
+        .unwrap()
+        .simplify_algebra(&crate::tensor::AlgebraSettings {
+            color: Some(settings),
+            contract: crate::tensor::AlgebraContraction::None,
+            ..Default::default()
+        })
+        .unwrap()
+        .collect(spenso::shadowing::TensorCollectFilter::<0>::Tensors)
+        .unwrap()
+        .into_expression();
+    cooking.uncook(simplified.as_view())
+}
+
 fn assert_color_zero(expr: Atom) {
-    assert!(expr.simplify_color().is_zero());
+    assert!(
+        crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned())
+            .unwrap()
+            .simplify_algebra(&crate::tensor::AlgebraSettings {
+                color: Some(crate::color::ColorSimplifySettings::default()),
+                ..Default::default()
+            })
+            .unwrap()
+            .contract(crate::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
+            .unwrap()
+            .into_expression()
+            .is_zero()
+    );
 }
 
 #[test]

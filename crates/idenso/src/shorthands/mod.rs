@@ -1,14 +1,14 @@
-use spenso::{
-    network::parsing::{ParseSettings, SchoonschipExpansionMode, ShorthandParsing},
-    structure::slot::{AbsInd, DummyAind, ParseableAind},
-};
-use symbolica::atom::{Atom, AtomView};
+use spenso::network::parsing::{ParseSettings, SchoonschipExpansionMode, ShorthandParsing};
+use spenso::structure::abstract_index::AbstractIndex;
+use spenso::structure::partial::PartialStructure;
+use spenso::structure::slot::{AbsInd, DummyAind, ParseableAind};
+use symbolica::atom::{Atom, AtomCore, AtomView};
 
-use crate::{
-    NetworkToolingError,
-    tensor::{SymbolicNetExt, SymbolicNetParse},
-};
+use crate::NetworkToolingError;
+use crate::tensor::inference::TensorInferenceError;
+use crate::tensor::{SymbolicNetExt, SymbolicNetParse, SymbolicTensor};
 
+pub(crate) mod bracket;
 pub mod chain;
 pub mod metric;
 pub mod schoonschip;
