@@ -271,6 +271,7 @@
     "alphal00p-docs-macros": {},
     "alphal00p-docs-python-exporter": {
       "feynkit-py": [
+        "linnet-python",
         "python_stubgen"
       ],
       "gammaloop-api": [
@@ -1602,6 +1603,7 @@
     },
     "alphal00p-docs-python-exporter": {
       "feynkit-py": [
+        "linnet-python",
         "python_stubgen"
       ],
       "gammaloop-api": [

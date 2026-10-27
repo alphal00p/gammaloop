@@ -8295,7 +8295,11 @@ class Parameter:
         Examples
         --------
         >>> from symbolica.community import hepkit as hep
-        >>> hep.Model.standard_model().parameter("aS").typstname
+        >>> import json
+        >>> definition = json.loads(hep.Model.standard_model().to_json())
+        >>> next(p for p in definition["parameters"] if p["name"] == "aS")["typstname"] = "alpha_s"
+        >>> annotated = hep.Model.from_json(json.dumps(definition))
+        >>> annotated.parameter("aS").typstname
         'alpha_s'
         """
     @property
@@ -8632,7 +8636,11 @@ class Particle:
         Examples
         --------
         >>> from symbolica.community import hepkit as hep
-        >>> hep.Model.qcd().particle("g").typstname
+        >>> import json
+        >>> definition = json.loads(hep.Model.qcd().to_json())
+        >>> next(p for p in definition["particles"] if p["name"] == "g")["typstname"] = "g"
+        >>> annotated = hep.Model.from_json(json.dumps(definition))
+        >>> annotated.particle("g").typstname
         'g'
         """
     @property
@@ -8643,7 +8651,11 @@ class Particle:
         Examples
         --------
         >>> from symbolica.community import hepkit as hep
-        >>> hep.Model.qcd().particle("u").antitypstname
+        >>> import json
+        >>> definition = json.loads(hep.Model.qcd().to_json())
+        >>> next(p for p in definition["particles"] if p["name"] == "u")["antitypstname"] = "overline(u)"
+        >>> annotated = hep.Model.from_json(json.dumps(definition))
+        >>> annotated.particle("u").antitypstname
         'overline(u)'
         """
     @property
@@ -11033,8 +11045,8 @@ class TensorReductionError(FeynkitError):
     >>> from symbolica.community import hepkit as hep
     >>> D, k, mu = S("D", "k", "mu")
     >>> mink = S("spenso::mink")
-    >>> reducer = hep.TensorReducer(D, integrated=[k(mink(D))])
     >>> try:
+    ...     reducer = hep.TensorReducer(D, integrated=[k(mink(D))])
     ...     scalar = reducer.reduce(k(mink(D, mu))**2)
     ... except hep.TensorReductionError as error:
     ...     message = str(error)

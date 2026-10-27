@@ -1,6 +1,5 @@
 ---
 source: crates/gammalooprs/src/cff/feynkit.rs
-assertion_line: 210
 expression: "serde_json::json!({\n    \"expression\": expression, \"surface_cache\": graph.surface_cache,\n})"
 ---
 {
@@ -39,7 +38,15 @@ expression: "serde_json::json!({\n    \"expression\": expression, \"surface_cach
               }
             ]
           },
-          "id": 0
+          "id": 0,
+          "prefactor": {
+            "denominator": {
+              "Single": 1
+            },
+            "numerator": {
+              "Single": 1
+            }
+          }
         },
         {
           "data": {
@@ -73,7 +80,15 @@ expression: "serde_json::json!({\n    \"expression\": expression, \"surface_cach
               }
             ]
           },
-          "id": 1
+          "id": 1,
+          "prefactor": {
+            "denominator": {
+              "Single": 1
+            },
+            "numerator": {
+              "Single": 1
+            }
+          }
         },
         {
           "data": {
@@ -107,7 +122,15 @@ expression: "serde_json::json!({\n    \"expression\": expression, \"surface_cach
               }
             ]
           },
-          "id": 2
+          "id": 2,
+          "prefactor": {
+            "denominator": {
+              "Single": 1
+            },
+            "numerator": {
+              "Single": 1
+            }
+          }
         },
         {
           "data": {
@@ -141,7 +164,15 @@ expression: "serde_json::json!({\n    \"expression\": expression, \"surface_cach
               }
             ]
           },
-          "id": 3
+          "id": 3,
+          "prefactor": {
+            "denominator": {
+              "Single": 1
+            },
+            "numerator": {
+              "Single": 1
+            }
+          }
         },
         {
           "data": {
@@ -175,7 +206,15 @@ expression: "serde_json::json!({\n    \"expression\": expression, \"surface_cach
               }
             ]
           },
-          "id": 4
+          "id": 4,
+          "prefactor": {
+            "denominator": {
+              "Single": 1
+            },
+            "numerator": {
+              "Single": 1
+            }
+          }
         },
         {
           "data": {
@@ -209,7 +248,15 @@ expression: "serde_json::json!({\n    \"expression\": expression, \"surface_cach
               }
             ]
           },
-          "id": 5
+          "id": 5,
+          "prefactor": {
+            "denominator": {
+              "Single": 1
+            },
+            "numerator": {
+              "Single": 1
+            }
+          }
         }
       ]
     },

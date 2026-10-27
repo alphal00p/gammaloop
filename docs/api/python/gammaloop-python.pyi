@@ -2083,7 +2083,6 @@ def to_dots(atom_str: builtins.str) -> builtins.str:
     Rewrite a contraction before passing it to an Idenso workflow:
 
     ```python
-    to_dots("p(mu) * q(mu)")
+    to_dots("spenso::g(spenso::mink(4,mu),spenso::mink(4,mu))")
     ```
     """
-

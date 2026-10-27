@@ -5,7 +5,7 @@ edition.workspace = true
 publish = false
 
 [dependencies]
-feynkit-py = { path = "../feynkit-py", optional = true, features = ["python_stubgen"] }
+feynkit-py = { path = "../feynkit-py", optional = true, features = ["python_stubgen", "linnet-python"] }
 gammaloop-api = { path = "../gammaloop-api", optional = true, default-features = false, features = ["python_stubgen"] }
 linnet-py = { path = "../linnet-py", optional = true, features = ["python_stubgen"] }
 pyo3 = { workspace = true, features = ["auto-initialize"] }

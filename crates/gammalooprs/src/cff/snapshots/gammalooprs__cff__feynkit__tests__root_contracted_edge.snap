@@ -28,7 +28,15 @@ expression: "serde_json::json!({\n    \"expression\": expression, \"surface_cach
               }
             ]
           },
-          "id": 0
+          "id": 0,
+          "prefactor": {
+            "denominator": {
+              "Single": 1
+            },
+            "numerator": {
+              "Single": 1
+            }
+          }
         },
         {
           "data": {
@@ -52,7 +60,15 @@ expression: "serde_json::json!({\n    \"expression\": expression, \"surface_cach
               }
             ]
           },
-          "id": 1
+          "id": 1,
+          "prefactor": {
+            "denominator": {
+              "Single": 1
+            },
+            "numerator": {
+              "Single": 1
+            }
+          }
         }
       ]
     },
