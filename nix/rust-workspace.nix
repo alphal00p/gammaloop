@@ -522,6 +522,13 @@
       "crates/vakint/tests/inputs"
       "crates/vakint/tests/resources"
       "crates/vakint/tests/fixtures"
+      "crates/vakint/examples/build_cache/frozen-public-suites.json"
+      "crates/vakint/examples/build_cache/frozen-public-suites.lowering-proof.json"
+      "crates/vakint/examples/build_cache/frozen-public-suites.evidence/qualification.json.gz"
+      "crates/vakint/examples/build_cache/frozen-public-suites.evidence/postflight.json.gz"
+      "crates/vakint/examples/build_cache/frozen-public-suites.evidence/completion.json.gz"
+      "crates/vakint/examples/build_cache/frozen-public-suites.evidence/declaration.json.gz"
+      "crates/vakint/examples/build_cache/frozen-public-suites.evidence/freeze.json.gz"
     ];
     clinnet = [
       "assets/embedded/drawing/templates/impl/physics-edge-style.typ"

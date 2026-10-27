@@ -1,0 +1,390 @@
+{
+  "application_sha256": "976d574c4ad8b4021ac7a1914c624095a77f5975b98e243c7a20a9396a86ff03",
+  "authority": "qualified_lowering",
+  "data_manifest_sha256": "794c0e4b44a1c6be1d78f8ebdbca188473678823ea1f3b821f70b63b2a6dd5a7",
+  "declared_cases": [
+    {
+      "id": "final-v2-parent-32745-late-double-dot-rank1-tuning",
+      "powers": [
+        0,
+        -1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        2,
+        2,
+        1,
+        0,
+        1,
+        0,
+        0,
+        1
+      ],
+      "public_input_sha256": "728f3743b7c86a95ae1f279999b0f54634349c67628d5fbede077451f6302cfb",
+      "role": "tuning"
+    },
+    {
+      "id": "parent-32745-dot_a",
+      "powers": [
+        0,
+        0,
+        0,
+        2,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        0,
+        0,
+        1
+      ],
+      "public_input_sha256": "cf0a17ef494b6928a9a144d7b122d8c481ed7dcee79545a687e6daa82989e6ca",
+      "role": "held_out"
+    },
+    {
+      "id": "parent-31740-dot_a",
+      "powers": [
+        0,
+        0,
+        0,
+        2,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0
+      ],
+      "public_input_sha256": "b1715fac58771446298dd808db45c834f6201c356fbc8a67bc1758f1935250b1",
+      "role": "held_out"
+    },
+    {
+      "id": "parent-30699-dot_a",
+      "powers": [
+        0,
+        0,
+        0,
+        0,
+        2,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        0,
+        1,
+        1
+      ],
+      "public_input_sha256": "4032e98a9f8c288f9eac667bc4d5cbd8cea514bebdf835834246587c8a32bfca",
+      "role": "held_out"
+    },
+    {
+      "id": "parent-30699-dot_b",
+      "powers": [
+        0,
+        0,
+        0,
+        0,
+        1,
+        2,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        0,
+        1,
+        1
+      ],
+      "public_input_sha256": "a9318c0366945f78cd76f9a701a7d51ee818f5b181b3018e63d071242bfeb91a",
+      "role": "held_out"
+    },
+    {
+      "id": "parent-30699-rank1",
+      "powers": [
+        -1,
+        0,
+        1,
+        0,
+        2,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        0,
+        1,
+        1
+      ],
+      "public_input_sha256": "045c88318cee979b5813bc3f0dbf2f4fc5c4fb0cb6998466b5036d1ba8b0aa53",
+      "role": "held_out"
+    },
+    {
+      "id": "parent-30527-dot_b",
+      "powers": [
+        0,
+        0,
+        0,
+        0,
+        1,
+        2,
+        1,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "public_input_sha256": "d080d590075ff290508bed27b4b65b8633dfed6ef2fcbce7c4fc5b354e7dc85f",
+      "role": "held_out"
+    },
+    {
+      "id": "reserve-v1-parent-32745-dot_c",
+      "powers": [
+        0,
+        0,
+        0,
+        1,
+        1,
+        2,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        0,
+        0,
+        1
+      ],
+      "public_input_sha256": "a847e8c0d7d68a3b8bb2003459f8f8084d454a140d2fb60ebf848b368292b8dd",
+      "role": "held_out"
+    },
+    {
+      "id": "reserve-v1-parent-31740-dot_c",
+      "powers": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        1,
+        2,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0
+      ],
+      "public_input_sha256": "b0ab9a88d98a4d01d77dcbc06237f20c0e57565a88412b8415412adce2173dee",
+      "role": "held_out"
+    },
+    {
+      "id": "reserve-v1-parent-30699-dot_c",
+      "powers": [
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        2,
+        1,
+        1,
+        1,
+        0,
+        1,
+        0,
+        1,
+        1
+      ],
+      "public_input_sha256": "c8fc6049a94dc6d23da63639b9287cd11665cba4d06cc8824c16ca376bfd51bb",
+      "role": "held_out"
+    },
+    {
+      "id": "reserve-v1-parent-30527-dot_c",
+      "powers": [
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        2,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "public_input_sha256": "b603f3a871c02881c54829fe90cfc255bb052b9ef7f1451840cfcaae225f528b",
+      "role": "held_out"
+    },
+    {
+      "id": "reserve-v1-parent-32745-dot_d",
+      "powers": [
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        2,
+        1,
+        1,
+        1,
+        0,
+        1,
+        0,
+        0,
+        1
+      ],
+      "public_input_sha256": "ea457473419f8886006d51d93e55841ad549a3f77fd10a07ff5b7e2681d05b46",
+      "role": "held_out"
+    },
+    {
+      "id": "final-v3-parent-30527-double-dot-rank1",
+      "powers": [
+        -1,
+        0,
+        0,
+        0,
+        2,
+        2,
+        1,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "public_input_sha256": "24c652439eabc8c6ace75811a588140ea77dbfe4f437cef2e4740ec06b48c157",
+      "role": "held_out"
+    }
+  ],
+  "evidence": {
+    "completion": {
+      "decoded_bytes": 4171,
+      "decoded_sha256": "fa6f6e1563d0c9d21a78fac4786982e3311970059d95b9fd6bd61bbf2f4be662",
+      "path": "frozen-public-suites.evidence/completion.json.gz",
+      "sha256": "f1650165f94901b6afa7c8bddf892ccd784560d382906ea8a4f0b581cd14544a"
+    },
+    "declaration": {
+      "decoded_bytes": 7848,
+      "decoded_sha256": "aff3ea532fbccfa9e684aca93f122980c375ff4be3ae4559d4640e6108226f62",
+      "path": "frozen-public-suites.evidence/declaration.json.gz",
+      "sha256": "4479b9335555f23e4cee49fbedb8ee50a0387e229dc3496e4f689a6ef526e12e"
+    },
+    "freeze": {
+      "decoded_bytes": 119891,
+      "decoded_sha256": "d8952d9b3f4318bbe50bfaff2011942bd7124d21fc0f98b042bdf262752ad75c",
+      "path": "frozen-public-suites.evidence/freeze.json.gz",
+      "sha256": "22f5239ca9831ce8971ad078a72acdc27015a569b6123296febab10f336a3215"
+    },
+    "postflight": {
+      "decoded_bytes": 67104,
+      "decoded_sha256": "b03fe932016191d12ced88f0726cded36c7510b870250850cf988777ded59fcf",
+      "path": "frozen-public-suites.evidence/postflight.json.gz",
+      "sha256": "064bd62f15deab941dcbf7ea16383cc44e464e58df4c561ebb66de3cb1938c38"
+    },
+    "qualification": {
+      "decoded_bytes": 5733258,
+      "decoded_sha256": "bd93bb9dfea93dfdee4aed27275eadc841431946f4c1e92ac09f474fd1c69ee2",
+      "path": "frozen-public-suites.evidence/qualification.json.gz",
+      "sha256": "fb08eee7b67da41812471fd8eee7aeae2c7412207c5033f3f8d8a078cb7b1ca6"
+    }
+  },
+  "frozen_suite_path": "frozen-public-suites.json",
+  "loop_manifest_sha256": "81ece536cd54781b98d039325a7d62a884ec958aca27c1f4d5adca734a0f4ccb",
+  "qualification_origin": {
+    "application_sha256": "976d574c4ad8b4021ac7a1914c624095a77f5975b98e243c7a20a9396a86ff03",
+    "data_checkout_revision": "d4384149b5076de84b3f3fda761585dff1776532",
+    "data_manifest_sha256": "794c0e4b44a1c6be1d78f8ebdbca188473678823ea1f3b821f70b63b2a6dd5a7",
+    "data_version": "v0.1.2",
+    "family_sha256": "44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b",
+    "freeze_sha256": "d8952d9b3f4318bbe50bfaff2011942bd7124d21fc0f98b042bdf262752ad75c",
+    "loop_manifest_sha256": "81ece536cd54781b98d039325a7d62a884ec958aca27c1f4d5adca734a0f4ccb",
+    "postflight_sha256": "b03fe932016191d12ced88f0726cded36c7510b870250850cf988777ded59fcf",
+    "qualification_sha256": "bd93bb9dfea93dfdee4aed27275eadc841431946f4c1e92ac09f474fd1c69ee2",
+    "source_identity": {
+      "base_main_revision": "e90e78ae9b05c2813b462157a83073b0740419f4",
+      "diagnostic_source_sha256": "7d74babaacbaef775ea1e7b0ecff425c3bcd5471d814e35c748afc7e9fccf71f",
+      "executable_sha256": "fc68aaa6d19f8a8b1ac2d7d83a1b58669e69db8dfcb0671c8ed9a004d2cb8c11",
+      "kernel_revision": "9cd57678d8817ec33c05cacba4925162f1c86b0b",
+      "native_revision": "b209adb1e774242bcbe0417fed223317566561bd",
+      "native_source_snapshot_sha256": "36e7e7796216a707e5db4e3da7981893fc67b77f87ca13eb56f8e5bd1344a0f5",
+      "private_source_snapshot_sha256": "75bf3add8740ce1e01584802ba887a30247340f99e14cd61751e74f01918820f",
+      "profile": "ci-optim",
+      "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)"
+    }
+  },
+  "schema": "vakint.public-lowering-qualification-proof.v1",
+  "semantic_binding": {
+    "artifact_digest": [
+      162,
+      68,
+      185,
+      180,
+      206,
+      143,
+      114,
+      40,
+      199,
+      12,
+      133,
+      132,
+      8,
+      135,
+      208,
+      168,
+      201,
+      62,
+      78,
+      199,
+      29,
+      175,
+      102,
+      4,
+      104,
+      117,
+      83,
+      104,
+      97,
+      251,
+      210,
+      115
+    ],
+    "family_fingerprint": "rustred-integral-family-v2;N27:tide_five_loop_common_basis;L5;2:k1;2:k2;2:k3;2:k4;2:k5;E0;P1;1:d;Q5,0,15;M;RY1,1;I+1;X1;Y1,1;I+1;X0;D15;RY1,1;I-1;X0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I-1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I-1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I-1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I-1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,1;I-1;X0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I-2;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I-1;X0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I-2;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I-1;X0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I-2;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,1;I-1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,1;I-2;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I-1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I-2;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I-1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I-2;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,1;I-1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I-2;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,1;I-1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,1;I-2;X0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,1;I-1;X0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,1;I+2;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I-2;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I-2;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I-1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,1;I-2;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;G0;U15;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;",
+    "layer": "saved-application-route-apply-v1",
+    "physical_arity": 15
+  },
+  "source_census_sha256": "dd21ebafa719d460141a83c8bd166a00dd485d9aa89397d353cc22d07afe1925"
+}

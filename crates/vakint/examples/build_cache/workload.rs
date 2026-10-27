@@ -4,9 +4,21 @@ use std::{collections::BTreeSet, path::PathBuf};
 use eyre::{Result, ensure};
 use serde::{Deserialize, Serialize};
 
+/// A completed measurement and a lowering-only qualification have different
+/// authorities. Historical references without a tag retain their strict rules.
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum OwnerProofAuthority {
+    #[default]
+    CompletedPublicEvaluation,
+    QualifiedLowering,
+}
+
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct OwnerProofReference {
+    #[serde(default)]
+    pub(super) authority: OwnerProofAuthority,
     pub(super) path: PathBuf,
     pub(super) sha256: String,
 }
@@ -19,7 +31,7 @@ pub(super) struct Root {
     pub(super) rationale: String,
     #[serde(default)]
     pub(super) public_input: Option<String>,
-    /// Complete owner-mapped input union, authenticated by public evaluation.
+    /// Complete owner-mapped input union, authenticated by the pinned authority.
     /// Empty is permitted while constructing an explicitly provisional pilot.
     #[serde(default)]
     pub(super) protected_roots: Vec<Vec<i64>>,
@@ -48,7 +60,7 @@ impl Workload {
         self.validate()?;
         ensure!(
             self.owner_proof.is_some(),
-            "final selection requires a pinned completed owner proof"
+            "final selection requires a pinned owner proof"
         );
         ensure!(
             self.tuning
@@ -85,97 +97,160 @@ impl Workload {
             self.held_out.len() >= 12,
             "freeze at least twelve held-out inputs before preparation"
         );
-        let mut identities = BTreeSet::new();
-        let mut training = BTreeSet::new();
-        let mut tuning = BTreeSet::new();
-        let mut held_out = BTreeSet::new();
-        let mut protected = BTreeSet::new();
-        for (kind, roots) in [
+        validate_root_groups(&[
             ("training", &self.training),
             ("tuning", &self.tuning),
             ("held_out", &self.held_out),
-        ] {
-            let mut keys = BTreeSet::new();
-            for root in roots {
-                ensure!(
-                    !root.id.is_empty() && identities.insert(&root.id),
-                    "duplicate or empty root identifier {:?}",
-                    root.id
-                );
-                ensure!(
-                    !root.rationale.trim().is_empty(),
-                    "missing selection rationale for {}",
-                    root.id
-                );
-                ensure!(
-                    kind == "training"
-                        || root
-                            .public_input
-                            .as_ref()
-                            .is_some_and(|input| !input.trim().is_empty()),
-                    "missing public input for {kind} root {}",
-                    root.id
-                );
-                ensure!(
-                    root.powers.len() == 15,
-                    "{} needs fifteen ordered family powers",
-                    root.id
-                );
-                ensure!(
-                    keys.insert(&root.powers),
-                    "duplicate {kind} root {}",
-                    root.id
-                );
-                let mut root_protected = BTreeSet::new();
-                for powers in &root.protected_roots {
-                    ensure!(
-                        powers.len() == 15 && root_protected.insert(powers),
-                        "invalid or duplicate protected root for {}",
-                        root.id
-                    );
-                    if kind != "training" {
-                        protected.insert(powers);
-                    }
-                }
-                let mut lowered = BTreeSet::new();
-                ensure!(
-                    root.lowered_roots
-                        .iter()
-                        .all(|powers| powers.len() == 15 && lowered.insert(powers)),
-                    "invalid or duplicate lowered root for {}",
-                    root.id
-                );
-                match kind {
-                    "training" => {
-                        training.insert(&root.powers);
-                    }
-                    "held_out" => {
-                        held_out.insert(&root.powers);
-                    }
-                    _ => {
-                        tuning.insert(&root.powers);
-                    }
-                }
-            }
-        }
+        ])
+    }
+}
+
+/// The input suite is independently frozen before a LIGHT training selection.
+/// It deliberately is not a Workload: no training roots have been selected.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct FrozenPublicSuites {
+    pub(super) schema: String,
+    pub(super) frozen_utc: String,
+    /// Historical topology-selection provenance; distinct from the authenticated
+    /// lowering/data/program evidence in qualification_origin.
+    pub(super) topology_source_sha256: String,
+    pub(super) ordered_case_ids: Vec<String>,
+    pub(super) qualification_origin: serde_json::Value,
+    pub(super) owner_proof: OwnerProofReference,
+    pub(super) tuning: Vec<Root>,
+    pub(super) held_out: Vec<Root>,
+    pub(super) scope: String,
+}
+
+impl FrozenPublicSuites {
+    pub(super) fn validate(&self) -> Result<()> {
         ensure!(
-            training.is_disjoint(&held_out),
-            "a held-out input was selected for training"
+            self.schema == "vakint.five-loop-frozen-public-suites.v1"
+                && !self.frozen_utc.trim().is_empty()
+                && !self.scope.trim().is_empty()
+                && self.topology_source_sha256.len() == 64
+                && self
+                    .topology_source_sha256
+                    .bytes()
+                    .all(|b| b.is_ascii_hexdigit())
+                && self.qualification_origin.is_object()
+                && self.owner_proof.authority == OwnerProofAuthority::QualifiedLowering,
+            "invalid frozen public suite provenance"
         );
         ensure!(
-            tuning.is_disjoint(&held_out),
-            "a held-out input occurs in the tuning suite"
+            self.tuning.len() == 1 && self.held_out.len() == 12,
+            "qualified suite requires exactly one tuning and twelve held-out inputs"
         );
+        validate_root_groups(&[("tuning", &self.tuning), ("held_out", &self.held_out)])?;
         ensure!(
-            training.is_disjoint(&tuning),
-            "a tuning input was selected for training"
-        );
-        ensure!(
-            training.is_disjoint(&protected),
-            "a protected tuning or held-out owner root was selected for training"
+            self.ordered_case_ids
+                == self
+                    .tuning
+                    .iter()
+                    .chain(&self.held_out)
+                    .map(|root| root.id.clone())
+                    .collect::<Vec<_>>()
+                && self
+                    .tuning
+                    .iter()
+                    .chain(&self.held_out)
+                    .all(|root| !root.lowered_roots.is_empty() && !root.protected_roots.is_empty()),
+            "frozen suite order or complete root sets differ"
         );
         Ok(())
     }
+}
+
+/// Shared input invariants; keeping training optional here does not relax the
+/// Workload requirement that an actual final training selection be nonempty.
+fn validate_root_groups(groups: &[(&str, &Vec<Root>)]) -> Result<()> {
+    let mut identities = BTreeSet::new();
+    let mut training = BTreeSet::new();
+    let mut tuning = BTreeSet::new();
+    let mut held_out = BTreeSet::new();
+    let mut protected = BTreeSet::new();
+    for &(kind, roots) in groups {
+        let mut keys = BTreeSet::new();
+        for root in roots {
+            ensure!(
+                !root.id.is_empty() && identities.insert(&root.id),
+                "duplicate or empty root identifier {:?}",
+                root.id
+            );
+            ensure!(
+                !root.rationale.trim().is_empty(),
+                "missing selection rationale for {}",
+                root.id
+            );
+            ensure!(
+                kind == "training"
+                    || root
+                        .public_input
+                        .as_ref()
+                        .is_some_and(|input| !input.trim().is_empty()),
+                "missing public input for {kind} root {}",
+                root.id
+            );
+            ensure!(
+                root.powers.len() == 15,
+                "{} needs fifteen ordered family powers",
+                root.id
+            );
+            ensure!(
+                keys.insert(&root.powers),
+                "duplicate {kind} root {}",
+                root.id
+            );
+            let mut root_protected = BTreeSet::new();
+            for powers in &root.protected_roots {
+                ensure!(
+                    powers.len() == 15 && root_protected.insert(powers),
+                    "invalid or duplicate protected root for {}",
+                    root.id
+                );
+                if kind != "training" {
+                    protected.insert(powers);
+                }
+            }
+            let mut lowered = BTreeSet::new();
+            ensure!(
+                root.lowered_roots
+                    .iter()
+                    .all(|powers| powers.len() == 15 && lowered.insert(powers)),
+                "invalid or duplicate lowered root for {}",
+                root.id
+            );
+            match kind {
+                "training" => {
+                    training.insert(&root.powers);
+                }
+                "held_out" => {
+                    held_out.insert(&root.powers);
+                }
+                _ => {
+                    tuning.insert(&root.powers);
+                }
+            }
+        }
+    }
+    ensure!(
+        training.is_disjoint(&held_out),
+        "a held-out input was selected for training"
+    );
+    ensure!(
+        tuning.is_disjoint(&held_out),
+        "a held-out input occurs in the tuning suite"
+    );
+    ensure!(
+        training.is_disjoint(&tuning),
+        "a tuning input was selected for training"
+    );
+    ensure!(
+        training.is_disjoint(&protected),
+        "a protected tuning or held-out owner root was selected for training"
+    );
+    Ok(())
 }
 
 #[cfg(test)]
@@ -201,10 +276,31 @@ pub(super) mod tests {
                 .map(|i| root(format!("held-out-{i}"), i + 3))
                 .collect(),
             owner_proof: Some(OwnerProofReference {
+                authority: OwnerProofAuthority::CompletedPublicEvaluation,
                 path: "owner-proof.json".into(),
                 sha256: "c".repeat(64),
             }),
         }
+    }
+
+    #[test]
+    fn proof_authorities_are_explicit_with_strict_legacy_default() {
+        let reference = |authority: Option<&str>| {
+            let mut value = serde_json::json!({"path":"proof.json","sha256":"a".repeat(64)});
+            if let Some(authority) = authority {
+                value["authority"] = authority.into();
+            }
+            serde_json::from_value::<OwnerProofReference>(value)
+        };
+        assert_eq!(
+            reference(None).unwrap().authority,
+            OwnerProofAuthority::CompletedPublicEvaluation
+        );
+        assert_eq!(
+            reference(Some("qualified_lowering")).unwrap().authority,
+            OwnerProofAuthority::QualifiedLowering
+        );
+        assert!(reference(Some("measurement_or_lowering_whatever_is_available")).is_err());
     }
 
     #[test]
