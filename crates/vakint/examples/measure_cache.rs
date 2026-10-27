@@ -35,13 +35,14 @@ use cache_identity::{CacheIdentity, digest};
 use eyre::{Context, Result, bail, ensure};
 use owner_proof::OwnerProof;
 use owner_proof::validate_hit_diagnostic;
+use rustred::solver::CandidateCacheRepresentation;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use symbolica::atom::{AtomCore, AtomView};
 use vakint::{
-    EvaluationMethod, EvaluationOrder, OfficialExternalDataOptions, RustRedEvaluationOptions,
-    RustRedMasterMode, RustRedMonitorDisplay, RustRedMonitorOptions, RustRedRunningCacheOptions,
-    RustRedSnapshotViewer, Vakint, VakintSettings,
+    EvaluationMethod, EvaluationOrder, ExternalDataLoadReport, OfficialExternalDataOptions,
+    RustRedEvaluationOptions, RustRedMasterMode, RustRedMonitorDisplay, RustRedMonitorOptions,
+    RustRedRunningCacheOptions, RustRedSnapshotViewer, Vakint, VakintSettings,
 };
 use workload::{Root, Workload};
 
@@ -583,6 +584,103 @@ impl Options {
         }
         Ok(identity)
     }
+
+    fn reduction_settings_document(
+        &self,
+        settings: &VakintSettings,
+        data: &ExternalDataLoadReport,
+        identity: &Value,
+    ) -> Result<Value> {
+        let [EvaluationMethod::RustRed(evaluation)] = settings.evaluation_order.0.as_slice() else {
+            bail!("cache measurement requires one RustRed evaluation method");
+        };
+        let coefficient_representation =
+            match settings.rustred_application_options.cache_representation {
+                CandidateCacheRepresentation::Sparse => "sparse",
+                CandidateCacheRepresentation::Factorized => "factorized",
+            };
+        // Record the conventions of the actual loaded data, separately from the
+        // requested output normalization. Authenticate these small manifests
+        // through the same release identity used by the measurement.
+        ensure!(
+            fs::canonicalize(&self.artifacts)? == fs::canonicalize(&data.path)?,
+            "loaded data root differs from the measurement artifacts"
+        );
+        let release_bytes = fs::read(data.path.join("manifest.json"))?;
+        let release_sha256 = format!("{:x}", Sha256::digest(&release_bytes));
+        ensure!(
+            identity["data_manifest_sha256"].as_str() == Some(release_sha256.as_str()),
+            "loaded release manifest differs from measurement identity"
+        );
+        let release: Value = serde_json::from_slice(&release_bytes)?;
+        ensure!(
+            release["schema"] == "vakint.external-data.v1"
+                && release["version"].as_str() == Some(data.version.as_str()),
+            "loaded release identity differs from its manifest"
+        );
+        let packs = release["loop_packs"]
+            .as_array()
+            .ok_or_else(|| eyre::eyre!("loaded release has no loop packs"))?;
+        let packs = packs
+            .iter()
+            .filter(|pack| pack["loop_count"] == 5)
+            .collect::<Vec<_>>();
+        let [pack] = packs.as_slice() else {
+            bail!("loaded release must contain exactly one five-loop manifest");
+        };
+        let loop_data = data
+            .loops
+            .iter()
+            .find(|pack| pack.loop_count == 5)
+            .ok_or_else(|| eyre::eyre!("loaded report has no five-loop data"))?;
+        let manifest = pack["manifest"]
+            .as_str()
+            .ok_or_else(|| eyre::eyre!("loaded five-loop manifest path is missing"))?;
+        ensure!(
+            data.path.join(manifest) == loop_data.path.join("manifest.json"),
+            "loaded five-loop manifest path differs from the activation report"
+        );
+        let loop_bytes = fs::read(loop_data.path.join("manifest.json"))?;
+        let loop_sha256 = format!("{:x}", Sha256::digest(&loop_bytes));
+        ensure!(
+            pack["manifest_sha256"].as_str() == Some(loop_sha256.as_str()),
+            "loaded five-loop manifest checksum differs from the release"
+        );
+        let manifest: Value = serde_json::from_slice(&loop_bytes)?;
+        ensure!(
+            manifest["schema"] == "vakint.external-data.loop.v1"
+                && manifest["loop_count"] == 5
+                && manifest["version"].as_str() == Some(data.version.as_str()),
+            "loaded five-loop manifest identity differs from the activation report"
+        );
+        let dimension = manifest["dimension"]
+            .as_str()
+            .ok_or_else(|| eyre::eyre!("loaded five-loop dimension is missing"))?;
+        let normalization = manifest["normalization"]
+            .as_str()
+            .ok_or_else(|| eyre::eyre!("loaded five-loop normalization is missing"))?;
+        let unit_mass_squared = manifest["unit_mass_squared"]
+            .as_bool()
+            .ok_or_else(|| eyre::eyre!("loaded five-loop unit-mass convention is missing"))?;
+        Ok(json!({
+            "raw_reduction_settings":{
+                "master_mode":evaluation.master_mode.to_string(),
+                "coefficient_representation":coefficient_representation,
+                "dimension":dimension,"normalization":normalization,
+                "unit_mass_squared":unit_mass_squared,
+            },
+            "raw_reduction_settings_source":{
+                "data_version":data.version,"loop_count":5,
+                "release_manifest_sha256":release_sha256,"loop_manifest_sha256":loop_sha256,
+            },
+            "conventions":{
+                "integral_normalization":format!("{:?}",settings.integral_normalization_factor),
+                "integral_normalization_expression":settings.get_integral_normalization_factor_atom()?.to_canonical_string(),
+                "epsilon_symbol":settings.epsilon_symbol,"mu_r_sq_symbol":settings.mu_r_sq_symbol,
+                "use_dot_product_notation":settings.use_dot_product_notation,
+            },
+        }))
+    }
 }
 
 fn write_json(path: &Path, value: &Value) -> Result<()> {
@@ -713,6 +811,8 @@ fn measure(options: &Options, root: &Root, identity: &Value, workload: &Workload
         "baseline must never import a persistent cache"
     );
     let data_loading_seconds = started.elapsed().as_secs_f64();
+    let reduction_settings =
+        options.reduction_settings_document(&settings, &data_report, identity)?;
     let cache_started = Instant::now();
     if options.variant == "cached" {
         engine.load_cache(
@@ -948,6 +1048,9 @@ fn measure(options: &Options, root: &Root, identity: &Value, workload: &Workload
             "owner_root_correlations":proof.as_ref().map(OwnerProof::correlations),
             "fresh_process":true,"data_loading_seconds":data_loading_seconds,"cache_loading_seconds":cache_loading_seconds,
             "external_data":data_report,"persistent_cache_attachments_before":caches_before,
+            "raw_reduction_settings":reduction_settings["raw_reduction_settings"],
+            "raw_reduction_settings_source":reduction_settings["raw_reduction_settings_source"],
+            "conventions":reduction_settings["conventions"],
             "persistent_cache_attachments_during_evaluation":caches_during_evaluation,
             "persistent_cache_policy":match (options.variant=="cached", running_read_backing) {
                 (true,true)=>"manual-five-loop-and-running-cache",
@@ -1084,7 +1187,12 @@ fn measure(options: &Options, root: &Root, identity: &Value, workload: &Workload
                 }
             }
         }
-        if &options.identity().map_err(&mut preserve_reduction_error)? != identity {
+        let identity_after = options.identity().map_err(&mut preserve_reduction_error)?;
+        receipt["cache_identity_after"] = json!({
+            "cache_sha256":identity_after["cache_sha256"],
+            "cache_native_index_identity":identity_after["cache_native_index_identity"],
+        });
+        if &identity_after != identity {
             return Err(preserve_reduction_error(eyre::eyre!(
                 "measurement inputs changed during evaluation"
             )));
