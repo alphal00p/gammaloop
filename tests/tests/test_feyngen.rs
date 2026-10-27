@@ -1112,6 +1112,8 @@ fn select_tth_graph_copy_after_generation_preserves_source_and_integrates_target
 
 //     clean_test(&cli.cli_settings.state.folder);
 
+// The Group labels below follow the physical order of sewn left/right-symmetric
+// graphs and identify generated sources before zero-numerator removal.
 #[test]
 #[rustfmt::skip]
 fn cp_fix_from_symbolica()->Result<()>{
@@ -1147,7 +1149,7 @@ fn cp_fix_from_symbolica()->Result<()>{
         (total - reference).expand().is_zero(),
         "the original expanded CP grouping factor must be preserved"
     );
-    assert_snapshot!(summary, @"10 | -7+Group(10,1,-1)+Group(2,1,-1)+Group(3,1,-1)+Group(4,1,-1)+Group(5,(-1*Nc^2+1)*-9/2*G^2*Nc^(-1)*ee^(-2),-1)+Group(6,(-1*Nc^2+1)*-9/2*G^2*Nc^(-1)*ee^(-2),-1)+Group(7,(-1*Nc^2+1)*-9/2*G^2*Nc^(-1)*ee^(-2),-1)+Group(9,1,-1) = -12+-27/2*G^2*Nc*ee^(-2)+27/2*G^2*Nc^(-1)*ee^(-2)");
+    assert_snapshot!(summary, @"10 | -7+Group(2,1,-1)+Group(3,1,-1)+Group(4,1,-1)+Group(5,(-1*Nc^2+1)*-9/2*G^2*Nc^(-1)*ee^(-2),-1)+Group(6,(-1*Nc^2+1)*-9/2*G^2*Nc^(-1)*ee^(-2),-1)+Group(7,(-1*Nc^2+1)*-9/2*G^2*Nc^(-1)*ee^(-2),-1)+Group(8,1,-1)+Group(9,1,-1) = -12+-27/2*G^2*Nc*ee^(-2)+27/2*G^2*Nc^(-1)*ee^(-2)");
     Ok(())
 }
 
@@ -1161,7 +1163,7 @@ fn test_generate_sm_full_a_ddx() -> Result<()> {
     assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{1}}] --symmetrize-left-right-states true --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"1 | -1 = -1");//good
     assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --numerator-grouping only_detect_zeroes",false)?,@"47 | -47 = -47");//good
     assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"37 | -35+Group(19,1,-1)+Group(20,1,-1)+Group(22,1,-1)+Group(23,1,-1) = -39");//less 37 vs 45 due to lorentz cancellations
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_sign",true)?,@"36 | -33+Group(19,1,-1)+Group(20,1,-1)+Group(22,1,-1)+Group(23,1,-1)+Group(25,1,-1)+Group(26,1,-1) = -39");//as above
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_sign",true)?,@"36 | -33+Group(18,1,-1)+Group(19,1,-1)+Group(21,1,-1)+Group(22,1,-1)+Group(24,1,-1)+Group(25,1,-1) = -39");//as above
 
     Ok(())
 }
