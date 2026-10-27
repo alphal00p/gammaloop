@@ -576,7 +576,7 @@ impl PyQuery {
         prune_skeletons: Option<Py<PyAny>>,
         #[gen_stub(override_type(type_repr="typing.Callable[[DressingView], bool] | None", imports=("typing")))]
         prune_dressings: Option<Py<PyAny>>,
-        #[gen_stub(override_type(type_repr="typing.Callable[[DiagramView], bool] | None", imports=("typing")))]
+        #[gen_stub(override_type(type_repr="typing.Callable[[GenerationDiagramView], bool] | None", imports=("typing")))]
         select: Option<Py<PyAny>>,
     ) -> PyResult<Self> {
         Ok(Self {
@@ -709,7 +709,7 @@ impl PyTheory {
         prune_skeletons: Option<Py<PyAny>>,
         #[gen_stub(override_type(type_repr="typing.Callable[[DressingView], bool] | None", imports=("typing")))]
         prune_dressings: Option<Py<PyAny>>,
-        #[gen_stub(override_type(type_repr="typing.Callable[[DiagramView], bool] | None", imports=("typing")))]
+        #[gen_stub(override_type(type_repr="typing.Callable[[GenerationDiagramView], bool] | None", imports=("typing")))]
         select: Option<Py<PyAny>>,
     ) -> PyResult<PyPlan> {
         PyPlan::new(

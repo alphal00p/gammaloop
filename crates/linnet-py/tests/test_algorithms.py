@@ -23,16 +23,20 @@ class AlgorithmsTests(unittest.TestCase):
             (4, [[gluon] * 3, [gluon] * 4], 2, 278),
         ):
             with self.subTest(external=external, loops=loops):
-                graphs = g.Graph.generate(
-                    [(i + 1, gluon) for i in range(external)],
-                    signatures,
-                    max_loops=loops,
-                    max_bridges=0,
-                    allow_self_loops=True,
+                plan = g.Theory(signatures).query(
+                    g.Legs([(i + 1, gluon) for i in range(external)]),
+                    loops=range(loops + 1),
+                    structure=g.Structure(
+                        bridges=g.Bridges.at_most(0), self_loops=True
+                    ),
                 )
-                self.assertEqual(len(graphs), expected)
-                for graph, size in graphs:
-                    self.assertEqual(graph.canonize()[2], size)
+                diagrams = list(plan.diagrams())
+                self.assertEqual(len(diagrams), expected)
+                self.assertEqual(plan.count().diagrams, expected)
+                for diagram in diagrams:
+                    self.assertEqual(
+                        diagram.graph().canonize()[2], diagram.symmetry_factor()
+                    )
 
     def test_graphica_canonical_symmetry_fixture(self):
         # The colored nine-vertex fixture from Graphica's canonicalization suite.
@@ -69,10 +73,11 @@ class AlgorithmsTests(unittest.TestCase):
         gluon = g.EdgeSignature(S("g"))
         quark = g.EdgeSignature(S("q"), direction=False)
 
-        def at_most_one_cubic_gluon_vertex(graph, completed):
+        def at_most_one_cubic_gluon_vertex(view):
+            graph = view.graph()
             self.assertIs(type(graph), g.Graph)
             count = 0
-            for node in graph.nodes()[:completed]:
+            for node in graph.nodes()[: view.n_vertices]:
                 # Graphica counts each self-loop once in the incident edge list.
                 edges = {port.edge.index: port.edge for port in node.incidence}
                 if len(edges) == 3 and all(
@@ -83,15 +88,14 @@ class AlgorithmsTests(unittest.TestCase):
                         return False
             return True
 
-        graphs = g.Graph.generate(
-            [(1, gluon), (2, gluon)],
-            [[gluon] * 3, [quark.flip(), quark, gluon], [gluon] * 4],
-            max_loops=4,
-            max_bridges=0,
-            allow_self_loops=True,
-            filter_fn=at_most_one_cubic_gluon_vertex,
+        plan = g.Theory([[gluon] * 3, [quark.flip(), quark, gluon], [gluon] * 4]).query(
+            g.Legs([(1, gluon), (2, gluon)]),
+            loops=range(5),
+            structure=g.Structure(bridges=g.Bridges.at_most(0), self_loops=True),
+            select=at_most_one_cubic_gluon_vertex,
         )
-        self.assertEqual(len(graphs), 845)
+        self.assertEqual(plan.count().diagrams, 845)
+        self.assertEqual(len(list(plan.diagrams())), 845)
 
     def test_graphica_permutation_fixture(self):
         pairs = [(0, 0), (0, 3), (0, 4), (1, 2), (1, 3), (1, 4), (2, 3), (2, 4), (3, 4)]
@@ -110,20 +114,39 @@ class AlgorithmsTests(unittest.TestCase):
 
     def test_generation_returns_common_graphs_and_integer_group_sizes(self):
         signature = g.EdgeSignature(S("phi"))
-        generated = g.Graph.generate(
-            [(1, signature), (2, signature)], [[signature] * 3], max_loops=0
-        )
-        self.assertIsInstance(generated, list)
-        for graph, size in generated:
-            self.assertIs(type(graph), g.Graph)
-            self.assertIsInstance(size, int)
-            self.assertGreaterEqual(size, 1)
+        theory = g.Theory([[signature] * 3])
+        # The staged planner diagnoses this formerly empty request explicitly.
+        with self.assertRaisesRegex(ValueError, "infeasible"):
+            theory.query(g.Legs([(1, signature), (2, signature)]), loops=0)
         # Four external legs in phi^3 have exactly the s, t, and u trees.
-        generated = g.Graph.generate(
-            [(i, signature) for i in range(1, 5)], [[signature] * 3], max_loops=0
+        retained = []
+
+        def select(view):
+            self.assertEqual(view.n_vertices, 2)
+            retained.append(view)
+            return True
+
+        plan = theory.query(
+            g.Legs([(i, signature) for i in range(1, 5)]), loops=0, select=select
         )
+        generated = list(plan.diagrams())
+        parallel = list(plan.diagrams(g.Run(parallel=True)))
+        self.assertIsInstance(generated, list)
+        for diagram in generated:
+            self.assertIs(type(diagram.graph()), g.Graph)
+            self.assertIsInstance(diagram.symmetry_factor(), int)
+            self.assertGreaterEqual(diagram.symmetry_factor(), 1)
         self.assertEqual(len(generated), 3)
-        self.assertEqual([size for _, size in generated], [1, 1, 1])
+        self.assertEqual([d.symmetry_factor() for d in generated], [1, 1, 1])
+        self.assertEqual(
+            [(d.canonical_form(), d.symmetry_factor()) for d in generated],
+            [(d.canonical_form(), d.symmetry_factor()) for d in parallel],
+        )
+        self.assertEqual(plan.count().diagrams, 3)
+        self.assertTrue(retained)
+        for view in retained:
+            with self.assertRaises(ReferenceError):
+                _ = view.n_vertices
 
     def test_parallel_edges_and_self_loops_have_expected_symmetries(self):
         parallel = g.build(
@@ -165,6 +188,38 @@ class AlgorithmsTests(unittest.TestCase):
             graph.is_isomorphic(result, node_key=lambda data: data["label"])
         )
 
+    def test_canonicalization_accepts_hashable_callback_keys(self):
+        for key in (b"key", (b"key", 7), frozenset({b"key", 7})):
+            with self.subTest(key=key):
+                payload = object()
+                graph = g.build(
+                    g.node("a", data=payload),
+                    g.node("b", data=object()),
+                    link("a", "b", data=object()),
+                )
+                calls = Counter()
+
+                def callback(role):
+                    def extract(data):
+                        calls[role] += 1
+                        return key
+
+                    return extract
+
+                keys = {
+                    role: callback(role)
+                    for role in ("node_key", "edge_key", "half_edge_key")
+                }
+                canonical, mapping, symmetry, _ = graph.canonize(**keys)
+                self.assertEqual(symmetry, 2)
+                self.assertIs(canonical.node(mapping[0]).data, payload)
+                self.assertTrue(graph.is_isomorphic(canonical, **keys))
+                graph.canonize_edges(
+                    edge_key=keys["edge_key"], half_edge_key=keys["half_edge_key"]
+                )
+                self.assertEqual((graph.n_nodes, graph.n_edges), (2, 1))
+                self.assertTrue(all(calls[role] > 0 for role in keys))
+
     def test_drawing_metadata_does_not_color_the_graph(self):
         a = g.build(g.node("a", label="first"), g.node("b"), link("a", "b"))
         b = g.build(g.node("x", label="different"), g.node("y"), link("x", "y"))
@@ -203,18 +258,23 @@ class AlgorithmsTests(unittest.TestCase):
     def test_callback_errors_propagate_and_generation_recovers(self):
         signature = g.EdgeSignature(0)
 
-        def reject(graph, count):
-            self.assertIs(type(graph), g.Graph)
+        retained = []
+
+        def reject(view):
+            retained.append(view)
             raise RuntimeError("callback sentinel")
 
-        kwargs = dict(
-            external_edges=[(i, signature) for i in range(4)],
-            vertex_signatures=[[signature] * 3],
-            max_loops=0,
-        )
+        theory = g.Theory([[signature] * 3])
+        legs = g.Legs([(i, signature) for i in range(4)])
+        failed = theory.query(legs, loops=0, select=reject).diagrams()
         with self.assertRaisesRegex(RuntimeError, "callback sentinel"):
-            g.Graph.generate(**kwargs, filter_fn=reject)
-        self.assertEqual(len(g.Graph.generate(**kwargs)), 3)
+            next(failed)
+        self.assertTrue(failed.aborted)
+        self.assertIsNone(next(failed, None))
+        for view in retained:
+            with self.assertRaises(ReferenceError):
+                _ = view.n_vertices
+        self.assertEqual(theory.query(legs, loops=0).count().diagrams, 3)
 
     def test_edge_canonicalization_ignores_fixed_vertex_payloads(self):
         payload = object()

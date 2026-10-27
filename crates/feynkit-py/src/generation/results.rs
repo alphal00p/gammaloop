@@ -1038,6 +1038,15 @@ impl PyBuiltDiagramSet {
     ///
     /// >>> view = built.render()
     /// >>> assert view is not None
+    ///
+    /// Parameters
+    /// ----------
+    /// config : RenderSettings or None, optional
+    ///     Shared layout and drawing overrides.
+    /// style : DiagramStyle or None, optional
+    ///     Particle, momentum, and physical index presentation.
+    /// max_diagrams : int or None, optional
+    ///     Maximum number of preview diagrams; None includes the full collection.
     #[pyo3(signature = (*, config=None, style=None, max_diagrams=Some(6)),
         text_signature = "($self, *, config=None, style=None, max_diagrams=6)")]
     fn render(
@@ -1073,6 +1082,21 @@ impl PyBuiltDiagramSet {
         )
     }
 
+    /// Display the constructed collection through its native notebook preview.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in this class example:
+    ///
+    /// >>> bundle = built._repr_mimebundle_(include=["text/plain"])
+    /// >>> assert bundle["text/plain"]
+    ///
+    /// Parameters
+    /// ----------
+    /// include : sequence[str] or None, optional
+    ///     MIME types to include; None permits every supported representation.
+    /// exclude : sequence[str] or None, optional
+    ///     MIME types to omit from the returned bundle.
     #[pyo3(signature = (include=None, exclude=None))]
     fn _repr_mimebundle_(
         &self,

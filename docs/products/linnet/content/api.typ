@@ -69,10 +69,14 @@ Its SVG, HTML, and file exports reuse the snapshot, even after later graph or se
 HepKit's physics-specific options live in `DiagramStyle`, passed separately as `style`.
 For multipage snapshots, use `to_svg_pages()`; `to_svg()` requires exactly one page.
 
-`Graph.generate()` takes `EdgeSignature` values and returns graph/group-size pairs.
-`HalfEdge` is a live graph view. Canonicalization and isomorphism compare expression-compatible
-payloads; use `node_key`, `edge_key`, and `half_edge_key` for custom data. Canonicalization
-preserves payload references and drawing metadata, which does not affect equivalence.
+`Theory` compiles vertex rules from `EdgeSignature` values. Query it with `Legs` and loop
+orders to obtain a `Plan`; `plan.diagrams()` streams `Diagram` objects with `graph()`,
+`canonical_form()`, and `symmetry_factor()`, while `plan.count()` counts without materializing
+graphs. Selection callbacks receive borrowed generation views that expire after the callback.
+`HalfEdge` is a live graph view. Canonicalization and isomorphism compare hashable Python
+keys or Symbolica expressions; use `node_key`, `edge_key`, and `half_edge_key` to map custom
+data to those keys. Canonicalization preserves payload references and drawing metadata,
+which does not affect equivalence.
 
 == Python graph workflows
 
@@ -169,8 +173,9 @@ propagator = graph.add_edge(edge(
 ))
 ```
 
-Each successful insertion is one atomic topology revision and returns a fresh view. Reacquire a
-view by name or index after the next edit. Validation failures do not publish the candidate and
+Each successful insertion is one atomic topology revision and returns a fresh view. Appending
+nodes or edges and changing orientations preserve existing element identities. Owning
+transformations that remove or renumber elements invalidate those element views. Validation failures do not publish the candidate and
 therefore leave existing views live. Arbitrary data keeps Python object identity; specs and their
 drawing dictionaries are copied by value and remain reusable.
 
@@ -182,12 +187,8 @@ edge records are replaced by the supplied value, name, and orientation. Use
 `delete(graph.subgraph(...))` for removal; there are no duplicate `remove_node` or `remove_edge`
 aliases.
 
-The long-lived topology is Linnet's native `HedgeGraph`; it is not a separate Python adjacency
-model. `NodeStore.Vec` is the default dense node store, while `NodeStore.Forest` selects the
-identification-preserving forest store. Pass `node_store=` to `Graph`, `build`, or a DOT importer,
-inspect `graph.node_store`, and use `graph.to_node_store(...)` for an explicit non-mutating
-conversion. Derived graphs preserve their input backend; append and join use the left graph's
-backend.
+The long-lived topology is Linnet's native `HedgeGraph` with one native node forest owner.
+Graph construction, derived graphs, append, and join use that same owner.
 
 A `Subgraph` is a graph-bound, revision-checked native half-edge selection, augmented only with
 explicit zero-crown node IDs so isolated nodes remain first-class members. Construct one from named
@@ -257,8 +258,10 @@ explicit `data` or `drawing` mutations they perform take effect immediately and 
 Every cut terminal must be part of a disjoint source or target node group and have an incident
 half-edge, while each combined terminal group must have a boundary. An isolated node mixed into
 an otherwise connected terminal group is rejected instead of being silently dropped. `all_cuts`
-eagerly materializes the native admissible separating
-partitions and can be combinatorial. Its result is sorted by structural half-edge indices, while
+eagerly materializes the native admissible separating partitions and can be combinatorial.
+Each connected component on either side must contain a terminal of that side. Thus a graph
+with an additional component containing no terminal has no admissible partitions; include a
+terminal in that component when it should participate in the partition. Its result is sorted by structural half-edge indices, while
 `CutPartition.boundary.left` and `.right` retain the orientation of each boundary half-edge.
 `all_bonds` enumerates inclusion-minimal connected bipartition boundaries in a size range; it is
 not a minimum-cardinality or max-flow operation. `find_bond` returns one deterministic native

@@ -4,6 +4,9 @@ use std::error::Error;
 use std::path::PathBuf;
 use std::{env, fs};
 
+#[cfg(feature = "linnet")]
+use linnet_py as graph;
+
 #[cfg(any(
     feature = "feynkit",
     feature = "gammaloop",
@@ -83,23 +86,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     }
     outputs.sort();
     outputs.dedup();
-    #[cfg_attr(not(feature = "linnet"), allow(unused_mut))]
-    let mut outputs = outputs
-        .into_iter()
-        .map(|output| (output, normalized.clone()))
-        .collect::<Vec<_>>();
-    // The standalone distribution ships the same classes without Symbolica keys.
-    #[cfg(feature = "linnet")]
-    if component == "linnet-graph" {
-        outputs.push((
-            crates.join("linnet-py/linnet_py.pyi"),
-            normalize(&linnet_py::stub(
-                module,
-                linnet_py::PythonModule::Standalone,
-            )?),
-        ));
-    }
-    for (output, normalized) in outputs {
+    for output in outputs {
         if check {
             let checked_in = fs::read_to_string(&output)?;
             if checked_in != normalized {
@@ -149,7 +136,7 @@ fn validate_runtime_stub_surface(
             #[cfg(feature = "linnet")]
             "symbolica.community.graph" => {
                 let module = pyo3::types::PyModule::new(py, module_name)?;
-                linnet_py::register(&module)?;
+                graph::register(&module)?;
                 module
             }
             #[cfg(feature = "feynkit")]
@@ -172,9 +159,7 @@ fn validate_runtime_stub_surface(
     #[cfg(any(feature = "linnet", feature = "feynkit"))]
     let rendered = match module_name {
         #[cfg(feature = "linnet")]
-        "symbolica.community.graph" => {
-            Some(linnet_py::stub(module, linnet_py::PythonModule::Community)?)
-        }
+        "symbolica.community.graph" => Some(graph::canonical_stub(module)?),
         #[cfg(feature = "feynkit")]
         "symbolica.community.hepkit" => Some(feynkit_py::stub_source(module)),
         _ => None,
@@ -257,7 +242,7 @@ fn render(
         #[cfg(feature = "feynkit")]
         "feynkit-community" => Ok(feynkit_py::stub_source(module)),
         #[cfg(feature = "linnet")]
-        "linnet-graph" => Ok(linnet_py::stub(module, linnet_py::PythonModule::Community)?),
+        "linnet-graph" => Ok(graph::canonical_stub(module)?),
         _ => Ok(module.to_string()),
     }
 }
@@ -381,7 +366,7 @@ fn gather(component: &str) -> Result<(&'static str, pyo3_stub_gen::StubInfo), Bo
         #[cfg(feature = "gammaloop")]
         "gammaloop-python" => Ok(("gammaloop._gammaloop", gammaloop_api::python::stub_info()?)),
         #[cfg(feature = "linnet")]
-        "linnet-graph" => Ok(("symbolica.community.graph", linnet_py::stub_info()?)),
+        "linnet-graph" => Ok(("symbolica.community.graph", graph::stub_info()?)),
         #[cfg(feature = "spenso")]
         "spynso3" => Ok(("symbolica.community.tensor", spynso3::stub_info()?)),
         #[cfg(feature = "vakint")]
@@ -448,6 +433,14 @@ fn scope_symbolica_floats(mut stub_info: pyo3_stub_gen::StubInfo) -> pyo3_stub_g
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "linnet")]
+    use linnet_py as graph;
+    #[cfg(feature = "gammaloop")]
+    use pyo3::types::{PyAnyMethods, PyModule};
+    #[cfg(feature = "gammaloop")]
+    use pyo3::{PyResult, Python};
+    #[cfg(feature = "gammaloop")]
+    use std::ffi::CString;
     #[cfg(feature = "feynkit")]
     #[test]
     fn feynkit_runtime_surface_uses_canonical_shared_reexports() {
@@ -510,9 +503,6 @@ mod tests {
             "{error}"
         );
     }
-
-    #[cfg(feature = "gammaloop")]
-    use std::ffi::CString;
 
     #[cfg(feature = "gammaloop")]
     const GAMMALOOP_STUB: &str = include_str!("../../../docs/api/python/gammaloop-python.pyi");
@@ -715,11 +705,9 @@ def validate(runtime_module, stub_source):
     #[cfg(feature = "linnet")]
     #[test]
     fn linnet_package_and_docs_share_the_typed_stub_info_surface() {
-        use linnet_py::{PythonModule, stub};
-
         let (module_name, info) = super::gather("linnet-graph").unwrap();
         let module = info.modules.get(module_name).unwrap();
-        let canonical = stub(module, PythonModule::Community).unwrap();
+        let canonical = graph::canonical_stub(module).unwrap();
         assert_eq!(
             canonical,
             include_str!("../../linnet-py/python/symbolica/community/graph/__init__.pyi")
@@ -728,57 +716,51 @@ def validate(runtime_module, stub_source):
             canonical,
             include_str!("../../../docs/api/python/linnet-graph.pyi")
         );
-        // The standalone stub differs only by the keys it accepts.
-        let standalone = stub(module, PythonModule::Standalone).unwrap();
-        assert_eq!(standalone, include_str!("../../linnet-py/linnet_py.pyi"));
-        assert_eq!(
-            standalone,
-            canonical
-                .replace("from symbolica.core import Expression\n", "")
-                .replace("typing.Hashable | Expression", "typing.Hashable")
-        );
         for declaration in [
             "_NativeValue: typing.TypeAlias = (",
+            "_Key: typing.TypeAlias = typing.Hashable | Expression",
+            "_LabelKey: typing.TypeAlias = typing.Callable[[typing.Any], _Key] | None",
             "def __new__(cls, *, encode_node: typing.Callable[[NodeValue], DotVertexData]",
-            "class Node:",
-            "class Edge:",
-            "class HalfEdge:",
-            "class NodeView:",
-            "class EdgeView:",
-            "class HalfEdgeView:",
-            "def __new__(cls, *, nodes: typing.Iterable[Node] | None = None, edges: typing.Iterable[Edge] | None = None",
-            "def __new__(cls, source: _EdgeEndpoint = None, sink: _EdgeEndpoint = None",
-            "def __new__(cls, node: _EndpointTarget, *, data: typing.Any = None",
-            "def add_node(self, node: _NodeInput = None",
-            "def add_edge(self, source: _EdgeInput = None, sink: _EdgeEndpoint = None",
-            "def map(self, *, node: typing.Callable[[NodeView], typing.Any] | None = None",
-            "def render(self, *, config: RenderSettings | None = None)",
-            "node_outset: _AutoNumber = ...",
-            "_Padding: typing.TypeAlias = builtins.int | builtins.float | _NativeArray | _NativeDict | Insets",
-            "def call(self, *args: _NativeValue, **kwargs: _NativeValue) -> TypstCall",
-            "length: _AutoMarkSize = ..., width: _AutoMarkSize = ...",
-            "stroke: _MarkStroke = ...",
-            "def combine(*parts: _MarkPart,",
-        ] {
-            assert!(canonical.contains(declaration), "missing `{declaration}`");
-        }
-        for legacy_or_broad in [
-            "**kwargs: typing.Any",
-            "**drawing",
-            "slf:",
             "class NodeSpec:",
             "class EdgeSpec:",
             "class HalfEdgeSpec:",
-            "\ndef build(",
-            "\ndef node(",
-            "\ndef edge(",
-            "\ndef source(",
-            "\ndef sink(",
+            "class Node:",
+            "class Edge:",
+            "class HalfEdge:",
+            "class Theory:",
+            "class Plan:",
+            "class Diagram:",
+            "def add_node(self, spec: NodeSpec)",
+            "def add_edge(self, spec: EdgeSpec)",
+            "def map(self, *, node: typing.Callable[[Node], typing.Any] | None = None",
+            "def render(self, *, config: RenderSettings | None = None)",
+            "\ndef build(*items: _GraphItem",
+            "\ndef node(name: _OptionalString",
+            "\ndef edge(first: HalfEdgeSpec",
+            "\ndef source(node: _EndpointTarget",
+            "\ndef sink(node: _EndpointTarget",
+            "node_outset: _AutoNumber = ...",
+            "_Padding: typing.TypeAlias = builtins.int | builtins.float | _NativeArray | _NativeDict | Insets",
+            "def call(self, *args: _NativeValue, **kwargs: _NativeValue) -> TypstCall",
+            "def __new__(cls, *, start: _NativeValue = ..., end: _NativeValue = ...",
+            "stroke: _OptionalStrokeValue = ...",
+            "def barbed() -> Mark",
+            "def straight() -> Mark",
+            "def query(",
+            "def diagrams(",
         ] {
-            assert!(
-                !canonical.contains(legacy_or_broad),
-                "unexpected `{legacy_or_broad}`"
-            );
+            assert!(canonical.contains(declaration), "missing `{declaration}`");
+        }
+        for removed in [
+            "class NodeStore",
+            "node_store",
+            "def to_node_store(",
+            "def generate(",
+            "**kwargs: typing.Any",
+            "**drawing",
+            "slf:",
+        ] {
+            assert!(!canonical.contains(removed), "unexpected `{removed}`");
         }
         assert_eq!(canonical.matches("def anchor(self)").count(), 1);
     }
@@ -849,16 +831,7 @@ def validate(runtime_module, stub_source):
 
     #[cfg(feature = "gammaloop")]
     #[test]
-    fn gammaloop_runtime_surface_and_signatures_match_the_docs_stub() -> pyo3::PyResult<()> {
-        use pyo3::prelude::{
-            Bound, PyAnyMethods, PyBoolMethods, PyByteArrayMethods, PyBytesMethods,
-            PyCapsuleMethods, PyComplexMethods, PyDictMethods, PyFloatMethods, PyFrozenSetMethods,
-            PyListMethods, PyMappingMethods, PyMappingProxyMethods, PyModule, PyModuleMethods,
-            PyResult, PySequenceMethods, PySetMethods, PySliceMethods, PyStringMethods,
-            PyTracebackMethods, PyTupleMethods, PyTypeMethods, PyWeakrefMethods, Python,
-        };
-        use pyo3::types::PyModule;
-
+    fn gammaloop_runtime_surface_and_signatures_match_the_docs_stub() -> PyResult<()> {
         Python::attach(|py| {
             let runtime = PyModule::new(py, "gammaloop._gammaloop")?;
             gammaloop_api::python::register_python_api_for_docs(&runtime)?;

@@ -1,28 +1,27 @@
-//! Writes the standalone and Community Linnet stubs; `alphal00p-docs-python-exporter --features
-//! linnet` writes and checks the same files. The final extension selects Symbolica's arithmetic
-//! backend, so name one when running the generator:
-//!
-//! ```text
-//! cargo run -p linnet-py --bin stubgen \
-//!     --features community,python_stubgen,symbolica/integer-gmp,symbolica/float-mpfr
-//! ```
+//! Regenerate the Community graph package and documentation stubs.
 
-use linnet_py::{stub, stub_info, PythonModule};
+use std::fs;
+use std::path::PathBuf;
 
-fn main() -> pyo3_stub_gen::Result<()> {
-    let root = env!("CARGO_MANIFEST_DIR");
-    let info = stub_info()?;
+use linnet_py as graph;
+use pyo3_stub_gen::Result;
+
+fn main() -> Result<()> {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let info = graph::stub_info()?;
     let module = info
         .modules
-        .get(PythonModule::COMPILED.name())
-        .expect("linnet StubInfo must contain the linnet module");
-    std::fs::write(
-        format!("{root}/linnet_py.pyi"),
-        stub(module, PythonModule::Standalone)?,
-    )?;
-    std::fs::write(
-        format!("{root}/python/symbolica/community/graph/__init__.pyi"),
-        stub(module, PythonModule::Community)?,
-    )?;
+        .get("symbolica.community.graph")
+        .expect("Linnet StubInfo must contain the graph module");
+    let stub = graph::canonical_stub(module)?;
+    for path in [
+        root.join("python/symbolica/community/graph/__init__.pyi"),
+        root.join("../../docs/api/python/linnet-graph.pyi"),
+        root.join(
+            "../../examples/notebooks/symbolica-host/python/symbolica/community/graph/__init__.pyi",
+        ),
+    ] {
+        fs::write(path, &stub)?;
+    }
     Ok(())
 }

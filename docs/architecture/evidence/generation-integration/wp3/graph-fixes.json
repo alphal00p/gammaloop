@@ -1,0 +1,669 @@
+{
+  "schema": 1,
+  "status": "Bounded correction candidate validated; NEW independent Astra review required; no parent integration/publication",
+  "date": "2026-10-27",
+  "source_head": "817b5886a50276efea05ab860d22016e1fb0c203",
+  "approved_base": "438b61500da4b32841c64211103e5da6fc4c4a72",
+  "code_commit": "ba37538752f6cd1af30c0cbe6be5549c86405d74",
+  "code_change": "skmtqrntkystqwoxmnrsoqpokkxnxoxz",
+  "author": "Lucien Huber <im@lcnbr.ch>",
+  "evidence_change": "nvxzqmvluwkoksnxkyznlovtwxzywxsk",
+  "bookmark": "generation-staged-graph-fixes",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-staged-graph-fixes",
+  "finding_responses": {
+    "C1": {
+      "severity": "P1",
+      "response": "Live identity uses element_epoch in every audited constructor/resolver, including map and renderer selectors; map resets both counters on its new owner; traversal roots reuse resolve_node_target. revision remains the mutation/snapshot guard. No storage enum, compatibility adapter or weakened stale/borrow-expiry guard.",
+      "regressions": {
+        "map_operations": [
+          "none",
+          "add_node",
+          "add_edge",
+          "orientation",
+          "reordered"
+        ],
+        "map_callbacks": [
+          "node",
+          "edge",
+          "source",
+          "sink"
+        ],
+        "argument_matrix": [
+          "fresh views",
+          "integer indices"
+        ],
+        "traversals": [
+          "breadth first",
+          "depth first"
+        ],
+        "selectors": "all4 roles after add_node/add_edge/orientation",
+        "other": "retained validity; reorder/split/connect invalidity; foreign graph rejection; map/selector mutation guards; original exception identity"
+      }
+    },
+    "C2": {
+      "severity": "P2",
+      "response": "All retained Python callers use the single native node forest and Theory/Legs/Plan API. All66 basic test methods remain (7 renamed to native-owner contracts); arbitrary payload identity, drawing independence, topology/canonical/symmetry/count/filter oracles retained. All6 package/docs/host snapshots regenerated through actual canonical owners. No NodeStore or Graph.generate aliases restored.",
+      "oracles": [
+        210,
+        278,
+        845
+      ],
+      "contract_migrations": [
+        "Two-leg phi3 L0 is explicitly infeasible at planning, preserving negative coverage.",
+        "Terminal-free disconnected components yield no terminal-rooted partitions; retain that original request as an empty oracle and add e as a source terminal for nontrivial partition assertions.",
+        "Reverse/orientation/append preserve element identity; topology snapshots still expire by revision.",
+        "Native DOT escaping supports a trailing backslash; assert exact roundtrip, retaining malformed IDs/direction/name rejection tests."
+      ]
+    },
+    "B1": {
+      "severity": "P2",
+      "response": "Dedicated terminal select callback asserts exact GenerationDiagramView and concrete particle fields; a nonempty terminal_checks assertion prevents silent omission. Native callback annotation overrides and HEP docstrings use the generation owner; renderer DiagramView remains distinct.",
+      "terminal_check_evidence": {
+        "terminal_field_checks": 4,
+        "generation_class": "GenerationDiagramView",
+        "live_class": "DiagramView",
+        "classes_distinct": true,
+        "method": "read-only trace after native test generation; original assertions continue"
+      }
+    },
+    "E1": {
+      "severity": "P1",
+      "response": "Exporter and stubgen delegate to canonical_stub, use only supported Community destinations, remove nonexistent standalone includes, and validate the retained Spec/live/factory API. Compatible detailed codec/callback/drawing signatures and narrow-value assertions remain; discarded NodeView/Mark assumptions migrate to the retained owner. One canonical string is borrowed for all destinations. Metadata fixes actual macro view names and numeric alias imports. Three bounded staged display docstrings unblock the unchanged documentation audit."
+    },
+    "E2": {
+      "severity": "P1",
+      "response": "Gamma exporter test uses a single minimal module-scope PyO3 import block; duplicate PyModule and unused/local prelude imports removed. Real gammaloop --tests feature build and runtime/signature tests pass."
+    },
+    "E3": {
+      "severity": "P2",
+      "response": "Linnet product component keeps its Community module kind and names supported native,python_stubgen features; literal Cargo metadata and no-default native feature checks pass. No community/standalone feature split restored."
+    },
+    "E5": {
+      "severity": "P1",
+      "response": "GammaLoop Python module imports IntoPyObject at module scope and removes exactly the observed unused prelude/type imports. Four primitive conversion paths compile; expected registered public surface/signatures remain identical to retained Gamma docs, without a Gamma stub refresh."
+    }
+  },
+  "code_files": [
+    {
+      "path": "crates/alphal00p-docs-python-exporter/src/main.rs",
+      "sha256": "92e6c311851fd3a58a8441434c84618fb59414286306b5f0c001e946c38da150"
+    },
+    {
+      "path": "crates/feynkit-py/python/symbolica/community/hepkit/__init__.pyi",
+      "sha256": "965481a91de1044265f1590d4d4e3499b37f366268c96a2c88ca57b478e3696b"
+    },
+    {
+      "path": "crates/feynkit-py/src/generation/results.rs",
+      "sha256": "324a64526d68ad47f787b02c7350560d617085003f5366adcd1fcad3044b47b5"
+    },
+    {
+      "path": "crates/feynkit-py/src/generation/tests.rs",
+      "sha256": "d67a85c7efe436487b68df15c594373fd5090ec8eeee5f01c82a3f5cbeacdf4d"
+    },
+    {
+      "path": "crates/feynkit-py/src/generation.rs",
+      "sha256": "e37e1136653d87dfc084a611398c144ca68ac646eaa844d3e92cd3615fd2e23a"
+    },
+    {
+      "path": "crates/gammaloop-api/src/python.rs",
+      "sha256": "ed3684989501059bbc617c659f772e1ca683938881a0936baa1629bfcd64a6bf"
+    },
+    {
+      "path": "crates/linnet-py/examples/rendering_api.py",
+      "sha256": "60f5658732ee1f5f7ecbead743544c26a959ec921f46757ed521b016e6b1a23e"
+    },
+    {
+      "path": "crates/linnet-py/python/symbolica/community/graph/__init__.pyi",
+      "sha256": "3a37e2707767a28bf617dd5988796f1dbc546e6d06a64fcd8762cacb66f35d02"
+    },
+    {
+      "path": "crates/linnet-py/src/bin/stubgen.rs",
+      "sha256": "923d43bd782d004a2a3954e8af73ab870c17976fb58edffed69de4e330768bfc"
+    },
+    {
+      "path": "crates/linnet-py/src/graph/generate.rs",
+      "sha256": "c8f2ccbe085cff91c0a408c1d69e31bc95ebddfc57473aa6b51c3d9593a71c7b"
+    },
+    {
+      "path": "crates/linnet-py/src/graph.rs",
+      "sha256": "7f688289cb03e3fe2af2eb21cbbe6ea786145952eb68464ed21628d85980f7c0"
+    },
+    {
+      "path": "crates/linnet-py/src/lib.rs",
+      "sha256": "aefc52cd7f0a8a23cc0854a06c6269ab24b1e6ceb16bda53f4a5fde4bdb3ec82"
+    },
+    {
+      "path": "crates/linnet-py/src/render.rs",
+      "sha256": "dee4015cb4cd017f3a2d22121453767ffab44b7a9d1f3d773c58f939b3e11ab4"
+    },
+    {
+      "path": "crates/linnet-py/src/topology.rs",
+      "sha256": "3ab2d10a35268f7469861022162b7aed25b0c27beed3bca606a501bba10ee081"
+    },
+    {
+      "path": "crates/linnet-py/tests/test_algorithms.py",
+      "sha256": "5e07da5423da1c4a7546235e188d83f37345971c84c76e331df5c7e01c8341fa"
+    },
+    {
+      "path": "crates/linnet-py/tests/test_basic.py",
+      "sha256": "da959e45e175019bb120db846450b2a71ef7b13eb249bd25179cde0f1169c6b6"
+    },
+    {
+      "path": "crates/linnet-py/tests/test_view_epochs.py",
+      "sha256": "f747df5cd56a2a2ac33a408e5f82cd85b6940d163851d3082280b6f09358030a"
+    },
+    {
+      "path": "docs/api/python/feynkit-community.pyi",
+      "sha256": "965481a91de1044265f1590d4d4e3499b37f366268c96a2c88ca57b478e3696b"
+    },
+    {
+      "path": "docs/api/python/linnet-graph.pyi",
+      "sha256": "3a37e2707767a28bf617dd5988796f1dbc546e6d06a64fcd8762cacb66f35d02"
+    },
+    {
+      "path": "docs/products/linnet/content/api.typ",
+      "sha256": "f877f554ae4eeb338f85fb5332a9882de8286a632755148365e1000abdb048b3"
+    },
+    {
+      "path": "docs/products/registry.toml",
+      "sha256": "cc5c9431d8039fe3a29e0fac4ecc0f224f9819ea98cc1d2f47d9bb17c2526efd"
+    },
+    {
+      "path": "examples/notebooks/symbolica-host/python/symbolica/community/graph/__init__.pyi",
+      "sha256": "3a37e2707767a28bf617dd5988796f1dbc546e6d06a64fcd8762cacb66f35d02"
+    },
+    {
+      "path": "examples/notebooks/symbolica-host/python/symbolica/community/hepkit/__init__.pyi",
+      "sha256": "965481a91de1044265f1590d4d4e3499b37f366268c96a2c88ca57b478e3696b"
+    }
+  ],
+  "code_inventory_rule": "Only the23 immutable implementation/generated-output files at code_commit are in code_files. This mutable receipt and its later documentation registration are excluded; their final revision is reported separately.",
+  "native_control_basis": {
+    "binary": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/linnet-7d8f725f1a9b558a",
+    "sha256": "4051f0848252d06be9b830ce48b3735fe9d62e54e74a3598ac06cb5e44324b86",
+    "selected_counts": [
+      211,
+      115,
+      12
+    ],
+    "source": "crates/linnet is byte-unchanged from frozen source; retained binary matches independent review identity; no full nauty/corpus/physics/benchmark certification"
+  },
+  "binding_identities": [
+    {
+      "target": "symbolica",
+      "source": "/home/lcnbr/.cargo/git/checkouts/symbolica-db3dbb7e8d40efb5/1a1829b/src/lib.rs",
+      "features": [
+        "bincode",
+        "float-mpfr",
+        "integer-gmp",
+        "native_code_generation",
+        "numpy",
+        "pyo3",
+        "pyo3-stub-gen",
+        "pyo3-stub-gen-derive",
+        "python_export",
+        "python_stubgen",
+        "serde"
+      ],
+      "test": false,
+      "files": [
+        {
+          "path": "/common/build-cache/lcnbr/44/087dd61ba278c7/ci-optim/deps/libsymbolica-ccb4b94a30ced33f.rlib",
+          "sha256": "82c353b794c81bcdbf0de337373edd60564871c9825470d336758b8d51cab0ce"
+        }
+      ]
+    },
+    {
+      "target": "linnet_py",
+      "source": "/shared/lcnbr/dev/gammaloop/generation-staged-graph-fixes/crates/linnet-py/src/lib.rs",
+      "features": [
+        "default",
+        "native",
+        "python_stubgen"
+      ],
+      "test": false,
+      "files": [
+        {
+          "path": "/common/build-cache/lcnbr/44/087dd61ba278c7/ci-optim/deps/liblinnet_py-e7fd1156c02d9937.rlib",
+          "sha256": "faa5d9a08395a1afa07ee76acfb6d94222b6431f94520ee950c994d943e6676b"
+        }
+      ]
+    },
+    {
+      "target": "feynkit_py",
+      "source": "/shared/lcnbr/dev/gammaloop/generation-staged-graph-fixes/crates/feynkit-py/src/lib.rs",
+      "features": [
+        "default",
+        "native",
+        "python_stubgen",
+        "ufo"
+      ],
+      "test": true,
+      "files": [
+        {
+          "path": "/common/build-cache/lcnbr/44/087dd61ba278c7/ci-optim/deps/feynkit_py-5e1f27f915ae78c9",
+          "sha256": "148e41bc9c8e1132ab207e1acc83875a5f7dee3fd0706d7cfdde142b95eb8862"
+        }
+      ]
+    }
+  ],
+  "gamma_binding_identities": [
+    {
+      "target": "gammaloop_api",
+      "test": false,
+      "source": "/shared/lcnbr/dev/gammaloop/generation-staged-graph-fixes/crates/gammaloop-api/src/lib.rs",
+      "features": [
+        "python_api",
+        "python_stubgen",
+        "ufo_support"
+      ],
+      "files": [
+        {
+          "path": "/common/build-cache/lcnbr/44/087dd61ba278c7/ci-optim/deps/libgammaloop_api.rlib",
+          "sha256": "e977e010d8d84b7ee342d5f18043969529caa48074d8356483af212453f3e11a"
+        }
+      ]
+    },
+    {
+      "target": "alphal00p-docs-python-exporter",
+      "test": true,
+      "source": "/shared/lcnbr/dev/gammaloop/generation-staged-graph-fixes/crates/alphal00p-docs-python-exporter/src/main.rs",
+      "features": [
+        "default",
+        "gammaloop"
+      ],
+      "files": [
+        {
+          "path": "/common/build-cache/lcnbr/44/087dd61ba278c7/ci-optim/deps/alphal00p_docs_python_exporter-aaa3c8605fb78541",
+          "sha256": "b7025cf773c83d6535033b4e782b962e4c5aa23b28f1c8b2acd6b6606cfe9fb4"
+        }
+      ]
+    }
+  ],
+  "python_results": {
+    "tests": 77,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "graph_module": "standalone_graph",
+    "graph_class_module": "symbolica.community.graph",
+    "method": "native modules registered by existing standalone host; temporary package scaffolding restored; no installed-wheel certification"
+  },
+  "negative_frozen_binding_results": {
+    "tests": 77,
+    "failures": 1,
+    "errors": 32,
+    "skipped": 0,
+    "graph_module": "standalone_graph",
+    "graph_class_module": "symbolica.community.graph",
+    "method": "native modules registered by existing standalone host; temporary package scaffolding restored; no installed-wheel certification",
+    "status": "EXPECTED_NEGATIVE: same current tests on frozen source reproduce C1"
+  },
+  "python_evidence": {
+    "current_log": "target/graph-fixes/retained-python.log",
+    "current_sha256": "109892d99e087bdec24423dd8026d47b8a33356817d0476ccb2210faeb69c671",
+    "negative_log": "target/graph-fixes/retained-baseline-python.log",
+    "negative_sha256": "7c1a97758127482a1232456939fc846300c3a9efc3f2f217d38d26849fa6fbd0",
+    "source_identities": "target/graph-fixes/baseline-test-identities.txt",
+    "method": "Existing native standalone host registers real graph/core modules; a read-only one-shot trace runs retained unittest sources with temporary namespace scaffolding and restores aliases, then original host assertions continue. No mocked graph methods, artificial skips or installed-wheel claim."
+  },
+  "isolated_callback_controls": {
+    "passed": 18,
+    "tests": [
+      "generation::tests::automatic_progress_tracks_marimo_lifecycle",
+      "generation::tests::compact_html_reports_discovery_without_demanding_numerators",
+      "generation::tests::display_only_generation_keeps_progress_and_native_regions",
+      "generation::tests::generation_defaults_leave_numerator_grouping_opt_in",
+      "generation::tests::group_member_wrapper_fits_wasm_allocator_alignment",
+      "generation::tests::minimal_output_preserves_physics_and_explicit_id_demands",
+      "generation::tests::process_metadata_and_selectors_are_typed_and_round_trip",
+      "generation::tests::progress_and_partial_filters_use_the_calling_python_thread",
+      "generation::tests::python_flavour_classes_preserve_physics_assignments_and_ranked_fields",
+      "generation::tests::python_signals_interrupt_both_generation_entry_points",
+      "generation::tests::python_typed_hooks_prune_like_rust_hooks",
+      "generation::tests::request_decorators_preserve_dispatch_gc_and_heredity_contracts",
+      "generation::tests::staged_python_amplitude_preserves_squared_pairs_after_selection_and_grouping",
+      "generation::tests::staged_python_selection_uses_run_progress_cancellation_and_errors",
+      "generation::tests::worker_permission_keeps_progress_on_caller_and_preserves_failures_and_gc",
+      "graph::tests::apply_feynman_rules_returns_the_ruled_diagram",
+      "tests::standalone_python_errors_keep_their_public_types_and_module_isolation",
+      "tests::standalone_python_pipeline_covers_generation_graphs_cff_and_kinematics"
+    ],
+    "results": "target/graph-fixes/callback-controls.json",
+    "sha256": "52308fa256c7c17d573f1ef733061db12e8300d918cf43d2e48ef89a6a685ca5",
+    "terminal_checks": {
+      "terminal_field_checks": 4,
+      "generation_class": "GenerationDiagramView",
+      "live_class": "DiagramView",
+      "classes_distinct": true,
+      "method": "read-only trace after native test generation; original assertions continue"
+    }
+  },
+  "generated_snapshots": {
+    "graph": {
+      "crates/linnet-py/python/symbolica/community/graph/__init__.pyi": "3a37e2707767a28bf617dd5988796f1dbc546e6d06a64fcd8762cacb66f35d02",
+      "docs/api/python/linnet-graph.pyi": "3a37e2707767a28bf617dd5988796f1dbc546e6d06a64fcd8762cacb66f35d02",
+      "examples/notebooks/symbolica-host/python/symbolica/community/graph/__init__.pyi": "3a37e2707767a28bf617dd5988796f1dbc546e6d06a64fcd8762cacb66f35d02"
+    },
+    "hepkit": {
+      "crates/feynkit-py/python/symbolica/community/hepkit/__init__.pyi": "965481a91de1044265f1590d4d4e3499b37f366268c96a2c88ca57b478e3696b",
+      "docs/api/python/feynkit-community.pyi": "965481a91de1044265f1590d4d4e3499b37f366268c96a2c88ca57b478e3696b",
+      "examples/notebooks/symbolica-host/python/symbolica/community/hepkit/__init__.pyi": "965481a91de1044265f1590d4d4e3499b37f366268c96a2c88ca57b478e3696b"
+    }
+  },
+  "checks": {
+    "native_topology_generation_canon_parser": {
+      "log": "target/graph-fixes/native-controls.log",
+      "sha256": "868b8f71e3b4b88ec68993ab802ef5d747991ef424178311a28c29a9404f281b",
+      "status": "PASS",
+      "passed_tests": 211
+    },
+    "native_additional": {
+      "log": "target/graph-fixes/additional-tests.log",
+      "sha256": "7b52ff5c17b6f684a56b60edd247459241d282cd6e68308e626bf23a7d5e30df",
+      "status": "PASS",
+      "passed_tests": 115
+    },
+    "native_subgraphs": {
+      "log": "target/graph-fixes/subgraph-tests.log",
+      "sha256": "0649adce5fbb5b162af42d33c17c46abc7b43aaae5e94d5cccd0c4484f27d5ca",
+      "status": "PASS",
+      "passed_tests": 12
+    },
+    "linnet_exporter_feature_tests_check": {
+      "log": "target/graph-fixes/e1-exporter-check.log",
+      "sha256": "4fd6df230a37fb7535d03bfd45bc50a8cb84ae3e5fe78f64fcd11c6533417eed",
+      "status": "PASS"
+    },
+    "linnet_exporter_contract_tests": {
+      "log": "target/graph-fixes/e1-exporter-tests-final.log",
+      "sha256": "da9dcb6a2b2819ad931982ca235dbd487f70b0a582393b80b890b02be5a22d7a",
+      "status": "PASS",
+      "passed_tests": 2
+    },
+    "feynkit_exporter_reexports": {
+      "log": "target/graph-fixes/feynkit-exporter-test.log",
+      "sha256": "069fab6538f478e5924b92be553ae7749841dd336e44147168ee556401343702",
+      "status": "PASS",
+      "passed_tests": 1
+    },
+    "gamma_exporter_feature_tests_check": {
+      "log": "target/graph-fixes/e2-e5-exporter-check.log",
+      "sha256": "4b599f761b1fad95ca6aebd179c094fbde6a2bcee7488da35c2f8a0fe0675bac",
+      "status": "PASS"
+    },
+    "gamma_exporter_runtime_registration_prose": {
+      "log": "target/graph-fixes/e2-e5-exporter-tests-final.log",
+      "sha256": "271f5c18facb57e6b0d7248aad9d96c8ddba989864a5384bd997e3f9edf844fe",
+      "status": "PASS",
+      "passed_tests": 3
+    },
+    "linnet_explicit_native_feature_check": {
+      "log": "target/graph-fixes/e3-product-feature-check.log",
+      "sha256": "553d06f33544de86022f96f66a2242184bebb381e3ae01872ae3ed91896127d5",
+      "status": "PASS"
+    },
+    "graph_stubs_owner_check": {
+      "log": "target/graph-fixes/graph-stubs-final-check.log",
+      "sha256": "c2b5e2b20de275bf0e6d91a3eb4f39f685edecf2d04bf8c400f4524b4680e250",
+      "status": "PASS"
+    },
+    "hepkit_stubs_owner_check": {
+      "log": "target/graph-fixes/hep-stubs-final-check.log",
+      "sha256": "17562471f30ffd21655f755eb5d7cf02dd91f45999f0ac57bc7b03cc05a7d96f",
+      "status": "PASS"
+    },
+    "scoped_clippy": {
+      "log": "target/graph-fixes/clippy.log",
+      "sha256": "4c069f2f73183a39aad5cab5551334c9091e852b445599e44d2cfe027cdff75b",
+      "status": "PASS"
+    },
+    "just-fmt-check": {
+      "status": "PASS",
+      "log": "target/graph-fixes/just-fmt-check.log",
+      "sha256": "b6e19c16e0d5f97094745b63c78c4f15238111c4de91b081bba774a71abff1e8"
+    },
+    "python-format-check": {
+      "status": "PASS",
+      "log": "target/graph-fixes/python-format-check.log",
+      "sha256": "177f260a5645724013185e4b140c7045cc39e56c0c97b120f5cb23599f85f0de"
+    }
+  },
+  "commands": {
+    "environment": "target/graph-fixes/dev.sh: preserve/load SYMBOLICA_LICENSE silently; CARGO_BUILD_JOBS=2 RUST_TEST_THREADS=2 RAYON_NUM_THREADS=2; final commands INSTA_UPDATE=no; realized canonical Nix dev shell /nix/store/j7qzy1qjcra1yzjq49xg31yggrv02b61-nix-shell-env.drv; explicit feature-workspace cwd",
+    "native": "python target/graph-fixes/native-controls.py; python target/graph-fixes/native-additional.py (exact retained test lists, unchanged native sources)",
+    "rebuilt_binding_host": "cargo test --locked --profile ci-optim -p feynkit-py --lib --features python_stubgen,pyo3/auto-initialize,linnet-py/default --no-run --message-format=json",
+    "python": "bash target/graph-fixes/run-python.sh HOST_BINARY; python target/graph-fixes/run-callback-controls.py HOST_BINARY",
+    "linnet_exporter_check": "cargo check --locked --profile ci-optim -p alphal00p-docs-python-exporter --features linnet --tests",
+    "linnet_tests": "cargo test --locked --profile ci-optim -p alphal00p-docs-python-exporter --features linnet -- tests::linnet_ --test-threads=1",
+    "feynkit_exporter_test": "cargo test --locked --profile ci-optim -p alphal00p-docs-python-exporter --features linnet,feynkit -- tests::feynkit_runtime_surface_uses_canonical_shared_reexports --exact --test-threads=1",
+    "gamma_check": "cargo check --locked --profile ci-optim -p alphal00p-docs-python-exporter --features gammaloop --tests",
+    "gamma_tests": "cargo test --locked --profile ci-optim -p alphal00p-docs-python-exporter --features gammaloop -- tests::gammaloop_ --test-threads=1",
+    "product_metadata": "cargo metadata --locked --no-deps --format-version 1 --features linnet-py/native,linnet-py/python_stubgen",
+    "product_feature": "cargo check --locked --profile ci-optim -p linnet-py --no-default-features --features native,python_stubgen",
+    "stub_generation": "cargo run --locked --profile ci-optim -p alphal00p-docs-python-exporter --features linnet -- linnet-graph docs/api/python/linnet-graph.pyi; cargo run --locked --profile ci-optim -p alphal00p-docs-python-exporter --features linnet,feynkit -- feynkit-community docs/api/python/feynkit-community.pyi",
+    "stub_checks": "cargo run --locked --profile ci-optim -p alphal00p-docs-python-exporter --features linnet,feynkit -- linnet-graph docs/api/python/linnet-graph.pyi --check; cargo run --locked --profile ci-optim -p alphal00p-docs-python-exporter --features linnet,feynkit -- feynkit-community docs/api/python/feynkit-community.pyi --check",
+    "clippy": "cargo clippy --locked --profile ci-optim -p linnet-py -p feynkit-py -p alphal00p-docs-python-exporter --all-targets --features alphal00p-docs-python-exporter/linnet,alphal00p-docs-python-exporter/feynkit,alphal00p-docs-python-exporter/gammaloop --no-deps -- -D warnings",
+    "format": "just fmt; just fmt -- --check; ruff0.16.3 format --check (the3 touched Python test files and rendering_api.py)"
+  },
+  "scope_attestation": {
+    "scopes": 81,
+    "frozen_mismatches": 27,
+    "current_mismatches": 27,
+    "new_drift": 0,
+    "split": "7 inherited +20 staged (16 stale digests,4 missing anchors)",
+    "refreshed_existing_scope_digests": false,
+    "audit": "target/graph-fixes/scope-audit.json",
+    "sha256": "d615e7f3f7de897f4fd6d315c6273eb44700b03775e9932aa6df7fbec97546b7",
+    "note": "New investigation note records immutable code provenance, not whole-architecture approval."
+  },
+  "policy_review": {
+    "existing_owners_reused": true,
+    "new_compatibility_storage_enum": false,
+    "new_precision_or_factorization_changes": false,
+    "imports": "New/changed imports are explicit and module-scoped; callback/framework metadata retains existing ownership.",
+    "errors": "Existing Python/stubgen Result boundaries preserve underlying exception/library/I/O errors; no new flattening or broad catches.",
+    "clones": "Final exporter shares one canonical string across supported outputs; graph payload reference/copy semantics preserved.",
+    "scope": "Manual final diff review plus scoped Clippy/format; no claim of complete whole-workspace policy audit."
+  },
+  "constraints": {
+    "nix_ci": "top-level enable=false preserved",
+    "manifests_kernel_locks": "unchanged; no broad relock or dependency additions",
+    "cache": "normal configured /common/build-cache/lcnbr/{workspace-path-hash}, no override, manual seed/copy or cache deletion",
+    "main_and_other_refs": "read-only; only own code/evidence changes and final task bookmark modified"
+  },
+  "limits_and_pending": [
+    "NEW independent Astra fix review before parent integration or source19.",
+    "No whole-candidate physics/oracle/frame-hash approval or expectation rerecording.",
+    "Full docs retain the separately inventoried27 source/anchor mismatches; no full five-product docs certificate.",
+    "Final wheel, Pyodide/WASM, external Community, browser/manual rendering and distribution certification remain separate.",
+    "Source30 compile-time producer closure checks remain separate; local Cargo tests do not certify that Nix source closure.",
+    "No full nauty, DOT corpus integration executable, benchmarks or performance certification."
+  ],
+  "retained_artifacts": {
+    "path": "target/graph-fixes",
+    "purpose": "Negative/positive matrix logs, actual host identities, exact test lists, one-shot trace reproducers, scoped build/check logs and compiled caches for independent review.",
+    "aborted_attempts": "Initial redundant host attempt and unnecessary default stubgen feature attempt were stopped; their partial outputs/logs are not counted as passing checks. Own complete child process subtree terminated for the latter; caches retained.",
+    "cleanup": "Own source-edit scratch helpers removed; no fixture/digest/other-contributor cleanup. No own background processes intentionally retained."
+  },
+  "canonicalization_key_followup_r3": {
+    "finding": "C2-R2 (P2), sole remaining round-2 finding",
+    "status": "IMPLEMENTED; awaiting NEW independent Astra review; not review approval",
+    "parent_candidate": "891d7d569a408fb6e7056254802a45173ef2cf26",
+    "code_commit": "1a68c9a8a5d16f2a195aa5808173764549d06e01",
+    "code_change": "qskszmoqrzrpkmkrwotqnpvqvprzkpzl",
+    "evidence_change": "rmuyknuntktuknupzzqspxssspptrykx",
+    "bookmark": "generation-staged-graph-fixes (final evidence child; final commit identity reported at handoff to avoid self-reference)",
+    "files": {
+      "crates/alphal00p-docs-python-exporter/src/main.rs": "575510d847483d726d3b6a0aad9f6696468e6dbcf722ce0112250720372c6041",
+      "crates/linnet-py/python/symbolica/community/graph/__init__.pyi": "477e03af0b1b104ba5a9b8ffad4ec5efa9f5cfce5e0a5043a039efd80820a224",
+      "crates/linnet-py/src/lib.rs": "f55dd38032b864d74d6e8e6c8d9e0b2d69a116abd713257837b3504ee529438d",
+      "crates/linnet-py/tests/test_algorithms.py": "9102135cc798a5ba19406c6097f341413791cf42f874a48f96907823a3d61a08",
+      "docs/api/python/linnet-graph.pyi": "477e03af0b1b104ba5a9b8ffad4ec5efa9f5cfce5e0a5043a039efd80820a224",
+      "docs/products/linnet/content/api.typ": "86f01a1cf46a0f13c5ded20cace8372df7541af18120f3d9935034bd717556f6",
+      "examples/notebooks/symbolica-host/python/symbolica/community/graph/__init__.pyi": "477e03af0b1b104ba5a9b8ffad4ec5efa9f5cfce5e0a5043a039efd80820a224"
+    },
+    "response": "Canonical _LabelKey returns existing _Key (Hashable | Expression); rendering _ExpressionLabel unchanged. Product prose matches native PayloadKeys. All three graph stubs regenerated through canonical_stub/exporter; no runtime acceptance change or compatibility API.",
+    "regressions": {
+      "native": {
+        "tests": 6,
+        "failures": 0,
+        "errors": 0,
+        "skips": 0,
+        "key_cases": [
+          "bytes",
+          "tuple",
+          "frozenset"
+        ],
+        "generated_copies": [
+          "docs/api/python/linnet-graph.pyi",
+          "crates/linnet-py/python/symbolica/community/graph/__init__.pyi",
+          "examples/notebooks/symbolica-host/python/symbolica/community/graph/__init__.pyi"
+        ],
+        "aliases": {
+          "_Key": "typing.Hashable | Expression",
+          "_LabelKey": "typing.Callable[[typing.Any], _Key] | None",
+          "_ExpressionLabel": "Expression | ComplexFloat | _RealLabel | complex | tuple[_RealLabel, _RealLabel] | None"
+        }
+      },
+      "exporter": "Existing canonical package/docs test now asserts hashable callback alias. Original assertions preserved."
+    },
+    "checks": {
+      "host-build.log": {
+        "status": "PASS",
+        "log": "target/graph-key-fix-r3/host-build.log",
+        "sha256": "f194d1334127fc4582b48799bc438451a093fb6e11c811ae715a9cdc51f9b67f"
+      },
+      "host.log": {
+        "status": "PASS",
+        "log": "target/graph-key-fix-r3/host.log",
+        "sha256": "40b5d1d2386df837a05a2a7b9bdf4a8eacdb2c939c474da882d3d635172f9799"
+      },
+      "python.log": {
+        "status": "PASS",
+        "log": "target/graph-key-fix-r3/python.log",
+        "sha256": "4018b5ea7b2638ee25526ac76d606d92d0fab63e904d589153032738c2c1abac"
+      },
+      "exporter-tests.log": {
+        "status": "PASS",
+        "log": "target/graph-key-fix-r3/exporter-tests.log",
+        "sha256": "be9ae1507cb7465bd640a57eb8e31d067245f818087cb8476f644b8044964a5a"
+      },
+      "stub-check.log": {
+        "status": "PASS",
+        "log": "target/graph-key-fix-r3/stub-check.log",
+        "sha256": "cd128a4002a8bfd8e7ae7b5bcd310770860f95c89ee51acd82e67380ef5d27e9"
+      },
+      "clippy.log": {
+        "status": "PASS",
+        "log": "target/graph-key-fix-r3/clippy.log",
+        "sha256": "fd54d2ee66ef76fde1faae6f140235ac65480e2f746019e027865abaebd01ec1"
+      },
+      "format.log": {
+        "status": "PASS",
+        "log": "target/graph-key-fix-r3/format.log",
+        "sha256": "b6e19c16e0d5f97094745b63c78c4f15238111c4de91b081bba774a71abff1e8"
+      },
+      "python-format.log": {
+        "status": "PASS",
+        "log": "target/graph-key-fix-r3/python-format.log",
+        "sha256": "fd2299c9f1c6dc869070883e281051bfe93aacf66c1a3b0069f45b4aa410ca50"
+      }
+    },
+    "commands": {
+      "host_build": "cargo test --locked --profile ci-optim -p feynkit-py --lib --features python_stubgen,pyo3/auto-initialize,linnet-py/default --no-run --message-format=json",
+      "native_probe": "ASTRA_REVIEW_OUT=target/graph-key-fix-r3 ASTRA_REVIEW_MODE=runtime ASTRA_PROBE_FILE=probe.py PYTHONPATH=target/graph-key-fix-r3/hook HOST --exact tests::standalone_python_pipeline_covers_generation_graphs_cff_and_kinematics --test-threads=1 --nocapture (absolute paths in actual run)",
+      "exporter_tests": "cargo test --locked --profile ci-optim -p alphal00p-docs-python-exporter --features linnet,feynkit -- tests::linnet_ --test-threads=1 (2 passed; zero ignored)",
+      "regenerate_and_check": "cargo run --locked --profile ci-optim -p alphal00p-docs-python-exporter --features linnet,feynkit -- linnet-graph docs/api/python/linnet-graph.pyi [--check]",
+      "clippy": "cargo clippy --locked --profile ci-optim -p linnet-py -p alphal00p-docs-python-exporter --all-targets --features alphal00p-docs-python-exporter/linnet,alphal00p-docs-python-exporter/feynkit --no-deps -- -D warnings",
+      "format": "just fmt -- --check; /nix/store/sddv779f9zwcm72i0nsa8sgy1zjcl2n4-ruff-0.16.3/bin/ruff format --check crates/linnet-py/tests/test_algorithms.py"
+    },
+    "host_identity": {
+      "host": "/common/build-cache/lcnbr/44/087dd61ba278c7/ci-optim/deps/feynkit_py-5e1f27f915ae78c9",
+      "sha256": "148e41bc9c8e1132ab207e1acc83875a5f7dee3fd0706d7cfdde142b95eb8862",
+      "artifact": {
+        "reason": "compiler-artifact",
+        "package_id": "path+file:///shared/lcnbr/dev/gammaloop/generation-staged-graph-fixes/crates/feynkit-py#0.1.0",
+        "manifest_path": "/shared/lcnbr/dev/gammaloop/generation-staged-graph-fixes/crates/feynkit-py/Cargo.toml",
+        "target": {
+          "kind": [
+            "lib"
+          ],
+          "crate_types": [
+            "lib"
+          ],
+          "name": "feynkit_py",
+          "src_path": "/shared/lcnbr/dev/gammaloop/generation-staged-graph-fixes/crates/feynkit-py/src/lib.rs",
+          "edition": "2024",
+          "doc": true,
+          "doctest": true,
+          "test": true
+        },
+        "profile": {
+          "opt_level": "2",
+          "debuginfo": 0,
+          "debug_assertions": true,
+          "overflow_checks": true,
+          "test": true
+        },
+        "features": [
+          "default",
+          "native",
+          "python_stubgen",
+          "ufo"
+        ],
+        "filenames": [
+          "/common/build-cache/lcnbr/44/087dd61ba278c7/ci-optim/deps/feynkit_py-5e1f27f915ae78c9"
+        ],
+        "executable": "/common/build-cache/lcnbr/44/087dd61ba278c7/ci-optim/deps/feynkit_py-5e1f27f915ae78c9",
+        "fresh": false
+      }
+    },
+    "environment": {
+      "devshell": "/nix/store/j7qzy1qjcra1yzjq49xg31yggrv02b61-nix-shell-env.drv",
+      "protected_files_verified": [
+        "flake.nix",
+        "flake.lock",
+        "Cargo.lock",
+        "nix-ci.nix",
+        "examples/notebooks/symbolica-host/Cargo.lock"
+      ],
+      "jobs": 2,
+      "cache": "/common/build-cache/lcnbr/44/087dd61ba278c7",
+      "prior_review_sha256": "75d1f10eec66876c0f88c02bee64c93a35e37885c016e99ec52b354d1cb77129"
+    },
+    "scope": {
+      "count": 81,
+      "mismatches": 27,
+      "new_drift": 0,
+      "log": "target/graph-key-fix-r3/scope-audit.json",
+      "sha256": "d615e7f3f7de897f4fd6d315c6273eb44700b03775e9932aa6df7fbec97546b7",
+      "registered_typst_title": "PASS"
+    },
+    "reuse": {
+      "review": "target/astra-graph-r2-20261027/review.json",
+      "sha256": "75d1f10eec66876c0f88c02bee64c93a35e37885c016e99ec52b354d1cb77129",
+      "closed_findings": [
+        "C1",
+        "B1",
+        "E1",
+        "E2",
+        "E3",
+        "E5"
+      ],
+      "basis": "Only callback metadata, graph generated aliases, targeted test/assertion and prose changed. Round2 77 Python /18 callback controls, Gamma matrix and338 native controls retained, not newly executed. No claim every mutable intermediate rlib hash still matches."
+    },
+    "policy": "Manual final Rust diff audit: existing metadata owner reused, no imports/helpers/runtime changes, no Rust-policy departure; Clippy/fmt pass with existing dependency Clarabel warnings.",
+    "limits": [
+      "No whole-candidate/WP3 approval, parent integration or publication. NEW independent Astra review required.",
+      "Native registration tested with temporary package scaffolding restored; no installed wheel/distribution/static type-checker certification.",
+      "Round2 pending frame/B2/source30/source31/full physics/final distribution gates remain pending; no lock, kernel, Nix or physics fixture changes."
+    ],
+    "retention": {
+      "path": "target/graph-key-fix-r3",
+      "purpose": "Focused native/alias probe, host and source identity, positive checks and initial scratch-probe failure for independent review. All prior raw evidence preserved.",
+      "initial_probe_failure": "AST unparse of unassigned annotated declaration; corrected probe filters null values, no production failure.",
+      "cleanup": "No background processes intentionally retained; useful probe/hook/logs kept. No shared caches seeded, overridden or deleted."
+    }
+  }
+}

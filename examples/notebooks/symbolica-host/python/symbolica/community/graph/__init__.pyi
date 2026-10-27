@@ -2,11 +2,13 @@
 # ruff: noqa: E501, F401
 
 import builtins
-import decimal
 import enum
+import fractions
 import os
 import pathlib
 import typing
+
+import decimal
 from symbolica import ComplexFloat, Float
 from symbolica.core import Expression
 
@@ -14,13 +16,19 @@ __all__ = [
     "AUTO",
     "Angle",
     "Auto",
+    "Bridges",
+    "Classes",
     "Color",
+    "Countable",
+    "Counts",
     "CutPartition",
     "Cycle",
     "Dash",
     "DebugLevel",
+    "Diagram",
     "DiagramRender",
     "DiagramView",
+    "Diagrams",
     "DirectionBasis",
     "DotCodec",
     "DotEdgeData",
@@ -28,10 +36,12 @@ __all__ = [
     "DotVertexData",
     "DrawOptions",
     "DrawingSelectors",
+    "Dressed",
     "EdgeSignature",
     "EdgeSpec",
     "Flow",
     "Fraction",
+    "GenerationStage",
     "GlobalData",
     "Graph",
     "GraphStyleOptions",
@@ -42,17 +52,24 @@ __all__ = [
     "LayoutFrame",
     "LayoutSettings",
     "LayoutStream",
+    "Legs",
     "Length",
+    "LoopCounts",
     "Mark",
     "MathSymbol",
     "NodeSpec",
-    "NodeStore",
     "Orientation",
     "OrientedCut",
+    "Plan",
+    "PlanCriterion",
+    "PlanReport",
+    "Progress",
     "Anchor",
     "Compass",
     "DanglingTangent",
     "DashPattern",
+    "GenerationDiagramView",
+    "DressingView",
     "Edge",
     "EdgeDrawing",
     "EdgeLengthResolution",
@@ -76,15 +93,22 @@ __all__ = [
     "RankAlignment",
     "RoutePoints",
     "Routing",
+    "SkeletonView",
     "StrokeCap",
     "StrokeJoin",
     "TextStyle",
+    "Query",
     "Ratio",
     "RelativeLength",
     "RenderSettings",
+    "Run",
+    "Skeleton",
+    "Skeletons",
     "Stroke",
+    "Structure",
     "Subgraph",
     "TextLabel",
+    "Theory",
     "TraversalTree",
     "TypstBind",
     "TypstCall",
@@ -97,9 +121,10 @@ __all__ = [
     "source",
 ]
 
+_Key: typing.TypeAlias = typing.Hashable | Expression
 _RealLabel: typing.TypeAlias = Float | int | float | str | decimal.Decimal
 _ExpressionLabel: typing.TypeAlias = Expression | ComplexFloat | _RealLabel | complex | tuple[_RealLabel, _RealLabel] | None
-_LabelKey: typing.TypeAlias = typing.Callable[[typing.Any], _ExpressionLabel] | None
+_LabelKey: typing.TypeAlias = typing.Callable[[typing.Any], _Key] | None
 
 class _TypstValueRef(typing.Protocol): ...
 class _TypstContentRef(typing.Protocol): ...
@@ -278,6 +303,38 @@ class Auto:
     def __deepcopy__(self, _memo: typing.Any) -> Auto: ...
 
 @typing.final
+class Bridges:
+    r"""
+    Bridge policy; dangling external legs never count as bridges.
+    """
+    @staticmethod
+    def any() -> Bridges: ...
+    @staticmethod
+    def at_most(count: builtins.int) -> Bridges: ...
+    @staticmethod
+    def one_pi() -> Bridges: ...
+    @staticmethod
+    def one_pi_in_loops() -> Bridges: ...
+    def __repr__(self) -> builtins.str: ...
+
+@typing.final
+class Classes:
+    r"""
+    Safe directed-line flavour refinement policy; Auto retains exact particle/rule outputs.
+    """
+    @staticmethod
+    def auto() -> Classes:
+        r"""
+        Assign safe flavour classes, then refine to original particles and rules.
+        """
+    @staticmethod
+    def none() -> Classes:
+        r"""
+        Assign particles directly, for exact comparison with class refinement.
+        """
+    def __repr__(self) -> builtins.str: ...
+
+@typing.final
 class Color:
     r"""
     A safe Typst color value.
@@ -286,6 +343,39 @@ class Color:
     @staticmethod
     def rgb(red: builtins.int, green: builtins.int, blue: builtins.int, alpha: typing.Optional[builtins.int] = None) -> Color: ...
     def __repr__(self) -> builtins.str: ...
+
+@typing.final
+class Countable:
+    r"""
+    A native rule/propagator/chord/closed-line count selector.
+    """
+    @staticmethod
+    def vertices(rules: typing.Sequence[builtins.int]) -> Countable: ...
+    @staticmethod
+    def propagators(fields: typing.Sequence[_Key]) -> Countable: ...
+    @staticmethod
+    def chords(fields: typing.Sequence[_Key]) -> Countable: ...
+    @staticmethod
+    def closed_lines(fields: typing.Sequence[_Key]) -> Countable: ...
+
+@typing.final
+class Counts:
+    r"""
+    Exact totals for a generation run, including whether the search completed.
+    """
+    @property
+    def skeletons(self) -> builtins.int: ...
+    @property
+    def diagrams(self) -> builtins.int: ...
+    @property
+    def sum_inv_aut(self) -> fractions.Fraction:
+        r"""
+        The exact sum of inverse automorphism orders, without process-specific factors.
+        """
+    @property
+    def per_loop(self) -> dict[int, LoopCounts]: ...
+    @property
+    def complete(self) -> builtins.bool: ...
 
 @typing.final
 class CutPartition:
@@ -322,6 +412,24 @@ class Dash:
     @staticmethod
     def pattern(values: _LengthArray, *, phase: _LengthValue | None = None) -> Dash: ...
     def __repr__(self) -> builtins.str: ...
+
+@typing.final
+class Diagram:
+    r"""
+    Owned compact output. Graph and canonical identity are computed only by their accessors.
+    """
+    @property
+    def loops(self) -> builtins.int: ...
+    def symmetry_factor(self) -> builtins.int: ...
+    def rules(self) -> builtins.list[builtins.int]: ...
+    def edges(self) -> builtins.list[tuple[builtins.int, builtins.int, EdgeSignature]]: ...
+    def legs(self) -> list[tuple[int, _Key, EdgeSignature]]: ...
+    def skeleton(self) -> SkeletonView: ...
+    def graph(self) -> Graph: ...
+    def canonical_form(self) -> tuple[tuple[int, ...], tuple[int, ...], tuple[_Key, ...], tuple[tuple[typing.Any, ...], ...]]:
+        r"""
+        Hashable native canonical words and key tables; no graph materialization is needed.
+        """
 
 @typing.final
 class DiagramRender:
@@ -510,6 +618,16 @@ class DiagramView:
     def __repr__(self) -> builtins.str: ...
 
 @typing.final
+class Diagrams:
+    r"""
+    A lazy stream of compact diagrams; no Python Graph or canonical form is created by next().
+    """
+    @property
+    def aborted(self) -> builtins.bool: ...
+    def __iter__(self) -> Diagrams: ...
+    def __next__(self) -> typing.Optional[Diagram]: ...
+
+@typing.final
 class DotCodec:
     r"""
     An explicit mapping between graph values and DOT-representable records.
@@ -584,20 +702,39 @@ class DrawingSelectors:
     def __new__(cls, *, node: _NodeDrawingSelector = ..., edge: _EdgeDrawingSelector = ..., source: _HalfEdgeDrawingSelector = ..., sink: _HalfEdgeDrawingSelector = ...) -> DrawingSelectors: ...
 
 @typing.final
-class EdgeSignature:
+class Dressed:
     r"""
-    A labeled port used in graph generation signatures.
-    Direction is outgoing (True), incoming (False), or undirected (None).
+    An owned field value with an explicit class/particle tag, so tuple-valued keys remain distinct.
+    Values may be retained after a callback; asking an expired view for a value is an error.
     """
     @property
-    def data(self) -> Expression: ...
+    def kind(self) -> builtins.str:
+        r"""
+        Either "class" or "particle"; the tag is independent of the Python key's type.
+        """
+    @property
+    def members(self) -> tuple[_Key, ...] | None:
+        r"""
+        Original keys in a class; None for a concrete particle.
+        """
+    @property
+    def particle(self) -> _Key | None:
+        r"""
+        The original particle key; None for a class. Use kind when None itself is a key.
+        """
+
+@typing.final
+class EdgeSignature:
+    r"""
+    A field and its direction at a vertex: outgoing True, incoming False, undirected None.
+    """
+    @property
+    def data(self) -> _Key: ...
     @property
     def direction(self) -> typing.Optional[builtins.bool]: ...
-    def __new__(cls, data: Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], direction: typing.Optional[builtins.bool] = None) -> EdgeSignature:
-        r"""
-        A labeled outgoing (True), incoming (False), or undirected (None) port.
-        """
+    def __new__(cls, data: _Key, direction: typing.Optional[builtins.bool] = None) -> EdgeSignature: ...
     def flip(self) -> EdgeSignature: ...
+    def __repr__(self) -> builtins.str: ...
 
 @typing.final
 class EdgeSpec:
@@ -681,17 +818,8 @@ class Graph:
     def n_edges(self) -> builtins.int: ...
     @property
     def n_half_edges(self) -> builtins.int: ...
-    @property
-    def node_store(self) -> NodeStore:
-        r"""
-        Return the node-storage strategy used by this graph.
-        """
-    def __new__(cls, *, name: typing.Optional[builtins.str] = None, global_data: typing.Optional[GlobalData] = None, codec: typing.Optional[DotCodec] = None, render_config: RenderSettings | None = None, node_store: NodeStore = NodeStore.Vec) -> Graph: ...
+    def __new__(cls, *, name: typing.Optional[builtins.str] = None, global_data: typing.Optional[GlobalData] = None, codec: typing.Optional[DotCodec] = None, render_config: RenderSettings | None = None) -> Graph: ...
     def __len__(self) -> builtins.int: ...
-    def to_node_store(self, node_store: NodeStore) -> Graph:
-        r"""
-        Copy this graph into another node-storage strategy.
-        """
     def node(self, key: builtins.int | builtins.str) -> Node: ...
     def edge(self, key: builtins.int | builtins.str) -> Edge: ...
     def half_edge(self, index: builtins.int) -> HalfEdge: ...
@@ -702,16 +830,16 @@ class Graph:
     def reorder_edges(self, order: typing.Sequence[builtins.int]) -> None: ...
     def set_orientation(self, key: builtins.int | builtins.str, orientation: Orientation) -> None:
         r"""
-        Change an edge's direction and invalidate existing graph-element views.
+        Change an edge's direction, preserving element identities and invalidating topology views.
         """
     def reverse_edge(self, key: builtins.int | builtins.str) -> None: ...
     def map(self, *, node: typing.Callable[[Node], typing.Any] | None = None, edge: typing.Callable[[Edge], typing.Any] | None = None, source: typing.Callable[[HalfEdge], typing.Any] | None = None, sink: typing.Callable[[HalfEdge], typing.Any] | None = None) -> Graph: ...
     @classmethod
-    def from_dot(cls, source: builtins.str, codec: DotCodec, *, node_store: NodeStore = NodeStore.Vec) -> Graph: ...
+    def from_dot(cls, source: builtins.str, codec: DotCodec) -> Graph: ...
     @classmethod
-    def from_dot_set(cls, source: builtins.str, codec: DotCodec, *, node_store: NodeStore = NodeStore.Vec) -> builtins.list[Graph]: ...
+    def from_dot_set(cls, source: builtins.str, codec: DotCodec) -> builtins.list[Graph]: ...
     @classmethod
-    def from_dot_file(cls, path: builtins.str | os.PathLike[builtins.str], codec: DotCodec, *, node_store: NodeStore = NodeStore.Vec) -> Graph: ...
+    def from_dot_file(cls, path: builtins.str | os.PathLike[builtins.str], codec: DotCodec) -> Graph: ...
     def to_dot(self, codec: typing.Optional[DotCodec] = None) -> builtins.str: ...
     def render(self, *, config: RenderSettings | None = None) -> DiagramView:
         r"""
@@ -759,8 +887,8 @@ class Graph:
         r"""
         Return a new graph with directionally redundant DAG edges removed.
         """
-    def depth_first_traverse(self, root: builtins.int | builtins.str, *, subgraph: typing.Optional[Subgraph] = None, include: typing.Optional[builtins.int] = None) -> TraversalTree: ...
-    def breadth_first_traverse(self, root: builtins.int | builtins.str, *, subgraph: typing.Optional[Subgraph] = None, include: typing.Optional[builtins.int] = None) -> TraversalTree: ...
+    def depth_first_traverse(self, root: Node | builtins.int | builtins.str, *, subgraph: typing.Optional[Subgraph] = None, include: typing.Optional[builtins.int] = None) -> TraversalTree: ...
+    def breadth_first_traverse(self, root: Node | builtins.int | builtins.str, *, subgraph: typing.Optional[Subgraph] = None, include: typing.Optional[builtins.int] = None) -> TraversalTree: ...
     def bridges(self, subgraph: typing.Optional[Subgraph] = None) -> Subgraph: ...
     def cycle_basis(self, subgraph: typing.Optional[Subgraph] = None) -> tuple[builtins.list[Cycle], Subgraph]: ...
     def all_spanning_forests(self, subgraph: typing.Optional[Subgraph] = None) -> builtins.list[Subgraph]: ...
@@ -841,18 +969,22 @@ class Graph:
     def __copy__(self) -> Graph: ...
     def canonize(self, *, node_key: _LabelKey = None, edge_key: _LabelKey = None, half_edge_key: _LabelKey = None) -> tuple[Graph, list[int], int, list[int]]:
         r"""
-        Canonical graph, old-to-new vertex map, automorphism-group size, and vertex orbit.
-        Keys receive element payloads; names and drawing metadata do not affect equivalence.
+        Canonical graph, old-to-new vertex map, automorphism-group size, and vertex orbits
+        indexed by canonical vertex, each mapped to the smallest canonical vertex of its orbit.
+        Keys are the element payloads, or what the key callbacks return for them; names and
+        drawing metadata do not affect equivalence. Keys must be hashable; keys of the same kind
+        compare by Python equality, Symbolica expressions structurally, and keys of different
+        kinds never compare equal. Distinct keys sort as None, numbers (`numbers.Real`), strings,
+        bytes, tuples and expressions, then other values by type name and repr, which must be
+        the same for equal keys and differ for distinct ones; the default repr is rejected.
+        The group counts permutations of identical dangling half-edges at a node, and swaps
+        the ends of an undirected edge only when they have equal half-edge keys.
         """
     def is_isomorphic(self, other: Graph, *, node_key: _LabelKey = None, edge_key: _LabelKey = None, half_edge_key: _LabelKey = None) -> builtins.bool: ...
     def canonize_edges(self, *, edge_key: _LabelKey = None, half_edge_key: _LabelKey = None) -> None:
         r"""
-        Sort edges canonically while fixing every vertex.
-        """
-    @staticmethod
-    def generate(external_edges: typing.Sequence[tuple[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal], EdgeSignature]], vertex_signatures: typing.Sequence[typing.Sequence[EdgeSignature]], *, max_vertices: typing.Optional[builtins.int] = None, max_loops: typing.Optional[builtins.int] = None, max_bridges: typing.Optional[builtins.int] = None, allow_self_loops: typing.Optional[builtins.bool] = None, allow_zero_flow_edges: typing.Optional[builtins.bool] = None, filter_fn: typing.Callable[[Graph, int], bool] | None = None, progress_fn: typing.Callable[[Graph], bool] | None = None) -> list[tuple[Graph, int]]:
-        r"""
-        Generate connected labeled graphs and their automorphism-group sizes.
+        Sort edges by their endpoints and keys, ordered as in `canonize`, while fixing every
+        vertex.
         """
     def to_mermaid(self) -> builtins.str:
         r"""
@@ -985,6 +1117,16 @@ class LayoutStream:
     def __next__(self) -> LayoutFrame: ...
 
 @typing.final
+class Legs:
+    r"""
+    Ordered external slots. Equal labels and signatures describe interchangeable legs.
+    """
+    def __new__(cls, slots: typing.Sequence[tuple[_Key, EdgeSignature]] | None = None) -> Legs: ...
+    def leg(self, label: _Key, stub: EdgeSignature) -> Legs: ...
+    def identical(self, label: _Key, stub: EdgeSignature, multiplicity: builtins.int) -> Legs: ...
+    def __len__(self) -> builtins.int: ...
+
+@typing.final
 class Length:
     r"""
     A Typst length such as `2pt` or `1.2em`.
@@ -1005,6 +1147,18 @@ class Length:
     @staticmethod
     def em(value: builtins.float) -> Length: ...
     def __repr__(self) -> builtins.str: ...
+
+@typing.final
+class LoopCounts:
+    r"""
+    Exact totals for one loop order.
+    """
+    @property
+    def skeletons(self) -> builtins.int: ...
+    @property
+    def diagrams(self) -> builtins.int: ...
+    @property
+    def sum_inv_aut(self) -> fractions.Fraction: ...
 
 @typing.final
 class Mark:
@@ -1065,6 +1219,222 @@ class OrientedCut:
         Return the signed intersection count with a cycle from the same graph revision.
         """
     def __repr__(self) -> builtins.str: ...
+
+@typing.final
+class Plan:
+    r"""
+    A compiled request, reusable across independent executions.
+    """
+    def __new__(cls, theory: Theory, query: Query) -> Plan: ...
+    def explain(self) -> PlanReport: ...
+    def count(self, run: typing.Optional[Run] = None, *, parallel: typing.Optional[builtins.bool] = None, check_heredity: typing.Optional[builtins.bool] = None) -> Counts: ...
+    def diagrams(self, run: typing.Optional[Run] = None, *, parallel: typing.Optional[builtins.bool] = None, check_heredity: typing.Optional[builtins.bool] = None) -> Diagrams: ...
+    def skeletons(self, run: typing.Optional[Run] = None, *, parallel: typing.Optional[builtins.bool] = None, check_heredity: typing.Optional[builtins.bool] = None) -> Skeletons: ...
+
+@typing.final
+class PlanCriterion:
+    r"""
+    One effective constraint and where it is enforced.
+    """
+    @property
+    def criterion(self) -> builtins.str: ...
+    @property
+    def effective(self) -> builtins.str: ...
+    @property
+    def stage(self) -> builtins.str: ...
+    @property
+    def hereditary(self) -> builtins.bool: ...
+    @property
+    def role(self) -> builtins.str: ...
+
+@typing.final
+class PlanReport:
+    r"""
+    Effective restrictions and propagation decisions from compiling a query.
+    """
+    @property
+    def criteria(self) -> builtins.list[PlanCriterion]: ...
+    @property
+    def empty_partitions(self) -> builtins.list[tuple[builtins.int, builtins.str]]: ...
+    @property
+    def infeasible(self) -> typing.Optional[builtins.str]: ...
+    def __str__(self) -> builtins.str: ...
+
+@typing.final
+class Progress:
+    r"""
+    Progress at an exact committed-output boundary; returning false stops before further work.
+    """
+    @property
+    def loops(self) -> builtins.int: ...
+    @property
+    def topologies(self) -> int: ...
+    @property
+    def diagrams(self) -> int: ...
+
+@typing.final
+class GenerationDiagramView:
+    r"""
+    A scoped fully assigned diagram supplied to final selection.
+    """
+    @property
+    def stage(self) -> GenerationStage: ...
+    @property
+    def loop_order(self) -> builtins.int:
+        r"""
+        The loop order being generated.
+        """
+    @property
+    def n_vertices(self) -> builtins.int: ...
+    @property
+    def loops(self) -> builtins.int:
+        r"""
+        Independent cycles of the edges placed so far.
+        """
+    @property
+    def unplaced_legs(self) -> builtins.int: ...
+    @property
+    def is_topology_complete(self) -> builtins.bool: ...
+    @property
+    def is_complete(self) -> builtins.bool: ...
+    def degree(self, vertex: builtins.int) -> builtins.int: ...
+    def open_stubs(self, vertex: builtins.int) -> builtins.int: ...
+    def self_loops(self, vertex: builtins.int) -> builtins.int: ...
+    def multiplicity(self, u: builtins.int, v: builtins.int) -> builtins.int:
+        r"""
+        Number of edges between distinct vertices; use self_loops for equal ends.
+        """
+    def legs(self, vertex: builtins.int) -> list[tuple[_Key, EdgeSignature]]:
+        r"""
+        Attached external labels and their field/direction at this vertex.
+        """
+    def edges(self) -> builtins.list[tuple[builtins.int, builtins.int, typing.Optional[EdgeSignature]]]:
+        r"""
+        Internal edges `(u, v, stub)`; stub is None before its field is assigned.
+        """
+    def field(self, edge: builtins.int) -> typing.Optional[Dressed]:
+        r"""
+        A class or concrete original particle for this edge; None while unassigned.
+        """
+    def flow(self, edge: builtins.int) -> typing.Optional[Flow]:
+        r"""
+        Known direction at the edge's first vertex, including during class refinement.
+        None denotes an undirected or unassigned edge; field() distinguishes them.
+        """
+    def rules(self, vertex: builtins.int) -> typing.Optional[builtins.list[builtins.int]]:
+        r"""
+        Exact matching rules once all vertex stubs have fields; otherwise None.
+        """
+    def domains(self, vertex: builtins.int) -> builtins.list[builtins.int]:
+        r"""
+        Compatible rules in declaration order, including rules for partial assignments.
+        """
+    def order_bounds(self) -> dict[str, tuple[int, int]] | None:
+        r"""
+        Inclusive named weight bounds once the skeleton is complete and feasible.
+        """
+    def skeleton_id(self) -> tuple[typing.Any, ...] | None:
+        r"""
+        Stable untyped topology identity; None while edges or external labels are missing.
+        """
+    def bridges(self) -> builtins.list[tuple[builtins.int, builtins.int, builtins.list[builtins.int]]]:
+        r"""
+        Bridges with a final side, as `(outside, inside, side_vertices)`.
+        """
+    def loops_in(self, side: typing.Sequence[builtins.int]) -> builtins.int:
+        r"""
+        Independent cycles on a nonempty connected set of vertices.
+        """
+    def graph(self) -> Graph:
+        r"""
+        Materialize the current state, omitting open slots and using None for unknown keys.
+        """
+    def complete_graph(self) -> typing.Optional[Graph]:
+        r"""
+        Materialize a fully assigned graph; None before the Complete stage.
+        """
+
+@typing.final
+class DressingView:
+    r"""
+    A scoped complete topology with fields and rules being assigned.
+    """
+    @property
+    def stage(self) -> GenerationStage: ...
+    @property
+    def loop_order(self) -> builtins.int:
+        r"""
+        The loop order being generated.
+        """
+    @property
+    def n_vertices(self) -> builtins.int: ...
+    @property
+    def loops(self) -> builtins.int:
+        r"""
+        Independent cycles of the edges placed so far.
+        """
+    @property
+    def unplaced_legs(self) -> builtins.int: ...
+    @property
+    def is_topology_complete(self) -> builtins.bool: ...
+    @property
+    def is_complete(self) -> builtins.bool: ...
+    def degree(self, vertex: builtins.int) -> builtins.int: ...
+    def open_stubs(self, vertex: builtins.int) -> builtins.int: ...
+    def self_loops(self, vertex: builtins.int) -> builtins.int: ...
+    def multiplicity(self, u: builtins.int, v: builtins.int) -> builtins.int:
+        r"""
+        Number of edges between distinct vertices; use self_loops for equal ends.
+        """
+    def legs(self, vertex: builtins.int) -> list[tuple[_Key, EdgeSignature]]:
+        r"""
+        Attached external labels and their field/direction at this vertex.
+        """
+    def edges(self) -> builtins.list[tuple[builtins.int, builtins.int, typing.Optional[EdgeSignature]]]:
+        r"""
+        Internal edges `(u, v, stub)`; stub is None before its field is assigned.
+        """
+    def field(self, edge: builtins.int) -> typing.Optional[Dressed]:
+        r"""
+        A class or concrete original particle for this edge; None while unassigned.
+        """
+    def flow(self, edge: builtins.int) -> typing.Optional[Flow]:
+        r"""
+        Known direction at the edge's first vertex, including during class refinement.
+        None denotes an undirected or unassigned edge; field() distinguishes them.
+        """
+    def rules(self, vertex: builtins.int) -> typing.Optional[builtins.list[builtins.int]]:
+        r"""
+        Exact matching rules once all vertex stubs have fields; otherwise None.
+        """
+    def domains(self, vertex: builtins.int) -> builtins.list[builtins.int]:
+        r"""
+        Compatible rules in declaration order, including rules for partial assignments.
+        """
+    def order_bounds(self) -> dict[str, tuple[int, int]] | None:
+        r"""
+        Inclusive named weight bounds once the skeleton is complete and feasible.
+        """
+    def skeleton_id(self) -> tuple[typing.Any, ...] | None:
+        r"""
+        Stable untyped topology identity; None while edges or external labels are missing.
+        """
+    def bridges(self) -> builtins.list[tuple[builtins.int, builtins.int, builtins.list[builtins.int]]]:
+        r"""
+        Bridges with a final side, as `(outside, inside, side_vertices)`.
+        """
+    def loops_in(self, side: typing.Sequence[builtins.int]) -> builtins.int:
+        r"""
+        Independent cycles on a nonempty connected set of vertices.
+        """
+    def graph(self) -> Graph:
+        r"""
+        Materialize the current state, omitting open slots and using None for unknown keys.
+        """
+    def complete_graph(self) -> typing.Optional[Graph]:
+        r"""
+        Materialize a fully assigned graph; None before the Complete stage.
+        """
 
 @typing.final
 class Edge:
@@ -1319,6 +1689,95 @@ class NodeValue:
     def __new__(cls, *, data: typing.Any = None, drawing: typing.Optional[NodeDrawing] = None) -> NodeValue: ...
 
 @typing.final
+class SkeletonView:
+    r"""
+    An untyped topology, borrowed during a callback or retained as compact owned data.
+    """
+    @property
+    def stage(self) -> GenerationStage: ...
+    @property
+    def loop_order(self) -> builtins.int:
+        r"""
+        The loop order being generated.
+        """
+    @property
+    def n_vertices(self) -> builtins.int: ...
+    @property
+    def loops(self) -> builtins.int:
+        r"""
+        Independent cycles of the edges placed so far.
+        """
+    @property
+    def unplaced_legs(self) -> builtins.int: ...
+    @property
+    def is_topology_complete(self) -> builtins.bool: ...
+    @property
+    def is_complete(self) -> builtins.bool: ...
+    def degree(self, vertex: builtins.int) -> builtins.int: ...
+    def open_stubs(self, vertex: builtins.int) -> builtins.int: ...
+    def self_loops(self, vertex: builtins.int) -> builtins.int: ...
+    def multiplicity(self, u: builtins.int, v: builtins.int) -> builtins.int:
+        r"""
+        Number of edges between distinct vertices; use self_loops for equal ends.
+        """
+    def legs(self, vertex: builtins.int) -> list[tuple[_Key, EdgeSignature]]:
+        r"""
+        Attached external labels and their field/direction at this vertex.
+        """
+    def edges(self) -> builtins.list[tuple[builtins.int, builtins.int, typing.Optional[EdgeSignature]]]:
+        r"""
+        Internal edges `(u, v, stub)`; stub is None before its field is assigned.
+        """
+    def field(self, edge: builtins.int) -> typing.Optional[Dressed]:
+        r"""
+        A class or concrete original particle for this edge; None while unassigned.
+        """
+    def flow(self, edge: builtins.int) -> typing.Optional[Flow]:
+        r"""
+        Known direction at the edge's first vertex, including during class refinement.
+        None denotes an undirected or unassigned edge; field() distinguishes them.
+        """
+    def rules(self, vertex: builtins.int) -> typing.Optional[builtins.list[builtins.int]]:
+        r"""
+        Exact matching rules once all vertex stubs have fields; otherwise None.
+        """
+    def domains(self, vertex: builtins.int) -> builtins.list[builtins.int]:
+        r"""
+        Compatible rules in declaration order, including rules for partial assignments.
+        """
+    def order_bounds(self) -> dict[str, tuple[int, int]] | None:
+        r"""
+        Inclusive named weight bounds once the skeleton is complete and feasible.
+        """
+    def skeleton_id(self) -> tuple[typing.Any, ...] | None:
+        r"""
+        Stable untyped topology identity; None while edges or external labels are missing.
+        """
+    def bridges(self) -> builtins.list[tuple[builtins.int, builtins.int, builtins.list[builtins.int]]]:
+        r"""
+        Bridges with a final side, as `(outside, inside, side_vertices)`.
+        """
+    def loops_in(self, side: typing.Sequence[builtins.int]) -> builtins.int:
+        r"""
+        Independent cycles on a nonempty connected set of vertices.
+        """
+    def graph(self) -> Graph:
+        r"""
+        Materialize the current state, omitting open slots and using None for unknown keys.
+        """
+    def complete_graph(self) -> typing.Optional[Graph]:
+        r"""
+        Materialize a fully assigned graph; None before the Complete stage.
+        """
+
+@typing.final
+class Query:
+    r"""
+    A request snapshot. Later edits to the supplied Legs do not change it.
+    """
+    def __new__(cls, legs: Legs, *, loops: int | range | None = None, structure: typing.Optional[Structure] = None, classes: typing.Optional[Classes] = None, weights: dict[str, tuple[int | None, int | None]] | None = None, counts: typing.Sequence[tuple[Countable, tuple[int | None, int | None]]] | None = None, prune_skeletons: typing.Callable[[SkeletonView], bool] | None = None, prune_dressings: typing.Callable[[DressingView], bool] | None = None, select: typing.Callable[[GenerationDiagramView], bool] | None = None) -> Query: ...
+
+@typing.final
 class Ratio:
     r"""
     A Typst ratio expressed in percent.
@@ -1368,12 +1827,71 @@ class RenderSettings:
     def __new__(cls, *, title: _AutoOptionalStaticContent = ..., style: _RenderStyle = ..., layouts: _RenderLayouts = ..., drawing: _RenderDrawing = ..., selectors: _RenderSelectors = ...) -> RenderSettings: ...
 
 @typing.final
+class Run:
+    r"""
+    Transient execution controls. Cancellation and dispatch statistics are shared by executions
+    using this Run; callbacks are invoked on the Python thread advancing the execution.
+    """
+    @property
+    def cancelled(self) -> builtins.bool: ...
+    @property
+    def callback_round_trips(self) -> builtins.int:
+        r"""
+        Number of outer predicate-batch dispatches across executions using this Run.
+        """
+    def __new__(cls, *, parallel: builtins.bool = False, check_heredity: builtins.bool = False, progress: typing.Callable[[Progress], bool] | None = None) -> Run: ...
+    def cancel(self) -> None: ...
+
+@typing.final
+class Skeleton:
+    r"""
+    An immutable compact skeleton and its originating plan, independent of its source iterator.
+    """
+    @property
+    def loops(self) -> builtins.int: ...
+    def automorphisms(self) -> builtins.int: ...
+    def graph(self) -> Graph: ...
+    def id(self) -> tuple[typing.Any, ...]: ...
+    def view(self) -> SkeletonView: ...
+    def diagrams(self) -> Diagrams:
+        r"""
+        Start fresh decoration without repeating topology search, using this execution's hooks.
+        """
+
+@typing.final
+class Skeletons:
+    r"""
+    Complete untyped skeletons, streamed without decorating them.
+    """
+    @property
+    def aborted(self) -> builtins.bool: ...
+    def __iter__(self) -> Skeletons: ...
+    def __next__(self) -> typing.Optional[Skeleton]: ...
+
+@typing.final
 class Stroke:
     r"""
     A typed Typst stroke dictionary.
     """
     def __repr__(self) -> builtins.str: ...
     def __new__(cls, *, paint: _OptionalPaint = ..., thickness: _OptionalLengthValue = ..., cap: _OptionalStrokeCap = ..., join: _OptionalStrokeJoin = ..., dash: _OptionalDashValue = ..., miter_limit: _Number = ...) -> Stroke: ...
+
+@typing.final
+class Structure:
+    r"""
+    Restrictions decided by topology alone. Defaults are the native Structure defaults.
+    """
+    @property
+    def bridges(self) -> Bridges: ...
+    @property
+    def self_loops(self) -> builtins.bool: ...
+    @property
+    def zero_flow_edges(self) -> builtins.bool: ...
+    @property
+    def max_vertices(self) -> typing.Optional[builtins.int]: ...
+    def __new__(cls, *, bridges: typing.Optional[Bridges] = None, self_loops: builtins.bool = False, zero_flow_edges: builtins.bool = False, max_vertices: typing.Optional[builtins.int] = None) -> Structure: ...
+    @staticmethod
+    def one_pi() -> Structure: ...
 
 @typing.final
 class Subgraph:
@@ -1447,6 +1965,18 @@ class TextLabel:
     def text(self) -> builtins.str: ...
     def __repr__(self) -> builtins.str: ...
     def __new__(cls, text: str, *, fill: _Paint = ..., size: _LengthValue = ..., weight: _NativeValue = ..., style: _TextStyleValue = ...) -> TextLabel: ...
+
+@typing.final
+class Theory:
+    r"""
+    Ordered rules and reusable structural automata. Equal signatures remain distinct rules.
+    """
+    @property
+    def n_rules(self) -> builtins.int: ...
+    @property
+    def weight_names(self) -> builtins.list[builtins.str]: ...
+    def __new__(cls, vertices: typing.Sequence[typing.Sequence[EdgeSignature]], *, weights: dict[str, typing.Sequence[int]] | None = None) -> Theory: ...
+    def query(self, legs: Legs, *, loops: int | range | None = None, structure: typing.Optional[Structure] = None, classes: typing.Optional[Classes] = None, weights: dict[str, tuple[int | None, int | None]] | None = None, counts: typing.Sequence[tuple[Countable, tuple[int | None, int | None]]] | None = None, prune_skeletons: typing.Callable[[SkeletonView], bool] | None = None, prune_dressings: typing.Callable[[DressingView], bool] | None = None, select: typing.Callable[[GenerationDiagramView], bool] | None = None) -> Plan: ...
 
 @typing.final
 class TraversalTree:
@@ -1547,17 +2077,21 @@ class Flow(enum.Enum):
     Sink = ...
 
 @typing.final
-class NodeStore(enum.Enum):
+class GenerationStage(enum.Enum):
     r"""
-    Storage strategy used for graph nodes.
+    How far a typed generation view has been built.
     """
-    Vec = ...
+    Topology = ...
     r"""
-    Dense node records with one incidence bitset per node.
+    An untyped topology with vertices, edges, attached legs and any remaining open stubs.
     """
-    Forest = ...
+    Fields = ...
     r"""
-    Identification-preserving forest node records.
+    A complete topology with fields assigned to some of its edges.
+    """
+    Complete = ...
+    r"""
+    Every edge has a field and every vertex has a rule.
     """
 
 @typing.final
@@ -1786,7 +2320,7 @@ class TextStyle(enum.Enum):
     Italic = ...
     Oblique = ...
 
-def build(*items: _GraphItem, name: _OptionalString = None, global_data: _OptionalGlobalData = None, codec: _OptionalDotCodec = None, render_config: _OptionalRenderSettings = None, node_store: NodeStore = NodeStore.Vec) -> Graph:
+def build(*items: _GraphItem, name: _OptionalString = None, global_data: _OptionalGlobalData = None, codec: _OptionalDotCodec = None, render_config: _OptionalRenderSettings = None) -> Graph:
     r"""
     Build a graph from declarative node and edge specs.
     """

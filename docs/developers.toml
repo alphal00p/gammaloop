@@ -13,6 +13,21 @@ title = "Implemented architecture"
 summary = "How the current runtime, physics layers, parsers, and symbolic engines are organized."
 
 [[section.note]]
+id = "generation-staged-python-fixes"
+title = "Staged Python graph and exporter corrections"
+summary = "Live-view epoch and Python surface corrections, terminal callback coverage, current stub owners and real feature/signature validation."
+source = "docs/architecture/generation-staged-python-fixes.typ"
+kind = "Implementation record"
+status = "Bounded validation passed; new independent Astra review required"
+lifecycle = "investigation"
+owner = "unassigned"
+reviewed_at = "2026-10-27"
+review_ref = "ba37538752f6cd1af30c0cbe6be5549c86405d74"
+products = ["gammaloop", "linnet", "feynkit"]
+topics = ["generation", "python", "validation", "build"]
+review_triggers = ["crates/linnet-py/**", "crates/feynkit-py/src/generation.rs", "crates/feynkit-py/src/generation/**", "crates/feynkit-py/python/**", "crates/gammaloop-api/src/python.rs", "crates/alphal00p-docs-python-exporter/**", "docs/api/python/linnet-graph.pyi", "docs/api/python/feynkit-community.pyi", "docs/products/linnet/content/api.typ", "docs/products/registry.toml", "examples/notebooks/symbolica-host/python/symbolica/community/graph/**", "examples/notebooks/symbolica-host/python/symbolica/community/hepkit/**"]
+
+[[section.note]]
 id = "generation-runtime-admission"
 title = "Generation runtime tensor admission"
 summary = "Runtime explicit-index validation before fragment composition and an exact staged native-frame equivalence certificate awaiting review."

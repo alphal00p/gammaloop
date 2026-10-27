@@ -1,4 +1,5 @@
 import ast
+import builtins
 import copy
 import gc
 import inspect
@@ -47,7 +48,7 @@ def replace_linnest_native(dot, statement, value):
     return dot[: match.start(1)] + replacement + dot[match.end(1) :]
 
 
-def sample_graph(*, codec=None, render_config=None, node_store=lp.NodeStore.Vec):
+def sample_graph(*, codec=None, render_config=None):
     node_data = [Payload(), Payload()]
     edge_data = [Payload(), Payload()]
     half_edge_data = [Payload(), Payload(), Payload()]
@@ -91,12 +92,11 @@ def sample_graph(*, codec=None, render_config=None, node_store=lp.NodeStore.Vec)
         name="example",
         codec=codec,
         render_config=render_config,
-        node_store=node_store,
     )
     return graph, node_data, edge_data, half_edge_data
 
 
-def topology_graph(*, node_store=lp.NodeStore.Vec):
+def topology_graph():
     node_data = {name: UserNodePayload(name) for name in ("a", "b", "c", "d", "e", "f")}
     edge_data = {
         name: UserEdgePayload(f"coupling-{name}")
@@ -126,12 +126,11 @@ def topology_graph(*, node_store=lp.NodeStore.Vec):
         internal_edge("cd", "c", "d"),
         internal_edge("ef", "e", "f"),
         name="topology",
-        node_store=node_store,
     )
     return graph, node_data, edge_data, half_edge_data
 
 
-def dangling_graph(name, flow, *, node_store=lp.NodeStore.Vec):
+def dangling_graph(name, flow):
     node_data = UserNodePayload(f"node-{name}")
     edge_data = UserEdgePayload(f"edge-{name}")
     half_edge_data = UserHalfEdgePayload(f"port-{name}")
@@ -145,7 +144,6 @@ def dangling_graph(name, flow, *, node_store=lp.NodeStore.Vec):
         node_spec,
         lp.edge(endpoint, f"edge-{name}", data=edge_data),
         name=name,
-        node_store=node_store,
     )
     return graph, node_data, edge_data, half_edge_data
 
@@ -503,13 +501,10 @@ class TestGraphModel(unittest.TestCase):
         source_view = edge_view.source
         source_drawing = source_view.drawing
         graph.reverse_edge("propagator")
-        for operation in (
-            lambda: edge_view.source,
-            lambda: source_view.flow,
-            lambda: source_drawing.compass,
-        ):
-            with self.assertRaises(ReferenceError):
-                operation()
+        self.assertIs(source_view.data, half_edges[0])
+        self.assertEqual(source_view.flow, lp.Flow.Sink)
+        self.assertEqual(source_drawing.compass, lp.Compass.E)
+        self.assertEqual(edge_view.source.node.name, "right")
         reversed_edge = graph.edge("propagator")
         self.assertIs(reversed_edge.source.data, half_edges[1])
         self.assertIs(reversed_edge.sink.data, half_edges[0])
@@ -615,27 +610,21 @@ class TestGraphModel(unittest.TestCase):
         self.assertTrue(all(reference() is None for reference in references))
 
 
-class TestNodeStores(unittest.TestCase):
-    def test_default_and_explicit_construction(self):
-        self.assertEqual(lp.Graph().node_store, lp.NodeStore.Vec)
-        self.assertEqual(
-            lp.Graph(node_store=lp.NodeStore.Forest).node_store,
-            lp.NodeStore.Forest,
+class TestNativeNodeForest(unittest.TestCase):
+    def test_native_construction(self):
+        self.assertFalse(hasattr(lp, "NodeStore"))
+        self.assertEqual(lp.Graph().n_nodes, 0)
+
+        graph = lp.build(
+            lp.node("only"),
         )
+        self.assertEqual([node.name for node in graph.nodes()], ["only"])
 
-        for node_store in (lp.NodeStore.Vec, lp.NodeStore.Forest):
-            with self.subTest(node_store=node_store):
-                graph = lp.build(lp.node("only"), node_store=node_store)
-                self.assertEqual(graph.node_store, node_store)
-                self.assertEqual([node.name for node in graph.nodes()], ["only"])
-
-    def test_conversion_preserves_data_identity_and_copies_drawing(self):
+    def test_copy_preserves_data_identity_and_copies_drawing(self):
         graph, node_data, edge_data, half_edge_data = sample_graph()
         original_label = repr(graph.node("left").drawing.label)
-        converted = graph.to_node_store(lp.NodeStore.Forest)
+        converted = copy.copy(graph)
 
-        self.assertEqual(graph.node_store, lp.NodeStore.Vec)
-        self.assertEqual(converted.node_store, lp.NodeStore.Forest)
         self.assertEqual(
             [node.name for node in converted.nodes()],
             [node.name for node in graph.nodes()],
@@ -670,8 +659,7 @@ class TestNodeStores(unittest.TestCase):
             lp.INHERIT,
         )
 
-        round_trip = converted.to_node_store(lp.NodeStore.Vec)
-        self.assertEqual(round_trip.node_store, lp.NodeStore.Vec)
+        round_trip = copy.copy(converted)
         self.assertIs(round_trip.node("left").data, node_data[0])
         self.assertIs(round_trip.edge("propagator").data, edge_data[0])
         self.assertIs(
@@ -680,39 +668,27 @@ class TestNodeStores(unittest.TestCase):
         )
         self.assertEqual(round_trip.node("left").drawing.label, "converted node")
 
-    def test_derived_graphs_preserve_the_backend(self):
-        graph, node_data, edge_data, _ = topology_graph(node_store=lp.NodeStore.Forest)
+    def test_derived_graphs_preserve_payloads(self):
+        graph, node_data, edge_data, _ = topology_graph()
 
         mapped = graph.map()
         fragment = graph.concretize(graph.subgraph(edges=["ef"]))
-        self.assertEqual(mapped.node_store, lp.NodeStore.Forest)
-        self.assertEqual(fragment.node_store, lp.NodeStore.Forest)
         self.assertIs(mapped.node("a").data, node_data["a"])
         self.assertIs(fragment.edge("ef").data, edge_data["ef"])
 
-        extracted_from, _, extracted_edge_data, _ = topology_graph(
-            node_store=lp.NodeStore.Forest
-        )
+        extracted_from, _, extracted_edge_data, _ = topology_graph()
         extracted = extracted_from.extract(extracted_from.subgraph(edges=["ef"]))
-        self.assertEqual(extracted_from.node_store, lp.NodeStore.Forest)
-        self.assertEqual(extracted.node_store, lp.NodeStore.Forest)
         self.assertIs(extracted.edge("ef").data, extracted_edge_data["ef"])
 
-    def test_forest_reorder_and_topology_algorithms_match_vec(self):
-        vec, _, _, _ = topology_graph()
-        forest, node_data, edge_data, half_edge_data = topology_graph(
-            node_store=lp.NodeStore.Forest
-        )
-        node_order = list(reversed(range(forest.n_nodes)))
-        edge_order = list(reversed(range(forest.n_edges)))
-        for graph in (vec, forest):
-            graph.reorder_nodes(node_order)
-            graph.reorder_edges(edge_order)
+    def test_reorder_preserves_topology_algorithms(self):
+        graph, node_data, edge_data, half_edge_data = topology_graph()
+        graph.reorder_nodes(list(reversed(range(graph.n_nodes))))
+        graph.reorder_edges(list(reversed(range(graph.n_edges))))
 
-        self.assertIs(forest.node("a").data, node_data["a"])
-        self.assertIs(forest.edge("ef").data, edge_data["ef"])
+        self.assertIs(graph.node("a").data, node_data["a"])
+        self.assertIs(graph.edge("ef").data, edge_data["ef"])
         self.assertIs(
-            forest.edge("ef").source.data,
+            graph.edge("ef").source.data,
             half_edge_data[("ef", "source")],
         )
 
@@ -728,7 +704,13 @@ class TestNodeStores(unittest.TestCase):
             }
             return components, cycle_edges
 
-        self.assertEqual(topology_summary(forest), topology_summary(vec))
+        self.assertEqual(
+            topology_summary(graph),
+            (
+                {frozenset({"ab", "bc", "ca", "cd"}), frozenset({"ef"})},
+                {frozenset({"ab", "bc", "ca"})},
+            ),
+        )
 
     def test_forest_extracts_isolated_nodes(self):
         left = lp.node("left", data=UserNodePayload("left"))
@@ -740,194 +722,166 @@ class TestNodeStores(unittest.TestCase):
             right,
             isolated,
             lp.edge(lp.source(left), "internal", lp.sink(right)),
-            node_store=lp.NodeStore.Forest,
         )
         selection = graph.subgraph(nodes=["isolated"])
 
         copied = graph.concretize(selection)
-        self.assertEqual(copied.node_store, lp.NodeStore.Forest)
         self.assertIs(copied.node("isolated").data, isolated_data)
         copied.node("isolated").drawing.label = "copied label"
         self.assertEqual(graph.node("isolated").drawing.label, "isolated label")
 
         extracted = graph.extract(selection)
-        self.assertEqual(extracted.node_store, lp.NodeStore.Forest)
         self.assertEqual((extracted.n_nodes, extracted.n_edges), (1, 0))
         self.assertIs(extracted.node("isolated").data, isolated_data)
-        self.assertEqual(graph.node_store, lp.NodeStore.Forest)
         self.assertEqual(
             [node.name for node in graph.nodes()],
             ["left", "right"],
         )
         self.assertEqual([edge.name for edge in graph.edges()], ["internal"])
 
-    def test_dot_import_selects_the_requested_backend(self):
+    def test_dot_import_preserves_native_graphs(self):
         codec = lp.DotCodec.topology()
         graph, _, _, _ = sample_graph(codec=codec)
         encoded = graph.to_dot()
 
-        default = lp.Graph.from_dot(encoded, codec)
-        forest = lp.Graph.from_dot(
-            encoded,
-            codec,
-            node_store=lp.NodeStore.Forest,
-        )
-        self.assertEqual(default.node_store, lp.NodeStore.Vec)
-        self.assertEqual(forest.node_store, lp.NodeStore.Forest)
+        decoded = lp.Graph.from_dot(encoded, codec)
         self.assertEqual(
-            [node.name for node in forest.nodes()],
-            [node.name for node in default.nodes()],
+            [node.name for node in decoded.nodes()],
+            [node.name for node in graph.nodes()],
         )
-        self.assertIn("digraph", forest.to_dot())
+        self.assertIn("digraph", decoded.to_dot())
 
         forest_set = lp.Graph.from_dot_set(
             "digraph one { a -> b; } digraph two { c -> d; }",
             codec,
-            node_store=lp.NodeStore.Forest,
         )
-        self.assertTrue(
-            all(item.node_store == lp.NodeStore.Forest for item in forest_set)
-        )
+        self.assertEqual(len(forest_set), 2)
+        self.assertTrue(all(item.n_nodes == 2 for item in forest_set))
         with TemporaryDirectory() as directory:
             path = Path(directory) / "forest graph.dot"
             path.write_text(encoded, encoding="utf-8")
             from_file = lp.Graph.from_dot_file(
                 path,
                 codec,
-                node_store=lp.NodeStore.Forest,
             )
-        self.assertEqual(from_file.node_store, lp.NodeStore.Forest)
 
-    def test_cross_backend_append_and_join_use_the_left_backend(self):
-        backend_pairs = (
-            (lp.NodeStore.Forest, lp.NodeStore.Vec),
-            (lp.NodeStore.Vec, lp.NodeStore.Forest),
+        self.assertEqual(from_file.to_dot(), decoded.to_dot())
+
+    def test_append_and_join_preserve_payloads(self):
+        left, left_node, _, left_port = dangling_graph(
+            "left",
+            lp.Flow.Source,
         )
-        for left_backend, right_backend in backend_pairs:
-            with self.subTest(
-                left_backend=left_backend,
-                right_backend=right_backend,
-            ):
-                left, left_node, _, left_port = dangling_graph(
-                    "left",
-                    lp.Flow.Source,
-                    node_store=left_backend,
-                )
-                right, right_node, right_edge, right_port = dangling_graph(
-                    "right",
-                    lp.Flow.Sink,
-                    node_store=right_backend,
-                )
+        right, right_node, right_edge, right_port = dangling_graph(
+            "right",
+            lp.Flow.Sink,
+        )
 
-                appended = left.append(right)
-                self.assertEqual(appended.node_store, left_backend)
-                self.assertEqual(left.node_store, left_backend)
-                self.assertEqual(right.node_store, right_backend)
-                self.assertIs(appended.node("node-left").data, left_node)
-                self.assertIs(appended.node("node-right").data, right_node)
-                self.assertIs(appended.edge("edge-right").data, right_edge)
+        appended = left.append(right)
+        self.assertIs(appended.node("node-left").data, left_node)
+        self.assertIs(appended.node("node-right").data, right_node)
+        self.assertIs(appended.edge("edge-right").data, right_edge)
 
-                joined_data = UserEdgePayload("joined")
+        joined_data = UserEdgePayload("joined")
 
-                def merge(left_half_edge, right_half_edge):
-                    self.assertIs(left_half_edge.data, left_port)
-                    self.assertIs(right_half_edge.data, right_port)
-                    return (
-                        lp.Flow.Source,
-                        lp.Orientation.Default,
-                        "joined",
-                        lp.EdgeValue(data=joined_data),
-                    )
+        def merge(left_half_edge, right_half_edge):
+            self.assertIs(left_half_edge.data, left_port)
+            self.assertIs(right_half_edge.data, right_port)
+            return (
+                lp.Flow.Source,
+                lp.Orientation.Default,
+                "joined",
+                lp.EdgeValue(data=joined_data),
+            )
 
-                joined = left.join(
-                    right,
-                    matching=lambda *_ports: True,
-                    merge=merge,
-                )
-                self.assertEqual(joined.node_store, left_backend)
-                self.assertIs(joined.node("node-left").data, left_node)
-                self.assertIs(joined.node("node-right").data, right_node)
-                self.assertIs(joined.edge("joined").data, joined_data)
+        joined = left.join(
+            right,
+            matching=lambda *_ports: True,
+            merge=merge,
+        )
+        self.assertIs(joined.node("node-left").data, left_node)
+        self.assertIs(joined.node("node-right").data, right_node)
+        self.assertIs(joined.edge("joined").data, joined_data)
 
 
 class TestHedgeGraphTopology(unittest.TestCase):
     def test_incremental_node_and_edge_insertion_is_transactional(self):
-        for node_store in (lp.NodeStore.Vec, lp.NodeStore.Forest):
-            with self.subTest(node_store=node_store):
-                graph = lp.Graph(node_store=node_store)
-                a_data = UserNodePayload("a")
-                b_data = UserNodePayload("b")
-                a_spec = lp.node("a", data=a_data, label="node a")
-                b_spec = lp.node("b", data=b_data)
-                first = graph.add_node(a_spec)
-                self.assertIs(first.data, a_data)
+        graph = lp.Graph()
+        a_data = UserNodePayload("a")
+        b_data = UserNodePayload("b")
+        a_spec = lp.node("a", data=a_data, label="node a")
+        b_spec = lp.node("b", data=b_data)
+        first = graph.add_node(a_spec)
+        self.assertIs(first.data, a_data)
 
-                second = graph.add_node(b_spec)
-                self.assertIs(second.data, b_data)
-                with self.assertRaises(ReferenceError):
-                    _ = first.data
+        second = graph.add_node(b_spec)
+        self.assertIs(second.data, b_data)
+        self.assertIs(first.data, a_data)
 
-                source_data = UserHalfEdgePayload("source")
-                sink_data = UserHalfEdgePayload("sink")
-                edge_data = UserEdgePayload("ab")
-                edge_spec = lp.edge(
-                    lp.source(a_spec, data=source_data, compass=lp.Compass.E),
-                    "ab",
-                    lp.sink(graph.node("b"), data=sink_data),
-                    data=edge_data,
-                    extensions={"protocol": "sync"},
+        source_data = UserHalfEdgePayload("source")
+        sink_data = UserHalfEdgePayload("sink")
+        edge_data = UserEdgePayload("ab")
+        edge_spec = lp.edge(
+            lp.source(a_spec, data=source_data, compass=lp.Compass.E),
+            "ab",
+            lp.sink(graph.node("b"), data=sink_data),
+            data=edge_data,
+            extensions={"protocol": "sync"},
+        )
+        inserted = graph.add_edge(edge_spec)
+        self.assertIs(inserted.data, edge_data)
+        self.assertIs(inserted.source.data, source_data)
+        self.assertIs(inserted.sink.data, sink_data)
+        self.assertEqual(inserted.drawing.extensions["protocol"], "sync")
+        self.assertEqual(inserted.source.node.name, "a")
+        self.assertEqual(inserted.sink.node.name, "b")
+
+        dangling_data = UserEdgePayload("external")
+        dangling = graph.add_edge(
+            lp.edge(
+                lp.source("b"),
+                "external",
+                data=dangling_data,
+                extensions={"protocol": "async"},
+            )
+        )
+        self.assertIs(dangling.data, dangling_data)
+        self.assertIsNotNone(dangling.source)
+        self.assertIsNone(dangling.sink)
+
+        a_spec.drawing.label = "changed spec"
+        edge_spec.drawing.extensions = {"protocol": "changed spec"}
+        self.assertEqual(graph.node("a").drawing.label, "node a")
+        self.assertEqual(
+            graph.edge("ab").drawing.extensions["protocol"],
+            "sync",
+        )
+
+        live = graph.node("a")
+        with self.assertRaisesRegex(ValueError, "duplicate node name"):
+            graph.add_node(lp.node("a"))
+        self.assertIs(live.data, a_data)
+
+        foreign = lp.Graph()
+        foreign.add_node(lp.node("foreign"))
+        with self.assertRaisesRegex(ValueError, "different graph epoch"):
+            graph.add_edge(
+                lp.edge(
+                    lp.source(foreign.node("foreign")),
+                    "foreign-edge",
                 )
-                inserted = graph.add_edge(edge_spec)
-                self.assertIs(inserted.data, edge_data)
-                self.assertIs(inserted.source.data, source_data)
-                self.assertIs(inserted.sink.data, sink_data)
-                self.assertEqual(inserted.drawing.extensions["protocol"], "sync")
-                self.assertEqual(inserted.source.node.name, "a")
-                self.assertEqual(inserted.sink.node.name, "b")
+            )
+        self.assertIs(live.data, a_data)
 
-                dangling_data = UserEdgePayload("external")
-                dangling = graph.add_edge(
-                    lp.edge(
-                        lp.source("b"),
-                        "external",
-                        data=dangling_data,
-                        extensions={"protocol": "async"},
-                    )
-                )
-                self.assertIs(dangling.data, dangling_data)
-                self.assertIsNotNone(dangling.source)
-                self.assertIsNone(dangling.sink)
-
-                a_spec.drawing.label = "changed spec"
-                edge_spec.drawing.extensions = {"protocol": "changed spec"}
-                self.assertEqual(graph.node("a").drawing.label, "node a")
-                self.assertEqual(
-                    graph.edge("ab").drawing.extensions["protocol"],
-                    "sync",
-                )
-
-                live = graph.node("a")
-                with self.assertRaisesRegex(ValueError, "duplicate node name"):
-                    graph.add_node(lp.node("a"))
-                self.assertIs(live.data, a_data)
-
-                foreign = lp.Graph(node_store=node_store)
-                foreign.add_node(lp.node("foreign"))
-                with self.assertRaisesRegex(ValueError, "different graph revision"):
-                    graph.add_edge(
-                        lp.edge(
-                            lp.source(foreign.node("foreign")),
-                            "foreign-edge",
-                        )
-                    )
-                self.assertIs(live.data, a_data)
-
-                stale = graph.node("a")
-                graph.add_node(lp.node("c"))
-                current = graph.node("a")
-                with self.assertRaises(ReferenceError):
-                    graph.add_edge(lp.edge(lp.source(stale), "stale-edge"))
-                self.assertIs(current.data, a_data)
+        retained = graph.node("a")
+        graph.add_node(lp.node("c"))
+        graph.add_edge(lp.edge(lp.source(retained), "retained-edge"))
+        stale = graph.node("a")
+        graph.reorder_nodes(list(reversed(range(graph.n_nodes))))
+        current = graph.node("a")
+        with self.assertRaises(ReferenceError):
+            graph.add_edge(lp.edge(lp.source(stale), "stale-edge"))
+        self.assertIs(current.data, a_data)
 
     def test_build_resolves_declared_endpoint_target_forms(self):
         key_graph = lp.Graph()
@@ -946,71 +900,69 @@ class TestHedgeGraphTopology(unittest.TestCase):
         self.assertEqual(graph.edge("by-live-node").source.node.name, "b")
 
     def test_incremental_split_and_connect_preserve_endpoint_values(self):
-        for node_store in (lp.NodeStore.Vec, lp.NodeStore.Forest):
-            with self.subTest(node_store=node_store):
-                graph = lp.Graph(node_store=node_store)
-                graph.add_node(lp.node("a"))
-                graph.add_node(lp.node("b"))
-                source_data = UserHalfEdgePayload("source")
-                sink_data = UserHalfEdgePayload("sink")
-                original_data = UserEdgePayload("original")
-                graph.add_edge(
-                    lp.edge(
-                        lp.source("a", data=source_data),
-                        "ab",
-                        lp.sink("b", data=sink_data),
-                        data=original_data,
-                    )
-                )
+        graph = lp.Graph()
+        graph.add_node(lp.node("a"))
+        graph.add_node(lp.node("b"))
+        source_data = UserHalfEdgePayload("source")
+        sink_data = UserHalfEdgePayload("sink")
+        original_data = UserEdgePayload("original")
+        graph.add_edge(
+            lp.edge(
+                lp.source("a", data=source_data),
+                "ab",
+                lp.sink("b", data=sink_data),
+                data=original_data,
+            )
+        )
 
-                original = graph.edge("ab")
-                selected, opposite = graph.split_edge(
-                    original.source,
-                    lp.EdgeValue(
-                        data=UserEdgePayload("split"),
-                        drawing=lp.EdgeDrawing(extensions={"operation": "split"}),
-                    ),
-                    name="a-external",
-                )
-                self.assertEqual((graph.n_edges, graph.n_half_edges), (2, 2))
-                self.assertEqual(selected.name, "a-external")
-                self.assertEqual(opposite.name, "ab")
-                self.assertEqual(selected.drawing.extensions["operation"], "split")
-                self.assertIs(selected.source.data, source_data)
-                self.assertIs(opposite.sink.data, sink_data)
-                self.assertIs(opposite.data, original_data)
-                with self.assertRaises(ReferenceError):
-                    _ = original.data
+        original = graph.edge("ab")
+        selected, opposite = graph.split_edge(
+            original.source,
+            lp.EdgeValue(
+                data=UserEdgePayload("split"),
+                drawing=lp.EdgeDrawing(extensions={"operation": "split"}),
+            ),
+            name="a-external",
+        )
+        self.assertEqual((graph.n_edges, graph.n_half_edges), (2, 2))
+        self.assertEqual(selected.name, "a-external")
+        self.assertEqual(opposite.name, "ab")
+        self.assertEqual(selected.drawing.extensions["operation"], "split")
+        self.assertIs(selected.source.data, source_data)
+        self.assertIs(opposite.sink.data, sink_data)
+        self.assertIs(opposite.data, original_data)
+        with self.assertRaises(ReferenceError):
+            _ = original.data
 
-                joined_data = UserEdgePayload("joined")
-                selected_view = selected
-                joined = graph.connect(
-                    selected.source,
-                    opposite.sink,
-                    lp.EdgeValue(
-                        data=joined_data,
-                        drawing=lp.EdgeDrawing(extensions={"operation": "joined"}),
-                    ),
-                    name="joined",
-                )
-                self.assertEqual((graph.n_edges, graph.n_half_edges), (1, 2))
-                self.assertIs(joined.data, joined_data)
-                self.assertEqual(joined.drawing.extensions["operation"], "joined")
-                self.assertEqual(joined.source.node.name, "a")
-                self.assertEqual(joined.sink.node.name, "b")
-                self.assertIs(joined.source.data, source_data)
-                self.assertIs(joined.sink.data, sink_data)
-                with self.assertRaises(ReferenceError):
-                    _ = selected_view.data
+        joined_data = UserEdgePayload("joined")
+        selected_view = selected
+        joined = graph.connect(
+            selected.source,
+            opposite.sink,
+            lp.EdgeValue(
+                data=joined_data,
+                drawing=lp.EdgeDrawing(extensions={"operation": "joined"}),
+            ),
+            name="joined",
+        )
+        self.assertEqual((graph.n_edges, graph.n_half_edges), (1, 2))
+        self.assertIs(joined.data, joined_data)
+        self.assertEqual(joined.drawing.extensions["operation"], "joined")
+        self.assertEqual(joined.source.node.name, "a")
+        self.assertEqual(joined.sink.node.name, "b")
+        self.assertIs(joined.source.data, source_data)
+        self.assertIs(joined.sink.data, sink_data)
+        with self.assertRaises(ReferenceError):
+            _ = selected_view.data
 
-                live = graph.edge("joined")
-                with self.assertRaisesRegex(ValueError, "two dangling"):
-                    graph.connect(
-                        live.source,
-                        live.sink,
-                        lp.EdgeValue(data=UserEdgePayload("invalid")),
-                    )
-                self.assertIs(live.data, joined_data)
+        live = graph.edge("joined")
+        with self.assertRaisesRegex(ValueError, "two dangling"):
+            graph.connect(
+                live.source,
+                live.sink,
+                lp.EdgeValue(data=UserEdgePayload("invalid")),
+            )
+        self.assertIs(live.data, joined_data)
 
     def test_subgraph_views_and_set_algebra_use_half_edge_indices(self):
         graph, _, _, _ = topology_graph()
@@ -1150,7 +1102,9 @@ class TestHedgeGraphTopology(unittest.TestCase):
         self.assertEqual(len(forests), 3)
         self.assertTrue(all(len(forest) == 4 for forest in forests))
 
-        cuts = graph.all_cuts(["a"], ["d"])
+        # Every disconnected component must contain a terminal on its side.
+        self.assertEqual(graph.all_cuts(["a"], ["d"]), [])
+        cuts = graph.all_cuts(["a", "e"], ["d"])
         self.assertTrue(cuts)
         self.assertTrue(all(isinstance(cut, lp.CutPartition) for cut in cuts))
         ordering = []
@@ -1198,378 +1152,353 @@ class TestHedgeGraphTopology(unittest.TestCase):
             self.assertEqual(len(tree.half_edges), 6)
 
     def test_cut_partitions_match_native_square_regression(self):
-        for node_store in (lp.NodeStore.Vec, lp.NodeStore.Forest):
-            with self.subTest(node_store=node_store):
-                nodes = {name: lp.node(name) for name in ("a", "b", "c", "d")}
+        nodes = {name: lp.node(name) for name in ("a", "b", "c", "d")}
 
-                def connection(source, sink, name):
-                    return lp.edge(
-                        lp.source(nodes[source]),
-                        name,
-                        lp.sink(nodes[sink]),
-                    )
+        def connection(source, sink, name):
+            return lp.edge(
+                lp.source(nodes[source]),
+                name,
+                lp.sink(nodes[sink]),
+            )
 
-                graph = lp.build(
-                    *nodes.values(),
-                    connection("a", "b", "ab"),
-                    connection("b", "c", "bc"),
-                    connection("c", "d", "cd"),
-                    connection("d", "a", "da"),
-                    connection("b", "d", "bd"),
-                    node_store=node_store,
-                )
-                partitions = graph.all_cuts(["a"], ["c"])
-                self.assertEqual(len(partitions), 4)
-                for partition in partitions:
-                    self.assertTrue(
-                        partition.source_side.includes_node(graph.node("a").index)
-                    )
-                    self.assertTrue(
-                        partition.target_side.includes_node(graph.node("c").index)
-                    )
-                    self.assertEqual(
-                        partition.source_side | partition.target_side,
-                        graph.full_subgraph(),
-                    )
-                    right = set(partition.boundary.right.half_edge_indices())
-                    for half_edge in partition.boundary.left.to_half_edges():
-                        self.assertIn(half_edge.pair.index, right)
+        graph = lp.build(
+            *nodes.values(),
+            connection("a", "b", "ab"),
+            connection("b", "c", "bc"),
+            connection("c", "d", "cd"),
+            connection("d", "a", "da"),
+            connection("b", "d", "bd"),
+        )
+        partitions = graph.all_cuts(["a"], ["c"])
+        self.assertEqual(len(partitions), 4)
+        for partition in partitions:
+            self.assertTrue(partition.source_side.includes_node(graph.node("a").index))
+            self.assertTrue(partition.target_side.includes_node(graph.node("c").index))
+            self.assertEqual(
+                partition.source_side | partition.target_side,
+                graph.full_subgraph(),
+            )
+            right = set(partition.boundary.right.half_edge_indices())
+            for half_edge in partition.boundary.left.to_half_edges():
+                self.assertIn(half_edge.pair.index, right)
 
-                partition = partitions[0]
-                boundary = partition.boundary
-                graph.reverse_edge("ab")
-                with self.assertRaises(ReferenceError):
-                    _ = partition.source_side
-                with self.assertRaises(ReferenceError):
-                    _ = boundary.left
+        partition = partitions[0]
+        boundary = partition.boundary
+        graph.reverse_edge("ab")
+        with self.assertRaises(ReferenceError):
+            _ = partition.source_side
+        with self.assertRaises(ReferenceError):
+            _ = boundary.left
 
     def test_bond_enumeration_uses_native_size_bounds(self):
-        for node_store in (lp.NodeStore.Vec, lp.NodeStore.Forest):
-            with self.subTest(node_store=node_store):
-                names = ("0", "1", "2", "3", "a", "b", "c")
-                nodes = {name: lp.node(name) for name in names}
+        names = ("0", "1", "2", "3", "a", "b", "c")
+        nodes = {name: lp.node(name) for name in names}
 
-                def connection(source, sink, index):
-                    return lp.edge(
-                        lp.source(nodes[source]),
-                        f"e{index}",
-                        lp.sink(nodes[sink]),
-                    )
+        def connection(source, sink, index):
+            return lp.edge(
+                lp.source(nodes[source]),
+                f"e{index}",
+                lp.sink(nodes[sink]),
+            )
 
-                graph = lp.build(
-                    *nodes.values(),
-                    connection("0", "1", 0),
-                    connection("1", "2", 1),
-                    connection("0", "3", 2),
-                    connection("2", "a", 3),
-                    connection("a", "b", 4),
-                    connection("b", "c", 5),
-                    connection("c", "3", 6),
-                    connection("3", "0", 7),
-                    connection("2", "1", 8),
-                    node_store=node_store,
-                )
-                bonds = graph.all_bonds(min_size=2, max_size=2)
-                self.assertEqual(len(bonds), 10)
-                self.assertTrue(all(bond.n_half_edges == 2 for bond in bonds))
-                self.assertEqual(
-                    [bond.half_edge_indices() for bond in bonds],
-                    sorted(bond.half_edge_indices() for bond in bonds),
-                )
-                with self.assertRaisesRegex(ValueError, "min_size"):
-                    graph.all_bonds(min_size=3, max_size=2)
+        graph = lp.build(
+            *nodes.values(),
+            connection("0", "1", 0),
+            connection("1", "2", 1),
+            connection("0", "3", 2),
+            connection("2", "a", 3),
+            connection("a", "b", 4),
+            connection("b", "c", 5),
+            connection("c", "3", 6),
+            connection("3", "0", 7),
+            connection("2", "1", 8),
+        )
+        bonds = graph.all_bonds(min_size=2, max_size=2)
+        self.assertEqual(len(bonds), 10)
+        self.assertTrue(all(bond.n_half_edges == 2 for bond in bonds))
+        self.assertEqual(
+            [bond.half_edge_indices() for bond in bonds],
+            sorted(bond.half_edge_indices() for bond in bonds),
+        )
+        with self.assertRaisesRegex(ValueError, "min_size"):
+            graph.all_bonds(min_size=3, max_size=2)
 
     def test_bond_defaults_restriction_and_live_revision(self):
-        for node_store in (lp.NodeStore.Vec, lp.NodeStore.Forest):
-            with self.subTest(node_store=node_store):
-                nodes = {name: lp.node(name) for name in ("a", "b", "c", "d")}
-                graph = lp.build(
-                    *nodes.values(),
-                    lp.edge(lp.source(nodes["a"]), "ab", lp.sink(nodes["b"])),
-                    lp.edge(lp.source(nodes["c"]), "cd", lp.sink(nodes["d"])),
-                    node_store=node_store,
+        nodes = {name: lp.node(name) for name in ("a", "b", "c", "d")}
+        graph = lp.build(
+            *nodes.values(),
+            lp.edge(lp.source(nodes["a"]), "ab", lp.sink(nodes["b"])),
+            lp.edge(lp.source(nodes["c"]), "cd", lp.sink(nodes["d"])),
+        )
+        bonds = graph.all_bonds()
+        self.assertEqual(len(bonds), 2)
+        self.assertTrue(all(bond.n_half_edges > 0 for bond in bonds))
+
+        restricted = graph.all_bonds(subgraph=graph.subgraph(edges=["ab"]))
+        self.assertEqual(len(restricted), 1)
+        self.assertTrue(restricted[0].is_subset(graph.subgraph(edges=["ab"])))
+
+        stale = restricted[0]
+        graph.add_node(lp.node("isolated"))
+        with self.assertRaises(ReferenceError):
+            _ = stale.n_half_edges
+
+        edgeless = lp.build(
+            lp.node("only"),
+        )
+        self.assertEqual(edgeless.all_bonds(), [])
+        self.assertEqual(edgeless.all_bonds(min_size=2), [])
+        with self.assertRaisesRegex(ValueError, "at least 1"):
+            edgeless.all_bonds(min_size=0)
+
+    def test_boundaries_cycles_bonds_and_tadpoles(self):
+        graph, _, _, _ = topology_graph()
+        triangle = graph.subgraph(edges=["ab", "bc", "ca"])
+        self.assertFalse(graph.internal_boundary(triangle))
+        self.assertEqual(
+            {edge.name for edge in graph.edges_of(graph.boundary(triangle))},
+            {"cd"},
+        )
+
+        split = graph.subgraph(half_edges=[graph.edge("cd").source.index])
+        self.assertEqual(graph.internal_boundary(split), split)
+
+        cycles = graph.all_cycles(max_results=1)
+        self.assertEqual(len(cycles), 1)
+        self.assertEqual(
+            {edge.name for edge in graph.edges_of(cycles[0].filter)},
+            {"ab", "bc", "ca"},
+        )
+        with self.assertRaisesRegex(
+            ValueError, "1 candidate combinations.*max_results=0"
+        ):
+            graph.all_cycles(max_results=0)
+        self.assertEqual(
+            graph.all_cycles(
+                max_results=0,
+                subgraph=graph.subgraph(edges=["cd"]),
+            ),
+            [],
+        )
+        loop_node = lp.node("loop")
+        large_cycle_space = lp.build(
+            loop_node,
+            *[
+                lp.edge(
+                    lp.source(loop_node),
+                    f"loop-{index}",
+                    lp.sink(loop_node),
                 )
-                bonds = graph.all_bonds()
-                self.assertEqual(len(bonds), 2)
-                self.assertTrue(all(bond.n_half_edges > 0 for bond in bonds))
+                for index in range(64)
+            ],
+        )
+        with self.assertRaisesRegex(
+            ValueError, "powerset at rank 64 is not representable"
+        ):
+            large_cycle_space.all_cycles(max_results=2**64 - 1)
 
-                restricted = graph.all_bonds(subgraph=graph.subgraph(edges=["ab"]))
-                self.assertEqual(len(restricted), 1)
-                self.assertTrue(restricted[0].is_subset(graph.subgraph(edges=["ab"])))
+        bond = graph.find_bond(min_size=1, max_size=1)
+        self.assertIsInstance(bond, lp.Subgraph)
+        self.assertEqual(bond.n_half_edges, 1)
+        self.assertIsNone(graph.find_bond(min_size=10, max_size=10))
 
-                stale = restricted[0]
-                graph.add_node(lp.node("isolated"))
-                with self.assertRaises(ReferenceError):
-                    _ = stale.n_half_edges
+        terminal_names = ("terminal", "a", "b", "c", "d", "e", "f", "x")
+        nodes = {name: lp.node(name) for name in terminal_names}
 
-                edgeless = lp.build(lp.node("only"), node_store=node_store)
-                self.assertEqual(edgeless.all_bonds(), [])
-                self.assertEqual(edgeless.all_bonds(min_size=2), [])
-                with self.assertRaisesRegex(ValueError, "at least 1"):
-                    edgeless.all_bonds(min_size=0)
+        def connection(source, sink, name):
+            return lp.edge(
+                lp.source(nodes[source]),
+                name,
+                lp.sink(nodes[sink]),
+            )
 
-    def test_boundaries_cycles_bonds_and_tadpoles_are_backend_neutral(self):
-        for node_store in (lp.NodeStore.Vec, lp.NodeStore.Forest):
-            with self.subTest(node_store=node_store):
-                graph, _, _, _ = topology_graph(node_store=node_store)
-                triangle = graph.subgraph(edges=["ab", "bc", "ca"])
-                self.assertFalse(graph.internal_boundary(triangle))
-                self.assertEqual(
-                    {edge.name for edge in graph.edges_of(graph.boundary(triangle))},
-                    {"cd"},
-                )
+        tadpole_graph = lp.build(
+            *nodes.values(),
+            connection("terminal", "a", "ta"),
+            connection("a", "b", "ab"),
+            connection("b", "c", "bc"),
+            connection("c", "a", "ca"),
+            connection("d", "e", "de"),
+            connection("e", "f", "ef"),
+            connection("f", "d", "fd"),
+        )
+        tadpoles = tadpole_graph.tadpoles([tadpole_graph.node("terminal")])
+        self.assertEqual(len(tadpoles), 2)
+        self.assertEqual(
+            [part.half_edge_indices() for part in tadpoles],
+            sorted(part.half_edge_indices() for part in tadpoles),
+        )
+        with self.assertRaisesRegex(ValueError, "at least one"):
+            tadpole_graph.tadpoles([])
+        with self.assertRaisesRegex(ValueError, "more than once"):
+            tadpole_graph.tadpoles(["terminal", "terminal"])
+        with self.assertRaisesRegex(ValueError, "no incident"):
+            tadpole_graph.tadpoles(["x"])
 
-                split = graph.subgraph(half_edges=[graph.edge("cd").source.index])
-                self.assertEqual(graph.internal_boundary(split), split)
-
-                cycles = graph.all_cycles(max_results=1)
-                self.assertEqual(len(cycles), 1)
-                self.assertEqual(
-                    {edge.name for edge in graph.edges_of(cycles[0].filter)},
-                    {"ab", "bc", "ca"},
-                )
-                with self.assertRaisesRegex(
-                    ValueError, "1 candidate combinations.*max_results=0"
-                ):
-                    graph.all_cycles(max_results=0)
-                self.assertEqual(
-                    graph.all_cycles(
-                        max_results=0,
-                        subgraph=graph.subgraph(edges=["cd"]),
-                    ),
-                    [],
-                )
-                loop_node = lp.node("loop")
-                large_cycle_space = lp.build(
-                    loop_node,
-                    *[
-                        lp.edge(
-                            lp.source(loop_node),
-                            f"loop-{index}",
-                            lp.sink(loop_node),
-                        )
-                        for index in range(64)
-                    ],
-                    node_store=node_store,
-                )
-                with self.assertRaisesRegex(
-                    ValueError, "powerset at rank 64 is not representable"
-                ):
-                    large_cycle_space.all_cycles(max_results=2**64 - 1)
-
-                bond = graph.find_bond(min_size=1, max_size=1)
-                self.assertIsInstance(bond, lp.Subgraph)
-                self.assertEqual(bond.n_half_edges, 1)
-                self.assertIsNone(graph.find_bond(min_size=10, max_size=10))
-
-                terminal_names = ("terminal", "a", "b", "c", "d", "e", "f", "x")
-                nodes = {name: lp.node(name) for name in terminal_names}
-
-                def connection(source, sink, name):
-                    return lp.edge(
-                        lp.source(nodes[source]),
-                        name,
-                        lp.sink(nodes[sink]),
-                    )
-
-                tadpole_graph = lp.build(
-                    *nodes.values(),
-                    connection("terminal", "a", "ta"),
-                    connection("a", "b", "ab"),
-                    connection("b", "c", "bc"),
-                    connection("c", "a", "ca"),
-                    connection("d", "e", "de"),
-                    connection("e", "f", "ef"),
-                    connection("f", "d", "fd"),
-                    node_store=node_store,
-                )
-                tadpoles = tadpole_graph.tadpoles([tadpole_graph.node("terminal")])
-                self.assertEqual(len(tadpoles), 2)
-                self.assertEqual(
-                    [part.half_edge_indices() for part in tadpoles],
-                    sorted(part.half_edge_indices() for part in tadpoles),
-                )
-                with self.assertRaisesRegex(ValueError, "at least one"):
-                    tadpole_graph.tadpoles([])
-                with self.assertRaisesRegex(ValueError, "more than once"):
-                    tadpole_graph.tadpoles(["terminal", "terminal"])
-                with self.assertRaisesRegex(ValueError, "no incident"):
-                    tadpole_graph.tadpoles(["x"])
-
-                sample, _, _, _ = sample_graph(node_store=node_store)
-                external = sample.external_half_edges()
-                self.assertIsInstance(external, lp.Subgraph)
-                self.assertEqual(
-                    [half_edge.index for half_edge in external.to_half_edges()],
-                    [sample.edge("outgoing").source.index],
-                )
+        sample, _, _, _ = sample_graph()
+        external = sample.external_half_edges()
+        self.assertIsInstance(external, lp.Subgraph)
+        self.assertEqual(
+            [half_edge.index for half_edge in external.to_half_edges()],
+            [sample.edge("outgoing").source.index],
+        )
 
     def test_traversal_relationships_and_cut_orientation_are_graph_bound(self):
-        for node_store in (lp.NodeStore.Vec, lp.NodeStore.Forest):
-            with self.subTest(node_store=node_store):
-                graph, _, _, _ = topology_graph(node_store=node_store)
-                graph.add_edge(lp.edge(lp.source("d"), "external"))
-                tree = graph.depth_first_traverse("a")
-                root = tree.nodes[0]
-                self.assertEqual(root.name, "a")
-                self.assertIsNone(tree.parent(root))
-                self.assertEqual(tree.ancestors(root), [])
+        graph, _, _, _ = topology_graph()
+        graph.add_edge(lp.edge(lp.source("d"), "external"))
+        tree = graph.depth_first_traverse("a")
+        root = tree.nodes[0]
+        self.assertEqual(root.name, "a")
+        self.assertIsNone(tree.parent(root))
+        self.assertEqual(tree.ancestors(root), [])
 
-                for node in tree.nodes[1:]:
-                    parent = tree.parent(node)
-                    self.assertIsNotNone(parent)
-                    self.assertIn(
-                        node.name,
-                        {child.name for child in tree.children(parent)},
-                    )
-                    self.assertEqual(tree.ancestors(node)[-1].name, "a")
+        for node in tree.nodes[1:]:
+            parent = tree.parent(node)
+            self.assertIsNotNone(parent)
+            self.assertIn(
+                node.name,
+                {child.name for child in tree.children(parent)},
+            )
+            self.assertEqual(tree.ancestors(node)[-1].name, "a")
 
-                with self.assertRaisesRegex(ValueError, "not part"):
-                    tree.parent(graph.node("e"))
-                foreign, _, _, _ = topology_graph(node_store=node_store)
-                with self.assertRaisesRegex(ValueError, "different graph revision"):
-                    tree.children(foreign.node("a"))
+        with self.assertRaisesRegex(ValueError, "not part"):
+            tree.parent(graph.node("e"))
+        foreign, _, _, _ = topology_graph()
+        with self.assertRaisesRegex(ValueError, "different graph epoch"):
+            tree.children(foreign.node("a"))
 
-                tree_indices = {half_edge.index for half_edge in tree.half_edges}
-                triangle_edges = [graph.edge(name) for name in ("ab", "bc", "ca")]
-                non_tree = next(
-                    edge
-                    for edge in triangle_edges
-                    if edge.source.index not in tree_indices
-                    and edge.sink.index not in tree_indices
-                )
-                tree_edge = next(
-                    edge for edge in triangle_edges if edge.source.index in tree_indices
-                )
-                cycle = tree.fundamental_cycle(non_tree.source)
-                self.assertIsInstance(cycle, lp.Cycle)
-                self.assertIsNone(tree.fundamental_cycle(tree_edge.source))
-                with self.assertRaisesRegex(ValueError, "external half-edge"):
-                    tree.fundamental_cycle(graph.edge("external").source)
-                with self.assertRaisesRegex(ValueError, "both edge endpoints"):
-                    tree.fundamental_cycle(graph.edge("ef").source)
+        tree_indices = {half_edge.index for half_edge in tree.half_edges}
+        triangle_edges = [graph.edge(name) for name in ("ab", "bc", "ca")]
+        non_tree = next(
+            edge
+            for edge in triangle_edges
+            if edge.source.index not in tree_indices
+            and edge.sink.index not in tree_indices
+        )
+        tree_edge = next(
+            edge for edge in triangle_edges if edge.source.index in tree_indices
+        )
+        cycle = tree.fundamental_cycle(non_tree.source)
+        self.assertIsInstance(cycle, lp.Cycle)
+        self.assertIsNone(tree.fundamental_cycle(tree_edge.source))
+        with self.assertRaisesRegex(ValueError, "external half-edge"):
+            tree.fundamental_cycle(graph.edge("external").source)
+        with self.assertRaisesRegex(ValueError, "both edge endpoints"):
+            tree.fundamental_cycle(graph.edge("ef").source)
 
-                partition = graph.all_cuts(["a"], ["d"])[0]
-                cut = partition.boundary
-                self.assertEqual(
-                    [edge.index for edge in cut.edges],
-                    sorted(edge.index for edge in cut.edges),
-                )
-                for edge in cut.edges:
-                    self.assertNotEqual(
-                        cut.orientation(edge), lp.Orientation.Undirected
-                    )
-                non_cut = next(
-                    edge
-                    for edge in graph.edges()
-                    if edge.index not in {cut_edge.index for cut_edge in cut.edges}
-                )
-                with self.assertRaisesRegex(ValueError, "not part of this cut"):
-                    cut.orientation(non_cut)
-                self.assertIsInstance(cut.winding_number(cycle), int)
-                foreign_cycle = foreign.all_cycles(max_results=1)[0]
-                with self.assertRaisesRegex(ValueError, "different graph revision"):
-                    cut.winding_number(foreign_cycle)
+        partition = graph.all_cuts(["a", "e"], ["d"])[0]
+        cut = partition.boundary
+        self.assertEqual(
+            [edge.index for edge in cut.edges],
+            sorted(edge.index for edge in cut.edges),
+        )
+        for edge in cut.edges:
+            self.assertNotEqual(cut.orientation(edge), lp.Orientation.Undirected)
+        non_cut = next(
+            edge
+            for edge in graph.edges()
+            if edge.index not in {cut_edge.index for cut_edge in cut.edges}
+        )
+        with self.assertRaisesRegex(ValueError, "not part of this cut"):
+            cut.orientation(non_cut)
+        self.assertIsInstance(cut.winding_number(cycle), int)
+        foreign_cycle = foreign.all_cycles(max_results=1)[0]
+        with self.assertRaisesRegex(ValueError, "different graph revision"):
+            cut.winding_number(foreign_cycle)
 
-                fresh = graph.add_node(lp.node("fresh"))
-                for relationship in (tree.parent, tree.children, tree.ancestors):
-                    with self.assertRaises(ReferenceError):
-                        relationship(fresh)
-                    with self.assertRaises(ReferenceError):
-                        relationship("fresh")
-                with self.assertRaises(ReferenceError):
-                    cut.orientation("no-longer-resolvable")
-                with self.assertRaises(ReferenceError):
-                    cut.winding_number(cycle)
+        fresh = graph.add_node(lp.node("fresh"))
+        for relationship in (tree.parent, tree.children, tree.ancestors):
+            with self.assertRaises(ReferenceError):
+                relationship(fresh)
+            with self.assertRaises(ReferenceError):
+                relationship("fresh")
+        with self.assertRaises(ReferenceError):
+            cut.orientation("no-longer-resolvable")
+        with self.assertRaises(ReferenceError):
+            cut.winding_number(cycle)
 
     def test_directed_algorithms_select_underlying_or_superficial_direction(self):
-        for node_store in (lp.NodeStore.Vec, lp.NodeStore.Forest):
-            with self.subTest(node_store=node_store):
-                nodes = {
-                    name: lp.node(name, data=UserNodePayload(name)) for name in "abcx"
-                }
-                edge_data = {name: UserEdgePayload(name) for name in ("ab", "bc", "ac")}
+        nodes = {name: lp.node(name, data=UserNodePayload(name)) for name in "abcx"}
+        edge_data = {name: UserEdgePayload(name) for name in ("ab", "bc", "ac")}
 
-                def connection(source, sink, name, orientation=lp.Orientation.Default):
-                    return lp.edge(
-                        lp.source(nodes[source]),
-                        name,
-                        lp.sink(nodes[sink]),
-                        data=edge_data[name],
-                        orientation=orientation,
-                        label=f"label-{name}",
-                    )
+        def connection(source, sink, name, orientation=lp.Orientation.Default):
+            return lp.edge(
+                lp.source(nodes[source]),
+                name,
+                lp.sink(nodes[sink]),
+                data=edge_data[name],
+                orientation=orientation,
+                label=f"label-{name}",
+            )
 
-                graph = lp.build(
-                    *nodes.values(),
-                    connection("a", "b", "ab"),
-                    connection("b", "c", "bc"),
-                    connection("a", "c", "ac", lp.Orientation.Reversed),
-                    node_store=node_store,
-                )
-                source_view = graph.edge("ab")
-                self.assertFalse(graph.is_reachable("c", "a"))
-                self.assertTrue(
-                    graph.is_reachable(
-                        "c",
-                        "a",
-                        direction=lp.DirectionBasis.Superficial,
-                    )
-                )
-                self.assertEqual(
-                    [node.name for node in graph.topological_order()],
-                    ["x", "a", "b", "c"],
-                )
-                with self.assertRaisesRegex(ValueError, "Not a DAG"):
-                    graph.topological_order(direction=lp.DirectionBasis.Superficial)
+        graph = lp.build(
+            *nodes.values(),
+            connection("a", "b", "ab"),
+            connection("b", "c", "bc"),
+            connection("a", "c", "ac", lp.Orientation.Reversed),
+        )
+        source_view = graph.edge("ab")
+        self.assertFalse(graph.is_reachable("c", "a"))
+        self.assertTrue(
+            graph.is_reachable(
+                "c",
+                "a",
+                direction=lp.DirectionBasis.Superficial,
+            )
+        )
+        self.assertEqual(
+            [node.name for node in graph.topological_order()],
+            ["x", "a", "b", "c"],
+        )
+        with self.assertRaisesRegex(ValueError, "Not a DAG"):
+            graph.topological_order(direction=lp.DirectionBasis.Superficial)
 
-                selected = graph.subgraph(edges=["ab"])
-                self.assertTrue(graph.is_reachable("a", "b", subgraph=selected))
-                with self.assertRaisesRegex(ValueError, "target node"):
-                    graph.is_reachable("a", "c", subgraph=selected)
-                isolated = graph.subgraph(nodes=["x"])
-                self.assertTrue(graph.is_reachable("x", "x", subgraph=isolated))
-                self.assertEqual(
-                    [node.name for node in graph.topological_order(subgraph=isolated)],
-                    ["x"],
-                )
+        selected = graph.subgraph(edges=["ab"])
+        self.assertTrue(graph.is_reachable("a", "b", subgraph=selected))
+        with self.assertRaisesRegex(ValueError, "target node"):
+            graph.is_reachable("a", "c", subgraph=selected)
+        isolated = graph.subgraph(nodes=["x"])
+        self.assertTrue(graph.is_reachable("x", "x", subgraph=isolated))
+        self.assertEqual(
+            [node.name for node in graph.topological_order(subgraph=isolated)],
+            ["x"],
+        )
 
-                reduced = graph.transitive_reduction()
-                self.assertEqual({edge.name for edge in reduced.edges()}, {"ab", "bc"})
-                self.assertEqual(graph.n_edges, 3)
-                self.assertIs(source_view.data, edge_data["ab"])
-                self.assertIs(reduced.edge("ab").data, edge_data["ab"])
-                reduced.edge("ab").drawing.label = "changed"
-                self.assertEqual(graph.edge("ab").drawing.label, "label-ab")
-                with self.assertRaisesRegex(ValueError, "Not a DAG"):
-                    graph.transitive_reduction(direction=lp.DirectionBasis.Superficial)
+        reduced = graph.transitive_reduction()
+        self.assertEqual({edge.name for edge in reduced.edges()}, {"ab", "bc"})
+        self.assertEqual(graph.n_edges, 3)
+        self.assertIs(source_view.data, edge_data["ab"])
+        self.assertIs(reduced.edge("ab").data, edge_data["ab"])
+        reduced.edge("ab").drawing.label = "changed"
+        self.assertEqual(graph.edge("ab").drawing.label, "label-ab")
+        with self.assertRaisesRegex(ValueError, "Not a DAG"):
+            graph.transitive_reduction(direction=lp.DirectionBasis.Superficial)
 
-                left = lp.node("left")
-                right = lp.node("right")
-                reversed_graph = lp.build(
-                    left,
-                    right,
-                    lp.edge(
-                        lp.source(left),
-                        "edge",
-                        lp.sink(right),
-                        orientation=lp.Orientation.Reversed,
-                    ),
-                    node_store=node_store,
+        left = lp.node("left")
+        right = lp.node("right")
+        reversed_graph = lp.build(
+            left,
+            right,
+            lp.edge(
+                lp.source(left),
+                "edge",
+                lp.sink(right),
+                orientation=lp.Orientation.Reversed,
+            ),
+        )
+        self.assertEqual(
+            [node.name for node in reversed_graph.topological_order()],
+            ["left", "right"],
+        )
+        self.assertEqual(
+            [
+                node.name
+                for node in reversed_graph.topological_order(
+                    direction=lp.DirectionBasis.Superficial
                 )
-                self.assertEqual(
-                    [node.name for node in reversed_graph.topological_order()],
-                    ["left", "right"],
-                )
-                self.assertEqual(
-                    [
-                        node.name
-                        for node in reversed_graph.topological_order(
-                            direction=lp.DirectionBasis.Superficial
-                        )
-                    ],
-                    ["right", "left"],
-                )
+            ],
+            ["right", "left"],
+        )
 
     def test_isolated_nodes_are_first_class_subgraph_members(self):
         a = lp.node("a", data=UserNodePayload("a"))
@@ -1740,18 +1669,15 @@ class TestHedgeGraphTopology(unittest.TestCase):
             delete_graph.node("e")
 
     def test_contract_closed_component_restores_replacement_and_isolated_nodes(self):
-        for node_store in (lp.NodeStore.Vec, lp.NodeStore.Forest):
-            for with_isolated in (False, True):
-                with self.subTest(
-                    node_store=node_store,
-                    with_isolated=with_isolated,
-                ):
-                    self.check_contract_closed_component(
-                        node_store,
-                        with_isolated,
-                    )
+        for with_isolated in (False, True):
+            with self.subTest(
+                with_isolated=with_isolated,
+            ):
+                self.check_contract_closed_component(
+                    with_isolated,
+                )
 
-    def check_contract_closed_component(self, node_store, with_isolated):
+    def check_contract_closed_component(self, with_isolated):
         left_data = UserNodePayload("left")
         right_data = UserNodePayload("right")
         edge_data = UserEdgePayload("internal")
@@ -1770,7 +1696,9 @@ class TestHedgeGraphTopology(unittest.TestCase):
         isolated_data = UserNodePayload("pre-existing-isolated")
         if with_isolated:
             items.append(lp.node("isolated", data=isolated_data))
-        graph = lp.build(*items, node_store=node_store)
+        graph = lp.build(
+            *items,
+        )
         selected = graph.subgraph(edges=["internal"])
         replacement_data = UserNodePayload("replacement")
 
@@ -2209,9 +2137,9 @@ class TestDotCodec(unittest.TestCase):
         self.assertEqual(decoded.node(0).data, value)
         self.assertEqual(decoded.global_data.statements[key], value)
 
-        unsupported = lp.build(lp.node("only", data="trailing\\"))
-        with self.assertRaisesRegex(ValueError, "cannot end in a backslash"):
-            unsupported.to_dot(codec)
+        trailing = lp.build(lp.node("only", data="trailing\\"))
+        round_trip = lp.Graph.from_dot(trailing.to_dot(codec), codec)
+        self.assertEqual(round_trip.node(0).data, "trailing\\")
 
     def test_import_rejects_duplicate_python_element_names(self):
         codec = lp.DotCodec.topology()
@@ -2246,7 +2174,30 @@ class TestTypedTypstSurface(unittest.TestCase):
             Path(__file__).resolve().parents[1]
             / "python/symbolica/community/graph/__init__.pyi"
         )
-        declarations = ast.parse(stub.read_text()).body
+        syntax = ast.parse(stub.read_text())
+        declarations = syntax.body
+        declared = set(vars(builtins))
+        for item in ast.walk(syntax):
+            if isinstance(item, (ast.ClassDef, ast.FunctionDef)):
+                declared.add(item.name)
+            elif isinstance(item, ast.Name) and isinstance(item.ctx, ast.Store):
+                declared.add(item.id)
+            elif isinstance(item, ast.Import):
+                declared.update(
+                    alias.asname or alias.name.split(".")[0] for alias in item.names
+                )
+            elif isinstance(item, ast.ImportFrom):
+                declared.update(alias.asname or alias.name for alias in item.names)
+        self.assertEqual(
+            {
+                item.id
+                for item in ast.walk(syntax)
+                if isinstance(item, ast.Name) and isinstance(item.ctx, ast.Load)
+            }
+            - declared,
+            set(),
+            "generated annotations and defaults must resolve to declared names",
+        )
         aliases = {
             node.target.id
             for node in declarations

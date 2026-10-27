@@ -749,9 +749,9 @@ impl PyGraph {
         owner: &Py<PyGraph>,
         key: &Bound<'_, PyAny>,
     ) -> PyResult<usize> {
-        let revision = self.revision()?;
+        let epoch = self.element_epoch()?;
         if let Ok(view) = key.extract::<PyRef<'_, PyHalfEdge>>() {
-            return view.index_for_graph(py, owner, revision);
+            return view.index_for_graph(py, owner, epoch);
         }
         let index = key
             .extract::<usize>()
@@ -1519,7 +1519,7 @@ impl PyGraph {
         Ok(())
     }
 
-    /// Change an edge's direction and invalidate existing graph-element views.
+    /// Change an edge's direction, preserving element identities and invalidating topology views.
     fn set_orientation(
         &self,
         #[gen_stub(override_type(type_repr="builtins.int | builtins.str", imports=("builtins")))]
@@ -1571,19 +1571,19 @@ impl PyGraph {
         #[gen_stub(override_type(type_repr="typing.Callable[[HalfEdge], typing.Any] | None", imports=("typing")))]
         sink: Option<Py<PyAny>>,
     ) -> PyResult<Self> {
-        let (revision, mut mapped) = {
+        let (revision, epoch, mut mapped) = {
             let graph = slf.borrow(py);
             let state_ref = graph.state.borrow();
             let state = state_ref
                 .as_ref()
                 .ok_or_else(|| PyReferenceError::new_err("graph has been cleared"))?;
-            (state.revision, state.copy(py)?)
+            (state.revision, state.element_epoch, state.copy(py)?)
         };
 
         for index in 0..mapped.graph.n_live() {
             if let Some(callback) = &node {
                 mapped.graph[NodeIndex(index)].data =
-                    callback.call1(py, (view_for(py, &slf, revision, ViewIndex::Node(index))?,))?;
+                    callback.call1(py, (view_for(py, &slf, epoch, ViewIndex::Node(index))?,))?;
             }
         }
         let source_callback = source.as_ref();
@@ -1591,7 +1591,7 @@ impl PyGraph {
         for index in 0..mapped.graph.n_edges() {
             if let Some(callback) = &edge {
                 mapped.graph[EdgeIndex(index)].data =
-                    callback.call1(py, (view_for(py, &slf, revision, ViewIndex::Edge(index))?,))?;
+                    callback.call1(py, (view_for(py, &slf, epoch, ViewIndex::Edge(index))?,))?;
             }
             let pair = mapped.graph[&EdgeIndex(index)].1;
             for (hedge, callback) in match pair {
@@ -1604,15 +1604,14 @@ impl PyGraph {
                 },
             } {
                 if let (Some(hedge), Some(callback)) = (hedge, callback) {
-                    mapped.graph[hedge].data = callback.call1(
-                        py,
-                        (view_for(py, &slf, revision, ViewIndex::Hedge(hedge.0))?,),
-                    )?;
+                    mapped.graph[hedge].data = callback
+                        .call1(py, (view_for(py, &slf, epoch, ViewIndex::Hedge(hedge.0))?,))?;
                 }
             }
         }
         slf.borrow(py).check_revision(revision)?;
         mapped.revision = 0;
+        mapped.element_epoch = 0;
         Ok(Self::from_state(mapped))
     }
 
@@ -1888,7 +1887,7 @@ impl PyGraph {
     fn py_depth_first_traverse(
         slf: Py<PyGraph>,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="builtins.int | builtins.str", imports=("builtins")))]
+        #[gen_stub(override_type(type_repr="Node | builtins.int | builtins.str", imports=("builtins")))]
         root: &Bound<'_, PyAny>,
         subgraph: Option<&PySubgraph>,
         include: Option<usize>,
@@ -1903,7 +1902,7 @@ impl PyGraph {
     fn py_breadth_first_traverse(
         slf: Py<PyGraph>,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="builtins.int | builtins.str", imports=("builtins")))]
+        #[gen_stub(override_type(type_repr="Node | builtins.int | builtins.str", imports=("builtins")))]
         root: &Bound<'_, PyAny>,
         subgraph: Option<&PySubgraph>,
         include: Option<usize>,
@@ -2254,7 +2253,7 @@ fn endpoint_record_for_graph(
     py: Python<'_>,
     endpoint: &Py<PyHalfEdgeSpec>,
     graph: &Py<PyGraph>,
-    revision: u64,
+    epoch: u64,
 ) -> PyResult<(EndpointRole, HedgeData<HalfEdgeRecord>)> {
     let endpoint = endpoint.borrow(py);
     let target = endpoint
@@ -2263,7 +2262,7 @@ fn endpoint_record_for_graph(
         .ok_or_else(|| PyReferenceError::new_err("half-edge specification has been cleared"))?
         .bind(py);
     let node = if let Ok(view) = target.extract::<PyRef<'_, PyNode>>() {
-        view.index_for_graph(py, graph, revision)?
+        view.index_for_graph(py, graph, epoch)?
     } else if let Ok(spec) = target.extract::<PyRef<'_, PyNodeSpec>>() {
         let name = spec.name.as_deref().ok_or_else(|| {
             PyTypeError::new_err(
@@ -2329,7 +2328,7 @@ impl PyEdgeSpec {
         &self,
         py: Python<'_>,
         graph: &Py<PyGraph>,
-        revision: u64,
+        epoch: u64,
     ) -> PyResult<IncrementalEdgeRecords> {
         let first = endpoint_record_for_graph(
             py,
@@ -2337,12 +2336,12 @@ impl PyEdgeSpec {
                 .as_ref()
                 .ok_or_else(|| PyReferenceError::new_err("edge specification has been cleared"))?,
             graph,
-            revision,
+            epoch,
         )?;
         let second = self
             .second
             .as_ref()
-            .map(|endpoint| endpoint_record_for_graph(py, endpoint, graph, revision))
+            .map(|endpoint| endpoint_record_for_graph(py, endpoint, graph, epoch))
             .transpose()?;
         let (source, sink) = match (first, second) {
             ((EndpointRole::Source, source), Some((EndpointRole::Sink, sink)))

@@ -720,7 +720,7 @@ impl PyOrientedCut {
     fn orientation(
         &self,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="EdgeView | builtins.int | builtins.str", imports=("builtins")))]
+        #[gen_stub(override_type(type_repr="Edge | builtins.int | builtins.str", imports=("builtins")))]
         edge: &Bound<'_, PyAny>,
     ) -> PyResult<PyOrientation> {
         self.owner(py)?;
@@ -901,7 +901,7 @@ impl PyTraversalTree {
     fn parent(
         &self,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="NodeView | builtins.int | builtins.str", imports=("builtins")))]
+        #[gen_stub(override_type(type_repr="Node | builtins.int | builtins.str", imports=("builtins")))]
         node: &Bound<'_, PyAny>,
     ) -> PyResult<Option<Py<PyNode>>> {
         let node = self.resolve_node(py, node)?;
@@ -920,7 +920,7 @@ impl PyTraversalTree {
     fn children(
         &self,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="NodeView | builtins.int | builtins.str", imports=("builtins")))]
+        #[gen_stub(override_type(type_repr="Node | builtins.int | builtins.str", imports=("builtins")))]
         node: &Bound<'_, PyAny>,
     ) -> PyResult<Vec<Py<PyNode>>> {
         let node = self.resolve_node(py, node)?;
@@ -949,7 +949,7 @@ impl PyTraversalTree {
     fn ancestors(
         &self,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="NodeView | builtins.int | builtins.str", imports=("builtins")))]
+        #[gen_stub(override_type(type_repr="Node | builtins.int | builtins.str", imports=("builtins")))]
         node: &Bound<'_, PyAny>,
     ) -> PyResult<Vec<Py<PyNode>>> {
         let node = self.resolve_node(py, node)?;
@@ -1888,7 +1888,7 @@ impl PyGraph {
     ) -> PyResult<PyTraversalTree> {
         let revision = slf.borrow(py).revision()?;
         let (filter, isolated_nodes) = selected_filter(&slf, py, revision, subgraph)?;
-        let root = NodeIndex(slf.borrow(py).resolve_node(root)?);
+        let root = NodeIndex(resolve_node_target(&slf, py, revision, root)?);
         let (tree, isolated_root) = {
             let graph = slf.borrow(py);
             let state = graph.state.borrow();

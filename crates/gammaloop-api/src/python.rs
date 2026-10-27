@@ -70,14 +70,11 @@ use symbolica::printer::PrintOptions;
 // const GIT_VERSION: &str = git_version!(fallback = "unavailable");
 
 use pyo3::prelude::{
-    Borrowed, Bound, Py, PyAnyMethods, PyBoolMethods, PyByteArrayMethods, PyBytesMethods,
-    PyCapsuleMethods, PyDictMethods, PyErr, PyFloatMethods, PyFrozenSetMethods, PyListMethods,
-    PyMappingMethods, PyMappingProxyMethods, PyModuleMethods, PyResult, PySequenceMethods,
-    PySetMethods, PySliceMethods, PyStringMethods, PyTracebackMethods, PyTupleMethods,
-    PyTypeMethods, PyWeakrefMethods,
+    Bound, Py, PyAnyMethods, PyDictMethods, PyErr, PyListMethods, PyModuleMethods, PyResult,
+    PyTupleMethods,
 };
-use pyo3::pyclass::CompareOp;
-use pyo3::types::{PyAny, PyComplex, PyComplexMethods, PyDict, PyList, PyModule, PyTuple, PyType};
+use pyo3::types::{PyAny, PyComplex, PyComplexMethods, PyDict, PyList, PyModule, PyTuple};
+use pyo3::IntoPyObject;
 #[allow(unused)]
 use pyo3::{
     exceptions, pyclass, pyfunction, pymethods, pymodule, wrap_pyfunction, FromPyObject, PyRef,

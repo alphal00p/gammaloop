@@ -654,6 +654,13 @@ impl PyProcess {
     /// >>> display(process)
     ///
     /// Select the static output and optional widget through the existing diagram view.
+    ///
+    /// Parameters
+    /// ----------
+    /// include : sequence[str] or None, optional
+    ///     MIME types to include; None permits every supported representation.
+    /// exclude : sequence[str] or None, optional
+    ///     MIME types to omit from the returned bundle.
     #[pyo3(signature = (include=None, exclude=None))]
     fn _repr_mimebundle_(
         &self,
@@ -741,7 +748,7 @@ impl PyProcess {
     /// prune_dressings : callable or None, optional
     ///     Hereditary bool predicate receiving a scoped graph.DressingView.
     /// select : callable or None, optional
-    ///     Arbitrary bool predicate receiving a complete graph.DiagramView.
+    ///     Arbitrary bool predicate receiving a complete graph.GenerationDiagramView.
     #[pyo3(signature=(*, loops, orders=None, restrict=None, topology=None, classes=None, symmetrize=None, prune_skeletons=None, prune_dressings=None, select=None))]
     #[allow(clippy::too_many_arguments)]
     fn amplitude(
@@ -801,7 +808,7 @@ impl PyProcess {
     /// prune_dressings : callable or None, optional
     ///     Hereditary bool predicate receiving a scoped graph.DressingView.
     /// select : callable or None, optional
-    ///     Arbitrary bool predicate receiving a complete graph.DiagramView.
+    ///     Arbitrary bool predicate receiving a complete graph.GenerationDiagramView.
     #[pyo3(signature=(*, loops, orders=None, restrict=None, topology=None, classes=None, cuts=None, symmetrize=None, prune_skeletons=None, prune_dressings=None, select=None))]
     #[allow(clippy::too_many_arguments)]
     fn cross_section(
@@ -1048,7 +1055,7 @@ impl PyRequest {
     /// Parameters
     /// ----------
     /// callback : callable or None
-    ///     Receives a scoped DiagramView. None returns a parameterized decorator.
+    ///     Receives a scoped GenerationDiagramView. None returns a parameterized decorator.
     /// thread_safe : bool
     ///     Permit this hook to run on the existing predicate worker.
     #[pyo3(signature=(callback=None, *, thread_safe=false))]

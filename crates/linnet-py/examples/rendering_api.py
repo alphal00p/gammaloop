@@ -64,14 +64,6 @@ def _(mo):
 
 @app.cell
 def _(lp, mo):
-    node_store = mo.ui.dropdown(
-        options={
-            "Dense Vec": lp.NodeStore.Vec,
-            "Identification Forest": lp.NodeStore.Forest,
-        },
-        value="Dense Vec",
-        label="Node store",
-    )
     layout_algorithm = mo.ui.dropdown(
         options={
             "Stable layered": lp.LayoutAlgorithm.StableLayered,
@@ -89,12 +81,12 @@ def _(lp, mo):
         label="Half-edge IDs (optional)",
     )
     controls = mo.hstack(
-        [node_store, layout_algorithm, custom_theme, show_half_edge_ids],
+        [layout_algorithm, custom_theme, show_half_edge_ids],
         justify="start",
         gap=1.5,
     )
     controls
-    return custom_theme, layout_algorithm, node_store, show_half_edge_ids
+    return custom_theme, layout_algorithm, show_half_edge_ids
 
 
 @app.cell
@@ -106,7 +98,6 @@ def _(
     layout_algorithm,
     lp,
     mo,
-    node_store,
     show_half_edge_ids,
 ):
     runtime_context = object()
@@ -210,7 +201,6 @@ def _(
             data=ChannelRecord("https", 256, runtime_context),
         ),
         name="document-intake-workflow",
-        node_store=node_store.value,
     )
 
     if layout_algorithm.value == lp.LayoutAlgorithm.Force:

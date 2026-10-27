@@ -44,9 +44,10 @@ pub fn stub_info() -> pyo3_stub_gen::Result<pyo3_stub_gen::StubInfo> {
 // are recursively checked before they can cross into Typst.  Keep the aliases
 // here so manual signatures and generated signatures share one closed model.
 #[cfg(feature = "python_stubgen")]
-const STUB_TYPE_ALIASES: &str = r#"_RealLabel: typing.TypeAlias = Float | int | float | str | decimal.Decimal
+const STUB_TYPE_ALIASES: &str = r#"_Key: typing.TypeAlias = typing.Hashable | Expression
+_RealLabel: typing.TypeAlias = Float | int | float | str | decimal.Decimal
 _ExpressionLabel: typing.TypeAlias = Expression | ComplexFloat | _RealLabel | complex | tuple[_RealLabel, _RealLabel] | None
-_LabelKey: typing.TypeAlias = typing.Callable[[typing.Any], _ExpressionLabel] | None
+_LabelKey: typing.TypeAlias = typing.Callable[[typing.Any], _Key] | None
 
 class _TypstValueRef(typing.Protocol): ...
 class _TypstContentRef(typing.Protocol): ...
@@ -245,14 +246,18 @@ pub fn canonical_stub(module: &pyo3_stub_gen::generate::Module) -> pyo3_stub_gen
         .map(|name| format!("    \"{name}\","))
         .collect::<Vec<_>>()
         .join("\n");
+    // The closed aliases need these numeric imports even when no inferred signature does.
     let mut stub = format!(
-        "{}\n__all__ = [\n{exports}\n]\n\n{STUB_TYPE_ALIASES}\n\n{declarations}\n",
+        "{}\nimport decimal\nfrom symbolica import ComplexFloat, Float\nfrom symbolica.core import Expression\n\n__all__ = [\n{exports}\n]\n\n{STUB_TYPE_ALIASES}\n\n{declarations}\n",
         &generated[..import_end]
     );
     // pyo3-stub-gen retains Rust identifiers for classes declared by macros,
     // so normalize those inventory names to the names registered with Python;
     // module variables such as AUTO and INHERIT are already included.
     for (rust, python) in [
+        ("PyDiagramView", "GenerationDiagramView"),
+        ("PyDressingView", "DressingView"),
+        ("PySkeletonView", "SkeletonView"),
         ("PyEdgeLengthResolution", "EdgeLengthResolution"),
         ("PyDirectionBasis", "DirectionBasis"),
         ("PyHalfEdgeDrawing", "HalfEdgeDrawing"),

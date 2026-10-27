@@ -1249,7 +1249,7 @@ for mode in (fk.Classes.none(), graph.Classes.auto(), None):
     assert type(sewn.classes) is graph.Classes
     assert repr(sewn.classes) == repr(request.classes)
 
-retained, classes, particles = [], [], []
+retained, classes, particles, terminal_checks = [], [], [], []
 def inspect(view):
     for index, (_, _, stub) in enumerate(view.edges()):
         value = view.field(index)
@@ -1273,16 +1273,24 @@ def inspect(view):
             assert stub.data is value.particle
             assert flow == (graph.Flow.Source if stub.direction else graph.Flow.Sink)
             particles.append(value)
-        if type(view) is graph.DiagramView:
-            assert value.kind == "particle"
     return True
 
+def select(view):
+    assert type(view) is graph.GenerationDiagramView
+    assert graph.GenerationDiagramView is not graph.DiagramView
+    for index, _ in enumerate(view.edges()):
+        value = view.field(index)
+        assert value is not None and value.kind == "particle"
+        terminal_checks.append(value)
+    return inspect(view)
+
 # Model particle IDs have gaps here; the callback's rank table must restore actual records.
-observed = process.amplitude(**criteria, prune_dressings=inspect, select=inspect).generate(
+observed = process.amplitude(**criteria, prune_dressings=inspect, select=select).generate(
     run=fk.Run(threads=2)
 )
 assert observed.report.completed and exact(observed) == reference
 assert classes and particles
+assert terminal_checks, "completed-field assertions must execute"
 for value in classes:
     assert {member.pdg_code for member in value.members} == {11, 13}
     assert all(any(particle.particle is member for particle in particles) for member in value.members)
