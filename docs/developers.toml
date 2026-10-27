@@ -1336,7 +1336,7 @@ title = "Combined generation integration plan"
 summary = "Accepted execution plan for rebuilding the combined Feynman-generation line on current FeynKit, diagnosing the sample-dependent vacuum group ratio, completing names, route() and the Classes gate, and closing the full-mode time and memory regressions with gammabench evidence."
 source = "docs/architecture/generation-integration-plan.typ"
 kind = "Design proposal"
-status = "Accepted · WP0 pending Astra review"
+status = "Accepted · WP0 approved; WP2 ready for review"
 lifecycle = "proposal"
 owner = "unassigned"
 reviewed_at = "2026-10-24"
@@ -1348,10 +1348,10 @@ review_triggers = ["crates/feynkit-generator/src/**", "crates/linnet/src/**", "c
 [[section.note]]
 id = "generation-integration-wp0"
 title = "Combined generation integration WP0 execution record"
-summary = "Accepted scope, preserved evidence, exact historical source availability and remaining regeneration requirements; implementation awaits independent Astra review."
+summary = "Accepted scope, preserved evidence, exact historical source availability and remaining regeneration requirements; approved by independent Astra round 2."
 source = "docs/architecture/generation-integration-wp0.typ"
 kind = "Execution record"
-status = "Implemented · pending Astra review"
+status = "Approved · Astra round 2"
 lifecycle = "investigation"
 owner = "unassigned"
 reviewed_at = "2026-10-27"
@@ -1359,6 +1359,22 @@ review_ref = "4374f720"
 products = ["feynkit", "gammaloop", "linnet"]
 topics = ["generation", "integration", "evidence"]
 review_triggers = ["docs/architecture/generation-integration-plan.typ", "docs/architecture/evidence/generation-integration/**"]
+
+[[section.note]]
+id = "generation-integration-wp2"
+title = "Generation integration base and dependency manifest"
+summary = "Exact fixed base, complete 46-change source disposition and dependency order, live PR observations, staged template adaptation and WP3 validation contract."
+source = "docs/architecture/generation-integration-wp2.typ"
+kind = "Integration manifest"
+status = "Ready for independent Astra review"
+lifecycle = "investigation"
+owner = "unassigned"
+reviewed_at = "2026-10-27"
+review_ref = "dc6f0b6b79f77c482e8747af0c7f12b817ffdaca"
+evidence_revision = "3f0df2a870806076820786994d4883decec8e9e3"
+products = ["feynkit", "gammaloop", "idenso"]
+topics = ["generation", "integration", "dependencies", "testing"]
+review_triggers = ["docs/architecture/evidence/generation-integration/wp2/**", "crates/feynkit-generator/src/**", "crates/idenso/src/**", "Cargo.lock"]
 
 [[section]]
 id = "investigations"

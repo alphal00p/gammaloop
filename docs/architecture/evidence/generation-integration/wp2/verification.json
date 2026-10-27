@@ -1,0 +1,79 @@
+{
+  "date_utc": "2026-10-27T08:09:25.715375+00:00",
+  "environment": "nix shell --inputs-from . nixpkgs#python3 nixpkgs#typst -c python3 .wp2-check.py; pinned Nixpkgs tools, license preserved or silently loaded; no shared envrc configured",
+  "script_sha256": "16fee501f654a839cd3c59dfcf9d56524b74c197ec75424451070c4ef9f56d65",
+  "checks": [
+    {
+      "check": "All archive JSON and registry TOML parse",
+      "status": "passed"
+    },
+    {
+      "check": "Exact 46 source identities, order, JJ identities, trees and parents; base and all nine baselines",
+      "status": "passed"
+    },
+    {
+      "check": "Complete dispositions and acyclic 41-unit planned order; exact drop/supersession/squash membership",
+      "status": "passed"
+    },
+    {
+      "check": "Merged PR ancestry and exact #175 file delta/#176 whole-patch equivalence; remote observation equals fixed target",
+      "status": "passed"
+    },
+    {
+      "check": "All nine frozen source bookmarks and reachable closures retained; plan bookmark unchanged; accepted locks unchanged",
+      "status": "passed"
+    },
+    {
+      "check": "Changed-file whitelist preserves code, snapshots, locks, historical receipts and source inventory",
+      "status": "passed"
+    },
+    {
+      "check": "Registry unique IDs, title/source/owner/lifecycle contracts for three changed notes",
+      "status": "passed"
+    },
+    {
+      "check": "Three changed Typst notes compile; rendered scratch removed",
+      "status": "passed"
+    },
+    {
+      "check": "NixCI top-level false by unchanged source inspection; WP2 commit conflict-free",
+      "status": "passed"
+    }
+  ],
+  "typst": [
+    {
+      "source": "docs/architecture/generation-integration-plan.typ",
+      "exit_code": 0,
+      "stderr": ""
+    },
+    {
+      "source": "docs/architecture/generation-integration-wp0.typ",
+      "exit_code": 0,
+      "stderr": ""
+    },
+    {
+      "source": "docs/architecture/generation-integration-wp2.typ",
+      "exit_code": 0,
+      "stderr": ""
+    }
+  ],
+  "disposition_counts": {
+    "reconcile": 28,
+    "retain": 12,
+    "drop-as-upstream": 2,
+    "superseded": 1,
+    "squash": 3
+  },
+  "not_run": [
+    "physics tests",
+    "code replay/rebase",
+    "full docs-check (would build/export workspace)",
+    "full build",
+    "v5 integration",
+    "snapshot regeneration"
+  ],
+  "retained": "manifest, exact PR/ref observations, future validation matrix, focused receipt and task workspace/bookmark; source refs/cache preserved",
+  "scratch": "one-off scripts and render outputs removed after validation",
+  "processes_retained": [],
+  "environment_limitation": "nix develop attempted drawing dependency rebuilds before Python execution; interrupted own Nix process to keep bounded scope. Focused checks use pinned nix shell tools instead; NixCI checked from unchanged source, not build-triggering eval."
+}

@@ -1,9 +1,9 @@
 {
   "date": "2026-10-27",
-  "scope": "WP0 only; implemented, pending parent-assigned independent Astra review",
+  "scope": "WP0 approved; WP2 ready for independent Astra review; WP1 running separately",
   "authorization": "Implement the plan, have Astra review at each impl step, and have sol implement",
   "implementer": "Sol",
-  "reviewer": "Astra (separate round assigned by parent; not yet run)",
+  "reviewer": "Astra (WP0 round 2 approved; WP2 independent review not yet run)",
   "workspace": "/shared/lcnbr/dev/gammaloop/generation-integration-plan",
   "base_commit": "3f0df2a870806076820786994d4883decec8e9e3",
   "plan_commit": "4374f72027b75df9ff95c5c7a725ee75beac27a8",
@@ -33,5 +33,32 @@
     "bounded evidence archive and verification receipts"
   ],
   "processes_retained": [],
-  "verification_script_sha256": "07b0519cbea54e8ef6888409b9bdaa7d0250fa61b569f0239f157fec8e393951"
+  "verification_script_sha256": "07b0519cbea54e8ef6888409b9bdaa7d0250fa61b569f0239f157fec8e393951",
+  "packages": {
+    "WP0": {
+      "status": "approved",
+      "implementer": "Sol",
+      "reviewer": "Astra",
+      "review_round": 2,
+      "commits": [
+        "12582cbd19f7c20fca07dbce1bd2437b717e3f49",
+        "dc6f0b6b79f77c482e8747af0c7f12b817ffdaca"
+      ],
+      "findings": "P2 closed; no remaining findings",
+      "approval_basis": "coordinator brief for WP2, 2026-10-27; no invented review task identity"
+    },
+    "WP1": {
+      "status": "running separately",
+      "workspace": "/shared/lcnbr/dev/gammaloop/generation-b2-diagnosis",
+      "verdict": "not claimed"
+    },
+    "WP2": {
+      "status": "ready-for-review",
+      "implementer": "Sol",
+      "reviewer": "Astra (separate review pending)",
+      "change": "uqvxqplspvwvmzryvnnvusrsrmnzuypz",
+      "manifest": "wp2/base-manifest.json",
+      "validation": "wp2/validation-matrix.json"
+    }
+  }
 }

@@ -3,9 +3,10 @@
 #quote(block: true)[
 #strong[Status:] accepted for execution on 2026-10-27. Sol implements each
 bounded step; parent Astra assigns independent Astra review after each step.
-WP0 evidence preservation and source availability is implemented, pending that
-review. Routine development and validation within accepted packages need no
-repeated approval. Publication and destructive historical cleanup retain their
+WP0 evidence preservation and source availability was approved by Astra round 2
+(P2 closed, no remaining findings). WP1 is running separately; WP2 is ready for
+independent Astra review. Routine development and validation within accepted
+packages need no repeated approval. Publication and destructive historical cleanup retain their
 explicit gates. The earlier stopped v5 rebuild remains historical; no rebuild
 is performed in WP0.
 
@@ -143,7 +144,7 @@ fix. Exit criteria are necessary, not sufficient: reviewers may add checks.
   handoff read-only. Index inaccessible raw evidence and its regeneration work.
 - Pin the frozen v4, stage-1, transplant, upstream, v2/v3 and M1 source commits
   under new `generation-integration-source-*` bookmarks.
-- #strong[2026-10-27 result:] implemented, pending independent Astra review;
+- #strong[2026-10-27 result:] approved by independent Astra round 2 (P2 closed);
   see #link("generation-integration-wp0.typ")[execution and availability record].
 - #strong[Exit:] no decision relies exclusively on scratch: surviving relevant
   receipts are archived; inaccessible evidence remains reported and requires
@@ -191,7 +192,11 @@ own workspace. Bounded: one regression, one bisect, one written verdict.
   are superseded (the first \#177 by \#210), and which open PRs
   (\#166, \#172–\#174, \#178, \#191, \#195–\#197,
   \#204) are still needed, with their current heads.
-- #strong[Exit:] a written base manifest with exact commits, agreed by the user.
+- #strong[2026-10-27 result:] fixed target and all 46 source dispositions in
+  #link("generation-integration-wp2.typ")[WP2 base manifest]; ready for independent
+  Astra review. WP1 remains running separately. The user-selected merged base
+  is settled; no renewed base approval is required.
+- #strong[Exit:] exact base/dependency manifest independently reviewed.
 
 === WP3 Rebuild v5
 <wp3>

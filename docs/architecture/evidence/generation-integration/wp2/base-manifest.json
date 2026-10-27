@@ -1,0 +1,1315 @@
+{
+  "schema": 1,
+  "observed_at_utc": "2026-10-27T08:06:15.255705+00:00",
+  "scope": "WP2 manifest only; no replay, code edits, rebuild or snapshot certification",
+  "target": {
+    "commit": "3f0df2a870806076820786994d4883decec8e9e3",
+    "tree": "3c91ba47525c627fbc02d79f5afa1d58aa7c5b66",
+    "parents": [
+      "f02faa90d55c1d0a875b5345c010f03746d29549"
+    ],
+    "subject": "Preserve tensor metadata and render notebook displays with MathML (#209)"
+  },
+  "old_upstream": {
+    "commit": "588148851e3e989ecbb7478279db7d46727e23a8",
+    "tree": "f7209e0c4acccaf50edb3fcb76dd71f01f1b9838",
+    "parents": [
+      "d39d9bf206d8f858efedc9281f034cddb50c51fa"
+    ],
+    "subject": "Preserve native Lorentz ports through repeated attachments (#157)"
+  },
+  "frozen_v4": {
+    "commit": "e0a779808174c64057fecfd062c948b8de8e5c1f",
+    "tree": "d9811519406b5d6aef92403f5ee0c20993a39adf",
+    "parents": [
+      "dfe6387606e44a96f110c1ce03f52d92824dbdb1"
+    ],
+    "subject": "reduce structure-constant cycles through adjoint chains"
+  },
+  "remote_feynkit": {
+    "ref": "refs/heads/feynkit",
+    "sha": "3f0df2a870806076820786994d4883decec8e9e3"
+  },
+  "source_range": "old_upstream..frozen_v4 (all ancestors excluding old_upstream ancestors)",
+  "source_count": 46,
+  "planned_unit_count": 41,
+  "kernel_locks": {
+    "Cargo.lock": {
+      "graphica": "git+https://github.com/symbolica-dev/symbolica?branch=main#1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+      "numerica": "git+https://github.com/symbolica-dev/symbolica?branch=main#1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+      "symbolica": "git+https://github.com/symbolica-dev/symbolica?branch=main#1a1829b1f3d0a88b53b44085b3b9f34ef77945b3"
+    },
+    "tydenso/Cargo.lock": {
+      "graphica": "git+https://github.com/symbolica-dev/symbolica?branch=main#1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+      "numerica": "git+https://github.com/symbolica-dev/symbolica?branch=main#1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+      "symbolica": "git+https://github.com/symbolica-dev/symbolica?branch=main#1a1829b1f3d0a88b53b44085b3b9f34ef77945b3"
+    },
+    "examples/notebooks/symbolica-host/Cargo.lock": {
+      "graphica": "git+https://github.com/symbolica-dev/symbolica?branch=main#1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+      "numerica": "git+https://github.com/symbolica-dev/symbolica?branch=main#1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+      "symbolica": "git+https://github.com/symbolica-dev/symbolica?branch=main#1a1829b1f3d0a88b53b44085b3b9f34ef77945b3"
+    }
+  },
+  "changes": [
+    {
+      "commit": "d8146dc2ad8c4f5272969310c4127bce3f0fe4f8",
+      "tree": "3e1d42714bd120105c0237a1acfc2049fb53b68a",
+      "parents": [
+        "588148851e3e989ecbb7478279db7d46727e23a8"
+      ],
+      "subject": "restore the FeynRules ghost vertex and check BRST quartet cuts",
+      "source_change": "kursouxxupmzxppvxqymtqwkwzvopklq",
+      "source_order": 1,
+      "disposition": "reconcile",
+      "reason": "Port ghost model A and momentum-conservation reduction plus BRST fixtures onto current model/template owner; retain quartet correctness assertions.",
+      "source_pr": 172,
+      "upstream_match": null,
+      "planned_unit": "port-01",
+      "planned_order": 1,
+      "depends_on": [
+        "base"
+      ]
+    },
+    {
+      "commit": "098ed36d9f06a2db7bdba367acdd753787f99446",
+      "tree": "d0c221cf4bab35e0b57340a0d79fd4a9a9ed5103",
+      "parents": [
+        "d8146dc2ad8c4f5272969310c4127bce3f0fe4f8"
+      ],
+      "subject": "pin Symbolica and Numerica to one GitHub revision",
+      "source_change": "myrqyuzquszvlksyrslronuqxunuqnwm",
+      "source_order": 2,
+      "disposition": "reconcile",
+      "reason": "Keep the locked-kernel alignment policy, not the obsolete v4 revision, binary wasm or old dependency patches. Preserve accepted target kernel in all three locks and uv.",
+      "source_pr": null,
+      "upstream_match": null,
+      "planned_unit": "port-02",
+      "planned_order": 2,
+      "depends_on": [
+        "port-01"
+      ]
+    },
+    {
+      "commit": "9601eb6bd5da5b83685d7ed3d2dc13fb2a93b0cb",
+      "tree": "2e240a646ed8cfdadcf0e60c3da666ed9734a22e",
+      "parents": [
+        "098ed36d9f06a2db7bdba367acdd753787f99446"
+      ],
+      "subject": "contract around symmetric spectator tensors in the component planner",
+      "source_change": "mnylmtnoknkvqvwrskxuqoqxlzstykvt",
+      "source_order": 3,
+      "disposition": "reconcile",
+      "reason": "Port spectator component planning onto current authoritative tensor metadata; preserve spectator invariance and mutation regressions.",
+      "source_pr": 196,
+      "upstream_match": null,
+      "planned_unit": "port-03",
+      "planned_order": 3,
+      "depends_on": [
+        "port-02"
+      ]
+    },
+    {
+      "commit": "1ebce5ed1e7396bd28686e5236f8862930a33523",
+      "tree": "4a0956f532635a0c7a47c7c4733da10ee6589b5f",
+      "parents": [
+        "9601eb6bd5da5b83685d7ed3d2dc13fb2a93b0cb"
+      ],
+      "subject": "scope partner-sum copies to bound non-colour antisymmetric tensors",
+      "source_change": "txukktrxpnqrustwtroqtznknyoxzmkn",
+      "source_order": 4,
+      "disposition": "reconcile",
+      "reason": "Port scoped partner copies alongside planner; preserve non-colour epsilon bounds, scopes and signed transport.",
+      "source_pr": 196,
+      "upstream_match": null,
+      "planned_unit": "port-04",
+      "planned_order": 4,
+      "depends_on": [
+        "port-03"
+      ]
+    },
+    {
+      "commit": "19ccf3a6fe86c382480c02d93d6d8b984c85ffd0",
+      "tree": "6686b2d775b4f436ab738ffb1729ad9b7d07fec9",
+      "parents": [
+        "1ebce5ed1e7396bd28686e5236f8862930a33523"
+      ],
+      "subject": "document scoped contraction limits and share colour representations",
+      "source_change": "vqlsqwonqpvxkmrxqmqoornoqykomnqx",
+      "source_order": 5,
+      "disposition": "reconcile",
+      "reason": "Reconcile shared colour representations and scoped-contraction docs with #209 tensor ownership; do not restore old interfaces.",
+      "source_pr": 196,
+      "upstream_match": null,
+      "planned_unit": "port-05",
+      "planned_order": 5,
+      "depends_on": [
+        "port-04"
+      ]
+    },
+    {
+      "commit": "ab40b7dc7daebe140ed97c18fc6acddda230eb47",
+      "tree": "f387b07189e3c582b4dff1c88125d680faa4e0a1",
+      "parents": [
+        "19ccf3a6fe86c382480c02d93d6d8b984c85ffd0"
+      ],
+      "subject": "register coupling symbols and overall-factor heads in a fixed order",
+      "source_change": "pyxxkprryykwusprvkolyrkxvplsnttr",
+      "source_order": 6,
+      "disposition": "reconcile",
+      "reason": "Preserve fixed coupling and factor-head registration order inside staged construction; do not undo #209 template admission.",
+      "source_pr": 197,
+      "upstream_match": null,
+      "planned_unit": "port-06",
+      "planned_order": 6,
+      "depends_on": [
+        "port-05"
+      ]
+    },
+    {
+      "commit": "db7590285613f55a36f3b2e955e70e7785c27f49",
+      "tree": "8831609249bcb48e79aa162c64e128ac7753a01d",
+      "parents": [
+        "ab40b7dc7daebe140ed97c18fc6acddda230eb47"
+      ],
+      "subject": "order inferred numerator interface ports canonically",
+      "source_change": "zxztmwpunllktxywrskxorzoztmvqwtz",
+      "source_order": 7,
+      "disposition": "reconcile",
+      "reason": "Port canonical inferred port order through current NumeratorInterface::translate; preserve declared order and hidden index history from #209.",
+      "source_pr": 173,
+      "upstream_match": null,
+      "planned_unit": "port-07",
+      "planned_order": 7,
+      "depends_on": [
+        "port-06"
+      ]
+    },
+    {
+      "commit": "2e77886cde8d72e1e063cafced9a2738811abf20",
+      "tree": "a6e4149814e36554627c15ab6894253386e99af9",
+      "parents": [
+        "db7590285613f55a36f3b2e955e70e7785c27f49"
+      ],
+      "subject": "compare complex phases on the circle in approx_eq",
+      "source_change": "tyyyvnqqytqzqqqzwnrzltxlyultwvnw",
+      "source_order": 8,
+      "disposition": "retain",
+      "reason": "Retain circular complex-phase comparison and relative phase tolerance; independent of metadata migration.",
+      "source_pr": 174,
+      "upstream_match": null,
+      "planned_unit": "port-08",
+      "planned_order": 8,
+      "depends_on": [
+        "port-07"
+      ]
+    },
+    {
+      "commit": "0eb460fd62c3b7fbd2a244ba13d8f38b60fbfad6",
+      "tree": "0be956a69f53e57a8cc53d25275ce2b79fbbe5be",
+      "parents": [
+        "2e77886cde8d72e1e063cafced9a2738811abf20"
+      ],
+      "subject": "compare imaginary parts against zero in real approx_eq",
+      "source_change": "mqrtpvykvroxolumuponxlvnkyplnuur",
+      "source_order": 9,
+      "disposition": "retain",
+      "reason": "Retain imaginary-against-zero real ApproxEq correction; not supplied by phase-wraparound PR alone.",
+      "source_pr": null,
+      "upstream_match": null,
+      "planned_unit": "port-09",
+      "planned_order": 9,
+      "depends_on": [
+        "port-08"
+      ]
+    },
+    {
+      "commit": "314a7f5349092a4b95944cae4abdb32d204da515",
+      "tree": "23233f3fd25d38dff2a2368d955d88a12cbd049d",
+      "parents": [
+        "0eb460fd62c3b7fbd2a244ba13d8f38b60fbfad6"
+      ],
+      "subject": "build the dev shell's python3 and virtualenv as one environment",
+      "source_change": "msmnnywklznzkyslzspnykvstulxkvvq",
+      "source_order": 10,
+      "disposition": "drop-as-upstream",
+      "reason": "Actual merged #175 is an ancestor of target; do not layer the dev-shell copy. Whole-commit patch IDs differ because merged #175 additionally changes .config/nextest.toml; flake.nix delta is byte-identical.",
+      "source_pr": 175,
+      "upstream_match": {
+        "commit": "20b0d6dc6dc6a59127fee3283260438a20dea494",
+        "tree": "dc80ec01450f1c95e3da0342ab8fcb5d67c8b0c2",
+        "parents": [
+          "613b4539220cd187efd3f1e629e806133d0519ab"
+        ],
+        "subject": "flake: build the dev shell's python3 and virtualenv as one environment (#175)"
+      },
+      "planned_unit": null,
+      "planned_order": null,
+      "depends_on": [
+        "base"
+      ],
+      "source_patch_id": "c22cc68a22d73a6304a1c99e4f48cad48fc5b406",
+      "upstream_patch_id": "3a985406243160475057cb99667f378b1488bc86",
+      "patch_equivalent": false,
+      "matched_file": "flake.nix",
+      "matched_file_delta_sha256": "6dbda358f535cc1a5dca5424232d249785cd2365f34940b97661466ff95633ff"
+    },
+    {
+      "commit": "1de750c53193f573ed2cd6885a9dbeba065367d1",
+      "tree": "22768652b221e457cb2d6a75fdd3835fee922cc6",
+      "parents": [
+        "314a7f5349092a4b95944cae4abdb32d204da515"
+      ],
+      "subject": "let run-card set commands reach the integration-test session",
+      "source_change": "mkkynrvssspronorumuurppvtpuyuwlq",
+      "source_order": 11,
+      "disposition": "drop-as-upstream",
+      "reason": "Actual merged #176 is an ancestor of target; keep its run-card session behavior without duplicate copy.",
+      "source_pr": 176,
+      "upstream_match": {
+        "commit": "865afdc43fb4e6b950439d34b4ec2c38352873e7",
+        "tree": "6ae5f2021b80535bf302e86a3bfe21cdfa79574f",
+        "parents": [
+          "20b0d6dc6dc6a59127fee3283260438a20dea494"
+        ],
+        "subject": "tests: let run-card `set` commands reach the test session (#176)"
+      },
+      "planned_unit": null,
+      "planned_order": null,
+      "depends_on": [
+        "base"
+      ],
+      "source_patch_id": "ef4da22cc1c52e728993d04cc3abf046aac1b3ca",
+      "upstream_patch_id": "ef4da22cc1c52e728993d04cc3abf046aac1b3ca",
+      "patch_equivalent": true
+    },
+    {
+      "commit": "b5e3c5e6a062da219d98384bf2cffdcc38dcd200",
+      "tree": "eca663412680bf1e4493cc02cbafcddc62584edc",
+      "parents": [
+        "1de750c53193f573ed2cd6885a9dbeba065367d1"
+      ],
+      "subject": "decide filter_zero_color on isolated color products",
+      "source_change": "nxmztorqonwmlzwrmzwnunsnqsnxopvl",
+      "source_order": 12,
+      "disposition": "superseded",
+      "reason": "Drop the first isolated-product proof (nxmztorq). Redesigned #177 and final #210 complete colour algebra beside indexed spectators; not patch-equivalent to this first copy.",
+      "source_pr": 177,
+      "upstream_match": {
+        "commit": "f02faa90d55c1d0a875b5345c010f03746d29549",
+        "tree": "99c766e3129ec4a0b432e18a700a7ac0213da433",
+        "parents": [
+          "4ae30bd6e00b33784d0c3c98dd619029c910d08d"
+        ],
+        "subject": "fix color-only algebra beside indexed spectators (#210)"
+      },
+      "planned_unit": null,
+      "planned_order": null,
+      "depends_on": [
+        "base"
+      ]
+    },
+    {
+      "commit": "07c14f18d432788d113ac4d1a443e21b3e8345d8",
+      "tree": "adc50f219ab780b6f948ad4bc69d2226def47c3e",
+      "parents": [
+        "b5e3c5e6a062da219d98384bf2cffdcc38dcd200"
+      ],
+      "subject": "assert the rendered ExecutionMode.Single docstring in the spynso3 stub test",
+      "source_change": "msqkzsytwonzpuopoyrlruntqnkmslrz",
+      "source_order": 13,
+      "disposition": "reconcile",
+      "reason": "Retain intent of rendered ExecutionMode.Single docstring assertion; adapt to current #209 stub/display surface without weakening asserted rendering.",
+      "source_pr": 166,
+      "upstream_match": null,
+      "planned_unit": "port-13",
+      "planned_order": 10,
+      "depends_on": [
+        "port-09"
+      ]
+    },
+    {
+      "commit": "14aff3bbdceb6687459efe4abcb96e9d760146f5",
+      "tree": "cb558252589947ec44d8ad3381fae3b946147754",
+      "parents": [
+        "07c14f18d432788d113ac4d1a443e21b3e8345d8"
+      ],
+      "subject": "admit plain scalars directly in SymbolicTensor::infer",
+      "source_change": "woqyvuynmtqxxzmzrqsntrxwtprmrkzz",
+      "source_order": 14,
+      "disposition": "reconcile",
+      "reason": "#191 remains open and its plain-scalar shortcut is absent on target. Adapt eligibility and proof construction to #209 authoritative metadata; compare shortcut with full admission, including all registered symbols. Never overwrite #193 templates or resurrect obsolete TensorProofs fields.",
+      "source_pr": 191,
+      "upstream_match": null,
+      "planned_unit": "port-14",
+      "planned_order": 11,
+      "depends_on": [
+        "port-13"
+      ]
+    },
+    {
+      "commit": "711f9440b323166cbba92df4bea632b20121aa06",
+      "tree": "4e7b9049c12d253d135803312d035f13f5d2178c",
+      "parents": [
+        "14aff3bbdceb6687459efe4abcb96e9d760146f5"
+      ],
+      "subject": "remove the unused gpl ec-layout plugin",
+      "source_change": "uoqkkyuutpkpwmlwsvlrmxnpmumxmyrk",
+      "source_order": 15,
+      "disposition": "reconcile",
+      "reason": "Keep removal of unused GPL plugin; integrate with current native drawing resources and retained Clarabel/NetworkX notices (WP11). Do not import stale generated assets.",
+      "source_pr": 178,
+      "upstream_match": null,
+      "planned_unit": "port-15",
+      "planned_order": 12,
+      "depends_on": [
+        "port-14"
+      ]
+    },
+    {
+      "commit": "9e737a18274991e8dc0542f777a6063acaf72fe8",
+      "tree": "66e9ea505123e34a65a2e17db1bae281b69d56a7",
+      "parents": [
+        "711f9440b323166cbba92df4bea632b20121aa06"
+      ],
+      "subject": "rank label placements by contacts before cost",
+      "source_change": "kvykwlrzowsrvvztrwuvmulronunrzok",
+      "source_order": 16,
+      "disposition": "reconcile",
+      "reason": "Retain contact-first label cost after #178; regenerate drawing binaries only in owning implementation lane; preserve current rendering and notice ownership.",
+      "source_pr": 195,
+      "upstream_match": null,
+      "planned_unit": "port-16",
+      "planned_order": 13,
+      "depends_on": [
+        "port-15"
+      ]
+    },
+    {
+      "commit": "8cf6cecaf22be4d5c62d467b8e6827e80c6ba66d",
+      "tree": "0e34ba81a99e70d4546228a96acf2fda36d58c04",
+      "parents": [
+        "9e737a18274991e8dc0542f777a6063acaf72fe8"
+      ],
+      "subject": "port the Feynman generation stack onto feynkit",
+      "source_change": "sptyyttxkwkrlluvpqqwkrvyymzwpuxp",
+      "source_order": 17,
+      "disposition": "squash",
+      "reason": "Combine conflicted transplant with vwptmtxs resolution and roxklnrz formatting as one clean staged-generation unit; use net resolved tree, never replay conflict container as code.",
+      "source_pr": null,
+      "upstream_match": null,
+      "planned_unit": "staged-transplant",
+      "planned_order": 14,
+      "depends_on": [
+        "port-16"
+      ],
+      "net_source_range": {
+        "from": "9e737a18274991e8dc0542f777a6063acaf72fe8",
+        "through": "2b1ef4f07a44bc061bcc97c378bbdd9c41cb0e94",
+        "plus_format_fixup": "cfe9e8d103b3d2a4ebf1f276f61d8d6980e3d054"
+      },
+      "additional_dependencies": [
+        "port-14",
+        "WP1-reviewed-verdict-before-WP3-completion"
+      ]
+    },
+    {
+      "commit": "2b1ef4f07a44bc061bcc97c378bbdd9c41cb0e94",
+      "tree": "058e6a31b7ef9948619332dafd5356145fac1509",
+      "parents": [
+        "8cf6cecaf22be4d5c62d467b8e6827e80c6ba66d"
+      ],
+      "subject": "resolve the staged generation transplant against reviewed prerequisites",
+      "source_change": "vwptmtxsoyxuptvltmrwqkpplkmxspsp",
+      "source_order": 18,
+      "disposition": "squash",
+      "reason": "Resolution belongs to sptyyttx unit; reconcile staged Request/DiagramSet/BuiltDiagramSet with #209 admitted templates and retain current tensor/display APIs.",
+      "source_pr": null,
+      "upstream_match": null,
+      "planned_unit": "staged-transplant",
+      "planned_order": null,
+      "depends_on": [
+        "staged-transplant"
+      ],
+      "fold_into_source_order": 17
+    },
+    {
+      "commit": "8d49e6ecf0d8fb1169e7433f2c0b41048aa92e60",
+      "tree": "6dc9f962a1aa98bdd3838d98a1949ec9baf63c38",
+      "parents": [
+        "2b1ef4f07a44bc061bcc97c378bbdd9c41cb0e94"
+      ],
+      "subject": "stabilize zero-colour removal and canonical grouping",
+      "source_change": "yrpmmsunvpsxzkvootvxurynzyzpsvss",
+      "source_order": 19,
+      "disposition": "reconcile",
+      "reason": "Adapt deterministic zero-colour removal to #210 completed colour-only algebra; remove dependency on obsolete PreparedNumerator::color_products_vanish. Retain canonical grouping and exact output comparisons.",
+      "source_pr": null,
+      "upstream_match": null,
+      "planned_unit": "port-19",
+      "planned_order": 15,
+      "depends_on": [
+        "staged-transplant"
+      ]
+    },
+    {
+      "commit": "8eeaeaaeb0fed758111e9f711eb256c4a5efbf75",
+      "tree": "57d6f8b9f9f400e5deebc5ddc8a00b61288644ec",
+      "parents": [
+        "8d49e6ecf0d8fb1169e7433f2c0b41048aa92e60"
+      ],
+      "subject": "normalize sampled grouping quotients",
+      "source_change": "mpyquuutlzpvlwusqnrxlzkotwklwtxx",
+      "source_order": 20,
+      "disposition": "reconcile",
+      "reason": "Retain sampled quotient normalization only with WP1 reviewed verdict/remedy. No exactness claim from matching sampled values; original numerator pair is the regression oracle.",
+      "source_pr": null,
+      "upstream_match": null,
+      "planned_unit": "port-20",
+      "planned_order": 16,
+      "depends_on": [
+        "port-19"
+      ]
+    },
+    {
+      "commit": "78f55a6d68aef17897638bacd1d1492047711f75",
+      "tree": "8d3c3e2fd824c3d8dc6cc2de53b3d63484a8cf53",
+      "parents": [
+        "8eeaeaaeb0fed758111e9f711eb256c4a5efbf75"
+      ],
+      "subject": "reject nonfinite grouping samples and supply the physical test card",
+      "source_change": "msurxwzpxkktnsprnztwnktlumnsorov",
+      "source_order": 21,
+      "disposition": "reconcile",
+      "reason": "Retain nonfinite-sample rejection and physical card closure; carry reviewed WP1 production fallback regression with original budget/seed, distinct from samples=0 proof.",
+      "source_pr": null,
+      "upstream_match": null,
+      "planned_unit": "port-21",
+      "planned_order": 17,
+      "depends_on": [
+        "port-20"
+      ]
+    },
+    {
+      "commit": "77dcd12272d0f86dc5309f8d74de94632a771b6e",
+      "tree": "0137db96705e741859ed2380a3da7753603d7245",
+      "parents": [
+        "78f55a6d68aef17897638bacd1d1492047711f75"
+      ],
+      "subject": "select scalar bubble orientations by energy flow",
+      "source_change": "punkpusnwrokzynnnknxxyzmrnvryrko",
+      "source_order": 22,
+      "disposition": "retain",
+      "reason": "Retain energy-flow scalar bubble orientation selection and its physical assertions.",
+      "source_pr": null,
+      "upstream_match": null,
+      "planned_unit": "port-22",
+      "planned_order": 18,
+      "depends_on": [
+        "port-21"
+      ]
+    },
+    {
+      "commit": "967abd74e1843016d34f5e6f701cd4b7828768b6",
+      "tree": "d7fe3af3fdc5f8e8c0299e3d523100de172fd6ff",
+      "parents": [
+        "77dcd12272d0f86dc5309f8d74de94632a771b6e"
+      ],
+      "subject": "fix the colour projector variance of qqx_aaa_subtracted.dot",
+      "source_change": "npztpvmozwmozmtrkqnuroxvtqmotoou",
+      "source_order": 23,
+      "disposition": "retain",
+      "reason": "Retain corrected qqx_aaa colour-projector variance; preserve exact fixture physics.",
+      "source_pr": null,
+      "upstream_match": null,
+      "planned_unit": "port-23",
+      "planned_order": 19,
+      "depends_on": [
+        "port-22"
+      ]
+    },
+    {
+      "commit": "a18babd0f5adb028d4bd0722ce386be93464839d",
+      "tree": "3bbb77f6d1161a913c94025640c86b9a0b06349c",
+      "parents": [
+        "967abd74e1843016d34f5e6f701cd4b7828768b6"
+      ],
+      "subject": "count projector half-edge indices from one",
+      "source_change": "ookmywxqtvwvuzmvzlszrkusmqmolrxl",
+      "source_order": 24,
+      "disposition": "reconcile",
+      "reason": "Preserve projector half-edge slots starting at one; adapt generation command and native index serialization to #209 local-zero convention.",
+      "source_pr": null,
+      "upstream_match": null,
+      "planned_unit": "port-24",
+      "planned_order": 20,
+      "depends_on": [
+        "port-23"
+      ]
+    },
+    {
+      "commit": "15f2aa1a11380f33325ce283a404753a9836882f",
+      "tree": "75beabd585d8ad7d91570645fb936667dca22acc",
+      "parents": [
+        "a18babd0f5adb028d4bd0722ce386be93464839d"
+      ],
+      "subject": "name the conversion of legacy GammaLoop DOT exports",
+      "source_change": "uprxtpyzqyxyuooyqnymnnpltnupuwpy",
+      "source_order": 25,
+      "disposition": "reconcile",
+      "reason": "Retain explicit legacy DOT conversion naming on current parser; no fallback restoring ambiguous legacy import.",
+      "source_pr": null,
+      "upstream_match": null,
+      "planned_unit": "port-25",
+      "planned_order": 21,
+      "depends_on": [
+        "port-24"
+      ]
+    },
+    {
+      "commit": "8cf71575a739976295edb42eae2052d6b5e455ee",
+      "tree": "b6a7f98c3abff0c4be293afce49b4cf7b0949c6d",
+      "parents": [
+        "15f2aa1a11380f33325ce283a404753a9836882f"
+      ],
+      "subject": "pin FeynKit's loop bases of the slow RQFT ghost diagrams",
+      "source_change": "nspktuturulolzqxqsrskmpqrmvmwzyn",
+      "source_order": 26,
+      "disposition": "retain",
+      "reason": "Keep explicit RQFT ghost loop bases; no snapshot/count change is authorized by this disposition.",
+      "source_pr": null,
+      "upstream_match": null,
+      "planned_unit": "port-26",
+      "planned_order": 22,
+      "depends_on": [
+        "port-25"
+      ]
+    },
+    {
+      "commit": "d17f3548821f76250e49056e6b684257e49d92ec",
+      "tree": "99bf8efbe2e54b6b3821f39ae5b0105258d2d59a",
+      "parents": [
+        "8cf71575a739976295edb42eae2052d6b5e455ee"
+      ],
+      "subject": "co-orient parallel bundles in LMB sampling channels",
+      "source_change": "xlxotqkxzmlzuwrvypktyqrytuusywmo",
+      "source_order": 27,
+      "disposition": "retain",
+      "reason": "Keep co-oriented parallel-bundle LMB sampling with signed routing correctness tests.",
+      "source_pr": null,
+      "upstream_match": null,
+      "planned_unit": "port-27",
+      "planned_order": 23,
+      "depends_on": [
+        "port-26"
+      ]
+    },
+    {
+      "commit": "2ec30ce37196011fbeb21af2822d655146b45a0f",
+      "tree": "5c3864cd59e3e7958633c4c9a105b9125fb5e612",
+      "parents": [
+        "d17f3548821f76250e49056e6b684257e49d92ec"
+      ],
+      "subject": "skip zero coefficients in affine sampling frames",
+      "source_change": "znotxmuqplopunyyoupttyqlspxtrmul",
+      "source_order": 28,
+      "disposition": "retain",
+      "reason": "Keep zero-coefficient omission in affine sampling frames; preserve nonzero contributions.",
+      "source_pr": null,
+      "upstream_match": null,
+      "planned_unit": "port-28",
+      "planned_order": 24,
+      "depends_on": [
+        "port-27"
+      ]
+    },
+    {
+      "commit": "dd3640cb8171fbdc455888e3b8fcf2de92514a32",
+      "tree": "9cf0b30d5df483cdc3337c2419c3394eeb8c3023",
+      "parents": [
+        "2ec30ce37196011fbeb21af2822d655146b45a0f"
+      ],
+      "subject": "widen the cool-QM acceptance gate to three sigma",
+      "source_change": "lrvklnoxsyzmpxpwzpkwymspoymxwzou",
+      "source_order": 29,
+      "disposition": "retain",
+      "reason": "Retain already accepted CoolQM three-sigma gate and original fixed seed; no reseeding or broader tolerance.",
+      "source_pr": null,
+      "upstream_match": null,
+      "planned_unit": "port-29",
+      "planned_order": 25,
+      "depends_on": [
+        "port-28"
+      ]
+    },
+    {
+      "commit": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "tree": "69cb4031013ff96b2de0797520e6cb8ea63ac3f8",
+      "parents": [
+        "dd3640cb8171fbdc455888e3b8fcf2de92514a32"
+      ],
+      "subject": "give nixci test builds their compile-time inputs",
+      "source_change": "lwlpypukowxvnxzolotymlkwounowwkr",
+      "source_order": 30,
+      "disposition": "reconcile",
+      "reason": "Reconcile compile-time test source closure with current Nix crate groups; include new staged fixtures without reverting #209 browser/resource ownership.",
+      "source_pr": null,
+      "upstream_match": null,
+      "planned_unit": "port-30",
+      "planned_order": 26,
+      "depends_on": [
+        "port-29"
+      ]
+    },
+    {
+      "commit": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "tree": "e961fa575438179949fdee04be66cb0f9e06cba2",
+      "parents": [
+        "a50f20f1ef485315f381d97b00a69c3b5461b07c"
+      ],
+      "subject": "review the transplant's stale developer-note scopes",
+      "source_change": "sovlouyzzttyzptklsnvrtvpuurlwmmz",
+      "source_order": 31,
+      "disposition": "reconcile",
+      "reason": "Recompute architecture scopes against rebuilt code; never copy historical digests over #209 records. Preserve historical reports separately.",
+      "source_pr": null,
+      "upstream_match": null,
+      "planned_unit": "port-31",
+      "planned_order": 27,
+      "depends_on": [
+        "port-30"
+      ]
+    },
+    {
+      "commit": "351c85036778be709117a021fc5f1656bbd5a964",
+      "tree": "b4acbff2042789907e37814c3885ac53017f7dcc",
+      "parents": [
+        "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb"
+      ],
+      "subject": "state what the Python wheels actually carry",
+      "source_change": "zyqtxlzmluwyprqnzpkoxpvoyrzsnmrl",
+      "source_order": 32,
+      "disposition": "reconcile",
+      "reason": "Update wheel contents prose to actual current resources; preserve #209 optional-widget/static-display contract and required notices.",
+      "source_pr": null,
+      "upstream_match": null,
+      "planned_unit": "port-32",
+      "planned_order": 28,
+      "depends_on": [
+        "port-31"
+      ]
+    },
+    {
+      "commit": "ce9072e44a3335fdba7d223b0c3ae885cc29dc20",
+      "tree": "9e575369ede661cbcfc43ff1c0b11809fec61df1",
+      "parents": [
+        "351c85036778be709117a021fc5f1656bbd5a964"
+      ],
+      "subject": "port the browser camera test to native drawings",
+      "source_change": "mxynunqnvrvoslylvoyzovkwqkzprxzz",
+      "source_order": 33,
+      "disposition": "reconcile",
+      "reason": "Adapt browser camera test to current native drawing APIs and offline Chromium owner; do not restore obsolete viewer or removed Typst renderer.",
+      "source_pr": null,
+      "upstream_match": null,
+      "planned_unit": "port-33",
+      "planned_order": 29,
+      "depends_on": [
+        "port-32"
+      ]
+    },
+    {
+      "commit": "7e93e726e253ebb2a1af0d4b38177f3628d4b34b",
+      "tree": "346095f0cbc2b008c2fe71744c7859ce767d6963",
+      "parents": [
+        "ce9072e44a3335fdba7d223b0c3ae885cc29dc20"
+      ],
+      "subject": "name current APIs in the feyncalc gallery",
+      "source_change": "xwlpupspvzsqnoxtpmsmmvlxsqzmutov",
+      "source_order": 34,
+      "disposition": "reconcile",
+      "reason": "Port FeynCalc gallery names to final staged API while retaining current tensor-expression and display examples.",
+      "source_pr": null,
+      "upstream_match": null,
+      "planned_unit": "port-34",
+      "planned_order": 30,
+      "depends_on": [
+        "port-33"
+      ]
+    },
+    {
+      "commit": "8c12968bde84643623ca2f5099e0175180a73dc6",
+      "tree": "d3e6af2ff357301ec9c2297d44a24dab4a0a268d",
+      "parents": [
+        "7e93e726e253ebb2a1af0d4b38177f3628d4b34b"
+      ],
+      "subject": "port feynkit-py scripts to the tensor expression boundary",
+      "source_change": "vsmnrmwtrsmwqxlqzrssvxxslvyqxulz",
+      "source_order": 35,
+      "disposition": "reconcile",
+      "reason": "Adapt Python scripts to current TensorExpression and native index boundary; do not import pre-#209 display tags.",
+      "source_pr": null,
+      "upstream_match": null,
+      "planned_unit": "port-35",
+      "planned_order": 31,
+      "depends_on": [
+        "port-34"
+      ]
+    },
+    {
+      "commit": "5a99afbd1645250715ecf59361beb7ab4826d083",
+      "tree": "4eb3de2216d88ac9e1b86aa86eb19b3bad9f0918",
+      "parents": [
+        "8c12968bde84643623ca2f5099e0175180a73dc6"
+      ],
+      "subject": "name the upgrade in missing data asset errors",
+      "source_change": "ylkykurolvlzqqlkqsvyyruupktpvvws",
+      "source_order": 36,
+      "disposition": "retain",
+      "reason": "Keep actionable data-asset upgrade errors; preserve installed resource discovery.",
+      "source_pr": null,
+      "upstream_match": null,
+      "planned_unit": "port-36",
+      "planned_order": 32,
+      "depends_on": [
+        "port-35"
+      ]
+    },
+    {
+      "commit": "cfe9e8d103b3d2a4ebf1f276f61d8d6980e3d054",
+      "tree": "c084c4cfdd27a3a0d1c5453cedcc7cb04a742263",
+      "parents": [
+        "5a99afbd1645250715ecf59361beb7ab4826d083"
+      ],
+      "subject": "format label placement score assertion",
+      "source_change": "roxklnrzrpvrmmvtwtowxywvulklswqm",
+      "source_order": 37,
+      "disposition": "squash",
+      "reason": "Fold assertion rustfmt fixup into staged transplant unit; no independent conflict-bearing commit.",
+      "source_pr": null,
+      "upstream_match": null,
+      "planned_unit": "staged-transplant",
+      "planned_order": null,
+      "depends_on": [
+        "staged-transplant"
+      ],
+      "fold_into_source_order": 17
+    },
+    {
+      "commit": "15dd7e1b188dad112d7887bdc6d769125b2697a1",
+      "tree": "2d6caa493a70d3d88c589ffd50d5a3220306bccd",
+      "parents": [
+        "cfe9e8d103b3d2a4ebf1f276f61d8d6980e3d054"
+      ],
+      "subject": "define kurvst mark geometry from first principles",
+      "source_change": "ymuswsmznnqtptlpmosmvlvznoyxwoyy",
+      "source_order": 38,
+      "disposition": "reconcile",
+      "reason": "Retain first-principles mark geometry, with source/license audit in WP11; reproduce generated assets there rather than copying historical binaries.",
+      "source_pr": null,
+      "upstream_match": null,
+      "planned_unit": "port-38",
+      "planned_order": 33,
+      "depends_on": [
+        "port-36"
+      ]
+    },
+    {
+      "commit": "854c4a7a4ac22ef6987e9446092560a3363f5d77",
+      "tree": "6d93d635c62eb7150655662865e5dc51ad7e7289",
+      "parents": [
+        "15dd7e1b188dad112d7887bdc6d769125b2697a1"
+      ],
+      "subject": "anchor numerator frames through compact labellings",
+      "source_change": "uzltsrpqqlwwszzxkvmunltkyxlmqzvy",
+      "source_order": 39,
+      "disposition": "reconcile",
+      "reason": "Retain compact-labelling frame anchoring and canonicalization tests on current tensor interfaces; separate stale bundled wasm output.",
+      "source_pr": null,
+      "upstream_match": null,
+      "planned_unit": "port-39",
+      "planned_order": 34,
+      "depends_on": [
+        "port-38"
+      ]
+    },
+    {
+      "commit": "f6c29e4b324692e8fa185ac356dc66e1b1edd783",
+      "tree": "4152d6c000c35fd48fbea8c7d37673b7c6a5a976",
+      "parents": [
+        "854c4a7a4ac22ef6987e9446092560a3363f5d77"
+      ],
+      "subject": "document that Cuts.sewn_tadpoles vetoes sewn tadpoles",
+      "source_change": "xxomkxowznmkxusqwpxyppqtovtoyqoz",
+      "source_order": 40,
+      "disposition": "retain",
+      "reason": "Keep accurate sewn_tadpoles veto documentation on staged options.",
+      "source_pr": null,
+      "upstream_match": null,
+      "planned_unit": "port-40",
+      "planned_order": 35,
+      "depends_on": [
+        "port-39"
+      ]
+    },
+    {
+      "commit": "b69de4327cf27e8ba275300ab02d7151f472f047",
+      "tree": "38ecd7a3fbb3389f14993a34951b345270fa9e13",
+      "parents": [
+        "f6c29e4b324692e8fa185ac356dc66e1b1edd783"
+      ],
+      "subject": "state the previous filters in the remaining generation cards",
+      "source_change": "vsqmxsywwprlvkmxtlysrzonzyonulsw",
+      "source_order": 41,
+      "disposition": "reconcile",
+      "reason": "Keep explicit previous filter settings in remaining run cards; adapt current schema, preserving accepted physics inventory.",
+      "source_pr": null,
+      "upstream_match": null,
+      "planned_unit": "port-41",
+      "planned_order": 36,
+      "depends_on": [
+        "port-40"
+      ]
+    },
+    {
+      "commit": "40c126b1ff91a0c8c95480cacc8f5ba3ee0f1309",
+      "tree": "393ee335d62d6bdbedde4d5627fe1e96e3af27e3",
+      "parents": [
+        "b69de4327cf27e8ba275300ab02d7151f472f047"
+      ],
+      "subject": "coalesce python progress per stage",
+      "source_change": "swtwpqvyvoqyrqsulpkryqkxluzlokox",
+      "source_order": 42,
+      "disposition": "retain",
+      "reason": "Keep per-stage Python progress coalescing and caller-thread/error ordering contract.",
+      "source_pr": null,
+      "upstream_match": null,
+      "planned_unit": "port-42",
+      "planned_order": 37,
+      "depends_on": [
+        "port-41"
+      ]
+    },
+    {
+      "commit": "74fcd8e57e9fe256d4bc34b5d8ad93c97fc28848",
+      "tree": "ed8e2c2e809b85d3d5d8cd091cbfd8534723bd97",
+      "parents": [
+        "40c126b1ff91a0c8c95480cacc8f5ba3ee0f1309"
+      ],
+      "subject": "cover cuts behind terminal pockets",
+      "source_change": "wqnmtlzuvwyuylvyswuwtkqmzqkyloyw",
+      "source_order": 43,
+      "disposition": "retain",
+      "reason": "Keep terminal-pocket cut coverage and original assertions on staged cut implementation.",
+      "source_pr": null,
+      "upstream_match": null,
+      "planned_unit": "port-43",
+      "planned_order": 38,
+      "depends_on": [
+        "port-42"
+      ]
+    },
+    {
+      "commit": "087bda82ce5a14dab092776ea470e66278dda12d",
+      "tree": "ca6be930d7c98fa2629d5c8baaae67d436ded344",
+      "parents": [
+        "74fcd8e57e9fe256d4bc34b5d8ad93c97fc28848"
+      ],
+      "subject": "refresh certified ghost and sunset snapshots",
+      "source_change": "klowxlpsrssumqqxmyqwrlnozwnxmtoy",
+      "source_order": 44,
+      "disposition": "reconcile",
+      "reason": "Historical refreshed ghost/sunset expectations are provenance, not certification. Port only after WP9 exact correctness justification; unresolved rows remain failing with reasons, not re-recorded.",
+      "source_pr": null,
+      "upstream_match": null,
+      "planned_unit": "port-44",
+      "planned_order": 39,
+      "depends_on": [
+        "port-43"
+      ]
+    },
+    {
+      "commit": "dfe6387606e44a96f110c1ce03f52d92824dbdb1",
+      "tree": "1fc62584e241d44d0e2352aa848201f99830a0ee",
+      "parents": [
+        "087bda82ce5a14dab092776ea470e66278dda12d"
+      ],
+      "subject": "align duplicate aa3 ghost-loop reference",
+      "source_change": "nvkxyoplklpptmluvtzzvunrrukzplyl",
+      "source_order": 45,
+      "disposition": "reconcile",
+      "reason": "Historical duplicate aa3 reference alignment is not new validation. Reconcile under WP9 exact standard; no automatic snapshot rewrite.",
+      "source_pr": null,
+      "upstream_match": null,
+      "planned_unit": "port-45",
+      "planned_order": 40,
+      "depends_on": [
+        "port-44"
+      ]
+    },
+    {
+      "commit": "e0a779808174c64057fecfd062c948b8de8e5c1f",
+      "tree": "d9811519406b5d6aef92403f5ee0c20993a39adf",
+      "parents": [
+        "dfe6387606e44a96f110c1ce03f52d92824dbdb1"
+      ],
+      "subject": "reduce structure-constant cycles through adjoint chains",
+      "source_change": "kpslpwqzortppxynqtqnmxyxnxpyzsnn",
+      "source_order": 46,
+      "disposition": "reconcile",
+      "reason": "Port order-independent structure-constant cycle reduction onto #210 colour completion and #209 tensor metadata; preserve symbol-registration perturbation tests.",
+      "source_pr": 204,
+      "upstream_match": null,
+      "planned_unit": "port-46",
+      "planned_order": 41,
+      "depends_on": [
+        "port-45"
+      ]
+    }
+  ],
+  "source_baselines": [
+    {
+      "label": "v4",
+      "commit": "e0a779808174c64057fecfd062c948b8de8e5c1f",
+      "tree": "d9811519406b5d6aef92403f5ee0c20993a39adf",
+      "parents": [
+        "dfe6387606e44a96f110c1ce03f52d92824dbdb1"
+      ],
+      "bookmark": "generation-integration-source-v4",
+      "local_jj_identity": "kpslpwqzortppxynqtqnmxyxnxpyzsnn e0a779808174c64057fecfd062c948b8de8e5c1f",
+      "missing_objects": []
+    },
+    {
+      "label": "stage1",
+      "commit": "f25961e21689ed1a33365430b4566a9a2e9c319a",
+      "tree": "41c3f39aaaa7eb3088e31b9c655625aa9ca3fbc2",
+      "parents": [
+        "f9dc5531314cb8e079d11240f8fcf7b339486607",
+        "e7432a39f08a480834babcef2911f96cb43e968e"
+      ],
+      "bookmark": "generation-integration-source-stage1",
+      "local_jj_identity": "oynmqpxpwvpzssytrnrzkovoznlnroxo f25961e21689ed1a33365430b4566a9a2e9c319a",
+      "missing_objects": []
+    },
+    {
+      "label": "transplant",
+      "commit": "4e00851731541be7de4626b7d1e5274d79b9eea8",
+      "tree": "23d466d43237f625c4251e04f1d57f1d064afe8f",
+      "parents": [
+        "c45ab00285291aefcb5915e8313dca928967e87c"
+      ],
+      "bookmark": "generation-integration-source-transplant",
+      "local_jj_identity": "xspzosrlwtmrxtvyotlprkxxrosmyqln 4e00851731541be7de4626b7d1e5274d79b9eea8",
+      "missing_objects": []
+    },
+    {
+      "label": "upstream",
+      "commit": "588148851e3e989ecbb7478279db7d46727e23a8",
+      "tree": "f7209e0c4acccaf50edb3fcb76dd71f01f1b9838",
+      "parents": [
+        "d39d9bf206d8f858efedc9281f034cddb50c51fa"
+      ],
+      "bookmark": "generation-integration-source-upstream",
+      "local_jj_identity": "yunvslvltxolmoqlvylxlmmwsqyqsnsr 588148851e3e989ecbb7478279db7d46727e23a8",
+      "missing_objects": []
+    },
+    {
+      "label": "v2",
+      "commit": "d9ff71a6826166e57bf3bba56ffcf8a57ffaf9db",
+      "tree": "b603915b7424e4c0e8748e209bb1d9b35a0cbc56",
+      "parents": [
+        "6733266b2c9fe31da5594aceb6433d25bbb7fc96"
+      ],
+      "bookmark": "generation-integration-source-v2",
+      "local_jj_identity": "qwpqosutmqwrvyqrvpukmqvtpkotzlzt d9ff71a6826166e57bf3bba56ffcf8a57ffaf9db",
+      "missing_objects": []
+    },
+    {
+      "label": "pre-v2",
+      "commit": "75b6c7a88fb099f142bcec9227ee614b6fc56376",
+      "tree": "7287ec6e3f2b8aa33729eee17f9ac12d2a533906",
+      "parents": [
+        "748691c5d5da63fced55c888885f4a7620b01bba"
+      ],
+      "bookmark": "generation-integration-source-pre-v2",
+      "local_jj_identity": "zwmyvwvmoyqtomsnmtnvxmurxyvmkttw 75b6c7a88fb099f142bcec9227ee614b6fc56376",
+      "missing_objects": []
+    },
+    {
+      "label": "v3",
+      "commit": "dfe6387606e44a96f110c1ce03f52d92824dbdb1",
+      "tree": "1fc62584e241d44d0e2352aa848201f99830a0ee",
+      "parents": [
+        "087bda82ce5a14dab092776ea470e66278dda12d"
+      ],
+      "bookmark": "generation-integration-source-v3",
+      "local_jj_identity": "nvkxyoplklpptmluvtzzvunrrukzplyl dfe6387606e44a96f110c1ce03f52d92824dbdb1",
+      "missing_objects": []
+    },
+    {
+      "label": "v3-original",
+      "commit": "6d207cfce36ab2bb128d92d67cc3da182afb0bb1",
+      "tree": "1fc62584e241d44d0e2352aa848201f99830a0ee",
+      "parents": [
+        "05006de521333a7c70ce0bace23212413c220bf7"
+      ],
+      "bookmark": "generation-integration-source-v3-original",
+      "local_jj_identity": "pzusvqwkttwkwntvkupkutszvwmzpnuo 6d207cfce36ab2bb128d92d67cc3da182afb0bb1",
+      "missing_objects": []
+    },
+    {
+      "label": "m1-source",
+      "commit": "9540f5bbf7a96609e69af6983d2bf7325530126d",
+      "tree": "e8b7d68a12a3bfa3da0946fad452e091a0186bb8",
+      "parents": [
+        "0b1c30df62c221d0ad28dd1f23d274855b57426b"
+      ],
+      "bookmark": "generation-integration-source-m1-source",
+      "local_jj_identity": "xspzosrlwtmrxtvyotlprkxxrosmyqln 9540f5bbf7a96609e69af6983d2bf7325530126d",
+      "missing_objects": []
+    }
+  ],
+  "pr_observations": [
+    {
+      "base_ref": "feynkit",
+      "base_sha": "4ae30bd6e00b33784d0c3c98dd619029c910d08d",
+      "head": "86e77588c90512d9f6a278e1c102aab0b8faf601",
+      "head_ref": "spenso-stub-execution-mode-assertion",
+      "html_url": "https://github.com/alphal00p/gammaloop/pull/166",
+      "merge_commit_sha": "73bdf38864240a3fb41f10e5b943a37a3a4b26c5",
+      "merged": false,
+      "merged_at": null,
+      "number": 166,
+      "state": "open",
+      "title": "alphal00p-docs-python-exporter: assert the current spynso3 ExecutionMode stub rendering",
+      "updated_at": "2026-10-24T11:49:52Z",
+      "integration_assessment": "Retain adapted rendered stub assertion (source 13)."
+    },
+    {
+      "base_ref": "feynkit",
+      "base_sha": "4ae30bd6e00b33784d0c3c98dd619029c910d08d",
+      "head": "d8146dc2ad8c4f5272969310c4127bce3f0fe4f8",
+      "head_ref": "restore-feynrules-ghost-vertex",
+      "html_url": "https://github.com/alphal00p/gammaloop/pull/172",
+      "merge_commit_sha": null,
+      "merged": false,
+      "merged_at": null,
+      "number": 172,
+      "state": "open",
+      "title": "Restore the FeynRules SM ghost vertex and check it with BRST quartet cuts",
+      "updated_at": "2026-10-24T11:49:52Z",
+      "integration_assessment": "Retain ghost/BRST behavior (source 1)."
+    },
+    {
+      "base_ref": "feynkit",
+      "base_sha": "4ae30bd6e00b33784d0c3c98dd619029c910d08d",
+      "head": "6b56ba173cb31470522a2afcace21d2026bf34ca",
+      "head_ref": "canonical-numerator-interface-ports",
+      "html_url": "https://github.com/alphal00p/gammaloop/pull/173",
+      "merge_commit_sha": null,
+      "merged": false,
+      "merged_at": null,
+      "number": 173,
+      "state": "open",
+      "title": "feynkit-graph: order inferred numerator ports canonically and validate permuted ports by label",
+      "updated_at": "2026-10-24T11:49:52Z",
+      "integration_assessment": "Reconcile canonical ports with current transport (source 7)."
+    },
+    {
+      "base_ref": "feynkit",
+      "base_sha": "4ae30bd6e00b33784d0c3c98dd619029c910d08d",
+      "head": "0fbce6f2980beead39c1a050eb26419b6cc4ef68",
+      "head_ref": "complex-phase-wraparound",
+      "html_url": "https://github.com/alphal00p/gammaloop/pull/174",
+      "merge_commit_sha": "7d215973273e2c96faa4a3d0af53bcab57789ff9",
+      "merged": false,
+      "merged_at": null,
+      "number": 174,
+      "state": "open",
+      "title": "gammalooprs: compare complex phases on the circle in ApproxEq",
+      "updated_at": "2026-10-24T11:49:52Z",
+      "integration_assessment": "Retain complex phase correction (source 8); source 9 real-part fix is additional."
+    },
+    {
+      "base_ref": "feynkit",
+      "base_sha": "588148851e3e989ecbb7478279db7d46727e23a8",
+      "head": "369e04cb99aba87f3e6e051c77333e085977cf99",
+      "head_ref": "dev-shell-python313-virtualenv",
+      "html_url": "https://github.com/alphal00p/gammaloop/pull/175",
+      "merge_commit_sha": "20b0d6dc6dc6a59127fee3283260438a20dea494",
+      "merged": true,
+      "merged_at": "2026-10-21T17:14:04Z",
+      "number": 175,
+      "state": "closed",
+      "title": "flake: build the dev shell's python3 and virtualenv as one environment",
+      "updated_at": "2026-10-21T17:14:08Z",
+      "integration_assessment": "Drop duplicate: genuinely merged."
+    },
+    {
+      "base_ref": "feynkit",
+      "base_sha": "588148851e3e989ecbb7478279db7d46727e23a8",
+      "head": "2e7d75deab1d1610a818e83bb39e7a08517e8122",
+      "head_ref": "run-card-settings-reach-tests",
+      "html_url": "https://github.com/alphal00p/gammaloop/pull/176",
+      "merge_commit_sha": "865afdc43fb4e6b950439d34b4ec2c38352873e7",
+      "merged": true,
+      "merged_at": "2026-10-21T18:47:50Z",
+      "number": 176,
+      "state": "closed",
+      "title": "tests: let run-card `set` commands reach the test session",
+      "updated_at": "2026-10-21T18:47:53Z",
+      "integration_assessment": "Drop duplicate: genuinely merged."
+    },
+    {
+      "base_ref": "feynkit",
+      "base_sha": "865afdc43fb4e6b950439d34b4ec2c38352873e7",
+      "head": "2864847dc89bdb4234aaf86f62396b7378395779",
+      "head_ref": "isolated-zero-colour-proof",
+      "html_url": "https://github.com/alphal00p/gammaloop/pull/177",
+      "merge_commit_sha": "9586c41a870c599f8dd1c9a870e5353bcb00049e",
+      "merged": true,
+      "merged_at": "2026-10-22T21:09:15Z",
+      "number": 177,
+      "state": "closed",
+      "title": "Complete color-only simplification beside indexed spectators",
+      "updated_at": "2026-10-22T21:09:17Z",
+      "integration_assessment": "First v4 version superseded; redesigned published PR merged, final completion #210."
+    },
+    {
+      "base_ref": "feynkit",
+      "base_sha": "4ae30bd6e00b33784d0c3c98dd619029c910d08d",
+      "head": "c59a62d97170129c3ab34c8d6fe2e1e0eca216d6",
+      "head_ref": "drop-gpl-ec-layout-plugin",
+      "html_url": "https://github.com/alphal00p/gammaloop/pull/178",
+      "merge_commit_sha": null,
+      "merged": false,
+      "merged_at": null,
+      "number": 178,
+      "state": "open",
+      "title": "linnest: remove the unused GPL ec-layout plugin",
+      "updated_at": "2026-10-24T11:49:52Z",
+      "integration_assessment": "Retain plugin removal with current resources/notices (source 15, WP11)."
+    },
+    {
+      "base_ref": "feynkit",
+      "base_sha": "4ae30bd6e00b33784d0c3c98dd619029c910d08d",
+      "head": "8f2a01272e8678bb390983ed331ceffb0417eacc",
+      "head_ref": "idenso-scalar-infer-fast-path",
+      "html_url": "https://github.com/alphal00p/gammaloop/pull/191",
+      "merge_commit_sha": null,
+      "merged": false,
+      "merged_at": null,
+      "number": 191,
+      "state": "open",
+      "title": "idenso: admit plain scalars directly in SymbolicTensor::infer",
+      "updated_at": "2026-10-24T11:49:52Z",
+      "integration_assessment": "Reconcile scalar shortcut with #209 metadata, not a merged dependency (source 14)."
+    },
+    {
+      "base_ref": "tensor-display",
+      "base_sha": "c13bdacf5812a6573560976e5444fd2b34b62c01",
+      "head": "3feac4b23e2d00a33cbedb710847ae7910d74bda",
+      "head_ref": "generation-construction-performance",
+      "html_url": "https://github.com/alphal00p/gammaloop/pull/193",
+      "merge_commit_sha": "929a0258d997f9ab2b5d5d1a1237ae57633f69a7",
+      "merged": false,
+      "merged_at": null,
+      "number": 193,
+      "state": "closed",
+      "title": "Derive tensor algebra from authoritative index metadata",
+      "updated_at": "2026-10-23T14:28:01Z",
+      "integration_assessment": "Closed unmerged; carried via #209, no separate layer."
+    },
+    {
+      "base_ref": "drop-gpl-ec-layout-plugin",
+      "base_sha": "c59a62d97170129c3ab34c8d6fe2e1e0eca216d6",
+      "head": "8793d517a7a2364636b6815935302a88da70e168",
+      "head_ref": "drawing-label-overlap-cost",
+      "html_url": "https://github.com/alphal00p/gammaloop/pull/195",
+      "merge_commit_sha": "053805021ec049998a262295f87285fafe4718b5",
+      "merged": false,
+      "merged_at": null,
+      "number": 195,
+      "state": "open",
+      "title": "linnest: rank label placements by contacts before cost",
+      "updated_at": "2026-10-21T11:49:25Z",
+      "integration_assessment": "Retain contact-first label placement after #178 (source 16, WP11)."
+    },
+    {
+      "base_ref": "feynkit",
+      "base_sha": "4ae30bd6e00b33784d0c3c98dd619029c910d08d",
+      "head": "4ed6936cd1c5905a83ca548534380d01f4194e8b",
+      "head_ref": "idenso-planner-opaque-spectators",
+      "html_url": "https://github.com/alphal00p/gammaloop/pull/196",
+      "merge_commit_sha": null,
+      "merged": false,
+      "merged_at": null,
+      "number": 196,
+      "state": "open",
+      "title": "idenso: plan around spectators and scope partner-sum copies",
+      "updated_at": "2026-10-24T11:49:52Z",
+      "integration_assessment": "Reconcile planner/scoping and representations (sources 3\u20135)."
+    },
+    {
+      "base_ref": "idenso-planner-opaque-spectators",
+      "base_sha": "4ed6936cd1c5905a83ca548534380d01f4194e8b",
+      "head": "4cabb7910106536fd28df69851bde2249c77ff37",
+      "head_ref": "register-couplings-in-model-order",
+      "html_url": "https://github.com/alphal00p/gammaloop/pull/197",
+      "merge_commit_sha": "6c22c41fbd8aac24fcd6da399333f23938097010",
+      "merged": false,
+      "merged_at": null,
+      "number": 197,
+      "state": "open",
+      "title": "register coupling symbols and factor heads in a fixed order",
+      "updated_at": "2026-10-21T11:49:52Z",
+      "integration_assessment": "Retain deterministic coupling registration after planner (source 6)."
+    },
+    {
+      "base_ref": "feynkit",
+      "base_sha": "4ae30bd6e00b33784d0c3c98dd619029c910d08d",
+      "head": "6749de08dd5015d5a0bbc747f6a32ab37f9cbd49",
+      "head_ref": "idenso-colour-order-independent",
+      "html_url": "https://github.com/alphal00p/gammaloop/pull/204",
+      "merge_commit_sha": "920e5beec8ac21600f69698cc2ee30ab4e2cc127",
+      "merged": false,
+      "merged_at": null,
+      "number": 204,
+      "state": "open",
+      "title": "Reduce structure-constant cycles through adjoint chains independently of symbol order",
+      "updated_at": "2026-10-24T11:49:52Z",
+      "integration_assessment": "Reconcile colour cycle/order completion (source 46)."
+    },
+    {
+      "base_ref": "feynkit",
+      "base_sha": "f02faa90d55c1d0a875b5345c010f03746d29549",
+      "head": "98e5ede45a0d49a306932680805adfb0b0d63df3",
+      "head_ref": "tensor-mathml-merge",
+      "html_url": "https://github.com/alphal00p/gammaloop/pull/209",
+      "merge_commit_sha": "3f0df2a870806076820786994d4883decec8e9e3",
+      "merged": true,
+      "merged_at": "2026-10-27T00:14:58Z",
+      "number": 209,
+      "state": "closed",
+      "title": "Preserve tensor metadata and render notebook displays with MathML",
+      "updated_at": "2026-10-27T00:15:02Z",
+      "integration_assessment": "Merged fixed target; carries #160/#193 tensor/templates."
+    },
+    {
+      "base_ref": "feynkit",
+      "base_sha": "4ae30bd6e00b33784d0c3c98dd619029c910d08d",
+      "head": "db902b540ce6fa94950532802995080ea9ead382",
+      "head_ref": "color-only-zero-completion",
+      "html_url": "https://github.com/alphal00p/gammaloop/pull/210",
+      "merge_commit_sha": "f02faa90d55c1d0a875b5345c010f03746d29549",
+      "merged": true,
+      "merged_at": "2026-10-24T12:39:46Z",
+      "number": 210,
+      "state": "closed",
+      "title": "Complete color-only simplification beside indexed spectators",
+      "updated_at": "2026-10-24T12:39:48Z",
+      "integration_assessment": "Merged ancestor; supersedes first #177 implementation."
+    }
+  ],
+  "history_policy": "Duplicate only onto fixed target; never rewrite frozen source identities, plan bookmark or other workspace refs; no fetch/rebase/publication here.",
+  "assembly_note": "Reviewable unit dependency order is conservative and linear; grouped source orders 17/18/37 form one unit. Snapshot-bearing units 44/45 are conditional on WP9 proof, never automatic expectation updates."
+}

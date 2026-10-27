@@ -1,0 +1,118 @@
+{
+  "scope": "WP3 future commands; none run in WP2",
+  "environment": "run from integration workspace; preserve/export license silently; INSTA_UPDATE=no; unset INSTA_FORCE_PASS and FEYNKIT_ORACLE_RECORD; no forced pass or snapshot rewrite; shared envrc only if configured and allowed",
+  "policy": "nonzero selected test inventory required; timeout/ignored tests are not passed; slow/heavy remain WP9 and final matrix",
+  "checks": [
+    {
+      "owner": "all changed Rust owners",
+      "command": "nix develop -c just fmt --check",
+      "pass_condition": "formatted",
+      "when": "each resulting commit"
+    },
+    {
+      "owner": "workspace CI owner",
+      "command": "nix develop -c just clippy -- --deny warnings",
+      "pass_condition": "zero warnings/errors",
+      "when": "each resulting commit"
+    },
+    {
+      "owner": "JJ integration owner",
+      "command": "jj --ignore-working-copy log -r '<fixed-target>..<rebuilt-tip> & conflicts()' --no-graph",
+      "pass_condition": "empty on every resulting commit, no conflict-container commit",
+      "when": "each resulting commit"
+    },
+    {
+      "owner": "kernel/host owner",
+      "command": "nix develop -c just check-symbolica-feature-isolation",
+      "pass_condition": "one locked kernel in three locks; host subset; same uv branch",
+      "when": "rebuilt tip"
+    },
+    {
+      "owner": "workspace test owners",
+      "command": "nix develop -c just test",
+      "pass_condition": "strict fast policy passes; classify failures under WP9, no expectation refresh",
+      "when": "rebuilt tip"
+    },
+    {
+      "owner": "feynkit-generator oracle",
+      "command": "FEYNKIT_ORACLE_THREADS=1,8,32 nix develop -c cargo nextest run --locked --cargo-profile ci-optim --profile ci_gammaloop --retries 0 -p feynkit-generator -p feynkit-py -p linnet -E 'binary(generation_oracle) or (package(feynkit-generator) and test(/^generation::/) and not test(/::failing::/)) or (package(linnet) and test(/^half_edge::generate::/)) or (package(feynkit-py) and test(=generation::tests::python_typed_hooks_prune_like_rust_hooks))'",
+      "pass_condition": "all source fast-tier rows (reported 364/364) and full payload equality at 1,8,32; record actual inventory; zero selected tests is failure",
+      "when": "rebuilt tip"
+    },
+    {
+      "owner": "integration-tests test_feyngen",
+      "command": "nix develop -c just test -p gammaloop-integration-tests --test test_feyngen test_vacuum_amplitude_generation_full_sm_three_loop_filtered",
+      "pass_condition": "3150 and -9861/16 plus two original Lorentz-zero graphs at actual 1 and 8 threads",
+      "when": "rebuilt tip",
+      "required_harness_correction": "source body forces one thread; parameterize settings or add equivalent eight-thread test preserving every assertion; external FEYNKIT_ORACLE_THREADS does not override it"
+    },
+    {
+      "owner": "feynkit-generator four_loop_numerator",
+      "command": "for threads in 1 8 32; do nix develop -c cargo run --locked --profile dev-optim -p feynkit-generator --example four_loop_numerator -- \"$threads\" - true; done",
+      "pass_condition": "4664 retained, 306 zero on every run, not merely total 4970",
+      "when": "rebuilt tip",
+      "required_harness_correction": "example currently asserts only total; add explicit split assertions or validated structured receipt, preserve physics"
+    },
+    {
+      "owner": "generator registration perturbation",
+      "command": "FEYNKIT_ORACLE_THREADS=1,8,32 nix develop -c cargo nextest run --locked --cargo-profile ci-optim --profile ci_gammaloop -p feynkit-generator -E 'test(ids_do_not_depend_on_threads_or_symbol_registration) | test(outputs_do_not_depend_on_index_registration_order)'",
+      "pass_condition": "identical full graph/numerator/group outputs across fresh symbol orders and 1,8,32",
+      "when": "rebuilt tip"
+    },
+    {
+      "owner": "idenso colour perturbation",
+      "command": "nix develop -c just test -p idenso colour_results_are_independent_of_label_order",
+      "pass_condition": "all colour cycle cases equal across label registration orders; retain #210 completion regressions",
+      "when": "rebuilt tip"
+    },
+    {
+      "owner": "integration-tests SM fresh process",
+      "command": "for run in 1 2 3 4 5; do nix develop -c just test -p gammaloop-integration-tests --test test_feyngen test_generate_sm_a_ddx; done",
+      "pass_condition": "5 of 5 fresh test processes; unmodified assertions",
+      "when": "rebuilt tip"
+    },
+    {
+      "owner": "gammalooprs gauge sewing",
+      "command": "nix develop -c just test -p gammalooprs massive_tau_covariant_cuts_satisfy_the_brst_quartet_identity",
+      "pass_condition": "exact physical quartet identity preserved",
+      "when": "rebuilt tip"
+    },
+    {
+      "owner": "integration-tests NLO",
+      "command": "nix develop -c just test -p gammaloop-integration-tests --test test_nlo_acceptance epem_a_",
+      "pass_condition": "all original local-UV NLO route assertions, ddx alpha_s/pi and published ttx inclusive ratio",
+      "when": "rebuilt tip"
+    },
+    {
+      "owner": "integration-tests CoolQM",
+      "command": "nix develop -c just test -p gammaloop-integration-tests --test test_nlo_acceptance cool_qm_eos_nlo_matches_example_target",
+      "pass_condition": "fixed seed, accepted three-sigma gate; no reseed",
+      "when": "rebuilt tip"
+    },
+    {
+      "owner": "idenso inference and generator templates",
+      "command": "nix develop -c just test -p idenso -p feynkit-generator -E 'test(inference) | test(template) | test(staged) | test(zero_detection)'",
+      "pass_condition": "current target metadata/history/admission tests retained in staged owners; source planner, scalar and zero tests pass",
+      "when": "rebuilt tip"
+    },
+    {
+      "owner": "WP1 original-pair/fallback owner",
+      "command": "Use the two exact test names and commands from the independently reviewed WP1 receipt; mandatory manifest amendment before WP3 exits",
+      "pass_condition": "factor-preserving original-pair exact ratio with samples=0 AND production sampled fallback at recorded seed/budget plus varied points; MT parameter contract stated",
+      "when": "rebuilt tip",
+      "blocked_by": "WP1 still running; test names are not invented here"
+    },
+    {
+      "owner": "docs and generated asset owners",
+      "command": "nix develop -c just docs-check",
+      "pass_condition": "registry/catalogues/stubs clean; reproduce changed wasm/SVG using owning recipes, no stale historical blobs",
+      "when": "rebuilt tip"
+    },
+    {
+      "owner": "WP10 milestone owner",
+      "command": "Coordinator applies reviewed gammabench M-rebuild recipe after WP3 checks",
+      "pass_condition": "Callgrind generation/full versus stage1/v4 with same outputs; DHAT peak/blocks recorded; paired >=21 balanced rounds; no preset memory budget",
+      "when": "M-rebuild; WP10-owned"
+    }
+  ]
+}

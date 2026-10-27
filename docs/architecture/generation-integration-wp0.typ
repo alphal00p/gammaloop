@@ -5,8 +5,10 @@
 
 On 2026-10-27 the user authorized execution of the accepted combined generation
 integration plan: Sol implements each bounded step and parent Astra assigns a
-separate Astra review after each step. This record covers WP0 only and awaits
-that review. It does not approve itself or begin WP1, WP2 or the v5 rebuild.
+separate Astra review after each step. This record covers WP0 only. Astra
+independently approved round 2 after
+`dc6f0b6b79f77c482e8747af0c7f12b817ffdaca` closed P2; no findings remain.
+This record does not begin WP1, WP2 or the v5 rebuild.
 Routine steps within accepted packages need no renewed approval; publication
 and destructive historical cleanup remain gated.
 
