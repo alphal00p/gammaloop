@@ -106,9 +106,7 @@ def _(mo):
 
 @app.cell
 def _(model, table):
-    generated = model.generate_diagrams(
-        incoming=["phi"],
-        outgoing=["phi", "phi"],
+    generated = model.process(["phi"], ["phi", "phi"]).generate_diagrams(
         loops=1,
         max_vertices=3,
         allow_self_loops=True,
