@@ -2595,12 +2595,8 @@ mod responsiveness_tests {
             interval: Duration::from_secs(60),
             ..Default::default()
         };
-        MonitorContext::run(&options, |mut observer, progress| {
-            MonitorContext::native_phase(
-                observer.as_deref_mut(),
-                "retained_guard_materialization",
-                None,
-            );
+        MonitorContext::run(&options, |observer, progress| {
+            MonitorContext::native_phase(observer, "retained_guard_materialization", None);
             let mut progress =
                 progress
                     .unwrap()
@@ -2655,7 +2651,7 @@ mod responsiveness_tests {
                 2,
                 "master products materialized",
             );
-            phase.completed_expression(2, atom.as_view(), observer.as_deref_mut());
+            phase.completed_expression(2, atom.as_view(), observer);
             Ok(())
         })
         .unwrap();
