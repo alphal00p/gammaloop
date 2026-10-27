@@ -4173,8 +4173,7 @@ mod tests {
         }
     }
 
-    #[test]
-    fn scalar_axial_traces_match_the_full_pass_at_every_gamma5_position() {
+    fn scalar_axial_trace_matches_the_full_pass(length: usize, position: usize) {
         let reps = test_initialize();
         let spin = reps.bis4.to_symbolic([]);
         let slots = (0..14)
@@ -4192,26 +4191,23 @@ mod tests {
             -&scalar / 5,
         ];
         let inert = symbolica::function!(symbolica::symbol!("contextual_axial_inert"), 0);
-        for length in 2..=14 {
-            for position in 0..=length {
-                let mut factors = slots[..length]
-                    .iter()
-                    .map(|slot| gamma!(slot))
-                    .collect::<Vec<_>>();
-                factors.insert(position, gamma5!());
-                let trace = trace!(&spin; factors);
-                {
-                    let settings = GammaSimplifySettings::default();
-                    let admitted = DiracSimplifier::new(&settings)
-                        .evaluate_terminal_trace::<true>(trace.as_view())
-                        .map(|(expression, _)| expression)
-                        .expect("a free axial word with symbolic slots is terminal");
-                    // A function spectator forces the established full pass.
-                    // Exact coefficients can then be applied without regrouping
-                    // approximate arithmetic or invoking normalization callbacks.
-                    let reference = crate::tensor::SymbolicTensor::infer(
-                        (&inert * &trace).as_atom_view().to_owned(),
-                    )
+        let mut factors = slots[..length]
+            .iter()
+            .map(|slot| gamma!(slot))
+            .collect::<Vec<_>>();
+        factors.insert(position, gamma5!());
+        let trace = trace!(&spin; factors);
+        {
+            let settings = GammaSimplifySettings::default();
+            let admitted = DiracSimplifier::new(&settings)
+                .evaluate_terminal_trace::<true>(trace.as_view())
+                .map(|(expression, _)| expression)
+                .expect("a free axial word with symbolic slots is terminal");
+            // A function spectator forces the established full pass.
+            // Exact coefficients can then be applied without regrouping
+            // approximate arithmetic or invoking normalization callbacks.
+            let reference =
+                crate::tensor::SymbolicTensor::infer((&inert * &trace).as_atom_view().to_owned())
                     .unwrap()
                     .simplify_algebra(&crate::tensor::AlgebraSettings {
                         gamma: Some(settings),
@@ -4220,18 +4216,17 @@ mod tests {
                     })
                     .unwrap()
                     .into_expression()
-                        / &inert;
-                    // Compare the same Clifford polynomial independently of
-                    // how the full pass groups its metric/epsilon factors.
-                    assert!(
-                        (&admitted - &reference).expand().is_zero(),
-                        "length {length}, gamma5 position {position}"
-                    );
-                    for spectator in &spectators {
-                        let decorated = spectator * &trace;
-                        let result = crate::tensor::SymbolicTensor::infer(
-                            (decorated).as_atom_view().to_owned(),
-                        )
+                    / &inert;
+            // Compare the same Clifford polynomial independently of
+            // how the full pass groups its metric/epsilon factors.
+            assert!(
+                (&admitted - &reference).expand().is_zero(),
+                "length {length}, gamma5 position {position}"
+            );
+            for spectator in &spectators {
+                let decorated = spectator * &trace;
+                let result =
+                    crate::tensor::SymbolicTensor::infer((decorated).as_atom_view().to_owned())
                         .unwrap()
                         .simplify_algebra(&crate::tensor::AlgebraSettings {
                             gamma: Some(settings),
@@ -4240,27 +4235,161 @@ mod tests {
                         })
                         .unwrap()
                         .into_expression();
-                        assert!(
-                            (&result / spectator - &reference).expand().is_zero(),
-                            "length {length}, gamma5 position {position}, spectator {spectator}"
-                        );
-                        assert_eq!(
-                            crate::tensor::SymbolicTensor::infer(
-                                (result).as_atom_view().to_owned()
-                            )
-                            .unwrap()
-                            .simplify_algebra(&crate::tensor::AlgebraSettings {
-                                gamma: Some(settings),
-                                epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
-                                ..Default::default()
-                            })
-                            .unwrap()
-                            .into_expression(),
-                            result
-                        );
-                    }
-                }
+                assert!(
+                    (&result / spectator - &reference).expand().is_zero(),
+                    "length {length}, gamma5 position {position}, spectator {spectator}"
+                );
+                assert_eq!(
+                    crate::tensor::SymbolicTensor::infer((result).as_atom_view().to_owned())
+                        .unwrap()
+                        .simplify_algebra(&crate::tensor::AlgebraSettings {
+                            gamma: Some(settings),
+                            epsilon: settings.output == crate::dirac::GammaOutput::Reduced,
+                            ..Default::default()
+                        })
+                        .unwrap()
+                        .into_expression(),
+                    result
+                );
             }
+        }
+    }
+
+    // Keep every word, gamma5 position, and spectator as an independently scheduled
+    // regression. Grouping the complete matrix into one test makes its deadline
+    // depend on aggregate work and contention rather than one failing case.
+    mod scalar_axial_traces_match_the_full_pass_at_every_gamma5_position {
+        use super::scalar_axial_trace_matches_the_full_pass;
+
+        macro_rules! cases {
+            ($($name:ident: ($length:literal, $position:literal)),* $(,)?) => {
+                $(
+                    #[test]
+                    fn $name() {
+                        scalar_axial_trace_matches_the_full_pass($length, $position);
+                    }
+                )*
+            };
+        }
+
+        cases! {
+            length_2_position_0: (2, 0),
+            length_2_position_1: (2, 1),
+            length_2_position_2: (2, 2),
+            length_3_position_0: (3, 0),
+            length_3_position_1: (3, 1),
+            length_3_position_2: (3, 2),
+            length_3_position_3: (3, 3),
+            length_4_position_0: (4, 0),
+            length_4_position_1: (4, 1),
+            length_4_position_2: (4, 2),
+            length_4_position_3: (4, 3),
+            length_4_position_4: (4, 4),
+            length_5_position_0: (5, 0),
+            length_5_position_1: (5, 1),
+            length_5_position_2: (5, 2),
+            length_5_position_3: (5, 3),
+            length_5_position_4: (5, 4),
+            length_5_position_5: (5, 5),
+            length_6_position_0: (6, 0),
+            length_6_position_1: (6, 1),
+            length_6_position_2: (6, 2),
+            length_6_position_3: (6, 3),
+            length_6_position_4: (6, 4),
+            length_6_position_5: (6, 5),
+            length_6_position_6: (6, 6),
+            length_7_position_0: (7, 0),
+            length_7_position_1: (7, 1),
+            length_7_position_2: (7, 2),
+            length_7_position_3: (7, 3),
+            length_7_position_4: (7, 4),
+            length_7_position_5: (7, 5),
+            length_7_position_6: (7, 6),
+            length_7_position_7: (7, 7),
+            length_8_position_0: (8, 0),
+            length_8_position_1: (8, 1),
+            length_8_position_2: (8, 2),
+            length_8_position_3: (8, 3),
+            length_8_position_4: (8, 4),
+            length_8_position_5: (8, 5),
+            length_8_position_6: (8, 6),
+            length_8_position_7: (8, 7),
+            length_8_position_8: (8, 8),
+            length_9_position_0: (9, 0),
+            length_9_position_1: (9, 1),
+            length_9_position_2: (9, 2),
+            length_9_position_3: (9, 3),
+            length_9_position_4: (9, 4),
+            length_9_position_5: (9, 5),
+            length_9_position_6: (9, 6),
+            length_9_position_7: (9, 7),
+            length_9_position_8: (9, 8),
+            length_9_position_9: (9, 9),
+            length_10_position_0: (10, 0),
+            length_10_position_1: (10, 1),
+            length_10_position_2: (10, 2),
+            length_10_position_3: (10, 3),
+            length_10_position_4: (10, 4),
+            length_10_position_5: (10, 5),
+            length_10_position_6: (10, 6),
+            length_10_position_7: (10, 7),
+            length_10_position_8: (10, 8),
+            length_10_position_9: (10, 9),
+            length_10_position_10: (10, 10),
+            length_11_position_0: (11, 0),
+            length_11_position_1: (11, 1),
+            length_11_position_2: (11, 2),
+            length_11_position_3: (11, 3),
+            length_11_position_4: (11, 4),
+            length_11_position_5: (11, 5),
+            length_11_position_6: (11, 6),
+            length_11_position_7: (11, 7),
+            length_11_position_8: (11, 8),
+            length_11_position_9: (11, 9),
+            length_11_position_10: (11, 10),
+            length_11_position_11: (11, 11),
+            length_12_position_0: (12, 0),
+            length_12_position_1: (12, 1),
+            length_12_position_2: (12, 2),
+            length_12_position_3: (12, 3),
+            length_12_position_4: (12, 4),
+            length_12_position_5: (12, 5),
+            length_12_position_6: (12, 6),
+            length_12_position_7: (12, 7),
+            length_12_position_8: (12, 8),
+            length_12_position_9: (12, 9),
+            length_12_position_10: (12, 10),
+            length_12_position_11: (12, 11),
+            length_12_position_12: (12, 12),
+            length_13_position_0: (13, 0),
+            length_13_position_1: (13, 1),
+            length_13_position_2: (13, 2),
+            length_13_position_3: (13, 3),
+            length_13_position_4: (13, 4),
+            length_13_position_5: (13, 5),
+            length_13_position_6: (13, 6),
+            length_13_position_7: (13, 7),
+            length_13_position_8: (13, 8),
+            length_13_position_9: (13, 9),
+            length_13_position_10: (13, 10),
+            length_13_position_11: (13, 11),
+            length_13_position_12: (13, 12),
+            length_13_position_13: (13, 13),
+            length_14_position_0: (14, 0),
+            length_14_position_1: (14, 1),
+            length_14_position_2: (14, 2),
+            length_14_position_3: (14, 3),
+            length_14_position_4: (14, 4),
+            length_14_position_5: (14, 5),
+            length_14_position_6: (14, 6),
+            length_14_position_7: (14, 7),
+            length_14_position_8: (14, 8),
+            length_14_position_9: (14, 9),
+            length_14_position_10: (14, 10),
+            length_14_position_11: (14, 11),
+            length_14_position_12: (14, 12),
+            length_14_position_13: (14, 13),
+            length_14_position_14: (14, 14),
         }
     }
 
