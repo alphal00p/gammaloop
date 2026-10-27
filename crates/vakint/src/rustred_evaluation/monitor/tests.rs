@@ -118,7 +118,7 @@ fn proc_memory_missing_malformed_units_duplicates_and_overflow_stay_unknown() {
 }
 
 #[test]
-fn display_freeze_does_not_freeze_live_resource_json_or_its_age() {
+fn display_freeze_keeps_resources_and_status_live_in_view_and_json() {
     let mut state = MonitorState::default();
     state.observe(snapshot(0, 3, 1, 0), Duration::ZERO);
     state.latest.resources = ResourceUsage::from_proc("VmRSS: 1 kB", "MemAvailable: 2 kB");
@@ -145,7 +145,7 @@ fn display_freeze_does_not_freeze_live_resource_json_or_its_age() {
     state.observe(failed, Duration::from_secs(6));
     let frozen = state.view(Duration::from_secs(7));
     assert!(frozen.frozen);
-    assert!(row(&frozen.cache, "Process RSS / peak").starts_with("1.0 KiB /"));
+    assert!(row(&frozen.cache, "Process RSS / peak").starts_with("3.0 KiB /"));
     let live = serde_json::to_value(state.live_resources(Duration::from_secs(7))).unwrap();
     assert_eq!(live["rss_bytes"], 3 * 1024);
     assert_eq!(live["mem_available_bytes"], 4 * 1024);
@@ -153,7 +153,8 @@ fn display_freeze_does_not_freeze_live_resource_json_or_its_age() {
     assert_eq!(live["guard"]["status"], "latched_abort");
     assert_eq!(live["guard"]["report_age_seconds"], 2.0);
     assert!(
-        row(&frozen.cache, "Local guard state / current-PID coverage").starts_with("unknown /")
+        row(&frozen.cache, "Local guard state / current-PID coverage")
+            .starts_with("latched_abort /")
     );
     let stale = state.live_resources(Duration::from_secs(9));
     assert_eq!(stale.guard.status, "unknown");
@@ -162,7 +163,7 @@ fn display_freeze_does_not_freeze_live_resource_json_or_its_age() {
     assert_eq!(published["status"], "Failed");
     assert_eq!(published["phase"], "synthetic_failed_finalization");
     assert_eq!(published["view"]["frozen"], true);
-    assert_eq!(published["view"]["status"], "Running");
+    assert_eq!(published["view"]["status"], "Failed");
     let estimates: Vec<(String, String)> =
         serde_json::from_value(published["estimates"].clone()).unwrap();
     assert_eq!(row(&estimates, "Estimate sample age"), "7.0s");

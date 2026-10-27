@@ -976,9 +976,16 @@ impl MonitorState {
                 "Low confidence: heuristic; no remaining-work certificate or global bound".into(),
             ),
         ];
-        if !self.latest.native_work_active {
-            rows[2].1 = "indeterminate · no active native dispatch; caller work is separate".into();
-            rows[3].1 = "indeterminate · no active native dispatch; caller work is separate".into();
+        if !self.latest.native_work_active
+            || self.latest.request_finished
+            || self.latest.status != MonitorStatus::Running
+        {
+            rows[2].1 =
+                "indeterminate / unknown · no active native dispatch; caller work is separate"
+                    .into();
+            rows[3].1 =
+                "indeterminate / unknown · no active native dispatch; caller work is separate"
+                    .into();
             rows[4].1 = "last native sample only".into();
             return rows;
         }
