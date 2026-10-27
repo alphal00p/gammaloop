@@ -1061,12 +1061,14 @@ impl ResourceTask {
             .spawn(move || {
                 let mut sampler = ResourceSampler::new(pid);
                 while !stop.load(Ordering::Acquire) {
+                    // Conservative age starts before OS and possibly slow guard I/O.
+                    let sampled_at = started.elapsed();
                     let sample = resource_usage(&mut sampler, guard.as_deref());
                     if stop.load(Ordering::Acquire) {
                         break;
                     }
                     if let Ok(mut latest) = output.try_lock() {
-                        *latest = Some((sample, started.elapsed()));
+                        *latest = Some((sample, sampled_at));
                     }
                     thread::sleep(interval);
                 }

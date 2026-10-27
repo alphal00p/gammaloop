@@ -218,6 +218,7 @@ impl SnapshotReader {
                     if writer.stopped.load(Ordering::Relaxed) {
                         break;
                     }
+                    let sampled_at = Instant::now();
                     let resources = if failed {
                         ResourceUsage::default()
                     } else {
@@ -228,7 +229,7 @@ impl SnapshotReader {
                         received_at,
                         publication_age,
                         resources,
-                        sampled_at: Instant::now(),
+                        sampled_at,
                         fault,
                     };
                     if failed {
