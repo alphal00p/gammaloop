@@ -1883,7 +1883,8 @@ pub struct SpensoSlot {
 
 impl ModuleInit for SpensoSlot {}
 
-#[cfg_attr(feature = "python-stubs", gen_stub_pymethods)]
+#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage, on_success)]
 #[pymethods]
 impl SpensoSlot {
     /// Hash the immutable representation and index label for dictionaries and sets.

@@ -1264,14 +1264,25 @@ pub(crate) fn structured_to_typst_with_settings(
 }
 
 pub(crate) fn format_structured_settings(
-    value: &StructuredAtom,
+    value: &SymbolicTensor<PartialStructure>,
     settings: &DisplaySettings,
 ) -> String {
     format_structured_with_settings(value, TensorDisplayMode::Plain, settings)
 }
 
-#[cfg(test)]
-fn format_atom(atom: &Atom, show_dimensions: bool) -> String {
+/// Format a borrowed expression as plain tensor notation without inferring a tensor.
+///
+/// Generated indices use representation-specific alphabets. `show_dimensions`
+/// includes representation dimensions; the expression itself stays unchanged.
+///
+/// ```
+/// use spynso3::display;
+/// use symbolica::atom::Atom;
+///
+/// assert_eq!(display::format_atom(&Atom::num(2), false), "2");
+/// ```
+#[must_use]
+pub fn format_atom(atom: &Atom, show_dimensions: bool) -> String {
     format_atom_with_mode(atom, TensorDisplayMode::Plain, show_dimensions)
 }
 
@@ -1326,13 +1337,74 @@ fn format_atom_backend(
     }
 }
 
-pub(crate) fn format_structured_output_rich(
+pub(crate) fn format_structured_backend(
     py: Python<'_>,
-    value: &StructuredAtom,
+    value: &SymbolicTensor<PartialStructure>,
     settings: &DisplaySettings,
     notation_source: Option<&str>,
+    backend: FormattedOutputBackend,
+) -> PyResult<String> {
+    if matches!(backend, FormattedOutputBackend::Html) {
+        return structured_to_html(py, value, settings, notation_source);
+    }
+    format_atom_backend(
+        py,
+        &value.presentation_atom(),
+        settings,
+        notation_source,
+        backend,
+    )
+}
+
+// Each backend is rendered on demand and cached by Symbolica's shared output
+// owner. The original immutable tensor remains shared, without materialization.
+pub(crate) fn format_structured_output_rich(
+    py: Python<'_>,
+    expression: Py<PythonExpression>,
+    value: Arc<SymbolicTensor<PartialStructure>>,
+    settings: DisplaySettings,
+    notation_source: Option<String>,
 ) -> PythonFormattedOutput {
-    format_atom_output_rich(py, &value.presentation_atom(), settings, notation_source)
+    let notebook_expression = expression.clone_ref(py);
+    let notebook_value = Arc::clone(&value);
+    let notebook_settings = settings.clone();
+    let notebook_notation = notation_source.clone();
+    let custom_notation = notation_source.is_some();
+    let large_text = paging::is_large(&value);
+    let paged_html = paging::needs_paging(&value);
+    let formatted = PythonFormattedOutput::lazy(move |py, backend| match backend {
+        FormattedOutputBackend::Html if !custom_notation && paged_html => paging::static_html(
+            py,
+            expression.clone_ref(py),
+            Arc::clone(&value),
+            settings.clone(),
+            notation_source.clone(),
+        )
+        .map(Some),
+        FormattedOutputBackend::Text if !custom_notation && large_text => Ok(Some(
+            "Tensor expression (large; use the paged notebook viewer or explicit export)".into(),
+        )),
+        FormattedOutputBackend::Latex if !custom_notation && large_text => Ok(None),
+        _ => format_structured_backend(py, &value, &settings, notation_source.as_deref(), backend)
+            .map(Some),
+    });
+    // Custom Typst notation is available through source projects and SVG.
+    // Preserve the explicit HTML error instead of creating a notebook viewer.
+    if custom_notation {
+        return formatted;
+    }
+    // Small notebook expressions share the same zoom and inspection controls.
+    // Static representations above retain their existing complete exports.
+    formatted.with_notebook(move |py| {
+        paging::viewer(
+            py,
+            notebook_expression.clone_ref(py),
+            Arc::clone(&notebook_value),
+            notebook_settings.clone(),
+            notebook_notation.clone(),
+            None,
+        )
+    })
 }
 
 fn portable_attachments(atom: &Atom) -> Result<AttachmentSet, String> {
@@ -1514,10 +1586,64 @@ fn typst_main_source(settings: &DisplaySettings, atom: &Atom) -> PyResult<String
 
 fn render_atom_tree(atom: &Atom) -> PyResult<Vec<u8>> {
     let attachments = portable_attachments(atom).map_err(PyRuntimeError::new_err)?;
-    encode_atom_render_tree(atom, &attachments)
+    payload::encode_atom_render_tree(atom, &attachments)
         .map_err(|error| PyRuntimeError::new_err(error.to_string()))
 }
 
+fn typst_sources(
+    main_source: &str,
+    notation_source: Option<&str>,
+    tree: Option<&[u8]>,
+) -> BTreeMap<String, Vec<u8>> {
+    let mut sources = BTreeMap::from([
+        ("main.typ".to_owned(), main_source.as_bytes().to_vec()),
+        ("render.typ".to_owned(), RENDER_TYP.as_bytes().to_vec()),
+        (
+            "notation.typ".to_owned(),
+            notation_source.unwrap_or(NOTATION_TYP).as_bytes().to_vec(),
+        ),
+    ]);
+    if let Some(tree) = tree {
+        sources.insert("tree.cbor".to_owned(), tree.to_vec());
+    }
+    sources
+}
+
+fn typst_project<'py>(
+    py: Python<'py>,
+    main_source: &str,
+    notation_source: Option<&str>,
+    tree: &[u8],
+) -> PyResult<Bound<'py, PyDict>> {
+    let sources = PyDict::new(py);
+    for (name, data) in typst_sources(main_source, notation_source, Some(tree)) {
+        sources.set_item(name, PyBytes::new(py, &data))?;
+    }
+    Ok(sources)
+}
+
+fn atom_to_typst_project<'py>(
+    py: Python<'py>,
+    atom: &Atom,
+    settings: &DisplaySettings,
+    notation_source: Option<&str>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let source = typst_main_source(settings, atom)?;
+    let tree = render_atom_tree(atom)?;
+    typst_project(py, &source, notation_source, &tree)
+}
+
+pub(crate) fn structured_to_typst_project<'py>(
+    py: Python<'py>,
+    value: &SymbolicTensor<PartialStructure>,
+    settings: &DisplaySettings,
+    notation_source: Option<&str>,
+) -> PyResult<Bound<'py, PyDict>> {
+    atom_to_typst_project(py, &value.presentation_atom(), settings, notation_source)
+}
+
+#[pyfunction]
+#[pyo3(signature = (main_source, format, notation_source=None, tree=None))]
 fn compile_typst(
     py: Python<'_>,
     main_source: &str,
@@ -1525,90 +1651,115 @@ fn compile_typst(
     notation_source: Option<&str>,
     tree: Option<&[u8]>,
 ) -> PyResult<Vec<u8>> {
-    let typst = PyModule::import(py, "typst").map_err(|_| {
-        PyImportError::new_err(
-            "Typst rendering requires the optional dependency; install gammaloop[typst-display]",
-        )
-    })?;
-    let compile = typst.getattr("compile")?;
-    // typst-py treats every value in its virtual-file mapping as UTF-8 source,
-    // so binary render trees must be routed through an actual temporary file.
-    let temporary_directory = PyModule::import(py, "tempfile")?
-        .getattr("TemporaryDirectory")?
-        .call0()?;
-    let root_string: String = temporary_directory.getattr("name")?.extract()?;
-    let root = Path::new(&root_string);
-    let write_file = |name: &str, contents: &[u8]| {
-        std::fs::write(root.join(name), contents).map_err(|error| {
-            PyRuntimeError::new_err(format!("could not prepare Typst input {name}: {error}"))
-        })
-    };
-    write_file("main.typ", main_source.as_bytes())?;
-    write_file("render.typ", RENDER_TYP.as_bytes())?;
-    write_file(
-        "notation.typ",
-        notation_source.unwrap_or(NOTATION_TYP).as_bytes(),
-    )?;
-    if let Some(tree) = tree {
-        write_file("tree.cbor", tree)?;
+    if format != "svg" {
+        return Err(PyValueError::new_err(
+            "Typst compilation supports SVG export only; use to_html() for direct MathML",
+        ));
     }
-    let kwargs = PyDict::new(py);
-    kwargs.set_item("format", format)?;
-    kwargs.set_item("pretty", true)?;
-    kwargs.set_item("root", &root_string)?;
-    let result = compile
-        .call((root.join("main.typ"),), Some(&kwargs))
-        .and_then(|output| output.extract::<Vec<u8>>());
-    let cleanup = temporary_directory.call_method0("cleanup");
-    match result {
-        Ok(output) => {
-            cleanup?;
-            Ok(output)
-        }
-        Err(error) => {
-            let _ = cleanup;
-            Err(error)
-        }
+    let sources = typst_sources(main_source, notation_source, tree);
+    let mut pages = typst_export::compile_sources(py, &sources, "svg")?;
+    if pages.len() != 1 {
+        return Err(PyRuntimeError::new_err(
+            "expression display requires exactly one page",
+        ));
     }
+    Ok(pages.pop().expect("the compiler returned exactly one page"))
 }
 
-fn extract_html_fragment(document: &str) -> Result<String, &'static str> {
-    let body_start = document
-        .find("<body")
-        .and_then(|start| document[start..].find('>').map(|offset| start + offset + 1))
-        .ok_or("Typst HTML output has no body")?;
-    let body_end = document[body_start..]
-        .find("</body>")
-        .map(|offset| body_start + offset)
-        .ok_or("Typst HTML output has no closing body")?;
-
-    let mut fragment = String::new();
-    let mut rest = document;
-    while let Some(style_start) = rest.find("<style") {
-        let style = &rest[style_start..];
-        let Some(style_end) = style.find("</style>") else {
-            break;
-        };
-        fragment.push_str(&style[..style_end + "</style>".len()]);
-        rest = &style[style_end + "</style>".len()..];
-    }
-    fragment.push_str(document[body_start..body_end].trim());
-    Ok(fragment)
-}
-
-pub(crate) fn atom_to_html(
+/// Export a complete MathML fragment from a borrowed expression.
+///
+/// Uses the same tensor notation and index aliases as the Python `to_html`
+/// entry point, without tensor inference or a canonical Python module lookup.
+/// The fragment includes notebook styles. No Typst compiler is needed.
+///
+/// # Errors
+///
+/// Returns `ValueError` for Typst `notation_source`, invalid settings, source
+/// limits, or incomplete labels/output. Complete exports never silently drop
+/// terms; use the Python pager for large inputs.
+///
+/// Registered Python printer exceptions follow Symbolica's native contract:
+/// they are logged and decline the override, allowing native fallback. Callback
+/// decline alone is not an export error.
+///
+/// ```no_run
+/// use pyo3::{PyResult, Python};
+/// use spynso3::display;
+/// use spynso3::display::DisplaySettings;
+/// use symbolica::atom::Atom;
+///
+/// # fn main() -> PyResult<()> {
+/// Python::initialize();
+/// Python::attach(|py| -> PyResult<()> {
+///     let html = display::atom_to_html(py, &Atom::num(2), &DisplaySettings::default(), None)?;
+///     assert!(html.contains("<mn>2</mn>"));
+///     Ok(())
+/// })
+/// # }
+/// ```
+pub fn atom_to_html(
     py: Python<'_>,
     atom: &Atom,
     settings: &DisplaySettings,
     notation_source: Option<&str>,
 ) -> PyResult<String> {
-    let tree = render_atom_tree(atom)?;
-    let source = typst_main_source(settings);
-    let html = compile_typst(py, &source, "html", notation_source, Some(&tree))?;
-    let html = String::from_utf8(html).map_err(|error| {
-        PyRuntimeError::new_err(format!("Typst returned invalid UTF-8: {error}"))
-    })?;
-    extract_html_fragment(&html).map_err(PyRuntimeError::new_err)
+    reject_html_notation(notation_source)?;
+    let aliases = IndexAliases::for_atom(atom, &settings.index_style);
+    paging::html(py, atom, settings, aliases)
+}
+
+pub(crate) fn reject_html_notation(notation_source: Option<&str>) -> PyResult<()> {
+    if notation_source.is_some() {
+        return Err(PyValueError::new_err(
+            "HTML uses direct MathML and does not accept Typst notation_source; use to_typst_project() or to_svg() for custom Typst notation",
+        ));
+    }
+    Ok(())
+}
+
+fn notebook_html_fragment(fragment: &str) -> String {
+    // Share fonts and responsive MathML layout for symbolic and concrete tensors.
+    format!("<style>{NOTEBOOK_STYLE}</style><div data-spenso-math>{fragment}</div>")
+}
+
+/// Embed the bundled math font in an HTML notebook or document.
+///
+/// Returns
+/// -------
+/// str
+///     A style element with the font data and redistribution license.
+///
+/// Notes
+/// -----
+/// Display this HTML once before tensor outputs, or include it in an exported
+/// document's head. It avoids the normal font download and applies to the same
+/// HTML document; isolated output frames need their own copy. In Marimo, use
+/// ``mo.Html(load_math_font())``; in IPython, use ``HTML(load_math_font())``.
+///
+/// Examples
+/// --------
+/// >>> from symbolica.community.tensor import load_math_font
+/// >>> html = load_math_font()
+/// >>> html.startswith("<style>")
+/// True
+#[cfg_attr(
+    feature = "python_stubgen",
+    gen_stub_pyfunction(module = "symbolica.community.tensor")
+)]
+#[pyfunction]
+fn load_math_font(py: Python<'_>) -> PyResult<String> {
+    let bytes = crate::data_assets::STIX_TWO_MATH
+        .bytes()
+        .map_err(|error| pyo3::exceptions::PyRuntimeError::new_err(error.to_string()))?;
+    let font = PyBytes::new(py, &bytes);
+    let encoded: String = PyModule::import(py, "base64")?
+        .call_method1("b64encode", (font,))?
+        .call_method1("decode", ("ascii",))?
+        .extract()?;
+    let license = STIX_TWO_MATH_LICENSE;
+    Ok(format!(
+        "<style>/* {license} */\n@font-face{{font-family:\"Spenso Offline Math\";src:url(\"data:font/woff2;base64,{encoded}\") format(\"woff2\");font-display:swap}}</style>"
+    ))
 }
 
 pub(crate) fn atom_to_svg(
@@ -1624,13 +1775,45 @@ pub(crate) fn atom_to_svg(
         .map_err(|error| PyRuntimeError::new_err(format!("Typst returned invalid UTF-8: {error}")))
 }
 
-pub(crate) fn structured_to_html(
+/// Export a borrowed typed tensor as complete MathML, retaining its index metadata.
+///
+/// This is the direct native counterpart of `TensorExpression.to_html()`: it
+/// uses the admitted tensor and its presentation labels without repeating inference.
+/// See [`atom_to_html`] for notebook style and error conventions.
+///
+/// # Errors
+///
+/// Returns the same export and notation errors as [`atom_to_html`]. Registered
+/// Python printer exceptions retain its native callback-decline behavior.
+///
+/// ```no_run
+/// use idenso::tensor::SymbolicTensor;
+/// use pyo3::Python;
+/// use spenso::structure::partial::PartialStructure;
+/// use spynso3::display;
+/// use spynso3::display::DisplaySettings;
+/// use std::error::Error;
+/// use symbolica::atom::Atom;
+///
+/// # fn main() -> Result<(), Box<dyn Error>> {
+/// Python::initialize();
+/// let value = SymbolicTensor::<PartialStructure>::infer(Atom::num(2))?;
+/// let html = Python::attach(|py| {
+///     display::structured_to_html(py, &value, &DisplaySettings::default(), None)
+/// })?;
+/// assert!(html.contains("<mn>2</mn>"));
+/// # Ok(())
+/// # }
+/// ```
+pub fn structured_to_html(
     py: Python<'_>,
-    value: &StructuredAtom,
+    value: &SymbolicTensor<PartialStructure>,
     settings: &DisplaySettings,
     notation_source: Option<&str>,
 ) -> PyResult<String> {
-    atom_to_html(py, &value.presentation_atom(), settings, notation_source)
+    reject_html_notation(notation_source)?;
+    let aliases = IndexAliases::for_descriptor(value, &settings.index_style);
+    paging::html(py, &value.presentation_atom(), settings, aliases)
 }
 
 pub(crate) fn structured_to_svg(
@@ -1656,18 +1839,53 @@ fn format_tensor_value(
     }
 }
 
+fn format_tensor_value_html(
+    py: Python<'_>,
+    value: &AtomViewOrConcrete<'_, RealOrComplexRef<'_, f64>>,
+    settings: &DisplaySettings,
+) -> PyResult<String> {
+    let (token, concrete) = match value {
+        AtomViewOrConcrete::Atom(atom) => {
+            return atom_to_html(py, &(*atom).to_owned(), settings, None);
+        }
+        AtomViewOrConcrete::Concrete(value) => (
+            match value {
+                RealOrComplexRef::Real(_) => "mn",
+                RealOrComplexRef::Complex(_) => "mtext",
+            },
+            value,
+        ),
+    };
+    let plain = format_tensor_value(
+        AtomViewOrConcrete::Concrete(concrete.clone()),
+        TensorDisplayMode::Plain,
+        settings,
+    );
+    Ok(format!(
+        "<math data-spenso-math><{token}>{}</{token}></math>",
+        escape_html(&plain)
+    ))
+}
+
 fn format_tensor_interface(
     tensor: &Spensor,
     mode: TensorDisplayMode,
     settings: &DisplaySettings,
 ) -> String {
+    let aliases = IndexAliases::for_descriptor(&tensor.descriptor, &settings.index_style);
     tensor
         .descriptor
-        .interface
+        .structure()
         .logical_slots()
         .into_iter()
         .map(composition::port_atom)
-        .map(|port| format_atom_with_settings(&port, mode, settings))
+        .map(|port| aliases.presentation_atom(&port, &settings.index_style))
+        .map(|port| {
+            port.format_string(
+                &display_options_with_settings(mode, settings),
+                PrintState::new(),
+            )
+        })
         .collect::<Vec<_>>()
         .join(" ")
 }
@@ -1758,6 +1976,16 @@ impl<'a> ConcreteTensorView<'a> {
             .and_then(|storage| tensor_value_at_storage(self.tensor, storage))
             .map(|value| format_tensor_value(value, self.mode, self.settings))
             .unwrap_or_else(|| "?".to_string())
+    }
+
+    fn html_value(&self, py: Python<'_>, logical: &[usize]) -> PyResult<String> {
+        let storage = self
+            .layout
+            .logical_expanded_to_storage_flat(logical)
+            .map_err(|error| PyValueError::new_err(error.to_string()).with_rust_cause(&error))?;
+        let value = tensor_value_at_storage(self.tensor, storage)
+            .ok_or_else(|| PyValueError::new_err("missing stored tensor component"))?;
+        format_tensor_value_html(py, &value, self.settings)
     }
 
     fn truncated(&self) -> bool {
@@ -2246,7 +2474,12 @@ fn escape_html(value: &str) -> String {
     AnsiHtmlFormatter::escape_html(value)
 }
 
-fn html_table(view: &ConcreteTensorView<'_>, prefix: &[usize], caption: Option<&str>) -> String {
+fn html_table(
+    py: Python<'_>,
+    view: &ConcreteTensorView<'_>,
+    prefix: &[usize],
+    caption: Option<&str>,
+) -> PyResult<String> {
     let (rows, columns) = matrix_indices(view);
     let mut html = String::from(
         r#"<table style="border-collapse:collapse;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.92em">"#,
@@ -2280,13 +2513,13 @@ fn html_table(view: &ConcreteTensorView<'_>, prefix: &[usize], caption: Option<&
                             DisplayIndex::Index(column) => {
                                 let mut logical = prefix.to_vec();
                                 logical.extend([row, *column]);
-                                escape_html(&view.value(&logical))
+                                view.html_value(py, &logical)?
                             }
                             DisplayIndex::Ellipsis => "&hellip;".to_string(),
                         };
                         let _ = write!(
                             html,
-                            r#"<td style="padding:.25em .55em;text-align:right;border:1px solid rgba(127,127,127,.35)"><code>{value}</code></td>"#
+                            r#"<td style="padding:.25em .55em;text-align:right;border:1px solid rgba(127,127,127,.35)">{value}</td>"#
                         );
                     }
                     html.push_str("</tr>");
@@ -2295,31 +2528,31 @@ fn html_table(view: &ConcreteTensorView<'_>, prefix: &[usize], caption: Option<&
         }
     }
     html.push_str("</tbody></table>");
-    html
+    Ok(html)
 }
 
-fn html_vector(view: &ConcreteTensorView<'_>) -> String {
+fn html_vector(py: Python<'_>, view: &ConcreteTensorView<'_>) -> PyResult<String> {
     let [dimension] = view.layout.logical_shape() else {
-        return "<code>?</code>".to_string();
+        return Ok("<code>?</code>".to_string());
     };
     let mut html = String::from(
         r#"<table style="border-collapse:collapse;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.92em"><tbody><tr>"#,
     );
     for index in displayed_indices(*dimension, DISPLAY_EDGE, view.truncated()) {
         let value = match index {
-            DisplayIndex::Index(index) => escape_html(&view.value(&[index])),
+            DisplayIndex::Index(index) => view.html_value(py, &[index])?,
             DisplayIndex::Ellipsis => "&hellip;".to_string(),
         };
         let _ = write!(
             html,
-            r#"<td style="padding:.25em .55em;text-align:right;border:1px solid rgba(127,127,127,.35)"><code>{value}</code></td>"#
+            r#"<td style="padding:.25em .55em;text-align:right;border:1px solid rgba(127,127,127,.35)">{value}</td>"#
         );
     }
     html.push_str("</tr></tbody></table>");
-    html
+    Ok(html)
 }
 
-fn html_high_rank(view: &ConcreteTensorView<'_>) -> String {
+fn html_high_rank(py: Python<'_>, view: &ConcreteTensorView<'_>) -> PyResult<String> {
     let shape = view.layout.logical_shape();
     let prefix_shape = &shape[..shape.len() - 2];
     let slice_count = prefix_shape.iter().product();
@@ -2333,29 +2566,24 @@ fn html_high_rank(view: &ConcreteTensorView<'_>) -> String {
             ),
             DisplayIndex::Index(slice) => {
                 let prefix = expanded_from_flat(slice, prefix_shape);
-                html.push_str(&html_table(view, &prefix, Some(&slice_label(&prefix))));
+                html.push_str(&html_table(py, view, &prefix, Some(&slice_label(&prefix)))?);
             }
         }
     }
     html.push_str("</div>");
-    html
+    Ok(html)
 }
 
-fn html_sparse(view: &ConcreteTensorView<'_>) -> String {
+fn html_sparse(py: Python<'_>, view: &ConcreteTensorView<'_>) -> PyResult<String> {
     let preview = sparse_preview(view);
     let entries = &preview.entries;
     let default = tensor_sparse_default(view.tensor)
-        .map(|value| {
-            escape_html(&format_tensor_value(
-                value,
-                TensorDisplayMode::Plain,
-                view.settings,
-            ))
-        })
+        .map(|value| format_tensor_value_html(py, &value, view.settings))
+        .transpose()?
         .unwrap_or_else(|| "0".to_string());
     let visible = sparse_displayed_indices(&preview);
     let mut html = format!(
-        r#"<div style="margin-bottom:.35em;opacity:.75">stored={} &middot; default=<code>{default}</code></div><table style="border-collapse:collapse;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.92em"><thead><tr><th scope="col" style="padding:.2em .55em;text-align:left;border-bottom:1px solid rgba(127,127,127,.5)">logical index</th><th scope="col" style="padding:.2em .55em;text-align:right;border-bottom:1px solid rgba(127,127,127,.5)">value</th></tr></thead><tbody>"#,
+        r#"<div style="margin-bottom:.35em;opacity:.75">stored={} &middot; default={default}</div><table style="border-collapse:collapse;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.92em"><thead><tr><th scope="col" style="padding:.2em .55em;text-align:left;border-bottom:1px solid rgba(127,127,127,.5)">logical index</th><th scope="col" style="padding:.2em .55em;text-align:right;border-bottom:1px solid rgba(127,127,127,.5)">value</th></tr></thead><tbody>"#,
         preview.stored
     );
     for entry in visible {
@@ -2375,35 +2603,67 @@ fn html_sparse(view: &ConcreteTensorView<'_>) -> String {
                 );
                 let _ = write!(
                     html,
-                    r#"<tr><td style="padding:.2em .55em;text-align:left;border-bottom:1px solid rgba(127,127,127,.2)"><code>{}</code></td><td style="padding:.2em .55em;text-align:right;border-bottom:1px solid rgba(127,127,127,.2)"><code>{}</code></td></tr>"#,
+                    r#"<tr><td style="padding:.2em .55em;text-align:left;border-bottom:1px solid rgba(127,127,127,.2)"><code>{}</code></td><td style="padding:.2em .55em;text-align:right;border-bottom:1px solid rgba(127,127,127,.2)">{}</td></tr>"#,
                     escape_html(&coordinate),
-                    escape_html(&entries[entry].value)
+                    view.html_value(py, &entries[entry].logical)?
                 );
             }
         }
     }
     html.push_str("</tbody></table>");
-    html
+    Ok(html)
 }
 
-#[allow(dead_code)]
-fn concrete_tensor_to_table_html(tensor: &Spensor, settings: &DisplaySettings) -> String {
+fn concrete_tensor_to_table_html(
+    py: Python<'_>,
+    tensor: &Spensor,
+    settings: &DisplaySettings,
+) -> PyResult<String> {
     let Some(view) = ConcreteTensorView::new(tensor, TensorDisplayMode::Plain, settings) else {
-        return r#"<div data-spenso-tensor><code>Tensor(&lt;invalid logical layout&gt;)</code></div>"#
-            .to_string();
+        return Err(PyValueError::new_err("invalid tensor logical layout"));
     };
-    let interface = escape_html(&format_tensor_interface(
-        tensor,
-        TensorDisplayMode::Plain,
-        settings,
-    ));
+    let descriptor = structured_to_html(py, &tensor.descriptor, settings, None)?;
     let shape = escape_html(&logical_shape_plain(view.layout.logical_shape()));
     let mut html = String::from(
         r#"<div data-spenso-tensor style="display:inline-block;max-width:100%;color:inherit">"#,
     );
     html.push_str(r#"<div style="margin-bottom:.45em"><strong>Tensor</strong>"#);
-    if !interface.is_empty() {
-        let _ = write!(html, "<sub>({interface})</sub>");
+    html.push_str(&descriptor);
+    // The expression can be zero or omit the external slots syntactically.
+    // Its admitted logical interface remains independent presentation data.
+    let slots = tensor.descriptor.structure().logical_slots();
+    if !slots.is_empty() {
+        let aliases = IndexAliases::for_descriptor(&tensor.descriptor, &settings.index_style);
+        let _ = write!(
+            html,
+            r#" <span data-spenso-interface data-rank="{}" aria-label="Logical ports" style="display:inline-grid;grid-template-rows:auto auto;vertical-align:middle;column-gap:{}">"#,
+            slots.len(),
+            escape_html(&settings.index_gap),
+        );
+        for (axis, slot) in slots.into_iter().enumerate() {
+            let row = IndexAliases::port_row(slot);
+            let grid_row = match row {
+                IndexRow::Top => 1,
+                IndexRow::Bottom => 2,
+            };
+            let label = aliases.port_html(py, slot, settings)?;
+            let _ = write!(
+                html,
+                r#"<span data-spenso-axis="{axis}" data-index-row="{}" style="grid-column:{};grid-row:{grid_row}">{label}"#,
+                row.as_str(),
+                axis + 1,
+            );
+            if settings.show_dimensions {
+                let representation = slot.rep().to_symbolic([]);
+                let dimension = atom_to_html(py, &representation, settings, None)?;
+                let _ = write!(
+                    html,
+                    r#"<span data-spenso-port-dimension>{dimension}</span>"#
+                );
+            }
+            html.push_str("</span>");
+        }
+        html.push_str("</span>");
     }
     let _ = write!(
         html,
@@ -2411,23 +2671,19 @@ fn concrete_tensor_to_table_html(tensor: &Spensor, settings: &DisplaySettings) -
     );
 
     if tensor_is_sparse(tensor) && view.truncated() {
-        html.push_str(&html_sparse(&view));
+        html.push_str(&html_sparse(py, &view)?);
     } else {
         match view.layout.logical_shape() {
             [] => {
-                let _ = write!(
-                    html,
-                    "<div><code>{}</code></div>",
-                    escape_html(&view.value(&[]))
-                );
+                let _ = write!(html, "<div>{}</div>", view.html_value(py, &[])?);
             }
-            [_] => html.push_str(&html_vector(&view)),
-            [_, _] => html.push_str(&html_table(&view, &[], None)),
-            _ => html.push_str(&html_high_rank(&view)),
+            [_] => html.push_str(&html_vector(py, &view)?),
+            [_, _] => html.push_str(&html_table(py, &view, &[], None)?),
+            _ => html.push_str(&html_high_rank(py, &view)?),
         }
     }
     html.push_str("</div>");
-    html
+    Ok(notebook_html_fragment(&html))
 }
 
 fn concrete_render_project(
@@ -2510,18 +2766,29 @@ pub(crate) fn concrete_tensor_to_typst(tensor: &Spensor, settings: &DisplaySetti
     format_concrete_with_settings(tensor, TensorDisplayMode::Typst, settings)
 }
 
+pub(crate) fn concrete_tensor_to_typst_project<'py>(
+    py: Python<'py>,
+    tensor: &Spensor,
+    settings: &DisplaySettings,
+    notation_source: Option<&str>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let (source, tree) = concrete_render_project(tensor, settings)?;
+    typst_project(py, &source, notation_source, &tree)
+}
+
 pub(crate) fn concrete_tensor_to_html(
     py: Python<'_>,
     tensor: &Spensor,
     settings: &DisplaySettings,
     notation_source: Option<&str>,
 ) -> PyResult<String> {
-    let (source, tree) = concrete_render_project(tensor, settings)?;
-    let html = compile_typst(py, &source, "html", notation_source, Some(&tree))?;
-    let html = String::from_utf8(html).map_err(|error| {
-        PyRuntimeError::new_err(format!("Typst returned invalid UTF-8: {error}"))
-    })?;
-    extract_html_fragment(&html).map_err(PyRuntimeError::new_err)
+    reject_html_notation(notation_source)?;
+    if settings.tensor_view == "interactive"
+        && !tensor.descriptor.structure().logical_slots().is_empty()
+    {
+        return explorer::to_html(py, tensor, settings);
+    }
+    concrete_tensor_to_table_html(py, tensor, settings)
 }
 
 pub(crate) fn concrete_tensor_to_svg(
@@ -2898,9 +3165,12 @@ fn formatted(
 }
 
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add("_compile_typst", wrap_pyfunction!(compile_typst, m)?)?;
     m.add_class::<DisplaySettings>()?;
+    m.add_function(wrap_pyfunction!(load_math_font, m)?)?;
     m.add_function(wrap_pyfunction!(format_tensor, m)?)?;
     m.add_function(wrap_pyfunction!(to_typst, m)?)?;
+    m.add_function(wrap_pyfunction!(to_typst_project, m)?)?;
     m.add_function(wrap_pyfunction!(to_html, m)?)?;
     m.add_function(wrap_pyfunction!(to_svg, m)?)?;
     m.add_function(wrap_pyfunction!(formatted, m)?)?;
@@ -2910,21 +3180,25 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use spenso::{
-        network::{parsing::ShadowedStructure, tags::SPENSO_TAG},
-        structure::{
-            OrderedStructure,
-            abstract_index::AbstractIndex,
-            concrete_index::FlatIndex,
-            dimension::Dimension,
-            partial::{PartialIndex, PartialStructure, PartialStructureExt},
-            representation::{ExtendibleReps, LibraryRep, RepName, Representation},
-            slot::IsAbstractSlot,
-        },
-        tensors::data::{DenseTensor, SparseTensor},
-        vector_symbol,
-    };
-    use symbolica::{atom::AtomCore, function, symbol};
+    use idenso::CookSettings;
+    use spenso::algebra::complex::RealOrComplex;
+    use spenso::network::parsing::ShadowedStructure;
+    use spenso::network::tags::SPENSO_TAG;
+    use spenso::structure::OrderedStructure;
+    use spenso::structure::abstract_index::AbstractIndex;
+    use spenso::structure::concrete_index::FlatIndex;
+    use spenso::structure::dimension::Dimension;
+    use spenso::structure::partial::{PartialIndex, PartialStructure, PartialStructureExt};
+    use spenso::structure::representation::{ExtendibleReps, LibraryRep, RepName, Representation};
+    use spenso::structure::slot::IsAbstractSlot;
+    use spenso::tensors::data::{DenseTensor, SparseTensor};
+    use spenso::tensors::parametric::ConcreteOrParam;
+    use spenso::vector_symbol;
+    use symbolica::atom::AtomCore;
+    use symbolica::{function, symbol};
+
+    static DISPLAY_TEST_VECTOR: std::sync::LazyLock<Symbol> =
+        std::sync::LazyLock::new(|| vector_symbol!("display_test_vector"));
 
     fn vector() -> Atom {
         let representation = Representation {
@@ -3686,8 +3960,8 @@ mod tests {
     fn scalar_latex_is_a_complete_notebook_math_fragment() {
         let interface = PartialStructure::from_logical_slots([]);
         let tensor = Spensor::scalar_with_descriptor(
-            2.,
-            StructuredAtom::new(Atom::Zero, interface),
+            ConcreteOrParam::Concrete(RealOrComplex::Real(2.)),
+            SymbolicTensor::new(Atom::Zero, interface).unwrap(),
             None,
             Vec::new(),
         );
@@ -3697,6 +3971,39 @@ mod tests {
             format_concrete_with_settings(&tensor, TensorDisplayMode::Latex, &settings),
             "$$2$$"
         );
+    }
+
+    #[test]
+    fn concrete_formatted_text_survives_html_export_failure() {
+        let tensor = Spensor::scalar_with_descriptor(
+            ConcreteOrParam::Concrete(RealOrComplex::Real(2.)),
+            SymbolicTensor::new(Atom::Zero, PartialStructure::from_logical_slots([])).unwrap(),
+            None,
+            Vec::new(),
+        );
+        let settings = DisplaySettings {
+            tensor_layout: "invalid".into(),
+            ..DisplaySettings::default()
+        };
+        let output = format_concrete_tensor_output_rich(&tensor, &settings, None).unwrap();
+        Python::initialize();
+        Python::attach(|py| {
+            assert_eq!(output.format_plain(py).unwrap(), "2");
+            let error = output.render(py, FormattedOutputBackend::Html).unwrap_err();
+            assert!(error.is_instance_of::<PyValueError>(py));
+            assert!(
+                error.to_string().contains("spenso.tensor_layout"),
+                "{error}"
+            );
+            assert_eq!(output.format_plain(py).unwrap(), "2");
+            assert_eq!(
+                output
+                    .render(py, FormattedOutputBackend::Latex)
+                    .unwrap()
+                    .as_deref(),
+                Some("$$2$$")
+            );
+        });
     }
 
     #[test]
@@ -3727,7 +4034,7 @@ mod tests {
                 structure,
             }
             .into(),
-            StructuredAtom::new(Atom::Zero, interface),
+            SymbolicTensor::new(Atom::Zero, interface).unwrap(),
             None,
             Vec::new(),
         );
@@ -3777,7 +4084,7 @@ mod tests {
         .into_canonical();
         let tensor = Spensor::from_storage_with_descriptor(
             tensor,
-            StructuredAtom::new(Atom::Zero, interface),
+            SymbolicTensor::new(Atom::Zero, interface).unwrap(),
             None,
             Vec::new(),
         );
@@ -3789,10 +4096,20 @@ mod tests {
             "unexpected plain tensor display:\n{plain}"
         );
         assert!(concrete_tensor_to_typst(&tensor, &settings).contains("mat(1,20,300;4000,50,6)"));
-        let html = concrete_tensor_to_table_html(&tensor, &settings);
+        let view = ConcreteTensorView::new(&tensor, TensorDisplayMode::Plain, &settings).unwrap();
+        let logical_values = (0..view.layout.size())
+            .map(|index| view.value(&expanded_from_flat(index, view.layout.logical_shape())))
+            .collect::<Vec<_>>();
+        assert_eq!(logical_values, ["1", "20", "300", "4000", "50", "6"]);
+        Python::initialize();
+        let html =
+            Python::attach(|py| concrete_tensor_to_table_html(py, &tensor, &settings)).unwrap();
         let positions = [1, 20, 300, 4000, 50, 6]
             .into_iter()
-            .map(|value| html.find(&format!("<code>{value}</code>")).unwrap())
+            .map(|value| {
+                html.find(&format!("<math data-spenso-math><mn>{value}</mn>"))
+                    .unwrap()
+            })
             .collect::<Vec<_>>();
         assert!(positions.windows(2).all(|pair| pair[0] < pair[1]));
     }
@@ -3829,16 +4146,29 @@ mod tests {
         .into_canonical();
         let tensor = Spensor::from_storage_with_descriptor(
             storage,
-            StructuredAtom::new(Atom::Zero, interface),
+            SymbolicTensor::new(Atom::Zero, interface).unwrap(),
             None,
             Vec::new(),
         );
 
         let settings = DisplaySettings::default();
+        Python::initialize();
+        let html =
+            Python::attach(|py| concrete_tensor_to_table_html(py, &tensor, &settings)).unwrap();
+        let Some(row) = html.find(">row<") else {
+            panic!("missing row descriptor index in HTML:\n{html}");
+        };
+        let Some(column) = html.find(">column<") else {
+            panic!("missing column descriptor index in HTML:\n{html}");
+        };
+        assert!(row < column, "unexpected HTML descriptor order: {html}");
+        assert!(
+            !html.contains("open") && !html.contains("101"),
+            "storage index leaked into HTML: {html}"
+        );
         for rendered in [
             format_concrete_tensor(&tensor, false),
             concrete_tensor_to_typst(&tensor, &settings),
-            concrete_tensor_to_table_html(&tensor, &settings),
             format_concrete_with_settings(&tensor, TensorDisplayMode::Latex, &settings),
         ] {
             let row = rendered.find("row").unwrap();
@@ -3849,7 +4179,114 @@ mod tests {
                 "storage index leaked: {rendered}"
             );
         }
+
+        // Zero carries no index syntax. Permuting its retained interface must
+        // still change the displayed logical port order, without re-inference.
+        let mut permuted = tensor;
+        permuted.descriptor = permuted.descriptor.permuted(&[1, 0]).unwrap();
+        assert!(permuted.descriptor.expression().is_zero());
+        let html =
+            Python::attach(|py| concrete_tensor_to_table_html(py, &permuted, &settings)).unwrap();
+        let Some(column) = html.find(">column<") else {
+            panic!("missing permuted column descriptor index in HTML:\n{html}");
+        };
+        let Some(row) = html.find(">row<") else {
+            panic!("missing permuted row descriptor index in HTML:\n{html}");
+        };
+        assert!(
+            column < row,
+            "unexpected permuted HTML descriptor order: {html}"
+        );
+        assert!(
+            html.contains(r#"data-rank="2""#),
+            "retained rank missing: {html}"
+        );
+        assert!(
+            !html.contains("open") && !html.contains("101"),
+            "storage index leaked into permuted HTML: {html}"
+        );
     }
+
+    #[test]
+    fn concrete_zero_interface_retains_dual_rows_and_optional_dimensions() {
+        let name = LibraryRep::new_dual_with_index_palette_and_row(
+            "display_zero_interface_tests::V",
+            IndexPalette::cyclic(
+                0,
+                [
+                    IndexDisplay::symbol("mu").unwrap(),
+                    IndexDisplay::symbol("nu").unwrap(),
+                ],
+            )
+            .unwrap(),
+            IndexRow::Top,
+        )
+        .unwrap();
+        let representation = name.new_rep(Dimension::Concrete(2));
+        let slots = [
+            representation
+                .dual()
+                .slot(PartialIndex::Explicit(AbstractIndex::Normal(0))),
+            representation.slot(PartialIndex::Explicit(AbstractIndex::Normal(1))),
+        ];
+        let storage = OrderedStructure::new(vec![
+            representation.dual().slot(AbstractIndex::Open {
+                owner: 102,
+                axis: 0,
+            }),
+            representation.slot(AbstractIndex::Open {
+                owner: 102,
+                axis: 1,
+            }),
+        ])
+        .map_canonical(|structure| ShadowedStructure {
+            structure,
+            global_name: None,
+            additional_args: None,
+        })
+        .map_canonical(|structure| {
+            DenseTensor::from_storage_data(vec![1., 2., 3., 4.], structure)
+                .unwrap()
+                .into()
+        })
+        .into_canonical();
+        let tensor = Spensor::from_storage_with_descriptor(
+            storage,
+            SymbolicTensor::new(Atom::Zero, PartialStructure::from_logical_slots(slots)).unwrap(),
+            None,
+            Vec::new(),
+        );
+        Python::initialize();
+        for show_dimensions in [false, true] {
+            let settings = DisplaySettings {
+                show_dimensions,
+                ..DisplaySettings::default()
+            };
+            let html =
+                Python::attach(|py| concrete_tensor_to_table_html(py, &tensor, &settings)).unwrap();
+            let Some(mu) = html.find(">μ<") else {
+                panic!("missing dual port palette label in HTML:\n{html}");
+            };
+            let Some(nu) = html.find(">ν<") else {
+                panic!("missing base port palette label in HTML:\n{html}");
+            };
+            assert!(mu < nu, "logical port order changed: {html}");
+            assert!(
+                html.contains(r#"data-spenso-axis="0" data-index-row="bottom""#)
+                    && html.contains(r#"data-spenso-axis="1" data-index-row="top""#),
+                "dualizable index rows changed: {html}"
+            );
+            assert_eq!(
+                html.contains("data-spenso-port-dimension"),
+                show_dimensions,
+                "{html}"
+            );
+            assert_eq!(html.contains(">V<"), show_dimensions, "{html}");
+            assert_eq!(html.contains("<mo>*</mo>"), show_dimensions, "{html}");
+            assert!(!html.contains("open") && !html.contains("102"), "{html}");
+        }
+    }
+
     #[test]
     fn document_settings_cover_each_tensor_layout() {
         for layout in ["ports", "schoonschip", "call"] {
@@ -3861,9 +4298,13 @@ mod tests {
                 false,
                 "0.04em",
                 "0.1em",
+                "alphabet",
+                "superscript",
+                "interactive",
+                "compact",
             )
             .unwrap();
-            let source = typst_settings_source(&settings);
+            let source = typst_settings_source(&settings, &Atom::Zero);
             assert!(source.contains(&format!("tensor-layout: {layout:?}")));
             assert!(source.contains("with-dim: true"));
             assert!(source.contains("parens: false"));
@@ -3895,17 +4336,29 @@ mod tests {
 
     #[test]
     fn generated_project_reads_the_portable_render_tree_as_binary() {
-        let source = typst_main_source(&DisplaySettings::default());
+        let source = typst_main_source(&DisplaySettings::default(), &Atom::Zero).unwrap();
         assert!(source.contains("cbor(read(\"tree.cbor\", encoding: none))"));
         assert!(source.contains("tensor-notation.render"));
     }
 
     #[test]
-    fn html_fragment_keeps_styles_and_body_mathml() {
-        let html = "<html><head><style>.x{color:red}</style></head><body><math><mi>x</mi></math></body></html>";
-        assert_eq!(
-            extract_html_fragment(html).unwrap(),
-            "<style>.x{color:red}</style><math><mi>x</mi></math>"
-        );
+    fn source_project_keeps_custom_notation_and_binary_tree_without_compilation() {
+        let tree = [0, 128, 255];
+        let project = typst_sources("$ x $", Some("#let render() = [custom]"), Some(&tree));
+        assert_eq!(project.len(), 4);
+        assert_eq!(project["main.typ"], b"$ x $");
+        assert_eq!(project["render.typ"], RENDER_TYP.as_bytes());
+        assert_eq!(project["notation.typ"], b"#let render() = [custom]");
+        assert_eq!(project["tree.cbor"], tree);
+        let defaults = typst_sources("$ x $", None, Some(&tree));
+        assert_eq!(defaults["notation.typ"], NOTATION_TYP.as_bytes());
+    }
+
+    #[test]
+    fn notebook_fragment_preserves_direct_mathml_and_adds_shared_style() {
+        let math = "<math><mi>x</mi></math>";
+        let html = notebook_html_fragment(math);
+        assert!(html.contains(NOTEBOOK_STYLE));
+        assert!(html.ends_with(&format!("<div data-spenso-math>{math}</div>")));
     }
 }

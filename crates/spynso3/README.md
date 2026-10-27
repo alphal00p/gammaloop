@@ -14,6 +14,15 @@ Exact signatures and defaults are in the
 [generated Python reference](https://alphal00p.github.io/gammaloop/products/spenso/latest/reference/python/spynso3/);
 the checked [`spynso3.pyi`](../../docs/api/python/spynso3.pyi) remains a tooling artifact.
 
+Notebook output uses Symbolica's MIME/Marimo contract: static HTML is always
+available, and installing `anywidget` adds live display. `TensorNetwork.to_svg()`
+exports tensor notation through optional typst-py; use `network.render().to_svg()`
+for a network diagram. Browser measurement is explicit, while default static
+exports use the view's snapshot policy. Font resources come from `symbolica.data`
+and `symbolica-fonts`, independently of the optional compiler.
+See the [Python display migration notes](../../docs/products/feynkit/content/community-host.typ)
+for notation registration, resource discovery, and removed display hooks.
+
 ## Availability
 
 An installed Symbolica package exposes Spenso only when its assembly includes

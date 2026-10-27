@@ -29,8 +29,8 @@ import numpy.typing
 import symbolica.core
 import typing
 from symbolica import ComplexFloat, Float
-from symbolica.community.idenso import ColorCasimirSettings, ColorSimplifySettings, CookSettings, GammaSimplifySettings, SchoonschipSettings
-from symbolica.core import Condition, Expression, FormattedOutput, HeldExpression, PatternRestriction
+from symbolica.community.graph import DiagramView, RenderSettings
+from symbolica.core import Condition, Evaluator, Expression, FormattedOutput, FunctionDefinition, HeldExpression, PatternRestriction, Replacement, Transformer
 
 AUTO: _AutoIndex
 _: _AutoIndex
@@ -309,69 +309,46 @@ class CanonicalizationError(builtins.ValueError):
     """
     ...
 
-        # Parameters:
-        - i: First index
-        - j: Second index
+@typing.final
+class CompiledTensorEvaluator:
+    r"""
+    Native Symbolica evaluator returning tensors. Construct with TensorEvaluator.compile.
 
-        # Examples:
-        ```python
-        rep = Representation.cof(3)
-        identity = rep.id('a', 'b')  # Color identity δ_ab
-        ```
-        """
-    def __repr__(self) -> builtins.str: ...
-    def __str__(self) -> builtins.str: ...
-    def to_expression(self) -> Expression:
+    evaluate uses the number_type selected at compilation, as in Symbolica's compiled
+    evaluators. scalar_evaluator exposes the underlying native evaluator.
+    """
+    @property
+    def parameters(self) -> builtins.list[Expression]:
         r"""
-        Convert the representation to a symbolic expression.
+        Symbolic inputs in evaluation order.
         """
     @property
     def input_size(self) -> builtins.int:
         r"""
-        Create a bispinor representation.
-
-        # Parameters:
-        - dimension: The dimension of the bispinor space
+        Number of entries in each input row.
         """
     @property
     def output_shape(self) -> tuple[int, ...]:
         r"""
-        Create a Euclidean space representation.
-
-        # Parameters:
-        - dimension: The dimension of the Euclidean space
+        Logical shape of each result tensor.
         """
     @property
     def supports_real(self) -> builtins.bool:
         r"""
-        Create a Minkowski space representation.
-
-        # Parameters:
-        - dimension: The dimension of the Minkowski space
+        Whether compilation selected a real number type.
         """
-    @staticmethod
-    def cof(dimension: builtins.int | Expression | str) -> Representation:
+    @property
+    def scalar_evaluator(self) -> typing.Any:
         r"""
-        Create a color fundamental representation.
-
-        # Parameters:
-        - dimension: The dimension of the color group (e.g., 3 for SU(3))
+        Underlying Symbolica compiled evaluator.
         """
-    @staticmethod
-    def coad(dimension: builtins.int | Expression | str) -> Representation:
+    def evaluate(self, inputs: numpy.typing.ArrayLike) -> builtins.list[Tensor]:
         r"""
-        Create a color adjoint representation.
-
-        # Parameters:
-        - dimension: The dimension of the adjoint representation (e.g., 8 for SU(3))
+        Evaluate real or complex inputs, according to the compiled number type.
         """
-    @staticmethod
-    def cos(dimension: builtins.int | Expression | str) -> Representation:
+    def __repr__(self) -> builtins.str:
         r"""
-        Create a color sextet representation.
-
-        # Parameters:
-        - dimension: The dimension of the sextet representation (e.g., 6 for SU(3))
+        Describe the compiled output tensor layout and numeric domain.
         """
 
 class CookingError(builtins.TypeError):
@@ -413,8 +390,11 @@ class DisplaySettings:
     r"""
     Immutable presentation options for tensor notation and component displays.
 
-    The tensor can store data as floats, complex numbers, or symbolic expressions.
-    Tensors have an associated structure that defines their shape and index properties.
+    Formatting does not change indices, tensor algebra, or component order.
+    The defaults use representation-specific index alphabets and an interactive
+    component explorer. The direct MathML pager supports rich layouts and gaps;
+    static Typst/plain source supports ports layout. HTML uses direct MathML;
+    customizable Typst projects and SVG exports retain the Typst notation backend.
 
     Examples
     --------
@@ -568,7 +548,7 @@ class DisplaySettings:
     @property
     def index_gap(self) -> builtins.str:
         r"""
-        Get tensor elements at the specified range of indices.
+        Spacing between rendered indices, as a finite length using
 
         Returns
         -------
@@ -1251,9 +1231,9 @@ class FactorProjector(typing.Generic[_Projected]):
         >>> group = FactorProjector.cyclic(A, A)
         >>> result = trace(space, group)
         """
-    def reinfer(self) -> TensorExpression:
+    def __repr__(self) -> builtins.str:
         r"""
-        Re-parse the underlying symbolic expression and rebuild its ordered tensor interface.
+        Describe the permutation group and the number of retained factors.
         """
     def _repr_html_(self) -> builtins.str:
         r"""

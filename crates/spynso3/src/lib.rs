@@ -1,8 +1,17 @@
-use std::{
-    collections::HashMap,
-    ops::Deref,
-    sync::atomic::{AtomicUsize, Ordering},
-};
+use crate::display::DisplaySettings;
+pub use linnet_render_py::data_assets;
+
+#[macro_use]
+mod documentation;
+
+#[cfg(feature = "python_stubgen")]
+use pyo3_stub_gen::{Result as StubResult, StubInfo};
+#[cfg(feature = "python_stubgen")]
+use std::env;
+#[cfg(feature = "python_stubgen")]
+use std::path::PathBuf;
+
+use std::ops::Deref;
 
 use eyre::eyre;
 
@@ -10,79 +19,94 @@ use broadcast::SpensoBroadcastFunction;
 use library::{SpensorFunctionLibrary, SpensorLibrary};
 use network::{ConvertibleToSpensoNet, SpensoNet};
 
+use pyo3::exceptions::{PyIndexError, PyOverflowError, PyRuntimeError, PyTypeError};
+use pyo3::types::{
+    PyAny, PyAnyMethods, PyDictMethods, PyListMethods, PyModule, PyModuleMethods, PySliceMethods,
+    PyTypeMethods,
+};
+use pyo3::types::{PyComplex, PyDict, PyFloat, PyInt, PySlice, PyTuple, PyType};
 use pyo3::{
-    PyClass,
-    exceptions::{self, PyIndexError, PyOverflowError, PyRuntimeError, PyTypeError},
-    prelude::*,
-    types::{PyComplex, PyFloat, PySlice, PyTuple, PyType},
+    Borrowed, Bound, FromPyObject, IntoPyObject, Py, PyErr, PyRef, PyResult, Python, pyclass,
+    pyfunction, pymethods, wrap_pyfunction,
+};
+use pyo3::{PyClass, exceptions};
+
+#[cfg(feature = "python_stubgen")]
+use pyo3_stub_gen::generate::MethodType;
+#[cfg(feature = "python_stubgen")]
+use pyo3_stub_gen::inventory::submit;
+#[cfg(feature = "python_stubgen")]
+use pyo3_stub_gen::type_info::{
+    MethodInfo, ParameterDefault, ParameterInfo, ParameterKind, PyMethodsInfo,
 };
 
-#[cfg(feature = "python-stubs")]
-use pyo3_stub_gen::{
-    generate::MethodType,
-    inventory::submit,
-    type_info::{MethodInfo, ParameterDefault, ParameterInfo, ParameterKind, PyMethodsInfo},
+use spenso::algebra::complex::{Complex, RealOrComplex};
+use spenso::tensors::data::{
+    DenseTensor, GetTensorData, SetTensorData, SparseOrDense, SparseTensor,
 };
+use spenso::tensors::parametric::{ConcreteOrParam, ParamOrConcrete, ParamTensor};
 
-#[cfg(feature = "native")]
-use spenso::{
-    algebra::complex::symbolica_traits::CompiledComplexEvaluatorSpenso,
-    tensors::parametric::EvalTensor,
+use spenso::network::parsing::ShadowedStructure;
+use spenso::structure::abstract_index::AbstractIndex;
+use spenso::structure::partial::{PartialStructure, PartialStructureExt};
+use spenso::structure::slot::IsAbstractSlot;
+use spenso::structure::{
+    Canonicalized, HasStructure, OrderedStructure, ScalarTensor, TensorDataLayout,
+    TensorDataLayoutError, TensorStructure,
 };
+use spenso::tensors::complex::RealOrComplexTensor;
+use spenso::tensors::data::DataTensor;
+use spenso::tensors::parametric::MixedTensor;
+use symbolica::api::python::{Citation, SymbolicaCommunityModule};
+use symbolica::prelude::*;
 
-use spenso::{
-    algebra::complex::{Complex, RealOrComplex},
-    tensors::{
-        data::{DenseTensor, GetTensorData, SetTensorData, SparseOrDense, SparseTensor},
-        parametric::{ConcreteOrParam, ParamOrConcrete, ParamTensor, atomcore::TensorAtomOps},
-    },
-};
+use symbolica::api::python::{ConvertibleToExpression, PythonExpression, PythonFormattedOutput};
 
-use spenso::{
-    network::parsing::ShadowedStructure,
-    structure::{
-        Canonicalized, HasStructure, OrderedStructure, ScalarTensor, TensorDataLayout,
-        TensorDataLayoutError, TensorStructure,
-        abstract_index::AbstractIndex,
-        partial::{PartialStructure, PartialStructureExt},
-        slot::IsAbstractSlot,
-    },
-    tensors::{
-        complex::RealOrComplexTensor,
-        data::{DataTensor, StorageTensor},
-        parametric::{LinearizedEvalTensor, MixedTensor},
-    },
-};
-use symbolica::{
-    api::python::SymbolicaCommunityModule, domains::float::Complex as SymComplex, prelude::*,
-};
+#[cfg(feature = "python_stubgen")]
+use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
+#[cfg(feature = "python_stubgen")]
+use pyo3_stub_gen::{PyStubType, TypeInfo, impl_stub_type};
 
-use symbolica::api::python::{PythonExpression, PythonFormattedOutput};
-
-#[cfg(feature = "python-stubs")]
-use pyo3_stub_gen::{PyStubType, TypeInfo, derive::*, impl_stub_type};
-
-#[cfg(feature = "python-stubs")]
+#[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::derive::{gen_stub_pyclass_enum, gen_stub_pyfunction};
 
 pub mod broadcast;
-mod composition;
+mod citations;
+mod data;
 pub mod display;
+mod evaluator;
 pub mod expression;
+
+#[cfg(feature = "native")]
+pub use evaluator::SpensoCompiledExpressionEvaluator;
+pub use evaluator::SpensoExpressionEvaluator;
 pub mod library;
+pub mod metadata;
 pub mod network;
 pub mod pattern;
+pub mod projectors;
+mod simplification;
+/// The Python reduction status reused by Rust adapters.
+///
+/// ```
+/// use idenso::tensor::simplification::ReductionStatus;
+/// use spynso3::PyReductionStatus;
+///
+/// for (native, python) in [
+///     (ReductionStatus::Complete, PyReductionStatus::Complete),
+///     (ReductionStatus::Deferred, PyReductionStatus::Deferred),
+///     (ReductionStatus::Capped, PyReductionStatus::Capped),
+/// ] {
+///     assert_eq!(PyReductionStatus::from(native), python);
+/// }
+/// ```
+pub use simplification::PyReductionStatus;
 pub mod structure;
+pub mod tensor_rule;
 
-use composition::StructuredAtom;
 use expression::TensorExpression;
+use idenso::tensor::SymbolicTensor;
 use structure::ConvertibleToSpensoName;
-
-static OPEN_OWNER: AtomicUsize = AtomicUsize::new(0);
-
-pub(crate) fn fresh_open_owner() -> usize {
-    OPEN_OWNER.fetch_add(1, Ordering::Relaxed)
-}
 
 trait ModuleInit: PyClass {
     fn init(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -1160,8 +1184,8 @@ impl Spensor {
         display::concrete_tensor_to_svg(py, self, &settings, notation_source.as_deref())
     }
 
-    fn _repr_html_(&self, py: Python<'_>) -> Option<String> {
-        display::concrete_tensor_to_html(py, self, &display::DisplaySettings::default(), None).ok()
+    fn _repr_html_(&self, py: Python<'_>) -> PyResult<Option<String>> {
+        display::concrete_tensor_to_html(py, self, &DisplaySettings::default(), None).map(Some)
     }
 
     fn _repr_latex_(&self) -> Option<String> {

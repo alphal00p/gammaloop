@@ -6113,6 +6113,7 @@ dependencies = [
  "spenso-hep-lib",
  "spenso-macros",
  "symbolica",
+ "symbolica-notation",
  "symbolica-typst-plugin",
  "tabled",
  "thiserror 2.0.18",

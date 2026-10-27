@@ -79,8 +79,37 @@ Do not link Spynso into `gammaloop._gammaloop` or distribute it as a second nati
 
 GammaLoop owns the Spynso source and bundled Tydenso `render.typ` and `notation.typ` assets;
 Symbolica Community owns the wheel. Their native dependencies must resolve one Symbolica
-source revision. The `gammaloop[typst-display]` extra adds only the optional renderer, not
-another Spynso binary.
+source revision. HTML uses direct MathML without a Typst compiler. Source-only
+Typst projects remain available, and vector exports use optional Python typst-py
+(distribution `typst`).
+
+=== Notebook expression display
+
+Interactive tensor output uses Symbolica's shared responsive MathML renderer
+and official `MathMLViewer::expression` factory. Symbolica owns arithmetic,
+cursor caching and navigation, with the same eight width-fitting layouts,
+nested omissions, inline expansion, hover previews, inspection, and keyboard
+zoom as `expression.to_expression()`. Spenso supplies only tensor notation
+leaves through its bounded native Rust MathML printer. The viewer retains typed
+metadata, local index aliases and a bounded leaf cache while preserving logical
+index order and the source expression. Paging uses no CBOR render tree, Typst
+compiler or notation worker.
+
+Use `expression.paged()` to request the tensor viewer explicitly. The default
+`page_size=None` allows a complete compact product to fit the initial preview;
+other pages use 25 entries. An explicit `page_size=25` keeps that entry limit.
+`expression.to_expression().mathml_viewer()` opens the same viewer with
+native Symbolica notation. Explicit page sizes range from 1 to 500; rendering
+budgets may shorten a page. `paged()`, `formatted()` and expression `to_html()` reject
+`notation_source` with `ValueError`. Explicit `to_html()` emits complete direct
+MathML without paging or Typst compilation. Custom Typst notation is available
+through `to_typst_project()` and optional vector `to_svg()` export.
+
+Notebook widgets need `anywidget`. This checkout declares `notebook-display`
+(`anywidget>=0.9,<1`), `graph-export` (`playwright>=1.55,<2`) and `typst-export`
+(`typst>=0.15`) extras in GammaLoop and the isolated notebook host. These are not
+a claim about extras in the currently released external Community wheel.
+Headless graph measurement also needs `python -m playwright install chromium`.
 
 === Pyodide builds
 
@@ -340,8 +369,9 @@ its atom-valued variant. Component values retain the same Python types as
 == Construct and inspect concrete data
 
 This complete source creates a named rank-two tensor, verifies one component, and converts its
-storage in place. The documentation harness compiles the Python source without importing the
-native module.
+storage in place. Use Run example to execute it in your browser. To run the same source locally,
+install a Symbolica community build containing `symbolica.community.tensor`; installing or
+building that native module takes longer than this small component calculation.
 
 // docs-example: compile
 ```python
@@ -896,7 +926,10 @@ graph_indices = numerator.formatted(settings=DisplaySettings(index_style="graph"
 raw_indices = numerator.formatted(settings=DisplaySettings(index_style="raw"))
 ```
 
-Install the optional compiler to render HTML and SVG:
+`to_typst` and `format_tensor` emit source using the ports layout. Schoonschip,
+call and custom-spacing settings are supported by native MathML paging and
+explicit HTML/SVG rendering. Source-only methods reject unsupported settings
+rather than silently ignoring them.
 
 A supplied rank-one tensor fills an argument position in the ports layout.
 A filled marker distinguishes it from an unresolved axis: inline-metric spaces
@@ -928,6 +961,8 @@ pslash = indexed.contract()
 pslash.formatted()
 ```
 
+HTML emits complete direct MathML. This display needs no Typst compiler:
+
 // docs-example: compile
 ```python
 from symbolica.community.tensor import DisplaySettings, TensorExpression
@@ -935,23 +970,78 @@ from symbolica.community.tensor import DisplaySettings, TensorExpression
 trace = TensorExpression.gamma5(4).trace()
 compact = DisplaySettings.schoonschip()
 html = trace.to_html(settings=compact)
-svg = trace.to_svg(settings=compact)
 rich = trace.formatted(settings=compact)
 ```
 
-Python uses the bundled Typst render/notation assets directly, without calling the Tydenso
-Wasm plugin. Explicit `to_html` and `to_svg` calls raise an install-guidance `ImportError`
-when the compiler is absent. Notebook `_repr_html_` and `formatted()` fall back to existing
-LaTeX or text. `TensorNetwork.__str__` remains Graphviz DOT; `to_dot()` makes that intention
-explicit. These display methods do not replace Symbolica's inherited `to_latex` API.
+For custom Typst notation,
+`to_typst_project(settings=..., notation_source=...)` returns a `dict[str, bytes]`
+with `main.typ`, `render.typ`, `notation.typ` and `tree.cbor`. It exports the rich
+render tree and bundled sources without invoking a compiler. Bare `to_typst()`
+retains its existing source-only contract.
 
-Idenso transformations still return ordinary Symbolica expressions. Module-level
-`spenso.formatted(expression)` or `spenso.as_tensor(expression)` provides tensor-aware display.
-HTML, SVG, and rich-display functions accept `notation_source` as a trusted, complete
-replacement for the bundled `notation.typ`, not a style fragment. Typst executes that source;
-it must implement the expected notation interface and must not come from untrusted input.
-Display customization stays outside Atom payloads; portable representation and math-label
-declarations continue to travel with the expressions.
+```python
+project = trace.to_typst_project(settings=compact)
+assert set(project) == {"main.typ", "render.typ", "notation.typ", "tree.cbor"}
+```
+
+Expression `trace.to_svg(settings=compact)` uses optional Python typst-py
+(distribution `typst`, version 0.15 or newer) and reports compilation errors.
+The native extension contains no Rust Typst compiler. Notebook rich display
+retains its LaTeX or text fallback on rendering errors.
+`TensorNetwork.__str__` prints the source formula and `to_dot()` returns
+the current graph. Its graph renderer uses Linnet's prepared-render pipeline and reports
+rendering errors directly. Use `to_expression().to_latex()` when raw Symbolica notation is
+needed instead of tensor-aware notation.
+
+HTML output keeps selectable native MathML and uses STIX Two Math. Include
+`load_math_font()` once in the output document to embed the font for offline use;
+isolated frames need their own copy. Math defaults to
+21 px with padding and horizontal scrolling for long expressions. Set the CSS custom
+property `--spenso-math-font-size` on the notebook or an output container to change
+the base size; nested scripts retain their relative sizing.
+
+Idenso reductions return typed `TensorExpression` values with these display methods.
+Call `to_expression()` explicitly when an ordinary Symbolica expression is needed.
+`to_typst_project()` and expression `to_svg()` accept `notation_source` as a
+trusted, complete replacement for the bundled `notation.typ`; compilation
+executes that source, which must implement the expected notation interface.
+`formatted()`, `paged()` and expression `to_html()` reject it with `ValueError`.
+Direct MathML never parses Typst source; custom HTML printers supply MathML fragments.
+Display notation stays process-local for ordinary Symbolica `Expression.save`
+and state exports. Spenso-aware exports such as `to_typst_project()` explicitly
+include referenced notation in validated `spenso.notation` version-1 attachments,
+alongside representation and display-identity index declarations. Heads and index
+labels use structured display trees; text overrides are bounded, and MathML
+passes the presentation allowlist. Import rejects conflicting local notation
+before importing atoms; identical re-import is safe. Callback implementations
+never travel. Tydenso renders transported Typst overrides as literal display
+text; executable custom source remains an explicit trusted document input.
+
+== Citation tracking
+
+After a calculation, `symbolica.get_citations()` returns citation objects with
+references, explanations in `reasons`, and bibliography entries from
+`citation.to_bibtex()`. Spenso is authored by Lucien Huber; Idenso is authored by
+Lucien Huber and Ben Ruijl.
+
+Successful tensor operations cite Spenso. Symbolic contraction, algebra
+simplification, canonicalization, Dirac adjoints, and index/notation rewrites add
+Idenso. Every Idenso citation also credits Spenso for the tensor-expression
+structure and display that define tensors in Symbolica. Component-network
+execution and numerical evaluation add their own reasons to the Spenso citation.
+
+Dirac gamma algebra also cites
+#link("https://arxiv.org/abs/2601.19982")[FORM Version 5.0] by J. Davies,
+T. Kaneko, C. Marinissen, T. Ueda, and J. A. M. Vermaseren, and
+#link("https://arxiv.org/abs/1707.06453")[FORM version 4.2] by B. Ruijl,
+T. Ueda, and J. A. M. Vermaseren, as the basis for Idenso's Dirac gamma algebra
+rules. Color algebra cites
+#link("https://arxiv.org/abs/hep-ph/9802376")[Group theory factors for Feynman diagrams]
+by T. van Ritbergen, A. N. Schellekens, and J. A. M. Vermaseren as the basis for
+Idenso's color algebra rules, through `color.h`.
+
+Citations accumulate during a session. Repeated operations keep a single entry
+for each contribution.
 
 == Repeated symbolic evaluation
 
@@ -972,3 +1062,66 @@ For exact parameters and defaults, use the
 The implementation starts in
 #source-link("crates/spynso3/src/lib.rs", label: "the Spenso Python adapter").
 ]
+
+== Tensor evaluation and Symbolica API parity
+
+`tensor.evaluator(params, functions=..., jit_compile=True, ...)` uses the same
+argument order, defaults, function definitions and optimisation settings as
+`Expression.evaluator`. It builds one Symbolica evaluator for all components in
+logical order. `evaluate` and `evaluate_complex` accept the same array-like inputs
+as Symbolica and return one `Tensor` per input row, preserving axes, name and
+arguments. Sparse input and permuted axes follow the same component ordering.
+SymJIT compilation occurs on first numerical use; `jit_compile=False` selects
+interpreted evaluation.
+
+The former `constants, funs, params` interface is removed. Substitute fixed values
+before constructing the evaluator, and pass `FunctionDefinition` objects through
+`functions`. `TensorEvaluator.compile` now follows `Evaluator.compile`, including
+its required `number_type`, compiler flags and native/SIMD/CUDA options. The
+compiled object's `evaluate` method uses the selected number type. The old
+compiled `evaluate_complex` method is removed. `scalar_evaluator` exposes the
+underlying Symbolica object for arbitrary-precision evaluation, instruction
+inspection, export and other scalar operations; these return component arrays
+without tensor metadata.
+
+An audit against Symbolica 3.0.1 found matching signatures for the explicitly
+wrapped `TensorExpression` algebra operations: `apart`, `cancel`, `collect`,
+`collect_by_coefficient`, `collect_factors`, `collect_horner`, `collect_num`,
+`collect_symbol`, `derivative`, `expand`, `expand_num`, `factor`, `map`,
+`replace_multiple` and `together`. Their tensor results additionally validate the
+external interface. `TensorExpression.evaluator` is inherited from `Expression`
+and evaluates its symbolic payload; use `to_tensor().evaluator(...)` to evaluate
+materialized components.
+
+The remaining differences are:
+
+- `TensorNetwork.replace` still uses `level_range` and optional booleans, lacks
+  `partial`, `once`, `bottom_up` and `nested`, and rejects replacement callbacks.
+  `TensorExpression.replace` already delegates those controls to Symbolica;
+  making its `rhs` optional is intentional, to accept whole-tensor rules.
+- `TensorNetwork.evaluate` still accepts real constants and a map of Python
+  functions. `Expression.evaluate` accepts real or complex substitutions and an
+  optional decimal precision. The network route has different capabilities and
+  does not yet provide scalar API parity.
+- Tensor indexing, powers and calls carry tensor semantics. Tensor display methods
+  add representation and layout settings; `to_typst` takes `show_dimensions`
+  where the scalar method takes `show_namespaces`. These are intentional
+  specialisations, not interchangeable scalar operations.
+- Inherited scalar inspection and transformation methods can return ordinary
+  `Expression` values. Use the explicitly wrapped algebra methods when the result
+  must retain a checked tensor interface.
+
+The audit also reproduced a shared Symbolica 3.0.1 C++ export failure at kernel
+revision `942bd2c` for a non-real coefficient: compiling `Symbol.I * x` with `number_type="complex"`
+generates `T(T(0e0), T(1e0))`, which is invalid for `std::complex<double>`.
+Both scalar and tensor evaluators fail, with either direct-translation setting.
+The older tensor-only exporter avoided this kernel bug through its own complex
+coefficient printer. Delegating native compilation exposes it; the existing
+complex-coefficient compilation regression remains failing until the shared
+exporter is fixed. Interpreted and SymJIT evaluation, including the current
+notebook, work. This is a backend defect, not an argument-signature mismatch.
+
+`crates/spynso3/tests/installed_evaluator_parity.py` checks the shared signatures
+and compares component results for function definitions, JIT and interpreted
+execution, sparse data, permuted axes and constant scalars. Native real/complex
+compilation is covered by `installed_api_operations.py`.

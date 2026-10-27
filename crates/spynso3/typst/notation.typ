@@ -201,14 +201,57 @@
   math.upright("?")
 }
 
-#let _payload-head(ctx) = {
-  let display = _attachment(
-    ctx,
-    "spenso.math-display",
-    ctx.identity,
-    (1,),
-  )
-  if display == none { (ctx.default)() } else { _display-node(display) }
+#let _display-label(node) = {
+  let kind = node.first()
+  if kind in ("symbol", "text") { return node.at(1) }
+  if kind == "number" { return str(node.at(1)) }
+  if kind in ("sequence", "list") {
+    return node.at(1).map(_display-label).join(if kind == "sequence" { " " } else { "," })
+  }
+  if kind == "attach" and node.at(2) == none and node.at(3) == none {
+    return _display-label(node.at(1))
+  }
+  // Only the endpoint strings s/t affect slot suppression. Decorated labels
+  // and mathematical operations cannot equal either native endpoint string.
+  ""
+}
+
+#let _portable-settings(ctx, settings) = {
+  // Plugin import validates these records before exposing the render tree.
+  // Treat overrides as text; payloads must never supply executable Typst.
+  let result = settings
+  for record in ctx.attachments {
+    if record.at("schema", default: none) == "spenso.notation" and record.version == 1 {
+      let name = str(record.identity)
+      let declaration = cbor(record.data)
+      if "head" in declaration and name not in result.tensor-labels {
+        result.tensor-labels.insert(name, _display-node(declaration.head))
+      }
+      if "index-label" in declaration and name not in result.index-labels {
+        let label = declaration.at("index-label")
+        result.index-labels.insert(name, (
+          label: _display-label(label),
+          visual: _display-node(label),
+        ))
+      }
+      if "typst" in declaration and name not in result.print-heads {
+        result.print-heads.insert(name, math.upright(declaration.typst))
+      }
+    }
+  }
+  result
+}
+
+#let _payload-head(ctx, settings) = {
+  let settings = _portable-settings(ctx, settings)
+  let head = settings.print-heads.at(ctx.identity, default: none)
+  if head != none { return head }
+  let display = if "spenso::index" in ctx.tags {
+    _attachment(ctx, "spenso.math-display", ctx.identity, (1,))
+  } else { none }
+  if display != none { return _display-node(display) }
+  let label = settings.tensor-labels.at(ctx.symbol.at("name", default: "?"), default: none)
+  if label != none { label } else { (ctx.default)() }
 }
 
 #let _visual(ctx, node) = (ctx.render-visual)(node)
@@ -677,7 +720,15 @@
   ) {
     return (ctx.default)()
   }
-  _tight((left.label, math.class("normal", $dot$), right.label))
+  // Fence the contraction as one scalar factor, including the last factor
+  // where no following-factor hint is available, and as a whole power base.
+  let body = _tight((left.label, math.class("normal", $dot$), right.label))
+  body = _parentheses(body)
+  // A renderer may supply the next-factor hint to separate an implicit
+  // multiplier; standalone calls need no trailing gap.
+  if ctx.at("followed-by-factor", default: false) and not ctx.power-base {
+    body + h(settings.factor-gap)
+  } else { body }
 }
 
 #let _render-chain(ctx, settings) = {
@@ -886,7 +937,7 @@
   if settings.commas == none {
     settings.insert("commas", settings.tensor-layout == "call")
   }
-  let tensor = ctx => if ctx.kind == "function" {
+  let printed-call = ctx => if ctx.kind == "function" {
     // The common dispatcher may encounter the broad package tensor tag before
     // a later document tag or class on the same symbol. Re-check the complete
     // document layer here so either kind of document override still wins over
@@ -895,14 +946,20 @@
     if renderer == none {
       renderer = _lookup-document-renderer(classes, ctx.classes)
     }
+    let is-tensor = ctx.tags.any(tag => tag in ("tensor", "spenso::tensor"))
     if renderer == none {
-      _render-tensor(ctx, settings)
+      let visual = _printed-call(ctx, settings)
+      if visual != none { visual }
+      else if is-tensor { _render-tensor(ctx, settings) }
+      else { (ctx.default)() }
     } else {
-      _invoke-document-renderer(renderer, _tensor-document-context(ctx, settings))
+      _invoke-document-renderer(renderer, if is-tensor { _tensor-document-context(ctx, settings) } else { ctx })
     }
   } else {
     (ctx.default)()
   }
+  let callback-calls = (:)
+  for name in settings.callback-symbols { callback-calls.insert(name, printed-call) }
   let defaults = core.notation(
     heads: _merge(_merge(_default-heads, (
       "spenso::Nc": ctx => _color-label("Nc", settings),
@@ -923,7 +980,7 @@
       "spenso::dot": ctx => _render-dot(ctx, settings),
       "spenso::chain": ctx => _render-chain(ctx, settings),
       "spenso::trace": ctx => _render-trace(ctx, settings),
-    ),
+    )),
     tags: (
       "spenso::index": ctx => {
         let settings = _portable-settings(ctx, settings)
@@ -953,7 +1010,7 @@
       tensor: printed-call,
       "spenso::tensor": printed-call,
     ),
-    fallback-head: _payload-head,
+    fallback-head: ctx => _payload-head(ctx, settings),
   )
   let document = core.notation(
     heads: heads,
@@ -980,7 +1037,8 @@
   notation: default-notation(),
   annotate: none,
   block: false,
+  power-base: false,
 ) = {
-  let body = core.render-tree(tree, notation: notation, annotate: annotate)
+  let body = core.render-tree(tree, notation: notation, annotate: annotate, power-base: power-base)
   if block { math.equation(body, block: true) } else { body }
 }
