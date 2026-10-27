@@ -48,7 +48,7 @@
     },
     {
       "owner": "feynkit-generator four_loop_numerator",
-      "command": "for threads in 1 8 32; do nix develop -c cargo run --locked --profile dev-optim -p feynkit-generator --example four_loop_numerator -- \"$threads\" - true; done",
+      "command": "for threads in 1 8 32; do nix develop -c cargo run --locked --profile dev-optim -p feynkit-generator --example four_loop_numerator -- \"$threads\" - true || exit \"$?\"; done",
       "pass_condition": "4664 retained, 306 zero on every run, not merely total 4970",
       "when": "rebuilt tip",
       "required_harness_correction": "example currently asserts only total; add explicit split assertions or validated structured receipt, preserve physics"
@@ -57,7 +57,8 @@
       "owner": "generator registration perturbation",
       "command": "FEYNKIT_ORACLE_THREADS=1,8,32 nix develop -c cargo nextest run --locked --cargo-profile ci-optim --profile ci_gammaloop -p feynkit-generator -E 'test(ids_do_not_depend_on_threads_or_symbol_registration) | test(outputs_do_not_depend_on_index_registration_order)'",
       "pass_condition": "identical full graph/numerator/group outputs across fresh symbol orders and 1,8,32",
-      "when": "rebuilt tip"
+      "when": "rebuilt tip, only after the required registration harness correction makes FEYNKIT_ORACLE_THREADS drive both registration paths; current source command cannot certify this matrix",
+      "required_harness_correction": "Frozen v4 generation_oracle/main.rs ID test compares only 1 with 8 and 8 with preload (lines 415\u2013417); index-registration test hard-codes 8 threads (lines 470, 475). Neither consumes FEYNKIT_ORACLE_THREADS. Parameterize both harness paths for genuine fresh-process registration-order comparisons at each of 1, 8, 32 threads, comparing full graph/numerator/group outputs and preserving all existing assertions. Separate printed-output coverage is insufficient."
     },
     {
       "owner": "idenso colour perturbation",
@@ -67,7 +68,7 @@
     },
     {
       "owner": "integration-tests SM fresh process",
-      "command": "for run in 1 2 3 4 5; do nix develop -c just test -p gammaloop-integration-tests --test test_feyngen test_generate_sm_a_ddx; done",
+      "command": "for run in 1 2 3 4 5; do nix develop -c just test -p gammaloop-integration-tests --test test_feyngen test_generate_sm_a_ddx || exit \"$?\"; done",
       "pass_condition": "5 of 5 fresh test processes; unmodified assertions",
       "when": "rebuilt tip"
     },

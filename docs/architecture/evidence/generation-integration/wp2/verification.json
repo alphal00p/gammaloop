@@ -75,5 +75,56 @@
   "retained": "manifest, exact PR/ref observations, future validation matrix, focused receipt and task workspace/bookmark; source refs/cache preserved",
   "scratch": "one-off scripts and render outputs removed after validation",
   "processes_retained": [],
-  "environment_limitation": "nix develop attempted drawing dependency rebuilds before Python execution; interrupted own Nix process to keep bounded scope. Focused checks use pinned nix shell tools instead; NixCI checked from unchanged source, not build-triggering eval."
+  "environment_limitation": "nix develop attempted drawing dependency rebuilds before Python execution; interrupted own Nix process to keep bounded scope. Focused checks use pinned nix shell tools instead; NixCI checked from unchanged source, not build-triggering eval.",
+  "bounded_fix_round": {
+    "date_utc": "2026-10-27T08:21:28.599025+00:00",
+    "reviewed_commit": "e8910d5d2f93e54066101cbc4661d0508d102c3f",
+    "review": "Astra round 1 REQUEST_CHANGES; both P2 findings addressed, independent re-review pending",
+    "environment": "nix shell --inputs-from . nixpkgs#python3 nixpkgs#typst -c python3; no licensed commands required",
+    "checks": [
+      {
+        "check": "All archive JSON/JSONL and registry TOML parse",
+        "status": "passed"
+      },
+      {
+        "check": "Changed WP2 Typst note compiles with repository root",
+        "status": "passed"
+      },
+      {
+        "check": "Both repeated-run snippets pass bash -n and stubbed all-success/every-position failure checks without errexit; no physics command executed",
+        "status": "passed",
+        "results": [
+          {
+            "owner": "feynkit-generator four_loop_numerator",
+            "syntax": "passed",
+            "all_success": "passed",
+            "injected_failure_at_each_position": "passed",
+            "required_runs": 3,
+            "failure_exit_code": 37
+          },
+          {
+            "owner": "integration-tests SM fresh process",
+            "syntax": "passed",
+            "all_success": "passed",
+            "injected_failure_at_each_position": "passed",
+            "required_runs": 5,
+            "failure_exit_code": 37
+          }
+        ]
+      },
+      {
+        "check": "Registration correction records existing fixed-thread limitations, requires full-output fresh-process order comparisons at 1/8/32, and preserves prior two corrections",
+        "status": "passed"
+      }
+    ],
+    "prior_receipt_scope": "Top-level checks above describe original WP2 verification; not repeated in this bounded fix round.",
+    "not_run": [
+      "physics tests",
+      "harness implementation",
+      "integration replay",
+      "full build",
+      "full source re-audit"
+    ],
+    "retained": "Updated matrix, WP2 note and this receipt; workspace/bookmark retained for independent review. Temporary Typst output removed; no processes retained."
+  }
 }

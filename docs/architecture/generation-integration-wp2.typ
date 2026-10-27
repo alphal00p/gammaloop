@@ -120,7 +120,7 @@ exact and production-fallback regressions. Port and run current target
 admission/template regressions as well as source staged tests. A passing
 command that selects zero tests is a failed validation attempt.
 
-Two harness discrepancies require bounded implementation work in WP3:
+Three harness discrepancies require bounded implementation work in WP3:
 + `four_loop_numerator` currently asserts only that retained plus zero equals
   4970. Its logged split must additionally be checked as 4664 retained and
   306 zero with colour filtering enabled; do not accept 4970 alone.
@@ -129,6 +129,20 @@ Two harness discrepancies require bounded implementation work in WP3:
   its execution setting or add an equivalent eight-thread invocation retaining
   the entire physical selection, `3150 | -9861/16` assertion and the two
   Lorentz-zero graph checks. Do not edit the expected values.
+
++ Frozen v4 `generation_oracle/main.rs` compares ID registration only between
+  1 and 8 threads and between 8 and preload (lines 415–417); its index-order
+  test hard-codes 8 threads (lines 470, 475). Neither test consumes
+  `FEYNKIT_ORACLE_THREADS`. Parameterize both harness paths in WP3 so each
+  registration order runs in genuine fresh processes at each of 1, 8 and 32
+  threads, comparing full graph/numerator/group outputs while retaining all
+  existing assertions. The separate printed-output test does not fill this
+  gap. The matrix command is conditional on this correction; setting the
+  environment variable against the current harness does not certify coverage.
+
+The four-loop 1/8/32 and five-process SM recipes explicitly exit on #emph[any]
+failed invocation, independent of shell errexit. Every thread must pass, and
+SM acceptance remains five of five fresh processes.
 
 The source oracle recipe mentioned in its module comment is absent from the
 accepted target recipes. Use the explicit cargo-nextest command in the matrix
@@ -141,6 +155,12 @@ and DHAT counters without a preauthorized 1.2× memory ceiling; the coordinator
 runs the milestone through WP10. Slow/heavy certification remains WP9.
 
 == Verification and retention
+
+Astra round 1 requested changes on
+`e8910d5d2f93e54066101cbc4661d0508d102c3f`: missing registration-order/thread
+coverage and repeated-run failure propagation. This bounded fix records the
+third WP3 harness correction and makes both repeated-run recipes fail on any
+required run. It awaits a new independent Astra review; no harness is changed.
 
 The WP2 focused receipt records JSON/TOML structure, exact 46-change coverage,
 commit/tree/parent identities, ordered dependencies, baseline closures, source
