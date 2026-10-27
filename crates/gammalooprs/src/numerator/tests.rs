@@ -1,56 +1,40 @@
 use brotli::CompressorWriter;
-use feynkit_generator::{
-    GenerationFilter, GenerationOptions, NumeratorGrouping, Process, VertexSelector,
-};
-use idenso::{dirac::GammaSimplifier, representations::Bispinor};
+use feynkit_generator::{Loops, Naming, NumeratorOptions, Process, Restrict, Run, TopologyRules, VertexSelector};
+use idenso::dirac::GammaSimplifier;
+use idenso::representations::Bispinor;
 use insta::assert_snapshot;
 use linnet::half_edge::involution::Orientation;
-use spenso::{
-    algebra::{complex::Complex, upgrading_arithmetic::FallibleSub},
-    iterators::IteratableTensor,
-    network::library::symbolic::ETS,
-    structure::{
-        representation::{Minkowski, RepName},
-        slot::IsAbstractSlot,
-        HasStructure,
-    },
-    tensors::{
-        data::{DenseTensor, SparseOrDense, StorageTensor},
-        parametric::{atomcore::TensorAtomMaps, ParamTensor},
-    },
-};
-use std::{
-    fs::File,
-    io::BufWriter,
-    path::{Path, PathBuf},
-    sync::Arc,
-};
-use symbolica::{
-    atom::{Atom, AtomCore},
-    domains::rational::Rational,
-    function, parse,
-};
+use spenso::algebra::complex::Complex;
+use spenso::algebra::upgrading_arithmetic::FallibleSub;
+use spenso::iterators::IteratableTensor;
+use spenso::network::library::symbolic::ETS;
+use spenso::structure::representation::{Minkowski, RepName};
+use spenso::structure::slot::IsAbstractSlot;
+use spenso::structure::HasStructure;
+use spenso::tensors::data::{DenseTensor, SparseOrDense, StorageTensor};
+use spenso::tensors::parametric::atomcore::TensorAtomMaps;
+use spenso::tensors::parametric::ParamTensor;
+use std::fs::File;
+use std::io::BufWriter;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use symbolica::atom::{Atom, AtomCore};
+use symbolica::domains::rational::Rational;
+use symbolica::{function, parse};
 
-use crate::{
-    cross_section::Amplitude,
-    feyngen::feynkit::FeynmanDiagramGammaLoopExt,
-    graph::{BareGraph, Graph},
-    initialize_reps,
-    model::Model,
-    momentum::{Dep, ExternalMomenta, Helicity},
-    momentum::sample::{LoopMomenta, MomentumSample},
-    numerator::{aind::Aind, ContractionSettings, ExtraInfo, GlobalPrefactor, Network},
-    tests_from_pytest::{
-        load_amplitude_output, load_generic_model, sample_generator, test_export_settings,
-    },
-    utils::{self, ApproxEq, F},
-    DependentMomentaConstructor, Externals, RotationSetting, Settings,
-};
+use crate::cross_section::Amplitude;
+use crate::feyngen::feynkit::FeynmanDiagramGammaLoopExt;
+use crate::graph::{BareGraph, Graph};
+use crate::{DependentMomentaConstructor, Externals, RotationSetting, Settings, initialize_reps, utils};
+use crate::model::Model;
+use crate::momentum::{Dep, ExternalMomenta, Helicity};
+use crate::momentum::sample::{LoopMomenta, MomentumSample};
+use crate::numerator::aind::Aind;
+use crate::numerator::{ContractionSettings, ExtraInfo, GlobalPrefactor, Network};
+use crate::tests_from_pytest::{load_amplitude_output, load_generic_model, sample_generator, test_export_settings};
+use crate::utils::{ApproxEq, F};
 
-use super::{
-    Evaluate, EvaluatorOptions, Numerator, NumeratorCompileOptions, NumeratorEvaluatorOptions,
-    UnInit,
-};
+use super::{Evaluate, EvaluatorOptions, Numerator, NumeratorCompileOptions, NumeratorEvaluatorOptions, UnInit};
 
 #[test]
 fn hhgghh() {
@@ -920,32 +904,36 @@ fn one_loop_lbl_concretize() {
 fn dumb_four_gluon() {
     let model = load_generic_model("sm");
     let process = Process::new(Vec::<i64>::new(), Vec::<i64>::new());
-    let options = GenerationOptions::default().with_loop_count(2, 2)
+    let request = process
+        .amplitude(Loops::total(2..=2))
+        .with_topology(
+            TopologyRules::new()
+                .with_self_loops(true)
+                .with_max_vertices(1),
+        )
+        .with_restrict(Restrict::new().only_vertices([VertexSelector::Name("V_37".to_owned())]));
+    let generated = request
+        .generate(Arc::new(model.clone()), &Run::default())
         .unwrap()
-        .allow_self_loops(true)
-        .max_vertices(1)
-        .numerator_grouping(NumeratorGrouping::None)
-        .with_graph_filter(GenerationFilter::VertexAllow(vec![VertexSelector::Name(
-            "V_37".to_owned(),
-        )]));
-    let generated = process.generate_diagrams(Arc::new(model.clone()), &options)
+        .build(
+            &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+            &Run::default(),
+        )
         .unwrap();
     let diagram = generated
-        .diagrams
-        .into_iter()
+        .diagrams()
+        .iter()
         .find(|diagram| {
             diagram.vertices().count() == 1
                 && diagram.edges().count() == 2
                 && diagram.vertices().all(|(_, vertex)| {
-                    vertex.interaction.is_some_and(|rule| {
-                        model.vertex_rule_by_id(rule).unwrap().name == "V_37"
-                    })
+                    vertex
+                        .interaction
+                        .is_some_and(|rule| model.vertex_rule_by_id(rule).unwrap().name == "V_37")
                 })
         })
         .expect("canonical generation should produce the two-loop four-gluon vacuum graph");
-    let graph = diagram
-        .to_gamma_loop_graph(None, true)
-        .unwrap();
+    let graph = diagram.to_gamma_loop_graph(None, true).unwrap();
 
     let num = Numerator::default().from_graph(&graph, &GlobalPrefactor::default());
     // println!("{}", num.state.color);
@@ -976,7 +964,6 @@ fn dumb_four_gluon() {
     assert_snapshot!(expanded.to_canonical_string());
 }
 
-
 mod failing {
     use super::*;
 
@@ -991,7 +978,8 @@ mod failing {
             .join("GL_OUTPUT");
 
         let model = Model::from_file(String::from(
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("src/test_resources")
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("src/test_resources")
                 .join("gammaloop_models/sm.yaml")
                 .to_str()
                 .unwrap(),
@@ -1062,7 +1050,7 @@ mod failing {
                 ExternalMomenta::Independent([F(592.625), F(0.), F(0.), F(566.8116)]), // 1
                 ExternalMomenta::Independent([F(579.375), F(0.), F(0.), F(-566.8116)]), // 2
                 ExternalMomenta::Independent([F(592.625), F(125.7463), F(504.2705), F(-226.2178)]), // 3
-                ExternalMomenta::Dependent(Dep::Dep),                                  // 4
+                ExternalMomenta::Dependent(Dep::Dep), // 4
             ],
             helicities: vec![
                 Helicity::MINUS,

@@ -1,19 +1,15 @@
 use cgmath::{Vector2, Zero};
-use figment::{providers::Serialized, Figment, Profile};
-use linnet::{
-    half_edge::{
-        involution::{Flow, HedgePair},
-        layout::force::ForceLayoutSession,
-        nodestore::DefaultNodeStore,
-        NodeIndex,
-    },
-    parser::set::DotGraphSet,
-};
+use figment::providers::Serialized;
+use figment::{Figment, Profile};
+use linnet::half_edge::involution::{Flow, HedgePair};
+use linnet::half_edge::layout::force::ForceLayoutSession;
+use linnet::half_edge::nodestore::NodeForest;
+use linnet::half_edge::NodeIndex;
+use linnet::parser::set::DotGraphSet;
 
 use crate::{LayoutAlgo, TypstEdge, TypstGraph, TypstHedge, TypstNode, TypstPoint};
 
-type NativeForceSession<'a> =
-    ForceLayoutSession<'a, TypstEdge, TypstNode, TypstHedge, DefaultNodeStore<TypstNode>>;
+type NativeForceSession<'a> = ForceLayoutSession<'a, TypstEdge, TypstNode, TypstHedge, NodeForest>;
 
 self_cell::self_cell! {
     struct ForceLayoutCell {
@@ -169,7 +165,7 @@ impl ForceLayoutStream {
 
     pub fn node_names(&self) -> Vec<String> {
         let owner = self.cell.borrow_owner();
-        (0..owner.n_nodes())
+        (0..owner.node_bound())
             .map(|i| {
                 owner[NodeIndex(i)]
                     .name

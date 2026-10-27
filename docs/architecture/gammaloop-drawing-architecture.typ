@@ -34,22 +34,20 @@ rendering run has these steps:
 + Clinnet stages the input DOT and a generated Typst entrypoint for each graph, then the `linnet`
    CLI compiles it with an external Typst 0.15 executable. Its thin DOT adapter parses that input
    and delegates graph styling, layout, and drawing to Linnest's generic renderer.
-+ `linnet-py` owns a separate in-process preparation boundary. It serializes only names, indices,
-   incidence, flow, and orientation into a versioned `linnest-graph-spec` CBOR document; arbitrary
-   Python `.data` and DOT `GlobalData` never enter it. The wheel embeds Linnest, Kurvst, CeTZ 0.5.1,
-   oxifmt 1.0.0, and MiTeX 0.2.6, stages them with the graph spec, and invokes the embedded Rust Typst compiler. It has
-   no Clinnet library dependency and does not discover or launch a Typst executable.
-+ Both preparers invoke Typst with constant-sized process arguments. Their generated entrypoints
++ `linnet-py` and the domain displays draw natively through `linnet-render-py`: Linnest's Rust
+   renderer lays out and paints the graph as SVG, and the embedded Rust Typst compiler typesets
+   only labels and titles. Arbitrary Python `.data` and DOT `GlobalData` never enter the drawing.
+   The wheels embed no Typst package or plugin (Linnest, Kurvst, CeTZ, oxifmt or MiTeX), have no
+   Clinnet library dependency and do not discover or launch a Typst executable.
++ Clinnet invokes Typst with constant-sized process arguments. Its generated entrypoints
    statically import the selected template and each referenced user module once, materialize the
    native configuration dictionary, and call the template's mandatory `render(config)` export.
-   Configuration is not
-   flattened into `sys.inputs`; the Python entrypoint adds `graph-spec-path`, while Clinnet adds
-   `data-path` for its DOT adapter.
+   Configuration is not flattened into `sys.inputs`; Clinnet adds `data-path` for its DOT adapter.
 + Linnest owns the generic figure/layout implementation. It has no particle, momentum, amplitude,
    or cross-section mode. The GammaLoop path supplies its generated template bundle instead,
    binding the model-specific `edge-style.typ` callbacks and interpreting GammaLoop-owned options
    for its generic, amplitude, and cross-section presets.
-+ The DOT and Python adapters first construct a native Linnest graph, then call the shared
++ The DOT adapter first constructs a native Linnest graph, then calls the shared
    `attach-elements(g, elements)` operation. This uses `graph.map` normalization for structural
    fields such as positions and spring lengths while preserving native Typst data.
 + GammaLoop optionally prepares the dangling endpoints, then supplies ordinary physics style
@@ -67,6 +65,28 @@ rendering run has these steps:
    typesets the label pages. Configurations that need Typst (templates, selectors, graph styles,
    drawing options, titles) and cross sections, whose initial states open before layout, still
    compile this Typst renderer.
+
+Inspection targets are a property of the output, not of the drawing: the transparent
+`#linnet-node-*`, `#linnet-edge-*` and `#linnet-halfedge-*` links that an interactive viewer
+decorates for hover, selection and keyboard focus. Each is a PDF link annotation or an SVG anchor,
+and edges carry many, so static output omits them. Typst `draw` emits them only with
+`inspection-targets: true`; its default `auto` follows the compile input
+`linnest-inspection-targets`, which documents, manuals, docs assets, Clinnet and GammaLoop CLI
+drawings leave unset. `linnest::svg::Figure` serializes one native drawing either as its static
+`svg()` or as `interactive_svg()`. Python `DiagramRender` snapshots keep both: HTML and notebook
+display use the interactive pages, while `to_svg()`, `_repr_svg_()` and file exports use the
+static pages; `to_svg(interactive=True)` requests the interactive SVG explicitly. On the Typst
+route one SVG compile with that input serves both outputs, since a notebook display requests both:
+`Scene::static_svg` removes the targets and the groups that held only them, leaving the document
+that compiling without the input produces. PDF and PNG exports compile without it.
+
+Label overlaps are measured by the placement code itself. The shared `label_placement` measure
+clips painted edge lines exactly against each chosen label's text box, as the search scores them,
+and lists the labels, nodes, self-loop bends and momentum arrows whose boxes share an area with
+the label. Native label feedback (`impred_labels`) scores its passes by the painted lines and
+labels it lists. On the Typst route the compile input `linnest-label-report=true` makes `draw`
+record the whole measure as `<linnest-label-report>` metadata, which the drawing benchmark's
+`--label-report` collects and compares with a baseline.
 
 The rendering contract has no evaluated-string mode. Generated particle styles are ordinary
 Typst dictionaries/functions in `edge-style.typ`, backed by
@@ -104,16 +124,12 @@ Python strings remain data.
   typed drawing metadata and render configuration, explicit DOT codecs, and module references.
   Subgraphs retain Linnet's native half-edge set and add only the zero-crown node IDs that the set
   cannot represent, keeping isolated nodes visible to Python graph operations.
-  Its rendering methods and notebook SVG display prepare a versioned CBOR topology and typed Typst
-  configuration, then compile the staged standalone project in-process through the `typst` Python
-  package. It shares Linnest's renderer with Clinnet but owns its native preparation and package
-  staging.
+  Its rendering methods and notebook SVG display draw through `linnet-render-py` and Linnest's
+  native SVG renderer, which Clinnet's Typst route shares only through the Linnest package.
 
 GammaLoop's particle policy is ordinary Typst styling and has no Python dependency. Its exported
-`figure.typ` is a DOT adapter requiring `data-path`; Python's renderer supplies `graph-spec-path`
-instead, so selecting that figure directly from Python is not supported. Python callers can use
-generic `DrawingSelectors` or an imported Typst styling module, and retain Python's separate data
-model. The editable Python physics example is an independent example, not GammaLoop infrastructure.
+`figure.typ` is a DOT adapter requiring `data-path`; Python renders natively and selects no Typst
+template. Python callers use generic `DrawingSelectors` and retain Python's separate data model. The editable Python physics example is an independent example, not GammaLoop infrastructure.
 
 == Data Ownership
 
@@ -157,9 +173,9 @@ digraph demo {
   edge [particle="a"];
 
   ext0 [style=invis];
-  ext0 -> v0:0 [id=0, is_cut=0, initial_state_connection=true];
+  ext0 -> v0:0 [id=0, is_cut=0];
   v0:1 -> v1:2 [id=1, particle="d", lmb_id=0];
-  v1:3 -> ext1 [id=2, particle="a", is_cut=0, initial_state_connection=true];
+  v1:3 -> ext1 [id=2, particle="a", is_cut=0];
   ext1 [style=invis];
 }
 ```
@@ -183,8 +199,11 @@ Important parser rules:
 
 == GammaLoop DOT Syntax
 
-GammaLoop expects canonical attribute names. Some older aliases may be mentioned
-by warnings, but new DOT should use the names below.
+GammaLoop imports DOT through FeynKit's compact importer, which resolves particles,
+interactions, cuts and loop momenta, then fills in every numerator fragment and the projector
+the input omits from the model's Feynman rules. GammaLoop applies the remaining attributes
+below itself. It expects canonical attribute names. Some older aliases may be mentioned by
+warnings, but new DOT should use the names below.
 
 === Graph Attributes
 
@@ -208,11 +227,11 @@ for inspection but are not input knobs.
 
 === Node Attributes
 
-/ `int_id`: UFO vertex-rule id. If omitted, GammaLoop infers the vertex rule from the
-  oriented incident particles when possible.
+/ `int_id`: UFO vertex-rule name. If omitted, FeynKit matches the vertex rule from the
+  incident particles; it is required when several rules match.
 
-/ `num`: Explicit vertex numerator. If present, it is used instead of a UFO vertex
-  rule.
+/ `num`: Explicit vertex numerator, used instead of the matched rule's vertex factor. A
+  vertex that matches no rule must carry one.
 
 / `dod`: Degree of divergence override for the vertex.
 
@@ -231,39 +250,33 @@ GraphViz-only presentation fields such as `label`, `shape`, `style`, `pos`,
 / `particle`: Model particle name, for example `"a"`, `"d"`, `"d~"`, `"g"`, `"ghG"`, or
   `"W+"`.
 
-/ `pdg`: Alternative to `particle`; looked up through the model PDG code.
+/ `pdg`: Alternative to `particle`; looked up through the model PDG code. Every edge
+  needs `particle` or `pdg`.
 
-/ `mass`: Symbolica mass expression. With `particle`, this overrides the model mass for
-  that edge. Without `particle`, it creates a mass-only scalar-like edge.
+/ `mass`: Symbolica mass expression overriding the model mass for that edge.
 
-/ `dir`: DOT direction/orientation. `forward` means default orientation, `back` means
-  reversed, and `none` means undirected. If omitted, GammaLoop derives the
-  orientation from the particle.
+/ `dir`: DOT direction/orientation. The orientation follows from the particle; an edge's
+  own `dir` must agree with it, while a default `edge [dir=...]` is drawing style only.
 
-/ `source`: Half-edge payload for the source half-edge. GammaLoop expects JSON5 when the
-  payload carries structured data, for example `source="{ufo_order:2}"`.
+/ `lmb_id`: Loop-momentum-basis slot of a chosen loop edge. Slots are contiguous from
+  zero and complete the basis; without them, momenta are routed through the canonical
+  basis used by generation.
 
-/ `sink`: Half-edge payload for the sink half-edge, with the same JSON5 convention as
-  `source`.
+/ `is_cut`: Initial-state tag of a cross section, on an incoming and an outgoing dangling
+  leg of the same particle or on one internal edge. The graph's optional `final_state`
+  names the particles of its physical cuts; without it every separating cut is physical.
 
-/ `lmb_id`: Loop-momentum-basis id for a chosen loop edge.
-
-/ `is_cut`: Shared sewing key on both dangling halves of a forward-amplitude
-  initial-state connection. Both halves also set `initial_state_connection=true`.
-
-/ `initial_state_connection`: Identifies mechanical forward-amplitude sewing metadata.
-  Canonical cross-section cuts belong to the FeynKit `FeynmanDiagram` artifact
-  and are not inferred from runtime DOT.
-
-/ `num`: Explicit edge numerator. The parser localizes `edgeid(...)`, `sourceid(...)`,
-  and `sinkid(...)` placeholders to the concrete edge and hedge indices.
+/ `num`: Explicit numerator of an internal edge, used instead of the model propagator
+  numerator; external legs carry none. `eid`, `source` and `sink` stand for the edge and
+  its endpoint half-edge indices, and `eid(i)`, `source(i)` and `sink(i)` for the
+  corresponding tensor-index identities.
 
 / `dod`: Degree of divergence override for the edge.
 
 / `name`: Optional semantic edge name.
 
 / `is_dummy`: Boolean marking a dummy edge. Dummy edges are filtered out of some physics
-  operations and vertex matching.
+  operations and of vertex matching, where they take the slots after the interaction's legs.
 
 / `momtrop_edge_power`: Optional Symbolica expression controlling the momentum power used by the
   momtrop sampler. This does not change the graph topology.
@@ -447,17 +460,21 @@ to Kurvst's path-in/path-out helpers:
 - `length`: maximum visible arc length for a centered parallel path.
 - `ratio`: maximum visible fraction of the base edge length for a centered
   parallel path.
-- `resolve-length`: how to combine `length` and `ratio`.
+- `resolve-length`: how to combine `length` and `ratio`; `"none"`/`"full"`
+  ignores both limits. A custom function receives one dictionary with
+  `base-length`, `length`, and `ratio`. The latter two entries are positive
+  absolute-length limits or `none`, with the ratio already multiplied by
+  `base-length`.
+- `shift`: arc-length displacement of the centered visible interval.
 - `accuracy`: Kurbo fitting tolerance for the parallel path.
-- `optimize`: whether Kurbo should optimize the fitted path.
 - `offset-side: "label"`: choose the sign of `offset` so the path is on the
   same side as the edge label.
 
 `draw` also accepts `edge-offset`, `edge-length`, `edge-ratio`,
-`edge-resolve-length`, `edge-accuracy`, and `edge-optimize` as defaults for both
-half edges. Derived paths are computed on the base edge geometry before patterns
-and other decorations; node outsets then trim the shifted path, so it remains
-shortened at node boundaries. When both length and ratio limits are set,
+`edge-resolve-length`, and `edge-accuracy` as defaults for both half edges.
+Derived paths are computed on the base edge geometry before patterns and other
+decorations; node outsets then trim the shifted path, so it remains shortened
+at node boundaries. When both length and ratio limits are set,
 `resolve-length` decides which visible span to use. For paired edges, Linnest
 computes that centered visible interval once on the full edge and then projects
 it onto the source and sink halves, so a short layer can cross the source/sink

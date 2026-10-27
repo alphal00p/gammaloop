@@ -33,11 +33,15 @@ def calculate(outgoing, kin):
             sorted(["mu-", "mu+", "a"]),
         ]
     ]
-    generated = model.process(["a"], outgoing, vertex_allow=allowed).generate_diagrams(
-        max_vertices=len(outgoing) - 1,
-        maximum_bridges=None,
-        numerator_grouping=None,
-        progress=None,
+    generated = (
+        model.process(["a"], outgoing)
+        .amplitude(
+            loops=hep.Loops.total(0),
+            restrict=hep.Restrict().only_vertices(allowed),
+            topology=hep.TopologyRules(max_vertices=len(outgoing) - 1),
+        )
+        .generate()
+        .build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
     )
     assert len(generated.diagrams) == len(outgoing) - 1
     ports = S("radiation::i0", "radiation::i1", "radiation::i2", "radiation::i3")

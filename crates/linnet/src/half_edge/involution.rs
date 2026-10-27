@@ -1,25 +1,22 @@
-use std::{
-    fmt::Display,
-    num::ParseIntError,
-    ops::{Index, IndexMut, Mul, Neg},
-    str::FromStr,
-};
+use std::fmt::Display;
+use std::num::ParseIntError;
+use std::ops::{Index, IndexMut, Mul, Neg};
+use std::str::FromStr;
 
 use crate::define_indexed_vec;
 pub use crate::num_traits::{Pow, Sign, SignError, SignOrZero};
 use crate::parser::dot_id;
-use rand::{rngs::SmallRng, Rng, SeedableRng};
+use rand::rngs::SmallRng;
+use rand::{Rng, SeedableRng};
 use thiserror::Error;
 
+use super::builder::HedgeData;
+use super::nodestore::Topology;
 #[cfg(feature = "rkyv")]
 use super::subgraph::Inclusion;
-use super::{
-    builder::HedgeData,
-    nodestore::{NodeStorage, NodeStorageOps},
-    subgraph::SubSetLike,
-    swap::Swap,
-    GVEdgeAttrs, HedgeGraph, NodeIndex,
-};
+use super::subgraph::SubSetLike;
+use super::swap::Swap;
+use super::{GVEdgeAttrs, HedgeGraph, NodeIndex};
 
 define_indexed_vec!(
     /// A type-safe wrapper around a `usize` representing an undirected edge in the graph.
@@ -291,7 +288,7 @@ impl<H> HedgePairWithData<H> {
 }
 impl<H> HedgePairWithData<&H> {
     #[allow(clippy::too_many_arguments)]
-    pub fn dot_fmt<W: std::fmt::Write, E, V, N: NodeStorageOps<NodeData = V>>(
+    pub fn dot_fmt<W: std::fmt::Write, E, V, N: Topology>(
         &self,
         writer: &mut W,
         graph: &HedgeGraph<E, V, H, N>,
@@ -365,7 +362,7 @@ impl<H> HedgePairWithData<&H> {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn dot_io<W: std::io::Write, E, V, N: NodeStorageOps<NodeData = V>>(
+    pub fn dot_io<W: std::io::Write, E, V, N: Topology>(
         &self,
         writer: &mut W,
         graph: &HedgeGraph<E, V, H, N>,
@@ -513,7 +510,7 @@ impl Display for HedgePair {
 }
 
 impl HedgePair {
-    pub fn add_data_of<'a, S: SubSetLike, V, E, H, N: NodeStorage<NodeData = V>>(
+    pub fn add_data_of<'a, S: SubSetLike, V, E, H, N: Topology>(
         self,
         graph: &'a HedgeGraph<E, V, H, N>,
         subgraph: &S,
@@ -547,7 +544,7 @@ impl HedgePair {
         }
     }
 
-    pub fn add_data<V, E, H, N: NodeStorage<NodeData = V>>(
+    pub fn add_data<V, E, H, N: Topology>(
         self,
         graph: &HedgeGraph<E, V, H, N>,
     ) -> HedgePairWithData<&H> {
@@ -813,6 +810,10 @@ impl HedgePair {
         }
     }
 
+    /// Always inlined, so edge iteration keeps the pair in registers: returned
+    /// through memory, its narrow field stores cannot forward to the wide load
+    /// that copies it, which cost `all_bonds` nearly half its run time.
+    #[inline(always)]
     pub fn from_half_edge_with_subgraph<E, S: SubSetLike>(
         hedge: Hedge,
         involution: &Involution<E>,
@@ -1617,8 +1618,17 @@ impl<E> Involution<E> {
     /// returns the pair of hedges: (source, sink)
     pub fn add_pair(&mut self, data: E, directed: impl Into<Orientation>) -> (Hedge, Hedge) {
         let orientation = directed.into();
-        let source = self.add_identity(data, orientation, Flow::Source);
-        let sink = self.connect_to_identity(source).unwrap();
+        let source = self.inv.len();
+        let sink = Hedge(source.0 + 1);
+        // Both endpoints are new: write their final mappings directly instead
+        // of creating an identity and moving its data back out to connect it.
+        self.inv.reserve(2);
+        self.inv.push(InvolutiveMapping::Source {
+            data: EdgeData::new(data, orientation),
+            sink_idx: sink,
+        });
+        self.inv
+            .push(InvolutiveMapping::Sink { source_idx: source });
         (source, sink)
     }
 
@@ -1843,22 +1853,7 @@ impl<E> Involution<E> {
     }
 
     fn delete_impl<S: SubSetLike>(&mut self, graph: &S) -> (HedgeVec<InvolutiveMapping<E>>, Hedge) {
-        let mut left = Hedge(0);
-        let mut extracted = self.inv.len();
-        while left < extracted {
-            if !graph.includes(&left) {
-                //left is in the right place
-                left.0 += 1;
-            } else {
-                //left needs to be swapped
-                extracted.0 -= 1;
-                if !graph.includes(&extracted) {
-                    //only with an extracted that is in the wrong spot
-                    self.swap(left, extracted);
-                    left.0 += 1;
-                }
-            }
-        }
+        let left = self.partition(|h| !graph.includes(h));
 
         for i in 0..(left.0) {
             if self.inv(Hedge(i)) >= left {

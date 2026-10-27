@@ -1,13 +1,11 @@
 use std::iter;
 
-use crate::{
-    momentum::{
-        Dep, Energy, ExternalMomenta, FourMomentum, Helicity, ThreeMomentum, sample::ExternalIndex,
-        signature::SignatureLike,
-    },
-    settings::runtime::kinematic::Externals,
-    utils::{F, FloatLike, newton_solver::newton_iteration_and_derivative},
-};
+use crate::momentum::sample::ExternalIndex;
+use crate::momentum::signature::SignatureLike;
+use crate::momentum::{Dep, Energy, ExternalMomenta, FourMomentum, Helicity, ThreeMomentum};
+use crate::settings::runtime::kinematic::Externals;
+use crate::utils::newton_solver::newton_iteration_and_derivative;
+use crate::utils::{F, FloatLike};
 
 use crate::utils::serde_utils::{IsDefault, is_false, show_defaults_helper};
 use bincode_trait_derive::{Decode, Encode};
@@ -17,7 +15,8 @@ use linnet::num_traits::SignOrZero;
 use rand::Rng;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use symbolica::{domains::float::Real, numerical_integration::MonteCarloRng};
+use symbolica::domains::float::Real;
+use symbolica::numerical_integration::MonteCarloRng;
 use tracing::{debug, warn};
 use typed_index_collections::TiVec;
 
@@ -687,16 +686,14 @@ mod tests {
     use linnet::half_edge::involution::Hedge;
     use typed_index_collections::TiVec;
 
-    use crate::{
-        DependentMomentaConstructor,
-        graph::{FeynmanGraph, Graph},
-        initialisation::test_initialise,
-        model::Model,
-        momentum::sample::ExternalIndex,
-        momentum::signature::SignatureLike,
-        momentum::{FourMomentum, SignOrZero},
-        utils::{F, FloatLike, f128, load_generic_model},
-    };
+    use crate::DependentMomentaConstructor;
+    use crate::graph::{FeynmanGraph, Graph};
+    use crate::initialisation::test_initialise;
+    use crate::model::Model;
+    use crate::momentum::sample::ExternalIndex;
+    use crate::momentum::signature::SignatureLike;
+    use crate::momentum::{FourMomentum, SignOrZero};
+    use crate::utils::{F, FloatLike, f128, load_generic_model};
 
     #[test]
     fn arb_external_cache_preserves_native_constraints_and_archive_layout() {
@@ -970,7 +967,7 @@ mod tests {
     fn test_photon_box() {
         test_initialise().unwrap();
         let sm = load_generic_model("sm");
-        let mut graphs = Graph::import_dot(
+        let mut graphs = Graph::from_dot(
             "digraph photon_box {
                 ext [style=invis];
                 ext -> v1:0 [particle=a,id=0]; ext -> v2:1 [particle=a,id=1];
@@ -990,7 +987,7 @@ mod tests {
     fn test_aa_tt() {
         test_initialise().unwrap();
         let sm = load_generic_model("sm");
-        let mut graphs = Graph::import_dot(
+        let mut graphs = Graph::from_dot(
             r#"digraph aa_tt {
                 ext [style=invis];
                 ext -> v1:0 [particle=a,id=0]; ext -> v2:1 [particle=a,id=1];
@@ -1016,7 +1013,7 @@ mod tests {
     fn test_gt_gt() {
         test_initialise().unwrap();
         let sm = load_generic_model("sm");
-        let mut graphs = Graph::import_dot(
+        let mut graphs = Graph::from_dot(
             "digraph gt_gt {
                 ext [style=invis];
                 ext -> v1:0 [particle=g,id=0]; ext -> v1:1 [particle=t,id=1];

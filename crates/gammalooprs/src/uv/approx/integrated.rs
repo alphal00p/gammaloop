@@ -1,63 +1,45 @@
 use color_eyre::Result;
 use eyre::{WrapErr, eyre};
 use gammaloop_tracing_filter::debug_instrument;
-use idenso::{
-    CookMode, CookSettings,
-    color::ColorSimplifySettings,
-    dirac::{AGS, GammaSimplifySettings},
-    representations::Bispinor,
-    tensor::{
-        ContractSettings, SymbolicNetExt, SymbolicNetParse, SymbolicTensor,
-        inference::InterfaceInference,
-    },
-};
+use idenso::color::ColorSimplifySettings;
+use idenso::dirac::{AGS, GammaSimplifySettings};
+use idenso::representations::Bispinor;
+use idenso::tensor::inference::InterfaceInference;
+use idenso::tensor::{ContractSettings, SymbolicNetExt, SymbolicNetParse, SymbolicTensor};
+use idenso::{CookMode, CookSettings};
 
-use linnet::half_edge::{
-    HedgeGraph,
-    builder::HedgeGraphBuilder,
-    involution::{EdgeIndex, HedgePair},
-    subgraph::{ModifySubSet, SuBitGraph, SubGraphLike, SubSetLike, SubSetOps},
-};
-use spenso::{
-    network::{
-        library::symbolic::ETS,
-        parsing::{ParseSettings, SchoonschipExpansionMode, ShorthandParsing},
-        tags::SPENSO_TAG,
-    },
-    structure::{
-        IndexedStructure,
-        abstract_index::AbstractIndex,
-        representation::{Minkowski, RepName},
-        slot::{DummyAind, ParseableAind, SlotMatch, SlotMatcher},
-    },
-};
-use symbolica::{
-    atom::{Atom, AtomCore, AtomView},
-    domains::{atom::AtomField, integer::Z, rational::Q},
-    function,
-    id::Replacement,
-    parse, parse_lit,
-    poly::{PolyVariable, series::Series},
-};
+use linnet::half_edge::HedgeGraph;
+use linnet::half_edge::builder::HedgeGraphBuilder;
+use linnet::half_edge::involution::{EdgeIndex, HedgePair};
+use linnet::half_edge::subgraph::{ModifySubSet, SuBitGraph, SubGraphLike, SubSetLike, SubSetOps};
+use spenso::network::library::symbolic::ETS;
+use spenso::network::parsing::{ParseSettings, SchoonschipExpansionMode, ShorthandParsing};
+use spenso::network::tags::SPENSO_TAG;
+use spenso::structure::IndexedStructure;
+use spenso::structure::abstract_index::AbstractIndex;
+use spenso::structure::representation::{Minkowski, RepName};
+use spenso::structure::slot::{DummyAind, ParseableAind, SlotMatch, SlotMatcher};
+use symbolica::atom::{Atom, AtomCore, AtomView};
+use symbolica::domains::atom::AtomField;
+use symbolica::domains::integer::Z;
+use symbolica::domains::rational::Q;
+use symbolica::id::Replacement;
+use symbolica::poly::PolyVariable;
+use symbolica::poly::series::Series;
+use symbolica::{function, parse, parse_lit};
 use symbolica_utils::ReplaceBuilderExt;
 use vakint::{Vakint, VakintExpression, vakint_symbol};
 
-use crate::{
-    debug_tags,
-    graph::{LMBext, LoopMomentumBasis},
-    numerator::aind::Aind,
-    utils::{GS, W_},
-    uv::{
-        ApproximationType, UltravioletGraph,
-        approx::{
-            ForestNodeLike, Rooted, UVCtx,
-            local_4d::{FourDSector, Local4dCts},
-        },
-        marker::{UvMarker, UvOperation},
-        settings::VakintSettings,
-        uv_graph::UVE,
-    },
-};
+use crate::debug_tags;
+use crate::graph::{LMBext, LoopMomentumBasis};
+use crate::numerator::aind::Aind;
+use crate::utils::{GS, W_};
+use crate::uv::approx::local_4d::{FourDSector, Local4dCts};
+use crate::uv::approx::{ForestNodeLike, Rooted, UVCtx};
+use crate::uv::marker::{UvMarker, UvOperation};
+use crate::uv::settings::VakintSettings;
+use crate::uv::uv_graph::UVE;
+use crate::uv::{ApproximationType, UltravioletGraph};
 
 /// Laurent projections of an integrated counterterm.
 ///
@@ -1779,7 +1761,7 @@ pub(crate) fn to_vakint_integrand<
             graph.identify_nodes(&nodes_to_merge, ());
         }
 
-        graph.forget_identification_history();
+        graph.compact();
         debug_tags!(#uv, #integrated, #vakint, #graph, #dump;
             log.graph = %graph.base_dot(),
             "Graph"
@@ -2198,7 +2180,8 @@ mod tests {
     use spenso::structure::abstract_index::AIND_SYMBOLS;
     use symbolica::symbol;
 
-    use crate::{initialisation::test_initialise, utils::symbolica_ext::Q_I};
+    use crate::initialisation::test_initialise;
+    use crate::utils::symbolica_ext::Q_I;
 
     #[test]
     fn integrated_projections_preserve_open_ports_when_a_laurent_part_vanishes() -> Result<()> {
@@ -3142,20 +3125,19 @@ mod tests {
 
     #[test]
     fn integrated_backend_preserves_numeric_open_ports_in_both_projection_modes() -> Result<()> {
-        use crate::{
-            finalized_runtime_dot,
-            graph::Graph,
-            numerator::AppliedFeynmanRule,
-            uv::{Spinney, UVgenerationSettings, hedge_poset::OwnedForestNode},
-        };
+        use crate::dot;
+        use crate::graph::Graph;
+        use crate::numerator::AppliedFeynmanRule;
+        use crate::uv::hedge_poset::OwnedForestNode;
+        use crate::uv::{Spinney, UVgenerationSettings};
         use linnet::half_edge::subgraph::InternalSubGraph;
 
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(digraph numeric_open_vacuum {
+        let graph: Graph = dot!(digraph numeric_open_vacuum {
             graph [projector=1]
             edge [particle=scalar_1 num=1 mass=2]
             node [num=1]
-            a -> a [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:1}"]
+            a -> a [id=0 lmb_id=0]
         }, "scalars")?;
         let full = graph.full_filter();
         let current = OwnedForestNode {
@@ -3984,20 +3966,21 @@ mod tests {
 
     #[test]
     fn vakint_preparation_reduces_color_before_opening_traces() {
-        use crate::{finalized_runtime_dot, graph::Graph};
+        use crate::dot;
+        use crate::graph::Graph;
         use idenso::{coad, cof, color_cas, color_f, color_idx, color_t};
         use spenso::{g, trace_sym};
 
         test_initialise().unwrap();
-        let graph: Graph = finalized_runtime_dot!(digraph color_vakint_tadpole {
+        let graph: Graph = dot!(digraph color_vakint_tadpole {
             projector=1
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
-            incoming -> a [id=0 sink="{ufo_order:0}"]
-            a -> a [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:2}"]
-            a -> outgoing [id=2 source="{ufo_order:3}"]
+            incoming -> a [particle=H id=0]
+            a -> a [particle=H id=1 lmb_id=0]
+            a -> outgoing [particle=H id=2]
         })
         .unwrap();
         let [a, b, c, d] = [
@@ -4044,18 +4027,19 @@ mod tests {
 
     #[test]
     fn vakint_additional_normalization_requires_a_scalar_interface() {
-        use crate::{finalized_runtime_dot, graph::Graph};
+        use crate::dot;
+        use crate::graph::Graph;
 
         test_initialise().unwrap();
-        let graph: Graph = finalized_runtime_dot!(digraph normalization_tadpole {
+        let graph: Graph = dot!(digraph normalization_tadpole {
             projector=1
             edge [num=1 mass=2]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
-            incoming -> a [id=0 sink="{ufo_order:0}"]
-            a -> a [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:2}"]
-            a -> outgoing [id=2 source="{ufo_order:3}"]
+            incoming -> a [particle=H id=0]
+            a -> a [particle=H id=1 lmb_id=0]
+            a -> outgoing [particle=H id=2]
         })
         .unwrap();
         let momentum = function!(GS.emr_mom, 1);
@@ -4102,17 +4086,18 @@ mod tests {
 
     #[test]
     fn vakint_conversion_preserves_squared_masses() {
-        use crate::{finalized_runtime_dot, graph::Graph};
+        use crate::dot;
+        use crate::graph::Graph;
 
         test_initialise().unwrap();
-        let graph: Graph = finalized_runtime_dot!(digraph vakint_mass_tadpole { graph [projector=1]
+        let graph: Graph = dot!(digraph vakint_mass_tadpole { graph [projector=1]
             edge [num=1 mass=2]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
-            incoming -> a [id=0 sink="{ufo_order:0}"]
-            a -> a [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:2}"]
-            a -> outgoing [id=2 source="{ufo_order:3}"]
+            incoming -> a [particle=H id=0]
+            a -> a [particle=H id=1 lmb_id=0]
+            a -> outgoing [particle=H id=2]
         })
         .unwrap();
         let momentum = function!(GS.emr_mom, 1);
@@ -4174,17 +4159,17 @@ mod tests {
 
     #[test]
     fn vakint_conversion_rejects_a_lost_active_loop() {
-        use crate::{finalized_runtime_dot, graph::Graph};
+        use crate::dot;
+        use crate::graph::Graph;
 
         test_initialise().unwrap();
-        let graph: Graph =
-            finalized_runtime_dot!(digraph cancelled_tadpole_loop { graph [projector=1]
-                edge [num=1 mass=2]
-                node [num=1]
-                a -> a [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:1}"]
-                a -> a [id=1 lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:3}"]
-            })
-            .unwrap();
+        let graph: Graph = dot!(digraph cancelled_tadpole_loop { graph [projector=1]
+            edge [num=1 mass=2]
+            node [num=1]
+            a -> a [particle=H id=0 lmb_id=0]
+            a -> a [particle=H id=1 lmb_id=1]
+        })
+        .unwrap();
         let remaining = graph.get_edge_subgraph(EdgeIndex(1));
         // This is the denominator domain after the other tadpole propagator
         // cancels against its edge-local numerator. The original two-loop
@@ -4229,18 +4214,19 @@ mod tests {
 
     #[test]
     fn affine_vakint_routing_keeps_external_momenta_fixed() {
-        use crate::{finalized_runtime_dot, graph::Graph};
+        use crate::dot;
+        use crate::graph::Graph;
 
         test_initialise().unwrap();
-        let graph: Graph = finalized_runtime_dot!(digraph affine_vakint_tadpole {
+        let graph: Graph = dot!(digraph affine_vakint_tadpole {
             projector=1
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
-            incoming -> a [id=0 sink="{ufo_order:0}"]
-            a -> a [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:2}"]
-            a -> outgoing [id=2 source="{ufo_order:3}"]
+            incoming -> a [particle=H id=0]
+            a -> a [particle=H id=1 lmb_id=0]
+            a -> outgoing [particle=H id=2]
         })
         .unwrap();
         let hard = function!(GS.emr_mom, 1) - function!(GS.emr_mom, 0);
@@ -4341,24 +4327,25 @@ mod tests {
 
     #[test]
     fn nested_active_sunset_keeps_its_two_loop_incidence() {
-        use crate::{finalized_runtime_dot, graph::Graph, momentum::sample::LoopIndex};
+        use crate::dot;
+        use crate::graph::Graph;
+        use crate::momentum::sample::LoopIndex;
 
         test_initialise().unwrap();
-        let graph: Graph =
-            finalized_runtime_dot!(digraph nested_active_sunset { graph [projector=1]
-                edge [num=1 mass=1]
-                node [num=1]
-                ext [style=invis]
-                ext -> a:0 [id=0 sink="{ufo_order:0}"]
-                d:1 -> ext [id=1 source="{ufo_order:0}"]
-                a -> b [id=2 source="{ufo_order:1}" sink="{ufo_order:0}"]
-                b -> c [id=3 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
-                b -> c [id=4 source="{ufo_order:2}" sink="{ufo_order:1}"]
-                c -> d [id=5 source="{ufo_order:2}" sink="{ufo_order:1}"]
-                a -> d [id=6 lmb_id=2 source="{ufo_order:2}" sink="{ufo_order:2}"]
-                b -> c [id=7 lmb_id=1 source="{ufo_order:3}" sink="{ufo_order:3}"]
-            })
-            .unwrap();
+        let graph: Graph = dot!(digraph nested_active_sunset { graph [projector=1]
+            edge [num=1 mass=1]
+            node [num=1]
+            ext [style=invis]
+            ext -> a:0 [particle=H id=0]
+            d:1 -> ext [particle=H id=1]
+            a -> b [particle=H id=2]
+            b -> c [particle=H id=3 lmb_id=0]
+            b -> c [particle=H id=4]
+            c -> d [particle=H id=5]
+            a -> d [particle=H id=6 lmb_id=2]
+            b -> c [particle=H id=7 lmb_id=1]
+        })
+        .unwrap();
         let full = graph
             .full_filter()
             .subtract(&graph.external_filter::<SuBitGraph>());
@@ -4447,19 +4434,20 @@ mod tests {
 
     #[test]
     fn nested_vacuum_denominators_preserve_incidence_and_factorized_numerators() {
-        use crate::{finalized_runtime_dot, graph::Graph};
+        use crate::dot;
+        use crate::graph::Graph;
 
         test_initialise().unwrap();
-        let graph: Graph = finalized_runtime_dot!(digraph nested_vacuum_bubble {
+        let graph: Graph = dot!(digraph nested_vacuum_bubble {
             projector=1
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
-            incoming -> a [id=0 sink="{ufo_order:0}"]
-            b -> outgoing [id=1 source="{ufo_order:0}"]
-            a -> b [id=2 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"]
-            a -> b [id=3 source="{ufo_order:2}" sink="{ufo_order:2}"]
+            incoming -> a [particle=H id=0]
+            b -> outgoing [particle=H id=1]
+            a -> b [particle=H id=2 lmb_id=0]
+            a -> b [particle=H id=3]
         })
         .unwrap();
         let denominators = [(2, 1), (3, -1)].map(|(edge, sign)| {
@@ -4756,10 +4744,8 @@ mod tests {
 
     #[test]
     fn analytic_fixed_gamma_one_two_has_independent_nonzero_weyl_components() -> Result<()> {
-        use crate::{
-            numerator::symbolica_ext::NumeratorAtomExt,
-            utils::{FUN_LIB, TENSORLIB},
-        };
+        use crate::numerator::symbolica_ext::NumeratorAtomExt;
+        use crate::utils::{FUN_LIB, TENSORLIB};
         use idenso::shorthands::UndoShorthands;
         use spenso::network::{ExecutionResult, Sequential, SmallestDegree};
         test_initialise()?;

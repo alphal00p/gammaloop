@@ -1,4 +1,4 @@
-#import "@preview/cetz:0.5.1"
+#import "@preview/cetz:0.5.2"
 #import "../theme.typ": palette
 
 #set page(width: 3.7cm, height: 3.7cm, margin: 1mm, fill: none)

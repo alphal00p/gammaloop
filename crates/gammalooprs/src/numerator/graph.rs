@@ -1,22 +1,17 @@
-use linnet::half_edge::{
-    HedgeGraph,
-    involution::{EdgeData, Flow, Orientation},
-    subgraph::{SuBitGraph, SubSetLike},
-};
-use spenso::{
-    iterators::IteratableTensor,
-    network::parsing::ShadowedStructure,
-    shadowing::Concretize,
-    structure::{Canonicalized, TensorStructure},
-    tensors::parametric::ParamTensor,
-};
+use linnet::half_edge::HedgeGraph;
+use linnet::half_edge::involution::{EdgeData, Flow, Orientation};
+use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
+use spenso::iterators::IteratableTensor;
+use spenso::network::parsing::ShadowedStructure;
+use spenso::shadowing::Concretize;
+use spenso::structure::{Canonicalized, TensorStructure};
+use spenso::tensors::parametric::ParamTensor;
 use symbolica::atom::{Atom, AtomOrView, FunctionBuilder, Symbol};
 
-use crate::{
-    graph::{Edge, Graph, HedgeData, edge::ParseEdge},
-    model::{Model, ParticleId, ParticleIdGammaLoopExt},
-    utils::GS,
-};
+use crate::graph::edge::ParseEdge;
+use crate::graph::{Edge, Graph, HedgeData};
+use crate::model::{Model, ParticleId, ParticleIdGammaLoopExt};
+use crate::utils::GS;
 
 use super::aind::Aind;
 
@@ -213,33 +208,27 @@ pub trait ReversibleEdge {
 
 impl ReversibleEdge for EdgeData<&Edge> {
     fn pdg(&self, model: &Model) -> isize {
-        self.data
-            .particle()
-            .map(|particle| oriented_pdg(particle.resolve(model).pdg_code, self.orientation))
-            .unwrap_or(0)
+        oriented_pdg(
+            self.data.particle().resolve(model).pdg_code,
+            self.orientation,
+        )
     }
 
     fn spin(&self, model: &Model) -> Option<i64> {
-        self.data
-            .particle()
-            .map(|particle| particle.resolve(model).spin)
+        Some(self.data.particle().resolve(model).spin)
     }
 }
 
 impl ReversibleEdge for EdgeData<&ParseEdge> {
     fn pdg(&self, model: &Model) -> isize {
-        self.data
-            .particle
-            .particle()
-            .map(|particle| oriented_pdg(particle.resolve(model).pdg_code, self.orientation))
-            .unwrap_or(0)
+        oriented_pdg(
+            self.data.particle.particle().resolve(model).pdg_code,
+            self.orientation,
+        )
     }
 
     fn spin(&self, model: &Model) -> Option<i64> {
-        self.data
-            .particle
-            .particle()
-            .map(|particle| particle.resolve(model).spin)
+        Some(self.data.particle.particle().resolve(model).spin)
     }
 }
 
@@ -278,17 +267,18 @@ fn oriented_pdg(pdg: i64, orientation: Orientation) -> isize {
 mod test {
 
     // use env_logger::WriteStyle;
-    use idenso::{
-        CookMode, CookSettings,
-        dirac::GammaSimplifySettings,
-        tensor::{SymbolicNetParse, SymbolicTensor},
-    };
+    use idenso::dirac::GammaSimplifySettings;
+    use idenso::tensor::{SymbolicNetParse, SymbolicTensor};
+    use idenso::{CookMode, CookSettings};
 
-    use crate::{graph::Graph, uv::UltravioletGraph};
+    use crate::graph::Graph;
+    use crate::uv::UltravioletGraph;
     use spenso::network::parsing::ParseSettings;
     use symbolica::parse_lit;
 
-    use crate::{initialisation::test_initialise, model::ModelGammaLoopExt, numerator::aind::Aind};
+    use crate::initialisation::test_initialise;
+    use crate::model::ModelGammaLoopExt;
+    use crate::numerator::aind::Aind;
 
     #[test]
     fn simplify() {
@@ -399,7 +389,7 @@ mod test {
             include_str!("../../../../tests/resources/graphs/qqx_aaa_tree_user_numerator.dot"),
             include_str!("../../../../tests/resources/graphs/trees/qqx_aaa.dot"),
         ] {
-            let graph = Graph::import_dot(source, &model).unwrap().remove(0);
+            let graph = Graph::from_dot(source, &model).unwrap().remove(0);
             let numerator = graph
                 .numerator(&graph.full_filter(), &graph.empty_subgraph())
                 .unwrap();
@@ -430,7 +420,7 @@ mod test {
     fn user_pentabox_numerator_closes_all_external_indices() {
         test_initialise().unwrap();
         let model = crate::utils::load_generic_model("sm");
-        let graph = Graph::import_dot(
+        let graph = Graph::from_dot(
             include_str!("../../../../tests/resources/graphs/qqx_aaa_pentabox_user_numerator.dot"),
             &model,
         )

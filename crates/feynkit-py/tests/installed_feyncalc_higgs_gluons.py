@@ -12,6 +12,7 @@ from symbolica import E, Replacement, S, Symbol
 from symbolica.community import hepkit as hep
 from symbolica.community.hepkit import oneloop
 from symbolica.community.tensor import TensorExpression
+from symbolica.community.graph import Bridges
 
 model = hep.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")
 D, s, m, gs, y, mu, nu, ca, cb, eps = S(
@@ -50,9 +51,16 @@ gluon_vertices = [
     if sorted(v.particles) == sorted([top.antiname, top.name, gluon.name])
 ]
 assert len(yukawa_vertices) == len(gluon_vertices) == 1
-yukawa_tree_result = model.process(
-    [higgs], [top, top.antiparticle], vertex_allow=yukawa_vertices
-).generate_diagrams(max_vertices=1, numerator_grouping=None, progress=None)
+yukawa_tree_result = (
+    model.process([higgs], [top, top.antiparticle])
+    .amplitude(
+        loops=hep.Loops.total(0),
+        restrict=hep.Restrict().only_vertices(yukawa_vertices),
+        topology=hep.TopologyRules(max_vertices=1),
+    )
+    .generate()
+    .build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
+)
 assert len(yukawa_tree_result.diagrams) == 1
 yukawa_tree = yukawa_tree_result.diagrams[0]
 yukawa_tree_kernel = model.expand_couplings(
@@ -65,10 +73,21 @@ identities = S("left_", "right_")
 yukawa_tree_coupling = yukawa_tree_kernel.replace(metric(*identities), E("1"))
 assert (yukawa_tree_coupling + Symbol.I * y).expand() == E("0")
 
-result = model.process(
-    [higgs], [gluon, gluon], vertex_allow=gluon_vertices + yukawa_vertices
-).generate_diagrams(
-    loops=1, max_vertices=3, maximum_bridges=0, numerator_grouping=None, progress=None
+result = (
+    model.process([higgs], [gluon, gluon])
+    .amplitude(
+        loops=hep.Loops.total(1),
+        restrict=hep.Restrict().only_vertices(gluon_vertices + yukawa_vertices),
+        topology=hep.TopologyRules(
+            max_vertices=3,
+            bridges=Bridges.at_most(0),
+            self_energies=hep.Veto.all(),
+            tadpoles=hep.Veto.all(),
+            snails=hep.Veto.massless(),
+        ),
+    )
+    .generate()
+    .build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
 )
 assert len(result.diagrams) == 2
 # P0=k1+k2 is incoming Higgs momentum and P1=k1 the first outgoing gluon.

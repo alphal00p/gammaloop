@@ -6,6 +6,7 @@ from pathlib import Path
 
 from symbolica.community import graph as linnet
 from symbolica.community import hepkit as fk
+from symbolica.community.graph import Bridges
 from symbolica.community.tensor import TensorExpression
 
 
@@ -26,13 +27,22 @@ def external_metrics_snapshot(view):
 model = fk.Model(Path(__file__).parent / "fixtures/scalars_2p_3p.json")
 diagram = next(
     candidate
-    for candidate in model.process(
-        ["scalar_0"], ["scalar_0", "scalar_0"], vertex_allow=["V_3_SCALAR_000"]
+    for candidate in model.process(["scalar_0"], ["scalar_0", "scalar_0"])
+    .amplitude(
+        loops=fk.Loops.total(1),
+        restrict=fk.Restrict().only_vertices(["V_3_SCALAR_000"]),
+        topology=fk.TopologyRules(
+            max_vertices=3,
+            self_loops=False,
+            bridges=Bridges.one_pi_in_loops(),
+            self_energies=fk.Veto.all(),
+            tadpoles=fk.Veto.all(),
+            snails=fk.Veto.massless(),
+        ),
     )
-    .generate_diagrams(
-        loops=1,
-        max_vertices=3,
-        allow_self_loops=False,
+    .generate(run=fk.Run(progress="auto"))
+    .build(
+        fk.NumeratorOptions(naming=fk.Naming.named("D")), run=fk.Run(progress="auto")
     )
     .diagrams
     if len(
@@ -115,8 +125,8 @@ assert all(edge.is_dangling for edge in excised.edges)
 assert excised.loop_count == 0
 assert excised.symmetry_factor == 1
 assert excised.overall_factor_expression() == 1
-assert excised.numerator_prefactor_expression() == 1
-assert excised.projector_expression() == 1
+assert excised.numerator_prefactor_expression() == TensorExpression(1)
+assert excised.projector_expression() == TensorExpression(1)
 assert excised.cuts == []
 excised.validate()
 assert (
@@ -147,7 +157,6 @@ for name in (
     "superficial_degree_of_divergence",
     "uv_expansion",
     "uv_counterterm",
-    "cross_free_family",
     "tensor_reduce",
     "reduce_tensor_numerator",
     "connected_components",

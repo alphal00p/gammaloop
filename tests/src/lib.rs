@@ -4,24 +4,20 @@
 
 use color_eyre::Result;
 
-use gammaloop_api::{
-    CLISettings,
-    commands::CommandExecution,
-    commands::save::SaveState,
-    session::{CliSession, CliSessionState},
-    state::{CommandHistory, RunHistory, State, SyncSettings},
-};
+use gammaloop_api::CLISettings;
+use gammaloop_api::commands::CommandExecution;
+use gammaloop_api::commands::save::SaveState;
+use gammaloop_api::session::{CliSession, CliSessionState};
+use gammaloop_api::state::{CommandHistory, RunHistory, State, SyncSettings};
 
-use gammalooprs::{
-    initialisation::initialise, integrands::HasIntegrand, utils::load_generic_model,
-};
-use std::{
-    env,
-    ffi::OsString,
-    ops::{ControlFlow, Deref, DerefMut},
-    path::{Path, PathBuf},
-    sync::{Once, OnceLock},
-};
+use gammalooprs::initialisation::initialise;
+use gammalooprs::integrands::HasIntegrand;
+use gammalooprs::utils::load_generic_model;
+use std::env;
+use std::ffi::OsString;
+use std::ops::{ControlFlow, Deref, DerefMut};
+use std::path::{Path, PathBuf};
+use std::sync::{Once, OnceLock};
 use tracing::{debug, warn};
 
 /// Serialize tests within one harness, retaining nested locking and panic recovery.
@@ -375,7 +371,7 @@ pub fn setup_sm_differential_lu_cli(test_name: &str) -> Result<CLIState> {
             "import model sm-default",
             r#"set default-runtime kv kinematics.externals='{"type":"constant","data":{"momenta":[[32.0,0.0,0.0,32.0],[32.0,0.0,0.0,-32.0]],"helicities":[1,1]}}'"#,
             "set default-runtime kv subtraction.disable_threshold_subtraction=true",
-            "generate xs e+ e- > d d~ g | e- a d g QED^2==4 [{{2}} QCD=0] --numerator-grouping group_identical_graphs_up_to_sign --clear-existing-processes --only-diagrams",
+            "generate xs e+ e- > d d~ g | e- a d g QED^2==4 [{{2}} QCD=0] --numerator-grouping group_identical_graphs_up_to_sign --clear-existing-processes --only-diagrams --filter-selfenergies true --filter-snails true --filter-tadpoles true --n-cut-blobs 1 1 --n-cut-spectators 0 0",
             "generate",
         ],
     )?;

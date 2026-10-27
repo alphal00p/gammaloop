@@ -1,27 +1,22 @@
-use std::{env, fs, ops::Deref, path::PathBuf, time::Instant};
+use std::ops::Deref;
+use std::path::PathBuf;
+use std::time::Instant;
+use std::{env, fs};
 
-use color_eyre::{
-    Result,
-    eyre::{WrapErr, eyre},
-};
-use gammalooprs::{
-    initialisation::test_initialise,
-    numerator::symbolica_ext::NumeratorAtomExt,
-    utils::{FUN_LIB, GS, TENSORLIB},
-};
-use idenso::{
-    CookMode, CookSettings, color::ColorSimplifySettings, dirac::GammaSimplifySettings,
-    tensor::SymbolicTensor,
-};
-use spenso::{
-    network::{MinResultRank, Sequential},
-    shadowing::symbolica_utils::LogPrint,
-};
-use symbolica::{
-    atom::{Atom, AtomCore},
-    parser::ParseSettings as SymbolicaParseSettings,
-    wrap_input,
-};
+use color_eyre::Result;
+use color_eyre::eyre::{WrapErr, eyre};
+use gammalooprs::initialisation::test_initialise;
+use gammalooprs::numerator::symbolica_ext::NumeratorAtomExt;
+use gammalooprs::utils::{FUN_LIB, GS, TENSORLIB};
+use idenso::color::ColorSimplifySettings;
+use idenso::dirac::GammaSimplifySettings;
+use idenso::tensor::SymbolicTensor;
+use idenso::{CookMode, CookSettings};
+use spenso::network::{MinResultRank, Sequential};
+use spenso::shadowing::symbolica_utils::LogPrint;
+use symbolica::atom::{Atom, AtomCore};
+use symbolica::parser::ParseSettings as SymbolicaParseSettings;
+use symbolica::wrap_input;
 
 fn main() -> Result<()> {
     test_initialise()?;
@@ -91,7 +86,7 @@ fn run_network(label: &str, atom: &Atom) -> Result<()> {
     println!(
         "{label}_network_parse\telapsed_ms={:.3}\tnodes={}\tedges={}\ttensors={}",
         parse_started.elapsed().as_secs_f64() * 1000.0,
-        net.graph.n_nodes(),
+        net.graph.n_live(),
         net.graph.graph.n_edges(),
         net.store.tensors.len()
     );

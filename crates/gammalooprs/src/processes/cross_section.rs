@@ -1,14 +1,13 @@
 use crate::model::ModelGammaLoopExt;
 use feynkit_generator::GenerationType;
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    fmt::{Display, Formatter},
-    fs::{self, File},
-    io::Write,
-    ops::{Index, IndexMut},
-    path::{Path, PathBuf},
-    sync::Mutex,
-};
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::{Display, Formatter};
+use std::fs;
+use std::fs::File;
+use std::io::Write;
+use std::ops::{Index, IndexMut};
+use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 #[cfg(test)]
 mod gauge_sewing_tests;
@@ -20,90 +19,78 @@ use crate::cff::{Esurface, EsurfaceID};
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use itertools::Itertools;
-use rayon::{
-    ThreadPool,
-    iter::{IntoParallelRefMutIterator, ParallelIterator},
-};
+use rayon::ThreadPool;
+use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 use spenso::algebra::algebraic_traits::IsZero;
 use tracing::info;
 use vakint::Vakint;
 
+use crate::cff::esurface::{RaisedEsurfaceData, RaisedEsurfaceGroup, RaisedEsurfaceId};
+use crate::cff::expression::{
+    OrientationID, normalize_cut_edge_support_with_raised_edge_groups,
+    normalize_three_d_expression_cut_support_with_raised_edge_groups,
+};
+use crate::cff::surface::HybridSurfaceID;
+use crate::cff::{CffEnergyDegreeBoundReport, CutCFFIndex};
+use crate::graph::cuts::{CutSet, LuCutSelection, ResidueSelector};
+use crate::graph::edge::EdgeMass;
+use crate::graph::parse::complete_group_parsing;
+use crate::graph::threshold_counterterms::{
+    ThresholdCountertermMultiplier, ThresholdCountertermVariant,
+};
+use crate::graph::{
+    FinalizedCut, FinalizedTopologyThresholdCandidate, GraphGroup, GroupId, LMBext,
+    LmbChannelFallback, LmbIndex, LoopMomentumBasis, ThresholdPinchStatus,
+};
+use crate::integrands::process::cross_section::CrossSectionIntegrandData;
+use crate::integrands::process::{
+    GenericEvaluator, LmbMultiChannelingSetup, ParamBuilder, graph_to_group_id_for_group_structure,
+};
+use crate::model::ParticleId;
+use crate::momentum::Helicity;
+use crate::momentum::sample::{ExternalIndex, SubspaceData};
+use crate::processes::{
+    DotExportSettings, EvaluatorSettings, GraphCutSelectionSubject, GraphGenerationStats,
+    GraphGroupSelectionMode, GraphGroupSelectionPlan, GraphGroupSelectionSpec,
+    GraphSelectionSignatureInventory, GraphSelectionSubject, NamedGraphGenerationReport,
+    RaisedCutSignatureInventory,
+};
+use crate::settings::global::GenerationSettings;
+use crate::settings::runtime::LockedRuntimeSettings;
+use crate::settings::{GlobalSettings, RuntimeSettings};
+use crate::utils::hyperdual_utils::{shape_from_cut_cff_index, simple_n_deriv_shape};
+use crate::utils::{DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, F, GS};
+use crate::uv::approx::{CutStructure, OrientationProjection};
+use crate::uv::forest::ParametricIntegrands;
 use crate::{
-    DependentMomentaConstructor, GammaLoopContext, GammaLoopContextContainer,
-    cff::{
-        CffEnergyDegreeBoundReport, CutCFFIndex,
-        esurface::{RaisedEsurfaceData, RaisedEsurfaceGroup, RaisedEsurfaceId},
-        expression::{
-            OrientationID, normalize_cut_edge_support_with_raised_edge_groups,
-            normalize_three_d_expression_cut_support_with_raised_edge_groups,
-        },
-        surface::HybridSurfaceID,
-    },
-    debug_tags, define_index,
-    graph::{
-        FinalizedCut, FinalizedTopologyThresholdCandidate, GraphGroup, GroupId, LMBext,
-        LmbChannelFallback, LmbIndex, LoopMomentumBasis, ThresholdPinchStatus,
-        cuts::{CutSet, LuCutSelection, ResidueSelector},
-        edge::EdgeMass,
-        parse::complete_group_parsing,
-        threshold_counterterms::{ThresholdCountertermMultiplier, ThresholdCountertermVariant},
-    },
-    integrands::process::{
-        GenericEvaluator, LmbMultiChannelingSetup, ParamBuilder,
-        cross_section::CrossSectionIntegrandData, graph_to_group_id_for_group_structure,
-    },
-    model::ParticleId,
-    momentum::{
-        Helicity,
-        sample::{ExternalIndex, SubspaceData},
-    },
-    processes::{
-        DotExportSettings, EvaluatorSettings, GraphCutSelectionSubject, GraphGenerationStats,
-        GraphGroupSelectionMode, GraphGroupSelectionPlan, GraphGroupSelectionSpec,
-        GraphSelectionSignatureInventory, GraphSelectionSubject, NamedGraphGenerationReport,
-        RaisedCutSignatureInventory,
-    },
-    settings::{
-        GlobalSettings, RuntimeSettings, global::GenerationSettings, runtime::LockedRuntimeSettings,
-    },
-    utils::{
-        DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, F, GS,
-        hyperdual_utils::{shape_from_cut_cff_index, simple_n_deriv_shape},
-    },
-    uv::{
-        approx::{CutStructure, OrientationProjection},
-        forest::ParametricIntegrands,
-    },
+    DependentMomentaConstructor, GammaLoopContext, GammaLoopContextContainer, debug_tags,
+    define_index,
 };
 use eyre::{Context, eyre};
-use linnet::half_edge::{
-    involution::{EdgeIndex, EdgeVec, Orientation},
-    subgraph::{
-        HedgeNode, Inclusion, InternalSubGraph, ModifySubSet, OrientedCut, SuBitGraph,
-        SubGraphLike, SubSetLike, SubSetOps,
-    },
+use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
+use linnet::half_edge::subgraph::{
+    HedgeNode, Inclusion, InternalSubGraph, ModifySubSet, OrientedCut, SuBitGraph, SubGraphLike,
+    SubSetLike, SubSetOps,
 };
 use serde::{Deserialize, Serialize};
-use symbolica::{domains::dual::HyperDual, prelude::*};
+use symbolica::domains::dual::HyperDual;
+use symbolica::prelude::*;
 use three_dimensional_reps::GeneratedThreeDExpression;
 use tracing::{debug, warn};
 use typed_index_collections::{TiVec, ti_vec};
 
-use super::generation_progress::{self, GenerationProcessKind, GenerationProgressPhase};
+use super::generation_progress;
+use super::generation_progress::{GenerationProcessKind, GenerationProgressPhase};
 use super::threshold_counterterms::{
     ResolvedCutGroupThresholdCounterterms, ResolvedThresholdCountertermAssociation,
     ResolvedThresholdCountertermVariant, ResolvedThresholdCounterterms, ThresholdCountertermOrigin,
     ThresholdCountertermSide, ThresholdCountertermVariantId,
 };
 
-use crate::{
-    graph::{ExternalConnection, FeynmanGraph, Graph},
-    integrands::process::{
-        ProcessIntegrand,
-        cross_section::{CrossSectionGraphTerm, CrossSectionIntegrand},
-    },
-    model::{Model, ParticleGammaLoopExt, ParticleIdGammaLoopExt},
-};
+use crate::graph::{ExternalConnection, FeynmanGraph, Graph};
+use crate::integrands::process::ProcessIntegrand;
+use crate::integrands::process::cross_section::{CrossSectionGraphTerm, CrossSectionIntegrand};
+use crate::model::{Model, ParticleGammaLoopExt, ParticleIdGammaLoopExt};
 
 use crate::processes::ProcessDefinition;
 
@@ -1130,8 +1117,9 @@ impl CrossSection {
                 base_external_cache_id: 0,
                 rotations: None,
                 symmetrize_left_right_states: process_definition
-                    .generation_options
-                    .symmetrizes_left_right(),
+                    .request
+                    .cuts()
+                    .symmetrize_left_right,
                 name: self.name.clone(),
                 external_connections: self.external_connections.clone(),
                 n_incoming: self.n_incmoming,
@@ -1308,18 +1296,17 @@ impl FinalizedCut {
             let cut_content_builder = self
                 .cut
                 .iter_edges(&cross_section_graph.graph.underlying)
-                .filter_map(|(orientation, edge_data)| {
-                    Some(if orientation == Orientation::Reversed {
-                        edge_data.data.particle()?.antiparticle(model)
+                .map(|(orientation, edge_data)| {
+                    if orientation == Orientation::Reversed {
+                        edge_data.data.particle().antiparticle(model)
                     } else {
-                        edge_data.data.particle()?
-                    })
+                        edge_data.data.particle()
+                    }
                 })
                 .collect_vec();
 
             let covariant_states = process.covariant_cut_states(model)?;
-            let unresolved =
-                feynkit_generator::unresolved_cut_content(model, &process.generation_options)?;
+            let unresolved = feynkit_generator::unresolved_cut_content(model, &process.request)?;
             let any_pdg_list_passes = covariant_states
                 .iter()
                 .map(|x| {
@@ -1371,17 +1358,8 @@ impl FinalizedCut {
                 return Ok(false);
             }
 
-            let amplitude_loop_count = process
-                .generation_options
-                .filters(feynkit_generator::FilterScope::CutAmplitude)
-                .iter()
-                .find_map(|filter| match filter {
-                    feynkit_generator::GenerationFilter::LoopCountRange(range) => Some(*range),
-                    _ => None,
-                });
-
-            if let Some((min_loop, max_loop)) = amplitude_loop_count {
-                let loop_range = min_loop..=max_loop;
+            let loop_range = process.request.cuts().amplitude.loops;
+            if loop_range != feynkit_generator::Range::Unrestricted {
                 let left_internal_subgraph = InternalSubGraph::cleaned_filter_pessimist(
                     self.left.clone(),
                     &cross_section_graph.graph.underlying,
@@ -1404,7 +1382,7 @@ impl FinalizedCut {
 
                 let total_loops = left_loop + right_loop;
 
-                if !loop_range.contains(&total_loops) {
+                if !loop_range.contains(total_loops) {
                     debug!("incorrect loop count");
                     return Ok(false);
                 }
@@ -1479,9 +1457,7 @@ impl CrossSectionGraph {
             //println!("{extid},{hel:?}");
             let eid = self.graph.loop_momentum_basis.ext_edges[ExternalIndex(extid)];
 
-            let Some(p) = self.graph.underlying[eid].particle() else {
-                continue;
-            };
+            let p = self.graph.underlying[eid].particle();
 
             match hel {
                 Helicity::Summed => {
@@ -4624,35 +4600,24 @@ pub(crate) fn params_for_iterated_threshold_ct(
 #[cfg(test)]
 mod tests {
     use crate::model::ModelGammaLoopExt;
-    use std::{
-        fs,
-        path::PathBuf,
-        time::{SystemTime, UNIX_EPOCH},
-    };
+    use std::fs;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
 
     use crate::utils::W_;
-    use symbolica::{
-        atom::{AtomCore, Symbol},
-        function,
-        id::Replacement,
-        symbol,
-    };
+    use symbolica::atom::{AtomCore, Symbol};
+    use symbolica::id::Replacement;
+    use symbolica::{function, symbol};
 
+    use crate::cff::CutCFFIndex;
+    use crate::cff::esurface::{EsurfaceID, RaisedEsurfaceData, RaisedEsurfaceGroup};
+    use crate::dot;
     use crate::graph::FinalizedCut;
-    use crate::{
-        cff::{
-            CutCFFIndex,
-            esurface::{EsurfaceID, RaisedEsurfaceData, RaisedEsurfaceGroup},
-        },
-        finalized_runtime_dot,
-        initialisation::test_initialise,
-        settings::global::{GenerationSettings, OrientationPattern},
-        utils::{GS, load_generic_model},
-    };
-    use linnet::half_edge::{
-        involution::EdgeIndex,
-        subgraph::{OrientedCut, SuBitGraph},
-    };
+    use crate::initialisation::test_initialise;
+    use crate::settings::global::{GenerationSettings, OrientationPattern};
+    use crate::utils::{GS, load_generic_model};
+    use linnet::half_edge::involution::EdgeIndex;
+    use linnet::half_edge::subgraph::{OrientedCut, SuBitGraph};
 
     fn threshold_association(
         cut_boundary_size: usize,
@@ -4721,57 +4686,20 @@ mod tests {
         test_initialise().unwrap();
         // This one-line cut is a residue-boundary diagnostic, not a 1->1
         // scattering-rate fixture. It deliberately bypasses the physical
-        // process selector's requirement of at least two final particles.
-        use crate::feyngen::feynkit::FeynmanDiagramGammaLoopExt;
-        use feynkit_graph::{
-            DiagramEdge, DiagramEndpoint, DiagramHalfEdge, DiagramVertex, EdgeId, ExternalState,
-            FeynmanDiagram,
-        };
-        let model = std::sync::Arc::new(crate::utils::load_generic_model("scalars"));
-        let particle = model.particle_id("scalar_0").unwrap();
-        let mut builder = FeynmanDiagram::builder(model, "scalar_cut_line").numerator_prefactor(
-            feynkit_graph::NumeratorInterface::admit(Atom::i(), None).unwrap(),
-        );
-        let incoming = builder.add_generation_external("in", 0, ExternalState::Incoming, 0);
-        let outgoing = builder.add_generation_external("out", 1, ExternalState::Outgoing, 0);
-        let left = builder.add_vertex(DiagramVertex {
-            name: "left".into(),
-            interaction: None,
-            numerator: feynkit_graph::NumeratorInterface::admit(Atom::one(), None).unwrap(),
-        });
-        let right = builder.add_vertex(DiagramVertex {
-            name: "right".into(),
-            interaction: None,
-            numerator: feynkit_graph::NumeratorInterface::admit(Atom::one(), None).unwrap(),
-        });
-        builder
-            .add_edge(incoming, left, DiagramEdge::new(particle, false))
-            .unwrap();
-        let mut propagator = DiagramEdge::new(particle, false);
-        propagator.numerator = feynkit_graph::NumeratorInterface::admit(Atom::i(), None).unwrap();
-        builder.add_edge(left, right, propagator).unwrap();
-        builder
-            .add_edge(right, outgoing, DiagramEdge::new(particle, false))
-            .unwrap();
-        let half = |edge, endpoint| DiagramHalfEdge {
-            edge: EdgeId(edge),
-            endpoint,
-        };
-        let left = vec![
-            half(0, DiagramEndpoint::Target),
-            half(1, DiagramEndpoint::Source),
-        ];
-        let right = vec![
-            half(0, DiagramEndpoint::Source),
-            half(1, DiagramEndpoint::Target),
-        ];
-        let graph: Graph = builder
-            .build()
-            .unwrap()
-            .with_cut_partitions(vec![(left.clone(), right.clone())])
-            .unwrap()
-            .to_gamma_loop_graph(None, true)
-            .unwrap();
+        // process selector's requirement of at least two final particles:
+        // without a final state, the imported graph keeps its only separating
+        // cut, which crosses one edge and so is no threshold candidate.
+        let graph: Graph = dot!(
+            digraph scalar_cut_line {
+                node [num=1];
+                edge [particle="scalar_0", num="1𝑖"];
+                ext [style=invis];
+                ext -> left [is_cut=0];
+                right -> ext [is_cut=0];
+                left -> right;
+            }, "scalars"
+        )
+        .unwrap();
         let graph = super::CrossSectionGraph::new(graph);
         assert_eq!(graph.cuts.len(), 1);
         let group = super::CutGroup {
@@ -4971,7 +4899,7 @@ mod tests {
     fn non_master_cross_section_threshold_metadata_is_rejected_at_import() {
         test_initialise().unwrap();
         let model = load_generic_model("sm");
-        let mut master: crate::graph::Graph = crate::graph::Graph::import_dot(
+        let mut master: crate::graph::Graph = crate::graph::Graph::from_dot(
             include_str!("../../../../tests/resources/graphs/ir_safe_thresholds/GL638.dot"),
             &model,
         )
@@ -5017,7 +4945,7 @@ mod tests {
             .spawn(|| {
                 test_initialise().unwrap();
                 let model = load_generic_model("sm");
-                let graph = crate::graph::Graph::import_dot(
+                let graph = crate::graph::Graph::from_dot(
                     include_str!("../../../../tests/resources/graphs/ir_safe_thresholds/GL638.dot"),
                     &model,
                 )
@@ -5115,18 +5043,16 @@ mod tests {
             .name("dormant-orientation-threshold-test".to_string())
             .stack_size(64 * 1024 * 1024)
             .spawn(|| {
-                use crate::graph::{
-                    autogen::Autogen,
-                    threshold_counterterms::{
-                        ThresholdCountertermCut, ThresholdCountertermMultiplier,
-                        ThresholdCountertermSpec, ThresholdCountertermThreshold,
-                        ThresholdCountertermVariant,
-                    },
+                use crate::graph::autogen::Autogen;
+                use crate::graph::threshold_counterterms::{
+                    ThresholdCountertermCut, ThresholdCountertermMultiplier,
+                    ThresholdCountertermSpec, ThresholdCountertermThreshold,
+                    ThresholdCountertermVariant,
                 };
 
                 test_initialise().unwrap();
                 let model = load_generic_model("sm");
-                let graph = crate::graph::Graph::import_dot(
+                let graph = crate::graph::Graph::from_dot(
                     include_str!("../../../../tests/resources/graphs/ir_safe_thresholds/GL638.dot"),
                     &model,
                 )
@@ -5250,16 +5176,16 @@ mod tests {
         )
         .unwrap();
         model.simplify(&mut parameters).unwrap();
-        let graph: crate::graph::Graph = finalized_runtime_dot!(
+        let graph: crate::graph::Graph = dot!(
             digraph cut_edge_priority {
                 graph [projector=1]
                 edge [num=1]
                 node [num=1]
-                A -> B [id=0 particle="g" lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
-                A -> B [id=1 particle="d" lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
-                A -> B [id=2 particle="t" mass=1 lmb_id=2 source="{ufo_order:2}" sink="{ufo_order:2}"]
-                A -> B [id=3 particle="a" lmb_id=3 source="{ufo_order:3}" sink="{ufo_order:3}"]
-                A -> B [id=4 mass=0 source="{ufo_order:4}" sink="{ufo_order:4}"]
+                A -> B [id=0 particle="g" lmb_id=0]
+                A -> B [id=1 particle="d" lmb_id=1]
+                A -> B [id=2 particle="t" mass=1 lmb_id=2]
+                A -> B [id=3 particle="a" lmb_id=3]
+                A -> B [particle=H id=4 mass=0]
             }, &model
         )
         .unwrap();
@@ -5332,16 +5258,16 @@ mod tests {
     fn cut_side_lmbs_ignore_boundary_hairs() {
         test_initialise().unwrap();
         let model = crate::utils::load_generic_model("scalars");
-        let graph: crate::graph::Graph = finalized_runtime_dot!(
+        let graph: crate::graph::Graph = dot!(
             digraph hairy_cut_side {
                 graph [projector=1]
                 edge [num=1 particle="scalar_0"]
                 node [num=1]
                 ext [style=invis]
-                ext -> A [id=0 sink="{ufo_order:0}"]
-                A -> B [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
-                B -> C [id=2 source="{ufo_order:1}" sink="{ufo_order:0}"]
-                C -> A [id=3 source="{ufo_order:1}" sink="{ufo_order:2}"]
+                ext -> A [id=0]
+                A -> B [id=1 lmb_id=0]
+                B -> C [id=2]
+                C -> A [id=3]
             },
             &model
         )
@@ -5413,13 +5339,11 @@ mod tests {
 
     #[test]
     fn directive_resolution_defaults_and_explicit_lists_are_authoritative() {
-        use crate::{
-            graph::threshold_counterterms::{
-                ThresholdCountertermCut, ThresholdCountertermSpec, ThresholdCountertermThreshold,
-                ThresholdCountertermVariant,
-            },
-            processes::threshold_counterterms::ThresholdCountertermOrigin,
+        use crate::graph::threshold_counterterms::{
+            ThresholdCountertermCut, ThresholdCountertermSpec, ThresholdCountertermThreshold,
+            ThresholdCountertermVariant,
         };
+        use crate::processes::threshold_counterterms::ThresholdCountertermOrigin;
 
         let cut_edges = vec![EdgeIndex::from(2), EdgeIndex::from(4)];
         let threshold_edges = vec![EdgeIndex::from(7), EdgeIndex::from(8)];
@@ -5485,17 +5409,15 @@ mod tests {
             .name("threshold-group-conflicts".to_string())
             .stack_size(64 * 1024 * 1024)
             .spawn(|| {
-                use crate::graph::{
-                    autogen::Autogen,
-                    threshold_counterterms::{
-                        ThresholdCountertermCut, ThresholdCountertermSpec,
-                        ThresholdCountertermThreshold, ThresholdCountertermVariant,
-                    },
+                use crate::graph::autogen::Autogen;
+                use crate::graph::threshold_counterterms::{
+                    ThresholdCountertermCut, ThresholdCountertermSpec,
+                    ThresholdCountertermThreshold, ThresholdCountertermVariant,
                 };
 
                 test_initialise().unwrap();
                 let model = load_generic_model("sm");
-                let graph = crate::graph::Graph::import_dot(
+                let graph = crate::graph::Graph::from_dot(
                     include_str!("../../../../tests/resources/graphs/ir_safe_thresholds/GL297.dot"),
                     &model,
                 )
@@ -5605,24 +5527,22 @@ mod tests {
 
     #[test]
     fn raised_member_compatibility_uses_directives_and_embedding_not_provenance() {
-        use crate::{
-            graph::{Graph, LMBext},
-            momentum::sample::SubspaceData,
-            processes::threshold_counterterms::ThresholdCountertermOrigin,
-        };
+        use crate::graph::{Graph, LMBext};
+        use crate::momentum::sample::SubspaceData;
+        use crate::processes::threshold_counterterms::ThresholdCountertermOrigin;
 
         test_initialise().unwrap();
-        let graph: Graph = crate::finalized_runtime_dot!(digraph raised_compatibility {
+        let graph: Graph = dot!(digraph raised_compatibility {
  graph [projector=1]
             ext [style=invis]
             edge [num=1 mass=0]
             node [num=1]
-            ext -> v1:0 [id=0 sink="{ufo_order:0}"]
-            v1 -> v2 [id=1 source="{ufo_order:1}" sink="{ufo_order:0}" lmb_id=0]
-            v2 -> v1 [id=2 source="{ufo_order:1}" sink="{ufo_order:2}"]
-            v2 -> v3 [id=3 source="{ufo_order:2}" sink="{ufo_order:0}" lmb_id=1]
-            v3 -> v2 [id=4 source="{ufo_order:1}" sink="{ufo_order:3}"]
-            ext -> v3:1 [id=5 sink="{ufo_order:2}"]
+            ext -> v1:0 [particle=H id=0]
+            v1 -> v2 [particle=H id=1 lmb_id=0]
+            v2 -> v1 [particle=H id=2]
+            v2 -> v3 [particle=H id=3 lmb_id=1]
+            v3 -> v2 [particle=H id=4]
+            ext -> v3:1 [particle=H id=5]
         }, &crate::utils::load_generic_model("sm"))
         .unwrap();
         let all_lmbs = graph.generate_loop_momentum_bases();

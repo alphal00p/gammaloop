@@ -1,4 +1,4 @@
-#import "crates/linnest/typst/src/lib.typ": graph, draw
+#import "crates/linnest/typst/src/lib.typ": graph, draw, curve
 #import "gamma-physics-edge-style.typ" as physics
 #set page(width: auto, height: auto, margin: 0pt)
 
@@ -48,14 +48,18 @@
     map: (probe: (
       source: line, sink: line, label: [particle],
       fermion-arrow: true,
-      fermion-arrow-mark: (end: (symbol: "triangle", fill: green, stroke: none), scale: 0.5),
+      fermion-arrow-mark: curve.mark.triangle(
+        length: 0.1cm, width: 0.075cm, fill: green, stroke: none,
+      ),
     )),
     momentum-arrows: true,
     momentum-label-slide: false,
     show-momentum: mode.starts-with("full"),
     show-particle: not mode.starts-with("none"),
     momentum-arrow-stroke: (paint: red, thickness: 0.4pt, cap: "round"),
-    momentum-arrow-mark: (end: (symbol: "triangle", fill: red, stroke: none)),
+    momentum-arrow-mark: curve.mark.triangle(
+      length: 0.16cm, width: 0.12cm, fill: red, stroke: none,
+    ),
   )
   for half in ("source", "sink") {
     let callback = callbacks.at(half + "-style")

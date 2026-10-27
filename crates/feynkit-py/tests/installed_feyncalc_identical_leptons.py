@@ -61,10 +61,15 @@ for label, pdgs in (
     ("Bhabha", [11, -11, 11, -11]),
     ("Moller", [11, 11, 11, 11]),
 ):
-    generated = model.process(
-        pdgs[:2], pdgs[2:], vertex_allow=["V_98"]
-    ).generate_diagrams(
-        max_vertices=2, maximum_bridges=None, numerator_grouping=None, progress=None
+    generated = (
+        model.process(pdgs[:2], pdgs[2:])
+        .amplitude(
+            loops=fk.Loops.total(0),
+            restrict=fk.Restrict().only_vertices(["V_98"]),
+            topology=fk.TopologyRules(max_vertices=2),
+        )
+        .generate()
+        .build(fk.NumeratorOptions(naming=fk.Naming.named("D")))
     )
     assert len(generated.diagrams) == 2
     operators, denominators, factors = [], [], []

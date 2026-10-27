@@ -74,6 +74,10 @@ fn fixture_scene(marker: &str) -> Scene {
                 pattern: None,
                 flow: Some(index != 2),
                 momentum: false,
+                flow_arrow: EdgeDrawing::default_flow_arrow(),
+                momentum_arrow: EdgeDrawing::default_momentum_arrow(),
+                flow_arrow_paints: Vec::new(),
+                momentum_arrow_paints: Vec::new(),
                 momentum_offset: EdgeDrawing::DEFAULT_MOMENTUM_OFFSET,
                 label: Some(if index == 0 { 4 } else { 3 }),
                 details: [
@@ -131,7 +135,11 @@ fn native_oracle(marker: &str, receipt: &str) -> PyResult<String> {
     let typeset = scene
         .typeset_mathml(&metrics)
         .map_err(|error| PyValueError::new_err(error.to_string()))?;
-    scene.render(&typeset).map_err(PyValueError::new_err)
+    scene
+        .render(typeset)
+        .map_err(PyValueError::new_err)?
+        .interactive_svg()
+        .map_err(PyValueError::new_err)
 }
 
 fn run_python(entry: &str) -> PyResult<()> {
@@ -181,7 +189,7 @@ fn mathml_view_fixture_seed_scale_reaches_native_scene_geometry() {
             edge.label = None;
         }
         let typeset = scene.typeset_mathml(&[]).unwrap();
-        let svg = scene.render(&typeset).unwrap();
+        let svg = scene.render(typeset).unwrap().interactive_svg().unwrap();
         let document = Document::parse(&svg).unwrap();
         let mut centers: Vec<[f64; 2]> = (0..3)
             .map(|id| {
@@ -198,18 +206,18 @@ fn mathml_view_fixture_seed_scale_reaches_native_scene_geometry() {
             })
             .collect();
         for (hedge, free_start) in [(6, true), (7, false)] {
-            let prefix = format!("#linnet-halfedge-{hedge}?");
+            let id = hedge.to_string();
             let carrier = document
                 .descendants()
                 .find(|node| {
                     node.attribute("data-linnet-carrier") == Some("true")
-                        && node
-                            .attribute("href")
-                            .is_some_and(|href| href.starts_with(&prefix))
+                        && node.attribute("data-linnet-kind") == Some("halfedge")
+                        && node.attribute("data-linnet-id") == Some(id.as_str())
                 })
                 .unwrap();
             let data = carrier
-                .first_element_child()
+                .children()
+                .find(|node| node.has_tag_name("path"))
                 .unwrap()
                 .attribute("d")
                 .unwrap();
@@ -264,7 +272,9 @@ fn mathml_view_fixture_seed_scale_reaches_native_scene_geometry() {
     .collect();
     let scene = fixture_scene("chromium-350-a");
     let svg = scene
-        .render(&scene.typeset_mathml(&metrics).unwrap())
+        .render(scene.typeset_mathml(&metrics).unwrap())
+        .unwrap()
+        .interactive_svg()
         .unwrap();
     let document = Document::parse(&svg).unwrap();
     let boxes: Vec<[f64; 4]> = document

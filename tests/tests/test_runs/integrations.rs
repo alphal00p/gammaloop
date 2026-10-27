@@ -102,7 +102,8 @@ fn fermi_surface_one_loop_integration_converges_to_analytic_target() -> Result<(
 
 #[test]
 fn fermi_surface_two_loop_integration_converges_in_nonaligned_basis() -> Result<()> {
-    use gammalooprs::{momentum::SignOrZero, processes::ProcessCollection};
+    use gammalooprs::momentum::SignOrZero;
+    use gammalooprs::processes::ProcessCollection;
 
     let name = "fermi_surface_two_loop_integration";
     let mut cli = get_test_cli(
@@ -255,6 +256,298 @@ fn scalar_bubble() -> Result<()> {
 
     clean_test(&cli.cli_settings.state.folder);
 
+    Ok(())
+}
+
+/// Breit-Wheeler pair production a a > t t~ at sqrt(s) = 1 TeV with mt = 173 GeV
+/// and alpha = 1/132.507, generated with the extra `generate xs` options
+/// `generation_options`. Stability checks stay in double precision, so a basis
+/// that covers the cut phase space badly fails within seconds instead of
+/// escalating its unstable points to arbitrary precision for many minutes.
+fn aa_ttx_born_cli(
+    test_name: &str,
+    generation_options: &str,
+) -> Result<gammaloop_integration_tests::CLIState> {
+    let mut cli = get_test_cli(
+        None,
+        get_tests_workspace_path().join(test_name),
+        Some(test_name.to_string()),
+        true,
+    )?;
+    run_commands(
+        &mut cli,
+        &[
+            "import model sm-default",
+            "set global kv global.generation.evaluator.compile=false global.generation.evaluator.summed=false global.generation.evaluator.iterative_orientation_optimization=false global.generation.evaluator.store_atom=false global.generation.uv.subtract_uv=false global.generation.uv.generate_integrated=false global.generation.threshold_subtraction.enable_thresholds=false global.generation.tropical_subgraph_table.disable_tropical_generation=true",
+            "set model MT=173.0",
+            "set model WT=0.0",
+            "set model ymt=173.0",
+            "set model aEWM1=132.507",
+            r#"set default-runtime string '
+[general]
+evaluator_method = "SingleParametric"
+enable_cache = false
+generate_events = false
+disable_flux_factor = true
+
+[subtraction]
+disable_threshold_subtraction = true
+
+[[stability.levels]]
+precision = "Double"
+required_precision_for_re = 1e-5
+required_precision_for_im = 1e-5
+escalate_for_large_weight_threshold = 0.9
+
+[sampling]
+graphs = "summed"
+orientations = "summed"
+lmb_multichanneling = false
+coordinate_system = "spherical"
+mapping = "linear"
+b = 1.0
+
+[kinematics]
+e_cm = 1000.0
+
+[kinematics.externals]
+type = "constant"
+
+[kinematics.externals.data]
+momenta = [[500.0, 0.0, 0.0, 500.0], [500.0, 0.0, 0.0, -500.0]]
+helicities = ["summed_averaged", "summed_averaged"]
+
+[integrator]
+integrated_phase = "real"
+n_start = 50000
+n_increase = 50000
+n_max = 50000
+min_samples_for_update = 1000
+seed = 7331
+'"#,
+            &format!(
+                "generate xs a a > t t~ | a t t~ g ghG ghG~ QED^2==4 [{{{{1}}}} QCD=0] --numerator-grouping no_grouping --symmetrize-initial-states false --symmetrize-final-states false {generation_options} -p aa_ttx -i LO --filter-selfenergies true --filter-snails true --filter-tadpoles true --n-cut-blobs 1 1 --n-cut-spectators 0 0"
+            ),
+        ],
+    )?;
+    Ok(cli)
+}
+
+/// The Breit-Wheeler cross section is sigma = 0.459677 pb. Without the flux
+/// factor the integrand returns sigma 2s in natural units.
+#[test]
+fn aa_ttx_born_cross_section_integration_matches_breit_wheeler() -> Result<()> {
+    const GEV_SQUARED_TO_PICOBARN: f64 = 0.389379304e9;
+    const BREIT_WHEELER_PICOBARN: f64 = 0.459677;
+    const E_CM: f64 = 1000.0;
+    let test_name = "aa_ttx_born_breit_wheeler";
+    let mut cli = aa_ttx_born_cli(test_name, "")?;
+
+    let integral = Integrate {
+        integrand_name: vec!["LO".to_string()],
+        ..default_integrate_for(test_name)
+    }
+    .run(&mut cli.state, &cli.cli_settings)?;
+    let integral = single_slot_integral(&integral);
+    let target = BREIT_WHEELER_PICOBARN / GEV_SQUARED_TO_PICOBARN * 2.0 * E_CM * E_CM;
+    // A badly covered cut phase space inflates the variance first.
+    assert!(
+        integral.error.re.0 < 0.03 * target,
+        "{integral:#} has a large error for target {target:e}"
+    );
+    assert!(
+        integral.is_compatible_with_target(Complex::new(F(target), F(0.0)), 3),
+        "{integral:#} is not compatible with target {target:e}"
+    );
+
+    clean_test(&cli.cli_settings.state.folder);
+
+    Ok(())
+}
+
+/// The loop momenta are rescaled about the origin of the generated basis. With
+/// the cut edges at K + P1 and K - P0 the cut energies there add up to
+/// 2 sqrt(500^2 + 173^2) GeV, 58.2 GeV above sqrt(s), so the origin lies outside
+/// every cut surface. Integrating with that basis used to give 6.0(3.6)e-3
+/// instead of 2.36e-3, with 17.5% unstable points; warm-up now rejects it.
+#[test]
+fn aa_ttx_born_rejects_a_basis_whose_origin_lies_outside_a_cut_surface() -> Result<()> {
+    let test_name = "aa_ttx_born_origin_outside_cut";
+    let mut cli = aa_ttx_born_cli(test_name, "--loop-momentum-bases GL0=2 GL1=3 GL2=2 GL3=3")?;
+
+    let Err(error) = (Integrate {
+        integrand_name: vec!["LO".to_string()],
+        ..default_integrate_for(test_name)
+    })
+    .run(&mut cli.state, &cli.cli_settings) else {
+        panic!("integrating with the rescaling centre outside the cut surfaces succeeded");
+    };
+    assert!(
+        error.chain().any(|cause| {
+            let cause = cause.to_string();
+            cause.contains("lies on or outside the energy surface of cut group")
+                && cause.contains("--loop-momentum-bases GL")
+        }),
+        "unexpected error: {error:?}"
+    );
+
+    clean_test(&cli.cli_settings.state.folder);
+
+    Ok(())
+}
+
+/// The rejected group remains in the generated integrand, but is never warmed or hashed
+/// when the saved runtime selection excludes it.
+#[test]
+fn selected_group_integrates_and_resumes_with_an_excluded_invalid_basis() -> Result<()> {
+    use gammalooprs::integrands::process::ProcessIntegrand;
+    use gammalooprs::integrate::{IntegrationState, workspace_state_path};
+
+    let name = "selected_group_excludes_invalid_basis";
+    let bad_name = "selected_group_invalid_basis_fixture";
+    let mut cli = aa_ttx_born_cli(name, "")?;
+    let mut bad_cli = aa_ttx_born_cli(bad_name, "--loop-momentum-bases GL0=2 GL1=3 GL2=2 GL3=3")?;
+    for state in [&mut cli, &mut bad_cli] {
+        state.run_command(
+            "set process -p aa_ttx -i LO string '[sampling]\ngraphs = \"monte_carlo\"\ngraph_names = []\n'",
+        )?;
+    }
+    let (process_id, integrand_name) =
+        cli.state.find_integrand_ref(None, Some(&"LO".to_owned()))?;
+    let (bad_id, bad_integrand) = bad_cli
+        .state
+        .find_integrand_ref(None, Some(&"LO".to_owned()))?;
+    let model = cli
+        .state
+        .resolve_model_for_integrand(process_id, &integrand_name)?;
+    let bad_source = bad_cli
+        .state
+        .process_list
+        .get_integrand(bad_id, &bad_integrand)?
+        .require_generated()?
+        .clone();
+    let mut source = cli
+        .state
+        .process_list
+        .get_integrand(process_id, &integrand_name)?
+        .require_generated()?
+        .clone();
+    assert_eq!(
+        source.graph_group_count(),
+        source.graph_count(),
+        "fixture explicitly disables grouping"
+    );
+
+    // Classify by the actual basis-origin check, then resolve names from those groups.
+    let mut rejected_name = None;
+    for master in bad_source.graph_group_master_names() {
+        let mut group =
+            bad_source.clone_with_selected_graph_groups(&model, &[master.to_owned()])?;
+        if let Err(error) = group.warm_up(&model) {
+            assert!(
+                format!("{error:?}").contains("lies on or outside the energy surface of cut group")
+            );
+            rejected_name = Some(master.to_owned());
+            break;
+        }
+    }
+    let rejected_name = rejected_name.expect("fixture must contain an invalid basis");
+    let (ProcessIntegrand::CrossSection(bad), ProcessIntegrand::CrossSection(good)) =
+        (&bad_source, &mut source)
+    else {
+        unreachable!()
+    };
+    let replacement = bad
+        .data
+        .graph_terms
+        .iter()
+        .find(|term| term.graph.name == rejected_name)
+        .unwrap();
+    let destination = good
+        .data
+        .graph_terms
+        .iter_mut()
+        .find(|term| term.graph.name == rejected_name)
+        .unwrap();
+    let group_id = destination.graph.group_id;
+    *destination = replacement.clone();
+    destination.graph.group_id = group_id;
+    destination.multi_channeling_setup.graph.group_id = group_id;
+    let mut accepted_name = None;
+    for master in source.graph_group_master_names() {
+        if master == rejected_name {
+            continue;
+        }
+        let mut group = source.clone_with_selected_graph_groups(&model, &[master.to_owned()])?;
+        group.warm_up(&model)?;
+        accepted_name = Some(master.to_owned());
+        break;
+    }
+    let accepted_name = accepted_name.expect("fixture must retain a valid group");
+    *cli.state
+        .process_list
+        .get_integrand_mut(process_id, &integrand_name)? = source;
+    cli.run_command(&format!("set process -p aa_ttx -i LO string '[sampling]\ngraphs = \"monte_carlo\"\ngraph_names = [\"{accepted_name}\"]\n[integrator]\nn_bins = 4\nmin_samples_for_update = 1\nn_start = 8\nn_increase = 8\nn_max = 8\n'"))?;
+    let before = cli
+        .state
+        .process_list
+        .get_integrand(process_id, &integrand_name)?
+        .require_generated()?
+        .resume_fingerprint()?;
+    let mut integrate = Integrate {
+        integrand_name: vec![integrand_name.clone()],
+        ..default_integrate_for(name)
+    };
+    let first = integrate.run(&mut cli.state, &cli.cli_settings)?;
+    let state_path = workspace_state_path(&first.workspace_path);
+    let (saved, _): (IntegrationState, _) =
+        bincode::decode_from_slice(&std::fs::read(&state_path)?, bincode::config::standard())?;
+    assert!(saved.iter > 0 && saved.num_points > 0);
+    assert_eq!(
+        cli.state
+            .process_list
+            .get_integrand(process_id, &integrand_name)?
+            .require_generated()?
+            .resume_fingerprint()?,
+        before
+    );
+    // Current empty selection is ignored on resume: the saved nonempty selection is effective.
+    cli.run_command(
+        "set process -p aa_ttx -i LO string '[sampling]\ngraphs = \"monte_carlo\"\ngraph_names = []\n'",
+    )?;
+    integrate.restart = false;
+    integrate.run(&mut cli.state, &cli.cli_settings)?;
+    let (resumed, _): (IntegrationState, _) =
+        bincode::decode_from_slice(&std::fs::read(&state_path)?, bincode::config::standard())?;
+    assert_eq!(
+        (resumed.iter, resumed.num_points),
+        (saved.iter, saved.num_points)
+    );
+    assert_eq!(
+        cli.state
+            .process_list
+            .get_integrand(process_id, &integrand_name)?
+            .require_generated()?
+            .resume_fingerprint()?,
+        before
+    );
+
+    // A restart chooses current settings; selecting the rejected group or every group
+    // retains the existing physical error and does not destroy the accepted workspace.
+    let protected = std::fs::read(&state_path)?;
+    for selected in [format!("\"{rejected_name}\""), String::new()] {
+        cli.run_command(&format!("set process -p aa_ttx -i LO string '[sampling]\ngraphs = \"monte_carlo\"\ngraph_names = [{selected}]\n'"))?;
+        integrate.restart = true;
+        let error = integrate
+            .run(&mut cli.state, &cli.cli_settings)
+            .expect_err("invalid selected basis");
+        assert!(
+            format!("{error:?}").contains("lies on or outside the energy surface of cut group")
+        );
+        assert_eq!(std::fs::read(&state_path)?, protected);
+    }
+    clean_test(&cli.cli_settings.state.folder);
+    clean_test(&bad_cli.cli_settings.state.folder);
     Ok(())
 }
 

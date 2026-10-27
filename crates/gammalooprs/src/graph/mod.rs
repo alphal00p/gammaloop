@@ -1,27 +1,22 @@
 use feynkit_graph::expressions::evaluate_overall_factor;
 use idenso::tensor::SymbolicTensor;
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    ops::Index,
-};
+use std::collections::{BTreeMap, BTreeSet};
+use std::ops::Index;
 
 use ahash::AHashSet;
 use bincode_trait_derive::{Decode, Encode};
 use gammaloop_tracing_filter::LogMessage;
 use itertools::Itertools;
-use linnet::{
-    half_edge::{
-        HedgeGraph,
-        involution::{EdgeData, EdgeIndex, Hedge, HedgePair},
-        subgraph::{
-            HedgeNode, ModifySubSet, OrientedCut, SuBitGraph, SubGraphLike, SubSetLike, SubSetOps,
-        },
-    },
-    parser::DotGraph,
+use linnet::half_edge::HedgeGraph;
+use linnet::half_edge::involution::{EdgeData, EdgeIndex, Hedge, HedgePair};
+use linnet::half_edge::subgraph::{
+    HedgeNode, ModifySubSet, OrientedCut, SuBitGraph, SubGraphLike, SubSetLike, SubSetOps,
 };
+use linnet::parser::DotGraph;
 use tracing::debug;
 
-use rand::{Rng, SeedableRng, rngs::SmallRng};
+use rand::rngs::SmallRng;
+use rand::{Rng, SeedableRng};
 // use petgraph::Direction::Outgoing;
 use spenso::shadowing::symbolica_utils::LogPrint;
 use spenso::structure::IndexedStructure;
@@ -29,18 +24,19 @@ use symbolica::atom::{Atom, AtomCore};
 use tracing::warn;
 use typed_index_collections::TiVec;
 
-use crate::{
-    cff::surface::SurfaceCache,
-    define_index,
-    integrands::process::{LmbMultiChannelingSetup, ParamBuilder, SamplingChannelId},
-    model::Model,
-    momentum::{Dep, ExternalMomenta, PolDef, sample::ExternalIndex},
-    numerator::{GetSingleAtom, GlobalPrefactor},
-    processes::DotExportSettings,
-    settings::runtime::kinematic::{Externals, improvement::PhaseSpaceImprovementSettings},
-    utils::{F, Length, ose_atom_from_index},
-    uv::{UltravioletGraph, uv_graph::UVE},
-};
+use crate::cff::surface::SurfaceCache;
+use crate::define_index;
+use crate::integrands::process::{LmbMultiChannelingSetup, ParamBuilder, SamplingChannelId};
+use crate::model::Model;
+use crate::momentum::sample::ExternalIndex;
+use crate::momentum::{Dep, ExternalMomenta, PolDef};
+use crate::numerator::{GetSingleAtom, GlobalPrefactor};
+use crate::processes::DotExportSettings;
+use crate::settings::runtime::kinematic::Externals;
+use crate::settings::runtime::kinematic::improvement::PhaseSpaceImprovementSettings;
+use crate::utils::{F, Length, ose_atom_from_index};
+use crate::uv::UltravioletGraph;
+use crate::uv::uv_graph::UVE;
 
 pub(crate) mod attribute_warnings;
 pub mod autogen;
@@ -225,18 +221,27 @@ impl Graph {
     }
 
     pub(crate) fn external_momentum_edge_order(&self) -> Vec<EdgeIndex> {
-        if self.initial_state_cut.nedges(&self.underlying) == 0 {
-            let external_filter: SuBitGraph = self.external_filter();
+        Self::external_momentum_edge_order_of(&self.underlying, &self.initial_state_cut)
+    }
+
+    /// GammaLoop's external momentum order: amplitude legs by dangling half-edge, and
+    /// cross-section initial states by their incoming half-edge.
+    pub(crate) fn external_momentum_edge_order_of<E, V, H>(
+        graph: &HedgeGraph<E, V, H>,
+        initial_state_cut: &OrientedCut,
+    ) -> Vec<EdgeIndex> {
+        if initial_state_cut.nedges(graph) == 0 {
+            let external_filter: SuBitGraph = graph.external_filter();
             external_filter
                 .included_iter()
                 .sorted()
-                .map(|hedge| self.underlying[&hedge])
+                .map(|hedge| graph[&hedge])
                 .collect_vec()
         } else {
-            self.initial_state_cut
+            initial_state_cut
                 .iter_left_hedges()
                 .sorted()
-                .map(|hedge| self.underlying[&hedge])
+                .map(|hedge| graph[&hedge])
                 .collect_vec()
         }
     }
@@ -768,10 +773,9 @@ pub fn get_cff_inverse_energy_product_impl<E, V, H, S: SubSetLike>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        finalized_runtime_dot, initialisation::test_initialise,
-        momentum::signature::LoopExtSignature,
-    };
+    use crate::dot;
+    use crate::initialisation::test_initialise;
+    use crate::momentum::signature::LoopExtSignature;
     use std::sync::OnceLock;
 
     fn test_lmb(graph: &Graph, loop_edges: &[usize]) -> LoopMomentumBasis {
@@ -790,16 +794,16 @@ mod tests {
         GRAPH
             .get_or_init(|| {
                 test_initialise().unwrap();
-                finalized_runtime_dot!(
+                dot!(
                     digraph lmb_selector {
                         graph [projector=1]
                         edge [num=1 mass=0]
                         node [num=1]
-                        A -> B [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
-                        A -> B [id=1 lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
-                        A -> B [id=2 lmb_id=2 source="{ufo_order:2}" sink="{ufo_order:2}"]
-                        A -> B [id=3 lmb_id=3 source="{ufo_order:3}" sink="{ufo_order:3}"]
-                        A -> B [id=4 mass=1 source="{ufo_order:4}" sink="{ufo_order:4}"]
+                        A -> B [particle=H id=0 lmb_id=0]
+                        A -> B [particle=H id=1 lmb_id=1]
+                        A -> B [particle=H id=2 lmb_id=2]
+                        A -> B [particle=H id=3 lmb_id=3]
+                        A -> B [particle=H id=4 mass=1]
                     }
                 )
                 .unwrap()

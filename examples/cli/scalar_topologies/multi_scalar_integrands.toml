@@ -25,8 +25,8 @@ commands = [
     "import model scalars-default.json",
 
     "remove processes",
-    "generate amp scalar_1 > scalar_0 scalar_0 [{1}] --allowed-vertex-interactions V_3_SCALAR_022 V_3_SCALAR_122 -p triangle -i scalar_tri_below_thres",
-    "generate amp scalar_0 scalar_0 > scalar_0 scalar_0 [{1}] --allowed-vertex-interactions V_3_SCALAR_022 -p box -i scalar_box_below_thres --select-graphs GL0",
+    "generate amp scalar_1 > scalar_0 scalar_0 [{1}] --allowed-vertex-interactions V_3_SCALAR_022 V_3_SCALAR_122 -p triangle -i scalar_tri_below_thres --filter-selfenergies true --filter-snails true --filter-tadpoles true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",
+    "generate amp scalar_0 scalar_0 > scalar_0 scalar_0 [{1}] --allowed-vertex-interactions V_3_SCALAR_022 -p box -i scalar_box_below_thres --select-graphs GL0 --filter-selfenergies true --filter-snails true --filter-tadpoles true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",
 	"generate",
     "duplicate integrand -p triangle -i scalar_tri_below_thres --output_process_name triangle --output_integrand_name scalar_tri_above_thres",
     "duplicate integrand -p box -i scalar_box_below_thres --output_process_name box --output_integrand_name scalar_box_above_thres",

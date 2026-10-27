@@ -198,7 +198,7 @@ impl PyLtdRepresentation {
             NOTEBOOK_STYLE,
             include_str!("../expression.css"),
             include_str!("display.css"),
-            display::escape_html(self.diagram.name()),
+            display::escape_html(self.diagram.name().unwrap_or("Diagram")),
             include_str!("../expression.js"),
             include_str!("display.js"),
             include_str!("../notebook.js"),

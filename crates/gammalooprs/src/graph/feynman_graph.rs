@@ -1,44 +1,44 @@
 use crate::model::{ModelGammaLoopExt, ParticleIdGammaLoopExt, PropagatorIdGammaLoopExt};
-use std::{borrow::Borrow, ops::Deref};
+use eyre::eyre;
+use std::borrow::Borrow;
+use std::ops::Deref;
 
 use itertools::Itertools;
-use linnet::half_edge::{
-    HedgeGraph, NodeIndex,
-    involution::{EdgeData, EdgeIndex, EdgeVec, Flow, HedgePair},
-    subgraph::{InternalSubGraph, ModifySubSet, SuBitGraph, SubGraphLike, SubSetLike, SubSetOps},
+use linnet::half_edge::involution::{EdgeData, EdgeIndex, EdgeVec, Flow, HedgePair};
+use linnet::half_edge::subgraph::{
+    BaseSubgraph, InternalSubGraph, ModifySubSet, SuBitGraph, SubGraphLike, SubSetLike, SubSetOps,
 };
+use linnet::half_edge::{HedgeGraph, NodeIndex};
 
-use spenso::{
-    algebra::{algebraic_traits::IsZero, complex::Complex},
-    structure::concrete_index::ExpandedIndex,
-};
+use spenso::algebra::algebraic_traits::IsZero;
+use spenso::algebra::complex::Complex;
+use spenso::structure::concrete_index::ExpandedIndex;
 // use petgraph::Direction::Outgoing;
-use symbolica::{
-    atom::{Atom, AtomCore, AtomView, Indeterminate},
-    evaluate::{FunctionMap, InliningPolicy},
-    function,
-    id::Replacement,
-    symbol,
-    transcendental::{coth, csch, sech, tanh},
-};
+use symbolica::atom::{Atom, AtomCore, AtomView, Indeterminate};
+use symbolica::evaluate::{FunctionMap, InliningPolicy};
+use symbolica::id::Replacement;
+use symbolica::transcendental::{coth, csch, sech, tanh};
+use symbolica::{function, symbol};
 use three_dimensional_reps::{MediumMode, ThermalDistributionCall, ThermalDistributionFactor};
 use typed_index_collections::TiVec;
 
-use crate::{
-    cff::{generation::ShiftRewrite, surface::HsurfaceID},
-    integrands::process::param_builder::{FnMapEntry, ParamBuilderGraph, SplitPolarizations},
-    model::{Model, ParticleId, UFOSymbol, VertexRuleIdGammaLoopExt},
-    momentum::sample::{ExternalFourMomenta, ExternalIndex, LoopMomenta},
-    momentum::signature::{ExternalSignature, SignatureLike},
-    momentum::{PolDef, SignOrZero},
-    numerator::{graph::ReversibleEdge, ufo::UFO},
-    utils::{F, FloatLike, GS, external_energy_atom_from_index, ose_atom_from_index},
-    uv::uv_graph::UVE,
+use crate::cff::generation::ShiftRewrite;
+use crate::cff::surface::HsurfaceID;
+use crate::integrands::process::param_builder::{
+    FnMapEntry, ParamBuilderGraph, SplitPolarizations,
 };
+use crate::model::{Model, ParticleId, UFOSymbol, VertexRuleIdGammaLoopExt};
+use crate::momentum::sample::{ExternalFourMomenta, ExternalIndex, LoopMomenta};
+use crate::momentum::signature::{ExternalSignature, SignatureLike};
+use crate::momentum::{PolDef, SignOrZero};
+use crate::numerator::graph::ReversibleEdge;
+use crate::numerator::ufo::UFO;
+use crate::utils::{F, FloatLike, GS, external_energy_atom_from_index, ose_atom_from_index};
+use crate::uv::uv_graph::UVE;
 
+use super::edge::PossibleParticle;
 use super::{
-    Edge, Graph, HedgeData, LoopMomentumBasis, Vertex, edge::PossibleParticle,
-    get_cff_inverse_energy_product_impl,
+    Edge, Graph, HedgeData, LoopMomentumBasis, Vertex, get_cff_inverse_energy_product_impl,
 };
 
 pub trait FeynmanGraph {
@@ -239,29 +239,27 @@ impl Graph {
             let mu = mu_value(chemical_potential.as_ref())?;
             // Reversing an edge conjugates its label and flips its orientation.
             // The occupation's E - sigma * mu must describe the same state.
-            if let Some(particle) = edge.data.particle() {
-                let is_self_antiparticle = particle.is_self_antiparticle(graph_model);
-                let particle = particle.resolve(graph_model);
-                if is_self_antiparticle {
-                    if !mu.re.is_zero() {
-                        return Err(eyre::eyre!(
-                            "Thermal graph '{}' requires zero chemical potential for self-conjugate particle '{}' on edge {edge_id}; got {mu}",
-                            self.name,
-                            particle.name
-                        ));
-                    }
-                } else {
-                    let antiparticle = PossibleParticle::from(particle.antiparticle);
-                    let anti_mu =
-                        mu_value(antiparticle.chemical_potential_atom(graph_model).as_ref())?;
-                    if anti_mu.re != -mu.re {
-                        return Err(eyre::eyre!(
-                            "Thermal graph '{}' requires opposite chemical potentials for particle '{}' and antiparticle '{}' on edge {edge_id}; got {mu} and {anti_mu}",
-                            self.name,
-                            particle.name,
-                            graph_model.particle_by_id(particle.antiparticle)?.name
-                        ));
-                    }
+            let particle = edge.data.particle();
+            let is_self_antiparticle = particle.is_self_antiparticle(graph_model);
+            let particle = particle.resolve(graph_model);
+            if is_self_antiparticle {
+                if !mu.re.is_zero() {
+                    return Err(eyre!(
+                        "Thermal graph '{}' requires zero chemical potential for self-conjugate particle '{}' on edge {edge_id}; got {mu}",
+                        self.name,
+                        particle.name
+                    ));
+                }
+            } else {
+                let antiparticle = PossibleParticle::from(particle.antiparticle);
+                let anti_mu = mu_value(antiparticle.chemical_potential_atom(graph_model).as_ref())?;
+                if anti_mu.re != -mu.re {
+                    return Err(eyre!(
+                        "Thermal graph '{}' requires opposite chemical potentials for particle '{}' and antiparticle '{}' on edge {edge_id}; got {mu} and {anti_mu}",
+                        self.name,
+                        particle.name,
+                        graph_model.particle_by_id(particle.antiparticle)?.name
+                    ));
                 }
             }
             // Finite-temperature occupations and zero-temperature fermion steps,
@@ -371,9 +369,8 @@ impl Graph {
                     edge_id
                 ));
             }
-            if matches!(pair, HedgePair::Paired { .. })
-                && let Some(particle) = edge.data.particle()
-            {
+            if matches!(pair, HedgePair::Paired { .. }) {
+                let particle = edge.data.particle();
                 let propagator = model.get_propagator_for_particle(particle).resolve(model);
                 let momentum = function!(UFO.momentum, 1);
                 let expected =
@@ -886,7 +883,7 @@ impl FeynmanGraph for Graph {
     // }
 
     fn add_signs_to_edges(&self, node_id: NodeIndex) -> Vec<isize> {
-        let node_hairs: SuBitGraph = self.iter_crown(node_id).into();
+        let node_hairs = SuBitGraph::from_hedge_iter(self.iter_crown(node_id), self.n_hedges());
 
         self.iter_edges_of(&node_hairs)
             .map(|(_, edge_index, _)| {
@@ -1093,7 +1090,7 @@ impl FeynmanGraph for Graph {
                 HedgePair::Unpaired { hedge, .. } => *hedge,
                 _ => unreachable!(),
             })
-            .filter_map(|(_, _, data)| data.data.particle())
+            .map(|(_, _, data)| data.data.particle())
             .collect()
     }
 
@@ -1195,15 +1192,11 @@ impl FeynmanGraph for Graph {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::initialisation::test_initialise;
     use crate::utils::test_utils::ModelFixtureExt;
-    use crate::{
-        initialisation::test_initialise,
-        utils::{ArbPrec, load_generic_model},
-    };
-    use symbolica::{
-        evaluate::{CompileOptions, ExportSettings, FunctionMap, OptimizationSettings},
-        symbol,
-    };
+    use crate::utils::{ArbPrec, load_generic_model};
+    use symbolica::evaluate::{CompileOptions, ExportSettings, FunctionMap, OptimizationSettings};
+    use symbolica::symbol;
 
     #[test]
     fn thermal_parameter_validation_tracks_modes_and_runtime_values() -> eyre::Result<()> {
@@ -1581,10 +1574,7 @@ mod tests {
             assert_eq!(graphs.len(), 1);
             graphs.remove(0)
         })?;
-        let particle = graph[EdgeIndex(0)]
-            .particle()
-            .unwrap()
-            .resolve(&graph.model);
+        let particle = graph[EdgeIndex(0)].particle().resolve(&graph.model);
         let particle_name = particle.name.clone();
         let named_mu = particle
             .chemical_potential
@@ -1647,8 +1637,8 @@ mod tests {
             digraph real_masses {
                 node [num=1];
                 edge [num=1];
-                A -> B [id=0 mass=0];
-                A -> B [id=1 mass=2];
+                A -> B [particle=H id=0 mass=0];
+                A -> B [particle=H id=1 mass=2];
                 A -> B [id=2 particle="t"];
             }
         "#,
@@ -1822,8 +1812,8 @@ mod tests {
             digraph complex_mass {
                 node [num=1];
                 edge [num=1];
-                A -> B [id=0 mass="1+1𝑖"];
-                A -> B [id=1 mass=0];
+                A -> B [particle=H id=0 mass="1+1𝑖"];
+                A -> B [particle=H id=1 mass=0];
             }
         "#,
             &model,
@@ -1851,8 +1841,8 @@ mod tests {
                     r#"digraph runtime_mass {{
                     node [num=1];
                     edge [num=1];
-                    A -> B [id=0 mass="{mass}{offset}"];
-                    A -> B [id=1 mass=0];
+                    A -> B [particle=H id=0 mass="{mass}{offset}"];
+                    A -> B [particle=H id=1 mass=0];
                 }}"#
                 )),
                 &model,
@@ -1892,7 +1882,7 @@ mod tests {
         })
         .unwrap();
         let edge = EdgeIndex(0);
-        let particle = graph[edge].particle().unwrap().resolve(&graph.model);
+        let particle = graph[edge].particle().resolve(&graph.model);
         let particle_name = particle.name.clone();
         let named_mu = particle
             .chemical_potential

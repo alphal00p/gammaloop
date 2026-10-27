@@ -1,39 +1,39 @@
-use std::{collections::BTreeMap, fs, path::PathBuf, str::FromStr};
+use std::collections::BTreeMap;
+use std::fs;
+use std::path::PathBuf;
+use std::str::FromStr;
 
 use clap::Subcommand;
 use color_eyre::{Result, Section};
 use eyre::{eyre, Context, Report};
-use figment::{
-    providers::{Format, Serialized},
-    value::{Dict, Value as FigmentValue},
-    Figment,
-};
-use gammalooprs::{
-    model::{ModelGammaLoopExt, ParameterNature, UFOSymbol},
-    processes::ProcessCollection,
-    settings::RuntimeSettings,
-    utils::F,
-};
+use figment::providers::{Format, Serialized};
+use figment::value::{Dict, Value as FigmentValue};
+use figment::Figment;
+use gammalooprs::model::{ModelGammaLoopExt, ParameterNature, UFOSymbol};
+use gammalooprs::processes::ProcessCollection;
+use gammalooprs::settings::RuntimeSettings;
+use gammalooprs::utils::F;
 use schemars::JsonSchema;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use spenso::algebra::complex::Complex;
 use tracing::warn;
 
-use crate::{
-    commands::generate::ProcessArgs,
-    commands::process_settings::{
-        observable_template, parse_quantity_kind, parse_selector_kind, quantity_template,
-        selector_template,
-    },
-    commands::Commands,
-    model_parameters::{
-        external_model_parameter_type, parse_model_parameter_value, validate_model_parameter_type,
-    },
-    state::{State, SyncSettings},
-    tracing::{clear_file_log_filter_override_on_settings_change, file_log_boot_disabled_reason},
-    CLISettings,
+use crate::commands::generate::ProcessArgs;
+use crate::commands::process_settings::{
+    observable_template, parse_quantity_kind, parse_selector_kind, quantity_template,
+    selector_template,
 };
+use crate::commands::Commands;
+use crate::model_parameters::{
+    external_model_parameter_type, parse_model_parameter_value, validate_model_parameter_type,
+};
+use crate::state::{State, SyncSettings};
+use crate::tracing::{
+    clear_file_log_filter_override_on_settings_change, file_log_boot_disabled_reason,
+};
+use crate::CLISettings;
 
 // Keep Figment's source metadata and profile handling while sharing the TOML
 // parser used by the rest of the API.
@@ -1128,35 +1128,36 @@ mod test {
     use std::str::FromStr;
 
     use clap::Parser;
-    use figment::{providers::Serialized, Figment};
-    use gammalooprs::{
-        graph::Graph,
-        initialisation::test_initialise,
-        model::{ModelGammaLoopExt, ParameterNature, ParameterType, UFOSymbol},
-        observables::{
-            FilterQuantity, PairQuantity, QuantityComputation, QuantityOrder, QuantityOrdering,
-            QuantitySettings, SelectorDefinitionSettings,
-        },
-        settings::{global::OrientationPattern, RuntimeSettings},
-        utils::{load_generic_model, F},
+    use figment::providers::Serialized;
+    use figment::Figment;
+    use gammalooprs::graph::Graph;
+    use gammalooprs::initialisation::test_initialise;
+    use gammalooprs::model::{ModelGammaLoopExt, ParameterNature, ParameterType, UFOSymbol};
+    use gammalooprs::observables::{
+        FilterQuantity, PairQuantity, QuantityComputation, QuantityOrder, QuantityOrdering,
+        QuantitySettings, SelectorDefinitionSettings,
     };
+    use gammalooprs::settings::global::OrientationPattern;
+    use gammalooprs::settings::RuntimeSettings;
+    use gammalooprs::utils::{load_generic_model, F};
     use serde::{Deserialize, Serialize};
     use spenso::algebra::complex::Complex;
 
-    use crate::{
-        model_parameters::{
-            model_value_format_hint, parse_model_parameter_value, MODEL_COMPLEX_VALUE_FORMAT_HINT,
-            MODEL_REAL_VALUE_FORMAT_HINT,
-        },
-        state::{ProcessRef, State},
-        tracing::{get_stderr_log_filter, set_stderr_log_filter, set_stderr_log_filter_override},
-        CLISettings, Repl,
+    use crate::model_parameters::{
+        model_value_format_hint, parse_model_parameter_value, MODEL_COMPLEX_VALUE_FORMAT_HINT,
+        MODEL_REAL_VALUE_FORMAT_HINT,
     };
+    use crate::state::{ProcessRef, State};
+    use crate::tracing::{
+        get_stderr_log_filter, set_stderr_log_filter, set_stderr_log_filter_override,
+    };
+    use crate::{CLISettings, Repl};
 
+    use super::super::Commands;
     use super::{
-        super::Commands, apply_process_set_args, validate_model_parameter_type, KvPair,
-        ModelSetValue, ProcessAddTarget, ProcessArgs, ProcessRemoveTarget, ProcessSetArgs,
-        ProcessUpdateTarget, Set, SetArgs,
+        apply_process_set_args, validate_model_parameter_type, KvPair, ModelSetValue,
+        ProcessAddTarget, ProcessArgs, ProcessRemoveTarget, ProcessSetArgs, ProcessUpdateTarget,
+        Set, SetArgs,
     };
 
     fn build_generated_scalar_bubble_state(process_names: &[&str]) -> State {
@@ -1166,7 +1167,7 @@ mod test {
         state.model_parameters = state.model.default_param_card();
         let graph_path =
             crate::test_workspace_root().join("tests/resources/graphs/scalar_bubble.dot");
-        let graphs = Graph::from_finalized_runtime_path(&graph_path, &state.model)
+        let graphs = Graph::from_dot_path(&graph_path, &state.model)
             .expect("scalar bubble graph fixture should load");
 
         for process_name in process_names {

@@ -2,31 +2,30 @@
 //! below are independent component oracles, with no tensor conjugation API.
 
 use std::collections::BTreeMap;
+use symbolica::function;
 
-use linnet::half_edge::involution::HedgePair;
+use linnet::half_edge::involution::{Flow, HedgePair};
 
-use spenso::{
-    iterators::IteratableTensor,
-    network::{
-        ExecutionResult, Sequential, SmallestDegree,
-        library::symbolic::{ExplicitKey, TensorLibrary},
-        parsing::ParseSettings,
-    },
-    structure::{TensorStructure, representation::Minkowski, slot::IsAbstractSlot},
-    tensors::parametric::ParamTensor,
-};
-use symbolica::{
-    atom::{Atom, AtomCore},
-    id::Replacement,
-};
+use spenso::iterators::IteratableTensor;
+use spenso::network::library::symbolic::{ExplicitKey, TensorLibrary};
+use spenso::network::parsing::ParseSettings;
+use spenso::network::{ExecutionResult, Sequential, SmallestDegree};
+use spenso::structure::TensorStructure;
+use spenso::structure::representation::Minkowski;
+use spenso::structure::slot::IsAbstractSlot;
+use spenso::tensors::parametric::ParamTensor;
+use symbolica::atom::{Atom, AtomCore};
+use symbolica::id::Replacement;
 
-use crate::{
-    graph::{Graph, parse::NumeratorInterface},
-    initialisation::test_initialise,
-    model::{Model, ModelGammaLoopExt, UFOSymbol, VertexRuleIdGammaLoopExt},
-    numerator::{ParsingNet, aind::Aind},
-    utils::{FUN_LIB, load_generic_model},
+use crate::graph::parse::NumeratorInterface;
+use crate::graph::{Graph, LMBext};
+use crate::initialisation::test_initialise;
+use crate::model::{
+    Model, ModelGammaLoopExt, ParticleIdGammaLoopExt, UFOSymbol, VertexRuleIdGammaLoopExt,
 };
+use crate::numerator::ParsingNet;
+use crate::numerator::aind::Aind;
+use crate::utils::{FUN_LIB, GS, load_generic_model};
 
 type Matrix = [[Atom; 4]; 4];
 
@@ -217,7 +216,7 @@ fn tensor_matrix(expression: Atom, vector_component: usize) -> Matrix {
 fn generated_charged_scalar_forward_vertex_is_already_the_hermitian_partner() {
     test_initialise().unwrap();
     let model = load_generic_model("sm");
-    let graphs = Graph::import_dot(
+    let graphs = Graph::from_dot(
         r#"
         digraph direct {
             ext [style=invis];
@@ -252,7 +251,7 @@ fn generated_charged_scalar_forward_vertex_is_already_the_hermitian_partner() {
 fn generated_complex_charged_current_preserves_the_ckm_norm() {
     test_initialise().unwrap();
     let model = load_generic_model("sm");
-    let graphs = Graph::import_dot(
+    let graphs = Graph::from_dot(
         r#"
         digraph direct {
             ext [style=invis];
@@ -302,7 +301,7 @@ fn generated_sm_quark_higgs_and_neutral_goldstone_vertices_follow_the_action() {
         ("b", "yb", -1),
     ] {
         for scalar in ["H", "G0"] {
-            let graphs = Graph::import_dot(
+            let graphs = Graph::from_dot(
                 &format!(
                     r#"
                     digraph decay {{
@@ -362,7 +361,7 @@ fn generated_sm_quark_charged_yukawas_satisfy_hermiticity_and_ward_identities() 
             .into_iter()
             .enumerate()
         {
-            let graphs = Graph::import_dot(
+            let graphs = Graph::from_dot(
                 &format!(
                     r#"
                     digraph scalar_plus {{
@@ -493,7 +492,7 @@ fn generated_sm_charged_ward_follows_the_action() {
     // The approved canonical model carries the action-consistent Lorentz rules;
     // loading it rebuilds the vertex rules and their shared Lorentz references.
     let model = load_generic_model("sm");
-    let graphs = Graph::import_dot(
+    let graphs = Graph::from_dot(
         r#"
             digraph goldstone {
                 ext [style=invis];
@@ -562,6 +561,101 @@ fn generated_sm_charged_ward_follows_the_action() {
 }
 
 #[test]
+fn generated_sm_ghost_momenta_follow_the_ordered_incoming_state() {
+    test_initialise().unwrap();
+    let model = load_generic_model("sm");
+    let momenta = [[5, 1, 2, 3], [3, -2, 1, 4], [-8, 1, -3, -7]];
+    for component in 0..4 {
+        assert_eq!(momenta.iter().map(|p| p[component]).sum::<i64>(), 0);
+    }
+    // In the ordered incoming (ghost, antighost, vector) state, the Grassmann
+    // contraction of barc c supplies a minus. With D=partial-ieA, V_26 is
+    // -ie(p2+p3)=+ie p1. The independent V_13 coupling has the opposite sign.
+    for (vertex_name, particles, coefficient) in [
+        ("V_26", ["ghWp", "ghWp~", "a"], 1),
+        ("V_13", ["ghA", "ghWp~", "W+"], -1),
+    ] {
+        let dot = format!(
+            r#"digraph ghost {{
+                ext [style=invis];
+                ext -> amplitude [particle="{}"];
+                ext -> amplitude [particle="{}"];
+                ext -> amplitude [particle="{}"];
+            }}"#,
+            particles[0], particles[1], particles[2]
+        );
+        let graphs = Graph::from_dot(&dot, &model).unwrap();
+        let graph = &graphs[0];
+        assert_eq!(graph.overall_factor, Atom::one());
+        let (node, _, vertex) = graph
+            .underlying
+            .iter_nodes()
+            .find(|(_, _, vertex)| {
+                vertex
+                    .vertex_rule
+                    .as_ref()
+                    .is_some_and(|rule| rule.resolve(&model).name == vertex_name)
+            })
+            .unwrap();
+        let mut slots = BTreeMap::new();
+        let mut vector_indices = Vec::new();
+        for hedge in graph.underlying.iter_crown(node) {
+            assert_eq!(graph.underlying.flow(hedge), Flow::Sink);
+            let order = usize::from(graph.underlying[hedge].ufo_order.value);
+            let edge = graph.underlying[&hedge];
+            let particle = graph.underlying[edge].particle.particle().resolve(&model);
+            assert_eq!(particle.name, particles[order]);
+            assert_eq!(particle.ghost_number, [1, -1, 0][order]);
+            assert!(slots.insert(order, edge).is_none());
+            if order == 2 {
+                vector_indices.extend(
+                    graph.underlying[hedge]
+                        .num_indices
+                        .spin_indices
+                        .vertex_indices
+                        .external_structure_iter()
+                        .map(|slot| slot.to_atom()),
+                );
+            }
+        }
+        assert_eq!(slots.keys().copied().collect::<Vec<_>>(), [0, 1, 2]);
+        assert_eq!(vector_indices.len(), 1);
+        let expression = model
+            .expand_couplings(&NumeratorInterface::export(&vertex.num.value).0)
+            .replace(Atom::from(UFOSymbol::from("ee")).to_pattern())
+            .with(Atom::one());
+        for (component, &first) in momenta[0].iter().enumerate() {
+            let index = GS.cind(component);
+            let mut raw = expression
+                .replace(vector_indices[0].to_pattern())
+                .with(index.clone());
+            let mut routed = raw.replace_multiple(graph.integrand_replacement(
+                &graph.full_filter(),
+                &graph.loop_momentum_basis,
+                std::slice::from_ref(&index),
+            ));
+            for (&order, &edge) in &slots {
+                let value = Atom::num(momenta[order][component]);
+                raw = raw.replace(GS.emr_mom(edge, &index)).with(value.clone());
+                let external = graph.loop_momentum_basis.ext_from(edge).unwrap();
+                routed = routed
+                    .replace(function!(GS.external_mom, external.0, &index))
+                    .with(value);
+            }
+            let expected = Atom::num(coefficient * first) * Atom::i();
+            assert_eq!(raw, expected, "{vertex_name} raw component {component}");
+            assert_eq!(
+                routed, expected,
+                "{vertex_name} routed component {component}"
+            );
+            if vertex_name == "V_26" {
+                assert_ne!(raw, Atom::num(-momenta[1][component]) * Atom::i());
+            }
+        }
+    }
+}
+
+#[test]
 fn generated_sm_virtual_vector_and_goldstone_exchange_matches_unitary_current() {
     test_initialise().unwrap();
     let model = load_generic_model("sm");
@@ -581,7 +675,7 @@ fn generated_sm_virtual_vector_and_goldstone_exchange_matches_unitary_current() 
         } else {
             ("Z", "G0", "ta-", "MZ")
         };
-        let graphs = Graph::import_dot(
+        let graphs = Graph::from_dot(
             &format!(
                 r#"
                 digraph vector_exchange {{

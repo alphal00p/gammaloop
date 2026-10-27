@@ -385,6 +385,10 @@ impl FeynmanDiagram {
                     pattern: drawing.pattern,
                     flow: drawing.flow,
                     momentum: options.momentum_arrows,
+                    flow_arrow: drawing.flow_arrow,
+                    momentum_arrow: drawing.momentum_arrow,
+                    flow_arrow_paints: drawing.flow_arrow_paints,
+                    momentum_arrow_paints: drawing.momentum_arrow_paints,
                     momentum_offset: options.momentum_arrow_offset,
                     label,
                     details,
@@ -463,7 +467,7 @@ impl FeynmanDiagram {
         let (edge_specs, edge_drawings) = edges.into_iter().unzip();
         Ok(Scene {
             graph: TypstGraphSpec {
-                name: Some(self.name().to_owned()),
+                name: self.name().map(str::to_owned),
                 data: None,
                 statements: BTreeMap::new(),
                 default_edge_statements: BTreeMap::new(),
@@ -544,6 +548,10 @@ impl SceneOptions {
                 None
             },
             momentum: self.momentum_arrows,
+            flow_arrow: EdgeDrawing::default_flow_arrow(),
+            momentum_arrow: EdgeDrawing::default_momentum_arrow(),
+            flow_arrow_paints: Vec::new(),
+            momentum_arrow_paints: Vec::new(),
             momentum_offset: self.momentum_arrow_offset,
             label: None,
             details: Details::default(),

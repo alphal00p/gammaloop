@@ -3,49 +3,39 @@ use std::collections::{BTreeMap, BTreeSet};
 use ahash::AHashSet;
 use color_eyre::Result;
 use itertools::Itertools;
-use linnet::half_edge::{
-    involution::{EdgeIndex, Flow, Hedge, HedgePair},
-    subgraph::{Inclusion, InternalSubGraph, ModifySubSet, SuBitGraph, SubSetLike},
+use linnet::half_edge::involution::{EdgeIndex, Flow, Hedge, HedgePair};
+use linnet::half_edge::subgraph::{
+    Inclusion, InternalSubGraph, ModifySubSet, SuBitGraph, SubSetLike,
 };
-use spenso::structure::{
-    abstract_index::AIND_SYMBOLS,
-    concrete_index::ExpandedIndex,
-    representation::{LibraryRep, Minkowski, RepName},
-};
+use spenso::structure::abstract_index::AIND_SYMBOLS;
+use spenso::structure::concrete_index::ExpandedIndex;
+use spenso::structure::representation::{LibraryRep, Minkowski, RepName};
+use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder};
 use symbolica::domains::rational::Rational;
-use symbolica::{
-    atom::{Atom, AtomCore, AtomView, FunctionBuilder},
-    function,
-    graph::Graph as SymbolicaGraph,
-    id::Replacement,
-};
+use symbolica::function;
+use symbolica::graph::Graph as SymbolicaGraph;
+use symbolica::id::Replacement;
 #[cfg(test)]
 use three_dimensional_reps::LinearSurface;
+use three_dimensional_reps::graph_io::{
+    GraphIoError, ParsedGraphExternalEdge, ParsedGraphInitialStateCutEdge, ParsedGraphInternalEdge,
+    initial_state_cut_external_alias,
+};
+use three_dimensional_reps::utils::{rank_i64, solve_rational_system};
 use three_dimensional_reps::{
-    EnergyEdgeIndexMap, MomentumSignature, ParsedGraph, ThreeDGraphSource,
-    graph_io::{
-        GraphIoError, ParsedGraphExternalEdge, ParsedGraphInitialStateCutEdge,
-        ParsedGraphInternalEdge, initial_state_cut_external_alias,
-    },
-    utils::{rank_i64, solve_rational_system},
-    validate_parsed_graph,
+    EnergyEdgeIndexMap, MomentumSignature, ParsedGraph, ThreeDGraphSource, validate_parsed_graph,
 };
 
-use crate::{
-    cff::surface::{GammaLoopLinearEnergyExpr, LinearEnergyExpr},
-    graph::{Graph, LMBext, LoopMomentumBasis},
-    momentum::SignOrZero,
-    numerator::energy_degree::{
-        EnergyPowerAssignmentPlan, EnergyReference, EquivalentEnergyCandidates,
-        PlannedEnergyExpression,
-    },
-    utils::{
-        GS, W_,
-        symbols::{UvDenominatorClassId, UvMomentumProvenanceRole},
-    },
-    uv::approx::local_4d::CanonicalUvDenominatorClass,
-    uv::uv_graph::UVE,
+use crate::cff::surface::{GammaLoopLinearEnergyExpr, LinearEnergyExpr};
+use crate::graph::{Graph, LMBext, LoopMomentumBasis};
+use crate::momentum::SignOrZero;
+use crate::numerator::energy_degree::{
+    EnergyPowerAssignmentPlan, EnergyReference, EquivalentEnergyCandidates, PlannedEnergyExpression,
 };
+use crate::utils::symbols::{UvDenominatorClassId, UvMomentumProvenanceRole};
+use crate::utils::{GS, W_};
+use crate::uv::approx::local_4d::CanonicalUvDenominatorClass;
+use crate::uv::uv_graph::UVE;
 
 impl ThreeDGraphSource for Graph {
     fn to_three_d_parsed_graph(&self) -> three_dimensional_reps::graph_io::Result<ParsedGraph> {
@@ -2571,7 +2561,7 @@ impl<'a> GraphThreeDSource<'a> {
         // Denominators absent from this additive 4D term are contracted only
         // in the source topology. The typed atom remains untouched and keeps
         // exact multiplicity and denominator expressions.
-        let mut parent = (0..self.graph.n_nodes()).collect_vec();
+        let mut parent = (0..self.graph.node_bound()).collect_vec();
         for (pair, edge_id, edge_data) in self.graph.underlying.iter_edges() {
             if edge_data.data.is_dummy || !self.contracts_edge(edge_id) {
                 continue;
@@ -2687,7 +2677,7 @@ impl<'a> GraphThreeDSource<'a> {
             .filter(|(_, (uses_uv_loop_basis, _, _, _, _))| *uses_uv_loop_basis)
             .map(|(source_edge, _)| *source_edge)
             .collect::<BTreeSet<_>>();
-        let mut uv_parent = (0..self.graph.n_nodes()).collect_vec();
+        let mut uv_parent = (0..self.graph.node_bound()).collect_vec();
         for (pair, edge_id, edge) in self.graph.underlying.iter_edges() {
             if edge.data.is_dummy
                 || !self.uv_edges.contains(&edge_id)
@@ -3229,7 +3219,7 @@ impl ThreeDGraphSource for GraphThreeDSource<'_> {
         // Keep contraction virtual here: linnet graph contraction mutates/deletes
         // edges, while the CFF expression must still map back to the original
         // EdgeIndex values used by GammaLoop's energy and surface caches.
-        let mut parent = (0..self.graph.n_nodes()).collect_vec();
+        let mut parent = (0..self.graph.node_bound()).collect_vec();
         for (pair, edge_id, edge_data) in self.graph.underlying.iter_edges() {
             if edge_data.data.is_dummy || !self.contracts_edge(edge_id) {
                 continue;
@@ -4012,29 +4002,27 @@ fn sign_to_i32(sign: SignOrZero) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        cff::expression::GammaLoopOrientationExpression,
-        cff::surface::GammaLoopSurfaceCache,
-        finalized_runtime_dot,
-        graph::cuts::CutSet,
-        initialisation::test_initialise,
-        momentum::sample::LoopIndex,
-        numerator::energy_degree::{EnergyPowerAnalyzer, EquivalentEnergyCandidates},
-        settings::global::OrientationPattern,
-        utils::symbols::UvMomentumProvenanceRole,
-    };
+    use crate::cff::expression::GammaLoopOrientationExpression;
+    use crate::cff::surface::GammaLoopSurfaceCache;
+    use crate::dot;
+    use crate::graph::cuts::CutSet;
+    use crate::initialisation::test_initialise;
+    use crate::momentum::sample::LoopIndex;
+    use crate::numerator::energy_degree::{EnergyPowerAnalyzer, EquivalentEnergyCandidates};
+    use crate::settings::global::OrientationPattern;
+    use crate::utils::symbols::UvMomentumProvenanceRole;
     use color_eyre::Result;
     use linnet::half_edge::subgraph::SubSetOps;
 
     #[test]
     fn exact_momentum_signatures_reject_overflow_and_preserve_cancellation() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(digraph exact_momentum_integer_range { graph [projector=1]
+        let graph: Graph = dot!(digraph exact_momentum_integer_range { graph [projector=1]
             edge [num=1 mass=1]
             node [num=1]
-            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
-            b -> c [id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            c -> a [id=2 sink="{ufo_order:1}" source="{ufo_order:1}"]
+            a -> b [particle=H id=0 lmb_id=0]
+            b -> c [particle=H id=1]
+            c -> a [particle=H id=2]
         })?;
         let momentum = |edge| function!(GS.emr_mom, edge);
         let large = Atom::num(i32::MAX);
@@ -4063,17 +4051,17 @@ mod tests {
     #[test]
     fn contracted_source_preserves_emr_ids_without_denominator_aliases() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(digraph { graph [projector=1]
+        let graph: Graph = dot!(digraph { graph [projector=1]
             edge [num=1 mass=1]
             node [num=1]
 
-            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
-            b -> c [id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            c -> a [id=2 sink="{ufo_order:1}" source="{ufo_order:1}"]
-            d -> e [id=3 lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            e -> f [id=4 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            f -> d [id=5 sink="{ufo_order:2}" source="{ufo_order:1}"]
-            c -> d [id=6 source="{ufo_order:2}" sink="{ufo_order:0}"]
+            a -> b [particle=H id=0 lmb_id=0]
+            b -> c [particle=H id=1]
+            c -> a [particle=H id=2]
+            d -> e [particle=H id=3 lmb_id=1]
+            e -> f [particle=H id=4]
+            f -> d [particle=H id=5]
+            c -> d [particle=H id=6]
         })?;
         let contracted_edges = [EdgeIndex::from(0), EdgeIndex::from(1), EdgeIndex::from(2)];
         let source = GraphThreeDSource::new(&graph, &contracted_edges)?;
@@ -4134,14 +4122,14 @@ mod tests {
     #[test]
     fn exact_source_preserves_the_complete_cubic_propagator_contour() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(digraph { graph [projector=1]
+        let graph: Graph = dot!(digraph { graph [projector=1]
             edge [num=1 mass=1]
             node [num=1]
 
-            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
-            b -> c [id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            c -> a [id=2 sink="{ufo_order:1}" source="{ufo_order:1}"]
-            c -> d [id=3 source="{ufo_order:2}" sink="{ufo_order:0}"]
+            a -> b [particle=H id=0 lmb_id=0]
+            b -> c [particle=H id=1]
+            c -> a [particle=H id=2]
+            c -> d [particle=H id=3]
         })?;
         let edge = EdgeIndex::from(0);
         let momentum = FunctionBuilder::new(GS.emr_mom)
@@ -4220,12 +4208,12 @@ mod tests {
     #[test]
     fn exact_source_owner_relabeling_preserves_residue_rank_and_cut_provenance() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph exact_distinct_owners { graph [projector=1]
+        let mut graph: Graph = dot!(digraph exact_distinct_owners { graph [projector=1]
             edge [num=1 mass=1]
             node [num=1]
 
-            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
-            a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
+            a -> b [particle=H id=0 lmb_id=0]
+            a -> b [particle=H id=1]
         })?;
         let distinct_owners = [EdgeIndex(0), EdgeIndex(1)].map(|source_edge| FourDDenominator {
             source_edge,
@@ -4416,19 +4404,19 @@ mod tests {
     #[test]
     fn exact_source_keeps_source_instantiated_domains_and_masses_separate() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(digraph exact_same_owner_domains { graph [projector=1]
+        let graph: Graph = dot!(digraph exact_same_owner_domains { graph [projector=1]
             edge [num=1 mass=1]
             node [num=1]
 
-            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
-            b -> c [id=3 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            c -> a [id=4 sink="{ufo_order:1}" source="{ufo_order:1}"]
-            d -> e [id=1 lmb_id=1 source="{ufo_order:0}" sink="{ufo_order:0}"]
-            e -> f [id=5 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            f -> d [id=6 sink="{ufo_order:1}" source="{ufo_order:1}"]
-            g -> h [id=2 lmb_id=2 source="{ufo_order:0}" sink="{ufo_order:0}"]
-            h -> i [id=7 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            i -> g [id=8 sink="{ufo_order:1}" source="{ufo_order:1}"]
+            a -> b [particle=H id=0 lmb_id=0]
+            b -> c [particle=H id=3]
+            c -> a [particle=H id=4]
+            d -> e [particle=H id=1 lmb_id=1]
+            e -> f [particle=H id=5]
+            f -> d [particle=H id=6]
+            g -> h [particle=H id=2 lmb_id=2]
+            h -> i [particle=H id=7]
+            i -> g [particle=H id=8]
         })?;
         let cograph_edge = EdgeIndex(0);
         let other_cograph_edge = EdgeIndex(1);
@@ -4505,12 +4493,12 @@ mod tests {
     #[test]
     fn exact_source_normalizes_opposite_spelling_inside_one_power_chain() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(digraph exact_opposite_same_owner { graph [projector=1]
+        let graph: Graph = dot!(digraph exact_opposite_same_owner { graph [projector=1]
             edge [num=1 mass=1]
             node [num=1]
 
-            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
-            a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
+            a -> b [particle=H id=0 lmb_id=0]
+            a -> b [particle=H id=1]
         })?;
         let momentum = FunctionBuilder::new(GS.emr_mom).add_arg(0).finish();
         let repeated_mass = graph.underlying[EdgeIndex(0)]
@@ -4626,12 +4614,12 @@ mod tests {
     #[test]
     fn exact_massless_surface_uses_normalized_edge_mass() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(digraph exact_massless_surface { graph [projector=1]
+        let graph: Graph = dot!(digraph exact_massless_surface { graph [projector=1]
             edge [num=1 mass="UFO::ZERO"]
             node [num=1]
 
-            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
-            a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
+            a -> b [particle=H id=0 lmb_id=0]
+            a -> b [particle=H id=1]
         })?;
         let denominators = [EdgeIndex(0), EdgeIndex(1)].map(|source_edge| FourDDenominator {
             source_edge,
@@ -4679,18 +4667,18 @@ mod tests {
     #[test]
     fn unexpanded_exact_source_is_the_production_source() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(
+        let graph: Graph = dot!(
             digraph exact_unexpanded_identity { graph [projector=1]
                 num = 1
                 edge [particle="scalar_1" num=1]
                 node [num=1]
 
-                v2 -> v3 [id=0 is_cut=0 initial_state_connection=true source="{ufo_order:1}" sink="{ufo_order:0}"]
-                v0 -> v1 [id=1 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
-                v0 -> v1 [id=2 source="{ufo_order:1}" sink="{ufo_order:1}"]
-                v3 -> v0 [id=3 lmb_id=1 sink="{ufo_order:2}" source="{ufo_order:2}"]
-                v1 -> v2 [id=4 source="{ufo_order:2}" sink="{ufo_order:0}"]
-                v2 -> v3 [id=5 source="{ufo_order:2}" sink="{ufo_order:1}"]
+                v2 -> v3 [id=0 is_cut=0]
+                v0 -> v1 [id=1 lmb_id=0]
+                v0 -> v1 [id=2]
+                v3 -> v0 [id=3 lmb_id=1]
+                v1 -> v2 [id=4]
+                v2 -> v3 [id=5]
             },
             "scalars"
         )?;
@@ -4756,13 +4744,13 @@ mod tests {
     #[test]
     fn unexpanded_massless_opposite_spelling_preserves_the_source_frame() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(digraph exact_massless_opposite_identity { graph [projector=1]
+        let graph: Graph = dot!(digraph exact_massless_opposite_identity { graph [projector=1]
             edge [num=1 mass="UFO::ZERO"]
             node [num=1]
 
-            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
-            b -> c [id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            c -> a [id=2 sink="{ufo_order:1}" source="{ufo_order:1}"]
+            a -> b [particle=H id=0 lmb_id=0]
+            b -> c [particle=H id=1]
+            c -> a [particle=H id=2]
         })?;
         let production = GraphThreeDSource::new(&graph, &[])?;
         let production_parsed = production.to_three_d_parsed_graph()?;
@@ -4822,13 +4810,13 @@ mod tests {
     #[test]
     fn tagged_odd_hard_momentum_composes_the_d_neg_q_routing_sign() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(digraph exact_tagged_massless_opposite { graph [projector=1]
+        let graph: Graph = dot!(digraph exact_tagged_massless_opposite { graph [projector=1]
             edge [num=1 mass="UFO::ZERO"]
             node [num=1]
 
-            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
-            b -> c [id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            c -> a [id=2 sink="{ufo_order:1}" source="{ufo_order:1}"]
+            a -> b [particle=H id=0 lmb_id=0]
+            b -> c [particle=H id=1]
+            c -> a [particle=H id=2]
         })?;
         let mut denominators = (0..3)
             .map(|source_edge| {
@@ -4886,16 +4874,16 @@ mod tests {
     #[test]
     fn exact_full_source_preserves_production_carrier_orientations() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph exact_production_basis { graph [projector=1]
+        let mut graph: Graph = dot!(digraph exact_production_basis { graph [projector=1]
             edge [num=1 mass=1]
             node [num=1]
 
-            a -> b [id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
-            b -> c [id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            c -> a [id=2 lmb_id=0 sink="{ufo_order:1}" source="{ufo_order:1}"]
-            c -> d [id=3 source="{ufo_order:2}" sink="{ufo_order:0}"]
-            d -> e [id=4 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            e -> c [id=5 lmb_id=1 sink="{ufo_order:3}" source="{ufo_order:1}"]
+            a -> b [particle=H id=0]
+            b -> c [particle=H id=1]
+            c -> a [particle=H id=2 lmb_id=0]
+            c -> d [particle=H id=3]
+            d -> e [particle=H id=4]
+            e -> c [particle=H id=5 lmb_id=1]
         })?;
         let denominators = (0..6)
             .map(|edge| {
@@ -4970,16 +4958,16 @@ mod tests {
     #[test]
     fn exact_shifted_factor_reversal_preserves_projected_affine_maps() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(digraph exact_shifted_reversal { graph [projector=1]
+        let graph: Graph = dot!(digraph exact_shifted_reversal { graph [projector=1]
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
 
-            incoming -> a [id=2 sink="{ufo_order:2}"]
-            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
-            a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
-            b -> outgoing [id=3 source="{ufo_order:2}"]
+            incoming -> a [particle=H id=2]
+            a -> b [particle=H id=0 lmb_id=0]
+            a -> b [particle=H id=1]
+            b -> outgoing [particle=H id=3]
         })?;
         let denominators = [EdgeIndex(0), EdgeIndex(1)].map(|source_edge| FourDDenominator {
             source_edge,
@@ -5043,16 +5031,16 @@ mod tests {
     #[test]
     fn unexpanded_external_source_reuses_production_frame_for_reversed_input() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(digraph exact_external_production_identity { graph [projector=1]
+        let graph: Graph = dot!(digraph exact_external_production_identity { graph [projector=1]
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
 
-            incoming -> a [id=2 sink="{ufo_order:2}"]
-            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
-            a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
-            b -> outgoing [id=3 source="{ufo_order:2}"]
+            incoming -> a [particle=H id=2]
+            a -> b [particle=H id=0 lmb_id=0]
+            a -> b [particle=H id=1]
+            b -> outgoing [particle=H id=3]
         })?;
         let mut denominators = [EdgeIndex(1), EdgeIndex(0)].map(|source_edge| FourDDenominator {
             source_edge,
@@ -5110,16 +5098,16 @@ mod tests {
     #[test]
     fn exact_rank_deficient_source_keeps_the_complete_active_direction() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(digraph exact_rank_deficient { graph [projector=1]
+        let graph: Graph = dot!(digraph exact_rank_deficient { graph [projector=1]
             edge [num=1 mass=1]
             node [num=1]
 
-            a -> b [id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
-            b -> c [id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            c -> a [id=2 lmb_id=0 sink="{ufo_order:1}" source="{ufo_order:1}"]
-            c -> d [id=3 source="{ufo_order:2}" sink="{ufo_order:0}"]
-            d -> e [id=4 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            e -> c [id=5 lmb_id=1 sink="{ufo_order:3}" source="{ufo_order:1}"]
+            a -> b [particle=H id=0]
+            b -> c [particle=H id=1]
+            c -> a [particle=H id=2 lmb_id=0]
+            c -> d [particle=H id=3]
+            d -> e [particle=H id=4]
+            e -> c [particle=H id=5 lmb_id=1]
         })?;
         let parent_carriers = graph
             .loop_momentum_basis
@@ -5187,18 +5175,18 @@ mod tests {
     #[test]
     fn exact_rank_deficient_initial_cut_energy_uses_its_external_alias() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph exact_rank_deficient_initial_cut { graph [projector=1]
+        let mut graph: Graph = dot!(digraph exact_rank_deficient_initial_cut { graph [projector=1]
             edge [num=1 mass=1]
             node [num=1]
 
-            c -> d [id=0 is_cut=0 initial_state_connection=true source="{ufo_order:2}" sink="{ufo_order:0}"]
-            a -> b [id=1 source="{ufo_order:0}" sink="{ufo_order:0}"]
-            b -> c [id=2 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            c -> a [id=3 lmb_id=0 sink="{ufo_order:1}" source="{ufo_order:1}"]
-            d -> e [id=4 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            e -> f [id=5 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            f -> d [id=6 lmb_id=1 sink="{ufo_order:2}" source="{ufo_order:2}"]
-            f -> a [id=7 sink="{ufo_order:2}" source="{ufo_order:1}"]
+            c -> d [particle=H id=0 is_cut=0]
+            a -> b [particle=H id=1]
+            b -> c [particle=H id=2]
+            c -> a [particle=H id=3 lmb_id=0]
+            d -> e [particle=H id=4]
+            e -> f [particle=H id=5]
+            f -> d [particle=H id=6 lmb_id=1]
+            f -> a [particle=H id=7]
         })?;
         let cut_edge = graph
             .get_edges_in_initial_state_cut()
@@ -5700,40 +5688,40 @@ mod tests {
         // The frozen GL04 Taylor numerator below belongs to the two-line
         // self-energy on owners 5 and 6. Retain that physical incidence while
         // reconstructing its raised denominators through the production API.
-        let gl04: Graph = finalized_runtime_dot!(digraph gl04_t2_source_certificate { graph [projector=1]
+        let gl04: Graph = dot!(digraph gl04_t2_source_certificate { graph [projector=1]
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
-            incoming -> v1 [id=0 sink="{ufo_order:0}"]
-            v0 -> v3 [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            v0 -> v5 [id=2 source="{ufo_order:2}" sink="{ufo_order:0}"]
-            v1 -> v2 [id=3 lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            v1 -> v3 [id=4 source="{ufo_order:2}" sink="{ufo_order:1}"]
-            v2 -> v4 [id=5 lmb_id=2 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            v2 -> v4 [id=6 source="{ufo_order:2}" sink="{ufo_order:1}"]
-            v3 -> v5 [id=7 source="{ufo_order:2}" sink="{ufo_order:1}"]
-            v4 -> v5 [id=8 source="{ufo_order:2}" sink="{ufo_order:2}"]
-            v0 -> outgoing [id=9 source="{ufo_order:0}"]
+            incoming -> v1 [particle=H id=0]
+            v0 -> v3 [particle=H id=1 lmb_id=0]
+            v0 -> v5 [particle=H id=2]
+            v1 -> v2 [particle=H id=3 lmb_id=1]
+            v1 -> v3 [particle=H id=4]
+            v2 -> v4 [particle=H id=5 lmb_id=2]
+            v2 -> v4 [particle=H id=6]
+            v3 -> v5 [particle=H id=7]
+            v4 -> v5 [particle=H id=8]
+            v0 -> outgoing [particle=H id=9]
         })?;
         // This GL00 graph and owner-local Q5^0 probe are used by the scalar LU
         // regression. Its first bubble has Q4=q, Q3=p and Q5=-q-p; the complete
         // T<=1 numerator below retains the odd fixed-owner factor and soft p.
-        let gl00: Graph = finalized_runtime_dot!(digraph gl00_t1_source_certificate { graph [projector=1]
+        let gl00: Graph = dot!(digraph gl00_t1_source_certificate { graph [projector=1]
             edge [num=1 mass=0]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
-            incoming -> v0 [id=0 mass=1 sink="{ufo_order:0}"]
-            v0 -> v1 [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            v0 -> v5 [id=2 source="{ufo_order:2}" sink="{ufo_order:0}"]
-            v1 -> v3 [id=3 source="{ufo_order:2}" sink="{ufo_order:0}"]
-            v2 -> v3 [id=4 lmb_id=1 source="{ufo_order:0}" sink="{ufo_order:1}"]
-            v2 -> v3 [id=5 num="Q(5,spenso::cind(0))" source="{ufo_order:1}" sink="{ufo_order:2}"]
-            v2 -> v4 [id=6 source="{ufo_order:2}" sink="{ufo_order:0}"]
-            v4 -> v5 [id=7 lmb_id=2 source="{ufo_order:1}" sink="{ufo_order:1}"]
-            v4 -> v5 [id=8 mass=1 source="{ufo_order:2}" sink="{ufo_order:2}"]
-            v1 -> outgoing [id=9 mass=1 source="{ufo_order:1}"]
+            incoming -> v0 [particle=H id=0 mass=1]
+            v0 -> v1 [particle=H id=1 lmb_id=0]
+            v0 -> v5 [particle=H id=2]
+            v1 -> v3 [particle=H id=3]
+            v2 -> v3 [particle=H id=4 lmb_id=1]
+            v2 -> v3 [particle=H id=5 num="Q(5,spenso::cind(0))"]
+            v2 -> v4 [particle=H id=6]
+            v4 -> v5 [particle=H id=7 lmb_id=2]
+            v4 -> v5 [particle=H id=8 mass=1]
+            v1 -> outgoing [particle=H id=9 mass=1]
         })?;
         for (case, graph, owner_a, owner_b, taylor_order, powers) in [
             ("gl04_t2", gl04, EdgeIndex(5), EdgeIndex(6), 2, [2, 3]),
@@ -6602,13 +6590,13 @@ mod tests {
     #[test]
     fn exact_energy_mapper_uses_selected_fixed_owner_sample_with_uv_mass() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(digraph exact_uv_literal_momentum { graph [projector=1]
+        let graph: Graph = dot!(digraph exact_uv_literal_momentum { graph [projector=1]
             edge [num=1 mass=1]
             node [num=1]
 
-            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
-            b -> c [id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            c -> a [id=2 sink="{ufo_order:1}" source="{ufo_order:1}"]
+            a -> b [particle=H id=0 lmb_id=0]
+            b -> c [particle=H id=1]
+            c -> a [particle=H id=2]
         })?;
         let carrier = graph.loop_momentum_basis.loop_edges[LoopIndex::from(0)];
         let ownership_edge = EdgeIndex(1);
@@ -6663,16 +6651,16 @@ mod tests {
     #[test]
     fn exact_uv_component_inherits_source_minor_and_rejects_wrong_provenance() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(digraph exact_uv_source_minor { graph [projector=1]
+        let graph: Graph = dot!(digraph exact_uv_source_minor { graph [projector=1]
             edge [num=1 mass=1]
             node [num=1]
 
-            a -> b [id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
-            b -> c [id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            c -> a [id=2 lmb_id=0 sink="{ufo_order:1}" source="{ufo_order:1}"]
-            c -> d [id=3 source="{ufo_order:2}" sink="{ufo_order:0}"]
-            d -> e [id=4 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            e -> c [id=5 lmb_id=1 sink="{ufo_order:3}" source="{ufo_order:1}"]
+            a -> b [particle=H id=0]
+            b -> c [particle=H id=1]
+            c -> a [particle=H id=2 lmb_id=0]
+            c -> d [particle=H id=3]
+            d -> e [particle=H id=4]
+            e -> c [particle=H id=5 lmb_id=1]
         })?;
         let uv_edges = (0..graph.underlying.n_edges())
             .map(EdgeIndex)
@@ -6795,21 +6783,21 @@ mod tests {
     #[test]
     fn exact_source_routes_a_hard_uv_row_modulo_the_soft_cograph_span() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(digraph exact_uv_hard_soft_routing { graph [projector=1]
+        let graph: Graph = dot!(digraph exact_uv_hard_soft_routing { graph [projector=1]
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
 
-            incoming -> v5 [id=0 sink="{ufo_order:0}"]
-            v0 -> v2 [id=1 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
-            v3 -> v0 [id=2 sink="{ufo_order:2}" source="{ufo_order:2}"]
-            v0 -> v5 [id=3 source="{ufo_order:1}" sink="{ufo_order:1}"]
-            v2 -> v1 [id=4 sink="{ufo_order:2}" source="{ufo_order:1}"]
-            v1 -> v3 [id=5 lmb_id=1 source="{ufo_order:0}" sink="{ufo_order:0}"]
-            v1 -> v4 [id=6 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            v2 -> v3 [id=7 source="{ufo_order:2}" sink="{ufo_order:1}"]
-            v4 -> outgoing [id=8 source="{ufo_order:1}"]
+            incoming -> v5 [particle=H id=0]
+            v0 -> v2 [particle=H id=1 lmb_id=0]
+            v3 -> v0 [particle=H id=2]
+            v0 -> v5 [particle=H id=3]
+            v2 -> v1 [particle=H id=4]
+            v1 -> v3 [particle=H id=5 lmb_id=1]
+            v1 -> v4 [particle=H id=6]
+            v2 -> v3 [particle=H id=7]
+            v4 -> outgoing [particle=H id=8]
         })?;
         let cograph_edges = [EdgeIndex(1), EdgeIndex(2)];
         let uv_edges = [EdgeIndex(4), EdgeIndex(5), EdgeIndex(7)];
@@ -6898,21 +6886,21 @@ mod tests {
     #[test]
     fn exact_uv_triangle_cached_and_uncached_residues_agree() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(digraph exact_uv_triangle_cache { graph [projector=1]
+        let graph: Graph = dot!(digraph exact_uv_triangle_cache { graph [projector=1]
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
 
-            incoming -> v5 [id=0 sink="{ufo_order:0}"]
-            v0 -> v2 [id=1 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
-            v3 -> v0 [id=2 sink="{ufo_order:2}" source="{ufo_order:2}"]
-            v0 -> v5 [id=3 source="{ufo_order:1}" sink="{ufo_order:1}"]
-            v2 -> v1 [id=4 sink="{ufo_order:2}" source="{ufo_order:1}"]
-            v1 -> v3 [id=5 lmb_id=1 source="{ufo_order:0}" sink="{ufo_order:0}"]
-            v1 -> v4 [id=6 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            v2 -> v3 [id=7 source="{ufo_order:2}" sink="{ufo_order:1}"]
-            v4 -> outgoing [id=8 source="{ufo_order:1}"]
+            incoming -> v5 [particle=H id=0]
+            v0 -> v2 [particle=H id=1 lmb_id=0]
+            v3 -> v0 [particle=H id=2]
+            v0 -> v5 [particle=H id=3]
+            v2 -> v1 [particle=H id=4]
+            v1 -> v3 [particle=H id=5 lmb_id=1]
+            v1 -> v4 [particle=H id=6]
+            v2 -> v3 [particle=H id=7]
+            v4 -> outgoing [particle=H id=8]
         })?;
         let owners = [EdgeIndex(4), EdgeIndex(5), EdgeIndex(7)];
         let carrier = EdgeIndex(5);
@@ -6986,22 +6974,22 @@ mod tests {
     #[test]
     fn exact_uv_triangle_matches_direct_factorized_minkowski_cff_variants() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(digraph exact_uv_triangle_source { graph [projector=1]
+        let graph: Graph = dot!(digraph exact_uv_triangle_source { graph [projector=1]
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
 
-            incoming -> v1 [id=0 sink="{ufo_order:0}"]
-            v0 -> v3 [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            v0 -> v5 [id=2 source="{ufo_order:2}" sink="{ufo_order:0}"]
-            v1 -> v2 [id=3 lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            v1 -> v3 [id=4 source="{ufo_order:2}" sink="{ufo_order:1}"]
-            v2 -> v4 [id=5 lmb_id=2 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            v2 -> v4 [id=6 source="{ufo_order:2}" sink="{ufo_order:1}"]
-            v3 -> v5 [id=7 source="{ufo_order:2}" sink="{ufo_order:1}"]
-            v4 -> v5 [id=8 source="{ufo_order:2}" sink="{ufo_order:2}"]
-            v0 -> outgoing [id=9 source="{ufo_order:0}"]
+            incoming -> v1 [particle=H id=0]
+            v0 -> v3 [particle=H id=1 lmb_id=0]
+            v0 -> v5 [particle=H id=2]
+            v1 -> v2 [particle=H id=3 lmb_id=1]
+            v1 -> v3 [particle=H id=4]
+            v2 -> v4 [particle=H id=5 lmb_id=2]
+            v2 -> v4 [particle=H id=6]
+            v3 -> v5 [particle=H id=7]
+            v4 -> v5 [particle=H id=8]
+            v0 -> outgoing [particle=H id=9]
         })?;
         let owners = [EdgeIndex(1), EdgeIndex(2), EdgeIndex(7)];
         let uv_filter = owners
@@ -7030,13 +7018,13 @@ mod tests {
             &sub_lmb,
             ExactUvSubLmbFrame::TaylorVacuum,
         )?;
-        let direct_graph: Graph = finalized_runtime_dot!(digraph direct_physical_uv_triangle { graph [projector=1]
+        let direct_graph: Graph = dot!(digraph direct_physical_uv_triangle { graph [projector=1]
             edge [num=1 mass=1]
             node [num=1]
 
-            v0 -> v3 [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
-            v0 -> v5 [id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            v3 -> v5 [id=2 source="{ufo_order:1}" sink="{ufo_order:1}"]
+            v0 -> v3 [particle=H id=0 lmb_id=0]
+            v0 -> v5 [particle=H id=1]
+            v3 -> v5 [particle=H id=2]
         })?;
         let direct_owners = [EdgeIndex(0), EdgeIndex(1), EdgeIndex(2)];
         let owner_skeleton = exact_source.physical_owner_skeleton()?;
@@ -7169,17 +7157,17 @@ mod tests {
     #[test]
     fn exact_sub_lmb_taylor_vacuum_keeps_dotted_bubble_owner_incidence() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(digraph exact_taylor_vacuum_bubble { graph [projector=1]
+        let graph: Graph = dot!(digraph exact_taylor_vacuum_bubble { graph [projector=1]
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
 
-            incoming -> a [id=0 sink="{ufo_order:2}"]
-            a -> b [id=1 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
-            a -> b [id=2 source="{ufo_order:1}" sink="{ufo_order:1}"]
-            b -> c [id=3 source="{ufo_order:2}" sink="{ufo_order:0}"]
-            c -> outgoing [id=4 source="{ufo_order:1}"]
+            incoming -> a [particle=H id=0]
+            a -> b [particle=H id=1 lmb_id=0]
+            a -> b [particle=H id=2]
+            b -> c [particle=H id=3]
+            c -> outgoing [particle=H id=4]
         })?;
         let uv_edges = [EdgeIndex(1), EdgeIndex(2)];
         let uv_filter = graph
@@ -7515,16 +7503,16 @@ mod tests {
     #[test]
     fn exact_uv_source_retains_a_non_vacuum_two_point_shift() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(digraph exact_uv_two_point { graph [projector=1]
+        let graph: Graph = dot!(digraph exact_uv_two_point { graph [projector=1]
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
 
-            incoming -> a [id=0 sink="{ufo_order:2}"]
-            a -> b [id=1 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
-            a -> b [id=2 source="{ufo_order:1}" sink="{ufo_order:1}"]
-            b -> outgoing [id=3 source="{ufo_order:2}"]
+            incoming -> a [particle=H id=0]
+            a -> b [particle=H id=1 lmb_id=0]
+            a -> b [particle=H id=2]
+            b -> outgoing [particle=H id=3]
         })?;
         let loop_carrier = FunctionBuilder::new(GS.emr_mom).add_arg(1).finish();
         let mass_squared = Atom::var(GS.m_uv_expansion).pow(2);
@@ -7581,18 +7569,18 @@ mod tests {
     #[test]
     fn exact_source_separates_loop_denominators_from_external_tree_factors() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(digraph shifted_loop { graph [projector=1]
+        let graph: Graph = dot!(digraph shifted_loop { graph [projector=1]
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
 
-            incoming -> a [id=4 sink="{ufo_order:2}"]
-            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
-            b -> c [id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            c -> a [id=2 sink="{ufo_order:1}" source="{ufo_order:1}"]
-            c -> d [id=3 source="{ufo_order:2}" sink="{ufo_order:0}"]
-            d -> outgoing [id=5 source="{ufo_order:1}"]
+            incoming -> a [particle=H id=4]
+            a -> b [particle=H id=0 lmb_id=0]
+            b -> c [particle=H id=1]
+            c -> a [particle=H id=2]
+            c -> d [particle=H id=3]
+            d -> outgoing [particle=H id=5]
         })?;
         let loop_edge = graph.loop_momentum_basis.loop_edges[LoopIndex::from(0)];
         let tree_edge = EdgeIndex::from(3);
@@ -7651,12 +7639,12 @@ mod tests {
     #[test]
     fn pure_tree_exact_denominators_have_no_active_loop_source() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(digraph { graph [projector=1]
+        let graph: Graph = dot!(digraph { graph [projector=1]
             edge [num=1 mass=1]
             node [num=1]
 
-            a -> b [id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
-            b -> c [id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
+            a -> b [particle=H id=0]
+            b -> c [particle=H id=1]
         })?;
         for edge in [EdgeIndex::from(0), EdgeIndex::from(1)] {
             let denominator = FourDDenominator {
@@ -7678,12 +7666,12 @@ mod tests {
     #[test]
     fn pinched_affine_carrier_requires_occurrence_interpolation() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(digraph pinched_affine_sunset { graph [projector=1]
+        let graph: Graph = dot!(digraph pinched_affine_sunset { graph [projector=1]
             edge [num=1 mass=1]
             node [num=1]
-            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
-            a -> b [id=1 lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
-            a -> b [id=2 source="{ufo_order:2}" sink="{ufo_order:2}"]
+            a -> b [particle=H id=0 lmb_id=0]
+            a -> b [particle=H id=1 lmb_id=1]
+            a -> b [particle=H id=2]
         })?;
         let owners = [EdgeIndex(0), EdgeIndex(1), EdgeIndex(2)];
         let denominators = [EdgeIndex(0), EdgeIndex(1)]
@@ -7884,12 +7872,12 @@ mod tests {
     #[test]
     fn pinched_positive_block_preserves_joint_affine_assignment() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(digraph pinched_positive_affine_sunset { graph [projector=1]
+        let graph: Graph = dot!(digraph pinched_positive_affine_sunset { graph [projector=1]
             edge [num=1 mass=1]
             node [num=1]
-            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
-            a -> b [id=1 lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
-            a -> b [id=2 source="{ufo_order:2}" sink="{ufo_order:2}"]
+            a -> b [particle=H id=0 lmb_id=0]
+            a -> b [particle=H id=1 lmb_id=1]
+            a -> b [particle=H id=2]
         })?;
         let owners = [EdgeIndex(0), EdgeIndex(1), EdgeIndex(2)];
         let denominators = owners[..2]
@@ -7983,16 +7971,16 @@ mod tests {
     #[test]
     fn exact_taylor_vacuum_affine_circulation_preserves_energy_mapping() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(digraph exact_affine_taylor_vacuum { graph [projector=1]
+        let graph: Graph = dot!(digraph exact_affine_taylor_vacuum { graph [projector=1]
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
-            incoming -> a [id=0 sink="{ufo_order:2}"]
-            a -> b [id=1 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
-            a -> b [id=2 source="{ufo_order:1}" sink="{ufo_order:1}"]
-            b -> c [id=3 source="{ufo_order:2}" sink="{ufo_order:0}"]
-            c -> outgoing [id=4 source="{ufo_order:1}"]
+            incoming -> a [particle=H id=0]
+            a -> b [particle=H id=1 lmb_id=0]
+            a -> b [particle=H id=2]
+            b -> c [particle=H id=3]
+            c -> outgoing [particle=H id=4]
         })?;
         let owners = [EdgeIndex(1), EdgeIndex(2)];
         let filter = graph

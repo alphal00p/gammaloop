@@ -82,7 +82,7 @@ impl TypstModule {
         })
     }
 
-    /// Import a Typst package such as `@preview/cetz:0.5.1`.
+    /// Import a Typst package such as `@preview/cetz:0.5.2`.
     pub fn package(alias: impl Into<String>, package: impl Into<String>) -> Result<Self> {
         let alias = alias.into();
         let package = package.into();
@@ -862,7 +862,7 @@ mod tests {
         ]))
         .unwrap();
         let request = TypstRenderRequest::new("digraph example { a -> b }", config)
-            .module(TypstModule::package("cetz", "@preview/cetz:0.5.1").unwrap());
+            .module(TypstModule::package("cetz", "@preview/cetz:0.5.2").unwrap());
         let svg = TypstRenderer::new(&base)
             .typst_executable(&executable)
             .to_svg(&request)
@@ -870,7 +870,7 @@ mod tests {
         assert_eq!(svg, "<svg>rendered</svg>");
         let entrypoint = fs::read_to_string(captured).unwrap();
         assert!(entrypoint.contains("_clinnet_template.render(_clinnet_config)"));
-        assert!(entrypoint.contains("#import \"@preview/cetz:0.5.1\" as cetz"));
+        assert!(entrypoint.contains("#import \"@preview/cetz:0.5.2\" as cetz"));
         assert!(entrypoint.contains("data-path:"));
         assert!(entrypoint.len() > 100_000);
 
@@ -896,14 +896,18 @@ mod tests {
                 .is_some()
         );
         assert!(KURVST_PACKAGE_ASSETS.get_file("src/impl.typ").is_some());
-        // linnest.wasm compiles Clarabel and NetworkX-derived code.
-        for name in ["LICENSE.clarabel", "LICENSE.networkx"] {
+        // linnest.wasm compiles Clarabel and NetworkX-derived code; kurvst.wasm
+        // compiles mark geometry derived from tiptoe.
+        for (package, name) in [
+            (&LINNEST_PACKAGE_ASSETS, "linnest.wasm"),
+            (&LINNEST_PACKAGE_ASSETS, "LICENSE.clarabel"),
+            (&LINNEST_PACKAGE_ASSETS, "LICENSE.networkx"),
+            (&KURVST_PACKAGE_ASSETS, "kurvst.wasm"),
+            (&KURVST_PACKAGE_ASSETS, "LICENSE.tiptoe"),
+        ] {
             assert!(
-                !LINNEST_PACKAGE_ASSETS
-                    .get_file(name)
-                    .unwrap()
-                    .contents()
-                    .is_empty()
+                !package.get_file(name).unwrap().contents().is_empty(),
+                "{name}"
             );
         }
         for package in [&LINNEST_PACKAGE_ASSETS, &KURVST_PACKAGE_ASSETS] {
@@ -919,6 +923,7 @@ mod tests {
                                 | "kurvst.wasm"
                                 | "LICENSE.clarabel"
                                 | "LICENSE.networkx"
+                                | "LICENSE.tiptoe"
                                 | "LICENSE"
                         )
                     )
@@ -931,8 +936,8 @@ mod tests {
         assert!(TypstModule::new("style_0", "style.typ").is_ok());
         assert!(TypstModule::new("bad-alias", "style.typ").is_err());
         assert!(TypstModule::new("_clinnet_template", "style.typ").is_err());
-        assert!(TypstModule::package("cetz", "@preview/cetz:0.5.1").is_ok());
-        assert!(TypstModule::package("cetz", "cetz:0.5.1").is_err());
+        assert!(TypstModule::package("cetz", "@preview/cetz:0.5.2").is_ok());
+        assert!(TypstModule::package("cetz", "cetz:0.5.2").is_err());
         assert!(TypstModule::package("cetz", "@preview/cetz:\"bad\"").is_err());
     }
 
@@ -1008,6 +1013,11 @@ mod tests {
                 KURVST_PACKAGE_DIR,
                 "LICENSE",
                 include_bytes!("../../kurvst/typst/LICENSE").as_slice(),
+            ),
+            (
+                KURVST_PACKAGE_DIR,
+                "LICENSE.tiptoe",
+                include_bytes!("../../kurvst/typst/LICENSE.tiptoe").as_slice(),
             ),
         ] {
             assert_eq!(
@@ -1142,7 +1152,7 @@ mod tests {
   attach-elements,
   layout-graph,
 )
-#import "crates/linnest/typst/src/lib.typ": draw, graph, subgraph
+#import "crates/linnest/typst/src/lib.typ": curve, draw, graph, subgraph
 
 #let source-drawing = (statement: "source-statement", compass: "e")
 #source-drawing.insert("port-label", "source-port")
@@ -1281,7 +1291,7 @@ mod tests {
     offset: 0.16,
     length: 0.8,
     stroke: red + 0.45pt,
-    mark: (end: ">"),
+    mark: curve.mark.triangle(),
   ),
 )
 #let crossing-style(edge) = crossing-layers(if edge.eid == 0 { 1 } else { none })

@@ -1,24 +1,17 @@
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    f64::consts::PI,
-};
+use std::collections::{BTreeMap, BTreeSet};
+use std::f64::consts::PI;
 
-use color_eyre::{Result, eyre::eyre};
-use gammaloop_api::{
-    commands::{
-        Inspect, Integrate,
-        evaluate_samples::{EvaluateSamplesPrecise, evaluate_samples_precise},
-        integrate::RendererOption,
-    },
-    state::ProcessRef,
-};
+use color_eyre::Result;
+use color_eyre::eyre::eyre;
+use gammaloop_api::commands::evaluate_samples::{EvaluateSamplesPrecise, evaluate_samples_precise};
+use gammaloop_api::commands::integrate::RendererOption;
+use gammaloop_api::commands::{Inspect, Integrate};
+use gammaloop_api::state::ProcessRef;
 use gammaloop_integration_tests::{clean_test, get_example_cli, get_tests_workspace_path};
-use gammalooprs::{
-    integrands::evaluation::PreciseEvaluationResultOutput,
-    settings::global::VectorPolarizationSumGauge,
-    utils::{ArbPrec, F, FloatLike},
-    uv::settings::{ApproximationType, FinalIntegrandDimension},
-};
+use gammalooprs::integrands::evaluation::PreciseEvaluationResultOutput;
+use gammalooprs::settings::global::VectorPolarizationSumGauge;
+use gammalooprs::utils::{ArbPrec, F, FloatLike};
+use gammalooprs::uv::settings::{ApproximationType, FinalIntegrandDimension};
 use ndarray::Array2;
 use spenso::algebra::algebraic_traits::IsZero;
 use symbolica::domains::float::Real;
@@ -120,7 +113,7 @@ fn gamma_star_ddx_msbar_nlo_matches_the_published_graph_cross_sections() -> Resu
         r#"generate xs a > d d~ | a d d~ g ghG ghG~ QCD^2==0 QED^2==2 [{{{{1}}}} QCD=0]
             --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
             --symmetrize-left-right-states true
-            -p {LO_PROCESS} -i {LO} --global-prefactor-num "1/2" --only-diagrams"#,
+            -p {LO_PROCESS} -i {LO} --global-prefactor-num "1/2" --only-diagrams --filter-selfenergies true --filter-snails true --filter-tadpoles true --n-cut-blobs 1 1 --n-cut-spectators 0 0"#,
     ))?;
     cli.run_command(&format!("generate existing -p {LO_PROCESS} -i {LO}"))?;
 
@@ -136,7 +129,7 @@ fn gamma_star_ddx_msbar_nlo_matches_the_published_graph_cross_sections() -> Resu
             r#"generate xs a > d d~ | a d d~ g ghG ghG~ QCD^2==2 QED^2==2 [{{{{2}}}} QCD=1]
                 --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
                 --symmetrize-left-right-states true
-                -p {process} -i {NLO} --global-prefactor-num "1/2" --only-diagrams"#,
+                -p {process} -i {NLO} --global-prefactor-num "1/2" --only-diagrams --filter-selfenergies true --filter-snails true --filter-tadpoles true --n-cut-blobs 1 1 --n-cut-spectators 0 0"#,
         ))?;
         cli.run_command(&format!("generate existing -p {process} -i {NLO}"))?;
 
@@ -153,7 +146,7 @@ fn gamma_star_ddx_msbar_nlo_matches_the_published_graph_cross_sections() -> Resu
             .collect::<BTreeSet<_>>();
         assert_eq!(
             masters,
-            BTreeSet::from(["GL0".to_string(), "GL1".to_string()]),
+            BTreeSet::from(["GL0".to_string(), "GL2".to_string()]),
             "the {process} direct-current acceptance must contain exactly the self-energy and vertex supergraphs",
         );
     }
@@ -313,7 +306,7 @@ fn gamma_star_ddx_msbar_nlo_matches_the_published_graph_cross_sections() -> Resu
             17.0, -31.0, 43.0, -29.0, 53.0, 71.0, 17.0, -31.0, 43.0, -29.0, 53.0, 71.0,
         ],
     )?;
-    let graph_names = ["GL1", "GL0"];
+    let graph_names = ["GL2", "GL0"];
     // Retaining one eighth of ArbPrec's requested precision permits substantial
     // expression-dependent loss while still testing the precision-increase path.
     let tolerance = F(ArbPrec::default().epsilon()).sqrt().sqrt().sqrt();
@@ -460,14 +453,14 @@ fn gamma_star_ddx_msbar_nlo_matches_the_published_graph_cross_sections() -> Resu
         .collect::<BTreeMap<_, _>>();
     assert_eq!(
         graph_estimates.keys().cloned().collect::<BTreeSet<_>>(),
-        BTreeSet::from(["GL0".to_string(), "GL1".to_string()]),
-        "the direct-current graph-MC breakdown must contain exactly GL1 and GL0",
+        BTreeSet::from(["GL0".to_string(), "GL2".to_string()]),
+        "the direct-current graph-MC breakdown must contain exactly GL2 and GL0",
     );
-    // In this two-master generation GL0 is the B.1 vertex graph and GL1 is
+    // In this two-master generation GL0 is the B.1 vertex graph and GL2 is
     // the B.2 self-energy graph, so the direct-current rows can be tested
     // separately without invoking a graphwise e+e- Ward decomposition.
     for (graph, target) in [
-        ("GL1", PUBLISHED_B2_SELF_ENERGY),
+        ("GL2", PUBLISHED_B2_SELF_ENERGY),
         ("GL0", PUBLISHED_B1_VERTEX),
     ] {
         let (value, error) = graph_estimates
@@ -493,7 +486,7 @@ fn gamma_star_ddx_msbar_nlo_matches_the_published_graph_cross_sections() -> Resu
     for entry in &imaginary_graphs.entries {
         let graph = entry.bin_label.as_deref().unwrap();
         let target = match graph {
-            "GL1" => PUBLISHED_B2_SELF_ENERGY.abs(),
+            "GL2" => PUBLISHED_B2_SELF_ENERGY.abs(),
             "GL0" => PUBLISHED_B1_VERTEX,
             _ => panic!("unexpected graph {graph}"),
         };

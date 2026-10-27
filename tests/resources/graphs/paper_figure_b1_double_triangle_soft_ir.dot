@@ -1,7 +1,7 @@
 digraph paper_figure_b1_double_triangle_soft_ir {
   // Figure 13, graph B.1 with the central gluon dressed by a massless-down
   // self-energy.  The external off-shell photon indices are saturated.
-  projector = "spenso::g(spenso::mink(4,gammalooprs::hedge(0)),spenso::mink(4,gammalooprs::hedge(1)))"
+  projector = "spenso::g(spenso::mink(4,gammalooprs::hedge(0,1)),spenso::mink(4,gammalooprs::hedge(1,1)))"
   ext [style=invis]
 
   ext -> photon_left:0 [id=0 particle=a]

@@ -1,35 +1,25 @@
 use feynkit_graph::{DiagramEdge, EdgeEndpoints, EdgeId, VertexId};
 use linnet::half_edge::NodeIndex;
-use linnet::half_edge::{
-    involution::{EdgeIndex, HedgePair},
-    subgraph::SubSetLike,
-};
-use spenso::{
-    network::tags::SPENSO_TAG,
-    structure::{
-        abstract_index::AIND_SYMBOLS,
-        representation::{Minkowski, RepName},
-    },
-};
-use symbolica::{
-    atom::{Atom, AtomCore, FunctionBuilder},
-    symbol,
-};
+use linnet::half_edge::involution::{EdgeIndex, HedgePair};
+use linnet::half_edge::subgraph::SubSetLike;
+use spenso::network::tags::SPENSO_TAG;
+use spenso::structure::abstract_index::AIND_SYMBOLS;
+use spenso::structure::representation::{Minkowski, RepName};
+use symbolica::atom::{Atom, AtomCore, FunctionBuilder};
+use symbolica::parse;
+use symbolica::symbol;
 use typed_index_collections::ti_vec;
 
 use super::Graph;
-use crate::{
-    finalized_runtime_dot,
-    graph::{
-        FeynmanGraph, GraphGroup,
-        parse::{IntoFinalizedRuntimeGraph, complete_group_parsing},
-    },
-    initialisation::test_initialise,
-    momentum::sample::LoopIndex,
-    processes::DotExportSettings,
-    utils::GS,
-    uv::{UltravioletGraph, uv_graph::UVE},
-};
+use crate::dot;
+use crate::graph::parse::{IntoGraph, complete_group_parsing};
+use crate::graph::{FeynmanGraph, GraphGroup};
+use crate::initialisation::test_initialise;
+use crate::momentum::sample::LoopIndex;
+use crate::processes::DotExportSettings;
+use crate::utils::GS;
+use crate::uv::UltravioletGraph;
+use crate::uv::uv_graph::UVE;
 
 fn triangle_fixture(loop_edge: usize, loop_edge_mass: Option<i64>) -> String {
     let mass = loop_edge_mass.map_or_else(String::new, |mass| format!(" mass={mass}"));
@@ -42,12 +32,12 @@ fn triangle_fixture(loop_edge: usize, loop_edge_mass: Option<i64>) -> String {
             node [num="1"]
             edge [pdg=1000 num="1" dir=none]
             ext [style=invis]
-            ext -> v4 [id=0 sink="{{ufo_order:0}}"]
-            v5 -> ext [id=1 source="{{ufo_order:0}}"]
-            v6 -> ext [id=2 source="{{ufo_order:0}}"]
-            v4 -> v5 [id=3{}{} source="{{ufo_order:1}}" sink="{{ufo_order:1}}"]
-            v5 -> v6 [id=4{} source="{{ufo_order:2}}" sink="{{ufo_order:1}}"]
-            v6 -> v4 [id=5{} source="{{ufo_order:2}}" sink="{{ufo_order:2}}"]
+            ext -> v4 [id=0]
+            v5 -> ext [id=1]
+            v6 -> ext [id=2]
+            v4 -> v5 [id=3{}{}]
+            v5 -> v6 [id=4{}]
+            v6 -> v4 [id=5{}]
         }}"#,
         loop_attribute(3),
         if loop_edge == 3 { mass.as_str() } else { "" },
@@ -58,7 +48,7 @@ fn triangle_fixture(loop_edge: usize, loop_edge_mass: Option<i64>) -> String {
 
 fn parse_triangle_fixture(loop_edge: usize, loop_edge_mass: Option<i64>) -> Graph {
     triangle_fixture(loop_edge, loop_edge_mass)
-        .into_finalized_runtime_graph(&crate::utils::load_generic_model("scalars"))
+        .into_graph(&crate::utils::load_generic_model("scalars"))
         .unwrap()
 }
 
@@ -104,7 +94,8 @@ fn numerator_interface_source_roundtrip_keeps_two_identical_open_axes() {
 #[test]
 fn runtime_graph_rejects_anonymous_ports_without_assigning_indices() {
     use super::NumeratorInterface;
-    use spenso::structure::{abstract_index::AbstractIndex, slot::IsAbstractSlot};
+    use spenso::structure::abstract_index::AbstractIndex;
+    use spenso::structure::slot::IsAbstractSlot;
 
     test_initialise().unwrap();
     let model = crate::utils::load_generic_model("scalars");
@@ -145,7 +136,7 @@ fn runtime_graph_rejects_anonymous_ports_without_assigning_indices() {
                 &format!("edge [pdg=1000 num=\"0\" num_interface={metadata} dir=none]"),
             ),
         ] {
-            let result: color_eyre::Result<Graph> = source.into_finalized_runtime_graph(&model);
+            let result: color_eyre::Result<Graph> = source.into_graph(&model);
             let error = result
                 .err()
                 .expect("anonymous runtime ports must be rejected");
@@ -166,7 +157,7 @@ fn runtime_graph_rejects_anonymous_ports_without_assigning_indices() {
             serde_json::to_string(&scalar.to_canonical_string()).unwrap()
         ),
     );
-    let graph: Graph = source.into_finalized_runtime_graph(&model).unwrap();
+    let graph: Graph = source.into_graph(&model).unwrap();
     assert!(graph.global_prefactor.num.is_scalar());
     assert_eq!(
         NumeratorInterface::export(&graph.global_prefactor.num).0,
@@ -179,7 +170,7 @@ fn runtime_and_canonical_dot_preserve_ranked_zero_fragments() {
     use super::NumeratorInterface;
     test_initialise().unwrap();
     let model = crate::utils::load_generic_model("scalars");
-    let canonical = Graph::import_dot(
+    let canonical = Graph::from_dot(
         include_str!("../../../../../tests/resources/graphs/ir_safe_thresholds/no_directive_cross_section.dot"),
         &model,
     ).unwrap().remove(0);
@@ -207,7 +198,7 @@ fn runtime_and_canonical_dot_preserve_ranked_zero_fragments() {
         graph.underlying[edge].num.value = metric.clone();
         let serialized = graph.dot_serialize(&DotExportSettings::default());
         assert!(serialized.contains("num_interface"));
-        let restored = Graph::import_dot(&serialized, &model).unwrap().remove(0);
+        let restored = Graph::from_dot(&serialized, &model).unwrap().remove(0);
         assert!(restored.underlying[vertex].num.value.same_value(&zero));
         assert!(restored.underlying[edge].num.value.same_value(&metric));
         assert_eq!(restored.finalized_cuts.len(), graph.finalized_cuts.len());
@@ -231,7 +222,8 @@ fn global_tensor_json_and_dot_roundtrips_preserve_zero_ports_and_logical_order()
     use crate::numerator::GlobalPrefactor;
     use crate::uv::UltravioletGraph;
     use idenso::tensor::SymbolicTensor;
-    use spenso::structure::{IndexedStructure, abstract_index::AbstractIndex};
+    use spenso::structure::IndexedStructure;
+    use spenso::structure::abstract_index::AbstractIndex;
     test_initialise().unwrap();
     let representation = Minkowski {}.new_rep(4).to_lib();
     let interface: IndexedStructure = [41, 37]
@@ -251,7 +243,7 @@ fn global_tensor_json_and_dot_roundtrips_preserve_zero_ports_and_logical_order()
     let metric =
         SymbolicTensor::from_indexed_parts(metric.expression().clone(), interface.clone()).unwrap();
     let model = crate::utils::load_generic_model("scalars");
-    let canonical = Graph::import_dot(
+    let canonical = Graph::from_dot(
         include_str!("../../../../../tests/resources/graphs/ir_safe_thresholds/no_directive_cross_section.dot"),
         &model,
     ).unwrap().remove(0);
@@ -280,7 +272,7 @@ fn global_tensor_json_and_dot_roundtrips_preserve_zero_ports_and_logical_order()
 
         let dot = graph.dot_serialize(&DotExportSettings::default());
         assert!(dot.contains("numerator_prefactor_interface"));
-        let restored = Graph::import_dot(&dot, &model).unwrap().remove(0);
+        let restored = Graph::from_dot(&dot, &model).unwrap().remove(0);
         assert!(restored.global_prefactor.num.same_value(&zero));
         assert!(restored.global_prefactor.projector.same_value(&metric));
         assert_eq!(restored.global_prefactor.num.rank(), 2);
@@ -342,7 +334,7 @@ fn legacy_internal_order_key_recovers_pre_normalized_fermion_flow() {
 
 fn split_forward_fixture(outgoing_momentum: &str, explicit_connection: bool) -> String {
     let connection = if explicit_connection {
-        r#" is_cut="0" initial_state_connection="true""#
+        r#" is_cut="0""#
     } else {
         ""
     };
@@ -353,10 +345,10 @@ fn split_forward_fixture(outgoing_momentum: &str, explicit_connection: bool) -> 
             edge [pdg=1000 num="1" dir=none]
             ext_in [style=invis]
             ext_out [style=invis]
-            ext_in -> A [id=0 lmb_rep="P(0,a___)" sink="{{ufo_order:0}}"{connection}]
-            A -> B [id=1 lmb_id=0 lmb_rep="K(0,a___)" source="{{ufo_order:1}}" sink="{{ufo_order:0}}"]
-            A -> B [id=2 lmb_rep="-K(0,a___)+P(0,a___)" source="{{ufo_order:2}}" sink="{{ufo_order:1}}"]
-            B -> ext_out [id=3 lmb_rep="{outgoing_momentum}" source="{{ufo_order:2}}"{connection}]
+            ext_in -> A [id=0 lmb_rep="P(0,a___)"{connection}]
+            A -> B [id=1 lmb_id=0 lmb_rep="K(0,a___)"]
+            A -> B [id=2 lmb_rep="-K(0,a___)+P(0,a___)"]
+            B -> ext_out [id=3 lmb_rep="{outgoing_momentum}"{connection}]
         }}"#
     )
 }
@@ -370,11 +362,11 @@ fn two_split_forward_connections_fixture() -> &'static str {
         out0 [style=invis]
         in1 [style=invis]
         out1 [style=invis]
-        in0 -> A [id=0 lmb_rep="P(0,a___)" sink="{ufo_order:0}" is_cut="0" initial_state_connection="true"]
-        in1 -> A [id=1 lmb_rep="P(1,a___)" sink="{ufo_order:1}" is_cut="1" initial_state_connection="true"]
-        A -> B [id=2 lmb_rep="P(0,a___)+P(1,a___)" source="{ufo_order:2}" sink="{ufo_order:0}"]
-        B -> out0 [id=3 lmb_rep="P(0,a___)" source="{ufo_order:1}" is_cut="0" initial_state_connection="true"]
-        B -> out1 [id=4 lmb_rep="P(1,a___)" source="{ufo_order:2}" is_cut="1" initial_state_connection="true"]
+        in0 -> A [id=0 lmb_rep="P(0,a___)" is_cut="0"]
+        in1 -> A [id=1 lmb_rep="P(1,a___)" is_cut="1"]
+        A -> B [id=2 lmb_rep="P(0,a___)+P(1,a___)"]
+        B -> out0 [id=3 lmb_rep="P(0,a___)" is_cut="0"]
+        B -> out1 [id=4 lmb_rep="P(1,a___)" is_cut="1"]
     }"#
 }
 
@@ -383,7 +375,7 @@ fn explicitly_marked_split_forward_endpoints_are_one_connection() {
     test_initialise().unwrap();
     let model = crate::utils::load_generic_model("scalars");
     let graph: Graph = split_forward_fixture("P(0,a___)", true)
-        .into_finalized_runtime_graph(&model)
+        .into_graph(&model)
         .unwrap();
 
     assert!(graph.get_external_signature().is_empty());
@@ -396,7 +388,7 @@ fn explicitly_marked_split_forward_endpoints_are_one_connection() {
     });
     assert_eq!(serialized.matches("is_cut=").count(), 2, "{serialized}");
 
-    let round_trip: Graph = serialized.into_finalized_runtime_graph(&model).unwrap();
+    let round_trip: Graph = serialized.into_graph(&model).unwrap();
     assert!(round_trip.get_external_signature().is_empty());
     assert_eq!(round_trip.loop_momentum_basis.ext_edges.len(), 1);
 }
@@ -405,7 +397,7 @@ fn explicitly_marked_split_forward_endpoints_are_one_connection() {
 fn equal_external_momenta_without_explicit_markers_remain_distinct_legs() {
     test_initialise().unwrap();
     let graph: Graph = split_forward_fixture("P(0,a___)", false)
-        .into_finalized_runtime_graph(&crate::utils::load_generic_model("scalars"))
+        .into_graph(&crate::utils::load_generic_model("scalars"))
         .unwrap();
 
     assert_eq!(graph.get_external_signature().len(), 2);
@@ -418,7 +410,7 @@ fn multiple_undirected_forward_connections_survive_split_round_trip() {
     test_initialise().unwrap();
     let model = crate::utils::load_generic_model("scalars");
     let graph: Graph = two_split_forward_connections_fixture()
-        .into_finalized_runtime_graph(&model)
+        .into_graph(&model)
         .unwrap();
     assert!(graph.get_external_signature().is_empty());
     assert_eq!(graph.loop_momentum_basis.ext_edges.len(), 2);
@@ -429,7 +421,7 @@ fn multiple_undirected_forward_connections_survive_split_round_trip() {
     });
     assert_eq!(serialized.matches("is_cut=").count(), 4, "{serialized}");
 
-    let round_trip: Graph = serialized.into_finalized_runtime_graph(&model).unwrap();
+    let round_trip: Graph = serialized.into_graph(&model).unwrap();
     assert!(round_trip.get_external_signature().is_empty());
     assert_eq!(round_trip.loop_momentum_basis.ext_edges.len(), 2);
 }
@@ -450,17 +442,17 @@ fn test_loop_momentum_basis() {
 #[test]
 fn dod_rescales_only_internal_edge_qs() {
     test_initialise().unwrap();
-    let g: Graph = finalized_runtime_dot!(
+    let g: Graph = dot!(
         digraph G {
             graph [projector="1"]
             edge [pdg=1000 num="1" dir=none]
             node [num="1"]
             ext0 [style=invis]
             ext1 [style=invis]
-            ext0 -> A [id=0 sink="{ufo_order:0}"]
-            B -> ext1 [id=1 source="{ufo_order:0}"]
-            A -> B [id=2, lmb_id=0, source="{ufo_order:1}", sink="{ufo_order:1}", num="Q(2,spenso::mink(4,edge(2,1)))*Q(0,spenso::mink(4,edge(2,1)))"]
-            A -> B [id=3, source="{ufo_order:2}", sink="{ufo_order:2}"]
+            ext0 -> A [id=0]
+            B -> ext1 [id=1]
+            A -> B [id=2, lmb_id=0 num="Q(2,spenso::mink(4,edge(2,1)))*Q(0,spenso::mink(4,edge(2,1)))"]
+            A -> B [id=3]
         },
         "scalars"
     )
@@ -520,10 +512,10 @@ fn grouped_graph_fixture(name: &str, group_id: Option<usize>, master: Option<boo
             node [num="1"]
             edge [pdg=1000 num="1" dir=none]
             ext [style=invis]
-            ext -> A [sink="{{ufo_order:0}}"]
-            A -> B [lmb_id=0 source="{{ufo_order:1}}" sink="{{ufo_order:0}}"]
-            A -> B [source="{{ufo_order:2}}" sink="{{ufo_order:1}}"]
-            B -> ext [source="{{ufo_order:2}}"]
+            ext -> A
+            A -> B [lmb_id=0]
+            A -> B
+            B -> ext
         }}"#
     )
 }
@@ -535,7 +527,7 @@ fn parse_grouped_graphs(specs: &[(&str, Option<usize>, Option<bool>)]) -> Vec<Gr
         .collect::<Vec<_>>()
         .join("\n");
     input
-        .into_finalized_runtime_graph(&crate::utils::load_generic_model("scalars"))
+        .into_graph(&crate::utils::load_generic_model("scalars"))
         .unwrap()
 }
 
@@ -680,37 +672,52 @@ fn edge_mass_attribute_drives_evaluated_edge_mass() {
 }
 
 #[test]
-fn explicit_hedge_payload_round_trips_in_dot_export() {
+fn gammaloop_attributes_round_trip_through_dot_export() {
     test_initialise().unwrap();
-    let g: Graph = finalized_runtime_dot!(
-        digraph payload_graph{
-            graph [projector="1"]
+    let model = crate::utils::load_generic_model("sm");
+    let g: Graph = dot!(
+        digraph attribute_graph {
+            graph [projector="1" params="x;y"]
             ext_in [style=invis]
             ext_out [style=invis]
-            A [num=1 dod=0]
-            ext_in -> A [name=e_in num=1 dod=-2 sink="{ufo_order:0,dod:-2}"]
-            A -> ext_out [name=e_out num=1 dod=-2 source="{ufo_order:1,dod:-2}"]
+            A [num=1 dod=1]
+            ext_in -> A [id=0 particle=H mass=0 name=e_in dod=-3 vakint_edge_power=2]
+            A -> ext_out [id=1 particle=H mass=0 name=e_out momtrop_edge_power="1/2"]
         }
     )
     .unwrap();
 
     let serialized = g.dot_serialize(&DotExportSettings::default());
-    assert!(serialized.contains("ufo_order"));
-    assert!(serialized.contains("dod"));
-    assert!(serialized.contains("source=") || serialized.contains("sink="));
+    let round_trip: Graph = serialized.as_str().into_graph(&model).unwrap();
+    for graph in [&g, &round_trip] {
+        let edges = graph
+            .underlying
+            .iter_edges()
+            .map(|(_, _, edge)| edge.data)
+            .collect::<Vec<_>>();
+        assert_eq!(edges[0].name.value, "e_in");
+        assert_eq!(edges[1].name.value, "e_out");
+        assert!(edges.iter().all(|edge| edge.mass_atom(&model).is_zero()));
+        assert_eq!(edges[0].dod.value, -3);
+        assert_eq!(edges[0].extra_data.vakint_edge_power, Some(2));
+        assert_eq!(edges[1].extra_data.momtrop_edge_power, Some(parse!("1/2")));
+        assert_eq!(
+            graph.underlying[linnet::half_edge::NodeIndex(0)].dod.value,
+            1
+        );
+        assert_eq!(graph.param_builder.pairs.additional_params.params.len(), 2);
+    }
 }
 
 fn assert_native_runtime_parity(diagram: &feynkit_graph::FeynmanDiagram) {
     use crate::uv::UltravioletGraph;
-    use linnet::half_edge::{
-        EdgeAccessors,
-        involution::{Flow, Hedge},
-    };
+    use linnet::half_edge::EdgeAccessors;
+    use linnet::half_edge::involution::{Flow, Hedge};
     use symbolica::atom::AtomCore;
 
     let runtime = Graph::from_feynkit(diagram, None, true).unwrap();
     let source = diagram.underlying();
-    assert_eq!(runtime.underlying.n_nodes(), source.n_nodes());
+    assert_eq!(runtime.underlying.n_live(), source.n_live());
     assert_eq!(runtime.underlying.n_edges(), source.n_edges());
     assert_eq!(runtime.underlying.n_hedges(), source.n_hedges());
     for (pair, edge, data) in source.iter_edges() {
@@ -756,7 +763,7 @@ fn assert_native_runtime_parity(diagram: &feynkit_graph::FeynmanDiagram) {
             .get_single_atom()
             .unwrap()
             .expand(),
-        super::NumeratorInterface::export(diagram.numerator())
+        super::NumeratorInterface::export(diagram.numerator().unwrap())
             .0
             .expand()
     );
@@ -860,45 +867,150 @@ fn assert_native_runtime_parity(diagram: &feynkit_graph::FeynmanDiagram) {
     }
 }
 
+fn native_fragment_fixture(
+    vertex_numerator: symbolica::atom::Atom,
+    dangling: &[symbolica::atom::Atom],
+    paired: bool,
+) -> feynkit_graph::FeynmanDiagram {
+    use feynkit_graph::{DiagramVertex, FeynmanDiagram};
+    let model = std::sync::Arc::new(crate::utils::load_generic_model("scalars"));
+    let particle = model.particle_id("scalar_1").unwrap();
+    let mut builder = FeynmanDiagram::builder(model, "native_fragments");
+    let vertex = builder.add_vertex(DiagramVertex {
+        name: "v".into(),
+        interaction: None,
+        numerator: super::NumeratorInterface::admit(vertex_numerator, None).unwrap(),
+    });
+    if paired {
+        builder
+            .add_edge(vertex, vertex, DiagramEdge::new(particle, false))
+            .unwrap();
+    }
+    for numerator in dangling {
+        let mut edge = DiagramEdge::new(particle, false);
+        edge.is_dummy = true;
+        edge.numerator = super::NumeratorInterface::admit(numerator.clone(), None).unwrap();
+        builder.add_edge(Some(vertex), None, edge).unwrap();
+    }
+    let diagram = builder.build().unwrap();
+    diagram.validate().unwrap();
+    diagram
+}
+
+#[test]
+fn native_runtime_conversion_rejects_changed_frame_before_cut_indexing() {
+    use linnet::half_edge::EdgeAccessors;
+    use linnet::half_edge::involution::Orientation;
+    use symbolica::atom::Atom;
+    test_initialise().unwrap();
+    let diagram = native_fragment_fixture(Atom::one(), &[], true);
+    let parsed = super::ParseGraph::from_feynkit_diagram(&diagram).unwrap();
+    let mut changed = parsed.clone();
+    let vertex = changed.graph.iter_nodes().next().unwrap().2.clone();
+    changed.graph.add_node(vertex);
+    assert!(
+        Graph::from_feynkit_parse_graph(&diagram, changed)
+            .err()
+            .expect("runtime conversion must reject the changed diagram")
+            .to_string()
+            .contains("changed its finalized topology")
+    );
+    let mut changed = parsed;
+    changed
+        .graph
+        .set_orientation(EdgeIndex(0), Orientation::Default);
+    assert!(
+        Graph::from_feynkit_parse_graph(&diagram, changed)
+            .err()
+            .expect("runtime conversion must reject the changed diagram")
+            .to_string()
+            .contains("changed its finalized topology")
+    );
+}
+
+#[test]
+fn native_runtime_conversion_preserves_dangling_dummy_product_acceptance() {
+    use symbolica::atom::Atom;
+    test_initialise().unwrap();
+    for paired in [false, true] {
+        for (vertex, omitted, accepted) in [
+            (Atom::one(), vec![Atom::one()], true),
+            (Atom::one(), vec![Atom::num(2)], false),
+            (Atom::one(), vec![Atom::num(2), Atom::one() / 2], true),
+            (Atom::Zero, vec![Atom::num(2)], true),
+        ] {
+            let diagram = native_fragment_fixture(vertex, &omitted, paired);
+            let runtime = Graph::from_feynkit(&diagram, None, true);
+            assert_eq!(
+                runtime.is_ok(),
+                accepted,
+                "paired={paired}, omitted={omitted:?}, error={:?}",
+                runtime.as_ref().err()
+            );
+        }
+    }
+}
+
 #[test]
 fn native_amplitude_runtime_enrichment_preserves_every_graph_coordinate() {
-    use feynkit_generator::{GenerationOptions, Process};
+    use feynkit_generator::{Loops, Naming, NumeratorOptions, Process, Run, TopologyRules};
     test_initialise().unwrap();
     let model = std::sync::Arc::new(crate::utils::load_generic_model("scalars"));
+    let run = Run::default().threads(1);
     let generated = Process::new(["scalar_1"], ["scalar_1"])
-        .generate_diagrams(
-            model,
-            &GenerationOptions::default()
-                .with_loop_count(1, 1)
-                .unwrap()
-                .threads(1)
-                .max_vertices(2),
+        .amplitude(Loops::total(1..=1))
+        .with_topology(
+            TopologyRules::new()
+                .with_self_loops(false)
+                .with_max_vertices(2),
+        )
+        .generate(model, &run)
+        .unwrap()
+        .build(
+            &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+            &run,
         )
         .unwrap();
-    assert!(!generated.diagrams.is_empty());
-    for diagram in generated.diagrams {
-        assert_native_runtime_parity(&diagram);
+    assert!(!generated.is_empty());
+    for diagram in generated.iter() {
+        assert_native_runtime_parity(diagram);
     }
 }
 
 #[test]
 fn native_cross_section_runtime_enrichment_preserves_cuts_and_positive_external_flow() {
-    use feynkit_generator::{GenerationOptions, Process};
+    use feynkit_generator::{Cuts, Loops, Naming, NumeratorOptions, Process, Run, TopologyRules};
     test_initialise().unwrap();
     let model = std::sync::Arc::new(crate::utils::load_generic_model("scalars"));
+    let run = Run::default().threads(1);
     let generated = Process::new(["scalar_1"], ["scalar_1", "scalar_1"])
-        .generate_cross_section(
-            model,
-            &GenerationOptions::default()
-                .with_loop_count(1, 1)
-                .unwrap()
-                .threads(1)
-                .max_vertices(2),
+        .cross_section(Loops::forward(1..=1))
+        .with_cuts(Cuts::new().with_blobs(1..=1).with_spectators(0..=0))
+        .with_topology(
+            TopologyRules::new()
+                .with_self_loops(false)
+                .with_max_vertices(2),
+        )
+        .generate(model, &run)
+        .unwrap()
+        .build(
+            &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+            &run,
         )
         .unwrap();
-    assert!(!generated.diagrams.is_empty());
-    for diagram in generated.diagrams {
+    assert!(!generated.is_empty());
+    for diagram in generated.iter() {
         assert!(!diagram.cuts().is_empty());
+        let mut changed = super::ParseGraph::from_feynkit_diagram(diagram).unwrap();
+        let vertex = changed.graph.iter_nodes().next().unwrap().2.clone();
+        changed.graph.add_node(vertex);
+        assert!(
+            Graph::from_feynkit_parse_graph(diagram, changed)
+                .err()
+                .expect("runtime conversion must reject the changed diagram")
+                .to_string()
+                .contains("changed its finalized topology")
+        );
         for (slot, edge) in diagram
             .loop_momentum_basis()
             .external_edges
@@ -912,13 +1024,15 @@ fn native_cross_section_runtime_enrichment_preserves_cuts_and_positive_external_
                 Some(feynkit_kinematics::SignOrZero::Plus)
             );
         }
-        assert_native_runtime_parity(&diagram);
+        assert_native_runtime_parity(diagram);
     }
 }
 
 #[test]
 fn native_compton_runtime_enrichment_preserves_sewn_fermions() {
-    use feynkit_generator::{GenerationFilter, GenerationOptions, Process};
+    use feynkit_generator::{
+        Cuts, Loops, Naming, NumeratorOptions, Process, Restrict, Run, TopologyRules,
+    };
     test_initialise().unwrap();
     let model = std::sync::Arc::new(
         feynkit_model::Model::from_json(include_str!(
@@ -927,21 +1041,27 @@ fn native_compton_runtime_enrichment_preserves_sewn_fermions() {
         .unwrap(),
     );
 
+    let run = Run::default().threads(1);
     for pdg in [11_i64, -11] {
         let generated = Process::new([pdg, 22], [pdg, 22])
-            .generate_cross_section(
-                model.clone(),
-                &GenerationOptions::default()
-                    .with_loop_count(1, 1)
-                    .unwrap()
-                    .threads(1)
-                    .max_vertices(4)
-                    .with_graph_filter(GenerationFilter::VertexAllow(vec!["V_98".into()])),
+            .cross_section(Loops::forward(1..=1))
+            .with_cuts(Cuts::new().with_blobs(1..=1).with_spectators(0..=0))
+            .with_topology(
+                TopologyRules::new()
+                    .with_self_loops(false)
+                    .with_max_vertices(4),
+            )
+            .with_restrict(Restrict::new().only_vertices(["V_98"]))
+            .generate(model.clone(), &run)
+            .unwrap()
+            .build(
+                &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                &run,
             )
             .unwrap();
-        assert_eq!(generated.diagrams.len(), 4);
-        for diagram in generated.diagrams {
-            assert_native_runtime_parity(&diagram);
+        assert_eq!(generated.len(), 4);
+        for diagram in generated.iter() {
+            assert_native_runtime_parity(diagram);
         }
     }
 }
@@ -1073,25 +1193,26 @@ mod finalized_reference;
 
 #[test]
 fn native_self_energy_tensor_ports_match_runtime_component_interfaces() {
-    use crate::numerator::{aind::Aind, symbolica_ext::NumeratorAtomExt};
-    use idenso::{dirac::AGS, representations::Bispinor};
-    use spenso::{
-        network::library::symbolic::ETS,
-        structure::{TensorStructure, slot::IsAbstractSlot},
-    };
+    use crate::numerator::aind::Aind;
+    use crate::numerator::symbolica_ext::NumeratorAtomExt;
+    use idenso::dirac::AGS;
+    use idenso::representations::Bispinor;
+    use spenso::network::library::symbolic::ETS;
+    use spenso::structure::TensorStructure;
+    use spenso::structure::slot::IsAbstractSlot;
     use symbolica::function;
 
     test_initialise().unwrap();
     let model = crate::utils::load_generic_model("sm");
+    // The model's projector closes the external spinors; the numerator keeps them open.
     let source = r#"digraph port_self_energy {
-        projector=1
         ext[style=invis]
         ext -> a[id=0 particle=t]
         a -> b[id=1 particle=t lmb_id=0]
         a -> b[id=2 particle=g]
         b -> ext[id=3 particle=t]
     }"#;
-    let graph = Graph::import_dot(source, &model).unwrap().remove(0);
+    let graph = Graph::from_dot(source, &model).unwrap().remove(0);
     let numerator = graph
         .numerator(&graph.full_filter(), &graph.empty_subgraph())
         .unwrap()
@@ -1147,135 +1268,13 @@ fn native_self_energy_tensor_ports_match_runtime_component_interfaces() {
         runtime_ports, source_ports,
         "spin and oriented color interfaces must both agree"
     );
-
-    // A literal artifact owns its supplied labels, including the zero-based
-    // labels of hand-authored numerators. Reindex complete local factors only.
-    let reindex = |atom: &Atom| {
-        (0..graph.underlying.n_hedges()).fold(atom.clone(), |atom, hedge| {
-            atom.replace(Atom::from(Aind::Hedge(hedge as u16, 1)).to_pattern())
-                .with(Atom::from(Aind::Hedge(hedge as u16, 0)).to_pattern())
-        })
-    };
-    let mut literal = graph.clone();
-    literal.underlying = graph.underlying.map_data_ref(
-        |_, _, vertex| {
-            let mut vertex = vertex.clone();
-            vertex.num.value = super::NumeratorInterface::admit(
-                reindex(&super::NumeratorInterface::export(&vertex.num.value).0),
-                None,
-            )
-            .unwrap()
-            .try_into_indexed()
-            .unwrap();
-            vertex
-        },
-        |_, _, _, edge| {
-            edge.map(|edge| {
-                let mut edge = edge.clone();
-                edge.num.value = super::NumeratorInterface::admit(
-                    reindex(&super::NumeratorInterface::export(&edge.num.value).0),
-                    None,
-                )
-                .unwrap()
-                .try_into_indexed()
-                .unwrap();
-                edge
-            })
-        },
-        |_, data| data.clone(),
-    );
-    let restored = Graph::import_dot(
-        &literal.dot_serialize(&DotExportSettings::default()),
-        &model,
-    )
-    .unwrap()
-    .remove(0);
-    for hedge in external.included_iter() {
-        let port = restored.underlying[hedge].edge_spin_slots().next().unwrap();
-        assert_eq!(port.aind, Aind::Hedge(hedge.0 as u16, 0));
-        assert!(
-            restored
-                .numerator(&restored.full_filter(), &restored.empty_subgraph())
-                .unwrap()
-                .get_single_atom()
-                .unwrap()
-                .contains(port.to_atom())
-        );
-    }
-
-    let hedge = external.included_iter().next().unwrap();
-    let [first, second] = [0, 1].map(|local| {
-        Bispinor {}
-            .new_rep(4)
-            .to_symbolic([Atom::from(Aind::Hedge(hedge.0 as u16, local))])
-    });
-    literal.global_prefactor.num = literal
-        .global_prefactor
-        .num
-        .multiply(
-            super::NumeratorInterface::admit(function!(ETS.metric, first, second), None)
-                .unwrap()
-                .try_into_indexed()
-                .unwrap(),
-        )
-        .unwrap();
-    let error = Graph::import_dot(
-        &literal.dot_serialize(&DotExportSettings::default()),
-        &model,
-    )
-    .err()
-    .expect("conflicting literal labels must not select a guessed port");
-    assert!(
-        error
-            .to_string()
-            .contains("ambiguous literal tensor interface"),
-        "{error:?}"
-    );
-
-    literal.global_prefactor.num = super::NumeratorInterface::admit(Atom::one(), None)
-        .unwrap()
-        .try_into_indexed()
-        .unwrap();
-    literal.underlying = literal.underlying.map_data_ref(
-        |_, _, vertex| {
-            let mut vertex = vertex.clone();
-            vertex.num.value = super::NumeratorInterface::admit(Atom::one(), None)
-                .unwrap()
-                .try_into_indexed()
-                .unwrap();
-            vertex
-        },
-        |_, _, _, edge| {
-            edge.map(|edge| {
-                let mut edge = edge.clone();
-                edge.num.value = super::NumeratorInterface::admit(Atom::one(), None)
-                    .unwrap()
-                    .try_into_indexed()
-                    .unwrap();
-                edge
-            })
-        },
-        |_, data| data.clone(),
-    );
-    let scalar = Graph::import_dot(
-        &literal.dot_serialize(&DotExportSettings::default()),
-        &model,
-    )
-    .unwrap()
-    .remove(0);
-    for hedge in external.included_iter() {
-        assert!(
-            scalar.underlying[hedge].edge_spin_slots().next().is_none(),
-            "literal scalar fragments cannot manufacture a component spin port"
-        );
-    }
 }
 
 #[test]
 fn compact_model_import_preserves_metadata_in_the_finalized_frame() {
     test_initialise().unwrap();
     let model = crate::utils::load_generic_model("scalars");
-    let mut parsed = linnet::parser::DotGraph::from_string(
+    let mut parsed: linnet::parser::DotGraph = linnet::parser::DotGraph::from_string(
         r#"digraph mapped_bubble {
         final_state="scalar_1,scalar_1"
         group_id=0
@@ -1303,7 +1302,9 @@ parent_lmb = [3]
 "#
         .into(),
     );
-    let imported = Graph::from_compact_model_dot(parsed, &model).unwrap();
+    let imported = Graph::from_dot(&parsed.debug_dot(), &model)
+        .unwrap()
+        .remove(0);
     assert_eq!(imported.group_id, Some(crate::graph::GroupId(0)));
     assert!(imported.is_group_master);
     assert_eq!(
@@ -1346,17 +1347,17 @@ fn compact_qcd_import_instantiates_rules_and_retains_explicit_fragments() {
     let topology =
         feynkit_graph::FeynmanDiagram::from_dot(std::sync::Arc::new(model.clone()), source)
             .unwrap();
-    assert_eq!(topology.numerator().expression(), &Atom::one());
+    assert_eq!(topology.numerator().unwrap().expression(), &Atom::one());
     let reference = topology.apply_feynman_rules().unwrap();
-    let imported = Graph::import_dot(source, &model).unwrap().remove(0);
-    assert_ne!(reference.numerator().expression(), &Atom::one());
+    let imported = Graph::from_dot(source, &model).unwrap().remove(0);
+    assert_ne!(reference.numerator().unwrap().expression(), &Atom::one());
     assert_eq!(
         imported
             .numerator(&imported.full_filter(), &imported.empty_subgraph())
             .unwrap()
             .get_single_atom()
             .unwrap(),
-        super::NumeratorInterface::export(reference.numerator()).0
+        super::NumeratorInterface::export(reference.numerator().unwrap()).0
     );
     assert_eq!(
         imported.global_prefactor.projector,
@@ -1367,18 +1368,38 @@ fn compact_qcd_import_instantiates_rules_and_retains_explicit_fragments() {
             .unwrap()
     );
     assert!(!imported.global_prefactor.projector.expression().is_one());
+    // Explicit factors override the model's. Import requires a contracted network,
+    // so supply the model's projector and seven times the model's factor of `a`.
+    let vertex = super::NumeratorInterface::export(
+        &imported.underlying[linnet::half_edge::NodeIndex(0)]
+            .num
+            .value,
+    )
+    .0;
+    let projector = super::NumeratorInterface::export(&imported.global_prefactor.projector).0;
     let supplied = source.replace(
         "ext [style=invis]",
-        "projector=1; a[num=7]; ext [style=invis]",
+        &format!(
+            r#"projector="{}"; a[num="7*({})"]; ext [style=invis]"#,
+            projector.to_canonical_string(),
+            vertex.to_canonical_string()
+        ),
     );
-    let explicit = Graph::import_dot(&supplied, &model).unwrap().remove(0);
-    assert!(explicit.global_prefactor.projector.expression().is_one());
+    let explicit = Graph::from_dot(&supplied, &model).unwrap().remove(0);
+    assert!(
+        explicit
+            .global_prefactor
+            .projector
+            .same_value(&imported.global_prefactor.projector)
+    );
     assert_eq!(
-        explicit.underlying[linnet::half_edge::NodeIndex(0)]
-            .num
-            .value
-            .expression(),
-        &Atom::num(7)
+        super::NumeratorInterface::export(
+            &explicit.underlying[linnet::half_edge::NodeIndex(0)]
+                .num
+                .value
+        )
+        .0,
+        vertex * 7
     );
     assert!(
         !explicit.underlying[EdgeIndex(1)]
@@ -1395,8 +1416,8 @@ fn compact_gamma_loop_indices_bind_to_native_rule_ports() {
     let model = crate::utils::load_generic_model("sm");
     let source =
         include_str!("../../../../../tests/resources/graphs/local_ir_gluon_self_energy.dot");
-    let qualified = Graph::import_dot(source, &model).unwrap().remove(0);
-    let unqualified = Graph::import_dot(&source.replace("gammalooprs::", ""), &model)
+    let qualified = Graph::from_dot(source, &model).unwrap().remove(0);
+    let unqualified = Graph::from_dot(&source.replace("gammalooprs::", ""), &model)
         .unwrap()
         .remove(0);
     // This explicitly supplied gluon projector closes the independently
@@ -1427,7 +1448,7 @@ fn compact_sewn_projector_uses_the_source_half_edge_chart() {
     use symbolica::function;
     test_initialise().unwrap();
     let model = crate::utils::load_generic_model("sm");
-    let mut source = linnet::parser::DotGraph::from_string(
+    let mut source: linnet::parser::DotGraph = linnet::parser::DotGraph::from_string(
         r#"digraph sewn_top_self_energy {
         final_state="t,g"
         ext[style=invis]
@@ -1438,13 +1459,15 @@ fn compact_sewn_projector_uses_the_source_half_edge_chart() {
     }"#,
     )
     .unwrap();
-    let automatic = Graph::from_compact_model_dot(source.clone(), &model).unwrap();
+    let automatic = Graph::from_dot(&source.debug_dot(), &model)
+        .unwrap()
+        .remove(0);
     let mut projector = Atom::one();
     for (pair, edge, _) in source.iter_edges() {
         if let HedgePair::Unpaired { hedge, flow } = pair {
             let slot = Bispinor {}
                 .new_rep(4)
-                .to_symbolic([Atom::from(Aind::Hedge(hedge.0 as u16, 0))]);
+                .to_symbolic([Atom::from(Aind::Hedge(hedge.0 as u16, 1))]);
             projector *= function!(
                 if flow == Flow::Sink { GS.u } else { GS.ubar },
                 edge.0,
@@ -1456,9 +1479,14 @@ fn compact_sewn_projector_uses_the_source_half_edge_chart() {
         .global_data
         .statements
         .insert("projector".into(), projector.to_canonical_string());
-    let explicit = Graph::from_compact_model_dot(source, &model).unwrap();
+    let explicit = Graph::from_dot(&source.debug_dot(), &model)
+        .unwrap()
+        .remove(0);
+    // An admitted projector orders its ports canonically, the generated one by
+    // construction; the wavefunctions and their slots must agree.
     assert_eq!(
-        explicit.global_prefactor.projector, automatic.global_prefactor.projector,
+        explicit.global_prefactor.projector.expression(),
+        automatic.global_prefactor.projector.expression(),
         "supplied wavefunctions must follow actual source incidence through sewing"
     );
     assert_eq!(explicit.loop_momentum_basis, automatic.loop_momentum_basis);
@@ -1479,7 +1507,7 @@ fn compact_sewn_projector_uses_the_source_half_edge_chart() {
 #[test]
 fn full_numerator_requires_one_q3_structure_argument() {
     test_initialise().unwrap();
-    let mut graph: Graph = crate::graph::Graph::import_dot(
+    let mut graph: Graph = crate::graph::Graph::from_dot(
         stringify!(
         digraph q3_validation {
             edge [pdg=1000]
@@ -1678,14 +1706,14 @@ fn full_numerator_requires_one_q3_structure_argument() {
 
     graph.overall_factor = Atom::one();
     for attribute in ["num", "projector"] {
-        let mut source =
+        let mut source: linnet::parser::DotGraph =
             linnet::parser::DotGraph::from_string(graph.dot_serialize(&Default::default()))
                 .unwrap();
         source
             .global_data
             .statements
             .insert(attribute.into(), nested_q.to_canonical_string());
-        let error = Graph::from_finalized_runtime_dot(source, &graph.model)
+        let error = Graph::from_dot(&source.debug_dot(), &graph.model)
             .err()
             .expect("malformed raw global momentum must be rejected");
         assert!(
@@ -1739,12 +1767,10 @@ fn graph_set_import_enforces_the_q3_convention_without_tensor_closure() {
             "#
         );
 
-        let error = crate::graph::Graph::import_dot(
-            &malformed,
-            &crate::utils::load_generic_model("scalars"),
-        )
-        .err()
-        .expect("multi-graph imports must reject the obsolete one-argument Q3 form");
+        let error =
+            crate::graph::Graph::from_dot(&malformed, &crate::utils::load_generic_model("scalars"))
+                .err()
+                .expect("multi-graph imports must reject the obsolete one-argument Q3 form");
         assert!(
             format!("{error:#}")
                 .contains("Q3 in graph 'q3_graph_set_validation' must have exactly two arguments"),
@@ -1756,13 +1782,13 @@ fn graph_set_import_enforces_the_q3_convention_without_tensor_closure() {
 #[test]
 fn hedge_payload_does_not_require_dod() {
     test_initialise().unwrap();
-    let graph: Graph = crate::finalized_runtime_dot!(digraph missing_hedge_dod{
+    let graph: Graph = dot!(digraph missing_hedge_dod{
     graph [projector=1]
                    ext_in [style=invis]
                    ext_out [style=invis]
                    A [num=1 dod=0]
-                   ext_in -> A [name=e_in num=1 dod=-2 sink="{ufo_order:0}"]
-                   A -> ext_out [name=e_out num=1 dod=-2 source="{ufo_order:1}"]
+                   ext_in -> A [particle=H mass=0 name=e_in num=1 dod=-2]
+                   A -> ext_out [particle=H mass=0 name=e_out num=1 dod=-2]
                })
     .unwrap();
 
@@ -1787,7 +1813,7 @@ fn hedge_payload_does_not_require_dod() {
 #[test]
 fn initial_state_cut_permutation_preserves_specified_loop_edges() {
     test_initialise().unwrap();
-    let graph = Graph::import_dot(
+    let graph = Graph::from_dot(
         stringify!(digraph cut_lmb_permutation {
             graph [projector=1 final_state="scalar_1,scalar_1,scalar_1"]
             edge [num=1 particle=scalar_1]
@@ -1821,13 +1847,13 @@ fn initial_state_cut_permutation_preserves_specified_loop_edges() {
 #[test]
 fn missing_vertex_dod_is_autogenerated() {
     test_initialise().unwrap();
-    let graph: Graph = crate::finalized_runtime_dot!(digraph missing_vertex_dod{
+    let graph: Graph = dot!(digraph missing_vertex_dod{
     graph [projector=1]
                    ext_in [style=invis]
                    ext_out [style=invis]
                    A [num=1]
-                   ext_in -> A [name=e_in num=1 dod=-2 sink="{ufo_order:0,dod:-2}"]
-                   A -> ext_out [name=e_out num=1 dod=-2 source="{ufo_order:1,dod:-2}"]
+                   ext_in -> A [particle=H mass=0 name=e_in num=1 dod=-2]
+                   A -> ext_out [particle=H mass=0 name=e_out num=1 dod=-2]
                })
     .unwrap();
 
@@ -1839,9 +1865,9 @@ fn missing_vertex_dod_is_autogenerated() {
 #[test]
 fn open_fundamental_color_requires_an_explicit_projector() {
     test_initialise().unwrap();
-    let mut graph: Graph = crate::graph::Graph::import_dot(stringify!(
+    let mut graph: Graph = crate::graph::Graph::from_dot(stringify!(
         digraph open_fundamental_color {
-            num = "1/3*spenso::g(spenso::dind(spenso::cof(3,gammalooprs::hedge(0))),spenso::cof(3,gammalooprs::hedge(1)))"
+            num = "1/3*spenso::g(spenso::dind(spenso::cof(3,gammalooprs::hedge(0,1))),spenso::cof(3,gammalooprs::hedge(1,1)))"
             ext [style=invis]
 
             ext -> v1:0 [id=0 particle=d]
@@ -1869,18 +1895,18 @@ fn open_fundamental_color_requires_an_explicit_projector() {
 #[test]
 fn vacuum_loop_edges_must_leave_a_spanning_forest() {
     test_initialise().unwrap();
-    let graph: eyre::Result<Graph> = crate::finalized_runtime_dot!(digraph invalid_vacuum_basis {
+    let graph: eyre::Result<Graph> = dot!(digraph invalid_vacuum_basis {
  graph [projector=1]
         edge [num=1 mass=2]
         node [num=1]
-        a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
-        b -> a [id=1 lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
+        a -> b [particle=H id=0 lmb_id=0]
+        b -> a [particle=H id=1 lmb_id=1]
     }, &crate::utils::load_generic_model("sm"));
     let error = graph
         .err()
         .expect("an overcomplete loop basis must be rejected");
     assert!(
-        format!("{error:?}").contains("must label exactly 1 loop edges"),
+        format!("{error:?}").contains("do not form a spanning forest"),
         "unexpected basis-validation error: {error:?}"
     );
 }
@@ -1890,27 +1916,27 @@ fn vacuum_tadpoles_keep_all_loop_generators_without_external_legs() {
     use linnet::half_edge::subgraph::SubSetLike;
 
     test_initialise().unwrap();
-    let graphs: Vec<Graph> = crate::finalized_runtime_dot!(
+    let graphs: Vec<Graph> = dot!(
         digraph canonical_vacuum {
  graph [projector=1]
             edge [num=1 mass=2]
             node [num=1]
-            a -> a [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:1}"]
-            a -> a [id=1 lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:3}"]
+            a -> a [particle=H id=0 lmb_id=0]
+            a -> a [particle=H id=1 lmb_id=1]
         }
         digraph specified_vacuum {
  graph [projector=1]
             edge [num=1 mass=2]
             node [num=1]
-            a -> a [id=0 lmb_id=1 source="{ufo_order:4}" sink="{ufo_order:5}"]
-            a -> a [id=1 lmb_id=0 source="{ufo_order:6}" sink="{ufo_order:7}"]
+            a -> a [particle=H id=0 lmb_id=1]
+            a -> a [particle=H id=1 lmb_id=0]
         }
         digraph disconnected_vacuum {
  graph [projector=1]
             edge [num=1 mass=2]
             node [num=1]
-            a -> a [id=0 lmb_id=1 source="{ufo_order:8}" sink="{ufo_order:9}"]
-            b -> b [id=1 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:1}"]
+            a -> a [particle=H id=0 lmb_id=1]
+            b -> b [particle=H id=1 lmb_id=0]
         }
     , &crate::utils::load_generic_model("sm"))
     .unwrap();
@@ -1937,7 +1963,7 @@ fn vacuum_tadpoles_keep_all_loop_generators_without_external_legs() {
         }
         let exported = graph.dot_serialize(&DotExportSettings::default());
         let reparsed: Graph = exported
-            .into_finalized_runtime_graph(&crate::utils::load_generic_model("sm"))
+            .into_graph(&crate::utils::load_generic_model("sm"))
             .unwrap();
         assert_eq!(reparsed.loop_momentum_basis, *lmb);
     }

@@ -1,8 +1,6 @@
-use linnet::half_edge::{
-    builder::{HedgeData, HedgeGraphBuilder},
-    involution::{Flow, Hedge, Orientation},
-    EdgeAccessors, HedgeGraph, NodeIndex,
-};
+use linnet::half_edge::builder::{HedgeData, HedgeGraphBuilder};
+use linnet::half_edge::involution::{Flow, Hedge, Orientation};
+use linnet::half_edge::{EdgeAccessors, HedgeGraph, NodeIndex};
 use std::sync::Mutex;
 
 type Data = Mutex<usize>;
@@ -45,7 +43,7 @@ fn retention_preserves_moved_payloads_and_boundary_edge_orientations() {
             let (builder, mapping) = fixture(orientation).retain_nodes_in_order(&order);
             let actual: HedgeGraph<Data, Data, Data> = builder.build();
             actual.check().unwrap();
-            assert_eq!(actual.n_nodes(), order.len());
+            assert_eq!(actual.n_live(), order.len());
             assert_eq!(actual.n_hedges(), expected_hedges.len());
             for (new, &old) in expected_hedges.iter().enumerate() {
                 let new = Hedge(new);
@@ -91,7 +89,8 @@ fn unknown_retained_node_is_rejected() {
 #[test]
 fn builder_connections_match_finished_connections_and_retained_boundaries() {
     use linnet::half_edge::involution::EdgeData;
-    use std::{cell::RefCell, collections::BTreeMap};
+    use std::cell::RefCell;
+    use std::collections::BTreeMap;
     type Graph = HedgeGraph<Vec<usize>, usize, usize>;
     for orientation in [
         Orientation::Default,
@@ -158,7 +157,7 @@ fn builder_connections_match_finished_connections_and_retained_boundaries() {
                 let (early, mapping) = early.retain_nodes_in_order(&order);
                 let actual: Graph = early.build();
                 actual.check().unwrap();
-                assert_eq!(actual.n_nodes(), order.len());
+                assert_eq!(actual.n_live(), order.len());
                 let expected_hedges = order
                     .iter()
                     .flat_map(|&node| late.iter_crown(node))

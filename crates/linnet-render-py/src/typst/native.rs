@@ -745,6 +745,10 @@ impl RenderSettingsTransport {
                     .iter()
                     .map(|name| ("name", name.clone()))
                     .collect(),
+                flow_arrow: EdgeDrawing::default_flow_arrow(),
+                momentum_arrow: EdgeDrawing::default_momentum_arrow(),
+                flow_arrow_paints: Vec::new(),
+                momentum_arrow_paints: Vec::new(),
             });
             edge.label = label;
             for (key, value) in record {

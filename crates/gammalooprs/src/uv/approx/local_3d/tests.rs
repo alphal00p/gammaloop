@@ -1,40 +1,31 @@
 use super::{OrientationIntegrandBranch, OrientationIntegrands};
-use crate::{
-    cff::{
-        CutCFFIndex,
-        expression::{
-            GammaLoopOrientationExpression, OrientationData, OrientationExpression, OrientationID,
-        },
-        orientations::GraphOrientation,
-        surface::LinearEnergyExpr,
-    },
-    finalized_runtime_dot,
-    graph::{FeynmanGraph, FourDDenominator, Graph, LMBext, cuts::CutSet},
-    initialisation::test_initialise,
-    numerator::AppliedFeynmanRule,
-    settings::global::OrientationPattern,
-    utils::GS,
-    uv::{
-        ApproximationType, Spinney, UltravioletGraph,
-        approx::{
-            OrientationProjection,
-            direct_3d::{Direct3dCts, DirectResidueBranches},
-            local_3d::Localizer,
-        },
-        hedge_poset::OwnedForestNode,
-    },
+use crate::cff::CutCFFIndex;
+use crate::cff::expression::{
+    GammaLoopOrientationExpression, OrientationData, OrientationExpression, OrientationID,
 };
+use crate::cff::orientations::GraphOrientation;
+use crate::cff::surface::LinearEnergyExpr;
+use crate::dot;
+use crate::graph::cuts::CutSet;
+use crate::graph::{FeynmanGraph, FourDDenominator, Graph, LMBext};
+use crate::initialisation::test_initialise;
+use crate::numerator::AppliedFeynmanRule;
+use crate::settings::global::OrientationPattern;
+use crate::utils::GS;
+use crate::uv::approx::OrientationProjection;
+use crate::uv::approx::direct_3d::{Direct3dCts, DirectResidueBranches};
+use crate::uv::approx::local_3d::Localizer;
+use crate::uv::hedge_poset::OwnedForestNode;
+use crate::uv::{ApproximationType, Spinney, UltravioletGraph};
 use color_eyre::Result;
 use eyre::eyre;
-use linnet::half_edge::{
-    involution::{EdgeIndex, EdgeVec, Orientation},
-    subgraph::{InternalSubGraph, SubSetOps},
-};
-use std::{borrow::Borrow, collections::BTreeSet, sync::OnceLock};
-use symbolica::{
-    atom::{Atom, AtomCore, FunctionBuilder},
-    function,
-};
+use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
+use linnet::half_edge::subgraph::{InternalSubGraph, SubSetOps};
+use std::borrow::Borrow;
+use std::collections::BTreeSet;
+use std::sync::OnceLock;
+use symbolica::atom::{Atom, AtomCore, FunctionBuilder};
+use symbolica::function;
 use three_dimensional_reps::CffGenerationContext;
 use typed_index_collections::TiVec;
 
@@ -73,13 +64,13 @@ fn two_edge_graph() -> Result<Graph> {
     Ok(TWO_EDGE_GRAPH
         .get_or_init(|| {
             test_initialise().expect("test model initialization succeeds");
-            finalized_runtime_dot!(
+            dot!(
                 digraph G {
                     projector=1;
                     edge [particle="scalar_1" num=1];
                     node [num=1];
-                    a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"];
-                    a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"];
+                    a -> b [id=0 lmb_id=0];
+                    a -> b [id=1];
                 },
                 "scalars"
             )
@@ -151,14 +142,14 @@ fn soft_dispatch_preserves_the_complete_quartic_contour() -> Result<()> {
     use three_dimensional_reps::{Generate3DExpressionOptions, NumeratorSamplingScaleMode};
 
     test_initialise()?;
-    let mut graph: Graph = finalized_runtime_dot!(digraph soft_count_triangle {
+    let mut graph: Graph = dot!(digraph soft_count_triangle {
         projector=1;
         edge [num=1 mass=2]
         node [num=1]
-        a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
-        b -> c [id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
-        c -> a [id=2 source="{ufo_order:1}" sink="{ufo_order:1}"]
-        a -> a [id=3 lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:3}"]
+        a -> b [particle=H id=0 lmb_id=0]
+        b -> c [particle=H id=1]
+        c -> a [particle=H id=2]
+        a -> a [particle=H id=3 lmb_id=1]
     })?;
     let active = [EdgeIndex(0), EdgeIndex(1), EdgeIndex(2)];
     let temporal = active.map(|edge| GS.emr_mom(edge, GS.cind(0)));
@@ -1536,13 +1527,13 @@ fn denominator_only_cff_has_no_localizer_fallback() -> Result<()> {
 fn exact_localization_capacity_excludes_replaced_spinney_numerator() -> Result<()> {
     // Share model initialization with the other graph-backed tests in this module.
     let _ = two_edge_graph()?;
-    let mut graph: Graph = finalized_runtime_dot!(
+    let mut graph: Graph = dot!(
         digraph replaced_spinney_numerator {
             projector=1;
             edge [pdg=1000 num=1 mass=1]
             node [num=1]
-            a -> b [id=0 lmb_id=0 num="1/(Q(0,spenso::cind(0))+1)" source="{ufo_order:0}" sink="{ufo_order:0}"]
-            a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
+            a -> b [id=0 lmb_id=0 num="1/(Q(0,spenso::cind(0))+1)"]
+            a -> b [id=1]
         },
         "scalars"
     )?;
@@ -1587,17 +1578,17 @@ fn exact_localization_capacity_excludes_replaced_spinney_numerator() -> Result<(
 fn exact_localization_maps_finite_ct_instead_of_leaving_it_unmapped() -> Result<()> {
     // Share model initialization with the other graph-backed tests in this module.
     let _ = two_edge_graph()?;
-    let mut graph: Graph = finalized_runtime_dot!(
+    let mut graph: Graph = dot!(
         digraph finite_ct_map {
             projector=1;
             edge [particle="scalar_1" num=1];
             node [num=1];
             external [style=invis];
-            external -> A:0 [id=3 sink="{ufo_order:0}"];
-            C:1 -> external [id=4 source="{ufo_order:1}"];
-            A -> B [id=0 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"];
-            A -> B [id=1 source="{ufo_order:2}" sink="{ufo_order:1}"];
-            B -> C [id=2 source="{ufo_order:2}" sink="{ufo_order:0}"];
+            external -> A:0 [id=3];
+            C:1 -> external [id=4];
+            A -> B [id=0 lmb_id=0];
+            A -> B [id=1];
+            B -> C [id=2];
         },
         "scalars"
     )?;

@@ -1,21 +1,16 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use color_eyre::{Result, eyre::eyre};
-use gammaloop_api::{
-    commands::{
-        Inspect, Integrate,
-        evaluate_samples::{EvaluateSamplesPrecise, evaluate_samples_precise},
-        integrate::RendererOption,
-    },
-    state::ProcessRef,
-};
+use color_eyre::Result;
+use color_eyre::eyre::eyre;
+use gammaloop_api::commands::evaluate_samples::{EvaluateSamplesPrecise, evaluate_samples_precise};
+use gammaloop_api::commands::integrate::RendererOption;
+use gammaloop_api::commands::{Inspect, Integrate};
+use gammaloop_api::state::ProcessRef;
 use gammaloop_integration_tests::{clean_test, get_example_cli, get_tests_workspace_path};
-use gammalooprs::{
-    integrands::evaluation::PreciseEvaluationResultOutput,
-    settings::global::VectorPolarizationSumGauge,
-    utils::{ArbPrec, F, FloatLike},
-    uv::settings::{ApproximationType, FinalIntegrandDimension},
-};
+use gammalooprs::integrands::evaluation::PreciseEvaluationResultOutput;
+use gammalooprs::settings::global::VectorPolarizationSumGauge;
+use gammalooprs::utils::{ArbPrec, F, FloatLike};
+use gammalooprs::uv::settings::{ApproximationType, FinalIntegrandDimension};
 use ndarray::Array2;
 use spenso::algebra::algebraic_traits::IsZero;
 use symbolica::domains::float::{Real, SingleFloat};
@@ -115,7 +110,7 @@ fn gamma_star_ttx_msbar_nlo_matches_the_published_absolute_cross_sections() -> R
         r#"generate xs a > t t~ | a t t~ g ghG ghG~ QCD^2==0 QED^2==2 [{{{{1}}}} QCD=0]
             --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
             --symmetrize-left-right-states true
-            -p {LO_PROCESS} -i {LO} --global-prefactor-num "1/2" --only-diagrams"#,
+            -p {LO_PROCESS} -i {LO} --global-prefactor-num "1/2" --only-diagrams --filter-selfenergies true --filter-snails true --filter-tadpoles true --n-cut-blobs 1 1 --n-cut-spectators 0 0"#,
     ))?;
     cli.run_command(&format!("generate existing -p {LO_PROCESS} -i {LO}"))?;
 
@@ -132,7 +127,7 @@ fn gamma_star_ttx_msbar_nlo_matches_the_published_absolute_cross_sections() -> R
             r#"generate xs a > t t~ | a t t~ g ghG ghG~ QCD^2==2 QED^2==2 [{{{{2}}}} QCD=1]
                 --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
                 --symmetrize-left-right-states true
-                -p {process} -i {NLO} --global-prefactor-num "1/2" --only-diagrams"#,
+                -p {process} -i {NLO} --global-prefactor-num "1/2" --only-diagrams --filter-selfenergies true --filter-snails true --filter-tadpoles true --n-cut-blobs 1 1 --n-cut-spectators 0 0"#,
         ))?;
         cli.run_command(&format!("generate existing -p {process} -i {NLO}"))?;
 
@@ -149,7 +144,7 @@ fn gamma_star_ttx_msbar_nlo_matches_the_published_absolute_cross_sections() -> R
             .collect::<BTreeSet<_>>();
         assert_eq!(
             masters,
-            BTreeSet::from(["GL0".to_string(), "GL1".to_string()]),
+            BTreeSet::from(["GL0".to_string(), "GL2".to_string()]),
             "the {process} direct-current acceptance must contain exactly the self-energy and vertex supergraphs",
         );
     }
@@ -258,7 +253,7 @@ fn gamma_star_ttx_msbar_nlo_matches_the_published_absolute_cross_sections() -> R
             17.0, -31.0, 43.0, -29.0, 53.0, 71.0, 17.0, -31.0, 43.0, -29.0, 53.0, 71.0,
         ],
     )?;
-    let graph_names = ["GL1", "GL0"];
+    let graph_names = ["GL2", "GL0"];
     // Retaining one eighth of ArbPrec's requested precision permits substantial
     // expression-dependent loss while still testing the precision-increase path.
     let tolerance = F(ArbPrec::default().epsilon()).sqrt().sqrt().sqrt();
@@ -339,7 +334,7 @@ fn gamma_star_ttx_msbar_nlo_matches_the_published_absolute_cross_sections() -> R
     let mut graph_estimates = BTreeMap::new();
     let mut imaginary_sum = 0.0;
     let mut imaginary_variance = 0.0;
-    for (graph_index, graph) in ["GL1", "GL0"].into_iter().enumerate() {
+    for (graph_index, graph) in ["GL2", "GL0"].into_iter().enumerate() {
         cli.run_command(&format!(
             r#"set process -p {graph_process} -i {NLO} kv
                 sampling.graphs="monte_carlo"
@@ -388,7 +383,7 @@ fn gamma_star_ttx_msbar_nlo_matches_the_published_absolute_cross_sections() -> R
         let error = estimate.error.re.0.abs();
         graph_estimates.insert(graph, (value, error));
     }
-    for (graph, target) in [("GL1", PUBLISHED_SELF_ENERGY), ("GL0", PUBLISHED_VERTEX)] {
+    for (graph, target) in [("GL2", PUBLISHED_SELF_ENERGY), ("GL0", PUBLISHED_VERTEX)] {
         let (value, error) = graph_estimates[graph];
         assert!(
             error / target.abs() <= 0.15,

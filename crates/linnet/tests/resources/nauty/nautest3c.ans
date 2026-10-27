@@ -1,0 +1,6 @@
+Mode=Traces m=2 n=80 labelorg=0 arcs=160 options=(-c+a+m-p+d-P y=100 k=(0,999))
+linelen=78 worksize=500 input_depth=0 G=10 invarproc=adjacencies_sg; 1 cell
+
+Traces can't handle digraphs
+Traces can't handle digraphs
+input skipped : 'z jxz'

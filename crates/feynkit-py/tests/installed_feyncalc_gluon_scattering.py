@@ -28,10 +28,15 @@ vertices = [
     if v.particles.count(gluon.name) == len(v.particles) and len(v.particles) in (3, 4)
 ]
 assert len(vertices) == 2
-generated = model.process(
-    ["g", "g"], ["g", "g"], vertex_allow=vertices
-).generate_diagrams(
-    max_vertices=2, maximum_bridges=None, numerator_grouping=None, progress=None
+generated = (
+    model.process(["g", "g"], ["g", "g"])
+    .amplitude(
+        loops=hep.Loops.total(0),
+        restrict=hep.Restrict().only_vertices(vertices),
+        topology=hep.TopologyRules(max_vertices=2),
+    )
+    .generate()
+    .build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
 )
 assert len(generated.diagrams) == 4
 kin = (

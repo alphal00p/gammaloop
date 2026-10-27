@@ -1,21 +1,15 @@
 use rkyv::Archived;
 
-use crate::half_edge::{
-    involution::{ArchivedFlow, EdgeIndex, Hedge, Orientation},
-    nodestore::DefaultNodeStore,
-    subgraph::{SuBitGraph, SubSetLike},
-    HedgeGraph,
-};
+use crate::half_edge::involution::{ArchivedFlow, EdgeIndex, Hedge, Orientation};
+use crate::half_edge::subgraph::{SuBitGraph, SubSetLike};
+use crate::half_edge::{HedgeGraph, NodeIndex};
 
-use super::{
-    hedge::compass_pt_to_u8, set::DotGraphSet, DotEdgeData, DotGraph, DotHedgeData, DotVertexData,
-    GlobalData,
-};
+use super::set::DotGraphSet;
+use super::{CompassPt, DotEdgeData, DotGraph, DotHedgeData, DotVertexData, GlobalData};
 
 type ArchivedDotGraph = Archived<DotGraph>;
 type ArchivedDotGraphBytesSetRoot = Archived<DotGraphBytesSet>;
-type ArchivedDotHedgeGraph =
-    Archived<HedgeGraph<DotEdgeData, DotVertexData, DotHedgeData, DefaultNodeStore<DotVertexData>>>;
+type ArchivedDotHedgeGraph = Archived<HedgeGraph<DotEdgeData, DotVertexData, DotHedgeData>>;
 
 #[derive(Debug, Clone, rkyv::Archive, rkyv::Serialize)]
 #[archive(check_bytes)]
@@ -50,7 +44,7 @@ pub struct ArchivedDotGraphView<'a> {
 
 #[derive(Clone, Copy)]
 pub struct ArchivedDotVertexView<'a> {
-    pub node: crate::half_edge::NodeIndex,
+    pub node: NodeIndex,
     pub data: &'a Archived<DotVertexData>,
 }
 
@@ -64,7 +58,7 @@ pub struct ArchivedDotEdgeView<'a> {
 
 #[derive(Clone, Copy)]
 pub struct ArchivedDotEndpointView<'a> {
-    pub node: crate::half_edge::NodeIndex,
+    pub node: NodeIndex,
     pub hedge: Hedge,
     pub data: &'a Archived<DotHedgeData>,
 }
@@ -183,92 +177,29 @@ impl<'a> ArchivedDotGraphView<'a> {
         self.graph.hedge_data.0.len()
     }
 
+    /// The number of vertices: the live nodes, without those absorbed by pending
+    /// identifications.
     pub fn n_vertices(&self) -> usize {
-        #[cfg(feature = "nodestore-forest-child-vec")]
-        {
-            self.graph.node_store.roots.as_slice().len()
-        }
-        #[cfg(not(feature = "nodestore-forest-child-vec"))]
-        {
-            self.graph.node_store.node_data.0.len()
-        }
+        self.graph.node_store.n_live()
     }
 
-    pub fn vertex_data(&self) -> Box<dyn Iterator<Item = ArchivedDotVertexView<'_>> + '_> {
-        #[cfg(feature = "nodestore-forest-child-vec")]
-        {
-            Box::new(
-                self.graph
-                    .node_store
-                    .roots
-                    .as_slice()
-                    .iter()
-                    .enumerate()
-                    .map(|(node, root)| ArchivedDotVertexView {
-                        node: crate::half_edge::NodeIndex(node),
-                        data: &root.data,
-                    }),
-            )
-        }
-        #[cfg(not(feature = "nodestore-forest-child-vec"))]
-        {
-            Box::new(
-                self.graph
-                    .node_store
-                    .node_data
-                    .0
-                    .as_slice()
-                    .iter()
-                    .enumerate()
-                    .map(|(node, data)| ArchivedDotVertexView {
-                        node: crate::half_edge::NodeIndex(node),
-                        data,
-                    }),
-            )
-        }
+    /// The vertices in node order, each with its node slot.
+    pub fn vertex_data(&self) -> impl Iterator<Item = ArchivedDotVertexView<'_>> + '_ {
+        (self.graph.node_store.iter_nodes())
+            .map(|(node, data)| ArchivedDotVertexView { node, data })
     }
 
+    /// The vertices incident to a half-edge of `subgraph`, in node order.
     pub fn vertex_data_of<'b>(
         &'b self,
         subgraph: &'b SuBitGraph,
-    ) -> Box<dyn Iterator<Item = ArchivedDotVertexView<'b>> + 'b> {
-        #[cfg(feature = "nodestore-forest-child-vec")]
-        {
-            Box::new(
-                self.graph
-                    .node_store
-                    .roots
-                    .as_slice()
-                    .iter()
-                    .enumerate()
-                    .filter(move |(node, _)| {
-                        subgraph
-                            .included_iter()
-                            .any(|hedge| self.node_of_hedge(hedge).0 == *node)
-                    })
-                    .map(|(node, root)| ArchivedDotVertexView {
-                        node: crate::half_edge::NodeIndex(node),
-                        data: &root.data,
-                    }),
-            )
+    ) -> impl Iterator<Item = ArchivedDotVertexView<'b>> + 'b {
+        let mut incident = vec![false; self.graph.node_store.node_bound()];
+        for hedge in subgraph.included_iter() {
+            incident[self.node_of_hedge(hedge).0] = true;
         }
-        #[cfg(not(feature = "nodestore-forest-child-vec"))]
-        {
-            Box::new(
-                self.graph
-                    .node_store
-                    .nodes
-                    .0
-                    .as_slice()
-                    .iter()
-                    .enumerate()
-                    .filter(move |(_, neighbors)| neighbors.intersects_owned(subgraph))
-                    .map(move |(node, _)| ArchivedDotVertexView {
-                        node: crate::half_edge::NodeIndex(node),
-                        data: &self.graph.node_store.node_data.0.as_slice()[node],
-                    }),
-            )
-        }
+        self.vertex_data()
+            .filter(move |vertex| incident[vertex.node.0])
     }
 
     pub fn edge_data(&self) -> impl Iterator<Item = ArchivedDotEdgeView<'_>> + '_ {
@@ -326,8 +257,8 @@ impl<'a> ArchivedDotGraphView<'a> {
         })
     }
 
-    pub fn compass_subgraph(&self, compass_pt: Option<dot_parser::ast::CompassPt>) -> SuBitGraph {
-        let target = compass_pt.map(compass_pt_to_u8);
+    pub fn compass_subgraph(&self, compass_pt: Option<CompassPt>) -> SuBitGraph {
+        let target = compass_pt.map(|compass| compass as u8);
         self.graph
             .hedge_data
             .0
@@ -380,33 +311,8 @@ impl<'a> ArchivedDotGraphView<'a> {
         }
     }
 
-    fn node_of_hedge(&self, hedge: Hedge) -> crate::half_edge::NodeIndex {
-        #[cfg(feature = "nodestore-forest-child-vec")]
-        {
-            crate::half_edge::NodeIndex(self.forest_root_id_of_hedge(hedge))
-        }
-        #[cfg(not(feature = "nodestore-forest-child-vec"))]
-        {
-            let node = &self.graph.node_store.hedge_data.0.as_slice()[hedge.0];
-            crate::half_edge::NodeIndex(node.0.try_into().unwrap())
-        }
-    }
-
-    #[cfg(feature = "nodestore-forest-child-vec")]
-    fn forest_root_id_of_hedge(&self, hedge: Hedge) -> usize {
-        let mut current = hedge.0;
-        loop {
-            let node = &self.graph.node_store.nodes.nodes.as_slice()[current];
-            match &node.parent_pointer.parent {
-                crate::tree::parent_pointer::ArchivedParentId::Root(root) => {
-                    return root.0.try_into().unwrap();
-                }
-                crate::tree::parent_pointer::ArchivedParentId::Node(parent)
-                | crate::tree::parent_pointer::ArchivedParentId::PointingRoot(parent) => {
-                    current = parent.0.try_into().unwrap();
-                }
-            }
-        }
+    fn node_of_hedge(&self, hedge: Hedge) -> NodeIndex {
+        self.graph.node_store.node_id(hedge)
     }
 
     fn orientation_of_hedge(&self, hedge: Hedge) -> &'a Archived<Orientation> {
@@ -424,10 +330,60 @@ impl<'a> ArchivedDotGraphView<'a> {
 
 #[cfg(test)]
 mod tests {
-    use dot_parser::ast::CompassPt;
+    use crate::parser::CompassPt;
 
-    use super::{ArchivedDotGraph, DotGraph, DotGraphBytesSet, DotGraphSet};
-    use crate::half_edge::{involution::ArchivedOrientation, subgraph::SubSetLike};
+    use super::{ArchivedDotGraph, ArchivedDotVertexView, DotGraph, DotGraphBytesSet, DotGraphSet};
+    use crate::half_edge::involution::ArchivedOrientation;
+    use crate::half_edge::subgraph::SubSetLike;
+
+    fn name(vertex: ArchivedDotVertexView<'_>) -> String {
+        vertex.data.name.as_ref().unwrap().as_str().to_owned()
+    }
+
+    /// Nodes absorbed by a pending identification are no vertices: the
+    /// archived view lists the vertices of the compacted copy under the
+    /// compaction's renumbering, and the archive keeps the identification.
+    #[test]
+    fn archived_views_skip_nodes_absorbed_by_pending_identifications() {
+        let mut graph: DotGraph =
+            DotGraph::from_string("digraph { a -> b; b -> c; c -> d; }").unwrap();
+        let named = |graph: &DotGraph, name: &str| {
+            (graph.iter_nodes())
+                .find(|(_, _, node)| node.name.as_deref() == Some(name))
+                .map(|(index, _, _)| index)
+                .unwrap()
+        };
+        let (a, c, d) = (named(&graph, "a"), named(&graph, "c"), named(&graph, "d"));
+        let merged = graph[c].clone();
+        // `c` has the larger crown and survives; `d` fills the slot of `a`.
+        graph.identify_nodes(&[a, c], merged);
+        let mut compacted = graph.clone();
+        let remap = compacted.compact();
+        assert_eq!(remap.get(d), Some(a));
+
+        let bytes = graph.to_rkyv_bytes::<4096>().unwrap();
+        let compacted_bytes = compacted.to_rkyv_bytes::<4096>().unwrap();
+        let view = DotGraph::archived_view(&bytes).unwrap();
+        let compacted_view = DotGraph::archived_view(&compacted_bytes).unwrap();
+        assert_eq!((view.n_vertices(), compacted_view.n_vertices()), (3, 3));
+        let mut moved: Vec<_> = (view.vertex_data())
+            .map(|vertex| (remap.get(vertex.node).unwrap(), name(vertex)))
+            .collect();
+        moved.sort();
+        let expected: Vec<_> = (compacted_view.vertex_data())
+            .map(|vertex| (vertex.node, name(vertex)))
+            .collect();
+        assert_eq!(moved, expected);
+        let everything = view
+            .subgraph_from_bools(vec![true; view.n_hedges()])
+            .unwrap();
+        let incident: Vec<_> = view.vertex_data_of(&everything).map(name).collect();
+        assert_eq!(incident, ["b", "c", "d"]);
+
+        let back: DotGraph = rkyv::from_bytes(&bytes).unwrap();
+        assert_eq!(back, graph);
+        assert_eq!((back.n_live(), back.node_bound()), (3, 4));
+    }
 
     #[test]
     fn archived_graph_bytes_set_supports_indexing_and_iteration() {

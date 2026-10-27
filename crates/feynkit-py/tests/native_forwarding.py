@@ -13,17 +13,10 @@ forwarding_model = fk.Model.from_json(MODEL_JSON)
 forwarding_process = forwarding_model.process(
     ["scalar_0"],
     ["scalar_0", "scalar_0"],
-    vertex_allow=["V_3_SCALAR_000"],
-    particle_veto=["scalar_1", "scalar_2"],
 )
 forwarding_diagram = next(
     item
-    for item in forwarding_process.generate_diagrams(
-        loops=1,
-        max_vertices=3,
-        allow_self_loops=True,
-        progress=None,
-    ).diagrams
+    for item in forwarding_process.amplitude(loops=fk.Loops.total(1), restrict=fk.Restrict().only_vertices(["V_3_SCALAR_000"]).exclude_particles(["scalar_1", "scalar_2"]), topology=fk.TopologyRules(max_vertices=3, self_loops=True, bridges=fk.Bridges.one_pi_in_loops(), self_energies=fk.Veto.all(), tadpoles=fk.Veto.all(), snails=fk.Veto.massless())).generate().build(fk.NumeratorOptions(naming=fk.Naming.named("D"))).diagrams
     if all(edge.source != edge.target for edge in item.edges)
 )
 forwarding_cff = forwarding_diagram.integrate_energy(method="cff")

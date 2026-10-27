@@ -7,13 +7,13 @@ digraph scalar_spectacles_overall_log { graph [projector=1]
 
     e [style = invis]
 
-    e -> A:0 [id = 6 sink="{ufo_order:0}"]
-    D:1 -> e [id = 7 source="{ufo_order:0}"]
+    e -> A:0 [id = 6]
+    D:1 -> e [id = 7]
 
-    A -> B [id = 0 lmb_id = 0 source="{ufo_order:1}" sink="{ufo_order:0}"]
-    A -> B [id = 1 source="{ufo_order:2}" sink="{ufo_order:1}"]
-    B -> C [id = 2 source="{ufo_order:2}" sink="{ufo_order:0}"]
-    C -> D [id = 3 lmb_id = 1 source="{ufo_order:1}" sink="{ufo_order:1}"]
-    C -> D [id = 4 lmb_id = 2 source="{ufo_order:2}" sink="{ufo_order:2}"]
-    D -> A [id = 5 sink="{ufo_order:3}" source="{ufo_order:3}"]
+    A -> B [id = 0 lmb_id = 0]
+    A -> B [id = 1]
+    B -> C [id = 2]
+    C -> D [id = 3 lmb_id = 1]
+    C -> D [id = 4 lmb_id = 2]
+    D -> A [id = 5]
 }

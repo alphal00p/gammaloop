@@ -1,12 +1,11 @@
-use std::{
-    collections::BTreeSet,
-    env,
-    ffi::OsString,
-    path::Path,
-    process::{Command, Output},
-};
+use std::collections::BTreeSet;
+use std::env;
+use std::ffi::OsString;
+use std::path::Path;
+use std::process::{Command, Output};
 
-use color_eyre::{Result, eyre::eyre};
+use color_eyre::Result;
+use color_eyre::eyre::eyre;
 use gammaloop_integration_tests::new_test_artifact_dir;
 use serde_json::Value as JsonValue;
 
@@ -169,7 +168,7 @@ fn base_setup_commands() -> Vec<String> {
         r#"set default-runtime kv kinematics.externals='{"type":"constant","data":{"momenta":[[32.0,0.0,0.0,32.0],[32.0,0.0,0.0,-32.0]],"helicities":[1,1]}}'"#
             .to_string(),
         "set default-runtime kv subtraction.disable_threshold_subtraction=true".to_string(),
-        "generate xs e+ e- > d d~ g | e- a d g QED^2==4 [{{2}} QCD=0] --numerator-grouping group_identical_graphs_up_to_sign --clear-existing-processes --only-diagrams".to_string(),
+        "generate xs e+ e- > d d~ g | e- a d g QED^2==4 [{{2}} QCD=0] --numerator-grouping group_identical_graphs_up_to_sign --clear-existing-processes --only-diagrams --filter-selfenergies true --filter-snails true --filter-tadpoles true --n-cut-blobs 1 1 --n-cut-spectators 0 0".to_string(),
         "generate".to_string(),
     ]
 }
@@ -768,6 +767,56 @@ payload = {{
         .contains(
             "Momentum-space evaluation expects flattened (px, py, pz) triplets, so the coordinate count must be a multiple of 3; got 4."
         ));
+
+    Ok(())
+}
+
+#[test]
+fn python_import_graphs_and_get_lmbs_read_plain_dot_through_feynkit() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
+    // The model fills in the omitted vertex factors and top propagators.
+    let dot = r#"digraph higgs_self_energy {
+    ext [style=invis];
+    ext -> a [id=0, particle="H"];
+    a -> b [id=1, particle="t"];
+    b -> a [id=2, particle="t"];
+    b -> ext [id=3, particle="H"];
+}"#;
+    let directory = new_test_artifact_dir("python_api_plain_dot_input")?;
+    let path = directory.join("higgs_self_energy.dot");
+    std::fs::write(&path, dot)?;
+    let payload = run_python_case(
+        "python_api_plain_dot_import",
+        &["import model sm-default".to_string()],
+        &format!(
+            r#"
+dot = {dot:?}
+api.import_graphs(dot, process_name="from_string", format="string")
+api.import_graphs({path:?})
+lmbs = api.get_lmbs({path:?})
+payload = {{
+    "exported": api.get_dot_files(process="from_string"),
+    "file_export": api.get_dot_files(process="higgs_self_energy"),
+    "loop_edges": [sorted(tuple(basis[0]) for basis in graph) for graph in lmbs],
+    "string_loop_edges": [
+        sorted(tuple(basis[0]) for basis in graph)
+        for graph in api.get_lmbs(dot, format="string")
+    ],
+}}
+"#,
+            path = path.display().to_string(),
+        ),
+    )?;
+
+    for export in ["exported", "file_export"] {
+        let exported = payload[export].as_str().unwrap();
+        assert!(exported.contains("particle=\"t\""), "{exported}");
+        assert!(exported.contains("int_id="), "{exported}");
+    }
+    // Either top propagator carries the loop momentum.
+    let loop_edges = serde_json::json!([[[1], [2]]]);
+    assert_eq!(payload["loop_edges"], loop_edges);
+    assert_eq!(payload["string_loop_edges"], loop_edges);
 
     Ok(())
 }

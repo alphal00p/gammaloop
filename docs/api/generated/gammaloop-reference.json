@@ -8737,7 +8737,7 @@
           "value_names": [
             "TOKENS"
           ],
-          "help": "Quote-free spec.\n\nGrammar (unquoted): `INITIAL to FINAL [process_options] [generation_options]` Also accepts: `INITIAL > FINAL [ ... ]`\n\nExamples: e+ e- to d d~ g veto u d xs QED^2==2 QCD^2<=4 pert loops=1 fsloops=2 QCD=2 e+ e- > { z z, a a } [ {1} {{2}} QCD=2 QED=1 ] / u d | g ghG QED==2 QCD>=2 QCD<=4\n\nNotes: - `veto` and `only` are synonyms for `/` and `|`. - The `[ ... ]` block holds perturbative spec: `{n}`, `{{n}}`, and orders `QCD=n` with shorthand `QCD`≡1.",
+          "help": "Quote-free spec.\n\nGrammar (unquoted): `INITIAL to FINAL [process_options] [generation_options]` Also accepts: `INITIAL > FINAL [ ... ]`\n\nExamples: e+ e- to d d~ g [ {1} ] veto u d QED^2==4 QCD^2<=4 e+ e- > { z z, a a } [ {1} {{2}} QCD=2 QED=1 ] / u d | g ghG QED==2 QCD>=2 QCD<=4\n\nNotes: - `veto` and `only` are synonyms for `/` and `|`. - The `[ ... ]` block holds perturbative spec: `{n}`, `{{n}}`, and orders `QCD=n` with shorthand `QCD`≡1.",
           "required": false,
           "positional": true,
           "index": 1,
@@ -8923,7 +8923,7 @@
           "value_names": [
             "FILTER_SELFENERGIES"
           ],
-          "help": "Include or exclude self-energy topologies; omission uses the generation-mode default",
+          "help": "Veto self-energy topologies; omission keeps them",
           "required": false,
           "positional": false,
           "index": null,
@@ -8956,7 +8956,7 @@
           "value_names": [
             "FILTER_SNAILS"
           ],
-          "help": "Include or exclude snail topologies; omission uses the generation-mode default",
+          "help": "Veto snail topologies; omission keeps them",
           "required": false,
           "positional": false,
           "index": null,
@@ -8989,7 +8989,7 @@
           "value_names": [
             "FILTER_TADPOLES"
           ],
-          "help": "Include or exclude tadpole topologies; omission uses the generation-mode default",
+          "help": "Veto tadpole topologies; omission keeps them",
           "required": false,
           "positional": false,
           "index": null,
@@ -9167,39 +9167,6 @@
           ]
         },
         {
-          "id": "veto_only_scaleless_tadpoles",
-          "long": "veto-only-scaleless-tadpoles",
-          "short": null,
-          "aliases": [],
-          "action": "set",
-          "arity": {
-            "min": 1,
-            "max": 1
-          },
-          "takes_values": true,
-          "value_required": true,
-          "value_names": [
-            "VETO_ONLY_SCALELESS_TADPOLES"
-          ],
-          "help": "Veto only tadpoles that are scaleless",
-          "required": false,
-          "positional": false,
-          "index": null,
-          "hidden": false,
-          "global": false,
-          "inherited": false,
-          "exclusive": false,
-          "require_equals": false,
-          "value_delimiter": null,
-          "value_terminator": null,
-          "conflicts_with": [],
-          "defaults": [],
-          "possible_values": [
-            "true",
-            "false"
-          ]
-        },
-        {
           "id": "veto_snails_attached_to_massive_lines",
           "long": "veto-snails-attached-to-massive-lines",
           "short": null,
@@ -9248,39 +9215,6 @@
             "VETO_SNAILS_ATTACHED_TO_MASSLESS_LINES"
           ],
           "help": "Veto snail insertions attached to massless propagators",
-          "required": false,
-          "positional": false,
-          "index": null,
-          "hidden": false,
-          "global": false,
-          "inherited": false,
-          "exclusive": false,
-          "require_equals": false,
-          "value_delimiter": null,
-          "value_terminator": null,
-          "conflicts_with": [],
-          "defaults": [],
-          "possible_values": [
-            "true",
-            "false"
-          ]
-        },
-        {
-          "id": "veto_only_scaleless_snails",
-          "long": "veto-only-scaleless-snails",
-          "short": null,
-          "aliases": [],
-          "action": "set",
-          "arity": {
-            "min": 1,
-            "max": 1
-          },
-          "takes_values": true,
-          "value_required": true,
-          "value_names": [
-            "VETO_ONLY_SCALELESS_SNAILS"
-          ],
-          "help": "Veto only snail insertions that are scaleless",
           "required": false,
           "positional": false,
           "index": null,
@@ -9365,39 +9299,6 @@
           ]
         },
         {
-          "id": "veto_only_scaleless_self_energy",
-          "long": "veto-only-scaleless-self-energy",
-          "short": null,
-          "aliases": [],
-          "action": "set",
-          "arity": {
-            "min": 1,
-            "max": 1
-          },
-          "takes_values": true,
-          "value_required": true,
-          "value_names": [
-            "VETO_ONLY_SCALELESS_SELF_ENERGY"
-          ],
-          "help": "Veto only self-energy insertions that are scaleless",
-          "required": false,
-          "positional": false,
-          "index": null,
-          "hidden": false,
-          "global": false,
-          "inherited": false,
-          "exclusive": false,
-          "require_equals": false,
-          "value_delimiter": null,
-          "value_terminator": null,
-          "conflicts_with": [],
-          "defaults": [],
-          "possible_values": [
-            "true",
-            "false"
-          ]
-        },
-        {
           "id": "max_n_bridges",
           "long": "max-n-bridges",
           "short": "b",
@@ -9412,7 +9313,7 @@
           "value_names": [
             "MAX_N_BRIDGES"
           ],
-          "help": "Maximum number of bridges allowed in a generated graph; negative values disable the bound",
+          "help": "Maximum number of bridges allowed in a generated graph; omission is unrestricted",
           "required": false,
           "positional": false,
           "index": null,
@@ -9478,7 +9379,7 @@
           "value_names": [
             "NUMBER_OF_FERMION_LOOPS"
           ],
-          "help": "Number of closed fermion loops, excluding ghosts; negative disables",
+          "help": "Inclusive minimum and maximum number of closed fermion loops, excluding ghosts",
           "required": false,
           "positional": false,
           "index": null,
@@ -9607,7 +9508,7 @@
           "value_names": [
             "SYMMETRIZE_INITIAL_STATES"
           ],
-          "help": "Identify graphs related by permutations of identical initial-state particles",
+          "help": "Identify graphs related by permutations of identical initial-state particles. A cross section keeps one graph per exchange of its two identical beams, weighted by the number of graphs it stands for; this assumes observables, selectors and beam helicities symmetric under the exchange, and can raise the integration error at equal sample counts. With left/right symmetrization the weights inherit its deviations and can differ from its total too",
           "required": false,
           "positional": false,
           "index": null,
@@ -9640,7 +9541,7 @@
           "value_names": [
             "SYMMETRIZE_FINAL_STATES"
           ],
-          "help": "Identify graphs related by permutations of identical final-state particles",
+          "help": "Identify amplitude graphs related by permutations of identical final-state particles; cross sections reject it, their identical final states being cut edges",
           "required": false,
           "positional": false,
           "index": null,
@@ -9673,7 +9574,7 @@
           "value_names": [
             "SYMMETRIZE_LEFT_RIGHT_STATES"
           ],
-          "help": "Identify cross-section graphs under CP-based left/right exchange; requires CP symmetry",
+          "help": "Identify cross-section graphs under CP-based left/right exchange; requires CP symmetry. From two loops on the physical cuts can depend on which side is searched, so the total can differ from the unsymmetrized one",
           "required": false,
           "positional": false,
           "index": null,
@@ -10285,7 +10186,7 @@
           "value_names": [
             "TOKENS"
           ],
-          "help": "Quote-free spec.\n\nGrammar (unquoted): `INITIAL to FINAL [process_options] [generation_options]` Also accepts: `INITIAL > FINAL [ ... ]`\n\nExamples: e+ e- to d d~ g veto u d xs QED^2==2 QCD^2<=4 pert loops=1 fsloops=2 QCD=2 e+ e- > { z z, a a } [ {1} {{2}} QCD=2 QED=1 ] / u d | g ghG QED==2 QCD>=2 QCD<=4\n\nNotes: - `veto` and `only` are synonyms for `/` and `|`. - The `[ ... ]` block holds perturbative spec: `{n}`, `{{n}}`, and orders `QCD=n` with shorthand `QCD`≡1.",
+          "help": "Quote-free spec.\n\nGrammar (unquoted): `INITIAL to FINAL [process_options] [generation_options]` Also accepts: `INITIAL > FINAL [ ... ]`\n\nExamples: e+ e- to d d~ g [ {1} ] veto u d QED^2==4 QCD^2<=4 e+ e- > { z z, a a } [ {1} {{2}} QCD=2 QED=1 ] / u d | g ghG QED==2 QCD>=2 QCD<=4\n\nNotes: - `veto` and `only` are synonyms for `/` and `|`. - The `[ ... ]` block holds perturbative spec: `{n}`, `{{n}}`, and orders `QCD=n` with shorthand `QCD`≡1.",
           "required": false,
           "positional": true,
           "index": 1,
@@ -10471,7 +10372,7 @@
           "value_names": [
             "FILTER_SELFENERGIES"
           ],
-          "help": "Include or exclude self-energy topologies; omission uses the generation-mode default",
+          "help": "Veto self-energy topologies; omission keeps them",
           "required": false,
           "positional": false,
           "index": null,
@@ -10504,7 +10405,7 @@
           "value_names": [
             "FILTER_SNAILS"
           ],
-          "help": "Include or exclude snail topologies; omission uses the generation-mode default",
+          "help": "Veto snail topologies; omission keeps them",
           "required": false,
           "positional": false,
           "index": null,
@@ -10537,7 +10438,7 @@
           "value_names": [
             "FILTER_TADPOLES"
           ],
-          "help": "Include or exclude tadpole topologies; omission uses the generation-mode default",
+          "help": "Veto tadpole topologies; omission keeps them",
           "required": false,
           "positional": false,
           "index": null,
@@ -10715,39 +10616,6 @@
           ]
         },
         {
-          "id": "veto_only_scaleless_tadpoles",
-          "long": "veto-only-scaleless-tadpoles",
-          "short": null,
-          "aliases": [],
-          "action": "set",
-          "arity": {
-            "min": 1,
-            "max": 1
-          },
-          "takes_values": true,
-          "value_required": true,
-          "value_names": [
-            "VETO_ONLY_SCALELESS_TADPOLES"
-          ],
-          "help": "Veto only tadpoles that are scaleless",
-          "required": false,
-          "positional": false,
-          "index": null,
-          "hidden": false,
-          "global": false,
-          "inherited": false,
-          "exclusive": false,
-          "require_equals": false,
-          "value_delimiter": null,
-          "value_terminator": null,
-          "conflicts_with": [],
-          "defaults": [],
-          "possible_values": [
-            "true",
-            "false"
-          ]
-        },
-        {
           "id": "veto_snails_attached_to_massive_lines",
           "long": "veto-snails-attached-to-massive-lines",
           "short": null,
@@ -10796,39 +10664,6 @@
             "VETO_SNAILS_ATTACHED_TO_MASSLESS_LINES"
           ],
           "help": "Veto snail insertions attached to massless propagators",
-          "required": false,
-          "positional": false,
-          "index": null,
-          "hidden": false,
-          "global": false,
-          "inherited": false,
-          "exclusive": false,
-          "require_equals": false,
-          "value_delimiter": null,
-          "value_terminator": null,
-          "conflicts_with": [],
-          "defaults": [],
-          "possible_values": [
-            "true",
-            "false"
-          ]
-        },
-        {
-          "id": "veto_only_scaleless_snails",
-          "long": "veto-only-scaleless-snails",
-          "short": null,
-          "aliases": [],
-          "action": "set",
-          "arity": {
-            "min": 1,
-            "max": 1
-          },
-          "takes_values": true,
-          "value_required": true,
-          "value_names": [
-            "VETO_ONLY_SCALELESS_SNAILS"
-          ],
-          "help": "Veto only snail insertions that are scaleless",
           "required": false,
           "positional": false,
           "index": null,
@@ -10913,39 +10748,6 @@
           ]
         },
         {
-          "id": "veto_only_scaleless_self_energy",
-          "long": "veto-only-scaleless-self-energy",
-          "short": null,
-          "aliases": [],
-          "action": "set",
-          "arity": {
-            "min": 1,
-            "max": 1
-          },
-          "takes_values": true,
-          "value_required": true,
-          "value_names": [
-            "VETO_ONLY_SCALELESS_SELF_ENERGY"
-          ],
-          "help": "Veto only self-energy insertions that are scaleless",
-          "required": false,
-          "positional": false,
-          "index": null,
-          "hidden": false,
-          "global": false,
-          "inherited": false,
-          "exclusive": false,
-          "require_equals": false,
-          "value_delimiter": null,
-          "value_terminator": null,
-          "conflicts_with": [],
-          "defaults": [],
-          "possible_values": [
-            "true",
-            "false"
-          ]
-        },
-        {
           "id": "max_n_bridges",
           "long": "max-n-bridges",
           "short": "b",
@@ -10960,7 +10762,7 @@
           "value_names": [
             "MAX_N_BRIDGES"
           ],
-          "help": "Maximum number of bridges allowed in a generated graph; negative values disable the bound",
+          "help": "Maximum number of bridges allowed in a generated graph; omission is unrestricted",
           "required": false,
           "positional": false,
           "index": null,
@@ -11026,7 +10828,7 @@
           "value_names": [
             "NUMBER_OF_FERMION_LOOPS"
           ],
-          "help": "Number of closed fermion loops, excluding ghosts; negative disables",
+          "help": "Inclusive minimum and maximum number of closed fermion loops, excluding ghosts",
           "required": false,
           "positional": false,
           "index": null,
@@ -11155,7 +10957,7 @@
           "value_names": [
             "SYMMETRIZE_INITIAL_STATES"
           ],
-          "help": "Identify graphs related by permutations of identical initial-state particles",
+          "help": "Identify graphs related by permutations of identical initial-state particles. A cross section keeps one graph per exchange of its two identical beams, weighted by the number of graphs it stands for; this assumes observables, selectors and beam helicities symmetric under the exchange, and can raise the integration error at equal sample counts. With left/right symmetrization the weights inherit its deviations and can differ from its total too",
           "required": false,
           "positional": false,
           "index": null,
@@ -11188,7 +10990,7 @@
           "value_names": [
             "SYMMETRIZE_FINAL_STATES"
           ],
-          "help": "Identify graphs related by permutations of identical final-state particles",
+          "help": "Identify amplitude graphs related by permutations of identical final-state particles; cross sections reject it, their identical final states being cut edges",
           "required": false,
           "positional": false,
           "index": null,
@@ -11221,7 +11023,7 @@
           "value_names": [
             "SYMMETRIZE_LEFT_RIGHT_STATES"
           ],
-          "help": "Identify cross-section graphs under CP-based left/right exchange; requires CP symmetry",
+          "help": "Identify cross-section graphs under CP-based left/right exchange; requires CP symmetry. From two loops on the physical cuts can depend on which side is searched, so the total can differ from the unsymmetrized one",
           "required": false,
           "positional": false,
           "index": null,

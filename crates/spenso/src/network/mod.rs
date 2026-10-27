@@ -11,20 +11,19 @@ use graph::{
     NAdd, NMul, NetworkEdge, NetworkGraph, NetworkLeaf, NetworkNode, NetworkOp, NetworkOperation,
     ScaledTensorRef,
 };
-use linnet::{
-    half_edge::{
-        NodeIndex,
-        subgraph::{Inclusion, SuBitGraph, SubSetLike},
-    },
-    permutation::Permutation,
-};
+use linnet::half_edge::NodeIndex;
+use linnet::half_edge::subgraph::{Inclusion, SuBitGraph, SubSetLike};
+use linnet::permutation::Permutation;
 use profile::{Counter, Timer};
-use rayon::prelude::*;
+use rayon::prelude::IntoParallelIterator;
+use rayon::prelude::IntoParallelRefIterator;
+use rayon::prelude::ParallelIterator;
 use serde::{Deserialize, Serialize};
 
 use library::{Library, LibraryError};
 
-use crate::algebra::{ScalarMul, algebraic_traits::RefOne};
+use crate::algebra::ScalarMul;
+use crate::algebra::algebraic_traits::RefOne;
 use crate::contraction::{Contract, Trace};
 #[cfg(feature = "shadowing")]
 use crate::iterators::IteratableTensor;
@@ -53,17 +52,13 @@ use thiserror::Error;
 
 #[cfg(feature = "shadowing")]
 use crate::algebra::complex::RealOrComplexRef;
+use crate::contraction::ContractionError;
+use crate::structure::{CastStructure, HasStructure, ScalarTensor, TensorStructure};
+use crate::tensors::complex::RealOrComplexTensor;
+use crate::tensors::data::{DataTensor, DenseTensor, SparseTensor};
 #[cfg(feature = "shadowing")]
 use crate::tensors::parametric::{
     AtomViewOrConcrete, ConcreteOrParam, ParamOrConcrete, ParamTensor,
-};
-use crate::tensors::{
-    complex::RealOrComplexTensor,
-    data::{DataTensor, DenseTensor, SparseTensor},
-};
-use crate::{
-    contraction::ContractionError,
-    structure::{CastStructure, HasStructure, ScalarTensor, TensorStructure},
 };
 use eyre::eyre;
 
@@ -78,7 +73,8 @@ pub mod tags;
 use tags::{SPENSO_TAG, scalar_store_alias, scalar_store_alias_index};
 // use eyre::Result;
 
-use std::{convert::Infallible, fmt::Debug};
+use std::convert::Infallible;
+use std::fmt::Debug;
 
 const LARGE_SUM_PROFILE_THRESHOLD: usize = 32;
 const MIN_LAZY_TENSOR_SUM_TERMS: usize = 2;
@@ -3553,7 +3549,7 @@ where
     if profile::enabled() && profile::verbose() {
         eprintln!(
             "spenso_profile execute.plan graph_nodes={} graph_hedges={} ignored_hedges={} rerooted={} ready_batch={} batch_subgraph_hedges={}",
-            graph.graph.n_nodes(),
+            graph.graph.n_live(),
             graph.graph.n_hedges(),
             ignored.n_included(),
             rerooted,
@@ -4172,16 +4168,12 @@ where
         + for<'a> MulAssign<<Store::Scalar as Ref>::Ref<'a>>
         + 'static,
 {
-    use std::{
-        any::{Any, TypeId},
-        fs::File,
-        io::BufWriter,
-    };
+    use std::any::{Any, TypeId};
+    use std::fs::File;
+    use std::io::BufWriter;
 
-    use symbolica::{
-        atom::Atom,
-        streaming::{TermStreamer, TermStreamerConfig},
-    };
+    use symbolica::atom::Atom;
+    use symbolica::streaming::{TermStreamer, TermStreamerConfig};
 
     if TypeId::of::<Store::Scalar>() != TypeId::of::<Atom>() {
         return None;

@@ -1,13 +1,13 @@
 use std::ops::{Range, RangeFrom, RangeInclusive, RangeTo, RangeToInclusive};
 
-use crate::half_edge::builder::HedgeNodeBuilder;
 use crate::half_edge::involution::HedgePair;
 use crate::half_edge::subgraph::{SuBitGraph, SubGraphLike, SubGraphOps};
-use crate::half_edge::{Hedge, HedgeGraph, NodeStorageOps};
+use crate::half_edge::{Hedge, HedgeGraph, Topology};
 
 use super::contracted::ContractedSubGraph;
-use super::{internal::InternalSubGraph, SubSetLike, SubSetOps};
+use super::internal::InternalSubGraph;
 use super::{Inclusion, ModifySubSet, SubSetIter};
+use super::{SubSetLike, SubSetOps};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, PartialOrd)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -76,10 +76,7 @@ impl Inclusion<SuBitGraph> for HedgeNode {
 }
 
 impl SubGraphLike for HedgeNode {
-    fn nedges<E, V, H, N: NodeStorageOps<NodeData = V>>(
-        &self,
-        graph: &HedgeGraph<E, V, H, N>,
-    ) -> usize {
+    fn nedges<E, V, H, N: Topology>(&self, graph: &HedgeGraph<E, V, H, N>) -> usize {
         self.internal_graph.nedges(graph)
     }
 
@@ -230,15 +227,12 @@ impl SubSetOps<Hedge> for HedgeNode {
 }
 
 impl SubGraphOps for HedgeNode {
-    fn complement<E, V, H, N: NodeStorageOps<NodeData = V>>(
-        &self,
-        graph: &HedgeGraph<E, V, H, N>,
-    ) -> Self {
+    fn complement<E, V, H, N: Topology>(&self, graph: &HedgeGraph<E, V, H, N>) -> Self {
         Self::from_internal_graph(self.internal_graph.complement(graph), graph)
     }
 }
 impl HedgeNode {
-    pub fn from_internal_graph<E, V, H, N: NodeStorageOps<NodeData = V>>(
+    pub fn from_internal_graph<E, V, H, N: Topology>(
         subgraph: InternalSubGraph,
         graph: &HedgeGraph<E, V, H, N>,
     ) -> Self {
@@ -276,29 +270,12 @@ impl HedgeNode {
         }
     }
 
-    pub fn from_builder<V>(builder: &HedgeNodeBuilder<V>, len: usize) -> Self {
-        let internal_graph = InternalSubGraph::empty(len);
-        let mut externalhedges = SuBitGraph::empty(len);
-
-        for hedge in &builder.hedges {
-            externalhedges.add(*hedge);
-        }
-
-        HedgeNode {
-            internal_graph,
-            hairs: externalhedges,
-        }
-    }
-
     pub fn is_node(&self) -> bool {
         self.internal_graph.is_empty()
     }
 
     /// Fixes the node by ensuring that all hairs are true hairs and not internal, and if they are move them to the internal graph. ! Also moves dangling edges to the internal graph.// not sure if this is kosher
-    pub fn fix<E, V, H, N: NodeStorageOps<NodeData = V>>(
-        &mut self,
-        graph: &HedgeGraph<E, V, H, N>,
-    ) {
+    pub fn fix<E, V, H, N: Topology>(&mut self, graph: &HedgeGraph<E, V, H, N>) {
         for i in self.hairs.included_iter() {
             let invh = graph.inv(i);
             if self.hairs.includes(&invh) {
@@ -310,10 +287,7 @@ impl HedgeNode {
     }
 
     /// adds all hairs possible
-    pub fn add_all_hairs<E, V, H, N: NodeStorageOps<NodeData = V>>(
-        &mut self,
-        graph: &HedgeGraph<E, V, H, N>,
-    ) {
+    pub fn add_all_hairs<E, V, H, N: Topology>(&mut self, graph: &HedgeGraph<E, V, H, N>) {
         let mut hairs: SuBitGraph = graph.empty_subgraph();
 
         for i in self.internal_graph.included_iter() {
@@ -329,10 +303,7 @@ impl HedgeNode {
         self.hairs = !nh;
     }
 
-    pub fn valid<E, V, H, N: NodeStorageOps<NodeData = V>>(
-        &self,
-        graph: &HedgeGraph<E, V, H, N>,
-    ) -> bool {
+    pub fn valid<E, V, H, N: Topology>(&self, graph: &HedgeGraph<E, V, H, N>) -> bool {
         for i in self.hairs.included_iter() {
             let invh = graph.inv(i);
             if self.hairs.includes(&invh) {

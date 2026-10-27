@@ -1,6 +1,6 @@
 digraph se {
 
-num = "spenso::g(spenso::dind(spenso::cof(3,hedge(0))),spenso::cof(3,hedge(100)))*spenso::g(spenso::dind(spenso::cof(3,hedge(101))),spenso::cof(3,hedge(1)))*spenso::t(spenso::coad(8,hedge(2)),spenso::cof(3,hedge(101)),spenso::dind(spenso::cof(3,hedge(100))))"
+num = "spenso::g(spenso::dind(spenso::cof(3,hedge(0,1))),spenso::cof(3,hedge(100,1)))*spenso::g(spenso::dind(spenso::cof(3,hedge(101,1))),spenso::cof(3,hedge(1,1)))*spenso::t(spenso::coad(8,hedge(2,1)),spenso::cof(3,hedge(101,1)),spenso::dind(spenso::cof(3,hedge(100,1))))"
 
 ext    [style=invis]
 ext -> v1:0 [particle=d];

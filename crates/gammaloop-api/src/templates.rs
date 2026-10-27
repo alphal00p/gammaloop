@@ -123,6 +123,10 @@ mod tests {
                 "crates/kurvst/typst/LICENSE",
                 include_bytes!("../../kurvst/typst/LICENSE").as_slice(),
             ),
+            (
+                "crates/kurvst/typst/LICENSE.tiptoe",
+                include_bytes!("../../kurvst/typst/LICENSE.tiptoe").as_slice(),
+            ),
         ] {
             assert_eq!(fs::read(templates.join(relative))?, expected, "{relative}");
         }

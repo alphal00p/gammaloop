@@ -8,7 +8,8 @@ use linnet::half_edge::HedgeGraph;
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Flow, HedgePair};
 use linnet::half_edge::subgraph::OrientedCut;
 use ref_ops::RefNeg;
-use rug::{Float, float::Round};
+use rug::Float;
+use rug::float::Round;
 use serde::{Deserialize, Serialize};
 
 use symbolica::atom::{Atom, AtomCore};
@@ -716,10 +717,10 @@ impl Esurface {
         crate::integrands::process::sampling::joint::SharedEnergyJointGeometryEvaluator<T>,
         crate::momentum::signature::LoopExtSignature,
     )> {
-        use crate::integrands::process::{
-            SharedEnergyJointGeometry, sampling::maps::SamplingEvaluationError,
-        };
-        use crate::momentum::{SignOrZero, signature::LoopExtSignature};
+        use crate::integrands::process::SharedEnergyJointGeometry;
+        use crate::integrands::process::sampling::maps::SamplingEvaluationError;
+        use crate::momentum::SignOrZero;
+        use crate::momentum::signature::LoopExtSignature;
         use std::sync::Arc;
 
         let lmb = subspace.get_lmb(all_lmbs);
@@ -2684,36 +2685,33 @@ impl Graph {
 
 #[cfg(test)]
 mod tests {
+    use crate::dot;
     use itertools::Itertools;
     use linnet::half_edge::HedgeGraph;
     use linnet::half_edge::builder::HedgeGraphBuilder;
     use linnet::half_edge::involution::{EdgeIndex, Flow, Orientation};
-    use linnet::half_edge::nodestore::NodeStorageVec;
     use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
     use symbolica::atom::{Atom, AtomCore};
     use symbolica::parse;
 
     use crate::cff::VertexSet;
+    use crate::cff::esurface::Esurface;
+    use crate::cff::generation::ShiftRewrite;
     use crate::graph::FinalizedCut;
     use crate::graph::{Graph, LmbIndex, LoopMomentumBasis};
     use crate::initialisation::test_initialise;
     use crate::integrands::process::SamplingMapAffine;
-    use crate::momentum::{
-        FourMomentum, ThreeMomentum,
-        sample::{ExternalFourMomenta, LoopMomenta, SubspaceData},
-        signature::LoopExtSignature,
+    use crate::momentum::sample::{ExternalFourMomenta, LoopMomenta, SubspaceData};
+    use crate::momentum::signature::LoopExtSignature;
+    use crate::momentum::{FourMomentum, ThreeMomentum};
+    use crate::utils::newton_solver::{
+        RadialRootDiagnostics, RadialRootIdentity, SafeguardedNewtonError,
+        safeguarded_newton_iteration_and_derivative,
     };
-    use crate::{
-        cff::{esurface::Esurface, generation::ShiftRewrite},
-        utils::{
-            ArbPrec, DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, ESURFACE_SHIFT_THRESHOLD, F, FloatLike,
-            QuadFloat,
-            newton_solver::{
-                RadialRootDiagnostics, RadialRootIdentity, SafeguardedNewtonError,
-                safeguarded_newton_iteration_and_derivative,
-            },
-            test_utils::dummy_hedge_graph,
-        },
+    use crate::utils::test_utils::dummy_hedge_graph;
+    use crate::utils::{
+        ArbPrec, DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, ESURFACE_SHIFT_THRESHOLD, F, FloatLike,
+        QuadFloat,
     };
     use typed_index_collections::ti_vec;
 
@@ -2786,20 +2784,20 @@ mod tests {
         test_initialise().unwrap();
         // Splitting the kite's common line through E gives distinct edge IDs
         // with opposite complete affine routes, without altering its two cycles.
-        let graph: Graph = crate::finalized_runtime_dot!(digraph joint_serial_energy {
+        let graph: Graph = dot!(digraph joint_serial_energy {
  graph [projector=1]
             ext_in [style=invis]
             ext_out [style=invis]
             node [num=1]
             edge [num=1 mass=1]
-            ext_in -> A:0 [id=0 mass=0 sink="{ufo_order:0}"]
-            C:1 -> ext_out [id=1 mass=0 source="{ufo_order:0}"]
-            A -> B [id=2 mass=2 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            B -> C [id=3 source="{ufo_order:1}" sink="{ufo_order:1}"]
-            C -> D [id=4 lmb_id=0 source="{ufo_order:2}" sink="{ufo_order:0}"]
-            D -> A [id=5 mass=3 source="{ufo_order:1}" sink="{ufo_order:2}"]
-            B -> E [id=6 lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:0}"]
-            D -> E [id=7 source="{ufo_order:2}" sink="{ufo_order:1}"]
+            ext_in -> A:0 [particle=H id=0 mass=0]
+            C:1 -> ext_out [particle=H id=1 mass=0]
+            A -> B [particle=H id=2 mass=2]
+            B -> C [particle=H id=3]
+            C -> D [particle=H id=4 lmb_id=0]
+            D -> A [particle=H id=5 mass=3]
+            B -> E [particle=H id=6 lmb_id=1]
+            D -> E [particle=H id=7]
         }, &crate::utils::load_generic_model("sm"))
         .unwrap();
         let lmbs = ti_vec![graph.loop_momentum_basis.clone()];
@@ -2915,8 +2913,10 @@ mod tests {
         // Changing only the symbolic mass distinguishes formal identity from
         // accidentally equal numeric values in a supplied mass cache.
         let mut different_mass_graph = graph.clone();
-        different_mass_graph.underlying[EdgeIndex(7)].particle =
-            crate::graph::edge::PossibleParticle::JustMass { expr: parse!("2") };
+        different_mass_graph.underlying[EdgeIndex(7)].particle = graph.underlying[EdgeIndex(7)]
+            .particle
+            .clone()
+            .override_mass(parse!("2"));
         assert!(
             left.sampling_joint_geometry_in_subspace(
                 &right,
@@ -2939,7 +2939,7 @@ mod tests {
         test_initialise().unwrap();
         // The two extra external ports between the distinct common-energy
         // edges sum to zero spatially in CM, but carry nonzero total energy.
-        let graph: Graph = crate::finalized_runtime_dot!(digraph joint_external_energy {
+        let graph: Graph = dot!(digraph joint_external_energy {
  graph [projector=1]
             ext_in [style=invis]
             ext_out [style=invis]
@@ -2947,16 +2947,16 @@ mod tests {
             beam_b [style=invis]
             node [num=1]
             edge [num=1 mass=1]
-            ext_in -> A:0 [id=0 mass=0 sink="{ufo_order:0}"]
-            C:1 -> ext_out [id=1 mass=0 source="{ufo_order:0}"]
-            A -> B [id=2 mass=2 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            B -> C [id=3 source="{ufo_order:1}" sink="{ufo_order:1}"]
-            C -> D [id=4 lmb_id=0 source="{ufo_order:2}" sink="{ufo_order:0}"]
-            D -> A [id=5 mass=3 source="{ufo_order:1}" sink="{ufo_order:2}"]
-            B -> E [id=6 lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:0}"]
-            D -> E [id=7 source="{ufo_order:2}" sink="{ufo_order:1}"]
-            beam_a -> E [id=8 mass=0 sink="{ufo_order:2}"]
-            beam_b -> E [id=9 mass=0 sink="{ufo_order:3}"]
+            ext_in -> A:0 [particle=H id=0 mass=0]
+            C:1 -> ext_out [particle=H id=1 mass=0]
+            A -> B [particle=H id=2 mass=2]
+            B -> C [particle=H id=3]
+            C -> D [particle=H id=4 lmb_id=0]
+            D -> A [particle=H id=5 mass=3]
+            B -> E [particle=H id=6 lmb_id=1]
+            D -> E [particle=H id=7]
+            beam_a -> E [particle=H id=8 mass=0]
+            beam_b -> E [particle=H id=9 mass=0]
         }, &crate::utils::load_generic_model("sm"))
         .unwrap();
         fn check<T: FloatLike>(graph: &Graph) {
@@ -3304,10 +3304,8 @@ mod tests {
     #[test]
     fn retained_lu_candidate_requires_directed_native_agreement() {
         use super::EsurfaceRay;
-        use crate::{
-            integrands::process::sampling::maps::SamplingEvaluationError,
-            momentum::{Rotatable, Rotation, RotationMethod},
-        };
+        use crate::integrands::process::sampling::maps::SamplingEvaluationError;
+        use crate::momentum::{Rotatable, Rotation, RotationMethod};
         fn check<T: FloatLike>() {
             let one = F::<T>::default().one();
             let f = |n| one.from_usize(n);
@@ -3450,16 +3448,16 @@ mod tests {
         // A ttH cut with back-to-back tops and a Higgs at rest has the analytic root
         // sqrt(((Q-mH)/2)^2-mt^2)/|p|. The Higgs momentum vanishes by cancellation of
         // two nonzero basis momenta, not because its graph signature is constant.
-        let graph: Graph = crate::finalized_runtime_dot!(digraph massive_energy_at_rest {
+        let graph: Graph = dot!(digraph massive_energy_at_rest {
  graph [projector=1]
             ext [style=invis]
             node [num=1]
             edge [num=1 mass=0]
-            ext -> a:0 [id=0 sink="{ufo_order:0}"]
-            a -> b [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            a -> b [id=2 lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:1}"]
-            a -> b [id=3 source="{ufo_order:3}" sink="{ufo_order:2}"]
-            b:1 -> ext [id=4 source="{ufo_order:3}"]
+            ext -> a:0 [particle=H id=0]
+            a -> b [particle=H id=1 lmb_id=0]
+            a -> b [particle=H id=2 lmb_id=1]
+            a -> b [particle=H id=3]
+            b:1 -> ext [particle=H id=4]
         }, &crate::utils::load_generic_model("sm"))
         .unwrap();
         let lmbs = ti_vec![graph.loop_momentum_basis.clone()];
@@ -3909,7 +3907,7 @@ mod tests {
         let one = point[0].one();
         let zero = one.zero();
         let model = crate::utils::load_generic_model("sm");
-        let graph: Graph = crate::graph::Graph::import_dot(
+        let graph: Graph = crate::graph::Graph::from_dot(
             include_str!("../../../../tests/resources/graphs/GL638.dot"),
             &model,
         )
@@ -4156,7 +4154,7 @@ mod tests {
         let zero = one.zero();
         let f = |value| one.from_i64(value);
         let model = crate::utils::load_generic_model("sm");
-        let graph: Graph = crate::graph::Graph::import_dot(
+        let graph: Graph = crate::graph::Graph::from_dot(
             include_str!("../../../../tests/resources/graphs/GL638.dot"),
             &model,
         )
@@ -4286,16 +4284,16 @@ mod tests {
     #[test]
     fn implicit_sampling_map_uses_graph_esurface_root_and_roundtrips() {
         test_initialise().unwrap();
-        let graph: Graph = crate::finalized_runtime_dot!(digraph implicit_sampling_esurface {
+        let graph: Graph = dot!(digraph implicit_sampling_esurface {
  graph [projector=1]
             ext [style=invis]
             node [num=1]
             edge [num=1 mass=0]
-            ext -> a:0 [id=0 sink="{ufo_order:0}"]
-            a -> b [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            a -> b [id=2 lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:1}"]
-            a -> b [id=3 source="{ufo_order:3}" sink="{ufo_order:2}"]
-            b:1 -> ext [id=4 source="{ufo_order:3}"]
+            ext -> a:0 [particle=H id=0]
+            a -> b [particle=H id=1 lmb_id=0]
+            a -> b [particle=H id=2 lmb_id=1]
+            a -> b [particle=H id=3]
+            b:1 -> ext [particle=H id=4]
         }, &crate::utils::load_generic_model("sm"))
         .unwrap();
         let lmb = graph.loop_momentum_basis.clone();
@@ -4762,10 +4760,9 @@ mod tests {
                 Flow::Source,
             );
 
-            let double_triangle: HedgeGraph<(), (), ()> =
-                hedge_graph_builder.build::<NodeStorageVec<()>>();
-            let node_0 = double_triangle.iter_crown(nodes[0]).into();
-            let node_3 = double_triangle.iter_crown(nodes[3]).into();
+            let double_triangle: HedgeGraph<(), (), ()> = hedge_graph_builder.build();
+            let node_0 = double_triangle.combine_to_single_hedgenode(&[nodes[0]]);
+            let node_3 = double_triangle.combine_to_single_hedgenode(&[nodes[3]]);
 
             let cuts = double_triangle.all_cuts(node_0, node_3);
 
@@ -4848,11 +4845,10 @@ mod tests {
                 Flow::Sink,
             );
 
-            let box_graph: HedgeGraph<(), (), ()> =
-                hedge_graph_builder.build::<NodeStorageVec<()>>();
+            let box_graph: HedgeGraph<(), (), ()> = hedge_graph_builder.build();
 
-            let node_0 = box_graph.iter_crown(nodes[0]).into();
-            let node_2 = box_graph.iter_crown(nodes[2]).into();
+            let node_0 = box_graph.combine_to_single_hedgenode(&[nodes[0]]);
+            let node_2 = box_graph.combine_to_single_hedgenode(&[nodes[2]]);
 
             let cuts = box_graph.all_cuts(node_0, node_2);
             assert_eq!(cuts.len(), 4);

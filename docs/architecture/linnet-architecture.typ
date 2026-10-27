@@ -2,7 +2,7 @@
 
 #quote(block: true)[
 #strong[Status:] Current implementation architecture, audited against the Linnet source on
-2026-08-28.
+2026-10-13.
 
 This note covers the `linnet` Rust crate. `clinnet` is a separate command-line renderer and
 `linnest` owns Typst layout and drawing; neither is part of Linnet's graph core.
@@ -11,12 +11,12 @@ This note covers the `linnet` Rust crate. `clinnet` is a separate command-line r
 == Boundaries
 
 Linnet is an in-process, generic graph library. Its main boundary is
-`HedgeGraph<E, V, H, S>` in `crates/linnet/src/half_edge.rs`: callers choose edge data `E`, node
-data `V`, per-half-edge data `H`, and a `NodeStorage` implementation `S`. The crate is divided
+`HedgeGraph<E, V, H, N>` in `crates/linnet/src/half_edge.rs`: callers choose edge data `E`, node
+data `V`, per-half-edge data `H`, and a `Topology` implementation `N`. The crate is divided
 into four layers:
 
 - `half_edge`: topology, typed indexes, graph mutation, subgraph views, traversal, cuts, cycles,
-  and directed-acyclic-graph algorithms;
+  canonicalization, constrained graph generation, and directed-acyclic-graph algorithms;
 - `parser`: DOT parsing and serialization, including graph-, node-, edge-, half-edge-, and port
   attributes;
 - `permutation`, `union_find`, and `tree`: reusable index-reordering and connectivity machinery
@@ -35,7 +35,8 @@ a supported graph-rendering pipeline; the implemented layout code is the feature
 
 - `hedge_data: HedgeVec<H>` has exactly one payload per half-edge;
 - `edge_store: SmartEdgeVec<E>` owns edge payloads and an `Involution<EdgeIndex>`;
-- `node_store: S` owns node payloads and maps each node to its incident half-edges.
+- `node_store: NodeStore<N, V>` pairs the topology `N`, which maps each node to its incident
+  half-edges, with one payload per node slot.
 
 `Hedge`, `EdgeIndex`, and `NodeIndex` are distinct typed wrappers around compact indexes. They
 are locations inside one graph, not durable identities. Operations that compact, extract, or
@@ -57,15 +58,27 @@ edge-pair inclusion semantics, so an edge crossing a subset boundary becomes a s
 than silently disappearing. Concrete forms such as `SuBitGraph`, `InternalSubGraph`,
 `HedgeNode`, `Cycle`, and `OrientedCut` add the invariants needed by particular algorithms.
 
-The default build resolves `DefaultNodeStore` to `NodeStorageVec`. The two forest-backed node
-stores are mutually exclusive features. The distinction matters: vector-backed node
-identification can invalidate previous `NodeIndex` values, whereas the forest-backed
-implementations preserve identification history until it is explicitly forgotten.
-`HedgeGraph::into_node_store` consumes a graph and rebuilds only its node store: node order,
-payloads, and incidence are retained, while edge and half-edge storage and IDs move unchanged.
-The conversion preserves active isolated nodes but rejects retained forest identification roots;
-callers must explicitly forget that history first when compaction and changed node IDs are
-acceptable.
+The `Topology` trait is the node contract: crowns, identification, compaction, partitions and
+permutations, with numbering fixed by the shared tail-fill kernel so implementations agree
+exactly. `NodeForest` is the topology in use: each node's crown is a ring of its half-edges that
+ascends from the smallest one in every state, so crown order never depends on history. A
+test-only reference topology states the same contract naively, numbering by the tail-fill rule
+written out rather than by the kernel, and a differential test runs random edits on both.
+`NodeStore` owns everything that does not depend on the topology: payloads, mapping, iteration,
+building and the contract check.
+
+Identification never renumbers: absorbed nodes keep their slot and payload until `compact`
+drops them, so earlier `NodeIndex` values stay valid until then. `node_bound()` counts every
+slot and is the size for dense side tables; `n_live()` counts the nodes that were not absorbed,
+and node iteration yields only those. Every operation that renumbers reports a typed `Remap`:
+`compact` maps absorbed nodes to their survivor, `delete_hedges`, `extract`, `extract_nodes` and
+`contract_subgraph` report where the remaining half-edges and nodes went, and `permute_hedges`
+and `permute_nodes` take bijections. Callers follow indices through these remaps instead of
+mirroring the kernel. Partitions and permutations require compacted identifications, and
+a `NodeForest` on its own can open nested checkpoints that roll back node additions,
+attachments, anchors and identifications; its renumberings refuse while one is open. A
+`NodeStore` lends its topology only by shared reference, so it never holds a checkpoint and its
+`compact` cannot fail.
 
 == Construction and data flow
 
@@ -75,19 +88,20 @@ Programmatic construction follows one path:
 HedgeGraphBuilder
   -> add nodes
   -> add paired or dangling edges to an Involution<E>
-  -> build NodeStorage from each node's incident half-edges
+  -> build the NodeStore topology from each half-edge's node
   -> SmartEdgeVec::new separates edge payloads from the involution
-  -> HedgeGraph<E, V, H, S>
+  -> HedgeGraph<E, V, H, N>
 ```
 
 Mutation methods update all three stores. Adding an edge extends half-edge data, edge storage,
-and node incidence. Extraction and deletion partition the same half-edge set in each store.
+and node incidence; `add_node` appends an empty-crown node in place. Neither renumbers existing
+nodes, edges or half-edges. Extraction and deletion partition the same half-edge set in each store.
 Complete-node extraction also moves explicitly selected empty-crown nodes, which have no
 half-edge representation in that partition.
-Joining extends the stores and then revalidates node incidence; sewing converts matched identity
-half-edges into pairs. `HedgeGraph::check` verifies involutivity and that every `EdgeIndex` points
-to the same `HedgePair` recorded by `SmartEdgeVec`. Node-store operations provide the additional
-partition and incidence checks.
+Joining appends the stores; sewing converts matched identity half-edges into pairs.
+`HedgeGraph::check` verifies involutivity and that every `EdgeIndex` points to the same
+`HedgePair` recorded by `SmartEdgeVec`. `NodeStore::check_nodes` checks the topology contract and
+one payload per node slot.
 
 Algorithms consume the graph together with an explicit subgraph when boundary behavior matters.
 Traversal and cycle/cut routines operate on those views. Directed algorithms take a
@@ -99,17 +113,50 @@ and rejects cycles; transitive closure and reduction first require that DAG chec
 delete complete half-edge pairs rather than one side of an edge.
 
 Exhaustive circuit enumeration requires an explicit cycle-rank bound and rejects powersets that
-the platform cannot represent before enumeration. Tadpole classification similarly validates and
-canonicalizes a non-empty terminal set, compares components against every terminal-incident edge,
-and returns deduplicated structural results. These guards make malformed input return errors and
-keep retained node-identification history on canonical structural paths instead of panic paths.
+the platform cannot represent before enumeration. Tadpole classification requires a non-empty
+set of distinct live terminals, each with an incident half-edge. A node absorbed by a pending
+identification is rejected; callers supply its live representative. It compares components against
+every terminal-incident edge and returns deduplicated structural results. These guards report
+malformed input as errors.
+
+Connectivity counts use one union-find pass over the nodes touched by a subgraph's half-edges.
+Dangling and split edges touch a node without joining components; internal edges determine the
+component count and independent cycle rank. Spanning-forest enumeration lives in
+`half_edge::spanning_forests`: it borrows the involution and rolls branch identifications back
+on a private checkpointed topology.
+
+`all_cuts` enumerates whole-node partitions in which every component on each side contains a
+terminal of that side. Empty or overlapping terminal regions and live isolated nodes produce
+no partitions. Dangling half-edges stay with their node; disconnected terminal-rooted regions
+can have an empty boundary. Results are sorted by the source-side mask.
+
+`half_edge::canon` computes canonical forms and automorphisms from caller-supplied node, edge,
+and half-edge keys, respecting physical orientation. Payloads omitted from those keys do not
+distinguish graphs; canonical forms are comparable within one canonizer version.
+`half_edge::generate` separates a checked `Plan` built from `Theory`, `Legs`, and `Query` from
+execution controls in `Run`. It generates topologies, then decorates them with fields and vertex
+rules. Pruning must reject every refinement of a rejected state; final selection may be arbitrary.
+Accepted diagrams retain compact data and materialize graphs and canonical forms on demand.
+Parallel execution preserves the serial search order.
+
+`Query.classes(Classes::Auto)` enables a conservative class search for directed fields that
+occur only in single diagonal lines. Undirected fields and participants in mixed or multi-line
+rules remain distinct. Exact automorphism orbits of the coloured rule-incidence graph define
+the eligible classes; active budgets and caller distinctions can only split them. External
+label classes retain their original particle pins.
+
+A complete coarse assignment is refined by whole directed lines, with its stabilizer used
+for the second symmetry quotient. Fine automaton checks retain original rule indices,
+including equal-signature rules, and exact weights and automorphism orders are computed for
+the resulting particle assignment. Hereditary dressing hooks also inspect refinement states.
+`Classes::None` bypasses the quotient and serves as the direct-particle comparison route.
 
 DOT interchange follows a separate adapter path:
 
 ```text
 DOT text/file
-  -> dot-parser AST
-  -> SubGraphFreeGraph plus inherited attributes
+  -> parser::syntax: lexing and recursive descent, flattened in one pass
+  -> FlatGraph: attribute statements, nodes keyed by decoded identifier, single edges
   -> DotVertexData / DotEdgeData / DotHedgeData
   -> HedgeGraphBuilder
   -> explicit id permutations, when ids were supplied
@@ -119,8 +166,14 @@ DOT text/file
 Invisible endpoint nodes represent dangling edges. `dir` controls superficial orientation, while
 the endpoint side determines underlying flow. Serialization maps caller data into the DOT data
 types and writes through a caller-provided `fmt::Write` or `io::Write`; DOT parsing separately
-offers string- and file-based entry points. Malformed direction, endpoint, and explicit-ID data
-are reported as parser errors; they do not panic or publish a partially constructed graph.
+offers string- and file-based entry points. `DotGraph` requires exactly one graph and rejects
+trailing input; `DotGraphSet` accepts multiple graphs. Invalid DOT is a `DotSyntaxError` with
+its line and column; the in-tree reader limits subgraph nesting to 256 levels, because the
+Typst plugin parses user-supplied DOT. Malformed direction, endpoint, and explicit-ID data
+produce `DotParseError` without publishing a partially constructed graph. Later graph-attribute
+statements take precedence, and parallel edges with equal endpoints retain their statement order.
+Quoted values preserve literal backslashes and Graphviz escapes. The shared `DotIndent` formatter
+keeps newlines and indentation inside quoted values intact in whole-graph and subgraph output.
 Graph-level multiline attribute values preserve their literal internal indentation
 through serialization and reparsing. Structural DOT indentation applies outside
 the quoted value, so embedded configuration retains its original whitespace.

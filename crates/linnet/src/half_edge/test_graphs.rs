@@ -1,5 +1,3 @@
-use nodestore::NodeStorageVec;
-
 use super::*;
 use crate::half_edge::builder::HedgeGraphBuilder;
 
@@ -113,7 +111,7 @@ impl fmt::Display for TestGraph {
 }
 
 impl TestGraph {
-    fn build(&self) -> (HedgeGraph<(), (), (), NodeStorageVec<()>>, GraphProperties) {
+    fn build(&self) -> (HedgeGraph<(), (), ()>, GraphProperties) {
         let mut builder = HedgeGraphBuilder::new();
 
         match self {
@@ -576,13 +574,13 @@ struct GraphProperties {
 impl TestGraph {
     fn test_basic_properties(
         &self,
-        graph: &HedgeGraph<(), (), (), NodeStorageVec<()>>,
+        graph: &HedgeGraph<(), (), ()>,
         props: &GraphProperties,
     ) -> TestResult {
-        if graph.n_nodes() != props.n_nodes {
+        if graph.n_live() != props.n_nodes {
             return Err(TestError::WrongNodeCount {
                 expected: props.n_nodes,
-                found: graph.n_nodes(),
+                found: graph.n_live(),
             });
         }
 
@@ -606,7 +604,7 @@ impl TestGraph {
 
     fn test_cycle_properties(
         &self,
-        graph: &HedgeGraph<(), (), (), NodeStorageVec<()>>,
+        graph: &HedgeGraph<(), (), ()>,
         props: &GraphProperties,
     ) -> TestResult {
         let cyclomatic = graph.cyclotomatic_number(&graph.full_graph());
@@ -629,14 +627,14 @@ impl TestGraph {
 
     fn test_degree_distribution(
         &self,
-        graph: &HedgeGraph<(), (), (), NodeStorageVec<()>>,
+        graph: &HedgeGraph<(), (), ()>,
         props: &GraphProperties,
     ) -> TestResult {
         let mut min_degree = usize::MAX;
         let mut max_degree = 0;
 
-        for i in 0..graph.n_nodes() {
-            let degree = graph.iter_crown(NodeIndex(i)).count();
+        for node in graph.iter_node_ids() {
+            let degree = graph.iter_crown(node).count();
             min_degree = min_degree.min(degree);
             max_degree = max_degree.max(degree);
         }
@@ -660,7 +658,7 @@ impl TestGraph {
         Ok(())
     }
 
-    fn verify_cycle(graph: &HedgeGraph<(), (), (), NodeStorageVec<()>>, cycle: &Cycle) -> bool {
+    fn verify_cycle(graph: &HedgeGraph<(), (), ()>, cycle: &Cycle) -> bool {
         let mut degree_map = std::collections::HashMap::new();
         for hedge in cycle.filter.included_iter() {
             let node = graph.node_id(hedge);
@@ -677,5 +675,106 @@ impl TestGraph {
         self.test_degree_distribution(&graph, &properties)?;
 
         Ok(())
+    }
+}
+
+/// Graph algorithms give the same results while identifications are pending as
+/// after compacting them: absorbed nodes are not part of the graph.
+#[test]
+fn algorithms_ignore_pending_identifications() {
+    use crate::half_edge::algorithms::DirectionBasis;
+    use crate::half_edge::nodestore::Checkpoint;
+    use crate::half_edge::subgraph::Cycle;
+
+    type Results = (
+        usize,
+        Vec<SuBitGraph>,
+        Vec<SuBitGraph>,
+        usize,
+        usize,
+        Vec<SuBitGraph>,
+        Result<Vec<SuBitGraph>, TadpoleError>,
+        usize,
+        Option<Vec<Cycle>>,
+        Option<Vec<SuBitGraph>>,
+    );
+
+    fn results<N: Checkpoint>(graph: &HedgeGraph<(), (), (), N>, nodes: [NodeIndex; 2]) -> Results {
+        let full = graph.full_filter();
+        let sorted = |mut subgraphs: Vec<SuBitGraph>| {
+            subgraphs.sort();
+            subgraphs
+        };
+        let rank = graph.cyclotomatic_number(&full);
+        let cuts = (graph.n_live() <= 10).then(|| {
+            let [source, target] = nodes.map(|node| graph.combine_to_single_hedgenode(&[node]));
+            sorted(
+                graph
+                    .all_cuts(source, target)
+                    .into_iter()
+                    .map(|(left, _, _)| left)
+                    .collect(),
+            )
+        });
+        (
+            rank,
+            sorted(graph.all_spanning_forests_of(&full)),
+            sorted(graph.connected_components(&full)),
+            graph.count_connected_components(&full),
+            graph
+                .strongly_connected_components(DirectionBasis::Underlying)
+                .len(),
+            sorted(graph.all_bonds(&(..=3))),
+            graph.tadpoles(&[nodes[0]]),
+            graph.cycle_basis().0.len(),
+            (rank <= 6).then(|| graph.all_cycles(rank).unwrap()),
+            cuts,
+        )
+    }
+
+    let mut graphs: Vec<HedgeGraph<(), (), ()>> = [
+        TestGraph::Petersen,
+        TestGraph::MoebiusLadder(4),
+        TestGraph::Complete(5),
+        TestGraph::Flower(4),
+        TestGraph::Cycle(5),
+    ]
+    .iter()
+    .map(|test_graph| test_graph.build().0)
+    .collect();
+    // A Feynman-like graph with externals, a tadpole, a self-loop and an
+    // isolated node.
+    let mut builder = HedgeGraphBuilder::new();
+    let nodes: Vec<_> = (0..7).map(|_| builder.add_node(())).collect();
+    for (a, b) in [
+        (0, 1),
+        (1, 2),
+        (2, 3),
+        (3, 0),
+        (1, 3),
+        (2, 4),
+        (4, 5),
+        (5, 5),
+        (4, 5),
+    ] {
+        builder.add_edge(nodes[a], nodes[b], (), a % 2 == 0);
+    }
+    builder.add_external_edge(nodes[0], (), true, Flow::Sink);
+    builder.add_external_edge(nodes[2], (), true, Flow::Source);
+    graphs.push(builder.build());
+
+    for mut graph in graphs {
+        let (a, b) = (graph.node_id(Hedge(0)), graph.node_id(graph.inv(Hedge(0))));
+        graph.identify_nodes(&[a, b], ());
+        let mut forgotten = graph.clone();
+        forgotten.compact();
+        // Compacting renumbers nodes, so compare through half-edges.
+        let ends = |graph: &HedgeGraph<(), (), ()>| {
+            [Hedge(0), Hedge(graph.n_hedges() - 1)].map(|hedge| graph.node_id(hedge))
+        };
+        assert_eq!(
+            results(&graph, ends(&graph)),
+            results(&forgotten, ends(&forgotten))
+        );
     }
 }

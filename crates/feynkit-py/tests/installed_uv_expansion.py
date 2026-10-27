@@ -6,11 +6,27 @@ from symbolica import E, S
 from symbolica.community.tensor import TensorExpression
 
 from symbolica.community import hepkit as fk
+from symbolica.community.graph import Bridges
 
 model = fk.Model(Path(__file__).parent / "fixtures/scalars_2p_3p.json")
 bubble = (
-    model.process(["scalar_0"], ["scalar_0"], vertex_allow=["V_3_SCALAR_000"])
-    .generate_diagrams(loops=1, max_vertices=2, allow_self_loops=False)
+    model.process(["scalar_0"], ["scalar_0"])
+    .amplitude(
+        loops=fk.Loops.total(1),
+        restrict=fk.Restrict().only_vertices(["V_3_SCALAR_000"]),
+        topology=fk.TopologyRules(
+            max_vertices=2,
+            self_loops=False,
+            bridges=Bridges.one_pi_in_loops(),
+            self_energies=fk.Veto.all(),
+            tadpoles=fk.Veto.all(),
+            snails=fk.Veto.massless(),
+        ),
+    )
+    .generate(run=fk.Run(progress="auto"))
+    .build(
+        fk.NumeratorOptions(naming=fk.Naming.named("D")), run=fk.Run(progress="auto")
+    )
     .diagrams[0]
 )
 mass = S("uv_test::mUV", is_scalar=True)
@@ -87,10 +103,23 @@ else:
     raise AssertionError("nonpositive dimension accepted")
 
 triangle = (
-    model.process(
-        ["scalar_0"], ["scalar_0", "scalar_0"], vertex_allow=["V_3_SCALAR_000"]
+    model.process(["scalar_0"], ["scalar_0", "scalar_0"])
+    .amplitude(
+        loops=fk.Loops.total(1),
+        restrict=fk.Restrict().only_vertices(["V_3_SCALAR_000"]),
+        topology=fk.TopologyRules(
+            max_vertices=3,
+            self_loops=False,
+            bridges=Bridges.one_pi_in_loops(),
+            self_energies=fk.Veto.all(),
+            tadpoles=fk.Veto.all(),
+            snails=fk.Veto.massless(),
+        ),
     )
-    .generate_diagrams(loops=1, max_vertices=3, allow_self_loops=False)
+    .generate(run=fk.Run(progress="auto"))
+    .build(
+        fk.NumeratorOptions(naming=fk.Naming.named("D")), run=fk.Run(progress="auto")
+    )
     .diagrams
 )
 triangle = next(
@@ -106,12 +135,23 @@ assert triangle.uv_counterterm(mass, dimension=6)
 # Lorentz/color interface; callers can contract a projector after expansion.
 sm = fk.Model(Path(__file__).parents[3] / "assets/models/json/sm/sm.json")
 diagrams = (
-    sm.process(["g"], ["g"], particle_veto=["c", "t", "s", "u", "d"])
-    .generate_diagrams(
-        loops=1,
-        max_vertices=2,
-        coupling_orders={"QCD": 2, "QED": 0},
-        allow_self_loops=False,
+    sm.process(["g"], ["g"])
+    .amplitude(
+        loops=fk.Loops.total(1),
+        restrict=fk.Restrict().exclude_particles(["c", "t", "s", "u", "d"]),
+        topology=fk.TopologyRules(
+            max_vertices=2,
+            self_loops=False,
+            bridges=Bridges.one_pi_in_loops(),
+            self_energies=fk.Veto.all(),
+            tadpoles=fk.Veto.all(),
+            snails=fk.Veto.massless(),
+        ),
+        orders=fk.Orders(plain={"QCD": fk.Range.exact(2), "QED": fk.Range.exact(0)}),
+    )
+    .generate(run=fk.Run(progress="auto"))
+    .build(
+        fk.NumeratorOptions(naming=fk.Naming.named("D")), run=fk.Run(progress="auto")
     )
     .diagrams
 )

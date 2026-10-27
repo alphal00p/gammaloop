@@ -1,40 +1,29 @@
-use std::{
-    collections::BTreeMap,
-    ops::Neg,
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::collections::BTreeMap;
+use std::ops::Neg;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use color_eyre::Result;
 use eyre::eyre;
 use linnet::half_edge::subgraph::SubSetLike;
 use spenso::structure::slot::IsAbstractSlot;
-use symbolica::{
-    atom::{Atom, AtomCore, Indeterminate},
-    id::Replacement,
-    symbol,
-};
+use symbolica::atom::{Atom, AtomCore, Indeterminate};
+use symbolica::id::Replacement;
+use symbolica::symbol;
 use three_dimensional_reps::CffGenerationContext;
 
-use crate::{
-    cff::{
-        CutCFFIndex,
-        generation::{PreparationKey, PreparationValue},
-    },
-    debug_tags,
-    graph::{ExactUvSubLmbFrame, Graph, cuts::CutSet},
-    integrands::process::param_builder::FnMapEntry,
-    numerator::energy_degree::{EnergyPowerAnalyzer, EnergyPowerCapMap},
-    utils::GS,
-    uv::{
-        Integrands, UVgenerationSettings,
-        approx::{
-            direct_3d::DirectResidueBranches,
-            local_3d::Localizer,
-            local_4d::{CanonicalUvSector, FourDSector, Local4dCts},
-        },
-    },
-};
+use crate::cff::CutCFFIndex;
+use crate::cff::generation::{PreparationKey, PreparationValue};
+use crate::debug_tags;
+use crate::graph::cuts::CutSet;
+use crate::graph::{ExactUvSubLmbFrame, Graph};
+use crate::integrands::process::param_builder::FnMapEntry;
+use crate::numerator::energy_degree::{EnergyPowerAnalyzer, EnergyPowerCapMap};
+use crate::utils::GS;
+use crate::uv::approx::direct_3d::DirectResidueBranches;
+use crate::uv::approx::local_3d::Localizer;
+use crate::uv::approx::local_4d::{CanonicalUvSector, FourDSector, Local4dCts};
+use crate::uv::{Integrands, UVgenerationSettings};
 
 /// Projected local-4D Taylor coefficients. They omit the untouched outer CFF,
 /// which is attached only during final assembly. Each child contour has already
@@ -652,29 +641,26 @@ impl Projected4dApproximation<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dot;
+    use crate::graph::LMBext;
+    use crate::initialisation::test_initialise;
+    use crate::settings::global::OrientationPattern;
+    use crate::utils::W_;
+    use crate::uv::approx::OrientationProjection;
     use crate::uv::approx::local_4d::FourDSector;
-    use crate::{
-        finalized_runtime_dot,
-        graph::LMBext,
-        initialisation::test_initialise,
-        settings::global::OrientationPattern,
-        utils::W_,
-        uv::{Spinney, UltravioletGraph, approx::OrientationProjection},
-    };
-    use linnet::half_edge::{
-        involution::EdgeIndex,
-        subgraph::{InternalSubGraph, SubSetOps},
-    };
+    use crate::uv::{Spinney, UltravioletGraph};
+    use linnet::half_edge::involution::EdgeIndex;
+    use linnet::half_edge::subgraph::{InternalSubGraph, SubSetOps};
     use symbolica::atom::{AtomCore, FunctionBuilder};
 
     #[test]
     fn projected_rows_retain_one_ordinary_numerator_and_scalar_arguments() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph projected_parametric_numerator { graph [projector=1]
+        let mut graph: Graph = dot!(digraph projected_parametric_numerator { graph [projector=1]
             edge [num=1 mass=1]
             node [num=1]
-            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
-            a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
+            a -> b [particle=H id=0 lmb_id=0]
+            a -> b [particle=H id=1]
         })?;
         let common = symbol!("projected_parametric_test::common"; Scalar);
         let numerator = Atom::var(common)
@@ -828,12 +814,12 @@ mod tests {
     #[test]
     fn canonical_source_and_template_preparation_share_retention_invariant_budget() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph preparation_retention {
+        let mut graph: Graph = dot!(digraph preparation_retention {
             projector=1;
             edge [num=1 mass=1]
             node [num=1]
-            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
-            a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
+            a -> b [particle=H id=0 lmb_id=0]
+            a -> b [particle=H id=1]
         })?;
         let mut coefficient = GS.emr_mom(EdgeIndex(0), GS.cind(0)).pow(2) + Atom::one();
         for edge in [EdgeIndex(0), EdgeIndex(1)] {
@@ -896,17 +882,17 @@ mod tests {
     #[test]
     fn nested_banana_quotient_powered_component_has_the_analytic_one_energy_sign() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph nested_banana_quotient_sign { graph [projector=1]
+        let mut graph: Graph = dot!(digraph nested_banana_quotient_sign { graph [projector=1]
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
 
-            incoming -> a [id=0 sink="{ufo_order:3}"]
-            a -> b [id=1 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
-            a -> b [id=2 lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
-            a -> b [id=3 source="{ufo_order:2}" sink="{ufo_order:2}"]
-            b -> outgoing [id=4 source="{ufo_order:3}"]
+            incoming -> a [particle=H id=0]
+            a -> b [particle=H id=1 lmb_id=0]
+            a -> b [particle=H id=2 lmb_id=1]
+            a -> b [particle=H id=3]
+            b -> outgoing [particle=H id=4]
         })?;
         let inner_filter = graph
             .get_edge_subgraph(EdgeIndex(1))
@@ -1130,12 +1116,12 @@ mod tests {
     #[test]
     fn typed_taylor_wave_batches_genuine_owner_relabelled_terms() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(
+        let mut graph: Graph = dot!(
             digraph G { graph [projector=1]
                 edge [particle="scalar_1" num="1𝑖"];
                 node [num=1];
-                a -> b [id=0 source="{ufo_order:0}" sink="{ufo_order:0}" lmb_id=0];
-                a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"];
+                a -> b [id=0 lmb_id=0];
+                a -> b [id=1];
             },
             "scalars"
         )?;
@@ -1273,12 +1259,12 @@ mod tests {
     #[test]
     fn typed_taylor_next_component_reuses_one_topology_for_prior_residue_states() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph typed_taylor_component_waves { graph [projector=1]
+        let mut graph: Graph = dot!(digraph typed_taylor_component_waves { graph [projector=1]
             edge [particle="scalar_1" num="1𝑖"];
             node [num=1];
-            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"];
-            a -> b [id=1 lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:1}"];
-            a -> b [id=2 source="{ufo_order:2}" sink="{ufo_order:2}"];
+            a -> b [id=0 lmb_id=0];
+            a -> b [id=1 lmb_id=1];
+            a -> b [id=2];
         }, "scalars")?;
         let inner_filter = graph
             .get_edge_subgraph(EdgeIndex(0))

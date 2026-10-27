@@ -1,0 +1,88 @@
+{
+  "review": "WP1 B2 ROUND1 independent Astra correctness review",
+  "commit": "468d10cfa5be903f99265e5929e80efb3f323193",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-b2-diagnosis",
+  "verdict": "REQUEST_CHANGES",
+  "b2_status": "Original stored-ratio display dependence is disproved; required factor-preserving original-pair certificate is not yet satisfied.",
+  "findings": [
+    {
+      "severity": "P1",
+      "file": "crates/feynkit-generator/src/grouping.rs",
+      "line": 3727,
+      "problem": "Primary exact preparation uses AlgebraSettings::hep with default Fully contraction. The gamma owner collects Bispinor sums via CollectionMode::Monomials (crates/idenso/src/dirac/simplify.rs:713), which distributes the original propagator alternatives; ContractSettings also defaults expand=true. Disabling numerical/expansion fallback only at coefficients_equal does not make the preceding normalization factor-preserving.",
+      "required": "Replace the certificate preparation with a demonstrably factor-preserving exact identity path; keep original local numerator products intact and audit enabled algebra prerequisites, not only outer contraction flags. Correct report claims and rerun focused certificate. No production physics fix inferred."
+    },
+    {
+      "severity": "P2",
+      "file": "crates/feynkit-generator/src/grouping.rs",
+      "line": 3832,
+      "problem": "Production samples=0 result is printed but never asserted. Dropping both sources or returning an invalid exact-only grouping can pass this regression; the earlier PreparedNumerator compare bypasses production preparation.",
+      "required": "Assert retained source identities and singleton unit ratios for the frozen two-group control, or validate any accepted exact ratio against the original-pair identity. Preserve an explicit assertion/witness that canonical-plus-sampled coverage reaches fallback."
+    }
+  ],
+  "independent_validation": {
+    "certificate_command": "nix develop /nix/store/aqhkq5ivk34ch9gvxjxv1a06jdazc0n7-nix-shell-env.drv -c cargo test -p feynkit-generator --profile dev-optim --lib grouping::tests::vacuum_group28_original_pair_identity -- --exact --ignored --nocapture",
+    "certificate_result": "1 passed; 124.94 seconds; exact True; canonical manually prepared samples=0 7/2; production samples=0 2 groups",
+    "production_command": "nix develop /nix/store/aqhkq5ivk34ch9gvxjxv1a06jdazc0n7-nix-shell-env.drv -c cargo run -p feynkit-generator --profile dev-optim --example vacuum_b2 -- target/wp1-review-round1/provenance-seed3 3 5",
+    "production_result": "JSON exactly equals archived v4-production.json; 270 raw, 176 groups; group output 84 contains source34 master ratio1 and source28 ratio7/2",
+    "original_slow_ratios": "Extracted actual Group(28) quotients from both observed 176-group and 128-group slow rows. Both contain the archived 3498/70553 snippet and independently cancel exactly to 7/2 via Symbolica Atom::together.",
+    "provenance": "Regenerated raw sources28/34 match fixture local edge factors, vertex factors and complete factorized numerator exactly after reversing signed Q and half-edge indices on [1,3,6,8] and [1,4,8]. No numerator expansion used. Signed basis maps, particle flow, model fingerprint and full scalar prefactors also checked.",
+    "hashes": "All recorded retained log hashes, code hashes and fixture hashes matched.",
+    "refs": "Frozen v4 e0a779808174c64057fecfd062c948b8de8e5c1f and upstream588148851e3e989ecbb7478279db7d46727e23a8 unchanged; reviewed bookmark468d10cf and upstream-control1f20e780 unchanged.",
+    "scope": "No tracked file or ref changed; source diff contains test/instrumentation only; NixCI false."
+  },
+  "minor_policy_note": {
+    "file": "crates/feynkit-generator/examples/vacuum_b2.rs",
+    "line": 16,
+    "issue": "Import std::env and call env::args to follow current import policy; no-policy-departures receipt is inaccurate."
+  },
+  "limitations": [
+    "Exact-only full-request run remains incomplete; not needed for bounded pair closure once certificate fixed.",
+    "Ordinary slow snapshots fail on both sources; forced-continue runs are not passing snapshot certifications.",
+    "No all-group correctness, full amplitude equivalence, first-bad commit or production defect established.",
+    "Independent review did not rerun Clippy/format/Typst; retained evidence hashes checked."
+  ],
+  "retained_processes": [],
+  "review_artifacts": [
+    {
+      "path": "target/wp1-review-round1/certificate-cached-shell.log",
+      "sha256": "e08d4dcfc6772aac3a27482670d4aa636a17f326dafa07eee9eba3d23b362c40"
+    },
+    {
+      "path": "target/wp1-review-round1/certificate.log",
+      "sha256": "bc48be82a71fe910f571a33ce206fb9c8ad27da1ff48b75f7c934910b0bab4a5"
+    },
+    {
+      "path": "target/wp1-review-round1/original-slow-ratio-0.txt",
+      "sha256": "a1df1e74a18774f21156c2227c89484ca6c286aa11f571343366b146ff9010ff"
+    },
+    {
+      "path": "target/wp1-review-round1/original-slow-ratio-1.txt",
+      "sha256": "a1df1e74a18774f21156c2227c89484ca6c286aa11f571343366b146ff9010ff"
+    },
+    {
+      "path": "target/wp1-review-round1/original-stored-cancellation.log",
+      "sha256": "0a9a3b27e5303a79e99383fe949ea54e8fee340d4e7a68e393eeb8ad76c9dc57"
+    },
+    {
+      "path": "target/wp1-review-round1/provenance-check.log",
+      "sha256": "5871a9044359e26cf22753fe85c8c2d89353a1fc3aa67d6150e51477a65f9f77"
+    },
+    {
+      "path": "target/wp1-review-round1/provenance-seed3.log",
+      "sha256": "dbde25afeed371505be4cafb28c5b45c38ac8b00f174a51a8ddbcaffe9a60ca5"
+    },
+    {
+      "path": "target/wp1-review-round1/routing-provenance.json",
+      "sha256": "d44c1041438e5c29762345f2fd1a055fc7cc8a534b57056515164e57660706a7"
+    },
+    {
+      "path": "target/wp1-review-round1/verify_provenance.rs",
+      "sha256": "ad2a6b92ea36753888750fb4f7001dc0d4b9c3292f8fda0d88798d33ca38f37f"
+    },
+    {
+      "path": "target/wp1-review-round1/verify_stored.rs",
+      "sha256": "b4068c5253b734b88ddcdd0a5e0f338a92662235c5beab771f3ff9116501e214"
+    }
+  ]
+}

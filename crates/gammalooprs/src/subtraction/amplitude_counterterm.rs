@@ -1,4 +1,6 @@
-use std::{collections::BTreeMap, path::Path, sync::Arc};
+use std::collections::BTreeMap;
+use std::path::Path;
+use std::sync::Arc;
 
 use crate::cff::{
     Esurface, EsurfaceID, OrientationID, RaisedEsurfaceData, RaisedEsurfaceGroup, RaisedEsurfaceId,
@@ -7,69 +9,55 @@ use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use eyre::{Context, eyre};
 use linnet::half_edge::involution::{EdgeVec, Orientation};
-use spenso::algebra::{algebraic_traits::IsZero, complex::Complex};
+use spenso::algebra::algebraic_traits::IsZero;
+use spenso::algebra::complex::Complex;
 use tracing::{debug, instrument, warn};
 use typed_index_collections::{TiVec, ti_vec};
 
-use crate::{
-    GammaLoopContext,
-    cff::{
-        CutCFFIndex,
-        esurface::{
-            EsurfaceCollection, ExistingEsurfaceId, ExistingEsurfaces, ExistingThresholds,
-            GroupEsurfaceId, esurface_value_is_strictly_inside,
-        },
-    },
-    graph::{FeynmanGraph, Graph, GraphGroupPosition, LmbIndex, LoopMomentumBasis},
-    integrands::{
-        evaluation::EvaluationMetaData,
-        process::{
-            GenericEvaluator, ParamBuilder, ThresholdParams,
-            evaluators::{
-                EvaluatorStack, SingleOrAllOrientations, evaluate_evaluator,
-                evaluate_evaluator_single,
-            },
-            threshold_multiplier::{
-                ThresholdMultiplierEvaluatorCollection, ThresholdMultiplierInputWorkspace,
-            },
-        },
-    },
-    model::Model,
-    momentum::{
-        Energy, FourMomentum, Rotation, ThreeMomentum,
-        sample::{
-            BareMomentumSample, ExternalFourMomenta, LoopIndex, LoopMomenta, MomentumSample,
-            SubspaceData,
-        },
-    },
-    processes::{
-        EvaluatorBuildTimings, ResolvedThresholdCountertermVariant, SingleThresholdPieces,
-        ThresholdCountertermComponentKind, ThresholdCountertermMetadataRegistry,
-        ThresholdCountertermSide, ThresholdCountertermVariantId,
-    },
-    settings::{GlobalSettings, RuntimeSettings},
-    subtraction::{
-        evaluate_integrated_ct_normalisation, evaluate_uv_damper,
-        overlap::{
-            OverlapGroup, OverlapInput, OverlapStructure, SingleGraphOverlapData,
-            find_maximal_overlap,
-        },
-        overlap_subspace::{
-            OverlapInput as SubspaceOverlapInput, OverlapKinematics,
-            OverlapStructure as SubspaceOverlapStructure,
-            find_maximal_overlap as find_maximal_subspace_overlap,
-        },
-    },
-    utils::{
-        F, FloatLike, RuntimeCache,
-        hyperdual_utils::{
-            DualOrNot, extract_t_derivatives, extract_t_derivatives_complex, new_constant,
-            shape_from_cut_cff_index, simple_n_deriv_shape,
-        },
-        newton_solver::{NewtonIterationResult, RadialRootDiagnostics, RadialRootIdentity},
-    },
-    uv::Integrands,
+use crate::GammaLoopContext;
+use crate::cff::CutCFFIndex;
+use crate::cff::esurface::{
+    EsurfaceCollection, ExistingEsurfaceId, ExistingEsurfaces, ExistingThresholds, GroupEsurfaceId,
+    esurface_value_is_strictly_inside,
 };
+use crate::graph::{FeynmanGraph, Graph, GraphGroupPosition, LmbIndex, LoopMomentumBasis};
+use crate::integrands::evaluation::EvaluationMetaData;
+use crate::integrands::process::evaluators::{
+    EvaluatorStack, SingleOrAllOrientations, evaluate_evaluator, evaluate_evaluator_single,
+};
+use crate::integrands::process::threshold_multiplier::{
+    ThresholdMultiplierEvaluatorCollection, ThresholdMultiplierInputWorkspace,
+};
+use crate::integrands::process::{GenericEvaluator, ParamBuilder, ThresholdParams};
+use crate::model::Model;
+use crate::momentum::sample::{
+    BareMomentumSample, ExternalFourMomenta, LoopIndex, LoopMomenta, MomentumSample, SubspaceData,
+};
+use crate::momentum::{Energy, FourMomentum, Rotation, ThreeMomentum};
+use crate::processes::{
+    EvaluatorBuildTimings, ResolvedThresholdCountertermVariant, SingleThresholdPieces,
+    ThresholdCountertermComponentKind, ThresholdCountertermMetadataRegistry,
+    ThresholdCountertermSide, ThresholdCountertermVariantId,
+};
+use crate::settings::{GlobalSettings, RuntimeSettings};
+use crate::subtraction::overlap::{
+    OverlapGroup, OverlapInput, OverlapStructure, SingleGraphOverlapData, find_maximal_overlap,
+};
+use crate::subtraction::overlap_subspace::{
+    OverlapInput as SubspaceOverlapInput, OverlapKinematics,
+    OverlapStructure as SubspaceOverlapStructure,
+    find_maximal_overlap as find_maximal_subspace_overlap,
+};
+use crate::subtraction::{evaluate_integrated_ct_normalisation, evaluate_uv_damper};
+use crate::utils::hyperdual_utils::{
+    DualOrNot, extract_t_derivatives, extract_t_derivatives_complex, new_constant,
+    shape_from_cut_cff_index, simple_n_deriv_shape,
+};
+use crate::utils::newton_solver::{
+    NewtonIterationResult, RadialRootDiagnostics, RadialRootIdentity,
+};
+use crate::utils::{F, FloatLike, RuntimeCache};
+use crate::uv::Integrands;
 use symbolica::domains::dual::{DualNumberStructure, HyperDual};
 
 const MAX_ITERATIONS: usize = 40;
@@ -3201,29 +3189,26 @@ mod tests {
         AmplitudeCountertermAtom, AmplitudeCountertermData, EvaluatedAmplitudeThreshold,
         append_amplitude_component_evaluations, combine_completed_threshold_pieces,
     };
-    use crate::{
-        cff::{CutCFFIndex, RaisedEsurfaceId},
-        graph::{Graph, GraphGroupPosition},
-        initialisation::test_initialise,
-        integrands::{
-            evaluation::EvaluationMetaData,
-            process::threshold_multiplier::{
-                ThresholdMultiplierEvaluatorCollection, ThresholdMultiplierInput,
-                ThresholdMultiplierInputWorkspace, ThresholdMultiplierLayout,
-                ThresholdMultiplierPoint,
-            },
-        },
-        momentum::{
-            FourMomentum, ThreeMomentum,
-            sample::{BareMomentumSample, ExternalFourMomenta, LoopMomenta, MomentumSample},
-        },
-        processes::{EvaluatorSettings, ThresholdCountertermVariantId},
-        utils::F,
-        uv::Integrands,
+    use crate::cff::{CutCFFIndex, RaisedEsurfaceId};
+    use crate::dot;
+    use crate::graph::{Graph, GraphGroupPosition};
+    use crate::initialisation::test_initialise;
+    use crate::integrands::evaluation::EvaluationMetaData;
+    use crate::integrands::process::threshold_multiplier::{
+        ThresholdMultiplierEvaluatorCollection, ThresholdMultiplierInput,
+        ThresholdMultiplierInputWorkspace, ThresholdMultiplierLayout, ThresholdMultiplierPoint,
     };
+    use crate::momentum::sample::{
+        BareMomentumSample, ExternalFourMomenta, LoopMomenta, MomentumSample,
+    };
+    use crate::momentum::{FourMomentum, ThreeMomentum};
+    use crate::processes::{EvaluatorSettings, ThresholdCountertermVariantId};
+    use crate::utils::F;
+    use crate::uv::Integrands;
     use linnet::half_edge::involution::EdgeVec;
     use spenso::algebra::complex::Complex;
-    use symbolica::{atom::Atom, symbol};
+    use symbolica::atom::Atom;
+    use symbolica::symbol;
     use typed_index_collections::ti_vec;
 
     #[test]
@@ -3278,40 +3263,34 @@ mod tests {
     #[test]
     fn grouped_amplitude_catalogue_keeps_foreign_complements_and_raised_weights() {
         use super::{AmplitudeOverlapCatalogue, evaluate_generalized_multichanneling_prefactor};
-        use crate::{
-            cff::{
-                VertexSet,
-                esurface::{Esurface, EsurfaceID, RaisedEsurfaceGroup},
-            },
-            graph::{FeynmanGraph, LMBext, LmbIndex},
-            momentum::{
-                Rotation, RotationMethod,
-                sample::{LoopIndex, SubspaceData},
-            },
-            processes::{ResolvedThresholdCountertermVariant, ThresholdCountertermSide},
-            settings::RuntimeSettings,
-            utils::{
-                hyperdual_utils::{DualOrNot, extract_t_derivatives, simple_n_deriv_shape},
-                load_generic_model,
-            },
+        use crate::cff::VertexSet;
+        use crate::cff::esurface::{Esurface, EsurfaceID, RaisedEsurfaceGroup};
+        use crate::graph::{FeynmanGraph, LMBext, LmbIndex};
+        use crate::momentum::sample::{LoopIndex, SubspaceData};
+        use crate::momentum::{Rotation, RotationMethod};
+        use crate::processes::{ResolvedThresholdCountertermVariant, ThresholdCountertermSide};
+        use crate::settings::RuntimeSettings;
+        use crate::utils::hyperdual_utils::{
+            DualOrNot, extract_t_derivatives, simple_n_deriv_shape,
         };
+        use crate::utils::load_generic_model;
         use linnet::half_edge::involution::EdgeIndex;
         use symbolica::domains::dual::{DualNumberStructure, HyperDual};
 
         test_initialise().unwrap();
         // Diagnostic geometry: A encloses disjoint balls B and C. Their owners are three
         // graph-group members; only A's owner will evaluate its CT at either center.
-        let graph: Graph = crate::finalized_runtime_dot!(digraph shared_threshold_geometry {
+        let graph: Graph = dot!(digraph shared_threshold_geometry {
             graph [projector=1]
             ext [style=invis]
             node [num=1]
             edge [num=1 mass=0]
-            ext -> a [id=0 sink="{ufo_order:0}"]
-            ext -> b [id=1 sink="{ufo_order:0}"]
-            ext -> c [id=2 sink="{ufo_order:0}"]
-            a -> b [id=3 source="{ufo_order:1}" sink="{ufo_order:1}"]
-            b -> c [id=4 source="{ufo_order:2}" sink="{ufo_order:1}"]
-            c -> a [id=5 lmb_id=0 source="{ufo_order:2}" sink="{ufo_order:2}"]
+            ext -> a [particle=H id=0]
+            ext -> b [particle=H id=1]
+            ext -> c [particle=H id=2]
+            a -> b [particle=H id=3]
+            b -> c [particle=H id=4]
+            c -> a [particle=H id=5 lmb_id=0]
         })
         .unwrap();
         let model = load_generic_model("scalars");
@@ -3480,18 +3459,18 @@ mod tests {
 
         // A native implicit member can have edges absent from the master. Its additional
         // ball must remain in the shared geometry without changing explicit members' routing.
-        let native: Graph = crate::finalized_runtime_dot!(digraph native_implicit_member {
+        let native: Graph = dot!(digraph native_implicit_member {
             graph [projector=1]
             ext [style=invis]
             node [num=1]
             edge [num=1 mass=0]
-            ext -> a [id=0 sink="{ufo_order:0}"]
-            ext -> b [id=1 sink="{ufo_order:0}"]
-            ext -> c [id=2 sink="{ufo_order:0}"]
-            a -> b [id=3 source="{ufo_order:1}" sink="{ufo_order:1}"]
-            b -> c [id=4 source="{ufo_order:2}" sink="{ufo_order:1}"]
-            c -> d [id=5 source="{ufo_order:2}" sink="{ufo_order:0}"]
-            d -> a [id=6 lmb_id=0 mass=1 source="{ufo_order:1}" sink="{ufo_order:2}"]
+            ext -> a [particle=H id=0]
+            ext -> b [particle=H id=1]
+            ext -> c [particle=H id=2]
+            a -> b [particle=H id=3]
+            b -> c [particle=H id=4]
+            c -> d [particle=H id=5]
+            d -> a [particle=H id=6 lmb_id=0 mass=1]
         })
         .unwrap();
         let mut mixed = catalogue.clone();
@@ -3586,16 +3565,16 @@ mod tests {
     #[test]
     fn generalized_multiplier_uses_component_contexts_after_helper_evaluation() {
         test_initialise().unwrap();
-        let graph: Graph = crate::finalized_runtime_dot!(digraph amplitude_multiplier_contexts {
+        let graph: Graph = dot!(digraph amplitude_multiplier_contexts {
             graph [projector=1]
             ext [style=invis]
             v1 [num=1]
             v2 [num=1]
             edge [num=1 mass=0]
-            ext -> v1 [id=0 sink="{ufo_order:0}"]
-            v1 -> v2 [id=1 source="{ufo_order:1}" sink="{ufo_order:0}" lmb_id=0]
-            v1 -> v2 [id=2 source="{ufo_order:2}" sink="{ufo_order:1}"]
-            v2 -> ext [id=3 source="{ufo_order:2}"]
+            ext -> v1 [particle=H id=0]
+            v1 -> v2 [particle=H id=1 lmb_id=0]
+            v1 -> v2 [particle=H id=2]
+            v2 -> ext [particle=H id=3]
         })
         .unwrap();
         let edge = graph.loop_momentum_basis.loop_edges.raw[0];

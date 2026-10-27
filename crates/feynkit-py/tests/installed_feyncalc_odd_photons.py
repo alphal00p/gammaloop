@@ -36,19 +36,17 @@ for count in (1, 3, 5):
     start = monotonic()
     # A one-point tadpole needs unrestricted bridge counting. Retain selfloops
     # and zero external flow, and disable optional topology/numerator filters.
-    result = model.process(
-        [photon], [photon] * (count - 1), vertex_allow=vertices
-    ).generate_diagrams(
-        loops=1,
-        max_vertices=count,
-        allow_self_loops=True,
-        allow_zero_flow_edges=True,
-        maximum_bridges=None,
-        self_energy=None,
-        tadpoles=None,
-        zero_snails=None,
-        numerator_grouping=None,
-        progress=None,
+    result = (
+        model.process([photon], [photon] * (count - 1))
+        .amplitude(
+            loops=hep.Loops.total(1),
+            restrict=hep.Restrict().only_vertices(vertices),
+            topology=hep.TopologyRules(
+                max_vertices=count, self_loops=True, zero_flow_edges=True
+            ),
+        )
+        .generate()
+        .build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
     )
     assert len(result.diagrams) == {1: 1, 3: 2, 5: 24}[count]
     # P(100+i) are independent test vectors, distinct from physical P(0..n-2).

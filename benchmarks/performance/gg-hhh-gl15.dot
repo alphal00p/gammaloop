@@ -2,7 +2,7 @@ digraph GL15 {
     num = "1";
     overall_factor = "(AutG(1))^(-1)*ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)";
     overall_factor_evaluated = "-1";
-    projector = "1/8*spenso::g(spenso::coad(8,hedge(0)),spenso::coad(8,hedge(1)))*ϵ(0,spenso::mink(4,hedge(0)))*ϵ(1,spenso::mink(4,hedge(1)))";
+    projector = "1/8*spenso::g(spenso::coad(8,hedge(0,1)),spenso::coad(8,hedge(1,1)))*ϵ(0,spenso::mink(4,hedge(0,1)))*ϵ(1,spenso::mink(4,hedge(1,1)))";
 
 	0 [int_id="V_141"];
 	1 [int_id="V_137"];

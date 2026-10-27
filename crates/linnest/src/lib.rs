@@ -10,8 +10,9 @@ pub mod svg;
 pub use label_placement::{
     attachment_offset_bytes as label_attachment_offset_bytes,
     candidates_bytes as label_candidates_bytes, first_bytes as label_first_bytes,
-    obstacle_boxes_bytes as label_obstacle_boxes_bytes, path_lines_bytes as label_path_lines_bytes,
-    search_bytes as label_search_bytes, stroke_lines_bytes as label_stroke_lines_bytes,
+    obstacle_boxes_bytes as label_obstacle_boxes_bytes, overlaps_bytes as label_overlaps_bytes,
+    path_lines_bytes as label_path_lines_bytes, search_bytes as label_search_bytes,
+    stroke_lines_bytes as label_stroke_lines_bytes,
 };
 mod pin;
 mod streaming;
@@ -44,29 +45,27 @@ pub use graph_api::{
 pub use pin::PinConstraint;
 
 use cgmath::{EuclideanSpace, InnerSpace, Point2, Rad, Vector2, Zero};
-use dot_parser::ast::CompassPt;
-use figment::{providers::Serialized, Figment, Profile};
+use figment::providers::Serialized;
+use figment::{Figment, Profile};
+use linnet::half_edge::involution::{
+    EdgeData, EdgeIndex, EdgeVec, Flow, Hedge, HedgePair, HedgeVec, Involution,
+};
+use linnet::half_edge::layout::force::{ForceLayoutConfig, ForceLayoutSession};
+use linnet::half_edge::layout::layered::{
+    LayeredConfig, LayeredEdgeRoute, LayeredGeometry, LayeredOutput, LayeredProfile,
+    LayeredRankAlign, LayeredRouteExit,
+};
+use linnet::half_edge::layout::simulatedanneale::{anneal, GeoSchedule, SAConfig};
+use linnet::half_edge::layout::spring::{
+    Constraint, HasPointConstraint, LayoutPointIndex, LayoutState, ParamTuning,
+    PinnedLayoutNeighbor, PointConstraint, ShiftDirection, SpringChargeEnergy,
+};
+use linnet::half_edge::nodestore::{NodeForest, NodeStore, Topology};
+use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
 use linnet::half_edge::swap::Swap;
-use linnet::{
-    half_edge::{
-        involution::{EdgeData, EdgeIndex, EdgeVec, Flow, Hedge, HedgePair, HedgeVec, Involution},
-        layout::{
-            force::{ForceLayoutConfig, ForceLayoutSession},
-            layered::{
-                LayeredConfig, LayeredEdgeRoute, LayeredGeometry, LayeredOutput, LayeredProfile,
-                LayeredRankAlign, LayeredRouteExit,
-            },
-            simulatedanneale::{anneal, GeoSchedule, SAConfig},
-            spring::{
-                Constraint, HasPointConstraint, LayoutPointIndex, LayoutState, ParamTuning,
-                PinnedLayoutNeighbor, PointConstraint, ShiftDirection, SpringChargeEnergy,
-            },
-        },
-        nodestore::{DefaultNodeStore, NodeStorageOps},
-        subgraph::{SuBitGraph, SubSetLike},
-        EdgeAccessors, HedgeGraph, NodeIndex, NodeVec,
-    },
-    parser::{DotEdgeData, DotGraph, DotHedgeData, DotVertexData, GlobalData, HedgeParseError},
+use linnet::half_edge::{EdgeAccessors, HedgeGraph, NodeIndex, NodeVec};
+use linnet::parser::{
+    CompassPt, DotEdgeData, DotGraph, DotHedgeData, DotVertexData, GlobalData, HedgeParseError,
 };
 
 use rand::rngs::SmallRng;
@@ -79,7 +78,7 @@ use std::ops::{Deref, IndexMut};
 use std::path::Path;
 
 #[cfg(all(target_arch = "wasm32", feature = "typst-plugin"))]
-use wasm_minimal_protocol::*;
+use wasm_minimal_protocol::{initiate_protocol, wasm_func};
 
 #[cfg(all(target_arch = "wasm32", feature = "typst-plugin"))]
 initiate_protocol!();
@@ -124,6 +123,12 @@ pub fn label_first(arg: &[u8]) -> Result<Vec<u8>, String> {
 #[wasm_func]
 pub fn label_search(arg: &[u8], math: &[u8]) -> Result<Vec<u8>, String> {
     label_search_bytes(arg, math)
+}
+
+#[cfg(all(target_arch = "wasm32", feature = "typst-plugin"))]
+#[wasm_func]
+pub fn label_overlaps(arg: &[u8]) -> Result<Vec<u8>, String> {
+    label_overlaps_bytes(arg)
 }
 
 // Custom getrandom implementation for WASM
@@ -467,9 +472,9 @@ impl Default for TypstEdge {
 }
 
 impl TypstEdge {
-    fn parse<N: NodeStorageOps>(
+    fn parse<N: Topology, V>(
         _inv: &Involution,
-        node_store: &N,
+        node_store: &NodeStore<N, V>,
         p: HedgePair,
         eid: EdgeIndex,
         data: EdgeData<DotEdgeData>,
@@ -495,21 +500,21 @@ impl TypstEdge {
             let mut to = None;
             match p {
                 HedgePair::Split { source, sink, .. } | HedgePair::Paired { source, sink } => {
-                    from = Some((node_store.node_id_ref(source), source));
-                    to = Some((node_store.node_id_ref(sink), sink));
+                    from = Some((node_store.node_id(source), source));
+                    to = Some((node_store.node_id(sink), sink));
                 }
                 HedgePair::Unpaired {
                     hedge,
                     flow: Flow::Source,
                 } => {
-                    from = Some((node_store.node_id_ref(hedge), hedge));
+                    from = Some((node_store.node_id(hedge), hedge));
                 }
 
                 HedgePair::Unpaired {
                     hedge,
                     flow: Flow::Sink,
                 } => {
-                    to = Some((node_store.node_id_ref(hedge), hedge));
+                    to = Some((node_store.node_id(hedge), hedge));
                 }
             }
 
@@ -606,7 +611,7 @@ impl TypstHedge {
             compasspt: self
                 .compasspt
                 .as_deref()
-                .and_then(|value| parse_hedge_compass(value).ok())
+                .and_then(|value| parse_compass(value).ok())
                 .flatten(),
         }
     }
@@ -617,43 +622,22 @@ impl TypstHedge {
             id: data.id.map(|id| id.0),
             data: data.payload,
             port_label: data.port_label,
-            compasspt: data.compasspt.map(hedge_compass_to_string),
+            compasspt: data.compasspt.map(|compass| compass.to_string()),
             ..Default::default()
         }
     }
 }
 
-fn parse_hedge_compass(value: &str) -> Result<Option<CompassPt>, String> {
+/// Reads a compass point as Typst passes it: case-insensitive, with an empty
+/// string or `none` for no compass point.
+pub(crate) fn parse_compass(value: &str) -> Result<Option<CompassPt>, String> {
     match value.trim().to_ascii_lowercase().as_str() {
         "" | "none" => Ok(None),
-        "n" => Ok(Some(CompassPt::N)),
-        "ne" => Ok(Some(CompassPt::NE)),
-        "e" => Ok(Some(CompassPt::E)),
-        "se" => Ok(Some(CompassPt::SE)),
-        "s" => Ok(Some(CompassPt::S)),
-        "sw" => Ok(Some(CompassPt::SW)),
-        "w" => Ok(Some(CompassPt::W)),
-        "nw" => Ok(Some(CompassPt::NW)),
-        "c" => Ok(Some(CompassPt::C)),
-        "_" => Ok(Some(CompassPt::Underscore)),
-        other => Err(format!("Invalid compass point: {other}")),
+        compass => compass
+            .parse()
+            .map(Some)
+            .map_err(|_| format!("Invalid compass point: {compass}")),
     }
-}
-
-fn hedge_compass_to_string(compass: CompassPt) -> String {
-    match compass {
-        CompassPt::N => "n",
-        CompassPt::NE => "ne",
-        CompassPt::E => "e",
-        CompassPt::SE => "se",
-        CompassPt::S => "s",
-        CompassPt::SW => "sw",
-        CompassPt::W => "w",
-        CompassPt::NW => "nw",
-        CompassPt::C => "c",
-        CompassPt::Underscore => "_",
-    }
-    .to_string()
 }
 
 #[derive(
@@ -2407,11 +2391,9 @@ impl TypstGraph {
             self.validate_isolated_subgraph_groups(subgraph.unwrap())?;
         }
         let selected_items = isolated.then(|| self.selected_layout_items(subgraph.unwrap()));
-        let node_count = selected_items
-            .as_ref()
-            .map_or(self.n_nodes(), |(nodes, _)| {
-                nodes.iter().filter(|(_, selected)| **selected).count()
-            });
+        let node_count = selected_items.as_ref().map_or(self.n_live(), |(nodes, _)| {
+            nodes.iter().filter(|(_, selected)| **selected).count()
+        });
         let spring_params = ParamTuning::from(&self.layout_config.spring);
         let (tree_cfg, energy) = self.tree_init_cfg(&spring_params, node_count);
         if !iterative {
@@ -2545,7 +2527,7 @@ impl TypstGraph {
         if !(0.0..=1.0).contains(&self.layout_config.flattening_end) {
             return Err("flattening-end must be a finite fraction between 0 and 1".to_string());
         }
-        for (kind, index, statements) in (0..self.n_nodes())
+        for (kind, index, statements) in (0..self.node_bound())
             .map(|i| ("node", i, &self[NodeIndex(i)].statements))
             .chain((0..self.n_edges()).map(|i| ("edge", i, &self[EdgeIndex(i)].statements)))
         {
@@ -2590,11 +2572,11 @@ impl TypstGraph {
     pub fn layout_energy_state(
         &self,
     ) -> (
-        LayoutState<'_, TypstEdge, TypstNode, TypstHedge, DefaultNodeStore<TypstNode>>,
+        LayoutState<'_, TypstEdge, TypstNode, TypstHedge, NodeForest>,
         SpringChargeEnergy,
     ) {
         let spring_params = ParamTuning::from(&self.layout_config.spring);
-        let (tree_cfg, energy) = self.tree_init_cfg(&spring_params, self.n_nodes());
+        let (tree_cfg, energy) = self.tree_init_cfg(&spring_params, self.n_live());
         let (mut pos_n, mut pos_e) = self.initial_solver_positions(tree_cfg);
         self.apply_initial_grouped_constraints(&mut pos_n, &mut pos_e);
         let mut state = self.graph.new_layout_state(
@@ -2946,12 +2928,12 @@ impl TypstGraph {
 
     fn force_session<'a>(
         &self,
-        mut state: LayoutState<'a, TypstEdge, TypstNode, TypstHedge, DefaultNodeStore<TypstNode>>,
+        mut state: LayoutState<'a, TypstEdge, TypstNode, TypstHedge, NodeForest>,
         energy: &SpringChargeEnergy,
         selection: Option<(&NodeVec<bool>, &EdgeVec<bool>)>,
-    ) -> ForceLayoutSession<'a, TypstEdge, TypstNode, TypstHedge, DefaultNodeStore<TypstNode>> {
+    ) -> ForceLayoutSession<'a, TypstEdge, TypstNode, TypstHedge, NodeForest> {
         let spring_length = energy.spring_length;
-        for i in 0..self.n_nodes() {
+        for i in 0..self.node_bound() {
             let index = NodeIndex(i);
             let statements = &self[index].statements;
             state.vertex_depths[index] = dot_statement_value(statements, "pos-z")
@@ -3128,7 +3110,7 @@ impl TypstGraph {
                 };
 
                 if label_charge != 0.0 {
-                    for n in 0..self.n_nodes() {
+                    for n in 0..self.node_bound() {
                         let ni = NodeIndex(n);
                         if selection.is_some_and(|(nodes, _)| !nodes[ni]) {
                             continue;
@@ -3961,7 +3943,7 @@ impl TypstGraph {
                 .layout_roots
                 .iter()
                 .copied()
-                .filter(|&root| root < self.n_nodes())
+                .filter(|&root| root < self.node_bound())
                 .map(NodeIndex)
                 .collect(),
             rank_same: self.rank_same_node_groups(),
@@ -4048,7 +4030,7 @@ impl TypstGraph {
             .iter()
             .filter_map(|label| SuBitGraph::from_base62(label, self.n_hedges()))
             .map(|subgraph| {
-                let mut seen = vec![false; self.n_nodes()];
+                let mut seen = vec![false; self.node_bound()];
                 let mut nodes = Vec::new();
                 for hedge in subgraph.included_iter() {
                     let node = self.node_id(hedge);
@@ -4410,7 +4392,7 @@ impl TypstGraph {
     }
 
     fn layout_order_positions(&self, ordered_nodes: &[NodeIndex]) -> Vec<usize> {
-        let mut order = vec![usize::MAX; self.n_nodes()];
+        let mut order = vec![usize::MAX; self.node_bound()];
         for (position, node) in ordered_nodes.iter().enumerate() {
             order[node.0] = position;
         }
@@ -4914,7 +4896,7 @@ impl TypstGraph {
         self.positions_from_node_targets(cfg, targets)
     }
 
-    pub fn parse<'a>(dot_str: &str) -> Result<Self, HedgeParseError<'a, (), (), (), ()>> {
+    pub fn parse(dot_str: &str) -> Result<Self, HedgeParseError<(), (), (), ()>> {
         let dot = DotGraph::from_string(dot_str)?;
         Ok(TypstGraph::from_dot(dot, &default_figment()))
     }

@@ -3,7 +3,7 @@ digraph GL638{
     num = "1";
     overall_factor = "NumeratorDependentGrouping(638,1,(AutG(1))^(-1)*AntiFermionSpinSumSign(-1)*ExternalFermionOrderingSign(-1)*InternalFermionLoopSign(-1)*NumeratorIndependentSymmetryGrouping(2))+NumeratorDependentGrouping(639,1,(AutG(1))^(-1)*AntiFermionSpinSumSign(-1)*ExternalFermionOrderingSign(-1)*InternalFermionLoopSign(-1)*NumeratorIndependentSymmetryGrouping(2))";
     overall_factor_evaluated = "-4";
-    projector = "u(1,spenso::bis(4,hedge(1)))*ubar(1,spenso::bis(4,hedge(29)))*v(0,spenso::bis(4,hedge(28)))*vbar(0,spenso::bis(4,hedge(0)))";
+    projector = "u(1,spenso::bis(4,hedge(1,1)))*ubar(1,spenso::bis(4,hedge(29,1)))*v(0,spenso::bis(4,hedge(28,1)))*vbar(0,spenso::bis(4,hedge(0,1)))";
 
 	0 [int_id="V_141"];
 	1 [int_id="V_141"];

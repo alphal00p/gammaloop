@@ -8,25 +8,19 @@ pub use three_dimensional_reps::expression::{
 
 use itertools::Itertools;
 use linnet::half_edge::involution::EdgeIndex;
-use spenso::structure::{
-    abstract_index::AIND_SYMBOLS,
-    representation::{LibraryRep, Minkowski, RepName},
-};
-use symbolica::{
-    atom::{Atom, AtomCore, FunctionBuilder},
-    function,
-    id::Replacement,
-};
+use spenso::structure::abstract_index::AIND_SYMBOLS;
+use spenso::structure::representation::{LibraryRep, Minkowski, RepName};
+use symbolica::atom::{Atom, AtomCore, FunctionBuilder};
+use symbolica::function;
+use symbolica::id::Replacement;
 use three_dimensional_reps::MediumMode;
 
-use super::{
-    esurface::Esurface, hsurface::Hsurface, orientations::GraphOrientation,
-    surface::GammaLoopLinearEnergyExpr,
-};
-use crate::{
-    graph::Graph,
-    utils::{GS, W_, ose_atom_from_index},
-};
+use super::esurface::Esurface;
+use super::hsurface::Hsurface;
+use super::orientations::GraphOrientation;
+use super::surface::GammaLoopLinearEnergyExpr;
+use crate::graph::Graph;
+use crate::utils::{GS, W_, ose_atom_from_index};
 
 pub type ThreeDExpression<O> =
     three_dimensional_reps::expression::ThreeDExpression<O, Esurface, Hsurface>;
@@ -238,17 +232,16 @@ mod tests {
     use three_dimensional_reps::thermal::OCCUPATION_FORM;
 
     use super::*;
-    use crate::{
-        cff::surface::LinearEnergyExpr, finalized_runtime_dot, initialisation::test_initialise,
-        utils::external_energy_atom_from_index,
-    };
+    use crate::cff::surface::LinearEnergyExpr;
+    use crate::dot;
+    use crate::initialisation::test_initialise;
+    use crate::utils::external_energy_atom_from_index;
 
     #[test]
     fn vacuum_subtraction_reaches_root_and_unit_cographs() -> color_eyre::Result<()> {
-        use crate::{
-            graph::cuts::CutSet, integrands::process::param_builder::ParamBuilderGraph,
-            settings::global::OrientationPattern,
-        };
+        use crate::graph::cuts::CutSet;
+        use crate::integrands::process::param_builder::ParamBuilderGraph;
+        use crate::settings::global::OrientationPattern;
         test_initialise()?;
         let mut graph: Graph = crate::graph::Graph::unit_numerator_fixtures(
             stringify!(digraph G {
@@ -321,7 +314,7 @@ mod tests {
         test_initialise()?;
         let graph: Graph = crate::graph::Graph::unit_numerator_fixtures(
             stringify!(digraph thermal_triangle {
-                edge [num=1 mass=0]
+                edge [particle=H num=1 mass=0]
                 node [num=1]
                 ext [style=invis]
                 ext -> a [id=3]
@@ -368,13 +361,13 @@ mod tests {
     #[test]
     fn affine_energy_map_keeps_two_numerator_factors_under_one_map() -> color_eyre::Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(
+        let graph: Graph = dot!(
             digraph affine_map {
                 graph [projector="1"]
                 edge [num=1 mass=0]
                 node [num=1]
-                A -> B [source="{ufo_order:0}" sink="{ufo_order:0}" id=0 lmb_id=0]
-                A -> B [source="{ufo_order:1}" sink="{ufo_order:1}" id=1]
+                A -> B [particle=H id=0 lmb_id=0]
+                A -> B [particle=H id=1]
             }
         )?;
         let energy_map = LinearEnergyExpr {
@@ -417,7 +410,7 @@ mod tests {
     fn padded_external_energy_slots_do_not_erase_factorized_external_momenta()
     -> color_eyre::Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(digraph padded_external_energy_slots {
+        let graph: Graph = dot!(digraph padded_external_energy_slots {
             graph [projector="1"]
             edge [num=1 mass=0]
             node [num=1]
@@ -425,12 +418,12 @@ mod tests {
             v0;
             v1;
             v2;
-            ext -> v0 [sink="{ufo_order:0}" id=0]
-            ext -> v1 [sink="{ufo_order:0}" id=1]
-            v2 -> ext [source="{ufo_order:0}" id=2]
-            v0 -> v2 [source="{ufo_order:1}" sink="{ufo_order:1}" id=3 lmb_id=0]
-            v1 -> v0 [source="{ufo_order:1}" sink="{ufo_order:2}" id=4]
-            v2 -> v1 [source="{ufo_order:2}" sink="{ufo_order:2}" id=5]
+            ext -> v0 [particle=H id=0]
+            ext -> v1 [particle=H id=1]
+            v2 -> ext [particle=H id=2]
+            v0 -> v2 [particle=H id=3 lmb_id=0]
+            v1 -> v0 [particle=H id=4]
+            v2 -> v1 [particle=H id=5]
         })?;
         let mapped_internal_energy = LinearEnergyExpr {
             internal_terms: vec![(EdgeIndex(3), 2.into())],

@@ -1,39 +1,30 @@
-use std::{
-    borrow::Borrow,
-    collections::{BTreeMap, HashMap},
-    fmt::Display,
-};
+use std::borrow::Borrow;
+use std::collections::{BTreeMap, HashMap};
+use std::fmt::Display;
 
 use bincode_trait_derive::{Decode, Encode};
 use itertools::{EitherOrBoth, Itertools};
-use linnet::half_edge::{
-    GVEdgeAttrs, HedgeGraph,
-    involution::{EdgeIndex, EdgeVec, Orientation, SignOrZero},
-    nodestore::NodeStorageOps,
-};
+use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation, SignOrZero};
+use linnet::half_edge::nodestore::Topology;
+use linnet::half_edge::{GVEdgeAttrs, HedgeGraph};
 use serde::{Deserialize, Serialize};
-use symbolica::{
-    atom::{Atom, AtomCore, AtomOrView, AtomView, Symbol},
-    domains::rational::Rational,
-    function,
-    id::{Pattern, Replacement},
-    symbol,
-};
+use symbolica::atom::{Atom, AtomCore, AtomOrView, AtomView, Symbol};
+use symbolica::domains::rational::Rational;
+use symbolica::id::{Pattern, Replacement};
+use symbolica::{function, symbol};
 use typed_index_collections::TiVec;
 
 mod ltd;
 
-use crate::{
-    MediumMode, ThermalWeight,
-    generation::RepresentationMode,
-    graph_io::EnergyEdgeIndexMap,
-    surface::{EsurfaceID, HybridSurfaceID, LinearEnergyExpr, SurfaceCache},
-    symbols::{
-        numerator_sampling_scale, orientation_delta, orientation_delta_symbol, ose_atom_from_index,
-        sign, sign_theta,
-    },
-    tree::{NodeId, Tree, TreeNode},
+use crate::generation::RepresentationMode;
+use crate::graph_io::EnergyEdgeIndexMap;
+use crate::surface::{EsurfaceID, HybridSurfaceID, LinearEnergyExpr, SurfaceCache};
+use crate::symbols::{
+    numerator_sampling_scale, orientation_delta, orientation_delta_symbol, ose_atom_from_index,
+    sign, sign_theta,
 };
+use crate::tree::{NodeId, Tree, TreeNode};
+use crate::{MediumMode, ThermalWeight};
 
 #[derive(
     Debug, Clone, Serialize, Deserialize, Hash, PartialEq, Eq, Copy, Encode, Decode, PartialOrd, Ord,
@@ -210,7 +201,7 @@ impl OrientationData {
         }
     }
 
-    pub fn dot<E, V, N: NodeStorageOps<NodeData = V>>(&self, graph: &HedgeGraph<E, V, N>) {
+    pub fn dot<E, V, N: Topology>(&self, graph: &HedgeGraph<E, V, N>) {
         let mut writer = String::new();
         writer.push_str("digraph {{");
 

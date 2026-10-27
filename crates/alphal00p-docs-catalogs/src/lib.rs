@@ -12,10 +12,8 @@ mod python_stub;
 #[cfg(feature = "vakint-reference")]
 pub mod vakint_reference;
 
-use std::{
-    fs,
-    path::{Path, PathBuf},
-};
+use std::fs;
+use std::path::{Path, PathBuf};
 
 use alphal00p_docs_schema::{
     ApiLanguage, DocCatalog, DocComponent, DocExample, DocFormat, DocItem, DocItemKind, DocProduct,
@@ -436,13 +434,13 @@ const FEYNKIT_GRAPH: &[RustExampleSpec] = &[example!(
 const FEYNKIT_AMPLITUDE: &[RustExampleSpec] = &[example!(
     "Amplitude",
     "rust",
-    "use feynkit::{Amplitude, GenerationOptions, Model, Process};\nlet model = Model::from_path(\"crates/feynkit-model/tests/fixtures/scalars_2p_3p.json\")?;\nlet process = Process::new([\"scalar_0\"], [\"scalar_0\", \"scalar_0\"]);\nlet result = process.generate_diagrams(model, &GenerationOptions::default().max_vertices(3))?;\nlet amplitude = Amplitude::from_diagram(result.diagrams.into_iter().next().expect(\"generated scalar diagram\"))?;\nassert_eq!(amplitude.diagrams().len(), 1);\nassert_eq!(amplitude.terms().len(), 1);"
+    "use feynkit::{Loops, Model, NumeratorOptions, Process, Run};\nlet model = Model::from_path(\"crates/feynkit-model/tests/fixtures/scalars_2p_3p.json\")?;\nlet request = Process::new([\"scalar_0\"], [\"scalar_0\", \"scalar_0\"]).amplitude(Loops::total(0..=0));\nlet run = Run::default();\nlet amplitude = request.generate(model.into(), &run)?.build(&NumeratorOptions::default(), &run)?.into_amplitude(Default::default())?;\nassert_eq!(amplitude.diagrams().len(), 1);\nassert_eq!(amplitude.terms().len(), 1);"
 )];
 
 const FEYNKIT_GENERATOR: &[RustExampleSpec] = &[example!(
     "Process",
     "rust",
-    "use feynkit_generator::{GenerationOptions, Process};\nlet model = feynkit_model::Model::from_path(\"crates/feynkit-model/tests/fixtures/scalars_2p_3p.json\")?;\nlet process = Process::new([\"scalar_0\"], [\"scalar_0\", \"scalar_0\"]);\nlet result = process.generate_diagrams(model, &GenerationOptions::default().max_vertices(3))?;\nassert!(!result.diagrams.is_empty());"
+    "use feynkit_generator::{Loops, Process, Run};\nlet model = feynkit_model::Model::from_path(\"crates/feynkit-model/tests/fixtures/scalars_2p_3p.json\")?;\nlet request = Process::new([\"scalar_0\"], [\"scalar_0\", \"scalar_0\"]).amplitude(Loops::total(0..=0));\nlet diagrams = request.generate(model.into(), &Run::default())?;\nassert!(!diagrams.is_empty());"
 )];
 
 const FEYNKIT_CFF: &[RustExampleSpec] = &[example!(
@@ -757,14 +755,14 @@ const LINNET: &[RustExampleSpec] = &[
         "use linnet::half_edge::subgraph::SubGraphLike;"
     ),
     example!(
-        "NodeStorage",
+        "Topology",
         "rust",
-        "use linnet::half_edge::nodestore::NodeStorage;"
+        "use linnet::half_edge::nodestore::Topology;"
     ),
     example!(
-        "NodeStorageOps",
+        "Checkpoint",
         "rust",
-        "use linnet::half_edge::nodestore::NodeStorageOps;"
+        "use linnet::half_edge::nodestore::Checkpoint;"
     ),
 ];
 
@@ -1212,8 +1210,8 @@ mod tests {
             ),
             (
                 "linnet",
-                "NodeStorageOps",
-                "linnet::half_edge::nodestore::NodeStorageOps",
+                "Topology",
+                "linnet::half_edge::nodestore::Topology",
             ),
             (
                 "spenso",
@@ -1446,8 +1444,8 @@ mod tests {
             "Inclusion",
             "BaseSubgraph",
             "SubGraphLike",
-            "NodeStorage",
-            "NodeStorageOps",
+            "Topology",
+            "Checkpoint",
         ] {
             assert!(
                 rust.iter().any(|example| example.id == entry),

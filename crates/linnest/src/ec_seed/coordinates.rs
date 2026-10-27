@@ -1,7 +1,8 @@
 //! Planar straight-line coordinates for an embedded drawing graph.
 use super::embedding::{require, Graph, Id, OrderedMap, Result};
 use indexmap::IndexMap;
-use std::collections::{btree_map::Entry, BTreeMap, BTreeSet};
+use std::collections::btree_map::Entry;
+use std::collections::{BTreeMap, BTreeSet};
 
 pub(crate) type Point = [f64; 2];
 pub(crate) type Positions = OrderedMap<Point>;
@@ -167,7 +168,7 @@ impl IntSet {
 
 /// Chrobak–Payne triangulation/canonical ordering translated from NetworkX 3.7.
 /// Copyright NetworkX Developers, BSD-3-Clause; see
-/// `crates/linnest/layout/native/LICENSE.networkx`.
+/// `crates/linnest/typst/LICENSE.networkx`.
 #[derive(Default)]
 struct Embedding {
     rotation: BTreeMap<i32, Vec<i32>>,

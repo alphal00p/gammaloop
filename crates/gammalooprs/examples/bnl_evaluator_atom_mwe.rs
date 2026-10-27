@@ -1,44 +1,42 @@
-use spenso::structure::{OrderedStructure, representation::LibraryRep};
-use std::{
-    collections::BTreeSet,
-    env, fs,
-    io::{self, Write},
-    ops::Deref,
-    path::{Path, PathBuf},
-    time::{Duration, Instant},
-};
+use spenso::structure::OrderedStructure;
+use spenso::structure::representation::LibraryRep;
+use std::collections::BTreeSet;
+use std::io::Write;
+use std::ops::Deref;
+use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
+use std::{env, fs, io};
 
-use color_eyre::{
-    Result,
-    eyre::{WrapErr, bail, eyre},
-};
-use gammalooprs::{
-    initialisation::test_initialise,
-    numerator::{ParsingNet, aind::Aind, symbolica_ext::NumeratorAtomExt},
-    processes::TensorNetworkContractionOrder,
-    utils::{FUN_LIB, TENSORLIB},
-};
+use color_eyre::Result;
+use color_eyre::eyre::{WrapErr, bail, eyre};
+use gammalooprs::initialisation::test_initialise;
+use gammalooprs::numerator::ParsingNet;
+use gammalooprs::numerator::aind::Aind;
+use gammalooprs::numerator::symbolica_ext::NumeratorAtomExt;
+use gammalooprs::processes::TensorNetworkContractionOrder;
+use gammalooprs::utils::{FUN_LIB, TENSORLIB};
 use idenso::tensor::{SymbolicNet, SymbolicNetExt, SymbolicTensor};
+use spenso::network::library::DummyLibrary;
+use spenso::network::library::function_lib::Wrap;
+use spenso::network::parsing::{
+    ParseSettings as NetworkParseSettings, SchoonschipExpansionMode, ShorthandParsing,
+    StrictTensorFilter,
+};
+use spenso::network::store::NetworkStore;
 use spenso::network::{
     DEFAULT_EXACT_JOIN_LIMIT, ExecutionResult, MinIntermediateCost, MinResultRank,
     MinResultRankWith, Network, PAIR_SCORE_ATOM_AWARE, PAIR_SCORE_ENTRY_AWARE,
     PAIR_SCORE_RESULT_RANK_ONLY, ScalarAliases, Sequential, SmallestDegree,
-    library::{DummyLibrary, function_lib::Wrap},
-    parsing::{
-        ParseSettings as NetworkParseSettings, SchoonschipExpansionMode, ShorthandParsing,
-        StrictTensorFilter,
-    },
-    store::NetworkStore,
 };
-use spenso::shadowing::{TensorCollectExt, symbolica_utils::LogPrint};
+use spenso::shadowing::TensorCollectExt;
+use spenso::shadowing::symbolica_utils::LogPrint;
 use spenso::tensors::data::HasTensorData;
-use symbolica::{
-    atom::{Atom, AtomCore, AtomView},
-    id::AliasedAtom,
-    parser::ParseSettings as SymbolicaParseSettings,
-    wrap_input,
-};
-use tabled::{builder::Builder, settings::Style};
+use symbolica::atom::{Atom, AtomCore, AtomView};
+use symbolica::id::AliasedAtom;
+use symbolica::parser::ParseSettings as SymbolicaParseSettings;
+use symbolica::wrap_input;
+use tabled::builder::Builder;
+use tabled::settings::Style;
 
 macro_rules! execute_concrete_network {
     ($net:expr, $order:expr) => {
@@ -250,7 +248,7 @@ fn main() -> Result<()> {
         [
             ("status", "done".to_owned()),
             ("elapsed", format_duration(network_parse_elapsed)),
-            ("nodes", net.graph.n_nodes().to_string()),
+            ("nodes", net.graph.n_live().to_string()),
             ("edges", net.graph.graph.n_edges().to_string()),
             ("tensors", net.store.tensors.len().to_string()),
         ],
@@ -263,7 +261,7 @@ fn main() -> Result<()> {
         "",
         format!(
             "nodes={} edges={} tensors={}",
-            net.graph.n_nodes(),
+            net.graph.n_live(),
             net.graph.graph.n_edges(),
             net.store.tensors.len()
         ),
@@ -989,7 +987,7 @@ fn run_symbolic_then_concrete(
         [
             ("status", "done".to_owned()),
             ("elapsed", format_duration(symbolic_parse_elapsed)),
-            ("nodes", symbolic_net.graph.n_nodes().to_string()),
+            ("nodes", symbolic_net.graph.n_live().to_string()),
             ("edges", symbolic_net.graph.graph.n_edges().to_string()),
             ("tensors", symbolic_net.store.tensors.len().to_string()),
             (
@@ -1006,7 +1004,7 @@ fn run_symbolic_then_concrete(
         "",
         format!(
             "nodes={} edges={} tensors={} strict_filter={:?}",
-            symbolic_net.graph.n_nodes(),
+            symbolic_net.graph.n_live(),
             symbolic_net.graph.graph.n_edges(),
             symbolic_net.store.tensors.len(),
             config.symbolic_strict_filter
@@ -1290,7 +1288,7 @@ fn run_symbolic_then_concrete(
         [
             ("status", "done".to_owned()),
             ("elapsed", format_duration(concrete_parse_elapsed)),
-            ("nodes", concrete_net.graph.n_nodes().to_string()),
+            ("nodes", concrete_net.graph.n_live().to_string()),
             ("edges", concrete_net.graph.graph.n_edges().to_string()),
             ("tensors", concrete_net.store.tensors.len().to_string()),
         ],
@@ -1303,7 +1301,7 @@ fn run_symbolic_then_concrete(
         "",
         format!(
             "nodes={} edges={} tensors={}",
-            concrete_net.graph.n_nodes(),
+            concrete_net.graph.n_live(),
             concrete_net.graph.graph.n_edges(),
             concrete_net.store.tensors.len()
         ),
@@ -1522,7 +1520,7 @@ fn run_symbolic_net(config: &Config, selected: &Atom, summary: &mut SummaryTable
         [
             ("status", "done".to_owned()),
             ("elapsed", format_duration(network_parse_elapsed)),
-            ("nodes", net.graph.n_nodes().to_string()),
+            ("nodes", net.graph.n_live().to_string()),
             ("edges", net.graph.graph.n_edges().to_string()),
             ("tensors", net.store.tensors.len().to_string()),
             (
@@ -1539,7 +1537,7 @@ fn run_symbolic_net(config: &Config, selected: &Atom, summary: &mut SummaryTable
         "",
         format!(
             "nodes={} edges={} tensors={} strict_filter={:?}",
-            net.graph.n_nodes(),
+            net.graph.n_live(),
             net.graph.graph.n_edges(),
             net.store.tensors.len(),
             config.symbolic_strict_filter

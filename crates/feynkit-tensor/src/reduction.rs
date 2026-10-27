@@ -36,25 +36,20 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use feynkit_graph::FeynmanDiagram;
 use idenso::tensor::{ContractSettings, SymbolicTensor};
 use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
-use spenso::network::{library::symbolic::ETS, tags::SPENSO_TAG};
-use spenso::{
-    shadowing::TensorCollectFilter,
-    structure::{
-        partial::{PartialStructure, PartialStructureExt},
-        representation::{BaseRepName, LibraryRep, Minkowski},
-        slot::IsAbstractSlot,
-    },
-};
+use spenso::network::library::symbolic::ETS;
+use spenso::network::tags::SPENSO_TAG;
+use spenso::shadowing::TensorCollectFilter;
+use spenso::structure::partial::{PartialStructure, PartialStructureExt};
+use spenso::structure::representation::{BaseRepName, LibraryRep, Minkowski};
+use spenso::structure::slot::IsAbstractSlot;
 use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol};
 use thiserror::Error;
 
 mod blocks;
 mod external;
 
-use crate::{
-    OrthogonalWeingarten, WeingartenError,
-    orbit_projector::{OrbitProjector, OrbitProjectorError},
-};
+use crate::orbit_projector::{OrbitProjector, OrbitProjectorError};
+use crate::{OrthogonalWeingarten, WeingartenError};
 
 // Closed single-vector angular moments need no universal Weingarten table.
 // 31!! still fits the reducer's signed 64-bit multiplicity conversion.
@@ -760,9 +755,7 @@ impl TensorReducer {
         }
 
         Ok(TensorMonomial {
-            scalar: scalar_factors
-                .into_iter()
-                .fold(Atom::one(), |product, factor| product * factor),
+            scalar: Atom::mul_many(scalar_factors),
             integrated,
             outside,
         })
@@ -1143,11 +1136,11 @@ pub trait FeynmanDiagramTensorExt {
     /// numerator contains both the exact tensor-projector coefficient and its
     /// scalar invariant. The external-state projector is consumed and reset to
     /// one, while the scalar numerator prefactor is retained. Topology IDs are
-    /// deliberately preserved. Derived names are deterministic and distinct:
-    /// `name.tensor[0]`, `name.tensor[1]`, and so on. Interaction and particle
-    /// assignments remain available as provenance; the original numerator
-    /// fragments are replaced by the scalar contribution. A numerator with
-    /// residual free indices is rejected; use
+    /// deliberately preserved. When a name exists, derived names are
+    /// `name.tensor[0]`, `name.tensor[1]`, and so on; unnamed inputs stay unnamed.
+    /// Interaction and particle assignments remain available as provenance; the
+    /// original numerator fragments are replaced by the scalar contribution.
+    /// A numerator with residual free indices is rejected; use
     /// [`Self::reduce_tensor_numerator`] to retain its metric-tensor output.
     fn reduce_tensor_graphs(
         &self,
@@ -1189,7 +1182,7 @@ impl FeynmanDiagramTensorExt for FeynmanDiagram {
             expression.clone()
         } else {
             let numerator = if *subgraph == self.underlying().full_filter() {
-                self.numerator().clone()
+                self.numerator()?.clone()
             } else {
                 self.numerator_of(subgraph, &SuBitGraph::empty(self.underlying().n_hedges()))?
             };
@@ -1210,7 +1203,7 @@ impl FeynmanDiagramTensorExt for FeynmanDiagram {
         &self,
         reducer: &TensorReducer,
     ) -> Result<TensorReduction, TensorReductionError> {
-        let projected_numerator = self.numerator().multiply(self.projector())?;
+        let projected_numerator = self.numerator()?.multiply(self.projector())?;
         reducer.reduce(&projected_numerator)
     }
 
@@ -1231,8 +1224,11 @@ impl FeynmanDiagramTensorExt for FeynmanDiagram {
             .filter(|numerator| !numerator.is_zero())
             .enumerate()
             .map(|(index, numerator)| {
-                self.clone()
-                    .with_name(format!("{}.tensor[{index}]", self.name()))
+                let mut graph = self.clone();
+                if let Some(name) = self.name() {
+                    graph = graph.with_name(format!("{name}.tensor[{index}]"));
+                }
+                graph
                     .with_projector(SymbolicTensor::infer(Atom::one())?)
                     .with_numerator(numerator)
                     .map_err(TensorReductionError::Diagram)
@@ -1792,11 +1788,11 @@ fn outside_pairing_atoms(
 }
 
 fn outside_pairing_atom(outside: &[Outside], pairing: &[usize]) -> Atom {
-    (0..pairing.len())
-        .filter(|left| *left < pairing[*left])
-        .fold(Atom::one(), |product, left| {
-            product * outside_pair(&outside[left], &outside[pairing[left]])
-        })
+    Atom::mul_many(
+        (0..pairing.len())
+            .filter(|left| *left < pairing[*left])
+            .map(|left| outside_pair(&outside[left], &outside[pairing[left]])),
+    )
 }
 
 fn coset_key_from_parts(parts: &[usize]) -> u64 {
@@ -1846,7 +1842,7 @@ fn atom_from_count(count: u128) -> Result<Atom, TensorReductionError> {
 mod tests {
     use super::*;
     use crate::CosetType;
-    use feynkit_graph::{DiagramEdge, DiagramVertex, NumeratorInterface};
+    use feynkit_graph::{DiagramEdge, DiagramVertex, FeynmanDiagramBuilder, NumeratorInterface};
     use feynkit_model::Model;
     use idenso::shorthands::UndoShorthands;
     use spenso::structure::abstract_index::AbstractIndex;
@@ -2113,12 +2109,12 @@ mod tests {
         }
     }
 
-    fn diagram_with_numerator(name: &str, numerator: Atom) -> FeynmanDiagram {
+    fn diagram_with_numerator(name: Option<&str>, numerator: Atom) -> FeynmanDiagram {
         diagram_with_payload(name, numerator, Atom::one(), Atom::one())
     }
 
     fn diagram_with_payload(
-        name: &str,
+        name: Option<&str>,
         numerator: Atom,
         numerator_prefactor: Atom,
         projector: Atom,
@@ -2132,7 +2128,7 @@ mod tests {
         let mut left = DiagramVertex::interaction("left", rule);
         let numerator = NumeratorInterface::admit(numerator, None).unwrap();
         left.numerator = numerator.clone();
-        let mut builder = FeynmanDiagram::builder(model, name)
+        let mut builder = FeynmanDiagramBuilder::new(model, name.map(str::to_owned))
             .numerator(numerator)
             .numerator_prefactor(NumeratorInterface::admit(numerator_prefactor, None).unwrap())
             .projector(NumeratorInterface::admit(projector, None).unwrap());
@@ -2287,18 +2283,20 @@ mod tests {
 
     #[test]
     fn graph_compound_dimension_preserves_selected_edge_and_declared_ports() {
-        use linnet::half_edge::{involution::EdgeIndex, subgraph::ModifySubSet};
+        use linnet::half_edge::involution::EdgeIndex;
+        use linnet::half_edge::subgraph::ModifySubSet;
         let momentum = feynkit_graph::momentum_symbol();
         let [mu, nu] = [Atom::num(7), Atom::num(11)];
         let four = Atom::num(4);
         let numerator = indexed(momentum, 0, &four, &mu) * indexed(momentum, 0, &four, &nu)
             + indexed(momentum, 1, &four, &mu) * indexed(momentum, 1, &four, &nu);
-        let diagram = diagram_with_numerator("compound-selected-edge", numerator);
+        let diagram = diagram_with_numerator(Some("compound-selected-edge"), numerator);
         let source = SymbolicTensor::from_declared_parts(
-            diagram.numerator().expression().clone(),
+            diagram.numerator().unwrap().expression().clone(),
             PartialStructure::from_logical_slots(
                 diagram
                     .numerator()
+                    .unwrap()
                     .structure()
                     .logical_slots()
                     .into_iter()
@@ -2417,10 +2415,8 @@ mod tests {
         assert_eq!(result, expected);
         assert_eq!(diagram.numerator_prefactor().expression(), &Atom::num(7));
 
-        use linnet::half_edge::{
-            involution::{EdgeIndex, HedgePair},
-            subgraph::ModifySubSet,
-        };
+        use linnet::half_edge::involution::{EdgeIndex, HedgePair};
+        use linnet::half_edge::subgraph::ModifySubSet;
         let pair = diagram.underlying()[&EdgeIndex(internal.0)].1;
         let mut selected: SuBitGraph = diagram.underlying().empty_subgraph();
         selected.add(pair);
@@ -2429,14 +2425,24 @@ mod tests {
                 &selected,
                 d.clone(),
                 diagram.projector(),
-                Some(&diagram.numerator().multiply(diagram.projector()).unwrap()),
+                Some(
+                    &diagram
+                        .numerator()
+                        .unwrap()
+                        .multiply(diagram.projector())
+                        .unwrap(),
+                ),
             )
             .unwrap()
             .into_expression()
             .unwrap()
             .into_expression();
         assert_eq!(partial, expected);
-        let product = diagram.numerator().multiply(diagram.projector()).unwrap();
+        let product = diagram
+            .numerator()
+            .unwrap()
+            .multiply(diagram.projector())
+            .unwrap();
         let expanded = product
             .with_checked_expression(Atom::num(3) + Atom::num(2) * product.expression())
             .unwrap();
@@ -2459,7 +2465,7 @@ mod tests {
     }
 
     #[test]
-    fn fully_contracted_reduction_splits_into_named_scalar_graphs() {
+    fn fully_contracted_reduction_preserves_optional_scalar_graph_names() {
         let (k, q, p, _) = vectors();
         let dimension = Atom::var(symbol!("feynkit_tensor_test::D_graph_split"));
         let mut numerator = Atom::one();
@@ -2471,35 +2477,41 @@ mod tests {
             numerator *= indexed(integrated, 1, &dimension, &index);
             numerator *= indexed(p, 1, &dimension, &index);
         }
-        let diagram = diagram_with_numerator("vacuum", numerator);
-        let reducer = TensorReducer::new(dimension)
-            .with_integrated_head(k)
-            .with_integrated_head(q);
-        let reduction = diagram.reduce_tensor_numerator(&reducer).unwrap();
-        let expected_numerators = reduction
-            .terms()
-            .iter()
-            .map(TensorReductionTerm::expression)
-            .collect::<Result<Vec<_>, _>>()
-            .unwrap();
-        let graphs = diagram.reduce_tensor_graphs(&reducer).unwrap();
-
-        assert_eq!(graphs.len(), 2);
-        assert_eq!(
-            graphs
+        for name in [None, Some(""), Some("vacuum")] {
+            let diagram = diagram_with_numerator(name, numerator.clone());
+            let reducer = TensorReducer::new(dimension.clone())
+                .with_integrated_head(k)
+                .with_integrated_head(q);
+            let reduction = diagram.reduce_tensor_numerator(&reducer).unwrap();
+            let expected_numerators = reduction
+                .terms()
                 .iter()
-                .map(|graph| graph.numerator().clone())
-                .collect::<Vec<_>>(),
-            expected_numerators
-        );
-        for (index, graph) in graphs.iter().enumerate() {
-            assert_eq!(graph.id(), diagram.id());
-            assert_eq!(graph.name(), format!("vacuum.tensor[{index}]"));
-            graph.validate().unwrap();
-            let json = graph.to_json().unwrap();
-            let dot = graph.to_dot().unwrap();
-            FeynmanDiagram::from_json(graph.model_arc(), &json).unwrap();
-            FeynmanDiagram::from_dot(graph.model_arc(), &dot).unwrap();
+                .map(TensorReductionTerm::expression)
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap();
+            let graphs = diagram.reduce_tensor_graphs(&reducer).unwrap();
+
+            assert_eq!(graphs.len(), 2);
+            assert_eq!(
+                graphs
+                    .iter()
+                    .map(|graph| graph.numerator().unwrap().clone())
+                    .collect::<Vec<_>>(),
+                expected_numerators
+            );
+            for (index, graph) in graphs.iter().enumerate() {
+                assert_eq!(graph.id().unwrap(), diagram.id().unwrap());
+                assert_eq!(
+                    graph.name(),
+                    name.map(|name| format!("{name}.tensor[{index}]"))
+                        .as_deref()
+                );
+                graph.validate().unwrap();
+                let json = graph.to_json().unwrap();
+                let dot = graph.to_dot().unwrap();
+                FeynmanDiagram::from_json(graph.model_arc(), &json).unwrap();
+                FeynmanDiagram::from_dot(graph.model_arc(), &dot).unwrap();
+            }
         }
     }
 
@@ -2513,7 +2525,7 @@ mod tests {
         let numerator = indexed(k, 1, &dimension, &mu) * indexed(k, 1, &dimension, &nu);
         let projector = indexed(p, 1, &dimension, &mu) * indexed(p, 1, &dimension, &nu);
         let diagram = diagram_with_payload(
-            "projected-vacuum",
+            Some("projected-vacuum"),
             numerator,
             prefactor.clone(),
             projector.clone(),
@@ -2530,7 +2542,7 @@ mod tests {
         let graph = &graphs[0];
         assert_eq!(graph.projector().expression(), &Atom::one());
         assert_eq!(graph.numerator_prefactor().expression(), &prefactor);
-        assert_eq!(graph.numerator().expression(), &expected);
+        assert_eq!(graph.numerator().unwrap().expression(), &expected);
         assert_eq!(diagram.projector().expression(), &projector);
         graph.validate().unwrap();
         FeynmanDiagram::from_json(graph.model_arc(), &graph.to_json().unwrap()).unwrap();
@@ -2544,7 +2556,7 @@ mod tests {
         let mu = Atom::var(symbol!("feynkit_tensor_test::graph_free_mu"));
         let nu = Atom::var(symbol!("feynkit_tensor_test::graph_free_nu"));
         let numerator = indexed(k, 1, &dimension, &mu) * indexed(k, 1, &dimension, &nu);
-        let diagram = diagram_with_numerator("tensor-vacuum", numerator);
+        let diagram = diagram_with_numerator(Some("tensor-vacuum"), numerator);
         let reducer = TensorReducer::new(dimension).with_integrated_head(k);
 
         let tensor_result = diagram.reduce_tensor_numerator(&reducer).unwrap();
@@ -3057,7 +3069,7 @@ mod tests {
         let dimension = Atom::var(symbol!("feynkit_tensor_test::D_external_free"));
         let mu = Atom::var(symbol!("feynkit_tensor_test::external_free_mu"));
         let input = indexed(p, 1, &dimension, &mu);
-        let diagram = diagram_with_numerator("external-free", input.clone());
+        let diagram = diagram_with_numerator(Some("external-free"), input.clone());
         let reducer = TensorReducer::new(dimension).with_integrated_head(k);
 
         let result = reducer
@@ -3101,7 +3113,7 @@ mod tests {
         let opaque = FunctionBuilder::new(spenso::broadcast_symbol!("feynkit_tensor_test::opaque"))
             .add_arg(indexed(p, 1, &dimension, &mu))
             .finish();
-        let diagram = diagram_with_numerator("opaque-free", opaque.clone());
+        let diagram = diagram_with_numerator(Some("opaque-free"), opaque.clone());
         let reducer = TensorReducer::new(dimension).with_integrated_head(k);
 
         let result = reducer
@@ -3301,6 +3313,26 @@ mod tests {
             / dimension;
         assert_eq!(result.expression().unwrap().into_expression(), expected);
         assert!(result.is_fully_contracted());
+    }
+
+    #[test]
+    fn reduction_keeps_repeated_factored_summands() {
+        let (k, _, p, _) = vectors();
+        let dimension = Atom::var(symbol!("feynkit_tensor_test::D_repeated_summands"));
+        let spectator = Atom::var(symbol!("feynkit_tensor_test::repeated_a"))
+            + Atom::var(symbol!("feynkit_tensor_test::repeated_b"));
+        let kc = compact(k, 1, &dimension);
+        let pc = compact(p, 1, &dimension);
+        // The rank-two row reduces to the same factored scalar as the constant row.
+        let input = &spectator
+            * (Atom::one() + &dimension * dot(&kc, &pc).pow(2) / (dot(&kc, &kc) * dot(&pc, &pc)));
+        let result = TensorReducer::new(dimension)
+            .with_integrated_head(k)
+            .reduce(&SymbolicTensor::infer(input).unwrap())
+            .unwrap();
+        let expected = Atom::num(2) * spectator;
+        assert_eq!(result.expression().unwrap().expression(), &expected);
+        assert_eq!(result.into_expression().unwrap().expression(), &expected);
     }
 
     #[test]

@@ -1,6 +1,10 @@
 //! Python bindings for Linnet's typed graph, DOT, and Typst drawing APIs.
 
-use pyo3::prelude::*;
+use pyo3::prelude::{Bound, PyModule, PyResult};
+#[cfg(feature = "python_stubgen")]
+use pyo3::types::{PyAnyMethods, PyStringMethods, PyTypeMethods};
+#[cfg(feature = "python_stubgen")]
+use pyo3::Python;
 
 mod dot;
 mod graph;
@@ -8,6 +12,8 @@ mod mutations;
 mod native_graph;
 mod render;
 pub use graph::PyGraph;
+#[doc(hidden)]
+pub use graph::{CancelCheck, GenerationCallbacks, PyBridges, PyClasses, PyPlanReport};
 pub use linnet_render_py::{drawing, typst, PyDiagramRender, PyDiagramView, PyRenderSettings};
 pub use topology::PySubgraph;
 pub use typst::{PyAuto as Auto, PyRenderSettings as RenderSettings};
@@ -290,7 +296,6 @@ pub fn canonical_stub(module: &pyo3_stub_gen::generate::Module) -> pyo3_stub_gen
     // Stub generation runs without signature inference, so non-builtin Rust
     // values collapse to `...`. These closed enums have one API-wide default.
     for (type_name, default) in [
-        ("NodeStore", "NodeStore.Vec"),
         ("Orientation", "Orientation.Default"),
         ("DirectionBasis", "DirectionBasis.Underlying"),
     ] {

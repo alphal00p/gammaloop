@@ -1,54 +1,43 @@
 #[cfg(test)]
 use crate::model::ModelGammaLoopExt;
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    fmt::Display,
-    hash::{Hash, Hasher},
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Display;
+use std::hash::{Hash, Hasher};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use bincode_trait_derive::{Decode, Encode};
-use linnet::half_edge::{
-    involution::{EdgeIndex, Hedge},
-    subgraph::{SubGraphLike, SubSetLike, SubSetOps},
-};
+use linnet::half_edge::involution::{EdgeIndex, Hedge};
+use linnet::half_edge::subgraph::{SubGraphLike, SubSetLike, SubSetOps};
 use serde::{Deserialize, Serialize};
-use symbolica::{
-    atom::{Atom, AtomCore, FunctionBuilder},
-    symbol,
-};
+use symbolica::atom::{Atom, AtomCore, FunctionBuilder};
+use symbolica::symbol;
 
-use crate::{
-    cff::{
-        expression::{
-            GammaLoopOrientationExpression, OrientationExpression, OrientationSelector,
-            ThreeDExpression, normalize_cut_edge_support_with_raised_edge_groups,
-            normalize_three_d_expression_cut_support_with_raised_edge_groups,
-        },
-        generation::{ExactCffPreparationKey, PreparationKey, PreparationValue},
-        orientations::GraphOrientation,
-        surface::{GammaLoopLinearEnergyExpr, GammaLoopSurfaceCache, LinearEnergyExpr},
-    },
-    graph::{
-        ExactUvSubLmbFrame, FeynmanGraph, FourDDenominator, Graph, GraphThreeDSource,
-        LoopMomentumBasis,
-        cuts::CutSet,
-        get_cff_inverse_energy_product_impl,
-        three_d_source::{ExactSourceEnergyMapper, ExactSourceMappingContext},
-    },
-    numerator::energy_degree::{EnergyPowerAssignmentPlan, PlannedEnergyExpression},
-    settings::global::OrientationPattern,
-    utils::GS,
-    uv::{
-        Integrands,
-        approx::{local_4d::CanonicalUvDenominatorClass, projected_4d::Local4dProjectionContext},
-    },
+use crate::cff::expression::{
+    GammaLoopOrientationExpression, OrientationExpression, OrientationSelector, ThreeDExpression,
+    normalize_cut_edge_support_with_raised_edge_groups,
+    normalize_three_d_expression_cut_support_with_raised_edge_groups,
 };
+use crate::cff::generation::{ExactCffPreparationKey, PreparationKey, PreparationValue};
+use crate::cff::orientations::GraphOrientation;
+use crate::cff::surface::{GammaLoopLinearEnergyExpr, GammaLoopSurfaceCache, LinearEnergyExpr};
+use crate::graph::cuts::CutSet;
+use crate::graph::three_d_source::{ExactSourceEnergyMapper, ExactSourceMappingContext};
+use crate::graph::{
+    ExactUvSubLmbFrame, FeynmanGraph, FourDDenominator, Graph, GraphThreeDSource,
+    LoopMomentumBasis, get_cff_inverse_energy_product_impl,
+};
+use crate::numerator::energy_degree::{EnergyPowerAssignmentPlan, PlannedEnergyExpression};
+use crate::settings::global::OrientationPattern;
+use crate::utils::GS;
+use crate::uv::Integrands;
+use crate::uv::approx::local_4d::CanonicalUvDenominatorClass;
+use crate::uv::approx::projected_4d::Local4dProjectionContext;
 use color_eyre::Result;
+use three_dimensional_reps::thermal::VACUUM_SUBTRACTION;
 use three_dimensional_reps::{
     CffEnergyFactorOwnership, CffGlobalPrefactorSign, Generate3DExpressionOptions,
-    GeneratedThreeDExpression, RepresentationMode, thermal::VACUUM_SUBTRACTION,
+    GeneratedThreeDExpression, RepresentationMode,
 };
 
 pub mod orientations;
@@ -1553,49 +1542,43 @@ pub use surface::HybridSurfaceID;
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::BTreeSet, fmt::Write};
+    use std::collections::BTreeSet;
+    use std::fmt::Write;
 
     use super::*;
-    use crate::{
-        finalized_runtime_dot,
-        graph::{LMBext, parse::IntoFinalizedRuntimeGraph},
-        initialisation::test_initialise,
-        integrands::{
-            evaluation::EvaluationMetaData,
-            process::{
-                GenericEvaluatorFloat,
-                evaluators::{EvaluatorStack, SingleOrAllOrientations},
-            },
-        },
-        momentum::{
-            ThreeMomentum,
-            sample::{BareMomentumSample, ExternalFourMomenta, LoopMomenta, MomentumSample},
-        },
-        processes::EvaluatorSettings,
-        settings::RuntimeSettings,
-        utils::{ArbPrec, F, FloatLike, W_, cut_energy},
-        uv::{
-            UltravioletGraph,
-            approx::{OrientationProjection, local_3d::Localizer, local_4d::Full4dCts},
-        },
+    use crate::dot;
+    use crate::graph::LMBext;
+    use crate::graph::parse::IntoGraph;
+    use crate::initialisation::test_initialise;
+    use crate::integrands::evaluation::EvaluationMetaData;
+    use crate::integrands::process::GenericEvaluatorFloat;
+    use crate::integrands::process::evaluators::{EvaluatorStack, SingleOrAllOrientations};
+    use crate::momentum::ThreeMomentum;
+    use crate::momentum::sample::{
+        BareMomentumSample, ExternalFourMomenta, LoopMomenta, MomentumSample,
     };
+    use crate::processes::EvaluatorSettings;
+    use crate::settings::RuntimeSettings;
+    use crate::utils::{ArbPrec, F, FloatLike, W_, cut_energy};
+    use crate::uv::UltravioletGraph;
+    use crate::uv::approx::OrientationProjection;
+    use crate::uv::approx::local_3d::Localizer;
+    use crate::uv::approx::local_4d::Full4dCts;
     use itertools::Itertools;
     use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
+    use linnet::half_edge::subgraph::subset::SubSet;
     use linnet::half_edge::subgraph::{
-        InternalSubGraph, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps, subset::SubSet,
+        InternalSubGraph, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps,
     };
-    use spenso::algebra::{algebraic_traits::IsZero, complex::Complex};
-    use symbolica::{
-        atom::FunctionBuilder,
-        domains::{
-            float::{Complex as SymComplex, Real},
-            integer::IntegerRing,
-            rational::{Fraction, Rational},
-        },
-        evaluate::ExpressionEvaluator,
-        function,
-        id::Replacement,
-    };
+    use spenso::algebra::algebraic_traits::IsZero;
+    use spenso::algebra::complex::Complex;
+    use symbolica::atom::FunctionBuilder;
+    use symbolica::domains::float::{Complex as SymComplex, Real};
+    use symbolica::domains::integer::IntegerRing;
+    use symbolica::domains::rational::{Fraction, Rational};
+    use symbolica::evaluate::ExpressionEvaluator;
+    use symbolica::function;
+    use symbolica::id::Replacement;
     use three_dimensional_reps::{
         OrientationData, OrientationID, ThreeDGraphSource, repeated_groups,
     };
@@ -1604,12 +1587,12 @@ mod tests {
     #[test]
     fn exact_numerator_templates_and_subtrees_are_retention_invariant() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph exact_template_retention {
+        let mut graph: Graph = dot!(digraph exact_template_retention {
             graph [projector="1"]
             edge [num=1 mass=1]
             node [num=1]
-            a -> b [source="{ufo_order:0}" sink="{ufo_order:0}" id=0 lmb_id=0]
-            a -> b [source="{ufo_order:1}" sink="{ufo_order:1}" id=1]
+            a -> b [particle=H id=0 lmb_id=0]
+            a -> b [particle=H id=1]
         })?;
         let denominators = [EdgeIndex(0), EdgeIndex(1)].map(|source_edge| FourDDenominator {
             source_edge,
@@ -1704,12 +1687,12 @@ mod tests {
     #[test]
     fn exact_source_parametric_family_retains_affine_sampling_rows() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph exact_parametric_rows {
+        let mut graph: Graph = dot!(digraph exact_parametric_rows {
             graph [projector="1"]
             edge [num=1 mass=1]
             node [num=1]
-            a -> b [source="{ufo_order:0}" sink="{ufo_order:0}" id=0 lmb_id=0]
-            a -> b [source="{ufo_order:1}" sink="{ufo_order:1}" id=1]
+            a -> b [particle=H id=0 lmb_id=0]
+            a -> b [particle=H id=1]
         })?;
         let denominators = [EdgeIndex(0), EdgeIndex(1)].map(|source_edge| FourDDenominator {
             source_edge,
@@ -1810,12 +1793,12 @@ mod tests {
     #[test]
     fn owned_source_preparation_preserves_assignment_and_coefficient() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph owned_source_retention {
+        let mut graph: Graph = dot!(digraph owned_source_retention {
             graph [projector="1"]
             edge [num=1 mass=1]
             node [num=1]
-            a -> b [source="{ufo_order:0}" sink="{ufo_order:0}" id=0 lmb_id=0]
-            a -> b [source="{ufo_order:1}" sink="{ufo_order:1}" id=1]
+            a -> b [particle=H id=0 lmb_id=0]
+            a -> b [particle=H id=1]
         })?;
         let denominators = [EdgeIndex(0), EdgeIndex(1)].map(|source_edge| FourDDenominator {
             source_edge,
@@ -1980,20 +1963,20 @@ mod tests {
     #[test]
     fn exact_child_sub_lmb_retains_parent_loop_crown_shift() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph exact_child_sub_lmb {
+        let mut graph: Graph = dot!(digraph exact_child_sub_lmb {
             graph [projector="1"]
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
 
-            incoming -> v3 [sink="{ufo_order:0}" id=0]
-            v0 -> v1 [source="{ufo_order:0}" sink="{ufo_order:0}" id=1 lmb_id=0]
-            v0 -> v1 [source="{ufo_order:1}" sink="{ufo_order:1}" id=2]
-            v3 -> v0 [source="{ufo_order:1}" sink="{ufo_order:2}" id=3 lmb_id=1]
-            v1 -> v2 [source="{ufo_order:2}" sink="{ufo_order:0}" id=4]
-            v2 -> v3 [source="{ufo_order:1}" sink="{ufo_order:2}" id=5]
-            v2 -> outgoing [source="{ufo_order:2}" id=6]
+            incoming -> v3 [particle=H id=0]
+            v0 -> v1 [particle=H id=1 lmb_id=0]
+            v0 -> v1 [particle=H id=2]
+            v3 -> v0 [particle=H id=3 lmb_id=1]
+            v1 -> v2 [particle=H id=4]
+            v2 -> v3 [particle=H id=5]
+            v2 -> outgoing [particle=H id=6]
         })?;
         let uv_edges = [EdgeIndex(1), EdgeIndex(2)];
         let uv_filter = graph
@@ -2093,17 +2076,17 @@ mod tests {
             },
         )? * Atom::num(exact.production_prefactor_factor());
 
-        let mut child: Graph = finalized_runtime_dot!(digraph ordinary_child {
+        let mut child: Graph = dot!(digraph ordinary_child {
             graph [projector="1"]
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
 
-            incoming -> a [sink="{ufo_order:0}" id=2]
-            a -> b [source="{ufo_order:1}" sink="{ufo_order:0}" id=0 lmb_id=0]
-            a -> b [source="{ufo_order:2}" sink="{ufo_order:1}" id=1]
-            b -> outgoing [source="{ufo_order:2}" id=3]
+            incoming -> a [particle=H id=2]
+            a -> b [particle=H id=0 lmb_id=0]
+            a -> b [particle=H id=1]
+            b -> outgoing [particle=H id=3]
         })?;
         let child_options = child.denominator_only_cff_3d_expression_options();
         let child_cutset = CutSet::empty(child.n_hedges());
@@ -2151,19 +2134,19 @@ mod tests {
     #[test]
     fn exact_child_sub_lmb_keeps_remote_cut_and_crown_emrs_factorized() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(
+        let mut graph: Graph = dot!(
             digraph exact_child_lu_aliases {
                 graph [projector="1"]
                 num = 1
                 edge [particle="scalar_1" num=1]
                 node [num=1]
 
-                v2 -> v3 [source="{ufo_order:0}" sink="{ufo_order:2}" id=0 is_cut=0 initial_state_connection=true]
-                v0 -> v1 [source="{ufo_order:0}" sink="{ufo_order:0}" id=1 lmb_id=0]
-                v0 -> v1 [source="{ufo_order:1}" sink="{ufo_order:1}" id=2]
-                v3 -> v0 [source="{ufo_order:0}" sink="{ufo_order:2}" id=3 lmb_id=1]
-                v1 -> v2 [source="{ufo_order:2}" sink="{ufo_order:1}" id=4]
-                v2 -> v3 [source="{ufo_order:2}" sink="{ufo_order:1}" id=5]
+                v2 -> v3 [id=0 is_cut=0]
+                v0 -> v1 [id=1 lmb_id=0]
+                v0 -> v1 [id=2]
+                v3 -> v0 [id=3 lmb_id=1]
+                v1 -> v2 [id=4]
+                v2 -> v3 [id=5]
             },
             "scalars"
         )?;
@@ -2285,20 +2268,20 @@ mod tests {
     #[test]
     fn exact_child_signed_maps_keep_owner_invariant_production_hosts() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph exact_child_orientation_projection {
+        let mut graph: Graph = dot!(digraph exact_child_orientation_projection {
             graph [projector="1"]
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
 
-            incoming -> v3 [sink="{ufo_order:0}" id=0]
-            v0 -> v1 [source="{ufo_order:0}" sink="{ufo_order:0}" id=1 lmb_id=0]
-            v0 -> v1 [source="{ufo_order:1}" sink="{ufo_order:1}" id=2]
-            v3 -> v0 [source="{ufo_order:1}" sink="{ufo_order:2}" id=3 lmb_id=1]
-            v1 -> v2 [source="{ufo_order:2}" sink="{ufo_order:0}" id=4]
-            v2 -> v3 [source="{ufo_order:1}" sink="{ufo_order:2}" id=5]
-            v2 -> outgoing [source="{ufo_order:2}" id=6]
+            incoming -> v3 [particle=H id=0]
+            v0 -> v1 [particle=H id=1 lmb_id=0]
+            v0 -> v1 [particle=H id=2]
+            v3 -> v0 [particle=H id=3 lmb_id=1]
+            v1 -> v2 [particle=H id=4]
+            v2 -> v3 [particle=H id=5]
+            v2 -> outgoing [particle=H id=6]
         })?;
         let uv_edges = [EdgeIndex(1), EdgeIndex(2)];
         let uv_filter = graph
@@ -2383,19 +2366,19 @@ mod tests {
     #[test]
     fn exact_unexpanded_cff_matches_ordinary_for_cross_loop_factorized_energy() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(
+        let mut graph: Graph = dot!(
             digraph exact_unexpanded_cross_loop_factorized_energy {
                 graph [projector="1"]
                 num = 1
                 edge [particle="scalar_1" num=1]
                 node [num=1]
 
-                v2 -> v3 [source="{ufo_order:0}" sink="{ufo_order:2}" id=0 is_cut=0 initial_state_connection=true]
-                v0 -> v1 [source="{ufo_order:0}" sink="{ufo_order:0}" id=1 lmb_id=0]
-                v0 -> v1 [source="{ufo_order:1}" sink="{ufo_order:1}" id=2]
-                v3 -> v0 [source="{ufo_order:0}" sink="{ufo_order:2}" id=3 lmb_id=1]
-                v1 -> v2 [source="{ufo_order:2}" sink="{ufo_order:1}" id=4]
-                v2 -> v3 [source="{ufo_order:2}" sink="{ufo_order:1}" id=5]
+                v2 -> v3 [id=0 is_cut=0]
+                v0 -> v1 [id=1 lmb_id=0]
+                v0 -> v1 [id=2]
+                v3 -> v0 [id=3 lmb_id=1]
+                v1 -> v2 [id=4]
+                v2 -> v3 [id=5]
             },
             "scalars"
         )?;
@@ -2565,7 +2548,7 @@ mod tests {
     #[test]
     fn triangle_affine_energy_identity_survives_production_mapping() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(
+        let graph: Graph = dot!(
             digraph diagnostic_triangle_affine_energy_identity {
                 graph [projector="1"]
                 num = 1
@@ -2576,12 +2559,12 @@ mod tests {
                 v0;
                 v1;
                 v2;
-                ext -> v0 [sink="{ufo_order:0}" id=0]
-                ext -> v1 [sink="{ufo_order:0}" id=1]
-                v2 -> ext [source="{ufo_order:0}" id=2]
-                v0 -> v2 [source="{ufo_order:1}" sink="{ufo_order:1}" id=3 lmb_id=0]
-                v1 -> v0 [source="{ufo_order:1}" sink="{ufo_order:2}" id=4]
-                v2 -> v1 [source="{ufo_order:2}" sink="{ufo_order:2}" id=5]
+                ext -> v0 [id=0]
+                ext -> v1 [id=1]
+                v2 -> ext [id=2]
+                v0 -> v2 [id=3 lmb_id=0]
+                v1 -> v0 [id=4]
+                v2 -> v1 [id=5]
             },
             "scalars"
         )?;
@@ -2881,17 +2864,17 @@ mod tests {
     #[test]
     fn exact_cff_keeps_dotted_same_edge_occurrences() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph exact_dotted {
+        let mut graph: Graph = dot!(digraph exact_dotted {
             graph [projector="1"]
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
 
-            incoming -> a [sink="{ufo_order:0}" id=2]
-            a -> b [source="{ufo_order:1}" sink="{ufo_order:0}" id=0 lmb_id=0]
-            a -> b [source="{ufo_order:2}" sink="{ufo_order:1}" id=1]
-            b -> outgoing [source="{ufo_order:2}" id=3]
+            incoming -> a [particle=H id=2]
+            a -> b [particle=H id=0 lmb_id=0]
+            a -> b [particle=H id=1]
+            b -> outgoing [particle=H id=3]
         })?;
         let edge = EdgeIndex::from(0);
         let momentum = FunctionBuilder::new(GS.emr_mom)
@@ -2954,13 +2937,13 @@ mod tests {
     #[test]
     fn exact_cff_uncancelled_powered_denominator_matches_lower_source() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph exact_powered_identity {
+        let mut graph: Graph = dot!(digraph exact_powered_identity {
             graph [projector="1"]
             edge [num=1 mass=1]
             node [num=1]
 
-            a -> b [source="{ufo_order:0}" sink="{ufo_order:0}" id=0 lmb_id=0]
-            a -> b [source="{ufo_order:1}" sink="{ufo_order:1}" id=1]
+            a -> b [particle=H id=0 lmb_id=0]
+            a -> b [particle=H id=1]
         })?;
         let edge = EdgeIndex(0);
         let momentum = FunctionBuilder::new(GS.emr_mom)
@@ -3292,18 +3275,18 @@ mod tests {
     #[test]
     fn exact_cff_uncancelled_powered_denominator_matches_lower_lu_residues() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph exact_powered_lu_identity {
+        let mut graph: Graph = dot!(digraph exact_powered_lu_identity {
             graph [projector="1"]
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
 
-            incoming -> v1 [sink="{ufo_order:0}" id=0]
-            v1 -> v2 [source="{ufo_order:1}" sink="{ufo_order:0}" id=1 lmb_id=0]
-            v2 -> v3 [source="{ufo_order:1}" sink="{ufo_order:0}" id=2]
-            v1 -> v3 [source="{ufo_order:2}" sink="{ufo_order:1}" id=3]
-            v3 -> outgoing [source="{ufo_order:2}" id=4]
+            incoming -> v1 [particle=H id=0]
+            v1 -> v2 [particle=H id=1 lmb_id=0]
+            v2 -> v3 [particle=H id=2]
+            v1 -> v3 [particle=H id=3]
+            v3 -> outgoing [particle=H id=4]
         })?;
         let edge = EdgeIndex(1);
         let momentum = FunctionBuilder::new(GS.emr_mom)
@@ -3520,18 +3503,18 @@ mod tests {
     #[test]
     fn exact_cff_alias_edges_share_physical_numerator_energy() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph exact_alias_energy_identity {
+        let mut graph: Graph = dot!(digraph exact_alias_energy_identity {
             graph [projector="1"]
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
 
-            incoming -> v1 [sink="{ufo_order:0}" id=0]
-            v1 -> v2 [source="{ufo_order:1}" sink="{ufo_order:0}" id=1 lmb_id=0]
-            v2 -> v3 [source="{ufo_order:1}" sink="{ufo_order:0}" id=2]
-            v1 -> v3 [source="{ufo_order:2}" sink="{ufo_order:1}" id=3]
-            v3 -> outgoing [source="{ufo_order:2}" id=4]
+            incoming -> v1 [particle=H id=0]
+            v1 -> v2 [particle=H id=1 lmb_id=0]
+            v2 -> v3 [particle=H id=2]
+            v1 -> v3 [particle=H id=3]
+            v3 -> outgoing [particle=H id=4]
         })?;
         let alias_edges = [EdgeIndex(1), EdgeIndex(2)];
         let spectator_edge = EdgeIndex(3);
@@ -3700,22 +3683,22 @@ mod tests {
     #[test]
     fn exact_cff_cubic_uv_rewrite_matches_production_convention() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph exact_cubic_uv_rewrite {
+        let mut graph: Graph = dot!(digraph exact_cubic_uv_rewrite {
             graph [projector="1"]
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
 
-            incoming -> v5 [sink="{ufo_order:0}" id=0]
-            v0 -> v2 [source="{ufo_order:0}" sink="{ufo_order:0}" id=1 lmb_id=0]
-            v3 -> v0 [source="{ufo_order:0}" sink="{ufo_order:1}" id=2]
-            v0 -> v5 [source="{ufo_order:2}" sink="{ufo_order:1}" id=3]
-            v2 -> v1 [source="{ufo_order:1}" sink="{ufo_order:0}" id=4]
-            v1 -> v3 [source="{ufo_order:1}" sink="{ufo_order:1}" id=5 lmb_id=1]
-            v1 -> v4 [source="{ufo_order:2}" sink="{ufo_order:0}" id=6]
-            v2 -> v3 [source="{ufo_order:2}" sink="{ufo_order:2}" id=7]
-            v4 -> outgoing [source="{ufo_order:1}" id=8]
+            incoming -> v5 [particle=H id=0]
+            v0 -> v2 [particle=H id=1 lmb_id=0]
+            v3 -> v0 [particle=H id=2]
+            v0 -> v5 [particle=H id=3]
+            v2 -> v1 [particle=H id=4]
+            v1 -> v3 [particle=H id=5 lmb_id=1]
+            v1 -> v4 [particle=H id=6]
+            v2 -> v3 [particle=H id=7]
+            v4 -> outgoing [particle=H id=8]
         })?;
         let owner_edges = [EdgeIndex(4), EdgeIndex(5), EdgeIndex(7)];
         assert_eq!(
@@ -3963,16 +3946,16 @@ mod tests {
     #[test]
     fn exact_theta_equal_channel_temporal_numerators_are_owner_invariant() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph exact_theta_equal_channel_numerator {
+        let mut graph: Graph = dot!(digraph exact_theta_equal_channel_numerator {
             graph [projector="1"]
             edge [num=1 mass=1]
             node [num=1]
 
-            a -> b [source="{ufo_order:0}" sink="{ufo_order:0}" id=0 lmb_id=0]
-            a -> c [source="{ufo_order:1}" sink="{ufo_order:0}" id=1 lmb_id=1]
-            a -> d [source="{ufo_order:2}" sink="{ufo_order:0}" id=2]
-            b -> c [source="{ufo_order:1}" sink="{ufo_order:1}" id=3]
-            b -> d [source="{ufo_order:2}" sink="{ufo_order:1}" id=4]
+            a -> b [particle=H id=0 lmb_id=0]
+            a -> c [particle=H id=1 lmb_id=1]
+            a -> d [particle=H id=2]
+            b -> c [particle=H id=3]
+            b -> d [particle=H id=4]
         })?;
         let q0 = FunctionBuilder::new(GS.emr_mom).add_arg(0).finish();
         let q1 = FunctionBuilder::new(GS.emr_mom).add_arg(1).finish();
@@ -4156,17 +4139,17 @@ mod tests {
     #[test]
     fn exact_lu_cut_matches_ordinary_cff_per_residue() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph exact_lu_cut_identity {
+        let mut graph: Graph = dot!(digraph exact_lu_cut_identity {
             graph [projector="1"]
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
 
-            incoming -> v1 [sink="{ufo_order:0}" id=0]
-            v1 -> v2 [source="{ufo_order:1}" sink="{ufo_order:0}" id=1 lmb_id=0]
-            v1 -> v2 [source="{ufo_order:2}" sink="{ufo_order:1}" id=2]
-            v2 -> outgoing [source="{ufo_order:2}" id=3]
+            incoming -> v1 [particle=H id=0]
+            v1 -> v2 [particle=H id=1 lmb_id=0]
+            v1 -> v2 [particle=H id=2]
+            v2 -> outgoing [particle=H id=3]
         })?;
         let options = graph.denominator_only_cff_3d_expression_options();
         let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
@@ -4306,14 +4289,14 @@ mod tests {
     #[test]
     fn exact_uncut_cubic_one_loop_source_matches_ordinary_cff() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph exact_uncut_cubic_one_loop {
+        let mut graph: Graph = dot!(digraph exact_uncut_cubic_one_loop {
             graph [projector="1"]
             edge [num=1 mass=1]
             node [num=1]
 
-            a -> b [source="{ufo_order:0}" sink="{ufo_order:0}" id=0 lmb_id=0]
-            b -> c [source="{ufo_order:1}" sink="{ufo_order:0}" id=1]
-            c -> a [source="{ufo_order:1}" sink="{ufo_order:1}" id=2]
+            a -> b [particle=H id=0 lmb_id=0]
+            b -> c [particle=H id=1]
+            c -> a [particle=H id=2]
         })?;
         let options = graph.denominator_only_cff_3d_expression_options();
         let numerator = GS.emr_mom(EdgeIndex(0), GS.cind(0)).pow(2);
@@ -4430,18 +4413,18 @@ mod tests {
     #[test]
     fn exact_raised_lu_cut_matches_ordinary_cff_per_residue() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph exact_raised_lu_cut_identity {
+        let mut graph: Graph = dot!(digraph exact_raised_lu_cut_identity {
             graph [projector="1"]
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
 
-            incoming -> v1 [sink="{ufo_order:0}" id=0]
-            v1 -> v2 [source="{ufo_order:1}" sink="{ufo_order:0}" id=1 lmb_id=0]
-            v2 -> v3 [source="{ufo_order:1}" sink="{ufo_order:0}" id=2]
-            v1 -> v3 [source="{ufo_order:2}" sink="{ufo_order:1}" id=3]
-            v3 -> outgoing [source="{ufo_order:2}" id=4]
+            incoming -> v1 [particle=H id=0]
+            v1 -> v2 [particle=H id=1 lmb_id=0]
+            v2 -> v3 [particle=H id=2]
+            v1 -> v3 [particle=H id=3]
+            v3 -> outgoing [particle=H id=4]
         })?;
         let options = graph.denominator_only_cff_3d_expression_options();
         let numerator = GS.emr_mom(EdgeIndex(1), GS.cind(0)).pow(2);
@@ -4573,13 +4556,13 @@ mod tests {
     #[test]
     fn exact_cff_keeps_opposite_source_routing_without_a_sign_bridge() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph exact_opposite_routing {
+        let mut graph: Graph = dot!(digraph exact_opposite_routing {
             graph [projector="1"]
             edge [num=1 mass=1]
             node [num=1]
 
-            a -> b [source="{ufo_order:0}" sink="{ufo_order:0}" id=0 lmb_id=0]
-            a -> b [source="{ufo_order:1}" sink="{ufo_order:1}" id=1]
+            a -> b [particle=H id=0 lmb_id=0]
+            a -> b [particle=H id=1]
         })?;
         let momentum = FunctionBuilder::new(GS.emr_mom).add_arg(0).finish();
         let mass_squared = Atom::var(GS.m_uv_expansion).pow(2);
@@ -4635,16 +4618,16 @@ mod tests {
     #[test]
     fn exact_cff_separates_uv_topology_from_the_cograph() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph exact_uv_cograph {
+        let mut graph: Graph = dot!(digraph exact_uv_cograph {
             graph [projector="1"]
             edge [num=1 mass=1]
             node [num=1]
 
-            a -> b [source="{ufo_order:0}" sink="{ufo_order:0}" id=0 lmb_id=0]
-            a -> b [source="{ufo_order:1}" sink="{ufo_order:1}" id=1]
-            b -> c [source="{ufo_order:2}" sink="{ufo_order:0}" id=4]
-            c -> d [source="{ufo_order:1}" sink="{ufo_order:0}" id=2 lmb_id=1]
-            c -> d [source="{ufo_order:2}" sink="{ufo_order:1}" id=3]
+            a -> b [particle=H id=0 lmb_id=0]
+            a -> b [particle=H id=1]
+            b -> c [particle=H id=4]
+            c -> d [particle=H id=2 lmb_id=1]
+            c -> d [particle=H id=3]
         })?;
         let mut denominators = Vec::new();
         for edge in [EdgeIndex::from(0), EdgeIndex::from(1)] {
@@ -4682,16 +4665,16 @@ mod tests {
     #[test]
     fn exact_cff_lu_residue_factorizes_from_quadratic_cubic_spectator() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph exact_lu_cubic_product {
+        let mut graph: Graph = dot!(digraph exact_lu_cubic_product {
             graph [projector="1"]
             edge [num=1 mass=1]
             node [num=1]
 
-            a -> b [source="{ufo_order:0}" sink="{ufo_order:0}" id=0 lmb_id=0]
-            a -> b [source="{ufo_order:1}" sink="{ufo_order:1}" id=1]
-            b -> c [source="{ufo_order:2}" sink="{ufo_order:0}" id=4]
-            c -> d [source="{ufo_order:1}" sink="{ufo_order:0}" id=2 lmb_id=1]
-            c -> d [source="{ufo_order:2}" sink="{ufo_order:1}" id=3]
+            a -> b [particle=H id=0 lmb_id=0]
+            a -> b [particle=H id=1]
+            b -> c [particle=H id=4]
+            c -> d [particle=H id=2 lmb_id=1]
+            c -> d [particle=H id=3]
         })?;
         let options = graph.denominator_only_cff_3d_expression_options();
         let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
@@ -4844,18 +4827,18 @@ mod tests {
     #[test]
     fn selected_highest_pole_commutes_with_factorized_cubic_numerator() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph selected_cubic_repeated_channel {
+        let mut graph: Graph = dot!(digraph selected_cubic_repeated_channel {
             graph [projector="1"]
             num = 1
             edge [particle="scalar_1" num=1]
             node [num=1]
 
-            v2 -> v3 [source="{ufo_order:0}" sink="{ufo_order:2}" id=0 is_cut=0 initial_state_connection=true]
-            v0 -> v1 [source="{ufo_order:0}" sink="{ufo_order:0}" id=1 lmb_id=0]
-            v0 -> v1 [source="{ufo_order:1}" sink="{ufo_order:1}" id=2]
-            v3 -> v0 [source="{ufo_order:0}" sink="{ufo_order:2}" id=3 lmb_id=1]
-            v1 -> v2 [source="{ufo_order:2}" sink="{ufo_order:1}" id=4]
-            v2 -> v3 [source="{ufo_order:2}" sink="{ufo_order:1}" id=5]
+            v2 -> v3 [id=0 is_cut=0]
+            v0 -> v1 [id=1 lmb_id=0]
+            v0 -> v1 [id=2]
+            v3 -> v0 [id=3 lmb_id=1]
+            v1 -> v2 [id=4]
+            v2 -> v3 [id=5]
         }, "scalars")?;
         let options = graph.denominator_only_cff_3d_expression_options();
         // Keep the three temporal factors separate. Edges 3 and 4 are the
@@ -4948,18 +4931,18 @@ mod tests {
     #[test]
     fn selected_lower_pole_obeys_repeated_channel_polynomial_division() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph selected_cubic_repeated_channel_contact {
+        let mut graph: Graph = dot!(digraph selected_cubic_repeated_channel_contact {
             graph [projector="1"]
             num = 1
             edge [particle="scalar_1" num=1]
             node [num=1]
 
-            v2 -> v3 [source="{ufo_order:0}" sink="{ufo_order:2}" id=0 is_cut=0 initial_state_connection=true]
-            v0 -> v1 [source="{ufo_order:0}" sink="{ufo_order:0}" id=1 lmb_id=0]
-            v0 -> v1 [source="{ufo_order:1}" sink="{ufo_order:1}" id=2]
-            v3 -> v0 [source="{ufo_order:0}" sink="{ufo_order:2}" id=3 lmb_id=1]
-            v1 -> v2 [source="{ufo_order:2}" sink="{ufo_order:1}" id=4]
-            v2 -> v3 [source="{ufo_order:2}" sink="{ufo_order:1}" id=5]
+            v2 -> v3 [id=0 is_cut=0]
+            v0 -> v1 [id=1 lmb_id=0]
+            v0 -> v1 [id=2]
+            v3 -> v0 [id=3 lmb_id=1]
+            v1 -> v2 [id=4]
+            v2 -> v3 [id=5]
         }, "scalars")?;
         let options = graph.denominator_only_cff_3d_expression_options();
         let repeated_energy = GS.emr_mom(EdgeIndex(3), GS.cind(0));
@@ -5069,7 +5052,7 @@ mod tests {
     #[test]
     fn exact_raised_lu_residue_factorizes_from_quadratic_cubic_spectator() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph exact_raised_lu_cubic_product {
+        let mut graph: Graph = dot!(digraph exact_raised_lu_cubic_product {
             graph [projector="1"]
             edge [num=1 mass=1]
             node [num=1]
@@ -5077,13 +5060,13 @@ mod tests {
             incoming [style=invis]
             outgoing [style=invis]
 
-            incoming -> v1 [sink="{ufo_order:0}" id=0]
-            v1 -> v2 [source="{ufo_order:1}" sink="{ufo_order:0}" id=1 lmb_id=0]
-            v2 -> v3 [source="{ufo_order:1}" sink="{ufo_order:0}" id=2]
-            v1 -> v3 [source="{ufo_order:2}" sink="{ufo_order:1}" id=3]
-            v1 -> u [source="{ufo_order:3}" sink="{ufo_order:0}" id=5 lmb_id=1]
-            u -> v1 [source="{ufo_order:1}" sink="{ufo_order:4}" id=6]
-            v3 -> outgoing [source="{ufo_order:2}" id=4]
+            incoming -> v1 [particle=H id=0]
+            v1 -> v2 [particle=H id=1 lmb_id=0]
+            v2 -> v3 [particle=H id=2]
+            v1 -> v3 [particle=H id=3]
+            v1 -> u [particle=H id=5 lmb_id=1]
+            u -> v1 [particle=H id=6]
+            v3 -> outgoing [particle=H id=4]
         })?;
         let options = graph.denominator_only_cff_3d_expression_options();
         let cograph_edge = EdgeIndex(1);
@@ -5822,18 +5805,18 @@ mod tests {
     #[test]
     fn exact_cff_quartic_lu_component_factorizes_from_muv_triangle() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(
+        let mut graph: Graph = dot!(
             digraph exact_quartic_lu_muv_product {
                 graph [projector="1"]
                 edge [num=1]
                 node [num=1]
 
-                a -> b [source="{ufo_order:0}" sink="{ufo_order:0}" id=0 lmb_id=0 particle=scalar_1]
-                a -> b [source="{ufo_order:1}" sink="{ufo_order:1}" id=1 particle=scalar_2]
-                b -> c [source="{ufo_order:2}" sink="{ufo_order:0}" id=4 particle=scalar_0]
-                c -> d [source="{ufo_order:1}" sink="{ufo_order:0}" id=2 lmb_id=1 particle=scalar_0]
-                c -> d [source="{ufo_order:2}" sink="{ufo_order:1}" id=3 lmb_id=2 particle=scalar_0]
-                c -> d [source="{ufo_order:3}" sink="{ufo_order:2}" id=5 particle=scalar_0]
+                a -> b [id=0 lmb_id=0 particle=scalar_1]
+                a -> b [id=1 particle=scalar_2]
+                b -> c [id=4 particle=scalar_0]
+                c -> d [id=2 lmb_id=1 particle=scalar_0]
+                c -> d [id=3 lmb_id=2 particle=scalar_0]
+                c -> d [id=5 particle=scalar_0]
             },
             "scalars"
         )?;
@@ -6308,40 +6291,40 @@ mod tests {
 
         check(
             "opposite outer parity",
-            finalized_runtime_dot!(digraph connected_parent_uv_bridge {
+            dot!(digraph connected_parent_uv_bridge {
                 graph [projector="1"]
                 edge [num=1 mass=1]
                 node [num=1]
                 incoming [style=invis]
                 outgoing [style=invis]
 
-                incoming -> a [sink="{ufo_order:0}" id=0]
-                a -> u [source="{ufo_order:1}" sink="{ufo_order:0}" id=1 lmb_id=0]
-                a -> u [source="{ufo_order:2}" sink="{ufo_order:1}" id=2]
-                u -> b [source="{ufo_order:2}" sink="{ufo_order:0}" id=3 lmb_id=1]
-                a -> b [source="{ufo_order:3}" sink="{ufo_order:1}" id=4]
-                b -> outgoing [source="{ufo_order:2}" id=5]
+                incoming -> a [particle=H id=0]
+                a -> u [particle=H id=1 lmb_id=0]
+                a -> u [particle=H id=2]
+                u -> b [particle=H id=3 lmb_id=1]
+                a -> b [particle=H id=4]
+                b -> outgoing [particle=H id=5]
             })?,
             2,
             None,
         )?;
         check(
             "GL24-matching outer parity",
-            finalized_runtime_dot!(digraph connected_parent_uv_bridge_three_loop {
+            dot!(digraph connected_parent_uv_bridge_three_loop {
                 graph [projector="1"]
                 edge [num=1 mass=1]
                 node [num=1]
                 incoming [style=invis]
                 outgoing [style=invis]
 
-                incoming -> a [sink="{ufo_order:0}" id=0]
-                a -> u [source="{ufo_order:1}" sink="{ufo_order:0}" id=1 lmb_id=0]
-                a -> u [source="{ufo_order:2}" sink="{ufo_order:1}" id=2]
-                u -> b [source="{ufo_order:2}" sink="{ufo_order:0}" id=3 lmb_id=1]
-                a -> b [source="{ufo_order:3}" sink="{ufo_order:1}" id=4]
-                b -> c [source="{ufo_order:2}" sink="{ufo_order:0}" id=5 lmb_id=2]
-                a -> c [source="{ufo_order:4}" sink="{ufo_order:1}" id=6]
-                c -> outgoing [source="{ufo_order:2}" id=7]
+                incoming -> a [particle=H id=0]
+                a -> u [particle=H id=1 lmb_id=0]
+                a -> u [particle=H id=2]
+                u -> b [particle=H id=3 lmb_id=1]
+                a -> b [particle=H id=4]
+                b -> c [particle=H id=5 lmb_id=2]
+                a -> c [particle=H id=6]
+                c -> outgoing [particle=H id=7]
             })?,
             3,
             Some(&[EdgeIndex(5), EdgeIndex(6)]),
@@ -6352,20 +6335,20 @@ mod tests {
     #[test]
     fn gl24_selected_quartic_residue_uses_the_reduced_outer_frame() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph gl24_selected_zero_sample {
+        let mut graph: Graph = dot!(digraph gl24_selected_zero_sample {
             graph [projector="1"]
             edge [num=1 mass=1]
             node [num=1]
 
-            v0 -> v1 [source="{ufo_order:0}" sink="{ufo_order:0}" id=0 is_cut=0 initial_state_connection=true]
-            v0 -> v3 [source="{ufo_order:1}" sink="{ufo_order:0}" id=1 lmb_id=0]
-            v0 -> v5 [source="{ufo_order:2}" sink="{ufo_order:0}" id=2]
-            v1 -> v2 [source="{ufo_order:1}" sink="{ufo_order:0}" id=3 lmb_id=1]
-            v1 -> v3 [source="{ufo_order:2}" sink="{ufo_order:1}" id=4]
-            v2 -> v4 [source="{ufo_order:1}" sink="{ufo_order:0}" id=5 lmb_id=2]
-            v2 -> v4 [source="{ufo_order:2}" sink="{ufo_order:1}" id=6]
-            v3 -> v5 [source="{ufo_order:2}" sink="{ufo_order:1}" id=7]
-            v4 -> v5 [source="{ufo_order:2}" sink="{ufo_order:2}" id=8 mass=2]
+            v0 -> v1 [particle=H id=0 is_cut=0]
+            v0 -> v3 [particle=H id=1 lmb_id=0]
+            v0 -> v5 [particle=H id=2]
+            v1 -> v2 [particle=H id=3 lmb_id=1]
+            v1 -> v3 [particle=H id=4]
+            v2 -> v4 [particle=H id=5 lmb_id=2]
+            v2 -> v4 [particle=H id=6]
+            v3 -> v5 [particle=H id=7]
+            v4 -> v5 [particle=H id=8 mass=2]
         })?;
         assert_eq!(graph.get_loop_number(), 3);
         assert_eq!(graph.get_edges_in_initial_state_cut(), [EdgeIndex(0)]);
@@ -6614,17 +6597,17 @@ mod tests {
     #[test]
     fn exact_original_source_matches_production_cff_after_projection() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph exact_root {
+        let mut graph: Graph = dot!(digraph exact_root {
             graph [projector="1"]
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
 
-            incoming -> a [sink="{ufo_order:0}" id=2]
-            a -> b [source="{ufo_order:1}" sink="{ufo_order:0}" id=0 lmb_id=0]
-            a -> b [source="{ufo_order:2}" sink="{ufo_order:1}" id=1]
-            b -> outgoing [source="{ufo_order:2}" id=3]
+            incoming -> a [particle=H id=2]
+            a -> b [particle=H id=0 lmb_id=0]
+            a -> b [particle=H id=1]
+            b -> outgoing [particle=H id=3]
         })?;
         let options = graph.denominator_only_cff_3d_expression_options();
         let cutset = CutSet::empty(graph.n_hedges());
@@ -6719,13 +6702,13 @@ mod tests {
     #[test]
     fn exact_nonliteral_physical_mass_alias_keeps_repeated_frame_and_arb_value() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(
+        let mut graph: Graph = dot!(
             digraph exact_nonliteral_physical_mass_alias {
                 graph [projector="1"]
                 edge [num=1]
                 node [num=1]
-                a -> b [source="{ufo_order:0}" sink="{ufo_order:0}" id=0 lmb_id=0 particle=scalar_1]
-                a -> b [source="{ufo_order:1}" sink="{ufo_order:1}" id=1 particle=scalar_1]
+                a -> b [id=0 lmb_id=0 particle=scalar_1]
+                a -> b [id=1 particle=scalar_1]
             },
             "scalars"
         )?;
@@ -6833,14 +6816,14 @@ mod tests {
     #[test]
     fn exact_two_loop_source_matches_the_signed_theta_contour() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph exact_two_loop_prefactor {
+        let mut graph: Graph = dot!(digraph exact_two_loop_prefactor {
             graph [projector="1"]
             edge [num=1 mass=1]
             node [num=1]
 
-            a -> b [source="{ufo_order:0}" sink="{ufo_order:0}" id=0 lmb_id=0]
-            a -> b [source="{ufo_order:1}" sink="{ufo_order:1}" id=1 lmb_id=1]
-            b -> a [source="{ufo_order:2}" sink="{ufo_order:2}" id=2]
+            a -> b [particle=H id=0 lmb_id=0]
+            a -> b [particle=H id=1 lmb_id=1]
+            b -> a [particle=H id=2]
         })?;
         let options = graph.denominator_only_cff_3d_expression_options();
         let cutset = CutSet::empty(graph.n_hedges());
@@ -6897,13 +6880,13 @@ mod tests {
     #[test]
     fn unused_rank_capacity_preserves_complete_one_loop_cff() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph production_rank_capacity_conversion {
+        let mut graph: Graph = dot!(digraph production_rank_capacity_conversion {
             graph [projector="1"]
             edge [num=1 mass=1]
             node [num=1]
 
-            a -> b [source="{ufo_order:0}" sink="{ufo_order:0}" id=0 lmb_id=0]
-            a -> b [source="{ufo_order:1}" sink="{ufo_order:1}" id=1]
+            a -> b [particle=H id=0 lmb_id=0]
+            a -> b [particle=H id=1]
         })?;
         let ordinary_options = graph.denominator_only_cff_3d_expression_options();
         let mut generalized_options = ordinary_options.clone();
@@ -6960,14 +6943,14 @@ mod tests {
     #[test]
     fn unused_rank_capacity_preserves_complete_two_loop_cff() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph two_loop_rank_capacity_conversion {
+        let mut graph: Graph = dot!(digraph two_loop_rank_capacity_conversion {
             graph [projector="1"]
             edge [num=1 mass=1]
             node [num=1]
 
-            a -> b [source="{ufo_order:0}" sink="{ufo_order:0}" id=0 lmb_id=0]
-            a -> b [source="{ufo_order:1}" sink="{ufo_order:1}" id=1 lmb_id=1]
-            a -> b [source="{ufo_order:2}" sink="{ufo_order:2}" id=2]
+            a -> b [particle=H id=0 lmb_id=0]
+            a -> b [particle=H id=1 lmb_id=1]
+            a -> b [particle=H id=2]
         })?;
         let ordinary_options = graph.denominator_only_cff_3d_expression_options();
         let mut generalized_options = ordinary_options.clone();
@@ -7019,19 +7002,19 @@ mod tests {
     #[test]
     fn exact_cff_powered_rational_identities_match_at_arb_precision() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph exact_powered_rational_identities {
+        let mut graph: Graph = dot!(digraph exact_powered_rational_identities {
             graph [projector="1"]
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
 
-            incoming -> a [sink="{ufo_order:0}" id=0]
-            a -> x [source="{ufo_order:1}" sink="{ufo_order:0}" id=1 lmb_id=0]
-            x -> y [source="{ufo_order:1}" sink="{ufo_order:0}" id=2]
-            b -> y [source="{ufo_order:0}" sink="{ufo_order:1}" id=3]
-            a -> b [source="{ufo_order:2}" sink="{ufo_order:1}" id=4]
-            b -> outgoing [source="{ufo_order:2}" id=5]
+            incoming -> a [particle=H id=0]
+            a -> x [particle=H id=1 lmb_id=0]
+            x -> y [particle=H id=2]
+            b -> y [particle=H id=3]
+            a -> b [particle=H id=4]
+            b -> outgoing [particle=H id=5]
         })?;
         let repeated_edges = [EdgeIndex(1), EdgeIndex(2), EdgeIndex(3)];
         let spectator_edge = EdgeIndex(4);
@@ -7395,10 +7378,10 @@ mod tests {
                     edge [particle=scalar_1 num="1𝑖"];
                     incoming0 [style=invis]; incoming1 [style=invis];
                     outgoing0 [style=invis]; outgoing1 [style=invis];
-                    incoming0 -> a0 [id={} num=1 sink="{{ufo_order:0}}"];
-                    incoming1 -> a0 [id={} num=1 sink="{{ufo_order:1}}"];
-                    a{loops} -> outgoing0 [id={} num=1 source="{{ufo_order:2}}"];
-                    a{loops} -> outgoing1 [id={} num=1 source="{{ufo_order:3}}"];
+                    incoming0 -> a0 [id={} num=1];
+                    incoming1 -> a0 [id={} num=1];
+                    a{loops} -> outgoing0 [id={} num=1];
+                    a{loops} -> outgoing1 [id={} num=1];
                 "#,
                 2 * loops,
                 2 * loops + 1,
@@ -7409,8 +7392,8 @@ mod tests {
             for bubble in 0..loops {
                 write!(
                     dot,
-                    r#"a{bubble} -> a{} [id={} lmb_id={bubble} source="{{ufo_order:2}}" sink="{{ufo_order:0}}"];
-                       a{bubble} -> a{} [id={} particle=scalar_2 source="{{ufo_order:3}}" sink="{{ufo_order:1}}"];
+                    r#"a{bubble} -> a{} [id={} lmb_id={bubble}];
+                       a{bubble} -> a{} [id={} particle=scalar_2];
                     "#,
                     bubble + 1,
                     2 * bubble,
@@ -7419,7 +7402,7 @@ mod tests {
                 )?;
             }
             dot.push('}');
-            let physical: Graph = dot.into_finalized_runtime_graph(&model)?;
+            let physical: Graph = dot.into_graph(&model)?;
             assert_eq!(physical.get_loop_number(), loops);
             let unit = physical.with_global_numerator_only(
                 format!("scalar_unit_phase_{loops}"),
@@ -7531,9 +7514,15 @@ mod tests {
                 continue;
             }
             let fermion = !particle.is_empty();
+            // The scalar medium uses the massless scalar, whose mass each edge overrides.
+            let edge_particle = if fermion {
+                particle
+            } else {
+                "particle=\"scalar_0\""
+            };
             let mut dot = format!(
                 "digraph thermal_mass_cycle {{ params=\"m1;m2;m3\"; \
-                 edge [num=1 {particle}]; node [num=1];",
+                 edge [num=1 {edge_particle}]; node [num=1];",
             );
             for (edge, mass) in masses.iter().enumerate() {
                 let next = (edge + 1) % masses.len();
@@ -7713,27 +7702,27 @@ mod tests {
     #[test]
     fn ordinary_terminal_sources_match_signed_contours() -> Result<()> {
         test_initialise()?;
-        let tadpole: Graph = finalized_runtime_dot!(digraph ordinary_unit_tadpole {
+        let tadpole: Graph = dot!(digraph ordinary_unit_tadpole {
                 graph [projector="1"]
                 edge [particle="scalar_1" num=1]
                 node [num=1]
                 incoming [style=invis]
                 outgoing [style=invis]
-                a -> a [source="{ufo_order:0}" sink="{ufo_order:1}" id=0 lmb_id=0]
-                incoming -> a [sink="{ufo_order:2}" id=1]
-                a -> outgoing [source="{ufo_order:3}" id=2]
+                a -> a [id=0 lmb_id=0]
+                incoming -> a [id=1]
+                a -> outgoing [id=2]
             }, "scalars")?;
-        let attached: Graph = finalized_runtime_dot!(digraph ordinary_attached_tadpole_bubble {
+        let attached: Graph = dot!(digraph ordinary_attached_tadpole_bubble {
                 graph [projector="1"]
                 edge [particle="scalar_1" num=1]
                 node [num=1]
                 incoming [style=invis]
                 outgoing [style=invis]
-                a -> a [source="{ufo_order:0}" sink="{ufo_order:1}" id=0 lmb_id=0]
-                a -> b [source="{ufo_order:2}" sink="{ufo_order:0}" id=1 lmb_id=1]
-                a -> b [source="{ufo_order:3}" sink="{ufo_order:1}" id=2 particle="scalar_2"]
-                incoming -> a [sink="{ufo_order:4}" id=3]
-                a -> outgoing [source="{ufo_order:5}" id=4]
+                a -> a [id=0 lmb_id=0]
+                a -> b [id=1 lmb_id=1]
+                a -> b [id=2 particle="scalar_2"]
+                incoming -> a [id=3]
+                a -> outgoing [id=4]
             }, "scalars")?;
         let mut failures = Vec::new();
         for (label, mut graph, energies) in [

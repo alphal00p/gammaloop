@@ -2,25 +2,22 @@
 //! The physical FullH generation below is an input inventory, not a proof of
 //! the leading soft behavior of the complete orientation/forest sum.
 
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    sync::{Arc, Mutex},
-};
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::{Arc, Mutex};
 
 use super::super::branches::DirectResidueKey;
 use super::*;
-use crate::{
-    cff::expression::OrientationID,
-    graph::{FeynmanGraph, Graph},
-    initialisation::test_initialise,
-    integrands::process::param_builder::NumeratorDefinition,
-    model::{InputParamCard, ModelGammaLoopExt},
-    numerator::pole_certificate::{ScalarPoleCertificate, ScalarPoleFailure},
-    settings::global::{GenerationSettings, ThresholdSubtractionSettings},
-    uv::{
-        CTIdentifier, CTRenormalizationRule, RenormalizationPrescriptionSettings,
-        UVgenerationSettings, approx::CutStructure, hedge_poset::Wood,
-    },
+use crate::cff::expression::OrientationID;
+use crate::graph::{FeynmanGraph, Graph};
+use crate::initialisation::test_initialise;
+use crate::integrands::process::param_builder::NumeratorDefinition;
+use crate::model::{InputParamCard, ModelGammaLoopExt};
+use crate::numerator::pole_certificate::{ScalarPoleCertificate, ScalarPoleFailure};
+use crate::settings::global::{GenerationSettings, ThresholdSubtractionSettings};
+use crate::uv::approx::CutStructure;
+use crate::uv::hedge_poset::Wood;
+use crate::uv::{
+    CTIdentifier, CTRenormalizationRule, RenormalizationPrescriptionSettings, UVgenerationSettings,
 };
 
 const MAX_CAPTURE_BYTES: usize = 128 * 1024 * 1024;
@@ -204,7 +201,7 @@ pub(crate) fn physical_full_h_fixture() -> Result<(Graph, GenerationSettings)> {
         "json",
     )?;
     model.simplify(&mut parameters)?;
-    let graph: Graph = Graph::import_dot(
+    let graph: Graph = Graph::from_dot(
         include_str!(
             "../../../../../../tests/resources/graphs/paper_figure_b1_double_triangle_soft_ir.dot"
         ),

@@ -1,21 +1,21 @@
-//! SVG output: painted layers, typeset labels, and the `#linnet-*` inspection
-//! links the interactive viewer decorates, as `draw.typ` emits them.
+//! SVG output: painted layers, typeset labels, and for interactive output the
+//! `#linnet-*` inspection links the viewer decorates, as `draw.typ` emits them.
 use std::fmt::Write as _;
 use std::sync::Arc;
 
 use kurbo::{BezPath, PathEl, Rect, Shape};
 use serde_json::Value;
 
-use super::{arrow_stroke, labels::Bounds, marks, Dash, Element, Stroke, Target, Typeset, UNIT};
+use super::labels::Bounds;
+use super::{arrow_stroke, Dash, Element, Stroke, Target, Typeset, UNIT};
 use crate::{TypstDotEdge, TypstDotEndpoint, TypstDotNode};
 
 /// Canvas padding in drawing units; margin (2mm) and title gutter (1em) in points.
 const PAD: f64 = 0.4;
 const MARGIN: f64 = 5.669291339;
 const GUTTER: f64 = 9.0;
-/// Arrowhead paint and the particle-flow triangle's outline width in points.
+/// Default arrowhead paint.
 pub(super) const INK: &str = "#3d2645";
-pub(super) const MARK_STROKE: f64 = 0.3;
 
 /// Ordered inspection fields shown by the interactive viewer.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -204,39 +204,60 @@ fn number(value: f64) -> String {
     }
 }
 
+/// Grow `bounds` by an element's painted extent; carriers paint nothing.
+fn include_painted(element: &Element, bounds: &mut Rect) {
+    let stroked = |path: &BezPath, stroke: &Stroke| {
+        kurbo::stroke(
+            path.elements().iter().copied(),
+            &kurbo::Stroke::new(stroke.width / UNIT).with_caps(if stroke.round_cap {
+                kurbo::Cap::Round
+            } else {
+                kurbo::Cap::Butt
+            }),
+            &kurbo::StrokeOpts::default(),
+            1e-6,
+        )
+        .bounding_box()
+    };
+    let rect = match element {
+        Element::Carrier { .. } => return,
+        Element::Path { path, stroke } if !path.is_empty() => stroked(path, stroke),
+        Element::Path { .. } => return,
+        Element::Momentum { shaft, heads, .. } => {
+            for head in heads {
+                include_painted(head, bounds);
+            }
+            if shaft.is_empty() {
+                return;
+            }
+            stroked(shaft, &arrow_stroke())
+        }
+        Element::Mark { drawable, .. } if !drawable.outline.path.is_empty() => {
+            drawable.outline.path.bounding_box()
+        }
+        Element::Mark { .. } => return,
+        Element::HitBox { bounds, .. } | Element::Label { bounds, .. } => Rect::from(*bounds),
+        Element::Node {
+            at: [x, y],
+            size: (w, h),
+            ..
+        } => Rect::new(x - w, y - h, x + w, y + h),
+    };
+    *bounds = bounds.union(rect);
+}
+
 /// The page: an optional centered title above the padded drawing canvas.
-pub(super) fn svg(typeset: &Typeset, layers: &[Element], targets: &[Target]) -> String {
+/// `targets` adds the inspection links: label and head hit areas, then the
+/// hover targets. `None` draws a static page without links.
+pub(super) fn svg(typeset: &Typeset, layers: &[Element], targets: Option<&[Target]>) -> String {
     let mut bounds = Rect::new(
         f64::INFINITY,
         f64::INFINITY,
         f64::NEG_INFINITY,
         f64::NEG_INFINITY,
     );
-    let mut include = |rect: Rect| bounds = bounds.union(rect);
     for element in layers {
-        match element {
-            Element::Carrier { .. } => {}
-            Element::Path { path, .. } => include(path.bounding_box()),
-            Element::Momentum { path, .. } => {
-                include(path.bounding_box());
-                if let Some(points) = marks::CHEVRON.at_end(path) {
-                    for point in points {
-                        include(Rect::from_points(point, point));
-                    }
-                }
-            }
-            Element::Triangle(points) => {
-                for point in points {
-                    include(Rect::from_points(*point, *point));
-                }
-            }
-            Element::Label { bounds, .. } => include(Rect::from(*bounds)),
-            Element::Node {
-                at: [x, y],
-                size: (w, h),
-                ..
-            } => include(Rect::new(x - w, y - h, x + w, y + h)),
-        }
+        include_painted(element, &mut bounds);
     }
     if !bounds.is_finite() {
         bounds = Rect::ZERO;
@@ -323,25 +344,64 @@ pub(super) fn svg(typeset: &Typeset, layers: &[Element], targets: &[Target]) -> 
         }
         attributes
     };
-    let polyline = |points: &[kurbo::Point; 3]| {
+    let mark = |drawable: &kurvst::marks::MarkDrawable, paint: &super::MarkPaint, width: f64| {
+        let fill = if drawable.fill {
+            paint.fill.as_deref().unwrap_or(INK)
+        } else {
+            "none"
+        };
+        let stroke = if drawable.stroke {
+            paint.stroke.as_deref().unwrap_or(INK)
+        } else {
+            "none"
+        };
         format!(
-            "M{} {}L{} {}L{} {}",
-            x(points[0].x),
-            y(points[0].y),
-            x(points[1].x),
-            y(points[1].y),
-            x(points[2].x),
-            y(points[2].y)
+            r#"<path fill="{}" stroke="{}" stroke-width="{}" stroke-linecap="{}" stroke-linejoin="{}" stroke-miterlimit="{}" d="{}"/>"#,
+            xml_escape(fill),
+            xml_escape(stroke),
+            number(width),
+            drawable.cap,
+            drawable.join,
+            number(drawable.miter_limit),
+            path_data(&drawable.path.path)
         )
     };
     for element in layers {
         match element {
+            Element::HitBox { .. } => {}
+            // Overlays read the structural carriers of interactive pages.
             Element::Carrier { path, href } => {
+                if targets.is_some() {
+                    let _ = write!(
+                        svg,
+                        r#"<a href="{href}" data-linnet-carrier="true" style="display:none"><path d="{}"/></a>"#,
+                        path_data(path)
+                    );
+                }
+            }
+            Element::Momentum { href, shaft, heads } => {
+                if targets.is_some() {
+                    let _ = write!(svg, r#"<a href="{href}" data-linnet-momentum="true">"#);
+                }
                 let _ = write!(
                     svg,
-                    r#"<a href="{href}" data-linnet-carrier="true" style="display:none"><path d="{}"/></a>"#,
-                    path_data(path)
+                    r#"<path fill="none" {} d="{}"/>"#,
+                    stroke_attributes(&arrow_stroke()),
+                    path_data(shaft)
                 );
+                for head in heads {
+                    if let Element::Mark {
+                        drawable,
+                        paint,
+                        width,
+                    } = head
+                    {
+                        svg.push_str(&mark(drawable, paint, *width));
+                    }
+                }
+                if targets.is_some() {
+                    svg.push_str("</a>");
+                }
             }
             Element::Path { path, stroke } => {
                 let _ = write!(
@@ -351,29 +411,11 @@ pub(super) fn svg(typeset: &Typeset, layers: &[Element], targets: &[Target]) -> 
                     path_data(path)
                 );
             }
-            Element::Momentum { path, href } => {
-                let _ = write!(
-                    svg,
-                    r#"<a href="{href}" data-linnet-momentum="true"><path fill="none" {} d="{}"/>"#,
-                    stroke_attributes(&arrow_stroke()),
-                    path_data(path)
-                );
-                if let Some(points) = marks::CHEVRON.at_end(path) {
-                    let _ = write!(
-                        svg,
-                        r#"<path fill="none" stroke="{INK}" stroke-width="1" stroke-linecap="round" stroke-linejoin="miter" d="{}"/>"#,
-                        polyline(&points)
-                    );
-                }
-                svg.push_str("</a>");
-            }
-            Element::Triangle(points) => {
-                let _ = write!(
-                    svg,
-                    r#"<path fill="{INK}" stroke="{INK}" stroke-width="{MARK_STROKE}" stroke-linejoin="miter" d="{}Z"/>"#,
-                    polyline(points)
-                );
-            }
+            Element::Mark {
+                drawable,
+                paint,
+                width,
+            } => svg.push_str(&mark(drawable, paint, *width)),
             Element::Label {
                 page,
                 bounds: b,
@@ -386,7 +428,8 @@ pub(super) fn svg(typeset: &Typeset, layers: &[Element], targets: &[Target]) -> 
                     r#"<g transform="translate({lx} {ly})">{body}</g>"#,
                     body = page.body,
                 );
-                if let Some(href) = href {
+                // Interactive pages also link each edge label to its edge.
+                if let (Some(href), Some(_)) = (href, targets) {
                     let _ = write!(
                         svg,
                         r#"<a href="{href}" transform="translate({lx} {ly})"><rect width="{w}" height="{h}" fill="transparent" stroke="none"/></a>"#,
@@ -428,14 +471,30 @@ pub(super) fn svg(typeset: &Typeset, layers: &[Element], targets: &[Target]) -> 
             }
         }
     }
-    for Target { at, size, href } in targets {
-        let _ = write!(
-            svg,
-            r#"<a href="{href}" transform="translate({} {})"><rect width="{s}" height="{s}" fill="transparent" stroke="none"/></a>"#,
-            number(ox + (at[0] - bounds.x0 + PAD) * UNIT - size / 2.0),
-            number(oy + (bounds.y1 + PAD - at[1]) * UNIT - size / 2.0),
-            s = number(*size)
-        );
+    if let Some(targets) = targets {
+        // Put head hit areas above paint so the full authoritative footprint is
+        // clickable even where the mark's raw stroke is not itself an anchor.
+        for element in layers {
+            if let Element::HitBox { bounds: b, href } = element {
+                let _ = write!(
+                    svg,
+                    r#"<a href="{href}"><rect x="{}" y="{}" width="{}" height="{}" fill="transparent" stroke="none"/></a>"#,
+                    x(b.left),
+                    y(b.top),
+                    number((b.right - b.left) * UNIT),
+                    number((b.top - b.bottom) * UNIT)
+                );
+            }
+        }
+        for Target { at, size, href } in targets {
+            let _ = write!(
+                svg,
+                r#"<a href="{href}" transform="translate({} {})"><rect width="{s}" height="{s}" fill="transparent" stroke="none"/></a>"#,
+                number(ox + (at[0] - bounds.x0 + PAD) * UNIT - size / 2.0),
+                number(oy + (bounds.y1 + PAD - at[1]) * UNIT - size / 2.0),
+                s = number(*size)
+            );
+        }
     }
     let _ = write!(
         svg,

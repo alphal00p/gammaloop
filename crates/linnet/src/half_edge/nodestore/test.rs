@@ -1,101 +1,12 @@
-use crate::{
-    dot,
-    half_edge::{
-        builder::HedgeGraphBuilder,
-        involution::{Flow, Hedge},
-        nodestore::{NodeStorageOps, NodeStorageVec},
-        subgraph::{Inclusion, ModifySubSet, SuBitGraph, SubSetLike},
-        HedgeGraph, HedgeGraphError, NodeIndex,
-    },
-    parser::{DotGraph, DotVertexData},
-    tree::{child_vec::ChildVecStore, Forest},
-};
-
-#[test]
-fn convert_node_store_preserves_graph_storage_and_isolated_nodes() {
-    type ForestStore = Forest<&'static str, ChildVecStore<()>>;
-
-    let mut builder = HedgeGraphBuilder::<&'static str, &'static str, &'static str>::new();
-    let source = builder.add_node("source node");
-    let sink = builder.add_node("sink node");
-    let isolated = builder.add_node("isolated node");
-    builder.add_edge(
-        source.add_data("source half-edge"),
-        sink.add_data("sink half-edge"),
-        "internal edge",
-        true,
-    );
-    builder.add_external_edge(
-        source.add_data("external half-edge"),
-        "external edge",
-        false,
-        Flow::Sink,
-    );
-    let graph: HedgeGraph<_, _, _, NodeStorageVec<_>> = builder.build();
-    let before = graph
-        .iter_hedges()
-        .map(|(hedge, data)| {
-            (
-                hedge,
-                *data,
-                graph.node_id(hedge),
-                graph.inv(hedge),
-                graph.flow(hedge),
-                graph[&hedge],
-                graph[graph[&hedge]],
-            )
-        })
-        .collect::<Vec<_>>();
-
-    let forest: HedgeGraph<_, _, _, ForestStore> = graph.into_node_store().unwrap();
-    let after = forest
-        .iter_hedges()
-        .map(|(hedge, data)| {
-            (
-                hedge,
-                *data,
-                forest.node_id(hedge),
-                forest.inv(hedge),
-                forest.flow(hedge),
-                forest[&hedge],
-                forest[forest[&hedge]],
-            )
-        })
-        .collect::<Vec<_>>();
-    assert_eq!(after, before);
-    assert_eq!(forest[source], "source node");
-    assert_eq!(forest[sink], "sink node");
-    assert_eq!(forest[isolated], "isolated node");
-    assert_eq!(forest.iter_crown(isolated).count(), 0);
-
-    let roundtrip: HedgeGraph<_, _, _, NodeStorageVec<_>> = forest.into_node_store().unwrap();
-    assert_eq!(roundtrip.n_nodes(), 3);
-    assert_eq!(roundtrip[source], "source node");
-    assert_eq!(roundtrip[sink], "sink node");
-    assert_eq!(roundtrip[isolated], "isolated node");
-    assert_eq!(roundtrip.iter_crown(isolated).count(), 0);
-    assert_eq!(roundtrip[Hedge(0)], "source half-edge");
-    assert_eq!(roundtrip[Hedge(1)], "sink half-edge");
-    assert_eq!(roundtrip[Hedge(2)], "external half-edge");
-}
+use crate::dot;
+use crate::half_edge::builder::HedgeGraphBuilder;
+use crate::half_edge::involution::{Flow, Hedge};
+use crate::half_edge::subgraph::{Inclusion, ModifySubSet, SuBitGraph, SubSetLike};
+use crate::half_edge::{HedgeGraph, HedgeGraphError, NodeIndex};
+use crate::parser::{DotGraph, DotVertexData};
 
 #[test]
 fn sewn_external_pairs_preserve_traversal_before_compaction() {
-    fn check<N: NodeStorageOps<NodeData = usize>>(mut graph: HedgeGraph<(), usize, (), N>) {
-        let terminals = [NodeIndex(0), NodeIndex(1), NodeIndex(2), NodeIndex(3)];
-        assert!(graph.tadpoles(&terminals).unwrap().is_empty());
-        graph.identify_nodes(&[terminals[0], terminals[2]], 100);
-        graph.identify_nodes(&[terminals[1], terminals[3]], 101);
-
-        // Sewing opposite external pairs into a box adds two cycles without
-        // separating it. Identification history must not create components.
-        let non_bridges = graph.non_bridges();
-        assert_eq!(graph.count_connected_components(&non_bridges), 1);
-        graph.forget_identification_history();
-        assert_eq!(graph.non_bridges(), non_bridges);
-        assert_eq!(graph.count_connected_components(&non_bridges), 1);
-    }
-
     let mut builder = HedgeGraphBuilder::<(), usize, ()>::new();
     let nodes: Vec<_> = (0..8).map(|id| builder.add_node(id)).collect();
     for (a, b) in [
@@ -110,85 +21,24 @@ fn sewn_external_pairs_preserve_traversal_before_compaction() {
     ] {
         builder.add_edge(nodes[a], nodes[b], (), false);
     }
-    let graph: HedgeGraph<_, _, _, NodeStorageVec<_>> = builder.build();
-    let forest: HedgeGraph<_, _, _, Forest<usize, ChildVecStore<()>>> =
-        graph.clone().into_node_store().unwrap();
-    check(graph);
-    check(forest);
-}
+    let mut graph: HedgeGraph<(), usize, ()> = builder.build();
+    let terminals = [NodeIndex(0), NodeIndex(1), NodeIndex(2), NodeIndex(3)];
+    assert!(graph.tadpoles(&terminals).unwrap().is_empty());
+    graph.identify_nodes(&[terminals[0], terminals[2]], 100);
+    graph.identify_nodes(&[terminals[1], terminals[3]], 101);
 
-#[test]
-fn converting_forest_history_requires_explicit_compaction() {
-    type ForestStore = Forest<&'static str, ChildVecStore<()>>;
-
-    let mut builder = HedgeGraphBuilder::<(), &'static str, ()>::new();
-    let a = builder.add_node("a");
-    let b = builder.add_node("b");
-    let c = builder.add_node("c");
-    builder.add_edge(a, b, (), false);
-    builder.add_edge(b, c, (), false);
-    let graph: HedgeGraph<_, _, _, ForestStore> = builder.build();
-
-    let mut retained = graph.clone();
-    retained.identify_nodes(&[a, b], "ab");
-    let conversion: Result<HedgeGraph<_, _, _, NodeStorageVec<_>>, _> = retained.into_node_store();
-    assert!(matches!(
-        conversion,
-        Err(HedgeGraphError::NodesDoNotPartition(_))
-    ));
-
-    let mut compacted = graph;
-    compacted.identify_nodes(&[a, b], "ab");
-    let discarded = compacted
-        .forget_identification_history()
-        .into_iter()
-        .map(|(_, data)| data)
-        .collect::<Vec<_>>();
-    assert_eq!(discarded, vec!["b"]);
-
-    let converted: HedgeGraph<_, _, _, NodeStorageVec<_>> = compacted.into_node_store().unwrap();
-    let merged = converted.node_id(Hedge(0));
-    assert_eq!(converted[merged], "ab");
-    assert_eq!(converted.node_id(Hedge(1)), merged);
-    assert_eq!(converted.node_id(Hedge(2)), merged);
-    assert_eq!(converted[converted.node_id(Hedge(3))], "c");
-}
-
-#[test]
-fn conversion_rejects_identified_isolated_forest_root() {
-    type ForestStore = Forest<&'static str, ChildVecStore<()>>;
-
-    let mut builder = HedgeGraphBuilder::<(), &'static str, ()>::new();
-    let a = builder.add_node("a");
-    let b = builder.add_node("b");
-    let graph: HedgeGraph<_, _, _, ForestStore> = builder.build();
-
-    let mut retained = graph.clone();
-    retained.identify_nodes(&[a, b], "ab");
-    let conversion: Result<HedgeGraph<_, _, _, NodeStorageVec<_>>, _> = retained.into_node_store();
-    assert!(matches!(
-        conversion,
-        Err(HedgeGraphError::NodesDoNotPartition(_))
-    ));
-
-    let mut compacted = graph;
-    compacted.identify_nodes(&[a, b], "ab");
-    let discarded = compacted
-        .forget_identification_history()
-        .into_iter()
-        .map(|(_, data)| data)
-        .collect::<Vec<_>>();
-    assert_eq!(discarded, vec!["b"]);
-
-    let converted: HedgeGraph<_, _, _, NodeStorageVec<_>> = compacted.into_node_store().unwrap();
-    assert_eq!(converted.n_nodes(), 1);
-    assert_eq!(converted[NodeIndex(0)], "ab");
-    assert_eq!(converted.iter_crown(NodeIndex(0)).count(), 0);
+    // Sewing opposite external pairs into a box adds two cycles without
+    // separating it. Identification history must not create components.
+    let non_bridges = graph.non_bridges();
+    assert_eq!(graph.count_connected_components(&non_bridges), 1);
+    graph.compact();
+    assert_eq!(graph.non_bridges(), non_bridges);
+    assert_eq!(graph.count_connected_components(&non_bridges), 1);
 }
 
 #[test]
 fn extract_forest() {
-    let mut aligned: DotGraph<Forest<DotVertexData, ChildVecStore<()>>> = dot!(
+    let mut aligned: DotGraph = dot!(
     digraph {
       ext4 [flow=sink];
       0 -> 1;
@@ -224,16 +74,18 @@ fn extract_forest() {
 
     // aligned.identify_nodes(&[NodeIndex(1), NodeIndex(2)], DotVertexData::empty());
 
-    aligned.forget_identification_history();
+    aligned.compact();
     println!("{}", aligned.dot(&subgraph));
 
-    let extracted = aligned.extract(
-        &subgraph,
-        |a| a.map(Clone::clone),
-        |a| a,
-        |a| a.clone(),
-        |a| a,
-    );
+    let (extracted, _) = aligned
+        .extract(
+            &subgraph,
+            |a| a.map(Clone::clone),
+            |a| a,
+            |a| a.clone(),
+            |a| a,
+        )
+        .unwrap();
     // println!("{:?}", aligned.node_store.node_len());
 
     // println!("{:?}", extracted.node_store.node_len());
@@ -258,20 +110,20 @@ fn extact_single_dangling() {
         single_hair.add(s.0);
     }
 
-    simple.extract(&single_hair, |a| a.map(Clone::clone), |a| a, |a| *a, |a| a);
+    simple
+        .extract(&single_hair, |a| a.map(Clone::clone), |a| a, |a| *a, |a| a)
+        .unwrap();
 }
 
 #[test]
 fn forest_storage_supports_empty_nodes() {
-    type Store = Forest<(), ChildVecStore<()>>;
-
     let mut builder = HedgeGraphBuilder::<(), (), ()>::new();
     let n1 = builder.add_node(());
     let n2 = builder.add_node(());
     let empty = builder.add_node(());
     builder.add_edge(n1, n2, (), false);
 
-    let graph: HedgeGraph<(), (), (), Store> = builder.build();
+    let graph: HedgeGraph<(), (), ()> = builder.build();
     assert_eq!(graph.iter_crown(empty).count(), 0);
     graph.node_store.check_nodes().unwrap();
 
@@ -284,24 +136,24 @@ fn forest_storage_supports_empty_nodes() {
 
 #[test]
 fn forest_extract_nodes_moves_selected_empty_nodes() {
-    type Store = Forest<&'static str, ChildVecStore<()>>;
-
     let mut builder = HedgeGraphBuilder::<(), &'static str, ()>::new();
     let source = builder.add_node("source");
     let isolated = builder.add_node("isolated");
     let sink = builder.add_node("sink");
     builder.add_edge(source, sink, (), false);
-    let mut graph: HedgeGraph<_, _, _, Store> = builder.build();
+    let mut graph: HedgeGraph<_, _, _> = builder.build();
 
-    let extracted = graph.extract_nodes([isolated], |edge| edge.map(|_| ()), |edge| edge);
+    let (extracted, _) = graph
+        .extract_nodes([isolated], |edge| edge.map(|_| ()), |edge| edge)
+        .unwrap();
 
-    assert_eq!(graph.n_nodes(), 2);
+    assert_eq!(graph.n_live(), 2);
     assert_eq!(graph.n_hedges(), 2);
     assert_eq!(graph[graph.node_id(Hedge(0))], "source");
     assert_eq!(graph[graph.node_id(Hedge(1))], "sink");
     graph.node_store.check_nodes().unwrap();
 
-    assert_eq!(extracted.n_nodes(), 1);
+    assert_eq!(extracted.n_live(), 1);
     assert_eq!(extracted.n_hedges(), 0);
     assert_eq!(extracted[NodeIndex(0)], "isolated");
     assert_eq!(extracted.iter_crown(NodeIndex(0)).count(), 0);
@@ -364,18 +216,19 @@ fn extract_buggy() {
 
     // aligned.identify_nodes(&[NodeIndex(1), NodeIndex(2)], DotVertexData::empty());
 
-    // aligned.forget_identification_history();
     // println!("{}", aligned.dot(&subgraph));
 
-    let extracted = aligned.extract(
-        &subgraph,
-        |a| a.map(Clone::clone),
-        |a| a,
-        |a| a.clone(),
-        |a| a,
-    );
+    let (extracted, _) = aligned
+        .extract(
+            &subgraph,
+            |a| a.map(Clone::clone),
+            |a| a,
+            |a| a.clone(),
+            |a| a,
+        )
+        .unwrap();
 
-    aligned.node_store.check_and_set_nodes().unwrap();
+    aligned.node_store.check_nodes().unwrap();
     // println!("{:?}", aligned.node_store.node_len());
 
     // println!("{:?}", extracted.node_store.node_len());
@@ -423,21 +276,23 @@ fn extract_normal() {
     let (_, s): (_, SuBitGraph) = aligned
         .identify_nodes_without_self_edges(&[NodeIndex(1), NodeIndex(2)], DotVertexData::empty());
 
-    aligned.forget_identification_history();
-    aligned.delete_hedges(&s);
-    aligned.node_store.check_and_set_nodes().unwrap();
+    aligned.compact();
+    aligned.delete_hedges(&s).unwrap();
+    aligned.node_store.check_nodes().unwrap();
 
     println!("{}", aligned.dot(&subgraph));
 
-    let extracted = aligned.extract(
-        &subgraph,
-        |a| a.map(Clone::clone),
-        |a| a,
-        |a| a.clone(),
-        |a| a,
-    );
+    let (extracted, _) = aligned
+        .extract(
+            &subgraph,
+            |a| a.map(Clone::clone),
+            |a| a,
+            |a| a.clone(),
+            |a| a,
+        )
+        .unwrap();
 
-    aligned.node_store.check_and_set_nodes().unwrap();
+    aligned.node_store.check_nodes().unwrap();
     // println!("{:?}", aligned.node_store.node_len());
 
     // println!("{:?}", extracted.node_store.node_len());
@@ -511,12 +366,13 @@ fn identify_compact_subgraph_preserves_hidden_edges_and_root_order() {
     builder.add_edge(n0, n1, (), false);
     builder.add_edge(n1, n1, (), false);
     builder.add_external_edge(n0, (), false, Flow::Sink);
-    let graph: HedgeGraph<(), (), (), Forest<(), ChildVecStore<()>>> = builder.build();
+    let graph: HedgeGraph<(), (), ()> = builder.build();
 
     for (visible, expected_marks, expected_root) in [
         (vec![0, 1, 2, 3, 4, 5, 6], vec![0, 1, 2, 3, 6], Some(n1)),
         (vec![0, 1, 2, 4, 5, 6], vec![0, 1, 6], Some(n1)),
-        (vec![2, 3, 4, 5, 6], vec![2, 3, 6], Some(n0)),
+        // The survivor is the node with the larger crown, not the first visited.
+        (vec![2, 3, 4, 5, 6], vec![2, 3, 6], Some(n1)),
         (vec![], vec![6], None),
     ] {
         let hedges = visible.into_iter().map(Hedge).collect::<Vec<_>>();
@@ -559,6 +415,29 @@ fn identify_compact_subgraph_preserves_hidden_edges_and_root_order() {
     }
 }
 
+/// Contraction renumbers nodes but keeps every node it does not touch, isolated
+/// ones included.
+#[test]
+fn contraction_keeps_unrelated_isolated_nodes() {
+    let mut builder = HedgeGraphBuilder::new();
+    let [a, b, c] = ["a", "b", "c"].map(|name| builder.add_node(name));
+    builder.add_node("isolated d");
+    builder.add_edge(a, b, (), true);
+    builder.add_edge(b, c, (), true);
+    let mut graph: HedgeGraph<(), &str> = builder.build();
+    graph.add_node("isolated e");
+
+    let mut edge: SuBitGraph = graph.empty_subgraph();
+    edge.add(Hedge(0));
+    edge.add(Hedge(1));
+    graph.contract_subgraph(&edge, "ab");
+
+    let mut data: Vec<_> = graph.iter_nodes().map(|(_, _, data)| *data).collect();
+    data.sort();
+    assert_eq!(data, ["ab", "c", "isolated d", "isolated e"]);
+    graph.node_store.check_nodes().unwrap();
+}
+
 #[test]
 fn orientation_hedges() {
     let mut single_node = HedgeGraphBuilder::new();
@@ -568,4 +447,813 @@ fn orientation_hedges() {
     let aligned: HedgeGraph<(), (), ()> = single_node.build();
 
     println!("{}", aligned.base_dot())
+}
+
+#[test]
+fn identification_reports_absorbed_nodes() {
+    let mut builder = HedgeGraphBuilder::<(), ()>::new();
+    let [a, b, c, d] = [(); 4].map(|_| builder.add_node(()));
+    builder.add_edge(a, b, (), true);
+    let mut graph: HedgeGraph<(), ()> = builder.build();
+    let ab = graph.identify_nodes(&[a, b], ());
+    let cd = graph.identify_nodes(&[c, d], ());
+
+    let absorbed: Vec<_> = (0..graph.node_bound())
+        .map(NodeIndex)
+        .filter(|&n| !graph.node_store.is_live(n))
+        .collect();
+    assert_eq!(absorbed.len(), 2);
+    assert!(!absorbed.contains(&ab) && !absorbed.contains(&cd));
+    // The absorbed isolated node is not an extra component.
+    let components = graph
+        .strongly_connected_components(crate::half_edge::algorithms::DirectionBasis::Underlying);
+    assert_eq!(components, [vec![ab], vec![cd]]);
+}
+
+/// Drives graphs through random sequences of edits and checks every state
+/// against a model of the node partition by payload: node indices and survivors
+/// are the store's choice, but which half-edges share a node, which nodes are
+/// live and how many nodes compaction drops are not. Every reported
+/// renumbering is checked against the payloads it moved, and, differentially,
+/// [`NodeForest`] against the naive [`RefTopology`] that states the
+/// [`Topology`] contract.
+mod random_edits {
+    use std::collections::{BTreeMap, BTreeSet};
+
+    use crate::half_edge::builder::HedgeGraphBuilder;
+    use crate::half_edge::involution::{Flow, Hedge, Orientation};
+    use crate::half_edge::nodestore::reference::RefTopology;
+    use crate::half_edge::nodestore::{NodeForest, Topology};
+    use crate::half_edge::remap::{HedgeRemap, NodeRemap, Remap, Renumbering};
+    use crate::half_edge::subgraph::{ModifySubSet, SuBitGraph, SubSetLike};
+    use crate::half_edge::{HedgeGraph, NodeIndex};
+    use crate::permutation::Permutation;
+
+    type Graph<T> = HedgeGraph<usize, usize, usize, T>;
+
+    struct Random(u64);
+
+    impl Random {
+        fn below(&mut self, bound: usize) -> usize {
+            self.0 ^= self.0 << 13;
+            self.0 ^= self.0 >> 7;
+            self.0 ^= self.0 << 17;
+            (self.0 % bound.max(1) as u64) as usize
+        }
+
+        fn one_in(&mut self, n: usize) -> bool {
+            self.below(n) == 0
+        }
+    }
+
+    /// A random graph with unique node, edge and half-edge payloads from `next`.
+    fn random_graph(
+        random: &mut Random,
+        next: &mut usize,
+    ) -> HedgeGraphBuilder<usize, usize, usize> {
+        let mut fresh = || {
+            *next += 1;
+            *next
+        };
+        let mut builder = HedgeGraphBuilder::new();
+        let nodes: Vec<_> = (0..1 + random.below(7))
+            .map(|_| builder.add_node(fresh()))
+            .collect();
+        for _ in 0..random.below(10) {
+            let (a, b) = (
+                nodes[random.below(nodes.len())],
+                nodes[random.below(nodes.len())],
+            );
+            builder.add_edge(
+                a.add_data(fresh()),
+                b.add_data(fresh()),
+                fresh(),
+                random.one_in(2),
+            );
+        }
+        for _ in 0..random.below(3) {
+            let flow = if random.one_in(2) {
+                Flow::Sink
+            } else {
+                Flow::Source
+            };
+            let node = nodes[random.below(nodes.len())];
+            builder.add_external_edge(node.add_data(fresh()), fresh(), true, flow);
+        }
+        builder
+    }
+
+    fn random_subgraph(random: &mut Random, n_hedges: usize) -> SuBitGraph {
+        let mut subgraph = SuBitGraph::empty(n_hedges);
+        for hedge in 0..n_hedges {
+            if random.one_in(3) {
+                subgraph.add(Hedge(hedge));
+            }
+        }
+        subgraph
+    }
+
+    /// A random bijection of `n` indices.
+    fn random_permutation<I: From<usize> + Into<usize>>(random: &mut Random, n: usize) -> Remap<I> {
+        let mut map: Vec<usize> = (0..n).collect();
+        for i in (1..n).rev() {
+            map.swap(i, random.below(i + 1));
+        }
+        Remap::from_permutation(&Permutation::from_map(map))
+    }
+
+    /// The node partition by payload: the node of each half-edge and the live
+    /// nodes, isolated ones included.
+    #[derive(Debug, PartialEq)]
+    struct Partition {
+        node_of: BTreeMap<usize, usize>,
+        live: BTreeSet<usize>,
+    }
+
+    impl Partition {
+        /// Checks the consistency of `graph`, absorbed nodes and the ascending
+        /// crowns included, and reads its partition.
+        fn of<T: Topology>(graph: &Graph<T>, context: &str) -> Self {
+            graph.check().unwrap();
+            let store = &graph.node_store;
+            if let Err(error) = store.check_nodes() {
+                panic!("{context}: {error}");
+            }
+            let mut live = BTreeSet::new();
+            let mut covered = 0;
+            for (node, crown, &payload) in graph.iter_nodes() {
+                assert!(store.is_live(node), "{context}: iterated absorbed {node}");
+                let crown: Vec<_> = crown.collect();
+                assert!(crown.is_sorted_by(|a, b| a < b), "{context}: {crown:?}");
+                covered += crown.len();
+                for &hedge in &crown {
+                    assert_eq!(graph.node_id(hedge), node, "{context}");
+                }
+                live.insert(payload);
+            }
+            for node in (0..graph.node_bound()).map(NodeIndex) {
+                if !store.is_live(node) {
+                    assert_eq!(graph.iter_crown(node).len(), 0, "{context}: {node}");
+                }
+            }
+            assert_eq!(store.n_live(), live.len(), "{context}");
+            assert_eq!(covered, graph.n_hedges(), "{context}: crowns cover");
+            let node_of = (0..graph.n_hedges())
+                .map(|hedge| (graph[Hedge(hedge)], graph[graph.node_id(Hedge(hedge))]))
+                .collect();
+            Partition { node_of, live }
+        }
+
+        /// Merges the live nodes `merged` into one carrying `payload`.
+        fn identify(&mut self, merged: &BTreeSet<usize>, payload: usize) {
+            for node in self.node_of.values_mut() {
+                if merged.contains(node) {
+                    *node = payload;
+                }
+            }
+            self.live.retain(|node| !merged.contains(node));
+            self.live.insert(payload);
+        }
+
+        /// Moves `hedges` out. Nodes that keep half-edges stay and leave a copy
+        /// with payload `+ split_offset`; nodes that lose all of them leave.
+        fn split_off(&mut self, hedges: &BTreeSet<usize>, split_offset: usize) -> Partition {
+            let staying: BTreeSet<usize> = (self.node_of.iter())
+                .filter(|(hedge, _)| !hedges.contains(hedge))
+                .map(|(_, &node)| node)
+                .collect();
+            let mut moved = Partition {
+                node_of: BTreeMap::new(),
+                live: BTreeSet::new(),
+            };
+            for hedge in hedges {
+                let node = self.node_of.remove(hedge).unwrap();
+                let node = if staying.contains(&node) {
+                    node + split_offset
+                } else {
+                    self.live.remove(&node);
+                    node
+                };
+                moved.node_of.insert(*hedge, node);
+                moved.live.insert(node);
+            }
+            moved
+        }
+
+        /// Moves the live `nodes` out with their half-edges.
+        fn extract_nodes(&mut self, nodes: &BTreeSet<usize>) -> Partition {
+            let (node_of, kept) = std::mem::take(&mut self.node_of)
+                .into_iter()
+                .partition(|(_, node)| nodes.contains(node));
+            self.node_of = kept;
+            self.live.retain(|node| !nodes.contains(node));
+            Partition {
+                node_of,
+                live: nodes.clone(),
+            }
+        }
+
+        fn append(&mut self, other: Partition) {
+            self.node_of.extend(other.node_of);
+            self.live.extend(other.live);
+        }
+    }
+
+    /// The payloads before a renumbering: each half-edge's, its partner's, and
+    /// each node's, absorbed nodes taking their survivor's.
+    struct Payloads {
+        hedges: Vec<usize>,
+        partner: Vec<usize>,
+        nodes: Vec<usize>,
+    }
+
+    impl Payloads {
+        fn of<T: Topology>(graph: &Graph<T>) -> Self {
+            let topology = graph.node_store.topology();
+            Payloads {
+                hedges: (0..graph.n_hedges()).map(|h| graph[Hedge(h)]).collect(),
+                partner: (0..graph.n_hedges())
+                    .map(|h| graph.inv(Hedge(h)).0)
+                    .collect(),
+                nodes: (0..graph.node_bound())
+                    .map(|node| graph[topology.representative(NodeIndex(node))])
+                    .collect(),
+            }
+        }
+
+        /// Checks that every node `nodes` keeps holds its payload, mapped by
+        /// `payload`, in `graph`, and that the payloads of dropped nodes are gone.
+        fn check_nodes<T: Topology>(
+            &self,
+            nodes: &NodeRemap,
+            graph: &Graph<T>,
+            payload: impl Fn(NodeIndex, usize) -> usize,
+        ) {
+            assert_eq!(nodes.old_bound(), self.nodes.len());
+            assert_eq!(nodes.new_bound(), graph.node_bound());
+            let present: BTreeSet<_> = graph.iter_nodes().map(|(_, _, &data)| data).collect();
+            for (old, new) in nodes.iter() {
+                let expected = payload(old, self.nodes[old.0]);
+                match new {
+                    Some(new) => assert_eq!(graph[new], expected, "node {old} -> {new}"),
+                    None => assert!(!present.contains(&expected), "node {old} dropped"),
+                }
+            }
+        }
+
+        /// Like [`Self::check_nodes`] for half-edges and nodes; half-edges kept
+        /// with their partner stay paired with it.
+        fn check<T: Topology>(
+            &self,
+            renumbering: &Renumbering,
+            graph: &Graph<T>,
+            payload: impl Fn(NodeIndex, usize) -> usize,
+        ) {
+            let hedges = &renumbering.hedges;
+            assert_eq!(hedges.old_bound(), self.hedges.len());
+            assert_eq!(hedges.new_bound(), graph.n_hedges());
+            let present: BTreeSet<_> = graph.iter_hedges().map(|(_, &data)| data).collect();
+            for (old, new) in hedges.iter() {
+                match new {
+                    Some(new) => {
+                        assert_eq!(graph[new], self.hedges[old.0], "half-edge {old} -> {new}");
+                        if let Some(partner) = hedges.get(Hedge(self.partner[old.0])) {
+                            assert_eq!(graph.inv(new), partner, "partner of {old}");
+                        }
+                    }
+                    None => assert!(!present.contains(&self.hedges[old.0])),
+                }
+            }
+            self.check_nodes(&renumbering.nodes, graph, payload);
+        }
+    }
+
+    /// The graph under test, its index of every logical node, the node that each
+    /// index was merged into by pending identifications, the model, and the
+    /// renumberings the last edit reported.
+    struct Lane<T: Topology> {
+        graph: Graph<T>,
+        slots: Vec<NodeIndex>,
+        merged_into: Vec<usize>,
+        model: Partition,
+        n_absorbed: usize,
+        reported: Vec<String>,
+    }
+
+    impl<T: Topology> Lane<T> {
+        fn new(builder: HedgeGraphBuilder<usize, usize, usize>) -> Self {
+            let graph: Graph<T> = builder.build();
+            let model = Partition::of(&graph, "build");
+            let mut lane = Lane {
+                graph,
+                slots: vec![],
+                merged_into: vec![],
+                model,
+                n_absorbed: 0,
+                reported: vec![],
+            };
+            lane.renumbered();
+            lane
+        }
+
+        fn n_slots(&self) -> usize {
+            self.slots.len()
+        }
+
+        fn live(&self, slot: usize) -> usize {
+            let mut node = self.slots[slot].0;
+            while self.merged_into[node] != node {
+                node = self.merged_into[node];
+            }
+            node
+        }
+
+        fn payload(&self, node: usize) -> usize {
+            self.graph[NodeIndex(node)]
+        }
+
+        fn hedge_payloads(&self, subgraph: &SuBitGraph) -> BTreeSet<usize> {
+            subgraph
+                .included_iter()
+                .map(|hedge| self.graph[hedge])
+                .collect()
+        }
+
+        /// Logical nodes follow payload order after a renumbering edit, which
+        /// leaves no pending identification.
+        fn renumbered(&mut self) {
+            let mut nodes: Vec<_> = self.graph.iter_nodes().map(|(n, _, &p)| (p, n)).collect();
+            nodes.sort();
+            self.slots = nodes.into_iter().map(|(_, node)| node).collect();
+            self.merged_into = (0..self.graph.node_bound()).collect();
+        }
+
+        /// Appended nodes keep their order behind the existing ones.
+        fn appended(&mut self) {
+            let old = self.merged_into.len();
+            let bound = self.graph.node_bound();
+            self.slots.extend((old..bound).map(NodeIndex));
+            self.merged_into.extend(old..bound);
+        }
+
+        fn report(&mut self, renumbering: &impl std::fmt::Debug) {
+            self.reported.push(format!("{renumbering:?}"));
+        }
+
+        /// Identifies possibly repeated or already absorbed nodes.
+        fn identify(&mut self, slots: &[usize], payload: usize) {
+            let resolved: BTreeSet<usize> = slots.iter().map(|&slot| self.live(slot)).collect();
+            let merged = resolved.iter().map(|&node| self.payload(node)).collect();
+            let requested: Vec<NodeIndex> = slots.iter().map(|&slot| self.slots[slot]).collect();
+            let survivor = self.graph.identify_nodes(&requested, payload).0;
+            assert!(resolved.contains(&survivor));
+            for &node in &resolved {
+                self.merged_into[node] = survivor;
+                assert_eq!(
+                    self.graph.node_store.is_live(NodeIndex(node)),
+                    node == survivor
+                );
+            }
+            self.n_absorbed += resolved.len() - 1;
+            self.model.identify(&merged, payload);
+        }
+
+        fn compact(&mut self) {
+            let before = Payloads::of(&self.graph);
+            let remap = self.graph.compact();
+            let merged = (0..remap.old_bound()).filter(|&old| remap.is_merged(NodeIndex(old)));
+            assert_eq!(merged.count(), self.n_absorbed);
+            before.check_nodes(&remap, &self.graph, |_, payload| payload);
+            self.report(&remap);
+            self.n_absorbed = 0;
+            self.renumbered();
+        }
+
+        fn check(&self, context: &str) {
+            assert_eq!(Partition::of(&self.graph, context), self.model, "{context}");
+        }
+
+        fn step(&mut self, random: &mut Random, next: &mut usize) -> String {
+            self.reported.clear();
+            let mut fresh = || {
+                *next += 1;
+                *next
+            };
+            let n_slots = self.n_slots();
+            // An empty graph can only grow.
+            let edit = if n_slots == 0 { 13 } else { random.below(19) };
+            match edit {
+                16 => {
+                    // Pending identifications neither block nor shift the new node.
+                    let payload = fresh();
+                    let node = self.graph.add_node(payload);
+                    assert_eq!(node.0, self.merged_into.len());
+                    self.model.live.insert(payload);
+                    self.appended();
+                    "add node".to_owned()
+                }
+                0..=4 => {
+                    let slots: Vec<_> = (0..1 + random.below(4))
+                        .map(|_| random.below(n_slots))
+                        .collect();
+                    self.identify(&slots, fresh());
+                    format!("identify {slots:?}")
+                }
+                5 => {
+                    let slot = random.below(n_slots);
+                    let (hedge, edge) = (fresh(), fresh());
+                    let flow = if random.one_in(2) {
+                        Flow::Sink
+                    } else {
+                        Flow::Source
+                    };
+                    let node = self.live(slot);
+                    (self.graph)
+                        .add_dangling_edge_mut(NodeIndex(node).add_data(hedge), edge, flow, true)
+                        .unwrap();
+                    self.model.node_of.insert(hedge, self.payload(node));
+                    format!("dangling at {slot}")
+                }
+                6 | 7 => {
+                    let (a, b) = (random.below(n_slots), random.below(n_slots));
+                    let (ha, hb, edge) = (fresh(), fresh(), fresh());
+                    let (na, nb) = (self.live(a), self.live(b));
+                    (self.graph)
+                        .add_pair_mut(
+                            NodeIndex(na).add_data(ha),
+                            NodeIndex(nb).add_data(hb),
+                            edge,
+                            Orientation::Default,
+                        )
+                        .unwrap();
+                    self.model.node_of.insert(ha, self.payload(na));
+                    self.model.node_of.insert(hb, self.payload(nb));
+                    format!("pair {a} {b}")
+                }
+                8 | 15 => {
+                    self.compact();
+                    "compact".to_owned()
+                }
+                9 => {
+                    self.compact();
+                    let subgraph = random_subgraph(random, self.graph.n_hedges());
+                    let hedges = self.hedge_payloads(&subgraph);
+                    let before = Payloads::of(&self.graph);
+                    let renumbering = self.graph.delete_hedges(&subgraph).unwrap();
+                    before.check(&renumbering, &self.graph, |_, payload| payload);
+                    self.report(&renumbering);
+                    self.model.split_off(&hedges, 0);
+                    self.renumbered();
+                    format!("delete {:?}", subgraph.included_iter().collect::<Vec<_>>())
+                }
+                10 => {
+                    self.compact();
+                    let subgraph = random_subgraph(random, self.graph.n_hedges());
+                    let hedges = self.hedge_payloads(&subgraph);
+                    let split_offset = 1_000_000;
+                    let before = Payloads::of(&self.graph);
+                    let (extracted, split) = (self.graph)
+                        .extract(
+                            &subgraph,
+                            |edge| edge.map(|data| *data),
+                            |edge| edge,
+                            |payload| payload + split_offset,
+                            |payload| payload,
+                        )
+                        .unwrap();
+                    before.check(&split.kept, &self.graph, |_, payload| payload);
+                    before.check(&split.moved, &extracted, |old, payload| {
+                        match split.kept.nodes.get(old) {
+                            Some(_) => payload + split_offset,
+                            None => payload,
+                        }
+                    });
+                    self.report(&split);
+                    let expected = self.model.split_off(&hedges, split_offset);
+                    assert_eq!(Partition::of(&extracted, "extracted"), expected);
+                    self.renumbered();
+                    format!("extract {:?}", subgraph.included_iter().collect::<Vec<_>>())
+                }
+                11 => {
+                    self.compact();
+                    let slots: Vec<_> = (0..random.below(3))
+                        .map(|_| random.below(self.n_slots()))
+                        .collect();
+                    let nodes: BTreeSet<_> = slots.iter().map(|&slot| self.slots[slot]).collect();
+                    let payloads = nodes.iter().map(|node| self.graph[*node]).collect();
+                    let before = Payloads::of(&self.graph);
+                    let (extracted, split) = (self.graph)
+                        .extract_nodes(nodes, |edge| edge.map(|data| *data), |edge| edge)
+                        .unwrap();
+                    before.check(&split.kept, &self.graph, |_, payload| payload);
+                    before.check(&split.moved, &extracted, |_, payload| payload);
+                    self.report(&split);
+                    let expected = self.model.extract_nodes(&payloads);
+                    assert_eq!(Partition::of(&extracted, "extracted nodes"), expected);
+                    self.renumbered();
+                    format!("extract nodes {slots:?}")
+                }
+                12 => {
+                    let n_hedges = self.graph.n_hedges();
+                    if n_hedges == 0 {
+                        return "contract nothing".to_owned();
+                    }
+                    let mut subgraph = random_subgraph(random, n_hedges);
+                    subgraph.add(Hedge(random.below(n_hedges)));
+                    let payload = fresh();
+                    let touched: BTreeSet<usize> = (subgraph.included_iter())
+                        .map(|hedge| self.graph[self.graph.node_id(hedge)])
+                        .collect();
+                    let hedges = self.hedge_payloads(&subgraph);
+                    let before = Payloads::of(&self.graph);
+                    let renumbering = self.graph.contract_subgraph(&subgraph, payload);
+                    before.check(&renumbering, &self.graph, |_, old| {
+                        if touched.contains(&old) {
+                            payload
+                        } else {
+                            old
+                        }
+                    });
+                    self.report(&renumbering);
+                    self.model.identify(&touched, payload);
+                    self.model.split_off(&hedges, 0);
+                    // Contraction compacts every pending identification.
+                    self.n_absorbed = 0;
+                    self.renumbered();
+                    format!(
+                        "contract {:?}",
+                        subgraph.included_iter().collect::<Vec<_>>()
+                    )
+                }
+                17 => {
+                    let node = NodeIndex(self.live(random.below(n_slots)));
+                    let crown: Vec<_> = self.graph.iter_crown(node).collect();
+                    let anchor = (!crown.is_empty() && !random.one_in(4))
+                        .then(|| crown[random.below(crown.len())]);
+                    self.graph.node_store.set_anchor(node, anchor);
+                    assert_eq!(self.graph.node_store.anchor(node), anchor);
+                    format!("anchor {node} at {anchor:?}")
+                }
+                18 => {
+                    self.compact();
+                    let hedges: HedgeRemap = random_permutation(random, self.graph.n_hedges());
+                    let nodes: NodeRemap = random_permutation(random, self.graph.node_bound());
+                    let before = Payloads::of(&self.graph);
+                    self.graph.permute_hedges(&hedges).unwrap();
+                    self.graph.permute_nodes(&nodes).unwrap();
+                    let renumbering = Renumbering { hedges, nodes };
+                    before.check(&renumbering, &self.graph, |_, payload| payload);
+                    self.renumbered();
+                    "permute".to_owned()
+                }
+                _ => {
+                    let other: Graph<T> = random_graph(random, next).build();
+                    self.model.append(Partition::of(&other, "other"));
+                    if random.one_in(2) {
+                        let graph =
+                            std::mem::replace(&mut self.graph, HedgeGraphBuilder::new().build());
+                        self.graph = graph
+                            .join(
+                                other,
+                                |af, ad, bf, bd| af == -bf && ad.data % 2 == bd.data % 2,
+                                |af, ad, _, _| (af, ad),
+                            )
+                            .unwrap();
+                    } else {
+                        self.graph.append_disconnected_mut(other).unwrap();
+                    }
+                    self.appended();
+                    "join".to_owned()
+                }
+            }
+        }
+    }
+
+    fn seeded(seed: u64) -> Random {
+        Random(0x9e37_79b9_7f4a_7c15 ^ (seed + 1).wrapping_mul(0x2545_f491))
+    }
+
+    #[test]
+    fn random_edits_keep_the_node_partition() {
+        for seed in 0..250u64 {
+            let mut random = seeded(seed);
+            let mut next = 0;
+            let mut lane = Lane::<NodeForest>::new(random_graph(&mut random, &mut next));
+            lane.check(&format!("seed {seed}: build"));
+            let mut history = vec![];
+            for _ in 0..24 {
+                history.push(lane.step(&mut random, &mut next));
+                lane.check(&format!("seed {seed}: {history:?}"));
+            }
+            lane.compact();
+            lane.check(&format!("seed {seed}: final"));
+        }
+    }
+
+    /// Everything observable through the [`Topology`] contract.
+    fn assert_same<A: Topology, B: Topology>(a: &Graph<A>, b: &Graph<B>, context: &str) {
+        let shape = |n_hedges, node_bound, n_live| (n_hedges, node_bound, n_live);
+        assert_eq!(
+            shape(a.n_hedges(), a.node_bound(), a.n_live()),
+            shape(b.n_hedges(), b.node_bound(), b.n_live()),
+            "{context}"
+        );
+        for hedge in (0..a.n_hedges()).map(Hedge) {
+            let incidence = |node, data, partner| (node, data, partner);
+            assert_eq!(
+                incidence(a.node_id(hedge), a[hedge], a.inv(hedge)),
+                incidence(b.node_id(hedge), b[hedge], b.inv(hedge)),
+                "{context}: half-edge {hedge}"
+            );
+        }
+        let (ta, tb) = (a.node_store.topology(), b.node_store.topology());
+        for node in (0..a.node_bound()).map(NodeIndex) {
+            let state = |live, representative, anchor, crown: Vec<Hedge>, data| {
+                (live, representative, anchor, crown, data)
+            };
+            assert_eq!(
+                state(
+                    ta.is_live(node),
+                    ta.representative(node),
+                    ta.anchor(node),
+                    ta.crown(node).collect(),
+                    a[node]
+                ),
+                state(
+                    tb.is_live(node),
+                    tb.representative(node),
+                    tb.anchor(node),
+                    tb.crown(node).collect(),
+                    b[node]
+                ),
+                "{context}: node {node}"
+            );
+        }
+    }
+
+    /// The same random edits on [`NodeForest`] and on [`RefTopology`] leave the
+    /// same observable state and report the same renumberings.
+    #[test]
+    fn node_forest_matches_the_reference_topology() {
+        for seed in 0..250u64 {
+            let (mut forest_random, mut reference_random) = (seeded(seed), seeded(seed));
+            let (mut forest_next, mut reference_next) = (0, 0);
+            let mut forest =
+                Lane::<NodeForest>::new(random_graph(&mut forest_random, &mut forest_next));
+            let mut reference =
+                Lane::<RefTopology>::new(random_graph(&mut reference_random, &mut reference_next));
+            assert_same(&forest.graph, &reference.graph, &format!("seed {seed}"));
+            let mut history = vec![];
+            for _ in 0..24 {
+                let edit = forest.step(&mut forest_random, &mut forest_next);
+                assert_eq!(
+                    reference.step(&mut reference_random, &mut reference_next),
+                    edit
+                );
+                history.push(edit);
+                let context = format!("seed {seed}: {history:?}");
+                assert_eq!(forest.reported, reference.reported, "{context}");
+                reference.check(&context);
+                assert_same(&forest.graph, &reference.graph, &context);
+            }
+        }
+    }
+}
+
+#[test]
+fn in_place_edge_insertion_preserves_graph_on_invalid_endpoints() {
+    let mut builder = HedgeGraphBuilder::<&str, &str, &str>::new();
+    let a = builder.add_node("a");
+    let b = builder.add_node("b");
+    builder.add_edge(a.add_data("a port"), b.add_data("b port"), "existing", true);
+    let mut graph: HedgeGraph<_, _, _> = builder.build();
+    let before = graph.clone();
+    let invalid = NodeIndex(graph.node_bound());
+    for (source, sink) in [(invalid, b), (a, invalid)] {
+        assert!(matches!(
+            graph.add_pair_mut(
+                source.add_data("new source"),
+                sink.add_data("new sink"),
+                "bad",
+                true
+            ),
+            Err(HedgeGraphError::NoNode)
+        ));
+        assert_eq!(graph, before);
+    }
+    assert!(matches!(
+        graph.add_dangling_edge_mut(invalid.add_data("new port"), "bad", Flow::Sink, true),
+        Err(HedgeGraphError::NoNode)
+    ));
+    assert_eq!(graph, before);
+    graph.check().unwrap();
+    graph.node_store.check_nodes().unwrap();
+}
+
+#[test]
+fn in_place_edge_insertion_rejects_absorbed_endpoints_before_changing_the_graph() {
+    let mut builder = HedgeGraphBuilder::<&str, &str, &str>::new();
+    let [a, b, c] = ["a", "b", "c"].map(|data| builder.add_node(data));
+    builder.add_edge(a.add_data("a port"), b.add_data("b port"), "existing", true);
+    let mut graph: HedgeGraph<_, _, _> = builder.build();
+    let live = graph.identify_nodes(&[a, b], "ab");
+    let absorbed = if live == a { b } else { a };
+    assert!(!graph.node_store.is_live(absorbed));
+    let before = graph.clone();
+    for (source, sink) in [(c, absorbed), (absorbed, c), (live, absorbed)] {
+        assert!(matches!(
+            graph.add_pair_mut(
+                source.add_data("new source"),
+                sink.add_data("new sink"),
+                "bad",
+                true
+            ),
+            Err(HedgeGraphError::InvalidNode(node)) if node == absorbed
+        ));
+        assert_eq!(graph, before);
+        assert_eq!(graph.node_store.n_hedges(), graph.n_hedges());
+    }
+    assert!(matches!(
+        graph.add_dangling_edge_mut(absorbed.add_data("new port"), "bad", Flow::Sink, true),
+        Err(HedgeGraphError::InvalidNode(node)) if node == absorbed
+    ));
+    assert_eq!(graph, before);
+    assert_eq!(graph.node_store.n_hedges(), graph.n_hedges());
+    graph.node_store.check_nodes().unwrap();
+    // The rejected insertions leave a graph that still accepts live endpoints.
+    let (source, sink) = graph
+        .add_pair_mut(
+            live.add_data("live source"),
+            c.add_data("live sink"),
+            "ok",
+            true,
+        )
+        .unwrap();
+    assert_eq!((graph.node_id(source), graph.node_id(sink)), (live, c));
+    assert_eq!(graph.node_store.n_hedges(), graph.n_hedges());
+    graph.node_store.check_nodes().unwrap();
+}
+
+#[test]
+fn in_place_edge_insertion_keeps_indices_and_incidence_payloads() {
+    let mut builder = HedgeGraphBuilder::<&str, &str, &str>::new();
+    let a = builder.add_node("a");
+    let b = builder.add_node("b");
+    let isolated = builder.add_node("isolated");
+    builder.add_edge(a.add_data("a port"), b.add_data("b port"), "existing", true);
+    let mut graph: HedgeGraph<_, _, _> = builder.build();
+    let original_edge = graph[&Hedge(0)];
+    let (source, sink) = graph
+        .add_pair_mut(
+            a.add_data("parallel source"),
+            b.add_data("parallel sink"),
+            "parallel",
+            false,
+        )
+        .unwrap();
+    let (loop_source, loop_sink) = graph
+        .add_pair_mut(
+            isolated.add_data("loop source"),
+            isolated.add_data("loop sink"),
+            "loop",
+            true,
+        )
+        .unwrap();
+    let dangling = graph
+        .add_dangling_edge_mut(
+            isolated.add_data("external port"),
+            "external",
+            Flow::Sink,
+            true,
+        )
+        .unwrap();
+    assert_eq!(graph.n_live(), 3);
+    assert_eq!(graph.n_edges(), 4);
+    assert_eq!(graph.n_hedges(), 7);
+    assert_eq!(graph[&Hedge(0)], original_edge);
+    assert_eq!(graph[original_edge], "existing");
+    assert_eq!(graph.node_id(Hedge(0)), a);
+    assert_eq!(graph.node_id(Hedge(1)), b);
+    assert_eq!(graph.inv(source), sink);
+    assert_eq!(graph.inv(loop_source), loop_sink);
+    assert_eq!(graph.node_id(loop_source), isolated);
+    assert_eq!(graph.node_id(loop_sink), isolated);
+    assert_eq!(graph.inv(dangling), dangling);
+    assert_eq!(graph.flow(dangling), Flow::Sink);
+    assert_eq!(graph.iter_crown(isolated).count(), 3);
+    let payloads: Vec<_> = graph.iter_hedges().map(|(_, data)| *data).collect();
+    assert_eq!(
+        payloads,
+        [
+            "a port",
+            "b port",
+            "parallel source",
+            "parallel sink",
+            "loop source",
+            "loop sink",
+            "external port"
+        ]
+    );
+    graph.check().unwrap();
+    graph.node_store.check_nodes().unwrap();
 }

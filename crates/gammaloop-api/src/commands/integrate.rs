@@ -1,26 +1,20 @@
-use std::{
-    any::Any,
-    collections::{BTreeMap, HashSet},
-    fmt, fs,
-    io::{self, IsTerminal, Write},
-    ops::Deref,
-    panic::{self, AssertUnwindSafe},
-    path::PathBuf,
-    sync::mpsc,
-    thread,
-    time::Duration,
-};
+use std::any::Any;
+use std::collections::{BTreeMap, HashSet};
+use std::io::{IsTerminal, Write};
+use std::ops::Deref;
+use std::panic::AssertUnwindSafe;
+use std::path::PathBuf;
+use std::sync::mpsc;
+use std::time::Duration;
+use std::{fmt, fs, io, panic, thread};
 
 use clap::{ArgAction, Args, ValueEnum};
-use crossterm::{
-    cursor::{Hide, MoveDown, MoveToColumn, MoveUp, Show},
-    event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
-    execute, queue,
-    terminal::{
-        self, disable_raw_mode, enable_raw_mode, Clear, ClearType, EnterAlternateScreen,
-        LeaveAlternateScreen,
-    },
+use crossterm::cursor::{Hide, MoveDown, MoveToColumn, MoveUp, Show};
+use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use crossterm::terminal::{
+    disable_raw_mode, enable_raw_mode, Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen,
 };
+use crossterm::{event, execute, queue, terminal};
 use gammalooprs::integrands::process::GaussianReferenceFunction;
 use gammalooprs::utils::serde_utils::{IsDefault, SmartSerde};
 use schemars::JsonSchema;
@@ -28,39 +22,35 @@ use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
 use unicode_width::UnicodeWidthChar;
 
-use color_eyre::{eyre::eyre, Result};
+use color_eyre::eyre::eyre;
+use color_eyre::Result;
 use colored::Colorize;
-use gammalooprs::{
-    integrands::{HasIntegrand, Integrand},
-    integrate::{
-        build_integration_result, emit_integration_status_via_tracing, havana_integrate,
-        latest_observable_resume_state_path, print_integral_result,
-        render_saved_integration_summary, render_status_update_tabled, slot_workspace_path,
-        workspace_manifest_path, workspace_state_path, ContributionSortMode,
-        HavanaIntegrateRequest, IntegrationSlot, IntegrationState, IntegrationStatusKind,
-        IntegrationStatusPhaseDisplay, IntegrationStatusViewOptions, IntegrationWorkspaceManifest,
-        IterationBatchingSettings, RatatuiDashboardState, SamplingCorrelationMode, SlotMeta,
-        StatusUpdate, TabledRenderOptions, WorkspaceSnapshotControl,
-    },
-    model::{Model, SerializableInputParamCard},
-    observables::ObservableSnapshotBundle,
-    request_interrupt, request_iteration_abort,
-    settings::{
-        runtime::{IntegratedPhase, IntegrationResult, SamplingSettings},
-        RuntimeSettings,
-    },
-    utils::F,
+use gammalooprs::integrands::{HasIntegrand, Integrand};
+use gammalooprs::integrate::{
+    build_integration_result, emit_integration_status_via_tracing, havana_integrate,
+    latest_observable_resume_state_path, print_integral_result, render_saved_integration_summary,
+    render_status_update_tabled, slot_workspace_path, workspace_manifest_path,
+    workspace_state_path, ContributionSortMode, HavanaIntegrateRequest, IntegrationSlot,
+    IntegrationState, IntegrationStatusKind, IntegrationStatusPhaseDisplay,
+    IntegrationStatusViewOptions, IntegrationWorkspaceManifest, IterationBatchingSettings,
+    RatatuiDashboardState, SamplingCorrelationMode, SlotMeta, StatusUpdate, TabledRenderOptions,
+    WorkspaceSnapshotControl,
 };
+use gammalooprs::model::{Model, SerializableInputParamCard};
+use gammalooprs::observables::ObservableSnapshotBundle;
+use gammalooprs::settings::runtime::{IntegratedPhase, IntegrationResult, SamplingSettings};
+use gammalooprs::settings::RuntimeSettings;
+use gammalooprs::utils::F;
+use gammalooprs::{request_interrupt, request_iteration_abort};
 use itertools::{izip, Itertools};
-use ratatui::{backend::CrosstermBackend, Terminal};
+use ratatui::backend::CrosstermBackend;
+use ratatui::Terminal;
 use symbolica::numerical_integration::Grid;
 use tracing::{info, warn};
 
-use crate::{
-    completion::CompletionArgExt,
-    state::{ProcessRef, State},
-    CLISettings,
-};
+use crate::completion::CompletionArgExt;
+use crate::state::{ProcessRef, State};
+use crate::CLISettings;
 
 #[cfg_attr(
     feature = "python_api",
@@ -1285,11 +1275,16 @@ impl Integrate {
 
     fn load_or_prepare_workspace_state(
         &self,
-        state: &mut State,
         selected_slots: &[ResolvedIntegrandSlot],
         requested: &mut IntegrationWorkspaceManifest,
         workspace_path: &std::path::Path,
-    ) -> Result<Option<IntegrationState>> {
+    ) -> Result<
+        Option<(
+            IntegrationState,
+            IntegrationWorkspaceManifest,
+            Vec<RuntimeSettings>,
+        )>,
+    > {
         let path_to_state = workspace_state_path(workspace_path);
         let manifest_path = workspace_manifest_path(workspace_path);
         match fs::read(&path_to_state) {
@@ -1359,49 +1354,6 @@ impl Integrate {
                         )
                     })
                     .collect::<Result<Vec<_>>>()?;
-                let comparison_integrand_fingerprints = izip!(
-                    selected_slots.iter(),
-                    workspace_settings.iter(),
-                    requested.integrand_fingerprints.iter(),
-                )
-                .map(|(slot, settings, current_fingerprint)| {
-                    if settings.sampling.selected_graph_names().is_empty() {
-                        return Ok(current_fingerprint.clone());
-                    }
-
-                    // A filtered workspace fingerprints the warmed full source. Recreate that
-                    // state on a clone with the saved non-model settings so a permitted settings
-                    // change cannot mutate the live source or invalidate resume prematurely.
-                    let mut integrand = state
-                        .process_list
-                        .get_integrand(slot.process_id, &slot.slot_meta.integrand_name)?
-                        .require_generated()?
-                        .clone();
-                    let preserved_model_overrides = integrand.get_settings().model.clone();
-                    *integrand.get_mut_settings() = settings.clone();
-                    integrand.get_mut_settings().model = preserved_model_overrides;
-                    let model = state.resolve_model_for_integrand(
-                        slot.process_id,
-                        &slot.slot_meta.integrand_name,
-                    )?;
-                    integrand.warm_up(&model)?;
-                    integrand.resume_fingerprint()
-                })
-                .collect::<Result<Vec<_>>>()?;
-                let mismatched_fingerprint_slots = selected_slots
-                    .iter()
-                    .zip(manifest.integrand_fingerprints.iter())
-                    .zip(comparison_integrand_fingerprints.iter())
-                    .filter(|&((_, saved), current)| saved != current)
-                    .map(|((slot, _), _)| slot.slot_meta.key())
-                    .collect_vec();
-                if !mismatched_fingerprint_slots.is_empty() {
-                    return Err(eyre!(
-                        "Workspace integrand fingerprints do not match the current generated integrands for {}. Resume requires the exact same generated integrands; use --restart or restore the previous generation.",
-                        mismatched_fingerprint_slots.join(", ")
-                    ));
-                }
-
                 info!(
                     "{}",
                     "Found integration state, result of previous integration:".yellow()
@@ -1421,35 +1373,19 @@ impl Integrate {
                     })?
                     .0;
 
-                for ((slot, target), workspace_settings) in selected_slots
+                for (index, (slot, target)) in selected_slots
                     .iter()
                     .zip(requested.targets.iter())
-                    .zip(workspace_settings)
+                    .enumerate()
                 {
-                    let gloop_integrand = state
-                        .process_list
-                        .get_integrand_mut(slot.process_id, &slot.slot_meta.integrand_name)?;
-                    let current_settings = gloop_integrand.get_mut_settings();
-                    if *current_settings != workspace_settings {
-                        warn!(
-                            "settings for {} have changed with respect to workspace, reverting non-model changes",
-                            slot.slot_meta.key()
-                        );
-                        let preserved_model_overrides = current_settings.model.clone();
-                        *current_settings = workspace_settings;
-                        current_settings.model = preserved_model_overrides;
-                    }
-
                     let label = format!("itg {}", slot.slot_meta.key());
-                    let saved_slot = integration_state
-                        .all_integrals
-                        .get(
-                            selected_slots
-                                .iter()
-                                .position(|candidate| candidate.slot_meta == slot.slot_meta)
-                                .expect("selected slot must exist"),
-                        )
-                        .expect("saved slot must exist");
+                    let saved_slot =
+                        integration_state.all_integrals.get(index).ok_or_else(|| {
+                            eyre!(
+                                "Workspace integration state is missing slot {}; use --restart",
+                                slot.slot_meta.key()
+                            )
+                        })?;
                     print_integral_result(
                         &saved_slot.re,
                         &label,
@@ -1472,7 +1408,7 @@ impl Integrate {
                 );
                 info!("{}", "Resuming integration".yellow());
 
-                Ok(Some(integration_state))
+                Ok(Some((integration_state, manifest, workspace_settings)))
             }
             Err(err) if err.kind() == io::ErrorKind::NotFound => {
                 info!("No integration state found, starting new integration");
@@ -1485,12 +1421,20 @@ impl Integrate {
         }
     }
 
-    fn warm_and_clone_integrands(
+    fn prepare_selected_integrands(
         &self,
-        state: &mut State,
+        state: &State,
         selected_slots: &[ResolvedIntegrandSlot],
         slot_models: &[Model],
+        saved_settings: Option<&[RuntimeSettings]>,
     ) -> Result<Vec<gammalooprs::integrands::process::ProcessIntegrand>> {
+        if slot_models.len() != selected_slots.len()
+            || saved_settings.is_some_and(|settings| settings.len() != selected_slots.len())
+        {
+            return Err(eyre!(
+                "Integration model/settings metadata does not cover every slot"
+            ));
+        }
         info!(
             "Gammaloop now integrates {}",
             selected_slots
@@ -1498,38 +1442,40 @@ impl Integrate {
                 .map(|slot| slot.slot_meta.key().green().bold().to_string())
                 .join(", ")
         );
-
         selected_slots
             .iter()
-            .zip(slot_models.iter())
-            .map(|slot| {
-                let (slot, model) = slot;
-                let gloop_integrand = state
+            .zip(slot_models)
+            .enumerate()
+            .map(|(index, (slot, model))| {
+                let source = state
                     .process_list
-                    .get_integrand_mut(slot.process_id, &slot.slot_meta.integrand_name)?;
-                let selected_graph_names = gloop_integrand
-                    .get_settings()
-                    .sampling
-                    .selected_graph_names()
-                    .to_vec();
-                if selected_graph_names.is_empty() {
-                    gloop_integrand.warm_up(model)?;
-                    return Ok(gloop_integrand.clone());
+                    .get_integrand(slot.process_id, &slot.slot_meta.integrand_name)?
+                    .require_generated()?;
+                // Saved non-model settings decide the resumed selection. Work on a clone:
+                // rejected preparation/fingerprints must leave the generated source intact.
+                let mut restored;
+                let source = if let Some(settings) = saved_settings {
+                    restored = source.clone();
+                    let model_overrides = source.get_settings().model.clone();
+                    *restored.get_mut_settings() = settings[index].clone();
+                    restored.get_mut_settings().model = model_overrides;
+                    &restored
+                } else {
+                    source
+                };
+                let names = source.get_settings().sampling.selected_graph_names();
+                let mut selected = source.clone_with_selected_graph_groups(model, names)?;
+                if !names.is_empty() {
+                    info!(
+                        "Runtime graph-group subset for {}: {} of {} groups [{}]",
+                        slot.slot_meta.key().green().bold(),
+                        selected.graph_group_count(),
+                        source.graph_group_count(),
+                        selected.graph_group_master_names().join(", "),
+                    );
                 }
-
-                gloop_integrand.warm_up(model)?;
-                let full_group_count = gloop_integrand.graph_group_count();
-                let mut integration_view = gloop_integrand
-                    .clone_with_selected_graph_groups(model, &selected_graph_names)?;
-                info!(
-                    "Runtime graph-group subset for {}: {} of {} groups [{}]",
-                    slot.slot_meta.key().green().bold(),
-                    integration_view.graph_group_count(),
-                    full_group_count,
-                    integration_view.graph_group_master_names().join(", "),
-                );
-                integration_view.warm_up(model)?;
-                Ok(integration_view)
+                selected.warm_up(model)?;
+                Ok(selected)
             })
             .collect()
     }
@@ -1599,22 +1545,6 @@ impl Integrate {
                     slot.process_id,
                     &slot.slot_meta.integrand_name,
                 )
-            })
-            .collect()
-    }
-
-    fn resolve_integrand_fingerprints(
-        &self,
-        state: &mut State,
-        selected_slots: &[ResolvedIntegrandSlot],
-    ) -> Result<Vec<String>> {
-        selected_slots
-            .iter()
-            .map(|slot| {
-                state
-                    .process_list
-                    .get_integrand_mut(slot.process_id, &slot.slot_meta.integrand_name)?
-                    .resume_fingerprint()
             })
             .collect()
     }
@@ -1863,17 +1793,6 @@ impl Integrate {
             }
         }
 
-        if self.restart && workspace_path.exists() {
-            fs::remove_dir_all(&workspace_path)?;
-        }
-
-        if !workspace_path.exists() {
-            fs::create_dir_all(&workspace_path)?;
-            info!(
-                "Created workspace directory at {}",
-                workspace_path.display()
-            );
-        }
         let slot_models = self.resolve_slot_models(state, &selected_slots)?;
         let mut manifest = IntegrationWorkspaceManifest {
             version: IntegrationWorkspaceManifest::CURRENT_VERSION,
@@ -1884,7 +1803,8 @@ impl Integrate {
             targets,
             effective_model_parameters: self
                 .resolve_effective_model_parameters(state, &selected_slots)?,
-            integrand_fingerprints: self.resolve_integrand_fingerprints(state, &selected_slots)?,
+            // Set below from the prepared integrands that will be evaluated.
+            integrand_fingerprints: Vec::new(),
             reference_observable_convention: references
                 .iter()
                 .any(Option::is_some)
@@ -1898,21 +1818,43 @@ impl Integrate {
             integrator_settings_slot: 0,
             sampling_correlation_mode: self.sampling_correlation_mode(),
         };
-        let integration_state = self.load_or_prepare_workspace_state(
+        let resumed = if self.restart {
+            None
+        } else {
+            self.load_or_prepare_workspace_state(&selected_slots, &mut manifest, &workspace_path)?
+        };
+        let mut slot_integrands = self.prepare_selected_integrands(
             state,
             &selected_slots,
-            &mut manifest,
-            &workspace_path,
+            &slot_models,
+            resumed.as_ref().map(|(_, _, settings)| settings.as_slice()),
         )?;
-        let mut slot_integrands =
-            self.warm_and_clone_integrands(state, &selected_slots, &slot_models)?;
-        // Persist the post-warm full-source fingerprint for both filtered and unfiltered slots.
-        manifest.integrand_fingerprints =
-            self.resolve_integrand_fingerprints(state, &selected_slots)?;
+        // Fingerprint exactly the warmed collection that will be evaluated, before mutable
+        // observable checkpoints are restored. Excluded graphs never enter this payload.
+        manifest.integrand_fingerprints = slot_integrands
+            .iter()
+            .map(|integrand| integrand.resume_fingerprint())
+            .collect::<Result<Vec<_>>>()?;
+        if let Some((_, saved, _)) = &resumed {
+            let mismatched = selected_slots
+                .iter()
+                .zip(&saved.integrand_fingerprints)
+                .zip(&manifest.integrand_fingerprints)
+                .filter(|((_, saved), current)| saved != current)
+                .map(|((slot, _), _)| slot.slot_meta.key())
+                .collect_vec();
+            if !mismatched.is_empty() {
+                return Err(eyre!(
+                    "Workspace integrand fingerprints do not match the selected generated integrands for {}. Resume requires the exact same selected integrands; use --restart or restore the previous generation.",
+                    mismatched.join(", ")
+                ));
+            }
+        }
+        let integration_state = resumed.as_ref().map(|(saved, _, _)| saved);
         self.restore_workspace_observables(
             &workspace_path,
             &selected_slots,
-            integration_state.as_ref(),
+            integration_state,
             &mut slot_integrands,
         )?;
         self.validate_slot_compatibility(&selected_slots, &slot_integrands)?;
@@ -1937,12 +1879,41 @@ impl Integrate {
         let view_options =
             self.build_render_options(&slot_settings, !self.no_show_integration_statistics);
         let tabled_options = self.build_tabled_render_options();
+        if let Some((_, _, saved_settings)) = &resumed {
+            for (slot, saved) in selected_slots.iter().zip(saved_settings) {
+                let current = state
+                    .process_list
+                    .get_integrand_mut(slot.process_id, &slot.slot_meta.integrand_name)?
+                    .get_mut_settings();
+                if current != saved {
+                    warn!(
+                        "settings for {} have changed with respect to workspace, reverting non-model changes",
+                        slot.slot_meta.key()
+                    );
+                    let model_overrides = current.model.clone();
+                    *current = saved.clone();
+                    current.model = model_overrides;
+                }
+            }
+        }
+        if self.restart && workspace_path.exists() {
+            fs::remove_dir_all(&workspace_path)?;
+        }
+        if !workspace_path.exists() {
+            fs::create_dir_all(&workspace_path)?;
+            info!(
+                "Created workspace directory at {}",
+                workspace_path.display()
+            );
+        }
         self.write_workspace_manifest_and_settings(
             &slot_integrands,
             &selected_slots,
             &manifest,
             &workspace_path,
         )?;
+
+        let integration_state = resumed.map(|(saved, _, _)| saved);
 
         let n_cores = self
             .n_cores
@@ -2030,21 +2001,18 @@ mod tests {
         ContributionSortOption, DashboardKeyAction, RendererOption, ShowPhaseOption,
         StreamingDisplayController, TabledKeyAction,
     };
-    use crate::{
-        state::{CommandHistory, ProcessRef, State},
-        CLISettings, Commands, SessionSettings, StateSettings,
-    };
+    use crate::state::{CommandHistory, ProcessRef, State};
+    use crate::{CLISettings, Commands, SessionSettings, StateSettings};
     use clap::Parser;
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-    use gammalooprs::{
-        integrate::{
-            workspace_manifest_path, workspace_state_path, ContributionSortMode,
-            IntegrationStatusPhaseDisplay, SlotMeta,
-        },
-        observables::ObservableSnapshotBundle,
-        settings::{runtime::IntegratedPhase, IntegratorSettings, RuntimeSettings},
-        utils::F,
+    use gammalooprs::integrate::{
+        workspace_manifest_path, workspace_state_path, ContributionSortMode,
+        IntegrationStatusPhaseDisplay, SlotMeta,
     };
+    use gammalooprs::observables::ObservableSnapshotBundle;
+    use gammalooprs::settings::runtime::IntegratedPhase;
+    use gammalooprs::settings::{IntegratorSettings, RuntimeSettings};
+    use gammalooprs::utils::F;
     use spenso::algebra::complex::Complex;
     use std::collections::BTreeMap;
     use std::path::{Path, PathBuf};
@@ -2144,10 +2112,9 @@ mod tests {
     fn resume_rejects_unversioned_workspace_before_decoding_state() {
         let temp = tempdir().unwrap();
         let mut requested = write_unversioned_workspace(temp.path());
-        let mut state = State::new_test();
 
         let error = Integrate::default()
-            .load_or_prepare_workspace_state(&mut state, &[], &mut requested, temp.path())
+            .load_or_prepare_workspace_state(&[], &mut requested, temp.path())
             .err()
             .expect("unversioned workspace must be rejected");
         let message = error.to_string();
@@ -2157,16 +2124,44 @@ mod tests {
     }
 
     #[test]
+    fn summary_and_resume_reject_full_source_fingerprint_workspaces() {
+        let temp = tempdir().unwrap();
+        let mut requested = write_unversioned_workspace(temp.path());
+        let path = workspace_manifest_path(temp.path());
+        let mut manifest: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        // Every earlier format fingerprinted the full generated source.
+        let previous = gammalooprs::integrate::IntegrationWorkspaceManifest::CURRENT_VERSION - 1;
+        manifest["version"] = previous.into();
+        std::fs::write(&path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+        let summary = super::read_existing_workspace_state(temp.path())
+            .err()
+            .unwrap();
+        let resume = Integrate::default()
+            .load_or_prepare_workspace_state(&[], &mut requested, temp.path())
+            .err()
+            .unwrap();
+        for error in [summary, resume] {
+            let message = error.to_string();
+            assert!(
+                message.contains(&format!("older format version {previous}")),
+                "{message}"
+            );
+            assert!(message.contains("--restart"), "{message}");
+            assert!(!message.contains("deserialize"), "{message}");
+        }
+    }
+
+    #[test]
     fn resume_propagates_workspace_state_read_errors() {
         let temp = tempdir().unwrap();
         let state_path = workspace_state_path(temp.path());
         let mut requested = write_unversioned_workspace(temp.path());
         std::fs::remove_file(&state_path).unwrap();
         std::fs::create_dir_all(&state_path).unwrap();
-        let mut state = State::new_test();
 
         let error = Integrate::default()
-            .load_or_prepare_workspace_state(&mut state, &[], &mut requested, temp.path())
+            .load_or_prepare_workspace_state(&[], &mut requested, temp.path())
             .err()
             .expect("workspace read error must be propagated");
         let message = error.to_string();
@@ -2333,9 +2328,8 @@ mod tests {
     #[test]
     fn reference_descriptor_cli_serde_and_workspace_contract() {
         use clap::Parser;
-        use gammalooprs::{
-            integrands::process::GaussianReferenceFunction, integrate::IntegrationWorkspaceManifest,
-        };
+        use gammalooprs::integrands::process::GaussianReferenceFunction;
+        use gammalooprs::integrate::IntegrationWorkspaceManifest;
         let parsed =
             IntegrateCli::try_parse_from(["test", "--reference-gaussian", r#"{"width":300}"#])
                 .unwrap();

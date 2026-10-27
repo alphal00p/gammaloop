@@ -197,12 +197,18 @@ def main():
     model = hep.Model.phi3()
     triangle = (
         model.process(["phi"], ["phi", "phi"])
-        .generate_diagrams(
-            loops=1,
-            max_vertices=3,
-            maximum_bridges=0,
-            progress=None,
+        .amplitude(
+            loops=hep.Loops.total(1),
+            topology=hep.TopologyRules(
+                max_vertices=3,
+                bridges=hep.Bridges.at_most(0),
+                self_energies=hep.Veto.all(),
+                tadpoles=hep.Veto.all(),
+                snails=hep.Veto.massless(),
+            ),
         )
+        .generate()
+        .build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
         .diagrams[0]
     )
     cases = [

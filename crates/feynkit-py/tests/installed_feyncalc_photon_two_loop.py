@@ -15,6 +15,7 @@ from pathlib import Path
 from symbolica import E, Replacement, S
 from symbolica.community import hepkit as hep
 from symbolica.community.tensor import TensorExpression
+from symbolica.community.graph import Bridges
 
 model = hep.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")
 d, s, mass_squared, uv_mass, eps, log_mass, log_4pi, flavors = S(
@@ -76,15 +77,15 @@ gmunu = metric(mink(d, mu), mink(d, nu))
 ppmunu = p(0, mink(d, mu)) * p(0, mink(d, nu))
 Qg, Qpp = S("photon_2l::metric_basis", "photon_2l::momentum_basis")
 Q, dot = S("gammalooprs::Q", "spenso::dot")
-result = model.process([22], [22], vertex_allow=["V_98"]).generate_diagrams(
-    loops=2,
-    max_vertices=4,
-    maximum_bridges=0,
-    self_energy=None,
-    tadpoles=None,
-    zero_snails=None,
-    numerator_grouping=None,
-    progress=None,
+result = (
+    model.process([22], [22])
+    .amplitude(
+        loops=hep.Loops.total(2),
+        restrict=hep.Restrict().only_vertices(["V_98"]),
+        topology=hep.TopologyRules(max_vertices=4, bridges=Bridges.at_most(0)),
+    )
+    .generate()
+    .build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
 )
 assert len(result.diagrams) == 3
 targets, diagram_integrals = set(), []
@@ -279,15 +280,15 @@ ct_coordinate, ct_integral = S("photon_2l::ctd", "photon_2l::ctI")
 # Keeping the latter's squared denominator through IR rearrangement is essential.
 # Physical electron mass is zero, so its mass counterterm contributes nothing.
 # These explicit local insertions are not automatic CT/forest generation.
-one_loop_generated = model.process([22], [22], vertex_allow=["V_98"]).generate_diagrams(
-    loops=1,
-    max_vertices=2,
-    maximum_bridges=0,
-    self_energy=None,
-    tadpoles=None,
-    zero_snails=None,
-    numerator_grouping=None,
-    progress=None,
+one_loop_generated = (
+    model.process([22], [22])
+    .amplitude(
+        loops=hep.Loops.total(1),
+        restrict=hep.Restrict().only_vertices(["V_98"]),
+        topology=hep.TopologyRules(max_vertices=2, bridges=Bridges.at_most(0)),
+    )
+    .generate()
+    .build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
 )
 assert len(one_loop_generated.diagrams) == 1
 one_loop_diagram = one_loop_generated.diagrams[0]

@@ -423,10 +423,10 @@ impl PyDiagramView {
                         })?
                     };
                     offset += count;
-                    let svg = scene.render(&typeset).map_err(PyRuntimeError::new_err)?;
+                    let figure = scene.render(typeset).map_err(PyRuntimeError::new_err)?;
                     // Identity, focus and selection belong to each channel's SVG.
                     // The combined outer viewport must not own their targets.
-                    figures.push(Scene::interactive_svg(&svg).map_err(PyRuntimeError::new_err)?);
+                    figures.push(figure.interactive_svg().map_err(PyRuntimeError::new_err)?);
                 }
                 let mut svg = Scene::combine_svgs(&figures).map_err(PyRuntimeError::new_err)?;
                 if scenes.len() > 1 {
@@ -1320,6 +1320,10 @@ with sync_playwright() as driver:
                 nodes: vec![node.clone(), node.clone()],
                 edges: vec![EdgeDrawing {
                     stroke: stroke.clone(),
+                    flow_arrow: EdgeDrawing::default_flow_arrow(),
+                    momentum_arrow: EdgeDrawing::default_momentum_arrow(),
+                    flow_arrow_paints: Vec::new(),
+                    momentum_arrow_paints: Vec::new(),
                     pattern: None,
                     flow: None,
                     momentum: false,

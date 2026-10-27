@@ -57,7 +57,7 @@ commands = [
            --global-prefactor-num '(1/8)*spenso::g(spenso::coad(8,FeynKit::SourceIndex(5,1)),
                                                    spenso::coad(8,FeynKit::SourceIndex(6,1)))'
            -p gg_hhh
-           -i 1L
+           -i 1L --filter-selfenergies true --filter-snails true --filter-tadpoles true
     """,
   "generate",
   "save dot",

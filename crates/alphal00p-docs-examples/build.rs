@@ -1,10 +1,7 @@
-use std::{
-    collections::BTreeSet,
-    env,
-    fmt::Write as _,
-    fs,
-    path::{Path, PathBuf},
-};
+use std::collections::BTreeSet;
+use std::fmt::Write as _;
+use std::path::{Path, PathBuf};
+use std::{env, fs};
 
 use alphal00p_docs_catalogs::{CatalogRequest, export_catalog};
 use alphal00p_docs_schema::{ApiLanguage, DocCatalog, DocItem, DocScope};
@@ -699,8 +696,8 @@ fn rust_example_mode(component: &str, item: &str, language: &str) -> Result<Rust
                     | "Inclusion"
                     | "BaseSubgraph"
                     | "SubGraphLike"
-                    | "NodeStorage"
-                    | "NodeStorageOps"
+                    | "Topology"
+                    | "Checkpoint"
             ) | (
                 "spenso",
                 "TensorStructure"

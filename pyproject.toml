@@ -71,7 +71,7 @@ include = [
   { path = "crates/kurvst/typst/src/**/*.typ", format = "sdist" },
   { path = "crates/kurvst/typst/typst.toml", format = "sdist" },
   { path = "crates/kurvst/typst/kurvst.wasm", format = "sdist" },
-  { path = "crates/kurvst/typst/LICENSE", format = "sdist" },
+  { path = "crates/kurvst/typst/LICENSE*", format = "sdist" },
 ]
 features = ["pyo3-extension-module", "python_abi"]
 module-name = "gammaloop._gammaloop"

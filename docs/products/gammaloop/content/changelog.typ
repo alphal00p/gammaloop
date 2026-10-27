@@ -9,13 +9,34 @@
   presenting development documentation as a complete release history.
 ])
 
+== Integrating selected graph groups
+
+Integration now warms and fingerprints only the graph groups selected by the effective
+runtime settings. An excluded graph with an invalid rescaling centre no longer prevents a
+valid selected group from running. Resume uses the saved selection and checks the same warmed
+selected data; changing an excluded graph does not invalidate that run. Integration workspace
+format 2 rejects older resumable runs with a `--restart` message. A failed preparation leaves
+the generated source and any existing workspace unchanged.
+
+== Explicit generation requests
+
+Generation now requires explicit loops for amplitudes, vacuum graphs, and forward cross
+sections. The CLI uses the same `Request` grammar and squared-order semantics as FeynKit.
+Topology restrictions, physical cuts, numerator construction, selection, and grouping have
+separate owners, and omitted settings use minimal defaults. Existing repository run cards
+state their previous filters and grouping explicitly. The obsolete scaleless-only flags and
+negative numeric sentinels are removed.
+
+Saved state manifests are version 10. Process definitions persist the request and the build,
+selection, and grouping settings, with runtime controls kept outside the file. Regenerate
+older states from their run cards.
+
 == Drawing exported graphs
 
-The drawing recipes in the `justfile` that `save dot` writes no longer stop with
-`failed to read style file` before compiling. All of them except `draw-single` listed Linnest's
-`ec-layout.wasm` as a style input, which GammaLoop never extracted. Linnest no longer ships that
-unused plugin. The model's generated `edge-style.typ` also no longer imports `mi`, which
-`physics-edge-style.typ` stopped providing, so it no longer fails with an unresolved import.
+The drawing recipes in the `justfile` that `save dot` writes no longer list the
+unused `ec-layout.wasm` plugin as a style input. The model's generated `edge-style.typ`
+imports the current `physics-edge-style.typ` interface without the removed `mi` export.
+This removes the missing-style-file and unresolved-import failures in those recipes.
 
 == Components and version sources
 

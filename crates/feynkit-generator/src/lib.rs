@@ -2,24 +2,31 @@
 
 #![forbid(unsafe_code)]
 
+// Unit tests share the case table of the generation oracle tests, which names this crate.
+#[cfg(test)]
+extern crate self as feynkit_generator;
+
 mod generation;
 mod grouping;
 mod options;
+mod parser;
 mod process;
 
 use feynkit_graph::momentum_symbol;
 
 pub use generation::{
-    DiagramGroup, EdgeColor, ExternalNode, FeynmanDiagramRulesExt, GenerationError,
-    GenerationReport, GenerationResult, GroupMember, NodeColor, UnresolvedCutContent,
-    unresolved_cut_content,
+    BuiltDiagramSet, Counts, DiagramGroup, DiagramSet, ExternalLabel, ExternalNode,
+    FeynmanDiagramRulesExt, GenerationDiagramView, GenerationDressingView, GenerationError,
+    GenerationReport, GenerationSkeletonView, GroupMember, LoopCounts, PreparedDiagram,
+    PreparedEdge, PreparedEndpoint, SourceIdentity, UnresolvedCutContent, unresolved_cut_content,
 };
 pub use grouping::GroupingError;
 pub use options::{
-    CancellationToken, FilterScope, GenerationControl, GenerationFilter, GenerationFilterKind,
-    GenerationOptions, GenerationProgress, GraphGroupingOptions, NumeratorGrouping,
-    SelfEnergyFilterOptions, SewnFilterOptions, SnailFilterOptions, TadpoleFilterOptions,
+    Bridges, CancellationToken, Classes, CutAmplitude, Cuts, GenerationControl, GenerationProgress,
+    GraphGroupingOptions, Grouping, Loops, Naming, NumeratorOptions, Orders, Range, Request,
+    Restrict, Run, Selection, Stage, Symmetrize, TopologyRules, Veto,
 };
+pub use parser::RequestParseError;
 pub use process::{
     GenerationType, ModelProcessExt, ParticleSelector, Process, ProcessError, SelectorError,
     VertexSelector,

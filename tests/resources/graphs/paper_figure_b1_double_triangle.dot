@@ -1,7 +1,7 @@
 digraph paper_figure_b1_double_triangle {
   // Figure 13, graph B.1: the massless-quark double triangle with a gluon
   // chord.  The external off-shell photon Lorentz indices are saturated.
-  projector = "spenso::g(spenso::mink(4,gammalooprs::hedge(0)),spenso::mink(4,gammalooprs::hedge(1)))"
+  projector = "spenso::g(spenso::mink(4,gammalooprs::hedge(0,1)),spenso::mink(4,gammalooprs::hedge(1,1)))"
   ext [style=invis]
 
   ext -> photon_left:0 [id=0 particle=a]

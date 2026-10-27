@@ -1,16 +1,13 @@
-use std::{
-    collections::{BTreeMap, BTreeSet, HashMap},
-    fs,
-    path::Path,
-    sync::OnceLock,
-};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::fs;
+use std::path::Path;
+use std::sync::OnceLock;
 
-use linnet::half_edge::{
-    HedgeGraph,
-    algorithms::{DirectionBasis, topological_order::TopoError},
-    builder::HedgeGraphBuilder,
-    involution::Orientation,
-};
+use linnet::half_edge::HedgeGraph;
+use linnet::half_edge::algorithms::DirectionBasis;
+use linnet::half_edge::algorithms::topological_order::TopoError;
+use linnet::half_edge::builder::HedgeGraphBuilder;
+use linnet::half_edge::involution::Orientation;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use symbolica::atom::{Atom, AtomCore, AtomView};
 use symbolica::domains::rational::Rational;
@@ -1268,6 +1265,10 @@ impl Model {
     }
 
     fn definition(&self) -> ModelDefinition {
+        self.definition_with(export_expression)
+    }
+
+    fn definition_with(&self, expression: impl Fn(&Atom) -> String) -> ModelDefinition {
         ModelDefinition {
             name: self.name.clone(),
             restriction: self.restriction.clone(),
@@ -1285,7 +1286,7 @@ impl Model {
                     nature: parameter.nature.clone(),
                     parameter_type: parameter.parameter_type.clone(),
                     value: parameter.value,
-                    expression: parameter.expression.as_ref().map(export_expression),
+                    expression: parameter.expression.as_ref().map(&expression),
                 })
                 .collect(),
             particles: self
@@ -1324,8 +1325,8 @@ impl Model {
                 .map(|propagator| PropagatorDefinition {
                     name: propagator.name.clone(),
                     particle: self.particles[propagator.particle.index()].name.clone(),
-                    numerator: export_expression(&propagator.numerator),
-                    denominator: export_expression(&propagator.denominator),
+                    numerator: expression(&propagator.numerator),
+                    denominator: expression(&propagator.denominator),
                 })
                 .collect(),
             lorentz_structures: self
@@ -1334,7 +1335,7 @@ impl Model {
                 .map(|lorentz| LorentzStructureDefinition {
                     name: lorentz.name.clone(),
                     spins: lorentz.spins.clone(),
-                    structure: export_expression(&lorentz.structure),
+                    structure: expression(&lorentz.structure),
                 })
                 .collect(),
             couplings: self
@@ -1342,7 +1343,7 @@ impl Model {
                 .iter()
                 .map(|coupling| CouplingDefinition {
                     name: coupling.name.clone(),
-                    expression: export_expression(&coupling.expression),
+                    expression: expression(&coupling.expression),
                     orders: coupling.orders.clone(),
                     value: coupling.value,
                 })
@@ -1357,11 +1358,7 @@ impl Model {
                         .iter()
                         .map(|id| self.particles[id.index()].name.clone())
                         .collect(),
-                    color_structures: vertex
-                        .color_structures
-                        .iter()
-                        .map(export_expression)
-                        .collect(),
+                    color_structures: vertex.color_structures.iter().map(&expression).collect(),
                     lorentz_structures: vertex
                         .lorentz_structures
                         .iter()
@@ -1384,7 +1381,7 @@ impl Model {
                 .map(|function| ModelFunctionDefinition {
                     name: function.name.clone(),
                     arguments: function.arguments.clone(),
-                    expression: function.expression.as_ref().map(export_expression),
+                    expression: function.expression.as_ref().map(&expression),
                 })
                 .collect(),
             form_factors: self
@@ -1393,7 +1390,7 @@ impl Model {
                 .map(|form_factor| ModelFormFactorDefinition {
                     name: form_factor.name.clone(),
                     type_name: form_factor.type_name.clone(),
-                    value: form_factor.value.as_ref().map(export_expression),
+                    value: form_factor.value.as_ref().map(&expression),
                 })
                 .collect(),
         }
@@ -1406,7 +1403,10 @@ impl Model {
 
     pub fn fingerprint(&self) -> ModelFingerprint {
         *self.fingerprint.get_or_init(|| {
-            let bytes = serde_json::to_vec(&self.definition())
+            // Identity preserves qualified symbol names and attributes. UFO
+            // interchange formatting instead follows the evaluator's syntax.
+            let definition = self.definition_with(|expression| expression.to_canonical_string());
+            let bytes = serde_json::to_vec(&definition)
                 .expect("canonical model definitions are always JSON serializable");
             ModelFingerprint(*blake3::hash(&bytes).as_bytes())
         })
@@ -2530,6 +2530,7 @@ fn reference<'a, V>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use symbolica::symbol;
 
     fn model_json(coupling_name: &str) -> String {
         format!(
@@ -2780,6 +2781,79 @@ mod tests {
 
         assert_ne!(first.propagators(), second.propagators());
         assert_ne!(first.fingerprint(), second.fingerprint());
+    }
+
+    #[test]
+    fn fingerprints_ignore_registration_order_and_preserve_function_attributes() {
+        const CHILD: &str = "FEYNKIT_FINGERPRINT_CHILD";
+        if let Ok(mode) = std::env::var(CHILD) {
+            if mode == "reverse" {
+                let _ = symbol!(
+                    "fingerprint_model::z",
+                    "fingerprint_model::y",
+                    "fingerprint_model::x"
+                );
+            } else {
+                let _ = symbol!(
+                    "fingerprint_model::x",
+                    "fingerprint_model::y",
+                    "fingerprint_model::z"
+                );
+            }
+            let cyclic = if mode == "ordinary" {
+                ""
+            } else {
+                "cyclesymmetric"
+            };
+            let call = |arguments: &str| format!("fingerprint_model::{{{cyclic}}}::c({arguments})");
+            let (x, y, z) = (
+                "fingerprint_model::x",
+                "fingerprint_model::y",
+                "fingerprint_model::z",
+            );
+            let c = call(&format!("{x},{y},{z}"));
+            let rotated = call(&format!("{y},{z},{x}"));
+            let reflected = call(&format!("{x},{z},{y}"));
+            let expressions = [
+                c.clone(),
+                rotated,
+                reflected.clone(),
+                format!("fingerprint_model::{{antisymmetric}}::a({c},{reflected})"),
+                format!("fingerprint_model::{{antisymmetric}}::a({reflected},{c})"),
+                format!("(1+2i/3)*({x}+{y})*({z})^-2+{c}"),
+                format!("fingerprint_other::x+{c}"),
+                format!("fingerprint_another::x+{c}"),
+            ];
+            let mut input: serde_json::Value =
+                serde_json::from_str(include_str!("../tests/fixtures/scalars_2p_3p.json")).unwrap();
+            for (index, expression) in expressions.into_iter().enumerate() {
+                input["propagators"][0]["numerator"] = expression.into();
+                let model = Model::from_json(&input.to_string()).unwrap();
+                println!("FINGERPRINT[{index}]={}", model.fingerprint());
+            }
+            return;
+        }
+        let outputs: Vec<Vec<String>> = ["forward", "reverse", "ordinary"].into_iter()
+            .map(|mode| {
+                let output = std::process::Command::new(std::env::current_exe().unwrap())
+                    .args(["--exact", "model::tests::fingerprints_ignore_registration_order_and_preserve_function_attributes", "--nocapture"])
+                    .env(CHILD, mode)
+                    .output().unwrap();
+                assert!(output.status.success(), "child {mode}: {}\n{}",
+                    String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+                let rows: Vec<_> = String::from_utf8(output.stdout).unwrap().lines()
+                    .filter(|line| line.starts_with("FINGERPRINT["))
+                    .map(|line| line.split_once('=').unwrap().1.to_owned()).collect();
+                assert_eq!(rows.len(), 8);
+                rows
+            }).collect();
+        assert_eq!(outputs[0], outputs[1]);
+        assert_eq!(outputs[0][0], outputs[0][1]);
+        assert_ne!(outputs[0][0], outputs[0][2]);
+        assert_ne!(outputs[0][3], outputs[0][4]);
+        assert_ne!(outputs[0][6], outputs[0][7]);
+        assert_ne!(outputs[0][0], outputs[2][0]);
+        assert_ne!(outputs[2][0], outputs[2][1]);
     }
 
     #[test]

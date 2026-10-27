@@ -1,8 +1,6 @@
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    fs,
-    path::Path,
-};
+use std::collections::{BTreeMap, BTreeSet};
+use std::fs;
+use std::path::Path;
 
 // use bincode::{Decode, Encode};
 use bincode_trait_derive::{Decode, Encode};
@@ -13,12 +11,11 @@ use schemars::JsonSchema;
 use symbolica::evaluate::OptimizationSettings;
 use tracing::debug;
 
-use crate::{
-    GammaLoopContext, GammaLoopContextContainer,
-    settings::{GlobalSettings, runtime::LockedRuntimeSettings},
-    utils::serde_utils::{IsDefault, is_false, is_true, is_usize, show_defaults_helper},
-    uv::export::UVForestExportSettings,
-};
+use crate::settings::GlobalSettings;
+use crate::settings::runtime::LockedRuntimeSettings;
+use crate::utils::serde_utils::{IsDefault, is_false, is_true, is_usize, show_defaults_helper};
+use crate::uv::export::UVForestExportSettings;
+use crate::{GammaLoopContext, GammaLoopContextContainer};
 use serde::{Deserialize, Serialize};
 
 use crate::model::Model;
@@ -798,7 +795,7 @@ impl ProcessList {
         for process in &self.processes {
             settings
                 .generation
-                .validate_for_process(process.definition.generation_type)?;
+                .validate_for_process(process.definition.request.kind())?;
         }
         let mut reports = Vec::new();
         for process in self.processes.iter_mut() {
@@ -885,20 +882,16 @@ mod tests {
 
     use symbolica::state::State;
 
-    use crate::{
-        GammaLoopContextContainer,
-        graph::Graph,
-        initialisation::test_initialise,
-        settings::{
-            RuntimeSettings,
-            global::{
-                CompilationMode, CompilationOptimizationLevel, GammaloopCompileOptions,
-                GenerationSettings, TropicalSubgraphTableSettings,
-            },
-            runtime::LockedRuntimeSettings,
-        },
-        utils::load_generic_model,
+    use crate::GammaLoopContextContainer;
+    use crate::graph::Graph;
+    use crate::initialisation::test_initialise;
+    use crate::settings::RuntimeSettings;
+    use crate::settings::global::{
+        CompilationMode, CompilationOptimizationLevel, GammaloopCompileOptions, GenerationSettings,
+        TropicalSubgraphTableSettings,
     };
+    use crate::settings::runtime::LockedRuntimeSettings;
+    use crate::utils::load_generic_model;
 
     use super::{AmplitudeGraph, EvaluatorSettings};
 
@@ -943,7 +936,7 @@ mod tests {
         // Use the model routing produced by graph import for the persistence roundtrip.
         let model = load_generic_model("sm");
 
-        let graph: Graph = crate::graph::Graph::import_dot(
+        let graph: Graph = crate::graph::Graph::from_dot(
             stringify!(
                 digraph G{
                     e1      [style=invis]

@@ -1,6 +1,20 @@
 //! Physics invariants retained from GammaLoop's completed soft foundation.
 
+use super::tests::{ColoredNode, Graph};
 use super::*;
+use crate::{Cuts, Loops, Symmetrize, TopologyRules};
+
+/// A cross-section request with the beam symmetrization and the left/right identification.
+fn cross_section_request(process: &Process, initial: bool, left_right: bool) -> Request {
+    process
+        .clone()
+        .cross_section(Loops::forward(0..=3))
+        .with_symmetrize(Symmetrize {
+            initial,
+            ..Symmetrize::default()
+        })
+        .with_cuts(Cuts::new().with_symmetrize_left_right(left_right))
+}
 
 #[test]
 fn paired_incoming_three_cycles_preserve_the_canonical_connection_frame() {
@@ -9,104 +23,84 @@ fn paired_incoming_three_cycles_preserve_the_canonical_connection_frame() {
     let interaction = model.vertex_rule_id(&model.vertex_rules()[0].name).unwrap();
     // An asymmetric attachment graph exercises the canonical coordinate map
     // independently of Feynman-rule evaluation. A three-cycle is not its own inverse.
-    let mut graph = Graph::new();
-    for _ in 0..6 {
-        graph.add_node(ColoredNode::Interaction(interaction));
-    }
-    for index in 0..6 {
-        let external = graph.add_node(ColoredNode::External(ExternalNode {
-            index,
-            state: if index < 3 {
-                ExternalState::Incoming
+    let relabel = |cycled: Option<bool>| {
+        let mut graph = Graph::new();
+        for _ in 0..6 {
+            graph.add_node(ColoredNode::Interaction(interaction));
+        }
+        for label in 0..6 {
+            // A paired relabelling cycles the incoming legs and their sewn copies together;
+            // a one-sided one only the incoming legs.
+            let index = match cycled {
+                Some(paired) if paired || label < 3 => (label / 3) * 3 + (label + 1) % 3,
+                _ => label,
+            };
+            let external = graph.add_node(ColoredNode::External(ExternalNode {
+                index,
+                state: if index < 3 {
+                    ExternalState::Incoming
+                } else {
+                    ExternalState::Outgoing
+                },
+                particle,
+            }));
+            let (source, target) = if label < 3 {
+                (external, label)
             } else {
-                ExternalState::Outgoing
-            },
-            particle,
-        }));
-        let (source, target) = if index < 3 {
-            (external, index)
-        } else {
-            (index, external)
-        };
-        graph
-            .add_edge(
-                source,
-                target,
-                false,
-                EdgeColor {
-                    particle,
-                    direction: None,
-                },
-            )
-            .unwrap();
-    }
-    for (source, target) in [
-        (0, 1),
-        (1, 2),
-        (2, 3),
-        (3, 4),
-        (4, 5),
-        (0, 2),
-        (0, 3),
-        (1, 4),
-        (3, 5),
-    ] {
-        graph
-            .add_edge(
-                source,
-                target,
-                false,
-                EdgeColor {
-                    particle,
-                    direction: None,
-                },
-            )
-            .unwrap();
-    }
-    let relabel = |paired: bool| {
-        let mut output = Graph::new();
-        for node in graph.nodes() {
-            let mut data = node.data.clone();
-            if let ColoredNode::External(external) = &mut data
-                && (paired || external.index < 3)
-            {
-                external.index = (external.index / 3) * 3 + (external.index + 1) % 3;
-            }
-            output.add_node(data);
+                (label, external)
+            };
+            graph.add_edge(source, target, false, particle).unwrap();
         }
-        for edge in graph.edges() {
-            output
-                .add_edge(edge.vertices.0, edge.vertices.1, edge.directed, edge.data)
-                .unwrap();
+        for (source, target) in [
+            (0, 1),
+            (1, 2),
+            (2, 3),
+            (3, 4),
+            (4, 5),
+            (0, 2),
+            (0, 3),
+            (1, 4),
+            (3, 5),
+        ] {
+            graph.add_edge(source, target, false, particle).unwrap();
         }
-        output
+        graph.build()
     };
     let process = Process::new(["phi", "phi", "phi"], ["phi", "phi"]);
+    // Exchanging identical beams is a rotation only in a 2 -> X process. The sewn-pair
+    // quotient that identifies paired relabellings therefore rejects three identical beams.
+    let symmetrized = ResolvedProcess::new(
+        &model,
+        &process,
+        GenerationType::CrossSection,
+        &cross_section_request(&process, true, false),
+    )
+    .and_then(|resolved| resolved.externals(&model).map(|_| ()));
+    assert!(matches!(
+        symmetrized,
+        Err(GenerationError::UnsupportedBeamSymmetrization { incoming: 3 })
+    ));
     for left_right in [false, true] {
-        let options = GenerationOptions::default()
-            .symmetrize_initial(true)
-            .symmetrize_left_right(left_right);
-        let resolved =
-            ResolvedProcess::new(&model, &process, GenerationType::CrossSection, &options).unwrap();
+        let resolved = ResolvedProcess::new(
+            &model,
+            &process,
+            GenerationType::CrossSection,
+            &cross_section_request(&process, false, left_right),
+        )
+        .unwrap();
         let canonical = resolved
-            .canonicalize_numerator_graph(&graph, &model, &NumeratorGrouping::None)
+            .canonicalize_numerator_graph(&relabel(None), &model, &Grouping::None)
             .unwrap();
         assert_eq!(
             canonical,
             resolved
-                .canonicalize_numerator_graph(&relabel(true), &model, &NumeratorGrouping::None)
-                .unwrap()
-        );
-        assert_eq!(
-            canonical,
-            resolved
-                .canonicalize_numerator_graph(&canonical, &model, &NumeratorGrouping::None)
+                .canonicalize_numerator_graph(&canonical, &model, &Grouping::None)
                 .unwrap()
         );
         assert_ne!(
             canonical,
             resolved
-                .canonicalize_numerator_graph(&relabel(false), &model, &NumeratorGrouping::None)
+                .canonicalize_numerator_graph(&relabel(Some(false)), &model, &Grouping::None)
                 .unwrap(),
             "one-sided permutations must not exchange physical incoming pairs"
         );
@@ -119,84 +113,127 @@ fn identical_incoming_scalar_born_weights_only_divide_by_final_state_symmetry() 
 
     let model = Arc::new(Model::phi4());
     let process = Process::new(["phi", "phi"], ["phi", "phi"]);
+    let run = Run::default().threads(1);
+    let request = |initial, left_right| {
+        process
+            .clone()
+            .cross_section(Loops::forward(1..=1))
+            .with_topology(TopologyRules::new().with_max_vertices(2))
+            .with_symmetrize(Symmetrize {
+                initial,
+                ..Symmetrize::default()
+            })
+            .with_cuts(Cuts::new().with_symmetrize_left_right(left_right))
+    };
     for initial in [false, true] {
-        for final_state in [false, true] {
-            for left_right in [false, true] {
-                let options = GenerationOptions::default()
-                    .with_loop_count(1, 1)
-                    .unwrap()
-                    .max_vertices(2)
-                    .symmetrize_initial(initial)
-                    .symmetrize_final(final_state)
-                    .symmetrize_left_right(left_right)
-                    .threads(1);
-                let result = process
-                    .generate_cross_section(Arc::clone(&model), &options)
-                    .unwrap();
-                assert_eq!(result.diagrams.len(), 1);
-                assert_eq!(result.diagrams[0].cuts().len(), 1);
-                assert_eq!(
-                    evaluate_overall_factor(result.diagrams[0].overall_factor().as_view()),
-                    Atom::num((1, 2)),
-                    "initial={initial}, final={final_state}, left_right={left_right}: a labelled two-particle flux has no extra initial-state factorial"
-                );
-            }
+        for left_right in [false, true] {
+            let result = request(initial, left_right)
+                .generate(Arc::clone(&model), &run)
+                .unwrap()
+                .build(
+                    &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                    &run,
+                )
+                .unwrap();
+            assert_eq!(result.diagrams().len(), 1);
+            assert_eq!(result.diagrams()[0].cuts().len(), 1);
+            assert_eq!(
+                evaluate_overall_factor(result.diagrams()[0].overall_factor().as_view()),
+                Atom::num((1, 2)),
+                "initial={initial}, left_right={left_right}: a labelled two-particle flux has no extra initial-state factorial"
+            );
         }
     }
+    // Final-state symmetrization is an amplitude option.
+    assert!(matches!(
+        request(false, false)
+            .with_symmetrize(Symmetrize::FINAL)
+            .generate(Arc::clone(&model), &run),
+        Err(GenerationError::CrossSectionFinalStateSymmetrization)
+    ));
 }
 
 #[test]
 fn directed_self_loop_symmetry_factors_match_wick_contractions() {
-    let neutral = HalfEdge::undirected("a");
-    let charged = HalfEdge::incoming("q");
-    let other = HalfEdge::incoming("r");
+    use linnet::half_edge::generate::{
+        Legs, Plan, Query, Run as EngineRun, Structure, Stub, Theory,
+    };
+
+    const NEUTRAL: u8 = 0;
+    const CHARGED: u8 = 1;
+    const OTHER: u8 = 2;
+    let neutral = Stub::undirected(NEUTRAL);
+    let charged = Stub::incoming(CHARGED);
+    let other = Stub::incoming(OTHER);
     // Production consumes these graph automorphism denominators directly.
     // Directed loop ends are distinct particle/antiparticle fields; neutral
     // flips and permutations of identical propagators still count.
     for (signature, vertices, expected) in [
-        (vec![charged, charged.flip()], 1, vec![(1, 1)]),
         (
-            vec![charged, charged.flip(), other, other.flip()],
+            vec![charged.clone(), charged.clone().flipped()],
+            1,
+            vec![(1, 1)],
+        ),
+        (
+            vec![
+                charged.clone(),
+                charged.clone().flipped(),
+                other.clone(),
+                other.clone().flipped(),
+            ],
             1,
             vec![(2, 1)],
         ),
         (
-            vec![charged, charged.flip(), charged, charged.flip()],
+            vec![
+                charged.clone(),
+                charged.clone().flipped(),
+                charged.clone(),
+                charged.clone().flipped(),
+            ],
             1,
             vec![(2, 2)],
         ),
-        (vec![neutral; 4], 1, vec![(0, 8)]),
+        (vec![neutral.clone(); 4], 1, vec![(0, 8)]),
         (
-            vec![neutral, neutral, charged, charged.flip()],
+            vec![
+                neutral.clone(),
+                neutral.clone(),
+                charged.clone(),
+                charged.clone().flipped(),
+            ],
             1,
             vec![(1, 2)],
         ),
         (
-            vec![neutral, charged, charged.flip()],
+            vec![neutral.clone(), charged.clone(), charged.clone().flipped()],
             2,
             vec![(0, 2), (2, 2)],
         ),
     ] {
-        let graphs = Graph::<usize, &str>::generate(
-            &[],
-            std::slice::from_ref(&signature),
-            GenerationSettings::new()
-                .max_vertices(vertices)
-                .max_loops(2)
-                .allow_self_loops(true)
-                .allow_zero_flow_edges(true),
-        )
-        .unwrap();
-        let mut observed = graphs
-            .iter()
-            .map(|(graph, symmetry)| {
+        let theory = Theory::builder()
+            .vertex(signature.clone(), [])
+            .build()
+            .unwrap();
+        let query = Query::new(&Legs::<u8, u8>::new())
+            .structure(Structure {
+                max_vertices: Some(vertices),
+                self_loops: true,
+                zero_flow_edges: true,
+                ..Structure::default()
+            })
+            .loops(0..=2);
+        let mut observed = Plan::new(&theory, &query)
+            .unwrap()
+            .diagrams(&EngineRun::default())
+            .unwrap()
+            .map(|diagram| {
                 (
-                    graph
+                    diagram
                         .edges()
-                        .iter()
-                        .filter(|edge| edge.directed && edge.vertices.0 == edge.vertices.1)
+                        .filter(|edge| edge.flow.is_some() && edge.vertices[0] == edge.vertices[1])
                         .count(),
-                    u64::try_from(symmetry.clone()).unwrap(),
+                    diagram.symmetry_factor().unwrap(),
                 )
             })
             .collect::<Vec<_>>();
@@ -218,32 +255,27 @@ impl GhostChart {
     }
 
     fn process(&self, cross_section: bool, cp: bool) -> ResolvedProcess {
-        ResolvedProcess::new(
-            &self.model,
-            &Process::new(
-                [22_i64],
-                if cross_section {
-                    vec![1_i64, -1]
-                } else {
-                    vec![22]
-                },
-            ),
+        let process = Process::new(
+            [22_i64],
             if cross_section {
-                GenerationType::CrossSection
+                vec![1_i64, -1]
             } else {
-                GenerationType::Amplitude
+                vec![22]
             },
-            &GenerationOptions::default().symmetrize_left_right(cp),
-        )
-        .unwrap()
+        );
+        let request = if cross_section {
+            process
+                .clone()
+                .cross_section(Loops::forward(3..=3))
+                .with_cuts(Cuts::new().with_symmetrize_left_right(cp))
+        } else {
+            process.clone().amplitude(Loops::total(2..=2))
+        };
+        let kind = request.kind();
+        ResolvedProcess::new(&self.model, &process, kind, &request).unwrap()
     }
 
-    fn graph(
-        &self,
-        triangle: bool,
-        reverse: bool,
-        reverse_storage: bool,
-    ) -> Graph<ColoredNode, EdgeColor> {
+    fn graph(&self, triangle: bool, reverse: bool, reverse_storage: bool) -> GeneratedGraph {
         let mut graph = Graph::new();
         for node in 0..8 {
             let rule = match (triangle, node) {
@@ -309,36 +341,28 @@ impl GhostChart {
                 (a, b, pdg)
             };
             graph
-                .add_edge(
-                    a,
-                    b,
-                    true,
-                    EdgeColor {
-                        particle: self.model.particle_id_by_pdg(pdg).unwrap(),
-                        direction: None,
-                    },
-                )
+                .add_edge(a, b, true, self.model.particle_id_by_pdg(pdg).unwrap())
                 .unwrap();
         }
-        graph
+        graph.build()
     }
 
+    /// The edges as sorted `(ends, directed, particle)`, optionally with every quark reversed.
     fn chart(
         &self,
-        graph: &Graph<ColoredNode, EdgeColor>,
+        graph: &GeneratedGraph,
         reverse_quarks: bool,
-    ) -> Vec<((usize, usize), bool, EdgeColor)> {
+    ) -> Vec<((Endpoint, Endpoint), bool, ParticleId)> {
         let mut edges = graph
             .edges()
-            .iter()
             .map(|edge| {
-                let particle = self.model.particle_by_id(edge.data.particle).unwrap();
+                let particle = self.model.particle_by_id(edge.particle).unwrap();
                 let endpoints = if reverse_quarks && particle.is_fermion() && !particle.is_ghost() {
-                    (edge.vertices.1, edge.vertices.0)
+                    (edge.sink, edge.source)
                 } else {
-                    edge.vertices
+                    (edge.source, edge.sink)
                 };
-                (endpoints, edge.directed, edge.data)
+                (endpoints, edge.directed, edge.particle)
             })
             .collect::<Vec<_>>();
         edges.sort();
@@ -350,7 +374,7 @@ impl GhostChart {
 fn ghost_box_reflection_preserves_the_derivative_momentum_chart() {
     let fixture = GhostChart::new();
     let process = fixture.process(false, false);
-    let grouping = NumeratorGrouping::UpToScalar(crate::GraphGroupingOptions::default());
+    let grouping = Grouping::UpToScalar(crate::GraphGroupingOptions::default());
     let canonical =
         [(false, false), (false, true), (true, false), (true, true)].map(|(reverse, storage)| {
             let source = fixture.graph(false, reverse, storage);
@@ -360,7 +384,7 @@ fn ghost_box_reflection_preserves_the_derivative_momentum_chart() {
             let repeated = process
                 .canonicalize_numerator_graph(&sorted, &fixture.model, &grouping)
                 .unwrap();
-            assert_eq!(sorted.nodes(), repeated.nodes());
+            assert!(sorted.vertices().eq(repeated.vertices()));
             assert_eq!(
                 fixture.chart(&sorted, false),
                 fixture.chart(&repeated, false)
@@ -371,18 +395,7 @@ fn ghost_box_reflection_preserves_the_derivative_momentum_chart() {
                 .graph
         });
     for graph in &canonical[1..] {
-        assert_eq!(
-            canonical[0]
-                .nodes()
-                .iter()
-                .map(|node| &node.data)
-                .collect::<Vec<_>>(),
-            graph
-                .nodes()
-                .iter()
-                .map(|node| &node.data)
-                .collect::<Vec<_>>()
-        );
+        assert!(canonical[0].vertices().eq(graph.vertices()));
     }
     assert_eq!(
         fixture.chart(&canonical[0], false),
@@ -399,7 +412,7 @@ fn ghost_box_reflection_preserves_the_derivative_momentum_chart() {
 #[test]
 fn cp_preserves_neutral_adjoint_ghost_derivative_flow() {
     let fixture = GhostChart::new();
-    let grouping = NumeratorGrouping::UpToScalar(crate::GraphGroupingOptions::default());
+    let grouping = Grouping::UpToScalar(crate::GraphGroupingOptions::default());
     let canonical = |reverse, storage, cp| {
         let process = fixture.process(true, cp);
         let source = fixture.graph(true, reverse, storage);
@@ -423,7 +436,7 @@ fn cp_preserves_neutral_adjoint_ghost_derivative_flow() {
                 .unwrap();
             assert!(!normalized.signs.external_ordering_negative);
             assert!(!repeated.signs.external_ordering_negative);
-            assert_eq!(normalized.graph.nodes(), repeated.graph.nodes());
+            assert!(normalized.graph.vertices().eq(repeated.graph.vertices()));
             assert_eq!(
                 fixture.chart(&normalized.graph, false),
                 fixture.chart(&repeated.graph, false)
@@ -433,18 +446,7 @@ fn cp_preserves_neutral_adjoint_ghost_derivative_flow() {
     // CP reverses the quark pentagon twice, while retaining the derivative
     // momentum carried by each ghost edge.
     for graph in &normalized[1..] {
-        assert_eq!(
-            normalized[0]
-                .nodes()
-                .iter()
-                .map(|node| &node.data)
-                .collect::<Vec<_>>(),
-            graph
-                .nodes()
-                .iter()
-                .map(|node| &node.data)
-                .collect::<Vec<_>>()
-        );
+        assert!(normalized[0].vertices().eq(graph.vertices()));
         assert_eq!(
             fixture.chart(&normalized[0], false),
             fixture.chart(graph, false)

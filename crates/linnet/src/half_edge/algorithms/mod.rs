@@ -19,11 +19,9 @@
 //! algorithms modify the graph structure (adding or removing edges), they properly
 //! handle both half-edges of each pair to maintain graph integrity.
 
-use super::{
-    involution::{Flow, Hedge},
-    nodestore::NodeStorageOps,
-    HedgeGraph,
-};
+use super::involution::{Flow, Hedge};
+use super::nodestore::Topology;
+use super::HedgeGraph;
 
 /// Selects which notion of edge direction a directed graph algorithm follows.
 ///
@@ -40,7 +38,7 @@ pub enum DirectionBasis {
 }
 
 impl DirectionBasis {
-    pub(super) fn flow<E, V, H, N: NodeStorageOps<NodeData = V>>(
+    pub(super) fn flow<E, V, H, N: Topology>(
         self,
         graph: &HedgeGraph<E, V, H, N>,
         hedge: Hedge,

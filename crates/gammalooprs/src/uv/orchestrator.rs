@@ -1,24 +1,26 @@
 use color_eyre::Result;
 use eyre::{WrapErr, eyre};
-use idenso::{CookMode, CookSettings, IndexTooling, tensor::SymbolicTensor};
+use idenso::tensor::SymbolicTensor;
+use idenso::{CookMode, CookSettings, IndexTooling};
 use linnet::half_edge::subgraph::{Inclusion, SubSetLike, SubSetOps};
 use symbolica::atom::{Atom, AtomCore};
 use vakint::Vakint;
 
-use crate::{
-    graph::{Graph, cuts::CutSet, feynman_graph::FeynmanGraph},
-    model::Model,
-    numerator::aind::Aind,
-    settings::global::GenerationSettings,
-    uv::{
-        Integrands, RenormalizationPart, UVOrchestrator, UVgenerationSettings, UltravioletGraph,
-        approx::{CutStructure, OrientationProjection, local_3d::Localizer},
-        forest::ParametricIntegrands,
-        hedge_poset::Wood as HedgePosetWood,
-        marker::UvMarker,
-        settings::FinalIntegrandDimension,
-        wood::CutWoods,
-    },
+use crate::graph::Graph;
+use crate::graph::cuts::CutSet;
+use crate::graph::feynman_graph::FeynmanGraph;
+use crate::model::Model;
+use crate::numerator::aind::Aind;
+use crate::settings::global::GenerationSettings;
+use crate::uv::approx::local_3d::Localizer;
+use crate::uv::approx::{CutStructure, OrientationProjection};
+use crate::uv::forest::ParametricIntegrands;
+use crate::uv::hedge_poset::Wood as HedgePosetWood;
+use crate::uv::marker::UvMarker;
+use crate::uv::settings::FinalIntegrandDimension;
+use crate::uv::wood::CutWoods;
+use crate::uv::{
+    Integrands, RenormalizationPart, UVOrchestrator, UVgenerationSettings, UltravioletGraph,
 };
 
 impl UVOrchestrator {
@@ -468,14 +470,15 @@ impl<'a> ComparableExpr<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        finalized_runtime_dot,
-        initialisation::test_initialise,
-        utils::load_generic_model,
-        uv::{ApproximationType, CTRenormalizationRule, RenormalizationPrescriptionSettings},
+    use crate::dot;
+    use crate::initialisation::test_initialise;
+    use crate::utils::load_generic_model;
+    use crate::uv::{
+        ApproximationType, CTRenormalizationRule, RenormalizationPrescriptionSettings,
     };
     use idenso::{bis, gamma};
-    use linnet::half_edge::{involution::EdgeIndex, subgraph::SubSetLike};
+    use linnet::half_edge::involution::EdgeIndex;
+    use linnet::half_edge::subgraph::SubSetLike;
     use spenso::{chain, mink};
     use std::collections::BTreeSet;
     use symbolica::symbol;
@@ -525,7 +528,7 @@ mod tests {
     fn integrated_soft_scheme_is_allowed_before_forest_generation() {
         test_initialise().unwrap();
         let model = load_generic_model("scalars");
-        let graph: Graph = Graph::import_dot(
+        let graph: Graph = Graph::from_dot(
             include_str!("../../../../tests/resources/graphs/scalar/dod2_bubble.dot"),
             &model,
         )
@@ -553,7 +556,7 @@ mod tests {
     fn incompatible_selected_spinney_route_is_reported_with_context() {
         test_initialise().unwrap();
         let model = load_generic_model("scalars");
-        let mut graph: Graph = Graph::import_dot(
+        let mut graph: Graph = Graph::from_dot(
             include_str!("../../../../tests/resources/graphs/scalar/dod2_bubble.dot"),
             &model,
         )
@@ -613,7 +616,7 @@ mod tests {
     fn integrated_on_shell_scheme_is_rejected_before_forest_generation() {
         test_initialise().unwrap();
         let model = load_generic_model("scalars");
-        let graph: Graph = Graph::import_dot(
+        let graph: Graph = Graph::from_dot(
             include_str!("../../../../tests/resources/graphs/scalar/dod2_bubble.dot"),
             &model,
         )
@@ -644,17 +647,17 @@ mod tests {
     #[test]
     fn soft_child_rejects_positive_degree_muv_parent() {
         test_initialise().unwrap();
-        let graph: Graph = finalized_runtime_dot!(digraph nested_positive_degree_hu { graph [projector=1]
+        let graph: Graph = dot!(digraph nested_positive_degree_hu { graph [projector=1]
                 edge [particle=scalar_1 num=1]
                 node [num=1]
                 ext [style=invis]
-                ext -> v1:0 [id=0 sink="{ufo_order:0}"]
-                v4:1 -> ext [id=1 source="{ufo_order:0}"]
-                v1 -> v2 [id=2 lmb_id=1 num="Q(2,spenso::cind(0))^2" source="{ufo_order:1}" sink="{ufo_order:0}"]
-                v2 -> v3 [id=3 particle=scalar_2 lmb_id=0 num="Q(3,spenso::cind(0))" source="{ufo_order:1}" sink="{ufo_order:0}"]
-                v2 -> v3 [id=4 particle=scalar_2 source="{ufo_order:2}" sink="{ufo_order:1}"]
-                v3 -> v4 [id=5 source="{ufo_order:2}" sink="{ufo_order:1}"]
-                v1 -> v4 [id=6 source="{ufo_order:2}" sink="{ufo_order:2}"]
+                ext -> v1:0 [id=0]
+                v4:1 -> ext [id=1]
+                v1 -> v2 [id=2 lmb_id=1 num="Q(2,spenso::cind(0))^2"]
+                v2 -> v3 [id=3 particle=scalar_2 lmb_id=0 num="Q(3,spenso::cind(0))"]
+                v2 -> v3 [id=4 particle=scalar_2]
+                v3 -> v4 [id=5]
+                v1 -> v4 [id=6]
             }, "scalars")
         .unwrap();
         let baseline = UVgenerationSettings {
@@ -740,7 +743,7 @@ mod tests {
     fn soft_and_pole_part_components_cannot_share_a_wood() {
         test_initialise().unwrap();
         let model = load_generic_model("sm");
-        let graph: Graph = Graph::import_dot(
+        let graph: Graph = Graph::from_dot(
             include_str!("../../../../tests/resources/graphs/dgse.dot"),
             &model,
         )
@@ -788,7 +791,7 @@ mod tests {
     #[test]
     fn disjoint_soft_and_pole_part_components_cannot_share_a_wood() {
         test_initialise().unwrap();
-        let graph: Graph = Graph::import_dot(
+        let graph: Graph = Graph::from_dot(
             stringify!(digraph asymmetric_scalar_spectacles {
                 num = "-1𝑖/2"
                 node [num = "1"]

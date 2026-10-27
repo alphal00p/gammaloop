@@ -113,6 +113,7 @@
     (workspaceRoot + "/crates/kurvst/typst/src")
     (workspaceRoot + "/crates/kurvst/typst/typst.toml")
     (workspaceRoot + "/crates/kurvst/typst/LICENSE")
+    (workspaceRoot + "/crates/kurvst/typst/LICENSE.tiptoe")
     (workspaceRoot + "/crates/linnest/typst/linnest.wasm")
     (workspaceRoot + "/crates/linnest/typst/LICENSE")
     (workspaceRoot + "/crates/linnest/typst/LICENSE.clarabel")
@@ -196,6 +197,7 @@
       (workspaceRoot + "/crates/kurvst/typst/src")
       (workspaceRoot + "/crates/kurvst/typst/typst.toml")
       (workspaceRoot + "/crates/kurvst/typst/LICENSE")
+      (workspaceRoot + "/crates/kurvst/typst/LICENSE.tiptoe")
       (workspaceRoot + "/crates/linnest/typst/src")
       (workspaceRoot + "/crates/linnest/typst/typst.toml")
       (workspaceRoot + "/crates/linnest/typst/LICENSE")
@@ -458,6 +460,7 @@
       "crates/kurvst/typst/src"
       "crates/kurvst/typst/typst.toml"
       "crates/kurvst/typst/LICENSE"
+      "crates/kurvst/typst/LICENSE.tiptoe"
       "crates/linnest/typst/linnest.wasm"
       "crates/linnest/typst/LICENSE.clarabel"
       "crates/linnest/typst/LICENSE"
@@ -478,6 +481,7 @@
       "crates/kurvst/typst/src"
       "crates/kurvst/typst/typst.toml"
       "crates/kurvst/typst/LICENSE"
+      "crates/kurvst/typst/LICENSE.tiptoe"
       "crates/linnest/typst/linnest.wasm"
       "crates/linnest/typst/LICENSE.clarabel"
       "crates/linnest/typst/LICENSE"
@@ -1589,7 +1593,7 @@
     cp -R ${linnest-wasm}/templates/crates/kurvst/typst/src/. crates/kurvst/typst/src/
     cp ${linnest-wasm}/templates/crates/kurvst/typst/typst.toml crates/kurvst/typst/typst.toml
     cp ${linnest-wasm}/templates/crates/kurvst/typst/kurvst.wasm crates/kurvst/typst/kurvst.wasm
-    cp ${linnest-wasm}/templates/crates/kurvst/typst/LICENSE crates/kurvst/typst/
+    cp ${linnest-wasm}/templates/crates/kurvst/typst/LICENSE* crates/kurvst/typst/
   '';
 
   clinnetCargoArtifacts = craneLib.buildDepsOnly (clinnetArgs
@@ -2685,7 +2689,7 @@
         cp crates/linnest/typst/LICENSE* "$out/templates/crates/linnest/typst/"
         cp -R crates/kurvst/typst/src "$out/templates/crates/kurvst/typst/"
         cp crates/kurvst/typst/typst.toml "$out/templates/crates/kurvst/typst/typst.toml"
-        cp crates/kurvst/typst/LICENSE "$out/templates/crates/kurvst/typst/"
+        cp crates/kurvst/typst/LICENSE* "$out/templates/crates/kurvst/typst/"
         cp "$out/linnest.wasm" "$out/templates/crates/linnest/typst/linnest.wasm"
         cp "$out/kurvst.wasm" "$out/templates/crates/kurvst/typst/kurvst.wasm"
       '';
@@ -3176,6 +3180,7 @@
         cmp ${workspaceRoot + "/crates/linnest/layout/native/LICENSE.networkx"} ${linnest-wasm}/templates/crates/linnest/typst/LICENSE.networkx
         cmp ${workspaceRoot + "/crates/linnest/typst/LICENSE"} ${linnest-wasm}/templates/crates/linnest/typst/LICENSE
         cmp ${workspaceRoot + "/crates/kurvst/typst/LICENSE"} ${linnest-wasm}/templates/crates/kurvst/typst/LICENSE
+        cmp ${workspaceRoot + "/crates/kurvst/typst/LICENSE.tiptoe"} ${linnest-wasm}/templates/crates/kurvst/typst/LICENSE.tiptoe
         grep -Fx 'license = "MIT AND Apache-2.0 AND BSD-3-Clause"' ${linnest-wasm}/templates/crates/linnest/typst/typst.toml
         wasm-tools validate ${linnest-wasm}/linnest.wasm
         wasm-tools validate ${linnest-wasm}/kurvst.wasm

@@ -1,9 +1,8 @@
 // Internal Kurvst implementation. Public users should import `lib.typ`.
 
-#import "@preview/cetz:0.5.1" as cetz
+#import "@preview/cetz:0.5.2" as cetz
 
-// Geometry functions capture just the CeTZ operations they use. Capturing the
-// complete module makes Typst hash every exported drawing and utility function.
+// Capture only the operations used below, not the complete CeTZ module.
 #let _cetz-bezier = cetz.draw.bezier
 #let _cetz-line = cetz.draw.line
 #let _cetz-merge-path = cetz.draw.merge-path
@@ -41,7 +40,6 @@
   end-outset: 0,
   side-point: none,
   accuracy: 0.001,
-  optimize: true,
 )
 
 #let _sampled-pattern(samples-per-period, offset) = {
@@ -194,6 +192,7 @@
 }
 
 #let _path-value(path) = {
+  if type(path) == bytes { path = cbor(path) }
   if type(path) == dictionary and path.keys().contains("path") {
     path.path
   } else {
@@ -239,13 +238,13 @@
   end: _point-pair(end),
 )
 
-/// Build a `close` path element.
+/// Close the current subpath with a straight segment back to its start.
 ///
 /// -> dictionary
-#let close(mode: "straight") = (kind: "close", mode: mode)
+#let close() = (kind: "close")
 
 #let _normalized-element(element) = {
-  if element.kind == "move" {
+  let normalized = if element.kind == "move" {
     move-to(element.start)
   } else if element.kind == "line" {
     line-to(element.end)
@@ -254,10 +253,19 @@
   } else if element.kind == "cubic" {
     cubic-to(element.control-start, element.control-end, element.end)
   } else if element.kind == "close" {
-    close(mode: element.at("mode", default: "straight"))
+    assert(
+      not ("mode" in element),
+      message: "close: mode is unsupported; add explicit curve segments for curved closure",
+    )
+    close()
   } else {
     panic("Unsupported Kurvst path element kind: " + str(element.kind))
   }
+  assert(
+    element.keys().all(key => key in normalized),
+    message: "Unsupported fields in Kurvst " + element.kind + " path element",
+  )
+  normalized
 }
 
 #let _part-elements(part) = {
@@ -444,7 +452,7 @@
 #let _elements(path) = {
   let path = _path-value(path)
   if type(path) == dictionary and path.keys().contains("elements") {
-    path.elements
+    path.elements.map(_normalized-element)
   } else {
     panic("Expected a Kurvst path dictionary with an `elements` field")
   }
@@ -644,8 +652,9 @@
 /// `length` is interpreted as a fixed arc length. `ratio` is interpreted as a
 /// fraction of `base-length`. `method` may be `"min"`/`"shorter"`,
 /// `"max"`/`"longer"`, `"length"`/`"fixed"`, `"ratio"`/`"relative"`,
-/// `"none"`/`"full"`, or a function receiving
-/// `(base-length, length, ratio)`.
+/// `"none"`/`"full"`, or a function receiving one dictionary with
+/// `base-length`, `length`, and `ratio`. The latter two are positive absolute
+/// lengths or `none`. Unknown strings are rejected.
 /// -> none | int | float
 #let _resolve-length-target(
   base-length,
@@ -653,12 +662,34 @@
   ratio: none,
   method: "min",
 ) = {
+  if type(method) != function {
+    assert(
+      method in (
+        "min",
+        "shorter",
+        "max",
+        "longer",
+        "length",
+        "fixed",
+        "ratio",
+        "relative",
+        "none",
+        "full",
+      ),
+      message: "resolve-length: unsupported method " + repr(method),
+    )
+  }
   let fixed = if length != none and length > 0 { length } else { none }
-  let relative = if ratio != none and ratio > 0 { base-length * ratio } else {
+  let relative = if ratio != none and ratio > 0 {
+    let target = base-length * ratio
+    if target > 0 { target } else { none }
+  } else {
     none
   }
   if type(method) == function {
     method((base-length: base-length, length: fixed, ratio: relative))
+  } else if method in ("none", "full") {
+    none
   } else if fixed == none {
     relative
   } else if relative == none {
@@ -669,8 +700,6 @@
     fixed
   } else if method in ("ratio", "relative") {
     relative
-  } else if method in ("none", "full") {
-    none
   } else {
     calc.min(fixed, relative)
   }
@@ -815,52 +844,15 @@
   ))))
 }
 
-#let _pattern-spec(
-  path,
-  pattern: "wave",
-  amplitude: 0.1,
-  wavelength: 1.0,
-  phase: 0,
-  samples-per-period: 16,
-  coil-longitudinal-scale: 1.25,
-  anchor-start: true,
-  anchor-end: true,
-  endpoint-slope: 0,
-  split-at: (),
-  accuracy: 0.001,
-) = {
-  let pattern = _resolve-pattern(
-    pattern,
-    samples-per-period: samples-per-period,
-    coil-longitudinal-scale: coil-longitudinal-scale,
-  )
-  (
-    path: _path-value(path),
-    pattern: pattern,
-    amplitude: amplitude,
-    wavelength: wavelength,
-    phase: phase,
-    samples-per-period: samples-per-period,
-    coil-longitudinal-scale: coil-longitudinal-scale,
-    anchor-start: anchor-start,
-    anchor-end: anchor-end,
-    endpoint-slope: endpoint-slope,
-    split-at: split-at,
-    accuracy: accuracy,
-  )
-}
-
 /// Generate a sampled 1D pattern along a path.
 ///
 /// `pattern` may be `wave()`, `zigzag()`, `coil()`, a compatible string name,
 /// or a point pattern:
 /// `(kind: "points", interpolation: "linear" or "smooth", points: ((at: 0, x: 0, y: 0), ...))`.
-/// A `kind: "fitted-coil"` dictionary accepts the fitting parameters of `coil()`
-/// and samples them natively; use outer wavelength `fit-length` and phase zero.
 /// The whole input path is sampled continuously, so pattern phase does not
-/// restart at cubic segment boundaries.
-/// With `split-at`, the returned `parts` divide the finished fitted pattern at
-/// carrier distances; cuts never re-fit, restart, or taper the pattern.
+/// restart at cubic segment boundaries. `split-at` lists arc distances along
+/// the input path; the result's `parts` holds the one patterned path cut there,
+/// so pieces can be styled independently while following a single pattern.
 ///
 /// ```example
 /// #let spline = kurvst.hobby-spline((
@@ -882,8 +874,43 @@
 /// ```
 ///
 /// -> dictionary
+#let _pattern-spec(
+  path,
+  pattern: "wave",
+  amplitude: 0.1,
+  wavelength: 1.0,
+  phase: 0,
+  samples-per-period: 16,
+  coil-longitudinal-scale: 1.25,
+  anchor-start: true,
+  anchor-end: true,
+  endpoint-slope: 0,
+  accuracy: 0.001,
+  split-at: (),
+) = {
+  let pattern = _resolve-pattern(
+    pattern,
+    samples-per-period: samples-per-period,
+    coil-longitudinal-scale: coil-longitudinal-scale,
+  )
+  (
+    path: _path-value(path),
+    pattern: pattern,
+    amplitude: amplitude,
+    wavelength: wavelength,
+    phase: phase,
+    samples-per-period: samples-per-period,
+    coil-longitudinal-scale: coil-longitudinal-scale,
+    anchor-start: anchor-start,
+    anchor-end: anchor-end,
+    endpoint-slope: endpoint-slope,
+    accuracy: accuracy,
+    split-at: split-at,
+  )
+}
+
 #let pattern(path, ..options) = {
-  cbor(_plugin.curve_pattern_path(cbor.encode(_pattern-spec(path, ..options.named()))))
+  cbor(_plugin.curve_pattern_path(cbor.encode(_pattern-spec(path, ..options))))
 }
 
 /// Generate a parallel path for a path.
@@ -913,7 +940,6 @@
   start-outset: 0,
   end-outset: 0,
   accuracy: 0.001,
-  optimize: true,
 ) = {
   cbor(_plugin.curve_parallel_path(cbor.encode((
     path: _path-value(path),
@@ -921,67 +947,7 @@
     start-outset: start-outset,
     end-outset: end-outset,
     accuracy: accuracy,
-    optimize: optimize,
   ))))
-}
-
-// Prepare shifted windows together while retaining the scalar layer semantics.
-#let layers(
-  path,
-  shifts,
-  offset: 0,
-  length: none,
-  ratio: none,
-  resolve-length: "min",
-  start-outset: 0,
-  end-outset: 0,
-  side-point: none,
-  accuracy: 0.001,
-  optimize: true,
-  format: "array",
-  unit: 1,
-) = {
-  assert(format in ("array", "cbor"), message: "Unknown layer format: " + repr(format))
-  let distance = _offset-toward-side-point(path, offset, side-point)
-  if distance != none and distance != 0 {
-    path = parallel(
-      path,
-      distance: distance,
-      accuracy: accuracy,
-      optimize: optimize,
-    )
-  }
-  // Keep empty paths drawable; trim requires at least one segment.
-  if segments(path).len() == 0 {
-    let slices = shifts.map(_ => (path: (path: _path-value(path)), segments: ()))
-    return if format == "cbor" {
-      (layers: cbor.encode(slices), footprints: cbor.encode(()), count: shifts.len(),
-        nonzero: false, supported: false, all-single: false, offset: distance)
-    } else {
-      slices.map(slice => (path: slice.path + (offset: distance), segments: slice.segments))
-    }
-  }
-  let center-trim = center-outset(
-    _length(path, accuracy: accuracy),
-    length: length,
-    ratio: ratio,
-    resolve-length: resolve-length,
-    start-outset: start-outset,
-    end-outset: end-outset,
-  )
-  // Keep Typst's numeric types, signed zeros and left-to-right arithmetic.
-  // Only the shared geometric trimming and cubic conversion cross to native.
-  let outsets = shifts.map(shift => {
-    let shift = calc.max(-center-trim, calc.min(center-trim, shift))
-    (start-outset: start-outset + center-trim + shift,
-      end-outset: end-outset + center-trim - shift)
-  })
-  let slices = cbor(_plugin.curve_trim_paths(cbor.encode((
-    path: _path-value(path), outsets: outsets, accuracy: accuracy, format: format, unit: unit,
-  ))))
-  if format == "cbor" { slices + (offset: distance) } else {
-    slices.map(slice => (path: slice.path + (offset: distance), segments: slice.segments))
-  }
 }
 
 /// Expand a stroked path into a closed outline that can be filled.
@@ -1012,6 +978,63 @@
   ))))
 }
 
+// Prepare shifted windows together while retaining the scalar layer semantics.
+#let layers(
+  path,
+  shifts,
+  offset: 0,
+  length: none,
+  ratio: none,
+  resolve-length: "min",
+  start-outset: 0,
+  end-outset: 0,
+  side-point: none,
+  accuracy: 0.001,
+  format: "array",
+  unit: 1,
+) = {
+  assert(format in ("array", "cbor"), message: "Unknown layer format: " + repr(format))
+  let distance = _offset-toward-side-point(path, offset, side-point)
+  if distance != none and distance != 0 {
+    path = parallel(
+      path,
+      distance: distance,
+      accuracy: accuracy,
+    )
+  }
+  let center-trim = center-outset(
+    _length(path, accuracy: accuracy),
+    length: length,
+    ratio: ratio,
+    resolve-length: resolve-length,
+    start-outset: start-outset,
+    end-outset: end-outset,
+  )
+  // Validate the resolver even for empty paths and empty batches.
+  if segments(path).len() == 0 {
+    let slices = shifts.map(_ => (path: (path: _path-value(path)), segments: ()))
+    return if format == "cbor" {
+      (layers: cbor.encode(slices), footprints: cbor.encode(()), count: shifts.len(),
+        nonzero: false, supported: false, all-single: false, offset: distance)
+    } else {
+      slices.map(slice => (path: slice.path + (offset: distance), segments: slice.segments))
+    }
+  }
+  // Retain Typst's numeric types, signed zeros and left-to-right arithmetic.
+  // Shared geometric trimming and cubic conversion cross to native once.
+  let outsets = shifts.map(shift => {
+    let shift = calc.max(-center-trim, calc.min(center-trim, shift))
+    (start-outset: start-outset + center-trim + shift,
+      end-outset: end-outset + center-trim - shift)
+  })
+  let slices = cbor(_plugin.curve_trim_paths(cbor.encode((
+    path: _path-value(path), outsets: outsets, accuracy: accuracy, format: format, unit: unit,
+  ))))
+  if format == "cbor" { slices + (offset: distance) } else {
+    slices.map(slice => (path: slice.path + (offset: distance), segments: slice.segments))
+  }
+}
+
 /// Build a derived visible path layer.
 ///
 /// `layer` combines the common operations needed by drawing packages:
@@ -1022,7 +1045,6 @@
 /// positive and is clamped at the endpoint outsets. The return value is a normal
 /// Kurvst path dictionary that can be passed to @pattern, @parallel,
 /// @trim, or @to-cetz.
-/// Its `offset` field records the signed offset resolved before trimming.
 ///
 /// ```example
 /// #let base = kurvst.hobby-spline((
@@ -1056,13 +1078,11 @@
   end-outset: 0,
   side-point: none,
   accuracy: 0.001,
-  optimize: true,
 ) = {
   layers(
     path, (shift,), offset: offset, length: length, ratio: ratio,
     resolve-length: resolve-length, start-outset: start-outset,
     end-outset: end-outset, side-point: side-point, accuracy: accuracy,
-    optimize: optimize,
   ).first().path
 }
 
@@ -1088,10 +1108,7 @@
         _point(element.end, unit: unit),
       ))
     } else if element.kind == "close" {
-      components.push(curve.close(mode: element.at(
-        "mode",
-        default: "straight",
-      )))
+      components.push(curve.close(mode: "straight"))
     }
   }
 
@@ -1149,8 +1166,7 @@
         ))
         current = element.end
       } else if element.kind == "cubic" {
-        // Patterned paths contain many cubics; convert their control points
-        // directly to avoid a function call for each numeric coordinate pair.
+        // Avoid a coordinate function call for every patterned cubic point.
         segments.push(if numeric { (
           "c",
           (float(element.control-start.at(0) * unit), float(element.control-start.at(1) * unit), 0.0),
@@ -1182,8 +1198,7 @@
 
 #let to-cetz-data(path, unit: 1) = _to-cetz-data(path, unit: unit)
 
-// Native pattern output contains float triples. Primitive coordinate hooks
-// receive the original scaled float pairs, just as pattern followed by to-cetz.
+// Primitive coordinate hooks receive the original scaled float pairs.
 #let _cetz-pairs(subpaths) = subpaths.map(((origin, closed, segments)) => (
   origin.slice(0, 2), closed,
   segments.map(((kind, ..points)) => (kind, ..points.map(p => p.slice(0, 2)))),
@@ -1198,7 +1213,7 @@
     let carrier = _cetz-apply-transform(ctx.transform,
       _cetz-drawable-path(((origin, false, joined),)),
     ).first()
-    // Join in canvas coordinates, just as merge-path joins primitive drawables.
+    // Join in canvas coordinates, as merge-path joins primitive drawables.
     // A singular transform can make distinct source endpoints coincide.
     if merged == none { merged = carrier } else {
       let (origin, closed, joined) = merged.segments.first()
@@ -1213,9 +1228,9 @@
 }
 
 #let _draw-cetz(subpaths, style, numeric, pairs, ctx) = {
-  // Numeric paths need no per-segment coordinate resolution, anchors or
-  // bounds. Keep primitive processing for hooks, inherited marks, empty paths
-  // and multi-subpath merges with explicit closing or disabled joining.
+  // Numeric paths need no per-segment resolution, anchors or bounds.
+  // Preserve primitive processing for hooks, marks, empty paths and merges
+  // with explicit closing or disabled joining.
   let custom = (not numeric
     or ctx.debug
     or subpaths.any(path => path.last().len() == 0)
@@ -1225,7 +1240,6 @@
     or _cetz-check-mark(_cetz-resolve-style(ctx.style, root: "line").mark)
     or _cetz-check-mark(_cetz-resolve-style(ctx.style, root: "bezier").mark))
   let body = if custom {
-    // Coordinate hooks and primitive processing receive the original pairs.
     let subpaths = if numeric { pairs() } else { subpaths }
     {
       for (origin, closed, segments) in subpaths {
@@ -1249,7 +1263,6 @@
   (_cetz-merge-path(body, ..style).first())(ctx)
 }
 
-
 /// Draw a path dictionary through CeTZ.
 ///
 /// ```example
@@ -1262,7 +1275,6 @@
 /// -> content
 #let to-cetz(path, unit: 1, ..style) = {
   let style = style.named()
-  // Scale and coerce numeric coordinates in the same traversal.
   let numeric = type(unit) in (int, float)
   let subpaths = _to-cetz-data(path, unit: unit,
     point: if numeric { _cetz-point } else { _point }, numeric: numeric)
@@ -1270,21 +1282,20 @@
   (_draw-cetz.with(subpaths, style, numeric, to-cetz-data.with(path, unit: unit)),)
 }
 
-// Convert native pattern geometry directly to the same CeTZ tuples that
-// to-cetz builds, without serializing and traversing an intermediate wire path.
+// Convert native pattern geometry directly to the same CeTZ tuples, without
+// serializing and traversing an intermediate wire path.
 #let pattern-to-cetz(path, unit: 1, style: (:), ..options) = {
-  let spec = _pattern-spec(path, ..options.named())
+  let spec = _pattern-spec(path, ..options)
   if type(unit) not in (int, float) {
     return to-cetz(cbor(_plugin.curve_pattern_path(cbor.encode(spec))), unit: unit, ..style)
   }
   let subpaths = cbor(_plugin.curve_pattern_cetz(cbor.encode((pattern: spec, unit: unit))))
-  // Degenerate command streams can synthesize integer origins; keep their
-  // original pair types for primitive hooks and signed-zero multiplication.
+  // Degenerate streams can synthesize integer origins; retain their original
+  // pair types for primitive hooks and signed-zero multiplication.
   if type(subpaths) == dictionary { return to-cetz(subpaths, unit: unit, ..style) }
   if subpaths.len() == 0 { return () }
   (_draw-cetz.with(subpaths, style, true, _cetz-pairs.with(subpaths)),)
 }
-
 
 /// Split a path through a point sequence into per-span paths.
 ///
@@ -1339,9 +1350,8 @@
 }
 
 /// Sample overlapping cubic targets in equal arc-length regions across parts.
-/// Parts contain cubic `segments` and a `visible` flag. Hidden parts contribute
-/// arc length; only visible parts produce `(region, points)` groups. Sampling
-/// retains both endpoints of each trimmed cubic, including shared endpoints.
+/// Hidden parts contribute arc length; only visible parts produce
+/// `(region, points)` groups. Retain both endpoints of each trimmed cubic.
 #let region-samples(parts, regions: 4, unit: 1, step: 4, accuracy: 0.001) = {
   cbor(_plugin.curve_region_samples(cbor.encode((
     parts: parts, regions: regions, unit: unit, step: step, accuracy: accuracy,

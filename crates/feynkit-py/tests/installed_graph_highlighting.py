@@ -61,10 +61,7 @@ def external_metrics_snapshot(view):
 
 model = fk.Model(Path(__file__).parent / "fixtures/scalars_2p_3p.json")
 diagrams = (
-    model.process(
-        ["scalar_0"], ["scalar_0", "scalar_0"], vertex_allow=["V_3_SCALAR_000"]
-    )
-    .generate_diagrams(loops=1, max_vertices=3, allow_self_loops=True)
+    model.process(["scalar_0"], ["scalar_0", "scalar_0"]).amplitude(loops=fk.Loops.total(1), restrict=fk.Restrict().only_vertices(["V_3_SCALAR_000"]), topology=fk.TopologyRules(max_vertices=3, self_loops=True, bridges=fk.Bridges.one_pi_in_loops(), self_energies=fk.Veto.all(), tadpoles=fk.Veto.all(), snails=fk.Veto.massless())).generate().build(fk.NumeratorOptions(naming=fk.Naming.named("D")))
     .diagrams
 )
 diagram = next(
@@ -144,10 +141,7 @@ for render in (diagram.to_linnest, diagram.render, diagram.to_html):
 assert diagram.to_json() == snapshot
 assert fixture_linnest(diagram) == source
 cross_section = (
-    model.process(
-        ["scalar_0"], ["scalar_0", "scalar_0"], vertex_allow=["V_3_SCALAR_000"]
-    )
-    .generate_cross_section(loops=1, max_vertices=2, allow_self_loops=True)
+    model.process(["scalar_0"], ["scalar_0", "scalar_0"]).cross_section(loops=fk.Loops.forward(1), restrict=fk.Restrict().only_vertices(["V_3_SCALAR_000"]), topology=fk.TopologyRules(max_vertices=2, self_loops=True, bridges=fk.Bridges.one_pi_in_loops(), self_energies=fk.Veto.all(), tadpoles=fk.Veto.all(), snails=fk.Veto.massless()), cuts=fk.Cuts(blobs=fk.Range.exact(1), spectators=fk.Range.exact(0))).generate().build(fk.NumeratorOptions(naming=fk.Naming.named("D")))
     .diagrams[0]
 )
 snapshot = cross_section.to_json()

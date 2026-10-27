@@ -1,6 +1,6 @@
 #import "crates/linnest/typst/src/lib.typ": draw, graph, layout, subgraph
 #import graph: edge, node, pos, sink, source
-#import "@preview/cetz:0.5.1" as cetz
+#import "@preview/cetz:0.5.2" as cetz
 
 // Render this value: graph.style measurement and draw callbacks need layout.
 // Black-only drawing deliberately avoids the public fixture's SVG color probes.

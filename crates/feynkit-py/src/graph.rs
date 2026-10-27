@@ -71,10 +71,10 @@ pub(crate) fn parse_symbolic_annotation(value: &str) -> Result<PythonExpression,
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hepkit as hep
+/// >>> from symbolica.community import hepkit as hep, graph
 /// >>> model = hep.Model.phi4()
 /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
-/// >>> result = process.generate_diagrams(loops=1)
+/// >>> result = process.amplitude(loops=hep.Loops.total(1), topology=hep.TopologyRules(bridges=graph.Bridges.one_pi_in_loops(), self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless())).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
 /// >>> diagram = result.diagrams[0]
 /// >>> vertex = diagram.vertices[0]
 /// >>> interaction = model.vertex_rule(vertex.interaction)
@@ -224,10 +224,10 @@ impl PyDiagramVertex {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hepkit as hep
+/// >>> from symbolica.community import hepkit as hep, graph
 /// >>> model = hep.Model.phi4()
 /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
-/// >>> result = process.generate_diagrams(loops=1)
+/// >>> result = process.amplitude(loops=hep.Loops.total(1), topology=hep.TopologyRules(bridges=graph.Bridges.one_pi_in_loops(), self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless())).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
 /// >>> diagram = result.diagrams[0]
 /// >>> edge = diagram.internal_edges[0]
 /// >>> endpoints = (edge.source, edge.target)
@@ -750,10 +750,10 @@ impl PyDiagramEdge {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hepkit as hep
+/// >>> from symbolica.community import hepkit as hep, graph
 /// >>> model = hep.Model.phi4()
 /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
-/// >>> result = process.generate_cross_section(loops=1)
+/// >>> result = process.cross_section(loops=hep.Loops.forward(1), topology=hep.TopologyRules(self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless()), cuts=hep.Cuts(blobs=hep.Range.exact(1), spectators=hep.Range.exact(0))).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
 /// >>> diagram = result.diagrams[0]
 /// >>> cut = diagram.cuts[0]
 /// >>> side = cut.left
@@ -816,10 +816,10 @@ impl PyDiagramCutSide {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hepkit as hep
+/// >>> from symbolica.community import hepkit as hep, graph
 /// >>> model = hep.Model.phi4()
 /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
-/// >>> result = process.generate_cross_section(loops=1)
+/// >>> result = process.cross_section(loops=hep.Loops.forward(1), topology=hep.TopologyRules(self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless()), cuts=hep.Cuts(blobs=hep.Range.exact(1), spectators=hep.Range.exact(0))).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
 /// >>> diagram = result.diagrams[0]
 /// >>> cut = diagram.cuts[0]
 /// >>> factors = cut.propagators()
@@ -1031,10 +1031,10 @@ impl PyDiagramCut {
 /// physical final-state cuts are available separately through ``diagram.cuts``.
 ///
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hepkit as hep
+/// >>> from symbolica.community import hepkit as hep, graph
 /// >>> model = hep.Model.phi4()
 /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
-/// >>> result = process.generate_cross_section(loops=1)
+/// >>> result = process.cross_section(loops=hep.Loops.forward(1), topology=hep.TopologyRules(self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless()), cuts=hep.Cuts(blobs=hep.Range.exact(1), spectators=hep.Range.exact(0))).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
 /// >>> diagram = result.diagrams[0]
 /// >>> cut = diagram.cuts[0]
 /// >>> thresholds = diagram.topology_threshold_candidates
@@ -1126,10 +1126,10 @@ impl PyDiagramThresholdCandidate {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hepkit as hep
+/// >>> from symbolica.community import hepkit as hep, graph
 /// >>> model = hep.Model.phi4()
 /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
-/// >>> result = process.generate_diagrams(loops=1)
+/// >>> result = process.amplitude(loops=hep.Loops.total(1), topology=hep.TopologyRules(bridges=graph.Bridges.one_pi_in_loops(), self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless())).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
 /// >>> diagram = result.diagrams[0]
 /// >>> basis = diagram.loop_momentum_basis
 /// >>> edge_id = basis.loop_edges[0]
@@ -1310,10 +1310,10 @@ impl PyMomentumSignature {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hepkit as hep
+/// >>> from symbolica.community import hepkit as hep, graph
 /// >>> model = hep.Model.phi4()
 /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
-/// >>> result = process.generate_diagrams(loops=1)
+/// >>> result = process.amplitude(loops=hep.Loops.total(1), topology=hep.TopologyRules(bridges=graph.Bridges.one_pi_in_loops(), self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless())).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
 /// >>> diagram = result.diagrams[0]
 /// >>> basis = diagram.loop_momentum_basis
 /// >>> assert len(basis.loop_edges) == diagram.loop_count
@@ -2015,7 +2015,7 @@ submit! {
 
 /// A generated or imported Feynman diagram, with particles, momenta and Feynman rules.
 ///
-/// Obtain diagrams from ``Model.process(...).generate_diagrams().diagrams``;
+/// Obtain diagrams from ``Model.process(...).amplitude(loops=hep.Loops.total(0)).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D"))).diagrams``;
 /// use ``from_json`` or ``from_dot`` to restore a saved diagram with its model.
 /// There is no direct Python constructor. ``internal_edges`` are propagators,
 /// whereas ``external_edges`` carry the scattering or decay states.
@@ -2033,10 +2033,10 @@ submit! {
 /// renders the graph. The methods below reuse this setup.
 ///
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hepkit as hep
+/// >>> from symbolica.community import hepkit as hep, graph
 /// >>> model = hep.Model.phi4()
 /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
-/// >>> result = process.generate_diagrams(loops=1)
+/// >>> result = process.amplitude(loops=hep.Loops.total(1), topology=hep.TopologyRules(bridges=graph.Bridges.one_pi_in_loops(), self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless())).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
 /// >>> diagram = result.diagrams[0]
 /// >>> diagram.validate()
 /// >>> assert diagram.loop_count == 1
@@ -2090,9 +2090,9 @@ struct DiagramSelection {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hepkit as hep
+/// >>> from symbolica.community import graph, hepkit as hep
 /// >>> model = hep.Model.phi4()
-/// >>> diagram = model.process(["phi", "phi"], ["phi", "phi"]).generate_diagrams(loops=1, progress=None).diagrams[0]
+/// >>> diagram = model.process(["phi", "phi"], ["phi", "phi"]).amplitude(loops=hep.Loops.total(1), topology=hep.TopologyRules(bridges=graph.Bridges.one_pi_in_loops(), self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless())).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D"))).diagrams[0]
 ///
 /// >>> endpoints = [(half.id, half.vertex, half.edge.particle_name) for half in diagram.half_edges]
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
@@ -2141,9 +2141,9 @@ pub struct PyDiagramHalfEdge {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hepkit as hep
+/// >>> from symbolica.community import graph, hepkit as hep
 /// >>> model = hep.Model.phi4()
-/// >>> diagram = model.process(["phi", "phi"], ["phi", "phi"]).generate_diagrams(loops=1, progress=None).diagrams[0]
+/// >>> diagram = model.process(["phi", "phi"], ["phi", "phi"]).amplitude(loops=hep.Loops.total(1), topology=hep.TopologyRules(bridges=graph.Bridges.one_pi_in_loops(), self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless())).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D"))).diagrams[0]
 ///
 /// >>> partitions = diagram.all_cuts([0], [1])
 /// >>> boundary_edges = partitions[0].boundary_left.edges
@@ -2220,9 +2220,9 @@ impl PyCutPartition {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hepkit as hep
+/// >>> from symbolica.community import graph, hepkit as hep
 /// >>> model = hep.Model.phi4()
-/// >>> diagram = model.process(["phi", "phi"], ["phi", "phi"]).generate_diagrams(loops=1, progress=None).diagrams[0]
+/// >>> diagram = model.process(["phi", "phi"], ["phi", "phi"]).amplitude(loops=hep.Loops.total(1), topology=hep.TopologyRules(bridges=graph.Bridges.one_pi_in_loops(), self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless())).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D"))).diagrams[0]
 ///
 /// >>> tree = diagram.depth_first_traverse(0)
 /// >>> discovery_order = [vertex.id for vertex in tree.nodes]
@@ -2594,7 +2594,7 @@ impl PyFeynmanDiagram {
     }
 
     fn check_node(&self, node: usize) -> PyResult<NodeIndex> {
-        if node >= self.inner.underlying().n_nodes() {
+        if node >= self.inner.underlying().node_bound() {
             return Err(PyIndexError::new_err("vertex ID out of range"));
         }
         Ok(NodeIndex(node))
@@ -3214,8 +3214,10 @@ impl PyFeynmanDiagram {
     /// model : Model
     ///     Model used to resolve particles and interactions or validate annotated IDs.
     /// dot : str
-    ///     Compact physics DOT or annotated HEP DOT. Compact cross-sections pair
-    ///     initial-state legs with is_cut and specify comma-separated final_state particles.
+    ///     Compact physics DOT or annotated HEP DOT. Compact cross-sections mark
+    ///     their initial states with is_cut, on an incoming and an outgoing leg or on
+    ///     one internal edge. They keep every separating cut as physical unless a
+    ///     comma-separated final_state names the particles of the physical cuts.
     #[staticmethod]
     fn from_dot(model: &PyModel, dot: &str) -> PyResult<Self> {
         FeynmanDiagram::from_dot(Arc::clone(&model.inner), dot)
@@ -3227,11 +3229,15 @@ impl PyFeynmanDiagram {
     ///
     /// Returns a new diagram whose local numerator fragments are built in the
     /// existing half-edge frame. Momentum routing, graph weights, numerator
-    /// prefactors and the external-state projector are retained.
+    /// prefactors and the external-state projector are retained. Only the local
+    /// fragments come from the model: a compact DOT graph without ``projector``
+    /// and ``overall_factor`` attributes keeps both at 1, whereas a generated
+    /// diagram also carries its external-state projector and its sign and
+    /// symmetry factors.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica.community import hepkit as hep
+    /// >>> from symbolica.community import hepkit as hep, graph
     /// >>> model = hep.Model.phi4()
     /// >>> diagram = hep.FeynmanDiagram.from_dot(model, '''digraph sunrise {
     /// ...     ext [style=invis];
@@ -3276,7 +3282,7 @@ impl PyFeynmanDiagram {
             .map_err(error::diagram)
     }
 
-    /// Return the deterministic name assigned during diagram generation.
+    /// Return the diagram name, or ``None`` for an unnamed diagram.
     ///
     /// Examples
     /// --------
@@ -3284,7 +3290,7 @@ impl PyFeynmanDiagram {
     ///
     /// >>> by_name = {item.name: item for item in result.diagrams}
     #[getter]
-    fn name(&self) -> &str {
+    fn name(&self) -> Option<&str> {
         self.inner.name()
     }
 
@@ -3294,22 +3300,30 @@ impl PyFeynmanDiagram {
     /// --------
     /// Using the setup in the ``FeynmanDiagram`` class example:
     ///
-    /// >>> selected = process.generate_diagrams(loops=1, select_diagrams=[diagram.id])
+    /// >>> selected = process.amplitude(loops=hep.Loops.total(1), topology=hep.TopologyRules(bridges=graph.Bridges.one_pi_in_loops(), self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless())).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D"))).select(hep.Selection(select=[diagram.id]))
     /// >>> assert len(selected.diagrams) == 1
     #[getter]
-    fn id(&self) -> String {
-        self.inner.id().to_string()
+    fn id(&self) -> PyResult<String> {
+        self.inner
+            .id()
+            .map(|id| id.to_string())
+            .map_err(error::diagram)
     }
 
-    /// Return the positive integer denominator of the graph symmetry factor.
+    /// Return the automorphism count of the graph, the denominator of its symmetry factor.
+    ///
+    /// The diagram's weight is ``overall_factor_expression(evaluate=True)``, which also
+    /// carries fermion signs and the number of graphs that symmetrization or grouping
+    /// identified with this one.
     ///
     /// Examples
     /// --------
     /// Using the setup in the ``FeynmanDiagram`` class example:
     ///
-    /// >>> graph_weight = 1 / diagram.symmetry_factor
+    /// >>> automorphisms = diagram.symmetry_factor
+    /// >>> weight = diagram.overall_factor_expression(evaluate=True)
     #[getter]
-    fn symmetry_factor(&self) -> u64 {
+    fn symmetry_factor(&self) -> u128 {
         self.inner.symmetry_factor()
     }
 
@@ -3854,9 +3868,9 @@ impl PyFeynmanDiagram {
     /// Reduce a vacuum graph after explicitly selecting its integrated momentum head:
     ///
     /// >>> from symbolica import S, E
-    /// >>> from symbolica.community import hepkit as hep
+    /// >>> from symbolica.community import hepkit as hep, graph
     /// >>> model = hep.Model.phi4()
-    /// >>> vacuum_diagram = model.process([], []).generate_diagrams(loops=2, factorized_loop_topologies_count_range=None).diagrams[0]
+    /// >>> vacuum_diagram = model.process([], []).amplitude(loops=hep.Loops.total(2)).generate().build().diagrams[0]
     /// >>> reducer = hep.TensorReducer(E("4"), integrated=[E("gammalooprs::Q")])
     /// >>> scalar_numerator = vacuum_diagram.reduce_tensor_numerator(reducer)
     ///
@@ -3895,9 +3909,9 @@ impl PyFeynmanDiagram {
     /// Construct scalar numerator graphs for a vacuum diagram:
     ///
     /// >>> from symbolica import S, E
-    /// >>> from symbolica.community import hepkit as hep
+    /// >>> from symbolica.community import hepkit as hep, graph
     /// >>> model = hep.Model.phi4()
-    /// >>> vacuum_diagram = model.process([], []).generate_diagrams(loops=2, factorized_loop_topologies_count_range=None).diagrams[0]
+    /// >>> vacuum_diagram = model.process([], []).amplitude(loops=hep.Loops.total(2)).generate().build().diagrams[0]
     /// >>> reducer = hep.TensorReducer(E("4"), integrated=[E("gammalooprs::Q")])
     /// >>> scalar_graphs = vacuum_diagram.reduce_tensor_graphs(reducer)
     ///
@@ -4691,13 +4705,15 @@ impl PyFeynmanDiagram {
     /// >>> print(diagram)
     fn __repr__(&self) -> PyResult<String> {
         Ok(format!(
-            "{}(name='{}', loops={}, vertices={}, edges={})",
+            "{}(name={}, loops={}, vertices={}, edges={})",
             if self.selected_region.is_some() {
                 "Subgraph"
             } else {
                 "FeynmanDiagram"
             },
-            self.inner.name(),
+            self.inner
+                .name()
+                .map_or_else(|| "None".to_owned(), |name| format!("{name:?}")),
             self.loop_count()?,
             self.vertices().len(),
             self.edges().len()
@@ -4715,10 +4731,10 @@ impl PyFeynmanDiagram {
 /// Examples
 /// --------
 /// >>> from symbolica import S, E
-/// >>> from symbolica.community import hepkit as hep
+/// >>> from symbolica.community import hepkit as hep, graph
 /// >>> model = hep.Model.phi4()
 /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
-/// >>> result = process.generate_diagrams(loops=1)
+/// >>> result = process.amplitude(loops=hep.Loops.total(1), topology=hep.TopologyRules(bridges=graph.Bridges.one_pi_in_loops(), self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless())).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
 /// >>> diagram = result.diagrams[0]
 /// >>> region = diagram.filter(edge=lambda edge: not edge.is_external)
 /// >>> left = diagram.subgraph(nodes=[0])
@@ -5076,12 +5092,20 @@ impl PyFeynmanDiagram {
 
 #[cfg(test)]
 mod tests {
+    use feynkit_generator::FeynmanDiagramRulesExt;
+    use pyo3::Python;
+    use pyo3::prelude::PyDictMethods;
+
     use super::{DiagramSelection, PyFeynmanDiagram, parse_symbolic_annotation};
     use feynkit_graph::FeynmanDiagram;
     use feynkit_model::Model;
     use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
+    use pyo3::types::PyDict;
+    use pyo3::types::PyModule;
     use std::ptr;
     use std::sync::Arc;
+    use symbolica::atom::Atom;
+    use symbolica::atom::FunctionBuilder;
 
     #[test]
     fn native_diagram_borrow_preserves_complete_selection_semantics() {
@@ -5128,8 +5152,6 @@ mod tests {
 
     #[test]
     fn canonical_denominator_has_a_scalar_interface() {
-        use symbolica::atom::{Atom, FunctionBuilder};
-
         let denominator = feynkit_graph::symbols::denominator();
         assert!(denominator.is_scalar());
         let momentum = FunctionBuilder::new(feynkit_graph::momentum_symbol())
@@ -5148,6 +5170,47 @@ mod tests {
         pyo3::Python::initialize();
         pyo3::Python::attach(|py| {
             spynso3::expression::TensorExpression::from_atom_interface(py, atom, None).unwrap();
+        });
+    }
+
+    #[test]
+    fn apply_feynman_rules_returns_the_ruled_diagram() {
+        const SUNRISE: &str = r#"digraph sunrise {
+            ext [style=invis];
+            ext -> a [particle="phi"];
+            a -> b [particle="phi"];
+            a -> b [particle="phi"];
+            a -> b [particle="phi"];
+            b -> ext [particle="phi"];
+        }"#;
+        let expected = FeynmanDiagram::from_dot(Model::phi4(), SUNRISE)
+            .unwrap()
+            .apply_feynman_rules()
+            .unwrap()
+            .to_json()
+            .unwrap();
+        Python::initialize();
+        Python::attach(|py| {
+            let module = PyModule::new(py, "symbolica.community.hepkit").unwrap();
+            crate::initialize_feynkit(&module).unwrap();
+            let locals = PyDict::new(py);
+            locals.set_item("fk", &module).unwrap();
+            locals.set_item("SUNRISE", SUNRISE).unwrap();
+            locals.set_item("EXPECTED", expected).unwrap();
+            py.run(
+                c"
+diagram = fk.FeynmanDiagram.from_dot(fk.Model.phi4(), SUNRISE)
+imported = diagram.to_json()
+ruled = diagram.apply_feynman_rules()
+assert ruled.numerator != diagram.numerator
+assert ruled.to_json() == EXPECTED
+assert ruled.apply_feynman_rules().to_json() == EXPECTED
+assert diagram.to_json() == imported
+",
+                Some(&locals),
+                Some(&locals),
+            )
+            .unwrap();
         });
     }
 

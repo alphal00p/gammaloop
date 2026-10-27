@@ -7,19 +7,14 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use typed_index_collections::TiVec;
 
-use crate::{
-    GammaLoopContext,
-    cff::esurface::{EsurfaceID, RaisedEsurfaceGroup},
-    define_index,
-    graph::{
-        LmbIndex, LoopMomentumBasis,
-        threshold_counterterms::{
-            ThresholdCountertermCut, ThresholdCountertermMultiplier, ThresholdCountertermSpec,
-            ThresholdCountertermThreshold, ThresholdCountertermVariant,
-        },
-    },
-    momentum::sample::SubspaceData,
+use crate::cff::esurface::{EsurfaceID, RaisedEsurfaceGroup};
+use crate::graph::threshold_counterterms::{
+    ThresholdCountertermCut, ThresholdCountertermMultiplier, ThresholdCountertermSpec,
+    ThresholdCountertermThreshold, ThresholdCountertermVariant,
 };
+use crate::graph::{LmbIndex, LoopMomentumBasis};
+use crate::momentum::sample::SubspaceData;
+use crate::{GammaLoopContext, define_index};
 
 use super::{CutGroupId, CutId};
 
@@ -791,18 +786,17 @@ impl ResolvedThresholdCounterterms {
 
 #[cfg(test)]
 mod tests {
+    use crate::dot;
     use linnet::half_edge::involution::EdgeIndex;
     use typed_index_collections::{TiVec, ti_vec};
 
-    use crate::{
-        graph::{
-            Graph, LMBext, LmbIndex,
-            threshold_counterterms::{ThresholdCountertermMultiplier, ThresholdCountertermSpec},
-        },
-        initialisation::test_initialise,
-        momentum::sample::{LoopIndex, SubspaceData},
-        processes::CutGroupId,
+    use crate::graph::threshold_counterterms::{
+        ThresholdCountertermMultiplier, ThresholdCountertermSpec,
     };
+    use crate::graph::{Graph, LMBext, LmbIndex};
+    use crate::initialisation::test_initialise;
+    use crate::momentum::sample::{LoopIndex, SubspaceData};
+    use crate::processes::CutGroupId;
 
     use super::{
         ResolvedCutGroupThresholdCounterterms, ResolvedThresholdCountertermAssociation,
@@ -851,15 +845,15 @@ mod tests {
     #[test]
     fn materialized_export_adds_only_eligible_implicit_defaults() {
         test_initialise().unwrap();
-        let graph: Graph = crate::finalized_runtime_dot!(digraph materialized_threshold_defaults {
+        let graph: Graph = dot!(digraph materialized_threshold_defaults {
  graph [projector=1]
             ext [style=invis]
             edge [num=1 mass=0]
             node [num=1]
-            ext -> v1:0 [id=0 sink="{ufo_order:0}"]
-            v1 -> v2 [id=1 source="{ufo_order:1}" sink="{ufo_order:0}" lmb_id=0]
-            v2 -> v1 [id=2 source="{ufo_order:1}" sink="{ufo_order:2}"]
-            ext -> v2:1 [id=3 sink="{ufo_order:2}"]
+            ext -> v1:0 [particle=H id=0]
+            v1 -> v2 [particle=H id=1 lmb_id=0]
+            v2 -> v1 [particle=H id=2]
+            ext -> v2:1 [particle=H id=3]
         }, &crate::utils::load_generic_model("sm"))
         .unwrap();
         let all_lmbs = ti_vec![graph.loop_momentum_basis.clone()];
@@ -964,20 +958,19 @@ mod tests {
     #[test]
     fn materialized_raised_defaults_round_trip_association_local_embeddings() {
         test_initialise().unwrap();
-        let graph: Graph =
-            crate::finalized_runtime_dot!(digraph raised_materialized_threshold_defaults {
+        let graph: Graph = dot!(digraph raised_materialized_threshold_defaults {
  graph [projector=1]
             ext [style=invis]
             edge [num=1 mass=0]
             node [num=1]
-            ext -> v1:0 [id=0 sink="{ufo_order:0}"]
-            v1 -> v2 [id=1 source="{ufo_order:1}" sink="{ufo_order:0}" lmb_id=0]
-            v2 -> v1 [id=2 source="{ufo_order:1}" sink="{ufo_order:2}"]
-            v2 -> v3 [id=3 source="{ufo_order:2}" sink="{ufo_order:0}" lmb_id=1]
-            v3 -> v2 [id=4 source="{ufo_order:1}" sink="{ufo_order:3}"]
-            ext -> v3:1 [id=5 sink="{ufo_order:2}"]
+            ext -> v1:0 [particle=H id=0]
+            v1 -> v2 [particle=H id=1 lmb_id=0]
+            v2 -> v1 [particle=H id=2]
+            v2 -> v3 [particle=H id=3 lmb_id=1]
+            v3 -> v2 [particle=H id=4]
+            ext -> v3:1 [particle=H id=5]
         }, &crate::utils::load_generic_model("sm"))
-            .unwrap();
+        .unwrap();
         let all_lmbs = graph.generate_loop_momentum_bases();
         let containing_subgraph = graph.full_filter();
         let subspaces = all_lmbs
@@ -1139,15 +1132,15 @@ mod tests {
     #[test]
     fn graph_registry_expands_components_in_stable_cartesian_order() {
         test_initialise().unwrap();
-        let graph: Graph = crate::finalized_runtime_dot!(digraph threshold_metadata_registry {
+        let graph: Graph = dot!(digraph threshold_metadata_registry {
  graph [projector=1]
             ext [style=invis]
             edge [num=1 mass=0]
             node [num=1]
-            ext -> v1:0 [id=0 sink="{ufo_order:0}"]
-            v1 -> v2 [id=1 source="{ufo_order:1}" sink="{ufo_order:0}" lmb_id=0]
-            v2 -> v1 [id=2 source="{ufo_order:1}" sink="{ufo_order:2}"]
-            ext -> v2:1 [id=3 sink="{ufo_order:2}"]
+            ext -> v1:0 [particle=H id=0]
+            v1 -> v2 [particle=H id=1 lmb_id=0]
+            v2 -> v1 [particle=H id=2]
+            ext -> v2:1 [particle=H id=3]
         }, &crate::utils::load_generic_model("sm"))
         .unwrap();
         let all_lmbs = ti_vec![graph.loop_momentum_basis.clone()];

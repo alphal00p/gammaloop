@@ -17,18 +17,27 @@ program, use the scalar fixture and the same owning APIs:
 
 // docs-example: compile feynkit-rust-quickstart
 ```rust
-use feynkit::{GenerationOptions, Model, ModelProcessExt};
+use feynkit::{
+    Model, ModelProcessExt,
+    generator::{Loops, Naming, NumeratorOptions, Run, TopologyRules},
+};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let model = Model::from_path(
         "crates/feynkit-model/tests/fixtures/scalars_2p_3p.json",
     )?;
     let process = model.process(["scalar_0"], ["scalar_0", "scalar_0"])?;
-    let options = GenerationOptions::default().max_vertices(3);
-    let result = process.generate_diagrams(model, &options)?;
+    let run = Run::default();
+    let request = process.amplitude(Loops::total(0..=0))
+        .with_topology(TopologyRules::new().with_max_vertices(3));
+    let compact = request.generate(model.into(), &run)?;
+    let result = compact.build(
+        &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+        &run,
+    )?;
 
-    assert!(!result.diagrams.is_empty());
-    for diagram in result.diagrams {
+    assert!(!result.is_empty());
+    for diagram in result.iter() {
         diagram.validate()?;
         assert_eq!(diagram.loop_count(), 0);
         println!("{}", diagram.to_dot()?);
@@ -38,7 +47,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ```
 
 The program's model path is relative to the repository root. Success means a nonempty set of
-validated tree diagrams with deterministic names and DOT output. Symbolica operations require
+validated tree diagrams with explicitly requested deterministic names and DOT output.
+Discovery and exact counting operate on compact assignments; `build` constructs
+numerators. `NumeratorOptions` leaves names absent by default. Use
+`result.into_amplitude(AmplitudeOptions::default())` to retain any squared-order
+interference policy when converting the complete collection. Symbolica operations require
 the license configuration appropriate to your environment.
 
 For an application outside the workspace, depend on `feynkit` from the same checkout or pin the

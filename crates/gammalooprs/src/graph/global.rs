@@ -1,23 +1,19 @@
-use eyre::Context;
-use feynkit_graph::{NumeratorInterface, expressions::evaluate_overall_factor};
+use feynkit_graph::NumeratorInterface;
+use feynkit_graph::expressions::evaluate_overall_factor;
 use linnet::parser::GlobalData;
 use symbolica::atom::Atom;
 
-use crate::graph::{GroupId, threshold_counterterms::ThresholdCountertermSpec};
+use crate::graph::GroupId;
+use crate::graph::threshold_counterterms::ThresholdCountertermSpec;
 
-use super::{
-    Graph,
-    parse::{ParseGraph, StripParse, ToQuoted},
-};
+use super::Graph;
+use super::parse::ToQuoted;
 
+/// Graph-level payloads of a diagram converted from FeynKit.
 #[derive(Clone, Debug)]
 pub struct ParseData {
     pub name: String,
     pub overall_factor: Atom,
-    pub projectors: Option<Atom>,
-    pub num: Atom,
-    pub(crate) num_interface: Option<NumeratorInterface>,
-    pub(crate) projector_interface: Option<NumeratorInterface>,
     pub parameters: Vec<Atom>,
     pub group_id: Option<GroupId>,
     pub is_group_master: bool,
@@ -29,103 +25,11 @@ impl Default for ParseData {
         ParseData {
             name: String::new(),
             overall_factor: Atom::one(),
-            projectors: None,
             parameters: Vec::new(),
-            num: Atom::one(),
-            num_interface: None,
-            projector_interface: None,
             group_id: None,
             is_group_master: false,
             threshold_counterterms: None,
         }
-    }
-}
-
-impl ParseData {
-    pub(crate) fn with_overall_factor(mut self, overall_factor: Atom) -> Self {
-        self.overall_factor = overall_factor;
-        self
-    }
-
-    pub(crate) fn with_projectors(mut self, polarizations: Atom) -> Self {
-        self.projectors = Some(polarizations);
-        self.projector_interface = None;
-        self
-    }
-
-    pub(crate) fn with_num(mut self, num: Atom) -> Self {
-        self.num = num;
-        self.num_interface = None;
-        self
-    }
-}
-
-impl TryFrom<linnet::parser::GlobalData> for ParseData {
-    type Error = color_eyre::Report;
-
-    fn try_from(value: linnet::parser::GlobalData) -> color_eyre::Result<Self> {
-        let mut parse_data = ParseData {
-            name: value.name,
-            ..Default::default()
-        };
-
-        if let Some(factor) = value.statements.get("overall_factor") {
-            parse_data = parse_data
-                .with_overall_factor(factor.strip_parse().context("overall_factor").unwrap());
-        }
-
-        if let Some(polarizations) = value.statements.get("projector") {
-            parse_data = parse_data
-                .with_projectors(polarizations.strip_parse().context("projector").unwrap());
-        }
-
-        if let Some(factor) = value.statements.get("num") {
-            parse_data = parse_data.with_num(factor.strip_parse().context("num").unwrap());
-        }
-        if let Some(interface) = value.statements.get("numerator_prefactor_interface") {
-            parse_data.num_interface = Some(NumeratorInterface::parse(interface)?);
-        }
-        if let Some(interface) = value.statements.get("projector_interface") {
-            parse_data.projector_interface = Some(NumeratorInterface::parse(interface)?);
-        }
-
-        if let Some(is_group_master) = value.statements.get("is_group_master") {
-            parse_data.is_group_master = is_group_master
-                .strip_parse()
-                .context("is_group_master")
-                .unwrap();
-        }
-
-        if let Some(group_id) = value.statements.get("group_id") {
-            parse_data.group_id =
-                Some(GroupId(group_id.strip_parse().context("group_id").unwrap()));
-        }
-
-        if let Some(params) = value.statements.get("params") {
-            let params: String = params.strip_parse().context("params").unwrap();
-            parse_data.parameters = params
-                .split(';')
-                .map(str::trim)
-                .filter(|param| !param.is_empty())
-                .map(|param| {
-                    param
-                        .strip_parse()
-                        .with_context(|| format!("params entry {param}"))
-                        .unwrap()
-                })
-                .collect();
-        }
-
-        if let Some(threshold_counterterms) = value.statements.get("threshold_counterterms") {
-            // Linnet decodes the quoted-string layer. Unknown Graphviz escapes remain
-            // literal, preserving meaningful TOML backslashes for its own parser.
-            parse_data.threshold_counterterms = Some(
-                ThresholdCountertermSpec::parse_toml(threshold_counterterms)
-                    .context("threshold_counterterms graph attribute")?,
-            );
-        }
-
-        Ok(parse_data)
     }
 }
 
@@ -135,8 +39,6 @@ impl Graph {
 
         // println!("Name: {}", self.name);
         g.add_name(self.name.clone());
-        g.statements
-            .insert("gammaloop_runtime".to_owned(), "1".to_owned());
 
         let (num, num_interface) = NumeratorInterface::export(&self.global_prefactor.num);
         let (projector, projector_interface) =
@@ -168,19 +70,6 @@ impl Graph {
             "overall_factor_evaluated".to_string(),
             evaluate_overall_factor(self.overall_factor.as_view()).to_quoted(),
         );
-
-        if !self.finalized_cuts.is_empty()
-            || !self.finalized_topology_threshold_candidates.is_empty()
-        {
-            // Runtime DOT intentionally does not serialize canonical physical
-            // cuts or topology-threshold candidates. Cross-section artifacts
-            // must round-trip through FeynmanDiagram DOT, which owns both
-            // typed partition inventories.
-            g.statements.insert(
-                "canonical_cuts_required".to_owned(),
-                "feynkit_diagram_dot".to_owned(),
-            );
-        }
 
         if !self.param_builder.pairs.additional_params.params.is_empty() {
             let params = self
@@ -216,78 +105,19 @@ impl Graph {
     }
 }
 
-impl ParseGraph {
-    pub(crate) fn global_data(&self) -> GlobalData {
-        let mut g = GlobalData::from(());
-
-        // println!("Name: {}", self.name);
-        g.add_name(self.global_data.name.clone());
-
-        g.statements
-            .insert("num".to_string(), self.global_data.num.to_quoted());
-        if let Some(interface) = &self.global_data.num_interface {
-            g.statements.insert(
-                "numerator_prefactor_interface".to_owned(),
-                interface.to_json(),
-            );
-        }
-        if let Some(interface) = &self.global_data.projector_interface {
-            g.statements
-                .insert("projector_interface".to_owned(), interface.to_json());
-        }
-        if let Some(proj) = &self.global_data.projectors {
-            g.statements
-                .insert("projector".to_string(), proj.to_quoted());
-        }
-
-        // g.statements.insert(
-        //     "overall_factor".to_string(),
-        //     self.global_prefactor.color.to_canonical_string(),
-        // );
-        g.statements.insert(
-            "overall_factor".to_string(),
-            self.global_data.overall_factor.to_quoted(),
-        );
-
-        if !self.global_data.parameters.is_empty() {
-            let params = self
-                .global_data
-                .parameters
-                .iter()
-                .map(ToQuoted::to_quoted)
-                .collect::<Vec<_>>()
-                .join(";");
-            g.statements.insert("params".to_string(), params);
-        }
-
-        if let Some(threshold_counterterms) = &self.global_data.threshold_counterterms {
-            let threshold_counterterms = threshold_counterterms
-                .to_toml()
-                .expect("validated threshold_counterterms should serialize to TOML");
-            g.statements.insert(
-                "threshold_counterterms".to_string(),
-                format!("\n{threshold_counterterms}"),
-            );
-        }
-
-        g
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use linnet::{
-        half_edge::nodestore::NodeStorageVec,
-        parser::{DotGraph, DotVertexData},
-    };
-    use symbolica::{atom::Atom, parser::ParseSettings};
+    use linnet::half_edge::nodestore::NodeForest;
+    use linnet::parser::DotGraph;
+    use symbolica::atom::Atom;
+    use symbolica::parser::ParseSettings;
 
     use super::evaluate_overall_factor;
 
-    use crate::{
-        finalized_runtime_dot, graph::Graph, initialisation::test_initialise,
-        processes::DotExportSettings,
-    };
+    use crate::dot;
+    use crate::graph::Graph;
+    use crate::initialisation::test_initialise;
+    use crate::processes::DotExportSettings;
 
     #[test]
     fn evaluates_canonical_feynkit_factor_namespace() {
@@ -308,7 +138,7 @@ mod tests {
     #[test]
     fn params_roundtrip_in_global_data() {
         test_initialise().unwrap();
-        match finalized_runtime_dot!(digraph params_roundtrip {
+        match dot!(digraph params_roundtrip {
             graph [
                 overall_factor = 1;
                 multiplicity_factor = 1;
@@ -318,20 +148,19 @@ mod tests {
             edge [pdg=1000 num=1]
             node [num=1]
             ext [style=invis]
-            ext -> v4 [sink="{ufo_order:0}"]
-            ext -> v5 [sink="{ufo_order:0}"]
-            v6 -> ext [source="{ufo_order:0}"]
-            v5 -> v4 [lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"];
-            v6 -> v5 [source="{ufo_order:1}" sink="{ufo_order:2}"];
-            v4 -> v6 [source="{ufo_order:2}" sink="{ufo_order:2}"];
+            ext -> v4 
+            ext -> v5 
+            v6 -> ext 
+            v5 -> v4 [lmb_id=0];
+            v6 -> v5 ;
+            v4 -> v6 ;
         },"scalars")
         {
             Ok(g) => {
                 let g: Graph = g;
                 // g.to_dot_graph_with_settings().dot()
                 let serialized = g.dot_serialize(&DotExportSettings::default());
-                let parsed: DotGraph<NodeStorageVec<DotVertexData>> =
-                    DotGraph::from_string(serialized).unwrap();
+                let parsed: DotGraph<NodeForest> = DotGraph::from_string(serialized).unwrap();
 
                 assert_eq!(
                     parsed.global_data.statements.get("params"),

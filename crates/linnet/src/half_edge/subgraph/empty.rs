@@ -1,14 +1,10 @@
-use std::{
-    marker::PhantomData,
-    ops::{Range, RangeFrom, RangeInclusive, RangeTo, RangeToInclusive},
-};
+use std::marker::PhantomData;
+use std::ops::{Range, RangeFrom, RangeInclusive, RangeTo, RangeToInclusive};
 
-use crate::half_edge::{
-    involution::{Hedge, HedgePair},
-    nodestore::NodeStorageOps,
-    subgraph::{SuBitGraph, SubGraphLike},
-    HedgeGraph,
-};
+use crate::half_edge::involution::{Hedge, HedgePair};
+use crate::half_edge::nodestore::Topology;
+use crate::half_edge::subgraph::{SuBitGraph, SubGraphLike};
+use crate::half_edge::HedgeGraph;
 
 use super::{Inclusion, SubSetLike};
 
@@ -155,10 +151,7 @@ impl<T> DoubleEndedIterator for EmptyIter<T> {
 }
 
 impl SubGraphLike for Empty {
-    fn nedges<E, V, H, N: NodeStorageOps<NodeData = V>>(
-        &self,
-        _graph: &HedgeGraph<E, V, H, N>,
-    ) -> usize {
+    fn nedges<E, V, H, N: Topology>(&self, _graph: &HedgeGraph<E, V, H, N>) -> usize {
         self.n_included() / 2
     }
 }

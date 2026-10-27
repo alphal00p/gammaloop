@@ -18,11 +18,11 @@ title = "Generation drawing ports"
 summary = "Independent plugin removal and contact-first label replay, approved notice preservation, and the deferred shared mark-engine prerequisite."
 source = "docs/architecture/generation-drawing-ports.typ"
 kind = "Implementation record"
-status = "Source15/16 implemented; source38 deferred; independent review pending"
+status = "Source15/16 approved input; combined staged integration review pending; source38 deferred"
 lifecycle = "investigation"
 owner = "unassigned"
 reviewed_at = "2026-10-27"
-review_ref = "74cebf6c8f673f5849b26afe55fa98035d5eba1d"
+review_ref = "98cbf5b8f984e702f4699b1b176fbebfee059d3a"
 products = ["gammaloop", "linnet", "feynkit"]
 topics = ["drawing", "packaging", "licenses"]
 review_triggers = ["crates/linnest/**", "crates/kurvst/**", "just/drawing.just", "nix/rust-workspace.nix"]
@@ -48,6 +48,44 @@ symbol = "embed_typst_packages"
 anchor = "pub fn embed_typst_packages("
 # Replay preserves the approved common root-license selector byte-for-byte.
 digest = "6cec3a4971faa783e0497c89ed9f614443f1117b"
+
+[[section.note]]
+id = "generation-integration-wp3-staged"
+title = "Generation integration staged foundation"
+summary = "Bounded drawing and resolved staged-generation transplant, admitted metadata ownership, original-pair certificate and validation limits."
+source = "docs/architecture/generation-integration-wp3-staged.typ"
+kind = "Implementation record"
+status = "Implementation and combined validation in progress; independent Astra review required"
+lifecycle = "investigation"
+owner = "unassigned"
+reviewed_at = "2026-10-27"
+review_ref = "438b61500da4b32841c64211103e5da6fc4c4a72"
+products = ["gammaloop", "linnet", "feynkit"]
+topics = ["generation", "drawing", "packaging", "validation"]
+review_triggers = ["crates/feynkit-generator/src/generation/**", "crates/feynkit-generator/src/generation.rs", "crates/feynkit-generator/src/grouping.rs", "crates/feynkit-graph/**", "crates/feynkit-py/**", "crates/linnet-py/**"]
+
+[[section.note.scope]]
+path = "crates/feynkit-generator/src/generation/staged.rs"
+symbol = "staged Request / DiagramSet / BuiltDiagramSet"
+anchor = "pub struct LoopCounts {"
+end_anchor = "#[cfg(test)]\nmod tests {"
+# Current integration owner, awaiting independent Astra review; exact scoped source fingerprint.
+digest = "7a8d1e6d6d8c2b88df7816c084c8493b400fd67b"
+
+[[section.note.scope]]
+path = "crates/feynkit-generator/src/generation.rs"
+symbol = "admitted interaction templates and checked conservation rewrite"
+anchor = "    fn interaction_numerator("
+end_anchor = "    fn edge_numerator("
+# Current integration owner, awaiting independent Astra review; exact scoped source fingerprint.
+digest = "584e7d14e34cf83605500b892943ea2ca3043569"
+
+[[section.note.scope]]
+path = "crates/feynkit-generator/src/grouping.rs"
+symbol = "original-pair B2 certificate and current colour completion"
+anchor = "    fn vacuum_group28_original_pair_identity()"
+# Current integration owner, awaiting independent Astra review; exact scoped source fingerprint.
+digest = "3ff919fd9caa2b1f07fab2a89580722e8c5861bf"
 
 [[section.note]]
 id = "gammaloop-architecture"
@@ -672,7 +710,8 @@ anchor = "pub fn extract_templates<P: AsRef<Path>>"
 # generated asset paths and shared drawing callbacks. This migration record remains
 # historical below its implemented preface.
 # Drawing integration: approved test-only package-layout attestation; production extraction unchanged.
-digest = "cb2de3f5d9713ed285244573ecf76acaf59a4b5f"
+# Integration attestation 2026-10-27: production extraction is byte-identical to8430e701; the added test checks exact Tiptoe notice bytes through the existing common selector.
+digest = "fafea3ec0a3203e2932cce7ce3134c0a8963c149"
 
 [[section.note]]
 id = "gammaloop-drawing-architecture"
@@ -2016,7 +2055,8 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # ownership, with pinned Chromium/Playwright/AnyWidget/Marimo runtime tools. The
 # separate nextest group reuses per-crate producers; ci.typ records this added coverage.
 # Drawing integration: approved ec-layout input removal; common notices and source-filter ownership retained.
-digest = "f446dbf3636e9a5f4736fca0fe724a134ab28300"
+# Integration attestation 2026-10-27: this filter adds the source17 Tiptoe notice to required inputs; producer/runtime and per-crate cache ownership are unchanged. Nix WASM/bundle byte checks passed.
+digest = "40c9f9e222f79069e9fef94da1288be3aacab0ac"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"

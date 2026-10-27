@@ -301,7 +301,6 @@ checksum = "1bc2832c24239b0141d5674bb9174f9d68a8b5b3f2753311927c172ca46f7e9c"
 dependencies = [
  "funty",
  "radium",
- "serde",
  "tap",
  "wyz",
 ]
@@ -959,15 +958,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dot-parser"
-version = "0.5.1"
-dependencies = [
- "either",
- "pest",
- "pest_derive",
-]
-
-[[package]]
 name = "duplicate"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1158,7 +1148,10 @@ dependencies = [
  "feynkit-model",
  "idenso",
  "linnet",
+ "num-bigint",
+ "num-rational",
  "rayon",
+ "regex",
  "serde",
  "spenso",
  "spenso-hep-lib",
@@ -1170,6 +1163,7 @@ dependencies = [
 name = "feynkit-graph"
 version = "0.1.0"
 dependencies = [
+ "blake3",
  "feynkit-kinematics",
  "feynkit-model",
  "idenso",
@@ -1177,6 +1171,7 @@ dependencies = [
  "linnest",
  "linnet",
  "nu-ansi-term",
+ "once_cell",
  "serde",
  "serde_json",
  "spenso",
@@ -1387,7 +1382,6 @@ dependencies = [
  "clap_builder",
  "console",
  "crossterm",
- "either",
  "hashbrown 0.17.1",
  "indenter",
  "indexmap",
@@ -1893,7 +1887,6 @@ version = "0.1.0"
 dependencies = [
  "cgmath",
  "ciborium",
- "dot-parser",
  "figment",
  "getrandom 0.2.17",
  "indexmap",
@@ -1917,19 +1910,20 @@ dependencies = [
  "ahash 0.8.12",
  "bincode",
  "bincode-trait-derive",
- "bitvec",
  "cgmath",
  "clarabel",
- "dot-parser",
  "duplicate 2.0.1",
  "figment",
  "gammaloop-workspace-hack",
  "getrandom 0.2.17",
- "indenter",
  "indexmap",
  "itertools 0.14.0",
+ "num-bigint",
+ "num-rational",
+ "num-traits",
  "paste",
  "rand 0.8.6",
+ "rayon",
  "rkyv",
  "serde",
  "serde_repr",
@@ -1944,12 +1938,12 @@ name = "linnet-py"
 version = "0.1.0"
 dependencies = [
  "ciborium",
- "dot-parser",
  "linnest",
  "linnet",
  "linnet-render-py",
  "pyo3",
  "pyo3-stub-gen-derive",
+ "self_cell",
  "serde",
  "serde_json",
  "symbolica",
@@ -2335,49 +2329,6 @@ dependencies = [
  "itoa",
  "memchr",
  "ryu",
-]
-
-[[package]]
-name = "pest"
-version = "2.8.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e0848c601009d37dfa3430c4666e147e49cdcf1b92ecd3e63657d8a5f19da662"
-dependencies = [
- "memchr",
- "ucd-trie",
-]
-
-[[package]]
-name = "pest_derive"
-version = "2.8.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "11f486f1ea21e6c10ed15d5a7c77165d0ee443402f0780849d1768e7d9d6fe77"
-dependencies = [
- "pest",
- "pest_generator",
-]
-
-[[package]]
-name = "pest_generator"
-version = "2.8.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8040c4647b13b210a963c1ed407c1ff4fdfa01c31d6d2a098218702e6664f94f"
-dependencies = [
- "pest",
- "pest_meta",
- "proc-macro2",
- "quote",
- "syn 2.0.117",
-]
-
-[[package]]
-name = "pest_meta"
-version = "2.8.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "89815c69d36021a140146f26659a81d6c2afa33d216d736dd4be5381a7362220"
-dependencies = [
- "pest",
- "sha2",
 ]
 
 [[package]]
@@ -3333,7 +3284,6 @@ dependencies = [
  "append-only-vec",
  "bincode",
  "bincode-trait-derive",
- "bitvec",
  "blake3",
  "ciborium",
  "colored 3.1.1",
@@ -3992,12 +3942,6 @@ name = "typenum"
 version = "1.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40ce102ab67701b8526c123c1bab5cbe42d7040ccfd0f64af1a385808d2f43de"
-
-[[package]]
-name = "ucd-trie"
-version = "0.1.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2896d95c02a80c6d6a5d6e953d479f5ddf2dfdb6a244441010e373ac0fb88971"
 
 [[package]]
 name = "uncased"

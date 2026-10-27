@@ -1,52 +1,48 @@
 use feynkit_cff::{CffError, CffOptions, CffResult, HedgeGraphCffExt, SurfaceCache};
 use feynkit_graph::expressions::evaluate_overall_factor;
 use gammaloop_tracing_filter::LogFormat;
-use gammalooprs::{
-    graph::{self, FeynmanGraph, Graph, LMBext},
-    integrands::evaluation::{
-        BatchSampleEvaluationResult, SampleEvaluationResult, SingleSampleEvaluationResult,
-    },
-    observables::{
-        AdditionalWeightKey, DiscreteBinOrdering, Event, EventGroup, GenericAdditionalWeightInfo,
-        GenericThresholdCountertermComponentWeight, GenericThresholdCountertermEventInfo,
-        HistogramAccumulatorState, HistogramSnapshot, HistogramStatisticsSnapshot,
-        ThresholdCountertermComponentOccurrence,
-    },
-    processes::{
-        DotExportSettings, ProcessCollection, ThresholdCountertermAssociationMetadata,
-        ThresholdCountertermComponentKind, ThresholdCountertermComponentMetadata,
-        ThresholdCountertermEvaluatorMetadata, ThresholdCountertermMetadataRegistry,
-        ThresholdCountertermMultiplierMetadata, ThresholdCountertermOrigin,
-        ThresholdCountertermSide, ThresholdCountertermVariantMetadata,
-    },
-    settings::{global::OrientationPattern, RuntimeSettings},
-    utils::tracing::LogLevel,
+use gammalooprs::graph;
+use gammalooprs::graph::{FeynmanGraph, Graph, LMBext};
+use gammalooprs::integrands::evaluation::{
+    BatchSampleEvaluationResult, SampleEvaluationResult, SingleSampleEvaluationResult,
 };
+use gammalooprs::observables::{
+    AdditionalWeightKey, DiscreteBinOrdering, Event, EventGroup, GenericAdditionalWeightInfo,
+    GenericThresholdCountertermComponentWeight, GenericThresholdCountertermEventInfo,
+    HistogramAccumulatorState, HistogramSnapshot, HistogramStatisticsSnapshot,
+    ThresholdCountertermComponentOccurrence,
+};
+use gammalooprs::processes::{
+    DotExportSettings, ProcessCollection, ThresholdCountertermAssociationMetadata,
+    ThresholdCountertermComponentKind, ThresholdCountertermComponentMetadata,
+    ThresholdCountertermEvaluatorMetadata, ThresholdCountertermMetadataRegistry,
+    ThresholdCountertermMultiplierMetadata, ThresholdCountertermOrigin, ThresholdCountertermSide,
+    ThresholdCountertermVariantMetadata,
+};
+use gammalooprs::settings::global::OrientationPattern;
+use gammalooprs::settings::RuntimeSettings;
+use gammalooprs::utils::tracing::LogLevel;
 use idenso::tensor::{ContractSettings, SymbolicTensor};
-use linnet::half_edge::{
-    involution::{EdgeIndex, Orientation},
-    subgraph::{ModifySubSet, SuBitGraph},
-};
-use linnet::parser::{set::DotGraphSet, DotGraph};
+use linnet::half_edge::involution::{EdgeIndex, Orientation};
+use linnet::half_edge::subgraph::{ModifySubSet, SuBitGraph};
+use linnet::parser::set::DotGraphSet;
+use linnet::parser::DotGraph;
 use numpy::{PyReadonlyArray1, PyReadonlyArray2};
 
-use crate::{
-    commands::{
-        evaluate_samples::EvaluateSamples, import::model::ImportModel, integrate::Integrate,
-        Evaluate,
-    },
-    integrand_info::{
-        IntegrandActiveThresholdCutInfo, IntegrandCutInfo, IntegrandCutThresholdInfo,
-        IntegrandGraphGroupInfo, IntegrandGraphInfo, IntegrandInfo, IntegrandLoopMomentumBasisInfo,
-        IntegrandOrientationInfo, IntegrandThresholdCountertermDirectiveInfo,
-        IntegrandThresholdEsurfaceInfo,
-    },
-    render_smart_toml,
-    session::{display_command, CliSession, CliSessionState},
-    settings_tree::{json_type_name, serialize_settings_with_defaults, value_at_path},
-    state::{GraphImportOptions, ProcessListExt, ProcessRef, RunHistory, State},
-    CLISettings, LoadedState, StateLoadOption,
+use crate::commands::evaluate_samples::EvaluateSamples;
+use crate::commands::import::model::ImportModel;
+use crate::commands::integrate::Integrate;
+use crate::commands::Evaluate;
+use crate::integrand_info::{
+    IntegrandActiveThresholdCutInfo, IntegrandCutInfo, IntegrandCutThresholdInfo,
+    IntegrandGraphGroupInfo, IntegrandGraphInfo, IntegrandInfo, IntegrandLoopMomentumBasisInfo,
+    IntegrandOrientationInfo, IntegrandThresholdCountertermDirectiveInfo,
+    IntegrandThresholdEsurfaceInfo,
 };
+use crate::session::{display_command, CliSession, CliSessionState};
+use crate::settings_tree::{json_type_name, serialize_settings_with_defaults, value_at_path};
+use crate::state::{GraphImportOptions, ProcessListExt, ProcessRef, RunHistory, State};
+use crate::{render_smart_toml, CLISettings, LoadedState, StateLoadOption};
 use ahash::{HashMap, HashMapExt};
 use clap::ValueEnum;
 
@@ -63,21 +59,29 @@ use gammalooprs::feyngen::{
 */
 
 // use git_version::git_version;
-use itertools::{self, Itertools};
-use std::{path::PathBuf, str::FromStr};
+use itertools;
+use itertools::Itertools;
+use std::path::PathBuf;
+use std::str::FromStr;
 
-use symbolica::{atom::AtomCore, parse, printer::PrintOptions};
+use symbolica::atom::AtomCore;
+use symbolica::parse;
+use symbolica::printer::PrintOptions;
 // const GIT_VERSION: &str = git_version!(fallback = "unavailable");
 
+use pyo3::prelude::{
+    Borrowed, Bound, Py, PyAnyMethods, PyBoolMethods, PyByteArrayMethods, PyBytesMethods,
+    PyCapsuleMethods, PyDictMethods, PyErr, PyFloatMethods, PyFrozenSetMethods, PyListMethods,
+    PyMappingMethods, PyMappingProxyMethods, PyModuleMethods, PyResult, PySequenceMethods,
+    PySetMethods, PySliceMethods, PyStringMethods, PyTracebackMethods, PyTupleMethods,
+    PyTypeMethods, PyWeakrefMethods,
+};
+use pyo3::pyclass::CompareOp;
+use pyo3::types::{PyAny, PyComplex, PyComplexMethods, PyDict, PyList, PyModule, PyTuple, PyType};
 #[allow(unused)]
 use pyo3::{
-    exceptions,
-    prelude::*,
-    pyclass,
-    pyclass::CompareOp,
-    pyfunction, pymethods, pymodule,
-    types::{PyAny, PyComplex, PyComplexMethods, PyDict, PyList, PyModule, PyTuple, PyType},
-    wrap_pyfunction, FromPyObject, PyRef, Python,
+    exceptions, pyclass, pyfunction, pymethods, pymodule, wrap_pyfunction, FromPyObject, PyRef,
+    Python,
 };
 
 /// Evaluate a graph's symbolic overall factor and return its canonical form.
@@ -247,18 +251,7 @@ fn register_python_api(m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<PyIntegrationResult>()?;
     m.add_class::<PyStabilityResult>()?;
     m.add_class::<PySettingsValue>()?;
-    /*
-    m.add_class::<PyFeynGenFilters>()?;
-    m.add_class::<PySnailFilterOptions>()?;
-    m.add_class::<PySewedFilterOptions>()?;
-    m.add_class::<PyTadpolesFilterOptions>()?;
-    m.add_class::<PySelfEnergyFilterOptions>()?;
-    m.add_class::<GlobalSettings>()?;
-    m.add_class::<RuntimeSettings>()?;
 
-    // m.add_class::<PyFeynGenOptions>()?;
-    m.add_class::<PyNumeratorAwareGroupingOption>()?;
-    */
     // m.add("git_version", GIT_VERSION)?;
     m.add_wrapped(wrap_pyfunction!(atom_to_canonical_string))?;
     m.add_wrapped(wrap_pyfunction!(atom_contract))?;
@@ -3264,262 +3257,6 @@ fn build_python_integrate_command(
     Ok(integrate)
 }
 
-/*
-pub struct OutputOptions {}
-
-/// There should only be 1 worker per instance of gammaloop.
-#[pyclass(from_py_object, name = "Worker", unsendable)]
-pub struct PythonWorker {
-    pub model: Model,
-    pub process_list: ProcessList,
-    // pub integrands: HashMap<String, Integrand>,
-    pub master_node: Option<MasterNode>,
-}
-
-impl Clone for PythonWorker {
-    fn clone(&self) -> PythonWorker {
-        PythonWorker {
-            model: self.model.clone(),
-            process_list: self.process_list.clone(),
-            // integrands: self.integrands.clone(),
-            master_node: self.master_node.clone(),
-        }
-    }
-}
-
-#[pyclass(from_py_object, name = "SnailFilterOptions")]
-pub struct PySnailFilterOptions {
-    pub filter_options: SnailFilterOptions,
-}
-
-#[pymethods]
-impl PySnailFilterOptions {
-    #[new]
-    pub(crate) fn __new__(
-        veto_snails_attached_to_massive_lines: Option<bool>,
-        veto_snails_attached_to_massless_lines: Option<bool>,
-        veto_only_scaleless_snails: Option<bool>,
-    ) -> Result<PySnailFilterOptions> {
-        Ok(PySnailFilterOptions {
-            filter_options: SnailFilterOptions {
-                veto_snails_attached_to_massive_lines: veto_snails_attached_to_massive_lines
-                    .unwrap_or(false),
-                veto_snails_attached_to_massless_lines: veto_snails_attached_to_massless_lines
-                    .unwrap_or(true),
-                veto_only_scaleless_snails: veto_only_scaleless_snails.unwrap_or(false),
-            },
-        })
-    }
-
-    pub(crate) fn __str__(&self) -> Result<String> {
-        Ok(format!("{}", self.filter_options))
-    }
-}
-
-#[pyclass(from_py_object, name = "SelfEnergyFilterOptions")]
-pub struct PySelfEnergyFilterOptions {
-    pub filter_options: SelfEnergyFilterOptions,
-}
-
-#[pymethods]
-impl PySelfEnergyFilterOptions {
-    #[new]
-    pub(crate) fn __new__(
-        veto_self_energy_of_massive_lines: Option<bool>,
-        veto_self_energy_of_massless_lines: Option<bool>,
-        veto_only_scaleless_self_energy: Option<bool>,
-    ) -> Result<PySelfEnergyFilterOptions> {
-        Ok(PySelfEnergyFilterOptions {
-            filter_options: SelfEnergyFilterOptions {
-                veto_self_energy_of_massive_lines: veto_self_energy_of_massive_lines
-                    .unwrap_or(true),
-                veto_self_energy_of_massless_lines: veto_self_energy_of_massless_lines
-                    .unwrap_or(true),
-                veto_only_scaleless_self_energy: veto_only_scaleless_self_energy.unwrap_or(false),
-            },
-        })
-    }
-
-    pub(crate) fn __str__(&self) -> Result<String> {
-        Ok(format!("{}", self.filter_options))
-    }
-}
-
-#[pyclass(from_py_object, name = "SewedFilterOptions")]
-pub struct PySewedFilterOptions {
-    pub filter_options: SewedFilterOptions,
-}
-
-#[pymethods]
-impl PySewedFilterOptions {
-    #[new]
-    pub(crate) fn __new__(filter_tadpoles: Option<bool>) -> Result<PySewedFilterOptions> {
-        Ok(PySewedFilterOptions {
-            filter_options: SewedFilterOptions {
-                filter_tadpoles: filter_tadpoles.unwrap_or(false),
-            },
-        })
-    }
-}
-
-#[pyclass(from_py_object, name = "TadpolesFilterOptions")]
-pub struct PyTadpolesFilterOptions {
-    pub filter_options: TadpolesFilterOptions,
-}
-
-#[pymethods]
-impl PyTadpolesFilterOptions {
-    #[new]
-    pub(crate) fn __new__(
-        veto_tadpoles_attached_to_massive_lines: Option<bool>,
-        veto_tadpoles_attached_to_massless_lines: Option<bool>,
-        veto_only_scaleless_tadpoles: Option<bool>,
-    ) -> Result<PyTadpolesFilterOptions> {
-        Ok(PyTadpolesFilterOptions {
-            filter_options: TadpolesFilterOptions {
-                veto_tadpoles_attached_to_massive_lines: veto_tadpoles_attached_to_massive_lines
-                    .unwrap_or(true),
-                veto_tadpoles_attached_to_massless_lines: veto_tadpoles_attached_to_massless_lines
-                    .unwrap_or(true),
-                veto_only_scaleless_tadpoles: veto_only_scaleless_tadpoles.unwrap_or(false),
-            },
-        })
-    }
-
-    pub(crate) fn __str__(&self) -> Result<String> {
-        Ok(format!("{}", self.filter_options))
-    }
-}
-
-#[pyclass(from_py_object, name = "FeynGenFilters")]
-pub struct PyFeynGenFilters {
-    pub filters: Vec<FeynGenFilter>,
-}
-impl<'a> FromPyObject<'a> for PyFeynGenFilters {
-    fn extract_bound(ob: &Bound<'a, PyAny>) -> PyResult<Self> {
-        if let Ok(a) = ob.extract::<PyFeynGenFilters>() {
-            Ok(PyFeynGenFilters { filters: a.filters })
-        } else {
-            Err(exceptions::PyValueError::new_err(
-                "Not a valid Feynman generation filter",
-            ))
-        }
-    }
-}
-
-#[pymethods]
-impl PyFeynGenFilters {
-    pub(crate) fn __str__(&self) -> Result<String> {
-        Ok(self.filters.iter().map(|f| format!(" > {}", f)).join("\n"))
-    }
-
-    #[new]
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn __new__(
-        particle_veto: Option<Vec<i64>>,
-        max_number_of_bridges: Option<usize>,
-        sewed_filter: Option<PyRef<PySewedFilterOptions>>,
-        self_energy_filter: Option<PyRef<PySelfEnergyFilterOptions>>,
-        tadpoles_filter: Option<PyRef<PyTadpolesFilterOptions>>,
-        zero_snails_filter: Option<PyRef<PySnailFilterOptions>>,
-        perturbative_orders: Option<HashMap<String, usize>>,
-        coupling_orders: Option<HashMap<String, (usize, Option<usize>)>>,
-        loop_count_range: Option<(usize, usize)>,
-        fermion_loop_count_range: Option<(usize, usize)>,
-        factorized_loop_topologies_count_range: Option<(usize, usize)>,
-    ) -> Result<PyFeynGenFilters> {
-        let mut filters = Vec::new();
-        if let Some(sewed_filter) = sewed_filter {
-            filters.push(FeynGenFilter::SewedFilter(sewed_filter.filter_options));
-        }
-        if let Some(self_energy_filter) = self_energy_filter {
-            filters.push(FeynGenFilter::SelfEnergyFilter(
-                self_energy_filter.filter_options,
-            ));
-        }
-        if let Some(particle_veto) = particle_veto {
-            filters.push(FeynGenFilter::ParticleVeto(particle_veto));
-        }
-        if let Some(max_number_of_bridges) = max_number_of_bridges {
-            filters.push(FeynGenFilter::MaxNumberOfBridges(max_number_of_bridges));
-        }
-        if let Some(tadpoles_filter) = tadpoles_filter {
-            filters.push(FeynGenFilter::TadpolesFilter(
-                tadpoles_filter.filter_options,
-            ));
-        }
-        if let Some(zero_snails_filter) = zero_snails_filter {
-            filters.push(FeynGenFilter::ZeroSnailsFilter(
-                zero_snails_filter.filter_options,
-            ));
-        }
-        if let Some(perturbative_orders) = perturbative_orders {
-            filters.push(FeynGenFilter::PerturbativeOrders(perturbative_orders));
-        }
-        if let Some(coupling_orders) = coupling_orders {
-            filters.push(FeynGenFilter::CouplingOrders(coupling_orders));
-        }
-        if let Some(loop_count_range) = loop_count_range {
-            filters.push(FeynGenFilter::LoopCountRange(loop_count_range));
-        }
-        if let Some(fermion_loop_count_range) = fermion_loop_count_range {
-            filters.push(FeynGenFilter::FermionLoopCountRange(
-                fermion_loop_count_range,
-            ));
-        }
-        if let Some(factorized_loop_topologies_count_range) = factorized_loop_topologies_count_range
-        {
-            filters.push(FeynGenFilter::FactorizedLoopTopologiesCountRange(
-                factorized_loop_topologies_count_range,
-            ));
-        }
-        Ok(PyFeynGenFilters { filters })
-    }
-}
-
-fn feyngen_to_python_error(error: FeynGenError) -> PyErr {
-    exceptions::PyValueError::new_err(format!("Feynman diagram generator error | {error}"))
-}
-
-#[pyclass(from_py_object, name = "NumeratorAwareGroupingOption")]
-pub struct PyNumeratorAwareGroupingOption {
-    pub grouping_options: NumeratorAwareGraphGroupingOption,
-}
-
-#[pymethods]
-impl PyNumeratorAwareGroupingOption {
-    #[new]
-    pub(crate) fn __new__(
-        numerator_aware_grouping_option: Option<String>,
-        compare_canonized_numerator: Option<bool>,
-        number_of_samples_for_numerator_comparisons: Option<usize>,
-        consider_internal_masses_only_in_numerator_isomorphisms: Option<bool>,
-        fully_numerical_substitution_when_comparing_numerators: Option<bool>,
-        numerical_samples_seed: Option<u16>,
-        symmetric_polarizations: Option<bool>,
-    ) -> Result<PyNumeratorAwareGroupingOption> {
-        Ok(PyNumeratorAwareGroupingOption {
-            grouping_options: NumeratorAwareGraphGroupingOption::new_with_attributes(
-                numerator_aware_grouping_option
-                    .unwrap_or("group_identical_graphs_up_to_scalar_rescaling".into())
-                    .as_str(),
-                numerical_samples_seed,
-                number_of_samples_for_numerator_comparisons,
-                consider_internal_masses_only_in_numerator_isomorphisms,
-                fully_numerical_substitution_when_comparing_numerators,
-                compare_canonized_numerator,
-                symmetric_polarizations,
-            )
-            .map_err(|e| exceptions::PyException::new_err(e.to_string()))?,
-        })
-    }
-
-    pub(crate) fn __str__(&self) -> Result<String> {
-        Ok(format!("{}", self.grouping_options))
-    }
-}
-*/
-
 /// Load, inspect, and evaluate one mutable GammaLoop session.
 ///
 /// One instance owns a GammaLoop state, run history, CLI settings, default runtime
@@ -4185,11 +3922,8 @@ impl GammaLoopAPI {
                 let process_name = process_name
                     .unwrap_or(dot_path.file_stem().unwrap().to_string_lossy().into_owned());
 
-                let graphs =
-                    Graph::from_finalized_runtime_path(&dot_path, &self.gammaloop_state.model)
-                        .map_err(|e| {
-                            eyre!("Could not parse graphs from path: {}", e.to_string())
-                        })?;
+                let graphs = Graph::from_dot_path(&dot_path, &self.gammaloop_state.model)
+                    .map_err(|e| eyre!("Could not parse graphs from path: {}", e.to_string()))?;
                 (graphs, Some(process_name))
             }
             "string" => {
@@ -4199,16 +3933,13 @@ impl GammaLoopAPI {
                     ));
                 }
 
-                let graphs =
-                    Graph::from_finalized_runtime_string(&graphs, &self.gammaloop_state.model)
-                        .map_err(|e| {
-                            eyre!("Could not parse graphs from string: {}", e.to_string())
-                        })?;
+                let graphs = Graph::from_dot(&graphs, &self.gammaloop_state.model)
+                    .map_err(|e| eyre!("Could not parse graphs from string: {}", e.to_string()))?;
                 (graphs, process_name)
             }
             other => {
                 return Err(eyre!(
-                    "Unknown graph import format: {}. Supported formats are 'yaml' and 'json'",
+                    "Unknown graph import format: {}. Supported formats are 'dot' and 'string'",
                     other
                 ));
             }
@@ -4263,24 +3994,14 @@ impl GammaLoopAPI {
                     return Err(eyre!("Path does not exist: {}", dot_path.display()));
                 }
 
-                let graphs =
-                    Graph::from_finalized_runtime_path(&dot_path, &self.gammaloop_state.model)
-                        .map_err(|e| {
-                            eyre!("Could not parse graphs from path: {}", e.to_string())
-                        })?;
-                graphs
+                Graph::from_dot_path(&dot_path, &self.gammaloop_state.model)
+                    .map_err(|e| eyre!("Could not parse graphs from path: {}", e.to_string()))?
             }
-            "string" => {
-                let graphs =
-                    Graph::from_finalized_runtime_string(&graphs, &self.gammaloop_state.model)
-                        .map_err(|e| {
-                            eyre!("Could not parse graphs from string: {}", e.to_string())
-                        })?;
-                graphs
-            }
+            "string" => Graph::from_dot(&graphs, &self.gammaloop_state.model)
+                .map_err(|e| eyre!("Could not parse graphs from string: {}", e.to_string()))?,
             other => {
                 return Err(eyre!(
-                    "Unknown graph import format: {}. Supported formats are sting and dot",
+                    "Unknown graph import format: {}. Supported formats are 'dot' and 'string'",
                     other
                 ));
             }
@@ -5040,96 +4761,6 @@ impl GammaLoopAPI {
     }
 
     /*
-
-    #[allow(clippy::too_many_arguments)]
-    #[pyo3(name="generate", signature = (process_name, numerator_aware_isomorphism_grouping=None, filter_self_loop=None, graph_prefix=None, selected_graphs=None, vetoed_graphs=None, loop_momentum_bases=None, global_prefactor_color=None, global_prefactor_colorless=None, num_threads=None))]
-    pub(crate) fn generate_diagrams(
-        &mut self,
-        //generation_options: PyRef<PyFeynGenOptions>,
-        process_name: String,
-        numerator_aware_isomorphism_grouping: Option<PyRef<PyNumeratorAwareGroupingOption>>,
-        filter_self_loop: Option<bool>,
-        graph_prefix: Option<String>,
-        selected_graphs: Option<Vec<String>>,
-        vetoed_graphs: Option<Vec<String>>,
-        loop_momentum_bases: Option<HashMap<String, Vec<String>>>,
-        global_prefactor_color: Option<String>,
-        global_prefactor_colorless: Option<String>,
-        num_threads: Option<usize>,
-    ) -> Result<Vec<String>> {
-        todo!();
-        //if self.model.is_empty() {
-        //    return Err(eyre!(
-        //        "A physics model must be loaded before generating diagrams"
-        //    ));
-        //}
-        //let feyngen_options = generation_options.options.clone();
-
-        //// clone some of the options that will be used in the process definition
-        //let initial_pdgs = feyngen_options.initial_pdgs.clone();
-        //let final_pdgs_lists = feyngen_options.final_pdgs_lists.clone();
-        //let generation_type = feyngen_options.generation_type.clone();
-        //let amplitude_filters = feyngen_options.amplitude_filters.clone();
-        //let cross_section_filters = feyngen_options.cross_section_filters.clone();
-
-        //let diagram_generator = FeynGen::new(feyngen_options);
-
-        //let mut global_prefactor = GlobalPrefactor::default();
-        //if let Some(global_prefactor_color) = global_prefactor_color {
-        //    global_prefactor.num = parse!(&global_prefactor_color);
-        //}
-        //if let Some(global_prefactor_colorless) = global_prefactor_colorless {
-        //    global_prefactor.projector = parse!(&global_prefactor_colorless);
-        //}
-
-        //let _diagrams = diagram_generator
-        //    .generate(
-        //        &self.model,
-        //        &numerator_aware_isomorphism_grouping
-        //            .map(|o| o.grouping_options.clone())
-        //            .unwrap_or(NumeratorAwareGraphGroupingOption::NoGrouping),
-        //        filter_self_loop.unwrap_or(false),
-        //        graph_prefix.unwrap_or("GL".to_string()),
-        //        selected_graphs,
-        //        vetoed_graphs,
-        //        loop_momentum_bases,
-        //        global_prefactor,
-        //        num_threads,
-        //    )
-        //    .map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
-
-        // let res = Ok(diagrams
-        //     .iter()
-        //     .map(|d| serde_yaml::to_string(&SerializableGraph::from_graph(d)).unwrap())
-        //     .collect());
-
-        // load everything into processlist
-        //let (n_unresolved, unresolved_cut_content) =
-        //    diagram_generator.unresolved_cut_content(&self.model);
-
-        //let process_definition = ProcessDefinition {
-        //    initial_pdgs,
-        //    final_pdgs_lists,
-        //    n_unresolved,
-        //    unresolved_cut_content: unresolved_cut_content.into_iter().collect(),
-        //    amplitude_filters,
-        //    cross_section_filters,
-        //};
-
-        //let process = Process::from_graph_list(
-        //    proccess_name.into(),
-        //    vec![],
-        //    generation_type,
-        //    process_definition,
-        //    None,
-        //)
-        //.map_err(|e| exceptions::PyException::new_err(e.to_string()))?;
-
-        //self.process_list.add_process(process);
-
-        //Ok(Vec::new())
-    }
-
     // pub(crate) fn export_expressions(
     //     &mut self,
     //     export_root: &str,

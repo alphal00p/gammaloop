@@ -150,7 +150,7 @@ Those older closed formulas are not substituted for a calculation here.
 
 === Physical input to native graph objects
 
-Existing: `Model.generate_diagrams`, `FeynmanDiagram` import, momentum bases,
+Existing: `Model.process(...).amplitude(loops=...).generate().build()`, `FeynmanDiagram` import, momentum bases,
 subgraph selection, numerator/denominator extraction, and ordinary generated
 final-state cuts. Rust already has `FeynmanDiagram::builder`; serialized Python
 imports expect finalized model identities and graph annotations.

@@ -5,11 +5,9 @@
 //! typed, deterministic selection after the graph name is known.  Numerical
 //! channel construction is intentionally kept out of this layer.
 
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    fmt,
-    str::FromStr,
-};
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt;
+use std::str::FromStr;
 
 use crate::settings::runtime::{
     HFunctionSettings, SamplingChannelDefinition, SamplingChannelSelection, SamplingChannelWeight,
@@ -17,11 +15,9 @@ use crate::settings::runtime::{
 };
 use color_eyre::eyre::{Result, WrapErr, eyre};
 use serde::{Deserialize, Serialize};
-use symbolica::{
-    atom::{Atom, AtomCore},
-    printer::PrintOptions,
-    symbol, try_parse,
-};
+use symbolica::atom::{Atom, AtomCore};
+use symbolica::printer::PrintOptions;
+use symbolica::{symbol, try_parse};
 
 use super::context::{
     PreparedLUHost, SamplingMapContext, SamplingProposalKey, SamplingProposalPolicies,
@@ -33,13 +29,14 @@ use super::{
     SamplingMapEvaluation, SamplingMapKernel, SamplingPartition, SamplingPartitionMode,
     SamplingScoreFunction, SamplingSupport, SharedEnergyJointMap, SurfaceRadialMap,
 };
+use crate::DependentMomentaConstructor;
 use crate::integrands::evaluation::EvaluationMetaData;
+use crate::momentum::ThreeMomentum;
 use crate::momentum::sample::{LoopMomenta, MomentumSample};
 use crate::settings::runtime::ParameterizationSettings;
 use crate::settings::runtime::kinematic::Externals;
 use crate::utils::newton_solver::RadialRootDiagnostics;
 use crate::utils::{F, FloatLike};
-use crate::{DependentMomentaConstructor, momentum::ThreeMomentum};
 
 /// Precision-independent proxy, radial-profile and joint programs in canonical
 /// order. Entries reuse the one neutral joint program compiled for the catalogue.
@@ -3255,6 +3252,7 @@ pub fn graph_channel_definitions(
 #[cfg(test)]
 #[allow(clippy::field_reassign_with_default)]
 mod tests {
+    use crate::dot;
     use std::sync::Arc;
 
     use super::*;
@@ -3742,26 +3740,26 @@ mod tests {
     #[test]
     fn native_lu_host_reuses_exact_sources_without_replacing_selected_authority() -> Result<()> {
         use super::super::context::SamplingLUHostPlan;
-        use crate::{
-            cff::{VertexSet, esurface::Esurface},
-            graph::Graph,
-            momentum::{FourMomentum, sample::ExternalFourMomenta},
-            processes::{CutGroupId, CutId},
-            utils::{ArbPrec, QuadFloat},
-        };
+        use crate::cff::VertexSet;
+        use crate::cff::esurface::Esurface;
+        use crate::graph::Graph;
+        use crate::momentum::FourMomentum;
+        use crate::momentum::sample::ExternalFourMomenta;
+        use crate::processes::{CutGroupId, CutId};
+        use crate::utils::{ArbPrec, QuadFloat};
         use linnet::half_edge::involution::EdgeIndex;
         use std::cell::Cell;
 
         test_initialise()?;
-        let graph: Graph = crate::finalized_runtime_dot!(digraph host_source {
+        let graph: Graph = dot!(digraph host_source {
  graph [projector=1]
             ext [style=invis]
             node [num=1]
             edge [num=1 mass=1]
-            ext -> a:0 [id=0 sink="{ufo_order:0}"]
-            a -> b [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            a -> b [id=2 source="{ufo_order:2}" sink="{ufo_order:1}"]
-            b:1 -> ext [id=3 source="{ufo_order:2}"]
+            ext -> a:0 [particle=H id=0]
+            a -> b [particle=H id=1 lmb_id=0]
+            a -> b [particle=H id=2]
+            b:1 -> ext [particle=H id=3]
         }, &crate::utils::load_generic_model("sm"))?;
         let surface = Esurface {
             energies: vec![EdgeIndex(1), EdgeIndex(2)],

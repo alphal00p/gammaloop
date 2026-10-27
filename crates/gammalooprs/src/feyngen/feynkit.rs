@@ -5,17 +5,15 @@
 
 use std::sync::Arc;
 
-use feynkit_generator::{GenerationControl, GenerationReport, GenerationResult, GenerationType};
+use feynkit_generator::{BuiltDiagramSet, GenerationControl, GenerationReport, Run};
 use feynkit_graph::{EdgeId, FeynmanDiagram};
 use thiserror::Error;
 
 use super::FeynGenError;
-use crate::{
-    graph::{Graph, GroupId},
-    model::Model,
-    processes::ProcessDefinition,
-    settings::GlobalSettings,
-};
+use crate::graph::{Graph, GroupId};
+use crate::model::Model;
+use crate::processes::ProcessDefinition;
+use crate::settings::GlobalSettings;
 
 /// Errors raised while enriching canonical FeynKit diagrams for GammaLoop.
 #[derive(Debug, Error)]
@@ -54,7 +52,7 @@ impl FeynmanDiagramGammaLoopExt for FeynmanDiagram {
     ) -> Result<Graph, FeynkitRuntimeError> {
         Graph::from_feynkit(self, group_id, is_group_master).map_err(|source| {
             FeynkitRuntimeError::GraphConversion {
-                diagram: self.name().to_owned(),
+                diagram: self.name().unwrap_or("<unnamed>").to_owned(),
                 source,
             }
         })
@@ -62,18 +60,18 @@ impl FeynmanDiagramGammaLoopExt for FeynmanDiagram {
 }
 
 /// Atomic GammaLoop enrichment for a canonical collapsed generation result.
-pub trait GenerationResultGammaLoopExt {
+pub trait BuiltDiagramSetGammaLoopExt {
     fn to_gamma_loop_graphs(&self) -> Result<Vec<Graph>, FeynkitRuntimeError>;
 }
 
-impl GenerationResultGammaLoopExt for GenerationResult {
+impl BuiltDiagramSetGammaLoopExt for BuiltDiagramSet {
     fn to_gamma_loop_graphs(&self) -> Result<Vec<Graph>, FeynkitRuntimeError> {
         self.validate_groups()?;
-        let mut group_ids = vec![None; self.diagrams.len()];
-        for (group_index, group) in self.groups.iter().enumerate() {
+        let mut group_ids = vec![None; self.diagrams().len()];
+        for (group_index, group) in self.groups().iter().enumerate() {
             group_ids[group.master] = Some(GroupId(group_index));
         }
-        self.diagrams
+        self.diagrams()
             .iter()
             .enumerate()
             .map(|(index, diagram)| diagram.to_gamma_loop_graph(group_ids[index], true))
@@ -111,11 +109,8 @@ impl ProcessDefinition {
                         .collect::<Result<Vec<_>, _>>()
                 })
                 .collect::<Result<Vec<_>, _>>()?;
-            let options = self
-                .generation_options
-                .clone()
+            let run = Run::default()
                 .threads(settings.n_cores.feyngen)
-                .forced_cuts(forced_cuts)
                 .cancellation_check(crate::is_interrupt_requested)
                 .progress(|_| {
                     if crate::is_interrupt_requested() {
@@ -124,19 +119,22 @@ impl ProcessDefinition {
                         GenerationControl::Continue
                     }
                 });
-            let generated = match self.generation_type {
-                GenerationType::Amplitude => self
-                    .process
-                    .generate_diagrams(Arc::new(model.clone()), &options)?,
-                GenerationType::CrossSection => self
-                    .process
-                    .generate_cross_section(Arc::new(model.clone()), &options)?,
+            let selection = if forced_cuts.is_empty() {
+                self.selection.clone()
+            } else {
+                self.selection.clone().with_forced_cuts(forced_cuts)
             };
-            if !generated.report.completed || crate::is_interrupt_requested() {
+            let generated = self
+                .request
+                .generate(Arc::new(model.clone()), &run)?
+                .build(&self.numerators, &run)?
+                .select(&selection, &run)?
+                .group(&self.grouping, &run)?;
+            if !generated.report().completed || crate::is_interrupt_requested() {
                 return Err(FeynkitRuntimeError::Interrupted);
             }
             let graphs = generated.to_gamma_loop_graphs()?;
-            Ok((graphs, generated.report))
+            Ok((graphs, generated.report().clone()))
         })();
         crate::clear_interrupt_request();
         result
@@ -156,29 +154,27 @@ impl ProcessDefinition {
 
 #[cfg(test)]
 mod tests {
-    use feynkit_generator::{GenerationOptions, Process};
+    use feynkit_generator::{
+        Cuts, Loops, Naming, NumeratorOptions, Process, Request, TopologyRules,
+    };
     use feynkit_graph::{
         DiagramCut, DiagramCutSide, DiagramEdge, DiagramEndpoint, DiagramHalfEdge, DiagramVertex,
-        EdgeId, ExternalState, FeynmanDiagram, LoopMomentumBasis, NumeratorInterface,
+        EdgeId, ExternalLeg, ExternalState, FeynmanDiagram, LoopMomentumBasis, NumeratorInterface,
+        VertexSlot,
     };
-    use linnet::half_edge::{
-        involution::{EdgeIndex, Hedge, HedgePair, Orientation},
-        subgraph::{Inclusion, SuBitGraph, SubGraphLike, SubSetLike, SubSetOps},
-    };
-    use symbolica::{
-        atom::{Atom, AtomCore},
-        parser::ParseSettings,
-    };
+    use linnet::half_edge::involution::{EdgeIndex, Flow, Hedge, HedgePair, Orientation};
+    use linnet::half_edge::subgraph::{Inclusion, SuBitGraph, SubGraphLike, SubSetLike, SubSetOps};
+    use symbolica::atom::{Atom, AtomCore};
+    use symbolica::parser::ParseSettings;
 
     use super::*;
-    use crate::{
-        graph::LMBext,
-        momentum::{SignOrZero, sample::ExternalIndex},
-        numerator::aind::NewAind,
-        processes::{CrossSectionGraph, ProcessDefinition},
-        settings::global::GenerationSettings,
-        uv::UltravioletGraph,
-    };
+    use crate::graph::LMBext;
+    use crate::momentum::SignOrZero;
+    use crate::momentum::sample::ExternalIndex;
+    use crate::numerator::aind::NewAind;
+    use crate::processes::{CrossSectionGraph, ProcessDefinition};
+    use crate::settings::global::GenerationSettings;
+    use crate::uv::UltravioletGraph;
 
     fn atom(expression: &str) -> Atom {
         Atom::parse(expression, "feynkit_runtime_test", ParseSettings::default()).unwrap()
@@ -229,12 +225,12 @@ mod tests {
         let particle = model.particle_id("phi").unwrap();
         let interaction = model.vertex_rule_id("V").unwrap();
         let left_numerator = if vertex_dummy {
-            atom("gammalooprs::vertex(1,0)")
+            atom("gammalooprs::vertex(0,0)")
         } else {
             atom("kept_vertex_fragment")
         };
         let numerator = if vertex_dummy {
-            atom("gammalooprs::vertex(1,0)*kept_vertex_fragment*kept_edge_fragment^2")
+            atom("gammalooprs::vertex(0,0)*kept_vertex_fragment*kept_edge_fragment^2")
         } else {
             atom("kept_vertex_fragment^2*kept_edge_fragment^2")
         };
@@ -244,7 +240,6 @@ mod tests {
             .numerator(NumeratorInterface::admit(numerator, None).unwrap())
             .numerator_prefactor(NumeratorInterface::admit(atom("kept_prefactor"), None).unwrap())
             .projector(NumeratorInterface::admit(atom("kept_projector"), None).unwrap());
-        let incoming = builder.add_generation_external("incoming", 0, ExternalState::Incoming, 0);
         let left = builder.add_vertex(DiagramVertex {
             numerator: NumeratorInterface::admit(left_numerator, None).unwrap(),
             ..DiagramVertex::interaction("left", interaction)
@@ -253,9 +248,14 @@ mod tests {
             numerator: NumeratorInterface::admit(atom("kept_vertex_fragment"), None).unwrap(),
             ..DiagramVertex::interaction("right", interaction)
         });
-        let outgoing = builder.add_generation_external("outgoing", 1, ExternalState::Outgoing, 1);
         builder
-            .add_edge(incoming, left, DiagramEdge::new(particle, false))
+            .add_generation_external(
+                left,
+                Flow::Sink,
+                DiagramEdge::new(particle, false),
+                VertexSlot(0),
+                leg("incoming", 0, ExternalState::Incoming, 0),
+            )
             .unwrap();
         for _ in 0..2 {
             let mut edge = DiagramEdge::new(particle, false);
@@ -263,7 +263,13 @@ mod tests {
             builder.add_edge(left, right, edge).unwrap();
         }
         builder
-            .add_edge(right, outgoing, DiagramEdge::new(particle, false))
+            .add_generation_external(
+                right,
+                Flow::Source,
+                DiagramEdge::new(particle, false),
+                VertexSlot(2),
+                leg("outgoing", 1, ExternalState::Outgoing, 1),
+            )
             .unwrap();
         let diagram = builder.build().unwrap();
         if let Some(basis) = basis {
@@ -273,12 +279,20 @@ mod tests {
         }
     }
 
+    fn leg(name: &str, index: usize, state: ExternalState, connection: usize) -> ExternalLeg {
+        ExternalLeg {
+            name: name.to_owned(),
+            index,
+            state,
+            connection,
+        }
+    }
+
     fn legacy_order_bubble(model: &Arc<Model>, basis: Option<LoopMomentumBasis>) -> FeynmanDiagram {
         let particle = model.particle_id("phi").unwrap();
         let interaction = model.vertex_rule_id("V").unwrap();
         let mut builder = FeynmanDiagram::builder(Arc::clone(model), "legacy_order_bubble")
             .numerator(NumeratorInterface::admit(atom("kept_vertex_fragment^4"), None).unwrap());
-        let incoming = builder.add_generation_external("incoming", 0, ExternalState::Incoming, 0);
         let interaction_vertex = |name| DiagramVertex {
             numerator: NumeratorInterface::admit(atom("kept_vertex_fragment"), None).unwrap(),
             ..DiagramVertex::interaction(name, interaction)
@@ -287,16 +301,21 @@ mod tests {
         let second = builder.add_vertex(interaction_vertex("second"));
         let third = builder.add_vertex(interaction_vertex("third"));
         let fourth = builder.add_vertex(interaction_vertex("fourth"));
-        let outgoing = builder.add_generation_external("outgoing", 1, ExternalState::Outgoing, 0);
-
+        builder
+            .add_generation_external(
+                first,
+                Flow::Sink,
+                DiagramEdge::new(particle, false),
+                VertexSlot(0),
+                leg("incoming", 0, ExternalState::Incoming, 0),
+            )
+            .unwrap();
         for (expected, source, target) in [
-            (0, incoming, first),
             (1, first, second),
             (2, second, third),
             (3, second, third),
             (4, third, fourth),
             (5, first, fourth),
-            (6, fourth, outgoing),
         ] {
             assert_eq!(
                 builder
@@ -305,6 +324,15 @@ mod tests {
                 EdgeId(expected)
             );
         }
+        builder
+            .add_generation_external(
+                fourth,
+                Flow::Source,
+                DiagramEdge::new(particle, false),
+                VertexSlot(2),
+                leg("outgoing", 1, ExternalState::Outgoing, 0),
+            )
+            .unwrap();
         let diagram = builder.build().unwrap();
         let diagram = if let Some(basis) = basis {
             diagram.with_loop_momentum_edges(&basis.loop_edges).unwrap()
@@ -340,14 +368,6 @@ mod tests {
         let particle = model.particle_id("phi").unwrap();
         let interaction = model.vertex_rule_id("V").unwrap();
         let mut builder = FeynmanDiagram::builder(Arc::clone(model), "two_connections");
-        let incoming_0 =
-            builder.add_generation_external("incoming_0", 0, ExternalState::Incoming, 0);
-        let incoming_1 =
-            builder.add_generation_external("incoming_1", 1, ExternalState::Incoming, 1);
-        let outgoing_0 =
-            builder.add_generation_external("outgoing_0", 2, ExternalState::Outgoing, 0);
-        let outgoing_1 =
-            builder.add_generation_external("outgoing_1", 3, ExternalState::Outgoing, 1);
         let internal = (0..4)
             .map(|index| {
                 builder.add_vertex(DiagramVertex::interaction(format!("v{index}"), interaction))
@@ -358,10 +378,32 @@ mod tests {
         // The second incoming edge points from its interaction vertex toward
         // the incoming external vertex. The sewing bridge must nevertheless
         // expose that connection as +P1 in the runtime coordinate frame.
-        builder.add_edge(incoming_0, internal[0], scalar()).unwrap();
-        builder.add_edge(internal[1], incoming_1, scalar()).unwrap();
-        builder.add_edge(internal[2], outgoing_0, scalar()).unwrap();
-        builder.add_edge(internal[3], outgoing_1, scalar()).unwrap();
+        for (vertex, flow, leg) in [
+            (
+                0,
+                Flow::Sink,
+                leg("incoming_0", 0, ExternalState::Incoming, 0),
+            ),
+            (
+                1,
+                Flow::Source,
+                leg("incoming_1", 1, ExternalState::Incoming, 1),
+            ),
+            (
+                2,
+                Flow::Source,
+                leg("outgoing_0", 2, ExternalState::Outgoing, 0),
+            ),
+            (
+                3,
+                Flow::Source,
+                leg("outgoing_1", 3, ExternalState::Outgoing, 1),
+            ),
+        ] {
+            builder
+                .add_generation_external(internal[vertex], flow, scalar(), VertexSlot(0), leg)
+                .unwrap();
+        }
         builder
             .add_edge(internal[0], internal[1], scalar())
             .unwrap();
@@ -419,10 +461,10 @@ mod tests {
     #[test]
     fn direct_conversion_rejects_anonymous_projector_ports() {
         use idenso::tensor::SymbolicTensor;
-        use spenso::structure::{
-            partial::{OpenPortId, PartialIndex, PartialStructure, PartialStructureExt},
-            representation::{Minkowski, RepName},
+        use spenso::structure::partial::{
+            OpenPortId, PartialIndex, PartialStructure, PartialStructureExt,
         };
+        use spenso::structure::representation::{Minkowski, RepName};
         let model = model();
         let rep = Minkowski {}.new_rep(4).to_lib();
         let zero = SymbolicTensor::from_declared_parts(
@@ -485,7 +527,9 @@ mod tests {
                 .get_single_atom()
                 .unwrap()
                 .expand(),
-            NumeratorInterface::export(diagram.numerator()).0.expand()
+            NumeratorInterface::export(diagram.numerator().unwrap())
+                .0
+                .expand()
         );
 
         let routed_edge = runtime
@@ -683,14 +727,17 @@ mod tests {
     fn direct_conversion_rejects_inconsistent_diagram_numerator() {
         let model = model();
         let diagram = diagram(&model, None);
-        let mut builder = FeynmanDiagram::builder(Arc::clone(&model), diagram.name())
-            .symmetry_factor(diagram.symmetry_factor())
-            .overall_factor(diagram.overall_factor().clone())
-            .numerator(NumeratorInterface::admit(atom("different_numerator"), None).unwrap())
-            .numerator_prefactor(diagram.numerator_prefactor().clone())
-            .projector(diagram.projector().clone())
-            .loop_momentum_basis(diagram.loop_momentum_basis().clone())
-            .cuts(diagram.cuts().to_vec());
+        let mut builder = feynkit_graph::FeynmanDiagramBuilder::new(
+            Arc::clone(&model),
+            diagram.name().map(str::to_owned),
+        )
+        .symmetry_factor(diagram.symmetry_factor())
+        .overall_factor(diagram.overall_factor().clone())
+        .numerator(NumeratorInterface::admit(atom("different_numerator"), None).unwrap())
+        .numerator_prefactor(diagram.numerator_prefactor().clone())
+        .projector(diagram.projector().clone())
+        .loop_momentum_basis(diagram.loop_momentum_basis().clone())
+        .cuts(diagram.cuts().to_vec());
         for (_, vertex) in diagram.vertices() {
             builder.add_vertex(vertex.clone());
         }
@@ -724,42 +771,44 @@ mod tests {
     fn canonical_cross_section_generation_survives_runtime_enrichment_and_consumption() {
         let model = model();
         let process = Process::new(["phi"], ["phi", "phi"]);
-        let options = GenerationOptions::default()
-            .with_loop_count(1, 1)
+        let request = Request::cross_section(process, Loops::forward(1..=1))
+            .with_topology(
+                TopologyRules::default()
+                    .with_self_loops(false)
+                    .with_max_vertices(2),
+            )
+            .with_cuts(Cuts::default().with_blobs(1..=1).with_spectators(0..=0));
+        let numerators = NumeratorOptions::default().with_naming(Naming::prefix("D"));
+        let run = Run::default().threads(1);
+        let generated = request
+            .generate(Arc::clone(&model), &run)
             .unwrap()
-            .threads(1)
-            .max_vertices(2);
-        let generated = process
-            .generate_cross_section(Arc::clone(&model), &options)
+            .build(&numerators, &run)
             .unwrap();
 
-        assert!(generated.report.completed);
-        assert!(!generated.diagrams.is_empty());
+        assert!(generated.report().completed);
+        assert!(!generated.diagrams().is_empty());
         assert!(
             generated
-                .diagrams
+                .diagrams()
                 .iter()
                 .all(|diagram| !diagram.cuts().is_empty())
         );
         assert!(
             generated
-                .diagrams
+                .diagrams()
                 .iter()
                 .all(|diagram| !diagram.topology_threshold_candidates().is_empty())
         );
 
         let runtime_graphs = generated.to_gamma_loop_graphs().unwrap();
-        assert_eq!(runtime_graphs.len(), generated.diagrams.len());
-        let process_definition = ProcessDefinition {
-            generation_type: GenerationType::CrossSection,
-            process,
-            generation_options: options,
-            folder_name: "canonical_cross_section_bridge".to_owned(),
-            process_id: 0,
-        };
+        assert_eq!(runtime_graphs.len(), generated.diagrams().len());
+        let mut process_definition = ProcessDefinition::new(request);
+        process_definition.numerators = numerators;
+        process_definition.folder_name = "canonical_cross_section_bridge".into();
         let settings = GenerationSettings::default();
 
-        for (diagram, runtime) in generated.diagrams.iter().zip(runtime_graphs) {
+        for (diagram, runtime) in generated.diagrams().iter().zip(runtime_graphs) {
             assert_eq!(runtime.finalized_cuts.len(), diagram.cuts().len());
             assert_eq!(
                 runtime.finalized_topology_threshold_candidates.len(),

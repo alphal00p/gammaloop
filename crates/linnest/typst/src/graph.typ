@@ -144,7 +144,7 @@
 /// Parsed fields take precedence over default data fields, so DOT
 /// `label="..."` overrides `default-node-data: (label: ...)`.
 ///
-/// Linnest uses `dot-parser` for DOT syntax and then gives special meaning to a
+/// Linnest reads DOT syntax with Linnet's DOT reader and then gives special meaning to a
 /// small set of attributes. Every other attribute is preserved as a flat string
 /// statement. Preserved statements are visible through @info, @nodes, @edges,
 /// @map, and @eval-fields, but they do not become native Typst `data` unless a

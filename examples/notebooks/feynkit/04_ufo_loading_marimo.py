@@ -60,10 +60,26 @@ def _():
     import os
     from pathlib import Path
 
-    from symbolica.community.hepkit import UfoLoader
+    from symbolica.community.hepkit import (
+        Loops,
+        Naming,
+        NumeratorOptions,
+        Restrict,
+        TopologyRules,
+        UfoLoader,
+    )
 
     UFO_MODEL = Path(__file__).resolve().parents[3] / "assets/models/ufo/scalars"
-    return (UFO_MODEL, UfoLoader, os)
+    return (
+        Loops,
+        Naming,
+        NumeratorOptions,
+        Restrict,
+        TopologyRules,
+        UFO_MODEL,
+        UfoLoader,
+        os,
+    )
 
 
 @app.cell(hide_code=True)
@@ -196,13 +212,13 @@ def _(mo):
 
 
 @app.cell
-def _(model):
-    generated = model.with_filters(vertex_allow=["V_3_SCALAR_000"]).generate_diagrams(
-        incoming=["scalar_0"],
-        outgoing=["scalar_0", "scalar_0"],
-        loops=0,
-        max_vertices=3,
+def _(Loops, Naming, NumeratorOptions, Restrict, TopologyRules, model):
+    _request = model.process(["scalar_0"], ["scalar_0", "scalar_0"]).amplitude(
+        loops=Loops.total(0),
+        restrict=Restrict().only_vertices(["V_3_SCALAR_000"]),
+        topology=TopologyRules(max_vertices=3),
     )
+    generated = _request.generate().build(NumeratorOptions(naming=Naming.named("D")))
     {
         "diagrams": len(generated.diagrams),
         "topologies_considered": generated.report.topology_count,

@@ -1,35 +1,27 @@
 use super::super::branches::{DirectResidueBranches, DirectResidueKey};
 use super::*;
 use crate::cff::expression::OrientationID;
-use crate::{
-    finalized_runtime_dot,
-    graph::{FeynmanGraph, Graph, cuts::CutSet},
-    initialisation::test_initialise,
-    numerator::AppliedFeynmanRule,
-    settings::global::OrientationPattern,
-    utils::GS,
-    uv::{
-        Integrands, UVgenerationSettings,
-        approx::{
-            OrientationProjection, Rooted,
-            direct_3d::{Direct3dCts, DirectSector},
-            local_3d::{
-                Local3DConceptualBranch, Local3DMaterialization, Local3DProjectionPath,
-                Local3DSignedBranch, Localizer,
-            },
-        },
-    },
+use crate::dot;
+use crate::graph::cuts::CutSet;
+use crate::graph::{FeynmanGraph, Graph};
+use crate::initialisation::test_initialise;
+use crate::numerator::AppliedFeynmanRule;
+use crate::settings::global::OrientationPattern;
+use crate::utils::GS;
+use crate::uv::approx::direct_3d::{Direct3dCts, DirectSector};
+use crate::uv::approx::local_3d::{
+    Local3DConceptualBranch, Local3DMaterialization, Local3DProjectionPath, Local3DSignedBranch,
+    Localizer,
 };
+use crate::uv::approx::{OrientationProjection, Rooted};
+use crate::uv::{Integrands, UVgenerationSettings};
 use gammaloop_tracing_filter::LogMessage;
-use idenso::{CookMode, CookSettings, tensor::SymbolicTensor};
-use linnet::half_edge::{
-    involution::EdgeIndex,
-    subgraph::{ModifySubSet, SubSetOps},
-};
-use spenso::{
-    network::tags::SPENSO_TAG,
-    structure::representation::{Minkowski, RepName},
-};
+use idenso::tensor::SymbolicTensor;
+use idenso::{CookMode, CookSettings};
+use linnet::half_edge::involution::EdgeIndex;
+use linnet::half_edge::subgraph::{ModifySubSet, SubSetOps};
+use spenso::network::tags::SPENSO_TAG;
+use spenso::structure::representation::{Minkowski, RepName};
 use symbolica::{function, symbol};
 
 // #[debug_instrument(
@@ -100,14 +92,14 @@ impl ForestNodeLike for TestNode {
 }
 
 fn scalar_two_point_graph() -> Graph {
-    finalized_runtime_dot!(digraph scalar_self_energy { graph [projector=1]
+    dot!(digraph scalar_self_energy { graph [projector=1]
         edge [particle="H" num=1];
         node [num=1];
         ext [style=invis];
-        ext -> A:0 [id=0 sink="{ufo_order:0}"];
-        B:1 -> ext [id=1 source="{ufo_order:0}"];
-        A -> B [id=2 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"];
-        A -> B [id=3 source="{ufo_order:2}" sink="{ufo_order:2}"];
+        ext -> A:0 [id=0];
+        B:1 -> ext [id=1];
+        A -> B [id=2 lmb_id=0];
+        A -> B [id=3];
     })
     .unwrap()
 }
@@ -482,15 +474,15 @@ fn integrated_mass_vertex_keeps_its_soft_weight_and_scalar_logs() -> Result<()> 
     // the same mass/log structure as the finite massive-fermion self-energy.
     // Its enclosing scalar bubble isolates m/(k^2-m^2)^2, whose degree-one
     // soft completion is the complete physical-mass zero-external-momentum jet.
-    let mut graph: Graph = finalized_runtime_dot!(digraph integrated_mass_vertex { graph [projector=1]
+    let mut graph: Graph = dot!(digraph integrated_mass_vertex { graph [projector=1]
         edge [particle="H" num=1];
         node [num=1];
         ext [style=invis];
-        ext -> A:0 [id=0 sink="{ufo_order:0}"];
-        B:1 -> ext [id=1 source="{ufo_order:0}"];
-        A -> B [id=2 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"];
-        A -> B [id=3 source="{ufo_order:2}" sink="{ufo_order:2}"];
-        A -> A [id=4 lmb_id=1 source="{ufo_order:3}" sink="{ufo_order:4}"];
+        ext -> A:0 [id=0];
+        B:1 -> ext [id=1];
+        A -> B [id=2 lmb_id=0];
+        A -> B [id=3];
+        A -> A [id=4 lmb_id=1];
     })?;
     let current = two_point_node(&graph, 1);
     let mut child_subgraph = graph.empty_subgraph::<SuBitGraph>();
@@ -607,17 +599,17 @@ fn disconnected_finite_mass_vertex_keeps_its_sibling_mass_inert() -> Result<()> 
     // the bubble parent, while the second is outside it and has the same mass.
     // Giving the sibling a squared mass makes accidental co-scaling retain a
     // spurious quadratic external-soft term even after orientation summation.
-    let mut graph: Graph = finalized_runtime_dot!(digraph disconnected_finite_mass_vertices { graph [projector=1]
+    let mut graph: Graph = dot!(digraph disconnected_finite_mass_vertices { graph [projector=1]
         edge [particle="H" num=1];
         node [num=1];
         ext [style=invis];
-        ext -> A:0 [id=0 sink="{ufo_order:0}"];
-        C:1 -> ext [id=1 source="{ufo_order:0}"];
-        A -> B [id=2 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"];
-        A -> B [id=3 source="{ufo_order:2}" sink="{ufo_order:1}"];
-        A -> A [id=4 lmb_id=1 source="{ufo_order:3}" sink="{ufo_order:4}"];
-        C -> C [id=5 lmb_id=2 source="{ufo_order:1}" sink="{ufo_order:2}"];
-        B -> C [id=6 source="{ufo_order:2}" sink="{ufo_order:3}"];
+        ext -> A:0 [id=0];
+        C:1 -> ext [id=1];
+        A -> B [id=2 lmb_id=0];
+        A -> B [id=3];
+        A -> A [id=4 lmb_id=1];
+        C -> C [id=5 lmb_id=2];
+        B -> C [id=6];
     })?;
     let mut inside_subgraph = graph.empty_subgraph::<SuBitGraph>();
     inside_subgraph.add(graph[&EdgeIndex(4)].1);
@@ -1076,7 +1068,7 @@ fn soft_projection_holds_cograph_tree_denominators() -> Result<()> {
 #[test]
 fn nested_soft_projection_scales_only_the_component_boundary_after_routing() -> Result<()> {
     test_initialise().unwrap();
-    let graph: Graph = Graph::import_dot(
+    let graph: Graph = Graph::from_dot(
         include_str!("../../../../../../tests/resources/graphs/gamma_star_ddbar_top_bubble.dot"),
         &crate::utils::load_generic_model("sm"),
     )
@@ -1157,7 +1149,7 @@ fn nested_soft_projection_scales_only_the_component_boundary_after_routing() -> 
 #[test]
 fn appendix_b1_nested_routes_keep_the_graph_canonical_enclosing_chart() -> Result<()> {
     test_initialise()?;
-    let graph: Graph = Graph::import_dot(include_str!(
+    let graph: Graph = Graph::from_dot(include_str!(
         "../../../../../../tests/resources/graphs/paper_appendix_b1_nested_gluon_self_energy.dot"
     ), &crate::utils::load_generic_model("sm")).map(|mut graphs| { assert_eq!(graphs.len(), 1, "one fixture graph expected"); graphs.remove(0) })?;
     let mut parent_subgraph = graph.empty_subgraph::<SuBitGraph>();
@@ -1221,16 +1213,16 @@ fn appendix_b1_nested_routes_keep_the_graph_canonical_enclosing_chart() -> Resul
 #[test]
 fn nested_banana_retains_quotient_carriers_after_an_integrated_prefix() -> Result<()> {
     test_initialise()?;
-    let graph: Graph = finalized_runtime_dot!(digraph banana { graph [projector=1]
+    let graph: Graph = dot!(digraph banana { graph [projector=1]
             edge [particle=scalar_1 num=1]
             node [num=1]
             ext [style=invis]
-            ext -> a:0 [id=5 sink="{ufo_order:0}"]
-            b:1 -> ext [id=4 source="{ufo_order:0}"]
-            a -> b [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"]
-            a -> b [id=2 lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:2}"]
-            a -> b [id=3 lmb_id=2 source="{ufo_order:3}" sink="{ufo_order:3}"]
-            a -> b [id=0 source="{ufo_order:4}" sink="{ufo_order:4}"]
+            ext -> a:0 [id=5]
+            b:1 -> ext [id=4]
+            a -> b [id=1 lmb_id=0]
+            a -> b [id=2 lmb_id=1]
+            a -> b [id=3 lmb_id=2]
+            a -> b [id=0]
         }, "scalars")?;
     let subgraph = |edges: &[usize]| {
         let mut subgraph = graph.empty_subgraph::<SuBitGraph>();
@@ -1317,18 +1309,18 @@ fn nested_banana_retains_quotient_carriers_after_an_integrated_prefix() -> Resul
 #[test]
 fn nested_route_rejects_a_retained_affine_graph_external_carrier() -> Result<()> {
     test_initialise()?;
-    let graph: Graph = finalized_runtime_dot!(digraph nested_soft_affine_routing { graph [projector=1]
+    let graph: Graph = dot!(digraph nested_soft_affine_routing { graph [projector=1]
             edge [particle=scalar_1 num=1]
             node [num=1]
             ext [style=invis]
-            ext -> v1:0 [id=0 sink="{ufo_order:0}"]
-            v4:1 -> ext [id=1 source="{ufo_order:0}"]
-            v1 -> v2 [id=2 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            v2 -> v3 [id=3 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            v2 -> v3 [id=4 source="{ufo_order:2}" sink="{ufo_order:1}"]
-            v3 -> v4 [id=5 source="{ufo_order:2}" sink="{ufo_order:1}"]
-            v1 -> v4 [id=6 lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:2}"]
-            v2 -> v2 [id=7 lmb_id=2 source="{ufo_order:3}" sink="{ufo_order:4}"]
+            ext -> v1:0 [id=0]
+            v4:1 -> ext [id=1]
+            v1 -> v2 [id=2]
+            v2 -> v3 [id=3 lmb_id=0]
+            v2 -> v3 [id=4]
+            v3 -> v4 [id=5]
+            v1 -> v4 [id=6 lmb_id=1]
+            v2 -> v2 [id=7 lmb_id=2]
         }, "scalars")?;
     let mut child_subgraph = graph.empty_subgraph::<SuBitGraph>();
     for edge in [2, 3, 5, 6].map(EdgeIndex) {

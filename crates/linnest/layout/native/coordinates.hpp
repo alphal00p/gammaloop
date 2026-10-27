@@ -101,7 +101,8 @@ public:
   }
 };
 // Chrobak–Payne triangulation/canonical ordering translated from NetworkX 3.7.
-// Copyright NetworkX Developers, BSD-3-Clause; see LICENSE.networkx.
+// Copyright NetworkX Developers, BSD-3-Clause; see
+// crates/linnest/typst/LICENSE.networkx.
 struct Embedding {
   std::map<int, std::vector<int>> rotation;
   std::vector<int> nodes;

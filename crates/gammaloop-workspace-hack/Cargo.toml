@@ -23,7 +23,6 @@ clap = { version = "4", features = ["derive", "env", "unicode", "unstable-ext", 
 clap_builder = { version = "4", default-features = false, features = ["color", "env", "std", "suggestions", "unicode", "unstable-ext", "usage", "wrap_help"] }
 console = { version = "0.16" }
 crossterm = { version = "0.29", features = ["serde"] }
-either = { version = "1", features = ["use_std"] }
 hashbrown = { version = "0.17" }
 indexmap = { version = "2", features = ["serde"] }
 libc = { version = "0.2" }
@@ -64,7 +63,6 @@ clap = { version = "4", features = ["derive", "env", "unicode", "unstable-ext", 
 clap_builder = { version = "4", default-features = false, features = ["color", "env", "std", "suggestions", "unicode", "unstable-ext", "usage", "wrap_help"] }
 console = { version = "0.16" }
 crossterm = { version = "0.29", features = ["serde"] }
-either = { version = "1", features = ["use_std"] }
 hashbrown = { version = "0.17" }
 indexmap = { version = "2", features = ["serde"] }
 libc = { version = "0.2" }

@@ -7,19 +7,17 @@
 //! nix develop -c cargo run --locked -p gammalooprs --example regenerate_canonical_fixtures -- --verify
 //! ```
 
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    env, fs,
-    path::{Path, PathBuf},
-};
+use std::collections::{BTreeMap, BTreeSet};
+use std::path::{Path, PathBuf};
+use std::{env, fs};
 
-use feynkit_generator::{GenerationFilter, GenerationOptions, Process, VertexSelector};
+use feynkit_generator::{
+    Cuts, Loops, Naming, NumeratorOptions, Orders, Process, Restrict, Run, TopologyRules,
+};
 use feynkit_graph::{EdgeId, ExternalState, FeynmanDiagram};
 use feynkit_model::{Model, ParameterCard};
-use gammalooprs::{
-    model::{InputParamCard, ModelGammaLoopExt},
-    utils::F,
-};
+use gammalooprs::model::{InputParamCard, ModelGammaLoopExt};
+use gammalooprs::utils::F;
 use symbolica::atom::Atom;
 
 type DynError = Box<dyn std::error::Error>;
@@ -435,7 +433,6 @@ fn select_target(
             matches.push((diagram, exact));
         }
     }
-    matches.sort_by_key(|(diagram, _)| diagram.id());
     if matches.len() != 1 {
         let diagnostics = diagrams
             .iter()
@@ -443,9 +440,16 @@ fn select_target(
                 let candidate = candidate_data(diagram, model).ok()?;
                 (candidate.vertices.len() == target.vertices.len()
                     && candidate.edges.len() == target.edges.len())
-                .then(|| format!("{} ({}): {candidate:?}", diagram.name(), diagram.id()))
+                .then_some((diagram, candidate))
             })
-            .collect::<Vec<_>>()
+            .map(|(diagram, candidate)| {
+                Ok(format!(
+                    "{} ({}): {candidate:?}",
+                    diagram.name().unwrap_or("<unnamed>"),
+                    diagram.id()?
+                ))
+            })
+            .collect::<Result<Vec<_>, DynError>>()?
             .join("\n");
         return Err(format!(
             "target '{}' matched {} generated diagrams; refine its deterministic selector. Same-size candidates:\n{}",
@@ -498,43 +502,47 @@ fn generate_addbar() -> Result<(Model, Vec<(Target, FeynmanDiagram)>), DynError>
     let model = standard_model()?;
     let process = Process::new(["a"], ["d", "d~"])
         .with_final_state_alternatives([vec!["d", "d~"], vec!["d", "d~", "g"]])?;
-    let options = GenerationOptions::default()
-        .with_loop_count(2, 2)?
-        .threads(1)
-        .max_vertices(4)
-        .allow_zero_flow_edges(true)
-        .graph_prefix("AUD")
-        .with_graph_filter(GenerationFilter::VertexAllow(vec![
-            VertexSelector::from("V_71"),
-            VertexSelector::from("V_74"),
-        ]))
-        .with_graph_filter(GenerationFilter::BlobRange(1..=1))
-        .with_graph_filter(GenerationFilter::SpectatorRange(0..=0));
-    let generated = process.generate_cross_section(model.clone(), &options)?;
+    let request = process
+        .cross_section(Loops::forward(2..=2))
+        .with_topology(
+            TopologyRules::new()
+                .with_self_loops(false)
+                .with_max_vertices(4)
+                .with_zero_flow_edges(true),
+        )
+        .with_restrict(Restrict::new().only_vertices(["V_71", "V_74"]))
+        .with_cuts(Cuts::new().with_blobs(1..=1).with_spectators(0..=0));
+    let run = Run::default().threads(1);
+    let generated = request.generate(model.clone().into(), &run)?.build(
+        &NumeratorOptions::default().with_naming(Naming::prefix("AUD")),
+        &run,
+    )?;
     let target = addbar_target();
-    let diagram = select_target(&target, &generated.diagrams, &model)?;
+    let diagram = select_target(&target, generated.diagrams(), &model)?;
     Ok((model, vec![(target, diagram)]))
 }
 
 fn generate_scalars() -> Result<(Model, Vec<(Target, FeynmanDiagram)>), DynError> {
     let model = scalar_model()?;
     let process = Process::new(["scalar_1"], ["scalar_1", "scalar_1"]);
-    let options = GenerationOptions::default()
-        .with_loop_count(1, 1)?
-        .threads(1)
-        .max_vertices(4)
-        .allow_self_loops(true)
-        .with_graph_filter(GenerationFilter::VertexAllow(vec![
-            VertexSelector::from("V_3_SCALAR_111"),
-            VertexSelector::from("V_2_SCALAR_11"),
-        ]))
-        .with_graph_filter(GenerationFilter::BlobRange(1..=1))
-        .with_graph_filter(GenerationFilter::SpectatorRange(0..=0));
-    let generated = process.generate_cross_section(model.clone(), &options)?;
+    let request = process
+        .cross_section(Loops::forward(1..=1))
+        .with_topology(
+            TopologyRules::new()
+                .with_self_loops(true)
+                .with_max_vertices(4),
+        )
+        .with_restrict(Restrict::new().only_vertices(["V_3_SCALAR_111", "V_2_SCALAR_11"]))
+        .with_cuts(Cuts::new().with_blobs(1..=1).with_spectators(0..=0));
+    let run = Run::default().threads(1);
+    let generated = request.generate(model.clone().into(), &run)?.build(
+        &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+        &run,
+    )?;
     let diagrams = scalar_targets()
         .into_iter()
         .map(|target| {
-            let diagram = select_target(&target, &generated.diagrams, &model)?;
+            let diagram = select_target(&target, generated.diagrams(), &model)?;
             Ok((target, diagram))
         })
         .collect::<Result<Vec<_>, DynError>>()?;
@@ -546,27 +554,28 @@ fn generate_epemttbar(model: &Model) -> Result<Vec<(Target, FeynmanDiagram)>, Dy
     // e+ e- -> t t~ H g g final state. Its four graph loops are the sewn
     // phase-space loops, not four virtual loops.
     let process = Process::new(["e+", "e-"], ["t", "t~", "H", "g", "g"]);
-    let options = GenerationOptions::default()
-        .with_loop_count(4, 4)?
-        .symmetrize_final(true)
-        .symmetrize_left_right(true)
-        .threads(1)
-        .max_vertices(10)
-        .with_graph_filter(GenerationFilter::VertexAllow(vec![
-            VertexSelector::from("V_98"),
-            VertexSelector::from("V_134"),
-            VertexSelector::from("V_137"),
-            VertexSelector::from("V_141"),
-        ]))
-        .with_graph_filter(GenerationFilter::CouplingOrders(BTreeMap::from([
-            ("QCD".to_owned(), (4, Some(4))),
-            ("QED".to_owned(), (6, Some(6))),
-        ])))
-        .with_graph_filter(GenerationFilter::BlobRange(1..=1))
-        .with_graph_filter(GenerationFilter::SpectatorRange(0..=0));
-    let generated = process.generate_cross_section(model.clone(), &options)?;
+    let request = process
+        .cross_section(Loops::forward(4..=4))
+        .with_topology(
+            TopologyRules::new()
+                .with_self_loops(false)
+                .with_max_vertices(10),
+        )
+        .with_restrict(Restrict::new().only_vertices(["V_98", "V_134", "V_137", "V_141"]))
+        .with_orders(Orders::new().exact("QCD", 4).exact("QED", 6))
+        .with_cuts(
+            Cuts::new()
+                .with_blobs(1..=1)
+                .with_spectators(0..=0)
+                .with_symmetrize_left_right(true),
+        );
+    let run = Run::default().threads(1);
+    let generated = request.generate(model.clone().into(), &run)?.build(
+        &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+        &run,
+    )?;
     let target = epemttbar_target();
-    let diagram = select_target(&target, &generated.diagrams, model)?;
+    let diagram = select_target(&target, generated.diagrams(), model)?;
     Ok(vec![(target, diagram)])
 }
 
@@ -643,7 +652,7 @@ fn main() -> Result<(), DynError> {
     ] {
         let path = format!("tests/resources/graphs/{name}.dot");
         let graphs =
-            gammalooprs::graph::Graph::import_dot(&fs::read_to_string(&path)?, &scalar_model)?;
+            gammalooprs::graph::Graph::from_dot(&fs::read_to_string(&path)?, &scalar_model)?;
         if graphs.is_empty() || graphs.iter().any(|graph| graph.finalized_cuts.is_empty()) {
             return Err(format!("canonical collection lost physical cuts: {path}").into());
         }

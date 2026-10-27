@@ -13,12 +13,12 @@ commands = [
 
     "remove processes",
 	"set global kv global.generation.uv.generate_integrated=true",
-    "generate amp scalar_1 > scalar_1 [{1}] --allowed-vertex-interactions V_3_SCALAR_122 -p bubble -i scalar_bubble_below_thres",
+    "generate amp scalar_1 > scalar_1 [{1}] --allowed-vertex-interactions V_3_SCALAR_122 -p bubble -i scalar_bubble_below_thres --filter-selfenergies true --filter-snails true --filter-tadpoles true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",
     "duplicate integrand -p bubble -i scalar_bubble_below_thres --output_process_name bubble --output_integrand_name scalar_bubble_above_thres",
     "save dot",
 
 	"set global kv global.generation.uv.generate_integrated=false",
-    "generate amp scalar_1 > scalar_1 [{1}] --allowed-vertex-interactions V_3_SCALAR_122 -p bubble_no_integrated_UV -i scalar_bubble_below_thres",
+    "generate amp scalar_1 > scalar_1 [{1}] --allowed-vertex-interactions V_3_SCALAR_122 -p bubble_no_integrated_UV -i scalar_bubble_below_thres --filter-selfenergies true --filter-snails true --filter-tadpoles true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",
     "duplicate integrand -p bubble_no_integrated_UV -i scalar_bubble_below_thres --output_process_name bubble_no_integrated_UV --output_integrand_name scalar_bubble_above_thres",
 
 	"save standalone --json",

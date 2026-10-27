@@ -1,7 +1,7 @@
 use crate::half_edge::subgraph::{ModifySubSet, SuBitGraph, SubSetLike};
 use crate::half_edge::swap::Swap;
 
-use super::{Flow, Involution};
+use super::{Flow, Involution, Orientation};
 
 #[test]
 fn invextract() {
@@ -68,7 +68,8 @@ fn involution_iterators_keep_exact_remaining_cardinality() {
 
 #[test]
 fn draining_involution_keeps_unconsumed_nonclone_drop_order() {
-    use std::{cell::RefCell, rc::Rc};
+    use std::cell::RefCell;
+    use std::rc::Rc;
     struct Payload(usize, Rc<RefCell<Vec<usize>>>);
     impl Drop for Payload {
         fn drop(&mut self) {
@@ -90,5 +91,26 @@ fn draining_involution_keeps_unconsumed_nonclone_drop_order() {
         }
         drop(iter);
         assert_eq!(&*drops.borrow(), &(0..8).collect::<Vec<_>>());
+    }
+}
+
+#[test]
+fn direct_pair_matches_connecting_a_new_identity() {
+    let mut actual = Involution::new();
+    let mut expected = Involution::new();
+    for orientation in [
+        Orientation::Default,
+        Orientation::Reversed,
+        Orientation::Undirected,
+    ] {
+        for flow in [Flow::Source, Flow::Sink] {
+            let payload = vec![1, 2, 3];
+            actual.add_identity(payload.clone(), orientation, flow);
+            expected.add_identity(payload.clone(), orientation, flow);
+            let source = expected.add_identity(payload.clone(), orientation, Flow::Source);
+            let sink = expected.connect_to_identity(source).unwrap();
+            assert_eq!(actual.add_pair(payload, orientation), (source, sink));
+            assert_eq!(actual, expected);
+        }
     }
 }

@@ -51,7 +51,10 @@ use crate::utils::F;
 use crate::{
     clear_iteration_abort_request, is_interrupted, is_iteration_abort_requested, set_interrupted,
 };
-use rayon::prelude::*;
+use rayon::prelude::{
+    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefMutIterator, ParallelIterator,
+    ParallelSlice,
+};
 pub use render_ratatui::RatatuiDashboardState;
 pub use render_tabled::TabledRenderOptions;
 use spenso::algebra::complex::Complex;
@@ -69,15 +72,11 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::time::Duration;
 use std::time::Instant;
-use tabled::{
-    Tabled,
-    builder::Builder,
-    settings::{
-        Alignment, Modify, Panel, Style,
-        object::{Columns, Rows},
-        style::HorizontalLine,
-    },
-};
+use tabled::Tabled;
+use tabled::builder::Builder;
+use tabled::settings::object::{Columns, Rows};
+use tabled::settings::style::HorizontalLine;
+use tabled::settings::{Alignment, Modify, Panel, Style};
 #[allow(unused_imports)]
 use tracing::{debug, error, info, trace, warn};
 
@@ -181,8 +180,9 @@ pub struct IntegrationWorkspaceManifest {
 
 impl IntegrationWorkspaceManifest {
     // Version 3 records physical absolute contributions before distinct
-    // sampling-channel points are summed. Older absolute moments cannot resume.
-    pub const CURRENT_VERSION: u32 = 3;
+    // sampling-channel points are summed. Version 4 fingerprints only the
+    // selected graph groups. Older workspaces cannot resume.
+    pub const CURRENT_VERSION: u32 = 4;
 
     /// A missing descriptor requests physics. Resume never silently changes that
     /// request into acceptance, and an unknown reporting convention cannot reuse grids.
@@ -4429,7 +4429,8 @@ mod tests {
     use super::*;
     use crate::integrands::TestProbeIntegrand;
     use colored::control;
-    use ratatui::{Terminal, backend::TestBackend};
+    use ratatui::Terminal;
+    use ratatui::backend::TestBackend;
     use std::fs;
     use symbolica::numerical_integration::ContinuousGrid;
 
@@ -4461,9 +4462,12 @@ mod tests {
         assert!(unversioned_error.contains("unversioned"));
         assert!(unversioned_error.contains("--restart"));
 
-        let previous = integration_workspace_manifest(Some(2));
-        let previous_error = previous.validate_version().unwrap_err().to_string();
-        assert!(previous_error.contains("--restart"));
+        for older in [1, IntegrationWorkspaceManifest::CURRENT_VERSION - 1] {
+            let old = integration_workspace_manifest(Some(older));
+            let old_error = old.validate_version().unwrap_err().to_string();
+            assert!(old_error.contains(&format!("older format version {older}")));
+            assert!(old_error.contains("--restart"));
+        }
 
         let future =
             integration_workspace_manifest(Some(IntegrationWorkspaceManifest::CURRENT_VERSION + 1));

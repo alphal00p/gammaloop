@@ -205,20 +205,21 @@ presentation export will require a later explicit opt-in attachment.
 
 No FeynKit crate depends on `gammalooprs`, `gammaloop-api`,
 `GlobalSettings`, or GammaLoop `State`. Generation receives explicit
-`GenerationOptions`, and progress/cancellation are callback- and
-token-based. The CI metadata guard also checks this direction
+`Request`, with progress, threads and cancellation owned by a separate `Run`. The CI metadata guard also checks this direction
 transitively and rejects source references that bypass a Cargo
 dependency.
 
-An explicit `GenerationOptions::threads(1)` performs interaction assignment,
-diagram construction and numerator/group preparation on the calling thread.
-Unspecified and multi-worker native requests retain their dedicated Rayon pool;
+An explicit `Run::threads(1)` performs skeleton enumeration (linnet's search
+with its parallel mode off), interaction assignment, diagram construction,
+numerator preparation, zero-colour filtering and group preparation on the
+calling thread. Unspecified and multi-worker native runs retain their dedicated
+Rayon pool;
 browser kernels remain serial. This avoids acquiring a second Symbolica thread
 license for an otherwise serial caller. Numerical algorithms and input order
 remain unchanged; fresh paired measurements qualify any timing effect.
 
 Rust clients load the canonical `Model`, construct a generation request,
-and receive finalized `FeynmanDiagram` values. Enabling `feynkit/ufo`
+receive compact `DiagramSet` values, and explicitly build `FeynmanDiagram` values. Enabling `feynkit/ufo`
 exposes an attached-interpreter loader that returns the same model type
 directly. Python clients use this ownership flow through
 `symbolica.community.hepkit`; the curated PyO3 API does not expose
@@ -228,6 +229,11 @@ The canonical model retains exact rational electric charges and optional
 left- and right-handed hypercharges. Model-supplied parameter labels are
 registered before parsing their expressions. Propagator lookup, including
 antiparticle orientation, belongs to the model and is reused by generation.
+The model lazily caches the fingerprint of its canonical definition, including qualified
+symbol names and function attributes. Model edits invalidate that cache; interchange
+printing remains a separate concern. Native Typst labels and shared particle line styles
+are also model metadata.
+
 Chemical potentials are optional validated parameter identifiers in that same
 model and survive JSON and binary round trips. Exact internal zero expressions
 are propagated through dependent masses and chemical potentials when the model
@@ -256,22 +262,20 @@ GammaLoop's vertex, edge, and rescaled-integrand checks use the same momentum-sc
 This bound excludes global projectors/prefactors and does not replace subdivergence analysis.
 
 Python's model-bound `Process` describes external states independently of calculation kind.
-Its `generate_diagrams()`, `generate_amplitude()`, and `generate_cross_section()` methods
-accept generation settings as keywords and construct the same Rust options.
-The corresponding Rust methods receive the model explicitly. Generation mode belongs to the
-method call; GammaLoop persists it on `ProcessDefinition` alongside the neutral process. Python dictionaries support reusable
-configurations; no mutable Python options builder accumulates filters. The Python boundary
-owns the process-dependent topology filter defaults. Explicit None disables a filter default;
-Ellipsis requests automatic filter settings. Numerator grouping defaults to None and must be
-enabled explicitly with a NumeratorGrouping value.
-Python permits tree exchanges and applies `LoopOneParticleIrreducible` to positive-loop
-individual graphs, including in mixed ranges; external legs are excluded from bridge counts.
-Explicit numeric bridge limits still apply to every graph, and None disables the default.
-When the requested minimum loop order is positive, the policy also prunes enumeration.
-Python permits self-loops; the reusable low-level Rust options remain explicit. Coupling upper bounds prune impossible vertex signatures before
-enumeration. Numerator construction reuses identical comparison/output diagrams, validation
-avoids expanding equal factored expressions, and unchanged cut inventories are retained. Coupling orders accept
-exact integers or inclusive ranges, while filter and grouping values wrap their Rust settings.
+Its `amplitude(loops=...)` and `cross_section(loops=...)` constructors produce a `Request` with
+native `Orders`, `Restrict`, `TopologyRules`, `Classes`, `Cuts` and `Symmetrize` values. Loops are explicit
+for every request, including vacuum requests. Both languages use the same minimal defaults;
+there are no Python-only topology presets or keyword-to-filter translators.
+
+`Request.generate` performs complete physics preparation while retaining compact diagrams and
+shared skeleton storage. `Request.count` uses the same physical acceptance with exact integer
+and rational accumulators, without building numerators. `DiagramSet.build(NumeratorOptions)`
+constructs physical numerators; the resulting `BuiltDiagramSet` owns subsequent `select` and
+`group` stages. Naming is opt-in. Private collection storage keeps diagram/source/order-class
+alignment valid. Amplitude squared-order constraints resolve one common partner relation,
+which survives selection, grouping and conversion into `Amplitude`; symbolic squaring uses
+only permitted class pairs. Cross sections test squared powers on the summed forward graph.
+
 Numerical numerator preparation restricts symbolic contraction to color;
 complete Lorentz contraction follows momentum sampling. Canonical comparison
 retains its symbolic tensor view and honors the concrete-color option even
@@ -282,19 +286,34 @@ removed before cut transport, while surviving provenance retains original
 source identities. Graph numerator products and powers are not distributed by
 these scalar-normalization operations.
 
-Valid requests admitting no graphs return a completed empty result through the same generation
-pipeline; invalid settings remain errors, and token-cancelled requests are marked incomplete.
-Both Python entry points share signal-aware execution: native generation runs on a worker
-while the Python caller polls signals and cancels through the existing generator hook.
-Browser kernels poll the same hook on their calling thread. Signal-handler exceptions are
-preserved and re-raised, rather than being converted to partial generation results.
-The same execution boundary delivers coalesced `GenerationProgress` stage/count snapshots
-and synchronous partial-topology `filter` requests on the calling Python thread. A rejected
-filter prunes an enumeration branch; callback exceptions cancel and propagate. The filter
-receives Symbolica's existing `Graph`, with integer external-leg labels and particle PDG
-edge data. Until Symbolica exposes a Rust constructor for its Python graph, the bridge uses
-its Python node/edge construction API. Generation, topology queries and pruning remain
-owned by the existing Symbolica graph implementation.
+The separate field-search policy `Classes::Auto` first assigns safe directed-line flavour
+classes, then refines them to exact particles; `Classes::None` retains direct particle search.
+FeynKit supplies equality distinctions for spin and colour, active mass vetoes, cut and
+unresolved content, rule colour/Lorentz structures and coupling occupancy, plus active cut
+orders and left/right exchange. These distinctions only split Linnet's structural classes.
+The adapter indexes rules by their surviving Theory position, preserving sparse original
+model rule IDs. Class labels are request-local equality values, not model identities.
+
+Diagram names are optional; structural IDs and aggregate numerators are computed on demand.
+The ID hashes Linnet's structural canonical form, including model particle/rule names,
+with BLAKE3; numerical model parameters, numerator expressions and display names do not
+enter it. Canonical forms remain comparable only within one Linnet version. Vertex IDs resolve
+only live nodes: an absorbed node slot cannot be read or assigned a numerator before compaction,
+and callers follow the compaction remap for renumbered vertices. Local
+numerator fragments stay attached to their edges and vertices; an explicitly supplied
+aggregate is checked against them. Validation and routing certificates are cached and
+invalidated at their owning edit boundaries. The `u128` automorphism order records
+provenance; the symbolic overall factor already carries the physical weight.
+
+Three hereditary/terminal hooks use typed Linnet views: `prune_skeletons`, `prune_dressings`,
+and complete-assignment `select`. Particle fields are model records. Native workers join
+bounded search waves before a batch is dispatched; default Python callbacks, progress and
+signal checks execute on the invoking thread. Views expire after each callback, while explicit
+owned graph snapshots survive. `Run(thread_safe=True)` permits worker callbacks; mutable
+Graph snapshots require the calling-thread mode. Wasm always executes inline. Callback and
+signal exceptions cancel execution and propagate with their original identity. Valid empty
+requests return complete empty collections; cancellation produces explicitly incomplete
+reports. Runtime controls and Python callbacks are never serialized into process definitions.
 
 The graph crate registers momentum and index symbols before parsing or
 generation. Index identities retain their source, sink, edge, or vertex head;
@@ -900,11 +919,10 @@ Within a running session, switch the preset with the existing command `set globa
 
 === 2. Process Generation Flow
 <process-generation-flow>
-+ `generate` resolves command syntax into a FeynKit `Process` and
-  `GenerationOptions`.
-+ FeynKit generates, canonicalizes, routes, constructs numerators,
-  removes zeroes, and groups diagrams before returning
-  `GenerationResult`.
++ `generate` uses the shared FeynKit parser to construct a required-loop `Request`,
+  then stores its separate numerator, selection and grouping settings.
++ FeynKit generates compact physical diagrams, builds their numerators, applies selection,
+  and groups them through the explicit staged API. `Run` supplies runtime controls only.
 + Each final diagram is converted once into a GammaLoop runtime graph,
   which adds only derived evaluator and integration state.
 + `ProcessList::preprocess` delegates to amplitude/cross-section
@@ -1493,7 +1511,12 @@ their amplitude version 12 and cross-section version 15 unchanged.
 
 === Persistence Compatibility Contract
 <persistence-compatibility-contract>
-- State format is versioned with `state_manifest.toml` (`version = 21` currently).
+- State format is versioned with `state_manifest.toml` (`version = 22` currently).
+- Version 22 persists the generation `Request`, including its explicit field-class search
+  policy, separately from numerator, selection and grouping settings, with `u128` symmetry
+  orders. It also weights each identical-beam cross-section graph by its beam-exchange
+  orbit; older symmetrized identical-beam states carry halved weights that nothing in them
+  reveals. Older states must be regenerated before loading.
 - Version 21 stores explicit indexed slots rather than partial-index wire tags.
   Earlier full states must be regenerated; source recipes are not relabeled
   binary archives. The logical layout and ranked-zero axes remain retained.
@@ -1552,6 +1575,13 @@ Workspace manifest version 3 also retains the resolved Gaussian-reference reques
 and the convention for physical absolute contributions at distinct channel points.
 Earlier checkpoints require a fresh run; resume verifies the reference request
 before restoring settings or completed-iteration state.
+
+Workspace version 2 fingerprints the exact selected integrand collection after warm-up and
+before observable checkpoints are restored. Preparation restores saved non-model settings on
+private clones while preserving current model overrides, selects graph groups, and warms only
+that selection. Excluded groups do not enter the resume fingerprint. Settings and workspace
+writes occur only after preparation, fingerprint and compatibility checks succeed; rejection
+leaves the generated source intact. Older full-source-fingerprint workspaces require a restart.
 
 == Configuration Architecture
 <configuration-architecture>

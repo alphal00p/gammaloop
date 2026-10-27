@@ -1,0 +1,22 @@
+{
+  "source": "e0a779808174c64057fecfd062c948b8de8e5c1f",
+  "request": "{} > {} | g ghg t u d QED==0 [{4}]",
+  "extraction": "group_diagrams accepted comparison boundary; original DiagramPair.comparison() serialized before collapse",
+  "candidate_source": 28,
+  "master_source": 34,
+  "stored_ratio_cancelled": "7/2",
+  "routing": "signed edge routing and LMB contained in annotated DOT; normalize_momentum_routing maps both into shared loop-basis slots",
+  "color": "concrete SU(3), Nc=3 and trace normalization 1/2, as in production component samples",
+  "files": [
+    {
+      "path": "crates/feynkit-generator/tests/fixtures/vacuum_b2/GL028.dot",
+      "bytes": 29113,
+      "sha256": "05d1b5b9de947ee6b41795ac062d6283602cc6d96490b09e025e35056ca8635e"
+    },
+    {
+      "path": "crates/feynkit-generator/tests/fixtures/vacuum_b2/GL034.dot",
+      "bytes": 29108,
+      "sha256": "36ef89039f8ac71907dfea68b91cc89f26c1e6b29db37fc094d629417f2d63c1"
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "status": "incomplete WP3; source03–07 approved by Astra coordinator; prerequisite08/09,13,14 integration candidate awaits NEW independent Astra review",
+  "status": "incomplete WP3; prerequisite slice438b6150 APPROVED by Astra; drawing15/16 and atomic staged17/18/37 implementation and validation in progress; NEW independent Astra review required before source19",
   "fixed_target": {
     "commit": "3f0df2a870806076820786994d4883decec8e9e3",
     "tree": "3c91ba47525c627fbc02d79f5afa1d58aa7c5b66",
@@ -789,7 +789,7 @@
     "WP10 M-rebuild measurement",
     "Final native/Pyodide/Community distribution certification"
   ],
-  "processes": "None. All task builds, tests, Clippy, docs and inventory captures completed; artifacts retained.",
+  "processes": "Current task checks retained under target/wp3-drawing-transplant; final completion inventory pending.",
   "extra_prerequisite": {
     "change": "txxpwnnvymmwqprmxvqtnmzvzqyskwmm",
     "commit": "52ac2eee4a1487bc79014c4f33f22b2854f80090",
@@ -823,11 +823,11 @@
   },
   "parallel_lanes": {
     "numeric08-09": {
-      "status": "Astra round2 APPROVED; cumulative patch integrated, combined candidate review pending",
+      "status": "Approved separately and integrated; combined prerequisite slice438b6150 APPROVED by Astra",
       "commit": "254420243792a63270c80a451884422bbc4000d9"
     },
     "scalar14": {
-      "status": "Astra round1 APPROVED; scoped patch integrated, combined candidate review pending",
+      "status": "Approved separately and integrated; combined prerequisite slice438b6150 APPROVED by Astra",
       "commit": "872e84b2b5bb875264c9eb476c5af47154f66b18",
       "bookmark": "generation-scalar-admission",
       "reviewer": "Astra",
@@ -840,13 +840,50 @@
       "measurement": "Only zero versus one discovery calls measured; no wider performance claim"
     },
     "drawing15-16-38": {
-      "status": "Not integrated.15/16 held on narrow registry digest fix despite license fix passing;38 awaits reviewed transplant and prerequisites through port36."
+      "status": "Approved cumulative15/16+notices integrated at8430e701d858b07e40203a25bfc3b1fa61b15f4a; combined staged slice still in progress; source38 remains pending through port36",
+      "input": "98cbf5b8f984e702f4699b1b176fbebfee059d3a",
+      "reviewer": "Astra coordinator R3 closed registry P2 after Astra runtime/layout/packaging R1/R2",
+      "receipt": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/target/astra-coordinator-drawing-r3/review.json"
     },
     "sampling27-28-29": {
-      "status": "isolated implementation lane; not integrated"
+      "status": "Approved cumulative input available for LATER integration; not replayed in this slice",
+      "commit": "c82916079b5cc643151e0213499ca9875739a4e3",
+      "production_parent": "21274d1442f57a33ca7c48629d9644f7fa8d228b",
+      "reviewer": "Astra",
+      "receipt": "/shared/lcnbr/dev/gammaloop/generation-sampling-fixes/target/astra-p3-review-c8291607/review.json",
+      "validation": "178 independent structural tests;36 generating/108 inverse cases; Clippy/fmt/hash/registry passed",
+      "limits": "Weighted numerator sum certifies partition unity, not independent full-evaluator contribution multiplicity; expected scores use returned IDs with catalogue/dedup coverage. Combined sign/numeric08/09/CoolQM/epem/BRST still required."
     },
     "benchmark-preparation": {
       "status": "separate preparation; M-rebuild not claimed"
+    },
+    "input25-36": {
+      "status": "APPROVED cumulative input available for LATER integration; not replayed in this slice",
+      "commit": "c0e9ce68c325f9d597847d68cc4f1c924da29f19",
+      "source25": "5e96b3f00a78c850236609527914dce1154f726c",
+      "source36": "7cf78f1c02088eaed3a951329af650e796494945",
+      "reviewer": "Astra round2",
+      "review_task": "node:delegated-task:command%3Amcp%3Abfeaf58c-8ff5-4388-83d1-9e288c003374%3Adelegate-task%3Ageneration-import-diagnostics-astra-review-20261027-r2",
+      "limits": "Later combined staged DOT caller reconciliation and focused resource/DOT checks required;8 inherited documentation scope mismatches disclosed"
+    },
+    "color46": {
+      "status": "Astra APPROVED standalone cumulative input for LATER integration after source45; not replayed in this slice",
+      "commit": "2a6ee257165cc1cbd2beb923729d09bab21ecdd3",
+      "implementation_commit": "e29f66dd44bf52454dc91cf8ec917946f5ed6f94",
+      "base": "438b61500da4b32841c64211103e5da6fc4c4a72",
+      "bookmark": "generation-color-cycles",
+      "workspace": "/shared/lcnbr/dev/gammaloop/generation-color-cycles",
+      "reviewer": "Astra",
+      "receipt": "/shared/lcnbr/dev/gammaloop/generation-color-cycles/.local/astra-round1-2a6ee257/review.json",
+      "validation": "192 independent color tests including17484 registration permutations, fmt/Typst/inventories/scopes;1191 Idenso and Clippy receipts audited",
+      "limitations": "Inherited cooking same-name/incompatible-tags collision at cook.rs691 reproduced before color algebra (minimal1pass/1fail). Original183pass/11fail/22ignore run remains failing. Seven inherited doc scope drifts unchanged. No full physics/performance/docs claim. Combined staged/color/tensor checks and independent review required after integration; preserve fresh-process registration and metadata/history."
+    },
+    "projector-flow22-24": {
+      "status": "Independent Sol preparation assigned; not integrated or approved here",
+      "workspace": "/shared/lcnbr/dev/gammaloop/generation-projector-flow",
+      "base": "438b61500da4b32841c64211103e5da6fc4c4a72",
+      "scope": "Source22 scalar bubble physical energy-flow orientation;23 qqx_aaa variance;24 projector slot conventions against modern #209 native indices",
+      "gates": "Lane must defer staged API dependencies rather than importing this unreviewed work. Parent replay remains sequential; NEW Astra review required before future integration. Do not duplicate these ports."
     }
   },
   "slice_review": {
@@ -871,5 +908,12 @@
       "scope": "Exact import-only correction, code bytes and retained affected test/fmt/integrity hashes verified; prior independent418 tests had no semantic findings",
       "task_id": null
     }
+  },
+  "prerequisite_review": {
+    "reviewer": "Astra",
+    "verdict": "APPROVED",
+    "commit": "438b61500da4b32841c64211103e5da6fc4c4a72",
+    "checks": "Independent572 combined +2 exporter tests, fmt/kernel/Typst/manifests/refs passed",
+    "limitation": "Seven inherited registry digests remain stale; carried explicitly for source31/final reconciliation."
   }
 }

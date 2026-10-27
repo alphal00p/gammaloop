@@ -26,7 +26,8 @@ use crate::settings::RuntimeSettings;
 use crate::utils::{ArbPrec, F, FloatLike};
 use crate::uv::UltravioletGraph;
 use clap::ValueEnum;
-use color_eyre::{Result, eyre::Context};
+use color_eyre::Result;
+use color_eyre::eyre::Context;
 use colored::Colorize;
 use eyre::eyre;
 use itertools::Itertools;
@@ -35,7 +36,7 @@ use linnet::half_edge::involution::{EdgeIndex, HedgePair, SignOrZero};
 use linnet::half_edge::subgraph::subset::SubSet;
 use linnet::half_edge::subgraph::{Inclusion, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps};
 use rand::Rng;
-use rayon::prelude::*;
+use rayon::prelude::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
@@ -44,13 +45,12 @@ use symbolica::domains::atom::AtomField;
 use symbolica::numerical_integration::MonteCarloRng;
 use symbolica::poly::series::Series;
 use symbolica::symbol;
-use tabled::{
-    Table, Tabled,
-    builder::Builder,
-    settings::{Modify, Span, Style},
-};
+use tabled::builder::Builder;
+use tabled::settings::{Modify, Span, Style};
+use tabled::{Table, Tabled};
 use tracing::{debug, info_span, instrument};
-use tracing_indicatif::{span_ext::IndicatifSpanExt, style::ProgressStyle};
+use tracing_indicatif::span_ext::IndicatifSpanExt;
+use tracing_indicatif::style::ProgressStyle;
 use typed_index_collections::TiVec;
 
 type LoopMomentumSample = TiVec<LoopIndex, ThreeMomentum<F<f64>>>;
@@ -366,12 +366,11 @@ mod tests {
 
     use itertools::Itertools;
     use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
-    use linnet::half_edge::subgraph::{
-        Inclusion, ModifySubSet, SuBitGraph, SubSetLike, subset::SubSet,
-    };
+    use linnet::half_edge::subgraph::subset::SubSet;
+    use linnet::half_edge::subgraph::{Inclusion, ModifySubSet, SuBitGraph, SubSetLike};
     use typed_index_collections::TiVec;
 
-    use crate::finalized_runtime_dot;
+    use crate::dot;
 
     use crate::graph::{FeynmanGraph, Graph, LMBext, LmbIndex, LoopMomentumBasis};
     use crate::initialisation::test_initialise;
@@ -435,15 +434,14 @@ mod tests {
         THETA_GRAPH
             .get_or_init(|| {
                 test_initialise().unwrap();
-                let mut graph: Graph =
-                    finalized_runtime_dot!(digraph theta_profile { graph [projector=1]
-                        edge [num=1 mass=0]
-                        node [num=1]
-                        A -> B [id=0 source="{ufo_order:0}" sink="{ufo_order:0}" lmb_id=0]
-                        A -> B [id=1 source="{ufo_order:1}" sink="{ufo_order:1}" lmb_id=1]
-                        A -> B [id=2 source="{ufo_order:2}" sink="{ufo_order:2}"]
-                    })
-                    .unwrap();
+                let mut graph: Graph = dot!(digraph theta_profile { graph [projector=1]
+                    edge [num=1 mass=0]
+                    node [num=1]
+                    A -> B [particle=H id=0 lmb_id=0]
+                    A -> B [particle=H id=1 lmb_id=1]
+                    A -> B [particle=H id=2]
+                })
+                .unwrap();
                 let lmbs = graph.generate_loop_momentum_bases();
                 graph.loop_momentum_basis = lmbs[LmbIndex::from(0)].clone();
                 (graph, lmbs)
@@ -476,10 +474,10 @@ mod tests {
     #[test]
     fn cycle_union_uses_lmb_signatures_for_a_self_loop() {
         let _ = theta_graph();
-        let graph: Graph = finalized_runtime_dot!(digraph tadpole_profile { graph [projector=1]
+        let graph: Graph = dot!(digraph tadpole_profile { graph [projector=1]
             edge [num=1 mass=0]
             node [num=1]
-            A -> A [id=0 source="{ufo_order:0}" sink="{ufo_order:1}" lmb_id=0]
+            A -> A [particle=H id=0 lmb_id=0]
         })
         .unwrap();
         assert_eq!(graph.loop_momentum_basis.loop_edges.len(), 1);
@@ -493,15 +491,14 @@ mod tests {
     #[test]
     fn only_divergent_targets_stay_inside_the_production_uv_domain() {
         let _ = theta_graph();
-        let mut graph: Graph =
-            finalized_runtime_dot!(digraph theta_profile_domain { graph [projector=1]
-                edge [num=1 mass=0]
-                node [num=1]
-                A -> B [id=0 source="{ufo_order:0}" sink="{ufo_order:0}" lmb_id=0]
-                A -> B [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
-                A -> B [id=2 is_dummy=true source="{ufo_order:2}" sink="{ufo_order:2}"]
-            })
-            .unwrap();
+        let mut graph: Graph = dot!(digraph theta_profile_domain { graph [projector=1]
+            edge [num=1 mass=0]
+            node [num=1]
+            A -> B [particle=H id=0 lmb_id=0]
+            A -> B [particle=H id=1]
+            A -> B [particle=H id=2 is_dummy=true]
+        })
+        .unwrap();
         let lmbs = graph.generate_loop_momentum_bases();
         graph.loop_momentum_basis = lmbs[LmbIndex::from(0)].clone();
         let selected = UVLimitSelection::OnlyDivergent
@@ -1586,7 +1583,7 @@ mod tests {
     #[test]
     fn nested_soft_fixed_e3_is_a_direct_candidate_coordinate() {
         test_initialise().unwrap();
-        let graph: Graph = Graph::import_dot(
+        let graph: Graph = Graph::from_dot(
             include_str!(
                 "../../../../tests/resources/graphs/local_nested_soft_top_self_energy.dot"
             ),
@@ -1627,7 +1624,7 @@ mod tests {
     #[test]
     fn candidate_lmb_affine_shift_is_applied_after_precision_cast() {
         test_initialise().unwrap();
-        let graph: Graph = Graph::import_dot(
+        let graph: Graph = Graph::from_dot(
             include_str!(
                 "../../../../tests/resources/graphs/local_nested_soft_top_self_energy.dot"
             ),

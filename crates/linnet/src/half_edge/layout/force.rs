@@ -1,18 +1,17 @@
 use cgmath::{EuclideanSpace, InnerSpace, Point2, Point3, Vector2, Vector3, Zero};
 
-use crate::half_edge::{
-    involution::{EdgeIndex, EdgeVec, Flow, Hedge, HedgeVec},
-    layout::spring::{
-        apply_edge_shift_with_groups, apply_route_point_shift, apply_vertex_shift_with_groups,
-        directional_force_shift, Constraint, HasPointConstraint, LayoutPointIndex, LayoutState,
-        PointConstraint, SpringChargeEnergy,
-    },
-    nodestore::NodeStorageOps,
-    subgraph::SubSetLike,
-    swap::Swap,
-    NodeIndex, NodeVec,
+use crate::half_edge::involution::{EdgeIndex, EdgeVec, Flow, Hedge, HedgeVec};
+use crate::half_edge::layout::spring::{
+    apply_edge_shift_with_groups, apply_route_point_shift, apply_vertex_shift_with_groups,
+    directional_force_shift, Constraint, HasPointConstraint, LayoutPointIndex, LayoutState,
+    PointConstraint, SpringChargeEnergy,
 };
-use rand::{rngs::SmallRng, Rng, SeedableRng};
+use crate::half_edge::nodestore::Topology;
+use crate::half_edge::subgraph::SubSetLike;
+use crate::half_edge::swap::Swap;
+use crate::half_edge::{NodeIndex, NodeVec};
+use rand::rngs::SmallRng;
+use rand::{Rng, SeedableRng};
 #[derive(Debug, Clone, Copy)]
 pub struct ForceLayoutConfig {
     pub steps: usize,
@@ -53,7 +52,7 @@ pub fn force_directed_layout<'a, E, V, H, N>(
 ) where
     E: HasPointConstraint,
     V: HasPointConstraint,
-    N: NodeStorageOps<NodeData = V> + Clone,
+    N: Topology + Clone,
 {
     let mut session = ForceLayoutSession::new(state.clone(), *energy, cfg);
     session.run_to_end();
@@ -68,7 +67,7 @@ pub struct ForceLayoutSession<'a, E, V, H, N>
 where
     E: HasPointConstraint,
     V: HasPointConstraint,
-    N: NodeStorageOps<NodeData = V> + Clone,
+    N: Topology + Clone,
 {
     state: LayoutState<'a, E, V, H, N>,
     energy: SpringChargeEnergy,
@@ -102,7 +101,7 @@ impl<'a, E, V, H, N> ForceLayoutSession<'a, E, V, H, N>
 where
     E: HasPointConstraint,
     V: HasPointConstraint,
-    N: NodeStorageOps<NodeData = V> + Clone,
+    N: Topology + Clone,
 {
     pub fn new(
         mut state: LayoutState<'a, E, V, H, N>,
@@ -362,7 +361,7 @@ impl ForceWorkSet {
     where
         E: HasPointConstraint,
         V: HasPointConstraint,
-        N: NodeStorageOps<NodeData = V> + Clone,
+        N: Topology + Clone,
     {
         let n = state.vertex_points.len().0;
         let m = state.edge_points.len().0;
@@ -501,7 +500,7 @@ fn apply_initial_jitter<'a, E, V, H, N>(
 ) where
     E: HasPointConstraint,
     V: HasPointConstraint,
-    N: NodeStorageOps<NodeData = V> + Clone,
+    N: Topology + Clone,
 {
     for &idx in &workset.movable_nodes {
         let shift = Vector2::new(
@@ -550,7 +549,7 @@ impl ForceBuffers {
     where
         E: HasPointConstraint,
         V: HasPointConstraint,
-        N: NodeStorageOps<NodeData = V> + Clone,
+        N: Topology + Clone,
     {
         let nodes = state.vertex_points.len().0;
         let edges = state.edge_points.len().0;
@@ -587,7 +586,7 @@ impl ForceBuffers {
     ) where
         E: HasPointConstraint,
         V: HasPointConstraint,
-        N: NodeStorageOps<NodeData = V> + Clone,
+        N: Topology + Clone,
     {
         let (node_z, edge_z, route_z) = depths;
         for &node in &workset.active_nodes {
@@ -986,17 +985,13 @@ fn init_edge_z(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::half_edge::{
-        builder::HedgeGraphBuilder,
-        involution::{Flow, HedgePair},
-        layout::{
-            simulatedanneale::Energy,
-            spring::{ParamTuning, ShiftDirection},
-        },
-        nodestore::DefaultNodeStore,
-        subgraph::{ModifySubSet, SuBitGraph},
-        HedgeGraph, NoData,
-    };
+    use crate::half_edge::builder::HedgeGraphBuilder;
+    use crate::half_edge::involution::{Flow, HedgePair};
+    use crate::half_edge::layout::simulatedanneale::Energy;
+    use crate::half_edge::layout::spring::{ParamTuning, ShiftDirection};
+    use crate::half_edge::layout::test::PendingIdentification;
+    use crate::half_edge::subgraph::{ModifySubSet, SuBitGraph};
+    use crate::half_edge::HedgeGraph;
 
     type LayoutForces = (
         NodeVec<Vector3<f64>>,
@@ -1016,7 +1011,7 @@ mod tests {
     where
         E: HasPointConstraint,
         V: HasPointConstraint,
-        N: NodeStorageOps<NodeData = V> + Clone,
+        N: Topology + Clone,
     {
         let mut buffers = ForceBuffers::new(state);
         buffers.compute(state, energy, (node_z, edge_z, route_z), scale, workset);
@@ -1028,7 +1023,7 @@ mod tests {
         let mut builder = HedgeGraphBuilder::<PointConstraint, PointConstraint>::new();
         let node = builder.add_node(PointConstraint::default());
         builder.add_external_edge(node, PointConstraint::default(), false, Flow::Source);
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let mut state = graph.new_layout_state(
             vec![Point2::new(-1.0, 0.0)].into(),
             vec![Point2::new(2.0, 0.0)].into(),
@@ -1096,7 +1091,7 @@ mod tests {
         builder.add_edge(a, a, PointConstraint::default(), false);
         builder.add_external_edge(a, PointConstraint::default(), false, Flow::Sink);
         builder.add_external_edge(b, PointConstraint::default(), false, Flow::Source);
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let mut state = graph.new_layout_state(
             vec![Point2::new(-2.0, 0.5), Point2::new(3.0, -0.4)].into(),
             vec![
@@ -1226,7 +1221,7 @@ mod tests {
         let mut builder = HedgeGraphBuilder::<PointConstraint, PointConstraint>::new();
         let node = builder.add_node(PointConstraint::default());
         builder.add_external_edge(node, PointConstraint::default(), false, Flow::Source);
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let mut state = graph.new_layout_state(
             vec![Point2::origin()].into(),
             vec![Point2::new(6.0, 0.0)].into(),
@@ -1286,7 +1281,7 @@ mod tests {
         let a = builder.add_node(PointConstraint::default());
         let b = builder.add_node(PointConstraint::default());
         builder.add_edge(a, b, rail, false);
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let mut state = graph.new_layout_state(
             vec![Point2::new(-2.0, 0.0), Point2::new(2.0, 0.0)].into(),
             vec![Point2::new(0.0, 0.3)].into(),
@@ -1362,7 +1357,7 @@ mod tests {
         let b = builder.add_node(fixed);
         builder.add_external_edge(a, rail, false, Flow::Source);
         builder.add_external_edge(b, rail, false, Flow::Source);
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let mut state = graph.new_layout_state(
             vec![Point2::new(-1.0, -2.0), Point2::new(-1.0, 2.0)].into(),
             vec![Point2::new(1.0, 2.0), Point2::new(1.0, -2.0)].into(),
@@ -1457,7 +1452,7 @@ mod tests {
         for _ in 0..3 {
             builder.add_external_edge(b, PointConstraint::default(), false, Flow::Source);
         }
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let original = graph.new_layout_state(
             vec![Point2::new(-1.0, -2.0), Point2::new(3.0, 2.0)].into(),
             vec![
@@ -1612,7 +1607,7 @@ mod tests {
                 Flow::Source,
             );
         }
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let state = graph.new_layout_state(
             vec![
                 Point2::new(0.0, 0.0),
@@ -1708,7 +1703,7 @@ mod tests {
                     false,
                     last_flow,
                 );
-                let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+                let graph: HedgeGraph<_, _> = builder.build();
                 let state = graph.new_layout_state(
                     (0..=length)
                         .map(|i| Point2::new(i as f64, 0.0))
@@ -1795,7 +1790,7 @@ mod tests {
         for _ in 0..3 {
             builder.add_external_edge(b, free, false, Flow::Source);
         }
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let state = graph.new_layout_state(
             vec![Point2::new(-1.0, -2.0), Point2::new(3.0, 2.0)].into(),
             vec![
@@ -1873,7 +1868,7 @@ mod tests {
             let b = builder.add_node(PointConstraint::default());
             builder.add_external_edge(a, PointConstraint::default(), false, flow);
             builder.add_external_edge(b, PointConstraint::default(), false, flow);
-            let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+            let graph: HedgeGraph<_, _> = builder.build();
             let energy = SpringChargeEnergy {
                 k_spring: 0.0,
                 external_pull: 5.0,
@@ -2012,7 +2007,7 @@ mod tests {
         builder.add_edge(a, b, PointConstraint::default(), false);
         builder.add_external_edge(a, PointConstraint::default(), false, Flow::Sink);
         builder.add_external_edge(b, PointConstraint::default(), false, Flow::Source);
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let state = graph.new_layout_state(
             vec![Point2::new(-1.0, -0.5), Point2::new(1.0, 0.5)].into(),
             vec![
@@ -2138,7 +2133,7 @@ mod tests {
         let b = builder.add_node(PointConstraint::default());
         builder.add_external_edge(a, PointConstraint::default(), false, Flow::Source);
         builder.add_external_edge(b, PointConstraint::default(), false, Flow::Sink);
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let energy = SpringChargeEnergy {
             k_spring: 0.0,
             ..SpringChargeEnergy::from_graph(
@@ -2215,7 +2210,7 @@ mod tests {
         let a = builder.add_node(PointConstraint::default());
         let b = builder.add_node(PointConstraint::default());
         builder.add_edge(a, b, PointConstraint::default(), false);
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let HedgePair::Paired { source, sink } = graph.iter_edges().next().unwrap().0 else {
             panic!("expected paired edge");
         };
@@ -2297,7 +2292,7 @@ mod tests {
         let node = builder.add_node(fixed);
         builder.add_external_edge(node, fixed, false, Flow::Sink);
         builder.add_external_edge(node, PointConstraint::default(), false, Flow::Source);
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let mut state = graph.new_layout_state(
             vec![Point2::new(20.0, 30.0)].into(),
             vec![Point2::new(25.0, 35.0), Point2::new(15.0, 32.0)].into(),
@@ -2349,7 +2344,7 @@ mod tests {
         builder.add_edge(a, b, PointConstraint::default(), false);
         builder.add_external_edge(a, PointConstraint::default(), false, Flow::Source);
         builder.add_external_edge(b, PointConstraint::default(), false, Flow::Sink);
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let mut state = graph.new_layout_state(
             vec![Point2::origin(), Point2::new(3.0, 4.0)].into(),
             vec![
@@ -2465,7 +2460,7 @@ mod tests {
         builder.add_edge(a, b, PointConstraint::default(), false);
         builder.add_external_edge(a, PointConstraint::default(), false, Flow::Source);
         builder.add_external_edge(b, PointConstraint::default(), false, Flow::Sink);
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let mut state = graph.new_layout_state(
             vec![Point2::origin(), Point2::new(3.0, 4.0)].into(),
             vec![
@@ -2535,7 +2530,7 @@ mod tests {
             let node = builder.add_node(fixed);
             builder.add_external_edge(node, fixed, false, Flow::Source);
         }
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let mut state = graph.new_layout_state(
             vec![Point2::origin(); 3].into(),
             vec![Point2::origin(); 3].into(),
@@ -2616,7 +2611,7 @@ mod tests {
             let node = builder.add_node(fixed);
             builder.add_external_edge(node, fixed, false, Flow::Source);
         }
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let energy = SpringChargeEnergy {
             spring_length: 1.0,
             k_spring: 0.0,
@@ -2671,7 +2666,7 @@ mod tests {
         let mut builder = HedgeGraphBuilder::<PointConstraint, PointConstraint>::new();
         let node = builder.add_node(PointConstraint::default());
         builder.add_external_edge(node, PointConstraint::default(), false, Flow::Source);
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let mut state = graph.new_layout_state(
             vec![Point2::origin()].into(),
             vec![Point2::new(3.0, 0.0)].into(),
@@ -2768,7 +2763,7 @@ mod tests {
     fn depth_schedule_uses_total_budget_without_early_stop_or_cooling_restart() {
         let mut builder = HedgeGraphBuilder::<PointConstraint, PointConstraint>::new();
         let node = builder.add_node(PointConstraint::default());
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let energy = SpringChargeEnergy {
             spring_length: 1.0,
             k_spring: 0.0,
@@ -2880,7 +2875,7 @@ mod tests {
             false,
             Flow::Source,
         );
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let energy = SpringChargeEnergy::from_graph(
             1,
             1.0,
@@ -2972,7 +2967,7 @@ mod tests {
         let a = builder.add_node(grouped_node);
         let b = builder.add_node(fixed);
         builder.add_edge(a, b, grouped_edge, false);
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
 
         assert!(can_shift_directly(&grouped_node, reference));
         assert!(!can_shift_directly(
@@ -3050,5 +3045,56 @@ mod tests {
         assert_eq!(state.edge_points[EdgeIndex(0)].y, 2.0);
         assert_eq!(state.vertex_depths, vec![Some(3.0), Some(-3.0)].into());
         assert_ne!(state.edge_depths[EdgeIndex(0)], Some(5.0));
+    }
+
+    /// Nodes absorbed by pending identifications are no layout points: the
+    /// live nodes move as in the compacted copy, the absorbed point stays.
+    #[test]
+    fn force_layout_skips_nodes_absorbed_by_pending_identifications() {
+        let fixture = PendingIdentification::new();
+        let energy = SpringChargeEnergy::from_graph(
+            fixture.graph.n_live(),
+            4.0,
+            4.0,
+            ParamTuning {
+                gamma_dangling_centroid: 1.0,
+                external_pull: 0.5,
+                ..ParamTuning::default()
+            },
+        );
+        let cfg = ForceLayoutConfig {
+            steps: 15,
+            epochs: 2,
+            step: 0.05,
+            cool: 0.9,
+            max_delta: 0.2,
+            early_tol: 0.0,
+            seed: 3,
+            depth_scale: 1.0,
+            flattening_end: 0.5,
+            initial_repulsion: 0.5,
+            repulsion_growth: 0.7,
+        };
+        let [pending, compacted] = fixture.states().map(|mut state| {
+            force_directed_layout(&mut state, &energy, cfg);
+            state
+        });
+        let [initial, _] = fixture.states();
+        let absorbed = fixture.absorbed;
+        assert_eq!(
+            pending.vertex_points[absorbed],
+            initial.vertex_points[absorbed]
+        );
+        assert_ne!(pending.vertex_points, initial.vertex_points);
+        assert_eq!(
+            fixture.compact(&pending.vertex_points),
+            compacted.vertex_points
+        );
+        assert_eq!(pending.vertex_depths[absorbed], None);
+        assert_eq!(
+            fixture.compact(&pending.vertex_depths),
+            compacted.vertex_depths
+        );
+        assert_eq!(pending.edge_points, compacted.edge_points);
     }
 }

@@ -8,13 +8,12 @@ use super::{
     ThresholdMultiplierEvaluator, ThresholdMultiplierInput, ThresholdMultiplierInputValues,
     ThresholdMultiplierLayout, ThresholdMultiplierPoint,
 };
-use crate::{
-    graph::{Graph, threshold_counterterms::ThresholdCountertermSpec},
-    initialisation::test_initialise,
-    integrands::evaluation::EvaluationMetaData,
-    processes::EvaluatorSettings,
-    utils::{ArbPrec, F, FloatLike, load_generic_model},
-};
+use crate::graph::Graph;
+use crate::graph::threshold_counterterms::ThresholdCountertermSpec;
+use crate::initialisation::test_initialise;
+use crate::integrands::evaluation::EvaluationMetaData;
+use crate::processes::EvaluatorSettings;
+use crate::utils::{ArbPrec, F, FloatLike, load_generic_model};
 
 fn evaluate_multipliers<T: FloatLike>(
     layout: &ThresholdMultiplierLayout,
@@ -136,7 +135,7 @@ fn evaluate_multipliers<T: FloatLike>(
 #[test]
 fn gl638_compact_function_map_matches_expanded_multipliers() {
     test_initialise().unwrap();
-    let graph: Graph = crate::graph::Graph::import_dot(
+    let graph: Graph = crate::graph::Graph::from_dot(
         include_str!("../../../../../../tests/resources/graphs/GL638.dot"),
         &load_generic_model("sm"),
     )

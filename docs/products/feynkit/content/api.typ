@@ -40,7 +40,8 @@ revision of this manual, so pin matching dependencies when reproducing a calcula
 
 The #link("reference/python/feynkit-community/")[generated Python reference] covers native
 classes, properties, signatures, examples, and error types. The primary owners are `Model`,
-`Process`, `SnailFilterOptions`, `NumeratorGrouping`, `FeynmanDiagram`, `Amplitude`, `SquaredAmplitude`, `AmplitudeLeg`, `Subgraph`, `TensorReducer`,
+`Process`, `Request`, `DiagramSet`, `BuiltDiagramSet`, `TopologyRules`, `NumeratorOptions`, `Grouping`,
+`FeynmanDiagram`, `Amplitude`, `SquaredAmplitude`, `AmplitudeLeg`, `Subgraph`, `TensorReducer`,
 `CffRepresentation`, `LtdRepresentation`, `Kinematics`, `IntegralFamily`, `JetDefinition`,
 and the optional `UfoLoader`. Expressions cross the boundary as Symbolica values.
 
@@ -71,7 +72,12 @@ from symbolica.community import hepkit as hep
 
 diagram = (
     hep.Model.phi3().process(["phi"], ["phi", "phi"])
-    .generate_diagrams(loops=1, max_vertices=3, maximum_bridges=0, progress=None)
+    .amplitude(
+        loops=hep.Loops.total(1),
+        topology=hep.TopologyRules(max_vertices=3, bridges=hep.Bridges.at_most(0)),
+    )
+    .generate()
+    .build()
     .diagrams[0]
 )
 cff = diagram.integrate_energy(method="cff")

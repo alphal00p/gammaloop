@@ -118,7 +118,18 @@ def main(directory):
     model = hep.Model.phi3()
     triangle = (
         model.process(["phi"], ["phi", "phi"])
-        .generate_diagrams(loops=1, max_vertices=3, maximum_bridges=0, progress=None)
+        .amplitude(
+            loops=hep.Loops.total(1),
+            topology=hep.TopologyRules(
+                max_vertices=3,
+                bridges=hep.Bridges.at_most(0),
+                self_energies=hep.Veto.all(),
+                tadpoles=hep.Veto.all(),
+                snails=hep.Veto.massless(),
+            ),
+        )
+        .generate()
+        .build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
         .diagrams[0]
     )
     ltd, data = check(triangle, "triangle", directory)
@@ -176,30 +187,46 @@ def main(directory):
 
     tree = (
         model.process(["phi", "phi"], ["phi", "phi"])
-        .generate_diagrams(loops=0, progress=None)
+        .amplitude(
+            loops=hep.Loops.total(0),
+            topology=hep.TopologyRules(
+                bridges=hep.Bridges.one_pi_in_loops(),
+                self_energies=hep.Veto.all(),
+                tadpoles=hep.Veto.all(),
+                snails=hep.Veto.massless(),
+            ),
+        )
+        .generate()
+        .build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
         .diagrams[0]
     )
     check(tree, "tree", directory)
     contact = (
         model.process(["phi"], ["phi", "phi"])
-        .generate_diagrams(loops=0, progress=None)
+        .amplitude(
+            loops=hep.Loops.total(0),
+            topology=hep.TopologyRules(
+                bridges=hep.Bridges.one_pi_in_loops(),
+                self_energies=hep.Veto.all(),
+                tadpoles=hep.Veto.all(),
+                snails=hep.Veto.massless(),
+            ),
+        )
+        .generate()
+        .build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
         .diagrams[0]
     )
     check(contact, "contact", directory)
     tadpole = (
         model.process(["phi"], [])
-        .generate_diagrams(
-            loops=1,
-            max_vertices=1,
-            allow_self_loops=True,
-            allow_zero_flow_edges=True,
-            tadpoles=None,
-            zero_snails=None,
-            self_energy=None,
-            factorized_loop_topologies_count_range=None,
-            maximum_bridges=None,
-            progress=None,
+        .amplitude(
+            loops=hep.Loops.total(1),
+            topology=hep.TopologyRules(
+                max_vertices=1, self_loops=True, zero_flow_edges=True
+            ),
         )
+        .generate()
+        .build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
         .diagrams[0]
     )
     check(tadpole, "tadpole", directory)
@@ -207,12 +234,21 @@ def main(directory):
     scalar = hep.Model(Path(__file__).parent / "fixtures/scalars_2p_3p.json")
     raised = next(
         d
-        for d in scalar.process(
-            ["scalar_0"], ["scalar_0"], vertex_allow=["V_2_SCALAR_00", "V_3_SCALAR_000"]
+        for d in scalar.process(["scalar_0"], ["scalar_0"])
+        .amplitude(
+            loops=hep.Loops.total(1),
+            restrict=hep.Restrict().only_vertices(["V_2_SCALAR_00", "V_3_SCALAR_000"]),
+            topology=hep.TopologyRules(
+                max_vertices=3,
+                self_loops=False,
+                bridges=hep.Bridges.one_pi_in_loops(),
+                self_energies=hep.Veto.all(),
+                tadpoles=hep.Veto.all(),
+                snails=hep.Veto.massless(),
+            ),
         )
-        .generate_diagrams(
-            loops=1, max_vertices=3, allow_self_loops=False, progress=None
-        )
+        .generate()
+        .build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
         .diagrams
         if len(d.internal_edges) == 3
     )

@@ -16,7 +16,7 @@ use crate::drawing::{element_drawing, DrawingKind};
 use crate::graph::{
     EdgeRecord, GraphState, HalfEdgeRecord, NodeRecord, PyEdge, PyGraph, PyHalfEdge, PyNode,
 };
-use crate::native_graph::{PyHedgeGraph, PyNodeStore};
+use crate::native_graph::PyHedgeGraph;
 use crate::topology::PySubgraph;
 use crate::typst::{
     evaluate_selector, render_config_transport, PyRenderSettings, RenderSettingsTransport,
@@ -107,7 +107,7 @@ fn apply_selectors(
             .ok_or_else(|| PyReferenceError::new_err("graph has been cleared"))?;
         (
             state.revision,
-            state.graph.n_nodes(),
+            state.graph.n_live(),
             state.graph.n_edges(),
             state.graph.n_hedges(),
             (0..state.graph.n_hedges())
@@ -416,12 +416,13 @@ pub(crate) fn scene_selectors(
     let graph = Py::new(
         py,
         PyGraph::from_state(GraphState {
-            graph: PyHedgeGraph::build(builder, PyNodeStore::Vec),
+            graph: builder.build(),
             name: spec.name.clone(),
             global_data: PyGlobalData::default(),
             codec: None,
             render_config: Py::new(py, settings.clone())?.into_any(),
             revision: 0,
+            element_epoch: 0,
         }),
     )?;
     request(py, &graph, None, true).map(|(_, transport)| transport)

@@ -5,19 +5,14 @@
 //! crown is selected, allowing dummy half-edges to be absent. An excluded region
 //! removes its edges and all vertices incident to that region.
 
-use linnet::half_edge::{
-    HedgeGraph, NodeIndex,
-    involution::{EdgeIndex, HedgePair},
-    subgraph::{ModifySubSet, SubGraphLike, SubSetLike, SubSetOps, subset::SubSet},
-};
-use spenso::structure::{
-    dimension::Dimension,
-    representation::{Minkowski, RepName},
-};
-use symbolica::{
-    atom::{Atom, AtomCore, AtomView, Symbol},
-    function, symbol,
-};
+use linnet::half_edge::involution::{EdgeIndex, HedgePair};
+use linnet::half_edge::subgraph::subset::SubSet;
+use linnet::half_edge::subgraph::{ModifySubSet, SubGraphLike, SubSetLike, SubSetOps};
+use linnet::half_edge::{HedgeGraph, NodeIndex};
+use spenso::structure::dimension::Dimension;
+use spenso::structure::representation::{Minkowski, RepName};
+use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
+use symbolica::{function, symbol};
 
 /// Evaluate bookkeeping heads without distributing the scalar payload.
 pub fn evaluate_overall_factor(factor: AtomView<'_>) -> Atom {
@@ -123,7 +118,7 @@ impl<E, V, H> GraphExpressions<E, V> for HedgeGraph<E, V, H> {
         mut product: impl FnMut(N, N) -> Result<N, Error>,
     ) -> Result<N, Error> {
         let mut numerator = unit;
-        let mut seen: SubSet<NodeIndex> = SubSet::empty(self.n_nodes());
+        let mut seen: SubSet<NodeIndex> = SubSet::empty(self.node_bound());
         for (node, _, _) in self.iter_nodes_of(without) {
             seen.add(node);
         }
@@ -311,12 +306,12 @@ mod tests {
     fn evaluates_factor_annotations_without_erasing_unknown_heads() {
         for namespace in ["gammalooprs", "feynkit_generator_factor"] {
             let factor = Atom::parse(
-                "InternalFermionLoopSign(-1)*CouplingsMultiplicity(2)/AutG(4) + NumeratorDependentGrouping(7,2,3) + unknown(5)",
+                "InternalFermionLoopSign(-1)*CouplingsMultiplicity(2)*NumeratorIndependentSymmetryGrouping(3)/AutG(4) + NumeratorDependentGrouping(7,2,3) + unknown(5)",
                 namespace,
                 symbolica::parser::ParseSettings::default(),
             ).unwrap();
             let expected = Atom::parse(
-                "11/2+unknown(5)",
+                "9/2+unknown(5)",
                 namespace,
                 symbolica::parser::ParseSettings::default(),
             )
@@ -344,11 +339,9 @@ mod tests {
     }
 
     use super::*;
-    use linnet::half_edge::{
-        builder::HedgeGraphBuilder,
-        involution::{Flow, Hedge, Orientation},
-        subgraph::SuBitGraph,
-    };
+    use linnet::half_edge::builder::HedgeGraphBuilder;
+    use linnet::half_edge::involution::{Flow, Hedge, Orientation};
+    use linnet::half_edge::subgraph::SuBitGraph;
 
     fn graph() -> HedgeGraph<(i32, bool), i32> {
         let mut builder = HedgeGraphBuilder::new();

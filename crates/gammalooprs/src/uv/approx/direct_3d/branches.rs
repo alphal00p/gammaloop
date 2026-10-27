@@ -1,40 +1,32 @@
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    ops::Neg,
-    sync::{
-        Arc,
-        atomic::{AtomicUsize, Ordering},
-    },
-};
+use std::collections::{BTreeMap, BTreeSet};
+use std::ops::Neg;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use color_eyre::Result;
 use eyre::{ensure, eyre};
 use idenso::tensor::SymbolicTensor;
 use spenso::shadowing::{ANTISYM, CYCLIC, SYM};
 use spenso::structure::IndexedStructure;
-use symbolica::{
-    atom::{Atom, AtomCore, AtomView, Indeterminate, Symbol, SymbolAttribute, SymbolBuilder},
-    domains::{atom::AtomField, rational::Rational},
-    id::Replacement,
-    poly::series::{Series, SeriesDepth},
-    symbol,
+use symbolica::atom::{
+    Atom, AtomCore, AtomView, Indeterminate, Symbol, SymbolAttribute, SymbolBuilder,
 };
+use symbolica::domains::atom::AtomField;
+use symbolica::domains::rational::Rational;
+use symbolica::id::Replacement;
+use symbolica::poly::series::{Series, SeriesDepth};
+use symbolica::symbol;
 
-use crate::{
-    cff::{
-        expression::{OrientationID, energy_map_replacements_gs},
-        surface::LinearEnergyExpr,
-    },
-    debug_tags,
-    graph::Graph,
-    integrands::process::param_builder::{FnMapEntry, NumeratorDefinition},
-    numerator::symbolica_ext::NumeratorAtomExt,
-    utils::{GS, external_energy_atom_from_index, ose_atom_from_index},
-    uv::{
-        Integrands,
-        approx::{OrientationProjection, local_3d::OrientationIntegrands},
-    },
-};
+use crate::cff::expression::{OrientationID, energy_map_replacements_gs};
+use crate::cff::surface::LinearEnergyExpr;
+use crate::debug_tags;
+use crate::graph::Graph;
+use crate::integrands::process::param_builder::{FnMapEntry, NumeratorDefinition};
+use crate::numerator::symbolica_ext::NumeratorAtomExt;
+use crate::utils::{GS, external_energy_atom_from_index, ose_atom_from_index};
+use crate::uv::Integrands;
+use crate::uv::approx::OrientationProjection;
+use crate::uv::approx::local_3d::OrientationIntegrands;
 
 use super::coefficients::ScalarCoefficients;
 
@@ -1220,20 +1212,18 @@ impl Neg for DirectResidueBranches {
 mod tests {
     use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
     use spenso::structure::representation::{LibraryRep, Minkowski, RepName};
-    use symbolica::{domains::rational::Rational, function, id::Replacement};
+    use symbolica::domains::rational::Rational;
+    use symbolica::function;
+    use symbolica::id::Replacement;
     use typed_index_collections::TiVec;
 
-    use crate::{
-        cff::{
-            CutCFFIndex,
-            expression::{OrientationData, OrientationExpression},
-        },
-        finalized_runtime_dot,
-        graph::Graph,
-        initialisation::test_initialise,
-        settings::global::OrientationPattern,
-        utils::GS,
-    };
+    use crate::cff::CutCFFIndex;
+    use crate::cff::expression::{OrientationData, OrientationExpression};
+    use crate::dot;
+    use crate::graph::Graph;
+    use crate::initialisation::test_initialise;
+    use crate::settings::global::OrientationPattern;
+    use crate::utils::GS;
 
     use super::*;
     use crate::numerator::AppliedFeynmanRule;
@@ -2163,13 +2153,13 @@ mod tests {
     #[test]
     fn prepared_numerator_keeps_full_affine_rows_and_independent_sampling_nodes() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(
+        let graph: Graph = dot!(
             digraph G {
                 projector=1;
                 edge [particle="scalar_1" num=1];
                 node [num=1];
-                a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"];
-                a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"];
+                a -> b [id=0 lmb_id=0];
+                a -> b [id=1];
             },
             "scalars"
         )?;
@@ -2320,15 +2310,15 @@ mod tests {
     #[test]
     fn prepared_numerator_reuses_vector_loop_and_external_mapping_rules() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(digraph G {
+        let graph: Graph = dot!(digraph G {
             projector=1;
             edge [num=1 mass=0]
             node [num=1]
             ext [style=invis]
-            ext -> a:0 [id=0 sink="{ufo_order:0}"]
-            a -> b [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            a -> b [id=2 source="{ufo_order:2}" sink="{ufo_order:1}"]
-            b:1 -> ext [id=3 source="{ufo_order:2}"]
+            ext -> a:0 [particle=H id=0]
+            a -> b [particle=H id=1 lmb_id=0]
+            a -> b [particle=H id=2]
+            b:1 -> ext [particle=H id=3]
         })?;
         let production = vec![OrientationExpression {
             data: OrientationData::new(EdgeVec::from_iter([
@@ -2408,13 +2398,13 @@ mod tests {
     #[test]
     fn one_source_residue_map_is_a_homomorphism_for_all_factorized_factors() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(
+        let graph: Graph = dot!(
             digraph G {
                 projector=1;
                 edge [particle="scalar_1" num=1];
                 node [num=1];
-                a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"];
-                a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"];
+                a -> b [id=0 lmb_id=0];
+                a -> b [id=1];
             },
             "scalars"
         )?;
@@ -2568,7 +2558,7 @@ mod tests {
         )))?;
         // The historical graph records model vertices rather than finalized
         // numerator/port metadata. Import it through that source's owner.
-        let graph = Graph::import_dot(
+        let graph = Graph::from_dot(
             fixture["graph"].as_str().unwrap(),
             &crate::utils::load_generic_model("sm"),
         )?

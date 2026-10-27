@@ -1,0 +1,8 @@
+# Runtime subset tests exercise graph selection and events independently of numerator comparison.
+commands = [
+  "import model sm-default",
+  "set default-runtime kv kinematics.externals='{\"type\":\"constant\",\"data\":{\"momenta\":[[32.0,0.0,0.0,32.0],[32.0,0.0,0.0,-32.0]],\"helicities\":[1,1]}}'",
+  "set default-runtime kv subtraction.disable_threshold_subtraction=true",
+  "generate xs e+ e- > d d~ g | e- a d g QED^2==4 [{{2}} QCD=0] --numerator-grouping no_grouping -p epem_ddxg --clear-existing-processes --only-diagrams --filter-selfenergies true --filter-snails true --filter-tadpoles true --n-cut-blobs 1 1 --n-cut-spectators 0 0",
+  "generate",
+]

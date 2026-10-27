@@ -1,31 +1,31 @@
 use super::*;
-use crate::{
-    cff::{VertexSet, esurface::RaisedEsurfaceGroup},
-    graph::lmb::LMBext,
-    initialisation::test_initialise,
-    momentum::{FourMomentum, RotationMethod, sample::BareMomentumSample},
-    processes::{
-        CrossSectionGraph, ResolvedCutGroupThresholdCounterterms,
-        ResolvedThresholdCountertermVariant, ResolvedThresholdCounterterms,
-        ThresholdCountertermVariantStatus,
-    },
-    subtraction::generate_rstar_t_dependence_evaluator,
+use crate::cff::VertexSet;
+use crate::cff::esurface::RaisedEsurfaceGroup;
+use crate::dot;
+use crate::graph::lmb::LMBext;
+use crate::initialisation::test_initialise;
+use crate::momentum::sample::BareMomentumSample;
+use crate::momentum::{FourMomentum, RotationMethod};
+use crate::processes::{
+    CrossSectionGraph, ResolvedCutGroupThresholdCounterterms, ResolvedThresholdCountertermVariant,
+    ResolvedThresholdCounterterms, ThresholdCountertermVariantStatus,
 };
+use crate::subtraction::generate_rstar_t_dependence_evaluator;
 use symbolica::atom::Atom;
 
 #[test]
 fn shared_group_weights_preserve_foreign_cut_data_and_radial_derivatives() {
     test_initialise().unwrap();
-    let graph: Graph = crate::finalized_runtime_dot!(digraph shared_weights {
+    let graph: Graph = dot!(digraph shared_weights {
             graph [projector=1]
         ext [style=invis]
         edge [num=1 mass=0]
         node [num=1]
-        ext->a:0 [id=0 sink="{ufo_order:0}"]
-        a->b [id=1 source="{ufo_order:1}" sink="{ufo_order:0}" lmb_id=0]
-        b->a [id=2 source="{ufo_order:1}" sink="{ufo_order:2}"]
-        a->b [id=3 source="{ufo_order:3}" sink="{ufo_order:2}" lmb_id=1]
-        ext->b:1 [id=4 sink="{ufo_order:3}"]
+        ext->a:0 [particle=H id=0]
+        a->b [particle=H id=1 lmb_id=0]
+        b->a [particle=H id=2]
+        a->b [particle=H id=3 lmb_id=1]
+        ext->b:1 [particle=H id=4]
     })
     .unwrap();
     let mut alternate = graph.loop_momentum_basis.clone();

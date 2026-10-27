@@ -724,24 +724,24 @@ fn linnet_base_subgraph() {}
 fn linnet_subgraph_like() {}
 
 #[alphal00p_docs::trait_item(
-    id = "NodeStorage",
-    title = "Node-storage interface",
-    summary = "Defines a graph's node data, transformed storage family, neighbor representation, and neighbor iterator.",
+    id = "Topology",
+    title = "Node topology interface",
+    summary = "Partitions half-edges into nodes: crowns, identification of nodes, and compaction, partitions and permutations that report typed renumberings.",
     format = "rust-markdown",
     source = "crates/linnet/src/half_edge/nodestore.rs",
-    source_id = "linnet::half_edge::nodestore::NodeStorage"
+    source_id = "linnet::half_edge::nodestore::Topology"
 )]
-fn linnet_node_storage() {}
+fn linnet_topology() {}
 
 #[alphal00p_docs::trait_item(
-    id = "NodeStorageOps",
-    title = "Mutable node-storage operations",
-    summary = "Adds construction, extraction, node identification, validation, traversal, and data mapping to a node-storage backend.",
+    id = "Checkpoint",
+    title = "Topology checkpoints",
+    summary = "Rolls back or commits node additions, attachments, anchors and identifications made since a checkpoint.",
     format = "rust-markdown",
     source = "crates/linnet/src/half_edge/nodestore.rs",
-    source_id = "linnet::half_edge::nodestore::NodeStorageOps"
+    source_id = "linnet::half_edge::nodestore::Checkpoint"
 )]
-fn linnet_node_storage_ops() {}
+fn linnet_checkpoint() {}
 
 #[alphal00p_docs::trait_item(
     id = "TensorStructure",
@@ -1235,8 +1235,8 @@ pub(super) fn for_component(component: &str) -> Option<Vec<DocItem>> {
             __alphal00p_docs_trait_linnet_inclusion(),
             __alphal00p_docs_trait_linnet_base_subgraph(),
             __alphal00p_docs_trait_linnet_subgraph_like(),
-            __alphal00p_docs_trait_linnet_node_storage(),
-            __alphal00p_docs_trait_linnet_node_storage_ops(),
+            __alphal00p_docs_trait_linnet_topology(),
+            __alphal00p_docs_trait_linnet_checkpoint(),
         ],
         "spenso" => vec![
             __alphal00p_docs_trait_spenso_tensor_structure(),

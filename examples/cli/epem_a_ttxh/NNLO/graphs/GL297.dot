@@ -2,7 +2,7 @@ digraph GL297{
     num = "1";
     overall_factor = "NumeratorDependentGrouping(297,1,(AutG(1))^(-1)*AntiFermionSpinSumSign(-1)*ExternalFermionOrderingSign(-1)*InternalFermionLoopSign(-1))+NumeratorDependentGrouping(300,1,(AutG(1))^(-1)*AntiFermionSpinSumSign(-1)*ExternalFermionOrderingSign(-1)*InternalFermionLoopSign(-1))";
     overall_factor_evaluated = "-2";
-    projector = "u(1,spenso::bis(4,hedge(1)))*ubar(1,spenso::bis(4,hedge(29)))*v(0,spenso::bis(4,hedge(28)))*vbar(0,spenso::bis(4,hedge(0)))";
+    projector = "u(1,spenso::bis(4,hedge(1,1)))*ubar(1,spenso::bis(4,hedge(29,1)))*v(0,spenso::bis(4,hedge(28,1)))*vbar(0,spenso::bis(4,hedge(0,1)))";
     // Explicit threshold metadata covers every cut/threshold association used
     // by the graph. Each counterterm names its one-loop subspace and complete
     // parent LMB, so grouping and center construction are deterministic.

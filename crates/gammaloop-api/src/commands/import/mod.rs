@@ -1,25 +1,17 @@
-use std::{
-    env, fs,
-    path::{Path, PathBuf},
-};
+use std::env;
+use std::path::{Path, PathBuf};
 
 use clap::Subcommand;
-#[cfg(test)]
-use feynkit_graph::FeynmanDiagram;
 use gammalooprs::graph::Graph;
 use model::ImportModel;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-#[cfg(test)]
-use std::sync::Arc;
 use tracing::info;
 
-use crate::{
-    commands::generate::parse_process_spec_string,
-    completion::CompletionArgExt,
-    state::{GraphImportOptions, ProcessRef, State},
-    CLISettings,
-};
+use crate::commands::generate::parse_process_spec_string;
+use crate::completion::CompletionArgExt;
+use crate::state::{GraphImportOptions, ProcessRef, State};
+use crate::CLISettings;
 use color_eyre::Result;
 use eyre::{eyre, Context};
 
@@ -136,44 +128,6 @@ impl Import {
             }
             Import::Model(im) => im.run(state),
         }
-    }
-
-    fn load_graphs(path: &Path, model: &gammalooprs::model::Model) -> Result<Vec<Graph>> {
-        if path.is_dir() {
-            let mut files = fs::read_dir(path)
-                .with_context(|| format!("Could not read graph directory '{}'.", path.display()))?
-                .filter_map(|entry| entry.ok().map(|entry| entry.path()))
-                .filter(|path| path.extension().is_some_and(|extension| extension == "dot"))
-                .collect::<Vec<_>>();
-            files.sort();
-            if files.is_empty() {
-                return Err(eyre!(
-                    "No .dot files found in directory: {}",
-                    path.display()
-                ));
-            }
-            return files
-                .iter()
-                .map(|path| Self::load_graph_file(path, model))
-                .collect::<Result<Vec<_>>>()
-                .map(|sets| sets.into_iter().flatten().collect());
-        }
-        Self::load_graph_file(path, model)
-    }
-
-    fn load_graph_file(path: &Path, model: &gammalooprs::model::Model) -> Result<Vec<Graph>> {
-        let input = fs::read_to_string(path)
-            .with_context(|| format!("Could not read graph file '{}'.", path.display()))?;
-        Self::load_graph_string(&input, model)
-            .with_context(|| format!("Could not import graphs from '{}'.", path.display()))
-    }
-
-    fn load_graph_string(input: &str, model: &gammalooprs::model::Model) -> Result<Vec<Graph>> {
-        let graphs = Graph::import_dot(input, model)?;
-        if graphs.is_empty() {
-            return Err(eyre!("No diagrams found."));
-        }
-        Ok(graphs)
     }
 
     fn resolve_graph_import_path(path: &Path, state_folder: &Path) -> Result<PathBuf> {
@@ -301,15 +255,19 @@ impl GraphImportSource {
 
     fn load(self, model: &gammalooprs::model::Model) -> Result<Vec<Graph>> {
         match self {
-            Self::Path(path) => Import::load_graphs(&path, model),
-            Self::String(dot_string) => Import::load_graph_string(&dot_string, model),
+            Self::Path(path) => Graph::from_dot_path(&path, model),
+            Self::String(dot_string) => Graph::from_dot(&dot_string, model),
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use feynkit_generator::{GenerationOptions, Process};
+    use std::fs;
+    use std::sync::Arc;
+
+    use feynkit_generator::{Cuts, Loops, Naming, NumeratorOptions, Process, Run, TopologyRules};
+    use feynkit_graph::FeynmanDiagram;
 
     use super::*;
 
@@ -319,16 +277,21 @@ mod tests {
             "../../../../../assets/models/json/scalars/scalars_2p_3p.json"
         ))?;
         let generated = Process::new(["scalar_1"], ["scalar_1", "scalar_1"])
-            .generate_cross_section(
-                Arc::new(model.clone()),
-                &GenerationOptions::default()
-                    .with_loop_count(1, 1)?
-                    .threads(1)
-                    .max_vertices(4),
+            .cross_section(Loops::forward(1..=1))
+            .with_cuts(Cuts::new().with_blobs(1..=1).with_spectators(0..=0))
+            .with_topology(
+                TopologyRules::new()
+                    .with_self_loops(false)
+                    .with_max_vertices(4),
+            )
+            .generate(Arc::new(model.clone()), &Run::default().threads(1))?
+            .build(
+                &NumeratorOptions::default().with_naming(Naming::prefix("D")),
+                &Run::default().threads(1),
             )?;
-        assert!(!generated.diagrams.is_empty());
+        assert!(!generated.diagrams().is_empty());
         let dot = generated
-            .diagrams
+            .diagrams()
             .iter()
             .map(FeynmanDiagram::to_dot)
             .collect::<Result<Vec<_>, _>>()?
@@ -337,12 +300,47 @@ mod tests {
         let path = directory.path().join("canonical.dot");
         fs::write(&path, dot)?;
 
-        let imported = Import::load_graph_file(&path, &model)?;
+        let imported = Graph::from_dot_path(&path, &model)?;
 
-        assert_eq!(imported.len(), generated.diagrams.len());
-        assert!(imported
-            .iter()
-            .all(|graph| !graph.finalized_cuts.is_empty()));
+        assert_eq!(imported.len(), generated.diagrams().len());
+        // The canonical cuts are exactly the generated ones.
+        for (graph, diagram) in imported.iter().zip(generated.diagrams()) {
+            assert!(!graph.finalized_cuts.is_empty());
+            assert_eq!(graph.finalized_cuts.len(), diagram.cuts().len());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn imports_every_dot_file_of_a_directory_in_name_order() -> Result<()> {
+        let model = gammalooprs::model::Model::from_json(include_str!(
+            "../../../../../assets/models/json/scalars/scalars_2p_3p.json"
+        ))?;
+        let directory = tempfile::tempdir()?;
+        assert!(Graph::from_dot_path(directory.path(), &model).is_err());
+        let bubble = |name: &str| {
+            format!(
+                r#"digraph {name} {{
+                    ext [style=invis];
+                    ext -> a [particle="scalar_1"];
+                    a -> b [particle="scalar_1"];
+                    a -> b [particle="scalar_1"];
+                    b -> ext [particle="scalar_1"];
+                }}"#
+            )
+        };
+        fs::write(directory.path().join("b.dot"), bubble("second"))?;
+        fs::write(
+            directory.path().join("a.dot"),
+            bubble("first") + bubble("also_first").as_str(),
+        )?;
+        fs::write(directory.path().join("ignored.txt"), bubble("ignored"))?;
+
+        let names = Graph::from_dot_path(directory.path(), &model)?
+            .into_iter()
+            .map(|graph| graph.name)
+            .collect::<Vec<_>>();
+        assert_eq!(names, ["first", "also_first", "second"]);
         Ok(())
     }
 }

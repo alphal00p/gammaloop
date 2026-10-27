@@ -1,22 +1,19 @@
 //! Regressions retained when the generator moved to FeynKit.
-use crate::{
-    initialisation::test_initialise,
-    model::ModelGammaLoopExt,
-    processes::ProcessDefinition,
-    settings::{GlobalSettings, global::Parallelisation},
-    utils::load_generic_model,
-};
+use crate::initialisation::test_initialise;
+use crate::model::ModelGammaLoopExt;
+use crate::processes::ProcessDefinition;
+use crate::settings::GlobalSettings;
+use crate::settings::global::Parallelisation;
+use crate::utils::load_generic_model;
 use feynkit_generator::{
-    GenerationFilter, GenerationOptions, GenerationType, Process as GenerationProcess,
+    Cuts, GenerationType, Loops, Naming, Process as GenerationProcess, Restrict, TopologyRules,
 };
 use symbolica::atom::{Atom, AtomCore};
 
 #[test]
 fn complex_ckm_generation_preserves_named_and_inline_couplings() -> color_eyre::Result<()> {
-    use crate::{
-        model::{InputParamCard, ParameterType},
-        utils::F,
-    };
+    use crate::model::{InputParamCard, ParameterType};
+    use crate::utils::F;
 
     for inline in [false, true] {
         let mut model = load_generic_model("sm");
@@ -57,17 +54,13 @@ fn complex_ckm_generation_preserves_named_and_inline_couplings() -> color_eyre::
         }
         // The unrelated leptonic coupling retains its ordinary imaginary factor.
         assert_ne!(model.get_coupling("GC_40").value.unwrap().im, 0.0);
-        let mut process = ProcessDefinition {
-            generation_type: feynkit_generator::GenerationType::CrossSection,
-            process: GenerationProcess::new([24_i64], [2_i64, -5]),
-            generation_options: GenerationOptions::default()
-                .with_loop_count(1, 1)?
-                .with_graph_filter(GenerationFilter::VertexAllow(vec![
-                    "V_95".into(),
-                    "V_125".into(),
-                ])),
-            ..Default::default()
-        };
+        let mut process = ProcessDefinition::new(
+            GenerationProcess::new([24_i64], [2_i64, -5])
+                .cross_section(Loops::forward(1..=1))
+                .with_topology(TopologyRules::new().with_self_loops(false))
+                .with_restrict(Restrict::new().only_vertices(["V_95", "V_125"])),
+        );
+        process.numerators.naming = Naming::prefix("D");
         let settings = GlobalSettings {
             n_cores: Parallelisation {
                 feyngen: 1,
@@ -78,10 +71,12 @@ fn complex_ckm_generation_preserves_named_and_inline_couplings() -> color_eyre::
         for symmetrize in [false, true] {
             // Acceptance certifies the opt-in contract, not CP validity of
             // this complex coupling point or a physical optimized rate.
-            process.generation_options = process
-                .generation_options
-                .clone()
-                .symmetrize_left_right(symmetrize);
+            process.request = process.request.clone().with_cuts(
+                Cuts::new()
+                    .with_blobs(1..=1)
+                    .with_spectators(0..=0)
+                    .with_symmetrize_left_right(symmetrize),
+            );
             assert_eq!(process.generate(&model, &settings)?.len(), 1);
         }
         let left = model.get_coupling("GC_43").value.unwrap();
@@ -95,10 +90,11 @@ fn complex_ckm_generation_preserves_named_and_inline_couplings() -> color_eyre::
 
 #[test]
 fn complex_ckm_updates_preserve_direct_integrand_warm_up() -> color_eyre::Result<()> {
-    use crate::{
-        integrands::process::ProcessIntegrand, model::InputParamCard, processes::Process,
-        settings::RuntimeSettings, utils::F,
-    };
+    use crate::integrands::process::ProcessIntegrand;
+    use crate::model::InputParamCard;
+    use crate::processes::Process;
+    use crate::settings::RuntimeSettings;
+    use crate::utils::F;
 
     test_initialise()?;
     let pool = rayon::ThreadPoolBuilder::new().num_threads(1).build()?;
@@ -134,18 +130,19 @@ fn complex_ckm_updates_preserve_direct_integrand_warm_up() -> color_eyre::Result
             model.recompute_dependents()?;
         }
 
-        let definition = ProcessDefinition {
-            generation_type: feynkit_generator::GenerationType::CrossSection,
-            process: GenerationProcess::new([24_i64], [2_i64, -5]),
-            generation_options: GenerationOptions::default()
-                .with_loop_count(1, 1)?
-                .symmetrize_left_right(symmetrize)
-                .with_graph_filter(GenerationFilter::VertexAllow(vec![
-                    "V_95".into(),
-                    "V_125".into(),
-                ])),
-            ..Default::default()
-        };
+        let mut definition = ProcessDefinition::new(
+            GenerationProcess::new([24_i64], [2_i64, -5])
+                .cross_section(Loops::forward(1..=1))
+                .with_topology(TopologyRules::new().with_self_loops(false))
+                .with_restrict(Restrict::new().only_vertices(["V_95", "V_125"]))
+                .with_cuts(
+                    Cuts::new()
+                        .with_blobs(1..=1)
+                        .with_spectators(0..=0)
+                        .with_symmetrize_left_right(symmetrize),
+                ),
+        );
+        definition.numerators.naming = Naming::prefix("D");
         let mut settings = GlobalSettings::default();
         settings.n_cores.feyngen = 1;
         settings.generation.evaluator.compile = false;

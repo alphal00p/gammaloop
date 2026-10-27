@@ -122,3 +122,31 @@ test-verbose TEST_NAME:
 test-fixed-frame-algebra *args:
     cargo nextest run -p spenso -p idenso -p spenso-hep-lib -p gammalooprs -p vakint --features spenso/shadowing --lib --test on_shell_projectors --test component_selectors --test tensor_reduction_mode_tests --cargo-profile {{ ci_cargo_profile }} --profile ci_gammaloop --locked --no-fail-fast \
         -E 'test(overlap_numerators::tests) or test(exact_scalar_sum_keys_) or test(compact_factors_) or test(native_projector_markers_remain_lorentz_ports) or test(native_tensor_coefficients_keep_their_connected_lorentz_interface) or test(scalar_laurent_boundary_preserves_powered_opaque_coefficients) or test(tensor_backend_modes_retain_powered_external_coefficients) or test(whole_numerator_and_projected_analytic_backends_have_identical_laurent_coefficients) or test(projected_temporal_and_external_slashes_share_a_native_interface) or test(restored_projector_indices_are_fresh_after_dimension_unification) or test(restored_symbolic_vakint_slots_preserve_the_native_source_interface) or binary(=on_shell_projectors) or binary(=component_selectors) or test(fixed_frame_regressions) or test(fixed_basis_products) or test(fixed_minkowski_basis_products) or test(metric_constructor) or test(sparse_evaluation_preserves_flat_positions) or (package(gammalooprs) and (test(projected_fixed_velocity) or test(exact_os_coefficients_use_fundamental_color_dimension_identities) or test(analytic_os_temporal_dot) or test(analytic_spin_expansion_preserves_powered_scalar_products) or test(analytic_spin_simplification_preserves_shared_color_factor) or test(projected_dirac_algebra_precedes_single_and_double_pole_expansion) or test(projected_dirac_numerator_matches_scalar_master_before_backend_truncation) or test(analytic_uv_spin_algebra_rejects_unsupported_residual_contractions) or test(residual_tensor_contractions_are_checked_per_analytic_branch) or test(scalar_dimensions_are_substituted_inside_functions_but_not_lorentz_slots)))' "$@"
+
+generation_oracle_filter := "binary(generation_oracle) or (package(feynkit-generator) and test(/^generation::/) and not test(/::failing::/)) or (package(linnet) and test(/^half_edge::generate::/)) or (package(feynkit-py) and test(=generation::tests::python_typed_hooks_prune_like_rust_hooks))"
+
+# The fast tier runs each successful generation_oracle case in both class modes, with Named
+# and Minimal output at 1, 8 and 32 threads, plus the search census of the small reference
+# workloads, the generation unit tests
+# of feynkit-generator (without the known `failing::` ones) and of linnet, and the Python filter
+# path. It is a gate, not the package suites, which later phases run as well. Retries are off:
+# a nondeterministic difference between thread counts must fail, not pass as flaky.
+# Run the fast tier of the diagram-generation oracles
+generation-oracle *ARGS:
+    cargo nextest run --cargo-profile dev-optim --retries 0 -p linnet -p feynkit-generator -p feynkit-py -E '{{ generation_oracle_filter }}' {{ ARGS }}
+
+# The heavy tier adds the large profile cases (gg->gg L3, the photon, gluon and Yang-Mills
+# self-energies at five loops, ...) and the search census of the large reference workloads.
+# Limit concurrent test processes when running these large cases. Each process still exercises
+# the full 1, 8 and 32 thread matrix; FEYNKIT_ORACLE_THREADS=32 selects only the 32-thread runs.
+# Full JSON inventories are written on comparison failure, or with FEYNKIT_ORACLE_DUMP=<dir>.
+# The `ci_full` profile bounds each case at two hours instead of the fast lane's four minutes.
+# Run the heavy tier of the diagram-generation oracles
+generation-oracle-heavy *ARGS:
+    cargo nextest run --cargo-profile dev-optim --profile ci_full --retries 0 -p feynkit-generator --run-ignored only -E '{{ generation_oracle_filter }}' {{ ARGS }}
+
+# For example `just generation-ir measure --allocations --label <commit>`, then
+# `just generation-ir compare bin/generation_ir_baseline.json target/generation_ir/summary.json`.
+# Measure diagram-generation instructions per stage under callgrind (bin/generation_ir.py)
+generation-ir *ARGS:
+    python3 bin/generation_ir.py {{ ARGS }}

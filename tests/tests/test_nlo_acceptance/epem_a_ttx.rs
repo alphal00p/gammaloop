@@ -1,21 +1,17 @@
-use std::{collections::BTreeSet, f64::consts::PI};
+use std::collections::BTreeSet;
+use std::f64::consts::PI;
 
-use color_eyre::{Result, eyre::eyre};
-use gammaloop_api::{
-    commands::{
-        Inspect, Integrate, Profile,
-        evaluate_samples::{EvaluateSamplesPrecise, evaluate_samples_precise},
-        integrate::RendererOption,
-        profile::UltraVioletProfile,
-    },
-    state::ProcessRef,
-};
+use color_eyre::Result;
+use color_eyre::eyre::eyre;
+use gammaloop_api::commands::evaluate_samples::{EvaluateSamplesPrecise, evaluate_samples_precise};
+use gammaloop_api::commands::integrate::RendererOption;
+use gammaloop_api::commands::profile::UltraVioletProfile;
+use gammaloop_api::commands::{Inspect, Integrate, Profile};
+use gammaloop_api::state::ProcessRef;
 use gammaloop_integration_tests::{clean_test, get_example_cli, get_tests_workspace_path};
-use gammalooprs::{
-    integrands::evaluation::PreciseEvaluationResultOutput,
-    utils::{ArbPrec, F, FloatLike},
-    uv::settings::{ApproximationType, FinalIntegrandDimension},
-};
+use gammalooprs::integrands::evaluation::PreciseEvaluationResultOutput;
+use gammalooprs::utils::{ArbPrec, F, FloatLike};
+use gammalooprs::uv::settings::{ApproximationType, FinalIntegrandDimension};
 use ndarray::Array2;
 use spenso::algebra::algebraic_traits::IsZero;
 use symbolica::domains::float::Real;
@@ -98,7 +94,7 @@ fn epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_ro
         r#"generate xs e+ e- > t t~ | e+ e- t t~ g ghG ghG~ a QCD^2==0 QED^2==4 [{{1}} QCD=0]
                 --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
                 --symmetrize-left-right-states true
-                -p epem_a_ttx_lo -i LO --only-diagrams"#,
+                -p epem_a_ttx_lo -i LO --only-diagrams --filter-selfenergies true --filter-snails true --filter-tadpoles true --n-cut-blobs 1 1 --n-cut-spectators 0 0"#,
     )?;
     cli.run_command("generate existing -p epem_a_ttx_lo -i LO")?;
 
@@ -112,7 +108,7 @@ fn epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_ro
                 r#"generate xs e+ e- > t t~ | e+ e- t t~ g ghG ghG~ a QCD^2==2 QED^2==4 [{{{{2}}}} QCD=1]
                     --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
                     --symmetrize-left-right-states true
-                    -p {process} -i NLO --only-diagrams"#,
+                    -p {process} -i NLO --only-diagrams --filter-selfenergies true --filter-snails true --filter-tadpoles true --n-cut-blobs 1 1 --n-cut-spectators 0 0"#,
             ))?;
         cli.run_command(&format!("generate existing -p {process} -i NLO"))?;
 
@@ -129,7 +125,7 @@ fn epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_ro
             .collect::<BTreeSet<_>>();
         assert_eq!(
             masters,
-            BTreeSet::from(["GL0".to_string(), "GL1".to_string()]),
+            BTreeSet::from(["GL0".to_string(), "GL2".to_string()]),
             "the {process} acceptance must contain exactly the self-energy and vertex supergraphs",
         );
     }
@@ -191,7 +187,7 @@ fn epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_ro
         r#"generate xs e+ e- > t t~ | e+ e- t t~ g ghG ghG~ a QCD^2==2 QED^2==4 [{{{{2}}}} QCD=1]
             --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
             --symmetrize-left-right-states true
-            -p {EXPLICIT_3D_PROCESS} -i NLO --only-diagrams"#,
+            -p {EXPLICIT_3D_PROCESS} -i NLO --only-diagrams --filter-selfenergies true --filter-snails true --filter-tadpoles true --n-cut-blobs 1 1 --n-cut-spectators 0 0"#,
     ))?;
     cli.run_command(&format!(
         "generate existing -p {EXPLICIT_3D_PROCESS} -i NLO"
@@ -211,7 +207,7 @@ fn epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_ro
             r#"generate xs e+ e- > t t~ | e+ e- t t~ g ghG ghG~ a QCD^2==2 QED^2==4 [{{{{2}}}} QCD=1]
                 --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
                 --symmetrize-left-right-states true
-                -p {process} -i NLO --only-diagrams"#,
+                -p {process} -i NLO --only-diagrams --filter-selfenergies true --filter-snails true --filter-tadpoles true --n-cut-blobs 1 1 --n-cut-spectators 0 0"#,
         ))?;
         cli.run_command(&format!("generate existing -p {process} -i NLO"))?;
 
@@ -228,7 +224,7 @@ fn epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_ro
             .collect::<BTreeSet<_>>();
         assert_eq!(
             masters,
-            BTreeSet::from(["GL0".to_string(), "GL1".to_string()]),
+            BTreeSet::from(["GL0".to_string(), "GL2".to_string()]),
             "the local-only {process} acceptance must contain exactly the self-energy and vertex supergraphs",
         );
     }
@@ -299,7 +295,7 @@ fn epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_ro
                 .iter()
                 .map(|graph| graph.graph_name.clone())
                 .collect::<BTreeSet<_>>(),
-            BTreeSet::from(["GL0".to_string(), "GL1".to_string()]),
+            BTreeSet::from(["GL0".to_string(), "GL2".to_string()]),
             "the {process} default divergent-only profile must cover both NLO supergraphs",
         );
         let profile_signatures = analysis
@@ -395,7 +391,7 @@ fn epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_ro
             17.0, -31.0, 43.0, -29.0, 53.0, 71.0, 17.0, -31.0, 43.0, -29.0, 53.0, 71.0,
         ],
     )?;
-    let graph_names = ["GL0", "GL1"];
+    let graph_names = ["GL0", "GL2"];
     // Retaining one eighth of ArbPrec's requested precision permits substantial
     // expression-dependent loss while still testing the precision-increase path.
     let tolerance = F(ArbPrec::default().epsilon()).sqrt().sqrt().sqrt();

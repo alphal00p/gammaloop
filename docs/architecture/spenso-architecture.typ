@@ -2,7 +2,7 @@
 
 #quote(block: true)[
 #strong[Status:] Current implementation architecture, audited against the Spenso source on
-2026-10-01.
+2026-10-01; changed source scopes reviewed 2026-10-12.
 
 This note covers the `spenso` Rust crate. `spenso-macros`, `spenso-hep-lib`, and `spynso3` are
 separate packages: they provide derives, concrete physics tensors, and a Python adapter rather
@@ -53,6 +53,11 @@ ordered slot vector, `NamedStructure` adds a global name and arguments, and
 canonical order alongside its immutable `CanonicalLayout`; `reindex_storage` instead returns
 `Reindexed`, with a checked pending index permutation to apply to the payload. `HasStructure`
 keeps metadata separate from that payload.
+
+For partial interfaces, `slots()` requires every axis to have an explicit index;
+`representations()` requires every axis to remain unresolved. Mixed or unsuitable
+interfaces return `ExpectedExplicitSlot` or `ExpectedRepresentation` at the first
+offending axis, rather than silently dropping the other axes.
 
 `IndexedStructure` names
 `Canonicalized<OrderedStructure<LibraryRep, AbstractIndex>>`. Its
@@ -170,7 +175,10 @@ Separately, `FastTensorSum`, `FastTensorSumContractible`, balanced scalar/tensor
 contraction profiles, and pair estimates provide optional optimized paths inside the same
 network semantics. Unsupported shapes or unprofitable cases use the ordinary sum and
 contraction paths. Network counters and timers are opt-in diagnostic instrumentation; they do
-not change the execution result. `SPENSO_NETWORK_PROFILE` records cumulative
+not change the execution result. Sparse pair estimates and finite sum attachments
+align right-hand matched coordinates with the left-hand slot order through
+`match_indices`; storage positions need not correspond when base and dual slots
+are grouped separately. `SPENSO_NETWORK_PROFILE` records cumulative
 counters and timers with periodic reports and slow-operation diagnostics.
 Per-operation starts, batch completion and merge-progress lines additionally
 require `SPENSO_NETWORK_PROFILE_VERBOSE`.
@@ -187,7 +195,11 @@ structure discovery, recursion depth, shorthand expansion versus opaque leaves, 
 handling, and how strictly a function must be tagged as a tensor. The tensor library resolves
 known keys; `TensorFromExpression` owns construction of an opaque tensor leaf; the function
 library owns supported opaque operations. A parse-local `ParseState` reserves written slot-index
-names before allocating dummies, and parser clones share that reservation set and allocator.
+spellings before allocating dummies, without reserializing typed labels. Parser clones
+share that reservation set and allocator. Dot validation uses the shared matcher
+for two compatible compact rank-one operands; metric partial contractions may
+retain spectator ports. Component realization and `ParamNet::simple_execute` use
+sequential `MinIntermediateCost` execution.
 Positive powers that lower shorthand with internal dummies reparse each copy from the original
 base, giving it fresh internal indices while retaining explicit boundary slots. Callers combining
 independently parsed expressions must still manage index namespaces deliberately.

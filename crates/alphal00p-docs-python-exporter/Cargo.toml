@@ -18,6 +18,6 @@ vakint = { workspace = true, optional = true, features = ["python_stubgen", "sym
 default = []
 feynkit = ["dep:symbolica", "dep:feynkit-py"]
 gammaloop = ["dep:symbolica", "dep:gammaloop-api"]
-linnet = ["dep:symbolica", "dep:linnet-py"]
-spenso = ["dep:symbolica", "dep:spynso3"]
+linnet = ["dep:symbolica", "dep:linnet-py", "symbolica/integer-gmp", "symbolica/float-mpfr"]
+spenso = ["dep:symbolica", "dep:linnet-py", "dep:spynso3"]
 vakint = ["dep:symbolica", "dep:vakint"]

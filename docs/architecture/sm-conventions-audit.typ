@@ -6,7 +6,7 @@ The full amplitude and LU marking/contour contract is in #link("phase-convention
 
 == Momentum, spin and color conventions
 <momentum-spin-and-color-conventions>
-We use metric `(+,-,-,-)`, fields Fourier transformed with `exp(-ip.x)`, and a vertex equal to `i` times the interaction action. Numbered UFO `P(mu,leg)` is the incoming momentum of that vertex leg. GammaLoop assigns the underlying source-to-sink momentum `q` with `+q` at a sink and `-q` at a source. This conversion is owned by #link("../../crates/gammalooprs/src/numerator/ufo.rs")[UFO reindexing];, after vertex legs, tensor slots and momenta have received the same permutation in #link("../../crates/gammalooprs/src/graph/parse/mod.rs")[graph parsing];.
+We use metric `(+,-,-,-)`, fields Fourier transformed with `exp(-ip.x)`, and a vertex equal to `i` times the interaction action. Numbered UFO `P(mu,leg)` is the incoming momentum of that vertex leg. FeynKit assigns the underlying source-to-sink momentum `q` with `+q` at a sink and `-q` at a source. The shared #link("../../crates/feynkit-generator/src/generation.rs")[FeynKit rule lowering] performs this conversion using finalized interaction slots; #link("../../crates/gammalooprs/src/graph/parse/mod.rs")[GammaLoop graph import] transfers the same endpoint slots and vertex expressions.
 
 These choices agree with #link("https://arxiv.org/pdf/2304.09883")[UFO 2.0, Table 2];. The action checks used #link("https://arxiv.org/pdf/1209.6213")[Romão--Silva, sections 2, 4 and 5];, whose sign parameters expose the convention choices; #link("https://arxiv.org/pdf/0709.1075")[Denner, Appendix A];, which fixes incoming momenta and propagator factors; and #link("https://www.tep.physik.uni-freiburg.de/lectures/archive/QCD-WS-14/qcd")[Schwinn, equations 4.81--4.87];, which derives the QCD and Faddeev--Popov interactions. ALOHA compatibility was not the criterion for accepting a sign.
 
@@ -155,7 +155,7 @@ The model regression `sm_lorentz_structures_use_the_scalar_and_vector_axial_basi
 
 == Generated local certificates and RHS sewing
 <generated-local-certificates-and-rhs-sewing>
-#link("../../crates/gammalooprs/src/processes/cross_section/sewing_tests.rs")[sewing\_tests.rs] uses actual `Graph::from_string` vertex assignment and tensor contraction, with independent explicit matrices/spinors as the oracle.
+#link("../../crates/gammalooprs/src/processes/cross_section/sewing_tests.rs")[sewing\_tests.rs] uses `Graph::from_dot` through FeynKit rule assignment and tensor contraction, with independent explicit matrices/spinors as the oracle.
 
 `generated_sm_charged_ward_follows_the_action` fixes `MW=5`, `m_tau=2`, `g=1`, `y_tau=sqrt(2)/5` and real on-shell momenta
 

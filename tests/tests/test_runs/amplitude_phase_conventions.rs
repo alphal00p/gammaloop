@@ -2,9 +2,9 @@ use super::utils::*;
 use super::*;
 use feynkit_graph::expressions::evaluate_overall_factor;
 use gammaloop_api::commands::integrate::RendererOption;
-use gammalooprs::{
-    graph::FeynmanGraph, processes::ProcessCollection, settings::global::OrientationPattern,
-};
+use gammalooprs::graph::FeynmanGraph;
+use gammalooprs::processes::ProcessCollection;
+use gammalooprs::settings::global::OrientationPattern;
 use std::f64::consts::PI;
 use symbolica::atom::Atom;
 
@@ -54,7 +54,7 @@ momenta = [[0.5,0.0,0.0,0.5],[0.5,0.0,0.0,-0.5],[0.5,0.5,0.0,0.0],"dependent"]
 helicities = [0,0,0,0]
 '"#,
                 &format!(
-                    "generate amp scalar_0 scalar_0 > {final_states} [{{0}}] --allowed-vertex-interactions {vertices} -p tree -i scalar",
+                    "generate amp scalar_0 scalar_0 > {final_states} [{{0}}] --allowed-vertex-interactions {vertices} -p tree -i scalar --filter-selfenergies true --filter-snails true --filter-tadpoles true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",
                 ),
             ],
         )?;
@@ -111,24 +111,21 @@ fn scalar_unit_amplitudes_match_convergent_mc_integrals_at_one_through_four_loop
         cli.cli_settings.global.generation.orientation_pattern =
             OrientationPattern::from_user_pattern(&format!("({orientation})"))?;
         let mut dot = format!(
-            "digraph vacuum_triangles {{ projector=1; edge [mass=1 num=1]; node [num=1]; \
+            "digraph vacuum_triangles {{ edge [particle=scalar_1 mass=1 num=1]; node [num=1]; \
              incoming [style=invis]; outgoing [style=invis]; \
-             incoming -> a [id={} particle=scalar_0 mass=0 sink=\"{{ufo_order:0}}\"]; \
-             a -> outgoing [id={} particle=scalar_0 mass=0 source=\"{{ufo_order:1}}\"];",
+             incoming -> a [id={} particle=scalar_0 mass=0]; \
+             a -> outgoing [id={} particle=scalar_0 mass=0];",
             3 * loops,
             3 * loops + 1,
         );
         for petal in 0..loops {
             write!(
                 dot,
-                "a -> b{petal} [id={} lmb_id={petal} source=\"{{ufo_order:{a_out}}}\" sink=\"{{ufo_order:0}}\"]; \
-                 b{petal} -> c{petal} [id={} source=\"{{ufo_order:1}}\" sink=\"{{ufo_order:0}}\"]; \
-                 c{petal} -> a [id={} source=\"{{ufo_order:1}}\" sink=\"{{ufo_order:{a_in}}}\"];",
+                "a -> b{petal} [id={} lmb_id={petal}]; \
+                 b{petal} -> c{petal} [id={}]; c{petal} -> a [id={}];",
                 3 * petal,
                 3 * petal + 1,
                 3 * petal + 2,
-                a_out = 2 + 2 * petal,
-                a_in = 3 + 2 * petal,
             )?;
         }
         dot.push('}');
@@ -330,7 +327,7 @@ min_samples_for_update = 1000
 seed = 7331
 target_relative_accuracy = 0.01
 '"#,
-            "generate amp scalar_2 > scalar_2 [{1}] --allowed-vertex-interactions V_3_SCALAR_112 -p bubble -i causal",
+            "generate amp scalar_2 > scalar_2 [{1}] --allowed-vertex-interactions V_3_SCALAR_112 -p bubble -i causal --filter-selfenergies true --filter-snails true --filter-tadpoles true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",
         ],
     )?;
     let ProcessCollection::Amplitudes(amplitudes) = &cli.state.process_list.processes[0].collection

@@ -4,6 +4,14 @@ version = "0.17.0"
 edition = "2021"
 description = "A library for working with half-edge data structures, and subgraphs, and drawing them"
 license = "MIT"
+# nauty-derived fixtures (Apache-2.0) and the tests that read them stay out of the package, as
+# does the DOT corpus test, which reads GammaLoop fixtures from the repository, with its snapshot
+exclude = [
+  "tests/nauty/**",
+  "tests/resources/nauty/**",
+  "tests/dot_corpus.rs",
+  "tests/snapshots/dot_corpus__*.snap",
+]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -14,26 +22,28 @@ path = "src/lib.rs"
 [dependencies]
 bincode = { workspace = true, features = ["serde"], optional = true }
 bincode-trait-derive = { workspace = true }
-bitvec = { version = "1.0.1" }
 cgmath = { version = "0.18.0", optional = true }
-clarabel = { version = "0.11.1", optional = true }
+# The path names the workspace patch, so Maturin also carries it into sdists.
+clarabel = { version = "0.11.1", path = "../../vendor/clarabel", optional = true }
 twofloat = { version = "0.8.4", optional = true }
 # derive_more = "0.99.17"
 # hibit_tree = "0.1.0-alpha.3"
-dot-parser = { workspace = true }
 duplicate = "2.0.0"
 figment = { version = "0.10.19" }
 getrandom = { version = "0.2", default-features = false, features = ["custom"] }
-indenter = { version = "0.3.3", features = ["std"] }
 indexmap = { workspace = true }
 itertools = "0.14.0"
+num-bigint = "0.4.6"
+num-rational = "0.4.2"
+num-traits = "0.2.19"
 paste = "1.0.15"
 rand = { version = "0.8.5", features = ["small_rng"] }
-rkyv = { version = "0.7", features = ["bitvec", "validation"], optional = true }
+rkyv = { version = "0.7", features = ["validation"], optional = true }
 serde = { workspace = true, features = ["derive"], optional = true }
 serde_repr = { workspace = true }
 symbolica = { workspace = true, default-features = false, optional = true }
 symbolica-utils = { workspace = true, optional = true }
+rayon = { workspace = true, optional = true }
 thiserror = { workspace = true }
 
 [dependencies.ahash]
@@ -45,6 +55,8 @@ features = ["compile-time-rng", "std"]
 gammaloop-workspace-hack = { version = "0.1", path = "../gammaloop-workspace-hack", optional = true }
 
 [dev-dependencies]
+# Reference for the property tests of the Linnet-owned bitsets.
+bitvec = "1.0.1"
 criterion = "0.5"
 figment = "0.10.19"
 # vers-vecs = { version = "1.6.1", features = ["simd"] }
@@ -59,22 +71,30 @@ iai-callgrind = "0.14.0"
 insta = { workspace = true, features = ["ron"] }
 kurbo = "0.13"
 # Keep optional drawing and serialization covered by isolated Linnet tests.
-linnet = { path = ".", features = ["drawing", "rkyv", "serde"] }
+linnet = { path = ".", features = ["drawing", "rkyv", "rayon", "serde"] }
 proptest = "1.6.0"
 serde = "1.0"
 serde_json = { workspace = true }
 similar-asserts = "1.7.0"
 
+[[bench]]
+name = "canon"
+harness = false
+required-features = ["symbolica"]
+
+[[bench]]
+name = "generate"
+harness = false
+required-features = ["symbolica"]
+
 [features]
-default = ["native", "nodestore-vec", "serde"]
+default = ["native", "serde"]
 bincode = ["dep:bincode", "serde"]
 drawing = ["dep:cgmath", "cgmath/serde", "dep:clarabel", "dep:twofloat"]
 energy_trace = []
-nodestore-forest-child-vec = []
-nodestore-forest-parent-child = []
-nodestore-vec = []
+rayon = ["dep:rayon"]
 rkyv = ["dep:rkyv"]
-serde = ["bitvec/serde", "dep:serde"]
+serde = ["dep:serde"]
 symbolica = ["dep:symbolica", "dep:symbolica-utils"]
 native = [
   "dep:gammaloop-workspace-hack",
@@ -84,3 +104,7 @@ native = [
 ]
 wasm = ["symbolica?/wasm", "symbolica-utils?/wasm"]
 # layout = ["dep:argmin"]
+
+[[bench]]
+name = "nodestores"
+harness = false

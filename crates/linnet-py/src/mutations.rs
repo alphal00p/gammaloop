@@ -1,22 +1,31 @@
 //! Python graph transformations backed by Linnet's owning topology operations.
+use crate::native_graph::PyHedgeGraph;
 
-use std::{cell::RefCell, collections::BTreeSet, mem};
+use std::cell::RefCell;
+use std::collections::BTreeSet;
 
 use linnet::half_edge::builder::HedgeGraphBuilder;
-use linnet::half_edge::involution::{EdgeData, Flow, Hedge};
+use linnet::half_edge::involution::{EdgeData, Flow, Hedge, Orientation};
 use linnet::half_edge::subgraph::{Inclusion, SuBitGraph, SubSetLike};
 use linnet::half_edge::NodeIndex;
 use pyo3::exceptions::{PyReferenceError, PyTypeError, PyValueError};
-use pyo3::prelude::*;
+use pyo3::prelude::Bound;
+use pyo3::prelude::Py;
+use pyo3::prelude::PyAny;
+use pyo3::prelude::PyAnyMethods;
+use pyo3::prelude::PyErr;
+use pyo3::prelude::PyRef;
+use pyo3::prelude::PyResult;
+use pyo3::prelude::PyTupleMethods;
+use pyo3::prelude::Python;
 use pyo3::types::PyTuple;
 
 use crate::dot::{PyEdgeValue, PyNodeValue};
 use crate::drawing::copy_drawing;
 use crate::graph::{
     EdgeRecord, GraphState, IncrementalEdgeRecords, NodeRecord, PyEdge, PyEdgeSpec, PyFlow,
-    PyGraph, PyHalfEdge, PyNode, PyNodeSpec, PyOrientation,
+    PyGraph, PyHalfEdge, PyNode, PyNodeSpec, PyOrientation, SETTLED,
 };
-use crate::native_graph::PyHedgeGraph;
 use crate::topology::PySubgraph;
 
 impl PyGraph {
@@ -35,15 +44,18 @@ impl PyGraph {
         isolated_nodes: &BTreeSet<usize>,
     ) -> PyHedgeGraph {
         if isolated_nodes.is_empty() {
-            return PyHedgeGraph::empty(graph.node_store());
+            return HedgeGraphBuilder::new().build();
         }
         // Augmented subgraphs only store zero-crown nodes, so neither edge
         // mapping callback can be reached during this native node extraction.
-        graph.extract_nodes(
-            isolated_nodes.iter().copied().map(NodeIndex),
-            |_| unreachable!("an isolated node cannot split an edge"),
-            |_| unreachable!("an isolated node cannot own an edge"),
-        )
+        graph
+            .extract_nodes(
+                isolated_nodes.iter().copied().map(NodeIndex),
+                |_| unreachable!("an isolated node cannot split an edge"),
+                |_| unreachable!("an isolated node cannot own an edge"),
+            )
+            .expect(SETTLED)
+            .0
     }
 
     pub(crate) fn split_off(
@@ -52,43 +64,45 @@ impl PyGraph {
         subgraph: &SuBitGraph,
         isolated_nodes: &BTreeSet<usize>,
     ) -> PyResult<PyHedgeGraph> {
-        let node_store = graph.node_store();
         let isolated = Self::split_isolated_nodes(graph, isolated_nodes);
 
         let error = RefCell::new(None);
         let mut extracted = if subgraph.is_empty() {
-            PyHedgeGraph::empty(node_store)
+            HedgeGraphBuilder::new().build()
         } else {
-            graph.extract(
-                subgraph,
-                |edge| EdgeData {
-                    orientation: edge.orientation,
-                    data: edge.data.copy(py).unwrap_or_else(|copy_error| {
-                        if error.borrow().is_none() {
-                            *error.borrow_mut() = Some(copy_error);
-                        }
-                        EdgeRecord {
-                            name: edge.data.name.clone(),
-                            data: edge.data.data.clone_ref(py),
-                            drawing: pyo3::types::PyDict::new(py).unbind(),
-                        }
-                    }),
-                },
-                |edge| edge,
-                |node| {
-                    node.copy(py).unwrap_or_else(|copy_error| {
-                        if error.borrow().is_none() {
-                            *error.borrow_mut() = Some(copy_error);
-                        }
-                        NodeRecord {
-                            name: node.name.clone(),
-                            data: node.data.clone_ref(py),
-                            drawing: pyo3::types::PyDict::new(py).unbind(),
-                        }
-                    })
-                },
-                |node| node,
-            )
+            graph
+                .extract(
+                    subgraph,
+                    |edge| EdgeData {
+                        orientation: edge.orientation,
+                        data: edge.data.copy(py).unwrap_or_else(|copy_error| {
+                            if error.borrow().is_none() {
+                                *error.borrow_mut() = Some(copy_error);
+                            }
+                            EdgeRecord {
+                                name: edge.data.name.clone(),
+                                data: edge.data.data.clone_ref(py),
+                                drawing: pyo3::types::PyDict::new(py).unbind(),
+                            }
+                        }),
+                    },
+                    |edge| edge,
+                    |node| {
+                        node.copy(py).unwrap_or_else(|copy_error| {
+                            if error.borrow().is_none() {
+                                *error.borrow_mut() = Some(copy_error);
+                            }
+                            NodeRecord {
+                                name: node.name.clone(),
+                                data: node.data.clone_ref(py),
+                                drawing: pyo3::types::PyDict::new(py).unbind(),
+                            }
+                        })
+                    },
+                    |node| node,
+                )
+                .expect(SETTLED)
+                .0
         };
         match error.into_inner() {
             Some(error) => Err(error),
@@ -165,6 +179,8 @@ impl PyGraph {
     ) -> PyResult<(u64, GraphState)> {
         let left_revision = left.borrow(py).revision()?;
         let right_revision = right.borrow(py).revision()?;
+        let left_epoch = left.borrow(py).element_epoch()?;
+        let right_epoch = right.borrow(py).element_epoch()?;
         let candidate = left
             .borrow(py)
             .state
@@ -204,11 +220,11 @@ impl PyGraph {
                 };
                 let left_view = Py::new(
                     py,
-                    PyHalfEdge::new(left.clone_ref(py), left_hedge.0, left_revision),
+                    PyHalfEdge::new(left.clone_ref(py), left_hedge.0, left_epoch),
                 );
                 let right_view = Py::new(
                     py,
-                    PyHalfEdge::new(right.clone_ref(py), right_index, right_revision),
+                    PyHalfEdge::new(right.clone_ref(py), right_index, right_epoch),
                 );
                 let result = left_view.and_then(|left_view| {
                     right_view.and_then(|right_view| {
@@ -239,11 +255,11 @@ impl PyGraph {
                 };
                 let left_view = Py::new(
                     py,
-                    PyHalfEdge::new(left.clone_ref(py), left_index, left_revision),
+                    PyHalfEdge::new(left.clone_ref(py), left_index, left_epoch),
                 );
                 let right_view = Py::new(
                     py,
-                    PyHalfEdge::new(right.clone_ref(py), right_index, right_revision),
+                    PyHalfEdge::new(right.clone_ref(py), right_index, right_epoch),
                 );
                 let result = left_view.and_then(|left_view| {
                     right_view.and_then(|right_view| {
@@ -277,6 +293,7 @@ impl PyGraph {
                 codec,
                 render_config,
                 revision: 0,
+                element_epoch: left_epoch,
             },
         ))
     }
@@ -337,77 +354,95 @@ impl PyGraph {
 }
 
 impl PyGraph {
-    /// Append one declarative node and return its fresh live view.
+    /// Append one declarative node without copying the existing graph or its metadata.
     pub(crate) fn add_node(
         slf: Py<PyGraph>,
         py: Python<'_>,
         spec: PyRef<'_, PyNodeSpec>,
     ) -> PyResult<Py<PyNode>> {
         let revision = slf.borrow(py).revision()?;
-        let mut candidate = slf
-            .borrow(py)
-            .state
-            .borrow()
-            .as_ref()
-            .ok_or_else(|| PyReferenceError::new_err("graph has been cleared"))?
-            .copy(py)?;
-        let index = candidate.graph.n_nodes();
-        let mut builder = HedgeGraphBuilder::new();
-        builder.add_node(spec.snapshot(py)?);
-        candidate
-            .graph
-            .append_disconnected_mut(PyHedgeGraph::build(builder, candidate.graph.node_store()))
-            .map_err(|error| PyValueError::new_err(error.to_string()))?;
-        Self::validate_names(&candidate.graph)?;
-        let result = Py::new(py, PyNode::new(slf.clone_ref(py), index, revision + 1))?;
+        let epoch = slf.borrow(py).element_epoch()?;
+        let node = spec.snapshot(py)?;
+        let index = {
+            let graph = slf.borrow(py);
+            let state = graph.state.borrow();
+            let graph = &state.as_ref().expect("checked").graph;
+            if let Some(name) = &node.name {
+                if graph
+                    .iter_node_ids()
+                    .any(|index| graph[index].name.as_ref() == Some(name))
+                {
+                    return Err(PyValueError::new_err(format!(
+                        "duplicate node name {name:?}"
+                    )));
+                }
+            }
+            graph.node_bound()
+        };
+        // Complete Python allocation and validation before changing live storage.
+        let result = Py::new(py, PyNode::new(slf.clone_ref(py), index, epoch))?;
         slf.borrow(py).check_revision(revision)?;
-        candidate.revision = revision + 1;
-        *slf.borrow(py).state.borrow_mut() = Some(candidate);
+        let graph = slf.borrow(py);
+        let mut state = graph.state.borrow_mut();
+        let state = state.as_mut().expect("checked");
+        let added = state.graph.add_node(node);
+        debug_assert_eq!(added.0, index);
+        state.revision = revision + 1;
         Ok(result)
     }
 
-    /// Append one declarative internal or dangling edge and return its fresh live view.
+    /// Append one edge in place after resolving and snapshotting its endpoints.
     pub(crate) fn add_edge(
         slf: Py<PyGraph>,
         py: Python<'_>,
         spec: PyRef<'_, PyEdgeSpec>,
     ) -> PyResult<Py<PyEdge>> {
         let revision = slf.borrow(py).revision()?;
+        let epoch = slf.borrow(py).element_epoch()?;
         let IncrementalEdgeRecords {
             source,
             sink,
             edge,
             orientation,
-        } = spec.incremental_records(py, &slf, revision)?;
-        let mut candidate = slf
-            .borrow(py)
-            .state
-            .borrow()
-            .as_ref()
-            .ok_or_else(|| PyReferenceError::new_err("graph has been cleared"))?
-            .copy(py)?;
-        let node_store = candidate.graph.node_store();
-        let graph = mem::replace(&mut candidate.graph, PyHedgeGraph::empty(node_store));
-        let (hedge, graph) = match (source, sink) {
-            (Some(source), Some(sink)) => graph
-                .add_pair(source, sink, edge, orientation.into())
-                .map(|(source, _, graph)| (source, graph)),
-            (Some(source), None) => {
-                graph.add_dangling_edge(source, edge, Flow::Source, orientation.into())
+        } = spec.incremental_records(py, &slf, epoch)?;
+        let index = {
+            let graph = slf.borrow(py);
+            let state = graph.state.borrow();
+            let graph = &state.as_ref().expect("checked").graph;
+            if let Some(name) = &edge.name {
+                if graph
+                    .iter_edges()
+                    .any(|(_, _, edge)| edge.data.name.as_ref() == Some(name))
+                {
+                    return Err(PyValueError::new_err(format!(
+                        "duplicate edge name {name:?}"
+                    )));
+                }
             }
-            (None, Some(sink)) => {
-                graph.add_dangling_edge(sink, edge, Flow::Sink, orientation.into())
-            }
+            graph.n_edges()
+        };
+        let result = Py::new(py, PyEdge::new(slf.clone_ref(py), index, epoch))?;
+        slf.borrow(py).check_revision(revision)?;
+        let graph = slf.borrow(py);
+        let mut state = graph.state.borrow_mut();
+        let state = state.as_mut().expect("checked");
+        match (source, sink) {
+            (Some(source), Some(sink)) => state
+                .graph
+                .add_pair_mut(source, sink, edge, Orientation::from(orientation))
+                .map(|_| ()),
+            (Some(source), None) => state
+                .graph
+                .add_dangling_edge_mut(source, edge, Flow::Source, Orientation::from(orientation))
+                .map(|_| ()),
+            (None, Some(sink)) => state
+                .graph
+                .add_dangling_edge_mut(sink, edge, Flow::Sink, Orientation::from(orientation))
+                .map(|_| ()),
             (None, None) => unreachable!("validated edge has an endpoint"),
         }
         .map_err(|error| PyValueError::new_err(error.to_string()))?;
-        let index = graph[&hedge].0;
-        candidate.graph = graph;
-        Self::validate_names(&candidate.graph)?;
-        let result = Py::new(py, PyEdge::new(slf.clone_ref(py), index, revision + 1))?;
-        slf.borrow(py).check_revision(revision)?;
-        candidate.revision = revision + 1;
-        *slf.borrow(py).state.borrow_mut() = Some(candidate);
+        state.revision = revision + 1;
         Ok(result)
     }
 
@@ -447,10 +482,17 @@ impl PyGraph {
         let selected = candidate.graph[&Hedge(at)].0;
         let opposite = candidate.graph[&opposite].0;
         Self::validate_names(&candidate.graph)?;
-        let selected = Py::new(py, PyEdge::new(slf.clone_ref(py), selected, revision + 1))?;
-        let opposite = Py::new(py, PyEdge::new(slf.clone_ref(py), opposite, revision + 1))?;
+        let selected = Py::new(
+            py,
+            PyEdge::new(slf.clone_ref(py), selected, candidate.element_epoch + 1),
+        )?;
+        let opposite = Py::new(
+            py,
+            PyEdge::new(slf.clone_ref(py), opposite, candidate.element_epoch + 1),
+        )?;
         slf.borrow(py).check_revision(revision)?;
         candidate.revision = revision + 1;
+        candidate.element_epoch += 1;
         *slf.borrow(py).state.borrow_mut() = Some(candidate);
         Ok((selected, opposite))
     }
@@ -491,17 +533,21 @@ impl PyGraph {
             .as_ref()
             .expect("checked")
             .copy(py)?;
-        candidate.graph.connect_identities(
-            Hedge(source),
-            Hedge(sink),
-            Flow::Source,
-            EdgeData::new(edge, orientation.into()),
-        );
+        let edge = RefCell::new(Some(EdgeData::new(edge, orientation.into())));
+        candidate
+            .graph
+            .connect_identities(Hedge(source), Hedge(sink), |_, _, _, _| {
+                (Flow::Source, edge.take().expect("merge is called once"))
+            });
         let index = candidate.graph[&Hedge(source)].0;
         Self::validate_names(&candidate.graph)?;
-        let result = Py::new(py, PyEdge::new(slf.clone_ref(py), index, revision + 1))?;
+        let result = Py::new(
+            py,
+            PyEdge::new(slf.clone_ref(py), index, candidate.element_epoch + 1),
+        )?;
         slf.borrow(py).check_revision(revision)?;
         candidate.revision = revision + 1;
+        candidate.element_epoch += 1;
         *slf.borrow(py).state.borrow_mut() = Some(candidate);
         Ok(result)
     }
@@ -537,7 +583,7 @@ impl PyGraph {
                 .as_ref()
                 .ok_or_else(|| PyReferenceError::new_err("graph has been cleared"))?;
             return Ok(PyGraph::from_state(
-                state.derived(py, PyHedgeGraph::empty(state.graph.node_store()))?,
+                state.derived(py, HedgeGraphBuilder::new().build())?,
             ));
         }
         let mut candidate = slf
@@ -551,6 +597,7 @@ impl PyGraph {
         let result = candidate.derived(py, extracted)?;
         slf.borrow(py).check_revision(revision)?;
         candidate.revision = revision + 1;
+        candidate.element_epoch += 1;
         *slf.borrow(py).state.borrow_mut() = Some(candidate);
         Ok(PyGraph::from_state(result))
     }
@@ -569,9 +616,10 @@ impl PyGraph {
             .ok_or_else(|| PyReferenceError::new_err("graph has been cleared"))?
             .copy(py)?;
         Self::split_isolated_nodes(&mut candidate.graph, &isolated_nodes);
-        candidate.graph.delete_hedges(&filter);
+        candidate.graph.delete_hedges(&filter).expect(SETTLED);
         slf.borrow(py).check_revision(revision)?;
         candidate.revision = revision + 1;
+        candidate.element_epoch += 1;
         *slf.borrow(py).state.borrow_mut() = Some(candidate);
         Ok(())
     }
@@ -611,57 +659,22 @@ impl PyGraph {
             .ok_or_else(|| PyReferenceError::new_err("graph has been cleared"))?
             .copy(py)?;
         Self::split_isolated_nodes(&mut candidate.graph, &isolated_nodes);
-        if filter.is_empty() {
-            let mut builder = HedgeGraphBuilder::new();
-            builder.add_node(replacement);
-            candidate
-                .graph
-                .append_disconnected_mut(PyHedgeGraph::build(builder, candidate.graph.node_store()))
-                .map_err(|error| PyValueError::new_err(error.to_string()))?;
-            Self::validate_names(&candidate.graph)?;
-            slf.borrow(py).check_revision(revision)?;
-            candidate.revision = revision + 1;
-            *slf.borrow(py).state.borrow_mut() = Some(candidate);
-            return Ok(());
-        }
-        // Move unrelated empty-crown nodes aside because node stores differ in
-        // how contraction compaction treats them. Restore the replacement when
-        // the contracted island has no boundary hairs.
-        let unrelated_isolated = candidate
-            .graph
-            .iter_nodes()
-            .filter_map(|(node, mut crown, _)| crown.next().is_none().then_some(node.0))
-            .collect::<BTreeSet<_>>();
-        let mut preserved = Self::split_isolated_nodes(&mut candidate.graph, &unrelated_isolated);
-        let involved = candidate
-            .graph
+        // Contraction keeps the replacement only on a half-edge that leaves the
+        // island; a closed island is deleted and the replacement added instead.
+        let graph = &mut candidate.graph;
+        let closed = graph
             .iter_nodes_of(&filter)
-            .map(|(node, _, _)| node)
-            .collect::<Vec<NodeIndex>>();
-        let has_boundary = involved.iter().any(|node| {
-            candidate
-                .graph
-                .iter_crown(*node)
-                .any(|hedge| !filter.includes(&hedge))
-        });
-        let replacement_backup = (!has_boundary).then(|| replacement.copy(py)).transpose()?;
-        candidate.graph.contract_subgraph(&filter, replacement);
-        if let Some(node) = replacement_backup {
-            let mut builder = HedgeGraphBuilder::new();
-            builder.add_node(node);
-            preserved
-                .append_disconnected_mut(PyHedgeGraph::build(builder, candidate.graph.node_store()))
-                .map_err(|error| PyValueError::new_err(error.to_string()))?;
-        }
-        if preserved.n_nodes() != 0 {
-            candidate
-                .graph
-                .append_disconnected_mut(preserved)
-                .map_err(|error| PyValueError::new_err(error.to_string()))?;
+            .all(|(_, mut crown, _)| crown.all(|hedge| filter.includes(&hedge)));
+        if closed {
+            graph.delete_hedges(&filter).expect(SETTLED);
+            graph.add_node(replacement);
+        } else {
+            graph.contract_subgraph(&filter, replacement);
         }
         Self::validate_names(&candidate.graph)?;
         slf.borrow(py).check_revision(revision)?;
         candidate.revision = revision + 1;
+        candidate.element_epoch += 1;
         *slf.borrow(py).state.borrow_mut() = Some(candidate);
         Ok(())
     }
@@ -672,7 +685,8 @@ impl PyGraph {
         py: Python<'_>,
         other: Py<PyGraph>,
     ) -> PyResult<PyGraph> {
-        let (_, candidate) = Self::appended_state(&slf, &other, py)?;
+        let (_, mut candidate) = Self::appended_state(&slf, &other, py)?;
+        candidate.element_epoch = 0;
         Ok(PyGraph::from_state(candidate))
     }
 
@@ -681,6 +695,7 @@ impl PyGraph {
         let (revision, mut candidate) = Self::appended_state(&slf, &other, py)?;
         slf.borrow(py).check_revision(revision)?;
         candidate.revision = revision + 1;
+        candidate.element_epoch += 1;
         *slf.borrow(py).state.borrow_mut() = Some(candidate);
         Ok(())
     }
@@ -693,7 +708,8 @@ impl PyGraph {
         matching: Py<PyAny>,
         merge: Py<PyAny>,
     ) -> PyResult<PyGraph> {
-        let (_, candidate) = Self::joined_state(&slf, &other, py, &matching, &merge)?;
+        let (_, mut candidate) = Self::joined_state(&slf, &other, py, &matching, &merge)?;
+        candidate.element_epoch = 0;
         Ok(PyGraph::from_state(candidate))
     }
 
@@ -708,6 +724,7 @@ impl PyGraph {
         let (revision, mut candidate) = Self::joined_state(&slf, &other, py, &matching, &merge)?;
         slf.borrow(py).check_revision(revision)?;
         candidate.revision = revision + 1;
+        candidate.element_epoch += 1;
         *slf.borrow(py).state.borrow_mut() = Some(candidate);
         Ok(())
     }

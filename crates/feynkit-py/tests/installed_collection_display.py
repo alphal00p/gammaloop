@@ -36,10 +36,17 @@ class Collection(HTMLParser):
 
 
 model = fk.Model(Path(__file__).parent / "fixtures/scalars_2p_3p.json")
-process = model.process(
-    ["scalar_0"], ["scalar_0", "scalar_0"], vertex_allow=["V_3_SCALAR_000"]
+process = model.process(["scalar_0"], ["scalar_0", "scalar_0"])
+amplitude = (
+    process.amplitude(
+        loops=fk.Loops.total(0),
+        restrict=fk.Restrict().only_vertices(["V_3_SCALAR_000"]),
+        topology=fk.TopologyRules(max_vertices=1),
+    )
+    .generate()
+    .build(fk.NumeratorOptions(naming=fk.Naming.named("D")))
+    .into_amplitude()
 )
-amplitude = process.generate_amplitude(loops=0, max_vertices=1, progress=None)
 before = amplitude.expression()
 view = amplitude.render()
 html = external_metrics_snapshot(view).to_html()
@@ -60,8 +67,21 @@ large_html = external_metrics_snapshot(large_view).to_html()
 assert Collection(large_html).rows == 6
 assert "Showing 6 of 7 diagrams" in large_html
 
-cross_section = process.generate_cross_section(
-    loops=1, max_vertices=2, allow_self_loops=True, progress=None
+cross_section = (
+    process.cross_section(
+        loops=fk.Loops.forward(1),
+        restrict=fk.Restrict().only_vertices(["V_3_SCALAR_000"]),
+        topology=fk.TopologyRules(
+            max_vertices=2,
+            self_loops=True,
+            self_energies=fk.Veto.all(),
+            tadpoles=fk.Veto.all(),
+            snails=fk.Veto.massless(),
+        ),
+        cuts=fk.Cuts(blobs=fk.Range.exact(1), spectators=fk.Range.exact(0)),
+    )
+    .generate()
+    .build(fk.NumeratorOptions(naming=fk.Naming.named("D")))
 )
 snapshots = [diagram.to_json() for diagram in cross_section.diagrams]
 view = cross_section.render()
@@ -69,21 +89,25 @@ html = external_metrics_snapshot(view).to_html()
 parsed = Collection(html)
 assert parsed.buttons == parsed.templates == len(cross_section.diagrams) > 0
 assert parsed.rows == 0
-assert "<strong>Cross section</strong>" in html
+assert "<strong>Built diagrams</strong>" in html
 assert all(diagram.cuts for diagram in cross_section.diagrams)
 assert [diagram.to_json() for diagram in cross_section.diagrams] == snapshots
 
-empty = process.generate_diagrams(
-    loops=0,
-    max_vertices=1,
-    filter=lambda diagram, completed_vertices: False,
-    progress=None,
+empty = (
+    process.amplitude(
+        loops=fk.Loops.total(0),
+        restrict=fk.Restrict().only_vertices(["V_3_SCALAR_000"]),
+        topology=fk.TopologyRules(max_vertices=1),
+        prune_skeletons=lambda view: False,
+    )
+    .generate()
+    .build(fk.NumeratorOptions(naming=fk.Naming.named("D")))
 )
 view = empty.render()
 html = external_metrics_snapshot(view).to_html()
 assert Collection(html).templates == 0
 assert "No diagrams retained." in html
-assert "<strong>Generation result</strong>" in html
+assert "<strong>Built diagrams</strong>" in html
 print(
     "Collection displays: terms, conjugation, preview bounds, cuts, empty results passed"
 )

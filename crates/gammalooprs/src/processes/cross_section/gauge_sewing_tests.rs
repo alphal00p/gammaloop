@@ -6,7 +6,8 @@ use std::collections::BTreeMap;
 
 use eyre::Result;
 use feynkit_generator::{
-    GenerationFilter, GenerationOptions, GenerationType, Process as GenerationProcess,
+    Cuts, GenerationType, Loops, Naming, Orders, Process as GenerationProcess, Restrict,
+    TopologyRules,
 };
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, Flow, HedgePair};
@@ -147,7 +148,7 @@ impl CutKinematics {
         let mut vectors = Vec::new();
         let mut unused = finals.iter().collect_vec();
         for (pair, edge, data) in graph.iter_edges_of(&cut.cut) {
-            let (particle, sign) = left_to_right(pair, data.data.particle().unwrap(), model);
+            let (particle, sign) = left_to_right(pair, data.data.particle(), model);
             let particle = particle.resolve(model);
             let label = labels
                 .get(&(particle.pdg_code as isize))
@@ -165,7 +166,7 @@ impl CutKinematics {
         let mut unused = initial.iter().collect_vec();
         for (pair, edge, data) in graph.iter_edges_of(&graph.initial_state_cut) {
             let against = enters_against_edge(pair, cut);
-            let particle = data.data.particle().unwrap();
+            let particle = data.data.particle();
             let pdg = if against {
                 particle.antiparticle(model)
             } else {
@@ -209,7 +210,6 @@ impl CutKinematics {
         }) {
             let mass = graph.underlying[edge]
                 .particle()
-                .unwrap()
                 .resolve(model)
                 .symbolic_mass(model);
             denominator *= minkowski_square(&momentum) - substitute(&mass, parameters).pow(2);
@@ -280,11 +280,10 @@ fn declared_covariant_cut_states_preserve_multisets_and_physical_labels() -> Res
     test_initialise()?;
     let model = load_generic_model("sm");
     for (state, count) in [(vec![24, -24], 16), (vec![23, 23], 10)] {
-        let process = ProcessDefinition {
-            generation_type: feynkit_generator::GenerationType::CrossSection,
-            process: GenerationProcess::new(Vec::<i64>::new(), state.clone()),
-            ..Default::default()
-        };
+        let process = ProcessDefinition::new(
+            GenerationProcess::new(Vec::<i64>::new(), state.clone())
+                .cross_section(Loops::forward(1..=1)),
+        );
         let closure = process.covariant_cut_states(&model)?;
         assert_eq!(closure.len(), count);
         assert_eq!(model.covariant_cut_states(&closure)?, closure);
@@ -300,23 +299,23 @@ fn declared_covariant_cut_states_preserve_multisets_and_physical_labels() -> Res
             );
         }
     }
-    let diagnostic = ProcessDefinition {
-        generation_type: feynkit_generator::GenerationType::CrossSection,
-        process: GenerationProcess::new(Vec::<i64>::new(), [250_i64, 250]),
-        ..Default::default()
-    };
+    let diagnostic = ProcessDefinition::new(
+        GenerationProcess::new(Vec::<i64>::new(), [250_i64, 250])
+            .cross_section(Loops::forward(1..=1)),
+    );
     assert!(diagnostic.covariant_cut_representatives(&model).is_empty());
     assert_eq!(
         diagnostic.covariant_cut_states(&model)?,
-        diagnostic.process.outgoing_pdgs(&model)?
+        diagnostic.request.process().outgoing_pdgs(&model)?
     );
-    let mixed = ProcessDefinition {
-        process: diagnostic
-            .process
+    let mixed = ProcessDefinition::new(
+        diagnostic
+            .request
+            .process()
             .clone()
-            .with_final_state_alternatives([vec![23_i64, 23], vec![250, 25]])?,
-        ..diagnostic.clone()
-    };
+            .with_final_state_alternatives([vec![23_i64, 23], vec![250, 25]])?
+            .cross_section(Loops::forward(1..=1)),
+    );
     assert!(
         mixed
             .covariant_cut_states(&model)
@@ -325,9 +324,10 @@ fn declared_covariant_cut_states_preserve_multisets_and_physical_labels() -> Res
             .contains("observable labels remain unambiguous")
     );
     let unresolved = ProcessDefinition {
-        generation_options: GenerationOptions::default().with_graph_filter(
-            GenerationFilter::PerturbativeOrders([("QED".into(), 1)].into_iter().collect()),
-        ),
+        request: diagnostic
+            .request
+            .clone()
+            .with_orders(Orders::new().perturbative("QED", 1)),
         ..diagnostic
     };
     let mut unresolved_model = model.clone();
@@ -338,13 +338,11 @@ fn declared_covariant_cut_states_preserve_multisets_and_physical_labels() -> Res
     unresolved_model.apply_parameter_card(&card)?;
     assert!(unresolved.covariant_cut_states(&unresolved_model).is_err());
 
-    let incomplete = ProcessDefinition {
-        generation_type: feynkit_generator::GenerationType::CrossSection,
-        process: GenerationProcess::new(Vec::<i64>::new(), [24_i64, -24]),
-        generation_options: GenerationOptions::default()
-            .with_graph_filter(GenerationFilter::ParticleVeto(vec![251_i64.into()])),
-        ..Default::default()
-    };
+    let incomplete = ProcessDefinition::new(
+        GenerationProcess::new(Vec::<i64>::new(), [24_i64, -24])
+            .cross_section(Loops::forward(1..=1))
+            .with_restrict(Restrict::new().exclude_particles([251_i64])),
+    );
     assert!(
         incomplete
             .covariant_cut_states(&model)
@@ -388,48 +386,50 @@ fn generated_higgs_covariant_cuts_equal_three_physical_vector_polarizations() ->
         (vec![24, -24], Atom::num(3), 6, Atom::one()),
         (vec![23, 23], Atom::num((15, 4)), 4, Atom::num((1, 2))),
     ] {
-        let process = ProcessDefinition {
-            generation_type: feynkit_generator::GenerationType::CrossSection,
-            process: GenerationProcess::new([25_i64], physical),
-            generation_options: GenerationOptions::default()
-                .with_loop_count(1, 1)?
-                .with_graph_filter(GenerationFilter::CouplingOrders(
-                    [("QED".into(), (2, Some(2)))].into_iter().collect(),
-                )),
-            ..Default::default()
-        };
+        let mut process = ProcessDefinition::new(
+            GenerationProcess::new([25_i64], physical)
+                .cross_section(Loops::forward(1..=1))
+                .with_topology(TopologyRules::new().with_self_loops(false))
+                .with_orders(Orders::new().exact("QED", 2))
+                .with_cuts(Cuts::new().with_blobs(1..=1).with_spectators(0..=0)),
+        );
+        process.numerators.naming = Naming::prefix("D");
         let graphs = process.generate(&model, &settings)?;
         assert_eq!(
             graphs.len(),
             graph_count,
             "the complete covariant Higgs cut inventory"
         );
-        assert!(!process.may_filter_covariant_partners(&model));
-        if process.process.outgoing_pdgs(&model)?[0] == [24, -24] {
+        // Coupling bounds alone retain the covariant sector. The explicitly selected
+        // cut ranges now count as restrictions, since the shared default is unrestricted.
+        let mut coupling_only = process.clone();
+        coupling_only.request = coupling_only.request.with_cuts(Cuts::new());
+        assert!(!coupling_only.may_filter_covariant_partners(&model));
+        assert!(process.may_filter_covariant_partners(&model));
+        if process.request.process().outgoing_pdgs(&model)?[0] == [24, -24] {
             let mut filtered = process.clone();
             // In H -> WW this retains the four bosonic Born graphs while
             // removing the two ghost graphs required by covariant completeness.
-            filtered.generation_options =
-                filtered
-                    .generation_options
-                    .with_graph_filter(GenerationFilter::VertexVeto(vec![
-                        "V_17".into(),
-                        "V_25".into(),
-                    ]));
+            filtered.request = filtered
+                .request
+                .with_restrict(Restrict::new().exclude_vertices(["V_17", "V_25"]));
             assert!(filtered.may_filter_covariant_partners(&model));
             let bosonic_graphs = filtered.generate(&model, &settings)?;
             assert_eq!(bosonic_graphs.len(), 4);
             assert!(bosonic_graphs.iter().all(|graph| {
-                graph.iter_edges().all(|(_, _, edge)| {
-                    !edge
-                        .data
-                        .particle()
-                        .is_some_and(|particle| particle.resolve(&model).is_ghost())
-                })
+                graph
+                    .iter_edges()
+                    .all(|(_, _, edge)| !edge.data.particle().resolve(&model).is_ghost())
             }));
-            filtered.process = filtered
-                .process
-                .with_final_state_alternatives([vec![251_i64, -251]])?;
+            filtered.request = filtered
+                .request
+                .process()
+                .clone()
+                .with_final_state_alternatives([vec![251_i64, -251]])?
+                .cross_section(filtered.request.loops().clone())
+                .with_orders(filtered.request.orders().clone())
+                .with_restrict(filtered.request.restrictions().clone())
+                .with_topology(filtered.request.topology().clone());
             assert!(!filtered.may_filter_covariant_partners(&model));
         }
         // Raw imported states cannot establish physical-vector intent. The
@@ -515,8 +515,7 @@ fn generated_higgs_covariant_cuts_equal_three_physical_vector_polarizations() ->
                     let mut particles = Vec::new();
                     let mut momenta = BTreeMap::new();
                     for (position, (pair, eid, edge)) in graph.iter_edges_of(&cut.cut).enumerate() {
-                        let (particle, sign) =
-                            left_to_right(pair, edge.data.particle().unwrap(), &model);
+                        let (particle, sign) = left_to_right(pair, edge.data.particle(), &model);
                         particles.push(particle.resolve(&model).pdg_code);
                         momenta.insert(eid, scaled(sign, &q[position]));
                     }
@@ -578,7 +577,7 @@ fn generated_higgs_covariant_cuts_equal_three_physical_vector_polarizations() ->
                     "{channels:?}, boosted={boosted}"
                 );
                 // The VV channel alone is the incomplete covariant metric sum.
-                let vector_channel = process.process.outgoing_pdgs(&model)?[0]
+                let vector_channel = process.request.process().outgoing_pdgs(&model)?[0]
                     .iter()
                     .copied()
                     .sorted()
@@ -716,16 +715,14 @@ fn massive_tau_covariant_cuts_satisfy_the_brst_quartet_identity() -> Result<()> 
         ([15, -16], [-24, 23], 48, 2, &TAU_NEUTRINO_TO_W_Z[..]),
         ([15, -15], [23, 23], 20, 1, &TAU_PAIR_TO_Z_PAIR[..]),
     ] {
-        let process = ProcessDefinition {
-            generation_type: GenerationType::CrossSection,
-            process: GenerationProcess::new(initial_pdgs, final_pdgs),
-            generation_options: GenerationOptions::default()
-                .with_loop_count(1, 1)?
-                .with_graph_filter(GenerationFilter::CouplingOrders(
-                    [("QED".into(), (4, Some(4)))].into_iter().collect(),
-                )),
-            ..Default::default()
-        };
+        let mut process = ProcessDefinition::new(
+            GenerationProcess::new(initial_pdgs, final_pdgs)
+                .cross_section(Loops::forward(1..=1))
+                .with_topology(TopologyRules::new().with_self_loops(false))
+                .with_orders(Orders::new().exact("QED", 4))
+                .with_cuts(Cuts::new().with_blobs(1..=1).with_spectators(0..=0)),
+        );
+        process.numerators.naming = Naming::prefix("D");
         let graphs = process.generate(&model, &settings)?;
         assert_eq!(graphs.len(), graph_count, "{final_pdgs:?}");
         let labels = process.covariant_cut_representatives(&model);
@@ -748,7 +745,7 @@ fn massive_tau_covariant_cuts_satisfy_the_brst_quartet_identity() -> Result<()> 
             let mut graph = supergraph.graph.clone();
             let source = &supergraph.graph;
             for (_, edge, data) in source.iter_edges_of(&source.initial_state_cut) {
-                let particle = data.data.particle().unwrap().resolve(&model);
+                let particle = data.data.particle().resolve(&model);
                 let Some(sum) = particle.polarization_sum(
                     &model,
                     edge,

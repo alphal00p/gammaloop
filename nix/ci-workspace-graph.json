@@ -271,7 +271,6 @@
       "linnet": [
         "bincode",
         "drawing",
-        "nodestore-vec",
         "serde",
         "symbolica"
       ],
@@ -342,6 +341,9 @@
       "feynkit-model": [],
       "idenso": [],
       "linnet": [
+        "bincode",
+        "rayon",
+        "serde",
         "symbolica"
       ],
       "spenso": [
@@ -372,9 +374,7 @@
       ]
     },
     "feynkit-model": {
-      "linnet": [
-        "nodestore-vec"
-      ]
+      "linnet": []
     },
     "feynkit-py": {
       "feynkit-amplitude": [],
@@ -506,7 +506,6 @@
     },
     "idenso": {
       "linnet": [
-        "nodestore-vec",
         "serde"
       ],
       "spenso": [
@@ -521,7 +520,6 @@
       "kurvst": [],
       "linnet": [
         "drawing",
-        "nodestore-vec",
         "rkyv",
         "serde"
       ]
@@ -535,7 +533,6 @@
         "svg"
       ],
       "linnet": [
-        "nodestore-vec",
         "serde"
       ],
       "linnet-render-py": []
@@ -552,7 +549,6 @@
       "gammaloop-workspace-hack": [],
       "linnet": [
         "bincode",
-        "nodestore-vec",
         "serde"
       ],
       "spenso-macros": [],
@@ -818,6 +814,7 @@
       "kurvst",
       "linnest",
       "linnet",
+      "linnet-py",
       "linnet-render-py",
       "spenso",
       "spenso-hep-lib",
@@ -1050,7 +1047,9 @@
     ],
     "alphal00p-docs-python-exporter": [],
     "alphal00p-docs-schema": [],
-    "clinnet": [],
+    "clinnet": [
+      "kurvst"
+    ],
     "feynkit": [
       "feynkit-amplitude",
       "feynkit-cff",
@@ -1146,6 +1145,7 @@
       "kurvst",
       "linnest",
       "linnet",
+      "linnet-py",
       "linnet-render-py",
       "spenso",
       "spenso-hep-lib",
@@ -1435,7 +1435,9 @@
       "vakint"
     ],
     "alphal00p-docs-schema": [],
-    "clinnet": [],
+    "clinnet": [
+      "kurvst"
+    ],
     "feynkit": [
       "feynkit-amplitude",
       "feynkit-cff",
@@ -1669,7 +1671,6 @@
       "linnet": [
         "bincode",
         "drawing",
-        "nodestore-vec",
         "serde",
         "symbolica"
       ],
@@ -1704,7 +1705,9 @@
       ]
     },
     "alphal00p-docs-schema": {},
-    "clinnet": {},
+    "clinnet": {
+      "kurvst": []
+    },
     "feynkit": {
       "feynkit-amplitude": [],
       "feynkit-cff": [],
@@ -1743,6 +1746,9 @@
       "feynkit-model": [],
       "idenso": [],
       "linnet": [
+        "bincode",
+        "rayon",
+        "serde",
         "symbolica"
       ],
       "spenso": [
@@ -1773,9 +1779,7 @@
       ]
     },
     "feynkit-model": {
-      "linnet": [
-        "nodestore-vec"
-      ]
+      "linnet": []
     },
     "feynkit-py": {
       "feynkit-amplitude": [],
@@ -1908,7 +1912,6 @@
     },
     "idenso": {
       "linnet": [
-        "nodestore-vec",
         "serde"
       ],
       "spenso": [
@@ -1923,7 +1926,6 @@
       "kurvst": [],
       "linnet": [
         "drawing",
-        "nodestore-vec",
         "rkyv",
         "serde"
       ]
@@ -1932,6 +1934,7 @@
       "gammaloop-workspace-hack": [],
       "linnet": [
         "drawing",
+        "rayon",
         "rkyv",
         "serde"
       ],
@@ -1942,7 +1945,6 @@
         "svg"
       ],
       "linnet": [
-        "nodestore-vec",
         "serde"
       ],
       "linnet-render-py": []
@@ -1959,7 +1961,6 @@
       "gammaloop-workspace-hack": [],
       "linnet": [
         "bincode",
-        "nodestore-vec",
         "serde"
       ],
       "spenso-macros": [],

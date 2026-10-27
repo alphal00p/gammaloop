@@ -3,10 +3,8 @@ use std::ffi::CString;
 use feynkit_graph::{DiagramEdge, DiagramVertex, FeynmanDiagram, NumeratorInterface};
 use feynkit_model::Model;
 use feynkit_py::{FeynkitModule, PyFeynmanDiagram, PyModel};
-#[cfg(feature = "linnet-python")]
+// Generation returns and filters Linnet graphs, so the full graph module is always linked.
 use linnet_py::GraphModule;
-#[cfg(not(feature = "linnet-python"))]
-use linnet_render_py::GraphModule;
 use pyo3::prelude::{Bound, Py, PyAnyMethods, PyDictMethods, PyModuleMethods, PyResult, Python};
 use pyo3::types::{PyCFunction, PyDict, PyList, PyModule};
 use spynso3::SpensoModule;
@@ -16,12 +14,8 @@ use symbolica::atom::Atom;
 use symbolica::parser::ParseSettings;
 
 const FEYNKIT_WRAPPER: &str = include_str!("../python/symbolica/community/hepkit/__init__.py");
-#[cfg(feature = "linnet-python")]
 const GRAPH_WRAPPER: &str =
     include_str!("../../linnet-py/python/symbolica/community/graph/__init__.py");
-#[cfg(not(feature = "linnet-python"))]
-const GRAPH_WRAPPER: &str =
-    include_str!("../../linnet-render-py/python/symbolica/community/graph/__init__.py");
 const MODEL_JSON: &str = include_str!("fixtures/scalars_2p_3p.json");
 const SPENSO_WRAPPER: &str = "from ..tensor_native import *\n\ninitialize_module()\n";
 
@@ -145,16 +139,12 @@ fn qcd_rich_display_requires_no_python_rendering_packages() {
         register_native::<FeynkitModule>(&core)?;
         register_native::<SpensoModule>(&core)?;
         import_wrapper(py, &community, "symbolica.community.graph", GRAPH_WRAPPER)?;
-        #[cfg(not(feature = "linnet-python"))]
         {
             let graph = py.import("symbolica.community.graph")?;
             for name in [
                 "DiagramRender", "DiagramView", "RenderSettings", "LayoutSettings", "Stroke",
             ] {
                 assert!(graph.hasattr(name)?, "missing shared display class {name}");
-            }
-            for name in ["Graph", "Subgraph", "node", "edge", "build"] {
-                assert!(!graph.hasattr(name)?, "unexpected generic graph API {name}");
             }
         }
         import_wrapper(
@@ -616,7 +606,9 @@ indexed_source = spenso.TensorExpression(
     core.Expression.parse(indexed_diagram.numerator), intern="indices"
 )
 assert indexed.to_expression() == indexed_source.to_expression()
-assert indexed.axes == indexed_source.axes
+# FeynKit orders explicit ports canonically; plain inference follows the term order of the
+# expression in memory, which depends on symbol registration. Both expose the same ports.
+assert sorted(map(str, indexed.axes)) == sorted(map(str, indexed_source.axes))
 assert "gammalooprs::Q(" in indexed_diagram.numerator
 assert "FeynKit::" not in indexed_diagram.numerator
 assert "Momentum" not in str(indexed)

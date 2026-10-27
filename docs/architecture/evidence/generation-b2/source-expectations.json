@@ -1,0 +1,178 @@
+{
+  "generation-b2-diagnosis": [
+    {
+      "command": "{} > {} | g ghg t u d QED==0 [{2}] --filter-zero-color --numerator-grouping no_grouping ",
+      "count": "6",
+      "sum": "-43/24",
+      "group28": []
+    },
+    {
+      "command": "{} > {} | g ghg t u d QED==0 [{2}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",
+      "count": "5",
+      "sum": "-43/24",
+      "group28": []
+    },
+    {
+      "command": "{} > {} | g ghg t u d QED==0 [{3}] --filter-zero-color --numerator-grouping no_grouping",
+      "count": "36",
+      "sum": "-91/48",
+      "group28": []
+    },
+    {
+      "command": "{} > {} | g ghg t u d QED==0 [{3}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",
+      "count": "27",
+      "sum": "-91/48",
+      "group28": []
+    },
+    {
+      "command": "{} > {} | g ghg t u d QED==0 [{4}] --filter-zero-color --numerator-grouping no_grouping",
+      "count": "264",
+      "sum": "191/24",
+      "group28": []
+    },
+    {
+      "command": "{} > {} | g ghg t u d QED==0 [{4}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling  ",
+      "count": "178",
+      "sum": "-731/168",
+      "group28": [
+        "Group(28,1,-1/6)"
+      ]
+    },
+    {
+      "command": "{} > {} | g ghg t u d QED==0 [{2}] --filter-zero-color --numerator-grouping no_grouping --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",
+      "count": "5",
+      "sum": "-23/12",
+      "group28": []
+    },
+    {
+      "command": "{} > {} | g ghg t u d QED==0 [{2}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",
+      "count": "4",
+      "sum": "-23/12",
+      "group28": []
+    },
+    {
+      "command": "{} > {} | g ghg t u d QED==0 [{3}] --filter-zero-color --numerator-grouping no_grouping --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",
+      "count": "30",
+      "sum": "-13/12",
+      "group28": []
+    },
+    {
+      "command": "{} > {} | g ghg t u d QED==0 [{3}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",
+      "count": "22",
+      "sum": "-17/12",
+      "group28": [
+        "Group(28,1,1/4)"
+      ]
+    },
+    {
+      "command": "{} > {} | g ghg t u d QED==0 [{3}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges 1 --number-of-factorized-loop-subtopologies 1 1",
+      "count": "22",
+      "sum": "-17/12",
+      "group28": [
+        "Group(28,1,1/4)"
+      ]
+    },
+    {
+      "command": "{} > {} | g ghg t u d QED==0 [{4}] --filter-zero-color --numerator-grouping no_grouping --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",
+      "count": "200",
+      "sum": "457/48",
+      "group28": []
+    },
+    {
+      "command": "{} > {} | g ghg t u d QED==0 [{4}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",
+      "count": "130",
+      "sum": "-853/336",
+      "group28": [
+        "Group(28,1,-1/2)"
+      ]
+    }
+  ],
+  "generation-b2-upstream": [
+    {
+      "command": "{} > {} | g ghg t u d QED==0 [{2}] --filter-zero-color --numerator-grouping no_grouping --max-n-bridges -1 --number-of-factorized-loop-subtopologies -1 -1 ",
+      "count": "6",
+      "sum": "-43/24",
+      "group28": []
+    },
+    {
+      "command": "{} > {} | g ghg t u d QED==0 [{2}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges -1 --number-of-factorized-loop-subtopologies -1 -1",
+      "count": "5",
+      "sum": "-43/24",
+      "group28": []
+    },
+    {
+      "command": "{} > {} | g ghg t u d QED==0 [{3}] --filter-zero-color --numerator-grouping no_grouping --max-n-bridges -1 --number-of-factorized-loop-subtopologies -1 -1",
+      "count": "36",
+      "sum": "-91/48",
+      "group28": []
+    },
+    {
+      "command": "{} > {} | g ghg t u d QED==0 [{3}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges -1 --number-of-factorized-loop-subtopologies -1 -1",
+      "count": "27",
+      "sum": "-91/48",
+      "group28": []
+    },
+    {
+      "command": "{} > {} | g ghg t u d QED==0 [{4}] --filter-zero-color --numerator-grouping no_grouping --max-n-bridges -1 --number-of-factorized-loop-subtopologies -1 -1",
+      "count": "264",
+      "sum": "191/24",
+      "group28": []
+    },
+    {
+      "command": "{} > {} | g ghg t u d QED==0 [{4}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges -1 --number-of-factorized-loop-subtopologies -1 -1",
+      "count": "178",
+      "sum": "-731/168",
+      "group28": [
+        "Group(28,1,-1/6)"
+      ]
+    },
+    {
+      "command": "{} > {} | g ghg t u d QED==0 [{2}] --filter-zero-color --numerator-grouping no_grouping --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",
+      "count": "5",
+      "sum": "-11/12",
+      "group28": []
+    },
+    {
+      "command": "{} > {} | g ghg t u d QED==0 [{2}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",
+      "count": "4",
+      "sum": "-11/12",
+      "group28": []
+    },
+    {
+      "command": "{} > {} | g ghg t u d QED==0 [{3}] --filter-zero-color --numerator-grouping no_grouping --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",
+      "count": "30",
+      "sum": "-17/12",
+      "group28": []
+    },
+    {
+      "command": "{} > {} | g ghg t u d QED==0 [{3}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",
+      "count": "22",
+      "sum": "-17/12",
+      "group28": [
+        "Group(28,1,1/4)"
+      ]
+    },
+    {
+      "command": "{} > {} | g ghg t u d QED==0 [{3}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges 1 --number-of-factorized-loop-subtopologies 1 1",
+      "count": "22",
+      "sum": "-17/12",
+      "group28": [
+        "Group(28,1,1/4)"
+      ]
+    },
+    {
+      "command": "{} > {} | g ghg t u d QED==0 [{4}] --filter-zero-color --numerator-grouping no_grouping --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",
+      "count": "200",
+      "sum": "-199/48",
+      "group28": []
+    },
+    {
+      "command": "{} > {} | g ghg t u d QED==0 [{4}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",
+      "count": "130",
+      "sum": "-853/336",
+      "group28": [
+        "Group(28,1,-1/2)"
+      ]
+    }
+  ]
+}

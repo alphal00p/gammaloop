@@ -56,7 +56,12 @@ assert isinstance(zero, TensorExpression)
 assert not zero and zero.structure.axes == ordered.structure.axes
 
 # Exercise a factored generated numerator without expanding its local factors.
-diagram = model.process(["e-", "e+"], ["a", "a"]).generate_diagrams(progress=None)[0]
+diagram = (
+    model.process(["e-", "e+"], ["a", "a"])
+    .amplitude(loops=hep.Loops.total(0))
+    .generate()
+    .build(hep.NumeratorOptions(naming=hep.Naming.named("D")))[0]
+)
 numerator = diagram.numerator_expression(in_lmb=True)
 expanded = model.expand_couplings(numerator)
 assert expanded.structure.axes == numerator.structure.axes

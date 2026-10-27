@@ -15,6 +15,7 @@ from symbolica import E, Replacement, S, Symbol
 from symbolica.community import hepkit as hep
 from symbolica.community.hepkit import oneloop
 from symbolica.community.tensor import TensorExpression
+from symbolica.community.graph import Bridges
 
 model = hep.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")
 D, eps, xi, s = S("qed_full::D", "qed_full::eps", "qed_full::xi", "qed_full::s")
@@ -35,15 +36,15 @@ vertices = [
     if sorted(v.particles) == sorted([electron.name, electron.antiname, photon.name])
 ]
 assert len(vertices) == 1
-result = model.process([electron], [electron], vertex_allow=vertices).generate_diagrams(
-    loops=1,
-    max_vertices=2,
-    maximum_bridges=0,
-    self_energy=None,
-    tadpoles=None,
-    zero_snails=None,
-    numerator_grouping=None,
-    progress=None,
+result = (
+    model.process([electron], [electron])
+    .amplitude(
+        loops=hep.Loops.total(1),
+        restrict=hep.Restrict().only_vertices(vertices),
+        topology=hep.TopologyRules(max_vertices=2, bridges=Bridges.at_most(0)),
+    )
+    .generate()
+    .build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
 )
 assert len(result.diagrams) == 1
 diagram = result.diagrams[0]
@@ -71,9 +72,16 @@ assert [e.particle_name for e in diagram.internal_edges] == [electron.name, phot
 # carry +i and -i. Their product gives the unweighted kernel -e^2 N.
 # Both generated e->e and e->gamma e amplitudes have an additional external
 # Wick-ordering factor -1. Establish that sign independently at tree level.
-tree_result = model.process(
-    [electron], [photon, electron], vertex_allow=vertices
-).generate_diagrams(max_vertices=1, numerator_grouping=None, progress=None)
+tree_result = (
+    model.process([electron], [photon, electron])
+    .amplitude(
+        loops=hep.Loops.total(0),
+        restrict=hep.Restrict().only_vertices(vertices),
+        topology=hep.TopologyRules(max_vertices=1),
+    )
+    .generate()
+    .build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
+)
 assert len(tree_result.diagrams) == 1
 tree_diagram = tree_result.diagrams[0]
 tree_ports = {}

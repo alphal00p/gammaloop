@@ -15,8 +15,10 @@ path = "src/bin/stubgen.rs"
 required-features = ["python_stubgen"]
 
 [dependencies]
+# The generation API returns and filters Linnet graphs, so the generic graph
+# bindings are always linked; `linnet-python` only gates FeynKit's graph interop exports.
 linnet-render-py = { path = "../linnet-render-py", default-features = false }
-linnet-py = { path = "../linnet-py", default-features = false, optional = true }
+linnet-py = { path = "../linnet-py", default-features = false }
 spenso-macros = { workspace = true }
 feynkit-amplitude = { version = "0.1.0", path = "../feynkit-amplitude", default-features = false }
 feynkit-cff = { version = "0.1.0", path = "../feynkit-cff", default-features = false }
@@ -46,11 +48,11 @@ features = ["python_export"]
 
 [features]
 default = ["ufo", "native"]
-# Generic Linnet graph exports are opt-in; callbacks use core Symbolica graphs.
-linnet-python = ["dep:linnet-py"]
+# FeynKit's generic Linnet graph interop exports are opt-in.
+linnet-python = []
 native = [
-  "linnet-render-py/native", "linnet-py?/native", "feynkit-amplitude/native", "spynso3/native", "feynkit-cff/native", "feynkit-generator/native", "feynkit-graph/native", "feynkit-tensor/native", "feynkit-kinematics/native", "idenso/native"]
+  "linnet-render-py/native", "linnet-py/native",  "feynkit-amplitude/native", "spynso3/native", "feynkit-cff/native", "feynkit-generator/native", "feynkit-graph/native", "feynkit-tensor/native", "feynkit-kinematics/native", "idenso/native"]
 wasm = [
-  "linnet-render-py/wasm", "linnet-py?/wasm", "feynkit-amplitude/wasm", "spynso3/wasm", "feynkit-cff/wasm", "feynkit-generator/wasm", "feynkit-graph/wasm", "feynkit-tensor/wasm", "feynkit-kinematics/wasm", "idenso/wasm"]
-python_stubgen = ["linnet-render-py/python_stubgen", "linnet-py?/python_stubgen", "spynso3/python_stubgen", "dep:pyo3-stub-gen", "symbolica/python_stubgen"]
+  "linnet-render-py/wasm", "linnet-py/wasm",  "feynkit-amplitude/wasm", "spynso3/wasm", "feynkit-cff/wasm", "feynkit-generator/wasm", "feynkit-graph/wasm", "feynkit-tensor/wasm", "feynkit-kinematics/wasm", "idenso/wasm"]
+python_stubgen = ["linnet-render-py/python_stubgen", "linnet-py/python_stubgen", "spynso3/python_stubgen", "dep:pyo3-stub-gen", "symbolica/python_stubgen"]
 ufo = ["dep:feynkit-ufo"]

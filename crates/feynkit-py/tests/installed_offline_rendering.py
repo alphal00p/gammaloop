@@ -240,7 +240,7 @@ try:
             xs, ys = zip(*tips)
             assert min(xs) < cx < max(xs) and min(ys) < cy < max(ys)
     ET.fromstring(external_metrics_snapshot(model.process([], []).render()).to_svg())
-    amplitude = process.generate_amplitude(loops=2, progress=None)
+    amplitude = process.amplitude(loops=hep.Loops.total(2), topology=hep.TopologyRules(bridges=hep.Bridges.one_pi_in_loops(), self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless())).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D"))).into_amplitude()
     assert len(amplitude.diagrams) == 48
     assert not hasattr(amplitude, "_repr_html_")
     assert (
@@ -357,11 +357,9 @@ try:
     )
     assert network.to_typst()
     scalar = hep.Model.phi3()
-    cross = scalar.process(["phi"], ["phi", "phi"]).generate_cross_section(
-        loops=1, max_vertices=2, allow_self_loops=True, progress=None
-    )[0]
+    cross = scalar.process(["phi"], ["phi", "phi"]).cross_section(loops=hep.Loops.forward(1), topology=hep.TopologyRules(max_vertices=2, self_loops=True, bridges=hep.Bridges.one_pi_in_loops(), self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless()), cuts=hep.Cuts(blobs=hep.Range.exact(1), spectators=hep.Range.exact(0))).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))[0]
     original = cross.to_json()
-    tree = scalar.process(["phi"], ["phi", "phi"]).generate_diagrams(progress=None)[0]
+    tree = scalar.process(["phi"], ["phi", "phi"]).amplitude(loops=hep.Loops.total(0), topology=hep.TopologyRules(bridges=hep.Bridges.one_pi_in_loops(), self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless())).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))[0]
     exported = [cross, tree]
     restored = hep.FeynmanDiagram.from_dot_set(
         scalar, "\n".join(item.to_dot() for item in exported)
@@ -517,10 +515,7 @@ try:
         assert tree.parent(0) is None and tree.children(0) == tree.ancestors(0) == []
     tadpole = (
         hep.Model.phi4()
-        .process(["phi"], ["phi"])
-        .generate_diagrams(
-            loops=1, max_vertices=1, allow_self_loops=True, progress=None
-        )[0]
+        .process(["phi"], ["phi"]).amplitude(loops=hep.Loops.total(1), topology=hep.TopologyRules(max_vertices=1, self_loops=True, bridges=hep.Bridges.one_pi_in_loops(), self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless())).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))[0]
     )
     assert len(tadpole.cycle_basis()[0]) == 1
     for traverse in (tadpole.depth_first_traverse, tadpole.breadth_first_traverse):

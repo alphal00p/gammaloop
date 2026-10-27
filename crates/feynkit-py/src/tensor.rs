@@ -1,13 +1,18 @@
 use feynkit_tensor::TensorReducer;
-use pyo3::{
-    prelude::*,
-    types::{PyAny, PyModule},
-};
-use spynso3::{expression::TensorExpression, structure::SpensoName};
-use symbolica::{
-    api::python::{ConvertibleToExpression, PythonExpression},
-    atom::AtomView,
-};
+use pyo3::prelude::Bound;
+use pyo3::prelude::Py;
+use pyo3::prelude::PyAnyMethods;
+use pyo3::prelude::PyModuleMethods;
+use pyo3::prelude::PyRef;
+use pyo3::prelude::PyResult;
+use pyo3::prelude::Python;
+use pyo3::prelude::pyclass;
+use pyo3::prelude::pymethods;
+use pyo3::types::{PyAny, PyModule};
+use spynso3::expression::TensorExpression;
+use spynso3::structure::SpensoName;
+use symbolica::api::python::{ConvertibleToExpression, PythonExpression};
+use symbolica::atom::AtomView;
 
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen_derive::{gen_stub_pyclass, gen_stub_pymethods};
@@ -156,7 +161,7 @@ impl PyTensorReducer {
     /// >>> from symbolica import S, E
     /// >>> from symbolica.community import hepkit as hep
     /// >>> model = hep.Model.phi4()
-    /// >>> vacuum_diagram = model.process([], []).generate_diagrams(loops=2, factorized_loop_topologies_count_range=None).diagrams[0]
+    /// >>> vacuum_diagram = model.process([], []).amplitude(loops=hep.Loops.total(2)).generate().build().diagrams[0]
     /// >>> reducer = hep.TensorReducer(E("4"), integrated=[E("gammalooprs::Q")])
     /// >>> reduced = reducer.reduce(vacuum_diagram.numerator_expression().to_expression())
     ///

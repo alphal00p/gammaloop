@@ -41,8 +41,14 @@ for label, vertices, incoming, outgoing, coupling in [
     ("scalar_quartic", quartics, [higgs, higgs], [higgs, higgs], 6 * lam),
 ]:
     trees = (
-        model.process(incoming, outgoing, vertex_allow=vertices)
-        .generate_diagrams(max_vertices=1, numerator_grouping=None, progress=None)
+        model.process(incoming, outgoing)
+        .amplitude(
+            loops=hep.Loops.total(0),
+            restrict=hep.Restrict().only_vertices(vertices),
+            topology=hep.TopologyRules(max_vertices=1),
+        )
+        .generate()
+        .build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
         .diagrams
     )
     assert len(trees) == 1, label
@@ -62,18 +68,15 @@ for label, vertices, outgoing, mass, expected_trace, wick_weight in [
     ("scalar_cubic", cubics, [], mh, 6 * vev * lam, wick_weights[1]),
     ("scalar_quartic", quartics, [higgs], mh, 6 * lam, wick_weights[2]),
 ]:
-    generated = model.process(
-        [higgs], outgoing, vertex_allow=vertices
-    ).generate_diagrams(
-        loops=1,
-        max_vertices=1,
-        allow_zero_flow_edges=True,
-        maximum_bridges=None,
-        tadpoles=None,
-        zero_snails=None,
-        self_energy=None,
-        numerator_grouping=None,
-        progress=None,
+    generated = (
+        model.process([higgs], outgoing)
+        .amplitude(
+            loops=hep.Loops.total(1),
+            restrict=hep.Restrict().only_vertices(vertices),
+            topology=hep.TopologyRules(max_vertices=1, zero_flow_edges=True),
+        )
+        .generate()
+        .build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
     )
     assert len(generated.diagrams) == 1, label
     diagram = generated.diagrams[0]

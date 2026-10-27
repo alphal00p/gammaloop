@@ -1,31 +1,25 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use cgmath::{Point2, Rad, Vector2};
-use dot_parser::ast::CompassPt;
-use linnet::{
-    half_edge::{
-        builder::{HedgeData, HedgeGraphBuilder},
-        involution::{
-            ArchivedOrientation, EdgeData, EdgeIndex, Flow, Hedge, HedgePair, HedgeVec, Involution,
-            InvolutiveMapping, Orientation,
-        },
-        layout::{
-            impred::{ImpredConfig, ImpredLayout},
-            spring::{Constraint, LayoutPointIndex, PointConstraint},
-        },
-        nodestore::{DefaultNodeStore, NodeStorageOps},
-        subgraph::{Inclusion, SuBitGraph, SubSetLike},
-        swap::Swap,
-        NodeIndex,
-    },
-    parser::{
-        ArchivedDotEdgeView, ArchivedDotEndpointView, ArchivedDotGraphView, ArchivedDotVertexView,
-        DotEdgeData, DotGraph, DotHedgeData, DotVertexData, GlobalData,
-    },
+use linnet::half_edge::builder::{HedgeData, HedgeGraphBuilder};
+use linnet::half_edge::involution::{
+    ArchivedOrientation, EdgeData, EdgeIndex, Flow, Hedge, HedgePair, HedgeVec, Involution,
+    InvolutiveMapping, Orientation,
+};
+use linnet::half_edge::layout::impred::{ImpredConfig, ImpredLayout};
+use linnet::half_edge::layout::spring::{Constraint, LayoutPointIndex, PointConstraint};
+use linnet::half_edge::nodestore::NodeForest;
+use linnet::half_edge::subgraph::{Inclusion, SuBitGraph, SubSetLike};
+use linnet::half_edge::NodeIndex;
+use linnet::parser::{
+    ArchivedDotEdgeView, ArchivedDotEndpointView, ArchivedDotGraphView, ArchivedDotVertexView,
+    CompassPt, DotEdgeData, DotGraph, DotHedgeData, DotVertexData, GlobalData,
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{default_figment, PinConstraint, TypstEdge, TypstGraph, TypstHedge, TypstNode};
+use crate::{
+    default_figment, parse_compass, PinConstraint, TypstEdge, TypstGraph, TypstHedge, TypstNode,
+};
 
 type DotBuilder = HedgeGraphBuilder<DotEdgeData, DotVertexData, DotHedgeData>;
 const TYPST_EDGE_NAME_KEY: &str = "__linnest-edge-name";
@@ -488,7 +482,8 @@ fn encode_typst_graph(graph: &TypstGraph) -> Result<Vec<u8>, String> {
 /// Export the measured graph through serde rather than the build-specific archive.
 /// The host computes a layout without taking ownership of Typst content or styles.
 pub fn graph_layout_snapshot_bytes(arg: &[u8], options: &[u8]) -> Result<Vec<u8>, String> {
-    use figment::{providers::Serialized, Figment, Profile};
+    use figment::providers::Serialized;
+    use figment::{Figment, Profile};
 
     let mut graph = decode_typst_graph(arg)?;
     let options: ciborium::Value = decode_cbor(options, "layout options")?;
@@ -500,63 +495,10 @@ pub fn graph_layout_snapshot_bytes(arg: &[u8], options: &[u8]) -> Result<Vec<u8>
 }
 
 impl TypstGraph {
-    /// Decode a measured snapshot across WASM/native word sizes. Bitvec's serde
-    /// representation embeds its storage word width, so rebuild each node crown
-    /// with the destination width before deserializing the native graph.
+    /// Decode a measured snapshot. The node store serializes word-size
+    /// independent labels, so WASM and native snapshots are interchangeable.
     pub fn from_layout_snapshot(snapshot: &serde_json::Value) -> Result<Self, String> {
-        let mut snapshot = snapshot.clone();
-        let nodes = snapshot
-            .pointer_mut("/graph/node_store/nodes")
-            .and_then(serde_json::Value::as_array_mut)
-            .ok_or("Layout snapshot has no node crowns")?;
-        for node in nodes {
-            let set = node
-                .get_mut("set")
-                .ok_or("Layout snapshot node has no crown")?;
-            if set.get("order").and_then(serde_json::Value::as_str) != Some("bitvec::order::Lsb0") {
-                return Err("Layout snapshot requires Lsb0 node crowns".to_owned());
-            }
-            let integer = |value: Option<&serde_json::Value>| {
-                value
-                    .and_then(serde_json::Value::as_u64)
-                    .ok_or("Invalid layout crown integer")
-            };
-            let width = integer(set.pointer("/head/width"))? as usize;
-            let head = integer(set.pointer("/head/index"))? as usize;
-            let bits = integer(set.get("bits"))? as usize;
-            if !matches!(width, 32 | 64) || head >= width {
-                return Err("Invalid layout crown storage width or head".to_owned());
-            }
-            let words = set
-                .get("data")
-                .and_then(serde_json::Value::as_array)
-                .ok_or("Layout crown has no storage words")?;
-            let end = head
-                .checked_add(bits)
-                .ok_or("Layout crown length overflow")?;
-            if words.len() != end.div_ceil(width) {
-                return Err("Layout crown storage does not match its bit count".to_owned());
-            }
-            let words = words
-                .iter()
-                .map(|word| integer(Some(word)))
-                .collect::<Result<Vec<_>, _>>()?;
-            if width == 32 && words.iter().any(|word| *word > u32::MAX as u64) {
-                return Err("Layout crown word exceeds its storage width".to_owned());
-            }
-            let native_width = usize::BITS as usize;
-            let mut packed = vec![0u64; bits.div_ceil(native_width)];
-            for bit in 0..bits {
-                let source = head + bit;
-                if (words[source / width] >> (source % width)) & 1 != 0 {
-                    packed[bit / native_width] |= 1 << (bit % native_width);
-                }
-            }
-            set["head"] = serde_json::json!({"width": native_width, "index": 0});
-            set["data"] = serde_json::json!(packed);
-        }
-        serde_json::from_value(snapshot)
-            .map_err(|error| format!("Invalid layout snapshot: {error}"))
+        Self::deserialize(snapshot).map_err(|error| format!("Invalid layout snapshot: {error}"))
     }
 }
 
@@ -936,16 +878,16 @@ fn apply_typst_graph_structural_patch(
     let original_edge_positions = (0..graph.graph.n_edges())
         .map(|index| graph.graph[EdgeIndex(index)].pos)
         .collect::<Vec<_>>();
-    let mut patched_node_positions = vec![false; graph.graph.n_nodes()];
+    let mut patched_node_positions = vec![false; graph.graph.node_bound()];
     let mut patched_edge_positions = vec![false; graph.graph.n_edges()];
     let mut refresh_positions = false;
 
     for node in patch.nodes {
-        if node.index >= graph.graph.n_nodes() {
+        if node.index >= graph.graph.node_bound() {
             return Err(format!(
                 "Node structural patch index {} is out of bounds for graph with {} nodes",
                 node.index,
-                graph.graph.n_nodes()
+                graph.graph.node_bound()
             ));
         }
 
@@ -1064,7 +1006,7 @@ fn apply_typst_graph_structural_patch(
             data.port_label = Some(port_label);
         }
         if let Some(compass) = hedge.compass {
-            data.compasspt = parse_endpoint_compass(&compass)?.map(compass_pt_to_string);
+            data.compasspt = parse_compass(&compass)?.map(|compass| compass.to_string());
         }
         if let Some(points) = hedge.route_points {
             data.route_points = points
@@ -1113,7 +1055,7 @@ fn point_statements_changed(statements: &BTreeMap<String, String>) -> bool {
 }
 
 fn typst_node_positions(graph: &TypstGraph) -> Vec<ResolvedPoint> {
-    let mut positions = vec![ResolvedPoint::default(); graph.graph.n_nodes()];
+    let mut positions = vec![ResolvedPoint::default(); graph.graph.node_bound()];
     for (index, _, node) in graph.graph.iter_nodes() {
         positions[index.0] = ResolvedPoint {
             x: node.pos.x,
@@ -1127,7 +1069,7 @@ fn typst_node_positions(graph: &TypstGraph) -> Vec<ResolvedPoint> {
 
 fn refresh_structural_state_from_statements(graph: &mut TypstGraph) {
     let mut group_map = HashMap::new();
-    for index in 0..graph.graph.n_nodes() {
+    for index in 0..graph.graph.node_bound() {
         let index = NodeIndex(index);
         let node = &mut graph.graph[index];
         let statements = node.statements.clone();
@@ -1247,11 +1189,11 @@ fn apply_graph_data_patch(
     }
 
     for node in patch.nodes {
-        if node.index >= graph.graph.n_nodes() {
+        if node.index >= graph.graph.node_bound() {
             return Err(format!(
                 "Node data patch index {} is out of bounds for graph with {} nodes",
                 node.index,
-                graph.graph.n_nodes()
+                graph.graph.node_bound()
             ));
         }
         if let Some(data) = node.data {
@@ -1635,11 +1577,9 @@ impl TypstGraph {
         let invalid = || "Invalid cut input graph topology".to_string();
         let involution: &Involution = self.graph.as_ref();
         let mappings: Vec<_> = involution.iter().map(|(_, mapping)| mapping).collect();
-        let node_hedges: Hedge = self.graph.node_store.len();
         if mappings.len() != self.n_hedges()
             || self.iter_hedges().count() != self.n_hedges()
-            || node_hedges.0 != self.n_hedges()
-            || self.graph.node_store.iter().count() != self.n_nodes()
+            || self.graph.node_store.n_hedges() != self.n_hedges()
         {
             return Err(invalid());
         }
@@ -1709,10 +1649,11 @@ impl TypstGraph {
         }
         let mut graph = decode_typst_graph(arg)?;
         graph.validate_cut_topology()?;
-        let (n_nodes, n_edges, n_hedges) = (graph.n_nodes(), graph.n_edges(), graph.n_hedges());
+        let (node_bound, n_edges, n_hedges) =
+            (graph.node_bound(), graph.n_edges(), graph.n_hedges());
         let mut result = TypstCutResult {
             graph: Vec::new(),
-            nodes: (0..n_nodes).map(Some).collect(),
+            nodes: (0..node_bound).map(Some).collect(),
             edges: (0..n_edges)
                 .map(|edge| TypstCutEdgeOrigin {
                     edge,
@@ -1756,7 +1697,7 @@ impl TypstGraph {
                 .ok_or_else(too_large)?;
         }
         let extra_endpoints = 2 * (windings - entries.len());
-        let output_nodes = n_nodes
+        let output_nodes = node_bound
             .checked_add(extra_endpoints)
             .filter(|n| *n <= MAX_ITEMS)
             .ok_or_else(too_large)?;
@@ -1902,7 +1843,7 @@ pub fn graph_join_by_edge_key_bytes(
     validate_join_identities(&left.graph, &spec.key, false)?;
     validate_join_identities(&right.graph, &spec.key, false)?;
     validate_join_names(&left.graph, &right.graph)?;
-    let left_nodes = left.graph.iter_nodes().count();
+    let left_nodes = left.graph.node_bound();
     let left_hedges = left.graph.iter_hedges().count();
     let left_map = edge_origin_map(&left.graph);
     let right_map = edge_origin_map(&right.graph);
@@ -1947,7 +1888,7 @@ pub fn graph_join_by_hedge_key_bytes(
     validate_join_identities(&left.graph, &spec.key, true)?;
     validate_join_identities(&right.graph, &spec.key, true)?;
     validate_join_names(&left.graph, &right.graph)?;
-    let left_nodes = left.graph.iter_nodes().count();
+    let left_nodes = left.graph.node_bound();
     let left_hedges = left.graph.iter_hedges().count();
     let left_map = edge_origin_map(&left.graph);
     let right_map = edge_origin_map(&right.graph);
@@ -2116,10 +2057,8 @@ fn encode_join_result(
 ) -> Result<Vec<u8>, String> {
     let graph_bytes = encode_typst_graph(&graph)?;
     let dot = graph.to_dot_graph();
-    let nodes = dot
-        .iter_nodes()
-        .enumerate()
-        .map(|(i, _)| TypstJoinOrigin {
+    let nodes = (0..dot.node_bound())
+        .map(|i| TypstJoinOrigin {
             left: (i < left_nodes).then_some(i),
             right: if i >= left_nodes {
                 Some(i - left_nodes)
@@ -2266,7 +2205,7 @@ fn graph_from_spec(spec: TypstGraphSpec) -> Result<DotGraph, String> {
 
     let mut graph = DotGraph {
         global_data,
-        graph: builder.build::<DefaultNodeStore<DotVertexData>>(),
+        graph: builder.build::<NodeForest>(),
     };
     graph
         .apply_explicit_id_ordering()
@@ -2773,7 +2712,7 @@ fn endpoint_spec_to_hedge_data(
             compasspt: endpoint
                 .compass
                 .as_deref()
-                .map(parse_endpoint_compass)
+                .map(parse_compass)
                 .transpose()?
                 .flatten(),
         },
@@ -2799,10 +2738,6 @@ fn parse_flow(value: &str) -> Result<Flow, String> {
     }
 }
 
-fn parse_endpoint_compass(value: &str) -> Result<Option<CompassPt>, String> {
-    parse_compass(value)
-}
-
 fn statement_value<'a>(data: EdgeData<&'a DotEdgeData>, key: &str) -> Option<&'a str> {
     data.data.statements.get(key).map(String::as_str)
 }
@@ -2811,7 +2746,7 @@ fn hedge_value(data: &DotHedgeData, key: &str) -> Option<String> {
     match key {
         "statement" => data.statement.clone(),
         "port-label" => data.port_label.clone(),
-        "compass" => data.compasspt.map(compass_pt_to_string),
+        "compass" => data.compasspt.map(|compass| compass.to_string()),
         "id" => data.id.map(|id| id.0.to_string()),
         _ => None,
     }
@@ -3014,23 +2949,6 @@ fn parse_rad(statements: &BTreeMap<String, String>, key: &str) -> Option<f64> {
     })
 }
 
-fn parse_compass(value: &str) -> Result<Option<CompassPt>, String> {
-    match value.trim().to_ascii_lowercase().as_str() {
-        "" | "none" => Ok(None),
-        "n" => Ok(Some(CompassPt::N)),
-        "ne" => Ok(Some(CompassPt::NE)),
-        "e" => Ok(Some(CompassPt::E)),
-        "se" => Ok(Some(CompassPt::SE)),
-        "s" => Ok(Some(CompassPt::S)),
-        "sw" => Ok(Some(CompassPt::SW)),
-        "w" => Ok(Some(CompassPt::W)),
-        "nw" => Ok(Some(CompassPt::NW)),
-        "c" => Ok(Some(CompassPt::C)),
-        "_" => Ok(Some(CompassPt::Underscore)),
-        other => Err(format!("Invalid compass point: {other}")),
-    }
-}
-
 fn orientation_to_string(orientation: &ArchivedOrientation) -> &'static str {
     match orientation {
         ArchivedOrientation::Default => "default",
@@ -3039,43 +2957,16 @@ fn orientation_to_string(orientation: &ArchivedOrientation) -> &'static str {
     }
 }
 
+/// Spells an archived compass byte, or `?` for an invalid one.
 fn compass_to_string(compass: u8) -> String {
-    match compass {
-        0 => "n",
-        1 => "ne",
-        2 => "e",
-        3 => "se",
-        4 => "s",
-        5 => "sw",
-        6 => "w",
-        7 => "nw",
-        8 => "c",
-        9 => "_",
-        _ => "?",
-    }
-    .to_string()
-}
-
-fn compass_pt_to_string(compass: CompassPt) -> String {
-    match compass {
-        CompassPt::N => "n",
-        CompassPt::NE => "ne",
-        CompassPt::E => "e",
-        CompassPt::SE => "se",
-        CompassPt::S => "s",
-        CompassPt::SW => "sw",
-        CompassPt::W => "w",
-        CompassPt::NW => "nw",
-        CompassPt::C => "c",
-        CompassPt::Underscore => "_",
-    }
-    .to_string()
+    CompassPt::try_from(compass).map_or_else(|_| "?".to_owned(), |compass| compass.to_string())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use ciborium::Value;
+    use serde_json::json;
 
     #[test]
     fn layout_snapshot_preserves_constraints_and_measured_fields() {
@@ -3104,38 +2995,25 @@ mod tests {
     }
 
     #[test]
-    fn layout_snapshot_reconstructs_wasm32_node_crowns() {
+    fn layout_snapshot_is_word_size_independent() {
         let source = format!("digraph {{ {} }}", "a -> b;".repeat(36));
         let graph = TypstGraph::parse(&source).unwrap();
-        let mut snapshot = serde_json::to_value(&graph).unwrap();
-        for node in snapshot
-            .pointer_mut("/graph/node_store/nodes")
-            .unwrap()
-            .as_array_mut()
-            .unwrap()
-        {
-            let set = &mut node["set"];
-            let bits = set["bits"].as_u64().unwrap() as usize;
-            let old_width = set["head"]["width"].as_u64().unwrap() as usize;
-            let old = set["data"].as_array().unwrap();
-            let mut words = vec![0u32; bits.div_ceil(32)];
-            for bit in 0..bits {
-                if (old[bit / old_width].as_u64().unwrap() >> (bit % old_width)) & 1 != 0 {
-                    words[bit / 32] |= 1 << (bit % 32);
-                }
-            }
-            set["head"]["width"] = serde_json::json!(32);
-            set["data"] = serde_json::json!(words);
-        }
+        let snapshot = serde_json::to_value(&graph).unwrap();
+        // Bitvec's serde form embeds its storage word width, which differs
+        // between WASM and native builds; the node store must not use it.
+        assert!(!snapshot["graph"]["node_store"]
+            .to_string()
+            .contains("bitvec"));
         let restored = TypstGraph::from_layout_snapshot(&snapshot).unwrap();
         assert_eq!(
             encode_cbor(&restored).unwrap(),
             encode_cbor(&graph).unwrap()
         );
-        snapshot["graph"]["node_store"]["nodes"][0]["set"]["head"]["width"] = serde_json::json!(16);
-        assert!(TypstGraph::from_layout_snapshot(&snapshot)
+        let mut corrupt = snapshot;
+        corrupt["graph"]["node_store"]["topology"]["label"][0] = json!(99);
+        assert!(TypstGraph::from_layout_snapshot(&corrupt)
             .unwrap_err()
-            .contains("storage width"));
+            .contains("Invalid layout snapshot"));
     }
 
     fn cut_fixture(orientation: Orientation) -> TypstGraph {
@@ -3270,10 +3148,10 @@ mod tests {
                     let result = cut_result(&graph, &[entry]).unwrap();
                     let output = decode_typst_graph(&result.graph).unwrap();
                     output.check().unwrap();
-                    assert_eq!(output.n_nodes(), 3 + 2 * (winding - 1));
+                    assert_eq!(output.n_live(), 3 + 2 * (winding - 1));
                     assert_eq!(output.n_edges(), 3 + winding);
                     assert_eq!(output.n_hedges(), 5 + 2 * (winding - 1));
-                    assert_eq!(result.nodes.len(), output.n_nodes());
+                    assert_eq!(result.nodes.len(), output.node_bound());
                     assert_eq!(result.edges.len(), output.n_edges());
                     assert_eq!(result.hedges.len(), output.n_hedges());
                     assert_eq!(output.name, graph.name);
@@ -3470,7 +3348,7 @@ mod tests {
             let bytes = crate::api::layout_parsed_graph_bytes(&cut.graph, &settings).unwrap();
             let after = decode_typst_graph(&bytes).unwrap();
             after.check().unwrap();
-            assert_eq!(after.n_nodes(), before.n_nodes());
+            assert_eq!(after.n_live(), before.n_live());
             assert_eq!(after.n_hedges(), before.n_hedges());
             assert_eq!(after.n_edges(), before.n_edges());
             for ((pair, edge, data), (original_pair, original_edge, _)) in
@@ -3504,7 +3382,7 @@ mod tests {
             assert_eq!(result.graph, bytes);
             assert_eq!(
                 result.nodes,
-                (0..graph.n_nodes()).map(Some).collect::<Vec<_>>()
+                (0..graph.node_bound()).map(Some).collect::<Vec<_>>()
             );
             assert_eq!(
                 result.hedges,
@@ -3591,7 +3469,7 @@ mod tests {
         );
         assert_eq!(
             recut.nodes,
-            (0..output.n_nodes()).map(Some).collect::<Vec<_>>()
+            (0..output.node_bound()).map(Some).collect::<Vec<_>>()
         );
     }
 
@@ -3772,7 +3650,7 @@ mod tests {
         }
         let mut graph = cut_fixture(Orientation::Default);
         graph.graph.node_store = HedgeGraphBuilder::<TypstEdge, TypstNode, TypstHedge>::new()
-            .build::<DefaultNodeStore<TypstNode>>()
+            .build::<NodeForest>()
             .node_store;
         assert!(cut_result(
             &graph,
@@ -3948,7 +3826,7 @@ mod tests {
             }
             graph.layout_with_subgraph(None).unwrap();
             let positions = |graph: &TypstGraph| {
-                let nodes = (0..graph.n_nodes())
+                let nodes = (0..graph.node_bound())
                     .map(|index| graph.graph[NodeIndex(index)].pos)
                     .collect::<Vec<_>>();
                 let edges = (0..graph.n_edges())

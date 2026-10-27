@@ -5,34 +5,24 @@
 //! substitutions remain port bindings until a distinct output variable is emitted.
 
 use super::*;
-use crate::tensor::{
-    ContractSettings, SymbolicNet, simplification::observation::DomainObservations,
-};
+use crate::tensor::simplification::observation::DomainObservations;
+use crate::tensor::{ContractSettings, SymbolicNet};
 use ahash::AHashSet;
-use linnet::{
-    half_edge::{
-        NodeIndex,
-        subgraph::{Inclusion, SuBitGraph},
-        tree::SimpleTraversalTree,
-    },
-    tree::child_vec::ChildVecStore,
-};
-use spenso::{
-    network::{
-        graph::{NetworkEdge, NetworkLeaf, NetworkNode, NetworkOp},
-        library::DummyLibrary,
-        parsing::{LeafInterfaceCache, ParseSettings, ShorthandParsing},
-        store::{TensorScalarStore, TensorScalarStoreMapping},
-    },
-    structure::{
-        OrderedStructure, TensorStructure,
-        abstract_index::AbstractIndex,
-        partial::{PartialIndex, PartialStructureExt},
-        slot::IsAbstractSlot,
-    },
-};
+use linnet::half_edge::NodeIndex;
+use linnet::half_edge::subgraph::{Inclusion, SuBitGraph};
+use linnet::half_edge::tree::SimpleTraversalTree;
+use linnet::tree::child_vec::ChildVecStore;
+use spenso::network::graph::{NetworkEdge, NetworkLeaf, NetworkNode, NetworkOp};
+use spenso::network::library::DummyLibrary;
+use spenso::network::parsing::{LeafInterfaceCache, ParseSettings, ShorthandParsing};
+use spenso::network::store::{TensorScalarStore, TensorScalarStoreMapping};
+use spenso::structure::abstract_index::AbstractIndex;
+use spenso::structure::partial::{PartialIndex, PartialStructureExt};
+use spenso::structure::slot::IsAbstractSlot;
+use spenso::structure::{OrderedStructure, TensorStructure};
 use std::sync::Arc;
-use symbolica::{atom::AtomOrView, coefficient::CoefficientView};
+use symbolica::atom::AtomOrView;
+use symbolica::coefficient::CoefficientView;
 
 // A state contains occurrence-local port bindings, not rebuilt expressions.
 // Variables and the incidence scratch still belong to ComponentSum.
@@ -2340,7 +2330,7 @@ mod lazy_tests {
             let source = super::super::tests::input(source);
             let scope = ContractionScope::parse(source.as_view()).unwrap();
             assert_eq!(scope.ports.len(), nodes, "{source}");
-            assert_eq!(scope.network.graph.graph.n_nodes(), nodes, "{source}");
+            assert_eq!(scope.network.graph.graph.n_live(), nodes, "{source}");
             assert!(scope.opened.values().all(|entry| entry.get().is_none()));
         }
     }
@@ -2592,7 +2582,7 @@ mod lazy_tests {
             let source = Atom::mul_many([core, first.clone(), second.clone()]);
             let scope = ContractionScope::parse(source.as_view()).unwrap();
             assert_eq!(scope.ports.len(), 5, "one product and four factor leaves");
-            assert_eq!(scope.network.graph.graph.n_nodes(), 5);
+            assert_eq!(scope.network.graph.graph.n_live(), 5);
             let protected = scope
                 .factors(scope.root)
                 .into_iter()

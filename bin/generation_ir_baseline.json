@@ -1,0 +1,685 @@
+{
+ "label": "baseline: library code and harness of xspzosrl (linnet-generation-combined, the Feynman generation stack on feynkit c45ab002); medians of 5 callgrind runs (generation) and 3 runs (full); allocations from one DHAT run",
+ "profile": [
+  "profile.generation-ir.inherits=\"release\"",
+  "profile.generation-ir.lto=false",
+  "profile.generation-ir.codegen-units=16",
+  "profile.generation-ir.debug=\"line-tables-only\""
+ ],
+ "toolchain": "rustc 1.98.1 (48a229cea 2026-09-01)",
+ "valgrind": "valgrind-3.27.1",
+ "workloads": {
+  "qcd_gggg_L3": {
+   "full": {
+    "allocations": {
+     "blocks": 349352748,
+     "bytes": 86601490933,
+     "peak_bytes": 21136981839
+    },
+    "result": {
+     "assignments": "686501",
+     "case": "qcd_gggg_L3",
+     "completed": "true",
+     "mode": "full",
+     "retained": "686501",
+     "topologies": "14340"
+    },
+    "runs": [
+     368688394590,
+     368203979567,
+     368206940484
+    ],
+    "stages": {
+     "canonical_frame": 32480745718,
+     "certify": null,
+     "dressing": 2084550733,
+     "dressing_start": 92265611,
+     "drop": 22364208317,
+     "enumeration": 5202771334,
+     "filter": 143713930,
+     "filter_complete": 36384553,
+     "grouping": null,
+     "interaction_filters": 61970050857,
+     "materialize": null,
+     "model": 37467250,
+     "numerators": 242191893661,
+     "preparation": 71342757986,
+     "rules": null,
+     "topologies": 155571344,
+     "topology_canonize": 63013387
+    },
+    "total": 368206940484
+   },
+   "generation": {
+    "allocations": {
+     "blocks": 88056884,
+     "bytes": 16756883829,
+     "peak_bytes": 1621415530
+    },
+    "result": {
+     "assignments": "686501",
+     "case": "qcd_gggg_L3",
+     "completed": "true",
+     "mode": "generation",
+     "retained": "686501",
+     "topologies": "14340"
+    },
+    "runs": [
+     79345831316,
+     79346829462,
+     79343843423,
+     79344183154,
+     79344073781
+    ],
+    "stages": {
+     "canonical_frame": 32480745718,
+     "certify": null,
+     "dressing": 2084550733,
+     "dressing_start": 92265687,
+     "drop": 1540443455,
+     "enumeration": 5202770134,
+     "filter": 143713930,
+     "filter_complete": 36384553,
+     "grouping": null,
+     "interaction_filters": 61970050821,
+     "materialize": null,
+     "model": 37465136,
+     "numerators": null,
+     "preparation": 71342757950,
+     "rules": null,
+     "topologies": 155571188,
+     "topology_canonize": 63013387
+    },
+    "total": 79344183154
+   }
+  },
+  "qcd_ggggg_L2": {
+   "full": {
+    "allocations": {
+     "blocks": 107177446,
+     "bytes": 24653914333,
+     "peak_bytes": 5840290112
+    },
+    "result": {
+     "assignments": "213390",
+     "case": "qcd_ggggg_L2",
+     "completed": "true",
+     "mode": "full",
+     "retained": "213390",
+     "topologies": "11685"
+    },
+    "runs": [
+     108898646175,
+     108898055986,
+     108898787380
+    ],
+    "stages": {
+     "canonical_frame": 7388514906,
+     "certify": null,
+     "dressing": 708939748,
+     "dressing_start": 68123867,
+     "drop": 6305822006,
+     "enumeration": 1791368029,
+     "filter": 52607493,
+     "filter_complete": 11309670,
+     "grouping": null,
+     "interaction_filters": 16137279817,
+     "materialize": null,
+     "model": 37466051,
+     "numerators": 74083349295,
+     "preparation": 18956745210,
+     "rules": null,
+     "topologies": 55794794,
+     "topology_canonize": 17237253
+    },
+    "total": 108898646175
+   },
+   "generation": {
+    "allocations": {
+     "blocks": 24937298,
+     "bytes": 4792952684,
+     "peak_bytes": 493430404
+    },
+    "result": {
+     "assignments": "213390",
+     "case": "qcd_ggggg_L2",
+     "completed": "true",
+     "mode": "generation",
+     "retained": "213390",
+     "topologies": "11685"
+    },
+    "runs": [
+     21642734463,
+     21801141739,
+     21799874843,
+     21799754950,
+     21642735518
+    ],
+    "stages": {
+     "canonical_frame": 7388514906,
+     "certify": null,
+     "dressing": 708939748,
+     "dressing_start": 68123771,
+     "drop": 632039809,
+     "enumeration": 1791367863,
+     "filter": 52607493,
+     "filter_complete": 11309670,
+     "grouping": null,
+     "interaction_filters": 16137279884,
+     "materialize": null,
+     "model": 37464145,
+     "numerators": null,
+     "preparation": 18956745277,
+     "rules": null,
+     "topologies": 55794724,
+     "topology_canonize": 17237253
+    },
+    "total": 21799754950
+   }
+  },
+  "qcd_uugg_L3": {
+   "full": {
+    "allocations": {
+     "blocks": 66830428,
+     "bytes": 15073583741,
+     "peak_bytes": 3535582184
+    },
+    "result": {
+     "assignments": "114301",
+     "case": "qcd_uugg_L3",
+     "completed": "true",
+     "mode": "full",
+     "retained": "114301",
+     "topologies": "7513"
+    },
+    "runs": [
+     68112957099,
+     68112590910,
+     68112534654
+    ],
+    "stages": {
+     "canonical_frame": 5743945664,
+     "certify": null,
+     "dressing": 476136622,
+     "dressing_start": 53771367,
+     "drop": 3917549116,
+     "enumeration": 1597971302,
+     "filter": 40173883,
+     "filter_complete": 6057953,
+     "grouping": null,
+     "interaction_filters": 11329404180,
+     "materialize": null,
+     "model": 37464244,
+     "numerators": 45088885721,
+     "preparation": 12886318341,
+     "rules": null,
+     "topologies": 512947659,
+     "topology_canonize": 55801196
+    },
+    "total": 68112590910
+   },
+   "generation": {
+    "allocations": {
+     "blocks": 16636665,
+     "bytes": 2993940478,
+     "peak_bytes": 275733182
+    },
+    "result": {
+     "assignments": "114301",
+     "case": "qcd_uugg_L3",
+     "completed": "true",
+     "mode": "generation",
+     "retained": "114301",
+     "topologies": "7513"
+    },
+    "runs": [
+     14989093203,
+     14989136374,
+     14989121454,
+     14988964150,
+     14989106910
+    ],
+    "stages": {
+     "canonical_frame": 5743945664,
+     "certify": null,
+     "dressing": 476136622,
+     "dressing_start": 53771319,
+     "drop": 261463622,
+     "enumeration": 1597971302,
+     "filter": 40173883,
+     "filter_complete": 6057953,
+     "grouping": null,
+     "interaction_filters": 11329227797,
+     "materialize": null,
+     "model": 37464367,
+     "numerators": null,
+     "preparation": 12886141958,
+     "rules": null,
+     "topologies": 512947337,
+     "topology_canonize": 55801196
+    },
+    "total": 14989106910
+   }
+  },
+  "qed_ase_L5": {
+   "full": {
+    "allocations": {
+     "blocks": 192523653,
+     "bytes": 48761933949,
+     "peak_bytes": 11051994863
+    },
+    "result": {
+     "assignments": "322704",
+     "case": "qed_ase_L5",
+     "completed": "true",
+     "mode": "full",
+     "retained": "322704",
+     "topologies": "519"
+    },
+    "runs": [
+     207630217839,
+     207628482756,
+     207629740259
+    ],
+    "stages": {
+     "canonical_frame": 20183207306,
+     "certify": null,
+     "dressing": 824398060,
+     "dressing_start": 5282415,
+     "drop": 12638174333,
+     "enumeration": 2341968329,
+     "filter": 52974315,
+     "filter_complete": 17103312,
+     "grouping": null,
+     "interaction_filters": 37865165318,
+     "materialize": null,
+     "model": 37490873,
+     "numerators": 134393749455,
+     "preparation": 43216437981,
+     "rules": null,
+     "topologies": 162967358,
+     "topology_canonize": 44275535
+    },
+    "total": 207629740259
+   },
+   "generation": {
+    "allocations": {
+     "blocks": 48529208,
+     "bytes": 9224276178,
+     "peak_bytes": 825288771
+    },
+    "result": {
+     "assignments": "322704",
+     "case": "qed_ase_L5",
+     "completed": "true",
+     "mode": "generation",
+     "retained": "322704",
+     "topologies": "519"
+    },
+    "runs": [
+     47130065630,
+     46983847003,
+     46976291062,
+     47125767800,
+     46978047956
+    ],
+    "stages": {
+     "canonical_frame": 20183207306,
+     "certify": null,
+     "dressing": 824398060,
+     "dressing_start": 5281282,
+     "drop": 805330180,
+     "enumeration": 2341799608,
+     "filter": 52974315,
+     "filter_complete": 17103312,
+     "grouping": null,
+     "interaction_filters": 37865165308,
+     "materialize": null,
+     "model": 37489070,
+     "numerators": null,
+     "preparation": 43216437854,
+     "rules": null,
+     "topologies": 162966742,
+     "topology_canonize": 44275535
+    },
+    "total": 46983847003
+   }
+  },
+  "qed_ee4f_L2": {
+   "full": {
+    "allocations": {
+     "blocks": 5875712,
+     "bytes": 1198289088,
+     "peak_bytes": 248460455
+    },
+    "result": {
+     "assignments": "8460",
+     "case": "qed_ee4f_L2",
+     "completed": "true",
+     "mode": "full",
+     "retained": "8460",
+     "topologies": "16977"
+    },
+    "runs": [
+     6200318441,
+     6200450409,
+     6200074921
+    ],
+    "stages": {
+     "canonical_frame": 341106169,
+     "certify": null,
+     "dressing": 69581940,
+     "dressing_start": 136368130,
+     "drop": 313600288,
+     "enumeration": 576877108,
+     "filter": 13404139,
+     "filter_complete": 448380,
+     "grouping": null,
+     "interaction_filters": 883704352,
+     "materialize": null,
+     "model": 37486485,
+     "numerators": 3886707969,
+     "preparation": 1015567089,
+     "rules": null,
+     "topologies": 150363103,
+     "topology_canonize": 41960303
+    },
+    "total": 6200318441
+   },
+   "generation": {
+    "allocations": {
+     "blocks": 1487285,
+     "bytes": 251974873,
+     "peak_bytes": 26549384
+    },
+    "result": {
+     "assignments": "8460",
+     "case": "qed_ee4f_L2",
+     "completed": "true",
+     "mode": "generation",
+     "retained": "8460",
+     "topologies": "16977"
+    },
+    "runs": [
+     1669318528,
+     1669493012,
+     1669497684,
+     1669502579,
+     1669370445
+    ],
+    "stages": {
+     "canonical_frame": 341106169,
+     "certify": null,
+     "dressing": 69581940,
+     "dressing_start": 136368130,
+     "drop": 21658804,
+     "enumeration": 576877076,
+     "filter": 13404139,
+     "filter_complete": 448380,
+     "grouping": null,
+     "interaction_filters": 883704306,
+     "materialize": null,
+     "model": 37490157,
+     "numerators": null,
+     "preparation": 1015567043,
+     "rules": null,
+     "topologies": 150363095,
+     "topology_canonize": 41960303
+    },
+    "total": 1669493012
+   }
+  },
+  "sm_eemm_L2": {
+   "full": {
+    "allocations": {
+     "blocks": 52019767,
+     "bytes": 9492167904,
+     "peak_bytes": 1696466002
+    },
+    "result": {
+     "assignments": "81586",
+     "case": "sm_eemm_L2",
+     "completed": "true",
+     "mode": "full",
+     "retained": "81586",
+     "topologies": "160"
+    },
+    "runs": [
+     45493248480,
+     45492777524,
+     45494238337
+    ],
+    "stages": {
+     "canonical_frame": 2716063257,
+     "certify": null,
+     "dressing": 221388948,
+     "dressing_start": 730279,
+     "drop": 1986024115,
+     "enumeration": 550934596,
+     "filter": 20178302,
+     "filter_complete": 4324058,
+     "grouping": null,
+     "interaction_filters": 6397574138,
+     "materialize": null,
+     "model": 22252849,
+     "numerators": 32690647719,
+     "preparation": 7367321117,
+     "rules": null,
+     "topologies": 10000041,
+     "topology_canonize": 869831
+    },
+    "total": 45493248480
+   },
+   "generation": {
+    "allocations": {
+     "blocks": 11100346,
+     "bytes": 1790165764,
+     "peak_bytes": 173478935
+    },
+    "result": {
+     "assignments": "81586",
+     "case": "sm_eemm_L2",
+     "completed": "true",
+     "mode": "generation",
+     "retained": "81586",
+     "topologies": "160"
+    },
+    "runs": [
+     8269389725,
+     8269168282,
+     8269378582,
+     8269274110,
+     8269288684
+    ],
+    "stages": {
+     "canonical_frame": 2716063257,
+     "certify": null,
+     "dressing": 221388948,
+     "dressing_start": 730271,
+     "drop": 176334047,
+     "enumeration": 550934588,
+     "filter": 20178302,
+     "filter_complete": 4324058,
+     "grouping": null,
+     "interaction_filters": 6397563806,
+     "materialize": null,
+     "model": 22252038,
+     "numerators": null,
+     "preparation": 7367310785,
+     "rules": null,
+     "topologies": 10000041,
+     "topology_canonize": 869831
+    },
+    "total": 8269288684
+   }
+  },
+  "sm_uudd_qed2_L2": {
+   "full": {
+    "allocations": {
+     "blocks": 6154641,
+     "bytes": 849213215,
+     "peak_bytes": 136043117
+    },
+    "result": {
+     "assignments": "5461",
+     "case": "sm_uudd_qed2_L2",
+     "completed": "true",
+     "mode": "full",
+     "retained": "5461",
+     "topologies": "230"
+    },
+    "runs": [
+     4896191638,
+     4896043693,
+     4896384734
+    ],
+    "stages": {
+     "canonical_frame": 179537274,
+     "certify": null,
+     "dressing": 38099359,
+     "dressing_start": 1082013,
+     "drop": 158346497,
+     "enumeration": 77386288,
+     "filter": 2568806,
+     "filter_complete": 289433,
+     "grouping": null,
+     "interaction_filters": 430941496,
+     "materialize": null,
+     "model": 22251069,
+     "numerators": 3947282189,
+     "preparation": 496793104,
+     "rules": null,
+     "topologies": 12285074,
+     "topology_canonize": 1108886
+    },
+    "total": 4896191638
+   },
+   "generation": {
+    "allocations": {
+     "blocks": 770167,
+     "bytes": 124513944,
+     "peak_bytes": 13149540
+    },
+    "result": {
+     "assignments": "5461",
+     "case": "sm_uudd_qed2_L2",
+     "completed": "true",
+     "mode": "generation",
+     "retained": "5461",
+     "topologies": "230"
+    },
+    "runs": [
+     624738669,
+     624833766,
+     624847583,
+     624840564,
+     624830939
+    ],
+    "stages": {
+     "canonical_frame": 179537274,
+     "certify": null,
+     "dressing": 38099359,
+     "dressing_start": 1082013,
+     "drop": 13436572,
+     "enumeration": 77386294,
+     "filter": 2568806,
+     "filter_complete": 289433,
+     "grouping": null,
+     "interaction_filters": 430944251,
+     "materialize": null,
+     "model": 22252449,
+     "numerators": null,
+     "preparation": 496795859,
+     "rules": null,
+     "topologies": 12285080,
+     "topology_canonize": 1108886
+    },
+    "total": 624833766
+   }
+  },
+  "ym_g8_L0": {
+   "full": {
+    "allocations": {
+     "blocks": 20300885,
+     "bytes": 4235370690,
+     "peak_bytes": 976465370
+    },
+    "result": {
+     "assignments": "34300",
+     "case": "ym_g8_L0",
+     "completed": "true",
+     "mode": "full",
+     "retained": "34300",
+     "topologies": "34300"
+    },
+    "runs": [
+     19861718991,
+     19863879522,
+     19863405501
+    ],
+    "stages": {
+     "canonical_frame": 1004765806,
+     "certify": null,
+     "dressing": 122695361,
+     "dressing_start": 153505676,
+     "drop": 1018268312,
+     "enumeration": 901989825,
+     "filter": 25151312,
+     "filter_complete": 1817900,
+     "grouping": null,
+     "interaction_filters": 2065927254,
+     "materialize": null,
+     "model": 35902732,
+     "numerators": 14177807862,
+     "preparation": 2572430511,
+     "rules": null,
+     "topologies": 78309586,
+     "topology_canonize": 1172317
+    },
+    "total": 19863405501
+   },
+   "generation": {
+    "allocations": {
+     "blocks": 3449939,
+     "bytes": 773577982,
+     "peak_bytes": 131123662
+    },
+    "result": {
+     "assignments": "34300",
+     "case": "ym_g8_L0",
+     "completed": "true",
+     "mode": "generation",
+     "retained": "34300",
+     "topologies": "34300"
+    },
+    "runs": [
+     3735384278,
+     3735191601,
+     3735187910,
+     3735181488,
+     3733604505
+    ],
+    "stages": {
+     "canonical_frame": 1004765806,
+     "certify": null,
+     "dressing": 122695361,
+     "dressing_start": 153505676,
+     "drop": 149383529,
+     "enumeration": 901989825,
+     "filter": 25151312,
+     "filter_complete": 1817900,
+     "grouping": null,
+     "interaction_filters": 2065927254,
+     "materialize": null,
+     "model": 35905611,
+     "numerators": null,
+     "preparation": 2572430511,
+     "rules": null,
+     "topologies": 78309586,
+     "topology_canonize": 1172317
+    },
+    "total": 3735187910
+   }
+  }
+ }
+}

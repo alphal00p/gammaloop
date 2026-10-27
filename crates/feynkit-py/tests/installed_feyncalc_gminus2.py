@@ -11,6 +11,7 @@ from symbolica import E, Matrix, Replacement, S, Symbol
 from symbolica.community import hepkit as hep
 from symbolica.community.hepkit import oneloop
 from symbolica.community.tensor import TensorExpression
+from symbolica.community.graph import Bridges
 
 model = hep.Model.standard_model()
 dimension, transfer, mass, charge, mu = S(
@@ -35,12 +36,21 @@ kinematics = (
 )
 operators, diagrams = [], []
 for loops in (0, 1):
-    generated = model.process([11], [22, 11], vertex_allow=["V_98"]).generate_diagrams(
-        loops=loops,
-        max_vertices=1 + 2 * loops,
-        maximum_bridges=0,
-        numerator_grouping=None,
-        progress=None,
+    generated = (
+        model.process([11], [22, 11])
+        .amplitude(
+            loops=hep.Loops.total(loops),
+            restrict=hep.Restrict().only_vertices(["V_98"]),
+            topology=hep.TopologyRules(
+                max_vertices=1 + 2 * loops,
+                bridges=Bridges.at_most(0),
+                self_energies=hep.Veto.all(),
+                tadpoles=hep.Veto.all(),
+                snails=hep.Veto.massless(),
+            ),
+        )
+        .generate()
+        .build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
     )
     assert len(generated.diagrams) == 1
     diagram = generated.diagrams[0]

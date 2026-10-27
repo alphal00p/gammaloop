@@ -219,13 +219,23 @@ own workspace. Bounded: one regression, one bisect, one written verdict.
   for as upstream drops and12 as superseded by \#210, per approved WP2 evidence.
   Combined checks passed: 572 owner/control tests and two Spenso exporter tests,
   relevant all-target Clippy, formatting, kernel isolation, Typst and integrity
-  checks. This prerequisite candidate awaits a NEW independent Astra review.
+  checks. Astra approved the combined prerequisite slice at `438b6150`, with
+  no new must-fix findings. Seven inherited registry digests remain explicitly
+  pending source31/final documentation reconciliation.
   Fixed-key hashing and lazy fresh-index allocation remain deferred; only zero
   versus one discovery calls were established, with no end-to-end speedup claim.
-  Drawing15/16 remain held on a narrow registry fix;38 awaits the reviewed
-  transplant and prerequisites through port36. No drawing, sampling or benchmark
-  work is integrated here. Full rebuilt-tip validation and M-rebuild remain
-  pending. See `evidence/generation-integration/wp3/prerequisites08-14.json`.
+  Approved cumulative drawing15/16 plus common notices are integrated at
+  `8430e701`; the atomic resolved source17/18 transplant with isolated37
+  formatting is reconciled against the admitted template owners. The
+  original-pair B2 certificate passed on the staged tree with exact original
+  fixtures and two explicit test-only presentation-tag bindings. This bounded candidate
+  requires NEW independent Astra review before source19; WP3 remains incomplete.
+  Source38 awaits the reviewed transplant and prerequisites through port36.
+  Approved input25/36 and cumulative sampling27–29 remain separate for later
+  integration; no benchmark milestone is claimed. Full rebuilt-tip validation
+  and M-rebuild remain pending. See
+  #link("generation-integration-wp3-staged.typ")[the staged integration record]
+  and `evidence/generation-integration/wp3/prerequisites08-14.json`.
 
 - `jj duplicate` the v4 chain (`kursouxx::kpslpwqz`) onto the WP2 base; do not
   rebase in place, so the 19 live workspaces on older lines stay valid.

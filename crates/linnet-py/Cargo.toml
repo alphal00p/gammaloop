@@ -17,8 +17,8 @@ required-features = ["python_stubgen"]
 [dependencies]
 symbolica = { workspace = true, features = ["python_export"] }
 ciborium = "0.2.2"
-dot-parser = { workspace = true }
-linnet = { workspace = true, features = ["nodestore-vec", "serde"] }
+self_cell = "1.2"
+linnet = { workspace = true, features = ["serde"] }
 linnet-render-py = { workspace = true, default-features = false }
 linnest = { workspace = true, features = ["svg"] }
 pyo3 = { workspace = true, features = ["multiple-pymethods"] }

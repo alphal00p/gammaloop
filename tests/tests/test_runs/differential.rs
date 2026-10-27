@@ -1,7 +1,7 @@
 use super::utils::*;
 use super::*;
 
-fn configure_differential_leading_jet_observable(
+pub(super) fn configure_differential_leading_jet_observable(
     cli: &mut gammaloop_integration_tests::CLIState,
 ) -> Result<()> {
     run_commands(

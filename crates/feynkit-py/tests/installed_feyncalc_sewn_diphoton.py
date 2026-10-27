@@ -18,14 +18,21 @@ vertices = [
     == sorted([electron.name, electron.antiname, photon.name])
 ]
 assert len(vertices) == 1
-result = model.process(
-    ["e-", "e+"], ["a", "a"], vertex_allow=vertices
-).generate_cross_section(
-    loops=1,
-    max_vertices=4,
-    maximum_bridges=None,
-    numerator_grouping=None,
-    progress=None,
+result = (
+    model.process(["e-", "e+"], ["a", "a"])
+    .cross_section(
+        loops=hep.Loops.forward(1),
+        restrict=hep.Restrict().only_vertices(vertices),
+        topology=hep.TopologyRules(
+            max_vertices=4,
+            self_energies=hep.Veto.all(),
+            tadpoles=hep.Veto.all(),
+            snails=hep.Veto.massless(),
+        ),
+        cuts=hep.Cuts(blobs=hep.Range.exact(1), spectators=hep.Range.exact(0)),
+    )
+    .generate()
+    .build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
 )
 assert len(result.diagrams) == 2
 Q, P, K = S("gammalooprs::Q", "gammalooprs::P", "gammalooprs::K")

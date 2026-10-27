@@ -23,16 +23,12 @@ fn display_labels_match_network_errors() {
 #[cfg(feature = "shadowing")]
 #[test]
 fn scalar_alias_refs_resolve_to_original_atom() {
-    use symbolica::{
-        atom::{Atom, AtomCore},
-        function, parse, symbol,
-    };
+    use symbolica::atom::{Atom, AtomCore};
+    use symbolica::{function, parse, symbol};
 
-    use super::{
-        Network,
-        store::{NetworkStore, TensorScalarStore},
-        tags::scalar_store_alias,
-    };
+    use super::Network;
+    use super::store::{NetworkStore, TensorScalarStore};
+    use super::tags::scalar_store_alias;
 
     let original = Atom::var(symbol!("x"));
     let mut net: Network<NetworkStore<(), Atom>, i8, i8> = Network::from_scalar(original.clone());
@@ -81,16 +77,12 @@ fn scalar_alias_refs_resolve_to_original_atom() {
 #[cfg(feature = "shadowing")]
 #[test]
 fn scalar_alias_resolution_preserves_nested_and_unregistered_handles() {
-    use symbolica::{
-        atom::{Atom, AtomCore},
-        function, parse, symbol,
-    };
+    use symbolica::atom::{Atom, AtomCore};
+    use symbolica::{function, parse, symbol};
 
-    use super::{
-        Network,
-        store::{NetworkStore, TensorScalarStore},
-        tags::{SPENSO_TAG, scalar_store_alias},
-    };
+    use super::Network;
+    use super::store::{NetworkStore, TensorScalarStore};
+    use super::tags::{SPENSO_TAG, scalar_store_alias};
 
     let mut net: Network<NetworkStore<(), Atom>, i8, i8> = Network::from_scalar(Atom::num(1));
     net.store.add_scalar(scalar_store_alias(3));
@@ -132,23 +124,18 @@ fn scalar_alias_resolution_preserves_nested_and_unregistered_handles() {
 fn auto_serializes_unlicensed_symbolic_fast_tensor_sum() {
     use std::collections::HashMap;
 
-    use symbolica::{atom::Atom, parse};
+    use symbolica::atom::Atom;
+    use symbolica::parse;
 
-    use crate::{
-        network::FastTensorSum,
-        structure::{
-            OrderedStructure,
-            concrete_index::FlatIndex,
-            representation::{Euclidean, RepName},
-        },
-        symbolic_parallelism::{
-            SymbolicParallelism, scoped_symbolica_rayon_setting_for_test, symbolica_rayon_enabled,
-        },
-        tensors::{
-            data::{DataTensor, SparseTensor},
-            parametric::ParamTensor,
-        },
+    use crate::network::FastTensorSum;
+    use crate::structure::OrderedStructure;
+    use crate::structure::concrete_index::FlatIndex;
+    use crate::structure::representation::{Euclidean, RepName};
+    use crate::symbolic_parallelism::{
+        SymbolicParallelism, scoped_symbolica_rayon_setting_for_test, symbolica_rayon_enabled,
     };
+    use crate::tensors::data::{DataTensor, SparseTensor};
+    use crate::tensors::parametric::ParamTensor;
 
     // The repository's Symbolica build may itself be licensed. Injecting the
     // unlicensed result makes this failure mode deterministic while exercising
@@ -227,19 +214,16 @@ fn fast_tensor_sum_parallel_candidate_rejects_light_or_unbalanced_work() {
 
 #[test]
 fn tensor_powers_preserve_the_requested_exponent() {
-    use crate::{
-        network::{
-            ExecutionResult, Network, NetworkLeaf, NetworkNode, Sequential, SmallestDegree,
-            graph::ScaledTensorRef,
-            library::{DummyLibrary, DummyLibraryTensor, panicing::ErroringLibrary},
-            store::{NetworkStore, TensorScalarStore},
-        },
-        structure::{
-            OrderedStructure,
-            representation::{Euclidean, RepName},
-        },
-        tensors::data::DenseTensor,
+    use crate::network::graph::ScaledTensorRef;
+    use crate::network::library::panicing::ErroringLibrary;
+    use crate::network::library::{DummyLibrary, DummyLibraryTensor};
+    use crate::network::store::{NetworkStore, TensorScalarStore};
+    use crate::network::{
+        ExecutionResult, Network, NetworkLeaf, NetworkNode, Sequential, SmallestDegree,
     };
+    use crate::structure::OrderedStructure;
+    use crate::structure::representation::{Euclidean, RepName};
+    use crate::tensors::data::DenseTensor;
 
     type Tensor = DenseTensor<f64, OrderedStructure<Euclidean>>;
     type Net = Network<NetworkStore<Tensor, f64>, DummyKey, DummyKey>;
@@ -305,18 +289,15 @@ fn tensor_powers_preserve_the_requested_exponent() {
 
 #[test]
 fn executed_scaled_tensors_add_distinct_tensors() {
-    use crate::{
-        network::{
-            ExecutionResult, Network, NetworkLeaf, NetworkNode, Sequential, SmallestDegree,
-            library::{DummyLibrary, DummyLibraryTensor, panicing::ErroringLibrary},
-            store::NetworkStore,
-        },
-        structure::{
-            OrderedStructure,
-            representation::{Euclidean, RepName},
-        },
-        tensors::data::DenseTensor,
+    use crate::network::library::panicing::ErroringLibrary;
+    use crate::network::library::{DummyLibrary, DummyLibraryTensor};
+    use crate::network::store::NetworkStore;
+    use crate::network::{
+        ExecutionResult, Network, NetworkLeaf, NetworkNode, Sequential, SmallestDegree,
     };
+    use crate::structure::OrderedStructure;
+    use crate::structure::representation::{Euclidean, RepName};
+    use crate::tensors::data::DenseTensor;
 
     type Tensor = DenseTensor<f64, OrderedStructure<Euclidean>>;
     type Store = NetworkStore<Tensor, f64>;
@@ -363,16 +344,16 @@ fn executed_scaled_tensors_add_distinct_tensors() {
 
 #[test]
 fn lazy_scalar_tensor_leaves_add_scalars_in_either_order() {
-    use crate::{
-        network::{
-            ExecutionResult, Network, NetworkLeaf, NetworkNode, Sequential, SmallestDegree,
-            graph::{ScalarRef, ScaledTensorRef},
-            library::{DummyLibrary, DummyLibraryTensor, panicing::ErroringLibrary},
-            store::{NetworkStore, TensorScalarStore},
-        },
-        structure::{OrderedStructure, representation::Euclidean},
-        tensors::data::DenseTensor,
+    use crate::network::graph::{ScalarRef, ScaledTensorRef};
+    use crate::network::library::panicing::ErroringLibrary;
+    use crate::network::library::{DummyLibrary, DummyLibraryTensor};
+    use crate::network::store::{NetworkStore, TensorScalarStore};
+    use crate::network::{
+        ExecutionResult, Network, NetworkLeaf, NetworkNode, Sequential, SmallestDegree,
     };
+    use crate::structure::OrderedStructure;
+    use crate::structure::representation::Euclidean;
+    use crate::tensors::data::DenseTensor;
 
     type Tensor = DenseTensor<f64, OrderedStructure<Euclidean>>;
     type Net = Network<NetworkStore<Tensor, f64>, DummyKey, DummyKey>;
@@ -450,18 +431,12 @@ fn lazy_scalar_tensor_leaves_add_scalars_in_either_order() {
 
 #[test]
 fn lazy_scalar_tensor_sum_rejects_free_indices() {
-    use crate::{
-        network::{
-            Network, NetworkLeaf,
-            graph::ScaledTensorRef,
-            store::{NetworkStore, TensorScalarStore},
-        },
-        structure::{
-            OrderedStructure,
-            representation::{Euclidean, RepName},
-        },
-        tensors::data::DenseTensor,
-    };
+    use crate::network::graph::ScaledTensorRef;
+    use crate::network::store::{NetworkStore, TensorScalarStore};
+    use crate::network::{Network, NetworkLeaf};
+    use crate::structure::OrderedStructure;
+    use crate::structure::representation::{Euclidean, RepName};
+    use crate::tensors::data::DenseTensor;
 
     type Tensor = DenseTensor<f64, OrderedStructure<Euclidean>>;
     type Net = Network<NetworkStore<Tensor, f64>, DummyKey, DummyKey>;
@@ -527,20 +502,17 @@ fn lazy_scalar_tensor_sum_rejects_free_indices() {
 
 #[test]
 fn lazy_scalar_tensor_contraction_adds_scalar_in_either_order() {
-    use crate::{
-        network::{
-            ExecutionResult, Network, NetworkLeaf, NetworkNode, NetworkState, Sequential,
-            SmallestDegree,
-            graph::{NAdd, NMul, ScaledTensorRef},
-            library::{DummyLibrary, DummyLibraryTensor, panicing::ErroringLibrary},
-            store::{NetworkStore, TensorScalarStore},
-        },
-        structure::{
-            OrderedStructure,
-            representation::{Euclidean, RepName},
-        },
-        tensors::data::DenseTensor,
+    use crate::network::graph::{NAdd, NMul, ScaledTensorRef};
+    use crate::network::library::panicing::ErroringLibrary;
+    use crate::network::library::{DummyLibrary, DummyLibraryTensor};
+    use crate::network::store::{NetworkStore, TensorScalarStore};
+    use crate::network::{
+        ExecutionResult, Network, NetworkLeaf, NetworkNode, NetworkState, Sequential,
+        SmallestDegree,
     };
+    use crate::structure::OrderedStructure;
+    use crate::structure::representation::{Euclidean, RepName};
+    use crate::tensors::data::DenseTensor;
 
     type Tensor = DenseTensor<f64, OrderedStructure<Euclidean>>;
     type Net = Network<NetworkStore<Tensor, f64>, DummyKey, DummyKey>;
@@ -619,19 +591,16 @@ fn lazy_scalar_tensor_contraction_adds_scalar_in_either_order() {
 
 #[test]
 fn odd_tensor_powers_keep_the_base_square_fixed() {
+    use super::library::panicing::ErroringLibrary;
+    use super::library::{DummyLibrary, DummyLibraryTensor};
+    use super::store::{NetworkStore, TensorScalarStore};
     use super::{
         ExecutionResult, Network, NetworkGraph, NetworkLeaf, ScaledTensorRef, Sequential,
         SmallestDegree,
-        library::{DummyLibrary, DummyLibraryTensor, panicing::ErroringLibrary},
-        store::{NetworkStore, TensorScalarStore},
     };
-    use crate::{
-        structure::{
-            OrderedStructure, ScalarTensor,
-            representation::{Euclidean, RepName},
-        },
-        tensors::data::DenseTensor,
-    };
+    use crate::structure::representation::{Euclidean, RepName};
+    use crate::structure::{OrderedStructure, ScalarTensor};
+    use crate::tensors::data::DenseTensor;
 
     type Tensor = DenseTensor<f64, OrderedStructure<Euclidean>>;
     type Net = Network<NetworkStore<Tensor, f64>, DummyKey, DummyKey>;
@@ -695,27 +664,17 @@ fn odd_tensor_powers_keep_the_base_square_fixed() {
 #[cfg(feature = "shadowing")]
 #[test]
 fn odd_library_tensor_powers_keep_the_base_square_fixed() {
-    use symbolica::{
-        atom::{Atom, Symbol},
-        symbol,
-    };
+    use symbolica::atom::{Atom, Symbol};
+    use symbolica::symbol;
 
-    use super::{
-        ExecutionResult, Network, Sequential, SmallestDegree,
-        library::{
-            panicing::ErroringLibrary,
-            symbolic::{ExplicitKey, TensorLibrary},
-        },
-        store::NetworkStore,
-    };
-    use crate::{
-        structure::{
-            NamedStructure, TensorStructure,
-            abstract_index::AbstractIndex,
-            representation::{Euclidean, LibraryRep, RepName, Representation},
-        },
-        tensors::data::DataTensor,
-    };
+    use super::library::panicing::ErroringLibrary;
+    use super::library::symbolic::{ExplicitKey, TensorLibrary};
+    use super::store::NetworkStore;
+    use super::{ExecutionResult, Network, Sequential, SmallestDegree};
+    use crate::structure::abstract_index::AbstractIndex;
+    use crate::structure::representation::{Euclidean, LibraryRep, RepName, Representation};
+    use crate::structure::{NamedStructure, TensorStructure};
+    use crate::tensors::data::DataTensor;
 
     type Tensor = DataTensor<f64, NamedStructure<Symbol, Vec<Atom>, LibraryRep>>;
     type LibTensor = DataTensor<f64, ExplicitKey<AbstractIndex>>;
@@ -781,19 +740,16 @@ fn odd_library_tensor_powers_keep_the_base_square_fixed() {
 
 #[test]
 fn scalar_sums_accept_closed_lazy_tensors_in_either_order() {
-    use crate::{
-        network::{
-            ExecutionResult, Network, NetworkLeaf, NetworkNode, ScaledTensorRef, Sequential,
-            SmallestDegree,
-            library::{DummyLibrary, DummyLibraryTensor, panicing::ErroringLibrary},
-            store::{NetworkStore, TensorScalarStore},
-        },
-        structure::{
-            OrderedStructure,
-            representation::{Euclidean, RepName},
-        },
-        tensors::data::DenseTensor,
+    use crate::network::library::panicing::ErroringLibrary;
+    use crate::network::library::{DummyLibrary, DummyLibraryTensor};
+    use crate::network::store::{NetworkStore, TensorScalarStore};
+    use crate::network::{
+        ExecutionResult, Network, NetworkLeaf, NetworkNode, ScaledTensorRef, Sequential,
+        SmallestDegree,
     };
+    use crate::structure::OrderedStructure;
+    use crate::structure::representation::{Euclidean, RepName};
+    use crate::tensors::data::DenseTensor;
 
     type Tensor = DenseTensor<f64, OrderedStructure<Euclidean>>;
     type Net = Network<NetworkStore<Tensor, f64>, DummyKey, DummyKey>;
@@ -869,28 +825,20 @@ fn scalar_sums_accept_closed_lazy_tensors_in_either_order() {
 #[cfg(feature = "shadowing")]
 #[test]
 fn tensor_powers_preserve_exponents_for_every_leaf_kind() {
-    use symbolica::{
-        atom::{Atom, Symbol},
-        symbol,
-    };
+    use symbolica::atom::{Atom, Symbol};
+    use symbolica::symbol;
 
-    use crate::{
-        network::{
-            ExecutionResult, Network, NetworkLeaf, NetworkNode, ScaledTensorRef, Sequential,
-            SmallestDegree,
-            library::{
-                panicing::ErroringLibrary,
-                symbolic::{ExplicitKey, TensorLibrary},
-            },
-            store::{NetworkStore, TensorScalarStore},
-        },
-        structure::{
-            NamedStructure, TensorStructure,
-            abstract_index::AbstractIndex,
-            representation::{Euclidean, RepName},
-        },
-        tensors::data::{DataTensor, DenseTensor},
+    use crate::network::library::panicing::ErroringLibrary;
+    use crate::network::library::symbolic::{ExplicitKey, TensorLibrary};
+    use crate::network::store::{NetworkStore, TensorScalarStore};
+    use crate::network::{
+        ExecutionResult, Network, NetworkLeaf, NetworkNode, ScaledTensorRef, Sequential,
+        SmallestDegree,
     };
+    use crate::structure::abstract_index::AbstractIndex;
+    use crate::structure::representation::{Euclidean, RepName};
+    use crate::structure::{NamedStructure, TensorStructure};
+    use crate::tensors::data::{DataTensor, DenseTensor};
 
     type Tensor = DataTensor<f64, NamedStructure<Symbol, Vec<Atom>>>;
     type LibTensor = DataTensor<f64, ExplicitKey<AbstractIndex>>;
@@ -1002,19 +950,16 @@ fn tensor_powers_preserve_exponents_for_every_leaf_kind() {
 
 #[test]
 fn lazy_scalar_tensors_add_scalars_in_either_order() {
+    use super::library::panicing::ErroringLibrary;
+    use super::library::{DummyLibrary, DummyLibraryTensor};
+    use super::store::{NetworkStore, TensorScalarStore};
     use super::{
         ExecutionResult, Network, NetworkGraph, NetworkLeaf, ScaledTensorRef, Sequential,
         SmallestDegree,
-        library::{DummyLibrary, DummyLibraryTensor, panicing::ErroringLibrary},
-        store::{NetworkStore, TensorScalarStore},
     };
-    use crate::{
-        structure::{
-            OrderedStructure, ScalarTensor,
-            representation::{Euclidean, RepName},
-        },
-        tensors::data::DenseTensor,
-    };
+    use crate::structure::representation::{Euclidean, RepName};
+    use crate::structure::{OrderedStructure, ScalarTensor};
+    use crate::tensors::data::DenseTensor;
 
     type Tensor = DenseTensor<f64, OrderedStructure<Euclidean>>;
     type Net = Network<NetworkStore<Tensor, f64>, DummyKey, DummyKey>;
@@ -1106,28 +1051,24 @@ fn lazy_scalar_tensors_add_scalars_in_either_order() {
 #[cfg(feature = "shadowing")]
 #[test]
 fn bulk_atom_sum_accepts_closed_tensor_leaves_and_preserves_aliases() {
-    use linnet::half_edge::{builder::HedgeGraphBuilder, involution::Flow};
+    use linnet::half_edge::builder::HedgeGraphBuilder;
+    use linnet::half_edge::involution::Flow;
     use std::collections::HashMap;
-    use symbolica::{
-        atom::{Atom, AtomCore},
-        parse,
-    };
+    use symbolica::atom::{Atom, AtomCore};
+    use symbolica::parse;
 
+    use super::graph::{NetworkEdge, NetworkNode, NetworkOp, ScalarRef};
+    use super::library::panicing::ErroringLibrary;
+    use super::library::{DummyLibrary, DummyLibraryTensor};
+    use super::store::{NetworkStore, TensorScalarStore};
+    use super::tags::scalar_store_alias;
     use super::{
         ExecutionResult, Network, NetworkGraph, NetworkLeaf, ScaledTensorRef, Sequential,
         SmallestDegree,
-        graph::{NetworkEdge, NetworkNode, NetworkOp, ScalarRef},
-        library::{DummyLibrary, DummyLibraryTensor, panicing::ErroringLibrary},
-        store::{NetworkStore, TensorScalarStore},
-        tags::scalar_store_alias,
     };
-    use crate::{
-        structure::{
-            OrderedStructure, ScalarTensor,
-            representation::{Euclidean, RepName},
-        },
-        tensors::data::{DataTensor, DenseTensor, SparseTensor},
-    };
+    use crate::structure::representation::{Euclidean, RepName};
+    use crate::structure::{OrderedStructure, ScalarTensor};
+    use crate::tensors::data::{DataTensor, DenseTensor, SparseTensor};
 
     type Tensor = DataTensor<Atom, OrderedStructure<Euclidean>>;
     type Net = Network<NetworkStore<Tensor, Atom>, DummyKey, DummyKey>;
@@ -1270,20 +1211,15 @@ fn bulk_atom_sum_accepts_closed_tensor_leaves_and_preserves_aliases() {
 #[cfg(feature = "shadowing")]
 #[test]
 fn fused_numeric_contraction_matches_dual_indices_in_storage_order() {
-    use symbolica::{atom::Atom, parse};
+    use symbolica::atom::Atom;
+    use symbolica::parse;
 
     use super::{FastTensorSumContract, fused_numeric_tensor_sum_contract};
-    use crate::{
-        structure::{
-            HasStructure, OrderedStructure, TensorDataLayout,
-            representation::{LibraryRep, Lorentz, RepName},
-            slot::{DualSlotTo, IsAbstractSlot, Slot},
-        },
-        tensors::{
-            data::{SetTensorData, SparseTensor},
-            parametric::ParamTensor,
-        },
-    };
+    use crate::structure::representation::{LibraryRep, Lorentz, RepName};
+    use crate::structure::slot::{DualSlotTo, IsAbstractSlot, Slot};
+    use crate::structure::{HasStructure, OrderedStructure, TensorDataLayout};
+    use crate::tensors::data::{SetTensorData, SparseTensor};
+    use crate::tensors::parametric::ParamTensor;
 
     let tensor = |slots: Vec<Slot<LibraryRep>>, coefficient: Atom| {
         let coordinates = (0..slots.len()).collect::<Vec<_>>();
@@ -1351,16 +1287,10 @@ fn sparse_pair_estimate_counts_shared_output_coordinates() {
     use symbolica::atom::Atom;
 
     use super::FastTensorSumContractible;
-    use crate::{
-        structure::{
-            OrderedStructure, TensorStructure,
-            representation::{Euclidean, RepName},
-        },
-        tensors::{
-            data::{DataTensor, SparseTensor},
-            parametric::ParamTensor,
-        },
-    };
+    use crate::structure::representation::{Euclidean, RepName};
+    use crate::structure::{OrderedStructure, TensorStructure};
+    use crate::tensors::data::{DataTensor, SparseTensor};
+    use crate::tensors::parametric::ParamTensor;
 
     let structure: OrderedStructure<Euclidean> = OrderedStructure::new(vec![
         Euclidean {}.new_slot(2, 1),
@@ -1433,17 +1363,11 @@ fn sparse_pair_estimate_aligns_three_cycle_matches_with_open_axes() {
     use symbolica::atom::Atom;
 
     use super::FastTensorSumContractible;
-    use crate::{
-        structure::{
-            HasStructure, OrderedStructure, TensorDataLayout, TensorStructure,
-            representation::{Euclidean, LibraryRep, Lorentz, RepName},
-            slot::{DualSlotTo, IsAbstractSlot, Slot},
-        },
-        tensors::{
-            data::{SetTensorData, SparseTensor},
-            parametric::ParamTensor,
-        },
-    };
+    use crate::structure::representation::{Euclidean, LibraryRep, Lorentz, RepName};
+    use crate::structure::slot::{DualSlotTo, IsAbstractSlot, Slot};
+    use crate::structure::{HasStructure, OrderedStructure, TensorDataLayout, TensorStructure};
+    use crate::tensors::data::{SetTensorData, SparseTensor};
+    use crate::tensors::parametric::ParamTensor;
 
     let matched = [
         Lorentz {}.new_slot(3, 0).to_lib(),
@@ -1506,28 +1430,21 @@ fn sparse_pair_estimate_aligns_three_cycle_matches_with_open_axes() {
 fn large_scaled_tensor_sum_preserves_results_across_strategies() {
     use std::collections::HashMap;
 
-    use symbolica::{
-        atom::{Atom, AtomCore},
-        function, symbol,
-    };
+    use symbolica::atom::{Atom, AtomCore};
+    use symbolica::{function, symbol};
 
-    use crate::{
-        network::{
-            ExecutionResult, MinIntermediateCost, MinResultRank, Network, Sequential,
-            SequentialRef, TensorOrScalarOrKey,
-            library::{DummyLibrary, DummyLibraryTensor, panicing::ErroringLibrary},
-            store::NetworkStore,
-        },
-        structure::{
-            OrderedStructure, TensorStructure,
-            concrete_index::FlatIndex,
-            representation::{Euclidean, RepName},
-        },
-        tensors::{
-            data::{DataTensor, GetTensorData, SparseTensor},
-            parametric::ParamTensor,
-        },
+    use crate::network::library::panicing::ErroringLibrary;
+    use crate::network::library::{DummyLibrary, DummyLibraryTensor};
+    use crate::network::store::NetworkStore;
+    use crate::network::{
+        ExecutionResult, MinIntermediateCost, MinResultRank, Network, Sequential, SequentialRef,
+        TensorOrScalarOrKey,
     };
+    use crate::structure::concrete_index::FlatIndex;
+    use crate::structure::representation::{Euclidean, RepName};
+    use crate::structure::{OrderedStructure, TensorStructure};
+    use crate::tensors::data::{DataTensor, GetTensorData, SparseTensor};
+    use crate::tensors::parametric::ParamTensor;
 
     type Tensor = ParamTensor<OrderedStructure<Euclidean>>;
     type Store = NetworkStore<Tensor, Atom>;
@@ -1662,18 +1579,15 @@ fn large_scaled_tensor_sum_preserves_results_across_strategies() {
 
 #[test]
 fn contraction_strategies_match_independent_coordinate_sum() {
-    use crate::{
-        network::{
-            ExecutionResult, MinIntermediateCost, MinResultRank, Network, Sequential,
-            library::{DummyLibrary, DummyLibraryTensor, panicing::ErroringLibrary},
-            store::NetworkStore,
-        },
-        structure::{
-            OrderedStructure, TensorStructure,
-            representation::{Euclidean, RepName},
-        },
-        tensors::data::DenseTensor,
+    use crate::network::library::panicing::ErroringLibrary;
+    use crate::network::library::{DummyLibrary, DummyLibraryTensor};
+    use crate::network::store::NetworkStore;
+    use crate::network::{
+        ExecutionResult, MinIntermediateCost, MinResultRank, Network, Sequential,
     };
+    use crate::structure::representation::{Euclidean, RepName};
+    use crate::structure::{OrderedStructure, TensorStructure};
+    use crate::tensors::data::DenseTensor;
 
     type Tensor = DenseTensor<f64, OrderedStructure<Euclidean>>;
     type Net = Network<NetworkStore<Tensor, f64>, DummyKey, DummyKey>;
@@ -1756,21 +1670,77 @@ fn contraction_strategies_match_independent_coordinate_sum() {
 }
 
 #[test]
-fn ready_sum_boundary_closure_matches_coordinates_across_execution_strategies() {
-    use crate::{
-        network::{
-            ExecutionResult, Network, Sequential, SequentialExtract, SequentialRef, SmallestDegree,
-            graph::{NAdd, NMul},
-            library::{DummyLibrary, DummyLibraryTensor, panicing::ErroringLibrary},
-            store::NetworkStore,
-        },
-        structure::{
-            OrderedStructure, TensorStructure,
-            representation::{Euclidean, Lorentz, RepName},
-            slot::IsAbstractSlot,
-        },
-        tensors::data::DenseTensor,
+fn in_place_product_rewrites_follow_operands_across_node_compaction() {
+    use crate::network::graph::NMul;
+    use crate::network::library::panicing::ErroringLibrary;
+    use crate::network::library::{DummyLibrary, DummyLibraryTensor};
+    use crate::network::store::NetworkStore;
+    use crate::network::{
+        ExecutionResult, Network, Sequential, SmallestDegree, SmallestDegreeIter,
     };
+    use crate::structure::OrderedStructure;
+    use crate::structure::representation::{Euclidean, RepName};
+    use crate::tensors::data::DenseTensor;
+
+    type Tensor = DenseTensor<f64, OrderedStructure<Euclidean>>;
+    type Net = Network<NetworkStore<Tensor, f64>, DummyKey, DummyKey>;
+    type LibTensor = DummyLibraryTensor<Tensor>;
+    type Lib = DummyLibrary<Tensor, DummyKey>;
+    type FnLib = ErroringLibrary<DummyKey>;
+
+    let tensor = |ids: &[usize], data: &[f64]| {
+        let structure =
+            OrderedStructure::new(ids.iter().map(|&id| Euclidean {}.new_slot(2, id)).collect())
+                .into_canonical();
+        Net::from_tensor(DenseTensor::from_storage_data(data.to_vec(), structure).unwrap())
+    };
+    // Each in-place pair or scalar merge compacts the graph nodes, which moves
+    // nodes from the tail into the freed slots. Operands contracted later must
+    // still name their own graph nodes.
+    let original = Net::from_scalar(2.0).n_mul([
+        tensor(&[1], &[1.0, 2.0]),
+        tensor(&[1, 2], &[1.0, 2.0, 3.0, 4.0]),
+        Net::from_scalar(3.0),
+        tensor(&[2, 3], &[5.0, -1.0, 2.0, 7.0]),
+        tensor(&[3, 4], &[-2.0, 3.0, 1.0, 1.0]),
+        Net::from_scalar(5.0),
+        tensor(&[4, 5], &[4.0, 0.0, -3.0, 2.0]),
+    ]);
+
+    let lib = Lib::new();
+    let fn_lib = FnLib::new();
+    let mut expected = original.clone();
+    expected
+        .execute::<Sequential, SmallestDegree, LibTensor, Lib, FnLib>(&lib, &fn_lib)
+        .unwrap();
+    let ExecutionResult::Val(expected) = expected.result_tensor::<LibTensor, Lib>(&lib).unwrap()
+    else {
+        panic!("expected the tensor with the open chain end");
+    };
+    let mut actual = original;
+    actual
+        .execute::<Sequential, SmallestDegreeIter<16>, LibTensor, Lib, FnLib>(&lib, &fn_lib)
+        .unwrap();
+    let ExecutionResult::Val(actual) = actual.result_tensor::<LibTensor, Lib>(&lib).unwrap() else {
+        panic!("expected the tensor with the open chain end");
+    };
+    assert_eq!(actual.structure, expected.structure);
+    assert_eq!(actual.data, expected.data);
+}
+
+#[test]
+fn ready_sum_boundary_closure_matches_coordinates_across_execution_strategies() {
+    use crate::network::graph::{NAdd, NMul};
+    use crate::network::library::panicing::ErroringLibrary;
+    use crate::network::library::{DummyLibrary, DummyLibraryTensor};
+    use crate::network::store::NetworkStore;
+    use crate::network::{
+        ExecutionResult, Network, Sequential, SequentialExtract, SequentialRef, SmallestDegree,
+    };
+    use crate::structure::representation::{Euclidean, Lorentz, RepName};
+    use crate::structure::slot::IsAbstractSlot;
+    use crate::structure::{OrderedStructure, TensorStructure};
+    use crate::tensors::data::DenseTensor;
 
     type Tensor = DenseTensor<f64, OrderedStructure>;
     type Net = Network<NetworkStore<Tensor, f64>, DummyKey, DummyKey>;
@@ -2050,17 +2020,11 @@ fn ready_sum_boundary_closure_matches_coordinates_across_execution_strategies() 
 #[cfg(feature = "shadowing")]
 #[test]
 fn sparse_contraction_preserves_overlapping_and_disjoint_support() {
-    use crate::{
-        contraction::Contract,
-        structure::{
-            HasStructure, OrderedStructure, TensorStructure,
-            representation::{Euclidean, RepName},
-        },
-        tensors::{
-            data::{DataTensor, GetTensorData, SparseTensor},
-            parametric::ParamTensor,
-        },
-    };
+    use crate::contraction::Contract;
+    use crate::structure::representation::{Euclidean, RepName};
+    use crate::structure::{HasStructure, OrderedStructure, TensorStructure};
+    use crate::tensors::data::{DataTensor, GetTensorData, SparseTensor};
+    use crate::tensors::parametric::ParamTensor;
     use symbolica::atom::Atom;
 
     type Tensor = ParamTensor<OrderedStructure<Euclidean>>;
@@ -2130,19 +2094,13 @@ fn sparse_contraction_preserves_overlapping_and_disjoint_support() {
 
 #[test]
 fn batched_reindex_preserves_component_axes_and_logical_positions() {
-    use crate::{
-        network::{
-            Network,
-            graph::{NetworkLeaf, NetworkNode, ScaledTensorRef},
-            store::{NetworkStore, TensorScalarStore},
-        },
-        structure::{
-            OrderedStructure, TensorStructure,
-            abstract_index::AbstractIndex,
-            representation::{Euclidean, LibraryRep, RepName},
-        },
-        tensors::data::DenseTensor,
-    };
+    use crate::network::Network;
+    use crate::network::graph::{NetworkLeaf, NetworkNode, ScaledTensorRef};
+    use crate::network::store::{NetworkStore, TensorScalarStore};
+    use crate::structure::abstract_index::AbstractIndex;
+    use crate::structure::representation::{Euclidean, LibraryRep, RepName};
+    use crate::structure::{OrderedStructure, TensorStructure};
+    use crate::tensors::data::DenseTensor;
     type Tensor = DenseTensor<f64, OrderedStructure<LibraryRep>>;
     type Net = Network<NetworkStore<Tensor, f64>, DummyKey, DummyKey>;
     let slots = [
@@ -2193,19 +2151,13 @@ fn batched_reindex_preserves_component_axes_and_logical_positions() {
 
 #[test]
 fn batched_reindex_follows_sum_incidence_without_capturing_internal_indices() {
-    use crate::{
-        network::{
-            Network,
-            graph::{NetworkLeaf, NetworkNode},
-            store::NetworkStore,
-        },
-        structure::{
-            OrderedStructure, TensorStructure,
-            abstract_index::AbstractIndex,
-            representation::{Euclidean, LibraryRep, RepName},
-        },
-        tensors::data::DenseTensor,
-    };
+    use crate::network::Network;
+    use crate::network::graph::{NetworkLeaf, NetworkNode};
+    use crate::network::store::NetworkStore;
+    use crate::structure::abstract_index::AbstractIndex;
+    use crate::structure::representation::{Euclidean, LibraryRep, RepName};
+    use crate::structure::{OrderedStructure, TensorStructure};
+    use crate::tensors::data::DenseTensor;
     type Tensor = DenseTensor<f64, OrderedStructure<LibraryRep>>;
     type Net = Network<NetworkStore<Tensor, f64>, DummyKey, DummyKey>;
     let first = Euclidean {}.new_slot::<AbstractIndex, _, _>(2, 1).to_lib();
@@ -2257,16 +2209,12 @@ fn batched_reindex_follows_sum_incidence_without_capturing_internal_indices() {
 
 #[test]
 fn occurrence_materialization_keeps_shared_payload_bindings_separate() {
-    use super::{
-        Network, NetworkState,
-        graph::{NetworkGraph, NetworkLeaf, NetworkNode, ScalarRef},
-        store::NetworkStore,
-    };
-    use crate::structure::{
-        Canonicalized, OrderedStructure, TensorShell,
-        representation::{Minkowski, RepName},
-        slot::IsAbstractSlot,
-    };
+    use super::graph::{NetworkGraph, NetworkLeaf, NetworkNode, ScalarRef};
+    use super::store::NetworkStore;
+    use super::{Network, NetworkState};
+    use crate::structure::representation::{Minkowski, RepName};
+    use crate::structure::slot::IsAbstractSlot;
+    use crate::structure::{Canonicalized, OrderedStructure, TensorShell};
 
     let rep = Minkowski {};
     let slots = [11, 22, 33, 44].map(|index| rep.new_slot(4, index).to_lib());
@@ -2405,19 +2353,13 @@ fn occurrence_materialization_keeps_shared_payload_bindings_separate() {
 
 #[test]
 fn batched_reindex_keeps_dual_endpoints_on_sewn_edges() {
-    use crate::{
-        network::{
-            Network,
-            graph::{NetworkLeaf, NetworkNode},
-            store::NetworkStore,
-        },
-        structure::{
-            OrderedStructure, TensorStructure,
-            abstract_index::AbstractIndex,
-            representation::{Euclidean, LibraryRep, Lorentz, RepName},
-        },
-        tensors::data::DenseTensor,
-    };
+    use crate::network::Network;
+    use crate::network::graph::{NetworkLeaf, NetworkNode};
+    use crate::network::store::NetworkStore;
+    use crate::structure::abstract_index::AbstractIndex;
+    use crate::structure::representation::{Euclidean, LibraryRep, Lorentz, RepName};
+    use crate::structure::{OrderedStructure, TensorStructure};
+    use crate::tensors::data::DenseTensor;
     type Tensor = DenseTensor<f64, OrderedStructure<LibraryRep>>;
     type Net = Network<NetworkStore<Tensor, f64>, DummyKey, DummyKey>;
     let free = Euclidean {}.new_slot::<AbstractIndex, _, _>(2, 31).to_lib();
@@ -2483,17 +2425,13 @@ fn scalar_network_state_addition_is_symmetric() {
 #[cfg(feature = "shadowing")]
 #[test]
 fn parsed_scalar_tensor_and_pure_scalar_add_in_both_orders() {
-    use crate::{
-        mink,
-        network::{
-            NetworkState,
-            graph::NAdd,
-            parsing::{NetworkParse, ParseSettings, ShorthandParsing},
-        },
-        p, q,
-        structure::abstract_index::{AIND_SYMBOLS, AbstractIndex},
-    };
-    use symbolica::{atom::Atom, function};
+    use crate::network::NetworkState;
+    use crate::network::graph::NAdd;
+    use crate::network::parsing::{NetworkParse, ParseSettings, ShorthandParsing};
+    use crate::structure::abstract_index::{AIND_SYMBOLS, AbstractIndex};
+    use crate::{mink, p, q};
+    use symbolica::atom::Atom;
+    use symbolica::function;
 
     let tensor = p!(q!(mink!(4)));
     let scalar = Atom::num(2);

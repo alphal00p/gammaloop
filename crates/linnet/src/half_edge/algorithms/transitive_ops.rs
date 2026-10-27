@@ -27,15 +27,14 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use crate::half_edge::{
-    builder::HedgeGraphBuilder,
-    involution::Flow,
-    nodestore::NodeStorageOps,
-    subgraph::{ModifySubSet, SuBitGraph, SubSetLike},
-    HedgeGraph, NoData, NodeIndex,
-};
+use crate::half_edge::builder::HedgeGraphBuilder;
+use crate::half_edge::involution::Flow;
+use crate::half_edge::nodestore::Topology;
+use crate::half_edge::subgraph::{ModifySubSet, SuBitGraph, SubSetLike};
+use crate::half_edge::{HedgeGraph, NoData, NodeIndex};
 
-use super::{topological_order::TopoError, DirectionBasis};
+use super::topological_order::TopoError;
+use super::DirectionBasis;
 
 /// Error types for transitive operations on half-edge graphs.
 ///
@@ -57,7 +56,7 @@ pub enum TransitiveError {
     GraphStructure,
 }
 
-impl<V, S: NodeStorageOps<NodeData = V, Base = SuBitGraph>> HedgeGraph<NoData, V, NoData, S> {
+impl<V, S: Topology> HedgeGraph<NoData, V, NoData, S> {
     pub fn poset<I: IntoIterator<Item = V>>(nodes: I) -> Self
     where
         V: PartialOrd,
@@ -123,9 +122,7 @@ impl<V, S: NodeStorageOps<NodeData = V, Base = SuBitGraph>> HedgeGraph<NoData, V
     }
 }
 
-impl<E, V, H, N: NodeStorageOps<NodeData = V, Base = crate::half_edge::subgraph::SuBitGraph>>
-    HedgeGraph<E, V, H, N>
-{
+impl<E, V, H, N: Topology> HedgeGraph<E, V, H, N> {
     /// Computes the transitive closure of the directed acyclic graph.
     ///
     /// The transitive closure adds an edge (u, v) for every pair of nodes u, v
@@ -322,7 +319,7 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V, Base = crate::half_edge::subgraph:
         }
 
         // Build a subgraph with all redundant edges to remove
-        let mut edges_to_remove: crate::half_edge::subgraph::SuBitGraph = self.empty_subgraph();
+        let mut edges_to_remove: SuBitGraph = self.empty_subgraph();
         for hedge in redundant_hedges {
             // CRITICAL: Add both half-edges of the pair to completely remove the edge
             // In HedgeGraph, each directed edge consists of two half-edges:
@@ -337,7 +334,8 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V, Base = crate::half_edge::subgraph:
         }
 
         // Delete all redundant hedges at once
-        self.delete_hedges(&edges_to_remove);
+        self.delete_hedges(&edges_to_remove)
+            .map_err(|_| TransitiveError::GraphStructure)?;
 
         Ok(self)
     }
@@ -465,19 +463,13 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V, Base = crate::half_edge::subgraph:
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        dot,
-        half_edge::{
-            algorithms::DirectionBasis,
-            builder::HedgeGraphBuilder,
-            involution::{Flow, HedgePair, Orientation},
-            nodestore::{NodeStorageOps, NodeStorageVec},
-            subgraph::{ModifySubSet, SuBitGraph, SubSetLike},
-            HedgeGraph, NoData,
-        },
-        parser::{DotGraph, DotVertexData},
-        tree::{child_vec::ChildVecStore, Forest},
-    };
+    use crate::dot;
+    use crate::half_edge::algorithms::DirectionBasis;
+    use crate::half_edge::builder::HedgeGraphBuilder;
+    use crate::half_edge::involution::{Flow, HedgePair, Orientation};
+    use crate::half_edge::subgraph::{ModifySubSet, SuBitGraph, SubSetLike};
+    use crate::half_edge::{HedgeGraph, NoData};
+    use crate::parser::DotGraph;
 
     #[test]
     fn test_transitive_closure_simple() {
@@ -599,7 +591,7 @@ mod tests {
 
     #[test]
     fn test_empty_graph() {
-        let graph: DotGraph<NodeStorageVec<DotVertexData>> = DotGraph::from_string(
+        let graph: DotGraph = DotGraph::from_string(
             r#"
             digraph {
                 A
@@ -615,7 +607,7 @@ mod tests {
             .transitive_closure(DirectionBasis::Underlying)
             .unwrap();
 
-        let graph2: DotGraph<NodeStorageVec<DotVertexData>> = DotGraph::from_string(
+        let graph2: DotGraph = DotGraph::from_string(
             r#"
             digraph {
                 A
@@ -637,23 +629,21 @@ mod tests {
 
     #[test]
     fn test_single_node() {
-        let graph: DotGraph<NodeStorageVec<DotVertexData>> =
-            DotGraph::from_string("digraph { A }").unwrap();
+        let graph: DotGraph = DotGraph::from_string("digraph { A }").unwrap();
 
         let closure = graph
             .graph
             .transitive_closure(DirectionBasis::Underlying)
             .unwrap();
 
-        let graph2: DotGraph<NodeStorageVec<DotVertexData>> =
-            DotGraph::from_string("digraph { A }").unwrap();
+        let graph2: DotGraph = DotGraph::from_string("digraph { A }").unwrap();
         let reduction = graph2
             .graph
             .transitive_reduction(DirectionBasis::Underlying)
             .unwrap();
 
-        assert_eq!(closure.n_nodes(), 1);
-        assert_eq!(reduction.n_nodes(), 1);
+        assert_eq!(closure.n_live(), 1);
+        assert_eq!(reduction.n_live(), 1);
         assert_eq!(closure.n_edges(), 0);
         assert_eq!(reduction.n_edges(), 0);
     }
@@ -683,14 +673,12 @@ mod tests {
     }
 
     #[test]
-    fn direction_basis_controls_reachability_with_forest_storage() {
-        type ForestStore = Forest<(), ChildVecStore<()>>;
-
+    fn direction_basis_controls_reachability() {
         let mut builder = HedgeGraphBuilder::<(), ()>::new();
         let left = builder.add_node(());
         let right = builder.add_node(());
         builder.add_edge(left, right, (), Orientation::Reversed);
-        let graph: HedgeGraph<(), (), NoData, ForestStore> = builder.build();
+        let graph: HedgeGraph<(), (), NoData> = builder.build();
 
         assert!(graph.is_reachable(left, right, DirectionBasis::Underlying));
         assert!(!graph.is_reachable(right, left, DirectionBasis::Underlying));
@@ -705,7 +693,7 @@ mod tests {
         let target = builder.add_node(());
         let source = builder.add_node(());
         builder.add_edge(source, target, (), Orientation::Undirected);
-        let graph: HedgeGraph<(), (), NoData, ForestStore> = builder.build();
+        let graph: HedgeGraph<(), (), NoData> = builder.build();
 
         assert!(graph.is_reachable(source, target, DirectionBasis::Underlying));
         assert!(!graph.is_reachable(source, target, DirectionBasis::Superficial));
@@ -1248,7 +1236,7 @@ mod tests {
 
     #[test]
     fn test_transitive_closure_with_isolated_components() {
-        let original: DotGraph<NodeStorageVec<DotVertexData>> = DotGraph::from_string(
+        let original: DotGraph = DotGraph::from_string(
             r#"
             digraph {
                 // Component 1: Chain
@@ -1329,7 +1317,7 @@ mod tests {
 
     #[test]
     fn test_comprehensive_reachability() {
-        let graph: DotGraph<NodeStorageVec<DotVertexData>> = DotGraph::from_string(
+        let graph: DotGraph = DotGraph::from_string(
             r#"
             digraph {
                 // Create a graph with known reachability patterns
@@ -1364,7 +1352,7 @@ mod tests {
                 graph
                     .graph
                     .node_store
-                    .get_node_data(idx)
+                    .get(idx)
                     .name
                     .as_ref()
                     .map(|id| (id.clone(), idx))
@@ -1428,7 +1416,7 @@ mod tests {
         // println!("{}", hasse.clone().transitive_closure(DirectionBasis::Underlying).unwrap().base_dot());
 
         // Should have 4 nodes
-        assert_eq!(hasse.n_nodes(), 4);
+        assert_eq!(hasse.n_live(), 4);
 
         // Should have 4 edges in the Hasse diagram (covering relations only)
         assert_eq!(hasse.n_edges(), 3);

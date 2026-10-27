@@ -1,0 +1,21 @@
+{
+  "command": "nix develop -c target/dev-optim/examples/vacuum_b2 target/wp1/v4-exact-only 3 0",
+  "source": "e0a779808174c64057fecfd062c948b8de8e5c1f plus diagnostic output only",
+  "check_canonical_numerator": true,
+  "number_of_numerical_samples": 0,
+  "seed": 3,
+  "scope": "complete 270-diagram four-loop vacuum request",
+  "outcome": "terminated after 605 seconds without a complete-request grouping result",
+  "last_observed_resident_kib": 9873796,
+  "interpretation": "bounded diagnostic stop, not bad-commit evidence; use original-pair exact certificate for the decisive comparison",
+  "completed_pair_control": {
+    "production_groups": 2,
+    "samples": 0,
+    "canonical": true,
+    "independent_exact_ratio": "7/2",
+    "original_certificate_status": "superseded by ROUND1 P1; see fix-round1.json for the corrected closed-loop similarity proof",
+    "corrected_identity": "closed-loop similarity and isolated finite color contraction, asserted by current regression; fix-round1.json",
+    "historical_expanding_identity_result": true,
+    "historical_certificate_admissible": false
+  }
+}

@@ -1,43 +1,37 @@
 use crate::integrands::process::EvaluationTarget;
 use feynkit_generator::GenerationType;
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    fs,
-    io::Cursor,
-    path::PathBuf,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::collections::{BTreeMap, BTreeSet};
+use std::fs;
+use std::io::Cursor;
+use std::path::PathBuf;
+use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::{
-    GammaLoopContextContainer,
-    cff::CutCFFIndex,
-    graph::{
-        Graph,
-        autogen::Autogen,
-        feynman_graph::FeynmanGraph,
-        threshold_counterterms::{
-            THRESHOLD_COUNTERTERM_SCHEMA_VERSION, ThresholdCountertermCut,
-            ThresholdCountertermMultiplier, ThresholdCountertermSpec,
-            ThresholdCountertermThreshold, ThresholdCountertermVariant,
-        },
-    },
-    initialisation::test_initialise,
-    integrands::{evaluation::EvaluationResult, process::ProcessIntegrand},
-    model::Model,
-    observables::ThresholdCountertermComponentOccurrence,
-    processes::{
-        CrossSection, CutGroupId, ProcessDefinition,
-        threshold_counterterms::{
-            ThresholdCountertermComponentKind, ThresholdCountertermMetadataRegistry,
-            ThresholdCountertermSide, ThresholdCountertermVariantId,
-        },
-    },
-    settings::{GlobalSettings, RuntimeSettings, global::GenerationSettings},
-    utils::F,
+use crate::GammaLoopContextContainer;
+use crate::cff::CutCFFIndex;
+use crate::graph::Graph;
+use crate::graph::autogen::Autogen;
+use crate::graph::feynman_graph::FeynmanGraph;
+use crate::graph::threshold_counterterms::{
+    THRESHOLD_COUNTERTERM_SCHEMA_VERSION, ThresholdCountertermCut, ThresholdCountertermMultiplier,
+    ThresholdCountertermSpec, ThresholdCountertermThreshold, ThresholdCountertermVariant,
 };
+use crate::initialisation::test_initialise;
+use crate::integrands::evaluation::EvaluationResult;
+use crate::integrands::process::ProcessIntegrand;
+use crate::model::Model;
+use crate::observables::ThresholdCountertermComponentOccurrence;
+use crate::processes::threshold_counterterms::{
+    ThresholdCountertermComponentKind, ThresholdCountertermMetadataRegistry,
+    ThresholdCountertermSide, ThresholdCountertermVariantId,
+};
+use crate::processes::{CrossSection, CutGroupId, ProcessDefinition};
+use crate::settings::global::GenerationSettings;
+use crate::settings::{GlobalSettings, RuntimeSettings};
+use crate::utils::F;
 use linnet::half_edge::involution::EdgeIndex;
 use spenso::algebra::complex::Complex;
-use symbolica::{numerical_integration::Sample, state::State};
+use symbolica::numerical_integration::Sample;
+use symbolica::state::State;
 
 const TRIPLE_DOTTED_BUBBLE: &str =
     include_str!("../../../../tests/resources/graphs/ir_safe_thresholds/triple_dotted_bubble.dot");
@@ -404,7 +398,7 @@ fn raised_cross_section_rejects_different_groups_for_one_merged_variant() {
         .spawn(|| {
             test_initialise().unwrap();
             let model = Model::from_json(SCALARS_2P_3P_MODEL).unwrap();
-            let mut graph: Graph = crate::graph::Graph::import_dot(TRIPLE_DOTTED_BUBBLE, &model)
+            let mut graph: Graph = crate::graph::Graph::from_dot(TRIPLE_DOTTED_BUBBLE, &model)
                 .map(|mut graphs| {
                     assert_eq!(graphs.len(), 1);
                     graphs.remove(0)
@@ -487,7 +481,7 @@ fn generalized_raised_cross_section_covers_derivative_components_and_roundtrips(
         .spawn(|| {
             test_initialise().unwrap();
             let model = Model::from_json(SCALARS_2P_3P_MODEL).unwrap();
-            let graph: Graph = crate::graph::Graph::import_dot(TRIPLE_DOTTED_BUBBLE, &model)
+            let graph: Graph = crate::graph::Graph::from_dot(TRIPLE_DOTTED_BUBBLE, &model)
                 .map(|mut graphs| {
                     assert_eq!(graphs.len(), 1);
                     graphs.remove(0)
@@ -708,13 +702,11 @@ fn generalized_raised_cross_section_covers_derivative_components_and_roundtrips(
             // Jacobian must multiply the result and every event only after
             // residue differentiation, independently of the chosen profile.
             {
-                use crate::{
-                    integrands::process::{MomentumSpaceEvaluationInput, SamplingChannelId},
-                    momentum::ThreeMomentum,
-                    settings::runtime::{
-                        MultiChannelingSettings, SamplingChannelDefinition, SamplingRadialProfile,
-                        SamplingSettings, StabilityLevelSetting,
-                    },
+                use crate::integrands::process::{MomentumSpaceEvaluationInput, SamplingChannelId};
+                use crate::momentum::ThreeMomentum;
+                use crate::settings::runtime::{
+                    MultiChannelingSettings, SamplingChannelDefinition, SamplingRadialProfile,
+                    SamplingSettings, StabilityLevelSetting,
                 };
                 let mut matched = cross_section.integrand.as_ref().unwrap().clone();
                 let ProcessIntegrand::CrossSection(prepared) = &matched else {
@@ -950,7 +942,7 @@ fn standalone_cut_sampling_compiles_from_production_cut_and_mass_data() {
             test_initialise().unwrap();
             let model = Model::from_json(SCALARS_2P_3P_MODEL).unwrap();
             for (pdg, mass) in [(1001, 1.0), (1000, 0.0)] {
-                let graph: Graph = crate::graph::Graph::import_dot(
+                let graph: Graph = crate::graph::Graph::from_dot(
                     r#"digraph cut_sampling_bubble {
                 num=1; final_state="SCALAR,SCALAR"; edge [pdg=PDG]; node [num=1];
                 ext [style=invis, is_cut=0];
@@ -1277,11 +1269,9 @@ fn standalone_cut_sampling_compiles_from_production_cut_and_mass_data() {
                 // physical body. Compare the retained draw with Double-only
                 // evaluation, including the complete physical event weights.
                 {
-                    use crate::{
-                        integrands::evaluation::{PreciseEvaluationResult, StabilityStatus},
-                        settings::runtime::{
-                            MultiChannelingSettings, SamplingSettings, StabilityLevelSetting,
-                        },
+                    use crate::integrands::evaluation::{PreciseEvaluationResult, StabilityStatus};
+                    use crate::settings::runtime::{
+                        MultiChannelingSettings, SamplingSettings, StabilityLevelSetting,
                     };
                     let mut runtime = ProcessIntegrand::CrossSection(integrand.clone());
                     let mut focused = parameterization.clone();
@@ -1398,13 +1388,9 @@ fn standalone_cut_sampling_compiles_from_production_cut_and_mass_data() {
 
 #[test]
 fn lu_h_sampling_preserves_normalization_and_raised_derivative_integrals() {
-    use crate::{
-        settings::runtime::{HFunction, HFunctionSettings},
-        utils::{
-            h, h_dual,
-            hyperdual_utils::{extract_t_derivatives, simple_n_deriv_shape},
-        },
-    };
+    use crate::settings::runtime::{HFunction, HFunctionSettings};
+    use crate::utils::hyperdual_utils::{extract_t_derivatives, simple_n_deriv_shape};
+    use crate::utils::{h, h_dual};
     use symbolica::domains::dual::HyperDual;
 
     test_initialise().unwrap();
@@ -1494,36 +1480,24 @@ fn conditional_cut_sampling_preserves_both_sides_and_raised_sum() {
         .name("conditional-cut-sampling".into())
         .stack_size(128 * 1024 * 1024)
         .spawn(|| {
-            use crate::{
-                DependentMomentaConstructor,
-                graph::{GroupId, LmbIndex},
-                integrands::process::{
-                    GaussianReferenceFunction, GraphTerm, MomentumSpaceEvaluationInput,
-                    SamplingChannelBridge, SamplingChannelBridgeAcceptanceReport, SamplingChannelId,
-                    sampling::maps::{SamplingEvaluationError, SamplingMapAffine},
-                },
-                momentum::{
-                    ThreeMomentum,
-                    sample::{LoopMomenta, SubspaceData},
-                },
-                settings::runtime::{
-                    DiscreteGraphSamplingSettings, DiscreteGraphSamplingType, MultiChannelingSettings,
-                    ParameterizationSettings, SamplingChannelDefinition, SamplingRadialProfile,
-                    SamplingSettings, StabilityLevelSetting,
-                },
-                utils::{
-                    ArbPrec,
-                    newton_solver::{RadialRootDiagnostics, RadialRootIdentity},
-                },
-            };
-            use crate::{integrands::evaluation::StabilityStatus, observables::AdditionalWeightKey};
+            use crate::DependentMomentaConstructor;
+            use crate::graph::{GroupId, LmbIndex};
+            use crate::integrands::process::{GaussianReferenceFunction, GraphTerm, MomentumSpaceEvaluationInput, SamplingChannelBridge, SamplingChannelBridgeAcceptanceReport, SamplingChannelId};
+            use crate::integrands::process::sampling::maps::{SamplingEvaluationError, SamplingMapAffine};
+            use crate::momentum::ThreeMomentum;
+            use crate::momentum::sample::{LoopMomenta, SubspaceData};
+            use crate::settings::runtime::{DiscreteGraphSamplingSettings, DiscreteGraphSamplingType, MultiChannelingSettings, ParameterizationSettings, SamplingChannelDefinition, SamplingRadialProfile, SamplingSettings, StabilityLevelSetting};
+            use crate::utils::ArbPrec;
+            use crate::utils::newton_solver::{RadialRootDiagnostics, RadialRootIdentity};
+            use crate::integrands::evaluation::StabilityStatus;
+            use crate::observables::AdditionalWeightKey;
             use itertools::Itertools;
             use symbolica::prelude::SingleFloat;
             use typed_index_collections::TiVec;
 
             test_initialise().unwrap();
             let model = Model::from_json(SCALARS_2P_3P_MODEL).unwrap();
-            let graph = crate::graph::Graph::import_dot(TRIPLE_DOTTED_BUBBLE, &model).map(|mut graphs| { assert_eq!(graphs.len(),1); graphs.remove(0) }).unwrap();
+            let graph = crate::graph::Graph::from_dot(TRIPLE_DOTTED_BUBBLE, &model).map(|mut graphs| { assert_eq!(graphs.len(),1); graphs.remove(0) }).unwrap();
             let generation = generation_settings();
             let runtime = runtime_settings();
             let mut cross_section = preprocess_graph(graph, &model, &generation, &runtime);
@@ -2276,26 +2250,16 @@ fn hosted_joint_kite_preserves_original_equations_and_physical_sum() {
         .name("hosted-joint-kite".into())
         .stack_size(128 * 1024 * 1024)
         .spawn(|| -> eyre::Result<()> {
-            use crate::{
-                DependentMomentaConstructor,
-                cff::esurface::{Esurface, EsurfaceRay},
-                graph::LmbIndex,
-                integrands::process::{
-                    GaussianReferenceFunction, GraphTerm, ProcessIntegrandImpl, SamplingChannelId, SamplingExpressionEvaluator,
-                    SamplingMapComponent, SharedEnergyJointMap, sampling::context::SamplingMapContext,
-                },
-                momentum::{
-                    ThreeMomentum,
-                    sample::{ExternalThreeMomenta, LoopMomenta, Subspace, SubspaceData},
-                },
-                settings::runtime::{
-                    SamplingChannelDefinition, SamplingChannelWeight, SamplingSettingsParser,
-                },
-                utils::{
-                    ArbPrec, FloatLike, QuadFloat, SamplingFloat,
-                    newton_solver::{RadialRootDiagnostics, RadialRootIdentity},
-                },
-            };
+            use crate::DependentMomentaConstructor;
+            use crate::cff::esurface::{Esurface, EsurfaceRay};
+            use crate::graph::LmbIndex;
+            use crate::integrands::process::{GaussianReferenceFunction, GraphTerm, ProcessIntegrandImpl, SamplingChannelId, SamplingExpressionEvaluator, SamplingMapComponent, SharedEnergyJointMap};
+            use crate::integrands::process::sampling::context::SamplingMapContext;
+            use crate::momentum::ThreeMomentum;
+            use crate::momentum::sample::{ExternalThreeMomenta, LoopMomenta, Subspace, SubspaceData};
+            use crate::settings::runtime::{SamplingChannelDefinition, SamplingChannelWeight, SamplingSettingsParser};
+            use crate::utils::{ArbPrec, FloatLike, QuadFloat, SamplingFloat};
+            use crate::utils::newton_solver::{RadialRootDiagnostics, RadialRootIdentity};
             use itertools::Itertools;
             use typed_index_collections::TiVec;
 
@@ -2319,7 +2283,7 @@ fn hosted_joint_kite_preserves_original_equations_and_physical_sum() {
                     &format!("id={original}, name=original_{original},"),
                 );
             }
-            let graph = crate::graph::Graph::import_dot(graph_text.as_str(), &model).map(|mut graphs| { assert_eq!(graphs.len(),1); graphs.remove(0) })?;
+            let graph = crate::graph::Graph::from_dot(graph_text.as_str(), &model).map(|mut graphs| { assert_eq!(graphs.len(),1); graphs.remove(0) })?;
             let mut generation = generation_settings();
             generation.override_lmb_heuristics = true;
             let mut runtime = runtime_settings();
@@ -2845,9 +2809,7 @@ fn hosted_joint_kite_preserves_original_equations_and_physical_sum() {
                 started.elapsed()
             );
 
-            use crate::settings::runtime::{
-                DiscreteGraphSamplingSettings, DiscreteGraphSamplingType, SamplingSettings,
-            };
+            use crate::settings::runtime::{DiscreteGraphSamplingSettings, DiscreteGraphSamplingType, SamplingSettings};
             let SamplingSettings::MultiChanneling(channels) = runtime.sampling.clone() else {
                 unreachable!()
             };

@@ -5,7 +5,7 @@ networks in `crates/spenso/src/network/parsing`. It focuses on the
 control flow, shorthand expansion, opaque leaves, structure inference,
 and edge cases that affect Schoonschip-style notation.
 
-#strong[Audit status:] reviewed 2026-09-29 against the unified reduction and admitted-parser implementation.
+#strong[Audit status:] changed source scopes reviewed 2026-10-12 against the shared slot matcher and component executor.
 Scalar coefficient assembly reviewed 2026-10-16.
 Lifecycle: current implementation architecture.
 
@@ -20,8 +20,8 @@ are materialized with their coefficients intact.
 External parsing starts from `NetworkParse` methods such as `parse_to_atom_net`.
 The parser first rejects chains or traces nested inside another chain or
 trace, because they share one global `in`/`out` placeholder scope. It then
-creates a fresh `ParseState`, reserves the original admitted input slot-index
-spellings without replaying their normalizers, and calls `try_from_view_impl`
+creates a fresh `ParseState`, reserves each admitted explicit index spelling
+without serializing or normalizing it again, and calls `try_from_view_impl`
 on the input `AtomView`. Parser
 clones share both the allocator and reservation set, so newly generated
 dummies cannot collide with written indices or each other.
@@ -155,7 +155,7 @@ else -> scalar fallback
 ```
 
 Products, sums, and powers may hit the depth leaf boundary before they
-recurse. Function parsing validates dot operands, handles broadcast wrappers,
+recurse. Function parsing validates dot arity and compatible rank-one operands, handles broadcast wrappers,
 applies `is_tensorial(strict_tensor_filter)`, and
 uses the opaque tensor-expression boundary only for recognized shorthand
 roots.
@@ -212,7 +212,7 @@ Pow
 Fun
 ==== `AtomView::Fun`
 <atomviewfun>
-+ Check dot arity and compatible rank-one operands.
++ Validate dot arity and its two compatible rank-one operands.
 + Handle broadcast wrappers.
 + Apply the strict tensor-syntax filter.
 + Keep recognized shorthand roots opaque when requested.
@@ -227,12 +227,13 @@ Parse directly as scalars.
 <function-parsing>
 #strong[Function];`try_from_fun(fun)`
 ↓
-#strong[Decision];`dot` without two compatible rank-one operands?
+#strong[Decision];Does `dot` fail the shared compact-inner-product check?
 Yes
 ==== Syntax error
 <syntax-error>
-Return `InvalidDotFunction`. This is a parser syntax check, not a tensor
-fallback.
+Return `InvalidDotFunction`. Dot requires two compatible compact rank-one
+operands with no remaining spectator ports; arity alone is insufficient.
+This syntax check precedes scalar and opaque fallback.
 
 No
 ==== Continue
@@ -391,8 +392,8 @@ trace
 <function-flow>
 Function parsing has the most important ordering rules.
 
-+ Reject malformed `dot` syntax first. Dot requires exactly two compatible
-  rank-one operands.
++ Reject malformed `dot` syntax first. The shared slot matcher requires two
+  compatible compact rank-one operands and no remaining spectator ports.
 + If the head has the `broadcast` tag, require one argument, parse that
   argument recursively, and apply the head to the result.
 + Apply `is_tensorial(settings.strict_tensor_filter)`. If it rejects the
@@ -660,7 +661,9 @@ g(p(rep), q(rep.dual()))
 
 The compact representations must match under duality, including dimension.
 For self-dual representations, `rep.dual()` is `rep`.
-`dot(p(rep), q(rep.dual()))` follows the same rule.
+`dot(p(rep), q(rep.dual()))` follows the same rule for rank-one operands.
+A metric inner product may contract one unique compact axis from each operand
+while retaining explicit spectator ports; `dot` rejects those partial contractions.
 
 The stripped representation in `p(rep)` means that the vector replaces
 an omitted tensor slot. It is valid only where such a slot exists:
@@ -677,14 +680,18 @@ A compact vector is a function that:
 - has a tensor-tagged head;
 - is not `metric` or `dot`;
 - is not itself a representation;
-- has no explicit slot argument;
-- has exactly one direct argument matching the representation wildcard
-  convention.
+- has exactly one direct unindexed representation argument;
+- may retain explicit slot arguments as spectators to that compact axis.
 
 Sums are accepted only when every summand is a compact vector with the
 same representation. Unary broadcasts, projectors, and products preserve
 compact-vector syntax when they contain exactly one compatible vector and
-otherwise scalar factors. Powers are not compact vector syntax.
+otherwise scalar factors. Powers are not compact vector syntax. Chain and trace operands may retain
+explicit spectators; ordinary weighted products still require scalar coefficients.
+
+Component realization and `ParamNet::simple_execute` use sequential
+`MinIntermediateCost` execution. Explicit `Network::execute` calls retain their
+chosen contraction strategy.
 
 == Chain Expansion
 <chain-expansion>

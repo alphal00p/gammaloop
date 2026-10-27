@@ -18,7 +18,7 @@ feynkit-tensor = { path = "../feynkit-tensor" }
 gammaloop-api = { path = "../gammaloop-api", default-features = false, features = ["cli"] }
 gammalooprs = { path = "../gammalooprs", default-features = false }
 idenso = { workspace = true, features = ["bincode", "reference-cases"] }
-linnet = { path = "../linnet", default-features = false, features = ["nodestore-vec", "bincode", "drawing", "serde", "symbolica"] }
+linnet = { path = "../linnet", default-features = false, features = ["bincode", "drawing", "serde", "symbolica"] }
 ndarray.workspace = true
 spenso = { workspace = true, features = ["shadowing"] }
 spenso-hep-lib = { workspace = true, features = ["native"] }

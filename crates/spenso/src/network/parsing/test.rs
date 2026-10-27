@@ -5,7 +5,8 @@ use crate::structure::OrderedStructure;
 use crate::structure::abstract_index::AIND_SYMBOLS;
 use crate::structure::representation::{Euclidean, Lorentz, Minkowski, RepName};
 use crate::{broadcast_symbol, chain, mink, p, q, slot, tensor, tensor_symbol, trace, vector};
-use symbolica::{atom::FunctionBuilder, function, symbol};
+use symbolica::atom::FunctionBuilder;
+use symbolica::{function, symbol};
 
 fn mink4() -> Representation<Minkowski> {
     Minkowski {}.new_rep(4)
@@ -219,7 +220,7 @@ fn parse_chain_opaque_structure_matches_expanded_graph() {
         .unwrap();
 
     assert_eq!(parsed.state, NetworkState::SelfDualTensor);
-    assert_eq!(parsed.graph.n_nodes(), 1);
+    assert_eq!(parsed.graph.n_live(), 1);
     assert_eq!(parsed.graph.dangling_indices().len(), 2);
     let expanded = expr
         .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
@@ -358,7 +359,7 @@ fn trace_projectors_preserve_exposed_slots_and_close_with_metrics() {
             assert_eq!(open.graph.dangling_indices().len(), 4);
             if matches!(settings.shorthand_parsing, ShorthandParsing::Opaque) {
                 assert_eq!(
-                    open.graph.n_nodes(),
+                    open.graph.n_live(),
                     3,
                     "the coefficient multiplies one opaque trace leaf"
                 );
@@ -467,7 +468,7 @@ fn parse_trace_opaque_structure_matches_expanded_graph() {
         .unwrap();
 
     assert_eq!(parsed.state, NetworkState::SelfDualTensor);
-    assert_eq!(parsed.graph.n_nodes(), 1);
+    assert_eq!(parsed.graph.n_live(), 1);
     assert_eq!(parsed.graph.dangling_indices().len(), 3);
     let expanded = expr
         .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
@@ -606,16 +607,14 @@ fn parse_slot_metric_as_tensor() {
         .unwrap();
 
     assert_eq!(parsed.state, NetworkState::SelfDualTensor);
-    assert_eq!(parsed.graph.n_nodes(), 1);
+    assert_eq!(parsed.graph.n_live(), 1);
     assert_eq!(parsed.graph.dangling_indices().len(), 2);
 }
 
 #[test]
 fn dual_slot_metric_preserves_strict_tensor_interfaces_and_closed_value() {
-    use crate::{
-        network::library::symbolic::{ExplicitKey, TensorLibrary},
-        structure::slot::IsAbstractSlot,
-    };
+    use crate::network::library::symbolic::{ExplicitKey, TensorLibrary};
+    use crate::structure::slot::IsAbstractSlot;
 
     type Net = Network<
         NetworkStore<ParamTensor<ShadowedStructure<AbstractIndex>>, Atom>,
@@ -750,7 +749,7 @@ fn inner_product_schoonschip_can_be_disabled() {
 
     assert!(parsed.state.is_scalar());
     assert!(parsed.graph.dangling_indices().is_empty());
-    assert_eq!(parsed.graph.n_nodes(), 1);
+    assert_eq!(parsed.graph.n_live(), 1);
 }
 
 #[test]
@@ -784,7 +783,7 @@ fn parse_schoonschipped_higher_rank_tensor_keeps_open_slots() {
         .unwrap();
 
     assert_eq!(parsed.state, NetworkState::SelfDualTensor);
-    assert!(parsed.graph.n_nodes() > 1);
+    assert!(parsed.graph.n_live() > 1);
     assert_eq!(parsed.graph.dangling_indices().len(), 2);
 }
 
@@ -803,7 +802,7 @@ fn schoonschip_only_expands_compact_vectors() {
         .unwrap();
 
     assert_eq!(parsed.state, NetworkState::SelfDualTensor);
-    assert!(parsed.graph.n_nodes() > 1);
+    assert!(parsed.graph.n_live() > 1);
     assert_eq!(parsed.graph.dangling_indices().len(), 2);
 }
 
@@ -818,7 +817,7 @@ fn representation_valued_scalar_metadata_is_not_a_compact_vector() {
         .unwrap();
 
     assert_eq!(parsed.state, NetworkState::SelfDualTensor);
-    assert_eq!(parsed.graph.n_nodes(), 1);
+    assert_eq!(parsed.graph.n_live(), 1);
     assert_eq!(parsed.graph.dangling_indices().len(), 1);
 }
 
@@ -1194,7 +1193,7 @@ fn precontracted_scalar_sources_keep_factorization_and_normalizer_calls() {
         assert_eq!(parsed.state, NetworkState::PureScalar);
         assert_eq!(parsed.store.scalar, vec![source]);
         assert!(parsed.store.tensors.is_empty());
-        assert_eq!(parsed.graph.n_nodes(), 1);
+        assert_eq!(parsed.graph.n_live(), 1);
         assert_eq!(CALLS.load(Ordering::SeqCst), 0);
     }
 }
@@ -1362,7 +1361,7 @@ fn scalar_sum_parsing_preserves_factorized_coefficients() {
             .unwrap();
         assert_eq!(parsed.state, NetworkState::PureScalar);
         if precontract_scalars {
-            assert_eq!(parsed.graph.n_nodes(), 1);
+            assert_eq!(parsed.graph.n_live(), 1);
             assert_eq!(parsed.store.scalar, vec![expression.clone()]);
         }
         parsed.simple_execute();

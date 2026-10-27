@@ -462,6 +462,10 @@ config = graph.RenderSettings(
                 ],
                 edges: vec![EdgeDrawing {
                     stroke,
+                    flow_arrow: EdgeDrawing::default_flow_arrow(),
+                    momentum_arrow: EdgeDrawing::default_momentum_arrow(),
+                    flow_arrow_paints: Vec::new(),
+                    momentum_arrow_paints: Vec::new(),
                     pattern: None,
                     flow: None,
                     momentum: false,

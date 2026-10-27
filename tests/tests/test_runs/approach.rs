@@ -523,7 +523,8 @@ fn approach_cross_section_momentum_space_uses_graph_orientation_selectors() -> R
     assert_eq!(result["integrand"]["kind"], "cross_section");
     assert_eq!(result["space"], "momentum");
     assert_eq!(result["command"]["skip_midpoint"], true);
-    assert_eq!(result["command"]["graph_name"], "GL0");
+    // Graph id 0 of this generation is GL1.
+    assert_eq!(result["command"]["graph_name"], "GL1");
     assert_eq!(result["parameter_name"], "lambda");
     assert_eq!(result["axes"][0]["label"], "correlated-soft-threshold");
     assert_eq!(result["spacing"]["max_abs_t"], 0.01);

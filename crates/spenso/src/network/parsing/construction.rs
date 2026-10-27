@@ -2,25 +2,19 @@
 //! construction still happen in source order. Only graph/store emission is
 //! deferred, so discarded scalar temporaries cannot change the final layout.
 
-use crate::{
-    network::{
-        Network, NetworkState, TensorNetworkError,
-        graph::{
-            NetworkEdge, NetworkGraph, NetworkGraphBuilder, NetworkLeaf, NetworkNode, NetworkOp,
-        },
-        store::TensorScalarStore,
-    },
-    structure::{
-        CanonicalLayout, Canonicalized, StructureError, TensorStructure,
-        representation::{LibrarySlot, RepName},
-        slot::{AbsInd, DualSlotTo, IsAbstractSlot},
-    },
+use crate::network::graph::{
+    NetworkEdge, NetworkGraph, NetworkGraphBuilder, NetworkLeaf, NetworkNode, NetworkOp,
 };
-use linnet::half_edge::{
-    NodeIndex,
-    involution::{Flow, Hedge},
-};
-use std::{collections::BTreeMap, fmt::Debug, ops::Range};
+use crate::network::store::TensorScalarStore;
+use crate::network::{Network, NetworkState, TensorNetworkError};
+use crate::structure::representation::{LibrarySlot, RepName};
+use crate::structure::slot::{AbsInd, DualSlotTo, IsAbstractSlot};
+use crate::structure::{CanonicalLayout, Canonicalized, StructureError, TensorStructure};
+use linnet::half_edge::NodeIndex;
+use linnet::half_edge::involution::{Flow, Hedge};
+use std::collections::BTreeMap;
+use std::fmt::Debug;
+use std::ops::Range;
 use symbolica::atom::Symbol;
 
 /// Bookkeeping for a subtree already recognized by the parser. This is not a
@@ -423,17 +417,11 @@ impl<S: TensorScalarStore, K: Debug, Aind: AbsInd> Construction<S, K, Aind> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        network::{
-            graph::{NAdd, NMul},
-            store::NetworkStore,
-        },
-        structure::{
-            OrderedStructure,
-            abstract_index::AbstractIndex,
-            representation::{Lorentz, Minkowski},
-        },
-    };
+    use crate::network::graph::{NAdd, NMul};
+    use crate::network::store::NetworkStore;
+    use crate::structure::OrderedStructure;
+    use crate::structure::abstract_index::AbstractIndex;
+    use crate::structure::representation::{Lorentz, Minkowski};
     use linnet::half_edge::EdgeAccessors;
 
     type Store = NetworkStore<OrderedStructure, i32>;
@@ -483,9 +471,9 @@ mod tests {
         );
         let actual = actual.graph.graph;
         let expected = expected.graph.graph;
-        assert_eq!(actual.n_nodes(), expected.n_nodes());
+        assert_eq!(actual.node_bound(), expected.node_bound());
         assert_eq!(actual.n_hedges(), expected.n_hedges());
-        for i in 0..actual.n_nodes() {
+        for i in 0..actual.node_bound() {
             assert_eq!(actual[NodeIndex(i)], expected[NodeIndex(i)]);
             assert_eq!(
                 actual.iter_crown(NodeIndex(i)).collect::<Vec<_>>(),
@@ -675,16 +663,13 @@ mod tests {
     #[test]
     fn arena_keeps_function_execution_order_and_results() {
         crate::structure::representation::initialize();
-        use crate::{
-            network::{
-                ExecutionResult, Sequential, SequentialExtract, SequentialRef, SmallestDegree,
-                library::{
-                    DummyKey, DummyLibrary, DummyLibraryTensor, FunctionLibrary,
-                    FunctionLibraryError,
-                },
-            },
-            tensors::data::DenseTensor,
+        use crate::network::library::{
+            DummyKey, DummyLibrary, DummyLibraryTensor, FunctionLibrary, FunctionLibraryError,
         };
+        use crate::network::{
+            ExecutionResult, Sequential, SequentialExtract, SequentialRef, SmallestDegree,
+        };
+        use crate::tensors::data::DenseTensor;
         use std::cell::RefCell;
         type Tensor = DenseTensor<f64, OrderedStructure>;
         type Values = NetworkStore<Tensor, f64>;

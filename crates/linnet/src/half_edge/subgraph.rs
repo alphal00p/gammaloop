@@ -1,14 +1,14 @@
-use std::{hash::Hash, num::TryFromIntError};
+use std::hash::Hash;
+use std::num::TryFromIntError;
 
 use ahash::AHashSet;
-use bitvec::order::Lsb0;
-use indenter::CodeFormatter;
 use std::fmt::Write;
 
-use super::{
-    involution::HedgePair, nodestore::NodeStorageOps, GVEdgeAttrs, Hedge, HedgeGraph,
-    PowersetIterator,
-};
+use crate::parser::DotIndent;
+
+use super::involution::HedgePair;
+use super::nodestore::Topology;
+use super::{GVEdgeAttrs, Hedge, HedgeGraph, PowersetIterator};
 
 const BASE62_ALPHABET: &[u8; 62] =
     b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
@@ -175,10 +175,7 @@ pub trait PairwiseSubSetOps<ID = Hedge>: SubSetOps<ID, Self> + Sized {
 impl<ID, T> PairwiseSubSetOps<ID> for T where T: SubSetOps<ID, T> + Sized {}
 
 pub trait SubGraphOps {
-    fn complement<E, V, H, N: NodeStorageOps<NodeData = V>>(
-        &self,
-        graph: &HedgeGraph<E, V, H, N>,
-    ) -> Self;
+    fn complement<E, V, H, N: Topology>(&self, graph: &HedgeGraph<E, V, H, N>) -> Self;
 }
 
 /// A trait for checking inclusion or intersection relationships between a subgraph
@@ -196,44 +193,11 @@ pub trait Inclusion<T> {
     fn intersects(&self, other: &T) -> bool;
 }
 
-/// An iterator over [`Hedge`]s included in a subgraph.
-///
-/// This struct typically wraps an iterator over set bits in a `BitVec`
-/// (like `bitvec::slice::IterOnes`) and maps the `usize` indices to `Hedge` types.
-#[derive(Clone, Debug)]
-pub struct SubSetIter<'a, ID = Hedge> {
-    /// The underlying iterator that yields `usize` indices, which are then mapped to `Hedge`.
-    iter: std::iter::Map<bitvec::slice::IterOnes<'a, usize, Lsb0>, fn(usize) -> ID>,
-}
-
-impl<ID> DoubleEndedIterator for SubSetIter<'_, ID> {
-    fn next_back(&mut self) -> Option<Self::Item> {
-        self.iter.next_back()
-    }
-}
-
-impl<ID> ExactSizeIterator for SubSetIter<'_, ID> {
-    fn len(&self) -> usize {
-        self.iter.len()
-    }
-}
-
-impl<ID> Iterator for SubSetIter<'_, ID> {
-    type Item = ID;
-    fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next()
-    }
-
-    fn size_hint(&self) -> (usize, Option<usize>) {
-        self.iter.size_hint()
-    }
-}
-
 pub trait BaseSubgraph:
     SubGraphLike + ModifySubSet<HedgePair> + ModifySubSet<Hedge> + SubSetOps<Hedge>
 {
     /// Selects all half-edges belonging to edges whose data satisfies `filter`.
-    fn from_filter<E, V, H, N: NodeStorageOps<NodeData = V>, F: FnMut(&E) -> bool>(
+    fn from_filter<E, V, H, N: Topology, F: FnMut(&E) -> bool>(
         graph: &HedgeGraph<E, V, H, N>,
         filter: F,
     ) -> Self;
@@ -267,7 +231,7 @@ pub trait SubGraphLike: SubSetLike<Hedge> + Inclusion<HedgePair> {
         E,
         V,
         H,
-        N: NodeStorageOps<NodeData = V>,
+        N: Topology,
         S: ModifySubSet<Hedge> + SubSetOps<Hedge> + SubSetLike<Hedge>,
     >(
         &self,
@@ -298,15 +262,12 @@ pub trait SubGraphLike: SubSetLike<Hedge> + Inclusion<HedgePair> {
     }
 
     /// Number of full edges included in the subgraph
-    fn nedges<E, V, H, N: NodeStorageOps<NodeData = V>>(
-        &self,
-        graph: &HedgeGraph<E, V, H, N>,
-    ) -> usize; //not counting unpaired hedges
+    fn nedges<E, V, H, N: Topology>(&self, graph: &HedgeGraph<E, V, H, N>) -> usize; //not counting unpaired hedges
 
     /// Writes a DOT rendering of this subgraph to a formatting sink.
     ///
     /// The attribute callbacks supply optional DOT attributes for half-edges, edges, and nodes.
-    fn dot_fmt<W: std::fmt::Write, E, V, H, N: NodeStorageOps<NodeData = V>, Str: AsRef<str>>(
+    fn dot_fmt<W: std::fmt::Write, E, V, H, N: Topology, Str: AsRef<str>>(
         &self,
         writer: &mut W,
         graph: &HedgeGraph<E, V, H, N>,
@@ -316,8 +277,7 @@ pub trait SubGraphLike: SubSetLike<Hedge> + Inclusion<HedgePair> {
         node_attr: &impl Fn(&V) -> Option<String>,
     ) -> Result<(), std::fmt::Error> {
         writeln!(writer, "digraph {{")?;
-        let mut writer = CodeFormatter::new(writer, "  ");
-        writer.indent(1);
+        let mut writer = DotIndent::new(writer);
         write!(
             writer,
             "\nnode\t [shape=circle,height=0.1,label=\"\"];\noverlap = \"scale\";\nlayout = \"neato\";",
@@ -371,7 +331,7 @@ pub trait SubGraphLike: SubSetLike<Hedge> + Inclusion<HedgePair> {
     /// Writes a DOT rendering of this subgraph to an I/O sink.
     ///
     /// The attribute callbacks supply optional DOT attributes for half-edges, edges, and nodes.
-    fn dot_io<W: std::io::Write, E, V, H, N: NodeStorageOps<NodeData = V>, Str: AsRef<str>>(
+    fn dot_io<W: std::io::Write, E, V, H, N: Topology, Str: AsRef<str>>(
         &self,
         writer: &mut W,
         graph: &HedgeGraph<E, V, H, N>,
@@ -502,12 +462,9 @@ pub trait SubSetLike<ID = Hedge>:
     /// Restore a selection's display symbol without reconstructing its topology.
     #[cfg(feature = "symbolica")]
     fn symbol_from_label(label: String) -> symbolica::atom::Symbol {
-        use symbolica::{
-            atom::{AtomCore, AtomView},
-            get_symbol,
-            printer::PrintState,
-            try_symbol,
-        };
+        use symbolica::atom::{AtomCore, AtomView};
+        use symbolica::printer::PrintState;
+        use symbolica::{get_symbol, try_symbol};
         use symbolica_utils::{PrintSettingsExt, TypstMode};
 
         let name = format!("S_{label}");
@@ -602,4 +559,4 @@ pub use empty::Empty;
 pub mod full;
 pub use full::FullOrEmpty;
 pub mod subset;
-pub use subset::SuBitGraph;
+pub use subset::{SuBitGraph, SubSetIter};

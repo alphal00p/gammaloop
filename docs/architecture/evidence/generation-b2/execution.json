@@ -1,0 +1,265 @@
+{
+  "verdict": "permitted",
+  "display_symptom": "test artefact: stored scalar quotient cancels exactly to 7/2",
+  "correctness_scope": "original frozen-v4 Group(28) numerator pair only",
+  "task_workspace": "/shared/lcnbr/dev/gammaloop/generation-b2-diagnosis",
+  "implementation_change": "vlvzooxlrszqooyzqlprpxqtpvomopxx",
+  "implementation_bookmark": "generation-b2-diagnosis",
+  "baseline": "e0a779808174c64057fecfd062c948b8de8e5c1f",
+  "upstream_control": {
+    "workspace": "/shared/lcnbr/dev/gammaloop/generation-b2-upstream",
+    "baseline": "588148851e3e989ecbb7478279db7d46727e23a8",
+    "bookmark": "generation-b2-upstream-control",
+    "commit": "1f20e7805f678415863866770125597f4fa83bae"
+  },
+  "license": "preserved exported SYMBOLICA_LICENSE or silently loaded current-user config; no value recorded",
+  "shared_envrc": "no .envrc in the workspace or its shared parent; direct nix develop used",
+  "pinned_realized_shells": {
+    "v4": "/nix/store/aqhkq5ivk34ch9gvxjxv1a06jdazc0n7-nix-shell-env.drv",
+    "upstream": "/nix/store/xq2bnljghl0hlpy5a5n7szdhhbv8xs7j-nix-shell-env.drv"
+  },
+  "commands": [
+    {
+      "command": "nix develop -c cargo test -p feynkit-generator --profile dev-optim --lib grouping::tests::vacuum_group28_original_pair_identity -- --exact --ignored --nocapture",
+      "outcome": "1 passed, 0 failed",
+      "runtime_seconds": 126.88,
+      "proof": {
+        "exact_tensor_coefficient_equality": true,
+        "independent_canonical_samples0_ratio": "7/2",
+        "production_canonical_samples0_groups": 2,
+        "production_samples5_groups": 1,
+        "seed_matrix": [
+          3,
+          7,
+          11
+        ],
+        "canonical_matrix": [
+          false,
+          true
+        ],
+        "stored_ratio_cancelled": "7/2",
+        "unused_sample_indices": [
+          7,
+          13
+        ],
+        "original_pair_fresh_point_checks": 12,
+        "fallback_exercised": "canonical production comparison leaves two groups at samples=0; five samples produce one group with certified ratio",
+        "admissible_factor_preserving_certificate": false
+      },
+      "status": "superseded: inadmissible source-factor expansion in primary preparation"
+    },
+    {
+      "command": "nix develop -c cargo run -p feynkit-generator --profile dev-optim --example vacuum_b2 -- OUTPUT SEED 5",
+      "outcome": {
+        "v4": {
+          "seeds": [
+            3,
+            7,
+            11
+          ],
+          "raw_count": 270,
+          "groups": 176,
+          "cancelled_weight_sum": "1607/168"
+        },
+        "upstream": {
+          "seed": 3,
+          "groups": 176,
+          "cancelled_weight_sum": "1157/168"
+        }
+      }
+    },
+    {
+      "command": "nix develop -c just test -p gammaloop-integration-tests --test test_feyngen --ignore-default-filter -E 'test(=slow::test_vacuum_amplitude_generation)' --no-capture",
+      "profile": "ci-optim",
+      "ordinary_outcome": "fails snapshot vacuum_amplitude_generation-2 on both sources; no snapshots changed",
+      "diagnostic_environment": {
+        "INSTA_FORCE_PASS": "1",
+        "INSTA_UPDATE": "no",
+        "GL_DISPLAY_FILTER": "off",
+        "GL_LOGFILE_FILTER": "off"
+      },
+      "diagnostic_outcome": "all requests executed at both sources; not a passing snapshot certification",
+      "diagnostic_seconds": {
+        "v4": 28.792,
+        "upstream": 36.971
+      }
+    },
+    {
+      "command": "nix develop -c cargo clippy -p feynkit-generator --all-targets --profile dev-optim --no-deps -- -D warnings",
+      "outcome": "passed"
+    },
+    {
+      "command": "nix develop -c cargo fmt -p feynkit-generator -- --check",
+      "outcome": "passed"
+    },
+    {
+      "command": "nix develop -c typst compile --root . docs/architecture/generation-integration-wp1.typ target/wp1/wp1.pdf",
+      "outcome": "passed"
+    }
+  ],
+  "bisect": {
+    "performed": false,
+    "first_bad_commit": null,
+    "reason": "no correctness defect reproduced; sample-looking coefficients cancel and original identity is proved"
+  },
+  "limits": [
+    "full 270-diagram samples=0 control stopped after 605 seconds; completed pair-level controls are decisive",
+    "full weight sums have differing UUV1 model inputs; no attribution or amplitude-equivalence claim",
+    "original slow snapshots remain uncertified and fail ordinary assertions",
+    "no full suite, Nix runtime closure, CI upload or publication run"
+  ],
+  "rust_policy": "ROUND1 identified an inadmissible expanding certificate and a qualified std::env use. Both corrected in fix-round1; current validation is recorded there. The prior no-departures claim is superseded.",
+  "nixci_enable": false,
+  "review": "pending NEW independent Astra review of fix-round1",
+  "code_hashes": [
+    {
+      "path": "crates/feynkit-generator/src/grouping.rs",
+      "bytes": 218933,
+      "sha256": "f1f98b0b0679d5a7dcbf5a384c3342615b3dafa491ff8b84f91ea562aed85c72"
+    },
+    {
+      "path": "crates/feynkit-generator/examples/vacuum_b2.rs",
+      "bytes": 3095,
+      "sha256": "1abd539ab59f5f8c2c053851d4da0a9940ed4c30c9f926addd5a45d438d6f770"
+    }
+  ],
+  "retained_log_hashes": [
+    {
+      "path": "target/wp1/slow-v4.log",
+      "bytes": 47381,
+      "sha256": "e7f199a8b678794de5ba96216d260e20759e089161864b36b913c6b975b516ca"
+    },
+    {
+      "path": "target/wp1/slow-v4-assertions.log",
+      "bytes": 7574,
+      "sha256": "3ac38d068a84be4815ba619e6caea8edc0cc793ab5b77b8000faf252407cabe9"
+    },
+    {
+      "path": "target/wp1/final-regression.log",
+      "bytes": 790,
+      "sha256": "522d6627d83dcb3cda0081f5b36c1bc3120ce3c50a9aa1b3c3aa7a8c4ebf1da0"
+    },
+    {
+      "path": "target/wp1/clippy.log",
+      "bytes": 7587,
+      "sha256": "27685d9a03e6f69093fb7c727526ffe507c6277e42c52ae39d431b4f5df7b36f"
+    },
+    {
+      "path": "target/wp1/docs-format.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "target/wp1/v4-final.log",
+      "bytes": 13343,
+      "sha256": "f655b3b240596ad427e859141b33ccfaa7864368d1ecb3f93941a33d4604eb5b"
+    },
+    {
+      "path": "target/wp1/exact-only.log",
+      "bytes": 245,
+      "sha256": "9464a53e4daf37cd0daaaeb42f50edc10a5da3ffac6c4f240981125db29d14e8"
+    },
+    {
+      "path": "target/wp1/exact-pair-cached-env.log",
+      "bytes": 832,
+      "sha256": "3bb584353c80f6879e2e14b70763136f74109059e184b3ec80023ab21733bf77"
+    },
+    {
+      "path": "target/wp1/pair-production-check.log",
+      "bytes": 1384,
+      "sha256": "3c00b513245dc80fa43a68ff4e13040e70f019a9d537106e61ebaba2b649e2ab"
+    },
+    {
+      "path": "target/wp1/pair-matched-color.log",
+      "bytes": 769,
+      "sha256": "a3d278caf496eb58f94fa682a05a8a03e3fa0616ed52fa475db55ade27418331"
+    },
+    {
+      "path": "../generation-b2-upstream/target/wp1/slow-upstream.log",
+      "bytes": 45776,
+      "sha256": "0fdc2264c8fa1282b604c03c90eda73edafec983ced60eef10feaf552f971527"
+    },
+    {
+      "path": "../generation-b2-upstream/target/wp1/slow-upstream-assertions.log",
+      "bytes": 4803,
+      "sha256": "4187de0deae6e18e6d95a4e76ff956e713d90fe9168bc1f9420acd5f0ec62366"
+    },
+    {
+      "path": "../generation-b2-upstream/target/wp1/upstream-final2.log",
+      "bytes": 17025,
+      "sha256": "e154f2f7957f118d47011d23c8e366bc6437bcabacb38d46caf7f6530fa5cf06"
+    },
+    {
+      "path": "../generation-b2-upstream/target/wp1/upstream-final3.log",
+      "bytes": 17025,
+      "sha256": "f9ea228da4daa38bf35e1d94488cccd7b57a974692c6e6184d7638dcbcc0085e"
+    },
+    {
+      "path": "target/wp1-fix-round1/final-regression.log",
+      "bytes": 713,
+      "sha256": "16eca8e21ecbd45071b0adc69446440ab9f7fba2a830dc9498bb473ce51854bc"
+    },
+    {
+      "path": "target/wp1-fix-round1/clippy-final.log",
+      "bytes": 248,
+      "sha256": "56606c8feee4974acb4c6cbb6ddfb5aee130983a38e1535754c7a3d88a110532"
+    },
+    {
+      "path": "target/wp1-fix-round1/docs-format.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "retained": [
+    "both task workspaces and bookmarks",
+    "annotated original pair fixtures",
+    "structured evidence and task-owned target/wp1 logs",
+    "crates/feynkit-generator/target/generated compiler/generated artifacts retained in place"
+  ],
+  "retained_processes": [],
+  "cleanup": [
+    "removed only task-generated redundant source DOT dumps; original pair fixtures retained",
+    "removed temporary derived exact tensor expressions and extraction copies",
+    "removed task-generated feyn_gen_generation_test states in both workspaces",
+    "moved bootstrap build log into task-owned target/wp1",
+    "no task processes left running; shared caches untouched"
+  ],
+  "verification": {
+    "json_syntax": "passed",
+    "registry_title_contract": "passed",
+    "jj_conflicts": "none",
+    "frozen_source_refs": "unchanged",
+    "source_diff": "test-only import and regression in grouping.rs; no production implementation change"
+  },
+  "reviewed_implementation": {
+    "commit": "468d10cfa5be903f99265e5929e80efb3f323193",
+    "change": "xsnpzsvv",
+    "review": "review-round1.json",
+    "verdict": "REQUEST_CHANGES"
+  },
+  "correction_receipt": "fix-round1.json",
+  "superseded_code_hashes": [
+    {
+      "path": "crates/feynkit-generator/src/grouping.rs",
+      "sha256": "ba988c33a7c1c9c491767e4b252932889ef5b90d4cb50b487b24699be552404a",
+      "revision": "468d10cfa5be903f99265e5929e80efb3f323193"
+    },
+    {
+      "path": "crates/feynkit-generator/examples/vacuum_b2.rs",
+      "sha256": "5e5d88703a7aadcd93f9fae5770b91fdb59e825cd7c665d54acbf21a991c7f59",
+      "revision": "468d10cfa5be903f99265e5929e80efb3f323193"
+    }
+  ],
+  "correction_validation": {
+    "receipt": "fix-round1.json",
+    "primary_certificate": "closed-loop similarity with intact propagator sums; original-pair identity proved",
+    "original_expanding_certificate": "inadmissible and superseded",
+    "regression": "1 passed, 0 failed",
+    "runtime_seconds": 6.38,
+    "P2": "actual source IDs 34 and 28 retained exactly once; singleton ratio/weight/owner assertions; actual-pair fallback matrix",
+    "review": "NEW independent Astra review required",
+    "format": "passed",
+    "clippy": "passed with -D warnings",
+    "typst": "passed"
+  }
+}

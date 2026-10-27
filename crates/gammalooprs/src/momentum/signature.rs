@@ -118,7 +118,8 @@ impl LoopExtSignature {
         externals: &ExternalThreeMomenta<F<T>>,
     ) -> eyre::Result<bool> {
         use crate::integrands::process::sampling::maps::SamplingEvaluationError;
-        use rug::{Float, float::Round};
+        use rug::Float;
+        use rug::float::Round;
         const PRECISION: u32 = 2048;
         if self.internal.len() != other.internal.len()
             || self.external.len() != other.external.len()
@@ -716,6 +717,7 @@ impl LoopExtSignature {
 #[cfg(test)]
 mod tests {
     use super::LoopExtSignature;
+    use crate::dot;
 
     #[test]
     fn affine_signature_equality_uses_one_global_sign() {
@@ -744,11 +746,10 @@ mod tests {
 
     #[test]
     fn spatial_routing_equality_certifies_native_external_frames() {
-        use crate::{
-            integrands::process::sampling::maps::SamplingEvaluationError,
-            momentum::{ThreeMomentum, sample::ExternalThreeMomenta},
-            utils::{ArbPrec, F, FloatLike, QuadFloat},
-        };
+        use crate::integrands::process::sampling::maps::SamplingEvaluationError;
+        use crate::momentum::ThreeMomentum;
+        use crate::momentum::sample::ExternalThreeMomenta;
+        use crate::utils::{ArbPrec, F, FloatLike, QuadFloat};
         fn check<T: FloatLike>() {
             let one = F::<T>::default().one();
             let zero = one.zero();
@@ -832,19 +833,20 @@ mod tests {
 
     #[test]
     fn raised_edge_comparison_preserves_complete_affine_routing() {
-        use crate::{graph::Graph, initialisation::test_initialise};
+        use crate::graph::Graph;
+        use crate::initialisation::test_initialise;
         use linnet::half_edge::involution::EdgeIndex;
         test_initialise().unwrap();
-        let graph: Graph = crate::finalized_runtime_dot!(digraph raised_affine_signature {
+        let graph: Graph = dot!(digraph raised_affine_signature {
             graph [projector=1]
             ext [style=invis]
             edge [num=1 mass=0]
             node [num=1]
-            ext -> a [id=0 sink="{ufo_order:0}"]
-            a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            b -> c [id=2 source="{ufo_order:1}" sink="{ufo_order:0}" lmb_id=0]
-            c -> a [id=3 source="{ufo_order:1}" sink="{ufo_order:2}"]
-            ext -> c [id=4 sink="{ufo_order:2}"]
+            ext -> a [particle=H id=0]
+            a -> b [particle=H id=1]
+            b -> c [particle=H id=2 lmb_id=0]
+            c -> a [particle=H id=3]
+            ext -> c [particle=H id=4]
         })
         .unwrap();
         let groups = graph.get_raised_edge_groups();

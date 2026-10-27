@@ -49,11 +49,9 @@ use linnet::half_edge::involution::{EdgeIndex, Orientation};
 ///
 /// Examples
 /// --------
-/// >>> from symbolica.community import hepkit as hep
+/// >>> from symbolica.community import graph, hepkit as hep
 /// >>> process = hep.Model.phi3().process(["phi"], ["phi", "phi"])
-/// >>> diagrams = process.generate_diagrams(
-/// ...     loops=1, max_vertices=3, maximum_bridges=0, progress=None
-/// ... )
+/// >>> diagrams = process.amplitude(loops=hep.Loops.total(1), topology=hep.TopologyRules(max_vertices=3, bridges=graph.Bridges.at_most(0), self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless())).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
 /// >>> diagram = diagrams.diagrams[0]
 /// >>> ltd = diagram.integrate_energy(method="ltd")
 /// >>> expression = ltd.to_expression()
@@ -356,11 +354,9 @@ impl PyLtdRepresentation {
 ///
 /// Examples
 /// --------
-/// >>> from symbolica.community import hepkit as hep
+/// >>> from symbolica.community import graph, hepkit as hep
 /// >>> process = hep.Model.phi3().process(["phi"], ["phi", "phi"])
-/// >>> diagrams = process.generate_diagrams(
-/// ...     loops=1, max_vertices=3, maximum_bridges=0, progress=None
-/// ... )
+/// >>> diagrams = process.amplitude(loops=hep.Loops.total(1), topology=hep.TopologyRules(max_vertices=3, bridges=graph.Bridges.at_most(0), self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless())).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
 /// >>> diagram = diagrams.diagrams[0]
 /// >>> ltd = diagram.integrate_energy(method="ltd")
 /// >>> residue = ltd.residues[0]
@@ -652,11 +648,9 @@ impl PyLtdResidue {
 ///
 /// Examples
 /// --------
-/// >>> from symbolica.community import hepkit as hep
+/// >>> from symbolica.community import graph, hepkit as hep
 /// >>> process = hep.Model.phi3().process(["phi"], ["phi", "phi"])
-/// >>> diagrams = process.generate_diagrams(
-/// ...     loops=1, max_vertices=3, maximum_bridges=0, progress=None
-/// ... )
+/// >>> diagrams = process.amplitude(loops=hep.Loops.total(1), topology=hep.TopologyRules(max_vertices=3, bridges=graph.Bridges.at_most(0), self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless())).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
 /// >>> diagram = diagrams.diagrams[0]
 /// >>> ltd = diagram.integrate_energy(method="ltd")
 /// >>> residue = ltd.residues[0]
@@ -745,11 +739,9 @@ impl PySurfacePair {
 ///
 /// Examples
 /// --------
-/// >>> from symbolica.community import hepkit as hep
+/// >>> from symbolica.community import graph, hepkit as hep
 /// >>> process = hep.Model.phi3().process(["phi"], ["phi", "phi"])
-/// >>> diagrams = process.generate_diagrams(
-/// ...     loops=1, max_vertices=3, maximum_bridges=0, progress=None
-/// ... )
+/// >>> diagrams = process.amplitude(loops=hep.Loops.total(1), topology=hep.TopologyRules(max_vertices=3, bridges=graph.Bridges.at_most(0), self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless())).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
 /// >>> diagram = diagrams.diagrams[0]
 /// >>> ltd = diagram.integrate_energy(method="ltd")
 /// >>> report = ltd.report

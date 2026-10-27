@@ -1,14 +1,10 @@
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    fmt::Write,
-};
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Write;
 
 use crate::{DiagramError, FeynmanDiagram, LoopMomentumBasis};
-use linnet::half_edge::{
-    EdgeAccessors,
-    involution::{EdgeIndex, Flow, Orientation},
-    subgraph::{SuBitGraph, SubSetLike},
-};
+use linnet::half_edge::EdgeAccessors;
+use linnet::half_edge::involution::{EdgeIndex, Flow, Orientation};
+use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
 use symbolica::atom::AtomCore;
 
 pub(crate) fn typst_string(value: &str) -> String {
@@ -202,10 +198,10 @@ impl FeynmanDiagram {
         writeln!(
             output,
             "  }}, name: {}, data: (symmetry-factor: {}, overall-factor: {}, numerator: {}, loop-count: {}))",
-            typst_string(self.name()),
+            typst_string(self.name().unwrap_or_default()),
             self.symmetry_factor(),
             typst_string(&self.overall_factor().to_canonical_string()),
-            typst_string(&crate::NumeratorInterface::export(self.numerator()).0.to_canonical_string()),
+            typst_string(&crate::NumeratorInterface::export(self.numerator()?).0.to_canonical_string()),
             self.loop_count(),
         )
         .expect("writing to a string cannot fail");
@@ -301,12 +297,11 @@ impl FeynmanDiagram {
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use std::{collections::BTreeSet, sync::Arc};
+    use std::collections::BTreeSet;
+    use std::sync::Arc;
 
-    use linnet::half_edge::{
-        involution::Hedge,
-        subgraph::{ModifySubSet, SuBitGraph},
-    };
+    use linnet::half_edge::involution::Hedge;
+    use linnet::half_edge::subgraph::{ModifySubSet, SuBitGraph};
 
     use crate::{DiagramEdge, DiagramVertex, ExternalLeg, ExternalState, FeynmanDiagram};
     use feynkit_model::Model;

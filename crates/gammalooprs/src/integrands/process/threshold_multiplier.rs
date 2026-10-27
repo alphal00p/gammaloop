@@ -1,45 +1,34 @@
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    ops::Deref,
-};
+use std::collections::{BTreeMap, BTreeSet};
+use std::ops::Deref;
 
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::eyre::{Context, Result, eyre};
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec};
-use spenso::{
-    algebra::complex::Complex,
-    network::{ExecutionResult, SequentialRef, SmallestDegree},
-    structure::abstract_index::AIND_SYMBOLS,
-};
-use symbolica::{
-    atom::{Atom, AtomCore, AtomView, Symbol},
-    domains::float::SingleFloat,
-    evaluate::FunctionMap,
-    function,
-    prelude::*,
-    symbol,
-};
+use spenso::algebra::complex::Complex;
+use spenso::network::{ExecutionResult, SequentialRef, SmallestDegree};
+use spenso::structure::abstract_index::AIND_SYMBOLS;
+use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
+use symbolica::domains::float::SingleFloat;
+use symbolica::evaluate::FunctionMap;
+use symbolica::prelude::*;
+use symbolica::{function, symbol};
 
-use crate::{
-    GammaLoopContext,
-    cff::esurface::EsurfaceID,
-    graph::{Graph, LoopMomentumBasis},
-    integrands::evaluation::EvaluationMetaData,
-    momentum::{
-        ThreeMomentum,
-        sample::{ExternalFourMomenta, ExternalThreeMomenta, LoopMomenta, MomentumSample},
-    },
-    numerator::symbolica_ext::NumeratorAtomExt,
-    processes::{
-        EvaluatorSettings, ThresholdCountertermEvaluatorRegistration, ThresholdCountertermVariantId,
-    },
-    utils::{F, FUN_LIB, FloatLike, GS, TENSORLIB},
+use crate::GammaLoopContext;
+use crate::cff::esurface::EsurfaceID;
+use crate::graph::{Graph, LoopMomentumBasis};
+use crate::integrands::evaluation::EvaluationMetaData;
+use crate::momentum::ThreeMomentum;
+use crate::momentum::sample::{
+    ExternalFourMomenta, ExternalThreeMomenta, LoopMomenta, MomentumSample,
 };
+use crate::numerator::symbolica_ext::NumeratorAtomExt;
+use crate::processes::{
+    EvaluatorSettings, ThresholdCountertermEvaluatorRegistration, ThresholdCountertermVariantId,
+};
+use crate::utils::{F, FUN_LIB, FloatLike, GS, TENSORLIB};
 
-use super::{
-    evaluators::{EvaluatorBackendPolicy, GenericEvaluator, evaluate_evaluator_single},
-    param_builder::FnMapEntry,
-};
+use super::evaluators::{EvaluatorBackendPolicy, GenericEvaluator, evaluate_evaluator_single};
+use super::param_builder::FnMapEntry;
 
 mod function_map;
 use function_map::ThresholdMultiplierFunctions;
@@ -1516,35 +1505,26 @@ fn scalarize(atom: AtomView<'_>) -> Result<Atom> {
 
 #[cfg(test)]
 mod tests {
+    use crate::dot;
     use std::io::Cursor;
 
     use super::*;
+    use crate::GammaLoopContextContainer;
     use crate::initialisation::test_initialise;
-    use crate::{
-        GammaLoopContextContainer,
-        integrands::process::{
-            cross_section::{
-                export::export_threshold_multiplier_collection,
-                load::{
-                    StandaloneThresholdMultiplierCollectionArchive,
-                    build_threshold_multiplier_collection,
-                },
-            },
-            evaluators::{ActiveF64Backend, EvaluatorBackendPolicy},
-        },
-        momentum::{
-            FourMomentum,
-            sample::{BareMomentumSample, ExternalFourMomenta, LoopMomenta},
-        },
-        settings::{
-            RuntimeSettings,
-            global::{
-                CompilationOptimizationLevel, CompilationOptionsSnapshot, FrozenCompilationMode,
-            },
-        },
-        utils::{ArbPrec, f128, load_generic_model},
+    use crate::integrands::process::cross_section::export::export_threshold_multiplier_collection;
+    use crate::integrands::process::cross_section::load::{
+        StandaloneThresholdMultiplierCollectionArchive, build_threshold_multiplier_collection,
     };
-    use symbolica::{domains::float::Complex as SymComplex, state::State};
+    use crate::integrands::process::evaluators::{ActiveF64Backend, EvaluatorBackendPolicy};
+    use crate::momentum::FourMomentum;
+    use crate::momentum::sample::{BareMomentumSample, ExternalFourMomenta, LoopMomenta};
+    use crate::settings::RuntimeSettings;
+    use crate::settings::global::{
+        CompilationOptimizationLevel, CompilationOptionsSnapshot, FrozenCompilationMode,
+    };
+    use crate::utils::{ArbPrec, f128, load_generic_model};
+    use symbolica::domains::float::Complex as SymComplex;
+    use symbolica::state::State;
 
     fn initialized_layout(
         model_parameters: Vec<Atom>,
@@ -1984,17 +1964,17 @@ mod tests {
     #[test]
     fn graph_declared_additional_parameters_enter_the_cut_layout_in_dot_order() {
         test_initialise().unwrap();
-        let graph: Graph = crate::finalized_runtime_dot!(digraph multiplier_additional_parameters {
+        let graph: Graph = dot!(digraph multiplier_additional_parameters {
  graph [projector=1]
             graph [params="alpha;beta";]
             ext [style=invis]
             v1 [num=1]
             v2 [num=1]
             edge [num=1 mass=0]
-            ext -> v1 [id=0 sink="{ufo_order:0}"]
-            v1 -> v2 [id=1 source="{ufo_order:1}" sink="{ufo_order:0}" lmb_id=0]
-            v1 -> v2 [id=2 source="{ufo_order:2}" sink="{ufo_order:1}"]
-            v2 -> ext [id=3 source="{ufo_order:2}"]
+            ext -> v1 [particle=H id=0]
+            v1 -> v2 [particle=H id=1 lmb_id=0]
+            v1 -> v2 [particle=H id=2]
+            v2 -> ext [particle=H id=3]
         }, &crate::utils::load_generic_model("sm"))
         .unwrap();
         let layout = ThresholdMultiplierLayout::from_graph_esurfaces(&graph, Vec::new()).unwrap();
@@ -2210,17 +2190,17 @@ mod tests {
     #[test]
     fn workspace_binds_global_effective_and_star_views_in_generation_lmb() {
         test_initialise().unwrap();
-        let graph: Graph = crate::finalized_runtime_dot!(digraph threshold_multiplier_workspace {
+        let graph: Graph = dot!(digraph threshold_multiplier_workspace {
  graph [projector=1]
             graph [params="graph_weight"]
             ext [style=invis]
             v1 [num=1]
             v2 [num=1]
             edge [num=1 mass=0]
-            ext -> v1 [id=0 sink="{ufo_order:0}"]
-            v1 -> v2 [id=1 source="{ufo_order:1}" sink="{ufo_order:0}" lmb_id=0]
-            v1 -> v2 [id=2 source="{ufo_order:2}" sink="{ufo_order:1}"]
-            v2 -> ext [id=3 source="{ufo_order:2}"]
+            ext -> v1 [particle=H id=0]
+            v1 -> v2 [particle=H id=1 lmb_id=0]
+            v1 -> v2 [particle=H id=2]
+            v2 -> ext [particle=H id=3]
         }, &crate::utils::load_generic_model("sm"))
         .unwrap();
         let energy_edge = graph.loop_momentum_basis.loop_edges.raw[0];
@@ -2421,19 +2401,18 @@ mod tests {
     #[test]
     fn workspace_reuses_exact_kinematic_contexts_despite_cache_id_aliases() {
         test_initialise().unwrap();
-        let graph: Graph =
-            crate::finalized_runtime_dot!(digraph threshold_multiplier_context_cache {
+        let graph: Graph = dot!(digraph threshold_multiplier_context_cache {
  graph [projector=1]
             ext [style=invis]
             v1 [num=1]
             v2 [num=1]
             edge [num=1 mass=0]
-            ext -> v1 [id=0 sink="{ufo_order:0}"]
-            v1 -> v2 [id=1 source="{ufo_order:1}" sink="{ufo_order:0}" lmb_id=0]
-            v1 -> v2 [id=2 source="{ufo_order:2}" sink="{ufo_order:1}"]
-            v2 -> ext [id=3 source="{ufo_order:2}"]
+            ext -> v1 [particle=H id=0]
+            v1 -> v2 [particle=H id=1 lmb_id=0]
+            v1 -> v2 [particle=H id=2]
+            v2 -> ext [particle=H id=3]
         }, &crate::utils::load_generic_model("sm"))
-            .unwrap();
+        .unwrap();
         let layout = ThresholdMultiplierLayout::new(
             Vec::new(),
             Vec::new(),
@@ -2558,20 +2537,19 @@ mod tests {
     #[test]
     fn workspace_recomputes_complete_merged_views_before_caching() {
         test_initialise().unwrap();
-        let graph: Graph =
-            crate::finalized_runtime_dot!(digraph threshold_multiplier_merged_cache {
+        let graph: Graph = dot!(digraph threshold_multiplier_merged_cache {
  graph [projector=1]
             ext [style=invis]
             v1 [num=1]
             v2 [num=1]
             edge [num=1 mass=0]
-            ext -> v1 [id=0 sink="{ufo_order:0}"]
-            v1 -> v2 [id=1 source="{ufo_order:1}" sink="{ufo_order:0}" lmb_id=0]
-            v1 -> v2 [id=2 source="{ufo_order:2}" sink="{ufo_order:1}" lmb_id=1]
-            v1 -> v2 [id=3 source="{ufo_order:3}" sink="{ufo_order:2}"]
-            v2 -> ext [id=4 source="{ufo_order:3}"]
+            ext -> v1 [particle=H id=0]
+            v1 -> v2 [particle=H id=1 lmb_id=0]
+            v1 -> v2 [particle=H id=2 lmb_id=1]
+            v1 -> v2 [particle=H id=3]
+            v2 -> ext [particle=H id=4]
         }, &crate::utils::load_generic_model("sm"))
-            .unwrap();
+        .unwrap();
         assert_eq!(graph.loop_momentum_basis.loop_edges.len(), 2);
         let energy_edges = graph
             .loop_momentum_basis

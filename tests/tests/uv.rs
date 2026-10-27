@@ -1,47 +1,41 @@
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    env, fs,
-    panic::{AssertUnwindSafe, catch_unwind},
-    path::PathBuf,
-    process::Command,
-    time::{Duration, Instant},
-};
+use std::collections::{BTreeMap, BTreeSet};
+use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::path::PathBuf;
+use std::process::Command;
+use std::time::{Duration, Instant};
+use std::{env, fs};
 
 use color_eyre::Result;
-use gammaloop_api::commands::{
-    Commands, Profile,
-    evaluate_samples::{
-        EvaluateSamples, EvaluateSamplesPrecise, evaluate_sample, evaluate_sample_precise,
-    },
-    integrate::Integrate,
-    profile::{InfraRedProfile, UltraVioletProfile},
+use gammaloop_api::StateLoadOption;
+use gammaloop_api::commands::evaluate_samples::{
+    EvaluateSamples, EvaluateSamplesPrecise, evaluate_sample, evaluate_sample_precise,
 };
-use gammaloop_api::{
-    StateLoadOption,
-    state::{CommandHistory, ProcessRef},
-};
+use gammaloop_api::commands::integrate::Integrate;
+use gammaloop_api::commands::profile::{InfraRedProfile, UltraVioletProfile};
+use gammaloop_api::commands::{Commands, Profile};
+use gammaloop_api::state::{CommandHistory, ProcessRef};
 use gammaloop_integration_tests::{
     CLIState, clean_test, get_test_cli, get_tests_workspace_path, workspace_root,
 };
-use gammalooprs::integrands::{
-    HasIntegrand,
-    evaluation::{EvaluationMetaData, PreciseEvaluationResultOutput, StabilityStatus},
+use gammalooprs::integrands::HasIntegrand;
+use gammalooprs::integrands::evaluation::{
+    EvaluationMetaData, PreciseEvaluationResultOutput, StabilityStatus,
 };
 use gammalooprs::observables::events::AdditionalWeightKey;
 use gammalooprs::processes::ProcessCollection;
 use gammalooprs::settings::runtime::{IntegralEstimate, SlotIntegrationResult};
 use gammalooprs::utils::{ArbPrec, F, FloatLike};
+use gammalooprs::uv::settings::FinalIntegrandDimension;
 use gammalooprs::uv::{
     ApproximationType, CTIdentifier, CTRenormalizationRule, UVOrchestrator, UVProfileAnalysis,
-    UltravioletGraph, settings::FinalIntegrandDimension,
+    UltravioletGraph,
 };
 use ndarray::Array2;
 use serde_json::{Map, Value, json};
-use spenso::algebra::{algebraic_traits::IsZero, complex::Complex};
-use symbolica::{
-    atom::{Atom, AtomCore},
-    domains::float::Real,
-};
+use spenso::algebra::algebraic_traits::IsZero;
+use spenso::algebra::complex::Complex;
+use symbolica::atom::{Atom, AtomCore};
+use symbolica::domains::float::Real;
 use tabled::{Table, Tabled};
 
 const INSPECT_DEPENDENCE_ACCURACY_FACTOR: f64 = 1000.0;
@@ -2335,7 +2329,8 @@ impl GraphUvRichInspectCase {
         integrand_name: &str,
         point: &[f64],
     ) -> Result<()> {
-        use gammalooprs::{integrands::process::ProcessIntegrand, uv::UltravioletGraph};
+        use gammalooprs::integrands::process::ProcessIntegrand;
+        use gammalooprs::uv::UltravioletGraph;
         use linnet::half_edge::subgraph::SubSetLike;
         use std::collections::BTreeSet;
 
@@ -2940,9 +2935,9 @@ fn genuine_vacuum_tadpole_matches_all_local_uv_routes_and_vakint_inputs() -> Res
     const VACUUM_TADPOLE: &str = r#"
         digraph vacuum_tadpole {
             projector=1
-            edge [num=1 mass=2]
+            edge [particle=scalar_1 num=1 mass=2]
             node [num=1]
-            a -> a [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:1}"]
+            a -> a [id=0 lmb_id=0]
         }
     "#;
     const VACUUM_RUNTIME: &str = r#"
@@ -5006,7 +5001,7 @@ fn local_ir_disconnected_completed_components_form_nonzero_union() -> Result<()>
         .name("local-ir-disconnected-replay".to_string())
         .stack_size(64 * 1024 * 1024)
         .spawn(move || -> Result<()> {
-            use gammalooprs::graph::parse::IntoFinalizedRuntimeGraph;
+            use gammalooprs::graph::parse::IntoGraph;
 
             const NAME: &str = "local_ir_dod2_scalar_spectacles";
             let mut spectacles =
@@ -5049,7 +5044,7 @@ fn local_ir_disconnected_completed_components_form_nonzero_union() -> Result<()>
             let mut nodes = BTreeMap::<String, Atom>::new();
             for term in export.node_terms {
                 let graph: gammalooprs::graph::Graph =
-                    term.dot.as_str().into_finalized_runtime_graph(&spectacles.state.model)?;
+                    term.dot.as_str().into_graph(&spectacles.state.model)?;
                 let numerator =
                     feynkit_graph::NumeratorInterface::export(&graph.global_prefactor.num).0;
                 nodes
@@ -5182,7 +5177,7 @@ fn consecutive_soft_components_have_exact_forest_and_cli_profile() -> Result<()>
         .name("consecutive-soft-components".to_string())
         .stack_size(64 * 1024 * 1024)
         .spawn(move || -> Result<()> {
-            use gammalooprs::graph::parse::IntoFinalizedRuntimeGraph;
+            use gammalooprs::graph::parse::IntoGraph;
 
             const NAME: &str = "local_consecutive_soft_scalar_bubbles";
             const CARD: &str = "local_consecutive_soft_scalar_bubbles.toml";
@@ -5245,7 +5240,7 @@ fn consecutive_soft_components_have_exact_forest_and_cli_profile() -> Result<()>
             let mut atoms_by_identity = BTreeMap::new();
             for term in &export.node_terms {
                 let graph: gammalooprs::graph::Graph =
-                    term.dot.as_str().into_finalized_runtime_graph(&subtracted.state.model)?;
+                    term.dot.as_str().into_graph(&subtracted.state.model)?;
                 let identity = UVForestTermIdentity::from(term);
                 assert!(
                     atoms_by_identity

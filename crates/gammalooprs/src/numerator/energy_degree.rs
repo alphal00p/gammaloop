@@ -1,30 +1,23 @@
-use std::{
-    borrow::Borrow,
-    collections::{BTreeMap, BTreeSet},
-};
+use std::borrow::Borrow;
+use std::collections::{BTreeMap, BTreeSet};
 
 use itertools::Itertools;
 use linnet::half_edge::involution::EdgeIndex;
-use spenso::shadowing::{ANTISYM, CYCLIC, SYM, symbolica_utils::LogPrint};
-use spenso::structure::{
-    abstract_index::AIND_SYMBOLS,
-    representation::{LibraryRep, Minkowski},
-};
+use spenso::shadowing::symbolica_utils::LogPrint;
+use spenso::shadowing::{ANTISYM, CYCLIC, SYM};
+use spenso::structure::abstract_index::AIND_SYMBOLS;
+use spenso::structure::representation::{LibraryRep, Minkowski};
 use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol};
 use symbolica::domains::rational::Rational;
 use thiserror::Error;
 use three_dimensional_reps::utils::{rank_i64, solve_rational_system};
 
 use super::GetSingleAtom;
-use crate::{
-    graph::Graph,
-    momentum::SignOrZero,
-    utils::{
-        GS,
-        symbols::{UvDenominatorClassId, UvMomentumProvenanceRole},
-    },
-    uv::UltravioletGraph,
-};
+use crate::graph::Graph;
+use crate::momentum::SignOrZero;
+use crate::utils::GS;
+use crate::utils::symbols::{UvDenominatorClassId, UvMomentumProvenanceRole};
+use crate::uv::UltravioletGraph;
 
 // Bound native CFF trials while sharing the same budget for hard and soft dispatch.
 const ENERGY_ASSIGNMENT_PROPOSAL_BUDGET: usize = 3;
@@ -2165,29 +2158,22 @@ impl Graph {
 mod tests {
     use std::collections::BTreeMap;
 
-    use crate::{
-        finalized_runtime_dot,
-        graph::{Graph, LMBext},
-        initialisation::test_initialise,
-        numerator::energy_degree::{
-            EnergyCandidateFamily, EnergyPowerAnalysisError, EnergyPowerAnalyzer, EnergyReference,
-            EquivalentEnergyCandidates,
-        },
-        utils::{
-            GS, W_,
-            symbols::{UvDenominatorClassId, UvMomentumProvenanceRole},
-        },
+    use crate::dot;
+    use crate::graph::{Graph, LMBext};
+    use crate::initialisation::test_initialise;
+    use crate::numerator::energy_degree::{
+        EnergyCandidateFamily, EnergyPowerAnalysisError, EnergyPowerAnalyzer, EnergyReference,
+        EquivalentEnergyCandidates,
     };
+    use crate::utils::symbols::{UvDenominatorClassId, UvMomentumProvenanceRole};
+    use crate::utils::{GS, W_};
     use linnet::half_edge::involution::EdgeIndex;
-    use spenso::shadowing::{ANTISYM, CYCLIC, SYM, symbolica_utils::ReplaceBuilderExt};
-    use spenso::structure::{
-        abstract_index::AIND_SYMBOLS,
-        representation::{LibraryRep, Minkowski},
-    };
-    use symbolica::{
-        atom::{Atom, AtomCore, AtomView, FunctionBuilder},
-        function, symbol,
-    };
+    use spenso::shadowing::symbolica_utils::ReplaceBuilderExt;
+    use spenso::shadowing::{ANTISYM, CYCLIC, SYM};
+    use spenso::structure::abstract_index::AIND_SYMBOLS;
+    use spenso::structure::representation::{LibraryRep, Minkowski};
+    use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder};
+    use symbolica::{function, symbol};
 
     fn mink_index(label: &str) -> Atom {
         FunctionBuilder::new(LibraryRep::from(Minkowski {}).symbol())
@@ -2479,19 +2465,19 @@ mod tests {
     fn soft_taylor_routing_balances_the_outer_envelope_without_moving_originals()
     -> color_eyre::Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(digraph soft_taylor_cograph {
+        let graph: Graph = dot!(digraph soft_taylor_cograph {
             projector=1
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
-            incoming -> a [id=0 sink="{ufo_order:0}"]
-            a -> b [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            a -> b [id=2 source="{ufo_order:2}" sink="{ufo_order:1}"]
-            b -> c [id=3 lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:0}"]
-            c -> d [id=4 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            d -> a [id=5 source="{ufo_order:1}" sink="{ufo_order:3}"]
-            d -> outgoing [id=6 source="{ufo_order:2}"]
+            incoming -> a [particle=H id=0]
+            a -> b [particle=H id=1 lmb_id=0]
+            a -> b [particle=H id=2]
+            b -> c [particle=H id=3 lmb_id=1]
+            c -> d [particle=H id=4]
+            d -> a [particle=H id=5]
+            d -> outgoing [particle=H id=6]
         })?;
         let soft_component = |index: Atom| {
             let owner = Atom::num(4);

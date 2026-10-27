@@ -4,34 +4,26 @@ use std::fmt::Display;
 use bincode_trait_derive::{Decode, Encode};
 use derive_more::{From, Into};
 use itertools::Itertools;
-use linnet::half_edge::{
-    HedgeGraph, NoData,
-    involution::{EdgeData, EdgeIndex, EdgeVec, Hedge, HedgePair, Orientation},
-    subgraph::{
-        InternalSubGraph, ModifySubSet, SuBitGraph, SubGraphLike, SubGraphOps, SubSetLike,
-        SubSetOps,
-    },
+use linnet::half_edge::involution::{EdgeData, EdgeIndex, EdgeVec, Hedge, HedgePair, Orientation};
+use linnet::half_edge::subgraph::{
+    InternalSubGraph, ModifySubSet, SuBitGraph, SubGraphLike, SubGraphOps, SubSetLike, SubSetOps,
 };
+use linnet::half_edge::{HedgeGraph, NoData};
 use serde::{Deserialize, Serialize};
-use symbolica::{
-    atom::{Atom, AtomCore, AtomOrView, FunctionBuilder, Symbol},
-    function,
-    id::Replacement,
-    poly::PolyVariable,
-    printer::PrintOptions,
-    symbol,
-};
-use tabled::{builder::Builder, settings::Style};
+use symbolica::atom::{Atom, AtomCore, AtomOrView, FunctionBuilder, Symbol};
+use symbolica::id::Replacement;
+use symbolica::poly::PolyVariable;
+use symbolica::printer::PrintOptions;
+use symbolica::{function, symbol};
+use tabled::builder::Builder;
+use tabled::settings::Style;
 use typed_index_collections::TiVec;
 
-use crate::{
-    integrands::process::{amplitude::AmplitudeGraphTerm, cross_section::CrossSectionGraphTerm},
-    momentum::{
-        sample::{ExternalIndex, LoopIndex},
-        signature::LoopExtSignature,
-    },
-    utils::{GS, W_},
-};
+use crate::integrands::process::amplitude::AmplitudeGraphTerm;
+use crate::integrands::process::cross_section::CrossSectionGraphTerm;
+use crate::momentum::sample::{ExternalIndex, LoopIndex};
+use crate::momentum::signature::LoopExtSignature;
+use crate::utils::{GS, W_};
 
 use super::Graph;
 
@@ -1236,20 +1228,16 @@ pub struct LmbIndex(usize);
 pub mod test {
 
     use insta::assert_snapshot;
-    use linnet::{
-        half_edge::{
-            involution::{EdgeIndex, Hedge},
-            subgraph::{Inclusion, InternalSubGraph, ModifySubSet, SuBitGraph, SubSetOps},
-        },
-        parser::DotGraph,
+    use linnet::half_edge::involution::{EdgeIndex, Hedge};
+    use linnet::half_edge::subgraph::{
+        Inclusion, InternalSubGraph, ModifySubSet, SuBitGraph, SubSetOps,
     };
+    use linnet::parser::{CompassPt, DotGraph};
 
-    use crate::{
-        finalized_runtime_dot,
-        graph::{FeynmanGraph, Graph, LMBext, LmbError},
-        initialisation::test_initialise,
-        momentum::SignOrZero,
-    };
+    use crate::dot;
+    use crate::graph::{FeynmanGraph, Graph, LMBext, LmbError};
+    use crate::initialisation::test_initialise;
+    use crate::momentum::SignOrZero;
 
     static SHRUNKEN_LMB_TEST_INIT: std::sync::Once = std::sync::Once::new();
     static SHRUNKEN_LMB_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -1257,23 +1245,23 @@ pub mod test {
     #[test]
     fn generated_singleton_lmbs_conserve_external_momentum() {
         test_initialise().unwrap();
-        let graphs: Vec<Graph> = finalized_runtime_dot!(
-            digraph contact { graph [projector=1] edge[num="1𝑖"]
+        let graphs: Vec<Graph> = dot!(
+            digraph contact {
                 ext [style=invis]
                 node[num=1]
-                ext->v:0[id=0 sink="{ufo_order:0}"]
-                ext->v:1[id=1 sink="{ufo_order:1}"]
-                v:2->ext[id=2 source="{ufo_order:2}"]
-                v:3->ext[id=3 source="{ufo_order:3}"]
+                ext->v:0[particle=H mass=0 id=0]
+                ext->v:1[particle=H mass=0 id=1]
+                v:2->ext[particle=H mass=0 id=2]
+                v:3->ext[particle=H mass=0 id=3]
             }
             digraph tadpole { graph [projector=1] edge[num="1𝑖"]
                 ext [style=invis]
                 node[num=1]
-                ext->v:0[id=0 sink="{ufo_order:0}"]
-                ext->v:1[id=1 sink="{ufo_order:1}"]
-                v:2->ext[id=2 source="{ufo_order:2}"]
-                v:3->ext[id=3 source="{ufo_order:3}"]
-                v->v[id=4 num=1 mass=1 lmb_id=0 source="{ufo_order:4}" sink="{ufo_order:5}"]
+                ext->v:0[particle=H mass=0 id=0]
+                ext->v:1[particle=H mass=0 id=1]
+                v:2->ext[particle=H mass=0 id=2]
+                v:3->ext[particle=H mass=0 id=3]
+                v->v[particle=H id=4 num=1 mass=1]
             }
         )
         .unwrap();
@@ -1324,25 +1312,25 @@ pub mod test {
     #[test]
     fn lmb_for_dummy() {
         test_initialise().unwrap();
-        let gs: Vec<Graph> = finalized_runtime_dot!(
+        let gs: Vec<Graph> = dot!(
             digraph dxda{
                 graph [projector="1"]
                 ext [style=invis]
                 node[num=1]
                 edge[num=1 particle=a dir=none]
-                ext->v1:0[id=0 is_dummy=true sink="{ufo_order:0}"]
-                ext->v1:1[id=1 sink="{ufo_order:1}"]
-                ext->v1:2[id=2 sink="{ufo_order:2}"]
+                ext->v1:0[id=0 is_dummy=true]
+                ext->v1:1[id=1]
+                ext->v1:2[id=2]
             }
             digraph aa{
                 graph [projector="1"]
                 ext [style=invis]
                 node[num=1]
                 edge[num=1 particle=a dir=none]
-                ext->v1:0[id=0 is_dummy=true sink="{ufo_order:0}"]
-                ext->v1:1[id=1 is_dummy=true sink="{ufo_order:1}"]
-                v1->v2[id=3 source="{ufo_order:2}" sink="{ufo_order:0}"]
-                ext->v2:2[id=2 sink="{ufo_order:1}"]
+                ext->v1:0[id=0 is_dummy=true]
+                ext->v1:1[id=1 is_dummy=true]
+                v1->v2[id=3]
+                ext->v2:2[id=2]
             }
         )
         .unwrap();
@@ -1359,16 +1347,16 @@ pub mod test {
     #[test]
     fn generated_lmbs_do_not_use_dummy_external_carriers() {
         test_initialise().unwrap();
-        let g: Graph = finalized_runtime_dot!(digraph{
+        let g: Graph = dot!(digraph{
             graph [projector="1"]
             ext [style=invis]
             edge[num=1 mass=1 particle=a dir=none]
             node[num=1]
-            ext->v1:0[id=0 is_dummy=true sink="{ufo_order:0}"]
-            ext->v1:1[id=1 sink="{ufo_order:1}"]
-            v1->v2[id=2 lmb_id=0 source="{ufo_order:2}" sink="{ufo_order:0}"]
-            v2->v1[id=3 source="{ufo_order:1}" sink="{ufo_order:3}"]
-            ext->v2:2[id=4 sink="{ufo_order:2}"]
+            ext->v1:0[id=0 is_dummy=true]
+            ext->v1:1[id=1]
+            v1->v2[id=2 lmb_id=0]
+            v2->v1[id=3]
+            ext->v2:2[id=4]
         })
         .unwrap();
 
@@ -1502,43 +1490,43 @@ pub mod test {
     #[test]
     fn paired_crown_sub_lmbs_preserve_full_graph_momenta() {
         test_initialise().unwrap();
-        let banana: Graph = crate::finalized_runtime_dot!(digraph paired_crown_banana {
+        let banana: Graph = dot!(digraph paired_crown_banana {
  graph [projector=1]
             edge[num=1 mass=1]
             node[num=1]
             incoming[style=invis]
             outgoing[style=invis]
-            incoming -> a:0 [id=0 sink="{ufo_order:0}"]
-            b:1 -> outgoing [id=5 source="{ufo_order:0}"]
-            a:2 -> b:3 [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"]
-            a:4 -> b:5 [id=2 lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:2}"]
-            b:6 -> a:7 [id=3 lmb_id=2 source="{ufo_order:3}" sink="{ufo_order:3}"]
-            a:8 -> b:9 [id=4 source="{ufo_order:4}" sink="{ufo_order:4}"]
+            incoming -> a:0 [particle=H id=0]
+            b:1 -> outgoing [particle=H id=5]
+            a:2 -> b:3 [particle=H id=1 lmb_id=0]
+            a:4 -> b:5 [particle=H id=2 lmb_id=1]
+            b:6 -> a:7 [particle=H id=3 lmb_id=2]
+            a:8 -> b:9 [particle=H id=4]
         }, &crate::utils::load_generic_model("sm"))
         .unwrap();
-        let common_path: Graph = crate::finalized_runtime_dot!(digraph paired_crown_common_path {
+        let common_path: Graph = dot!(digraph paired_crown_common_path {
  graph [projector=1]
             edge[num=1 mass=1]
             node[num=1]
             incoming[style=invis]
             outgoing[style=invis]
-            incoming -> root [id=0 sink="{ufo_order:0}"]
-            root -> c [id=1 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            c -> a [id=2 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            c -> b [id=3 source="{ufo_order:2}" sink="{ufo_order:0}"]
-            a -> b [id=4 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"]
-            root -> outgoing [id=5 source="{ufo_order:2}"]
-            a -> b [id=6 lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:2}"]
+            incoming -> root [particle=H id=0]
+            root -> c [particle=H id=1]
+            c -> a [particle=H id=2]
+            c -> b [particle=H id=3]
+            a -> b [particle=H id=4 lmb_id=0]
+            root -> outgoing [particle=H id=5]
+            a -> b [particle=H id=6 lmb_id=1]
         }, &crate::utils::load_generic_model("sm"))
         .unwrap();
-        let vacuum: Graph = crate::finalized_runtime_dot!(digraph paired_crown_vacuum {
+        let vacuum: Graph = dot!(digraph paired_crown_vacuum {
  graph [projector=1]
             edge[num=1 mass=1]
             node[num=1]
-            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
-            a -> b [id=1 lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
-            b -> a [id=2 lmb_id=2 source="{ufo_order:2}" sink="{ufo_order:2}"]
-            a -> b [id=3 source="{ufo_order:3}" sink="{ufo_order:3}"]
+            a -> b [particle=H id=0 lmb_id=0]
+            a -> b [particle=H id=1 lmb_id=1]
+            b -> a [particle=H id=2 lmb_id=2]
+            a -> b [particle=H id=3]
         }, &crate::utils::load_generic_model("sm"))
         .unwrap();
 
@@ -1619,7 +1607,7 @@ pub mod test {
         )
         .unwrap();
 
-        let subgraph: SuBitGraph = g.compass_subgraph(Some(dot_parser::ast::CompassPt::S));
+        let subgraph: SuBitGraph = g.compass_subgraph(Some(CompassPt::S));
 
         let lmb = g.lmb_of(&subgraph);
         assert_snapshot!(g.dot_lmb_of(&subgraph, &lmb));
@@ -1654,9 +1642,9 @@ pub mod test {
         )
         .unwrap();
 
-        let subgraph: SuBitGraph = g.compass_subgraph(Some(dot_parser::ast::CompassPt::S));
+        let subgraph: SuBitGraph = g.compass_subgraph(Some(CompassPt::S));
 
-        let dummy: SuBitGraph = g.compass_subgraph(Some(dot_parser::ast::CompassPt::N));
+        let dummy: SuBitGraph = g.compass_subgraph(Some(CompassPt::N));
         let non_dummy = g.full_filter().subtract(&dummy);
         let lmb = g.lmb_of(&non_dummy);
         let non_dummy_sub_ext = g.full_crown(&subgraph).subtract(&dummy);
@@ -1678,7 +1666,7 @@ pub mod test {
         )
         .unwrap();
 
-        let subgraph: SuBitGraph = g.compass_subgraph(Some(dot_parser::ast::CompassPt::S));
+        let subgraph: SuBitGraph = g.compass_subgraph(Some(CompassPt::S));
         let non_dummy = g.full_filter();
         let lmb = g.lmb_of(&non_dummy);
         let sub_lmb = g.compatible_sub_lmb(&subgraph, g.full_crown(&subgraph), &lmb);
@@ -1839,19 +1827,19 @@ pub mod test {
 
         let _guard = SHRUNKEN_LMB_TEST_LOCK.lock().unwrap();
         SHRUNKEN_LMB_TEST_INIT.call_once(|| test_initialise().unwrap());
-        let g: Graph = finalized_runtime_dot!(digraph { graph [projector=1]
+        let g: Graph = dot!(digraph {
             edge[num=1 mass=1]
             node[num=1]
-            b:17 -> a:0 [id=0 sink="{ufo_order:0}" source="{ufo_order:2}" lmb_id=3]
-            a:1 -> e:2 [id=1 source="{ufo_order:1}" sink="{ufo_order:0}" lmb_id=0]
-            a:3 -> f:4 [id=2 source="{ufo_order:2}" sink="{ufo_order:0}"]
-            b:5 -> c:6 [id=3 source="{ufo_order:0}" sink="{ufo_order:0}"]
-            b:7 -> d:8 [id=4 source="{ufo_order:1}" sink="{ufo_order:0}" lmb_id=1]
-            c:9 -> d:10 [id=5 source="{ufo_order:1}" sink="{ufo_order:1}"]
-            c:11 -> f:12 [id=6 source="{ufo_order:2}" sink="{ufo_order:1}" lmb_id=2]
-            d:13 -> e:14 [id=7 source="{ufo_order:2}" sink="{ufo_order:1}"]
-            e:15 -> f:16 [id=8 source="{ufo_order:2}" sink="{ufo_order:2}"]
-            x:18 -> y:19 [id=9 source="{ufo_order:0}" sink="{ufo_order:0}"]
+            b:17 -> a:0 [particle=H id=0]
+            a:1 -> e:2 [particle=H id=1]
+            a:3 -> f:4 [particle=H id=2]
+            b:5 -> c:6 [particle=H id=3]
+            b:7 -> d:8 [particle=H id=4]
+            c:9 -> d:10 [particle=H id=5]
+            c:11 -> f:12 [particle=H id=6]
+            d:13 -> e:14 [particle=H id=7]
+            e:15 -> f:16 [particle=H id=8]
+            x:18 -> y:19 [particle=H id=9]
         })
         .unwrap();
         let mut outer: SuBitGraph = g.empty_subgraph();
@@ -1875,7 +1863,7 @@ pub mod test {
             &shrunken,
             &g.underlying[g.node_id(root)],
         );
-        contracted.forget_identification_history();
+        contracted.compact();
         let surviving_crown = contracted.full_crown(&remainder);
         assert_eq!(
             surviving_crown.included_iter().collect::<Vec<_>>(),

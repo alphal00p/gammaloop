@@ -65,7 +65,8 @@ assert "expression=" in repr(model.couplings[0])
 assert "structure=" in repr(model.lorentz_structures[0])
 assert "numerator=" in repr(model.propagators[0])
 
-process = model.process(["e-", "e+"], ["a", "a"], vertex_allow=[vertex])
+process = model.process(["e-", "e+"], ["a", "a"])
+request = process.amplitude(loops=hep.Loops.total(0), restrict=hep.Restrict().only_vertices([vertex]))
 process_view = process.render()
 process_snapshot = external_metrics_snapshot(process_view)
 svg = process_snapshot.to_svg()
@@ -73,7 +74,10 @@ root = ET.fromstring(svg)
 assert root.tag == "{http://www.w3.org/2000/svg}svg"
 assert list(root.iter("{http://www.w3.org/2000/svg}path"))
 assert "prefers-color-scheme:dark" in svg
-assert "vertex_allow=[V_98]" in html.unescape(process_snapshot.to_html())
+# Restrictions belong to the staged Request; the Process schematic owns the external states.
+allowed = json.loads(repr(request)[len("Request("):-1])["restrictions"]["vertex_allow"]
+assert len(allowed) == len(allowed[0]) == 1
+assert allowed[0][0]["kind"] == "id" and allowed[0][0]["value"]["model"]
 assert ET.fromstring(process_snapshot.to_svg()).tag == root.tag
 assert (
     ET.fromstring(
@@ -145,7 +149,8 @@ for other in (
     )
 
 # The same asset preparation must preserve existing diagram rendering.
-diagram = process.generate_diagrams(progress=None)[0]
+diagram = request.generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))[0]
+assert all(item.interaction == vertex.name for item in diagram.vertices)
 assert (
     ET.fromstring(external_metrics_snapshot(diagram.render()).to_svg()).tag == root.tag
 )

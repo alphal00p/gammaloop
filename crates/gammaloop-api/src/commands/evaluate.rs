@@ -1,11 +1,11 @@
-use std::{collections::BTreeMap, fs, path::PathBuf};
+use std::collections::BTreeMap;
+use std::fs;
+use std::path::PathBuf;
 
 use clap::Args;
-use gammalooprs::{
-    graph::FeynmanGraph,
-    processes::{AmplitudeGraph, AnalyticalEvaluationConfig},
-    uv::UltravioletGraph,
-};
+use gammalooprs::graph::FeynmanGraph;
+use gammalooprs::processes::{AmplitudeGraph, AnalyticalEvaluationConfig};
+use gammalooprs::uv::UltravioletGraph;
 
 use gammalooprs::processes::{Amplitude, ProcessCollection};
 
@@ -21,11 +21,9 @@ use spenso::structure::IndexedStructure;
 use symbolica::atom::{Atom, AtomCore};
 use tracing::{info, warn};
 
-use crate::{
-    completion::CompletionArgExt,
-    state::{ProcessRef, State},
-    CLISettings,
-};
+use crate::completion::CompletionArgExt;
+use crate::state::{ProcessRef, State};
+use crate::CLISettings;
 
 #[cfg_attr(
     feature = "python_api",
@@ -212,37 +210,27 @@ impl Evaluate {
 #[cfg(test)]
 mod tests {
     use super::Evaluate;
-    use crate::{
-        commands::{
-            generate::Generate,
-            import::{model::ImportModel, Import},
-        },
-        state::State,
-        CLISettings,
-    };
-    use gammalooprs::{
-        initialisation::test_initialise,
-        settings::{global::MediumMode, RuntimeSettings},
-    };
+    use crate::commands::generate::Generate;
+    use crate::commands::import::model::ImportModel;
+    use crate::commands::import::Import;
+    use crate::state::State;
+    use crate::CLISettings;
+    use gammalooprs::initialisation::test_initialise;
+    use gammalooprs::settings::global::MediumMode;
+    use gammalooprs::settings::RuntimeSettings;
     use std::path::PathBuf;
 
     #[test]
     fn evaluate_vacuum_tensor_restores_numeric_ports_before_global_projection(
     ) -> color_eyre::Result<()> {
         use feynkit_graph::NumeratorInterface;
-        use gammalooprs::{
-            processes::{AnalyticalEvaluationConfig, ProcessCollection},
-            utils::{vakint, GS},
-        };
+        use gammalooprs::processes::{AnalyticalEvaluationConfig, ProcessCollection};
+        use gammalooprs::utils::{vakint, GS};
         use idenso::tensor::ContractSettings;
-        use spenso::structure::{
-            representation::{Minkowski, RepName},
-            slot::IsAbstractSlot,
-        };
-        use symbolica::{
-            atom::{Atom, AtomCore},
-            parse,
-        };
+        use spenso::structure::representation::{Minkowski, RepName};
+        use spenso::structure::slot::IsAbstractSlot;
+        use symbolica::atom::{Atom, AtomCore};
+        use symbolica::parse;
 
         test_initialise()?;
         let temp = tempfile::tempdir()?;
@@ -272,7 +260,7 @@ mod tests {
                         overall_factor=1; overall_factor_evaluated=1;
                         node [num=1];
                         a:0 -> a:1 [particle="scalar_1" num=1 id=0 lmb_id=0,
-                            lmb_rep="K(0,a___)", source="{{ufo_order:0}}", sink="{{ufo_order:1}}"];
+                            lmb_rep="K(0,a___)"];
                     }}"#
                 )),
                 process_spec: None,
@@ -407,7 +395,7 @@ mod tests {
                         num=1; overall_factor=1; overall_factor_evaluated=1; projector=1;
                         node [num=1];
                         a:0 -> a:1 [particle="scalar_1" num=1 id=0 lmb_id=0,
-                            lmb_rep="K(0,a___)", source="{ufo_order:0}", sink="{ufo_order:1}"];
+                            lmb_rep="K(0,a___)"];
                     }"#
                     .to_string(),
                 ),

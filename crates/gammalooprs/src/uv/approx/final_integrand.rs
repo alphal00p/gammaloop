@@ -1,42 +1,32 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::collections::BTreeMap;
+use std::sync::Arc;
 
 #[cfg(test)]
 use crate::cff::CutCFFIndex;
-use crate::{
-    debug_tags,
-    graph::Graph,
-    integrands::process::param_builder::FnMapEntry,
-    numerator::symbolica_ext::NumeratorAtomExt,
-    utils::{GS, W_},
-    uv::{
-        Integrands, UVgenerationSettings, UltravioletGraph,
-        approx::{
-            ForestNodeLike,
-            direct_3d::{Direct3dCts, DirectResidueBranches},
-            integrated::IntegratedCts,
-            local_3d::{LOCAL_3D_MASS_SCOPE, Localizer},
-            projected_4d::Projected4dCts,
-        },
-        marker::UvMarker,
-    },
-};
+use crate::debug_tags;
+use crate::graph::Graph;
+use crate::integrands::process::param_builder::FnMapEntry;
+use crate::numerator::symbolica_ext::NumeratorAtomExt;
+use crate::utils::{GS, W_};
+use crate::uv::approx::ForestNodeLike;
+use crate::uv::approx::direct_3d::{Direct3dCts, DirectResidueBranches};
+use crate::uv::approx::integrated::IntegratedCts;
+use crate::uv::approx::local_3d::{LOCAL_3D_MASS_SCOPE, Localizer};
+use crate::uv::approx::projected_4d::Projected4dCts;
+use crate::uv::marker::UvMarker;
+use crate::uv::{Integrands, UVgenerationSettings, UltravioletGraph};
 use color_eyre::Result;
 use gammaloop_tracing_filter::{LogMessage, debug_instrument};
+use idenso::color::ColorSimplifySettings;
+use idenso::tensor::{ContractSettings, SymbolicTensor};
 #[cfg(test)]
 use idenso::{CookMode, CookSettings};
-use idenso::{
-    color::ColorSimplifySettings,
-    tensor::{ContractSettings, SymbolicTensor},
-};
 use linnet::half_edge::subgraph::{Inclusion, SuBitGraph, SubSetLike, SubSetOps};
 use spenso::shadowing::TensorCollectFilter;
 use spenso::structure::IndexedStructure;
-use symbolica::{
-    atom::{Atom, AtomCore, AtomView, Indeterminate},
-    function,
-    id::Replacement,
-    symbol,
-};
+use symbolica::atom::{Atom, AtomCore, AtomView, Indeterminate};
+use symbolica::id::Replacement;
+use symbolica::{function, symbol};
 use three_dimensional_reps::CffGenerationContext;
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct FinalIntegrands(Integrands);
@@ -590,28 +580,22 @@ impl<'a> FinalIntegrandBuilder<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        cff::{esurface::RaisedEsurfaceGroup, expression::OrientationID},
-        finalized_runtime_dot,
-        graph::cuts::CutSet,
-        initialisation::test_initialise,
-        settings::global::OrientationPattern,
-        uv::{
-            ApproximationType, Spinney,
-            approx::{
-                OrientationProjection, Rooted, UVCtx,
-                local_4d::{Full4dCts, Local4dCts, uv_limit},
-                projected_4d::{Projected4dApproximation, Projected4dSector},
-            },
-            hedge_poset::OwnedForestNode,
-        },
-    };
+    use crate::cff::esurface::RaisedEsurfaceGroup;
+    use crate::cff::expression::OrientationID;
+    use crate::dot;
+    use crate::graph::cuts::CutSet;
+    use crate::initialisation::test_initialise;
+    use crate::settings::global::OrientationPattern;
+    use crate::uv::approx::local_4d::{Full4dCts, Local4dCts, uv_limit};
+    use crate::uv::approx::projected_4d::{Projected4dApproximation, Projected4dSector};
+    use crate::uv::approx::{OrientationProjection, Rooted, UVCtx};
+    use crate::uv::hedge_poset::OwnedForestNode;
+    use crate::uv::{ApproximationType, Spinney};
     use idenso::representations::{ColorAdjoint, ColorFundamental, ColorSextet};
-    use linnet::half_edge::{involution::EdgeIndex, subgraph::InternalSubGraph};
-    use spenso::{
-        network::tags::SPENSO_TAG,
-        structure::representation::{Minkowski, RepName},
-    };
+    use linnet::half_edge::involution::EdgeIndex;
+    use linnet::half_edge::subgraph::InternalSubGraph;
+    use spenso::network::tags::SPENSO_TAG;
+    use spenso::structure::representation::{Minkowski, RepName};
     use symbolica::{parse, symbol};
 
     #[test]
@@ -664,12 +648,12 @@ mod tests {
         use spenso::structure::slot::IsAbstractSlot;
 
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(digraph final_dimension_ports {
+        let graph: Graph = dot!(digraph final_dimension_ports {
             graph [projector=1]
             edge [num=1 mass=1];
             node [num=1];
-            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"];
-            a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"];
+            a -> b [particle=H id=0 lmb_id=0];
+            a -> b [particle=H id=1];
         })?;
         let reduced = graph.full_filter();
         let normalize = FinalIntegrandBuilder::final_normalizer(&graph, &reduced);
@@ -753,11 +737,11 @@ mod tests {
     #[test]
     fn final_energy_copy_coalesces_owners_and_even_powers_after_taylor() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(digraph final_energy { graph [projector=1]
+        let graph: Graph = dot!(digraph final_energy { graph [projector=1]
             edge [num=1 mass=1];
             node [num=1];
-            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"];
-            a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"];
+            a -> b [particle=H id=0 lmb_id=0];
+            a -> b [particle=H id=1];
         })?;
         let reduced = graph.full_filter();
         let normalize_tensor = FinalIntegrandBuilder::final_normalizer(&graph, &reduced);
@@ -797,12 +781,12 @@ mod tests {
     #[test]
     fn final_integrand_collects_tensor_factors_without_merging_denominators() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(digraph factorized_final {
+        let graph: Graph = dot!(digraph factorized_final {
             projector=1;
             edge [num=1 mass=1];
             node [num=1];
-            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"];
-            a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"];
+            a -> b [particle=H id=0 lmb_id=0];
+            a -> b [particle=H id=1];
         })?;
         let reduced = graph.full_filter();
         let normalize_tensor = FinalIntegrandBuilder::final_normalizer(&graph, &reduced);
@@ -879,16 +863,12 @@ mod tests {
 
     #[test]
     fn final_factor_collection_preserves_inactive_singular_branches() -> Result<()> {
-        use crate::{
-            cff::expression::OrientationID,
-            integrands::process::{
-                evaluators::{EvaluatorStack, GenericEvaluatorFloat},
-                param_builder::{ParamBuilder, ParamValuePairs},
-            },
-            processes::EvaluatorSettings,
-            settings::global::{CompilationOptimizationLevel, CompilationOptionsSnapshot},
-            utils::F,
-        };
+        use crate::cff::expression::OrientationID;
+        use crate::integrands::process::evaluators::{EvaluatorStack, GenericEvaluatorFloat};
+        use crate::integrands::process::param_builder::{ParamBuilder, ParamValuePairs};
+        use crate::processes::EvaluatorSettings;
+        use crate::settings::global::{CompilationOptimizationLevel, CompilationOptionsSnapshot};
+        use crate::utils::F;
         use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
         use spenso::algebra::complex::Complex;
 
@@ -970,16 +950,12 @@ mod tests {
 
     #[test]
     fn final_factor_collection_preserves_closed_tensor_pairs() -> Result<()> {
-        use crate::{
-            cff::expression::OrientationID,
-            integrands::process::{
-                evaluators::{EvaluatorStack, GenericEvaluatorFloat},
-                param_builder::{ParamBuilder, ParamValuePairs},
-            },
-            processes::EvaluatorSettings,
-            settings::global::{CompilationOptimizationLevel, CompilationOptionsSnapshot},
-            utils::F,
-        };
+        use crate::cff::expression::OrientationID;
+        use crate::integrands::process::evaluators::{EvaluatorStack, GenericEvaluatorFloat};
+        use crate::integrands::process::param_builder::{ParamBuilder, ParamValuePairs};
+        use crate::processes::EvaluatorSettings;
+        use crate::settings::global::{CompilationOptimizationLevel, CompilationOptionsSnapshot};
+        use crate::utils::F;
         use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
         use spenso::algebra::complex::Complex;
         use symbolica::parse_lit;
@@ -1071,12 +1047,12 @@ mod tests {
     #[test]
     fn projected_zero_sectors_preserve_cut_orders_without_energy_maps() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = finalized_runtime_dot!(digraph projected_zero {
+        let mut graph: Graph = dot!(digraph projected_zero {
             projector=1;
             edge [num=1 mass=1];
             node [num=1];
-            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"];
-            a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"];
+            a -> b [particle=H id=0 lmb_id=0];
+            a -> b [particle=H id=1];
         })?;
         let current = OwnedForestNode {
             spinney: Spinney::new(
@@ -1187,11 +1163,11 @@ mod tests {
     #[test]
     fn branch_normalization_preserves_selectors_and_cut_support() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = finalized_runtime_dot!(digraph normalization { graph [projector=1]
+        let graph: Graph = dot!(digraph normalization { graph [projector=1]
             edge [num=1 mass=1];
             node [num=1];
-            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"];
-            a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"];
+            a -> b [particle=H id=0 lmb_id=0];
+            a -> b [particle=H id=1];
         })?;
         let reduced = graph.full_filter();
         let normalize_tensor = FinalIntegrandBuilder::final_normalizer(&graph, &reduced);

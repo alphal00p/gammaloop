@@ -3,16 +3,13 @@
 use idenso::tensor::SymbolicTensor;
 use std::collections::{BTreeMap, BTreeSet};
 
-use linnet::half_edge::{
-    NodeIndex,
-    involution::{Flow, HedgePair},
-    subgraph::{Inclusion, SuBitGraph, SubSetLike},
-};
+use linnet::half_edge::involution::{Flow, HedgePair};
+use linnet::half_edge::subgraph::{Inclusion, SuBitGraph, SubSetLike};
 use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder};
 
 use crate::{
-    DiagramEndpoint, DiagramError, DiagramHalfEdge, ExternalLeg, ExternalState, FeynmanDiagram,
-    NumeratorInterface, VertexId, symbols,
+    DiagramEndpoint, DiagramError, DiagramHalfEdge, DiagramNumerator, ExternalLeg, ExternalState,
+    FeynmanDiagram, FeynmanDiagramBuilder, NumeratorInterface, VertexId, symbols,
 };
 
 impl FeynmanDiagram {
@@ -51,21 +48,14 @@ impl FeynmanDiagram {
             .nodes(subgraph)
             .into_iter()
             .collect::<BTreeSet<_>>();
-        for &VertexId(vertex) in isolated_vertices {
-            if vertex >= self.graph.n_nodes() {
-                return Err(DiagramError::UnknownVertex {
-                    vertex,
-                    vertices: self.graph.n_nodes(),
-                });
-            }
-            let node = NodeIndex(vertex);
+        for &vertex in isolated_vertices {
+            let node = self.vertex_node(vertex)?;
             if self.graph.iter_crown(node).next().is_some() {
-                return Err(error(format!("vertex {vertex} is not isolated")));
+                return Err(error(format!("vertex {} is not isolated", vertex.0)));
             }
             retained.insert(node);
         }
-        if subgraph.n_included() == self.graph.n_hedges() && retained.len() == self.graph.n_nodes()
-        {
+        if subgraph.n_included() == self.graph.n_hedges() && retained.len() == self.graph.n_live() {
             return Ok(self.clone());
         }
 
@@ -75,7 +65,10 @@ impl FeynmanDiagram {
                 contributing.extend([self.graph.node_id(source), self.graph.node_id(sink)]);
             }
         }
-        let mut builder = Self::builder(self.model_arc(), format!("{}_subgraph", self.name));
+        let mut builder = FeynmanDiagramBuilder::new(
+            self.model_arc(),
+            self.name.as_ref().map(|name| format!("{name}_subgraph")),
+        );
         let mut vertices = BTreeMap::new();
         let mut original_vertices = Vec::new();
         for node in retained.iter().copied() {
@@ -274,7 +267,7 @@ impl FeynmanDiagram {
             },
             |_, data| Ok(data),
         )?;
-        diagram.numerator = Self::fragment_numerator(&diagram.graph)?;
+        diagram.numerator = DiagramNumerator::default();
         diagram.validate()?;
         Ok(diagram)
     }
@@ -285,10 +278,9 @@ mod tests {
     use std::sync::Arc;
 
     use feynkit_model::Model;
-    use linnet::half_edge::{
-        involution::{EdgeIndex, Hedge},
-        subgraph::{BaseSubgraph, ModifySubSet},
-    };
+    use linnet::half_edge::NodeIndex;
+    use linnet::half_edge::involution::{EdgeIndex, Hedge};
+    use linnet::half_edge::subgraph::{BaseSubgraph, ModifySubSet};
     use symbolica::function;
 
     use super::*;
@@ -357,13 +349,13 @@ mod tests {
         let mut selected: SuBitGraph = parent.graph.empty_subgraph();
         selected.add(parent.graph[&EdgeIndex(2)].1);
         let result = parent.excise(&selected, &[]).unwrap();
-        assert_eq!(result.graph.n_nodes(), 2);
+        assert_eq!(result.graph.n_live(), 2);
         assert_eq!(result.graph.n_edges(), 5);
         assert_eq!(result.graph.n_internals(), 1);
         assert_eq!(result.graph.n_hedges(), parent.graph.n_hedges());
         assert!(result.loop_momentum_basis().loop_edges.is_empty());
         assert_eq!(
-            result.numerator(),
+            result.numerator().unwrap(),
             &parent
                 .numerator_of(&selected, &parent.graph.empty_subgraph::<SuBitGraph>())
                 .unwrap()
@@ -392,10 +384,10 @@ mod tests {
                 .unwrap(),
         );
         let result = parent.excise(&selected, &[]).unwrap();
-        assert_eq!(result.graph.n_nodes(), 1);
+        assert_eq!(result.graph.n_live(), 1);
         assert_eq!(result.graph.n_edges(), 3);
         assert_eq!(result.graph.n_internals(), 0);
-        assert_eq!(result.numerator().expression(), &Atom::one());
+        assert_eq!(result.numerator().unwrap().expression(), &Atom::one());
         assert!(result.edges().all(|(_, _, edge)| edge.external.is_some()));
         result.validate().unwrap();
     }
@@ -441,10 +433,12 @@ mod tests {
             None,
         )
         .unwrap();
-        parent.numerator = SymbolicTensor::infer(Atom::num(2))
-            .unwrap()
-            .multiply(&parent.graph[NodeIndex(1)].numerator)
-            .unwrap();
+        parent.numerator = DiagramNumerator::Explicit(
+            SymbolicTensor::infer(Atom::num(2))
+                .unwrap()
+                .multiply(&parent.graph[NodeIndex(1)].numerator)
+                .unwrap(),
+        );
         let result = parent.excise(&selected, &[]).unwrap();
         let new_hedge = result.graph.iter_crown(NodeIndex(0)).last().unwrap();
         let new_edge = result.graph[&new_hedge].0;
@@ -473,7 +467,10 @@ mod tests {
                 new_loop_edge,
                 function!(spenso::structure::abstract_index::AIND_SYMBOLS.cind, 0)
             );
-        assert_eq!(NumeratorInterface::export(result.numerator()).0, expected);
+        assert_eq!(
+            NumeratorInterface::export(result.numerator().unwrap()).0,
+            expected
+        );
         result.validate().unwrap();
     }
 
@@ -491,12 +488,21 @@ mod tests {
         let empty: SuBitGraph = parent.graph.empty_subgraph();
         let none = parent.excise(&empty, &[]).unwrap();
         let one = parent.excise(&empty, &[VertexId(1)]).unwrap();
-        assert_eq!(none.graph.n_nodes(), 0);
-        assert_eq!(one.graph.n_nodes(), 1);
+        assert_eq!(none.graph.n_live(), 0);
+        assert_eq!(one.graph.n_live(), 1);
         assert_eq!(one.vertex(VertexId(0)).unwrap().name, "second");
         none.validate().unwrap();
         one.validate().unwrap();
         assert!(parent.excise(&empty, &[VertexId(2)]).is_err());
+        let mut pending = parent.clone();
+        let survivor = parent.graph[NodeIndex(0)].clone();
+        pending
+            .graph
+            .identify_nodes(&[NodeIndex(0), NodeIndex(1)], survivor);
+        assert!(matches!(
+            pending.excise(&empty, &[VertexId(1)]),
+            Err(DiagramError::UnknownVertex { vertex: 1, .. })
+        ));
         assert!(parent.excise(&SuBitGraph::empty(1), &[]).is_err());
         let parent = bubble();
         assert!(

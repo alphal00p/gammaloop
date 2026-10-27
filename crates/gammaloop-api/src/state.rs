@@ -1,29 +1,22 @@
 #[cfg(test)]
 use gammalooprs::integrands::process::EvaluationTarget;
-use std::{
-    collections::{BTreeMap, BTreeSet, HashSet},
-    fs::{self},
-    io::{self, IsTerminal},
-    ops::ControlFlow,
-    path::{Path, PathBuf},
-    str::FromStr,
-    sync::{
-        atomic::{AtomicBool, AtomicU64, Ordering},
-        Arc, Mutex,
-    },
-    thread,
-    time::Duration,
-};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::io::IsTerminal;
+use std::ops::ControlFlow;
+use std::path::{Path, PathBuf};
+use std::str::FromStr;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+use std::{fs, io, thread};
 
 use clap::Args;
 use color_eyre::{Result, Section};
 use colored::Colorize;
 use eyre::{eyre, Context};
 use feynkit_generator::GenerationType;
-use gammalooprs::{
-    processes::{Amplitude, CrossSection},
-    utils::serde_utils::IsDefault,
-};
+use gammalooprs::processes::{Amplitude, CrossSection};
+use gammalooprs::utils::serde_utils::IsDefault;
 use linnet::half_edge::subgraph::{SuBitGraph, SubGraphLike, SubSetLike};
 use schemars::{schema_for, JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
@@ -34,42 +27,36 @@ use toml::Value as TomlValue;
 use tracing::{debug, info, info_span, Span};
 use tracing_indicatif::span_ext::IndicatifSpanExt;
 
-use gammalooprs::{
-    clear_interrupt_request,
-    graph::Graph,
-    initialisation::initialise,
-    integrands::process::ProcessIntegrand,
-    is_interrupt_requested,
-    model::{InputParamCard, Model, ModelGammaLoopExt, SerializableInputParamCard, UFOSymbol},
-    processes::{
-        begin_phase, merge_generated_graph_reports, DotExportSettings, GeneratedGraphReport,
-        GenerationProcessKind, GenerationProgressMode, GenerationProgressModeGuard,
-        GenerationProgressObserver, GenerationProgressObserverGuard, GenerationProgressPhase,
-        GraphGenerationStats, GraphGroupSelectionMode, GraphGroupSelectionPlan,
-        GraphGroupSelectionReport, GraphGroupSelectionSpec, NamedGraphGenerationReport, Process,
-        ProcessCollection, ProcessDefinition, ProcessList, ProcessLoadSelection,
-    },
-    settings::{
-        global::GenerationSettings, runtime::LockedRuntimeSettings, GlobalSettings, RuntimeSettings,
-    },
-    utils::{
-        serde_utils::{get_schema_folder, SmartSerde},
-        tracing::{init_bench_tracing, init_test_tracing},
-        F,
-    },
-    GammaLoopContextContainer,
+use gammalooprs::graph::Graph;
+use gammalooprs::initialisation::initialise;
+use gammalooprs::integrands::process::ProcessIntegrand;
+use gammalooprs::model::{
+    InputParamCard, Model, ModelGammaLoopExt, SerializableInputParamCard, UFOSymbol,
 };
+use gammalooprs::processes::{
+    begin_phase, merge_generated_graph_reports, DotExportSettings, GeneratedGraphReport,
+    GenerationProcessKind, GenerationProgressMode, GenerationProgressModeGuard,
+    GenerationProgressObserver, GenerationProgressObserverGuard, GenerationProgressPhase,
+    GraphGenerationStats, GraphGroupSelectionMode, GraphGroupSelectionPlan,
+    GraphGroupSelectionReport, GraphGroupSelectionSpec, NamedGraphGenerationReport, Process,
+    ProcessCollection, ProcessDefinition, ProcessList, ProcessLoadSelection,
+};
+use gammalooprs::settings::global::GenerationSettings;
+use gammalooprs::settings::runtime::LockedRuntimeSettings;
+use gammalooprs::settings::{GlobalSettings, RuntimeSettings};
+use gammalooprs::utils::serde_utils::{get_schema_folder, SmartSerde};
+use gammalooprs::utils::tracing::{init_bench_tracing, init_test_tracing};
+use gammalooprs::utils::F;
+use gammalooprs::{clear_interrupt_request, is_interrupt_requested, GammaLoopContextContainer};
 
-use crate::{
-    command_parser::{normalize_clap_args, split_command_line},
-    command_template::{contains_placeholder, placeholder_specs, PlaceholderSpec},
-    commands::{save::SaveState, Commands},
-    integrand_info::{collect_integrand_info, IntegrandInfo},
-    model_parameters::{external_model_parameter_type, validate_model_parameter_type},
-    render_smart_toml,
-    tracing::{set_file_log_filter, set_log_style, set_stderr_log_filter},
-    CLISettings,
-};
+use crate::command_parser::{normalize_clap_args, split_command_line};
+use crate::command_template::{contains_placeholder, placeholder_specs, PlaceholderSpec};
+use crate::commands::save::SaveState;
+use crate::commands::Commands;
+use crate::integrand_info::{collect_integrand_info, IntegrandInfo};
+use crate::model_parameters::{external_model_parameter_type, validate_model_parameter_type};
+use crate::tracing::{set_file_log_filter, set_log_style, set_stderr_log_filter};
+use crate::{render_smart_toml, CLISettings};
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct GenerationResourceSummary {
@@ -749,7 +736,8 @@ impl<'de> Deserialize<'de> for ProcessRef {
     where
         D: serde::Deserializer<'de>,
     {
-        use serde::de::{self, Visitor};
+        use serde::de;
+        use serde::de::Visitor;
         use std::fmt;
 
         struct ProcessRefVisitor;
@@ -1102,7 +1090,8 @@ impl<'de> Deserialize<'de> for CommandHistory {
     where
         D: serde::Deserializer<'de>,
     {
-        use serde::de::{self, Visitor};
+        use serde::de;
+        use serde::de::Visitor;
         use std::fmt;
 
         struct CommandHistoryVisitor;
@@ -1661,7 +1650,11 @@ const INTEGRAND_GENERATION_SUMMARY_FILE: &str = "generation_summary.json";
 // Version 20 also retains the graph's global numerator and projector interfaces.
 // Version 21 stores fully indexed tensor interfaces without PartialIndex wire tags.
 // Older positional archives must be regenerated; unresolved ports are not assigned indices.
-const CURRENT_STATE_MANIFEST_VERSION: u32 = 21;
+// Version 22 persists the generation Request, including its explicit field-class search
+// policy, separately from numerator, selection and grouping settings, with u128 symmetry
+// orders. It also weights identical-beam cross-section graphs by their beam-exchange orbit;
+// older symmetrized identical-beam states carry halved weights that nothing in them reveals.
+const CURRENT_STATE_MANIFEST_VERSION: u32 = 22;
 const GENERATION_THREAD_STACK_SIZE_BYTES: usize = 32 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -3171,10 +3164,10 @@ impl State {
         } = options;
         let generation_type = Self::infer_graph_list_generation_type(&graphs)?;
         if let Some(definition) = &process_definition {
-            if definition.generation_type != generation_type {
+            if definition.request.kind() != generation_type {
                 return Err(eyre!(
                     "--process-spec describes a {} process, but the imported graph list is {}",
-                    definition.generation_type,
+                    definition.request.kind(),
                     generation_type
                 ));
             }
@@ -3561,34 +3554,31 @@ impl State {
 
 #[cfg(test)]
 mod tests {
-    use std::{fs, process::Command};
+    use std::fs;
+    use std::process::Command;
 
-    use gammalooprs::{
-        graph::Graph,
-        initialisation::test_initialise,
-        integrands::process::{ActiveF64Backend, GaussianReferenceFunction},
-        model::ModelGammaLoopExt,
-        momentum::{Dep, ExternalMomenta, Helicity},
-        processes::{
-            process::ProcessCollection, RaisedPropagatorScope, RaisedPropagatorSignature,
-            SelectionPolarity,
-        },
-        settings::global::{CompilationMode, FrozenCompilationMode},
-        settings::{
-            runtime::kinematic::{improvement::PhaseSpaceImprovementSettings, Externals},
-            KinematicsSettings, RuntimeSettings,
-        },
-        utils::{load_generic_model, serde_utils::SHOWDEFAULTS},
+    use gammalooprs::graph::Graph;
+    use gammalooprs::initialisation::test_initialise;
+    use gammalooprs::integrands::process::{ActiveF64Backend, GaussianReferenceFunction};
+    use gammalooprs::model::ModelGammaLoopExt;
+    use gammalooprs::momentum::{Dep, ExternalMomenta, Helicity};
+    use gammalooprs::processes::process::ProcessCollection;
+    use gammalooprs::processes::{
+        RaisedPropagatorScope, RaisedPropagatorSignature, SelectionPolarity,
     };
+    use gammalooprs::settings::global::{CompilationMode, FrozenCompilationMode};
+    use gammalooprs::settings::runtime::kinematic::improvement::PhaseSpaceImprovementSettings;
+    use gammalooprs::settings::runtime::kinematic::Externals;
+    use gammalooprs::settings::{KinematicsSettings, RuntimeSettings};
+    use gammalooprs::utils::load_generic_model;
+    use gammalooprs::utils::serde_utils::SHOWDEFAULTS;
     use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
     use symbolica::atom::{Atom, AtomCore};
     use tempfile::tempdir;
 
-    use crate::commands::{
-        display::Display,
-        save::SaveState,
-        set::{ProcessSetArgs, Set, SetArgs},
-    };
+    use crate::commands::display::Display;
+    use crate::commands::save::SaveState;
+    use crate::commands::set::{ProcessSetArgs, Set, SetArgs};
 
     use super::*;
 
@@ -3736,12 +3726,12 @@ mod tests {
         let _ = UFOSymbol::from("GC_12");
         state.model = load_generic_model("sm");
         state.model_parameters = state.model.default_param_card();
-        let mut graphs = Graph::from_finalized_runtime_string(
+        let mut graphs = Graph::from_dot(
             r#"digraph model_values {
                 num=1; overall_factor=1; overall_factor_evaluated=1; projector=1;
                 A [num=1];
                 A:0 -> A:1 [particle="a", num=1, mass=0, id=0, lmb_id=0,
-                    lmb_rep="K(0,a___)", source="{ufo_order:0}", sink="{ufo_order:1}"];
+                    lmb_rep="K(0,a___)"];
             }"#,
             &state.model,
         )
@@ -3809,7 +3799,7 @@ mod tests {
 
         let graph_path =
             crate::test_workspace_root().join("tests/resources/graphs/scalar_bubble.dot");
-        let graphs = Graph::from_finalized_runtime_path(&graph_path, &state.model)
+        let graphs = Graph::from_dot_path(&graph_path, &state.model)
             .expect("scalar bubble graph fixture should load");
 
         state
@@ -3840,10 +3830,10 @@ mod tests {
 
     #[test]
     fn named_generation_records_common_settings_for_persistent_uv_exports() -> Result<()> {
-        use gammalooprs::{
-            cff::{expression::AllOrientations, surface::GammaLoopSurfaceCache},
-            uv::{export::UVForestExportSettings, UVOrchestrator},
-        };
+        use gammalooprs::cff::expression::AllOrientations;
+        use gammalooprs::cff::surface::GammaLoopSurfaceCache;
+        use gammalooprs::uv::export::UVForestExportSettings;
+        use gammalooprs::uv::UVOrchestrator;
 
         test_initialise()?;
         for (folder, source, model) in [
@@ -3866,7 +3856,7 @@ mod tests {
             let mut state = State::new_test();
             state.model = model;
             state.model_parameters = state.model.default_param_card();
-            let mut graphs = Graph::import_dot(source, &state.model)?;
+            let mut graphs = Graph::from_dot(source, &state.model)?;
             graphs.truncate(1);
             let graph_name = graphs[0].name.clone();
             for name in ["first", "second"] {
@@ -4005,9 +3995,7 @@ mod tests {
                                 let node = node?;
                                 let dot = fs::read_to_string(node.path())?;
                                 assert!(dot.contains("forest_residue_index"));
-                                for graph in
-                                    Graph::from_finalized_runtime_string(&dot, &state.model)?
-                                {
+                                for graph in Graph::from_dot(&dot, &state.model)? {
                                     exported_graph = true;
                                     expression += graph.full_numerator_atom();
                                 }
@@ -4320,7 +4308,7 @@ mod tests {
 
         let graph_path =
             crate::test_workspace_root().join("tests/resources/graphs/scalar_bubble.dot");
-        let graphs = Graph::from_finalized_runtime_path(&graph_path, &state.model)
+        let graphs = Graph::from_dot_path(&graph_path, &state.model)
             .expect("scalar bubble graph fixture should load");
         state
             .import_graphs(
@@ -4721,7 +4709,8 @@ b = 1.0
     #[test]
     fn run_history_push_with_raw_skips_quit_and_definition_commands() {
         use super::RunHistory;
-        use crate::commands::{run::Run, StartCommandsBlock};
+        use crate::commands::run::Run;
+        use crate::commands::StartCommandsBlock;
 
         let mut run_history = RunHistory::default();
         run_history.push_with_raw(
@@ -5076,7 +5065,64 @@ commands = ["quit -n"]
             let message = err.to_string();
             assert!(message.contains("cannot be migrated"));
             assert!(message.contains("regenerate the saved state"));
+            // All paths exist, but the old version must fail before either payload decodes.
+            fs::write(temp.path().join("model.json"), b"invalid model payload").unwrap();
+            fs::write(
+                temp.path().join("symbolica_state.bin"),
+                b"invalid symbolic payload",
+            )
+            .unwrap();
+            fs::create_dir(temp.path().join("processes")).unwrap();
+            let error = State::load(temp.path().to_owned(), None, None)
+                .err()
+                .expect("old state rejected before payload decoding");
+            assert_eq!(error.to_string(), message);
+            assert_eq!(
+                fs::read(temp.path().join("model.json")).unwrap(),
+                b"invalid model payload"
+            );
+            assert_eq!(
+                fs::read(temp.path().join("symbolica_state.bin")).unwrap(),
+                b"invalid symbolic payload"
+            );
+            assert!(!temp.path().join("logs").exists());
         }
+    }
+
+    #[test]
+    fn state_load_rejects_pre_request_state_before_payload_decoding() {
+        let temp = tempdir().unwrap();
+        fs::write(temp.path().join(STATE_MANIFEST_FILE), "version = 9\n").unwrap();
+        // Every required path exists, but neither the model nor symbolic payload can decode.
+        // The manifest-version guard must win before loading either or initializing state/logging.
+        fs::write(temp.path().join("model.json"), b"invalid model payload").unwrap();
+        fs::write(
+            temp.path().join("symbolica_state.bin"),
+            b"invalid symbolic payload",
+        )
+        .unwrap();
+        fs::create_dir(temp.path().join("processes")).unwrap();
+        let error = State::load(temp.path().to_owned(), None, None)
+            .err()
+            .expect("pre-Request state must be rejected");
+        let message = error.to_string();
+        assert!(
+            message.contains(&format!(
+                "State version 9 predates the supported version {CURRENT_STATE_MANIFEST_VERSION}"
+            )),
+            "{message}"
+        );
+        assert!(message.contains("cannot be migrated"), "{message}");
+        assert!(message.contains("regenerate the saved state"), "{message}");
+        assert_eq!(
+            fs::read(temp.path().join("model.json")).unwrap(),
+            b"invalid model payload"
+        );
+        assert_eq!(
+            fs::read(temp.path().join("symbolica_state.bin")).unwrap(),
+            b"invalid symbolic payload"
+        );
+        assert!(!temp.path().join("logs").exists());
     }
 
     #[test]
@@ -5140,7 +5186,9 @@ commands = ["quit -n"]
         .unwrap();
 
         let err = load_state_manifest(temp.path()).unwrap_err();
-        assert!(format!("{err}").contains("regenerate the saved state"));
+        let message = err.to_string();
+        assert!(message.contains("cannot be migrated"));
+        assert!(message.contains("regenerate the saved state"));
     }
 
     #[test]
@@ -5217,12 +5265,10 @@ commands = ["quit -n"]
 
     #[test]
     fn saved_generated_process_runs_reference_acceptance_after_reload() -> Result<()> {
-        use gammalooprs::{
-            graph::GroupId,
-            settings::runtime::{
-                DiscreteGraphSamplingSettings, DiscreteGraphSamplingType, SamplingSettings,
-                StabilityLevelSetting,
-            },
+        use gammalooprs::graph::GroupId;
+        use gammalooprs::settings::runtime::{
+            DiscreteGraphSamplingSettings, DiscreteGraphSamplingType, SamplingSettings,
+            StabilityLevelSetting,
         };
         use symbolica::numerical_integration::Sample;
 
@@ -5237,7 +5283,7 @@ commands = ["quit -n"]
             .insert("mass_scalar_1".into(), Complex::new_re(F(1.0)));
         kite.model.apply_param_card(&kite.model_parameters)?;
         kite.import_graphs(
-            Graph::import_dot(
+            Graph::from_dot(
                 &std::fs::read_to_string(
                     crate::test_workspace_root().join("tests/resources/graphs/massive_kite.dot"),
                 )?,
@@ -5313,7 +5359,7 @@ rotation_axis = [{type = "x"}, {type = "y"}]
         cut.model = kite.model.clone();
         cut.model_parameters = cut.model.default_param_card();
         cut.import_graphs(
-            Graph::import_dot(
+            Graph::from_dot(
                 r#"digraph sampling_cut_bubble {
                     final_state="scalar_1,scalar_1";
                     num=1; edge [pdg=1001]; node [num=1];
@@ -5631,7 +5677,11 @@ radial_profile = { kind = "lu_h", approximation = "log_logistic", scale = 2.0, s
                             slot_workspace_path(&full.workspace_path, &meta).join("settings.toml"),
                             slot_workspace_path(&partial, &meta).join("settings.toml"),
                         )?;
-                        let process = loaded.process_list.get_integrand_mut(0, "default")?.clone();
+                        // The command prepared its own copy and left the loaded source
+                        // cold; the direct engine call and the draws below need it warm.
+                        let process = loaded.process_list.get_integrand_mut(0, "default")?;
+                        process.warm_up(&loaded.model)?;
+                        let process = process.clone();
                         let settings = process.get_settings().clone();
                         let mut slot = IntegrationSlot::new(
                             meta,
@@ -5758,12 +5808,10 @@ radial_profile = { kind = "lu_h", approximation = "log_logistic", scale = 2.0, s
 
     #[test]
     fn summed_sampling_matches_explicit_canonical_channels() -> Result<()> {
-        use gammalooprs::{
-            graph::GroupId,
-            settings::runtime::{
-                DiscreteGraphSamplingSettings, DiscreteGraphSamplingType, SamplingSettings,
-                StabilityLevelSetting,
-            },
+        use gammalooprs::graph::GroupId;
+        use gammalooprs::settings::runtime::{
+            DiscreteGraphSamplingSettings, DiscreteGraphSamplingType, SamplingSettings,
+            StabilityLevelSetting,
         };
         use symbolica::numerical_integration::Sample;
 
@@ -5944,14 +5992,12 @@ rotation_axis = [{type = "x"}, {type = "y"}]
         // Default selected-LMB sampling must be converted at the same boundary
         // as the reference overlay. Compare both targets to an independently
         // reconstructed raw point, including the nonzero external shift.
-        use gammalooprs::{
-            integrands::process::{
-                sampling::context::SamplingMapContext, GraphTerm, MomentumSpaceEvaluationInput,
-                ProcessIntegrand, ProcessIntegrandImpl, SamplingMapComponent,
-                SamplingMapDefinition, SamplingMapKernel,
-            },
-            momentum::ThreeMomentum,
+        use gammalooprs::integrands::process::sampling::context::SamplingMapContext;
+        use gammalooprs::integrands::process::{
+            GraphTerm, MomentumSpaceEvaluationInput, ProcessIntegrand, ProcessIntegrandImpl,
+            SamplingMapComponent, SamplingMapDefinition, SamplingMapKernel,
         };
+        use gammalooprs::momentum::ThreeMomentum;
         let mut settings = integrand.get_settings().clone();
         let mut parameterization = settings.sampling.get_parameterization_settings().unwrap();
         parameterization

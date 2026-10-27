@@ -1,7 +1,13 @@
 //! Read-only progress inspection and execution on independent graph copies.
 use super::{ExecutionMode, SpensoNet, Spensor, SpensorFunctionLibrary, SpensorLibrary};
 use linnet::half_edge::involution::HedgePair;
-use pyo3::{prelude::*, types::PyTuple};
+use pyo3::prelude::Bound;
+use pyo3::prelude::Py;
+use pyo3::prelude::PyResult;
+use pyo3::prelude::Python;
+use pyo3::prelude::pyclass;
+use pyo3::prelude::pymethods;
+use pyo3::types::PyTuple;
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
 #[cfg(not(feature = "python_stubgen"))]
@@ -263,7 +269,7 @@ impl SpensoNet {
     pub(crate) fn status(&self) -> ExecutionStatus {
         let mut graph = self.network.graph.clone();
         graph.cache_expr_tree_roots();
-        let nodes = graph.n_nodes();
+        let nodes = graph.n_live();
         let operations = graph
             .graph
             .iter_nodes()

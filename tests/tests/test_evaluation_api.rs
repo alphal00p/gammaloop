@@ -1,22 +1,19 @@
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    time::Duration,
-};
+use std::collections::{BTreeMap, BTreeSet};
+use std::time::Duration;
 
 use color_eyre::Result;
 use feynkit_model::Model;
-use gammaloop_api::{
-    commands::evaluate_samples::{EvaluateSamples, EvaluateSamplesPrecise},
-    integrand_info::{IntegrandEsurfaceClassification, IntegrandKind, IntegrandThresholdStatus},
+use gammaloop_api::commands::evaluate_samples::{EvaluateSamples, EvaluateSamplesPrecise};
+use gammaloop_api::integrand_info::{
+    IntegrandEsurfaceClassification, IntegrandKind, IntegrandThresholdStatus,
 };
 use gammaloop_integration_tests::{
     CLIState, clean_test, default_momentum_space_point, default_xspace_point, get_test_cli,
     get_tests_workspace_path, setup_sm_differential_lu_cli,
 };
-use gammalooprs::{
-    graph::{Graph, LMBext, edge::PossibleParticle},
-    model::VertexRuleIdGammaLoopExt,
-};
+use gammalooprs::graph::edge::PossibleParticle;
+use gammalooprs::graph::{Graph, LMBext};
+use gammalooprs::model::VertexRuleIdGammaLoopExt;
 use ndarray::{Array1, Array2};
 
 fn is_multichannel_fixture_topology(graph: &Graph, model: &Model) -> bool {
@@ -81,7 +78,6 @@ fn is_multichannel_fixture_topology(graph: &Graph, model: &Model) -> bool {
             let particle = match &edge.data.particle {
                 PossibleParticle::Particle(particle)
                 | PossibleParticle::MassOverriddenParticle { particle, .. } => *particle,
-                PossibleParticle::JustMass { .. } => return false,
             };
             let Ok(particle) = model.particle_by_id(particle) else {
                 return false;

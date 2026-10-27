@@ -3,21 +3,20 @@ use std::fmt::Write;
 use color_eyre::Result;
 use colored::Colorize;
 use eyre::{eyre, Context};
-use gammalooprs::{
-    graph::{threshold_counterterms::ThresholdCountertermSpec, Graph, LmbIndex, LoopMomentumBasis},
-    momentum::SignOrZero,
-    processes::{
-        ProcessCollection, ResolvedThresholdCounterterms, ThresholdCountertermOrigin,
-        ThresholdCountertermSide,
-    },
-    utils::serde_utils::ShowDefaultsGuard,
+use gammalooprs::graph::threshold_counterterms::ThresholdCountertermSpec;
+use gammalooprs::graph::{Graph, LmbIndex, LoopMomentumBasis};
+use gammalooprs::momentum::SignOrZero;
+use gammalooprs::processes::{
+    ProcessCollection, ResolvedThresholdCounterterms, ThresholdCountertermOrigin,
+    ThresholdCountertermSide,
 };
+use gammalooprs::utils::serde_utils::ShowDefaultsGuard;
 use itertools::Itertools;
-use linnet::{half_edge::involution::EdgeIndex, parser::GlobalData};
-use tabled::{
-    builder::Builder,
-    settings::{object::Columns, Alignment, Style, Width},
-};
+use linnet::half_edge::involution::EdgeIndex;
+use linnet::parser::GlobalData;
+use tabled::builder::Builder;
+use tabled::settings::object::Columns;
+use tabled::settings::{Alignment, Style, Width};
 use typed_index_collections::TiVec;
 
 use crate::state::State;
@@ -445,7 +444,8 @@ mod tests {
 
     #[test]
     fn empty_enabled_thresholds_are_distinct_from_disabled_generation() -> Result<()> {
-        use gammalooprs::{initialisation::test_initialise, utils::load_generic_model};
+        use gammalooprs::initialisation::test_initialise;
+        use gammalooprs::utils::load_generic_model;
 
         test_initialise()?;
         let spec = ThresholdCountertermSpec::default();
@@ -464,7 +464,7 @@ mod tests {
         assert!(attribute.contains("cuts = []"));
 
         let model = load_generic_model("scalars");
-        let graph = Graph::import_dot(
+        let graph = Graph::from_dot(
             include_str!("../../../../../tests/resources/graphs/scalar_bubble.dot"),
             &model,
         )?

@@ -1,15 +1,15 @@
 use spenso::network::parsing::{
     ParseSettings, SchoonschipExpansionMode, ShadowedStructure, ShorthandParsing, StructureFromAtom,
 };
+use spenso::network::tags::SPENSO_TAG;
 use spenso::network::{
     ContractScalars, ExecutionResult, Network, NetworkState, Sequential, SequentialExtract,
-    SingleSmallestDegree, SmallestDegree, Steps, tags::SPENSO_TAG,
+    SingleSmallestDegree, SmallestDegree, Steps,
 };
-use spenso::structure::{OrderedStructure, representation::LibraryRep};
-use symbolica::{
-    atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol},
-    printer::PrintOptions,
-};
+use spenso::structure::OrderedStructure;
+use spenso::structure::representation::LibraryRep;
+use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol};
+use symbolica::printer::PrintOptions;
 
 use symbolica::symbol;
 
@@ -24,15 +24,10 @@ use crate::test_support::test_initialize;
 
 use core::panic;
 
-use spenso::{
-    chain, chain_factor, mink,
-    structure::{
-        HasName, ToSymbolic,
-        representation::{Euclidean, Lorentz, Minkowski, RepName},
-        slot::IsAbstractSlot,
-    },
-    tensor_symbol, vector,
-};
+use spenso::structure::representation::{Euclidean, Lorentz, Minkowski, RepName};
+use spenso::structure::slot::IsAbstractSlot;
+use spenso::structure::{HasName, ToSymbolic};
+use spenso::{chain, chain_factor, mink, tensor_symbol, vector};
 
 use crate::tensor::{SymbolicNet, SymbolicNetExt, SymbolicNetParse, SymbolicTensor};
 use insta::assert_snapshot;
@@ -82,7 +77,7 @@ fn schoonschip_only_symbolic_chain_without_compact_vector_stays_opaque() {
         .unwrap();
 
     assert_eq!(net.state, NetworkState::SelfDualTensor);
-    assert_eq!(net.graph.n_nodes(), 1);
+    assert_eq!(net.graph.n_live(), 1);
     assert_eq!(net.graph.dangling_indices().len(), 2);
     assert_eq!(net.store.tensors.len(), 1);
     assert_eq!(net.store.tensors[0].name(), Some(SPENSO_TAG.chain));
@@ -469,17 +464,17 @@ fn parse_scalar_tensors_step_by() {
       layout = "neato";
 
       4	 [label = "∏"];
-      3	 [label = "T:(d(mink(4,2)))^2"];
       1	 [label = "S:a*c"];
       2	 [label = "T:b(mink(4,1))"];
       0	 [label = "T:d(mink(4,1))"];
+      3	 [label = "T:(d(mink(4,2)))^2"];
       ext0	 [style=invis];
       4:0:s	-> ext0	 [id=0 color="red"];
       1:5:s	-> 4:4:s	 [id=1  color="red:blue;0.5"];
       2:6:s	-> 4:3:s	 [id=2  color="red:blue;0.5"];
       2:7:s	-> 0:9:s	 [id=3 dir=none  color="red:blue;0.5" label="mink4|1"];
       0:8:s	-> 4:2:s	 [id=4  color="red:blue;0.5"];
-      3:1:s	-> 4:10:s	 [id=5  color="red:blue;0.5"];
+      3:10:s	-> 4:1:s	 [id=5  color="red:blue;0.5"];
     }
     "#
     );
@@ -499,8 +494,8 @@ fn parse_scalar_tensors_step_by() {
       ext0	 [style=invis];
       2:0:s	-> ext0	 [id=0 color="red"];
       1:5:s	-> 2:4:s	 [id=1  color="red:blue;0.5"];
-      0:1:s	-> 2:3:s	 [id=2  color="red:blue;0.5"];
-      3:6:s	-> 2:2:s	 [id=3  color="red:blue;0.5"];
+      3:6:s	-> 2:3:s	 [id=2  color="red:blue;0.5"];
+      0:2:s	-> 2:1:s	 [id=3  color="red:blue;0.5"];
     }
     "#
     );
@@ -1050,15 +1045,15 @@ fn infinite_execution() {
       ext0	 [style=invis];
       0:0:s	-> ext0	 [id=0 color="red"];
       ext1	 [style=invis];
-      0:1:s	-> ext1	 [id=1 dir=none color="red" label="mink4|l_0"];
+      0:3:s	-> ext1	 [id=1 dir=none color="red" label="mink4|l_0"];
       ext2	 [style=invis];
-      0:2:s	-> ext2	 [id=2 dir=none color="red" label="mink4|l_4"];
+      0:1:s	-> ext2	 [id=2 dir=none color="red" label="bis4|l_3"];
       ext3	 [style=invis];
-      0:4:s	-> ext3	 [id=3 dir=none color="red" label="bis4|l_3"];
+      0:4:s	-> ext3	 [id=3 dir=none color="red" label="bis4|l_2"];
       ext4	 [style=invis];
-      0:3:s	-> ext4	 [id=4 dir=none color="red" label="mink4|l_1"];
+      0:2:s	-> ext4	 [id=4 dir=none color="red" label="mink4|l_1"];
       ext5	 [style=invis];
-      0:5:s	-> ext5	 [id=5 dir=none color="red" label="bis4|l_2"];
+      0:5:s	-> ext5	 [id=5 dir=none color="red" label="mink4|l_4"];
     }
     "#
     );
@@ -1366,10 +1361,8 @@ fn structural_network_borrows_source_leaves_and_owns_generated_shorthand() {
 
 #[test]
 fn structural_network_requires_materialization_before_execution() {
-    use spenso::network::{
-        graph::{NetworkLeaf, NetworkNode, ScalarRef},
-        store::TensorScalarStore,
-    };
+    use spenso::network::graph::{NetworkLeaf, NetworkNode, ScalarRef};
+    use spenso::network::store::TensorScalarStore;
     test_initialize();
     let source = symbolica::function!(tensor_symbol!(bound_network_leaf), mink!(4, i));
     let mut network = source

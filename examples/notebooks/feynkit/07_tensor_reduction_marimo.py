@@ -65,16 +65,46 @@ def _(Symbols):
     import math
     import time
 
-    from symbolica.community.hepkit import Model, TensorReducer
+    from symbolica.community.graph import Bridges
+    from symbolica.community.hepkit import (
+        Loops,
+        Model,
+        Naming,
+        NumeratorOptions,
+        Orders,
+        Range,
+        Restrict,
+        TensorReducer,
+        TopologyRules,
+    )
     from symbolica import E, S
+    from symbolica.community.tensor import Representation, TensorName
 
     D = S("D")
     momentum = Symbols.edge_momentum()
-    external = S("TensorTutorial::p")
-    from symbolica.community.tensor import Representation
+    external = TensorName.vector("TensorTutorial::p").to_expression()
 
     mink = Representation.mink(4).to_expression().get_head()
-    return (D, E, Model, S, TensorReducer, external, math, mink, momentum, time)
+    return (
+        Bridges,
+        D,
+        E,
+        Loops,
+        Model,
+        Naming,
+        NumeratorOptions,
+        Orders,
+        Range,
+        Restrict,
+        S,
+        TensorReducer,
+        TopologyRules,
+        external,
+        math,
+        mink,
+        momentum,
+        time,
+    )
 
 
 @app.cell(hide_code=True)
@@ -303,17 +333,41 @@ def _(mo):
 
 
 @app.cell
-def _(E, Model, TensorReducer, mo, table):
+def _(
+    Bridges,
+    E,
+    Loops,
+    Model,
+    Naming,
+    NumeratorOptions,
+    Orders,
+    Range,
+    Restrict,
+    TensorReducer,
+    TopologyRules,
+    mo,
+    table,
+):
     _vacuum_model = Model.yang_mills()
 
-    _vacuum_result = _vacuum_model.with_filters(
-        particle_veto=[
-            _particle
-            for _particle in _vacuum_model.particles
-            if abs(_particle.pdg_code) != 21
-        ]
-    ).generate_diagrams(
-        incoming=[], outgoing=[], loops=2, max_vertices=2, coupling_orders={"QCD": 2}
+    _request = _vacuum_model.process([], []).amplitude(
+        loops=Loops.total(2),
+        restrict=Restrict().exclude_particles(
+            [
+                _particle
+                for _particle in _vacuum_model.particles
+                if abs(_particle.pdg_code) != 21
+            ]
+        ),
+        orders=Orders().exact("QCD", 2),
+        topology=TopologyRules(
+            max_vertices=2,
+            bridges=Bridges.one_pi_in_loops(),
+            factorized_loops=Range.exact(1),
+        ),
+    )
+    _vacuum_result = _request.generate().build(
+        NumeratorOptions(naming=Naming.named("D"))
     )
     if len(_vacuum_result) != 1:
         raise RuntimeError("expected one pure-gluon theta vacuum graph")

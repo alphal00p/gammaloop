@@ -1,14 +1,15 @@
 use std::collections::BTreeSet;
 
 use color_eyre::eyre::{Result, WrapErr, ensure, eyre};
-use three_dimensional_reps::{ThermalDistributionFactor, utils::rank_i64};
+use three_dimensional_reps::ThermalDistributionFactor;
+use three_dimensional_reps::utils::rank_i64;
 
-use crate::{
-    graph::{Graph, LoopMomentumBasis, lmb::LMBwithEdges},
-    momentum::{SignOrZero, sample::LoopIndex},
-    utils::hyperdual_utils::mixed_derivative_shape,
-    uv::uv_graph::UVE,
-};
+use crate::graph::lmb::LMBwithEdges;
+use crate::graph::{Graph, LoopMomentumBasis};
+use crate::momentum::SignOrZero;
+use crate::momentum::sample::LoopIndex;
+use crate::utils::hyperdual_utils::mixed_derivative_shape;
+use crate::uv::uv_graph::UVE;
 
 use super::FermiSurfaceProduct;
 
@@ -200,7 +201,9 @@ mod tests {
     use linnet::half_edge::involution::EdgeIndex;
 
     use super::*;
-    use crate::{initialisation::test_initialise, momentum::ThreeMomentum, utils::F};
+    use crate::initialisation::test_initialise;
+    use crate::momentum::ThreeMomentum;
+    use crate::utils::F;
 
     #[test]
     fn independent_fermi_basis_preserves_affine_routes() -> Result<()> {
@@ -346,7 +349,7 @@ mod tests {
             for edge in [EdgeIndex(0), EdgeIndex(1)] {
                 let particle_name = graph
                     .model
-                    .particle_by_id(graph[edge].particle().unwrap())
+                    .particle_by_id(graph[edge].particle())
                     .unwrap()
                     .name
                     .clone();

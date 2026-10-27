@@ -1,110 +1,93 @@
-use crate::{
-    DependentMomentaConstructor, GammaLoopContext, GammaLoopContextContainer,
-    cff::{
-        CutCFFIndex,
-        esurface::{Esurface, EsurfaceRay},
-        expression::OrientationID,
-        orientations::GraphOrientation,
-        surface::HybridSurfaceID,
-    },
-    graph::{
-        ExternalConnection, FeynmanGraph, FinalizedCut, Graph, GraphGroup, GroupId, LmbIndex,
-        LoopMomentumBasis, parse::complete_group_parsing,
-    },
-    integrands::{
-        HasIntegrand,
-        evaluation::{EvaluationResult, GraphEvaluationResult},
-        process::{
-            GraphTermEvaluationContext, ParamBuilder, SamplingChannelBridge,
-            SamplingChannelCompileContext, SamplingChannelId, SamplingCutSide,
-            SharedEnergyJointMap,
-            evaluators::{ActiveF64Backend, EvaluatorStack, evaluate_evaluator_single},
-            graph_to_group_id_for_group_structure,
-            param_builder::LUParams,
-            prepare_buffered_event,
-            sampling::context::{SamplingLUHostPlan, SamplingMapContext},
-            sampling::maps::{
-                ImplicitSurfaceRadialMap, SamplingEvaluationError, SamplingMapAffine,
-                SamplingMapComposition, SamplingMapEmbedding,
-            },
-            sampling::selection::{CompiledSamplingMap, SamplingCatalogueEntry},
-            threshold_multiplier::{
-                ThresholdMultiplierEvaluatorCollection, ThresholdMultiplierExpression,
-                ThresholdMultiplierLayout,
-            },
-        },
-    },
-    model::{Model, ParticleIdGammaLoopExt},
-    momentum::{
-        FourMomentum, Rotatable, Rotation, RotationMethod, ThreeMomentum,
-        sample::{
-            ExternalFourMomenta, ExternalIndex, LoopIndex, LoopMomenta, MomentumSample, Subspace,
-            SubspaceData,
-        },
-    },
-    observables::{
-        AdditionalWeightKey, EventProcessingRuntime, GenericEvent, GenericEventGroup,
-        GenericThresholdCountertermEventInfo,
-    },
-    processes::{
-        self, CrossSectionGraph, CutGroupData, CutGroupId, CutId,
-        CutThresholdCountertermAssociations, GraphGenerationStats, GraphGroupSelectionPlan,
-        IteratedCtCollection, LUCounterTermData, LUThresholdHelperOutputs, LeftThresholdId,
-        RightThresholdId, ThresholdCountertermMetadataRegistry, ThresholdCountertermVariantId,
-        ThresholdCountertermVariantStatus, TopologicalThresholdId,
-    },
-    settings::{
-        GlobalSettings, RuntimeSettings,
-        global::{CompilationOptionsSnapshot, FrozenCompilationMode},
-        runtime::{IntegralUnit, ParameterizationSettings},
-    },
-    subtraction::{
-        generate_rstar_t_dependence_evaluator,
-        lu_counterterm::{
-            LUCTKinematicPoint, LUCounterTerm, LUCounterTermEvaluators, LUCountertermEvaluation,
-            LUSharedOverlaps, LUThresholdHelperEvaluators, LUVariantSubspaces,
-        },
-    },
-    utils::{
-        ArbPrec, F, FloatLike, RuntimeCache, h, h_dual,
-        hyperdual_utils::{
-            DualOrNot, extract_t_derivatives, extract_t_derivatives_complex,
-            shape_from_cut_cff_index, simple_n_deriv_shape,
-        },
-        newton_solver::{NewtonIterationResult, RadialRootIdentity},
-        serde_utils::SmartSerde,
-    },
+use crate::cff::CutCFFIndex;
+use crate::cff::esurface::{
+    Esurface, EsurfaceExistenceStatus, EsurfaceRay, esurface_value_is_strictly_inside,
 };
+use crate::cff::expression::OrientationID;
+use crate::cff::orientations::GraphOrientation;
+use crate::cff::surface::HybridSurfaceID;
+use crate::graph::parse::complete_group_parsing;
+use crate::graph::{
+    ExternalConnection, FeynmanGraph, FinalizedCut, Graph, GraphGroup, GroupId, LmbIndex,
+    LoopMomentumBasis,
+};
+use crate::integrands::HasIntegrand;
+use crate::integrands::evaluation::{EvaluationResult, GraphEvaluationResult};
+use crate::integrands::process::evaluators::{
+    ActiveF64Backend, EvaluatorStack, evaluate_evaluator_single,
+};
+use crate::integrands::process::param_builder::LUParams;
+use crate::integrands::process::sampling::context::{SamplingLUHostPlan, SamplingMapContext};
+use crate::integrands::process::sampling::maps::{
+    ImplicitSurfaceRadialMap, SamplingEvaluationError, SamplingMapAffine, SamplingMapComposition,
+    SamplingMapEmbedding,
+};
+use crate::integrands::process::sampling::selection::{
+    CompiledSamplingMap, SamplingCatalogueEntry,
+};
+use crate::integrands::process::threshold_multiplier::{
+    ThresholdMultiplierEvaluatorCollection, ThresholdMultiplierExpression,
+    ThresholdMultiplierLayout,
+};
+use crate::integrands::process::{
+    GraphTermEvaluationContext, ParamBuilder, SamplingChannelBridge, SamplingChannelCompileContext,
+    SamplingChannelId, SamplingCutSide, SharedEnergyJointMap,
+    graph_to_group_id_for_group_structure, prepare_buffered_event,
+};
+use crate::model::{Model, ParticleIdGammaLoopExt};
+use crate::momentum::sample::{
+    ExternalFourMomenta, ExternalIndex, LoopIndex, LoopMomenta, MomentumSample, Subspace,
+    SubspaceData,
+};
+use crate::momentum::{FourMomentum, Rotatable, Rotation, RotationMethod, ThreeMomentum};
+use crate::observables::{
+    AdditionalWeightKey, EventProcessingRuntime, GenericEvent, GenericEventGroup,
+    GenericThresholdCountertermEventInfo,
+};
+use crate::processes::{
+    CrossSectionGraph, CutGroupData, CutGroupId, CutId, CutThresholdCountertermAssociations,
+    GraphGenerationStats, GraphGroupSelectionPlan, IteratedCtCollection, LUCounterTermData,
+    LUThresholdHelperOutputs, LeftThresholdId, RightThresholdId,
+    ThresholdCountertermMetadataRegistry, ThresholdCountertermVariantId,
+    ThresholdCountertermVariantStatus, TopologicalThresholdId,
+};
+use crate::settings::global::{CompilationOptionsSnapshot, FrozenCompilationMode};
+use crate::settings::runtime::{IntegralUnit, ParameterizationSettings};
+use crate::settings::{GlobalSettings, RuntimeSettings};
+use crate::subtraction::generate_rstar_t_dependence_evaluator;
+use crate::subtraction::lu_counterterm::{
+    LUCTKinematicPoint, LUCounterTerm, LUCounterTermEvaluators, LUCountertermEvaluation,
+    LUSharedOverlaps, LUThresholdHelperEvaluators, LUVariantSubspaces,
+};
+use crate::utils::hyperdual_utils::{
+    DualOrNot, extract_t_derivatives, extract_t_derivatives_complex, shape_from_cut_cff_index,
+    simple_n_deriv_shape,
+};
+use crate::utils::newton_solver::{NewtonIterationResult, RadialRootIdentity};
+use crate::utils::serde_utils::SmartSerde;
+use crate::utils::{ArbPrec, ESURFACE_SHIFT_THRESHOLD, F, FloatLike, RuntimeCache, h, h_dual};
+use crate::{DependentMomentaConstructor, GammaLoopContext, GammaLoopContextContainer, processes};
 use bincode::Encode;
 use bincode_trait_derive::Decode;
-use color_eyre::{Result, owo_colors::OwoColorize};
+use color_eyre::Result;
+use color_eyre::owo_colors::OwoColorize;
 use eyre::Context;
 use eyre::eyre;
-use std::{
-    collections::{BTreeMap, BTreeSet, HashSet},
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use itertools::Itertools;
-use linnet::half_edge::{
-    involution::{EdgeIndex, EdgeVec, Flow, HedgePair, Orientation},
-    subgraph::{ModifySubSet, SubSetLike, subset::SubSet},
-};
-use rayon::{
-    ThreadPool,
-    iter::{IntoParallelRefMutIterator, ParallelIterator},
-};
+use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Flow, HedgePair, Orientation};
+use linnet::half_edge::subgraph::subset::SubSet;
+use linnet::half_edge::subgraph::{ModifySubSet, SubSetLike};
+use rayon::ThreadPool;
+use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 use spenso::algebra::complex::Complex;
-use std::{
-    fs::{self},
-    path::Path,
-    vec,
-};
-use symbolica::{
-    domains::{dual::HyperDual, float::SingleFloat},
-    numerical_integration::{Grid, Sample},
-};
+use std::path::Path;
+use std::{fs, vec};
+use symbolica::domains::dual::HyperDual;
+use symbolica::domains::float::SingleFloat;
+use symbolica::numerical_integration::{Grid, Sample};
 use tracing::{debug, warn};
 use typed_index_collections::{TiVec, ti_vec};
 
@@ -1576,25 +1559,16 @@ impl CrossSectionGraphTerm {
             .underlying
             .iter_edges_of(&self.graph.initial_state_cut)
             .map(|(_, edge_index, edge_data)| {
-                edge_data
+                let pdg: isize = edge_data
                     .data
                     .particle()
-                    .map(|particle| {
-                        let pdg = particle
-                            .resolve(event_context.model)
-                            .pdg_code
-                            .try_into()
-                            .expect("PDG code must fit in an isize");
-                        (edge_index, pdg)
-                    })
-                    .ok_or_else(|| {
-                        eyre!(
-                            "Initial-state cut edge {edge_index:?} in graph {} has no particle specifier",
-                            self.graph.name
-                        )
-                    })
+                    .resolve(event_context.model)
+                    .pdg_code
+                    .try_into()
+                    .expect("PDG code must fit in an isize");
+                (edge_index, pdg)
             })
-            .collect::<Result<Vec<_>>>()?;
+            .collect::<Vec<_>>();
         incoming_pdgs.sort_by_key(|(edge_index, _)| edge_index.0);
         new_event
             .cut_info
@@ -1631,9 +1605,7 @@ impl CrossSectionGraphTerm {
                     momentum_sample.external_moms(),
                 );
 
-            let particle = d.data.particle().ok_or_else(|| {
-                eyre!("Cut legs in Local Unitarity must have a particle specifier.")
-            })?;
+            let particle = d.data.particle();
             let edge_pdg: isize = particle
                 .resolve(event_context.model)
                 .pdg_code
@@ -1683,6 +1655,95 @@ impl CrossSectionGraphTerm {
         }
 
         Ok(new_event)
+    }
+
+    /// The origin of the generated loop momentum basis. `evaluate` rescales every
+    /// sample as k -> t k about it: `Esurface::solve_lu_cut` solves each cut energy
+    /// surface along the ray from it, while `rescaled_loop_momenta`, the hyper-dual
+    /// rescaling and `get_radius_guess` assume it.
+    fn basis_origin<T: FloatLike>(&self, zero: &F<T>) -> LoopMomenta<F<T>> {
+        let origin = ThreeMomentum {
+            px: zero.clone(),
+            py: zero.clone(),
+            pz: zero.clone(),
+        };
+        LoopMomenta::from_iter(vec![
+            origin;
+            self.graph.loop_momentum_basis.loop_edges.len()
+        ])
+    }
+
+    /// `evaluate` solves each cut energy surface along the ray from the basis
+    /// origin through the sampled loop momenta. Every such ray crosses the convex
+    /// surface exactly once only if the origin lies strictly inside it; otherwise
+    /// rays miss the surface or cross it twice, and the rescaling no longer covers
+    /// the cut phase space once. At the origin each cut edge carries only its
+    /// external shift. In the incoming centre-of-mass frame the origin therefore
+    /// lies inside every open cut surface unless the basis routes part of the beam
+    /// momenta through a cut edge; a closed cut surface, or incoming momenta
+    /// outside their centre-of-mass frame, can put it outside whatever the basis.
+    fn check_basis_origin_inside_cut_surfaces(
+        &self,
+        model: &Model,
+        settings: &RuntimeSettings,
+        externals: &ExternalFourMomenta<F<f64>>,
+    ) -> Result<()> {
+        let lmb = &self.graph.loop_momentum_basis;
+        let masses = self.graph.get_real_mass_vector::<f64>(model);
+        let origin = self.basis_origin(&F(0.0));
+        let e_cm = F(settings.kinematics.e_cm);
+        for (cut_group_id, cut_group) in self.cut_group_data.cut_groups.iter_enumerated() {
+            if !self.counterterm.cut_group_is_active(cut_group_id) {
+                continue;
+            }
+            let esurface = &self.cut_esurface[cut_group.cuts[0]];
+            let value = esurface.compute_from_momenta(lmb, &masses, &origin, externals);
+            if esurface_value_is_strictly_inside(&value, &e_cm) {
+                continue;
+            }
+
+            // A cross section's externals are its incoming momenta, and every cut carries their sum.
+            let mut incoming = FourMomentum::from_args(F(0.0), F(0.0), F(0.0), F(0.0));
+            for momentum in externals {
+                incoming += momentum;
+            }
+            let incoming_three_momentum = incoming.spatial.norm();
+            let remedy = if esurface.existence_status(
+                externals,
+                lmb,
+                &masses,
+                &e_cm,
+                &F(settings.subtraction.esurface_existence_threshold),
+            ) != EsurfaceExistenceStatus::Existing
+            {
+                let cut_mass = esurface
+                    .energies
+                    .iter()
+                    .fold(F(0.0), |sum, edge| sum + masses[*edge]);
+                format!(
+                    "The cut is kinematically closed or pinched at these kinematics: its masses add up to {cut_mass:e} against an incoming invariant mass of {:e}, so no loop momentum basis puts the origin inside it",
+                    incoming.norm(),
+                )
+            } else if incoming_three_momentum > F(ESURFACE_SHIFT_THRESHOLD) * e_cm {
+                format!(
+                    "The incoming momenta add up to a three-momentum of magnitude {incoming_three_momentum:e}: give them in their centre-of-mass frame, where a basis whose cut edges carry no partial beam momentum puts the origin inside every open cut surface"
+                )
+            } else {
+                format!(
+                    "Choose a loop momentum basis whose cut edges carry no partial beam momentum, with `generate ... --loop-momentum-bases {}=<loop edge ids>` or the `lmb_id`s of an imported DOT graph",
+                    self.graph.name,
+                )
+            };
+            let incoming_energy = -esurface.compute_shift_part_from_momenta(externals, lmb);
+            return Err(eyre!(
+                "The loop momenta of graph {} are rescaled about the origin of its loop momentum basis, which lies on or outside the energy surface of cut group {}: there the cut energies add up to {:e}, not below the incoming energy {:e}. {remedy}",
+                self.graph.name,
+                cut_group_id.0,
+                value + incoming_energy,
+                incoming_energy,
+            ));
+        }
+        Ok(())
     }
 }
 
@@ -2573,7 +2634,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                 .map(|mass| mass.re)
         }));
 
-        Ok(())
+        self.check_basis_origin_inside_cut_surfaces(model, settings, &externals)
     }
 
     fn prepare_physical_overlaps(
@@ -3402,35 +3463,30 @@ impl GraphTerm for CrossSectionGraphTerm {
                 2 => {
                     let mom_1 = &(momentum_sample.external_moms()[ExternalIndex::from(0)]);
                     let mom_2 = &(momentum_sample.external_moms()[ExternalIndex::from(1)]);
-                    let mass_factor = self
+                    // `masses` holds zero for massless (`EdgeMass::Zero`) beams.
+                    let mass_squared_product = self
                         .graph
-                        .initial_state_cut
-                        .iter_edges(&self.graph)
-                        .map(|(_, e)| match &e.data.mass {
-                            crate::graph::edge::EdgeMass::Zero => {
-                                Complex::new_re(momentum_sample.zero())
-                            }
-                            mass => mass
-                                .value(context.model, &self.param_builder)
-                                .expect("initial-state mass has a validated model value"),
-                        })
-                        .fold(Complex::new_re(momentum_sample.one()), |acc, mass| {
-                            acc * &mass * &mass
-                        })
-                        .re;
+                        .get_edges_in_initial_state_cut()
+                        .into_iter()
+                        .fold(momentum_sample.one(), |acc, edge| {
+                            acc * &masses[edge] * &masses[edge]
+                        });
 
                     let f = feynkit_kinematics::InitialStateFlux::Scattering {
                         momentum_dot: mom_1.dot(mom_2),
-                        mass_squared_product: mass_factor,
+                        mass_squared_product,
                     }
                     .denominator(|value| value.sqrt());
 
                     momentum_sample.one() / f
                         * barn_conversion_factor(resolved_integral_unit, momentum_sample.one())
                 }
-                _ => unimplemented!(
-                    "Flux factor for more than 3 or more incoming particles not implemented yet"
-                ),
+                incoming => {
+                    return Err(eyre!(
+                        "The flux factor for {incoming} incoming particles is not implemented; set general.disable_flux_factor to evaluate graph {} without it",
+                        self.graph.name
+                    ));
+                }
             }
         };
 

@@ -1,0 +1,76 @@
+{
+  "status": "pre-experiment pipeline triage",
+  "request": "{} > {} | g ghg t u d QED==0 [{4}]",
+  "sources": {
+    "v4": "e0a779808174c64057fecfd062c948b8de8e5c1f",
+    "upstream": "588148851e3e989ecbb7478279db7d46727e23a8"
+  },
+  "ordered_stages": [
+    [
+      "SM import/default restriction",
+      "shared requested input; verify model"
+    ],
+    [
+      "enumeration and admission",
+      "changed generator; compare counts and source identities"
+    ],
+    [
+      "physical routing and factor construction",
+      "changed staged API and canonical frames; first possible numerator difference"
+    ],
+    [
+      "color simplification and routing normalization",
+      "shared responsibility, changed implementation"
+    ],
+    [
+      "optional canonical comparison",
+      "off by default; exact-only requires samples=0"
+    ],
+    [
+      "component samples",
+      "five samples, seed 3; model scalars retained"
+    ],
+    [
+      "scalar quotient and cross-sample comparison",
+      "changed normalizer, not presumed cause"
+    ],
+    [
+      "collapse groups and print weights",
+      "labels and scalar weights do not certify physics"
+    ]
+  ],
+  "exclusions": [
+    "UV forests, CFF recursion, residue order, subtraction and integration are not reached by --only-diagrams"
+  ],
+  "scalar_contract": "Model parameters, couplings, functions, form factors and scalar color invariants are allowed. Tensor heads and sampled-coordinate dependence are not.",
+  "matrix": [
+    {
+      "canonical": false,
+      "samples": 5,
+      "seed": 3
+    },
+    {
+      "canonical": false,
+      "samples": 5,
+      "seed": 7
+    },
+    {
+      "canonical": false,
+      "samples": 5,
+      "seed": 11
+    },
+    {
+      "canonical": true,
+      "samples": 0,
+      "seed": 3
+    }
+  ],
+  "first_observed_input_difference": {
+    "commit": "d8146dc2ad8c4f5272969310c4127bce3f0fe4f8",
+    "boundary": "model UUV1 Lorentz structure and its generation-time momentum-conservation reduction",
+    "upstream": "P(3,2)",
+    "v4": "P(3,2)+P(3,3), reduced as -P(3,1)",
+    "pair_exclusion": "GL028/GL034 contain only gluons and massive top quarks; no ghost vertex occurs in the selected pair",
+    "interpretation": "the full weight sums have differing model inputs; the source-index pair requires its own exact certificate"
+  }
+}

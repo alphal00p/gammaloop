@@ -1,11 +1,9 @@
 use std::collections::BTreeMap;
 
-use linnet::half_edge::{
-    HedgeGraph,
-    involution::{Flow, HedgePair},
-    nodestore::NodeStorageOps,
-    subgraph::{OrientedCut, SubGraphLike},
-};
+use linnet::half_edge::HedgeGraph;
+use linnet::half_edge::involution::{Flow, HedgePair};
+use linnet::half_edge::nodestore::Topology;
+use linnet::half_edge::subgraph::{OrientedCut, SubGraphLike};
 use serde::{Deserialize, Serialize};
 use typed_index_collections::TiVec;
 
@@ -161,12 +159,10 @@ impl From<Vec<(EdgeId, i64)>> for ExternalShift {
 
 #[cfg(test)]
 mod tests {
-    use linnet::half_edge::{
-        HedgeGraph,
-        builder::HedgeGraphBuilder,
-        involution::{EdgeIndex, Flow, HedgePair, Orientation},
-        subgraph::{ModifySubSet, OrientedCut, SuBitGraph},
-    };
+    use linnet::half_edge::HedgeGraph;
+    use linnet::half_edge::builder::HedgeGraphBuilder;
+    use linnet::half_edge::involution::{EdgeIndex, Flow, HedgePair, Orientation};
+    use linnet::half_edge::subgraph::{ModifySubSet, OrientedCut, SuBitGraph};
 
     use super::*;
 
@@ -298,7 +294,7 @@ impl EnergySurface {
         initial_state_cut: Option<&OrientedCut>,
     ) -> Result<Self, CffError>
     where
-        N: NodeStorageOps<NodeData = V>,
+        N: Topology,
         C: SubGraphLike,
         S: SubGraphLike,
     {

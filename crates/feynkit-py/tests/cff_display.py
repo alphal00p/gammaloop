@@ -141,7 +141,18 @@ def check_cff_displays(fk, diagrams):
     collection_owner = (
         fk.Model.phi3()
         .process(["phi"], ["phi", "phi"])
-        .generate_diagrams(loops=0, max_vertices=1, progress=None)
+        .amplitude(
+            loops=fk.Loops.total(0),
+            topology=fk.TopologyRules(
+                max_vertices=1,
+                bridges=fk.Bridges.one_pi_in_loops(),
+                self_energies=fk.Veto.all(),
+                tadpoles=fk.Veto.all(),
+                snails=fk.Veto.massless(),
+            ),
+        )
+        .generate()
+        .build(fk.NumeratorOptions(naming=fk.Naming.named("D")))
     )
     collection = external_metrics_snapshot(collection_owner.render()).to_html()
     assert (

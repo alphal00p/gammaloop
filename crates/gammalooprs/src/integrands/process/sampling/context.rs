@@ -10,19 +10,19 @@
 //! directly from that immutable authority, never promoting a previous physical
 //! retry or pairing its point with stale cut data.
 
-use crate::{
-    cff::esurface::EsurfaceRay,
-    processes::{CutGroupId, CutId},
-    utils::{
-        ArbPrec, F, FloatLike,
-        newton_solver::{NewtonIterationResult, RadialRootDiagnostics, RadialRootIdentity},
-    },
+use crate::cff::esurface::EsurfaceRay;
+use crate::processes::{CutGroupId, CutId};
+use crate::utils::newton_solver::{
+    NewtonIterationResult, RadialRootDiagnostics, RadialRootIdentity,
 };
+use crate::utils::{ArbPrec, F, FloatLike};
 use color_eyre::eyre::{Result, WrapErr, eyre};
 use serde::{Deserialize, Serialize};
-use std::{collections::BTreeMap, sync::Arc};
+use std::collections::BTreeMap;
+use std::sync::Arc;
 
-use super::{maps::SamplingEvaluationError, selection::SamplingChannelId};
+use super::maps::SamplingEvaluationError;
+use super::selection::SamplingChannelId;
 
 /// A component's discrete recipe is authenticated during canonical preparation.
 /// Physical retries consume the completed draw without selecting another recipe.
@@ -381,34 +381,32 @@ fn validate_finite<T: FloatLike>(value: &T, label: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dot;
 
     #[test]
     fn canonical_lu_host_materializes_directly_without_new_root_history() -> Result<()> {
-        use crate::{
-            DependentMomentaConstructor,
-            cff::{VertexSet, esurface::Esurface},
-            graph::{Graph, GroupId},
-            initialisation::test_initialise,
-            integrands::process::gammaloop_sample::{DiscreteGraphSample, GammaLoopSample},
-            momentum::{
-                ExternalMomenta, FourMomentum, ThreeMomentum,
-                sample::{ExternalFourMomenta, LoopMomenta, MomentumSample},
-            },
-            settings::runtime::kinematic::Externals,
-            utils::{QuadFloat, SamplingFloat},
-        };
+        use crate::DependentMomentaConstructor;
+        use crate::cff::VertexSet;
+        use crate::cff::esurface::Esurface;
+        use crate::graph::{Graph, GroupId};
+        use crate::initialisation::test_initialise;
+        use crate::integrands::process::gammaloop_sample::{DiscreteGraphSample, GammaLoopSample};
+        use crate::momentum::sample::{ExternalFourMomenta, LoopMomenta, MomentumSample};
+        use crate::momentum::{ExternalMomenta, FourMomentum, ThreeMomentum};
+        use crate::settings::runtime::kinematic::Externals;
+        use crate::utils::{QuadFloat, SamplingFloat};
         use linnet::half_edge::involution::EdgeIndex;
 
         test_initialise()?;
-        let graph: Graph = crate::finalized_runtime_dot!(digraph canonical_host {
+        let graph: Graph = dot!(digraph canonical_host {
  graph [projector=1]
             ext [style=invis]
             node [num=1]
             edge [num=1 mass=1]
-            ext -> a:0 [id=0 sink="{ufo_order:0}"]
-            a -> b [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            a -> b [id=2 source="{ufo_order:2}" sink="{ufo_order:1}"]
-            b:1 -> ext [id=3 source="{ufo_order:2}"]
+            ext -> a:0 [particle=H id=0]
+            a -> b [particle=H id=1 lmb_id=0]
+            a -> b [particle=H id=2]
+            b:1 -> ext [particle=H id=3]
         }, &crate::utils::load_generic_model("sm"))?;
         let surface = Esurface {
             energies: vec![EdgeIndex(1), EdgeIndex(2)],

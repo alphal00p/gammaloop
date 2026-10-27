@@ -1,25 +1,20 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
-use std::{
-    env, fs,
-    ops::{ControlFlow, Deref, DerefMut},
-    path::{Path, PathBuf},
-    sync::{Mutex, MutexGuard, OnceLock},
-};
+use std::ops::{ControlFlow, Deref, DerefMut};
+use std::path::{Path, PathBuf};
+use std::sync::{Mutex, MutexGuard, OnceLock};
+use std::{env, fs};
 
 use color_eyre::Result;
 use feynkit_generator::GenerationType;
-use gammaloop_api::{
-    CLISettings, OneShot, StateLoadOption,
-    state::{CommandHistory, CommandsBlock, RunHistory},
-};
+use gammaloop_api::state::{CommandHistory, CommandsBlock, RunHistory};
+use gammaloop_api::{CLISettings, OneShot, StateLoadOption};
 use gammaloop_integration_tests::{CLIState, clean_test, get_test_cli, get_tests_workspace_path};
-use gammalooprs::{
-    graph::Graph,
-    processes::{CrossSection, ProcessCollection, ProcessDefinition},
-    settings::{RuntimeSettings, global::GenerationSettings},
-};
+use gammalooprs::graph::Graph;
+use gammalooprs::processes::{CrossSection, ProcessCollection, ProcessDefinition};
+use gammalooprs::settings::RuntimeSettings;
+use gammalooprs::settings::global::GenerationSettings;
 
 static TEMPLATE_CLI: OnceLock<Mutex<CLIState>> = OnceLock::new();
 
@@ -162,7 +157,7 @@ fn add_duplicate_integrand(
 fn populate_generated_scalar_box_process(cli: &mut SharedCli<'_>) -> Result<()> {
     cli.run_command("import model scalars-default.json")?;
     cli.run_command(
-        "generate amp scalar_0 scalar_0 > scalar_0 scalar_0 [{1}] --allowed-vertex-interactions V_3_SCALAR_022 -p box -i scalar_box --select-graphs GL0",
+        "generate amp scalar_0 scalar_0 > scalar_0 scalar_0 [{1}] --allowed-vertex-interactions V_3_SCALAR_022 -p box -i scalar_box --select-graphs GL0 --filter-selfenergies true --filter-snails true --filter-tadpoles true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",
     )?;
     cli.run_command("generate")?;
     cli.save_state()?;
@@ -878,7 +873,7 @@ fn import_graphs_inline_dot_process_spec_filters_cutkosky_cuts() -> Result<()> {
     let mut cli = get_test_cli(None, root.join("state"), None, true)?;
     cli.run_command("import model sm-default.json")?;
 
-    let graphs = Graph::import_dot(DOT, &cli.state.model)?;
+    let graphs = Graph::from_dot(DOT, &cli.state.model)?;
     let inferred_definition = ProcessDefinition::from_graph_list(
         &graphs,
         GenerationType::CrossSection,

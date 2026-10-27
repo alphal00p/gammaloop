@@ -1,0 +1,2480 @@
+{
+  "cancelled_weight_sum": "1607/168",
+  "count": 176,
+  "groups": [
+    {
+      "master": 0,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(48)",
+          "ratio": "1",
+          "source": 269
+        }
+      ]
+    },
+    {
+      "master": 1,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(24)",
+          "ratio": "1",
+          "source": 266
+        }
+      ]
+    },
+    {
+      "master": 2,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(32)",
+          "ratio": "1",
+          "source": 268
+        }
+      ]
+    },
+    {
+      "master": 3,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(48)",
+          "ratio": "1",
+          "source": 265
+        }
+      ]
+    },
+    {
+      "master": 4,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(16)",
+          "ratio": "1",
+          "source": 253
+        }
+      ]
+    },
+    {
+      "master": 5,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(16)",
+          "ratio": "1",
+          "source": 258
+        }
+      ]
+    },
+    {
+      "master": 6,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(24)",
+          "ratio": "1",
+          "source": 233
+        }
+      ]
+    },
+    {
+      "master": 7,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 120
+        }
+      ]
+    },
+    {
+      "master": 8,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(16)",
+          "ratio": "1",
+          "source": 267
+        }
+      ]
+    },
+    {
+      "master": 9,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(8)",
+          "ratio": "1",
+          "source": 119
+        }
+      ]
+    },
+    {
+      "master": 10,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(16)",
+          "ratio": "1",
+          "source": 118
+        }
+      ]
+    },
+    {
+      "master": 11,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(16)",
+          "ratio": "1",
+          "source": 264
+        }
+      ]
+    },
+    {
+      "master": 12,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(8)",
+          "ratio": "1",
+          "source": 263
+        }
+      ]
+    },
+    {
+      "master": 13,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(8)",
+          "ratio": "1",
+          "source": 254
+        }
+      ]
+    },
+    {
+      "master": 14,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(8)",
+          "ratio": "1",
+          "source": 259
+        }
+      ]
+    },
+    {
+      "master": 15,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(12)",
+          "ratio": "1",
+          "source": 234
+        }
+      ]
+    },
+    {
+      "master": 16,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(8)",
+          "ratio": "1",
+          "source": 262
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(8)",
+          "ratio": "1",
+          "source": 260
+        }
+      ]
+    },
+    {
+      "master": 17,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(8)",
+          "ratio": "1",
+          "source": 261
+        }
+      ]
+    },
+    {
+      "master": 18,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(12)",
+          "ratio": "1",
+          "source": 237
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(12)",
+          "ratio": "1",
+          "source": 235
+        }
+      ]
+    },
+    {
+      "master": 19,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(12)",
+          "ratio": "1",
+          "source": 236
+        }
+      ]
+    },
+    {
+      "master": 20,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(8)",
+          "ratio": "1",
+          "source": 257
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(8)",
+          "ratio": "1",
+          "source": 255
+        }
+      ]
+    },
+    {
+      "master": 21,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(8)",
+          "ratio": "1",
+          "source": 256
+        }
+      ]
+    },
+    {
+      "master": 22,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 121
+        }
+      ]
+    },
+    {
+      "master": 23,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(8)",
+          "ratio": "1",
+          "source": 224
+        }
+      ]
+    },
+    {
+      "master": 24,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(16)",
+          "ratio": "1",
+          "source": 126
+        }
+      ]
+    },
+    {
+      "master": 25,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(8)",
+          "ratio": "1",
+          "source": 109
+        }
+      ]
+    },
+    {
+      "master": 26,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 51
+        }
+      ]
+    },
+    {
+      "master": 27,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(16)",
+          "ratio": "1",
+          "source": 170
+        }
+      ]
+    },
+    {
+      "master": 28,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 225
+        }
+      ]
+    },
+    {
+      "master": 29,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 114
+        }
+      ]
+    },
+    {
+      "master": 30,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 175
+        }
+      ]
+    },
+    {
+      "master": 31,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(8)",
+          "ratio": "1",
+          "source": 46
+        }
+      ]
+    },
+    {
+      "master": 32,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(32)",
+          "ratio": "1",
+          "source": 238
+        }
+      ]
+    },
+    {
+      "master": 33,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 47
+        }
+      ]
+    },
+    {
+      "master": 34,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(8)",
+          "ratio": "1",
+          "source": 243
+        }
+      ]
+    },
+    {
+      "master": 35,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 110
+        }
+      ]
+    },
+    {
+      "master": 36,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 52
+        }
+      ]
+    },
+    {
+      "master": 37,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 229
+        }
+      ]
+    },
+    {
+      "master": 38,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(8)",
+          "ratio": "1",
+          "source": 127
+        }
+      ]
+    },
+    {
+      "master": 39,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 171
+        }
+      ]
+    },
+    {
+      "master": 40,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 122
+        }
+      ]
+    },
+    {
+      "master": 41,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(8)",
+          "ratio": "1",
+          "source": 239
+        }
+      ]
+    },
+    {
+      "master": 42,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(8)",
+          "ratio": "1",
+          "source": 242
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(8)",
+          "ratio": "1",
+          "source": 240
+        }
+      ]
+    },
+    {
+      "master": 43,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(8)",
+          "ratio": "1",
+          "source": 241
+        }
+      ]
+    },
+    {
+      "master": 44,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 174
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 172
+        }
+      ]
+    },
+    {
+      "master": 45,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 173
+        }
+      ]
+    },
+    {
+      "master": 46,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 125
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 123
+        }
+      ]
+    },
+    {
+      "master": 47,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 124
+        }
+      ]
+    },
+    {
+      "master": 48,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 232
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 230
+        }
+      ]
+    },
+    {
+      "master": 49,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 231
+        }
+      ]
+    },
+    {
+      "master": 50,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(8)",
+          "ratio": "1",
+          "source": 130
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(8)",
+          "ratio": "1",
+          "source": 128
+        }
+      ]
+    },
+    {
+      "master": 51,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(8)",
+          "ratio": "1",
+          "source": 129
+        }
+      ]
+    },
+    {
+      "master": 52,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 246
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 244
+        }
+      ]
+    },
+    {
+      "master": 53,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 245
+        }
+      ]
+    },
+    {
+      "master": 54,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 178
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 176
+        }
+      ]
+    },
+    {
+      "master": 55,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 177
+        }
+      ]
+    },
+    {
+      "master": 56,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 228
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 226
+        }
+      ]
+    },
+    {
+      "master": 57,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 227
+        }
+      ]
+    },
+    {
+      "master": 58,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 117
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 115
+        }
+      ]
+    },
+    {
+      "master": 59,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 116
+        }
+      ]
+    },
+    {
+      "master": 60,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 184
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 179
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 181
+        }
+      ]
+    },
+    {
+      "master": 61,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 182
+        }
+      ]
+    },
+    {
+      "master": 62,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 50
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 48
+        }
+      ]
+    },
+    {
+      "master": 63,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 49
+        }
+      ]
+    },
+    {
+      "master": 64,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(8)",
+          "ratio": "1",
+          "source": 252
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(8)",
+          "ratio": "1",
+          "source": 247
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 249
+        }
+      ]
+    },
+    {
+      "master": 65,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(8)",
+          "ratio": "1",
+          "source": 250
+        }
+      ]
+    },
+    {
+      "master": 66,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 180
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 183
+        }
+      ]
+    },
+    {
+      "master": 67,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 248
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 251
+        }
+      ]
+    },
+    {
+      "master": 68,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 55
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 53
+        }
+      ]
+    },
+    {
+      "master": 69,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 54
+        }
+      ]
+    },
+    {
+      "master": 70,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 113
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 111
+        }
+      ]
+    },
+    {
+      "master": 71,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 112
+        }
+      ]
+    },
+    {
+      "master": 72,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(8)",
+          "ratio": "1",
+          "source": 56
+        }
+      ]
+    },
+    {
+      "master": 73,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(12)",
+          "ratio": "1",
+          "source": 0
+        }
+      ]
+    },
+    {
+      "master": 74,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(16)",
+          "ratio": "1",
+          "source": 185
+        }
+      ]
+    },
+    {
+      "master": 75,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(48)",
+          "ratio": "1",
+          "source": 131
+        }
+      ]
+    },
+    {
+      "master": 76,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 90
+        }
+      ]
+    },
+    {
+      "master": 77,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 108
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 100
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 106
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 102
+        }
+      ]
+    },
+    {
+      "master": 78,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 104
+        }
+      ]
+    },
+    {
+      "master": 79,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 82
+        }
+      ]
+    },
+    {
+      "master": 80,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 88
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 86
+        }
+      ]
+    },
+    {
+      "master": 81,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 87
+        }
+      ]
+    },
+    {
+      "master": 82,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(6)",
+          "ratio": "1",
+          "source": 18
+        }
+      ]
+    },
+    {
+      "master": 83,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(6)",
+          "ratio": "1",
+          "source": 36
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(6)",
+          "ratio": "1",
+          "source": 31
+        },
+        {
+          "cancelled_ratio": "7/2",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(6)",
+          "ratio": "7/2",
+          "source": 30
+        },
+        {
+          "cancelled_ratio": "7/2",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(6)",
+          "ratio": "7/2",
+          "source": 25
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(3)",
+          "ratio": "1",
+          "source": 33
+        },
+        {
+          "cancelled_ratio": "7/2",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(3)",
+          "ratio": "7/2",
+          "source": 27
+        }
+      ]
+    },
+    {
+      "master": 84,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(6)",
+          "ratio": "1",
+          "source": 34
+        },
+        {
+          "cancelled_ratio": "7/2",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(6)",
+          "ratio": "(((-102\ud835\udc56)*UFO::{}::MT^2+95557+4937\ud835\udc56)*(-22*UFO::{}::MT^2+30292+214825\ud835\udc56)*(\ud835\udc56)+((-113-22\ud835\udc56)*UFO::{}::MT^2+46547+41537\ud835\udc56)*((106-51\ud835\udc56)*UFO::{}::MT^2+174134+37789\ud835\udc56)+((-12+41\ud835\udc56)*UFO::{}::MT^2+29568+44257\ud835\udc56)*((96-37\ud835\udc56)*UFO::{}::MT^2+123161+27333\ud835\udc56)*(3\ud835\udc56)+((-12+41\ud835\udc56)*UFO::{}::MT^2+29568+44257\ud835\udc56)*((96-37\ud835\udc56)*UFO::{}::MT^2+9731+12507\ud835\udc56)*(3\ud835\udc56)+((-12-17\ud835\udc56)*UFO::{}::MT^2+31752+30047\ud835\udc56)*((-22-37\ud835\udc56)*UFO::{}::MT^2+130647+122545\ud835\udc56)*(3\ud835\udc56)+((-12-17\ud835\udc56)*UFO::{}::MT^2+31752+30047\ud835\udc56)*((-22-37\ud835\udc56)*UFO::{}::MT^2+65021+92823\ud835\udc56)*(3\ud835\udc56)+((-162\ud835\udc56)*UFO::{}::MT^2+18351+120325\ud835\udc56)*(-2\ud835\udc56)*(122369+43*UFO::{}::MT^2)+((-17-12\ud835\udc56)*UFO::{}::MT^2+30047+31752\ud835\udc56)*((-37-22\ud835\udc56)*UFO::{}::MT^2+122545+130647\ud835\udc56)*(3\ud835\udc56)+((-17-12\ud835\udc56)*UFO::{}::MT^2+30047+31752\ud835\udc56)*((-37-22\ud835\udc56)*UFO::{}::MT^2+92823+65021\ud835\udc56)*(3\ud835\udc56)+((-22+113\ud835\udc56)*UFO::{}::MT^2+71371+85763\ud835\udc56)*((106-51\ud835\udc56)*UFO::{}::MT^2+174134+37789\ud835\udc56)*(\ud835\udc56)+((-22-113\ud835\udc56)*UFO::{}::MT^2+41537+46547\ud835\udc56)*((-51+106\ud835\udc56)*UFO::{}::MT^2+37789+174134\ud835\udc56)*-1+((-22-5\ud835\udc56)*UFO::{}::MT^2+115461+420771\ud835\udc56)*(13*UFO::{}::MT^2+15531)*(6\ud835\udc56)+((-22\ud835\udc56)*UFO::{}::MT^2+191949+95806\ud835\udc56)*((102\ud835\udc56)*UFO::{}::MT^2+98987+62631\ud835\udc56)*-1+((-22\ud835\udc56)*UFO::{}::MT^2+214825+30292\ud835\udc56)*(-102*UFO::{}::MT^2+4937+95557\ud835\udc56)*(\ud835\udc56)+((-32\ud835\udc56)*UFO::{}::MT^2+213365+126689\ud835\udc56)*((78\ud835\udc56)*UFO::{}::MT^2+141001+79634\ud835\udc56)+((-32\ud835\udc56)*UFO::{}::MT^2+226037+87987\ud835\udc56)*((78\ud835\udc56)*UFO::{}::MT^2+137879+5194\ud835\udc56)+((-37+96\ud835\udc56)*UFO::{}::MT^2+12507+9731\ud835\udc56)*((41-12\ud835\udc56)*UFO::{}::MT^2+44257+29568\ud835\udc56)*(3\ud835\udc56)+((-37+96\ud835\udc56)*UFO::{}::MT^2+27333+123161\ud835\udc56)*((41-12\ud835\udc56)*UFO::{}::MT^2+44257+29568\ud835\udc56)*(3\ud835\udc56)+((-37-6\ud835\udc56)*UFO::{}::MT^2+28563+321365\ud835\udc56)*(74988+79*UFO::{}::MT^2)*(\ud835\udc56)+((-44\ud835\udc56)*UFO::{}::MT^2+103327+267067\ud835\udc56)*(-\ud835\udc56)*(49534+119329\ud835\udc56+8*UFO::{}::MT^2)+((-44\ud835\udc56)*UFO::{}::MT^2+129297+172939\ud835\udc56)*(-\ud835\udc56)*(8*UFO::{}::MT^2+98604+92729\ud835\udc56)+((-5+22\ud835\udc56)*UFO::{}::MT^2+27629+69601\ud835\udc56)*(175967+39*UFO::{}::MT^2)*-2+((-5+22\ud835\udc56)*UFO::{}::MT^2+38629+57853\ud835\udc56)*(-3*UFO::{}::MT^2+6685)*26+((-5-22\ud835\udc56)*UFO::{}::MT^2+420771+115461\ud835\udc56)*(13*UFO::{}::MT^2+15531)*-6+((-50\ud835\udc56)*UFO::{}::MT^2+126219+88946\ud835\udc56)*(-74*UFO::{}::MT^2+49283+210789\ud835\udc56)*(\ud835\udc56)+((-50\ud835\udc56)*UFO::{}::MT^2+126219+88946\ud835\udc56)*(28*UFO::{}::MT^2+57525+157127\ud835\udc56)*(\ud835\udc56)+((-50\ud835\udc56)*UFO::{}::MT^2+139153+17470\ud835\udc56)*(-74*UFO::{}::MT^2+85841+223461\ud835\udc56)*(\ud835\udc56)+((-50\ud835\udc56)*UFO::{}::MT^2+139153+17470\ud835\udc56)*(142895+93767\ud835\udc56+28*UFO::{}::MT^2)*(\ud835\udc56)+((-51+106\ud835\udc56)*UFO::{}::MT^2+37789+174134\ud835\udc56)*((113-22\ud835\udc56)*UFO::{}::MT^2+85763+71371\ud835\udc56)*(\ud835\udc56)+((-58\ud835\udc56)*UFO::{}::MT^2+45009+555295\ud835\udc56)*(14\ud835\udc56)*(3*UFO::{}::MT^2+3835)+((-6+37\ud835\udc56)*UFO::{}::MT^2+15699+88875\ud835\udc56)*(-79*UFO::{}::MT^2+220546)+((-6+37\ud835\udc56)*UFO::{}::MT^2+4655+101283\ud835\udc56)*(352790+79*UFO::{}::MT^2)*-1+((-6-37\ud835\udc56)*UFO::{}::MT^2+321365+28563\ud835\udc56)*(74988+79*UFO::{}::MT^2)*-1+((-74\ud835\udc56)*UFO::{}::MT^2+210789+49283\ud835\udc56)*(-50*UFO::{}::MT^2+88946+126219\ud835\udc56)*(\ud835\udc56)+((-74\ud835\udc56)*UFO::{}::MT^2+223461+85841\ud835\udc56)*(-50*UFO::{}::MT^2+17470+139153\ud835\udc56)*(\ud835\udc56)+((-78+7\ud835\udc56)*UFO::{}::MT^2+20258+77075\ud835\udc56)*((-80+5\ud835\udc56)*UFO::{}::MT^2+101421+94869\ud835\udc56)*(\ud835\udc56)+((-78+7\ud835\udc56)*UFO::{}::MT^2+20258+77075\ud835\udc56)*((-80+5\ud835\udc56)*UFO::{}::MT^2+12631+30763\ud835\udc56)*(\ud835\udc56)+((-80+37\ud835\udc56)*UFO::{}::MT^2+354459+23903\ud835\udc56)*(512+UFO::{}::MT^2)*-7+((-81+22\ud835\udc56)*UFO::{}::MT^2+415657+75201\ud835\udc56)*(4*UFO::{}::MT^2+8975)*-2+((-81+6\ud835\udc56)*UFO::{}::MT^2+48323+122415\ud835\udc56)*((8+79\ud835\udc56)*UFO::{}::MT^2+117000+35683\ud835\udc56)*-1+((-88\ud835\udc56)*UFO::{}::MT^2+145653+160365\ud835\udc56)*(-1*UFO::{}::MT^2+549)*(14\ud835\udc56)+((-88\ud835\udc56)*UFO::{}::MT^2+94053+54095\ud835\udc56)*(-7*UFO::{}::MT^2+9319)*(2\ud835\udc56)+((104\ud835\udc56)*UFO::{}::MT^2+30421+150345\ud835\udc56)*(101551+29*UFO::{}::MT^2)*(2\ud835\udc56)+((118\ud835\udc56)*UFO::{}::MT^2+101563+51797\ud835\udc56)*((8\ud835\udc56)*UFO::{}::MT^2+119329+49534\ud835\udc56)+((118\ud835\udc56)*UFO::{}::MT^2+98133+121509\ud835\udc56)*((8\ud835\udc56)*UFO::{}::MT^2+92729+98604\ud835\udc56)+((14\ud835\udc56)*UFO::{}::MT^2+48215+5819\ud835\udc56)*(-29*UFO::{}::MT^2+57167)*(2\ud835\udc56)+((14\ud835\udc56)*UFO::{}::MT^2+48903+14577\ud835\udc56)*(-29*UFO::{}::MT^2+97673)*(2\ud835\udc56)+((164\ud835\udc56)*UFO::{}::MT^2+19039+756879\ud835\udc56)*(-14\ud835\udc56)*(4*UFO::{}::MT^2+5139)+((2+27\ud835\udc56)*UFO::{}::MT^2+22647+11569\ud835\udc56)*((8+79\ud835\udc56)*UFO::{}::MT^2+117000+35683\ud835\udc56)*(-3\ud835\udc56)+((22+37\ud835\udc56)*UFO::{}::MT^2+275155+347209\ud835\udc56)*((36+51\ud835\udc56)*UFO::{}::MT^2+144034+222541\ud835\udc56)*(\ud835\udc56)+((22+37\ud835\udc56)*UFO::{}::MT^2+66265+170351\ud835\udc56)*((36+51\ud835\udc56)*UFO::{}::MT^2+144034+222541\ud835\udc56)*(\ud835\udc56)+((22+5\ud835\udc56)*UFO::{}::MT^2+183959+286309\ud835\udc56)*(-2\ud835\udc56)*(39*UFO::{}::MT^2+50729)+((22+81\ud835\udc56)*UFO::{}::MT^2+44555+71313\ud835\udc56)*(-2\ud835\udc56)*(4*UFO::{}::MT^2+73039)+((22+81\ud835\udc56)*UFO::{}::MT^2+49231+496473\ud835\udc56)*(-2\ud835\udc56)*(14463+4*UFO::{}::MT^2)+((22+81\ud835\udc56)*UFO::{}::MT^2+55237+58783\ud835\udc56)*(-4*UFO::{}::MT^2+136583)*(2\ud835\udc56)+((22-5\ud835\udc56)*UFO::{}::MT^2+57853+38629\ud835\udc56)*(-26\ud835\udc56)*(-3*UFO::{}::MT^2+6685)+((22-5\ud835\udc56)*UFO::{}::MT^2+69601+27629\ud835\udc56)*(175967+39*UFO::{}::MT^2)*(2\ud835\udc56)+((22-81\ud835\udc56)*UFO::{}::MT^2+75201+415657\ud835\udc56)*(2\ud835\udc56)*(4*UFO::{}::MT^2+8975)+((27+2\ud835\udc56)*UFO::{}::MT^2+11569+22647\ud835\udc56)*((79+8\ud835\udc56)*UFO::{}::MT^2+35683+117000\ud835\udc56)*(-3\ud835\udc56)+((28\ud835\udc56)*UFO::{}::MT^2+157127+57525\ud835\udc56)*(-50*UFO::{}::MT^2+88946+126219\ud835\udc56)*(\ud835\udc56)+((28\ud835\udc56)*UFO::{}::MT^2+93767+142895\ud835\udc56)*(-50*UFO::{}::MT^2+17470+139153\ud835\udc56)*(\ud835\udc56)+((37+22\ud835\udc56)*UFO::{}::MT^2+170351+66265\ud835\udc56)*((51+36\ud835\udc56)*UFO::{}::MT^2+222541+144034\ud835\udc56)*(\ud835\udc56)+((37+22\ud835\udc56)*UFO::{}::MT^2+347209+275155\ud835\udc56)*((51+36\ud835\udc56)*UFO::{}::MT^2+222541+144034\ud835\udc56)*(\ud835\udc56)+((37+6\ud835\udc56)*UFO::{}::MT^2+150517+242055\ud835\udc56)*(-\ud835\udc56)*(79*UFO::{}::MT^2+83216)+((37+80\ud835\udc56)*UFO::{}::MT^2+17687+70241\ud835\udc56)*(-7*UFO::{}::MT^2+355702)*(\ud835\udc56)+((37+80\ud835\udc56)*UFO::{}::MT^2+49873+482411\ud835\udc56)*(-7\ud835\udc56)*(2140+UFO::{}::MT^2)+((37+80\ud835\udc56)*UFO::{}::MT^2+6809+82351\ud835\udc56)*(-\ud835\udc56)*(175886+7*UFO::{}::MT^2)+((37-6\ud835\udc56)*UFO::{}::MT^2+101283+4655\ud835\udc56)*(352790+79*UFO::{}::MT^2)*(\ud835\udc56)+((37-6\ud835\udc56)*UFO::{}::MT^2+88875+15699\ud835\udc56)*(-79*UFO::{}::MT^2+220546)*(-\ud835\udc56)+((37-80\ud835\udc56)*UFO::{}::MT^2+23903+354459\ud835\udc56)*(512+UFO::{}::MT^2)*(7\ud835\udc56)+((42\ud835\udc56)*UFO::{}::MT^2+36073+136385\ud835\udc56)*((78\ud835\udc56)*UFO::{}::MT^2+141001+79634\ud835\udc56)+((42\ud835\udc56)*UFO::{}::MT^2+99433+60955\ud835\udc56)*((78\ud835\udc56)*UFO::{}::MT^2+137879+5194\ud835\udc56)+((46\ud835\udc56)*UFO::{}::MT^2+21179+52763\ud835\udc56)*(-28*UFO::{}::MT^2+138385)*(2\ud835\udc56)+((5+22\ud835\udc56)*UFO::{}::MT^2+286309+183959\ud835\udc56)*(39*UFO::{}::MT^2+50729)*2+((5-80\ud835\udc56)*UFO::{}::MT^2+30763+12631\ud835\udc56)*((7-78\ud835\udc56)*UFO::{}::MT^2+77075+20258\ud835\udc56)*(\ud835\udc56)+((5-80\ud835\udc56)*UFO::{}::MT^2+94869+101421\ud835\udc56)*((7-78\ud835\udc56)*UFO::{}::MT^2+77075+20258\ud835\udc56)*(\ud835\udc56)+((56\ud835\udc56)*UFO::{}::MT^2+44321+316501\ud835\udc56)*(131189+50*UFO::{}::MT^2)*(2\ud835\udc56)+((6+37\ud835\udc56)*UFO::{}::MT^2+242055+150517\ud835\udc56)*(79*UFO::{}::MT^2+83216)+((6-81\ud835\udc56)*UFO::{}::MT^2+122415+48323\ud835\udc56)*((79+8\ud835\udc56)*UFO::{}::MT^2+35683+117000\ud835\udc56)+((60\ud835\udc56)*UFO::{}::MT^2+17749+110261\ud835\udc56)*(1531+5*UFO::{}::MT^2)*(26\ud835\udc56)+((80+37\ud835\udc56)*UFO::{}::MT^2+482411+49873\ud835\udc56)*(2140+UFO::{}::MT^2)*7+((80+37\ud835\udc56)*UFO::{}::MT^2+70241+17687\ud835\udc56)*(-7*UFO::{}::MT^2+355702)*-1+((80+37\ud835\udc56)*UFO::{}::MT^2+82351+6809\ud835\udc56)*(175886+7*UFO::{}::MT^2)+((81+22\ud835\udc56)*UFO::{}::MT^2+496473+49231\ud835\udc56)*(14463+4*UFO::{}::MT^2)*2+((81+22\ud835\udc56)*UFO::{}::MT^2+58783+55237\ud835\udc56)*(-4*UFO::{}::MT^2+136583)*-2+((81+22\ud835\udc56)*UFO::{}::MT^2+71313+44555\ud835\udc56)*(4*UFO::{}::MT^2+73039)*2+((8\ud835\udc56)*UFO::{}::MT^2+119329+49534\ud835\udc56)*(-44*UFO::{}::MT^2+267067+103327\ud835\udc56)*(-\ud835\udc56)+((8\ud835\udc56)*UFO::{}::MT^2+92729+98604\ud835\udc56)*(-44*UFO::{}::MT^2+172939+129297\ud835\udc56)*(-\ud835\udc56)+((90\ud835\udc56)*UFO::{}::MT^2+33851+92231\ud835\udc56)*(-2\ud835\udc56)*(255383+64*UFO::{}::MT^2)+(-1*UFO::{}::MT^2+549)*(-88*UFO::{}::MT^2+160365+145653\ud835\udc56)*-14+(-162*UFO::{}::MT^2+120325+18351\ud835\udc56)*(122369+43*UFO::{}::MT^2)*2+(-22*UFO::{}::MT^2+95806+191949\ud835\udc56)*(102*UFO::{}::MT^2+62631+98987\ud835\udc56)+(-28*UFO::{}::MT^2+138385)*(46*UFO::{}::MT^2+52763+21179\ud835\udc56)*-2+(-29*UFO::{}::MT^2+57167)*(14*UFO::{}::MT^2+5819+48215\ud835\udc56)*-2+(-29*UFO::{}::MT^2+97673)*(14*UFO::{}::MT^2+14577+48903\ud835\udc56)*-2+(-32*UFO::{}::MT^2+126689+213365\ud835\udc56)*(78*UFO::{}::MT^2+79634+141001\ud835\udc56)*-1+(-32*UFO::{}::MT^2+87987+226037\ud835\udc56)*(5194+137879\ud835\udc56+78*UFO::{}::MT^2)*-1+(-58*UFO::{}::MT^2+555295+45009\ud835\udc56)*(3*UFO::{}::MT^2+3835)*-14+(-7*UFO::{}::MT^2+9319)*(-88*UFO::{}::MT^2+54095+94053\ud835\udc56)*-2+(101551+29*UFO::{}::MT^2)*(104*UFO::{}::MT^2+150345+30421\ud835\udc56)*-2+(110261+17749\ud835\udc56+60*UFO::{}::MT^2)*(1531+5*UFO::{}::MT^2)*-26+(118*UFO::{}::MT^2+121509+98133\ud835\udc56)*(8*UFO::{}::MT^2+98604+92729\ud835\udc56)*-1+(118*UFO::{}::MT^2+51797+101563\ud835\udc56)*(49534+119329\ud835\udc56+8*UFO::{}::MT^2)*-1+(131189+50*UFO::{}::MT^2)*(316501+44321\ud835\udc56+56*UFO::{}::MT^2)*-2+(136385+36073\ud835\udc56+42*UFO::{}::MT^2)*(78*UFO::{}::MT^2+79634+141001\ud835\udc56)*-1+(164*UFO::{}::MT^2+756879+19039\ud835\udc56)*(4*UFO::{}::MT^2+5139)*14+(255383+64*UFO::{}::MT^2)*(90*UFO::{}::MT^2+92231+33851\ud835\udc56)*2+(42*UFO::{}::MT^2+60955+99433\ud835\udc56)*(5194+137879\ud835\udc56+78*UFO::{}::MT^2)*-1+19155048*UFO::{}::MT^2+84953597364)*((15997480+8949*UFO::{}::MT^2)*UFO::{}::MT^2+32311137823)^(-1)*-7/32",
+          "source": 28
+        }
+      ]
+    },
+    {
+      "master": 85,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 13
+        }
+      ]
+    },
+    {
+      "master": 86,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 16
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 14
+        }
+      ]
+    },
+    {
+      "master": 87,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 15
+        }
+      ]
+    },
+    {
+      "master": 88,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(6)",
+          "ratio": "1",
+          "source": 45
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(6)",
+          "ratio": "1",
+          "source": 43
+        }
+      ]
+    },
+    {
+      "master": 89,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(6)",
+          "ratio": "1",
+          "source": 44
+        }
+      ]
+    },
+    {
+      "master": 90,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(6)",
+          "ratio": "1",
+          "source": 17
+        }
+      ]
+    },
+    {
+      "master": 91,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 195
+        }
+      ]
+    },
+    {
+      "master": 92,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 213
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 205
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 211
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 207
+        }
+      ]
+    },
+    {
+      "master": 93,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 209
+        }
+      ]
+    },
+    {
+      "master": 94,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 194
+        }
+      ]
+    },
+    {
+      "master": 95,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 201
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 199
+        }
+      ]
+    },
+    {
+      "master": 96,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 200
+        }
+      ]
+    },
+    {
+      "master": 97,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(3)",
+          "ratio": "1",
+          "source": 146
+        }
+      ]
+    },
+    {
+      "master": 98,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(3)",
+          "ratio": "1",
+          "source": 149
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(3)",
+          "ratio": "1",
+          "source": 147
+        }
+      ]
+    },
+    {
+      "master": 99,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(3)",
+          "ratio": "1",
+          "source": 148
+        }
+      ]
+    },
+    {
+      "master": 100,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(6)",
+          "ratio": "1",
+          "source": 150
+        }
+      ]
+    },
+    {
+      "master": 101,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(6)",
+          "ratio": "1",
+          "source": 169
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(6)",
+          "ratio": "1",
+          "source": 160
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 165
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 162
+        }
+      ]
+    },
+    {
+      "master": 102,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(6)",
+          "ratio": "1",
+          "source": 166
+        }
+      ]
+    },
+    {
+      "master": 103,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 81
+        }
+      ]
+    },
+    {
+      "master": 104,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 62
+        }
+      ]
+    },
+    {
+      "master": 105,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 6
+        }
+      ]
+    },
+    {
+      "master": 106,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 189
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 187
+        }
+      ]
+    },
+    {
+      "master": 107,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 188
+        }
+      ]
+    },
+    {
+      "master": 108,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 60
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 58
+        }
+      ]
+    },
+    {
+      "master": 109,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 59
+        }
+      ]
+    },
+    {
+      "master": 110,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(8)",
+          "ratio": "1",
+          "source": 135
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(8)",
+          "ratio": "1",
+          "source": 133
+        }
+      ]
+    },
+    {
+      "master": 111,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(8)",
+          "ratio": "1",
+          "source": 134
+        }
+      ]
+    },
+    {
+      "master": 112,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 190
+        }
+      ]
+    },
+    {
+      "master": 113,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 198
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 196
+        }
+      ]
+    },
+    {
+      "master": 114,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 197
+        }
+      ]
+    },
+    {
+      "master": 115,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 206
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 212
+        }
+      ]
+    },
+    {
+      "master": 116,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 89
+        }
+      ]
+    },
+    {
+      "master": 117,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 93
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 91
+        }
+      ]
+    },
+    {
+      "master": 118,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 92
+        }
+      ]
+    },
+    {
+      "master": 119,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 101
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 107
+        }
+      ]
+    },
+    {
+      "master": 120,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 136
+        }
+      ]
+    },
+    {
+      "master": 121,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 153
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 151
+        }
+      ]
+    },
+    {
+      "master": 122,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 152
+        }
+      ]
+    },
+    {
+      "master": 123,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 161
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 168
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 164
+        }
+      ]
+    },
+    {
+      "master": 124,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 5
+        }
+      ]
+    },
+    {
+      "master": 125,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 214
+        }
+      ]
+    },
+    {
+      "master": 126,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 68
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 66
+        }
+      ]
+    },
+    {
+      "master": 127,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 67
+        }
+      ]
+    },
+    {
+      "master": 128,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(3)",
+          "ratio": "1",
+          "source": 4
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(3)",
+          "ratio": "1",
+          "source": 2
+        }
+      ]
+    },
+    {
+      "master": 129,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(3)",
+          "ratio": "1",
+          "source": 3
+        }
+      ]
+    },
+    {
+      "master": 130,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(3)",
+          "ratio": "1",
+          "source": 1
+        }
+      ]
+    },
+    {
+      "master": 131,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(3)",
+          "ratio": "1",
+          "source": 21
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(3)",
+          "ratio": "1",
+          "source": 19
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(3)",
+          "ratio": "1",
+          "source": 24
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(3)",
+          "ratio": "1",
+          "source": 22
+        }
+      ]
+    },
+    {
+      "master": 132,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(3)",
+          "ratio": "1",
+          "source": 20
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(3)",
+          "ratio": "1",
+          "source": 23
+        }
+      ]
+    },
+    {
+      "master": 133,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(3)",
+          "ratio": "1",
+          "source": 26
+        },
+        {
+          "cancelled_ratio": "2/7",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(3)",
+          "ratio": "2/7",
+          "source": 32
+        },
+        {
+          "cancelled_ratio": "2/7",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(3)",
+          "ratio": "2/7",
+          "source": 35
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(3)",
+          "ratio": "1",
+          "source": 29
+        }
+      ]
+    },
+    {
+      "master": 134,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 61
+        }
+      ]
+    },
+    {
+      "master": 135,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 65
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 63
+        }
+      ]
+    },
+    {
+      "master": 136,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 64
+        }
+      ]
+    },
+    {
+      "master": 137,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 193
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 191
+        }
+      ]
+    },
+    {
+      "master": 138,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 192
+        }
+      ]
+    },
+    {
+      "master": 139,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 145
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 140
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 142
+        }
+      ]
+    },
+    {
+      "master": 140,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 143
+        }
+      ]
+    },
+    {
+      "master": 141,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 96
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 94
+        }
+      ]
+    },
+    {
+      "master": 142,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 95
+        }
+      ]
+    },
+    {
+      "master": 143,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 9
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 7
+        }
+      ]
+    },
+    {
+      "master": 144,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 8
+        }
+      ]
+    },
+    {
+      "master": 145,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 223
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 218
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 220
+        }
+      ]
+    },
+    {
+      "master": 146,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 221
+        }
+      ]
+    },
+    {
+      "master": 147,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 186
+        }
+      ]
+    },
+    {
+      "master": 148,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(8)",
+          "ratio": "1",
+          "source": 132
+        }
+      ]
+    },
+    {
+      "master": 149,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 57
+        }
+      ]
+    },
+    {
+      "master": 150,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 204
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 202
+        }
+      ]
+    },
+    {
+      "master": 151,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 203
+        }
+      ]
+    },
+    {
+      "master": 152,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 208
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 210
+        }
+      ]
+    },
+    {
+      "master": 153,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 159
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 154
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 156
+        }
+      ]
+    },
+    {
+      "master": 154,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 157
+        }
+      ]
+    },
+    {
+      "master": 155,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 163
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 167
+        }
+      ]
+    },
+    {
+      "master": 156,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 99
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 97
+        }
+      ]
+    },
+    {
+      "master": 157,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 98
+        }
+      ]
+    },
+    {
+      "master": 158,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 103
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 105
+        }
+      ]
+    },
+    {
+      "master": 159,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 141
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 144
+        }
+      ]
+    },
+    {
+      "master": 160,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 219
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 222
+        }
+      ]
+    },
+    {
+      "master": 161,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 217
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 215
+        }
+      ]
+    },
+    {
+      "master": 162,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 216
+        }
+      ]
+    },
+    {
+      "master": 163,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 139
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 137
+        }
+      ]
+    },
+    {
+      "master": 164,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 138
+        }
+      ]
+    },
+    {
+      "master": 165,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 155
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 158
+        }
+      ]
+    },
+    {
+      "master": 166,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 71
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 69
+        }
+      ]
+    },
+    {
+      "master": 167,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 70
+        }
+      ]
+    },
+    {
+      "master": 168,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 85
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 83
+        }
+      ]
+    },
+    {
+      "master": 169,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 84
+        }
+      ]
+    },
+    {
+      "master": 170,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 12
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 10
+        }
+      ]
+    },
+    {
+      "master": 171,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "InternalFermionLoopSign(-1)*ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 11
+        }
+      ]
+    },
+    {
+      "master": 172,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 80
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 72
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 78
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 74
+        }
+      ]
+    },
+    {
+      "master": 173,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 76
+        }
+      ]
+    },
+    {
+      "master": 174,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 73
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 79
+        }
+      ]
+    },
+    {
+      "master": 175,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 75
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 77
+        }
+      ]
+    }
+  ],
+  "options": {
+    "check_canonical_numerator": false,
+    "differentiate_particle_masses_only": true,
+    "fully_numerical_substitution": false,
+    "number_of_numerical_samples": 5,
+    "numerical_sample_seed": 3,
+    "symmetric_polarizations": false
+  },
+  "raw_count": 270,
+  "weight_sum": "503/56-7/192*(84953597364+7\u001b[35m\ud835\udc56\u001b[0m*(512+MT^2)*(23903+354459\u001b[35m\ud835\udc56\u001b[0m+(37-80\u001b[35m\ud835\udc56\u001b[0m)*MT^2)-7*(512+MT^2)*(354459+23903\u001b[35m\ud835\udc56\u001b[0m+(-80+37\u001b[35m\ud835\udc56\u001b[0m)*MT^2)-7\u001b[35m\ud835\udc56\u001b[0m*(2140+MT^2)*(49873+482411\u001b[35m\ud835\udc56\u001b[0m+(37+80\u001b[35m\ud835\udc56\u001b[0m)*MT^2)+7*(2140+MT^2)*(482411+49873\u001b[35m\ud835\udc56\u001b[0m+(80+37\u001b[35m\ud835\udc56\u001b[0m)*MT^2)-2*(8975+4*MT^2)*(415657+75201\u001b[35m\ud835\udc56\u001b[0m+(-81+22\u001b[35m\ud835\udc56\u001b[0m)*MT^2)+2\u001b[35m\ud835\udc56\u001b[0m*(8975+4*MT^2)*(75201+415657\u001b[35m\ud835\udc56\u001b[0m+(22-81\u001b[35m\ud835\udc56\u001b[0m)*MT^2)+14*(5139+4*MT^2)*(756879+19039\u001b[35m\ud835\udc56\u001b[0m+164*MT^2)-14\u001b[35m\ud835\udc56\u001b[0m*(5139+4*MT^2)*(19039+756879\u001b[35m\ud835\udc56\u001b[0m+164\u001b[35m\ud835\udc56\u001b[0m*MT^2)+26*(6685-3*MT^2)*(38629+57853\u001b[35m\ud835\udc56\u001b[0m+(-5+22\u001b[35m\ud835\udc56\u001b[0m)*MT^2)-26\u001b[35m\ud835\udc56\u001b[0m*(6685-3*MT^2)*(57853+38629\u001b[35m\ud835\udc56\u001b[0m+(22-5\u001b[35m\ud835\udc56\u001b[0m)*MT^2)-14*(549-MT^2)*(160365+145653\u001b[35m\ud835\udc56\u001b[0m-88*MT^2)+14\u001b[35m\ud835\udc56\u001b[0m*(549-MT^2)*(145653+160365\u001b[35m\ud835\udc56\u001b[0m-88\u001b[35m\ud835\udc56\u001b[0m*MT^2)+2*(50729+39*MT^2)*(286309+183959\u001b[35m\ud835\udc56\u001b[0m+(5+22\u001b[35m\ud835\udc56\u001b[0m)*MT^2)-2\u001b[35m\ud835\udc56\u001b[0m*(50729+39*MT^2)*(183959+286309\u001b[35m\ud835\udc56\u001b[0m+(22+5\u001b[35m\ud835\udc56\u001b[0m)*MT^2)-2*(9319-7*MT^2)*(54095+94053\u001b[35m\ud835\udc56\u001b[0m-88*MT^2)+2\u001b[35m\ud835\udc56\u001b[0m*(9319-7*MT^2)*(94053+54095\u001b[35m\ud835\udc56\u001b[0m-88\u001b[35m\ud835\udc56\u001b[0m*MT^2)-2\u001b[35m\ud835\udc56\u001b[0m*(14463+4*MT^2)*(49231+496473\u001b[35m\ud835\udc56\u001b[0m+(22+81\u001b[35m\ud835\udc56\u001b[0m)*MT^2)+2*(14463+4*MT^2)*(496473+49231\u001b[35m\ud835\udc56\u001b[0m+(81+22\u001b[35m\ud835\udc56\u001b[0m)*MT^2)+6\u001b[35m\ud835\udc56\u001b[0m*(15531+13*MT^2)*(115461+420771\u001b[35m\ud835\udc56\u001b[0m+(-22-5\u001b[35m\ud835\udc56\u001b[0m)*MT^2)-6*(15531+13*MT^2)*(420771+115461\u001b[35m\ud835\udc56\u001b[0m+(-5-22\u001b[35m\ud835\udc56\u001b[0m)*MT^2)-26*(1531+5*MT^2)*(110261+17749\u001b[35m\ud835\udc56\u001b[0m+60*MT^2)+26\u001b[35m\ud835\udc56\u001b[0m*(1531+5*MT^2)*(17749+110261\u001b[35m\ud835\udc56\u001b[0m+60\u001b[35m\ud835\udc56\u001b[0m*MT^2)-14*(3835+3*MT^2)*(555295+45009\u001b[35m\ud835\udc56\u001b[0m-58*MT^2)+14\u001b[35m\ud835\udc56\u001b[0m*(3835+3*MT^2)*(45009+555295\u001b[35m\ud835\udc56\u001b[0m-58\u001b[35m\ud835\udc56\u001b[0m*MT^2)+(83216+79*MT^2)*(242055+150517\u001b[35m\ud835\udc56\u001b[0m+(6+37\u001b[35m\ud835\udc56\u001b[0m)*MT^2)-\u001b[35m\ud835\udc56\u001b[0m*(83216+79*MT^2)*(150517+242055\u001b[35m\ud835\udc56\u001b[0m+(37+6\u001b[35m\ud835\udc56\u001b[0m)*MT^2)-2*(131189+50*MT^2)*(316501+44321\u001b[35m\ud835\udc56\u001b[0m+56*MT^2)-2*(101551+29*MT^2)*(150345+30421\u001b[35m\ud835\udc56\u001b[0m+104*MT^2)-(74988+79*MT^2)*(321365+28563\u001b[35m\ud835\udc56\u001b[0m+(-6-37\u001b[35m\ud835\udc56\u001b[0m)*MT^2)-2*(52763+21179\u001b[35m\ud835\udc56\u001b[0m+46*MT^2)*(138385-28*MT^2)-2*(5819+48215\u001b[35m\ud835\udc56\u001b[0m+14*MT^2)*(57167-29*MT^2)-2*(14577+48903\u001b[35m\ud835\udc56\u001b[0m+14*MT^2)*(97673-29*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(17470+139153\u001b[35m\ud835\udc56\u001b[0m-50*MT^2)*(93767+142895\u001b[35m\ud835\udc56\u001b[0m+28\u001b[35m\ud835\udc56\u001b[0m*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(17470+139153\u001b[35m\ud835\udc56\u001b[0m-50*MT^2)*(223461+85841\u001b[35m\ud835\udc56\u001b[0m-74\u001b[35m\ud835\udc56\u001b[0m*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(4937+95557\u001b[35m\ud835\udc56\u001b[0m-102*MT^2)*(214825+30292\u001b[35m\ud835\udc56\u001b[0m-22\u001b[35m\ud835\udc56\u001b[0m*MT^2)-(5194+137879\u001b[35m\ud835\udc56\u001b[0m+78*MT^2)*(60955+99433\u001b[35m\ud835\udc56\u001b[0m+42*MT^2)-(5194+137879\u001b[35m\ud835\udc56\u001b[0m+78*MT^2)*(87987+226037\u001b[35m\ud835\udc56\u001b[0m-32*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(30292+214825\u001b[35m\ud835\udc56\u001b[0m-22*MT^2)*(95557+4937\u001b[35m\ud835\udc56\u001b[0m-102\u001b[35m\ud835\udc56\u001b[0m*MT^2)-(49534+119329\u001b[35m\ud835\udc56\u001b[0m+8*MT^2)*(51797+101563\u001b[35m\ud835\udc56\u001b[0m+118*MT^2)-\u001b[35m\ud835\udc56\u001b[0m*(49534+119329\u001b[35m\ud835\udc56\u001b[0m+8*MT^2)*(103327+267067\u001b[35m\ud835\udc56\u001b[0m-44\u001b[35m\ud835\udc56\u001b[0m*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(49283+210789\u001b[35m\ud835\udc56\u001b[0m-74*MT^2)*(126219+88946\u001b[35m\ud835\udc56\u001b[0m-50\u001b[35m\ud835\udc56\u001b[0m*MT^2)+(62631+98987\u001b[35m\ud835\udc56\u001b[0m+102*MT^2)*(95806+191949\u001b[35m\ud835\udc56\u001b[0m-22*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(57525+157127\u001b[35m\ud835\udc56\u001b[0m+28*MT^2)*(126219+88946\u001b[35m\ud835\udc56\u001b[0m-50\u001b[35m\ud835\udc56\u001b[0m*MT^2)+2*(120325+18351\u001b[35m\ud835\udc56\u001b[0m-162*MT^2)*(122369+43*MT^2)+2*(92231+33851\u001b[35m\ud835\udc56\u001b[0m+90*MT^2)*(255383+64*MT^2)+3\u001b[35m\ud835\udc56\u001b[0m*(9731+12507\u001b[35m\ud835\udc56\u001b[0m+(96-37\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(29568+44257\u001b[35m\ud835\udc56\u001b[0m+(-12+41\u001b[35m\ud835\udc56\u001b[0m)*MT^2)+2\u001b[35m\ud835\udc56\u001b[0m*(48903+14577\u001b[35m\ud835\udc56\u001b[0m+14\u001b[35m\ud835\udc56\u001b[0m*MT^2)*(97673-29*MT^2)+3\u001b[35m\ud835\udc56\u001b[0m*(31752+30047\u001b[35m\ud835\udc56\u001b[0m+(-12-17\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(65021+92823\u001b[35m\ud835\udc56\u001b[0m+(-22-37\u001b[35m\ud835\udc56\u001b[0m)*MT^2)+3\u001b[35m\ud835\udc56\u001b[0m*(31752+30047\u001b[35m\ud835\udc56\u001b[0m+(-12-17\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(130647+122545\u001b[35m\ud835\udc56\u001b[0m+(-22-37\u001b[35m\ud835\udc56\u001b[0m)*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(30763+12631\u001b[35m\ud835\udc56\u001b[0m+(5-80\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(77075+20258\u001b[35m\ud835\udc56\u001b[0m+(7-78\u001b[35m\ud835\udc56\u001b[0m)*MT^2)-3\u001b[35m\ud835\udc56\u001b[0m*(11569+22647\u001b[35m\ud835\udc56\u001b[0m+(27+2\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(35683+117000\u001b[35m\ud835\udc56\u001b[0m+(79+8\u001b[35m\ud835\udc56\u001b[0m)*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(12631+30763\u001b[35m\ud835\udc56\u001b[0m+(-80+5\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(20258+77075\u001b[35m\ud835\udc56\u001b[0m+(-78+7\u001b[35m\ud835\udc56\u001b[0m)*MT^2)+2\u001b[35m\ud835\udc56\u001b[0m*(48215+5819\u001b[35m\ud835\udc56\u001b[0m+14\u001b[35m\ud835\udc56\u001b[0m*MT^2)*(57167-29*MT^2)+3\u001b[35m\ud835\udc56\u001b[0m*(30047+31752\u001b[35m\ud835\udc56\u001b[0m+(-17-12\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(92823+65021\u001b[35m\ud835\udc56\u001b[0m+(-37-22\u001b[35m\ud835\udc56\u001b[0m)*MT^2)+3\u001b[35m\ud835\udc56\u001b[0m*(30047+31752\u001b[35m\ud835\udc56\u001b[0m+(-17-12\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(122545+130647\u001b[35m\ud835\udc56\u001b[0m+(-37-22\u001b[35m\ud835\udc56\u001b[0m)*MT^2)-3\u001b[35m\ud835\udc56\u001b[0m*(22647+11569\u001b[35m\ud835\udc56\u001b[0m+(2+27\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(117000+35683\u001b[35m\ud835\udc56\u001b[0m+(8+79\u001b[35m\ud835\udc56\u001b[0m)*MT^2)+3\u001b[35m\ud835\udc56\u001b[0m*(29568+44257\u001b[35m\ud835\udc56\u001b[0m+(-12+41\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(123161+27333\u001b[35m\ud835\udc56\u001b[0m+(96-37\u001b[35m\ud835\udc56\u001b[0m)*MT^2)-2*(58783+55237\u001b[35m\ud835\udc56\u001b[0m+(81+22\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(136583-4*MT^2)+2\u001b[35m\ud835\udc56\u001b[0m*(21179+52763\u001b[35m\ud835\udc56\u001b[0m+46\u001b[35m\ud835\udc56\u001b[0m*MT^2)*(138385-28*MT^2)+2\u001b[35m\ud835\udc56\u001b[0m*(55237+58783\u001b[35m\ud835\udc56\u001b[0m+(22+81\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(136583-4*MT^2)+(46547+41537\u001b[35m\ud835\udc56\u001b[0m+(-113-22\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(174134+37789\u001b[35m\ud835\udc56\u001b[0m+(106-51\u001b[35m\ud835\udc56\u001b[0m)*MT^2)+3\u001b[35m\ud835\udc56\u001b[0m*(12507+9731\u001b[35m\ud835\udc56\u001b[0m+(-37+96\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(44257+29568\u001b[35m\ud835\udc56\u001b[0m+(41-12\u001b[35m\ud835\udc56\u001b[0m)*MT^2)-(79634+141001\u001b[35m\ud835\udc56\u001b[0m+78*MT^2)*(136385+36073\u001b[35m\ud835\udc56\u001b[0m+42*MT^2)-(79634+141001\u001b[35m\ud835\udc56\u001b[0m+78*MT^2)*(126689+213365\u001b[35m\ud835\udc56\u001b[0m-32*MT^2)-(98604+92729\u001b[35m\ud835\udc56\u001b[0m+8*MT^2)*(121509+98133\u001b[35m\ud835\udc56\u001b[0m+118*MT^2)-\u001b[35m\ud835\udc56\u001b[0m*(98604+92729\u001b[35m\ud835\udc56\u001b[0m+8*MT^2)*(129297+172939\u001b[35m\ud835\udc56\u001b[0m-44\u001b[35m\ud835\udc56\u001b[0m*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(85841+223461\u001b[35m\ud835\udc56\u001b[0m-74*MT^2)*(139153+17470\u001b[35m\ud835\udc56\u001b[0m-50\u001b[35m\ud835\udc56\u001b[0m*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(88946+126219\u001b[35m\ud835\udc56\u001b[0m-50*MT^2)*(210789+49283\u001b[35m\ud835\udc56\u001b[0m-74\u001b[35m\ud835\udc56\u001b[0m*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(88946+126219\u001b[35m\ud835\udc56\u001b[0m-50*MT^2)*(157127+57525\u001b[35m\ud835\udc56\u001b[0m+28\u001b[35m\ud835\udc56\u001b[0m*MT^2)-2\u001b[35m\ud835\udc56\u001b[0m*(44555+71313\u001b[35m\ud835\udc56\u001b[0m+(22+81\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(73039+4*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(17687+70241\u001b[35m\ud835\udc56\u001b[0m+(37+80\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(355702-7*MT^2)+2\u001b[35m\ud835\udc56\u001b[0m*(44321+316501\u001b[35m\ud835\udc56\u001b[0m+56\u001b[35m\ud835\udc56\u001b[0m*MT^2)*(131189+50*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(20258+77075\u001b[35m\ud835\udc56\u001b[0m+(-78+7\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(101421+94869\u001b[35m\ud835\udc56\u001b[0m+(-80+5\u001b[35m\ud835\udc56\u001b[0m)*MT^2)-(4655+101283\u001b[35m\ud835\udc56\u001b[0m+(-6+37\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(352790+79*MT^2)-2\u001b[35m\ud835\udc56\u001b[0m*(33851+92231\u001b[35m\ud835\udc56\u001b[0m+90\u001b[35m\ud835\udc56\u001b[0m*MT^2)*(255383+64*MT^2)+(15699+88875\u001b[35m\ud835\udc56\u001b[0m+(-6+37\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(220546-79*MT^2)+(35683+117000\u001b[35m\ud835\udc56\u001b[0m+(79+8\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(122415+48323\u001b[35m\ud835\udc56\u001b[0m+(6-81\u001b[35m\ud835\udc56\u001b[0m)*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(28563+321365\u001b[35m\ud835\udc56\u001b[0m+(-37-6\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(74988+79*MT^2)-\u001b[35m\ud835\udc56\u001b[0m*(6809+82351\u001b[35m\ud835\udc56\u001b[0m+(37+80\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(175886+7*MT^2)-(37789+174134\u001b[35m\ud835\udc56\u001b[0m+(-51+106\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(41537+46547\u001b[35m\ud835\udc56\u001b[0m+(-22-113\u001b[35m\ud835\udc56\u001b[0m)*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(37789+174134\u001b[35m\ud835\udc56\u001b[0m+(-51+106\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(85763+71371\u001b[35m\ud835\udc56\u001b[0m+(113-22\u001b[35m\ud835\udc56\u001b[0m)*MT^2)-2\u001b[35m\ud835\udc56\u001b[0m*(18351+120325\u001b[35m\ud835\udc56\u001b[0m-162\u001b[35m\ud835\udc56\u001b[0m*MT^2)*(122369+43*MT^2)-(48323+122415\u001b[35m\ud835\udc56\u001b[0m+(-81+6\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(117000+35683\u001b[35m\ud835\udc56\u001b[0m+(8+79\u001b[35m\ud835\udc56\u001b[0m)*MT^2)+3\u001b[35m\ud835\udc56\u001b[0m*(27333+123161\u001b[35m\ud835\udc56\u001b[0m+(-37+96\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(44257+29568\u001b[35m\ud835\udc56\u001b[0m+(41-12\u001b[35m\ud835\udc56\u001b[0m)*MT^2)+2\u001b[35m\ud835\udc56\u001b[0m*(30421+150345\u001b[35m\ud835\udc56\u001b[0m+104\u001b[35m\ud835\udc56\u001b[0m*MT^2)*(101551+29*MT^2)+(36073+136385\u001b[35m\ud835\udc56\u001b[0m+42\u001b[35m\ud835\udc56\u001b[0m*MT^2)*(141001+79634\u001b[35m\ud835\udc56\u001b[0m+78\u001b[35m\ud835\udc56\u001b[0m*MT^2)-2*(27629+69601\u001b[35m\ud835\udc56\u001b[0m+(-5+22\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(175967+39*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(77075+20258\u001b[35m\ud835\udc56\u001b[0m+(7-78\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(94869+101421\u001b[35m\ud835\udc56\u001b[0m+(5-80\u001b[35m\ud835\udc56\u001b[0m)*MT^2)-\u001b[35m\ud835\udc56\u001b[0m*(119329+49534\u001b[35m\ud835\udc56\u001b[0m+8\u001b[35m\ud835\udc56\u001b[0m*MT^2)*(267067+103327\u001b[35m\ud835\udc56\u001b[0m-44*MT^2)-\u001b[35m\ud835\udc56\u001b[0m*(88875+15699\u001b[35m\ud835\udc56\u001b[0m+(37-6\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(220546-79*MT^2)-(70241+17687\u001b[35m\ud835\udc56\u001b[0m+(80+37\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(355702-7*MT^2)+(99433+60955\u001b[35m\ud835\udc56\u001b[0m+42\u001b[35m\ud835\udc56\u001b[0m*MT^2)*(137879+5194\u001b[35m\ud835\udc56\u001b[0m+78\u001b[35m\ud835\udc56\u001b[0m*MT^2)+2*(71313+44555\u001b[35m\ud835\udc56\u001b[0m+(81+22\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(73039+4*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(139153+17470\u001b[35m\ud835\udc56\u001b[0m-50\u001b[35m\ud835\udc56\u001b[0m*MT^2)*(142895+93767\u001b[35m\ud835\udc56\u001b[0m+28*MT^2)+(137879+5194\u001b[35m\ud835\udc56\u001b[0m+78\u001b[35m\ud835\udc56\u001b[0m*MT^2)*(226037+87987\u001b[35m\ud835\udc56\u001b[0m-32\u001b[35m\ud835\udc56\u001b[0m*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(101283+4655\u001b[35m\ud835\udc56\u001b[0m+(37-6\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(352790+79*MT^2)-(98987+62631\u001b[35m\ud835\udc56\u001b[0m+102\u001b[35m\ud835\udc56\u001b[0m*MT^2)*(191949+95806\u001b[35m\ud835\udc56\u001b[0m-22\u001b[35m\ud835\udc56\u001b[0m*MT^2)+(82351+6809\u001b[35m\ud835\udc56\u001b[0m+(80+37\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(175886+7*MT^2)+(101563+51797\u001b[35m\ud835\udc56\u001b[0m+118\u001b[35m\ud835\udc56\u001b[0m*MT^2)*(119329+49534\u001b[35m\ud835\udc56\u001b[0m+8\u001b[35m\ud835\udc56\u001b[0m*MT^2)+2\u001b[35m\ud835\udc56\u001b[0m*(69601+27629\u001b[35m\ud835\udc56\u001b[0m+(22-5\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(175967+39*MT^2)-\u001b[35m\ud835\udc56\u001b[0m*(92729+98604\u001b[35m\ud835\udc56\u001b[0m+8\u001b[35m\ud835\udc56\u001b[0m*MT^2)*(172939+129297\u001b[35m\ud835\udc56\u001b[0m-44*MT^2)+(92729+98604\u001b[35m\ud835\udc56\u001b[0m+8\u001b[35m\ud835\udc56\u001b[0m*MT^2)*(98133+121509\u001b[35m\ud835\udc56\u001b[0m+118\u001b[35m\ud835\udc56\u001b[0m*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(222541+144034\u001b[35m\ud835\udc56\u001b[0m+(51+36\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(347209+275155\u001b[35m\ud835\udc56\u001b[0m+(37+22\u001b[35m\ud835\udc56\u001b[0m)*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(170351+66265\u001b[35m\ud835\udc56\u001b[0m+(37+22\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(222541+144034\u001b[35m\ud835\udc56\u001b[0m+(51+36\u001b[35m\ud835\udc56\u001b[0m)*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(144034+222541\u001b[35m\ud835\udc56\u001b[0m+(36+51\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(275155+347209\u001b[35m\ud835\udc56\u001b[0m+(22+37\u001b[35m\ud835\udc56\u001b[0m)*MT^2)+(141001+79634\u001b[35m\ud835\udc56\u001b[0m+78\u001b[35m\ud835\udc56\u001b[0m*MT^2)*(213365+126689\u001b[35m\ud835\udc56\u001b[0m-32\u001b[35m\ud835\udc56\u001b[0m*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(71371+85763\u001b[35m\ud835\udc56\u001b[0m+(-22+113\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(174134+37789\u001b[35m\ud835\udc56\u001b[0m+(106-51\u001b[35m\ud835\udc56\u001b[0m)*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(66265+170351\u001b[35m\ud835\udc56\u001b[0m+(22+37\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(144034+222541\u001b[35m\ud835\udc56\u001b[0m+(36+51\u001b[35m\ud835\udc56\u001b[0m)*MT^2)+19155048*MT^2)/(32311137823+MT^2*(15997480+8949*MT^2))"
+}

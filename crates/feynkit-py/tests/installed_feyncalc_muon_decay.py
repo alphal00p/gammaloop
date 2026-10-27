@@ -30,8 +30,15 @@ vertices = [
     and any(p in ("e-", "e+", "mu-", "mu+") for p in v.particles)
 ]
 assert len(vertices) == 4
-generated = model.process([13], [11, -12, 14], vertex_allow=vertices).generate_diagrams(
-    max_vertices=2, maximum_bridges=None, numerator_grouping=None, progress=None
+generated = (
+    model.process([13], [11, -12, 14])
+    .amplitude(
+        loops=hep.Loops.total(0),
+        restrict=hep.Restrict().only_vertices(vertices),
+        topology=hep.TopologyRules(max_vertices=2),
+    )
+    .generate()
+    .build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
 )
 assert len(generated.diagrams) == 1
 diagram = generated.diagrams[0]

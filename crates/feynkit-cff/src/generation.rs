@@ -1,12 +1,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use feynkit_graph::FeynmanDiagram;
-use linnet::half_edge::{
-    HedgeGraph, NodeIndex,
-    involution::{EdgeIndex, Flow, HedgePair, Orientation},
-    nodestore::NodeStorageOps,
-    subgraph::SubGraphLike,
-};
+use linnet::half_edge::involution::{EdgeIndex, Flow, HedgePair, Orientation};
+use linnet::half_edge::nodestore::Topology;
+use linnet::half_edge::subgraph::SubGraphLike;
+use linnet::half_edge::{HedgeGraph, NodeIndex};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -280,7 +278,7 @@ pub trait HedgeGraphCffExt {
 
 impl<E, V, H, N> HedgeGraphCffExt for HedgeGraph<E, V, H, N>
 where
-    N: NodeStorageOps<NodeData = V>,
+    N: Topology,
 {
     fn build_cff_from_subgraph<S: SubGraphLike>(
         &self,
@@ -375,7 +373,7 @@ impl HedgeSubgraphCffInput {
         mut edge_role: F,
     ) -> Result<Self, CffError>
     where
-        N: NodeStorageOps<NodeData = V>,
+        N: Topology,
         S: SubGraphLike,
         F: FnMut(EdgeId) -> HedgeEdgeRole,
     {
@@ -1177,10 +1175,8 @@ mod tests {
     use crate::{CffEdge, VertexId};
     use feynkit_graph::{DiagramEdge, DiagramVertex, ExternalState, FeynmanDiagram};
     use feynkit_model::Model;
-    use linnet::{
-        half_edge::subgraph::{ModifySubSet, SuBitGraph},
-        parser::DotGraph,
-    };
+    use linnet::half_edge::subgraph::{ModifySubSet, SuBitGraph};
+    use linnet::parser::DotGraph;
 
     fn edge(index: usize) -> EdgeId {
         EdgeId::new(index)

@@ -1,0 +1,2471 @@
+{
+  "cancelled_weight_sum": "1157/168",
+  "count": 176,
+  "groups": [
+    {
+      "master": 0,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 0
+        }
+      ]
+    },
+    {
+      "master": 1,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(6)",
+          "ratio": "1",
+          "source": 1
+        }
+      ]
+    },
+    {
+      "master": 2,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(6)",
+          "ratio": "1",
+          "source": 2
+        }
+      ]
+    },
+    {
+      "master": 3,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(2)",
+          "ratio": "1",
+          "source": 3
+        }
+      ]
+    },
+    {
+      "master": 4,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(2)",
+          "ratio": "1",
+          "source": 5
+        }
+      ]
+    },
+    {
+      "master": 5,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(3)",
+          "ratio": "1",
+          "source": 6
+        }
+      ]
+    },
+    {
+      "master": 6,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(1)",
+          "ratio": "1",
+          "source": 7
+        }
+      ]
+    },
+    {
+      "master": 7,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 8
+        }
+      ]
+    },
+    {
+      "master": 8,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(6)",
+          "ratio": "1",
+          "source": 9
+        }
+      ]
+    },
+    {
+      "master": 9,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 10
+        }
+      ]
+    },
+    {
+      "master": 10,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(1)",
+          "ratio": "1",
+          "source": 11
+        }
+      ]
+    },
+    {
+      "master": 11,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(1)",
+          "ratio": "1",
+          "source": 12
+        }
+      ]
+    },
+    {
+      "master": 12,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(4)",
+          "ratio": "1",
+          "source": 13
+        }
+      ]
+    },
+    {
+      "master": 13,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(2)",
+          "ratio": "1",
+          "source": 14
+        }
+      ]
+    },
+    {
+      "master": 14,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 15
+        }
+      ]
+    },
+    {
+      "master": 15,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(2)",
+          "ratio": "1",
+          "source": 16
+        }
+      ]
+    },
+    {
+      "master": 16,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 18
+        }
+      ]
+    },
+    {
+      "master": 17,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(2)",
+          "ratio": "1",
+          "source": 19
+        }
+      ]
+    },
+    {
+      "master": 18,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(4)",
+          "ratio": "1",
+          "source": 20
+        }
+      ]
+    },
+    {
+      "master": 19,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 21
+        }
+      ]
+    },
+    {
+      "master": 20,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(4)",
+          "ratio": "1",
+          "source": 22
+        }
+      ]
+    },
+    {
+      "master": 21,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(8)",
+          "ratio": "1",
+          "source": 23
+        }
+      ]
+    },
+    {
+      "master": 22,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 24
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 27
+        }
+      ]
+    },
+    {
+      "master": 23,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 25
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 28
+        }
+      ]
+    },
+    {
+      "master": 24,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(2)",
+          "ratio": "1",
+          "source": 26
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(2)",
+          "ratio": "1",
+          "source": 29
+        }
+      ]
+    },
+    {
+      "master": 25,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 30
+        }
+      ]
+    },
+    {
+      "master": 26,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 31
+        }
+      ]
+    },
+    {
+      "master": 27,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(2)",
+          "ratio": "1",
+          "source": 32
+        }
+      ]
+    },
+    {
+      "master": 28,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(3)",
+          "ratio": "1",
+          "source": 33
+        }
+      ]
+    },
+    {
+      "master": 29,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(2)",
+          "ratio": "1",
+          "source": 34
+        }
+      ]
+    },
+    {
+      "master": 30,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(2)",
+          "ratio": "1",
+          "source": 35
+        }
+      ]
+    },
+    {
+      "master": 31,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(2)",
+          "ratio": "1",
+          "source": 36
+        }
+      ]
+    },
+    {
+      "master": 32,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 37
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 38
+        }
+      ]
+    },
+    {
+      "master": 33,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 39
+        }
+      ]
+    },
+    {
+      "master": 34,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(3)",
+          "ratio": "1",
+          "source": 40
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(3)",
+          "ratio": "1",
+          "source": 41
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(3)",
+          "ratio": "1",
+          "source": 42
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(3)",
+          "ratio": "1",
+          "source": 43
+        }
+      ]
+    },
+    {
+      "master": 35,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(3)",
+          "ratio": "1",
+          "source": 44
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(3)",
+          "ratio": "1",
+          "source": 45
+        }
+      ]
+    },
+    {
+      "master": 36,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(4)",
+          "ratio": "1",
+          "source": 46
+        }
+      ]
+    },
+    {
+      "master": 37,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(4)",
+          "ratio": "1",
+          "source": 47
+        }
+      ]
+    },
+    {
+      "master": 38,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(8)",
+          "ratio": "1",
+          "source": 48
+        }
+      ]
+    },
+    {
+      "master": 39,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(4)",
+          "ratio": "1",
+          "source": 49
+        }
+      ]
+    },
+    {
+      "master": 40,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(8)",
+          "ratio": "1",
+          "source": 50
+        }
+      ]
+    },
+    {
+      "master": 41,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(2)",
+          "ratio": "1",
+          "source": 51
+        }
+      ]
+    },
+    {
+      "master": 42,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(4)",
+          "ratio": "1",
+          "source": 52
+        }
+      ]
+    },
+    {
+      "master": 43,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(8)",
+          "ratio": "1",
+          "source": 53
+        }
+      ]
+    },
+    {
+      "master": 44,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 54
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 56
+        }
+      ]
+    },
+    {
+      "master": 45,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 55
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 57
+        }
+      ]
+    },
+    {
+      "master": 46,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 58
+        }
+      ]
+    },
+    {
+      "master": 47,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 59
+        }
+      ]
+    },
+    {
+      "master": 48,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 60
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 61
+        }
+      ]
+    },
+    {
+      "master": 49,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 62
+        }
+      ]
+    },
+    {
+      "master": 50,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(8)",
+          "ratio": "1",
+          "source": 63
+        }
+      ]
+    },
+    {
+      "master": 51,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(12)",
+          "ratio": "1",
+          "source": 64
+        }
+      ]
+    },
+    {
+      "master": 52,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(8)",
+          "ratio": "1",
+          "source": 65
+        }
+      ]
+    },
+    {
+      "master": 53,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 66
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 68
+        }
+      ]
+    },
+    {
+      "master": 54,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 67
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 69
+        }
+      ]
+    },
+    {
+      "master": 55,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 70
+        }
+      ]
+    },
+    {
+      "master": 56,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 71
+        }
+      ]
+    },
+    {
+      "master": 57,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 72
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 77
+        }
+      ]
+    },
+    {
+      "master": 58,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 73
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 78
+        }
+      ]
+    },
+    {
+      "master": 59,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(2)",
+          "ratio": "1",
+          "source": 74
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(1)",
+          "ratio": "1",
+          "source": 75
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(2)",
+          "ratio": "1",
+          "source": 79
+        }
+      ]
+    },
+    {
+      "master": 60,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(1)",
+          "ratio": "1",
+          "source": 76
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(1)",
+          "ratio": "1",
+          "source": 80
+        }
+      ]
+    },
+    {
+      "master": 61,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 81
+        }
+      ]
+    },
+    {
+      "master": 62,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 82
+        }
+      ]
+    },
+    {
+      "master": 63,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(2)",
+          "ratio": "1",
+          "source": 83
+        }
+      ]
+    },
+    {
+      "master": 64,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(48)",
+          "ratio": "1",
+          "source": 85
+        }
+      ]
+    },
+    {
+      "master": 65,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(16)",
+          "ratio": "1",
+          "source": 86
+        }
+      ]
+    },
+    {
+      "master": 66,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(12)",
+          "ratio": "1",
+          "source": 87
+        }
+      ]
+    },
+    {
+      "master": 67,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(8)",
+          "ratio": "1",
+          "source": 88
+        }
+      ]
+    },
+    {
+      "master": 68,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(16)",
+          "ratio": "1",
+          "source": 89
+        }
+      ]
+    },
+    {
+      "master": 69,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(8)",
+          "ratio": "1",
+          "source": 90
+        }
+      ]
+    },
+    {
+      "master": 70,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(8)",
+          "ratio": "1",
+          "source": 91
+        }
+      ]
+    },
+    {
+      "master": 71,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(8)",
+          "ratio": "1",
+          "source": 92
+        }
+      ]
+    },
+    {
+      "master": 72,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 93
+        }
+      ]
+    },
+    {
+      "master": 73,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(32)",
+          "ratio": "1",
+          "source": 94
+        }
+      ]
+    },
+    {
+      "master": 74,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 95
+        }
+      ]
+    },
+    {
+      "master": 75,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(16)",
+          "ratio": "1",
+          "source": 96
+        }
+      ]
+    },
+    {
+      "master": 76,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(4)",
+          "ratio": "1",
+          "source": 97
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(4)",
+          "ratio": "1",
+          "source": 100
+        }
+      ]
+    },
+    {
+      "master": 77,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(4)",
+          "ratio": "1",
+          "source": 98
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(4)",
+          "ratio": "1",
+          "source": 101
+        }
+      ]
+    },
+    {
+      "master": 78,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(8)",
+          "ratio": "1",
+          "source": 99
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(8)",
+          "ratio": "1",
+          "source": 102
+        }
+      ]
+    },
+    {
+      "master": 79,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(4)",
+          "ratio": "1",
+          "source": 103
+        }
+      ]
+    },
+    {
+      "master": 80,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(4)",
+          "ratio": "1",
+          "source": 104
+        }
+      ]
+    },
+    {
+      "master": 81,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(8)",
+          "ratio": "1",
+          "source": 105
+        }
+      ]
+    },
+    {
+      "master": 82,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(2)",
+          "ratio": "1",
+          "source": 106
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(2)",
+          "ratio": "1",
+          "source": 108
+        }
+      ]
+    },
+    {
+      "master": 83,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(3)",
+          "ratio": "1",
+          "source": 107
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(3)",
+          "ratio": "1",
+          "source": 109
+        }
+      ]
+    },
+    {
+      "master": 84,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(2)",
+          "ratio": "1",
+          "source": 110
+        }
+      ]
+    },
+    {
+      "master": 85,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(3)",
+          "ratio": "1",
+          "source": 111
+        }
+      ]
+    },
+    {
+      "master": 86,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(24)",
+          "ratio": "1",
+          "source": 112
+        }
+      ]
+    },
+    {
+      "master": 87,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(16)",
+          "ratio": "1",
+          "source": 113
+        }
+      ]
+    },
+    {
+      "master": 88,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(8)",
+          "ratio": "1",
+          "source": 114
+        }
+      ]
+    },
+    {
+      "master": 89,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(16)",
+          "ratio": "1",
+          "source": 115
+        }
+      ]
+    },
+    {
+      "master": 90,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 116
+        }
+      ]
+    },
+    {
+      "master": 91,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(16)",
+          "ratio": "1",
+          "source": 117
+        }
+      ]
+    },
+    {
+      "master": 92,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(16)",
+          "ratio": "1",
+          "source": 118
+        }
+      ]
+    },
+    {
+      "master": 93,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(8)",
+          "ratio": "1",
+          "source": 119
+        }
+      ]
+    },
+    {
+      "master": 94,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(16)",
+          "ratio": "1",
+          "source": 120
+        }
+      ]
+    },
+    {
+      "master": 95,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(8)",
+          "ratio": "1",
+          "source": 121
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(8)",
+          "ratio": "1",
+          "source": 126
+        }
+      ]
+    },
+    {
+      "master": 96,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(2)",
+          "ratio": "1",
+          "source": 122
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(2)",
+          "ratio": "1",
+          "source": 127
+        }
+      ]
+    },
+    {
+      "master": 97,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(4)",
+          "ratio": "1",
+          "source": 123
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(4)",
+          "ratio": "1",
+          "source": 128
+        }
+      ]
+    },
+    {
+      "master": 98,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(4)",
+          "ratio": "1",
+          "source": 124
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(4)",
+          "ratio": "1",
+          "source": 129
+        }
+      ]
+    },
+    {
+      "master": 99,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(8)",
+          "ratio": "1",
+          "source": 125
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(8)",
+          "ratio": "1",
+          "source": 130
+        }
+      ]
+    },
+    {
+      "master": 100,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(8)",
+          "ratio": "1",
+          "source": 131
+        }
+      ]
+    },
+    {
+      "master": 101,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(2)",
+          "ratio": "1",
+          "source": 132
+        }
+      ]
+    },
+    {
+      "master": 102,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(4)",
+          "ratio": "1",
+          "source": 133
+        }
+      ]
+    },
+    {
+      "master": 103,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(4)",
+          "ratio": "1",
+          "source": 134
+        }
+      ]
+    },
+    {
+      "master": 104,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(8)",
+          "ratio": "1",
+          "source": 135
+        }
+      ]
+    },
+    {
+      "master": 105,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(2)",
+          "ratio": "1",
+          "source": 136
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(2)",
+          "ratio": "1",
+          "source": 146
+        }
+      ]
+    },
+    {
+      "master": 106,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(4)",
+          "ratio": "1",
+          "source": 137
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(4)",
+          "ratio": "1",
+          "source": 147
+        }
+      ]
+    },
+    {
+      "master": 107,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 138
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 142
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 148
+        }
+      ]
+    },
+    {
+      "master": 108,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(2)",
+          "ratio": "1",
+          "source": 140
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(2)",
+          "ratio": "1",
+          "source": 150
+        }
+      ]
+    },
+    {
+      "master": 109,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 141
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 143
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 151
+        }
+      ]
+    },
+    {
+      "master": 110,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 144
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 152
+        }
+      ]
+    },
+    {
+      "master": 111,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 145
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 153
+        }
+      ]
+    },
+    {
+      "master": 112,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(2)",
+          "ratio": "1",
+          "source": 154
+        }
+      ]
+    },
+    {
+      "master": 113,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(4)",
+          "ratio": "1",
+          "source": 155
+        }
+      ]
+    },
+    {
+      "master": 114,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 156
+        }
+      ]
+    },
+    {
+      "master": 115,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(2)",
+          "ratio": "1",
+          "source": 158
+        }
+      ]
+    },
+    {
+      "master": 116,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 159
+        }
+      ]
+    },
+    {
+      "master": 117,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(2)",
+          "ratio": "1",
+          "source": 160
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(2)",
+          "ratio": "1",
+          "source": 162
+        }
+      ]
+    },
+    {
+      "master": 118,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(2)",
+          "ratio": "1",
+          "source": 161
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(2)",
+          "ratio": "1",
+          "source": 163
+        }
+      ]
+    },
+    {
+      "master": 119,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(2)",
+          "ratio": "1",
+          "source": 164
+        }
+      ]
+    },
+    {
+      "master": 120,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(2)",
+          "ratio": "1",
+          "source": 165
+        }
+      ]
+    },
+    {
+      "master": 121,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(1)",
+          "ratio": "1",
+          "source": 166
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(1)",
+          "ratio": "1",
+          "source": 173
+        }
+      ]
+    },
+    {
+      "master": 122,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(1)",
+          "ratio": "1",
+          "source": 167
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(1)",
+          "ratio": "1",
+          "source": 174
+        }
+      ]
+    },
+    {
+      "master": 123,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 168
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 169
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 171
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 175
+        }
+      ]
+    },
+    {
+      "master": 124,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 170
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 176
+        }
+      ]
+    },
+    {
+      "master": 125,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 172
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 177
+        }
+      ]
+    },
+    {
+      "master": 126,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(1)",
+          "ratio": "1",
+          "source": 178
+        }
+      ]
+    },
+    {
+      "master": 127,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(1)",
+          "ratio": "1",
+          "source": 179
+        }
+      ]
+    },
+    {
+      "master": 128,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 180
+        }
+      ]
+    },
+    {
+      "master": 129,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(48)",
+          "ratio": "1",
+          "source": 181
+        }
+      ]
+    },
+    {
+      "master": 130,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(24)",
+          "ratio": "1",
+          "source": 182
+        }
+      ]
+    },
+    {
+      "master": 131,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(32)",
+          "ratio": "1",
+          "source": 183
+        }
+      ]
+    },
+    {
+      "master": 132,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(48)",
+          "ratio": "1",
+          "source": 184
+        }
+      ]
+    },
+    {
+      "master": 133,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(8)",
+          "ratio": "1",
+          "source": 185
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(8)",
+          "ratio": "1",
+          "source": 188
+        }
+      ]
+    },
+    {
+      "master": 134,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(8)",
+          "ratio": "1",
+          "source": 186
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(8)",
+          "ratio": "1",
+          "source": 189
+        }
+      ]
+    },
+    {
+      "master": 135,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(12)",
+          "ratio": "1",
+          "source": 187
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(12)",
+          "ratio": "1",
+          "source": 190
+        }
+      ]
+    },
+    {
+      "master": 136,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(8)",
+          "ratio": "1",
+          "source": 191
+        }
+      ]
+    },
+    {
+      "master": 137,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(8)",
+          "ratio": "1",
+          "source": 192
+        }
+      ]
+    },
+    {
+      "master": 138,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(12)",
+          "ratio": "1",
+          "source": 193
+        }
+      ]
+    },
+    {
+      "master": 139,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(2)",
+          "ratio": "1",
+          "source": 194
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(2)",
+          "ratio": "1",
+          "source": 203
+        }
+      ]
+    },
+    {
+      "master": 140,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(4)",
+          "ratio": "1",
+          "source": 195
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(4)",
+          "ratio": "1",
+          "source": 204
+        }
+      ]
+    },
+    {
+      "master": 141,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 196
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 199
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 205
+        }
+      ]
+    },
+    {
+      "master": 142,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(4)",
+          "ratio": "1",
+          "source": 197
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(4)",
+          "ratio": "1",
+          "source": 206
+        }
+      ]
+    },
+    {
+      "master": 143,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(8)",
+          "ratio": "1",
+          "source": 198
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 200
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(8)",
+          "ratio": "1",
+          "source": 207
+        }
+      ]
+    },
+    {
+      "master": 144,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 201
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 208
+        }
+      ]
+    },
+    {
+      "master": 145,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 202
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 209
+        }
+      ]
+    },
+    {
+      "master": 146,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(2)",
+          "ratio": "1",
+          "source": 210
+        }
+      ]
+    },
+    {
+      "master": 147,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(4)",
+          "ratio": "1",
+          "source": 211
+        }
+      ]
+    },
+    {
+      "master": 148,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(4)",
+          "ratio": "1",
+          "source": 212
+        }
+      ]
+    },
+    {
+      "master": 149,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(4)",
+          "ratio": "1",
+          "source": 213
+        }
+      ]
+    },
+    {
+      "master": 150,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(8)",
+          "ratio": "1",
+          "source": 214
+        }
+      ]
+    },
+    {
+      "master": 151,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 215
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 225
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 236
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 242
+        }
+      ]
+    },
+    {
+      "master": 152,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(6)",
+          "ratio": "1",
+          "source": 216
+        },
+        {
+          "cancelled_ratio": "2/7",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(6)",
+          "ratio": "2/7",
+          "source": 217
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(3)",
+          "ratio": "1",
+          "source": 231
+        },
+        {
+          "cancelled_ratio": "2/7",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(3)",
+          "ratio": "2/7",
+          "source": 232
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(6)",
+          "ratio": "1",
+          "source": 243
+        },
+        {
+          "cancelled_ratio": "2/7",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(6)",
+          "ratio": "2/7",
+          "source": 244
+        }
+      ]
+    },
+    {
+      "master": 153,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(2)",
+          "ratio": "1",
+          "source": 218
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(2)",
+          "ratio": "1",
+          "source": 245
+        }
+      ]
+    },
+    {
+      "master": 154,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(6)",
+          "ratio": "1",
+          "source": 219
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(6)",
+          "ratio": "1",
+          "source": 246
+        }
+      ]
+    },
+    {
+      "master": 155,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(2)",
+          "ratio": "1",
+          "source": 220
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(2)",
+          "ratio": "1",
+          "source": 247
+        }
+      ]
+    },
+    {
+      "master": 156,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(3)",
+          "ratio": "1",
+          "source": 221
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(3)",
+          "ratio": "1",
+          "source": 248
+        }
+      ]
+    },
+    {
+      "master": 157,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(1)",
+          "ratio": "1",
+          "source": 222
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(1)",
+          "ratio": "1",
+          "source": 249
+        }
+      ]
+    },
+    {
+      "master": 158,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 223
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 226
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 235
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 250
+        }
+      ]
+    },
+    {
+      "master": 159,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(6)",
+          "ratio": "1",
+          "source": 224
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(2)",
+          "ratio": "1",
+          "source": 227
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(2)",
+          "ratio": "1",
+          "source": 237
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(6)",
+          "ratio": "1",
+          "source": 251
+        }
+      ]
+    },
+    {
+      "master": 160,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 228
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 252
+        }
+      ]
+    },
+    {
+      "master": 161,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 229
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 253
+        }
+      ]
+    },
+    {
+      "master": 162,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(2)",
+          "ratio": "1",
+          "source": 230
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(1)",
+          "ratio": "1",
+          "source": 238
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(2)",
+          "ratio": "1",
+          "source": 254
+        }
+      ]
+    },
+    {
+      "master": 163,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(3)",
+          "ratio": "1",
+          "source": 233
+        },
+        {
+          "cancelled_ratio": "2/7",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(3)",
+          "ratio": "2/7",
+          "source": 234
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(3)",
+          "ratio": "1",
+          "source": 255
+        },
+        {
+          "cancelled_ratio": "2/7",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(3)",
+          "ratio": "2/7",
+          "source": 256
+        }
+      ]
+    },
+    {
+      "master": 164,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 239
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 257
+        }
+      ]
+    },
+    {
+      "master": 165,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 240
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 258
+        }
+      ]
+    },
+    {
+      "master": 166,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(2)",
+          "ratio": "1",
+          "source": 241
+        },
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(2)",
+          "ratio": "1",
+          "source": 259
+        }
+      ]
+    },
+    {
+      "master": 167,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(2)",
+          "ratio": "1",
+          "source": 260
+        }
+      ]
+    },
+    {
+      "master": 168,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(6)",
+          "ratio": "1",
+          "source": 261
+        },
+        {
+          "cancelled_ratio": "2/7",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(6)",
+          "ratio": "(((-102+19\ud835\udc56)*UFO::{}::MT^2+279059+39312\ud835\udc56)*(51*UFO::{}::MT^2+76412)*-1+((-102-19\ud835\udc56)*UFO::{}::MT^2+50547+9990\ud835\udc56)*(131026+51*UFO::{}::MT^2)*-1+((-102-19\ud835\udc56)*UFO::{}::MT^2+60669+14218\ud835\udc56)*(-51*UFO::{}::MT^2+151802)+((-12\ud835\udc56)*UFO::{}::MT^2+5475+4409\ud835\udc56)*(-27*UFO::{}::MT^2+117698)*(-6\ud835\udc56)+((-17-23\ud835\udc56)*UFO::{}::MT^2+125727+93989\ud835\udc56)*((-28-19\ud835\udc56)*UFO::{}::MT^2+108541+127528\ud835\udc56)*(\ud835\udc56)+((-17-23\ud835\udc56)*UFO::{}::MT^2+125727+93989\ud835\udc56)*((-28-19\ud835\udc56)*UFO::{}::MT^2+15393+67230\ud835\udc56)*(\ud835\udc56)+((-17-67\ud835\udc56)*UFO::{}::MT^2+5565+38633\ud835\udc56)*((19-86\ud835\udc56)*UFO::{}::MT^2+52208+67217\ud835\udc56)+((-17-67\ud835\udc56)*UFO::{}::MT^2+5565+38633\ud835\udc56)*((19-86\ud835\udc56)*UFO::{}::MT^2+53230+4729\ud835\udc56)+((-18\ud835\udc56)*UFO::{}::MT^2+49805+13551\ud835\udc56)*(102*UFO::{}::MT^2+41265+102697\ud835\udc56)*(3\ud835\udc56)+((-19+102\ud835\udc56)*UFO::{}::MT^2+44640+158403\ud835\udc56)*(-\ud835\udc56)*(51*UFO::{}::MT^2+82880)+((-19+28\ud835\udc56)*UFO::{}::MT^2+8142+10063\ud835\udc56)*((17+23\ud835\udc56)*UFO::{}::MT^2+9387+15505\ud835\udc56)+((-19+44\ud835\udc56)*UFO::{}::MT^2+55244+19643\ud835\udc56)*(-\ud835\udc56)*(144648+95*UFO::{}::MT^2)+((-19+44\ud835\udc56)*UFO::{}::MT^2+59192+17697\ud835\udc56)*(-95*UFO::{}::MT^2+174972)*(\ud835\udc56)+((-19-102\ud835\udc56)*UFO::{}::MT^2+14218+60669\ud835\udc56)*(-51*UFO::{}::MT^2+151802)*(-\ud835\udc56)+((-19-102\ud835\udc56)*UFO::{}::MT^2+9990+50547\ud835\udc56)*(131026+51*UFO::{}::MT^2)*(\ud835\udc56)+((-19-28\ud835\udc56)*UFO::{}::MT^2+127528+108541\ud835\udc56)*((-23-17\ud835\udc56)*UFO::{}::MT^2+93989+125727\ud835\udc56)*(\ud835\udc56)+((-19-28\ud835\udc56)*UFO::{}::MT^2+67230+15393\ud835\udc56)*((-23-17\ud835\udc56)*UFO::{}::MT^2+93989+125727\ud835\udc56)*(\ud835\udc56)+((-19-44\ud835\udc56)*UFO::{}::MT^2+99974+103069\ud835\udc56)*(-95*UFO::{}::MT^2+75726)*(-\ud835\udc56)+((-22\ud835\udc56)*UFO::{}::MT^2+12393+5835\ud835\udc56)*(31*UFO::{}::MT^2+46536)*(4\ud835\udc56)+((-22\ud835\udc56)*UFO::{}::MT^2+13303+57957\ud835\udc56)*(-3*UFO::{}::MT^2+3178)*(56\ud835\udc56)+((-23-45\ud835\udc56)*UFO::{}::MT^2+6965+62321\ud835\udc56)*((28-63\ud835\udc56)*UFO::{}::MT^2+59101+45956\ud835\udc56)+((-23-45\ud835\udc56)*UFO::{}::MT^2+6965+62321\ud835\udc56)*((63+28\ud835\udc56)*UFO::{}::MT^2+34+62313\ud835\udc56)*(-\ud835\udc56)+((-28+51\ud835\udc56)*UFO::{}::MT^2+36821+39844\ud835\udc56)*(-\ud835\udc56)*(155582+87*UFO::{}::MT^2)+((-28+51\ud835\udc56)*UFO::{}::MT^2+40559+39480\ud835\udc56)*(-87*UFO::{}::MT^2+84238)*(\ud835\udc56)+((-28+95\ud835\udc56)*UFO::{}::MT^2+115575+148428\ud835\udc56)*(-\ud835\udc56)*(59*UFO::{}::MT^2+73878)+((-28-51\ud835\udc56)*UFO::{}::MT^2+127693+68566\ud835\udc56)*(-87*UFO::{}::MT^2+29932)*(-\ud835\udc56)+((-28-95\ud835\udc56)*UFO::{}::MT^2+50925+12762\ud835\udc56)*(136360+59*UFO::{}::MT^2)*(\ud835\udc56)+((-28-95\ud835\udc56)*UFO::{}::MT^2+55363+21302\ud835\udc56)*(-59*UFO::{}::MT^2+140252)*(-\ud835\udc56)+((-32\ud835\udc56)*UFO::{}::MT^2+10293+100785\ud835\udc56)*(-13*UFO::{}::MT^2+8141)*(6\ud835\udc56)+((-44+95\ud835\udc56)*UFO::{}::MT^2+28711+64626\ud835\udc56)*((-59+95\ud835\udc56)*UFO::{}::MT^2+17507+72919\ud835\udc56)*(\ud835\udc56)+((-44-19\ud835\udc56)*UFO::{}::MT^2+103069+99974\ud835\udc56)*(-95*UFO::{}::MT^2+75726)+((-44-95\ud835\udc56)*UFO::{}::MT^2+41363+244\ud835\udc56)*((95-59\ud835\udc56)*UFO::{}::MT^2+72919+17507\ud835\udc56)*-1+((-44\ud835\udc56)*UFO::{}::MT^2+53277+55867\ud835\udc56)*(15675+45991\ud835\udc56+92*UFO::{}::MT^2)*(\ud835\udc56)+((-44\ud835\udc56)*UFO::{}::MT^2+53277+55867\ud835\udc56)*(171183+16613\ud835\udc56+68*UFO::{}::MT^2)*(\ud835\udc56)+((-44\ud835\udc56)*UFO::{}::MT^2+88389+48419\ud835\udc56)*((-92\ud835\udc56)*UFO::{}::MT^2+49113+373\ud835\udc56)*-1+((-44\ud835\udc56)*UFO::{}::MT^2+88389+48419\ud835\udc56)*(155615+40251\ud835\udc56+68*UFO::{}::MT^2)*(\ud835\udc56)+((-45-23\ud835\udc56)*UFO::{}::MT^2+62321+6965\ud835\udc56)*((-63+28\ud835\udc56)*UFO::{}::MT^2+45956+59101\ud835\udc56)*-1+((-45-23\ud835\udc56)*UFO::{}::MT^2+62321+6965\ud835\udc56)*((28+63\ud835\udc56)*UFO::{}::MT^2+62313+34\ud835\udc56)*(-\ud835\udc56)+((-48\ud835\udc56)*UFO::{}::MT^2+19637+340573\ud835\udc56)*(-6\ud835\udc56)*(18109+UFO::{}::MT^2)+((-51+102\ud835\udc56)*UFO::{}::MT^2+21218+81367\ud835\udc56)*((-51+87\ud835\udc56)*UFO::{}::MT^2+28973+83937\ud835\udc56)*(\ud835\udc56)+((-51+102\ud835\udc56)*UFO::{}::MT^2+41120+9439\ud835\udc56)*((-51+87\ud835\udc56)*UFO::{}::MT^2+28973+83937\ud835\udc56)*(\ud835\udc56)+((-51-28\ud835\udc56)*UFO::{}::MT^2+68566+127693\ud835\udc56)*(-87*UFO::{}::MT^2+29932)+((-52\ud835\udc56)*UFO::{}::MT^2+177383+42557\ud835\udc56)*(-\ud835\udc56)*(105539+52283\ud835\udc56+80*UFO::{}::MT^2)+((-59+95\ud835\udc56)*UFO::{}::MT^2+17507+72919\ud835\udc56)*((-95-44\ud835\udc56)*UFO::{}::MT^2+244+41363\ud835\udc56)+((-64\ud835\udc56)*UFO::{}::MT^2+15453+62145\ud835\udc56)*((80\ud835\udc56)*UFO::{}::MT^2+34475+108003\ud835\udc56)*-1+((-64\ud835\udc56)*UFO::{}::MT^2+38115+36063\ud835\udc56)*(-\ud835\udc56)*(105539+52283\ud835\udc56+80*UFO::{}::MT^2)+((-66\ud835\udc56)*UFO::{}::MT^2+80899+2317\ud835\udc56)*((-94\ud835\udc56)*UFO::{}::MT^2+69927+50591\ud835\udc56)+((-66\ud835\udc56)*UFO::{}::MT^2+80899+2317\ud835\udc56)*(-\ud835\udc56)*(159871+49211\ud835\udc56+82*UFO::{}::MT^2)+((-67-17\ud835\udc56)*UFO::{}::MT^2+38633+5565\ud835\udc56)*((-86+19\ud835\udc56)*UFO::{}::MT^2+4729+53230\ud835\udc56)*-1+((-67-17\ud835\udc56)*UFO::{}::MT^2+38633+5565\ud835\udc56)*((-86+19\ud835\udc56)*UFO::{}::MT^2+67217+52208\ud835\udc56)*-1+((-78\ud835\udc56)*UFO::{}::MT^2+27709+63727\ud835\udc56)*(102*UFO::{}::MT^2+54845+98245\ud835\udc56)*(\ud835\udc56)+((-78\ud835\udc56)*UFO::{}::MT^2+81277+55313\ud835\udc56)*(102*UFO::{}::MT^2+41265+102697\ud835\udc56)*(\ud835\udc56)+((-8\ud835\udc56)*UFO::{}::MT^2+9271+48997\ud835\udc56)*(-7*UFO::{}::MT^2+2862)*(14\ud835\udc56)+((-94\ud835\udc56)*UFO::{}::MT^2+73049+21999\ud835\udc56)*(-\ud835\udc56)*(25879+56959\ud835\udc56+66*UFO::{}::MT^2)+((-95+28\ud835\udc56)*UFO::{}::MT^2+201372+18727\ud835\udc56)*(59*UFO::{}::MT^2+80934)*-1+((-95-28\ud835\udc56)*UFO::{}::MT^2+12762+50925\ud835\udc56)*(136360+59*UFO::{}::MT^2)*-1+((-95-28\ud835\udc56)*UFO::{}::MT^2+21302+55363\ud835\udc56)*(-59*UFO::{}::MT^2+140252)+((102-19\ud835\udc56)*UFO::{}::MT^2+158403+44640\ud835\udc56)*(51*UFO::{}::MT^2+82880)+((102-51\ud835\udc56)*UFO::{}::MT^2+81367+21218\ud835\udc56)*((87-51\ud835\udc56)*UFO::{}::MT^2+83937+28973\ud835\udc56)*(\ud835\udc56)+((102-51\ud835\udc56)*UFO::{}::MT^2+9439+41120\ud835\udc56)*((87-51\ud835\udc56)*UFO::{}::MT^2+83937+28973\ud835\udc56)*(\ud835\udc56)+((102\ud835\udc56)*UFO::{}::MT^2+102697+41265\ud835\udc56)*(-18*UFO::{}::MT^2+13551+49805\ud835\udc56)*(3\ud835\udc56)+((102\ud835\udc56)*UFO::{}::MT^2+102697+41265\ud835\udc56)*(-78*UFO::{}::MT^2+55313+81277\ud835\udc56)*(\ud835\udc56)+((102\ud835\udc56)*UFO::{}::MT^2+98245+54845\ud835\udc56)*((18\ud835\udc56)*UFO::{}::MT^2+51149+10835\ud835\udc56)*-3+((102\ud835\udc56)*UFO::{}::MT^2+98245+54845\ud835\udc56)*(-78*UFO::{}::MT^2+63727+27709\ud835\udc56)*(\ud835\udc56)+((138\ud835\udc56)*UFO::{}::MT^2+33931+15073\ud835\udc56)*(-18\ud835\udc56)*(-2*UFO::{}::MT^2+231)+((154\ud835\udc56)*UFO::{}::MT^2+43275+209037\ud835\udc56)*(-2*UFO::{}::MT^2+6363)*(18\ud835\udc56)+((17+23\ud835\udc56)*UFO::{}::MT^2+9387+15505\ud835\udc56)*((28+19\ud835\udc56)*UFO::{}::MT^2+43935+7188\ud835\udc56)*(\ud835\udc56)+((18\ud835\udc56)*UFO::{}::MT^2+116727+48653\ud835\udc56)*(17437+5*UFO::{}::MT^2)*(4\ud835\udc56)+((18\ud835\udc56)*UFO::{}::MT^2+91031+93219\ud835\udc56)*(11599+5*UFO::{}::MT^2)*(4\ud835\udc56)+((19+28\ud835\udc56)*UFO::{}::MT^2+7188+43935\ud835\udc56)*((23+17\ud835\udc56)*UFO::{}::MT^2+15505+9387\ud835\udc56)*(\ud835\udc56)+((19+44\ud835\udc56)*UFO::{}::MT^2+51430+215549\ud835\udc56)*(-95*UFO::{}::MT^2+1806)*(\ud835\udc56)+((19-102\ud835\udc56)*UFO::{}::MT^2+39312+279059\ud835\udc56)*(51*UFO::{}::MT^2+76412)*(\ud835\udc56)+((23+17\ud835\udc56)*UFO::{}::MT^2+15505+9387\ud835\udc56)*((28-19\ud835\udc56)*UFO::{}::MT^2+10063+8142\ud835\udc56)*-1+((28+51\ud835\udc56)*UFO::{}::MT^2+125453+213782\ud835\udc56)*(-\ud835\udc56)*(30464+87*UFO::{}::MT^2)+((28-95\ud835\udc56)*UFO::{}::MT^2+18727+201372\ud835\udc56)*(59*UFO::{}::MT^2+80934)*(\ud835\udc56)+((44+19\ud835\udc56)*UFO::{}::MT^2+215549+51430\ud835\udc56)*(-95*UFO::{}::MT^2+1806)*-1+((44-19\ud835\udc56)*UFO::{}::MT^2+17697+59192\ud835\udc56)*(-95*UFO::{}::MT^2+174972)*-1+((44-19\ud835\udc56)*UFO::{}::MT^2+19643+55244\ud835\udc56)*(144648+95*UFO::{}::MT^2)+((51+28\ud835\udc56)*UFO::{}::MT^2+213782+125453\ud835\udc56)*(30464+87*UFO::{}::MT^2)+((51-28\ud835\udc56)*UFO::{}::MT^2+39480+40559\ud835\udc56)*(-87*UFO::{}::MT^2+84238)*-1+((51-28\ud835\udc56)*UFO::{}::MT^2+39844+36821\ud835\udc56)*(155582+87*UFO::{}::MT^2)+((52\ud835\udc56)*UFO::{}::MT^2+173351+18057\ud835\udc56)*((80\ud835\udc56)*UFO::{}::MT^2+34475+108003\ud835\udc56)+((66\ud835\udc56)*UFO::{}::MT^2+56959+25879\ud835\udc56)*((82\ud835\udc56)*UFO::{}::MT^2+25573+178799\ud835\udc56)+((66\ud835\udc56)*UFO::{}::MT^2+56959+25879\ud835\udc56)*(-94*UFO::{}::MT^2+21999+73049\ud835\udc56)*(-\ud835\udc56)+((68\ud835\udc56)*UFO::{}::MT^2+16613+171183\ud835\udc56)*(-44*UFO::{}::MT^2+55867+53277\ud835\udc56)*(\ud835\udc56)+((68\ud835\udc56)*UFO::{}::MT^2+40251+155615\ud835\udc56)*(-44*UFO::{}::MT^2+48419+88389\ud835\udc56)*(\ud835\udc56)+((6\ud835\udc56)*UFO::{}::MT^2+21389+15635\ud835\udc56)*(-20*UFO::{}::MT^2+18963)*(2\ud835\udc56)+((6\ud835\udc56)*UFO::{}::MT^2+30733+5121\ud835\udc56)*(-2\ud835\udc56)*(20*UFO::{}::MT^2+2541)+((80\ud835\udc56)*UFO::{}::MT^2+52283+105539\ud835\udc56)*(-52*UFO::{}::MT^2+42557+177383\ud835\udc56)*(-\ud835\udc56)+((80\ud835\udc56)*UFO::{}::MT^2+52283+105539\ud835\udc56)*(-64*UFO::{}::MT^2+36063+38115\ud835\udc56)*(-\ud835\udc56)+((82\ud835\udc56)*UFO::{}::MT^2+49211+159871\ud835\udc56)*(-66*UFO::{}::MT^2+2317+80899\ud835\udc56)*(-\ud835\udc56)+((92\ud835\udc56)*UFO::{}::MT^2+45991+15675\ud835\udc56)*(-44*UFO::{}::MT^2+55867+53277\ud835\udc56)*(\ud835\udc56)+((95-28\ud835\udc56)*UFO::{}::MT^2+148428+115575\ud835\udc56)*(59*UFO::{}::MT^2+73878)+((95-44\ud835\udc56)*UFO::{}::MT^2+64626+28711\ud835\udc56)*((95-59\ud835\udc56)*UFO::{}::MT^2+72919+17507\ud835\udc56)*(\ud835\udc56)+(-12*UFO::{}::MT^2+4409+5475\ud835\udc56)*(-27*UFO::{}::MT^2+117698)*6+(-13*UFO::{}::MT^2+8141)*(-32*UFO::{}::MT^2+100785+10293\ud835\udc56)*-6+(-2*UFO::{}::MT^2+231)*(138*UFO::{}::MT^2+15073+33931\ud835\udc56)*18+(-2*UFO::{}::MT^2+6363)*(154*UFO::{}::MT^2+209037+43275\ud835\udc56)*-18+(-20*UFO::{}::MT^2+18963)*(15635+21389\ud835\udc56+6*UFO::{}::MT^2)*-2+(-22*UFO::{}::MT^2+57957+13303\ud835\udc56)*(-3*UFO::{}::MT^2+3178)*-56+(-22*UFO::{}::MT^2+5835+12393\ud835\udc56)*(31*UFO::{}::MT^2+46536)*-4+(-44*UFO::{}::MT^2+48419+88389\ud835\udc56)*(-92*UFO::{}::MT^2+373+49113\ud835\udc56)+(-48*UFO::{}::MT^2+340573+19637\ud835\udc56)*(18109+UFO::{}::MT^2)*6+(-64*UFO::{}::MT^2+62145+15453\ud835\udc56)*(108003+34475\ud835\udc56+80*UFO::{}::MT^2)+(-66*UFO::{}::MT^2+2317+80899\ud835\udc56)*(-94*UFO::{}::MT^2+50591+69927\ud835\udc56)*-1+(-7*UFO::{}::MT^2+2862)*(-8*UFO::{}::MT^2+48997+9271\ud835\udc56)*-14+(102*UFO::{}::MT^2+54845+98245\ud835\udc56)*(10835+51149\ud835\udc56+18*UFO::{}::MT^2)*3+(108003+34475\ud835\udc56+80*UFO::{}::MT^2)*(18057+173351\ud835\udc56+52*UFO::{}::MT^2)*-1+(11599+5*UFO::{}::MT^2)*(18*UFO::{}::MT^2+93219+91031\ud835\udc56)*-4+(17437+5*UFO::{}::MT^2)*(18*UFO::{}::MT^2+48653+116727\ud835\udc56)*-4+(178799+25573\ud835\udc56+82*UFO::{}::MT^2)*(25879+56959\ud835\udc56+66*UFO::{}::MT^2)*-1+(20*UFO::{}::MT^2+2541)*(5121+30733\ud835\udc56+6*UFO::{}::MT^2)*2+83068086304)*(((-111\ud835\udc56)*UFO::{}::MT^2+901+319166\ud835\udc56)*((4\ud835\udc56)*UFO::{}::MT^2+245+7525\ud835\udc56)*2+((-11\ud835\udc56)*UFO::{}::MT^2+1365+25025\ud835\udc56)*(14\ud835\udc56)*(3*UFO::{}::MT^2+4498)+((-11\ud835\udc56)*UFO::{}::MT^2+5418+7308\ud835\udc56)*(-3*UFO::{}::MT^2+5600+2280\ud835\udc56)*(14\ud835\udc56)+((-22-29\ud835\udc56)*UFO::{}::MT^2+14910+7574\ud835\udc56)*((-59-52\ud835\udc56)*UFO::{}::MT^2+292370+256386\ud835\udc56)*(-\ud835\udc56)+((-22-29\ud835\udc56)*UFO::{}::MT^2+1610+17150\ud835\udc56)*((59+52\ud835\udc56)*UFO::{}::MT^2+12096+10437\ud835\udc56)*(-\ud835\udc56)+((-22-29\ud835\udc56)*UFO::{}::MT^2+31122+18382\ud835\udc56)*((-59-52\ud835\udc56)*UFO::{}::MT^2+292370+256386\ud835\udc56)*(-\ud835\udc56)+((-22-29\ud835\udc56)*UFO::{}::MT^2+6776+15554\ud835\udc56)*((-59-52\ud835\udc56)*UFO::{}::MT^2+69744+140168\ud835\udc56)*(\ud835\udc56)+((-29+22\ud835\udc56)*UFO::{}::MT^2+13146+938\ud835\udc56)*((59+52\ud835\udc56)*UFO::{}::MT^2+94234+82733\ud835\udc56)+((-29-22\ud835\udc56)*UFO::{}::MT^2+15554+6776\ud835\udc56)*((-52-59\ud835\udc56)*UFO::{}::MT^2+140168+69744\ud835\udc56)*(\ud835\udc56)+((-29-22\ud835\udc56)*UFO::{}::MT^2+17150+1610\ud835\udc56)*((52+59\ud835\udc56)*UFO::{}::MT^2+10437+12096\ud835\udc56)*(-\ud835\udc56)+((-29-22\ud835\udc56)*UFO::{}::MT^2+18382+31122\ud835\udc56)*((-52-59\ud835\udc56)*UFO::{}::MT^2+256386+292370\ud835\udc56)*(-\ud835\udc56)+((-29-22\ud835\udc56)*UFO::{}::MT^2+7574+14910\ud835\udc56)*((-52-59\ud835\udc56)*UFO::{}::MT^2+256386+292370\ud835\udc56)*(-\ud835\udc56)+((-37\ud835\udc56)*UFO::{}::MT^2+5240+12560\ud835\udc56)*(4*UFO::{}::MT^2+6468+3311\ud835\udc56)*(6\ud835\udc56)+((-3\ud835\udc56)*UFO::{}::MT^2+17+8752\ud835\udc56)*((11\ud835\udc56)*UFO::{}::MT^2+1561+9933\ud835\udc56)*-14+((-3\ud835\udc56)*UFO::{}::MT^2+2280+5600\ud835\udc56)*(-11*UFO::{}::MT^2+7308+5418\ud835\udc56)*(14\ud835\udc56)+((-4\ud835\udc56)*UFO::{}::MT^2+819+6909\ud835\udc56)*(-37*UFO::{}::MT^2+139438)*(6\ud835\udc56)+((-52-59\ud835\udc56)*UFO::{}::MT^2+96488+47904\ud835\udc56)*((29+22\ud835\udc56)*UFO::{}::MT^2+17892+10584\ud835\udc56)*(-\ud835\udc56)+((-59-52\ud835\udc56)*UFO::{}::MT^2+47904+96488\ud835\udc56)*((22+29\ud835\udc56)*UFO::{}::MT^2+10584+17892\ud835\udc56)*(-\ud835\udc56)+((22-29\ud835\udc56)*UFO::{}::MT^2+938+13146\ud835\udc56)*((52+59\ud835\udc56)*UFO::{}::MT^2+82733+94234\ud835\udc56)*-1+((4\ud835\udc56)*UFO::{}::MT^2+3311+6468\ud835\udc56)*(-37*UFO::{}::MT^2+12560+5240\ud835\udc56)*(6\ud835\udc56)+(-11*UFO::{}::MT^2+25025+1365\ud835\udc56)*(3*UFO::{}::MT^2+4498)*-14+(-111*UFO::{}::MT^2+319166+901\ud835\udc56)*(4*UFO::{}::MT^2+7525+245\ud835\udc56)*-2+(-3*UFO::{}::MT^2+8752+17\ud835\udc56)*(11*UFO::{}::MT^2+9933+1561\ud835\udc56)*14+(-37*UFO::{}::MT^2+139438)*(-4*UFO::{}::MT^2+6909+819\ud835\udc56)*-6+(19985*UFO::{}::MT^2+762961)*-4*UFO::{}::MT^2+33616634548)^(-1)*-1/7",
+          "source": 262
+        }
+      ]
+    },
+    {
+      "master": 169,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(2)",
+          "ratio": "1",
+          "source": 263
+        }
+      ]
+    },
+    {
+      "master": 170,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(6)",
+          "ratio": "1",
+          "source": 264
+        }
+      ]
+    },
+    {
+      "master": 171,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(2)",
+          "ratio": "1",
+          "source": 265
+        }
+      ]
+    },
+    {
+      "master": 172,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(3)",
+          "ratio": "1",
+          "source": 266
+        }
+      ]
+    },
+    {
+      "master": 173,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(1)",
+          "ratio": "1",
+          "source": 267
+        }
+      ]
+    },
+    {
+      "master": 174,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)/AutG(1)",
+          "ratio": "1",
+          "source": 268
+        }
+      ]
+    },
+    {
+      "master": 175,
+      "members": [
+        {
+          "cancelled_ratio": "1",
+          "overall_factor": "ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)/AutG(6)",
+          "ratio": "1",
+          "source": 269
+        }
+      ]
+    }
+  ],
+  "weight_sum": "383/56-1/42*(83068086304+6*(18109+MT^2)*(340573+19637\u001b[35m\ud835\udc56\u001b[0m-48*MT^2)-6\u001b[35m\ud835\udc56\u001b[0m*(18109+MT^2)*(19637+340573\u001b[35m\ud835\udc56\u001b[0m-48\u001b[35m\ud835\udc56\u001b[0m*MT^2)+18*(231-2*MT^2)*(15073+33931\u001b[35m\ud835\udc56\u001b[0m+138*MT^2)-18\u001b[35m\ud835\udc56\u001b[0m*(231-2*MT^2)*(33931+15073\u001b[35m\ud835\udc56\u001b[0m+138\u001b[35m\ud835\udc56\u001b[0m*MT^2)-\u001b[35m\ud835\udc56\u001b[0m*(30464+87*MT^2)*(125453+213782\u001b[35m\ud835\udc56\u001b[0m+(28+51\u001b[35m\ud835\udc56\u001b[0m)*MT^2)+(30464+87*MT^2)*(213782+125453\u001b[35m\ud835\udc56\u001b[0m+(51+28\u001b[35m\ud835\udc56\u001b[0m)*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(1806-95*MT^2)*(51430+215549\u001b[35m\ud835\udc56\u001b[0m+(19+44\u001b[35m\ud835\udc56\u001b[0m)*MT^2)-(1806-95*MT^2)*(215549+51430\u001b[35m\ud835\udc56\u001b[0m+(44+19\u001b[35m\ud835\udc56\u001b[0m)*MT^2)+2\u001b[35m\ud835\udc56\u001b[0m*(18963-20*MT^2)*(21389+15635\u001b[35m\ud835\udc56\u001b[0m+6\u001b[35m\ud835\udc56\u001b[0m*MT^2)-4*(17437+5*MT^2)*(48653+116727\u001b[35m\ud835\udc56\u001b[0m+18*MT^2)+4\u001b[35m\ud835\udc56\u001b[0m*(17437+5*MT^2)*(116727+48653\u001b[35m\ud835\udc56\u001b[0m+18\u001b[35m\ud835\udc56\u001b[0m*MT^2)-14*(2862-7*MT^2)*(48997+9271\u001b[35m\ud835\udc56\u001b[0m-8*MT^2)+14\u001b[35m\ud835\udc56\u001b[0m*(2862-7*MT^2)*(9271+48997\u001b[35m\ud835\udc56\u001b[0m-8\u001b[35m\ud835\udc56\u001b[0m*MT^2)-4*(11599+5*MT^2)*(93219+91031\u001b[35m\ud835\udc56\u001b[0m+18*MT^2)+4\u001b[35m\ud835\udc56\u001b[0m*(11599+5*MT^2)*(91031+93219\u001b[35m\ud835\udc56\u001b[0m+18\u001b[35m\ud835\udc56\u001b[0m*MT^2)-56*(3178-3*MT^2)*(57957+13303\u001b[35m\ud835\udc56\u001b[0m-22*MT^2)+56\u001b[35m\ud835\udc56\u001b[0m*(3178-3*MT^2)*(13303+57957\u001b[35m\ud835\udc56\u001b[0m-22\u001b[35m\ud835\udc56\u001b[0m*MT^2)-6*(8141-13*MT^2)*(100785+10293\u001b[35m\ud835\udc56\u001b[0m-32*MT^2)+6\u001b[35m\ud835\udc56\u001b[0m*(8141-13*MT^2)*(10293+100785\u001b[35m\ud835\udc56\u001b[0m-32\u001b[35m\ud835\udc56\u001b[0m*MT^2)-18*(6363-2*MT^2)*(209037+43275\u001b[35m\ud835\udc56\u001b[0m+154*MT^2)+18\u001b[35m\ud835\udc56\u001b[0m*(6363-2*MT^2)*(43275+209037\u001b[35m\ud835\udc56\u001b[0m+154\u001b[35m\ud835\udc56\u001b[0m*MT^2)-\u001b[35m\ud835\udc56\u001b[0m*(29932-87*MT^2)*(127693+68566\u001b[35m\ud835\udc56\u001b[0m+(-28-51\u001b[35m\ud835\udc56\u001b[0m)*MT^2)+(29932-87*MT^2)*(68566+127693\u001b[35m\ud835\udc56\u001b[0m+(-51-28\u001b[35m\ud835\udc56\u001b[0m)*MT^2)+2*(2541+20*MT^2)*(5121+30733\u001b[35m\ud835\udc56\u001b[0m+6*MT^2)-2\u001b[35m\ud835\udc56\u001b[0m*(2541+20*MT^2)*(30733+5121\u001b[35m\ud835\udc56\u001b[0m+6\u001b[35m\ud835\udc56\u001b[0m*MT^2)-(80934+59*MT^2)*(201372+18727\u001b[35m\ud835\udc56\u001b[0m+(-95+28\u001b[35m\ud835\udc56\u001b[0m)*MT^2)-(76412+51*MT^2)*(279059+39312\u001b[35m\ud835\udc56\u001b[0m+(-102+19\u001b[35m\ud835\udc56\u001b[0m)*MT^2)-\u001b[35m\ud835\udc56\u001b[0m*(73878+59*MT^2)*(115575+148428\u001b[35m\ud835\udc56\u001b[0m+(-28+95\u001b[35m\ud835\udc56\u001b[0m)*MT^2)+(73878+59*MT^2)*(148428+115575\u001b[35m\ud835\udc56\u001b[0m+(95-28\u001b[35m\ud835\udc56\u001b[0m)*MT^2)+(82880+51*MT^2)*(158403+44640\u001b[35m\ud835\udc56\u001b[0m+(102-19\u001b[35m\ud835\udc56\u001b[0m)*MT^2)-\u001b[35m\ud835\udc56\u001b[0m*(75726-95*MT^2)*(99974+103069\u001b[35m\ud835\udc56\u001b[0m+(-19-44\u001b[35m\ud835\udc56\u001b[0m)*MT^2)+(75726-95*MT^2)*(103069+99974\u001b[35m\ud835\udc56\u001b[0m+(-44-19\u001b[35m\ud835\udc56\u001b[0m)*MT^2)-2*(15635+21389\u001b[35m\ud835\udc56\u001b[0m+6*MT^2)*(18963-20*MT^2)-(25879+56959\u001b[35m\ud835\udc56\u001b[0m+66*MT^2)*(178799+25573\u001b[35m\ud835\udc56\u001b[0m+82*MT^2)-\u001b[35m\ud835\udc56\u001b[0m*(25879+56959\u001b[35m\ud835\udc56\u001b[0m+66*MT^2)*(73049+21999\u001b[35m\ud835\udc56\u001b[0m-94\u001b[35m\ud835\udc56\u001b[0m*MT^2)+6*(4409+5475\u001b[35m\ud835\udc56\u001b[0m-12*MT^2)*(117698-27*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(15675+45991\u001b[35m\ud835\udc56\u001b[0m+92*MT^2)*(53277+55867\u001b[35m\ud835\udc56\u001b[0m-44\u001b[35m\ud835\udc56\u001b[0m*MT^2)+3*(10835+51149\u001b[35m\ud835\udc56\u001b[0m+18*MT^2)*(54845+98245\u001b[35m\ud835\udc56\u001b[0m+102*MT^2)+(373+49113\u001b[35m\ud835\udc56\u001b[0m-92*MT^2)*(48419+88389\u001b[35m\ud835\udc56\u001b[0m-44*MT^2)+(62145+15453\u001b[35m\ud835\udc56\u001b[0m-64*MT^2)*(108003+34475\u001b[35m\ud835\udc56\u001b[0m+80*MT^2)-4*(5835+12393\u001b[35m\ud835\udc56\u001b[0m-22*MT^2)*(46536+31*MT^2)-\u001b[35m\ud835\udc56\u001b[0m*(36063+38115\u001b[35m\ud835\udc56\u001b[0m-64*MT^2)*(52283+105539\u001b[35m\ud835\udc56\u001b[0m+80\u001b[35m\ud835\udc56\u001b[0m*MT^2)+3\u001b[35m\ud835\udc56\u001b[0m*(13551+49805\u001b[35m\ud835\udc56\u001b[0m-18*MT^2)*(102697+41265\u001b[35m\ud835\udc56\u001b[0m+102\u001b[35m\ud835\udc56\u001b[0m*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(63727+27709\u001b[35m\ud835\udc56\u001b[0m-78*MT^2)*(98245+54845\u001b[35m\ud835\udc56\u001b[0m+102\u001b[35m\ud835\udc56\u001b[0m*MT^2)-\u001b[35m\ud835\udc56\u001b[0m*(34+62313\u001b[35m\ud835\udc56\u001b[0m+(63+28\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(6965+62321\u001b[35m\ud835\udc56\u001b[0m+(-23-45\u001b[35m\ud835\udc56\u001b[0m)*MT^2)+(244+41363\u001b[35m\ud835\udc56\u001b[0m+(-95-44\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(17507+72919\u001b[35m\ud835\udc56\u001b[0m+(-59+95\u001b[35m\ud835\udc56\u001b[0m)*MT^2)-(2317+80899\u001b[35m\ud835\udc56\u001b[0m-66*MT^2)*(50591+69927\u001b[35m\ud835\udc56\u001b[0m-94*MT^2)-\u001b[35m\ud835\udc56\u001b[0m*(2317+80899\u001b[35m\ud835\udc56\u001b[0m-66*MT^2)*(49211+159871\u001b[35m\ud835\udc56\u001b[0m+82\u001b[35m\ud835\udc56\u001b[0m*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(55313+81277\u001b[35m\ud835\udc56\u001b[0m-78*MT^2)*(102697+41265\u001b[35m\ud835\udc56\u001b[0m+102\u001b[35m\ud835\udc56\u001b[0m*MT^2)+3\u001b[35m\ud835\udc56\u001b[0m*(41265+102697\u001b[35m\ud835\udc56\u001b[0m+102*MT^2)*(49805+13551\u001b[35m\ud835\udc56\u001b[0m-18\u001b[35m\ud835\udc56\u001b[0m*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(41265+102697\u001b[35m\ud835\udc56\u001b[0m+102*MT^2)*(81277+55313\u001b[35m\ud835\udc56\u001b[0m-78\u001b[35m\ud835\udc56\u001b[0m*MT^2)-\u001b[35m\ud835\udc56\u001b[0m*(42557+177383\u001b[35m\ud835\udc56\u001b[0m-52*MT^2)*(52283+105539\u001b[35m\ud835\udc56\u001b[0m+80\u001b[35m\ud835\udc56\u001b[0m*MT^2)-\u001b[35m\ud835\udc56\u001b[0m*(62313+34\u001b[35m\ud835\udc56\u001b[0m+(28+63\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(62321+6965\u001b[35m\ud835\udc56\u001b[0m+(-45-23\u001b[35m\ud835\udc56\u001b[0m)*MT^2)-(18057+173351\u001b[35m\ud835\udc56\u001b[0m+52*MT^2)*(108003+34475\u001b[35m\ud835\udc56\u001b[0m+80*MT^2)-(41363+244\u001b[35m\ud835\udc56\u001b[0m+(-44-95\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(72919+17507\u001b[35m\ud835\udc56\u001b[0m+(95-59\u001b[35m\ud835\udc56\u001b[0m)*MT^2)-\u001b[35m\ud835\udc56\u001b[0m*(21999+73049\u001b[35m\ud835\udc56\u001b[0m-94*MT^2)*(56959+25879\u001b[35m\ud835\udc56\u001b[0m+66\u001b[35m\ud835\udc56\u001b[0m*MT^2)-\u001b[35m\ud835\udc56\u001b[0m*(105539+52283\u001b[35m\ud835\udc56\u001b[0m+80*MT^2)*(177383+42557\u001b[35m\ud835\udc56\u001b[0m-52\u001b[35m\ud835\udc56\u001b[0m*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(9990+50547\u001b[35m\ud835\udc56\u001b[0m+(-19-102\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(131026+51*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(7188+43935\u001b[35m\ud835\udc56\u001b[0m+(19+28\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(15505+9387\u001b[35m\ud835\udc56\u001b[0m+(23+17\u001b[35m\ud835\udc56\u001b[0m)*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(53277+55867\u001b[35m\ud835\udc56\u001b[0m-44\u001b[35m\ud835\udc56\u001b[0m*MT^2)*(171183+16613\u001b[35m\ud835\udc56\u001b[0m+68*MT^2)-(17697+59192\u001b[35m\ud835\udc56\u001b[0m+(44-19\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(174972-95*MT^2)+(6965+62321\u001b[35m\ud835\udc56\u001b[0m+(-23-45\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(59101+45956\u001b[35m\ud835\udc56\u001b[0m+(28-63\u001b[35m\ud835\udc56\u001b[0m)*MT^2)+(21302+55363\u001b[35m\ud835\udc56\u001b[0m+(-95-28\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(140252-59*MT^2)-(39480+40559\u001b[35m\ud835\udc56\u001b[0m+(51-28\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(84238-87*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(59192+17697\u001b[35m\ud835\udc56\u001b[0m+(-19+44\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(174972-95*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(27709+63727\u001b[35m\ud835\udc56\u001b[0m-78\u001b[35m\ud835\udc56\u001b[0m*MT^2)*(54845+98245\u001b[35m\ud835\udc56\u001b[0m+102*MT^2)-\u001b[35m\ud835\udc56\u001b[0m*(55363+21302\u001b[35m\ud835\udc56\u001b[0m+(-28-95\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(140252-59*MT^2)-(10063+8142\u001b[35m\ud835\udc56\u001b[0m+(28-19\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(15505+9387\u001b[35m\ud835\udc56\u001b[0m+(23+17\u001b[35m\ud835\udc56\u001b[0m)*MT^2)-(15453+62145\u001b[35m\ud835\udc56\u001b[0m-64\u001b[35m\ud835\udc56\u001b[0m*MT^2)*(34475+108003\u001b[35m\ud835\udc56\u001b[0m+80\u001b[35m\ud835\udc56\u001b[0m*MT^2)-6\u001b[35m\ud835\udc56\u001b[0m*(5475+4409\u001b[35m\ud835\udc56\u001b[0m-12\u001b[35m\ud835\udc56\u001b[0m*MT^2)*(117698-27*MT^2)+4\u001b[35m\ud835\udc56\u001b[0m*(12393+5835\u001b[35m\ud835\udc56\u001b[0m-22\u001b[35m\ud835\udc56\u001b[0m*MT^2)*(46536+31*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(40559+39480\u001b[35m\ud835\udc56\u001b[0m+(-28+51\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(84238-87*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(64626+28711\u001b[35m\ud835\udc56\u001b[0m+(95-44\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(72919+17507\u001b[35m\ud835\udc56\u001b[0m+(95-59\u001b[35m\ud835\udc56\u001b[0m)*MT^2)-(50547+9990\u001b[35m\ud835\udc56\u001b[0m+(-102-19\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(131026+51*MT^2)-(4729+53230\u001b[35m\ud835\udc56\u001b[0m+(-86+19\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(38633+5565\u001b[35m\ud835\udc56\u001b[0m+(-67-17\u001b[35m\ud835\udc56\u001b[0m)*MT^2)-(45956+59101\u001b[35m\ud835\udc56\u001b[0m+(-63+28\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(62321+6965\u001b[35m\ud835\udc56\u001b[0m+(-45-23\u001b[35m\ud835\udc56\u001b[0m)*MT^2)-\u001b[35m\ud835\udc56\u001b[0m*(14218+60669\u001b[35m\ud835\udc56\u001b[0m+(-19-102\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(151802-51*MT^2)+(39844+36821\u001b[35m\ud835\udc56\u001b[0m+(51-28\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(155582+87*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(45991+15675\u001b[35m\ud835\udc56\u001b[0m+92\u001b[35m\ud835\udc56\u001b[0m*MT^2)*(55867+53277\u001b[35m\ud835\udc56\u001b[0m-44*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(9387+15505\u001b[35m\ud835\udc56\u001b[0m+(17+23\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(43935+7188\u001b[35m\ud835\udc56\u001b[0m+(28+19\u001b[35m\ud835\udc56\u001b[0m)*MT^2)+(19643+55244\u001b[35m\ud835\udc56\u001b[0m+(44-19\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(144648+95*MT^2)+(5565+38633\u001b[35m\ud835\udc56\u001b[0m+(-17-67\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(53230+4729\u001b[35m\ud835\udc56\u001b[0m+(19-86\u001b[35m\ud835\udc56\u001b[0m)*MT^2)+(5565+38633\u001b[35m\ud835\udc56\u001b[0m+(-17-67\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(52208+67217\u001b[35m\ud835\udc56\u001b[0m+(19-86\u001b[35m\ud835\udc56\u001b[0m)*MT^2)-\u001b[35m\ud835\udc56\u001b[0m*(55244+19643\u001b[35m\ud835\udc56\u001b[0m+(-19+44\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(144648+95*MT^2)-3*(51149+10835\u001b[35m\ud835\udc56\u001b[0m+18\u001b[35m\ud835\udc56\u001b[0m*MT^2)*(98245+54845\u001b[35m\ud835\udc56\u001b[0m+102\u001b[35m\ud835\udc56\u001b[0m*MT^2)+(8142+10063\u001b[35m\ud835\udc56\u001b[0m+(-19+28\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(9387+15505\u001b[35m\ud835\udc56\u001b[0m+(17+23\u001b[35m\ud835\udc56\u001b[0m)*MT^2)-\u001b[35m\ud835\udc56\u001b[0m*(36821+39844\u001b[35m\ud835\udc56\u001b[0m+(-28+51\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(155582+87*MT^2)-(49113+373\u001b[35m\ud835\udc56\u001b[0m-92\u001b[35m\ud835\udc56\u001b[0m*MT^2)*(88389+48419\u001b[35m\ud835\udc56\u001b[0m-44\u001b[35m\ud835\udc56\u001b[0m*MT^2)-(12762+50925\u001b[35m\ud835\udc56\u001b[0m+(-95-28\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(136360+59*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(9439+41120\u001b[35m\ud835\udc56\u001b[0m+(102-51\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(83937+28973\u001b[35m\ud835\udc56\u001b[0m+(87-51\u001b[35m\ud835\udc56\u001b[0m)*MT^2)-\u001b[35m\ud835\udc56\u001b[0m*(38115+36063\u001b[35m\ud835\udc56\u001b[0m-64\u001b[35m\ud835\udc56\u001b[0m*MT^2)*(105539+52283\u001b[35m\ud835\udc56\u001b[0m+80*MT^2)-(38633+5565\u001b[35m\ud835\udc56\u001b[0m+(-67-17\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(67217+52208\u001b[35m\ud835\udc56\u001b[0m+(-86+19\u001b[35m\ud835\udc56\u001b[0m)*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(50925+12762\u001b[35m\ud835\udc56\u001b[0m+(-28-95\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(136360+59*MT^2)+(60669+14218\u001b[35m\ud835\udc56\u001b[0m+(-102-19\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(151802-51*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(15393+67230\u001b[35m\ud835\udc56\u001b[0m+(-28-19\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(125727+93989\u001b[35m\ud835\udc56\u001b[0m+(-17-23\u001b[35m\ud835\udc56\u001b[0m)*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(18727+201372\u001b[35m\ud835\udc56\u001b[0m+(28-95\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(80934+59*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(28973+83937\u001b[35m\ud835\udc56\u001b[0m+(-51+87\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(41120+9439\u001b[35m\ud835\udc56\u001b[0m+(-51+102\u001b[35m\ud835\udc56\u001b[0m)*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(40251+155615\u001b[35m\ud835\udc56\u001b[0m+68\u001b[35m\ud835\udc56\u001b[0m*MT^2)*(48419+88389\u001b[35m\ud835\udc56\u001b[0m-44*MT^2)-\u001b[35m\ud835\udc56\u001b[0m*(44640+158403\u001b[35m\ud835\udc56\u001b[0m+(-19+102\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(82880+51*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(17507+72919\u001b[35m\ud835\udc56\u001b[0m+(-59+95\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(28711+64626\u001b[35m\ud835\udc56\u001b[0m+(-44+95\u001b[35m\ud835\udc56\u001b[0m)*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(39312+279059\u001b[35m\ud835\udc56\u001b[0m+(19-102\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(76412+51*MT^2)+(34475+108003\u001b[35m\ud835\udc56\u001b[0m+80\u001b[35m\ud835\udc56\u001b[0m*MT^2)*(173351+18057\u001b[35m\ud835\udc56\u001b[0m+52\u001b[35m\ud835\udc56\u001b[0m*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(21218+81367\u001b[35m\ud835\udc56\u001b[0m+(-51+102\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(28973+83937\u001b[35m\ud835\udc56\u001b[0m+(-51+87\u001b[35m\ud835\udc56\u001b[0m)*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(16613+171183\u001b[35m\ud835\udc56\u001b[0m+68\u001b[35m\ud835\udc56\u001b[0m*MT^2)*(55867+53277\u001b[35m\ud835\udc56\u001b[0m-44*MT^2)+(25573+178799\u001b[35m\ud835\udc56\u001b[0m+82\u001b[35m\ud835\udc56\u001b[0m*MT^2)*(56959+25879\u001b[35m\ud835\udc56\u001b[0m+66\u001b[35m\ud835\udc56\u001b[0m*MT^2)-\u001b[35m\ud835\udc56\u001b[0m*(80899+2317\u001b[35m\ud835\udc56\u001b[0m-66\u001b[35m\ud835\udc56\u001b[0m*MT^2)*(159871+49211\u001b[35m\ud835\udc56\u001b[0m+82*MT^2)+(69927+50591\u001b[35m\ud835\udc56\u001b[0m-94\u001b[35m\ud835\udc56\u001b[0m*MT^2)*(80899+2317\u001b[35m\ud835\udc56\u001b[0m-66\u001b[35m\ud835\udc56\u001b[0m*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(88389+48419\u001b[35m\ud835\udc56\u001b[0m-44\u001b[35m\ud835\udc56\u001b[0m*MT^2)*(155615+40251\u001b[35m\ud835\udc56\u001b[0m+68*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(67230+15393\u001b[35m\ud835\udc56\u001b[0m+(-19-28\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(93989+125727\u001b[35m\ud835\udc56\u001b[0m+(-23-17\u001b[35m\ud835\udc56\u001b[0m)*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(81367+21218\u001b[35m\ud835\udc56\u001b[0m+(102-51\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(83937+28973\u001b[35m\ud835\udc56\u001b[0m+(87-51\u001b[35m\ud835\udc56\u001b[0m)*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(93989+125727\u001b[35m\ud835\udc56\u001b[0m+(-23-17\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(127528+108541\u001b[35m\ud835\udc56\u001b[0m+(-19-28\u001b[35m\ud835\udc56\u001b[0m)*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(108541+127528\u001b[35m\ud835\udc56\u001b[0m+(-28-19\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(125727+93989\u001b[35m\ud835\udc56\u001b[0m+(-17-23\u001b[35m\ud835\udc56\u001b[0m)*MT^2))/(33616634548-14*(4498+3*MT^2)*(25025+1365\u001b[35m\ud835\udc56\u001b[0m-11*MT^2)+14*(8752+17\u001b[35m\ud835\udc56\u001b[0m-3*MT^2)*(9933+1561\u001b[35m\ud835\udc56\u001b[0m+11*MT^2)-2*(7525+245\u001b[35m\ud835\udc56\u001b[0m+4*MT^2)*(319166+901\u001b[35m\ud835\udc56\u001b[0m-111*MT^2)-6*(6909+819\u001b[35m\ud835\udc56\u001b[0m-4*MT^2)*(139438-37*MT^2)-14*(17+8752\u001b[35m\ud835\udc56\u001b[0m-3\u001b[35m\ud835\udc56\u001b[0m*MT^2)*(1561+9933\u001b[35m\ud835\udc56\u001b[0m+11\u001b[35m\ud835\udc56\u001b[0m*MT^2)+2*(245+7525\u001b[35m\ud835\udc56\u001b[0m+4\u001b[35m\ud835\udc56\u001b[0m*MT^2)*(901+319166\u001b[35m\ud835\udc56\u001b[0m-111\u001b[35m\ud835\udc56\u001b[0m*MT^2)+14\u001b[35m\ud835\udc56\u001b[0m*(5418+7308\u001b[35m\ud835\udc56\u001b[0m-11\u001b[35m\ud835\udc56\u001b[0m*MT^2)*(5600+2280\u001b[35m\ud835\udc56\u001b[0m-3*MT^2)+6\u001b[35m\ud835\udc56\u001b[0m*(819+6909\u001b[35m\ud835\udc56\u001b[0m-4\u001b[35m\ud835\udc56\u001b[0m*MT^2)*(139438-37*MT^2)-\u001b[35m\ud835\udc56\u001b[0m*(14910+7574\u001b[35m\ud835\udc56\u001b[0m+(-22-29\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(292370+256386\u001b[35m\ud835\udc56\u001b[0m+(-59-52\u001b[35m\ud835\udc56\u001b[0m)*MT^2)-\u001b[35m\ud835\udc56\u001b[0m*(1610+17150\u001b[35m\ud835\udc56\u001b[0m+(-22-29\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(12096+10437\u001b[35m\ud835\udc56\u001b[0m+(59+52\u001b[35m\ud835\udc56\u001b[0m)*MT^2)+14\u001b[35m\ud835\udc56\u001b[0m*(1365+25025\u001b[35m\ud835\udc56\u001b[0m-11\u001b[35m\ud835\udc56\u001b[0m*MT^2)*(4498+3*MT^2)-\u001b[35m\ud835\udc56\u001b[0m*(10584+17892\u001b[35m\ud835\udc56\u001b[0m+(22+29\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(47904+96488\u001b[35m\ud835\udc56\u001b[0m+(-59-52\u001b[35m\ud835\udc56\u001b[0m)*MT^2)+(13146+938\u001b[35m\ud835\udc56\u001b[0m+(-29+22\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(94234+82733\u001b[35m\ud835\udc56\u001b[0m+(59+52\u001b[35m\ud835\udc56\u001b[0m)*MT^2)+6\u001b[35m\ud835\udc56\u001b[0m*(5240+12560\u001b[35m\ud835\udc56\u001b[0m-37\u001b[35m\ud835\udc56\u001b[0m*MT^2)*(6468+3311\u001b[35m\ud835\udc56\u001b[0m+4*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(6776+15554\u001b[35m\ud835\udc56\u001b[0m+(-22-29\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(69744+140168\u001b[35m\ud835\udc56\u001b[0m+(-59-52\u001b[35m\ud835\udc56\u001b[0m)*MT^2)-\u001b[35m\ud835\udc56\u001b[0m*(31122+18382\u001b[35m\ud835\udc56\u001b[0m+(-22-29\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(292370+256386\u001b[35m\ud835\udc56\u001b[0m+(-59-52\u001b[35m\ud835\udc56\u001b[0m)*MT^2)-\u001b[35m\ud835\udc56\u001b[0m*(7574+14910\u001b[35m\ud835\udc56\u001b[0m+(-29-22\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(256386+292370\u001b[35m\ud835\udc56\u001b[0m+(-52-59\u001b[35m\ud835\udc56\u001b[0m)*MT^2)-(938+13146\u001b[35m\ud835\udc56\u001b[0m+(22-29\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(82733+94234\u001b[35m\ud835\udc56\u001b[0m+(52+59\u001b[35m\ud835\udc56\u001b[0m)*MT^2)+\u001b[35m\ud835\udc56\u001b[0m*(15554+6776\u001b[35m\ud835\udc56\u001b[0m+(-29-22\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(140168+69744\u001b[35m\ud835\udc56\u001b[0m+(-52-59\u001b[35m\ud835\udc56\u001b[0m)*MT^2)-\u001b[35m\ud835\udc56\u001b[0m*(10437+12096\u001b[35m\ud835\udc56\u001b[0m+(52+59\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(17150+1610\u001b[35m\ud835\udc56\u001b[0m+(-29-22\u001b[35m\ud835\udc56\u001b[0m)*MT^2)-\u001b[35m\ud835\udc56\u001b[0m*(18382+31122\u001b[35m\ud835\udc56\u001b[0m+(-29-22\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(256386+292370\u001b[35m\ud835\udc56\u001b[0m+(-52-59\u001b[35m\ud835\udc56\u001b[0m)*MT^2)-\u001b[35m\ud835\udc56\u001b[0m*(17892+10584\u001b[35m\ud835\udc56\u001b[0m+(29+22\u001b[35m\ud835\udc56\u001b[0m)*MT^2)*(96488+47904\u001b[35m\ud835\udc56\u001b[0m+(-52-59\u001b[35m\ud835\udc56\u001b[0m)*MT^2)+14\u001b[35m\ud835\udc56\u001b[0m*(2280+5600\u001b[35m\ud835\udc56\u001b[0m-3\u001b[35m\ud835\udc56\u001b[0m*MT^2)*(7308+5418\u001b[35m\ud835\udc56\u001b[0m-11*MT^2)+6\u001b[35m\ud835\udc56\u001b[0m*(3311+6468\u001b[35m\ud835\udc56\u001b[0m+4\u001b[35m\ud835\udc56\u001b[0m*MT^2)*(12560+5240\u001b[35m\ud835\udc56\u001b[0m-37*MT^2)-4*MT^2*(762961+19985*MT^2))"
+}

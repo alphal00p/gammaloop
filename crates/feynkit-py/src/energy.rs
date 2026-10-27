@@ -7,20 +7,20 @@ use feynkit_cff::generalized::{LinearEnergyExpr, LinearSurfaceID, LinearSurfaceK
 use feynkit_cff::{Surface, SurfaceCache, SurfaceId};
 use feynkit_graph::FeynmanDiagram;
 use linnet::half_edge::involution::EdgeIndex;
-use pyo3::prelude::*;
+use pyo3::prelude::Py;
+use pyo3::prelude::PyResult;
+use pyo3::prelude::Python;
+use pyo3::prelude::pyclass;
+use pyo3::prelude::pymethods;
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
 use spynso3::expression::TensorExpression;
-use symbolica::{
-    api::python::PythonExpression,
-    atom::{Atom, AtomCore},
-    symbol,
-};
+use symbolica::api::python::PythonExpression;
+use symbolica::atom::{Atom, AtomCore};
+use symbolica::symbol;
 
-use crate::{
-    display::{expression_html, record_html},
-    error,
-};
+use crate::display::{expression_html, record_html};
+use crate::error;
 
 /// A symbolic on-shell energy shared by CFF and LTD.
 ///
@@ -39,11 +39,9 @@ use crate::{
 ///
 /// Examples
 /// --------
-/// >>> from symbolica.community import hepkit as hep
+/// >>> from symbolica.community import graph, hepkit as hep
 /// >>> process = hep.Model.phi3().process(["phi"], ["phi", "phi"])
-/// >>> diagrams = process.generate_diagrams(
-/// ...     loops=1, max_vertices=3, maximum_bridges=0, progress=None
-/// ... )
+/// >>> diagrams = process.amplitude(loops=hep.Loops.total(1), topology=hep.TopologyRules(max_vertices=3, bridges=graph.Bridges.at_most(0), self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless())).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
 /// >>> diagram = diagrams.diagrams[0]
 /// >>> rep = diagram.integrate_energy(method="cff")
 /// >>> energy = next(iter(rep.on_shell_energies.values()))
@@ -189,11 +187,9 @@ impl PyOnShellEnergy {
 ///
 /// Examples
 /// --------
-/// >>> from symbolica.community import hepkit as hep
+/// >>> from symbolica.community import graph, hepkit as hep
 /// >>> process = hep.Model.phi3().process(["phi"], ["phi", "phi"])
-/// >>> diagrams = process.generate_diagrams(
-/// ...     loops=1, max_vertices=3, maximum_bridges=0, progress=None
-/// ... )
+/// >>> diagrams = process.amplitude(loops=hep.Loops.total(1), topology=hep.TopologyRules(max_vertices=3, bridges=graph.Bridges.at_most(0), self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless())).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
 /// >>> diagram = diagrams.diagrams[0]
 /// >>> rep = diagram.integrate_energy(method="cff")
 /// >>> surface = rep.surfaces[0]
@@ -478,11 +474,9 @@ impl PyEnergySurface {
 ///
 /// Examples
 /// --------
-/// >>> from symbolica.community import hepkit as hep
+/// >>> from symbolica.community import graph, hepkit as hep
 /// >>> process = hep.Model.phi3().process(["phi"], ["phi", "phi"])
-/// >>> diagrams = process.generate_diagrams(
-/// ...     loops=1, max_vertices=3, maximum_bridges=0, progress=None
-/// ... )
+/// >>> diagrams = process.amplitude(loops=hep.Loops.total(1), topology=hep.TopologyRules(max_vertices=3, bridges=graph.Bridges.at_most(0), self_energies=hep.Veto.all(), tadpoles=hep.Veto.all(), snails=hep.Veto.massless())).generate().build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
 /// >>> diagram = diagrams.diagrams[0]
 /// >>> rep = diagram.integrate_energy(method="cff")
 /// >>> factor = rep.orientations[0].families[0].factors[0]

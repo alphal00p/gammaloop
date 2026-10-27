@@ -1,51 +1,44 @@
-use std::{
-    borrow::Cow,
-    collections::{BTreeSet, HashMap},
-    fmt::Display,
-    ops::{Deref, Range},
-};
+use std::borrow::Cow;
+use std::collections::{BTreeSet, HashMap};
+use std::fmt::Display;
+use std::ops::{Deref, Range};
 
 use bincode::{Decode, Encode};
 
 use color_eyre::Result;
-use idenso::{coad, cof, color::CS, color_cas, color_idx};
+use idenso::color::CS;
+use idenso::{coad, cof, color_cas, color_idx};
 use itertools::Itertools;
 use linnet::half_edge::involution::EdgeIndex;
-use spenso::{
-    algebra::{
-        algebraic_traits::{IsZero, RefZero},
-        complex::Complex,
-    },
-    iterators::IteratableTensor,
-    network::{ExecutionResult, parsing::ParseSettings},
-    structure::concrete_index::ExpandedIndex,
-};
+use spenso::algebra::algebraic_traits::{IsZero, RefZero};
+use spenso::algebra::complex::Complex;
+use spenso::iterators::IteratableTensor;
+use spenso::network::ExecutionResult;
+use spenso::network::parsing::ParseSettings;
+use spenso::structure::concrete_index::ExpandedIndex;
 use symbolica::evaluate::{FunctionRegistrationOptions, InliningPolicy};
 use symbolica::prelude::{
     Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, FunctionMap, Indeterminate, Rational,
     ReplaceWith, Replacement, Symbol, parse_lit, symbol,
 };
-use tabled::{Table, settings::Style};
+use tabled::Table;
+use tabled::settings::Style;
 use three_dimensional_reps::{MediumMode, ThermalDistributionCall};
 use tracing::debug;
 use tracing::warn;
 
-use crate::{
-    GammaLoopContext,
-    graph::{Graph, LoopMomentumBasis},
-    integrands::process::{
-        amplitude::export::ExportAtomTo,
-        evaluators::{InputParams, SliceMut},
-    },
-    model::{Model, ModelGammaLoopExt, UFOSymbol},
-    momentum::sample::{ExternalFourMomenta, MomentumSample},
-    momentum::{Helicity, PolType},
-    numerator::ParsingNet,
-    utils::{
-        F, FloatLike, GS, PrecisionUpgradable, TENSORLIB, VarFloat, f128,
-        hyperdual_utils::DualOrNot, symbolica_ext::LOGPRINTOPTS, tracing::StatusRenderable,
-    },
-};
+use crate::GammaLoopContext;
+use crate::graph::{Graph, LoopMomentumBasis};
+use crate::integrands::process::amplitude::export::ExportAtomTo;
+use crate::integrands::process::evaluators::{InputParams, SliceMut};
+use crate::model::{Model, ModelGammaLoopExt, UFOSymbol};
+use crate::momentum::sample::{ExternalFourMomenta, MomentumSample};
+use crate::momentum::{Helicity, PolType};
+use crate::numerator::ParsingNet;
+use crate::utils::hyperdual_utils::DualOrNot;
+use crate::utils::symbolica_ext::LOGPRINTOPTS;
+use crate::utils::tracing::StatusRenderable;
+use crate::utils::{F, FloatLike, GS, PrecisionUpgradable, TENSORLIB, VarFloat, f128};
 
 #[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
 #[trait_decode(trait = GammaLoopContext)]
@@ -1972,13 +1965,11 @@ impl<T: FloatLike> Display for ParamBuilder<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        finalized_runtime_dot,
-        initialisation::test_initialise,
-        momentum::sample::{BareMomentumSample, LoopMomenta},
-        utils::{ArbPrec, SamplingFloat, load_generic_model},
-        uv::uv_graph::UVE,
-    };
+    use crate::dot;
+    use crate::initialisation::test_initialise;
+    use crate::momentum::sample::{BareMomentumSample, LoopMomenta};
+    use crate::utils::{ArbPrec, SamplingFloat, load_generic_model};
+    use crate::uv::uv_graph::UVE;
 
     #[test]
     fn polarization_cache_keeps_the_latest_64_absolute_keys() {
@@ -2544,19 +2535,17 @@ mod tests {
     /// must vanish exactly.
     #[test]
     fn vacuum_subtracted_thermal_weights_keep_uv_tails_and_exact_zeros() {
-        use three_dimensional_reps::{
-            ThermalDistributionFactor,
-            thermal::{ThermalNumerator, ThermalWeight, VACUUM_SUBTRACTION},
+        use three_dimensional_reps::ThermalDistributionFactor;
+        use three_dimensional_reps::thermal::{
+            ThermalNumerator, ThermalWeight, VACUUM_SUBTRACTION,
         };
 
         use symbolica::evaluate::OptimizationSettings;
 
-        use crate::{
-            integrands::process::{GenericEvaluator, GenericEvaluatorFloat},
-            processes::EvaluatorSettings,
-            settings::global::GammaloopCompileOptions,
-            utils::f128,
-        };
+        use crate::integrands::process::{GenericEvaluator, GenericEvaluatorFloat};
+        use crate::processes::EvaluatorSettings;
+        use crate::settings::global::GammaloopCompileOptions;
+        use crate::utils::f128;
 
         test_initialise().unwrap();
         let mut graph: Graph = crate::graph::Graph::unit_numerator_fixtures(
@@ -2757,11 +2746,11 @@ mod tests {
         where
             ParamBuilder<f64>: UpdateAndGetParams<T>,
         {
-            let graph = finalized_runtime_dot!(
+            let graph = dot!(
                 digraph arb_parameter_baseline { graph [projector=1]
                     edge [num=1 mass=0]
                     node [num=1]
-                    A -> B [id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+                    A -> B [particle=H id=0]
                 }
             )
             .unwrap();

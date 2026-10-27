@@ -1,32 +1,27 @@
-use gammalooprs::{
-    graph::{Graph, parse::IntoFinalizedRuntimeGraph},
-    initialisation::test_initialise,
-    model::{Model, ModelGammaLoopExt},
-    numerator::{aind::Aind, symbolica_ext::NumeratorAtomExt},
-    processes::{Amplitude, AmplitudeGraph},
-    utils::{GS, load_generic_model},
-    uv::{
-        ApproximationType, RenormalizationPart, RenormalizationPrescriptionSettings,
-        UVOrchestrator, UVgenerationSettings,
-        settings::{AlphaLoopSettings, MATADSettings, VakintSettings},
-    },
+use gammalooprs::graph::Graph;
+use gammalooprs::graph::parse::IntoGraph;
+use gammalooprs::initialisation::test_initialise;
+use gammalooprs::model::{Model, ModelGammaLoopExt};
+use gammalooprs::numerator::aind::Aind;
+use gammalooprs::numerator::symbolica_ext::NumeratorAtomExt;
+use gammalooprs::processes::{Amplitude, AmplitudeGraph};
+use gammalooprs::utils::{GS, load_generic_model};
+use gammalooprs::uv::settings::{AlphaLoopSettings, MATADSettings, VakintSettings};
+use gammalooprs::uv::{
+    ApproximationType, RenormalizationPart, RenormalizationPrescriptionSettings, UVOrchestrator,
+    UVgenerationSettings,
 };
-use idenso::{
-    CookMode, CookSettings, IndexTooling, coad, cof,
-    color::{CS, ColorSimplifier, ColorSimplifySettings},
-    color_cas, color_idx,
-    dirac::GammaSimplifySettings,
-    tensor::{ContractSettings, SymbolicTensor},
-};
-use spenso::{
-    network::{library::symbolic::ETS, tags::SPENSO_TAG},
-    shadowing::symbolica_utils::LogPrint,
-    structure::{abstract_index::AbstractIndex, representation::RepName},
-};
-use symbolica::{
-    atom::{Atom, AtomCore, Symbol},
-    function, parse, parse_lit,
-};
+use idenso::color::{CS, ColorSimplifier, ColorSimplifySettings};
+use idenso::dirac::GammaSimplifySettings;
+use idenso::tensor::{ContractSettings, SymbolicTensor};
+use idenso::{CookMode, CookSettings, IndexTooling, coad, cof, color_cas, color_idx};
+use spenso::network::library::symbolic::ETS;
+use spenso::network::tags::SPENSO_TAG;
+use spenso::shadowing::symbolica_utils::LogPrint;
+use spenso::structure::abstract_index::AbstractIndex;
+use spenso::structure::representation::RepName;
+use symbolica::atom::{Atom, AtomCore, Symbol};
+use symbolica::{function, parse, parse_lit};
 use symbolica_utils::AtomPrintExt;
 
 fn pole_part_uv_settings() -> UVgenerationSettings {
@@ -278,7 +273,7 @@ fn rqft_alignment_normalizes_positive_uv_scale_logs() {
 #[test]
 fn scalar_pole_part() {
     test_initialise().unwrap();
-    let sunrise: Vec<Graph> = Graph::import_dot(
+    let sunrise: Vec<Graph> = Graph::from_dot(
         stringify!(digraph sunrise {
             edge [particle=scalar_1]
             A -> B [id=0]
@@ -371,7 +366,7 @@ fn finite_part_quark_lo() {
     test_initialise().unwrap();
     let model = load_generic_model("sm");
     let g: Vec<Graph> = include_str!("fixtures/renormalization/quark_lo.dot")
-        .into_finalized_runtime_graph(&model)
+        .into_graph(&model)
         .unwrap();
 
     let mut results = Vec::new();
@@ -472,7 +467,7 @@ fn finite_part_ghost_2loop() {
     test_initialise().unwrap();
     let fixture_model = load_generic_model("sm");
     let g: Vec<Graph> = include_str!("fixtures/renormalization/ghost_2loop.dot")
-        .into_finalized_runtime_graph(&fixture_model)
+        .into_graph(&fixture_model)
         .unwrap();
 
     let mut amp = Amplitude::from_graph_list("bub", g).unwrap();
@@ -648,7 +643,7 @@ fn finit_part_ghlo() {
 
     let fixture_model = load_generic_model("sm");
     let g: Vec<Graph> = include_str!("fixtures/renormalization/ghost_lo.dot")
-        .into_finalized_runtime_graph(&fixture_model)
+        .into_graph(&fixture_model)
         .unwrap();
 
     let mut amp = Amplitude::from_graph_list("bub", g).unwrap();
@@ -709,7 +704,7 @@ fn finite_part_ghost_3loop_developed() {
     test_initialise().unwrap();
 
     let model = load_generic_model("sm");
-    let g: Vec<Graph> = Graph::import_dot(
+    let g: Vec<Graph> = Graph::from_dot(
         include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/../../tests/resources/graphs/uv_tests/rqft_ghG_3l.dot"
@@ -979,7 +974,7 @@ macro_rules! rqft_ghost_reference {
         fn $name() {
             test_initialise().unwrap();
             let model = load_generic_model("sm");
-            let graphs: Vec<Graph> = Graph::import_dot(include_str!(concat!(
+            let graphs: Vec<Graph> = Graph::from_dot(include_str!(concat!(
                     env!("CARGO_MANIFEST_DIR"),
                     "/../../tests/resources/graphs/uv_tests/rqft_ghG_3l.dot"
                 )), &model)
@@ -1119,7 +1114,7 @@ mod slow {
         test_initialise().unwrap();
 
         let model = load_generic_model("sm");
-        let g: Vec<Graph> = Graph::import_dot(
+        let g: Vec<Graph> = Graph::from_dot(
             include_str!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
                 "/../../tests/resources/graphs/uv_tests/rqft_a_3l_no_ghost.dot"
@@ -1291,7 +1286,7 @@ fn finite_part_ghost_3loop_quark_bubble() {
     test_initialise().unwrap();
 
     let model = load_generic_model("sm");
-    let g: Vec<Graph> = Graph::import_dot(
+    let g: Vec<Graph> = Graph::from_dot(
         include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/../../tests/resources/graphs/uv_tests/rqft_ghG_3l.dot"

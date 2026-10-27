@@ -52,9 +52,18 @@ an installed workflow.
 ```python
 from symbolica import E, S
 import symbolica.community.hepkit as fk
+from symbolica.community.graph import Bridges
 
 model = fk.Model("crates/feynkit-py/tests/fixtures/scalars_2p_3p.json")
-diagrams = model.process(["scalar_0"], ["scalar_0"], vertex_allow=["V_3_SCALAR_000"]).generate_diagrams(loops=1, max_vertices=2, allow_self_loops=False).diagrams
+request = model.process(["scalar_0"], ["scalar_0"]).amplitude(
+    loops=fk.Loops.total(1),
+    restrict=fk.Restrict().only_vertices(["V_3_SCALAR_000"]),
+    topology=fk.TopologyRules(
+        max_vertices=2, self_loops=False, bridges=Bridges.one_pi_in_loops(),
+        self_energies=fk.Veto.all(), tadpoles=fk.Veto.all(), snails=fk.Veto.massless(),
+    ),
+)
+diagrams = request.generate().build()
 diagram = diagrams[0]
 family = diagram.integral_family()
 p = family.external_momenta[0]
@@ -477,7 +486,7 @@ Regressions additionally check an on-shell massless bubble and the massless and
 massive eikonal examples from
 #link("https://feyncalc.github.io/FeynCalcBookDev/FCLoopPakScalelessQ.html")[FeynCalc's scalelessness documentation].
 The API returns a certificate; it does not automatically erase terms, separate
-UV and IR poles, or enable the generator's `only_scaleless` filter.
+UV and IR poles, or change generation restrictions.
 
 The conventions match the algebraic tasks described by FeynCalc's
 #link("https://feyncalc.github.io/FeynCalcBookDev/FCLoopBasisFindCompletion.html")[basis completion]

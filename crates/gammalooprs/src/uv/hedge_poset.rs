@@ -1,75 +1,63 @@
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    fmt::Display,
-    sync::Arc,
-};
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Display;
+use std::sync::Arc;
 
+#[cfg(test)]
+use crate::cff::expression::OrientationID;
 #[cfg(test)]
 use crate::uv::Integrands;
 #[cfg(test)]
-use crate::{
-    cff::expression::OrientationID,
-    uv::approx::direct_3d::{DirectCoordinateFrame, DirectResidueBranches, DirectSector},
-};
+use crate::uv::approx::direct_3d::{DirectCoordinateFrame, DirectResidueBranches, DirectSector};
 #[cfg(test)]
 use std::cmp::Reverse;
 
 use ahash::AHashMap;
 use eyre::{WrapErr, eyre};
 use gammaloop_tracing_filter::LogMessage;
-use idenso::{
-    CookMode, CookSettings,
-    color::ColorSimplifySettings,
-    representations::{ColorAdjoint, ColorFundamental, ColorSextet},
-    tensor::SymbolicTensor,
-};
+use idenso::color::ColorSimplifySettings;
+use idenso::representations::{ColorAdjoint, ColorFundamental, ColorSextet};
+use idenso::tensor::SymbolicTensor;
+use idenso::{CookMode, CookSettings};
 use itertools::Itertools;
-use linnet::half_edge::{
-    HedgeGraph, NoData, NodeIndex,
-    algorithms::{
-        DirectionBasis,
-        trace_unfold::{HiddenData, Independence, TraceKey, TraceUnfold, UnfoldedTraceGraph},
-    },
-    involution::{EdgeIndex, Flow, HedgePair},
-    nodestore::{NodeStorageOps, NodeStorageVec},
-    subgraph::{Inclusion, InternalSubGraph, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps},
+use linnet::half_edge::algorithms::DirectionBasis;
+use linnet::half_edge::algorithms::trace_unfold::{
+    HiddenData, Independence, TraceKey, TraceUnfold, UnfoldedTraceGraph,
 };
+use linnet::half_edge::involution::{EdgeIndex, Flow, HedgePair};
+use linnet::half_edge::nodestore::NodeForest;
+use linnet::half_edge::subgraph::{
+    Inclusion, InternalSubGraph, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps,
+};
+use linnet::half_edge::{HedgeGraph, NoData, NodeIndex};
 use spenso::shadowing::TensorCollectFilter;
-use symbolica::{
-    atom::{Atom, AtomCore, FunctionBuilder},
-    function,
-};
+use symbolica::atom::{Atom, AtomCore, FunctionBuilder};
+use symbolica::function;
 use tracing::debug;
 use vakint::Vakint;
 
-use crate::{
-    debug_tags,
-    graph::{
-        Graph, LMBext, LoopMomentumBasis,
-        cuts::CutSet,
-        parse::string_utils::{ToOrderedSimple, dot_attr_value},
-    },
-    model::Model,
-    settings::global::GenerationSettings,
-    utils::{GS, W_},
-    uv::{
-        ApproximationType, RenormalizationPart, Spinney, UVgenerationSettings, UltravioletGraph,
-        approx::{
-            CutStructure, ForestNodeLike, OrientationProjection, Rooted, UVCtx,
-            direct_3d::{Direct3dApproximation, Direct3dCts},
-            final_integrand::{FinalIntegrandBuilder, FinalIntegrands},
-            integrated::{Integrated, IntegratedCts},
-            local_3d::{Local3DCts, Localizer},
-            local_4d::{self, Full4dCts, Local4dCts},
-            projected_4d::{Local4dProjectionContext, Projected4dApproximation},
-        },
-        export::{
-            UVForestLocalProvenance, UVForestNodeExpression, UVForestNodeProvenance,
-            UVForestProvenance,
-        },
-        forest::ParametricIntegrands,
-        marker::UvMarker,
-    },
+use crate::debug_tags;
+use crate::graph::cuts::CutSet;
+use crate::graph::parse::string_utils::{ToOrderedSimple, dot_attr_value};
+use crate::graph::{Graph, LMBext, LoopMomentumBasis};
+use crate::model::Model;
+use crate::settings::global::GenerationSettings;
+use crate::utils::{GS, W_};
+use crate::uv::approx::direct_3d::{Direct3dApproximation, Direct3dCts};
+use crate::uv::approx::final_integrand::{FinalIntegrandBuilder, FinalIntegrands};
+use crate::uv::approx::integrated::{Integrated, IntegratedCts};
+use crate::uv::approx::local_3d::{Local3DCts, Localizer};
+use crate::uv::approx::local_4d::{Full4dCts, Local4dCts};
+use crate::uv::approx::projected_4d::{Local4dProjectionContext, Projected4dApproximation};
+use crate::uv::approx::{
+    CutStructure, ForestNodeLike, OrientationProjection, Rooted, UVCtx, local_4d,
+};
+use crate::uv::export::{
+    UVForestLocalProvenance, UVForestNodeExpression, UVForestNodeProvenance, UVForestProvenance,
+};
+use crate::uv::forest::ParametricIntegrands;
+use crate::uv::marker::UvMarker;
+use crate::uv::{
+    ApproximationType, RenormalizationPart, Spinney, UVgenerationSettings, UltravioletGraph,
 };
 use color_eyre::Result;
 use spenso::shadowing::symbolica_utils::{LogPrint, SpensoPrintSettings};
@@ -95,11 +83,11 @@ impl TraceUnfold<SuBitGraph> for Wood {
     type EdgeData = SuBitGraph;
     type HedgeData = NoData;
     type NodeData = Spinney;
-    type NodeStorage = NodeStorageVec<Spinney>;
+    type NodeTopology = NodeForest;
 
     fn graph(
         &self,
-    ) -> &HedgeGraph<Self::EdgeData, Self::NodeData, Self::HedgeData, Self::NodeStorage> {
+    ) -> &HedgeGraph<Self::EdgeData, Self::NodeData, Self::HedgeData, Self::NodeTopology> {
         &self.graph
     }
 
@@ -237,11 +225,11 @@ impl Wood {
                 let HedgePair::Paired { source, sink } = pair else {
                     return e.map(|_| graph.as_ref().empty_subgraph());
                 };
-                let nsource = n.node_id_ref(source);
-                let nsink = n.node_id_ref(sink);
+                let nsource = n.node_id(source);
+                let nsink = n.node_id(sink);
 
-                let source_subgraph = &n.get_node_data(nsource).subgraph;
-                let sink_subgraph = &n.get_node_data(nsink).subgraph;
+                let source_subgraph = &n.get(nsource).subgraph;
+                let sink_subgraph = &n.get(nsink).subgraph;
                 let reduced_subgraph = sink_subgraph.subtract(source_subgraph).filter;
                 let hairy_source = graph.as_ref().full_crown(source_subgraph);
 
@@ -312,7 +300,9 @@ impl Wood {
             }
         }
 
-        poset.delete_hedges(&to_remove);
+        poset
+            .delete_hedges(&to_remove)
+            .expect("the poset has no pending identifications");
         let root = poset
             .iter_nodes()
             .find(|(_, _, s)| s.subgraph.is_empty())
@@ -327,7 +317,7 @@ impl Wood {
     }
 
     fn unfold_with_cached_node_label_atoms(self, cache_node_label_atoms: bool) -> Forests {
-        let unfolded = self.trace_unfold::<NodeStorageVec<_>>(self.root);
+        let unfolded = self.trace_unfold::<NodeForest>(self.root);
         let graph = unfolded.map(|_, _, key| OperationNode { key });
 
         let mut cuts: Vec<(SuBitGraph, CutSet)> = Vec::new();
@@ -419,7 +409,7 @@ impl ComputeStore {
 }
 
 pub struct Forests {
-    pub graph: UnfoldedTraceGraph<Wood, OperationNode, NodeStorageVec<OperationNode>>,
+    pub graph: UnfoldedTraceGraph<Wood, OperationNode, NodeForest>,
     pub root: NodeIndex,
     /// Wood subgraph that has compatible
     cuts: Vec<(SuBitGraph, CutSet)>,
@@ -1649,7 +1639,7 @@ impl Forests {
             sum.replace_multiple(&replacements)
                 .replace(GS.m_uv_expansion)
                 .with(GS.m_uv_vacuum),
-            self.graph.n_nodes(),
+            self.graph.n_live(),
         ))
     }
 
@@ -1706,16 +1696,13 @@ impl Display for Forests {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        finalized_runtime_dot,
-        graph::{FeynmanGraph, Graph},
-        initialisation::test_initialise,
-        processes::DotExportSettings,
-        uv::{
-            UltravioletGraph, Wood as OldWood, approx::local_4d::Local4dBranch,
-            settings::RenormalizationPrescriptionSettings,
-        },
-    };
+    use crate::dot;
+    use crate::graph::{FeynmanGraph, Graph};
+    use crate::initialisation::test_initialise;
+    use crate::processes::DotExportSettings;
+    use crate::uv::approx::local_4d::Local4dBranch;
+    use crate::uv::settings::RenormalizationPrescriptionSettings;
+    use crate::uv::{UltravioletGraph, Wood as OldWood};
     use idenso::tensor::ContractSettings;
 
     use super::*;
@@ -1776,7 +1763,7 @@ mod tests {
     fn three_d_compute_skips_unused_four_d_atoms_when_integration_is_disabled() -> Result<()> {
         test_initialise().unwrap();
         for project_local_4d in [false, true] {
-            let mut graph: Graph = Graph::import_dot(
+            let mut graph: Graph = Graph::from_dot(
                 stringify!(digraph scalar_self_energy {
                     edge [particle="scalar_1"];
                     node [num=1];
@@ -1825,7 +1812,7 @@ mod tests {
                 &settings.uv,
             )?;
 
-            assert_eq!(forests.compute_store.entries.len(), forests.graph.n_nodes());
+            assert_eq!(forests.compute_store.entries.len(), forests.graph.n_live());
             for (_, _, operation) in forests.graph.iter_nodes() {
                 let computed = forests.compute_store.require(operation)?;
                 assert_eq!(
@@ -1959,14 +1946,10 @@ mod tests {
 
     #[test]
     fn vacuum_subtraction_commutes_with_local_and_integrated_forests() -> Result<()> {
-        use crate::{
-            integrands::process::param_builder::ParamBuilderGraph,
-            numerator::{
-                soft_energy_certificate::{EnergyZeroOutcome, SoftEnergyAlgebra},
-                symbolica_ext::NumeratorAtomExt,
-            },
-            settings::global::MediumMode,
-        };
+        use crate::integrands::process::param_builder::ParamBuilderGraph;
+        use crate::numerator::soft_energy_certificate::{EnergyZeroOutcome, SoftEnergyAlgebra};
+        use crate::numerator::symbolica_ext::NumeratorAtomExt;
+        use crate::settings::global::MediumMode;
         use symbolica::atom::AtomView;
         use three_dimensional_reps::thermal::OCCUPATION_FORM;
         test_initialise()?;
@@ -2093,15 +2076,15 @@ mod tests {
     #[test]
     fn local_leaf_operations_follow_dependency_frontiers() -> Result<()> {
         test_initialise().unwrap();
-        let dumbell: Graph = finalized_runtime_dot!(
+        let dumbell: Graph = dot!(
             digraph G{
                 graph [projector=1]
                 node [num=1]
                 edge [particle="scalar_1" num=1];
-                v1 -> v2 [source="{ufo_order:0}" sink="{ufo_order:0}"];
-                v2 -> v2 [lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:2}"];
-                v1 -> v1 [lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:2}"];
-                v1 -> v1 [lmb_id=2 source="{ufo_order:3}" sink="{ufo_order:4}"];
+                v1 -> v2;
+                v2 -> v2 [lmb_id=0];
+                v1 -> v1 [lmb_id=1];
+                v1 -> v1 [lmb_id=2];
             },"scalars"
         )?;
 
@@ -2209,7 +2192,7 @@ mod tests {
     #[test]
     fn union_terms_project_factorized_typed_4d_values() -> Result<()> {
         test_initialise().unwrap();
-        let graph: Graph = finalized_runtime_dot!(digraph G {
+        let graph: Graph = dot!(digraph G {
           projector = "1";
           edge	 [
         num = "1𝑖", particle = "scalar_1"]
@@ -2218,10 +2201,10 @@ mod tests {
           v1;
           v2;
 
-          v1:0	-> v1:1	 [id=0 source="{ufo_order:0}" sink="{ufo_order:1}"  lmb_id="0"];
-          v1:2	-> v1:3	 [id=1 source="{ufo_order:2}" sink="{ufo_order:3}"  lmb_id="1"];
-          v1:4	-> v2:5	 [id=2 source="{ufo_order:4}" sink="{ufo_order:0}" ];
-          v2:6	-> v2:7	 [id=3 source="{ufo_order:1}" sink="{ufo_order:2}"  lmb_id="2"];
+          v1:0	-> v1:1	 [id=0  lmb_id="0"];
+          v1:2	-> v1:3	 [id=1  lmb_id="1"];
+          v1:4	-> v2:5	 [id=2 ];
+          v2:6	-> v2:7	 [id=3  lmb_id="2"];
         },"scalars"
                 )?;
         // Disable integrated terms so each union equality isolates factorized
@@ -2277,15 +2260,15 @@ mod tests {
         use crate::graph::feynman_graph::FeynmanGraph;
 
         test_initialise().unwrap();
-        let mut graph: Graph = finalized_runtime_dot!(
+        let mut graph: Graph = dot!(
             digraph G{
                 graph [projector=1]
                 node [num=1]
                 edge [particle="scalar_1" num=1];
-                v1 -> v2 [source="{ufo_order:0}" sink="{ufo_order:0}"];
-                v2 -> v2 [lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:2}"];
-                v1 -> v1 [lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:2}"];
-                v1 -> v1 [lmb_id=2 source="{ufo_order:3}" sink="{ufo_order:4}"];
+                v1 -> v2;
+                v2 -> v2 [lmb_id=0];
+                v1 -> v1 [lmb_id=1];
+                v1 -> v1 [lmb_id=2];
             },"scalars"
         )?;
         let settings = GenerationSettings::default();
@@ -2486,7 +2469,7 @@ mod tests {
     #[test]
     fn disconnected_soft_union_is_the_product_of_completed_component_atoms() -> Result<()> {
         test_initialise().unwrap();
-        let mut graph: Graph = Graph::import_dot(
+        let mut graph: Graph = Graph::from_dot(
             include_str!("../../../../tests/resources/graphs/local_ir_dod2_scalar_spectacles.dot"),
             &crate::utils::load_generic_model("scalars"),
         )
@@ -2733,17 +2716,17 @@ mod tests {
 
     fn heterogeneous_terminal_projects_components_before_multiplying_impl() -> Result<()> {
         test_initialise().unwrap();
-        let graph: Graph = finalized_runtime_dot!(
+        let graph: Graph = dot!(
             digraph G {
                 num = "1";
                 projector = "1";
                 overall_factor = "1";
                 edge [particle = "scalar_1" num=1];
                 node [num = "1"];
-                v1 -> v2 [source="{ufo_order:0}" sink="{ufo_order:0}"];
-                v1 -> v1 [lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:2}"];
-                v2 -> v3 [source="{ufo_order:1}" sink="{ufo_order:0}"];
-                v2 -> v3 [lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:1}"];
+                v1 -> v2;
+                v1 -> v1 [lmb_id=0];
+                v2 -> v3;
+                v2 -> v3 [lmb_id=1];
             },
             "scalars"
         )?;
@@ -2851,16 +2834,16 @@ mod tests {
     #[test]
     fn triple_tadpole() -> Result<()> {
         test_initialise().unwrap();
-        let dumbell: Graph = finalized_runtime_dot!(
+        let dumbell: Graph = dot!(
             digraph G{
                 graph [projector=1]
                 node [num=1]
                 edge [particle="scalar_1" num=1];
-                v1 -> v2 [source="{ufo_order:0}" sink="{ufo_order:0}"];
-                v2 -> v3 [source="{ufo_order:1}" sink="{ufo_order:0}"];
-                v3 -> v3 [lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:2}"];
-                v2 -> v2 [lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:3}"];
-                v1 -> v1 [lmb_id=2 source="{ufo_order:1}" sink="{ufo_order:2}"];
+                v1 -> v2;
+                v2 -> v3;
+                v3 -> v3 [lmb_id=0];
+                v2 -> v2 [lmb_id=1];
+                v1 -> v1 [lmb_id=2];
             },"scalars"
         )?;
 
@@ -2879,7 +2862,7 @@ mod tests {
         println!("{}", f);
 
         insta::assert_snapshot!(
-            f.graph.n_nodes(),
+            f.graph.n_live(),
             @"8",
             // format!("Wood does not have correct number of spinneys: \n{}",f)
         );
@@ -2922,7 +2905,7 @@ mod tests {
         let f = f.unfold();
         println!("{}", f);
         insta::assert_snapshot!(
-            f.graph.n_nodes(),
+            f.graph.n_live(),
             @"8");
 
         let three_component_union = f
@@ -2956,19 +2939,19 @@ mod tests {
     #[test]
     fn saclay() -> Result<()> {
         test_initialise().unwrap();
-        let dt: Graph = finalized_runtime_dot!(digraph GL16{
+        let dt: Graph = dot!(digraph GL16{
 
         num = "1"
                 projector = "1"
                 node [num=1]
                 ext	 [style=invis];
-                ext	-> 0  [dir=none id=0 particle="g" num=1 dod=-2 sink="{ufo_order:0}"];
-                2	-> ext  [dir=none id=1 particle="g" num=1 dod=-2 source="{ufo_order:0}"];
-                0 -> 1 [id=2 particle="d" num="Q(2,spenso::cind(1))" dod=-1 source="{ufo_order:1}" sink="{ufo_order:0}"];
-                1 -> 2 [id=3 particle="d" num="Q(3,spenso::cind(1))" dod=-1 source="{ufo_order:1}" sink="{ufo_order:1}"];
-                2 -> 3 [id=4 particle="d" num="Q(4,spenso::cind(1))" dod=-1 source="{ufo_order:2}" sink="{ufo_order:0}"];
-                3 -> 0 [id=5 particle="d" num="Q(5,spenso::cind(1))" dod=-1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:2}"];
-                1 -> 3 [id=6 particle="g" num=1 dod=-2 lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:2}"]
+                ext	-> 0  [dir=none id=0 particle="g" num=1 dod=-2];
+                2	-> ext  [dir=none id=1 particle="g" num=1 dod=-2];
+                0 -> 1 [id=2 particle="d" num="Q(2,spenso::cind(1))" dod=-1];
+                1 -> 2 [id=3 particle="d" num="Q(3,spenso::cind(1))" dod=-1];
+                2 -> 3 [id=4 particle="d" num="Q(4,spenso::cind(1))" dod=-1];
+                3 -> 0 [id=5 particle="d" num="Q(5,spenso::cind(1))" dod=-1 lmb_id=0];
+                1 -> 3 [id=6 particle="g" num=1 dod=-2 lmb_id=1]
                     })?;
 
         let f = Wood::new(
@@ -2981,7 +2964,7 @@ mod tests {
         println!("{}", dt.dot_serialize(&DotExportSettings::default()));
 
         insta::assert_snapshot!(
-            f.graph.n_nodes(),
+            f.graph.n_live(),
             @"5",
             // format!("Wood does not have correct number of spinneys: \n{}",f)
         );
@@ -2992,7 +2975,7 @@ mod tests {
         assert!(!structured_dot.contains("#T("));
         println!("{structured_dot}");
         insta::assert_snapshot!(
-            f.graph.n_nodes(),
+            f.graph.n_live(),
             @"8");
 
         Ok(())
@@ -3001,14 +2984,14 @@ mod tests {
     #[test]
     fn dumbells() -> Result<()> {
         test_initialise().unwrap();
-        let dumbell: Graph = finalized_runtime_dot!(
+        let dumbell: Graph = dot!(
             digraph G{
                 graph [projector=1]
                 node [num=1]
                 edge [particle="scalar_1" num=1];
-                v1 -> v2 [source="{ufo_order:0}" sink="{ufo_order:0}"];
-                v2 -> v2 [lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:2}"];
-                v1 -> v1 [lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:2}"];
+                v1 -> v2;
+                v2 -> v2 [lmb_id=0];
+                v1 -> v1 [lmb_id=1];
             },"scalars"
         )?;
 
@@ -3027,7 +3010,7 @@ mod tests {
         println!("{}", f);
 
         insta::assert_snapshot!(
-            f.graph.n_nodes(),
+            f.graph.n_live(),
             @"4",
             // format!("Wood does not have correct number of spinneys: \n{}",f)
         );
@@ -3046,7 +3029,7 @@ mod tests {
         let f = f.unfold();
         println!("{}", f);
         insta::assert_snapshot!(
-            f.graph.n_nodes(),
+            f.graph.n_live(),
             @"4");
 
         Ok(())
@@ -3056,19 +3039,19 @@ mod tests {
     fn bugblatter() -> Result<()> {
         test_initialise().unwrap();
 
-        match finalized_runtime_dot!(
+        match dot!(
             digraph G{
                 graph [projector=1]
                 node [num=1]
-                A1 -> A2 [id=0 particle="t" num="Q(0,spenso::cind(1))" dod=-1 source="{ufo_order:0}" sink="{ufo_order:0}"];
-                A2 -> A3 [id=1 particle="t" num="Q(1,spenso::cind(1))" dod=-1 source="{ufo_order:1}" sink="{ufo_order:0}"];
-                A3 -> A1 [id=2 particle="t" num="Q(2,spenso::cind(1))" dod=-1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"];
-                B1 -> B2 [id=3 particle="t" num="Q(3,spenso::cind(1))" dod=-1 source="{ufo_order:0}" sink="{ufo_order:0}"];
-                B2 -> B3 [id=4 particle="t" num="Q(4,spenso::cind(1))" dod=-1 source="{ufo_order:1}" sink="{ufo_order:0}"];
-                B3 -> B1 [id=5 particle="t" num="Q(5,spenso::cind(1))" dod=-1 lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:1}"];
-                A1 -> B1 [id=6 particle="a" num=1 dod=-2 source="{ufo_order:2}" sink="{ufo_order:2}"];
-                A2 -> B2 [id=7 particle="a" num=1 dod=-2 lmb_id=2 source="{ufo_order:2}" sink="{ufo_order:2}"];
-                A3 -> B3 [id=8 particle="a" num=1 dod=-2 lmb_id=3 source="{ufo_order:2}" sink="{ufo_order:2}"];
+                A1 -> A2 [id=0 particle="t" num="Q(0,spenso::cind(1))" dod=-1];
+                A2 -> A3 [id=1 particle="t" num="Q(1,spenso::cind(1))" dod=-1];
+                A3 -> A1 [id=2 particle="t" num="Q(2,spenso::cind(1))" dod=-1 lmb_id=0];
+                B1 -> B2 [id=3 particle="t" num="Q(3,spenso::cind(1))" dod=-1];
+                B2 -> B3 [id=4 particle="t" num="Q(4,spenso::cind(1))" dod=-1];
+                B3 -> B1 [id=5 particle="t" num="Q(5,spenso::cind(1))" dod=-1 lmb_id=1];
+                A1 -> B1 [id=6 particle="a" num=1 dod=-2];
+                A2 -> B2 [id=7 particle="a" num=1 dod=-2 lmb_id=2];
+                A3 -> B3 [id=8 particle="a" num=1 dod=-2 lmb_id=3];
             },"sm"
         ) {
             Ok(g) => {
@@ -3089,7 +3072,7 @@ mod tests {
 
                 assert_eq!(
                     20,
-                    f.graph.n_nodes(),
+                    f.graph.n_live(),
                     "Wood does not have correct number of spinneys: \n{}",
                     f
                 );
@@ -3110,7 +3093,7 @@ mod tests {
                 println!("{}", f);
                 assert_eq!(
                     152,
-                    f.graph.n_nodes(),
+                    f.graph.n_live(),
                     "Forest unfolds into the wrong number of terms :\n{}",
                     f
                 );
@@ -3136,17 +3119,17 @@ mod tests {
     fn mercedes() -> Result<()> {
         test_initialise().unwrap();
 
-        let mercedes: Graph = finalized_runtime_dot!(
+        let mercedes: Graph = dot!(
             digraph G{
                 graph [projector=1]
                 node [num=1]
                 edge [particle="scalar_1" num=1];
-                v1 -> v2 [source="{ufo_order:0}" sink="{ufo_order:0}"];
-                v2 -> v3 [source="{ufo_order:1}" sink="{ufo_order:0}"];
-                v3 -> v1 [lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"];
-                v1 -> v4 [source="{ufo_order:2}" sink="{ufo_order:0}"];
-                v2 -> v4 [lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:1}"];
-                v3 -> v4 [lmb_id=2 source="{ufo_order:2}" sink="{ufo_order:2}"];
+                v1 -> v2;
+                v2 -> v3;
+                v3 -> v1 [lmb_id=0];
+                v1 -> v4;
+                v2 -> v4 [lmb_id=1];
+                v3 -> v4 [lmb_id=2];
             },"scalars"
         )?;
 
@@ -3158,13 +3141,13 @@ mod tests {
         )?;
         println!("{}", f);
         insta::assert_snapshot!(
-        f.graph.n_nodes(),
+        f.graph.n_live(),
         @"2",
         );
         let f = f.unfold();
         println!("{}", f);
         insta::assert_snapshot!(
-        f.graph.n_nodes(),
+        f.graph.n_live(),
         @"2",
          );
 
@@ -3175,16 +3158,16 @@ mod tests {
     fn sunrise() -> Result<()> {
         test_initialise().unwrap();
 
-        let sunrise: Graph = finalized_runtime_dot!( digraph sunrise{
+        let sunrise: Graph = dot!( digraph sunrise{
             graph [projector=1]
             node [num = "1"]
             edge [particle=scalar_1 num=1]
             e        [style=invis]
-            e -> A:0 [id=3 sink="{ufo_order:0}"]
-            B:1 -> e [id=4 source="{ufo_order:0}"]
-            A -> B [id=0 source="{ufo_order:1}" sink="{ufo_order:1}"]
-            A -> B [id=1 lmb_id=0 source="{ufo_order:2}" sink="{ufo_order:2}"]
-            A -> B [id=2 lmb_id=1 source="{ufo_order:3}" sink="{ufo_order:3}"]
+            e -> A:0 [id=3]
+            B:1 -> e [id=4]
+            A -> B [id=0]
+            A -> B [id=1 lmb_id=0]
+            A -> B [id=2 lmb_id=1]
         },"scalars")?;
         // let spinneys = spectacles.spinneys(&spectacles.full_filter());
         let f = Wood::new(
@@ -3195,13 +3178,13 @@ mod tests {
         )?;
         println!("{}", f);
         insta::assert_snapshot!(
-        f.graph.n_nodes(),
+        f.graph.n_live(),
         @"5",
         );
         let f = f.unfold();
         println!("{}", f);
         insta::assert_snapshot!(
-        f.graph.n_nodes(),
+        f.graph.n_live(),
         @"8",
          );
 
@@ -3211,19 +3194,19 @@ mod tests {
     fn dotted_sunrise() -> Result<()> {
         test_initialise().unwrap();
 
-        let sunrise: Graph = finalized_runtime_dot!( digraph sunrise{
+        let sunrise: Graph = dot!( digraph sunrise{
             graph [projector=1]
             node [num=1]
             edge [particle=scalar_1 num=1]
             e        [style=invis]
-            e -> A:0 [id=3 sink="{ufo_order:0}"]
-            B:1 -> e [id=4 source="{ufo_order:0}"]
+            e -> A:0 [id=3]
+            B:1 -> e [id=4]
 
-            A -> C [id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
-            C -> e [source="{ufo_order:1}"]
-            C -> B [source="{ufo_order:2}" sink="{ufo_order:1}"]
-            A -> B [id=1 lmb_id=0 source="{ufo_order:2}" sink="{ufo_order:2}"]
-            A -> B [id=2 lmb_id=1 source="{ufo_order:3}" sink="{ufo_order:3}"]
+            A -> C [id=0]
+            C -> e
+            C -> B
+            A -> B [id=1 lmb_id=0]
+            A -> B [id=2 lmb_id=1]
         },"scalars")?;
         // let spinneys = spectacles.spinneys(&spectacles.full_filter());
         let f = Wood::new(
@@ -3234,13 +3217,13 @@ mod tests {
         )?;
         println!("{}", f);
         insta::assert_snapshot!(
-        f.graph.n_nodes(),
+        f.graph.n_live(),
         @"3",
         );
         let f = f.unfold();
         println!("{}", f);
         insta::assert_snapshot!(
-        f.graph.n_nodes(),
+        f.graph.n_live(),
         @"4",
          );
 
@@ -3251,19 +3234,19 @@ mod tests {
     fn dotted() -> Result<()> {
         test_initialise().unwrap();
 
-        let sunrise: Graph = finalized_runtime_dot!( digraph sunrise{
+        let sunrise: Graph = dot!( digraph sunrise{
             graph [projector=1]
             node [num=1]
             edge [particle=scalar_1 num=1]
             e        [style=invis]
-            e -> A:0 [id=4 sink="{ufo_order:0}"]
-            B:1 -> e [id=5 source="{ufo_order:0}"]
-            C:2 -> e [id=6 source="{ufo_order:0}"]
+            e -> A:0 [id=4]
+            B:1 -> e [id=5]
+            C:2 -> e [id=6]
 
-            A -> B [id=0 source="{ufo_order:1}" sink="{ufo_order:1}"]
-            B -> C [id=1 source="{ufo_order:2}" sink="{ufo_order:1}"]
-            C -> A [id=2 lmb_id=0 source="{ufo_order:2}" sink="{ufo_order:2}"]
-            B -> C [id=3 lmb_id=1 source="{ufo_order:3}" sink="{ufo_order:3}"]
+            A -> B [id=0]
+            B -> C [id=1]
+            C -> A [id=2 lmb_id=0]
+            B -> C [id=3 lmb_id=1]
 
         },"scalars")?;
         // let spinneys = spectacles.spinneys(&spectacles.full_filter());
@@ -3275,13 +3258,13 @@ mod tests {
         )?;
         println!("{}", f);
         insta::assert_snapshot!(
-        f.graph.n_nodes(),
+        f.graph.n_live(),
         @"3",
         );
         let f = f.unfold();
         println!("{}", f);
         insta::assert_snapshot!(
-        f.graph.n_nodes(),
+        f.graph.n_live(),
         @"4",
          );
 
@@ -3294,19 +3277,19 @@ mod tests {
 
         test_initialise().unwrap();
 
-        let mut spectacles: Graph = finalized_runtime_dot!(
+        let mut spectacles: Graph = dot!(
             digraph G{
                 graph [projector=1]
                 node [num=1]
                 edge [particle="scalar_1" num=1];
-                v1 -> v2 [source="{ufo_order:0}" sink="{ufo_order:0}"];
-                v1 -> v2 [lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"];
+                v1 -> v2;
+                v1 -> v2 [lmb_id=0];
 
-                v3 -> v4 [source="{ufo_order:0}" sink="{ufo_order:0}"];
-                v3 -> v4 [lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:1}"];
+                v3 -> v4;
+                v3 -> v4 [lmb_id=1];
 
-                v2 -> v3 [source="{ufo_order:2}" sink="{ufo_order:2}"];
-                v1 -> v4 [lmb_id=2 source="{ufo_order:2}" sink="{ufo_order:2}"];
+                v2 -> v3;
+                v1 -> v4 [lmb_id=2];
             },"scalars"
         )?;
 
@@ -3597,16 +3580,16 @@ mod tests {
         // minus two. Their disconnected union has logarithmic simultaneous
         // power counting, but the triangle is not a UV region on its own.
         // Componentwise classification therefore retains only the bubble.
-        let graph: Graph = finalized_runtime_dot!(
+        let graph: Graph = dot!(
             digraph G { graph [projector=1]
                 node [num = "1"];
                 edge [particle = "scalar_1" num="1𝑖"];
-                a0 -> a1 [id = 0, dod = "-1", num = "gammalooprs::Q(0,spenso::mink(4,0))" source="{ufo_order:0}" sink="{ufo_order:0}" lmb_id=0];
-                a0 -> a1 [id = 1, dod = "-1", num = "gammalooprs::Q(1,spenso::mink(4,0))" source="{ufo_order:1}" sink="{ufo_order:1}"];
-                a1 -> b0 [id = 2 source="{ufo_order:2}" sink="{ufo_order:0}"];
-                b0 -> b1 [id = 3 source="{ufo_order:1}" sink="{ufo_order:0}" lmb_id=1];
-                b1 -> b2 [id = 4 source="{ufo_order:1}" sink="{ufo_order:0}"];
-                b2 -> b0 [id = 5 sink="{ufo_order:2}" source="{ufo_order:1}"];
+                a0 -> a1 [id = 0, dod = "-1", num = "gammalooprs::Q(0,spenso::mink(4,0))" lmb_id=0];
+                a0 -> a1 [id = 1, dod = "-1", num = "gammalooprs::Q(1,spenso::mink(4,0))"];
+                a1 -> b0 [id = 2];
+                b0 -> b1 [id = 3 lmb_id=1];
+                b1 -> b2 [id = 4];
+                b2 -> b0 [id = 5];
             },
             "scalars"
         )?;
@@ -3816,19 +3799,19 @@ mod tests {
         // Only the two independently divergent bubbles form a factorized join;
         // their complete Taylor cancellation permits omitting the collective
         // transition rather than classifying the triangle as a UV factor.
-        let graph: Graph = finalized_runtime_dot!(
+        let graph: Graph = dot!(
             digraph G { graph [projector=1]
                 node [num = "1"];
                 edge [particle = "scalar_1" num="1𝑖"];
-                a0 -> a1 [id = 0, dod = "-1", num = "gammalooprs::Q(0,spenso::mink(4,0))" source="{ufo_order:0}" sink="{ufo_order:0}" lmb_id=0];
-                a0 -> a1 [id = 1, dod = "-1", num = "gammalooprs::Q(1,spenso::mink(4,0))" source="{ufo_order:1}" sink="{ufo_order:1}"];
-                a1 -> b0 [id = 2 source="{ufo_order:2}" sink="{ufo_order:0}"];
-                b0 -> b1 [id = 3, dod = "-1", num = "gammalooprs::Q(3,spenso::mink(4,1))" source="{ufo_order:1}" sink="{ufo_order:0}" lmb_id=1];
-                b0 -> b1 [id = 4, dod = "-1", num = "gammalooprs::Q(4,spenso::mink(4,1))" source="{ufo_order:2}" sink="{ufo_order:1}"];
-                b1 -> c0 [id = 5 source="{ufo_order:2}" sink="{ufo_order:0}"];
-                c0 -> c1 [id = 6 source="{ufo_order:1}" sink="{ufo_order:0}" lmb_id=2];
-                c1 -> c2 [id = 7 source="{ufo_order:1}" sink="{ufo_order:0}"];
-                c2 -> c0 [id = 8 sink="{ufo_order:2}" source="{ufo_order:1}"];
+                a0 -> a1 [id = 0, dod = "-1", num = "gammalooprs::Q(0,spenso::mink(4,0))" lmb_id=0];
+                a0 -> a1 [id = 1, dod = "-1", num = "gammalooprs::Q(1,spenso::mink(4,0))"];
+                a1 -> b0 [id = 2];
+                b0 -> b1 [id = 3, dod = "-1", num = "gammalooprs::Q(3,spenso::mink(4,1))" lmb_id=1];
+                b0 -> b1 [id = 4, dod = "-1", num = "gammalooprs::Q(4,spenso::mink(4,1))"];
+                b1 -> c0 [id = 5];
+                c0 -> c1 [id = 6 lmb_id=2];
+                c1 -> c2 [id = 7];
+                c2 -> c0 [id = 8];
             },
             "scalars"
         )?;
@@ -4152,7 +4135,7 @@ mod tests {
     fn spectacles_typed_4d_local_construction_matches_uv_limit() -> Result<()> {
         test_initialise().unwrap();
 
-        let spectacles: Graph = finalized_runtime_dot!(digraph G {
+        let spectacles: Graph = dot!(digraph G {
           projector = "1";
           edge	 [
         num = "1𝑖", particle = "scalar_1"]
@@ -4163,12 +4146,12 @@ mod tests {
           v3;
           v4;
 
-          v1:0	-> v2:1	 [id=0 source="{ufo_order:0}" sink="{ufo_order:0}"  lmb_id="0"];
-          v1:2	-> v2:3	 [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"  lmb_id="1"];
-          v1:4	-> v4:5	 [id=2 source="{ufo_order:2}" sink="{ufo_order:0}" ];
-          v2:6	-> v3:7	 [id=3 source="{ufo_order:2}" sink="{ufo_order:0}" ];
-          v3:8	-> v4:9	 [id=4 source="{ufo_order:1}" sink="{ufo_order:1}"  lmb_id="2"];
-          v3:10	-> v4:11	 [id=5 source="{ufo_order:2}" sink="{ufo_order:2}" ];
+          v1:0	-> v2:1	 [id=0  lmb_id="0"];
+          v1:2	-> v2:3	 [id=1  lmb_id="1"];
+          v1:4	-> v4:5	 [id=2 ];
+          v2:6	-> v3:7	 [id=3 ];
+          v3:8	-> v4:9	 [id=4  lmb_id="2"];
+          v3:10	-> v4:11	 [id=5 ];
         },"scalars"
                 )?;
 
@@ -4228,15 +4211,15 @@ mod tests {
     fn basketball() -> Result<()> {
         test_initialise().unwrap();
 
-        let basketball: Graph = finalized_runtime_dot!(
+        let basketball: Graph = dot!(
             digraph G{
                 graph [projector=1]
                 node [num=1]
                 edge [particle="scalar_1" num=1];
-                v1 -> v2 [source="{ufo_order:0}" sink="{ufo_order:0}"];
-                v1 -> v2 [lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"];
-                v1 -> v2 [lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:2}"];
-                v1 -> v2 [lmb_id=2 source="{ufo_order:3}" sink="{ufo_order:3}"];
+                v1 -> v2;
+                v1 -> v2 [lmb_id=0];
+                v1 -> v2 [lmb_id=1];
+                v1 -> v2 [lmb_id=2];
             },"scalars"
         )?;
 
@@ -4248,13 +4231,13 @@ mod tests {
         )?;
         println!("{}", f);
         insta::assert_snapshot!(
-        f.graph.n_nodes(),
+        f.graph.n_live(),
         @"12",
               );
         let f = f.unfold();
         println!("{}", f.dot_serialize());
         insta::assert_snapshot!(
-        f.graph.n_nodes(),
+        f.graph.n_live(),
         @"46");
         Ok(())
     }
@@ -4263,20 +4246,20 @@ mod tests {
     fn fourloop_b() -> Result<()> {
         test_initialise().unwrap();
 
-        let fourloop_b: Graph = finalized_runtime_dot!(
+        let fourloop_b: Graph = dot!(
             digraph G{
                 graph [projector=1]
                 node [num=1]
                 edge [particle="scalar_1" num=1];
-                v1 -> v2 [source="{ufo_order:0}" sink="{ufo_order:0}"];
-                v1 -> v2 [lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"];
+                v1 -> v2;
+                v1 -> v2 [lmb_id=0];
 
-                v3 -> v4 [source="{ufo_order:0}" sink="{ufo_order:0}"];
-                v3 -> v4 [lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:1}"];
+                v3 -> v4;
+                v3 -> v4 [lmb_id=1];
 
-                v2 -> v3 [source="{ufo_order:2}" sink="{ufo_order:2}"];
-                v1 -> v3 [lmb_id=2 source="{ufo_order:2}" sink="{ufo_order:3}"];
-                v1 -> v4 [lmb_id=3 source="{ufo_order:3}" sink="{ufo_order:2}"];
+                v2 -> v3;
+                v1 -> v3 [lmb_id=2];
+                v1 -> v4 [lmb_id=3];
             },"scalars"
         )?;
 
@@ -4289,13 +4272,13 @@ mod tests {
         )?;
         println!("{}", f);
         insta::assert_snapshot!(
-        f.graph.n_nodes(),
+        f.graph.n_live(),
         @"14",
         );
         let f = f.unfold();
         println!("{}", f);
         insta::assert_snapshot!(
-        f.graph.n_nodes(),
+        f.graph.n_live(),
         @"80",
          );
 
@@ -4306,18 +4289,18 @@ mod tests {
     fn four_loop_a() -> Result<()> {
         test_initialise().unwrap();
 
-        let four_loop_a: Graph = finalized_runtime_dot!(
+        let four_loop_a: Graph = dot!(
             digraph G{
                 graph [projector=1]
                 node [num=1]
                 edge [particle="scalar_1" num=1];
-                v1 -> v2 [source="{ufo_order:0}" sink="{ufo_order:0}"];
-                v1 -> v2 [lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"];
-                v2 -> v3 [source="{ufo_order:2}" sink="{ufo_order:0}"];
-                v3 -> v1 [lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:2}"];
-                v1 -> v4 [source="{ufo_order:3}" sink="{ufo_order:0}"];
-                v2 -> v4 [lmb_id=2 source="{ufo_order:3}" sink="{ufo_order:1}"];
-                v3 -> v4 [lmb_id=3 source="{ufo_order:2}" sink="{ufo_order:2}"];
+                v1 -> v2;
+                v1 -> v2 [lmb_id=0];
+                v2 -> v3;
+                v3 -> v1 [lmb_id=1];
+                v1 -> v4;
+                v2 -> v4 [lmb_id=2];
+                v3 -> v4 [lmb_id=3];
             },"scalars"
         )?;
 
@@ -4329,13 +4312,13 @@ mod tests {
         )?;
         println!("{}", f);
         insta::assert_snapshot!(
-        f.graph.n_nodes(),
+        f.graph.n_live(),
         @"12",
         );
         let f = f.unfold();
         println!("{}", f);
         insta::assert_snapshot!(
-        f.graph.n_nodes(),
+        f.graph.n_live(),
         @"60",
          );
 
@@ -4345,19 +4328,19 @@ mod tests {
     #[test]
     fn triple_double_tadpole() -> Result<()> {
         test_initialise().unwrap();
-        let dumbell: Graph = finalized_runtime_dot!(
+        let dumbell: Graph = dot!(
             digraph G{
                 graph [projector=1]
                 node [num=1]
                 edge [particle="scalar_1" num=1];
-                v1 -> v2 [source="{ufo_order:0}" sink="{ufo_order:0}"];
-                v2 -> v3 [source="{ufo_order:1}" sink="{ufo_order:0}"];
-                v3 -> v3 [lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:2}"];
-                v3 -> v3 [lmb_id=1 source="{ufo_order:3}" sink="{ufo_order:4}"];
-                v2 -> v2 [lmb_id=2 source="{ufo_order:2}" sink="{ufo_order:3}"];
-                v2 -> v2 [lmb_id=3 source="{ufo_order:4}" sink="{ufo_order:5}"];
-                v1 -> v1 [lmb_id=4 source="{ufo_order:1}" sink="{ufo_order:2}"];
-                v1 -> v1 [lmb_id=5 source="{ufo_order:3}" sink="{ufo_order:4}"];
+                v1 -> v2;
+                v2 -> v3;
+                v3 -> v3 [lmb_id=0];
+                v3 -> v3 [lmb_id=1];
+                v2 -> v2 [lmb_id=2];
+                v2 -> v2 [lmb_id=3];
+                v1 -> v1 [lmb_id=4];
+                v1 -> v1 [lmb_id=5];
             },"scalars"
         )?;
 
@@ -4369,12 +4352,12 @@ mod tests {
         )?;
 
         insta::assert_snapshot!(
-            f.graph.n_nodes(),
+            f.graph.n_live(),
             @"64");
 
         let f = f.unfold_uncached();
         insta::assert_snapshot!(
-            f.graph.n_nodes(),
+            f.graph.n_live(),
             @"307");
 
         Ok(())
@@ -4386,15 +4369,15 @@ mod tests {
         #[test]
         fn lobsided_double_dumbell() -> Result<()> {
             test_initialise().unwrap();
-            let dumbell: Graph = finalized_runtime_dot!(
+            let dumbell: Graph = dot!(
                 digraph G{
                     graph [projector=1]
                     node [num=1]
                     edge [particle="scalar_1" num=1];
-                    v1 -> v2 [source="{ufo_order:0}" sink="{ufo_order:0}"];
-                    v2 -> v2 [lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:2}"];
-                    v1 -> v1 [lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:2}"];
-                    v1 -> v1 [lmb_id=2 source="{ufo_order:3}" sink="{ufo_order:4}"];
+                    v1 -> v2;
+                    v2 -> v2 [lmb_id=0];
+                    v1 -> v1 [lmb_id=1];
+                    v1 -> v1 [lmb_id=2];
                 },"scalars"
             )?;
 
@@ -4413,7 +4396,7 @@ mod tests {
             println!("{}", f);
 
             insta::assert_snapshot!(
-                f.graph.n_nodes(),
+                f.graph.n_live(),
                 @"8",
                 // format!("Wood does not have correct number of spinneys: \n{}",f)
             );
@@ -4441,7 +4424,7 @@ mod tests {
 "###
             );
             insta::assert_snapshot!(
-                f.graph.n_nodes(),
+                f.graph.n_live(),
                 @"12");
 
             let f = Wood::new(
@@ -4467,16 +4450,16 @@ mod tests {
         #[test]
         fn double_double_dumbell() -> Result<()> {
             test_initialise().unwrap();
-            let dumbell: Graph = finalized_runtime_dot!(
+            let dumbell: Graph = dot!(
                 digraph G{
                     graph [projector=1]
                     node [num=1]
                     edge [particle="scalar_1" num=1];
-                    v1 -> v2 [source="{ufo_order:0}" sink="{ufo_order:0}"];
-                    v2 -> v2 [lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:2}"];
-                    v2 -> v2 [lmb_id=1 source="{ufo_order:3}" sink="{ufo_order:4}"];
-                    v1 -> v1 [lmb_id=2 source="{ufo_order:1}" sink="{ufo_order:2}"];
-                    v1 -> v1 [lmb_id=3 source="{ufo_order:3}" sink="{ufo_order:4}"];
+                    v1 -> v2;
+                    v2 -> v2 [lmb_id=0];
+                    v2 -> v2 [lmb_id=1];
+                    v1 -> v1 [lmb_id=2];
+                    v1 -> v1 [lmb_id=3];
                 },"scalars"
             )?;
 
@@ -4495,7 +4478,7 @@ mod tests {
             println!("{}", f);
 
             insta::assert_snapshot!(
-                f.graph.n_nodes(),
+                f.graph.n_live(),
                 @"16",
                 // format!("Wood does not have correct number of spinneys: \n{}",f)
             );
@@ -4503,7 +4486,7 @@ mod tests {
             let f = f.unfold();
 
             insta::assert_snapshot!(
-                f.graph.n_nodes(),
+                f.graph.n_live(),
                 @"36");
 
             let f = Wood::new(

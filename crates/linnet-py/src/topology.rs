@@ -4,8 +4,10 @@ use std::collections::BTreeSet;
 
 use linnet::half_edge::algorithms::DirectionBasis;
 use linnet::half_edge::involution::{EdgeIndex, Hedge};
+use linnet::half_edge::subgraph::cut::OrientedCut;
+use linnet::half_edge::subgraph::cycle::Cycle;
 use linnet::half_edge::subgraph::{
-    cut::OrientedCut, cycle::Cycle, Inclusion, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps,
+    Inclusion, ModifySubSet, SuBitGraph, SubGraphOps, SubSetLike, SubSetOps,
 };
 use linnet::half_edge::tree::SimpleTraversalTree;
 use linnet::half_edge::NodeIndex;
@@ -23,13 +25,8 @@ use crate::{render, PyDiagramView};
     feature = "python_stubgen",
     pyo3_stub_gen::derive::gen_stub_pyclass_enum
 )]
-#[pyclass(
-    module = "symbolica.community.graph",
-    from_py_object,
-    eq,
-    eq_int,
-    name = "DirectionBasis"
-)]
+#[pyclass(from_py_object, eq, eq_int, name = "DirectionBasis")]
+#[pyo3(module = "symbolica.community.graph")]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum PyDirectionBasis {
     /// Follow the source/sink roles stored by the half-edge involution.
@@ -50,7 +47,8 @@ impl From<PyDirectionBasis> for DirectionBasis {
 
 /// A graph-bound structural selection.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(module = "symbolica.community.graph", unsendable, name = "Subgraph")]
+#[pyclass(unsendable, name = "Subgraph")]
+#[pyo3(module = "symbolica.community.graph")]
 pub struct PySubgraph {
     graph: Option<Py<PyGraph>>,
     revision: u64,
@@ -211,7 +209,7 @@ impl PySubgraph {
         let graph = self.owner(py)?.borrow();
         let state = graph.state.borrow();
         let graph = &state.as_ref().expect("checked").graph;
-        if node >= graph.n_nodes() {
+        if node >= graph.node_bound() {
             return Err(PyIndexError::new_err("node index out of range"));
         }
         Ok(self.isolated_nodes.contains(&node)
@@ -227,7 +225,11 @@ impl PySubgraph {
             .map(|hedge| {
                 Py::new(
                     py,
-                    PyHalfEdge::new(graph.as_unbound().clone_ref(py), hedge.0, self.revision),
+                    PyHalfEdge::new(
+                        graph.as_unbound().clone_ref(py),
+                        hedge.0,
+                        graph.borrow().element_epoch()?,
+                    ),
                 )
             })
             .collect()
@@ -302,11 +304,9 @@ impl PySubgraph {
     fn complement(&self, py: Python<'_>) -> PyResult<Self> {
         let graph = self.owner(py)?.borrow();
         let state = graph.state.borrow();
-        let filter = state
-            .as_ref()
-            .expect("checked")
-            .graph
-            .complement(&self.subgraph);
+        let filter = self
+            .subgraph
+            .complement(&state.as_ref().expect("checked").graph);
         let isolated_nodes = isolated_node_indices(&state.as_ref().expect("checked").graph)
             .difference(&self.isolated_nodes)
             .copied()
@@ -452,7 +452,8 @@ impl PySubgraph {
 
 /// A cycle in a particular graph revision.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(module = "symbolica.community.graph", unsendable, name = "Cycle")]
+#[pyclass(unsendable, name = "Cycle")]
+#[pyo3(module = "symbolica.community.graph")]
 pub struct PyCycle {
     graph: Option<Py<PyGraph>>,
     revision: u64,
@@ -522,7 +523,8 @@ impl PyCycle {
 
 /// An oriented cut in a particular graph revision.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(module = "symbolica.community.graph", unsendable, name = "OrientedCut")]
+#[pyclass(unsendable, name = "OrientedCut")]
+#[pyo3(module = "symbolica.community.graph")]
 pub struct PyOrientedCut {
     graph: Option<Py<PyGraph>>,
     revision: u64,
@@ -556,11 +558,8 @@ impl PyOrientedCut {
 
 /// One source-side, oriented-boundary, target-side cut partition.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(
-    module = "symbolica.community.graph",
-    unsendable,
-    name = "CutPartition"
-)]
+#[pyclass(unsendable, name = "CutPartition")]
+#[pyo3(module = "symbolica.community.graph")]
 pub struct PyCutPartition {
     graph: Option<Py<PyGraph>>,
     revision: u64,
@@ -635,7 +634,11 @@ impl PyCutPartition {
                     PyEdge::new(
                         self.graph.as_ref().expect("checked").clone_ref(py),
                         edge,
-                        self.revision,
+                        self.graph
+                            .as_ref()
+                            .expect("checked")
+                            .borrow(py)
+                            .element_epoch()?,
                     ),
                 )
             })
@@ -701,7 +704,11 @@ impl PyOrientedCut {
                     PyEdge::new(
                         self.graph.as_ref().expect("checked").clone_ref(py),
                         edge,
-                        self.revision,
+                        self.graph
+                            .as_ref()
+                            .expect("checked")
+                            .borrow(py)
+                            .element_epoch()?,
                     ),
                 )
             })
@@ -713,7 +720,7 @@ impl PyOrientedCut {
     fn orientation(
         &self,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="Edge | builtins.int | builtins.str", imports=("builtins")))]
+        #[gen_stub(override_type(type_repr="EdgeView | builtins.int | builtins.str", imports=("builtins")))]
         edge: &Bound<'_, PyAny>,
     ) -> PyResult<PyOrientation> {
         self.owner(py)?;
@@ -760,11 +767,8 @@ impl PyOrientedCut {
 
 /// A graph-bound DFS or BFS traversal tree.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(
-    module = "symbolica.community.graph",
-    unsendable,
-    name = "TraversalTree"
-)]
+#[pyclass(unsendable, name = "TraversalTree")]
+#[pyo3(module = "symbolica.community.graph")]
 pub struct PyTraversalTree {
     graph: Option<Py<PyGraph>>,
     revision: u64,
@@ -806,7 +810,11 @@ impl PyTraversalTree {
             PyNode::new(
                 self.graph.as_ref().expect("checked").clone_ref(py),
                 node,
-                self.revision,
+                self.graph
+                    .as_ref()
+                    .expect("checked")
+                    .borrow(py)
+                    .element_epoch()?,
             ),
         )
     }
@@ -833,7 +841,11 @@ impl PyTraversalTree {
         if let Some(node) = self.isolated_root {
             return Ok(vec![Py::new(
                 py,
-                PyNode::new(graph.as_unbound().clone_ref(py), node, self.revision),
+                PyNode::new(
+                    graph.as_unbound().clone_ref(py),
+                    node,
+                    graph.borrow().element_epoch()?,
+                ),
             )?]);
         }
         self.tree
@@ -842,7 +854,11 @@ impl PyTraversalTree {
             .map(|node| {
                 Py::new(
                     py,
-                    PyNode::new(graph.as_unbound().clone_ref(py), node.0, self.revision),
+                    PyNode::new(
+                        graph.as_unbound().clone_ref(py),
+                        node.0,
+                        graph.borrow().element_epoch()?,
+                    ),
                 )
             })
             .collect()
@@ -871,7 +887,11 @@ impl PyTraversalTree {
             .map(|hedge| {
                 Py::new(
                     py,
-                    PyHalfEdge::new(graph.as_unbound().clone_ref(py), hedge.0, self.revision),
+                    PyHalfEdge::new(
+                        graph.as_unbound().clone_ref(py),
+                        hedge.0,
+                        graph.borrow().element_epoch()?,
+                    ),
                 )
             })
             .collect()
@@ -881,7 +901,7 @@ impl PyTraversalTree {
     fn parent(
         &self,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="Node | builtins.int | builtins.str", imports=("builtins")))]
+        #[gen_stub(override_type(type_repr="NodeView | builtins.int | builtins.str", imports=("builtins")))]
         node: &Bound<'_, PyAny>,
     ) -> PyResult<Option<Py<PyNode>>> {
         let node = self.resolve_node(py, node)?;
@@ -890,11 +910,8 @@ impl PyTraversalTree {
         }
         let graph = self.owner(py)?.borrow();
         let state = graph.state.borrow();
-        state
-            .as_ref()
-            .expect("checked")
-            .graph
-            .traversal_parent(&self.tree, NodeIndex(node))
+        self.tree
+            .node_parent(NodeIndex(node), &state.as_ref().expect("checked").graph)
             .map(|parent| self.node_view(py, parent.0))
             .transpose()
     }
@@ -903,7 +920,7 @@ impl PyTraversalTree {
     fn children(
         &self,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="Node | builtins.int | builtins.str", imports=("builtins")))]
+        #[gen_stub(override_type(type_repr="NodeView | builtins.int | builtins.str", imports=("builtins")))]
         node: &Bound<'_, PyAny>,
     ) -> PyResult<Vec<Py<PyNode>>> {
         let node = self.resolve_node(py, node)?;
@@ -918,7 +935,7 @@ impl PyTraversalTree {
                 .node_order()
                 .into_iter()
                 .filter(|candidate| {
-                    graph.traversal_parent(&self.tree, *candidate) == Some(NodeIndex(node))
+                    self.tree.node_parent(*candidate, graph) == Some(NodeIndex(node))
                 })
                 .collect::<Vec<_>>()
         };
@@ -932,7 +949,7 @@ impl PyTraversalTree {
     fn ancestors(
         &self,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="Node | builtins.int | builtins.str", imports=("builtins")))]
+        #[gen_stub(override_type(type_repr="NodeView | builtins.int | builtins.str", imports=("builtins")))]
         node: &Bound<'_, PyAny>,
     ) -> PyResult<Vec<Py<PyNode>>> {
         let node = self.resolve_node(py, node)?;
@@ -942,11 +959,11 @@ impl PyTraversalTree {
         let ancestors = {
             let graph = self.owner(py)?.borrow();
             let state = graph.state.borrow();
-            state
-                .as_ref()
-                .expect("checked")
-                .graph
-                .traversal_ancestors(&self.tree, NodeIndex(node))
+            let graph = &state.as_ref().expect("checked").graph;
+            self.tree
+                .ancestor_iter_node(NodeIndex(node), graph.as_ref())
+                .skip(1)
+                .collect::<Vec<_>>()
         };
         ancestors
             .into_iter()
@@ -987,7 +1004,7 @@ impl PyTraversalTree {
                     "both edge endpoints must be part of this traversal tree",
                 ));
             }
-            graph.traversal_cycle(&self.tree, hedge)
+            self.tree.get_cycle(hedge, graph)
         };
         Ok(cycle.map(|cycle| PyCycle {
             graph: Some(graph_object.clone_ref(py)),
@@ -1029,8 +1046,9 @@ fn resolve_node_target(
     revision: u64,
     key: &Bound<'_, PyAny>,
 ) -> PyResult<usize> {
+    graph.borrow(py).check_revision(revision)?;
     if let Ok(node) = key.extract::<PyRef<'_, PyNode>>() {
-        node.index_for_graph(py, graph, revision)
+        node.index_for_graph(py, graph, graph.borrow(py).element_epoch()?)
     } else {
         graph.borrow(py).resolve_node(key)
     }
@@ -1042,8 +1060,9 @@ fn resolve_edge_target(
     revision: u64,
     key: &Bound<'_, PyAny>,
 ) -> PyResult<usize> {
+    graph.borrow(py).check_revision(revision)?;
     if let Ok(edge) = key.extract::<PyRef<'_, PyEdge>>() {
-        edge.index_for_graph(py, graph, revision)
+        edge.index_for_graph(py, graph, graph.borrow(py).element_epoch()?)
     } else {
         graph.borrow(py).resolve_edge(key)
     }
@@ -1177,7 +1196,10 @@ impl PyGraph {
 
         if let Some(predicate) = node {
             for (index, crown) in node_crowns {
-                let view = Py::new(py, PyNode::new(slf.clone_ref(py), index, revision))?;
+                let view = Py::new(
+                    py,
+                    PyNode::new(slf.clone_ref(py), index, slf.borrow(py).element_epoch()?),
+                )?;
                 let include = predicate.call1(py, (view,))?.bind(py).is_truthy()?;
                 slf.borrow(py).check_revision(revision)?;
                 if include {
@@ -1191,7 +1213,10 @@ impl PyGraph {
         }
         if let Some(predicate) = edge {
             for (index, pair) in edge_pairs {
-                let view = Py::new(py, PyEdge::new(slf.clone_ref(py), index, revision))?;
+                let view = Py::new(
+                    py,
+                    PyEdge::new(slf.clone_ref(py), index, slf.borrow(py).element_epoch()?),
+                )?;
                 let include = predicate.call1(py, (view,))?.bind(py).is_truthy()?;
                 slf.borrow(py).check_revision(revision)?;
                 if include {
@@ -1201,7 +1226,10 @@ impl PyGraph {
         }
         if let Some(predicate) = half_edge {
             for index in 0..n_hedges {
-                let view = Py::new(py, PyHalfEdge::new(slf.clone_ref(py), index, revision))?;
+                let view = Py::new(
+                    py,
+                    PyHalfEdge::new(slf.clone_ref(py), index, slf.borrow(py).element_epoch()?),
+                )?;
                 let include = predicate.call1(py, (view,))?.bind(py).is_truthy()?;
                 slf.borrow(py).check_revision(revision)?;
                 if include {
@@ -1238,7 +1266,12 @@ impl PyGraph {
         };
         ids.extend(subgraph.isolated_nodes.iter().copied());
         ids.into_iter()
-            .map(|node| Py::new(py, PyNode::new(slf.clone_ref(py), node, revision)))
+            .map(|node| {
+                Py::new(
+                    py,
+                    PyNode::new(slf.clone_ref(py), node, slf.borrow(py).element_epoch()?),
+                )
+            })
             .collect()
     }
 
@@ -1261,7 +1294,12 @@ impl PyGraph {
                 .collect::<Vec<_>>()
         };
         ids.into_iter()
-            .map(|edge| Py::new(py, PyEdge::new(slf.clone_ref(py), edge.0, revision)))
+            .map(|edge| {
+                Py::new(
+                    py,
+                    PyEdge::new(slf.clone_ref(py), edge.0, slf.borrow(py).element_epoch()?),
+                )
+            })
             .collect()
     }
 
@@ -1290,7 +1328,7 @@ impl PyGraph {
                 .as_ref()
                 .expect("checked")
                 .graph
-                .internal_boundary(&subgraph.subgraph)
+                .internal_crown(&subgraph.subgraph)
         };
         Ok(PySubgraph::new(slf.clone_ref(py), revision, boundary))
     }
@@ -1310,7 +1348,7 @@ impl PyGraph {
                 .as_ref()
                 .expect("checked")
                 .graph
-                .boundary(&subgraph.subgraph)
+                .full_crown(&subgraph.subgraph)
         };
         Ok(PySubgraph::new(slf.clone_ref(py), revision, boundary))
     }
@@ -1467,13 +1505,18 @@ impl PyGraph {
                 .as_ref()
                 .expect("checked")
                 .graph
-                .topological_order_of(&filter, direction.into())
-                .map_err(PyValueError::new_err)?
+                .topo_sort_kahn_of(&filter, direction.into())
+                .map_err(|error| PyValueError::new_err(error.to_string()))?
         };
         order.extend(directed);
         order
             .into_iter()
-            .map(|node| Py::new(py, PyNode::new(slf.clone_ref(py), node.0, revision)))
+            .map(|node| {
+                Py::new(
+                    py,
+                    PyNode::new(slf.clone_ref(py), node.0, slf.borrow(py).element_epoch()?),
+                )
+            })
             .collect()
     }
 
@@ -1492,7 +1535,7 @@ impl PyGraph {
             let reduced = state
                 .copy_graph(py)?
                 .transitive_reduction(direction.into())
-                .map_err(PyValueError::new_err)?;
+                .map_err(|error| PyValueError::new_err(error.to_string()))?;
             state.derived(py, reduced)?
         };
         Ok(PyGraph::from_state(candidate))
@@ -1623,7 +1666,7 @@ impl PyGraph {
                 .as_ref()
                 .expect("checked")
                 .graph
-                .all_bonds_of(&filter, minimum, maximum)
+                .all_bonds_of(&filter, &(minimum..=maximum))
         };
         // Isolated nodes have no edge boundary and therefore contribute no bond.
         drop(isolated_nodes);
@@ -1665,7 +1708,9 @@ impl PyGraph {
                 .as_ref()
                 .expect("checked")
                 .graph
-                .a_bond_of(&filter, minimum, maximum)
+                .a_bond_of(&filter, &|bond: &SuBitGraph| {
+                    (minimum..=maximum).contains(&bond.n_included())
+                })
         };
         Ok(bond.map(|bond| PySubgraph::new(slf.clone_ref(py), revision, bond)))
     }
@@ -1709,7 +1754,7 @@ impl PyGraph {
                 .expect("checked")
                 .graph
                 .all_cycles_of(&filter, rank)
-                .map_err(PyValueError::new_err)?
+                .map_err(|error| PyValueError::new_err(error.to_string()))?
         };
         Ok(cycles
             .into_iter()
@@ -1740,7 +1785,7 @@ impl PyGraph {
                 .expect("checked")
                 .graph
                 .tadpoles(&externals)
-                .map_err(PyValueError::new_err)?
+                .map_err(|error| PyValueError::new_err(error.to_string()))?
         };
         tadpoles.sort_by_key(|tadpole| {
             tadpole
@@ -1857,15 +1902,13 @@ impl PyGraph {
                         "an isolated traversal root has no includable half-edge",
                     ));
                 }
-                (graph.empty_traversal_tree(), Some(root.0))
+                (SimpleTraversalTree::empty(graph), Some(root.0))
             } else if depth_first {
-                graph
-                    .depth_first_traverse(&filter, &root, include)
+                SimpleTraversalTree::depth_first_traverse(graph, &filter, &root, include)
                     .map(|tree| (tree, None))
                     .map_err(|error| PyValueError::new_err(error.to_string()))?
             } else {
-                graph
-                    .breadth_first_traverse(&filter, &root, include)
+                SimpleTraversalTree::breadth_first_traverse(graph, &filter, &root, include)
                     .map(|tree| (tree, None))
                     .map_err(|error| PyValueError::new_err(error.to_string()))?
             }

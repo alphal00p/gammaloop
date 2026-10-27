@@ -1,10 +1,8 @@
 use super::utils::*;
 use super::*;
 use gammaloop_api::commands::integrate::RendererOption;
-use gammalooprs::{
-    graph::FeynmanGraph,
-    processes::{CutId, ProcessCollection},
-};
+use gammalooprs::graph::FeynmanGraph;
+use gammalooprs::processes::{CutId, ProcessCollection};
 use std::f64::consts::PI;
 
 #[test]
@@ -127,7 +125,7 @@ target_relative_accuracy = 0.02
                         !above_threshold
                     ),
                     &format!(
-                        "import graphs --inline-dot \"\"\"{dot}\"\"\" --process-spec 'scalar_2 > scalar_0 scalar_0' -p interference -i virtual -o"
+                        "import graphs --inline-dot \"\"\"{dot}\"\"\" --process-spec 'scalar_2 > scalar_0 scalar_0 [{{{{2}}}}]' -p interference -i virtual -o"
                     ),
                     "generate existing -p interference -i virtual",
                 ],

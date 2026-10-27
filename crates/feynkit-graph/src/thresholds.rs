@@ -1,11 +1,9 @@
 //! Initial-state attachment trees used to normalize physical threshold sides.
 
-use linnet::half_edge::{
-    HedgeGraph,
-    involution::{EdgeIndex, HedgePair},
-    nodestore::NodeStorageOps,
-    subgraph::{Inclusion, ModifySubSet, SuBitGraph, SubSetOps},
-};
+use linnet::half_edge::HedgeGraph;
+use linnet::half_edge::involution::{EdgeIndex, HedgePair};
+use linnet::half_edge::nodestore::Topology;
+use linnet::half_edge::subgraph::{Inclusion, ModifySubSet, SuBitGraph, SubSetOps};
 
 use crate::{EdgeId, FeynmanDiagram};
 
@@ -24,7 +22,7 @@ pub trait InitialStateTreeExt {
     ) -> (SuBitGraph, Vec<EdgeIndex>);
 }
 
-impl<E, V, H, N: NodeStorageOps<NodeData = V>> InitialStateTreeExt for HedgeGraph<E, V, H, N> {
+impl<E, V, H, N: Topology> InitialStateTreeExt for HedgeGraph<E, V, H, N> {
     fn initial_state_tree(
         &self,
         initial_state: &SuBitGraph,
@@ -86,9 +84,9 @@ impl FeynmanDiagram {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use linnet::half_edge::{
-        builder::HedgeGraphBuilder, involution::Orientation, subgraph::SubSetLike,
-    };
+    use linnet::half_edge::builder::HedgeGraphBuilder;
+    use linnet::half_edge::involution::Orientation;
+    use linnet::half_edge::subgraph::SubSetLike;
 
     #[test]
     fn initial_attachment_tree_retains_internal_bridges() {

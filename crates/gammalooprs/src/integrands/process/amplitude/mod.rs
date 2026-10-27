@@ -1,10 +1,8 @@
-use std::{
-    collections::HashSet,
-    fs::{self},
-    path::Path,
-    sync::LazyLock,
-    time::Instant,
-};
+use std::collections::HashSet;
+use std::fs;
+use std::path::Path;
+use std::sync::LazyLock;
+use std::time::Instant;
 
 use bincode_trait_derive::{Decode, Encode};
 
@@ -13,91 +11,86 @@ use color_eyre::{Help, Result};
 use colored::Colorize;
 use eyre::{Context, eyre};
 use itertools::Itertools;
-use linnet::half_edge::{
-    involution::{EdgeIndex, EdgeVec, Orientation},
-    subgraph::{ModifySubSet, SubSetLike, subset::SubSet},
-};
+use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
+use linnet::half_edge::subgraph::subset::SubSet;
+use linnet::half_edge::subgraph::{ModifySubSet, SubSetLike};
 use momtrop::SampleGenerator;
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
 use spenso::algebra::complex::Complex;
-use symbolica::{
-    atom::{Atom, AtomCore},
-    evaluate::OptimizationSettings,
-    numerical_integration::{Grid, Sample},
-};
+use symbolica::atom::{Atom, AtomCore};
+use symbolica::evaluate::OptimizationSettings;
+use symbolica::numerical_integration::{Grid, Sample};
 use three_dimensional_reps::utils::rank_i64;
 use tracing::{debug, info, instrument, warn};
 use typed_index_collections::{TiSlice, TiVec, ti_vec};
 
+use crate::cff::esurface::{
+    Esurface, EsurfaceCollection, EsurfaceRay, ExistingEsurfaces, GroupEsurfaceId,
+    RaisedEsurfaceId, get_representative,
+};
+use crate::cff::expression::OrientationID;
+use crate::cff::orientations::GraphOrientation;
+use crate::cff::surface::{HsurfaceID, HybridSurfaceID};
+use crate::graph::parse::complete_group_parsing;
+use crate::graph::{
+    FeynmanGraph, Graph, GraphGroup, GraphGroupPosition, GroupId, LMBext, LmbIndex,
+    LoopMomentumBasis,
+};
+use crate::integrands::HasIntegrand;
+use crate::integrands::evaluation::{EvaluationResult, GraphEvaluationResult};
+use crate::integrands::process::evaluators::{
+    ActiveF64Backend, EvaluatorStack, SingleOrAllOrientations,
+};
+use crate::integrands::process::fermi_surface::{FermiSurfaceEvaluator, FermiSurfaceSector};
+use crate::integrands::process::threshold_multiplier::ThresholdMultiplierEvaluatorCollection;
+use crate::integrands::process::{
+    CompiledSamplingMap, ParamBuilder, SamplingChannelBridge, SamplingChannelCompileContext,
+    SamplingChannelId, SamplingMapDefinition, SurfaceRadialMap,
+    graph_to_group_id_for_group_structure,
+};
+use crate::model::{Model, ParticleIdGammaLoopExt};
+use crate::momentum::sample::{ExternalFourMomenta, ExternalIndex, LoopMomenta, MomentumSample};
+use crate::momentum::signature::SignatureLike;
+use crate::momentum::{
+    FourMomentum, Helicity, Rotation, RotationMethod, SignOrZero, ThreeMomentum,
+};
+use crate::observables::{
+    AdditionalWeightKey, EventProcessingRuntime, GenericEvent,
+    GenericThresholdCountertermComponentWeight, GenericThresholdCountertermEventInfo,
+    ThresholdCountertermComponentOccurrence,
+};
+use crate::processes::{
+    AmplitudeGraph, GraphGenerationStats, GraphGroupSelectionPlan, GroupDerivedData,
+    ThresholdCountertermMetadataRegistry, ThresholdCountertermVariantStatus,
+};
+use crate::settings::global::{CompilationOptionsSnapshot, FrozenCompilationMode};
+use crate::settings::runtime::{
+    DiscreteGraphSamplingType, ParameterizationSettings, SamplingSettings,
+};
+use crate::settings::{GlobalSettings, RuntimeSettings};
+use crate::subtraction::amplitude_counterterm::{
+    AmplitudeCountertermAtom, AmplitudeCountertermComponentEvaluation, AmplitudeCountertermData,
+    AmplitudeCountertermEvaluation, AmplitudeLocalCountertermEvaluation,
+    OverlapStructureWithKinematics,
+};
+use crate::subtraction::overlap::{OverlapInput, SingleGraphOverlapData, find_maximal_overlap};
+use crate::utils::serde_utils::SmartSerde;
+use crate::utils::symbolica_ext::LOGPRINTOPTS;
+use crate::utils::{
+    ArbPrec, DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, GS, RuntimeCache, W_, compute_shift_part,
+};
 use crate::{
     DependentMomentaConstructor, F, FloatLike, GammaLoopContext, GammaLoopContextContainer,
-    cff::{
-        esurface::{
-            Esurface, EsurfaceCollection, EsurfaceRay, ExistingEsurfaces, GroupEsurfaceId,
-            RaisedEsurfaceId, get_representative,
-        },
-        expression::OrientationID,
-        orientations::GraphOrientation,
-        surface::{HsurfaceID, HybridSurfaceID},
-    },
-    graph::{
-        FeynmanGraph, Graph, GraphGroup, GraphGroupPosition, GroupId, LMBext, LmbIndex,
-        LoopMomentumBasis, parse::complete_group_parsing,
-    },
-    integrands::{
-        HasIntegrand,
-        evaluation::{EvaluationResult, GraphEvaluationResult},
-        process::{
-            CompiledSamplingMap, ParamBuilder, SamplingChannelBridge,
-            SamplingChannelCompileContext, SamplingChannelId, SamplingMapDefinition,
-            SurfaceRadialMap,
-            evaluators::{ActiveF64Backend, EvaluatorStack, SingleOrAllOrientations},
-            fermi_surface::{FermiSurfaceEvaluator, FermiSurfaceSector},
-            graph_to_group_id_for_group_structure,
-            threshold_multiplier::ThresholdMultiplierEvaluatorCollection,
-        },
-    },
-    model::{Model, ParticleIdGammaLoopExt},
-    momentum::{
-        FourMomentum, Helicity, Rotation, RotationMethod, SignOrZero, ThreeMomentum,
-        sample::{ExternalFourMomenta, ExternalIndex, LoopMomenta, MomentumSample},
-        signature::SignatureLike,
-    },
-    observables::{
-        AdditionalWeightKey, EventProcessingRuntime, GenericEvent,
-        GenericThresholdCountertermComponentWeight, GenericThresholdCountertermEventInfo,
-        ThresholdCountertermComponentOccurrence,
-    },
-    processes::{
-        AmplitudeGraph, GraphGenerationStats, GraphGroupSelectionPlan, GroupDerivedData,
-        ThresholdCountertermMetadataRegistry, ThresholdCountertermVariantStatus,
-    },
-    settings::{
-        GlobalSettings, RuntimeSettings,
-        global::{CompilationOptionsSnapshot, FrozenCompilationMode},
-        runtime::{DiscreteGraphSamplingType, ParameterizationSettings, SamplingSettings},
-    },
-    subtraction::{
-        amplitude_counterterm::{
-            AmplitudeCountertermAtom, AmplitudeCountertermComponentEvaluation,
-            AmplitudeCountertermData, AmplitudeCountertermEvaluation,
-            AmplitudeLocalCountertermEvaluation, OverlapStructureWithKinematics,
-        },
-        overlap::{OverlapInput, SingleGraphOverlapData, find_maximal_overlap},
-    },
-    utils::{
-        ArbPrec, DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, GS, RuntimeCache, W_, compute_shift_part,
-        serde_utils::SmartSerde, symbolica_ext::LOGPRINTOPTS,
-    },
 };
 
+use super::sampling::context::SamplingMapContext;
+use super::sampling::selection::SamplingCatalogueEntry;
 use super::{
     GraphTerm, GraphTermEvaluationContext, LmbMultiChannelingSetup, ProcessIntegrandImpl,
     create_grid, evaluate_sample, filtered_orientation_count, format_orientation_label,
     format_sampling_channel_label, histogram_process_info_for_integrand, prepare_buffered_event,
-    resolve_visible_orientation_id, sampling::context::SamplingMapContext,
-    sampling::selection::SamplingCatalogueEntry, validate_group_orientation_catalogs,
+    resolve_visible_orientation_id, validate_group_orientation_catalogs,
     validate_process_runtime_settings,
 };
 
@@ -3437,22 +3430,20 @@ mod fermi_tests;
 #[cfg(test)]
 mod sampling_tests {
     use super::*;
+    use crate::initialisation::test_initialise;
     use crate::integrands::evaluation::EvaluationMetaData;
-    use crate::{
-        initialisation::test_initialise,
-        integrands::process::{
-            CompiledSamplingMap, ProcessIntegrand, SamplingMapAffine, SamplingSupport,
-        },
-        processes::Amplitude,
-        utils::{load_generic_model, test_utils::ModelFixtureExt},
+    use crate::integrands::process::{
+        CompiledSamplingMap, ProcessIntegrand, SamplingMapAffine, SamplingSupport,
     };
+    use crate::processes::Amplitude;
+    use crate::utils::load_generic_model;
+    use crate::utils::test_utils::ModelFixtureExt;
     use linnet::half_edge::involution::EdgeIndex;
 
     #[test]
     fn vacuum_amplitude_default_cube_sampling_handles_empty_externals() -> Result<()> {
-        use crate::integrands::process::{
-            MomentumSpaceEvaluationInput, gammaloop_sample::parameterize,
-        };
+        use crate::integrands::process::MomentumSpaceEvaluationInput;
+        use crate::integrands::process::gammaloop_sample::parameterize;
 
         test_initialise()?;
         let model = load_generic_model("scalars");
@@ -3544,7 +3535,7 @@ escalate_if_exact_zero = false
         use crate::integrands::process::GaussianReferenceFunction;
         test_initialise()?;
         let model = load_generic_model("scalars");
-        let graphs = crate::graph::Graph::import_dot(
+        let graphs = crate::graph::Graph::from_dot(
             r#"digraph joint_triangle {
             node [num=1]; edge [num=1];
             incoming_a [style=invis]; incoming_b [style=invis]; outgoing [style=invis];
@@ -3649,18 +3640,12 @@ parent_lmb = [4]
                 .is_empty()
         );
         {
-            use crate::{
-                integrands::{
-                    evaluation::PreciseEvaluationResult,
-                    process::{
-                        EvaluationTarget, evaluate_single,
-                        gammaloop_sample::{GammaLoopSample, parameterize},
-                        sampling::maps::SamplingEvaluationError,
-                    },
-                },
-                settings::runtime::{Precision, StabilityLevelSetting},
-                utils::QuadFloat,
-            };
+            use crate::integrands::evaluation::PreciseEvaluationResult;
+            use crate::integrands::process::gammaloop_sample::{GammaLoopSample, parameterize};
+            use crate::integrands::process::sampling::maps::SamplingEvaluationError;
+            use crate::integrands::process::{EvaluationTarget, evaluate_single};
+            use crate::settings::runtime::{Precision, StabilityLevelSetting};
+            use crate::utils::QuadFloat;
             // The original physical triangle (without threshold CTs) now also
             // exercises normal materialization through the production boundary.
             let mut physical = runtime.clone();
@@ -3826,19 +3811,17 @@ parent_lmb = [4]
 
     #[test]
     fn generated_kite_reference_normalizes_unequal_groups_and_orientations() -> Result<()> {
-        use crate::{
-            integrands::process::{
-                EvaluationTarget, GaussianReferenceFunction, evaluate_single,
-                gammaloop_sample::{GammaLoopSample, parameterize},
-            },
-            settings::runtime::{
-                DiscreteGraphSamplingSettings, DiscreteGraphSamplingType, SamplingSettings,
-            },
-            utils::{ArbPrec, QuadFloat},
+        use crate::integrands::process::gammaloop_sample::{GammaLoopSample, parameterize};
+        use crate::integrands::process::{
+            EvaluationTarget, GaussianReferenceFunction, evaluate_single,
         };
+        use crate::settings::runtime::{
+            DiscreteGraphSamplingSettings, DiscreteGraphSamplingType, SamplingSettings,
+        };
+        use crate::utils::{ArbPrec, QuadFloat};
         test_initialise()?;
         let model = load_generic_model("scalars");
-        let graph = crate::graph::Graph::import_dot(
+        let graph = crate::graph::Graph::from_dot(
             include_str!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
                 "/../../tests/resources/graphs/massive_kite.dot"
@@ -4017,7 +4000,7 @@ sampling_multichanneling = false
     fn generated_kite_sampling_uses_physical_six_dimensional_surfaces() -> Result<()> {
         test_initialise()?;
         let mut model = load_generic_model("scalars");
-        let graphs = crate::graph::Graph::import_dot(
+        let graphs = crate::graph::Graph::from_dot(
             include_str!(concat!(
                 env!("CARGO_MANIFEST_DIR"),
                 "/../../tests/resources/graphs/massive_kite.dot"
@@ -4082,12 +4065,11 @@ parent_lmb = [4,6]
         // Exercise the warmed production owner on a clone, leaving the fresh
         // construction/geometry checks below independent of runtime caching.
         {
-            use crate::{
-                integrands::process::GaussianReferenceFunction,
-                momentum::ExternalMomenta,
-                settings::runtime::{SamplingSettings, kinematic::Externals},
-                utils::QuadFloat,
-            };
+            use crate::integrands::process::GaussianReferenceFunction;
+            use crate::momentum::ExternalMomenta;
+            use crate::settings::runtime::SamplingSettings;
+            use crate::settings::runtime::kinematic::Externals;
+            use crate::utils::QuadFloat;
             let mut runtime = integrand.clone();
             let reference = GaussianReferenceFunction::new(2.0, vec![0.0; 6])?;
             let point = Sample::Continuous(
@@ -4204,16 +4186,12 @@ parent_lmb = [4,6]
         // above threshold, but the interior depth is below Double's native
         // cancellation budget. Quad binds the same physical equation.
         {
-            use crate::{
-                integrands::process::{
-                    GaussianReferenceFunction, sampling::maps::SamplingEvaluationError,
-                },
-                momentum::ExternalMomenta,
-                settings::runtime::{
-                    Precision, SamplingSettings, StabilityLevelSetting, kinematic::Externals,
-                },
-                utils::QuadFloat,
-            };
+            use crate::integrands::process::GaussianReferenceFunction;
+            use crate::integrands::process::sampling::maps::SamplingEvaluationError;
+            use crate::momentum::ExternalMomenta;
+            use crate::settings::runtime::kinematic::Externals;
+            use crate::settings::runtime::{Precision, SamplingSettings, StabilityLevelSetting};
+            use crate::utils::QuadFloat;
             let mut runtime = integrand.clone();
             let runtime_settings = runtime.get_mut_settings();
             runtime_settings.stability.rotation_axis.clear();
@@ -4708,13 +4686,10 @@ parent_lmb = [4,6]
         check_joint_matcher::<crate::utils::QuadFloat>(term, joint_program.clone())?;
         check_joint_matcher::<crate::utils::ArbPrec>(term, joint_program)?;
         {
-            use crate::{
-                integrands::process::GaussianReferenceFunction,
-                momentum::ExternalMomenta,
-                settings::runtime::{
-                    SamplingSettingsParser, StabilityLevelSetting, kinematic::Externals,
-                },
-            };
+            use crate::integrands::process::GaussianReferenceFunction;
+            use crate::momentum::ExternalMomenta;
+            use crate::settings::runtime::kinematic::Externals;
+            use crate::settings::runtime::{SamplingSettingsParser, StabilityLevelSetting};
             let mut joint_runtime = runtime_for_rescue.clone();
             let mut parser: SamplingSettingsParser =
                 toml::from_str(&toml::to_string(&settings.sampling)?)?;
@@ -4799,9 +4774,8 @@ parent_lmb = [4,6]
             // The actual physical body is distinct from the reference and
             // controlled replay targets. Retain all 18 orientations and CT terms.
             {
-                use crate::{
-                    integrands::process::MomentumSpaceEvaluationInput, settings::runtime::SumMode,
-                };
+                use crate::integrands::process::MomentumSpaceEvaluationInput;
+                use crate::settings::runtime::SumMode;
                 let mut physical = joint_runtime.clone();
                 let mut selected_settings = parser.clone();
                 selected_settings.graphs = SumMode::MonteCarlo;
@@ -5892,11 +5866,9 @@ parent_lmb = [4,6]
         // C/D/LMB density and threshold CT. Double physical arithmetic can
         // collapse the focused distance; Quad evaluates the same retained draw.
         {
-            use crate::{
-                integrands::evaluation::{PreciseEvaluationResult, StabilityStatus},
-                settings::runtime::{Precision, StabilityLevelSetting},
-                utils::QuadFloat,
-            };
+            use crate::integrands::evaluation::{PreciseEvaluationResult, StabilityStatus};
+            use crate::settings::runtime::{Precision, StabilityLevelSetting};
+            use crate::utils::QuadFloat;
             use symbolica::prelude::SingleFloat;
             let stability = &mut runtime_for_rescue.get_mut_settings().stability;
             stability.rotation_axis.clear();
@@ -6079,11 +6051,9 @@ parent_lmb = [4,6]
         // Arb retains its nonzero value; complete underflow may round to zero
         // only at the ordinary reporting boundary.
         {
-            use crate::{
-                integrands::evaluation::PreciseEvaluationResult,
-                integrands::process::MomentumSpaceEvaluationInput,
-                settings::runtime::StabilityLevelSetting,
-            };
+            use crate::integrands::evaluation::PreciseEvaluationResult;
+            use crate::integrands::process::MomentumSpaceEvaluationInput;
+            use crate::settings::runtime::StabilityLevelSetting;
             use symbolica::prelude::SingleFloat;
             let mut heavy_model = model.clone();
             heavy_model.set_fixture_values([("mass_scalar_1", Complex::new(F(1.0e60), F(0.0)))])?;

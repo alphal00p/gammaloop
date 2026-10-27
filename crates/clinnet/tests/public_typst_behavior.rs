@@ -8,10 +8,17 @@ use clinnet::TypstRenderer;
 use tempfile::TempDir;
 
 const TEMPLATES: &str = ".clinnet/templates";
-const MAP_STYLE: (&str, &str) = (
-    "map-style.typ",
-    include_str!("../../linnest/typst/examples/map-style.typ"),
-);
+/// The map-style example, relocated beside the renderer's staged packages.
+fn map_style() -> (&'static str, &'static str) {
+    static SOURCE: OnceLock<String> = OnceLock::new();
+    let source = SOURCE.get_or_init(|| {
+        include_str!("../../linnest/typst/examples/map-style.typ").replace(
+            "\"../src/curve.typ\"",
+            "\"crates/linnest/typst/src/curve.typ\"",
+        )
+    });
+    ("map-style.typ", source)
+}
 const PHYSICS_STYLE: [(&str, &str); 3] = [
     (
         "gamma-physics-edge-style.typ",
@@ -230,6 +237,7 @@ fn stroke_spans(svg: &str, color: &str) -> Vec<(f64, f64)> {
     )
 }
 
+#[track_caller]
 fn assert_close(actual: f64, expected: f64, tolerance: f64) {
     assert!(
         (actual - expected).abs() <= tolerance,
@@ -312,7 +320,7 @@ fn linnest_public_svg() -> &'static str {
             include_str!("resources/linnest-public-behavior.typ"),
         );
         let (base, renderer) = staged(&[
-            MAP_STYLE,
+            map_style(),
             (
                 "curved-arrow-behavior.typ",
                 include_str!("resources/curved-arrow-behavior.typ"),
@@ -414,12 +422,20 @@ fn public_linnest_arrow_shafts_and_crossing_gaps() {
     let shaft_span = shaft[0];
     let shaft_reference_span = shaft_reference[0];
     assert_close(shaft_span.0 - shaft_reference_span.0, 10.0, 1e-3);
-    assert_close(shaft_span.1, own_translation(arrow_head[0].1).0, 1e-3);
+    // A 9pt stealth with 40% inset stops at its painted notch, not at the
+    // first SVG polygon vertex (whose export translation is not an anchor).
+    assert_close(
+        shaft_span.1,
+        shaft_reference_span.1 + 10.0 - 9.0 * (1.0 - 0.4),
+        1e-3,
+    );
 
     let crossing = stroke_spans(svg, "#dc2626");
     assert_eq!(crossing.len(), 2);
     let crossing_gap = crossing[1].0 - crossing[0].1;
-    let crossing_span = crossing[1].1 - crossing[0].0;
+    // The head shortens the final visible fragment, not the crossing gap.
+    // Derive the six-unit reference carrier from the independent one-unit shift.
+    let crossing_span = 6.0 * (shaft_span.0 - shaft_reference_span.0);
     assert_close(crossing_gap / crossing_span, 1.0 / 6.0, 5e-4);
     let gap_center = (crossing[0].1 + crossing[1].0) / 2.0;
     assert_close(
@@ -681,6 +697,8 @@ fn public_gammaloop_momentum_arrows_are_placed_along_the_edge() {
         "curved-short",
         "curved-long",
         "default-mark",
+        "data-no-mark",
+        "data-default-mark",
     ] {
         let svg = render_mode(&base, &renderer, gamma_momentum_fixture(), "short", mode);
         let labels = paths_with_attr(&svg, "fill", "#ea580c");
@@ -694,11 +712,30 @@ fn public_gammaloop_momentum_arrows_are_placed_along_the_edge() {
         );
         assert_eq!(
             paths_with_attr(&svg, "fill", "#dc2626").len(),
-            usize::from(!["no-mark", "fallback", "ordinary", "default-mark"].contains(&mode)),
+            usize::from(
+                ![
+                    "no-mark",
+                    "fallback",
+                    "ordinary",
+                    "default-mark",
+                    "data-no-mark",
+                    "data-default-mark",
+                ]
+                .contains(&mode)
+            ),
             "{mode}"
         );
         momentum_outputs.insert(mode, svg);
     }
+    // Per-edge DOT words select no mark or the default one, like the options.
+    assert_eq!(
+        momentum_outputs["data-no-mark"],
+        momentum_outputs["no-mark"]
+    );
+    assert_eq!(
+        momentum_outputs["data-default-mark"],
+        momentum_outputs["default-mark"]
+    );
     // Test the GammaLoop callbacks themselves, independently of the Xbox example.
     for mode in [
         "long",
@@ -915,7 +952,7 @@ fn public_gammaloop_debug_view_renders() {
 #[test]
 fn public_configurable_map_style_behavior_is_observable() {
     let (base, renderer) = staged(&[
-        MAP_STYLE,
+        map_style(),
         (
             "map-style-behavior.typ",
             include_str!("resources/map-style-behavior.typ"),
@@ -925,17 +962,11 @@ fn public_configurable_map_style_behavior_is_observable() {
     let output = base.path().join("map-style-case.svg");
     let mut default_svg = None;
     for (case, unit, radius, node_width, widths) in [
-        ("defaults", 13.5, 0.08, "0.5", ["0.2", "0.4", "0.5", "1"]),
-        ("reference", 13.5, 0.08, "0.5", ["0.2", "0.4", "0.5", "1"]),
-        ("scaled", 20.0, 0.3, "0.5", ["0.2", "0.4", "0.5", "1"]),
-        ("derived", 10.0, 0.3, "1.25", ["0.5", "1", "1.25", "2.5"]),
-        (
-            "overrides",
-            10.0,
-            0.3,
-            "1.75",
-            ["0.625", "0.875", "1.25", "3"],
-        ),
+        ("defaults", 13.5, 0.08, "0.5", ["0.4", "0.5", "1"]),
+        ("reference", 13.5, 0.08, "0.5", ["0.4", "0.5", "1"]),
+        ("scaled", 20.0, 0.3, "0.5", ["0.4", "0.5", "1"]),
+        ("derived", 10.0, 0.3, "1.25", ["1", "1.25", "2.5"]),
+        ("overrides", 10.0, 0.3, "1.75", ["0.875", "1.25", "3"]),
     ] {
         fs::write(
             &fixture,
@@ -998,15 +1029,365 @@ fn public_configurable_map_style_behavior_is_observable() {
 }
 
 #[test]
+fn public_kurvst_contracts_are_enforced() {
+    let typst = typst();
+    let base = tempfile::tempdir().unwrap();
+    let renderer = TypstRenderer::new(base.path()).typst_executable(typst);
+    renderer.check_version().unwrap();
+    renderer.stage_default_assets().unwrap();
+    let templates = base.path().join(".clinnet/templates");
+    let curve_tests = templates.join("crates/kurvst/typst/tests");
+    fs::create_dir_all(&curve_tests).unwrap();
+
+    // Each contract mode selects one call that the fixture must reject before
+    // invoking native code; the regular cases run when no mode is selected.
+    let output = base.path().join("kurvst-contract.pdf");
+    for (name, source, contracts) in [
+        (
+            "layer-offset.typ",
+            include_str!("../../kurvst/typst/tests/layer-offset.typ"),
+            &[
+                ("resolver-empty", "resolve-length: unsupported method"),
+                ("resolver-packet", "resolve-length: unsupported method"),
+                ("optimize", "unexpected argument: optimize"),
+                ("close-mode", "unknown field `mode`"),
+            ][..],
+        ),
+        (
+            "pattern-split.typ",
+            include_str!("../../kurvst/typst/tests/pattern-split.typ"),
+            &[
+                ("optimize", "unexpected argument: optimize"),
+                ("positional", "unexpected argument"),
+                ("resolver", "unexpected argument: resolve-length"),
+            ][..],
+        ),
+    ] {
+        let fixture = curve_tests.join(name);
+        for (mode, expected) in contracts {
+            fs::write(
+                &fixture,
+                source.replace("default: \"\"", &format!("default: \"{mode}\"")),
+            )
+            .unwrap();
+            let error = renderer
+                .compile_template(&fixture, &output, &[&templates])
+                .unwrap_err();
+            assert!(
+                error.to_string().contains(expected),
+                "{name} {mode}: expected {expected}, got {error}"
+            );
+        }
+    }
+
+    let fixture = templates.join("kurvst-public-contract.typ");
+    let output = base.path().join("kurvst-public-contract.svg");
+    fs::write(
+        &fixture,
+        include_str!("resources/kurvst-public-contract.typ"),
+    )
+    .unwrap();
+    // Validate the shared setup and installed Wasm before testing rejections.
+    renderer.compile_template(&fixture, &output, &[]).unwrap();
+
+    for (source, expected) in [
+        (
+            "#let _ = kurvst.parallel(kurvst.line((0, 0), (1, 0)), optimize: true)",
+            "unexpected argument: optimize",
+        ),
+        (
+            "#let _ = kurvst.layer(kurvst.line((0, 0), (1, 0)), optimize: false)",
+            "unexpected argument: optimize",
+        ),
+        (
+            "#let _ = kurvst.close(mode: \"smooth\")",
+            "unexpected argument: mode",
+        ),
+        (
+            "#let _ = kurvst.from-elements(((kind: \"close\", mode: \"smooth\"),))",
+            "close: mode is unsupported",
+        ),
+        (
+            "#let _ = kurvst.to-native((elements: ((kind: \"close\", mode: \"smooth\"),)))",
+            "close: mode is unsupported",
+        ),
+        (
+            "#let _ = kurvst.length((elements: ((kind: \"close\", mode: \"smooth\"),)))",
+            "unknown field `mode`",
+        ),
+        (
+            "#let _ = kurvst.from-elements(((kind: \"line\", end: (1, 0), extra: true),))",
+            "Unsupported fields in Kurvst line path element",
+        ),
+        (
+            "#let _ = kurvst.to-native((elements: ((kind: \"move\", start: (0, 0)), (kind: \"line\", end: (1, 0), extra: true))))",
+            "Unsupported fields in Kurvst line path element",
+        ),
+        (
+            "#let _ = kurvst.length((elements: ((kind: \"move\", start: (0, 0)), (kind: \"line\", end: (1, 0), extra: true))))",
+            "unknown field `extra`",
+        ),
+        (
+            "#let _ = kurvst.resolve-length(10, length: 3, ratio: 0.2, method: \"mn\")",
+            "resolve-length: unsupported method",
+        ),
+        (
+            "#let _ = kurvst.resolve-length(10, method: \"mn\")",
+            "resolve-length: unsupported method",
+        ),
+        (
+            "#let _ = kurvst.center-outset(10, resolve-length: \"mn\")",
+            "resolve-length: unsupported method",
+        ),
+        (
+            "#let _ = kurvst.layer(kurvst.line((0, 0), (1, 0)), resolve-length: \"mn\")",
+            "resolve-length: unsupported method",
+        ),
+        (
+            "#let _ = kurvst.layer(kurvst.from-elements(()), offset: 1, resolve-length: \"mn\")",
+            "resolve-length: unsupported method",
+        ),
+    ] {
+        fs::write(
+            &fixture,
+            format!("#import \"crates/kurvst/typst/src/lib.typ\" as kurvst\n{source}"),
+        )
+        .unwrap();
+        let error = renderer
+            .compile_template(&fixture, &output, &[])
+            .unwrap_err();
+        assert!(
+            error.to_string().contains(expected),
+            "{source}: expected {expected}, got {error}"
+        );
+    }
+}
+
+#[test]
+fn public_linnest_inspection_targets_are_an_output_property() {
+    let typst = typst();
+    let base = tempfile::tempdir().unwrap();
+    let renderer = TypstRenderer::new(base.path()).typst_executable(&typst);
+    renderer.check_version().unwrap();
+    renderer.stage_default_assets().unwrap();
+    let templates = base.path().join(".clinnet/templates");
+    let fixture = templates.join("inspection-targets.typ");
+    // The default follows the compile input; explicit values override it.
+    fs::write(
+        &fixture,
+        r#"#set page(width: auto, height: auto, margin: 0pt)
+#import "crates/linnest/typst/src/lib.typ": draw, graph, layout
+#let g = layout(graph.parse("digraph { a -> b [label=p]; b -> c; c -> a; c -> out; out [style=invis] }").first())
+#draw(g)
+#draw(g, inspection-targets: true)
+#draw(g, inspection-targets: false)
+"#,
+    )
+    .unwrap();
+    let anchors = |input: Option<&str>| {
+        let output = base.path().join("inspection-targets.svg");
+        let mut command = Command::new(&typst);
+        command
+            .arg("compile")
+            .arg("--root")
+            .arg(&templates)
+            .arg(&fixture)
+            .arg(&output);
+        if let Some(input) = input {
+            command.arg("--input").arg(input);
+        }
+        let result = command.output().unwrap();
+        assert!(
+            result.status.success(),
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        let svg = fs::read_to_string(output).unwrap();
+        ["#linnet-node-", "#linnet-edge-", "#linnet-halfedge-"]
+            .map(|kind| svg.matches(&format!("href=\"{kind}")).count())
+    };
+    // Only the explicitly enabled drawing links its nodes, edges and half-edges.
+    let static_document = anchors(None);
+    assert!(static_document.iter().all(|&count| count > 0));
+    assert_eq!(
+        anchors(Some("linnest-inspection-targets=false")),
+        static_document
+    );
+    // The input enables the automatic drawing as well, never the disabled one.
+    let interactive_document = anchors(Some("linnest-inspection-targets=true"));
+    assert_eq!(interactive_document, static_document.map(|count| 2 * count));
+    let invalid = Command::new(&typst)
+        .arg("compile")
+        .arg("--root")
+        .arg(&templates)
+        .arg("--input")
+        .arg("linnest-inspection-targets=yes")
+        .arg(&fixture)
+        .arg(base.path().join("invalid.svg"))
+        .output()
+        .unwrap();
+    assert!(!invalid.status.success());
+    assert!(String::from_utf8_lossy(&invalid.stderr).contains("must be \"true\" or \"false\""));
+}
+
+#[test]
+fn public_linnest_label_report_lists_what_chosen_labels_meet() {
+    let typst = typst();
+    let base = tempfile::tempdir().unwrap();
+    let renderer = TypstRenderer::new(base.path()).typst_executable(&typst);
+    renderer.check_version().unwrap();
+    renderer.stage_default_assets().unwrap();
+    let templates = base.path().join(".clinnet/templates");
+    let fixture = templates.join("label-report.typ");
+    // Edge 0 labels its source half and prefers the upper side, which the
+    // dotted edge 1 crosses along its whole length.
+    fs::write(
+        &fixture,
+        r#"#set page(width: auto, height: auto, margin: 0pt)
+#import "crates/linnest/typst/src/lib.typ": draw, graph
+#let g = graph.build({
+  graph.node(<a>, pos: graph.pos(x: -3, y: 0))
+  graph.node(<b>, pos: graph.pos(x: 3, y: 0))
+  graph.node(<c>, pos: graph.pos(x: -4, y: 0.45))
+  graph.node(<d>, pos: graph.pos(x: 4, y: 0.45))
+  graph.edge(graph.source(<a>), graph.sink(<b>), pos: graph.pos(x: 0, y: 0))
+  graph.edge(graph.source(<c>), graph.sink(<d>), pos: graph.pos(x: 0, y: 0.45))
+})
+#let dotted = edge => if edge.eid == 1 { (stroke: (thickness: 1pt, dash: "dotted")) } else { (:) }
+#let labelled(side, slide: true) = edge => dotted(edge) + if edge.eid == 0 {
+  (label: $p_1$, label-side: side, label-slide: slide)
+} else { (:) }
+#draw(g, source-style: labelled(auto), sink-style: dotted)
+#draw(g, source-style: labelled("left"), sink-style: dotted)
+#draw(g, source-style: labelled("left", slide: false), sink-style: dotted)
+"#,
+    )
+    .unwrap();
+    let report = |input: &str| {
+        Command::new(&typst)
+            .arg("eval")
+            .arg("query(<linnest-label-report>).map(record => record.value)")
+            .arg("--in")
+            .arg(&fixture)
+            .arg("--root")
+            .arg(&templates)
+            .arg("--input")
+            .arg(input)
+            .output()
+            .unwrap()
+    };
+    let output = report("linnest-label-report=true");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let drawings: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    // The automatic label leaves the dotted edge; pinned to that side, the
+    // report names the edge its text crosses, also when no label can move.
+    let label = |drawing: usize| &drawings[drawing]["labels"][0];
+    assert_eq!(drawings.as_array().unwrap().len(), 3);
+    assert_eq!(label(0)["edge"], 0);
+    assert_eq!(label(0)["movable"], true);
+    assert_eq!(label(0)["crossings"], serde_json::json!([]));
+    for drawing in [1, 2] {
+        assert_eq!(label(drawing)["crossings"][0]["edge"], 1);
+        assert!(label(drawing)["crossings"][0]["length"].as_f64().unwrap() > 0.5);
+        for kind in ["labels", "obstacles", "arrows"] {
+            assert_eq!(label(drawing)[kind], serde_json::json!([]));
+        }
+    }
+    assert_eq!(label(2)["movable"], false);
+    // Documents record nothing unless asked, and reject other values.
+    let quiet = report("linnest-label-report=false");
+    assert!(quiet.status.success());
+    assert_eq!(
+        serde_json::from_slice::<serde_json::Value>(&quiet.stdout).unwrap(),
+        serde_json::json!([])
+    );
+    let invalid = report("linnest-label-report=yes");
+    assert!(!invalid.status.success());
+    assert!(String::from_utf8_lossy(&invalid.stderr).contains("must be \"true\" or \"false\""));
+}
+
+#[test]
+fn public_cetz_no_ink_paths_keep_bounds_and_links() {
+    let (base, renderer) = staged(&[(
+        "cetz-bounds-behavior.typ",
+        include_str!("resources/cetz-bounds-behavior.typ"),
+    )]);
+    let svg = render(
+        &base,
+        &renderer,
+        "no-ink-behavior.typ",
+        "#import \"cetz-bounds-behavior.typ\": no-ink-scene\n\
+         #set page(width: auto, height: auto, margin: 0pt)\n\
+         #no-ink-scene\n",
+    );
+    assert_eq!(
+        svg.matches(" href=\"https://example.com/cetz-no-ink\"")
+            .count(),
+        2
+    );
+    assert_eq!(paths_with_attr(&svg, "stroke", "#8732a8").len(), 2);
+    assert_eq!(paths_with_attr(&svg, "stroke", "#137c45").len(), 2);
+    assert!(svg.contains("#08a17b") && svg.contains("#e98224"));
+    // Stock CeTZ debug bounds use Typst's red, not CSS red.
+    assert!(!paths_with_attr(&svg, "stroke", "#ff4136").is_empty());
+}
+
+#[test]
+fn public_kurvst_marks_draw_on_stock_cetz() {
+    let fixture = (
+        "kurvst-mark-drawing-behavior.typ",
+        include_str!("resources/kurvst-mark-drawing-behavior.typ"),
+    );
+    let (base, renderer) = staged(&[fixture]);
+    renderer
+        .compile_template(
+            base.path().join(TEMPLATES).join(fixture.0),
+            base.path().join("kurvst-mark-drawing-behavior.pdf"),
+            &[],
+        )
+        .unwrap();
+}
+
+#[test]
+fn public_linnest_identity_targets_and_collision_lines_behave() {
+    let (base, renderer) = staged(&[
+        (
+            "crates/linnest/typst/tests/identity-targets.typ",
+            include_str!("../../linnest/typst/tests/identity-targets.typ"),
+        ),
+        (
+            "crates/linnest/typst/tests/collision-lines.typ",
+            include_str!("../../linnest/typst/tests/collision-lines.typ"),
+        ),
+    ]);
+    for name in ["identity-targets.typ", "collision-lines.typ"] {
+        let wrapper = base.path().join(TEMPLATES).join("linnest-behavior.typ");
+        fs::write(
+            &wrapper,
+            format!("#include \"crates/linnest/typst/tests/{name}\""),
+        )
+        .unwrap();
+        renderer
+            .compile_template(&wrapper, base.path().join(format!("{name}.pdf")), &[])
+            .unwrap();
+    }
+}
+
+#[test]
 fn public_weighted_cut_rejects_invalid_selections_and_stale_topology() {
-    let (base, renderer) = staged(&[MAP_STYLE]);
+    let (base, renderer) = staged(&[map_style()]);
     let fixture = base.path().join(TEMPLATES).join("invalid-cut.typ");
     let output = base.path().join("invalid-cut.svg");
     let prelude = r#"
 #set page(width: auto, height: auto)
 #import "crates/linnest/typst/src/lib.typ": graph, subgraph, layout, draw
+#import "crates/linnest/typst/src/curve.typ" as curve
 #import graph: node, edge, source, sink
-#import "map-style.typ": momentum
+#import "map-style.typ": momentum, graph-style
 #let g = graph.build({
   node(<a>); node(<b>); node(<c>)
   edge(<e>, source(<a>), sink(<b>))
@@ -1027,6 +1408,21 @@ fn public_weighted_cut_rejects_invalid_selections_and_stale_topology() {
     renderer.compile_template(&fixture, &output, &[]).unwrap();
 
     let mut cases = vec![
+        (
+            "removed-fermion-arrow-line-width".to_owned(),
+            "#let _ = graph-style(fermion-arrow-line-width: 0.625pt)".to_owned(),
+            "unexpected argument",
+        ),
+        (
+            "legacy-cetz-mark".to_owned(),
+            "#let _ = curve.mark.prepare((symbol: \">\", scale: 0.5))".to_owned(),
+            "replace CeTZ mark dictionaries",
+        ),
+        (
+            "legacy-head-thickness".to_owned(),
+            "#let _ = curve.mark.triangle(stroke: black + 0.2pt)".to_owned(),
+            "set line thickness on the line",
+        ),
         (
             "overlap".to_owned(),
             "#let _ = graph.cut(g, left: left, right: left)".to_owned(),
@@ -1309,13 +1705,28 @@ fn public_native_curve_splits_layers_and_route_points_behave() {
             include_str!("../../kurvst/typst/tests/layer-offset.typ"),
         ),
         (
+            "crates/kurvst/typst/tests/mark-contract.typ",
+            include_str!("../../kurvst/typst/tests/mark-contract.typ"),
+        ),
+        (
+            "crates/kurvst/typst/tests/mark-geometry.typ",
+            include_str!("../../kurvst/typst/tests/mark-geometry.typ"),
+        ),
+        (
             "route-points-behavior.typ",
             include_str!("resources/route-points-behavior.typ"),
         ),
     ]);
     let source = r#"#include "crates/kurvst/typst/tests/pattern-split.typ"
 #include "crates/kurvst/typst/tests/layer-offset.typ"
+#include "crates/kurvst/typst/tests/mark-contract.typ"
+#include "crates/kurvst/typst/tests/mark-geometry.typ"
 #include "route-points-behavior.typ"
 "#;
-    render(&base, &renderer, "native-geometry.typ", source);
+    // The mark fixtures span several pages, so compile to PDF rather than SVG.
+    let fixture = base.path().join(TEMPLATES).join("native-geometry.typ");
+    fs::write(&fixture, source).unwrap();
+    renderer
+        .compile_template(&fixture, base.path().join("native-geometry.pdf"), &[])
+        .unwrap();
 }

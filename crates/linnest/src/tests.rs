@@ -1,17 +1,21 @@
 use crate::graph_api::TypstJoinResult;
-use std::{collections::BTreeMap, fs};
+use std::collections::BTreeMap;
+use std::fs;
 
 use figment::providers::Serialized;
 use figment::{Figment, Profile};
-use linnet::half_edge::layout::{
-    simulatedanneale::{anneal, Energy, GeoSchedule, Neighbor, SAConfig},
-    spring::{Constraint, PinnedLayoutNeighbor, ShiftDirection},
+use linnet::dot;
+use linnet::half_edge::involution::EdgeIndex;
+use linnet::half_edge::layout::simulatedanneale::{
+    anneal, Energy, GeoSchedule, Neighbor, SAConfig,
 };
+use linnet::half_edge::layout::spring::{Constraint, PinnedLayoutNeighbor, ShiftDirection};
 use linnet::half_edge::subgraph::{Inclusion, ModifySubSet, SuBitGraph};
 use linnet::half_edge::swap::Swap;
-use linnet::half_edge::{involution::EdgeIndex, NodeIndex};
-use linnet::{dot, parser::set::DotGraphSet};
-use rand::{rngs::SmallRng, SeedableRng};
+use linnet::half_edge::NodeIndex;
+use linnet::parser::set::DotGraphSet;
+use rand::rngs::SmallRng;
+use rand::SeedableRng;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -4606,7 +4610,7 @@ fn cross_kind_group_is_one_force_and_annealing_coordinate() {
     graph.restore_layout_constraints(saved_node_constraints, saved_edge_constraints);
 
     let spring = linnet::half_edge::layout::spring::ParamTuning::from(&graph.layout_config.spring);
-    let (tree, energy) = graph.tree_init_cfg(&spring, graph.n_nodes());
+    let (tree, energy) = graph.tree_init_cfg(&spring, graph.n_live());
     let (mut nodes, mut edges) = graph.new_positions(tree);
     nodes[NodeIndex(0)].y = 4.0;
     edges[EdgeIndex(0)].y = -3.0;
@@ -4819,7 +4823,7 @@ fn dangling_centroid_repulsion_keeps_grouped_external_edges_outside() {
     let mut graph = TypstGraph::parse(input).unwrap();
     graph.layout_config = crate::LayoutConfig::from_figment(&figment);
     let spring = linnet::half_edge::layout::spring::ParamTuning::from(&graph.layout_config.spring);
-    let (tree, energy) = graph.tree_init_cfg(&spring, graph.n_nodes());
+    let (tree, energy) = graph.tree_init_cfg(&spring, graph.n_live());
     assert!((energy.dangling_centroid_charge / energy.c_vv - 1.25).abs() < 1e-12);
     let (nodes, edges) = graph.new_positions(tree);
     let (nodes, edges, _) = graph.optimized_positions(nodes, edges, &energy, None, None);

@@ -5,10 +5,11 @@ use linnet::half_edge::involution::EdgeIndex;
 use symbolica::atom::{Atom, AtomCore, AtomView};
 use three_dimensional_reps::{ThermalDistributionCall, ThermalDistributionFactor};
 
-use crate::{
-    graph::Graph, momentum::SignOrZero, numerator::symbolica_ext::NumeratorAtomExt, utils::GS,
-    uv::uv_graph::UVE,
-};
+use crate::graph::Graph;
+use crate::momentum::SignOrZero;
+use crate::numerator::symbolica_ext::NumeratorAtomExt;
+use crate::utils::GS;
+use crate::uv::uv_graph::UVE;
 
 use super::FermiSurfaceProduct;
 
@@ -241,7 +242,8 @@ mod tests {
     use symbolica::{function, symbol};
 
     use super::*;
-    use crate::{initialisation::test_initialise, integrands::process::fermi_surface::routing};
+    use crate::initialisation::test_initialise;
+    use crate::integrands::process::fermi_surface::routing;
 
     #[test]
     fn fermi_sector_extraction_preserves_factorized_coefficients_and_regular_terms() -> Result<()> {
@@ -381,7 +383,7 @@ mod tests {
         let edge = EdgeIndex(1);
         let particle_name = graph
             .model
-            .particle_by_id(graph[edge].particle().unwrap())
+            .particle_by_id(graph[edge].particle())
             .unwrap()
             .name
             .clone();

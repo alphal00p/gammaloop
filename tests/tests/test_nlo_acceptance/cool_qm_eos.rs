@@ -1,10 +1,11 @@
-use std::{collections::BTreeSet, time::Instant};
+use std::collections::BTreeSet;
+use std::time::Instant;
 
-use color_eyre::{Result, eyre::eyre};
-use gammaloop_api::{
-    commands::{Integrate, integrate::RendererOption},
-    state::ProcessRef,
-};
+use color_eyre::Result;
+use color_eyre::eyre::eyre;
+use gammaloop_api::commands::Integrate;
+use gammaloop_api::commands::integrate::RendererOption;
+use gammaloop_api::state::ProcessRef;
 use gammaloop_integration_tests::{clean_test, get_example_cli, get_tests_workspace_path};
 use gammalooprs::settings::global::Parallelisation;
 
@@ -66,7 +67,7 @@ fn cool_qm_eos_nlo_matches_example_target() -> Result<()> {
         .collect::<BTreeSet<_>>();
     assert_eq!(
         masters,
-        BTreeSet::from(["GL0", "GL1", "GL2", "GL3", "GL4"]),
+        BTreeSet::from(["GL0", "GL1", "GL3", "GL4", "GL5"]),
         "the acceptance must generate the complete cool-QM NLO example",
     );
 

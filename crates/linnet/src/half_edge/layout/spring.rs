@@ -2,20 +2,19 @@ use std::collections::HashMap;
 
 use cgmath::{EuclideanSpace, MetricSpace, Point2, Vector2, Zero};
 
-use rand::{distributions::Uniform, prelude::Distribution, Rng};
+use rand::distributions::Uniform;
+use rand::prelude::Distribution;
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    half_edge::{
-        involution::{EdgeIndex, EdgeVec, Flow, Hedge, HedgePair, HedgeVec},
-        layout::simulatedanneale::{Energy, Neighbor},
-        nodestore::NodeStorageOps,
-        subgraph::{subset::SubSet, Inclusion, ModifySubSet, SuBitGraph, SubSetLike},
-        swap::Swap,
-        HedgeGraph, NodeIndex, NodeVec,
-    },
-    parser::GlobalData,
-};
+use crate::half_edge::involution::{EdgeIndex, EdgeVec, Flow, Hedge, HedgePair, HedgeVec};
+use crate::half_edge::layout::simulatedanneale::{Energy, Neighbor};
+use crate::half_edge::nodestore::Topology;
+use crate::half_edge::subgraph::subset::SubSet;
+use crate::half_edge::subgraph::{Inclusion, ModifySubSet, SuBitGraph, SubSetLike};
+use crate::half_edge::swap::Swap;
+use crate::half_edge::{HedgeGraph, NodeIndex, NodeVec};
+use crate::parser::GlobalData;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[cfg_attr(
@@ -143,7 +142,7 @@ impl Default for ExternalPullTopology {
     }
 }
 
-pub struct LayoutState<'a, E, V, H, N: NodeStorageOps<NodeData = V>> {
+pub struct LayoutState<'a, E, V, H, N: Topology> {
     pub graph: &'a HedgeGraph<E, V, H, N>,
     pub ext: SuBitGraph,
     active_subgraph: Option<SuBitGraph>,
@@ -172,7 +171,7 @@ pub struct LayoutState<'a, E, V, H, N: NodeStorageOps<NodeData = V>> {
     pub incremental: bool,
 }
 
-impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
+impl<E, V, H, N: Topology> HedgeGraph<E, V, H, N> {
     pub fn new_layout_state(
         &self,
         vertex_points: NodeVec<Point2<f64>>,
@@ -212,7 +211,7 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
     }
 }
 
-impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> Clone for LayoutState<'a, E, V, H, N> {
+impl<'a, E, V, H, N: Topology> Clone for LayoutState<'a, E, V, H, N> {
     fn clone(&self) -> Self {
         LayoutState {
             graph: self.graph,
@@ -236,7 +235,7 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> Clone for LayoutState<'a, E, 
     }
 }
 
-impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayoutState<'a, E, V, H, N> {
+impl<'a, E, V, H, N: Topology> LayoutState<'a, E, V, H, N> {
     pub fn with_active_subgraph(mut self, active_subgraph: SuBitGraph) -> Self
     where
         E: HasPointConstraint,
@@ -548,12 +547,15 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayoutState<'a, E, V, H, N> {
             .is_none_or(|active| active.includes(&hedge))
     }
 
+    /// Whether `node` is laid out: it is live and, with an active subgraph, incident to it.
+    /// Nodes absorbed by pending identifications keep their points untouched.
     pub(super) fn node_is_active(&self, node: NodeIndex) -> bool {
-        self.active_subgraph.as_ref().is_none_or(|active| {
-            self.graph
-                .iter_crown(node)
-                .any(|hedge| active.includes(&hedge))
-        })
+        self.graph.node_store.is_live(node)
+            && self.active_subgraph.as_ref().is_none_or(|active| {
+                self.graph
+                    .iter_crown(node)
+                    .any(|hedge| active.includes(&hedge))
+            })
     }
 
     pub(super) fn edge_is_active(&self, edge: EdgeIndex) -> bool {
@@ -685,9 +687,7 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V>> LayoutState<'a, E, V, H, N> {
 
 pub struct LayoutNeighbor;
 
-impl<'a, E, V, H, N: NodeStorageOps<NodeData = V> + Clone> Neighbor<LayoutState<'a, E, V, H, N>>
-    for LayoutNeighbor
-{
+impl<'a, E, V, H, N: Topology + Clone> Neighbor<LayoutState<'a, E, V, H, N>> for LayoutNeighbor {
     fn propose(
         &self,
         s: &LayoutState<'a, E, V, H, N>,
@@ -795,7 +795,7 @@ impl<'a, E, V, H, N> Neighbor<LayoutState<'a, E, V, H, N>> for PinnedLayoutNeigh
 where
     E: HasPointConstraint,
     V: HasPointConstraint,
-    N: NodeStorageOps<NodeData = V> + Clone,
+    N: Topology + Clone,
 {
     fn prepare(&self, state: &mut LayoutState<'a, E, V, H, N>) {
         state.synchronize_grouped_coordinates();
@@ -927,7 +927,7 @@ pub(crate) fn apply_route_point_shift<'a, E, V, H, N>(
 ) -> bool
 where
     E: HasPointConstraint,
-    N: NodeStorageOps<NodeData = V>,
+    N: Topology,
 {
     let constraints = state.graph[state.graph[&hedge]].point_constraint();
     if matches!(constraints.x, Constraint::Fixed) {
@@ -939,7 +939,7 @@ where
     state.shift_route_point(hedge, index, shift)
 }
 
-pub(crate) fn apply_vertex_shift<'a, E, V, H, N: NodeStorageOps<NodeData = V> + Clone>(
+pub(crate) fn apply_vertex_shift<'a, E, V, H, N: Topology + Clone>(
     state: &mut LayoutState<'a, E, V, H, N>,
     idx: NodeIndex,
     shift: Vector2<f64>,
@@ -952,7 +952,7 @@ pub(crate) fn apply_vertex_shift<'a, E, V, H, N: NodeStorageOps<NodeData = V> + 
     true
 }
 
-pub(crate) fn apply_edge_shift<'a, E, V, H, N: NodeStorageOps<NodeData = V> + Clone>(
+pub(crate) fn apply_edge_shift<'a, E, V, H, N: Topology + Clone>(
     state: &mut LayoutState<'a, E, V, H, N>,
     idx: EdgeIndex,
     shift: Vector2<f64>,
@@ -975,7 +975,7 @@ impl<'a, E, V, H, N> LayoutState<'a, E, V, H, N>
 where
     E: HasPointConstraint,
     V: HasPointConstraint,
-    N: NodeStorageOps<NodeData = V> + Clone,
+    N: Topology + Clone,
 {
     fn group_members(
         &self,
@@ -1275,7 +1275,7 @@ pub(crate) fn apply_vertex_shift_with_groups<'a, E, V, H, N>(
 where
     E: HasPointConstraint,
     V: HasPointConstraint,
-    N: NodeStorageOps<NodeData = V> + Clone,
+    N: Topology + Clone,
 {
     state.shift_constrained(LayoutPointIndex::Node(idx), shift)
 }
@@ -1288,7 +1288,7 @@ pub(crate) fn apply_edge_shift_with_groups<'a, E, V, H, N>(
 where
     E: HasPointConstraint,
     V: HasPointConstraint,
-    N: NodeStorageOps<NodeData = V> + Clone,
+    N: Topology + Clone,
 {
     state.shift_constrained(LayoutPointIndex::Edge(idx), shift)
 }
@@ -1313,9 +1313,7 @@ pub struct SpringChargeEnergy {
     pub eps: f64,              // softened distance (≈ eps*L)
 }
 
-impl<'a, E, V, H, N: NodeStorageOps<NodeData = V> + Clone> Energy<LayoutState<'a, E, V, H, N>>
-    for SpringChargeEnergy
-{
+impl<'a, E, V, H, N: Topology + Clone> Energy<LayoutState<'a, E, V, H, N>> for SpringChargeEnergy {
     fn energy(
         &self,
         prev: Option<(&LayoutState<'a, E, V, H, N>, f64)>,
@@ -1692,7 +1690,7 @@ impl SpringChargeEnergy {
 
     fn dangling_centroid_energy<'a, E, V, H, N>(&self, state: &LayoutState<'a, E, V, H, N>) -> f64
     where
-        N: NodeStorageOps<NodeData = V> + Clone,
+        N: Topology + Clone,
     {
         let active_nodes = state.active_nodes().collect::<Vec<_>>();
         if (self.dangling_centroid_charge == 0.0 && self.external_pull == 0.0)
@@ -1748,7 +1746,7 @@ impl SpringChargeEnergy {
         edge: EdgeIndex,
     ) -> Vec<(Point2<f64>, Point2<f64>, Option<NodeIndex>)>
     where
-        N: NodeStorageOps<NodeData = V> + Clone,
+        N: Topology + Clone,
     {
         let hedges = s.edge_route_hedges(edge);
         // An unrouted self-loop's out-and-back span does not describe its drawn loop.
@@ -1777,7 +1775,7 @@ impl SpringChargeEnergy {
         base: f64,
     ) -> f64
     where
-        N: NodeStorageOps<NodeData = V> + Clone,
+        N: Topology + Clone,
     {
         let base = base * s.edge_spring_length_scales[edge];
         let (_, pair) = &s.graph[&edge];
@@ -1819,7 +1817,7 @@ impl SpringChargeEnergy {
         ej: EdgeIndex,
     ) -> bool
     where
-        N: NodeStorageOps<NodeData = V> + Clone,
+        N: Topology + Clone,
     {
         let seg_i = Self::edge_segments(s, ei);
         if seg_i.is_empty() {
@@ -1844,7 +1842,7 @@ impl SpringChargeEnergy {
 
     fn total_energy<'a, E, V, H, N>(&self, s: &LayoutState<'a, E, V, H, N>) -> f64
     where
-        N: NodeStorageOps<NodeData = V> + Clone,
+        N: Topology + Clone,
     {
         #[cfg(feature = "energy_trace")]
         let total_start = std::time::Instant::now();
@@ -1856,19 +1854,11 @@ impl SpringChargeEnergy {
 
         #[cfg(feature = "energy_trace")]
         let vv_start = std::time::Instant::now();
-        for i in 0..n {
-            let ni = NodeIndex(i);
-            if !s.node_is_active(ni) {
-                continue;
-            }
+        let active_nodes = s.active_nodes().collect::<Vec<_>>();
+        for (i, &ni) in active_nodes.iter().enumerate() {
             let np = s.vertex_points[ni];
-            for j in (i + 1)..n {
-                let nj = NodeIndex(j);
-                if !s.node_is_active(nj) {
-                    continue;
-                }
-                let vj = s.vertex_points[nj];
-                energy += self.vv_term(np.distance(vj));
+            for &nj in &active_nodes[i + 1..] {
+                energy += self.vv_term(np.distance(s.vertex_points[nj]));
             }
         }
         #[cfg(feature = "energy_trace")]
@@ -2009,7 +1999,7 @@ impl SpringChargeEnergy {
         edge_changes: &SubSet<EdgeIndex>,
     ) -> f64
     where
-        N: NodeStorageOps<NodeData = V> + Clone,
+        N: Topology + Clone,
     {
         #[cfg(feature = "energy_trace")]
         let total_start = std::time::Instant::now();
@@ -2030,10 +2020,8 @@ impl SpringChargeEnergy {
             let next_np = next.vertex_points[ni];
             for j in (i + 1)..n {
                 let nj = NodeIndex(j);
-                if !next.node_is_active(nj) {
-                    continue;
-                }
-                if !(node_changed || node_changes.includes(&nj)) {
+                // Most pairs moved neither node: test that before activity.
+                if !(node_changed || node_changes.includes(&nj)) || !next.node_is_active(nj) {
                     continue;
                 }
                 let prev_vj = prev.vertex_points[nj];
@@ -2248,10 +2236,11 @@ impl SpringChargeEnergy {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::half_edge::{
-        builder::HedgeGraphBuilder, involution::Flow, nodestore::DefaultNodeStore, NoData,
-    };
-    use rand::{rngs::SmallRng, SeedableRng};
+    use crate::half_edge::builder::HedgeGraphBuilder;
+    use crate::half_edge::involution::Flow;
+    use crate::half_edge::layout::test::PendingIdentification;
+    use rand::rngs::SmallRng;
+    use rand::SeedableRng;
 
     fn normalized_pull_scales(
         n: usize,
@@ -2268,7 +2257,7 @@ mod tests {
         for &(node, flow) in external {
             builder.add_external_edge(nodes[node], PointConstraint::default(), false, flow);
         }
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let state = graph.new_layout_state(
             vec![Point2::origin(); n].into(),
             vec![Point2::origin(); graph.n_edges()].into(),
@@ -2637,7 +2626,7 @@ mod tests {
                     }
                     builder.add_external_edge(nodes[owner], constraint, false, outgoing);
                 }
-                let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+                let graph: HedgeGraph<_, _> = builder.build();
                 let state = graph.new_layout_state(
                     vec![Point2::origin(); 3].into(),
                     vec![Point2::origin(); 8].into(),
@@ -2733,7 +2722,7 @@ mod tests {
         for &node in &nodes[1..] {
             builder.add_external_edge(node, shared, false, Flow::Source);
         }
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let state = graph.new_layout_state(
             vec![Point2::origin(); 11].into(),
             vec![Point2::origin(); 21].into(),
@@ -2795,7 +2784,7 @@ mod tests {
         for _ in 0..2 {
             builder.add_external_edge(b, PointConstraint::default(), false, Flow::Source);
         }
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let state = graph.new_layout_state(
             vec![Point2::origin(); 2].into(),
             vec![Point2::origin(); 6].into(),
@@ -2851,7 +2840,7 @@ mod tests {
         let a = builder.add_node(PointConstraint::default());
         let b = builder.add_node(PointConstraint::default());
         builder.add_edge(a, b, PointConstraint::default(), false);
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let HedgePair::Paired { source, sink } = graph[&EdgeIndex(0)].1 else {
             panic!("expected paired edge");
         };
@@ -2881,7 +2870,7 @@ mod tests {
         let a = builder.add_node(PointConstraint::default());
         let b = builder.add_node(PointConstraint::default());
         builder.add_edge(a, b, PointConstraint::default(), false);
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let HedgePair::Paired { source, sink } = graph[&EdgeIndex(0)].1 else {
             panic!("expected paired edge");
         };
@@ -2944,7 +2933,7 @@ mod tests {
             },
             false,
         );
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let HedgePair::Paired { source, sink } = graph[&EdgeIndex(0)].1 else {
             panic!("expected paired edge");
         };
@@ -2984,7 +2973,7 @@ mod tests {
         let a = builder.add_node(PointConstraint::default());
         let b = builder.add_node(PointConstraint::default());
         builder.add_edge(a, b, PointConstraint::default(), false);
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let HedgePair::Paired { source, sink } = graph[&EdgeIndex(0)].1 else {
             panic!("expected paired edge");
         };
@@ -3026,7 +3015,7 @@ mod tests {
         let c = builder.add_node(PointConstraint::default());
         builder.add_edge(a, a, PointConstraint::default(), false);
         builder.add_edge(b, c, PointConstraint::default(), false);
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let mut state = graph.new_layout_state(
             vec![
                 Point2::new(-3.0, 0.0),
@@ -3060,7 +3049,7 @@ mod tests {
         let c = builder.add_node(PointConstraint::default());
         builder.add_edge(a, b, PointConstraint::default(), false);
         builder.add_edge(a, c, PointConstraint::default(), false);
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let mut state = graph.new_layout_state(
             vec![
                 Point2::origin(),
@@ -3186,7 +3175,7 @@ mod tests {
                 let b = builder.add_node(fixed);
                 builder.add_external_edge(a, constraint, false, Flow::Source);
                 builder.add_external_edge(b, constraint, false, Flow::Source);
-                let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+                let graph: HedgeGraph<_, _> = builder.build();
                 let mut state = graph.new_layout_state(
                     vec![point(-1.0, -2.0), point(-1.0, 2.0)].into(),
                     vec![point(1.0, 2.0), point(1.0, -2.0)].into(),
@@ -3253,7 +3242,7 @@ mod tests {
         builder.add_external_edge(c, y_group, false, Flow::Source);
         builder.add_external_edge(c, y_group, false, Flow::Source);
         builder.add_external_edge(inactive, rail, false, Flow::Source);
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let mut selected = graph.empty_subgraph::<SuBitGraph>();
         for (pair, edge, _) in graph.iter_edges() {
             if edge != EdgeIndex(4) {
@@ -3326,7 +3315,7 @@ mod tests {
             });
             builder.add_external_edge(a, constraint, false, Flow::Source);
             builder.add_external_edge(a, constraint, false, Flow::Source);
-            let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+            let graph: HedgeGraph<_, _> = builder.build();
             let mut state = graph.new_layout_state(
                 vec![Point2::origin()].into(),
                 vec![Point2::new(1.0, -2.0), Point2::new(1.0, 2.0)].into(),
@@ -3353,7 +3342,7 @@ mod tests {
             builder.add_edge(a, b, PointConstraint::default(), false);
             builder.add_external_edge(a, PointConstraint::default(), false, Flow::Source);
             builder.add_external_edge(b, PointConstraint::default(), false, Flow::Sink);
-            let mut graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+            let mut graph: HedgeGraph<_, _> = builder.build();
             if let Some(split) = split {
                 let HedgePair::Paired { source, sink } = graph[&EdgeIndex(0)].1 else {
                     panic!("expected paired edge");
@@ -3421,7 +3410,7 @@ mod tests {
             builder.add_edge(b, c, PointConstraint::default(), false);
             builder.add_external_edge(a, PointConstraint::default(), false, Flow::Source);
             builder.add_external_edge(c, PointConstraint::default(), false, second_flow);
-            let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+            let graph: HedgeGraph<_, _> = builder.build();
             let mut state = graph.new_layout_state(
                 vec![
                     Point2::new(-2.0, 0.0),
@@ -3471,7 +3460,7 @@ mod tests {
         let c = builder.add_node(PointConstraint::default());
         builder.add_edge(a, b, PointConstraint::default(), false);
         builder.add_edge(b, c, PointConstraint::default(), false);
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let selected_pair = graph.iter_edges().next().unwrap().0;
         let mut selected = graph.empty_subgraph::<SuBitGraph>();
         selected.add(selected_pair);
@@ -3523,7 +3512,7 @@ mod tests {
         let a = builder.add_node(PointConstraint::default());
         let b = builder.add_node(PointConstraint::default());
         builder.add_edge(a, b, PointConstraint::default(), false);
-        let graph: HedgeGraph<_, _, NoData, DefaultNodeStore<_>> = builder.build();
+        let graph: HedgeGraph<_, _> = builder.build();
         let HedgePair::Paired { source, .. } = graph.iter_edges().next().unwrap().0 else {
             panic!("expected paired edge");
         };
@@ -3598,5 +3587,42 @@ mod tests {
         assert_eq!(large.crossing_penalty / small.crossing_penalty, 4.0);
         assert_eq!(large.eps / small.eps, 2.0);
         assert_eq!(large.c_center, small.c_center);
+    }
+
+    /// Nodes absorbed by pending identifications are no layout points: they
+    /// add no energy and annealing moves only live nodes, like in the
+    /// compacted copy.
+    #[test]
+    fn spring_layout_skips_nodes_absorbed_by_pending_identifications() {
+        let fixture = PendingIdentification::new();
+        let energy = SpringChargeEnergy::from_graph(
+            fixture.graph.n_live(),
+            4.0,
+            4.0,
+            ParamTuning::default(),
+        );
+        let [mut pending, mut compacted] = fixture.states();
+        let absorbed = fixture.absorbed;
+        let initial = pending.vertex_points[absorbed];
+        assert!(!pending.active_nodes().any(|node| node == absorbed));
+        assert_eq!(
+            energy.energy(None, &pending),
+            energy.energy(None, &compacted)
+        );
+        let mut rngs = [SmallRng::seed_from_u64(5), SmallRng::seed_from_u64(5)];
+        for _ in 0..64 {
+            pending = LayoutNeighbor.propose(&pending, &mut rngs[0], 0.3, 1.0);
+            compacted = LayoutNeighbor.propose(&compacted, &mut rngs[1], 0.3, 1.0);
+        }
+        assert_eq!(pending.vertex_points[absorbed], initial);
+        assert_eq!(
+            fixture.compact(&pending.vertex_points),
+            compacted.vertex_points
+        );
+        assert_eq!(pending.edge_points, compacted.edge_points);
+        assert_eq!(
+            energy.energy(None, &pending),
+            energy.energy(None, &compacted)
+        );
     }
 }

@@ -526,7 +526,6 @@ checksum = "1bc2832c24239b0141d5674bb9174f9d68a8b5b3f2753311927c172ca46f7e9c"
 dependencies = [
  "funty",
  "radium",
- "serde",
  "tap",
  "wyz",
 ]
@@ -902,10 +901,12 @@ name = "clinnet"
 version = "0.1.8"
 dependencies = [
  "blake3",
+ "ciborium",
  "clap",
  "eyre",
  "include_dir",
  "indicatif",
+ "kurvst",
  "pathdiff",
  "rayon",
  "serde",
@@ -1630,15 +1631,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dot-parser"
-version = "0.5.1"
-dependencies = [
- "either",
- "pest",
- "pest_derive",
-]
-
-[[package]]
 name = "duplicate"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1922,12 +1914,16 @@ dependencies = [
  "feynkit-model",
  "idenso",
  "linnet",
+ "num-bigint",
+ "num-rational",
  "rayon",
+ "regex",
  "serde",
  "serde_json",
  "spenso",
  "spenso-hep-lib",
  "symbolica",
+ "tempfile",
  "thiserror 2.0.18",
 ]
 
@@ -1935,6 +1931,7 @@ dependencies = [
 name = "feynkit-graph"
 version = "0.1.0"
 dependencies = [
+ "blake3",
  "feynkit-kinematics",
  "feynkit-model",
  "idenso",
@@ -1942,6 +1939,7 @@ dependencies = [
  "linnest",
  "linnet",
  "nu-ansi-term",
+ "once_cell",
  "serde",
  "serde_json",
  "spenso",
@@ -2359,7 +2357,6 @@ dependencies = [
  "clap_builder",
  "console 0.16.3",
  "crossterm 0.29.0",
- "either",
  "hashbrown 0.17.1",
  "indenter",
  "indexmap",
@@ -2417,7 +2414,6 @@ dependencies = [
  "delegate 0.12.0",
  "derive_more 0.99.20",
  "dirs",
- "dot-parser",
  "dyn-clone",
  "enum_dispatch",
  "eyre",
@@ -2434,7 +2430,6 @@ dependencies = [
  "indicatif",
  "insta",
  "itertools 0.14.0",
- "json5",
  "linnet",
  "momtrop",
  "nu-ansi-term",
@@ -3718,7 +3713,6 @@ version = "0.1.0"
 dependencies = [
  "cgmath",
  "ciborium",
- "dot-parser",
  "figment",
  "getrandom 0.2.17",
  "indexmap",
@@ -3746,21 +3740,23 @@ dependencies = [
  "cgmath",
  "clarabel",
  "criterion",
- "dot-parser",
  "duplicate 2.0.1",
  "figment",
  "gammaloop-workspace-hack",
  "getrandom 0.2.17",
  "iai-callgrind",
- "indenter",
  "indexmap",
  "insta",
  "itertools 0.14.0",
  "kurbo",
  "linnet",
+ "num-bigint",
+ "num-rational",
+ "num-traits",
  "paste",
  "proptest",
  "rand 0.8.6",
+ "rayon",
  "rkyv",
  "serde",
  "serde_json",
@@ -3777,13 +3773,13 @@ name = "linnet-py"
 version = "0.1.0"
 dependencies = [
  "ciborium",
- "dot-parser",
  "linnest",
  "linnet",
  "linnet-render-py",
  "pyo3",
  "pyo3-stub-gen",
  "pyo3-stub-gen-derive",
+ "self_cell",
  "serde",
  "serde_json",
  "symbolica",
@@ -6260,7 +6256,6 @@ dependencies = [
  "append-only-vec",
  "bincode 2.0.1",
  "bincode-trait-derive",
- "bitvec",
  "blake3",
  "ciborium",
  "colored 3.1.1",

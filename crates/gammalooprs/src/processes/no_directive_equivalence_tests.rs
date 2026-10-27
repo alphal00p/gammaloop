@@ -2,21 +2,17 @@ use crate::integrands::process::EvaluationTarget;
 use feynkit_generator::GenerationType;
 use std::collections::BTreeSet;
 
-use crate::{
-    graph::{
-        FeynmanGraph, Graph, autogen::Autogen, threshold_counterterms::ThresholdCountertermSpec,
-    },
-    initialisation::test_initialise,
-    integrands::process::{MomentumSpaceEvaluationInput, ProcessIntegrand},
-    momentum::ThreeMomentum,
-    processes::{Amplitude, CrossSection, ProcessDefinition},
-    settings::{
-        GlobalSettings, RuntimeSettings,
-        global::{GenerationSettings, ThresholdSubtractionSettings},
-        runtime::kinematic::KinematicsSettings,
-    },
-    utils::{F, load_generic_model},
-};
+use crate::graph::autogen::Autogen;
+use crate::graph::threshold_counterterms::ThresholdCountertermSpec;
+use crate::graph::{FeynmanGraph, Graph};
+use crate::initialisation::test_initialise;
+use crate::integrands::process::{MomentumSpaceEvaluationInput, ProcessIntegrand};
+use crate::momentum::ThreeMomentum;
+use crate::processes::{Amplitude, CrossSection, ProcessDefinition};
+use crate::settings::global::{GenerationSettings, ThresholdSubtractionSettings};
+use crate::settings::runtime::kinematic::KinematicsSettings;
+use crate::settings::{GlobalSettings, RuntimeSettings};
+use crate::utils::{F, load_generic_model};
 use spenso::algebra::complex::Complex;
 use symbolica::numerical_integration::Sample;
 
@@ -98,7 +94,7 @@ fn assert_event_metadata_equivalent(
 }
 
 fn amplitude_graph() -> Graph {
-    let graph: crate::processes::AmplitudeGraph = crate::graph::Graph::import_dot(
+    let graph: crate::processes::AmplitudeGraph = crate::graph::Graph::from_dot(
         stringify!(
         digraph no_directive_amplitude {
             // A massive external scalar above the two-massless-particle threshold ensures the
@@ -299,7 +295,7 @@ fn cross_section_generation() -> GenerationSettings {
 }
 
 fn cross_section_graph() -> Graph {
-    crate::graph::Graph::import_dot(
+    crate::graph::Graph::from_dot(
         include_str!(
             "../../../../tests/resources/graphs/ir_safe_thresholds/no_directive_cross_section.dot"
         ),

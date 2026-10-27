@@ -2,9 +2,14 @@
 
 == Scope and source dispositions
 
-This independent slice starts at approved integration prefix `74cebf6c` in
-workspace and bookmark `generation-drawing-ports`, change `snvmvumx`. It is held
-for a new independent Astra review; nothing is integrated or published here.
+This record describes the isolated drawing lane based on approved prefix
+`74cebf6c`, workspace and bookmark `generation-drawing-ports`, change `snvmvumx`.
+Astra coordinator round 3 approved its cumulative tip `98cbf5b8`, following the
+independent runtime/layout/packaging reviews. The integration imports the
+cumulative patch at `8430e701`. Its combined staged-transplant review remains
+pending. The historical source38 prerequisite discussion below describes the
+isolated lane base: the current source17/18 integration adds the shared mark
+engine and retains Tiptoe attribution. Source38 remains unimplemented.
 The #link("generation-integration-plan.typ")[accepted plan] and its WP2 manifest
 remain authoritative. The structured
 #link("evidence/generation-integration/drawing/receipt.json")[receipt] records
@@ -56,7 +61,7 @@ delivered manifest expression. The affected bundle is rebuilt with the canonical
 recipe. Prior verified code/render evidence remains preserved; the correction
 and its artifact identities are recorded in the
 #link("evidence/generation-integration/drawing/round1-fix/receipt.json")[fix receipt].
-This fix awaits a new independent Astra review; WP11 is not complete.
+This fix subsequently passed independent review; WP11 is not complete.
 
 == Round 2 registry correction
 
@@ -71,8 +76,8 @@ the digest calculated from the actual current file. The
 records validation of every registry scope whose source changed in this drawing
 slice, using the owner's exact anchor slicing and Git blob hashing semantics.
 No runtime source, package metadata, notice or rendered asset changes in this fix.
-It awaits fresh independent Astra review; WP11 and the final artifact gates
-remain incomplete.
+Astra coordinator round 3 closed this registry finding at `98cbf5b8`; WP11
+and the final artifact gates remain incomplete.
 
 == Validation and remaining gates
 

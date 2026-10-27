@@ -32,7 +32,8 @@ use gammaloop_sample::{DiscreteGraphSample, GammaLoopSample, parameterize};
 use itertools::Itertools;
 use linnet::half_edge::involution::EdgeVec;
 use linnet::half_edge::involution::Orientation;
-use linnet::half_edge::subgraph::{SubSetLike, subset::SubSet};
+use linnet::half_edge::subgraph::SubSetLike;
+use linnet::half_edge::subgraph::subset::SubSet;
 use momtrop::SampleGenerator;
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
@@ -50,18 +51,13 @@ pub(crate) mod fermi_surface;
 pub mod gammaloop_sample;
 pub mod ir;
 pub mod sampling;
-use crate::{
-    DependentMomentaConstructor, GammaLoopContext,
-    settings::RuntimeSettings,
-    settings::runtime::DiscreteGraphSamplingSettings,
-    settings::runtime::DiscreteGraphSamplingType,
-    settings::runtime::IntegratorSettings,
-    settings::runtime::ParameterizationSettings,
-    settings::runtime::Precision,
-    settings::runtime::StabilityLevelSetting,
-    settings::runtime::StabilitySettings,
-    settings::runtime::{IntegratedPhase, SamplingChannelWeight, SamplingSettings},
+use crate::settings::RuntimeSettings;
+use crate::settings::runtime::{
+    DiscreteGraphSamplingSettings, DiscreteGraphSamplingType, IntegratedPhase, IntegratorSettings,
+    ParameterizationSettings, Precision, SamplingChannelWeight, SamplingSettings,
+    StabilityLevelSetting, StabilitySettings,
 };
+use crate::{DependentMomentaConstructor, GammaLoopContext};
 use color_eyre::Result;
 use sampling::context::PreparedLUHost;
 use sampling::selection::SamplingChannelPrograms;
@@ -5901,31 +5897,25 @@ pub(crate) mod tests {
         validate_process_runtime_settings,
     };
     use crate::cff::OrientationID;
-    use crate::{
-        finalized_runtime_dot,
-        graph::{FeynmanGraph, Graph, GroupId, LMBext, LmbIndex, LoopMomentumBasis},
-        initialisation::test_initialise,
-        momentum::{
-            ThreeMomentum,
-            sample::{BareMomentumSample, ExternalFourMomenta, LoopMomenta, MomentumSample},
-            signature::LoopExtSignature,
-        },
-        settings::{
-            RuntimeSettings,
-            global::OrientationPattern,
-            runtime::{
-                DiscreteGraphSamplingSettings, DiscreteGraphSamplingType, HFunctionSettings,
-                MultiChannelingSettings, ParameterizationSettings, Precision,
-                SamplingChannelDefinition, SamplingChannelSelection, SamplingSettings,
-                StabilitySettings,
-            },
-        },
-        utils::F,
+    use crate::dot;
+    use crate::graph::{FeynmanGraph, Graph, GroupId, LMBext, LmbIndex, LoopMomentumBasis};
+    use crate::initialisation::test_initialise;
+    use crate::momentum::ThreeMomentum;
+    use crate::momentum::sample::{
+        BareMomentumSample, ExternalFourMomenta, LoopMomenta, MomentumSample,
     };
-    use linnet::half_edge::{
-        involution::{EdgeIndex, EdgeVec, Orientation},
-        subgraph::{ModifySubSet, SubSetLike, subset::SubSet},
+    use crate::momentum::signature::LoopExtSignature;
+    use crate::settings::RuntimeSettings;
+    use crate::settings::global::OrientationPattern;
+    use crate::settings::runtime::{
+        DiscreteGraphSamplingSettings, DiscreteGraphSamplingType, HFunctionSettings,
+        MultiChannelingSettings, ParameterizationSettings, Precision, SamplingChannelDefinition,
+        SamplingChannelSelection, SamplingSettings, StabilitySettings,
     };
+    use crate::utils::F;
+    use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
+    use linnet::half_edge::subgraph::subset::SubSet;
+    use linnet::half_edge::subgraph::{ModifySubSet, SubSetLike};
     use std::sync::OnceLock;
     use typed_index_collections::TiVec;
 
@@ -5940,11 +5930,9 @@ pub(crate) mod tests {
             EvaluationSource, EvaluationTarget, GraphTerm, ProcessIntegrand, ProcessIntegrandImpl,
             SamplingLawProbe, evaluate_from_source_precise,
         };
-        use crate::{
-            integrands::evaluation::EvaluationMetaData,
-            settings::runtime::{Precision, StabilityLevelSetting},
-            utils::{ArbPrec, QuadFloat, SamplingFloat, SamplingPrecision},
-        };
+        use crate::integrands::evaluation::EvaluationMetaData;
+        use crate::settings::runtime::{Precision, StabilityLevelSetting};
+        use crate::utils::{ArbPrec, QuadFloat, SamplingFloat, SamplingPrecision};
         use spenso::algebra::complex::Complex;
         use std::sync::atomic::{AtomicUsize, Ordering};
         let original_sampling = runtime.get_settings().sampling.clone();
@@ -6576,12 +6564,12 @@ pub(crate) mod tests {
         graph_id: usize,
         channel_id: SamplingChannelId,
     ) -> color_eyre::Result<()> {
-        use super::{EvaluationSource, gammaloop_sample::unwrap_sample};
-        use crate::{
-            integrands::evaluation::EvaluationMetaData,
-            momentum::{Rotatable, Rotation, RotationMethod},
-            utils::{QuadFloat, newton_solver::RadialRootDiagnostics},
-        };
+        use super::EvaluationSource;
+        use super::gammaloop_sample::unwrap_sample;
+        use crate::integrands::evaluation::EvaluationMetaData;
+        use crate::momentum::{Rotatable, Rotation, RotationMethod};
+        use crate::utils::QuadFloat;
+        use crate::utils::newton_solver::RadialRootDiagnostics;
         use symbolica::numerical_integration::Sample;
 
         assert_eq!(
@@ -7074,14 +7062,12 @@ pub(crate) mod tests {
             EvaluationSource, EvaluationTarget, GraphTerm, ProcessIntegrand, ProcessIntegrandImpl,
             SamplingLawProbe, evaluate_from_source_precise,
         };
-        use crate::{
-            integrands::evaluation::StabilityStatus,
-            settings::runtime::{
-                Precision, SamplingChannelWeight, SamplingSettingsParser, StabilityLevelSetting,
-                SumMode,
-            },
-            utils::{ArbPrec, SamplingFloat, SamplingPrecision},
+        use crate::integrands::evaluation::StabilityStatus;
+        use crate::settings::runtime::{
+            Precision, SamplingChannelWeight, SamplingSettingsParser, StabilityLevelSetting,
+            SumMode,
         };
+        use crate::utils::{ArbPrec, SamplingFloat, SamplingPrecision};
         use spenso::algebra::complex::Complex;
         use std::sync::atomic::{AtomicUsize, Ordering};
         use symbolica::numerical_integration::Sample;
@@ -7414,13 +7400,11 @@ pub(crate) mod tests {
     #[test]
     fn precise_stability_reporting_preserves_underflowed_estimates() {
         use super::{PreciseStabilityLevelResult, Precision};
-        use crate::{
-            integrands::evaluation::{
-                EvaluationResult, GraphEvaluationResult, NumericalStabilityLevel,
-                NumericalStabilityMedian, StatisticsCounter,
-            },
-            utils::ArbPrec,
+        use crate::integrands::evaluation::{
+            EvaluationResult, GraphEvaluationResult, NumericalStabilityLevel,
+            NumericalStabilityMedian, StatisticsCounter,
         };
+        use crate::utils::ArbPrec;
         use spenso::algebra::complex::Complex;
         use std::time::Duration;
 
@@ -7685,7 +7669,8 @@ pub(crate) mod tests {
 
     #[test]
     fn stability_checks_bound_complete_underflow_without_cancellation() {
-        use crate::{settings::runtime::StabilityLevelSetting, utils::ArbPrec};
+        use crate::settings::runtime::StabilityLevelSetting;
+        use crate::utils::ArbPrec;
         use spenso::algebra::complex::Complex;
 
         let level = StabilityLevelSetting::default_arb();
@@ -7776,7 +7761,8 @@ pub(crate) mod tests {
 
     #[test]
     fn stability_underflow_waivers_are_componentwise() {
-        use crate::{settings::runtime::StabilityLevelSetting, utils::ArbPrec};
+        use crate::settings::runtime::StabilityLevelSetting;
+        use crate::utils::ArbPrec;
         use spenso::algebra::complex::Complex;
 
         let level = StabilityLevelSetting::default_arb();
@@ -8067,12 +8053,10 @@ pub(crate) mod tests {
 
     #[test]
     fn precise_event_normalization_preserves_prior_factors_and_partial_weights() {
-        use crate::{
-            observables::{
-                AdditionalWeightKey, GenericEvent, GenericEventGroup, GenericEventGroupList,
-            },
-            utils::ArbPrec,
+        use crate::observables::{
+            AdditionalWeightKey, GenericEvent, GenericEventGroup, GenericEventGroupList,
         };
+        use crate::utils::ArbPrec;
         use spenso::algebra::complex::Complex;
 
         let one = F::<ArbPrec>::default().one();
@@ -8120,15 +8104,13 @@ pub(crate) mod tests {
 
     #[test]
     fn native_sampling_product_and_precise_reporting_preserve_full_range() {
-        use crate::{
-            integrands::evaluation::{
-                EvaluationMetaData, GraphEvaluationResult, PreciseEvaluationResult,
-            },
-            integrands::process::sampling::reference::ReferenceMoments,
-            observables::{GenericEvent, GenericEventGroup, GenericEventGroupList},
-            settings::runtime::Precision,
-            utils::ArbPrec,
+        use crate::integrands::evaluation::{
+            EvaluationMetaData, GraphEvaluationResult, PreciseEvaluationResult,
         };
+        use crate::integrands::process::sampling::reference::ReferenceMoments;
+        use crate::observables::{GenericEvent, GenericEventGroup, GenericEventGroupList};
+        use crate::settings::runtime::Precision;
+        use crate::utils::ArbPrec;
         use spenso::algebra::complex::Complex;
         use std::time::Duration;
 
@@ -8728,14 +8710,14 @@ pub(crate) mod tests {
         static GRAPH: OnceLock<Graph> = OnceLock::new();
         let graph = GRAPH
             .get_or_init(|| {
-                finalized_runtime_dot!(
+                dot!(
                     digraph lmb_basis_selection {
                         graph [projector=1]
                         edge [num=1 mass=0]
                         node [num=1]
-                        A -> B [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
-                        A -> B [id=1 lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
-                        A -> B [id=2 source="{ufo_order:2}" sink="{ufo_order:2}"]
+                        A -> B [particle=H id=0 lmb_id=0]
+                        A -> B [particle=H id=1 lmb_id=1]
+                        A -> B [particle=H id=2]
                     }
                 )
                 .unwrap()
@@ -9019,16 +9001,16 @@ pub(crate) mod tests {
     #[test]
     fn canonical_lmb_density_partition_matches_inverse_jacobians() {
         test_initialise().unwrap();
-        let mut graph: Graph = finalized_runtime_dot!(
+        let mut graph: Graph = dot!(
             digraph lmb_prefactor_partition {
                 graph [projector=1]
                 edge [num=1 mass=0]
                 node [num=1]
                 ext [style=invis]
-                ext -> A [id=0 sink="{ufo_order:0}"]
-                A -> B [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
-                A -> B [id=2 source="{ufo_order:2}" sink="{ufo_order:1}"]
-                B -> ext [id=3 source="{ufo_order:2}"]
+                ext -> A [particle=H id=0]
+                A -> B [particle=H id=1 lmb_id=0]
+                A -> B [particle=H id=2]
+                B -> ext [particle=H id=3]
             }
         )
         .unwrap();
@@ -9231,16 +9213,16 @@ pub(crate) mod tests {
     #[test]
     fn process_catalogue_bridge_integrates_normalized_gaussian() {
         test_initialise().unwrap();
-        let mut graph: Graph = crate::finalized_runtime_dot!(
+        let mut graph: Graph = dot!(
             digraph process_sampling_acceptance {
  graph [projector=1]
                 edge [num=1 mass=0]
                 node [num=1]
                 ext [style=invis]
-                ext -> A [id=0 sink="{ufo_order:0}"]
-                A -> B [id=1 source="{ufo_order:1}" sink="{ufo_order:0}" lmb_id=0]
-                A -> B [id=2 source="{ufo_order:2}" sink="{ufo_order:1}"]
-                B -> ext [id=3 source="{ufo_order:2}"]
+                ext -> A [particle=H id=0]
+                A -> B [particle=H id=1 lmb_id=0]
+                A -> B [particle=H id=2]
+                B -> ext [particle=H id=3]
             }
         , &crate::utils::load_generic_model("sm"))
         .unwrap();

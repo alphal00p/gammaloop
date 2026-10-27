@@ -21,7 +21,9 @@ LINNEST_LICENSE = "MIT AND Apache-2.0 AND BSD-3-Clause"
 SOURCES = {
     "clarabel-LICENSE": ROOT / "vendor/clarabel/LICENSE.md",
     "networkx-LICENSE": ROOT / "crates/linnest/layout/native/LICENSE.networkx",
+    "tiptoe-LICENSE": ROOT / "crates/kurvst/typst/LICENSE.tiptoe",
 }
+PACKAGES = {"clarabel": "linnest", "networkx": "linnest", "tiptoe": "kurvst"}
 
 
 class DrawingNotices(unittest.TestCase):
@@ -60,6 +62,7 @@ class DrawingNotices(unittest.TestCase):
                     "crates/linnest/typst/LICENSE.networkx",
                     "crates/linnest/typst/LICENSE",
                     "crates/kurvst/typst/LICENSE",
+                    "crates/kurvst/typst/LICENSE.tiptoe",
                 ]:
                     with self.subTest(path=relative):
                         self.assertEqual(
@@ -116,7 +119,7 @@ class DrawingNotices(unittest.TestCase):
             for name, source in SOURCES.items():
                 suffix = name.removesuffix("-LICENSE")
                 self.assertEqual(
-                    (extracted / f"linnest/typst/LICENSE.{suffix}").read_bytes(),
+                    (extracted / f"{PACKAGES[suffix]}/typst/LICENSE.{suffix}").read_bytes(),
                     source.read_bytes(),
                 )
             for package in ["linnest", "kurvst"]:
@@ -137,7 +140,7 @@ class DrawingNotices(unittest.TestCase):
                 )
                 suffix = name.removesuffix("-LICENSE")
                 self.assertEqual(
-                    (ROOT / f"crates/linnest/typst/LICENSE.{suffix}").read_bytes(),
+                    (ROOT / f"crates/{PACKAGES[suffix]}/typst/LICENSE.{suffix}").read_bytes(),
                     source.read_bytes(),
                 )
 

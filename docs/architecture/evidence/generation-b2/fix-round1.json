@@ -1,0 +1,287 @@
+{
+  "scope": "Sol WP1 focused implementation correction; pending NEW independent Astra review",
+  "reviewed_parent": "468d10cfa5be903f99265e5929e80efb3f323193",
+  "change_id": "vlvzooxlrszqooyzqlprpxqtpvomopxx",
+  "bookmark": "generation-b2-diagnosis",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-b2-diagnosis",
+  "author": "Lucien Huber <im@lcnbr.ch>",
+  "responses": {
+    "P1": {
+      "status": "implemented, pending re-review",
+      "old_certificate": "superseded: AlgebraSettings::hep enabled Dirac monomial distribution and expanding contraction before equality",
+      "new_certificate": "closed-loop matrix similarity on intact local factors, with finite exact color and gamma/C component identities",
+      "result": "N28=(7/2)*N34 at concrete SU(3) and four-dimensional production component conventions"
+    },
+    "P2": {
+      "status": "implemented",
+      "zero_sample_assertions": [
+        "zero_numerator_count=0",
+        "two diagrams and two singleton groups",
+        "source IDs in order [34,28], each exactly once",
+        "valid group.master and member.diagram indices",
+        "unit member ratio",
+        "unchanged original name and aggregate numerator",
+        "original full scalar factor and evaluated weight"
+      ],
+      "sampled_assertions": [
+        "one group and one retained master",
+        "source IDs [34,28] exactly once",
+        "valid group/master/member indices",
+        "ratios 1 and 7/2",
+        "original member scalar factors",
+        "combined scalar weight exactly 3/4"
+      ],
+      "fallback_witness": "canonical=true samples=0 retains two original singleton groups; same original pair canonical=true samples=5 merges at each seed"
+    },
+    "import_policy": {
+      "status": "fixed",
+      "change": "module-scope use std::env; env::args()",
+      "prior_no_departures_claim": "superseded explicitly in execution.json"
+    }
+  },
+  "proof": {
+    "kinematic_point_substitution": false,
+    "original_graph_polynomial_expansion": false,
+    "symbolic_Dirac_simplification": false,
+    "whole_numerator_contraction": false,
+    "preserved_symbolic_dependence": [
+      "all formal routed loop momentum components",
+      "UFO::MT",
+      "UFO::G"
+    ],
+    "locality": "original fixture edge/vertex factors and signed routing unchanged; reuse Astra provenance verification",
+    "isolated_color_components": [
+      "7/3",
+      "-2/3"
+    ],
+    "charge_conjugation_checks": {
+      "C_transpose_equals_minus_C_entries": 16,
+      "C_squared_equals_minus_identity_entries": 16,
+      "C_gamma_transpose_C_equals_gamma_entries": 64,
+      "arithmetic": "exact integer/Gaussian rational Atom values; SU(3) component library exact rational/sqrt(3) values"
+    },
+    "closed_loop": {
+      "vertices": [
+        1,
+        2,
+        3
+      ],
+      "fermion_edges": [
+        3,
+        4,
+        6
+      ],
+      "spinor_slots": 6,
+      "gamma_factors": 6,
+      "mass_identity_factors": 3,
+      "slot_incidence": "each slot occurs twice among gamma alternatives and once in mass identities; vertex gamma plus either local propagator branch closes every contraction",
+      "dimension_guards": "four-dimensional spinor slots and all four Lorentz gamma components; unsupported matrix heads rejected"
+    },
+    "rewrite": "T(A)=C^-1 A C; C is antisymmetric and C^2=-I, hence orthogonal. Identities remain fixed, gamma becomes negative transpose. Applying the same transformation on every local factor preserves the closed spinor contraction, including each intact mass-plus-slash sum.",
+    "literal_result": "after existing numeric-content factoring and pure dummy graph canonicalization, transformed L28 equals -L34 as an Atom",
+    "ratio_derivation": "-(7/3)/(-2/3)=7/2"
+  },
+  "prerequisite_audit": [
+    {
+      "owner": "FeynmanDiagram::from_dot / original numerator",
+      "guarantee": "unchanged fixtures already independently verified by Astra against regenerated local factors and signed routing; unit numerator-prefactor and projector asserted before using aggregate source"
+    },
+    {
+      "owner": "Model::expand_couplings",
+      "guarantee": "replace_multiple of scalar coupling definitions only; no graph distribution"
+    },
+    {
+      "owner": "normalize_momentum_routing / MomentumBasis::route_expression",
+      "guarantee": "signed momentum replacement and expand_num numerical-content normalization only; independent numerator factors remain intact"
+    },
+    {
+      "owner": "SymbolicTensor::with_checked_expression / finish_parts / normalize_products",
+      "guarantee": "interface validation and recursive product/bracket normalization retain sums and powers, with no contraction planner or algebra family enabled"
+    },
+    {
+      "owner": "SymbolicTensor::coefficient_list(TensorCollectFilter::Reps(color))",
+      "guarantee": "color-only selection; Lorentz subtrees are unselected immutable spectators; exactly one sector and syntactic reconstruction of complete factored source asserted"
+    },
+    {
+      "owner": "hep_lib_atom / su3_generator_data_atom / into_network / Network::execute",
+      "guarantee": "only isolated color tensors are contracted to constants; exact rational/sqrt(3) data, no symbolic Dirac or original propagator sum enters executor"
+    },
+    {
+      "owner": "gamma_data_weyl / CHARGE_CONJUGATION_WEYL_COMPONENTS",
+      "guarantee": "constant component table identities verified entrywise, not a momentum sample"
+    },
+    {
+      "owner": "Atom replace_map / collect_numeric_content / collect_factors",
+      "guarantee": "local gamma transpose/sign rewrite and factoring existing content only; no polynomial conversion or multiplication of independent propagator alternatives"
+    },
+    {
+      "owner": "IndexTooling::canonize / tensor canonicalize project_expression",
+      "guarantee": "direct Atom graph/dummy relabelling; NetworkOp::Sum remains an opaque factor, functions remain opaque; no tensor finisher or enabled Dirac/algebra prerequisite"
+    },
+    {
+      "owner": "group_diagrams and evaluate_tensor_sample after certificate",
+      "guarantee": "unchanged production and supplementary fresh-point coverage only; not used as the factor-preserving symbolic proof"
+    }
+  ],
+  "validation": {
+    "regression": {
+      "command": "nix develop /nix/store/aqhkq5ivk34ch9gvxjxv1a06jdazc0n7-nix-shell-env.drv -c cargo test -p feynkit-generator --profile dev-optim --lib grouping::tests::vacuum_group28_original_pair_identity -- --exact --ignored --nocapture",
+      "result": "1 passed, 0 failed",
+      "runtime_seconds": 6.38,
+      "samples": 5,
+      "seeds": [
+        3,
+        7,
+        11
+      ],
+      "canonical": [
+        false,
+        true
+      ],
+      "fresh_sample_indices": [
+        7,
+        13
+      ],
+      "fresh_pair_checks": 12
+    },
+    "clippy": {
+      "command": "nix develop /nix/store/aqhkq5ivk34ch9gvxjxv1a06jdazc0n7-nix-shell-env.drv -c cargo clippy -p feynkit-generator --all-targets --profile dev-optim --no-deps -- -D warnings",
+      "result": "passed"
+    },
+    "format_and_typst": {
+      "format_command": "nix develop /nix/store/aqhkq5ivk34ch9gvxjxv1a06jdazc0n7-nix-shell-env.drv -c cargo fmt -p feynkit-generator -- --check",
+      "typst_command": "nix develop /nix/store/aqhkq5ivk34ch9gvxjxv1a06jdazc0n7-nix-shell-env.drv -c typst compile --root . docs/architecture/generation-integration-wp1.typ target/wp1-fix-round1/wp1.pdf",
+      "result": "both passed"
+    }
+  },
+  "original_display_cancellation": {
+    "status": "already independently confirmed by Astra for both original slow-test rows; retained unchanged",
+    "evidence": "review-round1.json and original-stored-cancellation.log/verifier under target/wp1-review-round1"
+  },
+  "code_hashes": [
+    {
+      "path": "crates/feynkit-generator/src/grouping.rs",
+      "bytes": 218933,
+      "sha256": "f1f98b0b0679d5a7dcbf5a384c3342615b3dafa491ff8b84f91ea562aed85c72"
+    },
+    {
+      "path": "crates/feynkit-generator/examples/vacuum_b2.rs",
+      "bytes": 3095,
+      "sha256": "1abd539ab59f5f8c2c053851d4da0a9940ed4c30c9f926addd5a45d438d6f770"
+    }
+  ],
+  "immutable_input_hashes": [
+    {
+      "path": "crates/feynkit-generator/tests/fixtures/vacuum_b2/GL028.dot",
+      "bytes": 29113,
+      "sha256": "05d1b5b9de947ee6b41795ac062d6283602cc6d96490b09e025e35056ca8635e"
+    },
+    {
+      "path": "crates/feynkit-generator/tests/fixtures/vacuum_b2/GL034.dot",
+      "bytes": 29108,
+      "sha256": "36ef89039f8ac71907dfea68b91cc89f26c1e6b29db37fc094d629417f2d63c1"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-b2/pair-provenance.json",
+      "bytes": 963,
+      "sha256": "4ce8795366972bda45066fe2af1427be75dc7a541124a9bb7e20e11236103b96"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-b2/v4-production.json",
+      "bytes": 87358,
+      "sha256": "018bdb54f54548b0f278c42875b9ac313e58d1f0a0e7dd6d20ce207c34399c6b"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-b2/upstream-production.json",
+      "bytes": 94769,
+      "sha256": "4970096f31bfe8970faca70894a22810881578dc50c79945c1999b5c7dbc277a"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-b2/varied-seeds.json",
+      "bytes": 48320,
+      "sha256": "510191555e59ec509266665c7fd7ceff9c5e52fc4c2d8d8687437954a3c141c0"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-b2/slow-observed.json",
+      "bytes": 3893,
+      "sha256": "0c98758ae457b3c0930c271dadaa7de13e82e18038e7254ab2350d4f047f506c"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-b2/source-expectations.json",
+      "bytes": 6657,
+      "sha256": "b0fa6df01a9270d7f61ffd97fb716ae28ee668072c7b62a6c9d348e559ba516d"
+    }
+  ],
+  "retained_review_json": [
+    {
+      "path": "docs/architecture/evidence/generation-b2/review-round1.json",
+      "bytes": 6071,
+      "sha256": "64cbc706e27cdc37152211df53306f57483347f347b3362089a50f9749935cd3"
+    }
+  ],
+  "log_hashes": [
+    {
+      "path": "target/wp1-fix-round1/final-regression.log",
+      "bytes": 713,
+      "sha256": "16eca8e21ecbd45071b0adc69446440ab9f7fba2a830dc9498bb473ce51854bc"
+    },
+    {
+      "path": "target/wp1-fix-round1/clippy-final.log",
+      "bytes": 248,
+      "sha256": "56606c8feee4974acb4c6cbb6ddfb5aee130983a38e1535754c7a3d88a110532"
+    },
+    {
+      "path": "target/wp1-fix-round1/docs-format.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "limits": [
+    "fixed original pair, four-dimensional Weyl components and concrete SU(3) convention; no all-group or full-amplitude certification",
+    "ordinary slow snapshot failures and full-request exact-only timeout remain out of scope and were not rerun",
+    "no actual defect or first bad commit established; no bisect or production physics fix",
+    "WP3 must port original fixtures, signed provenance, corrected certificate, asserted zero-sample control, sampled/fallback matrix and original stored-cancellation evidence; rerun ignored regression on rebuilt revision",
+    "NEW independent Astra review is required before proceeding"
+  ],
+  "rust_policy": "current fix checked against mandatory main Rust policy; explicit imports, existing owners reused, no new general framework or production helper; prior import and factorization violations acknowledged above",
+  "nixci_enable": false,
+  "retained": [
+    "original target/wp1 receipts/logs",
+    "Astra target/wp1-review-round1 verifier sources/provenance/logs",
+    "final fix logs and report PDF under target/wp1-fix-round1",
+    "same task workspace and named bookmark"
+  ],
+  "retained_processes": [],
+  "changed_files": [
+    "crates/feynkit-generator/examples/vacuum_b2.rs",
+    "crates/feynkit-generator/src/grouping.rs",
+    "docs/architecture/evidence/generation-b2/exact-only-control.json",
+    "docs/architecture/evidence/generation-b2/execution.json",
+    "docs/architecture/evidence/generation-b2/fix-round1.json",
+    "docs/architecture/evidence/generation-b2/review-round1.json",
+    "docs/architecture/generation-integration-wp1.typ"
+  ],
+  "changed_artifact_hashes": [
+    {
+      "path": "docs/architecture/evidence/generation-b2/exact-only-control.json",
+      "bytes": 1103,
+      "sha256": "dd4bce67a7dea0d7e08879fbff0a1e0c2208d66f908763d8853ad4815194ef6f"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-b2/execution.json",
+      "bytes": 10331,
+      "sha256": "d18d71023d66b2594fbf0ee4c259c366a99ddbeea1ed663d48aeefd4d7fd56b3"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-b2/review-round1.json",
+      "bytes": 6071,
+      "sha256": "64cbc706e27cdc37152211df53306f57483347f347b3362089a50f9749935cd3"
+    },
+    {
+      "path": "docs/architecture/generation-integration-wp1.typ",
+      "bytes": 12274,
+      "sha256": "cb099fded47419a958c9b518639e982dc199288f25678fd65762f60defca9936"
+    }
+  ],
+  "cleanup": "removed only this fix rounds unused probe/earlier validation logs; final regression, Clippy, format/Typst log and PDF retained. Existing WP1 and independent review evidence and shared caches untouched."
+}

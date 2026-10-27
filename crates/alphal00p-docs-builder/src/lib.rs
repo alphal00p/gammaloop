@@ -12,22 +12,19 @@ mod provenance_tests;
 #[cfg(feature = "watch")]
 pub use watch::WatchRequest;
 
-use std::{
-    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
-    env, fs,
-    io::Write,
-    ops::Range,
-    path::{Component, Path, PathBuf},
-    process::{Command, Stdio},
-};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::io::Write;
+use std::ops::Range;
+use std::path::{Component, Path, PathBuf};
+use std::process::{Command, Stdio};
+use std::{env, fs};
 
+use alphal00p_docs_schema::generated::{
+    CliAliasKind, CliArgument, CliArgumentAction, CliCommand, GENERATED_REFERENCE_SCHEMA,
+    GammaLoopReference, SettingReference, VakintReference,
+};
 use alphal00p_docs_schema::{
-    ApiLanguage, DocCatalog, DocFormat, DocItem, DocMember, DocMemberKind, DocScope,
-    SCHEMA_VERSION,
-    generated::{
-        CliAliasKind, CliArgument, CliArgumentAction, CliCommand, GENERATED_REFERENCE_SCHEMA,
-        GammaLoopReference, SettingReference, VakintReference,
-    },
+    ApiLanguage, DocCatalog, DocFormat, DocItem, DocMember, DocMemberKind, DocScope, SCHEMA_VERSION,
 };
 use chrono::{NaiveDate, Utc};
 use clap::ValueEnum;
@@ -10529,26 +10526,60 @@ mod tests {
     }
 
     #[test]
-    fn prose_source_gate_distinguishes_runtime_assets_from_neighboring_prose() {
+    fn prose_source_gate_distinguishes_exact_assets_from_nearby_prose() {
         let temporary = tempfile::tempdir().unwrap();
-        let mut builder = SiteBuilder::discover().unwrap();
-        builder.root = temporary.path().to_path_buf();
-        for asset in [
+        for source in [
+            "vendor/typst-packages/preview/mitex/0.2.6/CHANGELOG.md",
             "vendor/clarabel/CHANGELOG.md",
             "vendor/clarabel/LICENSE.md",
             "vendor/clarabel/html/rustdocs-header.html",
             "crates/feynkit-py/src/cff/display.html",
             "examples/layout/impred/playground.html",
         ] {
-            let path = temporary.path().join(asset);
+            let path = temporary.path().join(source);
             fs::create_dir_all(path.parent().unwrap()).unwrap();
-            fs::write(&path, "Asset").unwrap();
-            assert!(builder.check_prose_sources().is_ok(), "{asset}");
-            let prose = path.parent().unwrap().join("new-note.html");
-            fs::write(&prose, "New prose").unwrap();
-            assert!(builder.check_prose_sources().is_err(), "{asset}");
-            fs::remove_file(prose).unwrap();
+            fs::write(path, "Non-prose asset").unwrap();
         }
+        let mut builder = SiteBuilder::discover().unwrap();
+        builder.root = temporary.path().to_path_buf();
+        builder.legacy_prose = LegacyProseConfig {
+            schema: LEGACY_PROSE_SCHEMA_VERSION,
+            source: Vec::new(),
+        };
+        builder.check_prose_sources().unwrap();
+
+        for source in [
+            "vendor/clarabel/notes.md",
+            "vendor/clarabel/html/notes.html",
+            "examples/layout/impred/notes.html",
+            "crates/feynkit-py/src/cff/notes.html",
+            "vendor/typst-packages/preview/mitex/0.2.6/notes.md",
+        ] {
+            let path = temporary.path().join(source);
+            fs::write(&path, "New prose").unwrap();
+            let error = builder.check_prose_sources().unwrap_err();
+            assert!(
+                error
+                    .to_string()
+                    .contains("Markdown/HTML sources differ from the shrinking legacy inventory"),
+                "{error}"
+            );
+            fs::remove_file(path).unwrap();
+        }
+
+        fs::write(
+            temporary
+                .path()
+                .join("examples/layout/impred/playground.typ"),
+            "= Parallel editable source",
+        )
+        .unwrap();
+        let error = builder.check_prose_sources().unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("parallel editable documentation")
+        );
     }
 
     #[test]

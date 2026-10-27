@@ -23,6 +23,7 @@ from symbolica.community.tensor import (
     Representation,
     TensorExpression,
 )
+from symbolica.community.graph import Bridges
 
 model = hep.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")
 D, epsilon, M, mUV, coordinate, integral, xi, s, Nf = S(
@@ -115,17 +116,18 @@ for kind, incoming, outgoing, loops, vertices, count in [
         2,
     ),
 ]:
-    generated = model.process(
-        incoming, outgoing, vertex_allow=vertices
-    ).generate_diagrams(
-        loops=loops,
-        max_vertices=len(incoming) + len(outgoing) - 2 + 2 * loops,
-        maximum_bridges=0,
-        self_energy=None,
-        tadpoles=None,
-        zero_snails=None,
-        numerator_grouping=None,
-        progress=None,
+    generated = (
+        model.process(incoming, outgoing)
+        .amplitude(
+            loops=hep.Loops.total(loops),
+            restrict=hep.Restrict().only_vertices(vertices),
+            topology=hep.TopologyRules(
+                max_vertices=len(incoming) + len(outgoing) - 2 + 2 * loops,
+                bridges=Bridges.at_most(0),
+            ),
+        )
+        .generate()
+        .build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
     )
     assert len(generated.diagrams) == count
     diagrams[kind] = generated.diagrams
@@ -488,23 +490,30 @@ for kind, incoming, outgoing, count, qcd_order in [
 ]:
     # CT order is perturbative bookkeeping; two-point insertions have no loops.
     # Bound vertices explicitly to exclude arbitrarily long insertion chains.
-    options = {
-        "loops": 0,
-        "max_vertices": 1,
-        "maximum_bridges": None,
-        "self_energy": None,
-        "tadpoles": None,
-        "zero_snails": None,
-        "numerator_grouping": None,
-        "progress": None,
-    }
-    generated = ct_model.process(
-        incoming, outgoing, vertex_allow=ct_vertices
-    ).generate_diagrams(coupling_orders={"QCD": qcd_order, "CT": 1}, **options)
+    generated = (
+        ct_model.process(incoming, outgoing)
+        .amplitude(
+            loops=hep.Loops.total(0),
+            restrict=hep.Restrict().only_vertices(ct_vertices),
+            topology=hep.TopologyRules(max_vertices=1),
+            orders=hep.Orders(
+                plain={"QCD": hep.Range.exact(qcd_order), "CT": hep.Range.exact(1)}
+            ),
+        )
+        .generate()
+        .build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
+    )
     assert len(generated.diagrams) == count
     assert (
-        not ct_model.process(incoming, outgoing, vertex_allow=ct_vertices)
-        .generate_diagrams(coupling_orders={"CT": 0}, **options)
+        not ct_model.process(incoming, outgoing)
+        .amplitude(
+            loops=hep.Loops.total(0),
+            restrict=hep.Restrict().only_vertices(ct_vertices),
+            topology=hep.TopologyRules(max_vertices=1),
+            orders=hep.Orders(plain={"CT": hep.Range.exact(0)}),
+        )
+        .generate()
+        .build(hep.NumeratorOptions(naming=hep.Naming.named("D")))
         .diagrams
     )
     ct_diagrams[kind] = generated.diagrams

@@ -2,7 +2,7 @@ digraph BNL {
     num = "1";
     overall_factor = "1";
     overall_factor_evaluated = "1";
-    projector = "vbar(0,spenso::bis(4,hedge(0))) * u(1,spenso::bis(4,hedge(1))) * v(2,spenso::bis(4,hedge(2))) * ubar(3,spenso::bis(4,hedge(3))) * ϵbar(4,spenso::mink(4,hedge(4))) * ϵbar(5,spenso::mink(4,hedge(5))) * ϵbar(6,spenso::mink(4,hedge(6)))";
+    projector = "vbar(0,spenso::bis(4,hedge(0,1))) * u(1,spenso::bis(4,hedge(1,1))) * v(2,spenso::bis(4,hedge(2,1))) * ubar(3,spenso::bis(4,hedge(3,1))) * ϵbar(4,spenso::mink(4,hedge(4,1))) * ϵbar(5,spenso::mink(4,hedge(5,1))) * ϵbar(6,spenso::mink(4,hedge(6,1)))";
 
 	exte0	 [style=invis];
 	exte1	 [style=invis];
