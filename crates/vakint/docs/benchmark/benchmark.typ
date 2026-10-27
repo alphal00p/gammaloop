@@ -163,6 +163,9 @@ Refresh instructions: #raw("../../AGENTS.md").
 ))
 #let physical-id = report.at("selected_physical_capture_run", default: none)
 #let physical = if physical-id == none { none } else { report.physical_capture_runs.at(physical-id) }
+#let physical-deferred(id) = physical != none and (
+  id in physical.at("physical_scope", default: (deferred: ())).deferred
+)
 #let primary(run, id) = if run == none { none } else { run.primary.at(id) }
 #let physical-scope-note(run) = {
   let authorization = run.at("physical_scope_authorization", default: none)
@@ -185,7 +188,7 @@ Refresh instructions: #raw("../../AGENTS.md").
 #let primary-cell(run, id, variant) = {
   let row = primary(run, id)
   if row == none or row.status != "measured" {
-    if row != none and row.status == "deferred" { [Deferred] } else { [Pending] }
+    if physical-deferred(id) or (row != none and row.status == "deferred") { [Deferred] } else { [Pending] }
     if row != none and row.functional_records.len() > 0 {
       linebreak()
       text(8pt)[Functional evidence only]
@@ -358,7 +361,7 @@ acceptance was pending in that historical record. Full revisions: #raw("data/res
   for case in pending.cases.filter(case => case.id != "held-out-suite") {
     let row = primary(five, case.id)
     v(0.3em)
-    [*#case.label:* #if row.status == "deferred" [Deferred; unmeasured in this scope.] else [#row.status.]]
+    [*#case.label:* #if row.status == "deferred" or (row.status != "measured" and physical-deferred(case.id)) [Deferred; unmeasured in this scope.] else [#row.status.]]
     if row.functional_records.len() > 0 {
       let functional = row.functional_records.filter(record => not record.performance_eligible)
       if functional.len() > 0 {
@@ -721,9 +724,9 @@ acceptance was pending in that historical record. Full revisions: #raw("data/res
 pagebreak()
 set text(font: "Libertinus Serif", size: 10pt, fill: black)
 align(center)[
-  #text(21pt, weight: "bold", fill: navy)[Cumulative physical cache]
+  #text(21pt, weight: "bold", fill: navy)[Zero-momentum physical reduction]
   #v(0.2em)
-  #text(11pt, fill: luma(80))[Capture during a physical reduction · fresh reuse of the same input]
+  #text(11pt, fill: luma(80))[Completed cache capture · fresh reuse of the same input]
 ]
 v(0.6em)
   assert(physical.status == "functional-seen-physical-reuse")
@@ -732,7 +735,7 @@ v(0.6em)
   physical-scope-note(physical)
   v(0.3em)
   [*One completed fresh seen-input pair; functional evidence only.*
-  Complete retained output, ordered nonzero conditions, unknown-master inventory
+  Complete retained output, canonical public nonzero-condition file, unknown-master inventory
   and family map agree. The fresh reuse wrote no new records and preserved the
   native snapshot identity.]
   v(0.5em)
@@ -754,7 +757,34 @@ v(0.6em)
   v(0.3em)
   text(8.5pt)[These are raw single observations, with possible concurrent historical
   workers. No median, speedup claim or performance colour is assigned. Producer
-  reduction includes capture overhead; pure IBP time is unmeasured.]
+  reduction includes capture overhead; pure IBP time is unmeasured.
+  Both processes load the same prepared scalar input; graph preparation is excluded.]
+  v(0.4em)
+  let hits = physical.cache.cached_persistent_statistics
+  let native = physical.raw_reuse.report.saved_application_cache.native
+  let closure = physical.raw_producer.report.catalogue_closure
+  let grouped(value) = {
+    let digits = str(value)
+    let first = calc.rem(digits.len(), 3)
+    let parts = if first == 0 { () } else { (digits.slice(0, first),) }
+    (parts + range(first, digits.len(), step: 3).map(i => digits.slice(i, i + 3))).join(",")
+  }
+  table(columns: (1fr, 1fr, 1fr), inset: (x: 8pt, y: 10pt),
+    stroke: 0.4pt + luma(215),
+    fill: (x, y) => if y == 0 { navy } else { pale },
+    table.header(
+      text(fill: white, weight: "bold")[Strict records captured],
+      text(fill: white, weight: "bold")[Seen Route hits / misses],
+      text(fill: white, weight: "bold")[Distinct masters / unknowns],
+    ),
+    text(15pt, weight: "bold")[#grouped(physical.cache.producer_accepted_records)],
+    text(15pt, weight: "bold")[#grouped(hits.route_hits) / #hits.misses],
+    text(15pt, weight: "bold")[#closure.master_count / #closure.unknown_count],
+  )
+  v(0.2em)
+  text(8.5pt)[Reuse applied #native.rule_applications rules, with #hits.apply_hits Apply hits,
+  #hits.intermediate_hits intermediate hits and #physical.cache.newly_captured_records new records.
+  Captured records are not a deduplicated-key census or the final HEAVY file size.]
   v(0.45em)
   let captured = physical.raw_producer.artifact
   text(9pt)[Producer source #raw(captured.source_head.slice(0, 12));
@@ -762,6 +792,7 @@ v(0.6em)
   ELF #raw(captured.elf.sha256.slice(0, 12));
   frozen source #raw(captured.elf.source_freeze_sha256.slice(0, 12)).
   Optimization 3 and fat LTO are bound by the compiler receipt.
+  This original producer cohort is separate from the current application/dependency build.
   Selected evidence: #raw(physical-id).
   Complete source, executable, input, cache and result bindings remain in
   #raw("data/results.json").]
