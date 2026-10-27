@@ -580,6 +580,7 @@ impl MonitorState {
             })),
             "status": format!("{:?}", live.status),
             "resources": self.live_resources(now),
+            "resource_sample_elapsed_seconds": self.latest.resource_sample_at.map(|at| at.as_secs_f64()),
             "stored_symbolic_state": self.latest.stored_state.as_ref().map(|sample| serde_json::json!({
                 "scope": "native stored partitions; overlapping occurrences, not a global expression",
                 "family_fingerprint": sample.family_fingerprint,
@@ -793,7 +794,7 @@ impl MonitorState {
         MonitorView {
             title: "RustRed · request".into(),
             subtitle: format!(
-                "{} · active {} · event age {} · UI heartbeat {}\n{}",
+                "Local observations · {} · active {} · event age {} · UI heartbeat {}\n{}",
                 if snapshot.phase.is_empty() {
                     "Starting monitor".into()
                 } else {
@@ -952,7 +953,8 @@ impl MonitorState {
         let mut rows = vec![
             (
                 "Estimate scope".into(),
-                "Native dispatch only; excludes caller postprocessing and future discovery".into(),
+                "Native dispatch only; excludes caller postprocessing; future discovery excluded"
+                    .into(),
             ),
             (
                 "Estimate sample age".into(),

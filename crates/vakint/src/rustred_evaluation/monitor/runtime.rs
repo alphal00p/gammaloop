@@ -1735,14 +1735,14 @@ mod tests {
         let path = directory.path().join("resources.json");
         let options = RustRedMonitorOptions {
             progress_snapshot: Some(path.clone()),
-            interval: Duration::from_millis(100),
+            interval: Duration::from_secs(60),
             ..Default::default()
         };
         let failure = MonitorContext::run::<()>(&options, |mut observer, _progress| {
             // Real OS sampling/file publication; synthetic control events only.
             // No saved application, coefficient, cache or reduction is loaded.
             MonitorContext::native_phase(observer.as_deref_mut(), "synthetic_busy_phase", None);
-            let deadline = Instant::now() + Duration::from_secs(5);
+            let deadline = Instant::now() + Duration::from_secs(8);
             let first = loop {
                 if let Ok(bytes) = std::fs::read(&path) {
                     let document: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
@@ -1753,30 +1753,57 @@ mod tests {
                 assert!(Instant::now() < deadline, "resource publication timed out");
                 thread::sleep(Duration::from_millis(5));
             };
+            let first_sample = first["monitor"]["resource_sample_elapsed_seconds"]
+                .as_f64()
+                .unwrap();
+            let mut sample_clocks = vec![first_sample];
             let refreshed = loop {
                 let document: serde_json::Value =
                     serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
-                if document["monitor"]["published_unix_seconds"]
-                    .as_f64()
-                    .unwrap()
-                    > first["monitor"]["published_unix_seconds"].as_f64().unwrap()
-                    && document["monitor"]["native_document_age_seconds"]
-                        .as_f64()
-                        .is_some_and(|age| age >= 0.1)
+                if let Some(sample) =
+                    document["monitor"]["resource_sample_elapsed_seconds"].as_f64()
                 {
-                    break document;
+                    if sample > *sample_clocks.last().unwrap() {
+                        sample_clocks.push(sample);
+                    }
+                    if sample_clocks.len() >= 3 && sample - first_sample >= 1.5 {
+                        break document;
+                    }
                 }
                 assert!(
                     Instant::now() < deadline,
-                    "independent OS refresh timed out"
+                    "independent OS sample clock did not advance across multiple heartbeats"
                 );
                 thread::sleep(Duration::from_millis(5));
             };
             assert!(
+                sample_clocks
+                    .windows(2)
+                    .all(|samples| samples[1] > samples[0])
+            );
+            assert!(
                 refreshed["monitor"]["resources"]["sample_age_seconds"]
                     .as_f64()
                     .unwrap()
-                    < 0.1
+                    <= 2.5,
+                "independent resource sample is stale: {}",
+                refreshed["monitor"]["resources"]
+            );
+            assert!(
+                refreshed["monitor"]["published_unix_seconds"]
+                    .as_f64()
+                    .unwrap()
+                    > first["monitor"]["published_unix_seconds"].as_f64().unwrap()
+            );
+            assert_eq!(
+                refreshed["sequence"], first["sequence"],
+                "heartbeat invented observer progress"
+            );
+            assert!(
+                refreshed["monitor"]["native_document_age_seconds"]
+                    .as_f64()
+                    .unwrap()
+                    >= 1.5
             );
             assert!(refreshed["monitor"]["last_cycle"].is_null());
             let mut cycle = Envelope::new(Event::CycleDetected, "synthetic-resource-fixture");
