@@ -1274,7 +1274,10 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # Reviewed 2026-10-27: The complete package-input delta retains native SVG
 # assets, fonts, typed tensor/graph fixtures, canonical Python facades, and
 # runtime/test inputs with their actual owners.
-digest = "49ded08ff404e24b98742ed20665328cabf37fd0"
+# Reviewed 2026-10-27: The portable thirteen-case Vakint qualification fixture
+# and its five authenticated gzip provenance records are compile-time test
+# inputs. Production data ownership and dependency artifacts are unchanged.
+digest = "1010d74ea3599a01c3b068af40f3468b6676eb0e"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"

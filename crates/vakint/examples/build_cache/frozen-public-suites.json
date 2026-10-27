@@ -1,0 +1,832 @@
+{
+  "frozen_utc": "2026-10-27T11:02:10.875428+00:00",
+  "held_out": [
+    {
+      "id": "parent-32745-dot_a",
+      "lowered_roots": [
+        [
+          1,
+          1,
+          1,
+          1,
+          0,
+          0,
+          1,
+          1,
+          1,
+          0,
+          0,
+          2,
+          0,
+          0,
+          1
+        ]
+      ],
+      "powers": [
+        0,
+        0,
+        0,
+        2,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        0,
+        0,
+        1
+      ],
+      "protected_roots": [
+        [
+          1,
+          1,
+          1,
+          0,
+          0,
+          1,
+          1,
+          0,
+          0,
+          2,
+          0,
+          1,
+          1,
+          0,
+          1
+        ]
+      ],
+      "public_input": "(1)*topo(prop(1,edge(5,1),k(4),1,2)*prop(2,edge(1,5),k(5),1,1)*prop(3,edge(7,6),(k(1)-k(3)),1,1)*prop(4,edge(6,1),(k(1)-k(4)),1,1)*prop(5,edge(1,7),(k(1)-k(5)),1,1)*prop(6,edge(8,5),(k(2)-k(3)),1,1)*prop(7,edge(5,8),(k(2)-k(4)),1,1)*prop(8,edge(7,5),(k(3)-k(5)),1,1)*prop(9,edge(8,6),(k(3)-k(4)),1,1))",
+      "rationale": "Frozen before cache root selection: parent 32745, 3 forest pinches, dot_a; unit mass, physical total degree 10. Original common-family powers; owner mapping must be authenticated before final training exclusion."
+    },
+    {
+      "id": "parent-31740-dot_a",
+      "lowered_roots": [
+        [
+          1,
+          1,
+          1,
+          1,
+          2,
+          1,
+          1,
+          0,
+          1,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      ],
+      "powers": [
+        0,
+        0,
+        0,
+        2,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0
+      ],
+      "protected_roots": [
+        [
+          1,
+          1,
+          0,
+          1,
+          0,
+          1,
+          1,
+          0,
+          1,
+          1,
+          0,
+          2,
+          0,
+          0,
+          1
+        ]
+      ],
+      "public_input": "(1)*topo(prop(1,edge(4,4),k(4),1,2)*prop(2,edge(5,4),(k(1)-k(3)),1,1)*prop(3,edge(4,6),(k(1)-k(4)),1,1)*prop(4,edge(6,5),(k(1)-k(5)),1,1)*prop(5,edge(4,7),(k(2)-k(3)),1,1)*prop(6,edge(8,4),(k(2)-k(4)),1,1)*prop(7,edge(7,8),(k(2)-k(5)),1,1)*prop(8,edge(5,7),(k(3)-k(5)),1,1)*prop(9,edge(8,6),(k(4)-k(5)),1,1))",
+      "rationale": "Frozen before cache root selection: parent 31740, 3 forest pinches, dot_a; unit mass, physical total degree 10. Original common-family powers; owner mapping must be authenticated before final training exclusion."
+    },
+    {
+      "id": "parent-30699-dot_a",
+      "lowered_roots": [
+        [
+          1,
+          1,
+          1,
+          1,
+          0,
+          0,
+          1,
+          1,
+          1,
+          1,
+          0,
+          2,
+          0,
+          0,
+          0
+        ]
+      ],
+      "powers": [
+        0,
+        0,
+        0,
+        0,
+        2,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        0,
+        1,
+        1
+      ],
+      "protected_roots": [
+        [
+          1,
+          1,
+          0,
+          0,
+          1,
+          0,
+          1,
+          0,
+          1,
+          1,
+          0,
+          2,
+          0,
+          1,
+          1
+        ]
+      ],
+      "public_input": "(1)*topo(prop(1,edge(4,1),k(5),1,2)*prop(2,edge(6,7),(k(1)-k(3)),1,1)*prop(3,edge(4,6),(k(1)-k(4)),1,1)*prop(4,edge(7,1),(k(1)-k(5)),1,1)*prop(5,edge(4,8),(k(2)-k(3)),1,1)*prop(6,edge(8,1),(k(2)-k(4)),1,1)*prop(7,edge(4,7),(k(3)-k(5)),1,1)*prop(8,edge(1,4),(k(1)+k(2)-k(4)),1,1)*prop(9,edge(6,8),(k(3)-k(4)),1,1))",
+      "rationale": "Frozen before cache root selection: parent 30699, 3 forest pinches, dot_a; unit mass, physical total degree 10. Original common-family powers; owner mapping must be authenticated before final training exclusion."
+    },
+    {
+      "id": "parent-30699-dot_b",
+      "lowered_roots": [
+        [
+          1,
+          1,
+          1,
+          2,
+          0,
+          0,
+          1,
+          1,
+          1,
+          1,
+          0,
+          1,
+          0,
+          0,
+          0
+        ]
+      ],
+      "powers": [
+        0,
+        0,
+        0,
+        0,
+        1,
+        2,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        0,
+        1,
+        1
+      ],
+      "protected_roots": [
+        [
+          1,
+          1,
+          0,
+          0,
+          1,
+          0,
+          1,
+          0,
+          1,
+          1,
+          0,
+          1,
+          0,
+          2,
+          1
+        ]
+      ],
+      "public_input": "(1)*topo(prop(1,edge(4,1),k(5),1,1)*prop(2,edge(6,7),(k(1)-k(3)),1,2)*prop(3,edge(4,6),(k(1)-k(4)),1,1)*prop(4,edge(7,1),(k(1)-k(5)),1,1)*prop(5,edge(4,8),(k(2)-k(3)),1,1)*prop(6,edge(8,1),(k(2)-k(4)),1,1)*prop(7,edge(4,7),(k(3)-k(5)),1,1)*prop(8,edge(1,4),(k(1)+k(2)-k(4)),1,1)*prop(9,edge(6,8),(k(3)-k(4)),1,1))",
+      "rationale": "Frozen before cache root selection: parent 30699, 3 forest pinches, dot_b; unit mass, physical total degree 10. Original common-family powers; owner mapping must be authenticated before final training exclusion."
+    },
+    {
+      "id": "parent-30699-rank1",
+      "lowered_roots": [
+        [
+          1,
+          1,
+          1,
+          -1,
+          1,
+          0,
+          1,
+          1,
+          1,
+          2,
+          0,
+          1,
+          0,
+          0,
+          1
+        ]
+      ],
+      "powers": [
+        -1,
+        0,
+        1,
+        0,
+        2,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        0,
+        1,
+        1
+      ],
+      "protected_roots": [
+        [
+          1,
+          1,
+          -1,
+          1,
+          1,
+          0,
+          1,
+          1,
+          2,
+          1,
+          0,
+          1,
+          0,
+          0,
+          1
+        ]
+      ],
+      "public_input": "(1*(dot(k(1),k(1))-1)^1)*topo(prop(1,edge(4,5),k(3),1,1)*prop(2,edge(5,1),k(5),1,2)*prop(3,edge(6,7),(k(1)-k(3)),1,1)*prop(4,edge(4,6),(k(1)-k(4)),1,1)*prop(5,edge(7,1),(k(1)-k(5)),1,1)*prop(6,edge(4,8),(k(2)-k(3)),1,1)*prop(7,edge(8,1),(k(2)-k(4)),1,1)*prop(8,edge(5,7),(k(3)-k(5)),1,1)*prop(9,edge(1,4),(k(1)+k(2)-k(4)),1,1)*prop(10,edge(6,8),(k(3)-k(4)),1,1))",
+      "rationale": "Frozen before cache root selection: parent 30699, 2 forest pinches, rank1; unit mass, physical total degree 10. Original common-family powers; owner mapping must be authenticated before final training exclusion."
+    },
+    {
+      "id": "parent-30527-dot_b",
+      "lowered_roots": [
+        [
+          1,
+          1,
+          1,
+          1,
+          0,
+          0,
+          1,
+          1,
+          2,
+          1,
+          0,
+          1,
+          0,
+          0,
+          0
+        ]
+      ],
+      "powers": [
+        0,
+        0,
+        0,
+        0,
+        1,
+        2,
+        1,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "protected_roots": [
+        [
+          1,
+          1,
+          0,
+          0,
+          1,
+          0,
+          1,
+          0,
+          1,
+          1,
+          0,
+          1,
+          0,
+          1,
+          2
+        ]
+      ],
+      "public_input": "(1)*topo(prop(1,edge(4,5),k(5),1,1)*prop(2,edge(6,5),(k(1)-k(3)),1,2)*prop(3,edge(4,6),(k(1)-k(4)),1,1)*prop(4,edge(7,5),(k(2)-k(4)),1,1)*prop(5,edge(4,7),(k(2)-k(5)),1,1)*prop(6,edge(8,5),(k(3)-k(5)),1,1)*prop(7,edge(7,8),(k(4)-k(5)),1,1)*prop(8,edge(5,4),(k(1)+k(2)-k(4)),1,1)*prop(9,edge(6,8),(k(3)-k(4)),1,1))",
+      "rationale": "Frozen before cache root selection: parent 30527, 3 forest pinches, dot_b; unit mass, physical total degree 10. Original common-family powers; owner mapping must be authenticated before final training exclusion."
+    },
+    {
+      "id": "reserve-v1-parent-32745-dot_c",
+      "lowered_roots": [
+        [
+          1,
+          1,
+          1,
+          2,
+          0,
+          0,
+          1,
+          1,
+          1,
+          0,
+          0,
+          1,
+          0,
+          0,
+          1
+        ]
+      ],
+      "powers": [
+        0,
+        0,
+        0,
+        1,
+        1,
+        2,
+        1,
+        1,
+        1,
+        1,
+        0,
+        1,
+        0,
+        0,
+        1
+      ],
+      "protected_roots": [
+        [
+          1,
+          1,
+          1,
+          0,
+          0,
+          2,
+          1,
+          0,
+          0,
+          1,
+          0,
+          1,
+          1,
+          0,
+          1
+        ]
+      ],
+      "public_input": "(1)*topo(prop(1,edge(5,1),((1)*k(4)),1,1)*prop(2,edge(1,5),((1)*k(5)),1,1)*prop(3,edge(7,6),((1)*k(1)+(-1)*k(3)),1,2)*prop(4,edge(6,1),((1)*k(1)+(-1)*k(4)),1,1)*prop(5,edge(1,7),((1)*k(1)+(-1)*k(5)),1,1)*prop(6,edge(8,5),((1)*k(2)+(-1)*k(3)),1,1)*prop(7,edge(5,8),((1)*k(2)+(-1)*k(4)),1,1)*prop(8,edge(7,5),((1)*k(3)+(-1)*k(5)),1,1)*prop(9,edge(8,6),((1)*k(3)+(-1)*k(4)),1,1))",
+      "rationale": "Deterministic reserve frozen before modern authentication or tuning timings: parent32745, 3 forestpinches, dot_c, rank0, unitmass physicalD10. No optional numerator/denominator cancellation."
+    },
+    {
+      "id": "reserve-v1-parent-31740-dot_c",
+      "lowered_roots": [
+        [
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          0,
+          2,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      ],
+      "powers": [
+        0,
+        0,
+        0,
+        1,
+        0,
+        1,
+        2,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0
+      ],
+      "protected_roots": [
+        [
+          1,
+          1,
+          0,
+          1,
+          0,
+          2,
+          1,
+          0,
+          1,
+          1,
+          0,
+          1,
+          0,
+          0,
+          1
+        ]
+      ],
+      "public_input": "(1)*topo(prop(1,edge(4,4),((1)*k(4)),1,1)*prop(2,edge(5,4),((1)*k(1)+(-1)*k(3)),1,1)*prop(3,edge(4,6),((1)*k(1)+(-1)*k(4)),1,2)*prop(4,edge(6,5),((1)*k(1)+(-1)*k(5)),1,1)*prop(5,edge(4,7),((1)*k(2)+(-1)*k(3)),1,1)*prop(6,edge(8,4),((1)*k(2)+(-1)*k(4)),1,1)*prop(7,edge(7,8),((1)*k(2)+(-1)*k(5)),1,1)*prop(8,edge(5,7),((1)*k(3)+(-1)*k(5)),1,1)*prop(9,edge(8,6),((1)*k(4)+(-1)*k(5)),1,1))",
+      "rationale": "Deterministic reserve frozen before modern authentication or tuning timings: parent31740, 3 forestpinches, dot_c, rank0, unitmass physicalD10. No optional numerator/denominator cancellation."
+    },
+    {
+      "id": "reserve-v1-parent-30699-dot_c",
+      "lowered_roots": [
+        [
+          1,
+          1,
+          1,
+          1,
+          0,
+          0,
+          1,
+          1,
+          1,
+          2,
+          0,
+          1,
+          0,
+          0,
+          0
+        ]
+      ],
+      "powers": [
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        2,
+        1,
+        1,
+        1,
+        0,
+        1,
+        0,
+        1,
+        1
+      ],
+      "protected_roots": [
+        [
+          2,
+          1,
+          0,
+          0,
+          1,
+          0,
+          1,
+          0,
+          1,
+          1,
+          0,
+          1,
+          0,
+          1,
+          1
+        ]
+      ],
+      "public_input": "(1)*topo(prop(1,edge(4,1),((1)*k(5)),1,1)*prop(2,edge(6,7),((1)*k(1)+(-1)*k(3)),1,1)*prop(3,edge(4,6),((1)*k(1)+(-1)*k(4)),1,2)*prop(4,edge(7,1),((1)*k(1)+(-1)*k(5)),1,1)*prop(5,edge(4,8),((1)*k(2)+(-1)*k(3)),1,1)*prop(6,edge(8,1),((1)*k(2)+(-1)*k(4)),1,1)*prop(7,edge(4,7),((1)*k(3)+(-1)*k(5)),1,1)*prop(8,edge(1,4),((1)*k(1)+(1)*k(2)+(-1)*k(4)),1,1)*prop(9,edge(6,8),((1)*k(3)+(-1)*k(4)),1,1))",
+      "rationale": "Deterministic reserve frozen before modern authentication or tuning timings: parent30699, 3 forestpinches, dot_c, rank0, unitmass physicalD10. No optional numerator/denominator cancellation."
+    },
+    {
+      "id": "reserve-v1-parent-30527-dot_c",
+      "lowered_roots": [
+        [
+          1,
+          1,
+          2,
+          1,
+          0,
+          0,
+          1,
+          1,
+          1,
+          1,
+          0,
+          1,
+          0,
+          0,
+          0
+        ]
+      ],
+      "powers": [
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        2,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "protected_roots": [
+        [
+          1,
+          1,
+          0,
+          0,
+          1,
+          0,
+          1,
+          0,
+          2,
+          1,
+          0,
+          1,
+          0,
+          1,
+          1
+        ]
+      ],
+      "public_input": "(1)*topo(prop(1,edge(4,5),((1)*k(5)),1,1)*prop(2,edge(6,5),((1)*k(1)+(-1)*k(3)),1,1)*prop(3,edge(4,6),((1)*k(1)+(-1)*k(4)),1,2)*prop(4,edge(7,5),((1)*k(2)+(-1)*k(4)),1,1)*prop(5,edge(4,7),((1)*k(2)+(-1)*k(5)),1,1)*prop(6,edge(8,5),((1)*k(3)+(-1)*k(5)),1,1)*prop(7,edge(7,8),((1)*k(4)+(-1)*k(5)),1,1)*prop(8,edge(5,4),((1)*k(1)+(1)*k(2)+(-1)*k(4)),1,1)*prop(9,edge(6,8),((1)*k(3)+(-1)*k(4)),1,1))",
+      "rationale": "Deterministic reserve frozen before modern authentication or tuning timings: parent30527, 3 forestpinches, dot_c, rank0, unitmass physicalD10. No optional numerator/denominator cancellation."
+    },
+    {
+      "id": "reserve-v1-parent-32745-dot_d",
+      "lowered_roots": [
+        [
+          1,
+          1,
+          1,
+          1,
+          0,
+          0,
+          1,
+          1,
+          1,
+          0,
+          0,
+          1,
+          0,
+          0,
+          2
+        ]
+      ],
+      "powers": [
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        2,
+        1,
+        1,
+        1,
+        0,
+        1,
+        0,
+        0,
+        1
+      ],
+      "protected_roots": [
+        [
+          1,
+          1,
+          1,
+          0,
+          0,
+          1,
+          2,
+          0,
+          0,
+          1,
+          0,
+          1,
+          1,
+          0,
+          1
+        ]
+      ],
+      "public_input": "(1)*topo(prop(1,edge(5,1),((1)*k(4)),1,1)*prop(2,edge(1,5),((1)*k(5)),1,1)*prop(3,edge(7,6),((1)*k(1)+(-1)*k(3)),1,1)*prop(4,edge(6,1),((1)*k(1)+(-1)*k(4)),1,2)*prop(5,edge(1,7),((1)*k(1)+(-1)*k(5)),1,1)*prop(6,edge(8,5),((1)*k(2)+(-1)*k(3)),1,1)*prop(7,edge(5,8),((1)*k(2)+(-1)*k(4)),1,1)*prop(8,edge(7,5),((1)*k(3)+(-1)*k(5)),1,1)*prop(9,edge(8,6),((1)*k(3)+(-1)*k(4)),1,1))",
+      "rationale": "Deterministic reserve frozen before modern authentication or tuning timings: parent32745, 3 forestpinches, dot_d, rank0, unitmass physicalD10. No optional numerator/denominator cancellation."
+    },
+    {
+      "id": "final-v3-parent-30527-double-dot-rank1",
+      "lowered_roots": [
+        [
+          1,
+          1,
+          1,
+          1,
+          0,
+          0,
+          2,
+          2,
+          1,
+          1,
+          -1,
+          1,
+          0,
+          0,
+          0
+        ]
+      ],
+      "powers": [
+        -1,
+        0,
+        0,
+        0,
+        2,
+        2,
+        1,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "protected_roots": [
+        [
+          1,
+          1,
+          0,
+          0,
+          2,
+          0,
+          2,
+          0,
+          1,
+          1,
+          0,
+          1,
+          -1,
+          1,
+          1
+        ]
+      ],
+      "public_input": "(dot(k(1),k(1))-1)*topo(prop(1,edge(4,5),k(5),1,2)*prop(2,edge(6,5),(k(1)-k(3)),1,2)*prop(3,edge(4,6),(k(1)-k(4)),1,1)*prop(4,edge(7,5),(k(2)-k(4)),1,1)*prop(5,edge(4,7),(k(2)-k(5)),1,1)*prop(6,edge(8,5),(k(3)-k(5)),1,1)*prop(7,edge(7,8),(k(4)-k(5)),1,1)*prop(8,edge(5,4),(k(1)+k(2)-k(4)),1,1)*prop(9,edge(6,8),(k(3)-k(4)),1,1))",
+      "rationale": "One deterministic structurally distinct rank-one/two-dot support class; no IBP or performance observations used. Actual raw/owner keys must come from the validated production frontend and Native transport."
+    }
+  ],
+  "ordered_case_ids": [
+    "final-v2-parent-32745-late-double-dot-rank1-tuning",
+    "parent-32745-dot_a",
+    "parent-31740-dot_a",
+    "parent-30699-dot_a",
+    "parent-30699-dot_b",
+    "parent-30699-rank1",
+    "parent-30527-dot_b",
+    "reserve-v1-parent-32745-dot_c",
+    "reserve-v1-parent-31740-dot_c",
+    "reserve-v1-parent-30699-dot_c",
+    "reserve-v1-parent-30527-dot_c",
+    "reserve-v1-parent-32745-dot_d",
+    "final-v3-parent-30527-double-dot-rank1"
+  ],
+  "owner_proof": {
+    "authority": "qualified_lowering",
+    "path": "frozen-public-suites.lowering-proof.json",
+    "sha256": "a5db9aa5a8eb24b99e316740d66a64ea7d197e5cd484132947c3c364449c88c5"
+  },
+  "qualification_origin": {
+    "application_sha256": "976d574c4ad8b4021ac7a1914c624095a77f5975b98e243c7a20a9396a86ff03",
+    "data_checkout_revision": "d4384149b5076de84b3f3fda761585dff1776532",
+    "data_manifest_sha256": "794c0e4b44a1c6be1d78f8ebdbca188473678823ea1f3b821f70b63b2a6dd5a7",
+    "data_version": "v0.1.2",
+    "family_sha256": "44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b",
+    "freeze_sha256": "d8952d9b3f4318bbe50bfaff2011942bd7124d21fc0f98b042bdf262752ad75c",
+    "loop_manifest_sha256": "81ece536cd54781b98d039325a7d62a884ec958aca27c1f4d5adca734a0f4ccb",
+    "postflight_sha256": "b03fe932016191d12ced88f0726cded36c7510b870250850cf988777ded59fcf",
+    "qualification_sha256": "bd93bb9dfea93dfdee4aed27275eadc841431946f4c1e92ac09f474fd1c69ee2",
+    "source_identity": {
+      "base_main_revision": "e90e78ae9b05c2813b462157a83073b0740419f4",
+      "diagnostic_source_sha256": "7d74babaacbaef775ea1e7b0ecff425c3bcd5471d814e35c748afc7e9fccf71f",
+      "executable_sha256": "fc68aaa6d19f8a8b1ac2d7d83a1b58669e69db8dfcb0671c8ed9a004d2cb8c11",
+      "kernel_revision": "9cd57678d8817ec33c05cacba4925162f1c86b0b",
+      "native_revision": "b209adb1e774242bcbe0417fed223317566561bd",
+      "native_source_snapshot_sha256": "36e7e7796216a707e5db4e3da7981893fc67b77f87ca13eb56f8e5bd1344a0f5",
+      "private_source_snapshot_sha256": "75bf3add8740ce1e01584802ba887a30247340f99e14cd61751e74f01918820f",
+      "profile": "ci-optim",
+      "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)"
+    }
+  },
+  "schema": "vakint.five-loop-frozen-public-suites.v1",
+  "scope": "Twelve held-out inputs plus one tuning input qualified through the complete public scalar-lowering and Native verified-direct-owner path. Original declared powers/rationales are preserved; lowered/protected roots are the observed lowering identities. No training selected, IBP reduction proved, cache selected, or performance measured. Original qualification source identities are provenance; current consumers must match data/program/family bindings and observe these frozen input-root sets.",
+  "topology_source_sha256": "332edfb1bf87fc37dd824dac65de248b72d27a20b7ebf151628060567d10550c",
+  "tuning": [
+    {
+      "id": "final-v2-parent-32745-late-double-dot-rank1-tuning",
+      "lowered_roots": [
+        [
+          1,
+          2,
+          1,
+          1,
+          0,
+          0,
+          2,
+          1,
+          1,
+          0,
+          -1,
+          1,
+          0,
+          0,
+          1
+        ]
+      ],
+      "powers": [
+        0,
+        -1,
+        0,
+        1,
+        1,
+        1,
+        1,
+        2,
+        2,
+        1,
+        0,
+        1,
+        0,
+        0,
+        1
+      ],
+      "protected_roots": [
+        [
+          2,
+          1,
+          1,
+          0,
+          0,
+          1,
+          1,
+          0,
+          0,
+          1,
+          -1,
+          2,
+          1,
+          0,
+          1
+        ]
+      ],
+      "public_input": "(1*(dot(k(2),k(2))-1)^1)*topo(prop(1,edge(5,1),k(4),1,1)*prop(2,edge(1,5),k(5),1,1)*prop(3,edge(7,6),(k(1)-k(3)),1,1)*prop(4,edge(6,1),(k(1)-k(4)),1,1)*prop(5,edge(1,7),(k(1)-k(5)),1,2)*prop(6,edge(8,5),(k(2)-k(3)),1,2)*prop(7,edge(5,8),(k(2)-k(4)),1,1)*prop(8,edge(7,5),(k(3)-k(5)),1,1)*prop(9,edge(8,6),(k(3)-k(4)),1,1))",
+      "rationale": "Proposed before any new evaluation/timing: parent 32745, unchanged authenticated nine-edge forest-pinch graph/routing, unit mass; dots at common zero-based slots [7, 8], numerator slot 1. Nominal D=10 and R=1 do not certify recorded coverage; full current public-lowering/owner/source exclusion is required."
+    }
+  ]
+}

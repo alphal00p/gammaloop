@@ -927,6 +927,15 @@ fn measure(options: &Options, root: &Root, identity: &Value, workload: &Workload
             options.provisional || proof.is_some(),
             "final measurement requires validated owner proof"
         );
+        if let Some(proof) = &proof {
+            proof.observe_input(
+                &root.id,
+                &format!(
+                    "{:x}",
+                    Sha256::digest(input.to_canonical_string().as_bytes())
+                ),
+            )?;
+        }
         let owner_proof_seconds = proof_started.elapsed().as_secs_f64();
         let owners_before = engine.rustred_application_owner_preparation_statistics()?;
         *LOGGER.stages() = Stages::default();

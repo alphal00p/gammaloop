@@ -1,7 +1,14 @@
-//! Pinned native owner maps from complete successful public evaluations only.
+//! Authenticated native owner maps, with explicit evaluation or lowering authority.
+//!
+//! Qualified lowering preserves the original producer and data origin. It proves
+//! no reduction result, timing, cache benefit or current-source owner rerouting.
+//! A consumer must match the loaded data/program and the observed public inputs;
+//! the complete original mass/coefficient/guard/handoff evidence remains pinned.
+//! A later release changing manifests needs explicit requalification; producer
+//! provenance is never silently relabeled as that release or consumer build.
 use super::{
     digest,
-    workload::{Root, Workload},
+    workload::{FrozenPublicSuites, OwnerProofAuthority, Root, Workload},
 };
 use eyre::{Result, ensure};
 use serde_json::{Value, json};
@@ -9,7 +16,8 @@ use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
-    path::{Path, PathBuf},
+    io::Read,
+    path::{Component, Path, PathBuf},
 };
 
 pub(super) struct OwnerProof {
@@ -163,10 +171,16 @@ pub(super) fn validate_completed_outputs(
             receipt["native_keys_authenticated"] == true
                 && receipt["actual_lowered_roots"] == json!(root.lowered_roots)
                 && receipt["owner_proof"] == *pinned
-                && receipt["cache_statistics"]["binding"]
-                    == pinned["compiled_cohort"]["semantic_binding"],
+                && receipt["cache_statistics"]["binding"] == *identity_binding(pinned),
             "resumed public key/program evidence differs from the pinned case"
         );
+        if pinned["authority"] == "qualified_lowering" {
+            ensure!(
+                receipt["input_sha256"] == pinned["parsed_input_sha256_by_case"][&root.id]
+                    && receipt["declared_common_powers"] == json!(root.powers),
+                "resumed parsed input or declared powers differ from qualified provenance"
+            );
+        }
     }
     Ok(())
 }
@@ -201,6 +215,440 @@ fn evidence(document: &Value, base: &Path, path: &str, hash: &str) -> Result<Pat
         path.display()
     );
     Ok(path)
+}
+
+fn qualified(document: &Value) -> bool {
+    document["schema"] == "vakint.public-lowering-qualification-proof.v1"
+}
+
+fn identity_binding(identity: &Value) -> &Value {
+    if identity["authority"] == "qualified_lowering" {
+        &identity["semantic_binding"]
+    } else {
+        &identity["compiled_cohort"]["semantic_binding"]
+    }
+}
+
+fn portable_path(base: &Path, relative: &str) -> Result<PathBuf> {
+    let relative = Path::new(relative);
+    ensure!(
+        !relative.as_os_str().is_empty()
+            && relative
+                .components()
+                .all(|part| matches!(part, Component::Normal(_))),
+        "portable proof paths must be relative without traversal"
+    );
+    let path = base.join(relative);
+    ensure!(
+        path.canonicalize()?.starts_with(base.canonicalize()?),
+        "portable proof path escapes its directory through a symlink"
+    );
+    Ok(path)
+}
+
+/// Original JSON bytes remain immutable provenance, including any historical
+/// paths inside them. Only the authenticated relative envelope paths perform IO.
+struct QualifiedEvidence {
+    qualification: Value,
+    postflight: Value,
+    completion: Value,
+    declaration: Value,
+    freeze: Value,
+}
+
+impl QualifiedEvidence {
+    fn read(document: &Value, base: &Path) -> Result<Self> {
+        fn read_one(document: &Value, base: &Path, name: &str) -> Result<Value> {
+            let reference = &document["evidence"][name];
+            let compressed = fs::read(portable_path(base, string(reference, "path")?)?)?;
+            ensure!(
+                format!("{:x}", Sha256::digest(&compressed)) == sha256(reference, "sha256")?,
+                "compressed qualification evidence changed: {name}"
+            );
+            let length = count(reference, "decoded_bytes")?;
+            // The bound is the authenticated original byte length, not an
+            // arbitrary limit on a user's reduction or on proof complexity.
+            let mut decoder = flate2::bufread::GzDecoder::new(compressed.as_slice());
+            let mut decoded = Vec::new();
+            decoder
+                .by_ref()
+                .take(
+                    length
+                        .checked_add(1)
+                        .ok_or_else(|| eyre::eyre!("invalid evidence length"))?,
+                )
+                .read_to_end(&mut decoded)?;
+            ensure!(
+                decoded.len() as u64 == length
+                    && decoder.get_ref().is_empty()
+                    && format!("{:x}", Sha256::digest(&decoded))
+                        == sha256(reference, "decoded_sha256")?,
+                "qualification evidence length, framing or decoded hash differs: {name}"
+            );
+            Ok(serde_json::from_slice(&decoded)?)
+        }
+        Ok(Self {
+            qualification: read_one(document, base, "qualification")?,
+            postflight: read_one(document, base, "postflight")?,
+            completion: read_one(document, base, "completion")?,
+            declaration: read_one(document, base, "declaration")?,
+            freeze: read_one(document, base, "freeze")?,
+        })
+    }
+
+    fn validate(&self, document: &Value, suite: &FrozenPublicSuites) -> Result<Vec<Value>> {
+        let q = &self.qualification;
+        let p = &self.postflight;
+        let c = &self.completion;
+        let d = &self.declaration;
+        let f = &self.freeze;
+        let origin = &document["qualification_origin"];
+        let binding = &document["semantic_binding"];
+        ensure!(
+            qualified(document)
+                && document["authority"] == "qualified_lowering"
+                && origin == &suite.qualification_origin,
+            "unknown or mismatched lowering qualification authority"
+        );
+        ensure!(
+            q["schema"] == "vakint.public-input-lowering-owner-qualification.v1"
+                && q["qualification_complete"] == true
+                && q["declared_case_count"] == 13
+                && q["candidate_qualified"].is_null()
+                && q["requested_candidate"].is_null()
+                && q["reduction_succeeded"].is_null()
+                && q["ibp_application"] == false
+                && q["measurement_claim_allowed"] == false
+                && q["cache_selection_claim"] == false
+                && q["persistent_cache_attachments"]
+                    .as_object()
+                    .is_some_and(|loops| loops.len() == 5
+                        && (1..=5).all(|n| loops.get(&n.to_string()) == Some(&json!(false))))
+                && q["data"]["load_prepared_caches"] == false
+                && q["native_work_unchanged"] == true
+                && q["native_before"] == q["native_after"]
+                && q["source_owner_images_match_historical"] == true,
+            "requires complete thirteen-case lowering-only qualification, without IBP/cache work"
+        );
+        ensure!(
+            p["schema"] == "vakint.public-lowering-v3-full-corpus-independent-postflight.v1"
+                && p["accepted"] == true
+                && p["ready_for_independent_corpus_freeze"] == true
+                && p["ibp_application"] == false
+                && p["performance_claim"] == false
+                && p["cache_selection_claim"] == false
+                && [
+                    "exact_thirteen_roles_order_public_inputs",
+                    "same_actual_elf_source_no_candidate_selector",
+                    "all_five_training_categories_and_current_historical_owner_equivalence",
+                    "complete_1095_raw_2426_owner_training_inventory",
+                    "original_812_correlated_query_endpoint_predicates",
+                    "all_coefficient_mass_spectator_request_guard_invariants",
+                    "all_78_raw_owner_and_stronger_cross_role_pair_exclusions",
+                    "all_cases_cross_role_disjoint_from_all_five_training_unions",
+                    "accepted_candidate_exact_agreement_in_full13",
+                    "no_native_owner_preparation_rule_cache_work",
+                    "complete_11060_file_authenticated_observed_data_inventory",
+                ]
+                .iter()
+                .all(|check| p["checked"][check] == true),
+            "missing accepted independent coefficient/guard/coverage/exclusion postflight"
+        );
+        ensure!(
+            c["schema"] == "vakint.public-corpus-lowering-full-runtime.v1"
+                && c["status"] == "completed"
+                && c["worker_exit_code"] == 0
+                && c["body_count"] == 1
+                && c["qualification_complete"] == true
+                && c["declared_case_count"] == 13
+                && c["candidate_qualified"].is_null()
+                && c["selected_candidate"].is_null()
+                && c["source_unchanged"] == true
+                && c["data_unchanged"] == true
+                && c["ibp_application"] == false
+                && c["performance_claim"] == false
+                && c["memory_killed"] == false,
+            "missing completed same-source full-suite lower-only runtime"
+        );
+        ensure!(
+            f["schema"] == "vakint.five-loop-qualified-corpus-freeze.v1"
+                && f["qualified_suite_frozen"] == true
+                && f["independent_pair_count"] == 78
+                && f["ibp_reduction_proved"] == false
+                && f["performance_measured"] == false
+                && f["cache_selection_performed"] == false
+                && f["native_frontier_certificate"] == false
+                && f["frozen_utc"] == suite.frozen_utc
+                && d["schema"] == "vakint.public-input-lowering-corpus.v1",
+            "qualification freeze or input declaration differs"
+        );
+        for (record, field, evidence) in [
+            (p, "qualification", "qualification"),
+            (p, "completion", "completion"),
+            (p, "corpus_declaration", "declaration"),
+            (c, "qualification", "qualification"),
+            (c, "input_corpus", "declaration"),
+            (f, "qualification", "qualification"),
+            (f, "actual_full_runtime", "completion"),
+            (f, "accepted_independent_postflight", "postflight"),
+            (f, "input_declaration", "declaration"),
+            (q, "input_corpus", "declaration"),
+        ] {
+            ensure!(
+                sha256(&record[field], "sha256")?
+                    == sha256(&document["evidence"][evidence], "decoded_sha256")?,
+                "qualification evidence join differs: {field}"
+            );
+        }
+        for (field, evidence) in [
+            ("qualification_sha256", "qualification"),
+            ("postflight_sha256", "postflight"),
+            ("freeze_sha256", "freeze"),
+        ] {
+            ensure!(
+                sha256(origin, field)?
+                    == sha256(&document["evidence"][evidence], "decoded_sha256")?,
+                "qualification origin differs: {field}"
+            );
+        }
+        for field in [
+            "data_manifest_sha256",
+            "loop_manifest_sha256",
+            "application_sha256",
+        ] {
+            let expected = sha256(document, field)?;
+            ensure!(
+                sha256(q, field)? == expected
+                    && sha256(d, field)? == expected
+                    && sha256(&f["data"], field)? == expected
+                    && sha256(origin, field)? == expected,
+                "qualification data/program origin differs: {field}"
+            );
+        }
+        ensure!(
+            q["semantic_binding"] == *binding
+                && f["semantic_binding"] == *binding
+                && q["source_identity"] == origin["source_identity"]
+                && f["source_identity"] == origin["source_identity"]
+                && p["candidate_compiled_cohort"]["source_identity"] == origin["source_identity"]
+                && q["data"]["version"] == origin["data_version"]
+                && sha256(origin, "family_sha256")?
+                    == format!(
+                        "{:x}",
+                        Sha256::digest(string(binding, "family_fingerprint")?.as_bytes())
+                    )
+                && sha256(&q["source_inventory"], "sha256")?
+                    == sha256(document, "source_census_sha256")?
+                && q["source_inventory"]["sha256"] == d["source_inventory"]["sha256"]
+                && q["source_inventory"]["sha256"]
+                    == f["training_exclusion"]["authority"]["sha256"],
+            "qualification source/program or five-source inventory binding differs"
+        );
+        for field in ["base_main_revision", "native_revision", "kernel_revision"] {
+            let revision = string(&origin["source_identity"], field)?;
+            ensure!(
+                revision.len() == 40 && revision.bytes().all(|b| b.is_ascii_hexdigit()),
+                "missing qualification producer revision"
+            );
+        }
+        for field in [
+            "diagnostic_source_sha256",
+            "executable_sha256",
+            "native_source_snapshot_sha256",
+            "private_source_snapshot_sha256",
+        ] {
+            sha256(&origin["source_identity"], field)?;
+        }
+        let mut training_raw = BTreeSet::new();
+        let mut training_owner = BTreeSet::new();
+        let mut sources = BTreeSet::new();
+        for source in array(q, "sources")? {
+            ensure!(
+                sources.insert(string(source, "source")?.to_owned())
+                    && source["current_owner_images_match_historical"] == true,
+                "duplicate or unqualified training source"
+            );
+            let raw = roots(&source["raw_keys"])?;
+            let owners = roots(&source["direct_owner_keys"])?;
+            ensure!(
+                !raw.is_empty()
+                    && !owners.is_empty()
+                    && owners == roots(&source["historical_direct_owner_keys"])?,
+                "five-source current/historical owner equivalence differs"
+            );
+            training_raw.extend(raw);
+            training_owner.extend(owners);
+        }
+        let frozen_sources: BTreeSet<String> =
+            serde_json::from_value(f["training_exclusion"]["source_categories"].clone())?;
+        ensure!(
+            sources.len() == 5
+                && sources == frozen_sources
+                && training_raw.len() as u64 == count(q, "raw_source_union_count")?
+                && training_owner.len() as u64 == count(q, "direct_owner_source_union_count")?
+                && q["raw_source_union_count"] == f["training_exclusion"]["raw_union_count"]
+                && q["direct_owner_source_union_count"]
+                    == f["training_exclusion"]["direct_owner_union_count"],
+            "incomplete five-source training inventory"
+        );
+        let mut source_keys = BTreeSet::new();
+        let mut source_images = BTreeMap::new();
+        for transport in array(q, "source_transports")? {
+            let key: Vec<i64> = serde_json::from_value(transport["powers"].clone())?;
+            ensure!(
+                key.len() == 15 && source_keys.insert(key.clone()),
+                "duplicate or invalid training transport"
+            );
+            let mut images = BTreeSet::new();
+            for image in array(transport, "images")? {
+                let powers: Vec<i64> = serde_json::from_value(image["powers"].clone())?;
+                ensure!(
+                    powers.len() == 15
+                        && images.insert(powers)
+                        && !string(image, "coefficient")?.trim().is_empty()
+                        && string(image, "coefficient")?.trim() != "0",
+                    "invalid training owner image"
+                );
+            }
+            source_images.insert(key, images);
+        }
+        ensure!(source_keys == training_raw, "missing training rerouting");
+        for source in array(q, "sources")? {
+            let derived = roots(&source["raw_keys"])?
+                .iter()
+                .flat_map(|key| source_images[key].iter().cloned())
+                .collect::<BTreeSet<_>>();
+            ensure!(
+                derived == roots(&source["direct_owner_keys"])?,
+                "training source owner transport does not reproduce its historical union"
+            );
+        }
+        let training = training_raw
+            .union(&training_owner)
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        let mut selected = Vec::<BTreeSet<Vec<i64>>>::new();
+        let mut rows = Vec::new();
+        let declaration = array(d, "cases")?;
+        let cases = array(q, "cases")?;
+        let frozen = array(f, "cases")?;
+        let declared = array(document, "declared_cases")?;
+        let suite_cases = suite
+            .tuning
+            .iter()
+            .chain(&suite.held_out)
+            .collect::<Vec<_>>();
+        ensure!(
+            [
+                declaration.len(),
+                cases.len(),
+                frozen.len(),
+                declared.len(),
+                suite_cases.len()
+            ]
+            .iter()
+            .all(|length| *length == 13),
+            "incomplete qualified case inventory"
+        );
+        for (ordinal, root) in suite_cases.iter().enumerate() {
+            let case = &cases[ordinal];
+            let declaration = &declaration[ordinal];
+            let frozen = &frozen[ordinal];
+            let declared = &declared[ordinal];
+            let role = if ordinal == 0 { "tuning" } else { "held_out" };
+            let input = root
+                .public_input
+                .as_deref()
+                .ok_or_else(|| eyre::eyre!("missing public input"))?;
+            let input_hash = format!("{:x}", Sha256::digest(input.as_bytes()));
+            ensure!(
+                [case, declaration, frozen, declared]
+                    .iter()
+                    .all(|row| row["id"] == root.id
+                        && row["role"] == role
+                        && row["public_input_sha256"] == input_hash)
+                    && [case, declaration, frozen]
+                        .iter()
+                        .all(|row| row["public_input"] == input)
+                    && declared["powers"] == json!(root.powers),
+                "qualified input, ordered identity, role or declared powers differ: {}",
+                root.id
+            );
+            ensure!(
+                case["lowering_complete"] == true
+                    && case["nonempty_candidate"] == true
+                    && case["original_coverage_admitted"] == true
+                    && case["explicit_sources_disjoint"] == true
+                    && case["native_work_unchanged"] == true
+                    && case["native_before"] == case["native_after"]
+                    && case["native_before"] == q["native_before"]
+                    && case["error"].is_null()
+                    && case["ibp_application"] == false
+                    && case["reduction_succeeded"].is_null()
+                    && case["application_binding"] == *binding,
+                "incomplete, uncovered or non-lowering case {}",
+                root.id
+            );
+            let raw = roots(&case["actual_lowered_roots"])?;
+            let owners = roots(&case["protected_owner_roots"])?;
+            ensure!(
+                !raw.is_empty()
+                    && !owners.is_empty()
+                    && raw == roots(&json!(root.lowered_roots))?
+                    && owners == roots(&json!(root.protected_roots))?
+                    && case["actual_lowered_roots"] == frozen["actual_lowered_roots"]
+                    && case["protected_owner_roots"] == frozen["protected_owner_roots"],
+                "qualified root sets differ: {}",
+                root.id
+            );
+            let union = raw.union(&owners).cloned().collect::<BTreeSet<_>>();
+            ensure!(
+                union.is_disjoint(&training) && selected.iter().all(|old| union.is_disjoint(old)),
+                "qualified roots overlap training or another frozen case: {}",
+                root.id
+            );
+            selected.push(union);
+            let mut transports = BTreeMap::<Vec<i64>, Value>::new();
+            for contribution in array(case, "contributions")? {
+                ensure!(
+                    contribution["binding"] == *binding,
+                    "contribution program binding differs"
+                );
+                for source in array(contribution, "roots")? {
+                    ensure!(source["admitted"] == true, "uncovered scalar root");
+                    let powers: Vec<i64> = serde_json::from_value(source["powers"].clone())?;
+                    let mut endpoints = Vec::new();
+                    for image in array(&source["owner_route"], "images")? {
+                        ensure!(
+                            image["recorded_owner_admitted"] == true,
+                            "uncovered owner endpoint"
+                        );
+                        endpoints.push(json!({"powers":image["powers"],
+                            "coefficient":image["transport_coefficient"],"recorded_coverage_admitted":true}));
+                    }
+                    let transport = json!({"powers":powers,"owner_endpoints":endpoints,
+                        "nonzero_conditions":source["owner_route"]["nonzero_conditions"]});
+                    if let Some(previous) = transports.insert(powers, transport.clone()) {
+                        ensure!(
+                            previous == transport,
+                            "inconsistent repeated owner transport"
+                        );
+                    }
+                }
+            }
+            rows.push(json!({"id":root.id,"logical_cohort":if role == "tuning" { "tuning" } else { "held-out" },
+                "public_input_source_sha256":input_hash,"lowering_complete":true,
+                "parsed_input_sha256":format!("{:x}", Sha256::digest(string(case, "parsed_input")?.as_bytes())),
+                "canonical_scalar_handoff":case["canonical_scalar_handoff"],
+                "lowering_contributions":case["contributions"],
+                "reduction_succeeded":null,"complete_owner_transport":true,"mapping_error":null,
+                "application_binding":binding,"actual_lowered_roots":case["actual_lowered_roots"],
+                "protected_owner_roots":case["protected_owner_roots"],
+                "protected_root_set_sha256":format!("{:x}", Sha256::digest(serde_json::to_vec(&case["protected_owner_roots"])?)),
+                "native_transports":transports.into_values().collect::<Vec<_>>()}));
+        }
+        Ok(rows)
+    }
 }
 
 /// Full native work identity. A Route and an Apply of the same powers are
@@ -793,11 +1241,41 @@ impl OwnerProof {
             "pinned owner-proof hash differs"
         );
         let document: Value = serde_json::from_slice(&bytes)?;
-        ensure!(
-            document["schema"] == "vakint.public-lowering-owner-map-proof.v1",
-            "unknown completed owner-proof schema"
-        );
-        let identity = json!({"path":path,"sha256":reference.sha256,"mapper_executable_sha256":document["mapper_executable_sha256"],"mapper_source_sha256":document["mapper_source_sha256"],"cohort_receipt_sha256":document["cohort_receipt_sha256"],"compiled_cohort":document["compiled_cohort"]});
+        let (document, identity) = match reference.authority {
+            OwnerProofAuthority::CompletedPublicEvaluation => {
+                ensure!(
+                    document["schema"] == "vakint.public-lowering-owner-map-proof.v1",
+                    "unknown completed owner-proof schema"
+                );
+                let identity = json!({"path":path,"sha256":reference.sha256,"mapper_executable_sha256":document["mapper_executable_sha256"],"mapper_source_sha256":document["mapper_source_sha256"],"cohort_receipt_sha256":document["cohort_receipt_sha256"],"compiled_cohort":document["compiled_cohort"]});
+                (document, identity)
+            }
+            OwnerProofAuthority::QualifiedLowering => {
+                let base = path.parent().unwrap_or(Path::new("."));
+                let suite_path = portable_path(base, string(&document, "frozen_suite_path")?)?;
+                let suite: FrozenPublicSuites = serde_json::from_slice(&fs::read(suite_path)?)?;
+                suite.validate()?;
+                ensure!(
+                    suite.owner_proof.authority == reference.authority
+                        && suite.owner_proof.sha256 == reference.sha256
+                        && portable_path(base, &suite.owner_proof.path.to_string_lossy())? == path,
+                    "frozen suite pins a different owner proof"
+                );
+                let evidence = QualifiedEvidence::read(&document, base)?;
+                let rows = evidence.validate(&document, &suite)?;
+                let identity = json!({"path":path,"sha256":reference.sha256,
+                    "authority":"qualified_lowering", "semantic_binding":document["semantic_binding"],
+                    "qualification_origin":document["qualification_origin"],
+                    "parsed_input_sha256_by_case": rows.iter().map(|row|
+                        (row["id"].as_str().unwrap().to_owned(), row["parsed_input_sha256"].clone()))
+                        .collect::<BTreeMap<_, _>>()});
+                let mut document = document;
+                // Derived owner rows share the existing observer/transport checks.
+                // They never claim an IBP result or a completed measurement.
+                document["rows"] = json!(rows);
+                (document, identity)
+            }
+        };
         Ok(Some((document, path, identity)))
     }
 
@@ -865,6 +1343,14 @@ impl OwnerProof {
     }
 
     fn validate_evidence(&self, base: &Path, workload: &Workload) -> Result<()> {
+        if qualified(&self.document) {
+            // The portable evidence and full suite were authenticated in read().
+            ensure!(
+                self.document["source_census_sha256"] == workload.source_census_sha256,
+                "qualified source inventory differs from workload"
+            );
+            return Ok(());
+        }
         let mut frozen = Vec::new();
         for (path, hash) in [
             ("frozen_suite_path", "frozen_suite_sha256"),
@@ -985,11 +1471,53 @@ impl OwnerProof {
         expected: &[(&str, Option<&str>); 5],
     ) -> Result<Self> {
         workload.validate_final_selection()?;
-        cohort(&document, binding, expected)?;
+        if qualified(&document) {
+            ensure!(
+                document["authority"] == "qualified_lowering"
+                    && document["source_census_sha256"] == workload.source_census_sha256,
+                "qualified proof authority or source inventory differs"
+            );
+            ensure!(
+                workload.tuning.len() == 1 && workload.held_out.len() == 12,
+                "qualified authority requires the complete frozen thirteen-case suite"
+            );
+            let declared = array(&document, "declared_cases")?;
+            let cases = workload
+                .tuning
+                .iter()
+                .chain(&workload.held_out)
+                .collect::<Vec<_>>();
+            ensure!(
+                declared.len() == cases.len()
+                    && declared
+                        .iter()
+                        .zip(cases)
+                        .enumerate()
+                        .all(|(ordinal, (entry, root))| entry["id"] == root.id
+                            && entry["role"] == if ordinal == 0 { "tuning" } else { "held_out" }
+                            && entry["powers"] == json!(root.powers)
+                            && root
+                                .public_input
+                                .as_deref()
+                                .is_some_and(|input| entry["public_input_sha256"]
+                                    == format!("{:x}", Sha256::digest(input.as_bytes())))),
+                "consuming workload differs from the qualified ordered inputs, roles or powers"
+            );
+        } else {
+            cohort(&document, binding, expected)?;
+        }
         ensure!(
             document["semantic_binding"] == *binding
                 && binding.is_object()
                 && binding["physical_arity"] == 15
+                && (!qualified(&document)
+                    || (binding["artifact_digest"]
+                        .as_array()
+                        .is_some_and(|bytes| bytes.len() == 32
+                            && bytes
+                                .iter()
+                                .all(|byte| byte.as_u64().is_some_and(|byte| byte <= 255)))
+                        && !string(binding, "family_fingerprint")?.trim().is_empty()))
                 && binding["layer"] == "saved-application-route-apply-v1"
                 && document["data_manifest_sha256"] == workload.data_manifest_sha256,
             "owner proof differs from the loaded application"
@@ -1023,7 +1551,11 @@ impl OwnerProof {
                 ensure!(
                     row["logical_cohort"] == cohort
                         && row["public_input_source_sha256"] == source
-                        && row["reduction_succeeded"] == true
+                        && if qualified(&document) {
+                            row["lowering_complete"] == true && row["reduction_succeeded"].is_null()
+                        } else {
+                            row["reduction_succeeded"] == true
+                        }
                         && row["complete_owner_transport"] == true
                         && row["mapping_error"].is_null()
                         && row["application_binding"] == *binding,
@@ -1087,7 +1619,8 @@ impl OwnerProof {
                     workload
                         .training
                         .iter()
-                        .all(|root| !protected.contains(&root.powers)),
+                        .all(|root| !protected.contains(&root.powers)
+                            && (!qualified(&document) || !raw.contains(&root.powers))),
                     "training contains a protected owner root"
                 );
                 selected.push((root.id.clone(), cohort, protected));
@@ -1130,6 +1663,18 @@ impl OwnerProof {
                 && roots(&json!(protected))? == roots(&row["protected_owner_roots"])?,
             "observed public roots differ from the pinned owner proof"
         );
+        Ok(())
+    }
+    /// Current parsing is observable before reduction. Complete current mass,
+    /// coefficient and guard telemetry is not exposed by this consumer; retain
+    /// the authenticated origin evidence without claiming it was rerun here.
+    pub(super) fn observe_input(&self, id: &str, parsed_input_sha256: &str) -> Result<()> {
+        if qualified(&self.document) {
+            ensure!(
+                self.row(id)?["parsed_input_sha256"] == parsed_input_sha256,
+                "current parsed input differs from the qualified public input"
+            );
+        }
         Ok(())
     }
     pub(super) fn identity(&self) -> &Value {
@@ -1279,6 +1824,225 @@ pub(super) fn hit_diagnostic_fixture() -> Value {
 #[cfg(test)]
 pub(super) mod tests {
     use super::*;
+
+    fn portable_fixture() -> (FrozenPublicSuites, Value, QualifiedEvidence, PathBuf) {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("examples/build_cache/frozen-public-suites.json");
+        let suite: FrozenPublicSuites = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        suite.validate().unwrap();
+        let base = path.parent().unwrap();
+        let proof_path = portable_path(base, &suite.owner_proof.path.to_string_lossy()).unwrap();
+        assert_eq!(digest(&proof_path).unwrap(), suite.owner_proof.sha256);
+        let document: Value = serde_json::from_slice(&fs::read(proof_path).unwrap()).unwrap();
+        let evidence = QualifiedEvidence::read(&document, base).unwrap();
+        (suite, document, evidence, path)
+    }
+
+    /// A test-only placeholder demonstrates consumption after a future real
+    /// training selection. It is never stored or presented as that selection.
+    fn portable_test_workload(suite: FrozenPublicSuites, document: &Value) -> Workload {
+        let mut workload = super::super::workload::tests::selected();
+        workload.training[0].id = "synthetic-contract-only-not-selected-training".into();
+        workload.training[0].powers = vec![99; 15];
+        workload.tuning = suite.tuning;
+        workload.held_out = suite.held_out;
+        workload.data_manifest_sha256 = string(document, "data_manifest_sha256").unwrap().into();
+        workload.source_census_sha256 = string(document, "source_census_sha256").unwrap().into();
+        workload.owner_proof = Some(suite.owner_proof);
+        workload
+    }
+
+    #[test]
+    fn portable_qualified_suite_authenticates_original_lowering_without_measurement_claim() {
+        let (suite, document, evidence, path) = portable_fixture();
+        evidence.validate(&document, &suite).unwrap();
+        let workload = portable_test_workload(suite, &document);
+        let (derived, _, identity) = OwnerProof::read(&workload, &path).unwrap().unwrap();
+        assert!(identity["compiled_cohort"].is_null());
+        assert_eq!(identity["authority"], "qualified_lowering");
+        assert_eq!(identity_binding(&identity), &document["semantic_binding"]);
+        // A different consumer revision is not relabeled as the producer.
+        // Exact data/program bindings and actual observed input roots remain
+        // mandatory; the original full coefficient/guard evidence is retained.
+        let proof = OwnerProof::validate(
+            derived,
+            &workload,
+            &document["semantic_binding"],
+            identity,
+            &[("unused", None); 5],
+        )
+        .unwrap();
+        for root in workload.tuning.iter().chain(&workload.held_out) {
+            proof
+                .observe(
+                    &root.id,
+                    &root.lowered_roots.iter().cloned().collect(),
+                    &root.protected_roots,
+                )
+                .unwrap();
+            assert!(proof.initial_routing_frontier(&root.id).unwrap().is_null());
+            assert!(proof.row(&root.id).unwrap()["reduction_succeeded"].is_null());
+        }
+        assert_eq!(proof.correlations(), &json!([]));
+    }
+
+    #[test]
+    fn qualified_parsed_input_is_checked_before_reduction_and_again_on_resume() {
+        let (suite, document, _, path) = portable_fixture();
+        let workload = portable_test_workload(suite, &document);
+        let (derived, _, identity) = OwnerProof::read(&workload, &path).unwrap().unwrap();
+        let proof = OwnerProof::validate(
+            derived,
+            &workload,
+            &document["semantic_binding"],
+            identity.clone(),
+            &[("unused", None); 5],
+        )
+        .unwrap();
+        let root = &workload.held_out[0];
+        let input_hash = string(proof.row(&root.id).unwrap(), "parsed_input_sha256").unwrap();
+        proof.observe_input(&root.id, input_hash).unwrap();
+        assert!(proof.observe_input(&root.id, &"0".repeat(64)).is_err());
+        let temp = tempfile::tempdir().unwrap();
+        fs::write(temp.path().join("value.symbolica"), b"completed fixture").unwrap();
+        fs::write(temp.path().join("guards.json"), b"[]").unwrap();
+        let receipt = json!({"success":true,"worker_success":true,"fresh_process":true,
+            "supervision":{"success":true,"exit_code":0,"deadline_exhausted":false},
+            "value_sha256":digest(&temp.path().join("value.symbolica")).unwrap(),
+            "guards_sha256":digest(&temp.path().join("guards.json")).unwrap(),
+            "input_sha256":input_hash,"declared_common_powers":root.powers,
+            "identity":{"owner_proof":identity},"owner_proof":identity,
+            "native_keys_authenticated":true,"actual_lowered_roots":root.lowered_roots,
+            "cache_statistics":{"binding":document["semantic_binding"]}});
+        validate_completed_outputs(&receipt, temp.path(), root).unwrap();
+        for field in ["input_sha256", "declared_common_powers"] {
+            let mut changed = receipt.clone();
+            changed[field] = Value::Null;
+            assert!(validate_completed_outputs(&changed, temp.path(), root).is_err());
+        }
+    }
+
+    #[test]
+    fn qualified_authority_rejects_changed_consumer_input_order_powers_binding_and_training() {
+        for change in 0..6 {
+            let (suite, document, _, path) = portable_fixture();
+            let mut workload = portable_test_workload(suite, &document);
+            let (derived, _, identity) = OwnerProof::read(&workload, &path).unwrap().unwrap();
+            let mut binding = document["semantic_binding"].clone();
+            match change {
+                0 => workload.held_out.swap(0, 1),
+                1 => workload.held_out[0].powers[0] += 10,
+                2 => workload.held_out[0]
+                    .public_input
+                    .as_mut()
+                    .unwrap()
+                    .push_str("*2"),
+                3 => binding["artifact_digest"][0] = json!(0),
+                4 => workload.training[0].powers = workload.held_out[0].lowered_roots[0].clone(),
+                _ => workload.source_census_sha256 = "0".repeat(64),
+            }
+            assert!(
+                OwnerProof::validate(
+                    derived,
+                    &workload,
+                    &binding,
+                    identity,
+                    &[("unused", None); 5]
+                )
+                .is_err(),
+                "mutation {change}"
+            );
+        }
+    }
+
+    #[test]
+    fn qualified_evidence_rejects_candidate_only_changed_origin_and_five_source_transport() {
+        for change in 0..11 {
+            let (suite, mut document, mut evidence, _) = portable_fixture();
+            match change {
+                0 => evidence.qualification["qualification_complete"] = false.into(),
+                1 => evidence.qualification["requested_candidate"] = "one-case".into(),
+                2 => evidence.qualification["reduction_succeeded"] = true.into(),
+                3 => evidence.qualification["persistent_cache_attachments"]["5"] = true.into(),
+                4 => {
+                    evidence.postflight["checked"]["all_coefficient_mass_spectator_request_guard_invariants"] =
+                        false.into()
+                }
+                5 => {
+                    evidence.qualification["sources"][0]["historical_direct_owner_keys"][0][0] =
+                        json!(999)
+                }
+                6 => {
+                    evidence.qualification["source_transports"]
+                        .as_array_mut()
+                        .unwrap()
+                        .pop();
+                }
+                7 => document["application_sha256"] = json!("0".repeat(64)),
+                8 => evidence.completion["data_unchanged"] = false.into(),
+                9 => {
+                    evidence.postflight["checked"]
+                        .as_object_mut()
+                        .unwrap()
+                        .remove("all_coefficient_mass_spectator_request_guard_invariants");
+                }
+                _ => {
+                    evidence.qualification["persistent_cache_attachments"]
+                        .as_object_mut()
+                        .unwrap()
+                        .remove("5");
+                    evidence.qualification["persistent_cache_attachments"]["other"] = false.into();
+                }
+            }
+            assert!(
+                evidence.validate(&document, &suite).is_err(),
+                "mutation {change}"
+            );
+        }
+    }
+
+    #[test]
+    fn portable_qualification_evidence_rejects_bad_framing_hash_length_and_paths() {
+        let (suite, document, _, path) = portable_fixture();
+        let base = path.parent().unwrap();
+        for change in 0..7 {
+            let temp = tempfile::tempdir().unwrap();
+            let mut changed = document.clone();
+            for reference in changed["evidence"].as_object().unwrap().values() {
+                let relative = string(reference, "path").unwrap();
+                let target = temp.path().join(relative);
+                fs::create_dir_all(target.parent().unwrap()).unwrap();
+                fs::copy(base.join(relative), target).unwrap();
+            }
+            let reference = &mut changed["evidence"]["qualification"];
+            let target = temp.path().join(string(reference, "path").unwrap());
+            match change {
+                0 => reference["decoded_bytes"] = json!(1),
+                1 => reference["decoded_sha256"] = json!("0".repeat(64)),
+                2 | 3 | 6 => {
+                    let mut bytes = fs::read(&target).unwrap();
+                    if change == 2 {
+                        bytes.extend_from_slice(b"trailing");
+                    } else if change == 3 {
+                        bytes.extend_from_within(..);
+                    } else {
+                        bytes.truncate(bytes.len() - 4);
+                    }
+                    fs::write(&target, &bytes).unwrap();
+                    reference["sha256"] = json!(format!("{:x}", Sha256::digest(&bytes)));
+                }
+                4 => reference["path"] = json!("../qualification.json.gz"),
+                5 => reference["path"] = json!(target.to_string_lossy()),
+                _ => {}
+            }
+            assert!(
+                QualifiedEvidence::read(&changed, temp.path()).is_err(),
+                "mutation {change}"
+            );
+        }
+        assert_eq!(suite.tuning.len(), 1);
+        assert_eq!(suite.held_out.len(), 12);
+    }
 
     fn frontier_fixture(normalized: &Value) -> (Value, Value, Value) {
         let binding = json!({"physical_arity":15,"family_fingerprint":"fixture"});
