@@ -1,0 +1,21 @@
+{
+  "base": "817b5886a50276efea05ab860d22016e1fb0c203",
+  "scope": "Metadata-only correction, separate from frozen code inventory; this inventory deliberately has no self hash",
+  "files": [
+    "docs/architecture/evidence/generation-integration/execution.json",
+    "docs/architecture/evidence/generation-integration/wp3/drawing-staged-artifacts.json",
+    "docs/architecture/evidence/generation-integration/wp3/replay.json",
+    "docs/architecture/evidence/generation-integration/wp3/staged-evidence-correction.json",
+    "docs/architecture/evidence/generation-integration/wp3/staged-evidence-files.json",
+    "docs/architecture/evidence/generation-integration/wp3/staged-round1/A.json",
+    "docs/architecture/evidence/generation-integration/wp3/staged-round1/B.json",
+    "docs/architecture/evidence/generation-integration/wp3/staged-round1/C.json",
+    "docs/architecture/evidence/generation-integration/wp3/staged-round1/D-round2.json",
+    "docs/architecture/evidence/generation-integration/wp3/staged-round1/D.json",
+    "docs/architecture/evidence/generation-integration/wp3/staged-round1/E.json",
+    "docs/architecture/generation-integration-plan.typ",
+    "docs/architecture/generation-integration-wp3-staged.typ",
+    "docs/developers.toml"
+  ],
+  "count": 14
+}

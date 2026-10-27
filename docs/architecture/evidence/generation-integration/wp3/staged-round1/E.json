@@ -1,0 +1,320 @@
+{
+  "status": "COMPLETE: scope E review only; REQUEST_CHANGES before source19; not whole-candidate approval",
+  "verdict": "REQUEST_CHANGES",
+  "scope": "E: integration provenance, validation contracts, docs/build/evidence",
+  "candidate": "817b5886a50276efea05ab860d22016e1fb0c203",
+  "base": "438b61500da4b32841c64211103e5da6fc4c4a72",
+  "findings": [
+    {
+      "id": "E1",
+      "severity": "P1",
+      "file": "crates/alphal00p-docs-python-exporter/src/main.rs",
+      "lines": [
+        96,
+        98,
+        176,
+        260,
+        718,
+        733,
+        751,
+        778
+      ],
+      "summary": "Exporter replay uses the retired Linnet stub owner and nonexistent standalone output.",
+      "evidence": "The candidate exposes linnet_py::canonical_stub at crates/linnet-py/src/lib.rs:206, but no stub or PythonModule. The new exporter calls those nonexistent APIs in production and includes nonexistent crates/linnet-py/linnet_py.pyi in its Linnet test. The native/static/optional-widget owner was intentionally retained; the old standalone owner was intentionally not restored. Independent cargo check --features linnet --tests exits101 with 8 errors. The transplanted tests additionally demand NodeSpec/EdgeSpec/HalfEdgeSpec absence and NodeView/EdgeView classes, contradicting the deliberately retained native #209 owner, which still registers those Spec classes.",
+      "fix": "Use the retained canonical stub owner throughout production and tests; keep only supported destinations and preserve runtime/inventory/signature checks. Do not resurrect an obsolete compatibility owner to satisfy this replay.",
+      "required_check": "cargo check --locked --profile ci-optim -p alphal00p-docs-python-exporter --features linnet --tests; canonical Linnet exporter --check and relevant tests",
+      "log": "exporter-linnet-check.log"
+    },
+    {
+      "id": "E2",
+      "severity": "P1",
+      "file": "crates/alphal00p-docs-python-exporter/src/main.rs",
+      "lines": [
+        853,
+        856,
+        860
+      ],
+      "summary": "Explicit-import cleanup imports PyModule twice in the GammaLoop exporter test.",
+      "evidence": "Both pyo3::prelude::{..., PyModule, ...} and pyo3::types::PyModule introduce the same type name. The previous glob plus explicit import did not have this problem. The exact import block extracted unchanged into ignored scratch and compiled with current PyO3 metadata independently produces E0252 (duplicate-import.log). Full GammaLoop exporter compilation stops earlier at E5.",
+      "fix": "Keep a single module-scope import of each actually used PyO3 item, consistent with current repository policy.",
+      "required_check": "cargo check --locked --profile ci-optim -p alphal00p-docs-python-exporter --features gammaloop --tests; relevant exporter tests",
+      "log": "duplicate-import.log"
+    },
+    {
+      "id": "E5",
+      "severity": "P1",
+      "file": "crates/gammaloop-api/src/python.rs",
+      "lines": [
+        72,
+        548,
+        571,
+        574,
+        577
+      ],
+      "summary": "The production GammaLoop Python feature no longer compiles after explicit-import cleanup omitted IntoPyObject.",
+      "evidence": "Independent locked ci-optim cargo check of the GammaLoop exporter feature exits101 in gammaloop-api with four E0599 errors for String/i64/u64/f64.into_pyobject. Compiler identifies missing pyo3::IntoPyObject. This fails before the E2 duplicate-import test block is compiled.",
+      "fix": "Import the actually required IntoPyObject trait at module scope and remove the new unused prelude imports; validate the real GammaLoop Python/stub features, not only default CLI or feynkit-py.",
+      "log": "exporter-gammaloop-check.log",
+      "required_check": "cargo check --locked --profile ci-optim -p alphal00p-docs-python-exporter --features gammaloop --tests, followed by relevant exporter/runtime-signature tests"
+    },
+    {
+      "id": "E3",
+      "severity": "P2",
+      "file": "docs/products/registry.toml",
+      "lines": [
+        75
+      ],
+      "summary": "The documented Linnet Python feature matrix adds nonexistent feature community.",
+      "evidence": "Cargo metadata with linnet-py/community fails: available features are default, native, python_stubgen, wasm. The new registry advertises [community, python_stubgen], inherited from the discarded source owner.",
+      "fix": "Describe the actual retained Community module and supported feature set; do not restore the old feature/standalone split.",
+      "log": "community-feature.log"
+    },
+    {
+      "id": "E4",
+      "severity": "P3",
+      "file": "docs/architecture/evidence/generation-integration/wp3/drawing-staged-artifacts.json",
+      "lines": [
+        1695,
+        1696
+      ],
+      "summary": "Two recorded source-file hashes match neither the nominated code commit nor the final candidate.",
+      "evidence": "execution.json and wp3/replay.json code_files SHA256 values are stale intermediate evidence hashes. All other audited source hashes and the four recorded selected binaries match the retained artifacts.",
+      "fix": "Refresh these evidence hashes after finalization, or exclude mutable receipt files from code_files and record them separately at an explicit final revision."
+    }
+  ],
+  "cross_scope": [
+    {
+      "id": "C2 corroboration and FeynKit impact",
+      "detail": "Graph stubs are already owned by C2. Additionally, unchanged docs/api/python/feynkit-community.pyi and crates/feynkit-py/python/symbolica/community/hepkit/__init__.pyi still advertise Process.generate_diagrams (line 9584), while generation.rs:747 exposes Process.amplitude and Request.generate at1215. The newly added host stub destination is absent. Regenerate all supported FeynKit and graph copies through their owners after E1; a python_stubgen cargo check does not validate generated files. The native NodeSpec/EdgeSpec APIs remain supported; they must not be removed merely to satisfy the erroneous transplanted exporter assertions."
+    },
+    {
+      "id": "DOT corpus certification limit",
+      "file": "crates/linnet/tests/dot_corpus.rs",
+      "lines": [
+        51,
+        61
+      ],
+      "detail": "New round-trip content() compares sorted node and edge attribute statements, not edge incidence/endpoints. The count snapshot plus this content check cannot by themselves exclude a consistent topology rewiring. This is a certification limit, not a demonstrated parser bug; native C review did not run the corpus integration executable."
+    },
+    {
+      "id": "D findings",
+      "detail": "User-provided drawing review D1/D2/D3 and final asset limits remain owned by scope D; no duplicate investigation."
+    },
+    {
+      "id": "A1",
+      "detail": "User-provided coreA hidden-index finalization failure remains with generation-staged-transport-fix. CoreA reports238 controls and original-pair B2 passed; E independently verifies original fixture bytes only and does not duplicate B2."
+    },
+    {
+      "id": "B1/B2/B3",
+      "detail": "User-reported callback guard omission, finalized_reference photon edge4 routing regression, and anonymous runtime-port error composition remain with downstream/graph/parser correction lanes. In particular B2 is separate from these 3 generator historical digest failures; E does not diagnose it as representation-only."
+    }
+  ],
+  "provenance": {
+    "working_tree": "All 3346 Git blob and symlink identities match pinned 817b; read-only JJ commands only.",
+    "manifest": "46 exact source commit/tree/parent/subject tuples; 41 planned units; 14 preserved refs plus 3 candidate bookmarks; 6 original prerequisite receipts and 21 original log hashes independently verified.",
+    "atomic_source": "Source17 parent is9e737a18; resolved18 directly follows17. Candidate linear parents are438b->8430drawing->f264staged->817bevidence. Isolated37 changes only assertion formatting already supplied by drawing. No intervening-source ancestry replay.",
+    "net": "1416 no-renames paths exactly match raw9e737a18..2b1ef4f0 and every recorded source/final Git blob and SHA256. JJ1415 counts NetworkX native-to-linnet-py notice relocation once.",
+    "counts": "1385 slice=1324 raw-net paths+61 additional drawing/WP1/current-owner/evidence paths.92 net paths do not change the approved base.1418 cumulative=1385+33 earlier prerequisite paths.",
+    "dispositions": {
+      "exact_resolved_bytes": 879,
+      "reconciled": 333,
+      "resolved_deletions": 111,
+      "current_owner_retained": 63,
+      "restoration_skipped": 30
+    },
+    "drawing": "Cumulative approved drawing has76 paths. Drawing commit production/assets match approved98cb;28 old .log receipts remain in pinned source rather than this checkout; docs/developers.toml is reconciled. Later staged differences are enumerated in net receipt.",
+    "scope_limit": "The333 reconciled paths received provenance/inventory audit and substantive scopeE review, not an independent physics proof for every implementation body."
+  },
+  "docs": {
+    "valid_scopes": 54,
+    "inherited_stale_digests": 7,
+    "new_stale_digests": 16,
+    "new_missing_anchors": 4,
+    "title_mismatches": 0,
+    "assessment": "The27 architecture scope/anchor mismatches are honestly inventoried and fit explicit planned source31 rescope. They are not evidence of full docs success, and cannot excuse new exporter/API/feature failures."
+  },
+  "fixtures": {
+    "snapshot_count": "test_feyngen retains143 assert_snapshot! calls /142 inline expectations at base, source parent, resolved18 andcandidate. This count does not prove changed expected algebra.",
+    "representative_changes": "Subset snapshots preserve len/bit-word values while replacing BitSeq/PhantomData storage. DOT migrations include explicit hedge second indices and removal of obsolete source/sink UFO attributes. Native generator changes some group identifiers and weights; physical equality requires scoped algebra/graph tests, not donor byte parity.",
+    "obligations": "Full affected DOT corpus/physics fixtures, complete rebuilt-tip oracle, five fresh a_ddx, BRST/epem/CoolQM and final WP13 remain pending as planned. B2 execution belongs to coreA.",
+    "original_wp1_bytes": "Both GL028 and GL034 match approved f473709c exactly; see wp1-fixtures.json."
+  },
+  "build": {
+    "kernel": "Independent canonical just check-symbolica-feature-isolation PASS; root/Tydenso/host all1a1829b1, host dependency subset, offline locks, uv unchanged.",
+    "hakari": "Independent cargo hakari verify PASS.",
+    "ci": "Canonical CI-generation receipt and file identities audited; NixCI remains false; no full NixCI certificate.",
+    "source30": "Explicit pending source30 closure obligations remain: compile-time feynkit-py/tests/request_decorator_contract.py and linnet/tests/generation_reports/*.txt are absent from current compileTimeTest extra roots. The current fileset includes only.rs test roots. Do not claim test producer source closure complete."
+  },
+  "frame_diagnostic": [
+    {
+      "diagrams": 66,
+      "native": 1831509842489383612,
+      "old_spelling": 2337113648169949181,
+      "old_spelling_without_interfaces": 13627127486228112534,
+      "present_interface_fields": 202
+    },
+    {
+      "diagrams": 60,
+      "native": 17492405225653900047,
+      "old_spelling": 12634529482205017412,
+      "old_spelling_without_interfaces": 13526262874643750147,
+      "present_interface_fields": 165
+    },
+    {
+      "diagrams": 130,
+      "native": 11122069825991028494,
+      "old_spelling": 10620695785570712218,
+      "old_spelling_without_interfaces": 9770711142649904079,
+      "present_interface_fields": 556
+    }
+  ],
+  "frame_assessment": "All 3 retained full-payload SHA256 identities and exact64-bit native digests reproduced independently. Old spelling alone fails; spelling plus omission of202/165/556 explicit interface fields recovers historical digests. Actual assertions/payloads remain intact. This locates a representation boundary, not physical equivalence or a passing oracle. The frame test file is newly imported relative to approved438b, while its historical expected rows remain unchanged from the donor; these are not proven previously passing base tests.",
+  "checks": {
+    "exporter_gammaloop": {
+      "exit_code": 101,
+      "observed_error": "4 E0599 failures in production gammaloop-api Python module; exporter duplicate-import block not reached",
+      "log": "exporter-gammaloop-check.log"
+    },
+    "exporter_linnet": {
+      "exit_code": 101,
+      "errors": 8,
+      "log": "exporter-linnet-check.log"
+    },
+    "registration": {
+      "passed": 2,
+      "seconds": 4.638,
+      "nextest_run_id": "78e8a5c8-1c61-4cca-b2cd-d03287d0a6e7",
+      "log": "registration.log",
+      "detail": "Fresh Cargo build against pinned source, exact current production library; genuine ordinary/preload/reverse processes at each 1/8/32, full census graph/numerator/group payloads and separate printed-numerator process matrix.",
+      "binary": {
+        "path": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/generation_oracle-513b63cbc76b9164",
+        "sha256": "e7074e5cd5533fe5fb0426282a5e66ee33498ba0d81183513623cb6159f2d66c",
+        "mtime_ns": 1793127134086449230
+      }
+    },
+    "sm": {
+      "passed": 1,
+      "seconds": 13.974,
+      "nextest_run_id": "1faa9ffa-a9a4-4f8d-b9c8-657b14ee5b90",
+      "log": "sm.log",
+      "detail": "Original 3150|-9861/16 and both original Lorentz-zero graphs at actual 1/8 threads; all original assertions retained; INSTA_UPDATE=no; unique review state directory. CLI settings.n_cores.feyngen reaches Run.threads and the native pool uses the requested count.",
+      "binary": {
+        "path": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/test_feyngen-9581d43dfd98ca33",
+        "sha256": "51be184c3e73177c985ebaf97d1caa1e3c18e6dab257d1ff920d32bdef79450d",
+        "mtime_ns": 1793127549908630348
+      }
+    },
+    "four_loop": {
+      "passed": 3,
+      "threads": [
+        1,
+        8,
+        32
+      ],
+      "retained": 4664,
+      "zero": 306,
+      "total": 4970,
+      "logs": [
+        "four-loop-1.log",
+        "four-loop-8.log",
+        "four-loop-32.log"
+      ],
+      "detail": "Actual rebuilt four_loop_numerator example invoked with each explicit thread argument and filter_zero_color=true. Fail-on-any-command set -eu loop; completed flag and full split assertions retained.",
+      "binary": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/ci-optim/examples/four_loop_numerator",
+        "sha256": "14393898996187958d7ea3a10957fca1439e4408322c9738fdf2efcc7d2192cc",
+        "mtime_ns": 1793127632672865286
+      }
+    },
+    "frames": {
+      "passed": 0,
+      "failed": 3,
+      "nextest_exit_code": 100,
+      "seconds": 16.94,
+      "log": "frames.log",
+      "detail": "All 3 unchanged donor historical expectations executed and failed on the numerator digest after the current-thread consistency comparisons. New full captures are byte-identical to implementer payloads. No expectation/payload field removed or refreshed."
+    },
+    "kernel_isolation": {
+      "exit_code": 0,
+      "command": "just check-symbolica-feature-isolation",
+      "log": "kernel-isolation.log"
+    },
+    "hakari": {
+      "exit_code": 0,
+      "command": "cargo hakari verify",
+      "log": "hakari.log"
+    },
+    "duplicate_import": {
+      "exit_code": 1,
+      "error": "E0252",
+      "log": "duplicate-import.log",
+      "detail": "Exact unchanged exporter import block isolated and compiled with pinned rustc/current PyO3 metadata, since full exporter feature fails first in production GammaLoop Python module."
+    },
+    "community_feature": {
+      "exit_code": 101,
+      "log": "community-feature.log",
+      "command": "cargo metadata --locked --format-version 1 --features linnet-py/community"
+    }
+  },
+  "retained_artifacts": "Unique ignored target/astra-staged-r1-e. Durable candidate remains817b with existing named bookmarks; no review-created VCS reference is needed.",
+  "frame_fresh_captures": [
+    {
+      "path": "target/astra-staged-r1-e/frames/oracle-failure-qed_eeaa_sign_L1_recorded_frame_row-1336943/left.json",
+      "diagrams": 60,
+      "sha256": "4eb086c8ac5156be5be4cd94d51c0507b64984f5a81b1d6dbc389dbb5ac5f2cd",
+      "same_full_payload_bytes_as_implementer": true,
+      "native_digest": 17492405225653900047,
+      "old_spelling_digest": 12634529482205017412,
+      "old_spelling_without_interfaces_digest": 13526262874643750147,
+      "interface_fields": 165
+    },
+    {
+      "path": "target/astra-staged-r1-e/frames/oracle-failure-qed_eeaa_sign_L1_recorded_frame_row-1336944/left.json",
+      "diagrams": 66,
+      "sha256": "91b8969d450231181c4f12b25c0b8402db4dc216c480fb8ced278ca02b3da3d0",
+      "same_full_payload_bytes_as_implementer": true,
+      "native_digest": 1831509842489383612,
+      "old_spelling_digest": 2337113648169949181,
+      "old_spelling_without_interfaces_digest": 13627127486228112534,
+      "interface_fields": 202
+    },
+    {
+      "path": "target/astra-staged-r1-e/frames/oracle-failure-xs_qed_aaee_lr_L2_recorded_frame_row-1339505/left.json",
+      "diagrams": 130,
+      "sha256": "dc0458581a3f4f995f904931a4fc79a0777e4c0f44a455d6184480e095f7c9ae",
+      "same_full_payload_bytes_as_implementer": true,
+      "native_digest": 11122069825991028494,
+      "old_spelling_digest": 10620695785570712218,
+      "old_spelling_without_interfaces_digest": 9770711142649904079,
+      "interface_fields": 556
+    }
+  ],
+  "required_next_checks": [
+    "Repair E1/E2/E3/E5 on a correction workspace and test actual supported feature contexts: GammaLoop Python/python_stubgen, exporter --features gammaloop --tests, and exporter --features linnet --tests. Remove donor-only standalone owner assumptions while retaining current native Spec classes and runtime/signature validation.",
+    "Coordinate generated graph stubs with C2, and regenerate/validate FeynKit docs/package/host stubs through their current owner. Run canonical exporter --check and relevant tests for both components; mere compilation of feynkit-py/python_stubgen is insufficient.",
+    "Refresh or explicitly separate volatile evidence hashes in E4 after final receipt updates. Update any all-affected-targets-compiled wording to the actual feature matrix.",
+    "New independent review after combined fixes, with relevant matrix reruns as required by changed scope; coordinator must aggregate all scopes before source19.",
+    "Keep source30 source closure, source31 architecture scope rescope, full rebuilt-tip matrix, frame-oracle recertification without stripping metadata, final WP13 B2 rerun, and final artifact/distribution checks as explicit later obligations. No WP3/M-rebuild/performance/full-docs certification here."
+  ],
+  "tracked_integrity": "Final independent audit: all 3346 tracked file/symlink blobs match817b; all 1416 net mappings match source/final receipts; source manifest and candidate refs unchanged. No tracked test fixtures, JJ state/refs, or main files mutated.",
+  "processes": "No review-owned processes remain active. The initial queued duplicate driver was cancelled and replaced before compilation; all actual checks completed. Other reviewers processes and shared caches were left intact.",
+  "cleanup": "Removed only own passed SM transient state and obsolete setup/draft helpers. Retained scoped scripts/diffs, logs, failed-frame full payloads and receipts for review/reproduction.",
+  "logs": {
+    "audit.log": "f80d7d02dbd1fdf520614dcf63d0a5d1baf1a6f2f72e4ac588f3f1256193ab87",
+    "community-feature.log": "cda2724b490a69edf483d757577f51bc571772a7a046c36aa8db75dd664c449b",
+    "duplicate-import.log": "ba5c5a0cd66d021aa63096cff3cfe9c02d31086f15a2ae1ce91901d42cd51eb9",
+    "exporter-gammaloop-check.log": "6149701271f56a9648753623035641f3bd446523beb2791374b3ec7ff70a4a26",
+    "exporter-linnet-check.log": "81748d9b617652ea89227b4cda6108cf96e11391f49c346e7c3a5813110036fa",
+    "four-loop-1.log": "60659b3a647721423ca0857cf554b07e250856812b606ab6a8198a45c183f44e",
+    "four-loop-32.log": "ecf27f17338cb29476b6024862d2e3f1c156544079bf48b58fc4c45f1509a0ee",
+    "four-loop-8.log": "40ea3edb64f655e939d84ef1e10b0e7a6a9e803acb3c04cdef7a1240b7b33990",
+    "frames.log": "434cb985d2780483ef67f467d3f861a7d5860682504ff7db8acd96e1a75d9d09",
+    "hakari.log": "704f7242c6f355e1c07d9f9ae6ea748231571460920e0647e0fad2f515d7c7f3",
+    "kernel-isolation.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "manifest-audit.log": "faf4e99c5216c9d9c283287bdcfa21622d0fddf5d4b598a8a6bb28874118568e",
+    "registration.log": "b82a049b7a08c79f1dd4db3ad9b92310e0c0f4e519c30b0d1f232d669373f669",
+    "sm.log": "e43d48f336c57684cb83f64ad2ad8e08c9d62042e288c9693cde6b22b042b7ca",
+    "static-audit.log": "9d8b99063279339ac25d88eb1f46f462c7f13c852c3a28b0c7023806194c0f2e"
+  },
+  "commands_environment": "Scoped Cargo commands used the workspace Nix development environment and CARGO_BUILD_JOBS=2. License preserved/loaded silently. Required runtime worker matrices intentionally used 1/8/32. All JSON/digest audits used Python exact integers."
+}

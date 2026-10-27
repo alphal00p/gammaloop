@@ -978,5 +978,21 @@
       37
     ],
     "next_gate": "NEW independent Astra review; no source19+, other lane integration or WP4+ implementation"
+  },
+  "staged_round1_review": {
+    "verdict": "REQUEST_CHANGES",
+    "candidate": "817b5886a50276efea05ab860d22016e1fb0c203",
+    "aggregate_receipt": "staged-evidence-correction.json",
+    "E4": "metadata-only correction awaiting NEW independent review",
+    "D_round2": "Scoped APPROVE b1061d715bca86d2d29df0f108576c001a29b22a; not integrated",
+    "pending_gates": [
+      "Three newly imported historical frame hash assertions FAIL; representation diagnostic only, not physics proof or B2 routing closure.",
+      "Source31: seven inherited and twenty new scope/anchor mismatches; Kurvst PDF stale.",
+      "Source30 compile-time closure omits request_decorator_contract.py and generation_reports/*.txt.",
+      "DOT sorted content/count check does not certify incidence.",
+      "Full WP3 matrix, five fresh a_ddx, BRST, combined physics and benchmark remain pending.",
+      "Final Linnest WASM data/name provenance unresolved; no byte-exact reproduction claim.",
+      "Actual final sdist build/install, native/Pyodide/Community wheels and installed behavior remain pending."
+    ]
   }
 }

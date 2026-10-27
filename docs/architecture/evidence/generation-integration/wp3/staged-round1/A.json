@@ -1,0 +1,105 @@
+{
+  "review": "Astra NEW independent ROUND1 scope A",
+  "candidate": "817b5886a50276efea05ab860d22016e1fb0c203",
+  "base": "438b61500da4b32841c64211103e5da6fc4c4a72",
+  "code_commit": "f264028690d117b4b99c320b61b7f2d5d89222d0",
+  "verdict": "REQUEST_CHANGES",
+  "scope": "production generation/algebra boundary only",
+  "findings": [
+    {
+      "severity": "P1",
+      "path": "crates/feynkit-graph/src/finalization.rs",
+      "lines": [
+        330,
+        337
+      ],
+      "title": "Scalar finalization shortcut skips retained index-owner history",
+      "new_since_base": true,
+      "description": "The new scalar/visible-expression gate bypasses NumeratorInterface::translate even when a scalar zero retains contracted indices. Generated finalization reorders provisional outgoing edge 0 to final edge 1 but leaves the scalar zero history at edge(0,1). Correct explicit transport records edge(1,1). A subsequent multiplication by a vector carrying edge(1,1) is wrongly accepted; the correctly transported zero rejects the third index occurrence. The same closure handles vertex/edge fragments, explicit aggregates, prefactors and projectors.",
+      "reproducer": "target/astra-staged-r1-production/hidden_scalar_transport.rs",
+      "run_log": "target/astra-staged-r1-production/hidden-scalar-transport-final.log",
+      "exit_code": 101,
+      "fix": "Gate any fast path on the retained metadata as well as visible payload, or run the existing NumeratorInterface::translate for every generated tensor. Add a finalization regression covering closed scalar zero history and collision behavior after a nonidentity edge/half-edge map."
+    }
+  ],
+  "checks": {
+    "passing_tests": 238,
+    "per_suite": {
+      "feynkit-generator": 75,
+      "feynkit-graph": 122,
+      "feynkit-model": 41
+    },
+    "zero_test_passes": 0,
+    "b2_ignored_test_executed": true,
+    "all_tracked_files_matched_candidate": 3346,
+    "tracked_mismatches": [],
+    "scope_tracked_files_matched_candidate": 345,
+    "binary_identity_receipt": "identity.json",
+    "test_receipts": [
+      "controls.json",
+      "extra-controls.json"
+    ],
+    "inventory_hash_verified": true,
+    "test_environment": "Nix development environment; existing license preserved or silently loaded; build jobs 2; existing hash-verified candidate binaries; INSTA_UPDATE=no; no forced passes"
+  },
+  "b2": {
+    "approved_source": "f473709ce444fd99f5200fed0c9fcead48e8bf71",
+    "fixtures_byte_identical": true,
+    "changes": "Only asserted Q/edge presentation-tag binding plus two import qualifications; all proof and matrix assertions unchanged.",
+    "result": "Explicit ignored test passed in 3.596 seconds: color constants 7/3,-2/3; exact gamma/C closed-loop identity N28=(7/2)N34; zero-sample singleton ownership/unit ratios/weights; seeds 3/7/11, canonical on/off, stored quotient cancellation. Original pair, 4D SU3 only."
+  },
+  "source_audit": {
+    "numerator_interface_and_inference_byte_identical_to_base": true,
+    "template_owner_block_byte_identical_to_base": true,
+    "numeric_utils_byte_identical_to_base": true,
+    "reviewed": "Staged ownership/callback disposal, lazy fallible aggregate and ID accessors, deterministic ordered work, cancellation/group source and order-class invariants, signed frame transport and routing cache, raw admission before conservation reduction, actual-owner dynamic/template paths and publication, current color-only grouping, native NodeForest consumers and zero-node replacement.",
+    "net_reconciliation": "Staged/graph/star/parser code compared directly with resolved source18, preserved metadata owners compared with base438b. No additional production B2 physics change identified."
+  },
+  "reproducer_details": {
+    "build": "Isolated scratch Cargo package built against current pinned workspace path dependencies and locked Symbolica 1a1829b1; no tracked edits.",
+    "initial_probe": "A first probe used cold try_sub and had no retained indices, so it did not exercise this invariant. The final probe explicitly establishes retained source indices then uses the existing checked-zero rewrite, as existing history controls do.",
+    "direct_link_attempt": "A direct link against reusable rlibs failed because the shared unversioned Clarabel rlib had a different fingerprint. The final reproducer was rebuilt from current sources; this is not reported as a candidate defect.",
+    "artifacts": {
+      "hidden_scalar_transport.rs": {
+        "sha256": "0279ad170e3ce1fc739fa310db89dc5ad1a25898716824a5d5ec66bf7e2d0d63",
+        "bytes": 3081
+      },
+      "hidden-scalar-transport-final.log": {
+        "sha256": "0dc5da94a128327ac242f43ba10fdc9c4f9db53f08ea507c0e27769533e5fde9",
+        "bytes": 1588
+      },
+      "probe/Cargo.toml": {
+        "sha256": "0c4ce16cbe01e06fa9b5e422a0655fa2dd254735c23062a32751d8af2ed50f6a",
+        "bytes": 1562
+      },
+      "probe/Cargo.lock": {
+        "sha256": "16f9377b24692756bf5370f41f22e22c17faac9e640d17ca88e031ae41a44ef7",
+        "bytes": 74434
+      },
+      "probe-build/debug/hidden_scalar_transport": {
+        "sha256": "d607906aecc4607a861a57bba4de58ecca2ab8896124766a4c46f7c4443f9699",
+        "bytes": 39502944
+      },
+      "b2-port.diff": {
+        "sha256": "3c0b5509bb4a7518580a0a4d84d38e3e7dea4da65519b3d09a5baf9e058f6cbe",
+        "bytes": 2722
+      }
+    }
+  },
+  "limits": {
+    "not_run": [
+      "four-loop/SM/fresh-process 1/8/32 matrix owned by reviewer E",
+      "full generation oracle and full heavy physics",
+      "full idenso/spenso/tensor crate suites",
+      "full documentation products and distribution certifications"
+    ],
+    "reported_existing_limits": "Three unchanged historical frame assertions and 7 inherited plus 20 added documentation scope/anchor mismatches remain as disclosed by the implementer; not rerun here and not counted as passes. Documentation rescope is explicitly bounded to source31 in the staged note; no extra rejection is based solely on that planned deferral.",
+    "scope_only": true
+  },
+  "required_next_checks": [
+    "Fix and directly regress generated finalization of scalar zeros retaining hidden edge/half-edge indices, including later invalid-index collision rejection.",
+    "Rerun focused admission/template/interface/graph controls and explicit ignored B2 on the rebuilt fix.",
+    "Coordinator aggregates all five reviews before any source19 continuation; full WP3 matrix and WP13 B2 rerun remain required."
+  ],
+  "cleanup": "No tracked files, refs or fixtures changed; no nested agents; all own processes completed. Retained only useful review receipts/logs and isolated reproducer source, manifest/lock and executable; shared caches untouched by cleanup."
+}

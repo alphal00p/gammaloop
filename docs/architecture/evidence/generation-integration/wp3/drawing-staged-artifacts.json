@@ -1692,8 +1692,6 @@
     "docs/architecture/evidence/generation-integration/drawing/round2-fix/receipt.json": "22a8c0fd0d98b607a9c5c97900a0c709a1f0497907458c96230161b5656f2de7",
     "docs/architecture/evidence/generation-integration/drawing/round2-fix/round2-review.json": "36c6198abdcdddc32836a71c516fad874819c0296c7aeb729e60eb075b3e2351",
     "docs/architecture/evidence/generation-integration/drawing/round2-fix/scope-validation.json": "670fad53a2c9f71147ea9b852600f89a83bc6e30659ec44a9005723f93e8bad6",
-    "docs/architecture/evidence/generation-integration/execution.json": "af6f241034b99f33817a0b2390aef6a23344bfd8ead1decd3e38ede9aa695f12",
-    "docs/architecture/evidence/generation-integration/wp3/replay.json": "a910d299ebf1b25503e106e248ca542c9b9924deceee35c80d3e399025d5d9f9",
     "docs/architecture/gammaloop-drawing-architecture.typ": "d112d418c83d2b49d626149f95e8ae120fae2874337f58c00fa1419290ef1448",
     "docs/architecture/generation-drawing-notices.typ": "7f0f4575423cd196a8e43ad0dd3df6e596d7b66c425a9917d3b1e45de6321d33",
     "docs/architecture/generation-drawing-ports.typ": "5ec34e9ea654156caac4fbaf3190a3574fe189bc199b219729282ac82003b8bd",
@@ -2856,5 +2854,22 @@
     "target/wp3-drawing-transplant/staged-epem-ttbar-dark.png": "bc34813d0221a6e9dff000e3a8379bb5e4d32f870e379713571de7144086cb99"
   },
   "scope": "Review producer identities only; no M-rebuild/performance or final distribution milestone claim.",
-  "log_hash_scope": "Completed immutable logs as of receipt finalization; the integrity script output hash was refreshed after completion."
+  "log_hash_scope": "Completed immutable logs as of receipt finalization; the integrity script output hash was refreshed after completion.",
+  "code_files_semantics": "Hashes of exact blobs at code_commit, including absent paths; mutable execution/replay receipts excluded. Validation remains historical for that frozen code, not later corrections.",
+  "frozen_evidence": {
+    "revision": "817b5886a50276efea05ab860d22016e1fb0c203",
+    "files": {
+      "docs/architecture/evidence/generation-integration/execution.json": {
+        "superseded_intermediate_sha256": "af6f241034b99f33817a0b2390aef6a23344bfd8ead1decd3e38ede9aa695f12",
+        "sha256": "9f90e5459c3a81fc40b05bd59db584ffdfff320b32140cdc07e3606f33d5b3e5",
+        "code_revision_sha256": "8d5a19d9158130488f9dd26e7fae587a66211f08e08e3b8418a15b3d2400e030"
+      },
+      "docs/architecture/evidence/generation-integration/wp3/replay.json": {
+        "superseded_intermediate_sha256": "a910d299ebf1b25503e106e248ca542c9b9924deceee35c80d3e399025d5d9f9",
+        "sha256": "63f7dd1cfd1476c18595fd0800d337c0e0d41bfbb2bcb9675ca4b6abd0e02f1a",
+        "code_revision_sha256": "28eebd44f8adeb4a374f6457a7688c83eb49c4b6727dfbe298187a6f8a88d8ef"
+      }
+    },
+    "semantics": "Exact finalized candidate blobs; not hashes of mutable metadata correction files."
+  }
 }

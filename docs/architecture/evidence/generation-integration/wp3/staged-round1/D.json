@@ -1,0 +1,115 @@
+{
+  "review": "Astra independent ROUND1 scopeD",
+  "decision": "REQUEST_CHANGES",
+  "candidate": "817b5886a50276efea05ab860d22016e1fb0c203",
+  "base": "438b61500da4b32841c64211103e5da6fc4c4a72",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-integration-plan",
+  "findings": [
+    {
+      "id": "D1",
+      "severity": "P2",
+      "path": "just/drawing.just",
+      "lines": [
+        55,
+        145
+      ],
+      "title": "Development asset sync omits the retained Tiptoe notice",
+      "evidence": "Both exact copy_package_sources helpers executed into isolated empty destinations. Each copies src/mark.typ but only Kurvst LICENSE, never LICENSE.tiptoe. Their following copy_wasm_bundles installs the new mark-engine WASM. Existing pre-transplant states therefore receive attributed code without its new notice.",
+      "origin": "New integration gap triggered by source17 shared marks; source15/16 only needed the main Kurvst license.",
+      "required": "Copy all required Kurvst root licenses in both recipes and exercise an existing bundle lacking Tiptoe."
+    },
+    {
+      "id": "D2",
+      "severity": "P2",
+      "path": ".github/workflows/linnet-py-wasm.yml",
+      "lines": [
+        23,
+        24
+      ],
+      "title": "New packaging gate is not bootstrapped for a clean runner",
+      "evidence": "The command precedes toolchain setup, installs no Maturin and seeds no Cargo registry. The fixture runs cargo/maturin --offline. Independently running test_api_embedded_payload with an empty CARGO_HOME fails with exit101: no matching package named color-eyre. The warmed Nix environment passes all four packaging tests.",
+      "origin": "Added by drawing transplant8430; absent even in approved drawing98cb.",
+      "required": "Provision the toolchain and Maturin and fetch fixture dependencies (or run the tests in a prepared canonical Nix environment), then validate from an empty cache."
+    },
+    {
+      "id": "D3",
+      "severity": "P2",
+      "path": "crates/linnest/src/svg/marks.rs",
+      "lines": [
+        46,
+        51,
+        63
+      ],
+      "related": [
+        {
+          "path": "crates/linnest/src/svg/mod.rs",
+          "lines": [
+            76,
+            77,
+            757,
+            759
+          ]
+        }
+      ],
+      "title": "New shared-mark adapters still violate the mandatory import policy",
+      "evidence": "New/substantially modified code spells std::collections::BTreeMap, std::cell::RefCell and kurvst::marks::MarkSpec/MarkGeometry types at use sites rather than importing the types. These are not macro expansion templates.",
+      "origin": "New source17 adapter code, confirmed by base438b..candidate additions.",
+      "required": "Apply module-scope explicit imports to the new drawing adapters, preserving old unrelated style, then rerun scoped formatting/Clippy checks."
+    }
+  ],
+  "checks": [
+    {
+      "name": "packaging and actual Typst WASM",
+      "result": "7 passed: 4 packaging, 3 WASM runtime",
+      "log": "packaging-wasm-tests.log",
+      "limits": "Host wheel uses the documented minimal Rust fixture; not full native/Pyodide/Community certification. Test source was executed unchanged except scratch-root relocation."
+    },
+    {
+      "name": "Rust label/SVG/mark contracts",
+      "result": "103 passed;237 skipped by selection",
+      "log": "label-svg-mark-tests.log",
+      "command": "CARGO_BUILD_JOBS=2 RAYON_NUM_THREADS=2 INSTA_UPDATE=no nix develop --max-jobs 2 --cores 2 -c cargo nextest run --locked --cargo-profile ci-optim --profile ci_gammaloop -p linnest -p kurvst --features linnest/svg --no-fail-fast --test-threads 2 -E \"test(label_placement::) or test(svg::) or test(marks::)\""
+    },
+    {
+      "name": "Nix bundle check",
+      "result": "PASS",
+      "log": "nix-wasm-check.log",
+      "result_path": "/nix/store/0wjlq43ccbg5ilx26y7ppf1k64xvjib1-linnest-wasm-check",
+      "bundle": "/nix/store/qb4qladd6d7mdz1a27hz8nw5vhmmmln4-linnest-wasm-0.1.0",
+      "limits": "Nix check verifies rebuilt bundle self-consistency, notices, SPDX and wasm-tools validity; it does not compare the committed WASM."
+    },
+    {
+      "name": "SVG reuse and independent render spots",
+      "result": "All34 checked-in and retained reproduction outputs match recorded SHA256; both epem-ttbar-cut themes independently compile byte-exact",
+      "log": "render-spotchecks.log"
+    },
+    {
+      "name": "Integer-aware source identity audit",
+      "result": "1379 source receipt entries checked, including absent/deleted entries; only execution.json and replay.json differ because receipt records earlier code commit. No drawing production input mismatch.",
+      "log": "audit.log"
+    },
+    {
+      "name": "source38 boundary",
+      "result": "marks.rs, Typst mark.typ and LICENSE.tiptoe are byte-identical to resolved source18; no replacement38 imported."
+    }
+  ],
+  "limits": [
+    {
+      "kind": "WASM reproduction",
+      "detail": "Fresh canonical Nix Kurvst matches committed SHA6da2f870339592b6c7fedbad62e07921342e083f3e5eaf1c861a6e7dd292149e. Linnest differs: committed c921635e81cf38e34232782f39f3aef65eaac188f57584ff37ee942bbeb72e9d vs rebuilt530c89c785284be1351ba4acb2ac948ce3e7e13590c3190b58e44857197d483b. All executable/code sections match. Data section differs by156 bytes (two repeated64-byte blocks and28 isolated bytes), name section differs; printable data strings match. Linnet enables AHash compile-time RNG (already present in base) and imports moved source locations; these are plausible causes, not a completed byte-level provenance proof. Do not claim byte-exact final Linnest reproduction. Required: final-source/seed/source-location audit and renewed bundle/runtime/SVG certification."
+    },
+    {
+      "kind": "Generated manual",
+      "detail": "Kurvst manual.typ now documents Mark specifications/Tiptoe; committed manual.pdf remains base blob2c4b32df552e86ab8b6d3133c2903e624e018a83 and lacks that section. A fresh timestamp0 compile succeeds (db25c8b6bd9ef4fe93891e3d82271568abe880b8dec9dd91f3c01d525b65cfaf). Treat as explicitly outstanding source31/final-doc artifact work, not current-documentation certification."
+    },
+    {
+      "kind": "Distribution",
+      "detail": "Actual final repaired/compressed native host and Pyodide wheels and external Community locked-revision wheels remain unverified: inspect final METADATA License-File entries, shipped license bytes and RECORD hashes, then installed offline/static/optional-widget behavior. Root sdist test proves inclusion/extraction only, not build/install of the final archive. Standalone Linnet packaging remains absent: any later restoration must retain license-files=[LICENSE,licenses/*], required Clarabel/NetworkX and retained Tiptoe attribution, and actual-wheel inspection. Source38 may remove Tiptoe only after replacing its owner."
+    },
+    {
+      "kind": "Cross-scope",
+      "detail": "No whole-candidate, physics, oracle, full documentation, full460, final distribution or WP3 approval claimed. Historical3 frame hashes and7+20 registry mismatches were not reclassified as passes or investigated outside this scope."
+    }
+  ],
+  "state": "No tracked edits, ref writes, nested agents or publication. All own test/build processes completed; retained scratch receipts, fixture wheel and render artifacts for coordinator review."
+}

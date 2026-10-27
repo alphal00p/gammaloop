@@ -229,7 +229,11 @@ own workspace. Bounded: one regression, one bisect, one written verdict.
   formatting is reconciled against the admitted template owners. The
   original-pair B2 certificate passed on the staged tree with exact original
   fixtures and two explicit test-only presentation-tag bindings. This bounded candidate
-  requires NEW independent Astra review before source19; WP3 remains incomplete.
+  received aggregate REQUEST_CHANGES from all five independent Astra round1
+  reviews at `817b5886`. E4 metadata provenance is corrected separately and
+  awaits NEW independent review; code correction lanes remain separate. Scope D
+  round2 approves isolated `b1061d7` only, available for later integration.
+  Frozen candidate bookmarks remain at `817b5886`; WP3 remains incomplete.
   Source38 awaits the reviewed transplant and prerequisites through port36.
   Approved input25/36 and cumulative sampling27–29 remain separate for later
   integration; no benchmark milestone is claimed. Full rebuilt-tip validation

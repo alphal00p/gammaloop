@@ -1,0 +1,85 @@
+{
+  "verdict": "REQUEST_CHANGES",
+  "scope": "C: native graph/generation infrastructure and nonrender Linnet Python bindings",
+  "candidate": "817b5886a50276efea05ab860d22016e1fb0c203",
+  "base": "438b61500da4b32841c64211103e5da6fc4c4a72",
+  "findings": [
+    {
+      "id": "C1",
+      "severity": "P1",
+      "file": "crates/linnet-py/src/graph.rs",
+      "lines": [
+        752,
+        754,
+        1586,
+        1594,
+        1609
+      ],
+      "summary": "Revision/element_epoch split incomplete at map callback construction and live-half-edge resolution.",
+      "evidence": "runtime-probe-results.json: fresh map and split pass; after add_node map raises ReferenceError, freshly acquired half-edge split raises ValueError while integer split passes.",
+      "fix": "Keep revision for mutation guards and element_epoch for live-view identity; migrate every live-view creation/resolution caller, including returned map state, without reintroducing old storage enum."
+    },
+    {
+      "id": "C2",
+      "severity": "P2",
+      "file": "crates/linnet-py/tests/test_basic.py",
+      "lines": [
+        50
+      ],
+      "related": [
+        "crates/linnet-py/tests/test_algorithms.py:26",
+        "crates/linnet-py/examples/rendering_api.py:69",
+        "crates/linnet-py/python/symbolica/community/graph/__init__.pyi:685",
+        "nix/documentation.nix:410"
+      ],
+      "summary": "Native API removal left retained graph validation and consumer files on removed NodeStore and Graph.generate APIs.",
+      "evidence": "The unmodified test_basic.py fails at import with AttributeError against candidate native module. Graph.generate also absent. These were supported by the approved base; this is distinct from the disclosed 27 scope/anchor mismatches.",
+      "fix": "Migrate graph tests and examples to the single native owner and staged Theory/Plan API while preserving assertions; regenerate graph stubs through their owner. Full documentation scope/anchor rescope can remain explicitly pending."
+    }
+  ],
+  "checks": {
+    "native_topology_generation_canon_parser_subset": {
+      "passed": 211,
+      "seconds": 3.65
+    },
+    "additional_algorithms_remap_permutation_tree_unionfind": {
+      "passed": 115,
+      "seconds": 0.08
+    },
+    "subgraph_cut_connectivity_identification": {
+      "passed": 12,
+      "seconds": 0.05
+    },
+    "feynkit_python_callback_thread_gc_heredity": {
+      "passed": 4,
+      "seconds": 1.74
+    },
+    "direct_native_python_probe": "3 phi3 trees; identical complete canonical forms and symmetry factors in serial/parallel, exact count, 9 borrowed views expired, callback exception type and aborted-stream behavior preserved; separate negative regression matrix reproduced C1/C2."
+  },
+  "probe_method": "An ignored sitecustomize trace attaches once to the existing standalone Python test frame, uses its already-registered candidate graph/core modules, disables tracing immediately, executes the scratch probe, and continues the unchanged host assertions. This avoids rebuilding five reviewers shared dependencies and does not edit tracked tests. The native library was selected from exact-int Cargo fingerprints; an abandoned separate Rust harness could not link because an unversioned shared Clarabel artifact had another metadata hash. Its scratch artifacts were removed.",
+  "source_audit": "155 scoped file identities match receipt; substantive review of native owner/checkpoints/compaction, remaps and extraction, parser explicit IDs, canonical forms/generators/group orders, compact incidence/self-loop occurrences, generation budget/bridge/closed-side semantics, ordered parallel buffering, callbacks expiry/GC/errors and Python epoch adaptation. Resolved-source18 comparison in source-reconciliation.diff is import/format only for native canonicalization/generation/NodeForest. Representative graph/subset snapshots preserve old labels/bit words with new storage schema.",
+  "limits": [
+    "No full nauty or feature-symbolica Graphica suite executed; native binary features default,drawing,native,rayon,rkyv,serde.",
+    "No full installed-wheel/Pyodide/Community distribution run; test_basic import failure reproduced using actual native registration with temporary package scaffolding.",
+    "Generation-plan/report/DOT-corpus integration executables were not built or run; native focused controls ran instead.",
+    "Benchmarks inspected only; no performance certification.",
+    "No whole-candidate physics/frame-hash/docs approval. Existing three frame hash failures and 27 registry drifts remain coordinator/other scope work; observed C1/C2 are new.",
+    "Whole lint/policy suite not rerun; existing Clippy/fmt receipts do not establish absence of all source style departures."
+  ],
+  "required_next_checks": [
+    "Fix C1 and add actual Python regression matrix covering map node/edge/source/sink after add_node/add_edge/orientation and split/connect/traversal with fresh views versus integer indices.",
+    "Migrate and execute retained nonrender Python graph tests and native staged callback controls against rebuilt matching bindings; preserve canonical symmetry/count/filter oracles.",
+    "Rerun affected native controls and pass all scope reviews before source19."
+  ],
+  "tracked_scope_integrity": "155 receipt identities and four retained Python test/stub sources rechecked unchanged; JJ working-copy revision remains pinned. No tracked changes or refs made.",
+  "retained_artifacts": "Unique ignored target/astra-staged-r1-graph, retained for review and reproduction.",
+  "logs": {
+    "native-additional.log": "a9b0c686846f923dd2e25bc66530638f2e71d2497eaec47c81600a6b0163c7cf",
+    "native-211-direct.log": "eb177dfe25f543b1b6ba46e24a7adfab33b1550ba5534b9952c1c1b949b48f13",
+    "native-build.log": "bb73d109c2f7b83d5a0a69e68a68e33556ce73ba31eb4a1eb07fe3f816057648",
+    "subgraph.log": "0649adce5fbb5b162af42d33c17c46abc7b43aaae5e94d5cccd0c4484f27d5ca",
+    "callbacks.log": "76c2fa19d7bc90c77385622213405b8cdbcc23342c51c8d209bf8b3ede3ad0c0",
+    "native-211.log": "256920d31a6e3c8c7b7c6e25b6976dd361363b398cfdd33869c4affe88178eb2",
+    "runtime-probe-host.log": "b1f395f5bf502b14afbeb99eeb9884bad9ace6967f501a60c2261db7775e00aa"
+  }
+}

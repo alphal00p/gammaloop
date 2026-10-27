@@ -1,0 +1,1279 @@
+{
+  "status": "E4 metadata correction awaiting NEW independent Astra review; whole candidate REQUEST_CHANGES",
+  "frozen_candidate": "817b5886a50276efea05ab860d22016e1fb0c203",
+  "frozen_code": "f264028690d117b4b99c320b61b7f2d5d89222d0",
+  "correction_scope": "JSON/Typst evidence only; no production edits, code correction branches not integrated",
+  "reviews": {
+    "A": {
+      "receipt": "docs/architecture/evidence/generation-integration/wp3/staged-round1/A.json",
+      "sha256": "4bfee4e712405181509c3a34fe7c54cd1a735e9afaf0cdff23358584a4c7b938",
+      "findings": [
+        {
+          "severity": "P1",
+          "path": "crates/feynkit-graph/src/finalization.rs",
+          "lines": [
+            330,
+            337
+          ],
+          "title": "Scalar finalization shortcut skips retained index-owner history",
+          "new_since_base": true,
+          "description": "The new scalar/visible-expression gate bypasses NumeratorInterface::translate even when a scalar zero retains contracted indices. Generated finalization reorders provisional outgoing edge 0 to final edge 1 but leaves the scalar zero history at edge(0,1). Correct explicit transport records edge(1,1). A subsequent multiplication by a vector carrying edge(1,1) is wrongly accepted; the correctly transported zero rejects the third index occurrence. The same closure handles vertex/edge fragments, explicit aggregates, prefactors and projectors.",
+          "reproducer": "target/astra-staged-r1-production/hidden_scalar_transport.rs",
+          "run_log": "target/astra-staged-r1-production/hidden-scalar-transport-final.log",
+          "exit_code": 101,
+          "fix": "Gate any fast path on the retained metadata as well as visible payload, or run the existing NumeratorInterface::translate for every generated tensor. Add a finalization regression covering closed scalar zero history and collision behavior after a nonidentity edge/half-edge map."
+        }
+      ],
+      "verdict": "REQUEST_CHANGES"
+    },
+    "B": {
+      "receipt": "docs/architecture/evidence/generation-integration/wp3/staged-round1/B.json",
+      "sha256": "7b3f6545258b76d50416f11d108dcce09763b2890a5adaebb01562e1b8064a40",
+      "findings": [
+        {
+          "candidate": "817b5886a50276efea05ab860d22016e1fb0c203",
+          "severity": "P2",
+          "summary": "Complete the GenerationDiagramView rename in callback consumers",
+          "primary_file": "crates/feynkit-py/src/generation/tests.rs",
+          "line": 1276,
+          "runtime_owner": "crates/linnet-py/src/graph/generate/views.rs:446",
+          "cause": "The flavour-class test checks type(view) is graph.DiagramView. The transplant now reserves DiagramView for the live renderer, so the terminal selection assertion that every field is a concrete particle never runs. The tested callback receives GenerationDiagramView, as separately asserted by progress_and_partial_filters_use_the_calling_python_thread.",
+          "cross_scope_pointers": [
+            "crates/linnet-py/src/graph/generate.rs:579",
+            "crates/linnet-py/src/graph/generate.rs:712"
+          ],
+          "additional_docs": [
+            "crates/feynkit-py/src/generation.rs:744",
+            "crates/feynkit-py/src/generation.rs:804",
+            "crates/feynkit-py/src/generation.rs:1051"
+          ],
+          "required_fix": "Use GenerationDiagramView for generation-only checks/annotations and verify a nonzero number of terminal callback checks. Keep the existing live DiagramView owner. Regenerating stubs alone will not repair the handwritten type overrides.",
+          "validation": "A read-only sitecustomize trace in the unchanged candidate flavour-class test observed a two-edge GenerationDiagramView: old guard false, corrected guard true, classes distinct; original assertions continued and test passed. See callback-probe-result.json.",
+          "id": "B1"
+        },
+        {
+          "id": "B2",
+          "severity": "P2",
+          "file": "crates/gammalooprs/src/graph/parse/finalized_reference.rs",
+          "line": 138,
+          "summary": "New exact finalized-graph reference regression has an uncertified routing sign change",
+          "evidence": "Approved-base binary passes; candidate fails fermion_amplitude diagram 0 edges. Internal photon edge 4 external signature is [Plus,Plus,Zero,Zero], unchanged fixture expects [Minus,Minus,Zero,Zero]; listed edge identities, orientation, particle, mass and numerator otherwise match at the first failing field.",
+          "scope": "New compared with approved base; distinct from three previously disclosed generator frame-numerator digest failures. A sign flip on this undirected propagator is not by itself proof of wrong physics.",
+          "pipeline_comparison": "Both routes generate e-/e+ -> mu-/mu+ tree diagrams with the same model and max_vertices=2/self_loops=false; the staged Request/build route replaces GenerationOptions generation. Both then convert finalized diagrams to GammaLoop. Current bridge clones native routing and only permutes external columns, so compare native finalized frames before attributing this to downstream algebra.",
+          "required_next_check": "Keep expected fixture intact. Locate the first changed native frame; certify all affected local numerator/routing/cut transformations and complete-reference equivalence without expanding graph numerators. Restore the promised stable frame or justify an authorized exact reference migration only after that certificate."
+        },
+        {
+          "id": "B3",
+          "severity": "P2",
+          "file": "crates/gammalooprs/src/graph/parse/from_dot.rs",
+          "line": 128,
+          "summary": "Unified import composes anonymous fragments before enforcing the runtime explicit-index boundary",
+          "evidence": "Approved-base runtime_graph_rejects_anonymous_ports_without_assigning_indices passes. Candidate reaches an incompatible tensor product for open(801,0) occurring on three ports instead of the retained requires-an-explicit-index diagnostic, failing parse/tests.rs:143.",
+          "scope": "New error-boundary regression on rejected invalid runtime input; no acceptance of an anonymous graph and no production physics corruption established. Distinct from A1 hidden edge-history transport.",
+          "required_next_check": "Preserve the anonymous/ranked-zero rejection assertion by checking the runtime explicit-index requirement at its owning boundary before aggregate composition, or supply a justified, non-weakening test migration. Cover graph prefactors, vertices, edges, scoped/unscoped anonymous ports and compact scalar contraction control."
+        }
+      ],
+      "verdict": "REQUEST_CHANGES"
+    },
+    "C": {
+      "receipt": "docs/architecture/evidence/generation-integration/wp3/staged-round1/C.json",
+      "sha256": "a88fef71d571d385d4dce55c9c43b1c7dee9e5e2053478656b69d6e683ba094f",
+      "findings": [
+        {
+          "id": "C1",
+          "severity": "P1",
+          "file": "crates/linnet-py/src/graph.rs",
+          "lines": [
+            752,
+            754,
+            1586,
+            1594,
+            1609
+          ],
+          "summary": "Revision/element_epoch split incomplete at map callback construction and live-half-edge resolution.",
+          "evidence": "runtime-probe-results.json: fresh map and split pass; after add_node map raises ReferenceError, freshly acquired half-edge split raises ValueError while integer split passes.",
+          "fix": "Keep revision for mutation guards and element_epoch for live-view identity; migrate every live-view creation/resolution caller, including returned map state, without reintroducing old storage enum."
+        },
+        {
+          "id": "C2",
+          "severity": "P2",
+          "file": "crates/linnet-py/tests/test_basic.py",
+          "lines": [
+            50
+          ],
+          "related": [
+            "crates/linnet-py/tests/test_algorithms.py:26",
+            "crates/linnet-py/examples/rendering_api.py:69",
+            "crates/linnet-py/python/symbolica/community/graph/__init__.pyi:685",
+            "nix/documentation.nix:410"
+          ],
+          "summary": "Native API removal left retained graph validation and consumer files on removed NodeStore and Graph.generate APIs.",
+          "evidence": "The unmodified test_basic.py fails at import with AttributeError against candidate native module. Graph.generate also absent. These were supported by the approved base; this is distinct from the disclosed 27 scope/anchor mismatches.",
+          "fix": "Migrate graph tests and examples to the single native owner and staged Theory/Plan API while preserving assertions; regenerate graph stubs through their owner. Full documentation scope/anchor rescope can remain explicitly pending."
+        }
+      ],
+      "verdict": "REQUEST_CHANGES"
+    },
+    "D": {
+      "receipt": "docs/architecture/evidence/generation-integration/wp3/staged-round1/D.json",
+      "sha256": "1d636a47228d2b4da44a7d0ff8e65d6da2587ed17d2e1439ba2c796a419863d2",
+      "findings": [
+        {
+          "id": "D1",
+          "severity": "P2",
+          "path": "just/drawing.just",
+          "lines": [
+            55,
+            145
+          ],
+          "title": "Development asset sync omits the retained Tiptoe notice",
+          "evidence": "Both exact copy_package_sources helpers executed into isolated empty destinations. Each copies src/mark.typ but only Kurvst LICENSE, never LICENSE.tiptoe. Their following copy_wasm_bundles installs the new mark-engine WASM. Existing pre-transplant states therefore receive attributed code without its new notice.",
+          "origin": "New integration gap triggered by source17 shared marks; source15/16 only needed the main Kurvst license.",
+          "required": "Copy all required Kurvst root licenses in both recipes and exercise an existing bundle lacking Tiptoe."
+        },
+        {
+          "id": "D2",
+          "severity": "P2",
+          "path": ".github/workflows/linnet-py-wasm.yml",
+          "lines": [
+            23,
+            24
+          ],
+          "title": "New packaging gate is not bootstrapped for a clean runner",
+          "evidence": "The command precedes toolchain setup, installs no Maturin and seeds no Cargo registry. The fixture runs cargo/maturin --offline. Independently running test_api_embedded_payload with an empty CARGO_HOME fails with exit101: no matching package named color-eyre. The warmed Nix environment passes all four packaging tests.",
+          "origin": "Added by drawing transplant8430; absent even in approved drawing98cb.",
+          "required": "Provision the toolchain and Maturin and fetch fixture dependencies (or run the tests in a prepared canonical Nix environment), then validate from an empty cache."
+        },
+        {
+          "id": "D3",
+          "severity": "P2",
+          "path": "crates/linnest/src/svg/marks.rs",
+          "lines": [
+            46,
+            51,
+            63
+          ],
+          "related": [
+            {
+              "path": "crates/linnest/src/svg/mod.rs",
+              "lines": [
+                76,
+                77,
+                757,
+                759
+              ]
+            }
+          ],
+          "title": "New shared-mark adapters still violate the mandatory import policy",
+          "evidence": "New/substantially modified code spells std::collections::BTreeMap, std::cell::RefCell and kurvst::marks::MarkSpec/MarkGeometry types at use sites rather than importing the types. These are not macro expansion templates.",
+          "origin": "New source17 adapter code, confirmed by base438b..candidate additions.",
+          "required": "Apply module-scope explicit imports to the new drawing adapters, preserving old unrelated style, then rerun scoped formatting/Clippy checks."
+        }
+      ],
+      "verdict": "REQUEST_CHANGES"
+    },
+    "E": {
+      "receipt": "docs/architecture/evidence/generation-integration/wp3/staged-round1/E.json",
+      "sha256": "c883f47b11741e062e95ccb66a20eb538b951e2a48cf65885f2e2e81ce01bfed",
+      "findings": [
+        {
+          "id": "E1",
+          "severity": "P1",
+          "file": "crates/alphal00p-docs-python-exporter/src/main.rs",
+          "lines": [
+            96,
+            98,
+            176,
+            260,
+            718,
+            733,
+            751,
+            778
+          ],
+          "summary": "Exporter replay uses the retired Linnet stub owner and nonexistent standalone output.",
+          "evidence": "The candidate exposes linnet_py::canonical_stub at crates/linnet-py/src/lib.rs:206, but no stub or PythonModule. The new exporter calls those nonexistent APIs in production and includes nonexistent crates/linnet-py/linnet_py.pyi in its Linnet test. The native/static/optional-widget owner was intentionally retained; the old standalone owner was intentionally not restored. Independent cargo check --features linnet --tests exits101 with 8 errors. The transplanted tests additionally demand NodeSpec/EdgeSpec/HalfEdgeSpec absence and NodeView/EdgeView classes, contradicting the deliberately retained native #209 owner, which still registers those Spec classes.",
+          "fix": "Use the retained canonical stub owner throughout production and tests; keep only supported destinations and preserve runtime/inventory/signature checks. Do not resurrect an obsolete compatibility owner to satisfy this replay.",
+          "required_check": "cargo check --locked --profile ci-optim -p alphal00p-docs-python-exporter --features linnet --tests; canonical Linnet exporter --check and relevant tests",
+          "log": "exporter-linnet-check.log"
+        },
+        {
+          "id": "E2",
+          "severity": "P1",
+          "file": "crates/alphal00p-docs-python-exporter/src/main.rs",
+          "lines": [
+            853,
+            856,
+            860
+          ],
+          "summary": "Explicit-import cleanup imports PyModule twice in the GammaLoop exporter test.",
+          "evidence": "Both pyo3::prelude::{..., PyModule, ...} and pyo3::types::PyModule introduce the same type name. The previous glob plus explicit import did not have this problem. The exact import block extracted unchanged into ignored scratch and compiled with current PyO3 metadata independently produces E0252 (duplicate-import.log). Full GammaLoop exporter compilation stops earlier at E5.",
+          "fix": "Keep a single module-scope import of each actually used PyO3 item, consistent with current repository policy.",
+          "required_check": "cargo check --locked --profile ci-optim -p alphal00p-docs-python-exporter --features gammaloop --tests; relevant exporter tests",
+          "log": "duplicate-import.log"
+        },
+        {
+          "id": "E5",
+          "severity": "P1",
+          "file": "crates/gammaloop-api/src/python.rs",
+          "lines": [
+            72,
+            548,
+            571,
+            574,
+            577
+          ],
+          "summary": "The production GammaLoop Python feature no longer compiles after explicit-import cleanup omitted IntoPyObject.",
+          "evidence": "Independent locked ci-optim cargo check of the GammaLoop exporter feature exits101 in gammaloop-api with four E0599 errors for String/i64/u64/f64.into_pyobject. Compiler identifies missing pyo3::IntoPyObject. This fails before the E2 duplicate-import test block is compiled.",
+          "fix": "Import the actually required IntoPyObject trait at module scope and remove the new unused prelude imports; validate the real GammaLoop Python/stub features, not only default CLI or feynkit-py.",
+          "log": "exporter-gammaloop-check.log",
+          "required_check": "cargo check --locked --profile ci-optim -p alphal00p-docs-python-exporter --features gammaloop --tests, followed by relevant exporter/runtime-signature tests"
+        },
+        {
+          "id": "E3",
+          "severity": "P2",
+          "file": "docs/products/registry.toml",
+          "lines": [
+            75
+          ],
+          "summary": "The documented Linnet Python feature matrix adds nonexistent feature community.",
+          "evidence": "Cargo metadata with linnet-py/community fails: available features are default, native, python_stubgen, wasm. The new registry advertises [community, python_stubgen], inherited from the discarded source owner.",
+          "fix": "Describe the actual retained Community module and supported feature set; do not restore the old feature/standalone split.",
+          "log": "community-feature.log"
+        },
+        {
+          "id": "E4",
+          "severity": "P3",
+          "file": "docs/architecture/evidence/generation-integration/wp3/drawing-staged-artifacts.json",
+          "lines": [
+            1695,
+            1696
+          ],
+          "summary": "Two recorded source-file hashes match neither the nominated code commit nor the final candidate.",
+          "evidence": "execution.json and wp3/replay.json code_files SHA256 values are stale intermediate evidence hashes. All other audited source hashes and the four recorded selected binaries match the retained artifacts.",
+          "fix": "Refresh these evidence hashes after finalization, or exclude mutable receipt files from code_files and record them separately at an explicit final revision."
+        }
+      ],
+      "verdict": "REQUEST_CHANGES"
+    }
+  },
+  "E4": {
+    "policy": "Exclude mutable receipts from code_files; separately bind finalized receipt bytes to explicit immutable candidate revision. Parent preserves original erroneous receipt.",
+    "frozen_evidence": {
+      "revision": "817b5886a50276efea05ab860d22016e1fb0c203",
+      "files": {
+        "docs/architecture/evidence/generation-integration/execution.json": {
+          "superseded_intermediate_sha256": "af6f241034b99f33817a0b2390aef6a23344bfd8ead1decd3e38ede9aa695f12",
+          "sha256": "9f90e5459c3a81fc40b05bd59db584ffdfff320b32140cdc07e3606f33d5b3e5",
+          "code_revision_sha256": "8d5a19d9158130488f9dd26e7fae587a66211f08e08e3b8418a15b3d2400e030"
+        },
+        "docs/architecture/evidence/generation-integration/wp3/replay.json": {
+          "superseded_intermediate_sha256": "a910d299ebf1b25503e106e248ca542c9b9924deceee35c80d3e399025d5d9f9",
+          "sha256": "63f7dd1cfd1476c18595fd0800d337c0e0d41bfbb2bcb9675ca4b6abd0e02f1a",
+          "code_revision_sha256": "28eebd44f8adeb4a374f6457a7688c83eb49c4b6727dfbe298187a6f8a88d8ef"
+        }
+      },
+      "semantics": "Exact finalized candidate blobs; not hashes of mutable metadata correction files."
+    },
+    "remaining_code_hashes_checked": 1377,
+    "mismatches": [],
+    "artifact_audit": [
+      {
+        "kind": "binaries",
+        "path": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/feynkit_generator-8052585fb3d024e3",
+        "expected": "64c706b8c9250701a0021dc9558a745f75339bb49a1543c62562c909770d5f40",
+        "actual": "64c706b8c9250701a0021dc9558a745f75339bb49a1543c62562c909770d5f40",
+        "matches": true
+      },
+      {
+        "kind": "binaries",
+        "path": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/feynkit_graph-965c8e05c4247a9b",
+        "expected": "aba5969509b7d7a58bdd7bf189d63a6db24606cf0a8d2c494f878d29fc255dfd",
+        "actual": "aba5969509b7d7a58bdd7bf189d63a6db24606cf0a8d2c494f878d29fc255dfd",
+        "matches": true
+      },
+      {
+        "kind": "binaries",
+        "path": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/feynkit_model-408c2970f9216cd8",
+        "expected": "965f049a43580bc70bbc6ba06482eb56545ea0178212b1b0f5c6a2535e619a9f",
+        "actual": "965f049a43580bc70bbc6ba06482eb56545ea0178212b1b0f5c6a2535e619a9f",
+        "matches": true
+      },
+      {
+        "kind": "binaries",
+        "path": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/feynkit_py-9f7622fa85dbd250",
+        "expected": "06d000de00378e92d69b5cdb84638aceeb111d2c29e4603debfb7ca1dbd60045",
+        "actual": "06d000de00378e92d69b5cdb84638aceeb111d2c29e4603debfb7ca1dbd60045",
+        "matches": true
+      },
+      {
+        "kind": "locks",
+        "path": "tydenso/Cargo.lock",
+        "expected": "f1f0573d5f1c02d4ddb73d4491514cd291ae94ded7d84627342226917ca41dd0",
+        "actual": "f1f0573d5f1c02d4ddb73d4491514cd291ae94ded7d84627342226917ca41dd0",
+        "matches": true
+      },
+      {
+        "kind": "locks",
+        "path": "examples/notebooks/symbolica-host/Cargo.lock",
+        "expected": "03e18f00dbba096e08978063fd857d6558659f9f75e0ab09d73be3e543882c5a",
+        "actual": "03e18f00dbba096e08978063fd857d6558659f9f75e0ab09d73be3e543882c5a",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/alltargets-check.log",
+        "expected": "ccf322e6a9ae065b3a7f445dc1096d8f18bdce4eea6f7db88b74d5bb3c64e040",
+        "actual": "ccf322e6a9ae065b3a7f445dc1096d8f18bdce4eea6f7db88b74d5bb3c64e040",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/candidate-inventory.log",
+        "expected": "4f28b015255190a22d22bebe8f0b82a7959bd1f5816aff34ae038dba076e3088",
+        "actual": "4f28b015255190a22d22bebe8f0b82a7959bd1f5816aff34ae038dba076e3088",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/ci-update-final.log",
+        "expected": "07d54af5c935ee5b3f971f89507147ed688a6c3cba60975d0bbf4ea3892d81ea",
+        "actual": "07d54af5c935ee5b3f971f89507147ed688a6c3cba60975d0bbf4ea3892d81ea",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/ci-update.log",
+        "expected": "16a5cef668264d1a4b09861eddb2fef4787eb544998fc4490df49dc85f21d1ab",
+        "actual": "16a5cef668264d1a4b09861eddb2fef4787eb544998fc4490df49dc85f21d1ab",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/clippy-candidate.log",
+        "expected": "c6079aae6b534c4d3cf75ee245eeff98579c6190036ca0c4073dbca63f2ae621",
+        "actual": "c6079aae6b534c4d3cf75ee245eeff98579c6190036ca0c4073dbca63f2ae621",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/clippy-candidate2.log",
+        "expected": "6e386b42a8d1d36a8279b6731eb04542f908eb5b265501dd1681bfc61609b416",
+        "actual": "6e386b42a8d1d36a8279b6731eb04542f908eb5b265501dd1681bfc61609b416",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/clippy-candidate3.log",
+        "expected": "dede1b0a1891da5ccdb92bc253f40640d78ee8d09ec70ef12f1c79ba41d611c8",
+        "actual": "dede1b0a1891da5ccdb92bc253f40640d78ee8d09ec70ef12f1c79ba41d611c8",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/clippy-candidate4.log",
+        "expected": "5604c96267c31649d5bff126a7fd039cff8ebec9b60efe7ed80ac0244e83309e",
+        "actual": "5604c96267c31649d5bff126a7fd039cff8ebec9b60efe7ed80ac0244e83309e",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/combined-owner-controls.log",
+        "expected": "c30ad378fa6ebd7f61f5f07db95e2e7f2c62db47b1e0992f8a2b3433e1d0fe0b",
+        "actual": "c30ad378fa6ebd7f61f5f07db95e2e7f2c62db47b1e0992f8a2b3433e1d0fe0b",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/consumers-check.log",
+        "expected": "e6c5e60181b768879df3862fc04ef0bcfb6f3f9d4c8348370d451c323d7df6eb",
+        "actual": "e6c5e60181b768879df3862fc04ef0bcfb6f3f9d4c8348370d451c323d7df6eb",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/consumers-check10.log",
+        "expected": "60c0b2101fac2ad4404e1f1a7637bcf86b2a95d58579004dde8fdc0777646a4c",
+        "actual": "60c0b2101fac2ad4404e1f1a7637bcf86b2a95d58579004dde8fdc0777646a4c",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/consumers-check11.log",
+        "expected": "6b8337212571c1777eb8b623b7f50adbdfb326daf88c349adf63f7ed031a22b3",
+        "actual": "6b8337212571c1777eb8b623b7f50adbdfb326daf88c349adf63f7ed031a22b3",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/consumers-check12.log",
+        "expected": "d50083d541500207b0ac5a3e41452cebd916f7b9b0de21c487ba637a87608179",
+        "actual": "d50083d541500207b0ac5a3e41452cebd916f7b9b0de21c487ba637a87608179",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/consumers-check2.log",
+        "expected": "b81a77d70a3370cdc705cf16227fb77313a29654207172d2349457b85ecafea0",
+        "actual": "b81a77d70a3370cdc705cf16227fb77313a29654207172d2349457b85ecafea0",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/consumers-check3.log",
+        "expected": "dca6f5404ca43dafc12b25a30f0251af26ac803d5788cfa7183478448cc815df",
+        "actual": "dca6f5404ca43dafc12b25a30f0251af26ac803d5788cfa7183478448cc815df",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/consumers-check4.log",
+        "expected": "dfaf4222e816419227e085f5584ecc464775cc094a60d38005b1d8547a3a76b2",
+        "actual": "dfaf4222e816419227e085f5584ecc464775cc094a60d38005b1d8547a3a76b2",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/consumers-check5.log",
+        "expected": "bded529958751bf44f2a47301ad5faf935bb873d7b94a689006fd70dfb4471e9",
+        "actual": "bded529958751bf44f2a47301ad5faf935bb873d7b94a689006fd70dfb4471e9",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/consumers-check6.log",
+        "expected": "200fe7919536a7587dffed2c45c34f573ab6572c5cd7ec935a57faeb0bb46340",
+        "actual": "200fe7919536a7587dffed2c45c34f573ab6572c5cd7ec935a57faeb0bb46340",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/consumers-check7.log",
+        "expected": "e4e6eac0ed858f395dadec503be639e1b794f9bcd1753e074c883618f9f165ea",
+        "actual": "e4e6eac0ed858f395dadec503be639e1b794f9bcd1753e074c883618f9f165ea",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/consumers-check8.log",
+        "expected": "86680e66ec5e9e6cfe01098635e357f016401731aa591707c30658008c9341f5",
+        "actual": "86680e66ec5e9e6cfe01098635e357f016401731aa591707c30658008c9341f5",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/consumers-check9.log",
+        "expected": "c5c424a9504161daadd5424e8dbfc27317c740c4aa6f5274b7e93ff1e948fd44",
+        "actual": "c5c424a9504161daadd5424e8dbfc27317c740c4aa6f5274b7e93ff1e948fd44",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/core-check.log",
+        "expected": "f0225d18097bca6cf2f16dfc94edecdee9b8ff0104204aa4bf60fdd49e1b49b9",
+        "actual": "f0225d18097bca6cf2f16dfc94edecdee9b8ff0104204aa4bf60fdd49e1b49b9",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/core-check2.log",
+        "expected": "383459b9faf9fa9706e4fca14cac71b27632e4d776216a5b4c2bd131e527c77e",
+        "actual": "383459b9faf9fa9706e4fca14cac71b27632e4d776216a5b4c2bd131e527c77e",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/core-check3.log",
+        "expected": "64d5cb12577b10366d8968ed08e946132947f58f0e34f1ffae40a1fd73d1d8b3",
+        "actual": "64d5cb12577b10366d8968ed08e946132947f58f0e34f1ffae40a1fd73d1d8b3",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/core-tests-check.log",
+        "expected": "920d4a6a9328ef06858f0a57e36cfa68bbc8970f988aae47d67b0397077408c2",
+        "actual": "920d4a6a9328ef06858f0a57e36cfa68bbc8970f988aae47d67b0397077408c2",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/core-tests-check2.log",
+        "expected": "4e8789b52690d65eda5bf455e2c8f60a561b3339689c0315e3a35724a2cdf09b",
+        "actual": "4e8789b52690d65eda5bf455e2c8f60a561b3339689c0315e3a35724a2cdf09b",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/core-tests-check3.log",
+        "expected": "596e94980f774cc86f9517b66f793fdd284f66c04c92a3c846b43726606d8ad3",
+        "actual": "596e94980f774cc86f9517b66f793fdd284f66c04c92a3c846b43726606d8ad3",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/core-tests-check4.log",
+        "expected": "255da73ff3b5da641be1da14593063fa07570dead0fee9b58b4b4e026d2ade6d",
+        "actual": "255da73ff3b5da641be1da14593063fa07570dead0fee9b58b4b4e026d2ade6d",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/docs-final.log",
+        "expected": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "actual": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/drawing-assets.log",
+        "expected": "abdc53998ac9d37c5707ddb8749e9fc53bf3bba35c3c9a7d065700021e39f594",
+        "actual": "abdc53998ac9d37c5707ddb8749e9fc53bf3bba35c3c9a7d065700021e39f594",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/drawing-clippy.log",
+        "expected": "0ecfb19e14c45d554a29e4f15b8e7e9df94c41fe977a5ea87bc3a67f5342bad8",
+        "actual": "0ecfb19e14c45d554a29e4f15b8e7e9df94c41fe977a5ea87bc3a67f5342bad8",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/drawing-fmt.log",
+        "expected": "1dadf1b63f3fc19e19b1e9fb9a6c3f7772d8ba250861dcced4346f892ae2fca3",
+        "actual": "1dadf1b63f3fc19e19b1e9fb9a6c3f7772d8ba250861dcced4346f892ae2fca3",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/drawing-inventory.log",
+        "expected": "daa780a9f6ac40dd3f5d29476ca0676f51e86550e55c44dc0e48366015d47131",
+        "actual": "daa780a9f6ac40dd3f5d29476ca0676f51e86550e55c44dc0e48366015d47131",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/drawing-tests.log",
+        "expected": "5f3803d32f781847b40fababb9c5b44121826188b195907ae66b0325d5928b07",
+        "actual": "5f3803d32f781847b40fababb9c5b44121826188b195907ae66b0325d5928b07",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/explicit-super-check.log",
+        "expected": "f6f81b78206c682e4863dd0d255cf7aa224abca770b49e6feeb3599d50336015",
+        "actual": "f6f81b78206c682e4863dd0d255cf7aa224abca770b49e6feeb3599d50336015",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/explicit-super-check2.log",
+        "expected": "16ff48bb70af0b168ae1866ba4a239b95adc240ca3af031e9f2131cb956b552b",
+        "actual": "16ff48bb70af0b168ae1866ba4a239b95adc240ca3af031e9f2131cb956b552b",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/explicit-super-check3.log",
+        "expected": "463edfb9777cb1777583898a10b6c64208a7414d412ac647ae7d4de5366e4cb5",
+        "actual": "463edfb9777cb1777583898a10b6c64208a7414d412ac647ae7d4de5366e4cb5",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/explicit-super-check4.log",
+        "expected": "d5f10bb143770b4b50b6740965f9cb708a9883c63e65b65cd7b847fd22da5bb3",
+        "actual": "d5f10bb143770b4b50b6740965f9cb708a9883c63e65b65cd7b847fd22da5bb3",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/final-focused-controls.log",
+        "expected": "81da139824605173366c27f282b7ac76ea0274d4ff1159a186d4b91265191daf",
+        "actual": "81da139824605173366c27f282b7ac76ea0274d4ff1159a186d4b91265191daf",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/final-import-diagnostics.log",
+        "expected": "5904f4cff4e65a8337ab8d114134c428f4cfc327be4e72a9af298813f8a8ebdf",
+        "actual": "5904f4cff4e65a8337ab8d114134c428f4cfc327be4e72a9af298813f8a8ebdf",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/fmt-candidate.log",
+        "expected": "c1f7a030d9fc8cf9e69d42d7d602fdd179aeaeedba0a88e8ad449b9aaa5f1652",
+        "actual": "c1f7a030d9fc8cf9e69d42d7d602fdd179aeaeedba0a88e8ad449b9aaa5f1652",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/fmt-final.log",
+        "expected": "c1f7a030d9fc8cf9e69d42d7d602fdd179aeaeedba0a88e8ad449b9aaa5f1652",
+        "actual": "c1f7a030d9fc8cf9e69d42d7d602fdd179aeaeedba0a88e8ad449b9aaa5f1652",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/focused-candidate.log",
+        "expected": "d5bd14e8d0ca7d1543f758f51a20a471702115f0171804c134862242dd61184e",
+        "actual": "d5bd14e8d0ca7d1543f758f51a20a471702115f0171804c134862242dd61184e",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/format-policy.log",
+        "expected": "621e13037a181773bc032f668b50739b807101c2bbea523ad54ef02a67dc2b39",
+        "actual": "621e13037a181773bc032f668b50739b807101c2bbea523ad54ef02a67dc2b39",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/format-policy2.log",
+        "expected": "c1f7a030d9fc8cf9e69d42d7d602fdd179aeaeedba0a88e8ad449b9aaa5f1652",
+        "actual": "c1f7a030d9fc8cf9e69d42d7d602fdd179aeaeedba0a88e8ad449b9aaa5f1652",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/format-policy3.log",
+        "expected": "c1f7a030d9fc8cf9e69d42d7d602fdd179aeaeedba0a88e8ad449b9aaa5f1652",
+        "actual": "c1f7a030d9fc8cf9e69d42d7d602fdd179aeaeedba0a88e8ad449b9aaa5f1652",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/format-policy4.log",
+        "expected": "c1f7a030d9fc8cf9e69d42d7d602fdd179aeaeedba0a88e8ad449b9aaa5f1652",
+        "actual": "c1f7a030d9fc8cf9e69d42d7d602fdd179aeaeedba0a88e8ad449b9aaa5f1652",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/format-policy5.log",
+        "expected": "c1f7a030d9fc8cf9e69d42d7d602fdd179aeaeedba0a88e8ad449b9aaa5f1652",
+        "actual": "c1f7a030d9fc8cf9e69d42d7d602fdd179aeaeedba0a88e8ad449b9aaa5f1652",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/format-policy6.log",
+        "expected": "c1f7a030d9fc8cf9e69d42d7d602fdd179aeaeedba0a88e8ad449b9aaa5f1652",
+        "actual": "c1f7a030d9fc8cf9e69d42d7d602fdd179aeaeedba0a88e8ad449b9aaa5f1652",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/format-policy7.log",
+        "expected": "c1f7a030d9fc8cf9e69d42d7d602fdd179aeaeedba0a88e8ad449b9aaa5f1652",
+        "actual": "c1f7a030d9fc8cf9e69d42d7d602fdd179aeaeedba0a88e8ad449b9aaa5f1652",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/format-policy8.log",
+        "expected": "c1f7a030d9fc8cf9e69d42d7d602fdd179aeaeedba0a88e8ad449b9aaa5f1652",
+        "actual": "c1f7a030d9fc8cf9e69d42d7d602fdd179aeaeedba0a88e8ad449b9aaa5f1652",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/four-loop-1-8-32.log",
+        "expected": "45ddf9ff1b437ffedd14786dff496d0baf2841155dcb0e420a99ac3aae9833b5",
+        "actual": "45ddf9ff1b437ffedd14786dff496d0baf2841155dcb0e420a99ac3aae9833b5",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/frame-diagnostic.log",
+        "expected": "66efc3eaf9041d3bd12e800052cf732440bc0f73a7bd13b5b1fa022f2d13bfbc",
+        "actual": "66efc3eaf9041d3bd12e800052cf732440bc0f73a7bd13b5b1fa022f2d13bfbc",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/frame-digest-boundary.log",
+        "expected": "3b6a90c78cdfad9cd9b0315cd9097a76c022c587a408eaa22f8ce8a35fb83fd3",
+        "actual": "3b6a90c78cdfad9cd9b0315cd9097a76c022c587a408eaa22f8ce8a35fb83fd3",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/hakari-generate.log",
+        "expected": "3f97c84bba5aad06288d3390b26f6ea0278e090b58ea15e3403e7749a4f45fe0",
+        "actual": "3f97c84bba5aad06288d3390b26f6ea0278e090b58ea15e3403e7749a4f45fe0",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/hakari-generate2.log",
+        "expected": "4508232c1c59fd2cfb83dee6bd9c0d78ab3150b3671f332ac0221c4df78e381a",
+        "actual": "4508232c1c59fd2cfb83dee6bd9c0d78ab3150b3671f332ac0221c4df78e381a",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/hakari-verify.log",
+        "expected": "704f7242c6f355e1c07d9f9ae6ea748231571460920e0647e0fad2f515d7c7f3",
+        "actual": "704f7242c6f355e1c07d9f9ae6ea748231571460920e0647e0fad2f515d7c7f3",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/host-lock-refresh.log",
+        "expected": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "actual": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/import-diagnostics2.log",
+        "expected": "b9eda0d568bb70adda383f4b93b819b5ad4a93cde8f1fd56962f5d22c58c5480",
+        "actual": "b9eda0d568bb70adda383f4b93b819b5ad4a93cde8f1fd56962f5d22c58c5480",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/import-fix.log",
+        "expected": "95eb4edaa43290bd83b3c07d754e8ae8ead3804277c7fe530a37c1db4024c672",
+        "actual": "95eb4edaa43290bd83b3c07d754e8ae8ead3804277c7fe530a37c1db4024c672",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/import-fix10.log",
+        "expected": "59975e65b3fff6504d8430f4989eec43a0d63ef53d53437c294ae33bfe018382",
+        "actual": "59975e65b3fff6504d8430f4989eec43a0d63ef53d53437c294ae33bfe018382",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/import-fix11.log",
+        "expected": "81db8c15d8e4c7129fa642803b143d4aa916104085739a22193bda728787663a",
+        "actual": "81db8c15d8e4c7129fa642803b143d4aa916104085739a22193bda728787663a",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/import-fix2.log",
+        "expected": "607250c83d87e62545aea4e2abc745c42431a985699d4593b4ef3e2912f63940",
+        "actual": "607250c83d87e62545aea4e2abc745c42431a985699d4593b4ef3e2912f63940",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/import-fix3.log",
+        "expected": "f02d8405e0dcaecd99f21ac84f08118760566c4de363f375c551e69f0e7ed88a",
+        "actual": "f02d8405e0dcaecd99f21ac84f08118760566c4de363f375c551e69f0e7ed88a",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/import-fix4.log",
+        "expected": "109a6f9b37f4b5f4c96cbdda9a74f031fefe40ce2762d51a4202a74a0d2988be",
+        "actual": "109a6f9b37f4b5f4c96cbdda9a74f031fefe40ce2762d51a4202a74a0d2988be",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/import-fix5.log",
+        "expected": "ab666326da0c01806a183890f491c63d1a928f9d7cc91520614b1ab78f96a751",
+        "actual": "ab666326da0c01806a183890f491c63d1a928f9d7cc91520614b1ab78f96a751",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/import-fix6.log",
+        "expected": "25a32865d59ebcb0f1e879d2bd61522da33652397ecd1509fce81a58f7efa298",
+        "actual": "25a32865d59ebcb0f1e879d2bd61522da33652397ecd1509fce81a58f7efa298",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/import-fix7.log",
+        "expected": "721159f3b1682c063cf34cde3f253765335d7b8650f645afe7139d7312bde66f",
+        "actual": "721159f3b1682c063cf34cde3f253765335d7b8650f645afe7139d7312bde66f",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/import-fix8.log",
+        "expected": "5935ef4b1b5305f55ec3145d1fce04f4e1669b1f2d1278d7e4fe49e3d150cd81",
+        "actual": "5935ef4b1b5305f55ec3145d1fce04f4e1669b1f2d1278d7e4fe49e3d150cd81",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/import-fix9.log",
+        "expected": "d5fd1f61435e056d3570a2b5b7188151afe975114ffd124f29efd06928c84cef",
+        "actual": "d5fd1f61435e056d3570a2b5b7188151afe975114ffd124f29efd06928c84cef",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/import-flattening.log",
+        "expected": "66f721855b9a93028ac97823041b68937fd70fe025e6c3459b6e2a69d64bfa65",
+        "actual": "66f721855b9a93028ac97823041b68937fd70fe025e6c3459b6e2a69d64bfa65",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/integrity-final.log",
+        "expected": "3977f1b198847f79186e3a4053c5e4280a4413c1949fe3381fbf972d38686c52",
+        "actual": "3977f1b198847f79186e3a4053c5e4280a4413c1949fe3381fbf972d38686c52",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/kernel-candidate.log",
+        "expected": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "actual": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/kernel-isolation.log",
+        "expected": "ccb0eb67482a149f4c810b892dc52ff60d2b5df6b17b5f7158d32efe6161cba7",
+        "actual": "ccb0eb67482a149f4c810b892dc52ff60d2b5df6b17b5f7158d32efe6161cba7",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/kernel-isolation2.log",
+        "expected": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "actual": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/manual.log",
+        "expected": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "actual": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/metadata.log",
+        "expected": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "actual": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/native-topology-controls.log",
+        "expected": "dc1a8a7e5e7d73a9db633e623e42065138caa88293566794f48e43f46421acdd",
+        "actual": "dc1a8a7e5e7d73a9db633e623e42065138caa88293566794f48e43f46421acdd",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/net-application.log",
+        "expected": "64e8eb3e87ac2b453b324e937d98829d709867f386a32e6facff543cee28b27c",
+        "actual": "64e8eb3e87ac2b453b324e937d98829d709867f386a32e6facff543cee28b27c",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/notices-standalone.log",
+        "expected": "cdb525574321cd21f5fb372bcab596f0ff42e996963067e3c1ebe8b16f9c35e7",
+        "actual": "cdb525574321cd21f5fb372bcab596f0ff42e996963067e3c1ebe8b16f9c35e7",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/notices-tests.log",
+        "expected": "ce25ecabc771dc8a3d6202ae0dac029c752b9f4241c6df7ceef7dcc102b0c1b1",
+        "actual": "ce25ecabc771dc8a3d6202ae0dac029c752b9f4241c6df7ceef7dcc102b0c1b1",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/offline-display-final.log",
+        "expected": "0cbdb2995ad31ea91e35408f7e1db3fc37153465567358433265641b02a53068",
+        "actual": "0cbdb2995ad31ea91e35408f7e1db3fc37153465567358433265641b02a53068",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/registration-controls-final.log",
+        "expected": "8d5f8305b6383ad9f999b4b6c455f4c0955ba782662ed9f71921c0d646c968e7",
+        "actual": "8d5f8305b6383ad9f999b4b6c455f4c0955ba782662ed9f71921c0d646c968e7",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/registry-audit.log",
+        "expected": "e00deaa86c13d9fa2872d50da7bcdb48e0424e725100e31979d973601bd6c907",
+        "actual": "e00deaa86c13d9fa2872d50da7bcdb48e0424e725100e31979d973601bd6c907",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/registry-final.log",
+        "expected": "54cad138b0746f3f5bea39188293d073faebf85d17eeef4e486acdf87672285c",
+        "actual": "54cad138b0746f3f5bea39188293d073faebf85d17eeef4e486acdf87672285c",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/scene-fixture-regression.log",
+        "expected": "42ea594a02b2856fe812ca738f7f0ca6bbfb8b62e9986b0dd1b3c1f167e8dc4c",
+        "actual": "42ea594a02b2856fe812ca738f7f0ca6bbfb8b62e9986b0dd1b3c1f167e8dc4c",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/sm-filtered-1-8-certified.log",
+        "expected": "6a26fe78f4be3ca6693d89aa3351d00a8ba9c3ed7f8f145bd5cd002ee34d9ba9",
+        "actual": "6a26fe78f4be3ca6693d89aa3351d00a8ba9c3ed7f8f145bd5cd002ee34d9ba9",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/sm-filtered-1-8-final.log",
+        "expected": "2fb294544d7e67dbc4792278ffbf0a0fdd4495333f91f4eb3e1c6f764e236a90",
+        "actual": "2fb294544d7e67dbc4792278ffbf0a0fdd4495333f91f4eb3e1c6f764e236a90",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/sm-filtered-1-8-rerun.log",
+        "expected": "3708a7d1bb06108b625487b010b6b00efa3901fd46246f00da4949a4db20884c",
+        "actual": "3708a7d1bb06108b625487b010b6b00efa3901fd46246f00da4949a4db20884c",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/sm-filtered-1-8.log",
+        "expected": "34aad3954f6e1fca4186e33cac61c5a805e5493f5aefd31aa111aabaa915c689",
+        "actual": "34aad3954f6e1fca4186e33cac61c5a805e5493f5aefd31aa111aabaa915c689",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/sm-harness-clippy.log",
+        "expected": "6965830b8d82ac2bb71752dd14f2a315dd8f8dc3d1866e60e533422372a45725",
+        "actual": "6965830b8d82ac2bb71752dd14f2a315dd8f8dc3d1866e60e533422372a45725",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/staged-clippy-final.log",
+        "expected": "ab14e2648448786f34d1f4573330935e98ea2372f5611ce84b18a2e1dfbc1c4f",
+        "actual": "ab14e2648448786f34d1f4573330935e98ea2372f5611ce84b18a2e1dfbc1c4f",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/staged-clippy.log",
+        "expected": "3f03b880d538d1c0eb7fa3ae8dab0ac54d64a314ca1881286b6e01e23ead0ff8",
+        "actual": "3f03b880d538d1c0eb7fa3ae8dab0ac54d64a314ca1881286b6e01e23ead0ff8",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/staged-clippy2.log",
+        "expected": "86541979752b33fbd03406b0791a283cc14707269c8bdf495b2146720bc42331",
+        "actual": "86541979752b33fbd03406b0791a283cc14707269c8bdf495b2146720bc42331",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/staged-controls.log",
+        "expected": "4b982a9633c95141a3b023e937a591e4156ef1c58ff11f243904be606738db89",
+        "actual": "4b982a9633c95141a3b023e937a591e4156ef1c58ff11f243904be606738db89",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/staged-controls2.log",
+        "expected": "bd70d922ff41fbbe19da2d8b134c209cfdcc42b24f45f718208d8bf896292eaa",
+        "actual": "bd70d922ff41fbbe19da2d8b134c209cfdcc42b24f45f718208d8bf896292eaa",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/staged-controls3.log",
+        "expected": "79498359ace1456c86df532ba096b1d54b9e008788355acce535f3dc522e378c",
+        "actual": "79498359ace1456c86df532ba096b1d54b9e008788355acce535f3dc522e378c",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/staged-controls4.log",
+        "expected": "3a19b81db2e92fa66f0f555b1423c4150ad3f951dda71dbdab29ccc4affadd23",
+        "actual": "3a19b81db2e92fa66f0f555b1423c4150ad3f951dda71dbdab29ccc4affadd23",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/staged-drawing-assets-notices.log",
+        "expected": "57d2bc091e31aa1ef2d628fc971d60c52a74d769030c0bde9cae6c66771deaf5",
+        "actual": "57d2bc091e31aa1ef2d628fc971d60c52a74d769030c0bde9cae6c66771deaf5",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/staged-drawing-assets.log",
+        "expected": "841e5005f029abd833cf7c58e2193049f08a87637a64aac502ee53ce15cdb4a1",
+        "actual": "841e5005f029abd833cf7c58e2193049f08a87637a64aac502ee53ce15cdb4a1",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/staged-drawing-python-tests.log",
+        "expected": "b9b294ae2915a94524777120357f2ecd6b308555307d3d212778791aa2672b7a",
+        "actual": "b9b294ae2915a94524777120357f2ecd6b308555307d3d212778791aa2672b7a",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/staged-drawing-python-tests2.log",
+        "expected": "63c334e6b583be9cc699ec29e059c683768f5f6ac93c12bea88cb930339f1e05",
+        "actual": "63c334e6b583be9cc699ec29e059c683768f5f6ac93c12bea88cb930339f1e05",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/staged-format-initial.log",
+        "expected": "c1f7a030d9fc8cf9e69d42d7d602fdd179aeaeedba0a88e8ad449b9aaa5f1652",
+        "actual": "c1f7a030d9fc8cf9e69d42d7d602fdd179aeaeedba0a88e8ad449b9aaa5f1652",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/staged-native-wasm-tests.log",
+        "expected": "b8d27e9c1f7ad53f580b0c08d13f42ec44ee8a11ee896915a2da387167726fa6",
+        "actual": "b8d27e9c1f7ad53f580b0c08d13f42ec44ee8a11ee896915a2da387167726fa6",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/staged-nix-wasm-check.log",
+        "expected": "8433d5e0aa321aa88a3c3ccf23f2924aa728a1c476af68e3fab6f8bafde9f638",
+        "actual": "8433d5e0aa321aa88a3c3ccf23f2924aa728a1c476af68e3fab6f8bafde9f638",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/staged-notices-tiptoe.log",
+        "expected": "f70b42c06f0b9872f92344a789c582f1d4760a223cd6499743c82a9de576dd79",
+        "actual": "f70b42c06f0b9872f92344a789c582f1d4760a223cd6499743c82a9de576dd79",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/staged-notices.log",
+        "expected": "0576c7c374d6f7e179fb32297e6402a0c86eed38c054a7162ba306e09efebdde",
+        "actual": "0576c7c374d6f7e179fb32297e6402a0c86eed38c054a7162ba306e09efebdde",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/staged-oracle-controls.log",
+        "expected": "35ae4100fedc59e71b3c26ad2225ecd792bc3979f52b605020d979ab02bb82e9",
+        "actual": "35ae4100fedc59e71b3c26ad2225ecd792bc3979f52b605020d979ab02bb82e9",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/staged-oracle-controls2.log",
+        "expected": "6703057fa0c743483c9369739924b2d0074041e0ca2f499afc69ac2e478455ed",
+        "actual": "6703057fa0c743483c9369739924b2d0074041e0ca2f499afc69ac2e478455ed",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/staged-python-caller-controls.log",
+        "expected": "7fc4888b2b7e4ba31d2030ef480111a0ef709aca8d343c6d97d5cad9ebd248b3",
+        "actual": "7fc4888b2b7e4ba31d2030ef480111a0ef709aca8d343c6d97d5cad9ebd248b3",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/staged-python-final-fixes.log",
+        "expected": "91f2e87b2d0368964c492c3d385190ffd9ba592c4a54907024cb39c89ccb4c02",
+        "actual": "91f2e87b2d0368964c492c3d385190ffd9ba592c4a54907024cb39c89ccb4c02",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/staged-svg-assets.log",
+        "expected": "3757b81634c5214999d42eb1e2fed267cce6f6e2bcbdc138d6ee6210ae5e3913",
+        "actual": "3757b81634c5214999d42eb1e2fed267cce6f6e2bcbdc138d6ee6210ae5e3913",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/staged-svg-reproduction.log",
+        "expected": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "actual": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/staged-visuals.log",
+        "expected": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "actual": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/staged-wasm-notice-check.log",
+        "expected": "dd667412b74d5691cf9bbe5caea2aa0fa86bf24aa65462e4a1c35d7552be052b",
+        "actual": "dd667412b74d5691cf9bbe5caea2aa0fa86bf24aa65462e4a1c35d7552be052b",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/stubgen-candidate.log",
+        "expected": "c2d597232cf7999aace092916fcfbfdaaa8bb74b8e4dcc749cdb34667e46a667",
+        "actual": "c2d597232cf7999aace092916fcfbfdaaa8bb74b8e4dcc749cdb34667e46a667",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/stubgen-candidate2.log",
+        "expected": "4116f90ccd95a421349ee370e32fafc45b304c2e948c5f285959867208d5a41d",
+        "actual": "4116f90ccd95a421349ee370e32fafc45b304c2e948c5f285959867208d5a41d",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/stubgen-feature-check.log",
+        "expected": "13f5ef66492d7c1eb1b972fdc349fb5f2e61396612f8b15b397231cd11fa4cbd",
+        "actual": "13f5ef66492d7c1eb1b972fdc349fb5f2e61396612f8b15b397231cd11fa4cbd",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/stubgen-feature-check2.log",
+        "expected": "c244a5fbc565c7a09b5468854709b56f60f2ff07fdda3e6d640c61d81998a135",
+        "actual": "c244a5fbc565c7a09b5468854709b56f60f2ff07fdda3e6d640c61d81998a135",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/svg-assets.log",
+        "expected": "3757b81634c5214999d42eb1e2fed267cce6f6e2bcbdc138d6ee6210ae5e3913",
+        "actual": "3757b81634c5214999d42eb1e2fed267cce6f6e2bcbdc138d6ee6210ae5e3913",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/tydenso-lock-refresh.log",
+        "expected": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "actual": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/wasm-runtime.log",
+        "expected": "0b5e412d1760ae1cf5e51e45ab3f0f1a8db31035b10cd38fd17621bce49249be",
+        "actual": "0b5e412d1760ae1cf5e51e45ab3f0f1a8db31035b10cd38fd17621bce49249be",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/wasm-standalone.log",
+        "expected": "6bf6e731205e7a2aea0400b072ae1337e7e2a40a62c9416cdcc0602dc3e78e17",
+        "actual": "6bf6e731205e7a2aea0400b072ae1337e7e2a40a62c9416cdcc0602dc3e78e17",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/wp1-regression-final.log",
+        "expected": "3f7de51a15c5f5bc24e2837893524c709603739b14ac51f173de78f651d7b469",
+        "actual": "3f7de51a15c5f5bc24e2837893524c709603739b14ac51f173de78f651d7b469",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/wp1-regression.log",
+        "expected": "abb83b9604f4fce8d278140d18a4a5cc9093941277977b40c66b8dbfe20fb2cb",
+        "actual": "abb83b9604f4fce8d278140d18a4a5cc9093941277977b40c66b8dbfe20fb2cb",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/wp1-regression2.log",
+        "expected": "50abb3880d5100a3cad36c96df98c3329a78e5a4ff42d5a71b64cd6ecc127f7a",
+        "actual": "50abb3880d5100a3cad36c96df98c3329a78e5a4ff42d5a71b64cd6ecc127f7a",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/wp1-regression3.log",
+        "expected": "f58c819b6d01407542d297b6b5bcbb0eaebb1722e7d9a4e3f622713742170304",
+        "actual": "f58c819b6d01407542d297b6b5bcbb0eaebb1722e7d9a4e3f622713742170304",
+        "matches": true
+      },
+      {
+        "kind": "logs",
+        "path": "target/wp3-drawing-transplant/wp1-regression4.log",
+        "expected": "34f930d5bb8ce11ba5916f70c380183045035ad277d4912ff2fc49da96e36104",
+        "actual": "34f930d5bb8ce11ba5916f70c380183045035ad277d4912ff2fc49da96e36104",
+        "matches": true
+      },
+      {
+        "kind": "additional_artifacts",
+        "path": "target/wp3-drawing-transplant/staged-epem-ttbar-light.png",
+        "expected": "56e2067d975d8ea1cfbbe4d65644ef44515aa635be626f36a151fceb92c4dfa9",
+        "actual": "56e2067d975d8ea1cfbbe4d65644ef44515aa635be626f36a151fceb92c4dfa9",
+        "matches": true
+      },
+      {
+        "kind": "additional_artifacts",
+        "path": "target/wp3-drawing-transplant/staged-epem-ttbar-dark.png",
+        "expected": "bc34813d0221a6e9dff000e3a8379bb5e4d32f870e379713571de7144086cb99",
+        "actual": "bc34813d0221a6e9dff000e3a8379bb5e4d32f870e379713571de7144086cb99",
+        "matches": true
+      },
+      {
+        "kind": "inventory",
+        "path": "target/wp3-drawing-transplant/candidate-inventory.json",
+        "expected": "bcf22fbedd8a419a039d5c7b4cf745771ed7c55c35cc59f0030c68e04da2beab",
+        "actual": "bcf22fbedd8a419a039d5c7b4cf745771ed7c55c35cc59f0030c68e04da2beab",
+        "matches": true
+      }
+    ]
+  },
+  "owners": {
+    "A1": "generation-staged-transport-fix",
+    "C1/C2/B1/E1/E2/E3/E5": "generation-staged-graph-fixes",
+    "B2/B3": "generation-staged-parser-fixes",
+    "D1/D2/D3": "APPROVED independently at b1061d715bca86d2d29df0f108576c001a29b22a; available LATER, not integrated",
+    "E4": "this metadata-only correction; review pending"
+  },
+  "drawing_round2": {
+    "receipt": "docs/architecture/evidence/generation-integration/wp3/staged-round1/D-round2.json",
+    "sha256": "4af6beaf4e7fc142b8796fae62f62d75a3fdd558ffddb8709592a4b726f8a6ee",
+    "reviewer": "Astra",
+    "commit": "b1061d715bca86d2d29df0f108576c001a29b22a",
+    "status": "APPROVE scoped only; D1/D2/D3 closed on isolated branch",
+    "checks": "Independent5 packaging from empty CargoHome, offline/bootstrap failure controls, both parent recipe failures/upgrade idempotence,3 WASM runtime,fmt/Typst/7file inventory/3347blobs/34SVG hashes;103Rust/Clippy exact receipts reused"
+  },
+  "pending_gates": [
+    "Three newly imported historical frame hash assertions FAIL; representation diagnostic only, not physics proof or B2 routing closure.",
+    "Source31: seven inherited and twenty new scope/anchor mismatches; Kurvst PDF stale.",
+    "Source30 compile-time closure omits request_decorator_contract.py and generation_reports/*.txt.",
+    "DOT sorted content/count check does not certify incidence.",
+    "Full WP3 matrix, five fresh a_ddx, BRST, combined physics and benchmark remain pending.",
+    "Final Linnest WASM data/name provenance unresolved; no byte-exact reproduction claim.",
+    "Actual final sdist build/install, native/Pyodide/Community wheels and installed behavior remain pending."
+  ],
+  "inventory_semantics": "drawing-staged-files.json remains historical frozen code-candidate inventory (1385 slice/1418 cumulative); this correction has a separate metadata-only inventory.",
+  "validation_semantics": "All copied review results refer to their pinned revisions, not tests rerun on metadata correction. No runtime suite/build requested or run.",
+  "focused_checks": {
+    "exact_json_parser": "Python arbitrary-precision int, no floating conversion of integer digests",
+    "runtime_tests": "not run: metadata-only correction",
+    "artifact_audit_mismatches": 0,
+    "production_changes": 0,
+    "Typst": "staged note and canonical plan compile successfully",
+    "registry": "54 valid;7 inherited and20 new deferred mismatches; all staged note scopes valid",
+    "title": "Exactly one leading title per affected note; matches registry",
+    "conflicts": 0,
+    "NixCI": false,
+    "preserved_refs_verified": 17
+  }
+}

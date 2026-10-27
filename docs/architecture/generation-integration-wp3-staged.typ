@@ -68,22 +68,63 @@ tests. The combined numeric/inference/graph/model/template/gauge controls passed
 controls passed. The drawing/Python selection passed 458 of 460; the two bounded
 consumer fixes subsequently passed their targeted reruns. These selections
 overlap and must not be summed as independent coverage.
-All affected native/Rust/Python/CLI targets compiled with locked dependencies;
+Selected targets compiled with locked dependencies; independent scope E found
+GammaLoop Python and exporter feature compilation failures (E1/E2/E5).
+These are correction-lane work, not passing targets.
 the root, Tydenso and host lock updates contain necessary workspace edges and
 retain kernel `1a1829b1`. Kernel isolation and canonical Hakari verification pass.
 The CI graph is regenerated with top-level NixCI disabled. Full rebuilt-tip
 validation remains pending later units. The structured WP3 replay and retained
 `target/wp3-drawing-transplant` logs distinguish completed checks, diagnostic
-failures, reruns and deferred gates. This bounded candidate awaits independent Astra review; WP3 is not complete.
+failures, reruns and deferred gates. All five independent Astra round1 reviews of `817b5886` request changes; WP3
+is not complete. The frozen code is `f2640286`.
 
-Three unchanged historical frame-row assertions still fail on their numerator
+Three newly imported historical frame-row assertions still fail on their numerator
 digests. Full payload captures and a diagnostic-only byte comparison reproduce
 all three recorded hashes exactly after restoring verified old presentation
 spellings and omitting the new explicit-interface fields. Current payloads and
 all assertions retain the richer metadata; no expectation is refreshed. This
-is an isolated artifact-schema boundary, not a general physics certificate.
+is a representation diagnostic, not a physics certificate or closure of the
+separate downstream exact-frame routing failure B2.
 Seven inherited registry drifts and 20 additional scope/anchor mismatches remain
 explicitly inventoried for the authorized source31/final documentation rescope.
 The two newly affected drawing notice/filter scopes have specific attestations
 and exact validated fingerprints. All 34 SVGs reproduce byte-for-byte; the
-current manual and representative light/dark PNGs are retained.
+representative light/dark PNGs are retained; the committed Kurvst PDF is stale.
+
+
+== Independent review and metadata correction
+
+The durable exact review receipts and all findings are indexed in
+`evidence/generation-integration/wp3/staged-evidence-correction.json`.
+A1 hidden scalar-history transport is assigned to the transport lane.
+C1 live-view epochs, C2 retained Python tests/stubs, B1 callback guard and
+E1/E2/E3/E5 exporter/feature/import failures are assigned to the graph lane.
+B2 exact-frame consumer routing and B3 anonymous runtime boundaries belong to
+the parser lane. None of those correction branches is integrated here.
+Scope D round2 independently approves `b1061d7`, closing D1 recipe notices,
+D2 clean CI bootstrap and D3 imports on its isolated branch only. Its five
+packaging and three WASM checks and reused Rust/Clippy evidence are recorded
+separately; this is available for later combined integration.
+
+E4 excludes mutable execution/replay receipts from the code-file hash set and
+binds their exact finalized bytes to frozen revision `817b5886`. Remaining
+code hashes retain their explicit `f2640286` meaning. This metadata correction
+requires NEW independent Astra review; candidate bookmarks remain at `817b5886`.
+It changes no production bytes and does not relabel old validation as a run
+against corrected production. Frozen inventories remain historical; a separate
+metadata-only file inventory describes this correction.
+
+Independent scope E passes the four-loop 4664/306 controls at 1/8/32, SM
+3150 and -9861/16 with both zero controls at 1/8, genuine registration full-payload
+matrices, kernel isolation and Hakari. Other independent checks and their
+limits are retained verbatim in the five round1 receipts; overlapping test
+selections are not additive coverage.
+
+Source30 closure still omits `request_decorator_contract.py` and
+`generation_reports/*.txt`. DOT content/count checks do not certify incidence.
+Linnest WASM data/name provenance remains unresolved despite matching executable
+sections. Actual sdist build/install, repaired native/Pyodide/Community wheels,
+installed behavior, full WP3, five fresh a_ddx, BRST, combined physics and
+M-rebuild remain pending. Projector22–24 is unapproved; approved input25/36,
+sampling27–29 and color46 remain separate later inputs. No source19 is started.

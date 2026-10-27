@@ -1,0 +1,155 @@
+{
+  "review": "Astra NEW independent ROUND2 ScopeD correction re-review",
+  "decision": "APPROVE",
+  "scope": "Standalone D1-D3 correction only; no whole candidate/WP3/source19 continuation approval",
+  "candidate": "b1061d715bca86d2d29df0f108576c001a29b22a",
+  "base": "817b5886a50276efea05ab860d22016e1fb0c203",
+  "change": "zlzwmtltsknrzzxzwynmwylrsvuloprt",
+  "bookmark": "generation-staged-drawing-fixes",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-staged-drawing-fixes",
+  "findings": [],
+  "closures": [
+    {
+      "id": "D1",
+      "prior_severity": "P2",
+      "status": "CLOSED",
+      "path": "just/drawing.just",
+      "lines": [
+        55,
+        145
+      ],
+      "evidence": "Both existing install_assets owners copy Kurvst LICENSE*. Fresh five-test suite passes both upgrade subcases; new regression independently fails on missing LICENSE.tiptoe for BOTH frozen-parent recipe bodies. Additional isolated real-helper controls refresh stale notice bytes, install mark.typ, preserve unrelated LICENSE.local/local source/WASM files and are idempotent. Authoritative notices and common selector unchanged."
+    },
+    {
+      "id": "D2",
+      "prior_severity": "P2",
+      "status": "CLOSED",
+      "path": ".github/workflows/linnet-py-wasm.yml",
+      "lines": [
+        23,
+        28,
+        32,
+        35
+      ],
+      "evidence": "Declared Rust1.98.1, setup-python3.13 and pinned Maturin1.15.0 precede gate. Explicit prepare flag fetches the identical shared fixture manifests; normal invocations remain offline and do not bootstrap. Independent initially empty Cargo home passes all five tests with API and wheel FIRST, before root sdist metadata can fetch workspace dependencies. Separate empty/unprepared control fails on color-eyre. Injected cargo exit42 propagates as exit1 during preparation before any test and from offline API test; no skip/continue-on-error. No broader workflow or dependency changes."
+    },
+    {
+      "id": "D3",
+      "prior_severity": "P2",
+      "status": "CLOSED",
+      "paths": [
+        "crates/linnest/src/svg/marks.rs",
+        "crates/linnest/src/svg/mod.rs"
+      ],
+      "evidence": "New shared-mark adapter types and test helpers use explicit module-scope imports. Diff is imports/name substitutions and formatter wrapping only; cfg(test) is preserved for RefCell/mem, permitted test glob remains. Independent pinned rustfmt check passes. Reused hash-verified final Sol Clippy/103-test receipt on exact candidate sources; no new Rust policy departure or geometry/label-cost semantic change."
+    }
+  ],
+  "checks": [
+    {
+      "name": "fresh-cache packaging",
+      "result": "PASS:5 tests,68.311s,no skips; both upgrade recipe subcases included",
+      "log": "clean-checks.log",
+      "runner": "clean-checks.sh / run-packaging.py",
+      "provenance": "Actual source loaded with only scratch path relocation (all5 occurrences). Test selection orders API then wheel before sdist; test assertions/commands unchanged. No developer Cargo config/cache copied. New task cache initially empty, CARGO_TARGET_DIR/RUSTC_WRAPPER/RUSTC_WORKSPACE_WRAPPER empty. Fresh fixture target directories. Explicit online preparation then offline API/wheel; root sdist metadata is allowed to fetch online. Nix tools Rust/Cargo1.98.1,Python3.13.15,Maturin1.15.0; same Maturin version as workflow, Sol clean venv install receipt verified."
+    },
+    {
+      "name": "regression, file preservation, failure propagation",
+      "result": "PASS",
+      "log": "controls.log",
+      "script": "controls.py",
+      "details": "2 frozen-parent negative upgrade subcases;2 corrected stale-notice/preservation/idempotence cases;bootstrap/offline exit42 injection propagated. Separate no-bootstrap empty Cargo home reproduced missing color-eyre."
+    },
+    {
+      "name": "committed WASM runtime and static checks",
+      "result": "PASS:3 actual Typst runtime tests,0.682s,no skips; rustfmt edition2021, Ruff format, timestamp0 Typst note",
+      "log": "static-wasm-checks.log",
+      "script": "static-wasm-checks.sh",
+      "tools": "Typst0.15.1;Ruff0.16.3; rustfmt from same pinned Rust shell",
+      "note": "Independent note PDF byte-identical to Sol receipt; title matches unchanged docs/developers.toml registry."
+    },
+    {
+      "name": "integer-aware identity audit",
+      "result": "PASS:7-file inventory,3347 tracked blobs equal pinned candidate,6 changed-file hashes plus all preserved-input hashes and round1 review hash verified; final post-test tracked-tree audit also passed",
+      "log": "audit.log",
+      "detail": "Python integer-aware JSON. No floating-number conversion. New receipt itself matches Sol final-state SHA3112910b023be04298d31e2b5153c68010a5c65fdc5b1edc394fd4a68c6cfe90."
+    },
+    {
+      "name": "prior evidence integrity and reuse",
+      "result": "PASS:all13 Sol retained log/script/PDF hashes,34 unchanged committed SVG hashes and2 retained independent render output hashes",
+      "log": "evidence-audit.log",
+      "details": "Reused Sol exact-candidate103 label/SVG/mark tests (237 skipped by selection) and successful scoped all-target Linnest Clippy; two inherited Clarabel warnings. Round1 Nix bundle SPDX/notice/WASM validity and render reproduction remain prior evidence, not renewed final artifact certification."
+    }
+  ],
+  "changed_files": [
+    ".github/workflows/linnet-py-wasm.yml",
+    "crates/linnest/src/svg/marks.rs",
+    "crates/linnest/src/svg/mod.rs",
+    "docs/architecture/evidence/generation-drawing-notices/staged-corrections.json",
+    "docs/architecture/generation-drawing-notices.typ",
+    "just/drawing.just",
+    "tests/packaging/test_drawing_notices.py"
+  ],
+  "fixture_manifest_sha256": {
+    "EMBED_MANIFEST": "b939b4e336fab912679f085c2f5ca1966aa7515302d3aa466dbf37bcf15779f2",
+    "WHEEL_MANIFEST": "04f05051912c7c9d91eb77ce72ce2a52fc22ad7eeb0a672a0c4a409d3237cfcb"
+  },
+  "preserved_boundaries": "All other tracked files unchanged from817b: kernel/locks/uv/NixCI(false), geometry engine, native MathML/static/optional-widget owners, notice texts, package metadata/source selectors, generated WASM/SVG/manual assets. No ec-layout/GPL restoration; retained shared17 marks and Tiptoe, no source38 replacement. ScopeC epoch/render fixes in another workspace not included.",
+  "inherited_failures_and_limits": [
+    {
+      "kind": "WASM reproduction",
+      "detail": "Fresh canonical Nix Kurvst matches committed SHA6da2f870339592b6c7fedbad62e07921342e083f3e5eaf1c861a6e7dd292149e. Linnest differs: committed c921635e81cf38e34232782f39f3aef65eaac188f57584ff37ee942bbeb72e9d vs rebuilt530c89c785284be1351ba4acb2ac948ce3e7e13590c3190b58e44857197d483b. All executable/code sections match. Data section differs by156 bytes (two repeated64-byte blocks and28 isolated bytes), name section differs; printable data strings match. Linnet enables AHash compile-time RNG (already present in base) and imports moved source locations; these are plausible causes, not a completed byte-level provenance proof. Do not claim byte-exact final Linnest reproduction. Required: final-source/seed/source-location audit and renewed bundle/runtime/SVG certification."
+    },
+    {
+      "kind": "Generated manual",
+      "detail": "Kurvst manual.typ now documents Mark specifications/Tiptoe; committed manual.pdf remains base blob2c4b32df552e86ab8b6d3133c2903e624e018a83 and lacks that section. A fresh timestamp0 compile succeeds (db25c8b6bd9ef4fe93891e3d82271568abe880b8dec9dd91f3c01d525b65cfaf). Treat as explicitly outstanding source31/final-doc artifact work, not current-documentation certification."
+    },
+    {
+      "kind": "Distribution",
+      "detail": "Actual final repaired/compressed native host and Pyodide wheels and external Community locked-revision wheels remain unverified: inspect final METADATA License-File entries, shipped license bytes and RECORD hashes, then installed offline/static/optional-widget behavior. Root sdist test proves inclusion/extraction only, not build/install of the final archive. Standalone Linnet packaging remains absent: any later restoration must retain license-files=[LICENSE,licenses/*], required Clarabel/NetworkX and retained Tiptoe attribution, and actual-wheel inspection. Source38 may remove Tiptoe only after replacing its owner."
+    },
+    {
+      "kind": "Cross-scope",
+      "detail": "No whole-candidate, physics, oracle, full documentation, full460, final distribution or WP3 approval claimed. Historical3 frame hashes and7+20 registry mismatches were not reclassified as passes or investigated outside this scope."
+    }
+  ],
+  "required_combined_checks": [
+    "After coordinator composes separately approved corrections, rerun packaging/upgrade and bootstrap controls, committed-WASM runtime, and scoped label/SVG/mark/Clippy checks against the integrated source identity; include relevant native/static/optional-widget controls for any composed ScopeC render changes. Confirm final combined inventory and kernel/lock/NixCI invariants.",
+    "Final source/seed/source-location audit for non-byte-identical Linnest WASM and renewed final bundle/runtime/SVG certification. Current Kurvst exact reproduction and Linnest code-section equality do not close that gate.",
+    "Refresh the stale Kurvst manual PDF through source31/final-doc work. Parent review must separately resolve or explicitly gate the3 historical frame-hash failures and7 inherited/20 new documentation-scope mismatches through their proper owners; do not weaken expectations.",
+    "Build/install actual final root sdist and repaired/compressed native host, Pyodide and external Community locked-revision wheels. Inspect final METADATA License-File entries, source closure, notice bytes and RECORD hashes; exercise installed offline/static/optional-widget behavior. Fixture wheel validates notice packaging only.",
+    "Any standalone Linnet package restoration must include root LICENSE and licenses/* plus Clarabel/NetworkX/retained Tiptoe attributions, and undergo actual wheel inspection. Source38 may remove Tiptoe only after replacing its owner.",
+    "Coordinator must aggregate other scopes and outstanding WP3/full validation gates before continuation. This receipt neither approves the frozen whole candidate nor certifies physics/full460/full docs/final distribution."
+  ],
+  "unverified": "No live GitHub Actions run, clean Ubuntu VM, full native/Pyodide/Community wheel or new full WASM/manual reproduction. Local clean-state claim is specifically an initially empty Cargo home under the pinned Nix environment. Existing broad tests deliberately not regenerated.",
+  "initial_review_attempts": "Scratch harness initially executed in a detached namespace causing unittest lookup error; corrected to __main__ globals before real negative/positive tests. An evidence audit initially used a missing SVG basename; corrected from recorded inventory. Both diagnostic logs retained; neither was a product failure or claimed pass. Early read-only Git-dir lookup and non-Nix python lookup failures led to canonical store/absolute Nix Python reads.",
+  "environment": "Nix shell derivation60rl7l3n96rrk6hcyi2my43azjhbrckz reused from verified workspace receipts; pinned tool versions independently checked. CARGO_BUILD_JOBS=2,RAYON_NUM_THREADS=2,INSTA_UPDATE=no. License preserved if set, otherwise silently read from user config. No shared .envrc present. No secrets emitted.",
+  "cleanup": "All three own sessions completed exit0. Temporary fixtures/injected tools self-cleaned; both task-owned Cargo caches and empty temporary directory removed after validation, cache-cleanup.json retained. Keep scripts/logs, fixture wheel, note PDF, hashes and review receipt for coordinator review. Shared caches and Sol/round1 artifacts untouched.",
+  "state": "No tracked edits, snapshots/ref writes, nested agents, integration or publication. Bookmark and working revision remain b1061d715bca86d2d29df0f108576c001a29b22a.",
+  "retained_sha256": {
+    "notices.pdf": "e7d7b120265a5d59dca379f943b8866e5a2a66eb9763b15aba065ba236273c77",
+    "write-review.py": "5c3481a27bebc8142c48b72b8b48d90591e5ce25f6bbea1bc67f6ca2a51a4386",
+    "static-wasm-checks.log": "7b1d5e73b35f099e6f083cd4c1e778dd583f3e436b1ee651a5ba75e332f7bbab",
+    "unprepared.log": "11f07edcfbc761114171ddb44dd00cebc571a7ab423b38cd3274d787e6f6a40f",
+    "clean-checks-harness-error.log": "92b15b6dfee308f61ca7947a9f1cdf39d9f962d885a2889bc6f442f0a45c579b",
+    "evidence-audit-initial-path-error.log": "d4a15fcf96c609bc0b8987c3f8dc59e696a3d106aa1bc34de27832d1d14f8901",
+    "run-packaging.py": "ae33699f38d61ee9099b28003add5e47f05f32481e4453ee4a26819ef13f8f35",
+    "audit.log": "d1e33fdf506ad59b1ff5d1119f0fa1eac0caa8653936cf669b7be714b79d65bb",
+    "evidence-audit.py": "3b78ebb1f90d56beebc273256b0de73d1f21494506c854dbbba3a4c348e0cece",
+    "offline-failure.log": "635a6017994d055541514ee0ab8e78c77bd989132914c7685355c5421e170179",
+    "bootstrap-failure.log": "11dfc275bb775c080393c9e0f1f7219b16f1e6f87d91a2663b474d424fbc65be",
+    "unprepared-harness-error.log": "6590aa23d0a46eb21236b0bc186dec437ef0241fb646400bfebcc99f52f98a3f",
+    "audit.py": "99ad5dac2169e0c64325361d19cd636ad1f3bea4f6a4d2ddb896e4b16208691f",
+    "static-wasm-checks.sh": "a27ad5223aab3ae265511f2f5dcd440100f826008a92bd4e28b9ac68ba7a42d4",
+    "evidence-audit.json": "6d44e4409c8ab1efadd7372048dd9f81da842a9815f122def6e97bef7e539e6f",
+    "evidence-audit.log": "17781c0daf4f3bac6db2cca779060557c2a7a8c9834ab2cdbc2e1edd6799aa5c",
+    "clean-checks.sh": "610ae92a7e8f9b0ac8b61fff6f832ad89f55ea4b0ed5d23f9b162161d0c973bd",
+    "audit.json": "a6f1cb743b66bd19f14cc285fff02103f9029e5f1ceef4424c703896e6b5875c",
+    "controls.log": "57c0b1a15e70f295f1c371e770d86f7d2712c7796d7084cbf7a6fe782a02c490",
+    "clean-checks.log": "cdba979c15d7793023777731f143db83fc795858cb2de919956814ee84a4334e",
+    "controls.py": "946f2ddae2914e06ffdcf825149bc6ebf8ee60d54d3773fbbb00c65bcc839e49",
+    "parent-upgrade-negative.log": "dd518e4c125cd251af05a6a3e9f3e8f6652767ac645a9db4dbc4283f924b8e21",
+    "cache-cleanup.json": "20fb7cf55f30fabc2302b39adcd519520bf8e72004b0be9a8891f5d2f8e19408",
+    "wheel/symbolica-3.0.1-cp310-abi3-linux_x86_64.whl": "ec317cd126595abf3f258728b03d112d6ae43ae90513677ee10b7ff2a1836755",
+    "final-audit.log": "d1e33fdf506ad59b1ff5d1119f0fa1eac0caa8653936cf669b7be714b79d65bb"
+  }
+}

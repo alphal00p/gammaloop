@@ -1,0 +1,157 @@
+{
+  "status": "Complete scoped independent round1 review; candidate requires changes",
+  "verdict": "REQUEST_CHANGES",
+  "scope": "B: downstream consumers; no whole-candidate verdict",
+  "candidate": "817b5886a50276efea05ab860d22016e1fb0c203",
+  "base": "438b61500da4b32841c64211103e5da6fc4c4a72",
+  "findings": [
+    {
+      "candidate": "817b5886a50276efea05ab860d22016e1fb0c203",
+      "severity": "P2",
+      "summary": "Complete the GenerationDiagramView rename in callback consumers",
+      "primary_file": "crates/feynkit-py/src/generation/tests.rs",
+      "line": 1276,
+      "runtime_owner": "crates/linnet-py/src/graph/generate/views.rs:446",
+      "cause": "The flavour-class test checks type(view) is graph.DiagramView. The transplant now reserves DiagramView for the live renderer, so the terminal selection assertion that every field is a concrete particle never runs. The tested callback receives GenerationDiagramView, as separately asserted by progress_and_partial_filters_use_the_calling_python_thread.",
+      "cross_scope_pointers": [
+        "crates/linnet-py/src/graph/generate.rs:579",
+        "crates/linnet-py/src/graph/generate.rs:712"
+      ],
+      "additional_docs": [
+        "crates/feynkit-py/src/generation.rs:744",
+        "crates/feynkit-py/src/generation.rs:804",
+        "crates/feynkit-py/src/generation.rs:1051"
+      ],
+      "required_fix": "Use GenerationDiagramView for generation-only checks/annotations and verify a nonzero number of terminal callback checks. Keep the existing live DiagramView owner. Regenerating stubs alone will not repair the handwritten type overrides.",
+      "validation": "A read-only sitecustomize trace in the unchanged candidate flavour-class test observed a two-edge GenerationDiagramView: old guard false, corrected guard true, classes distinct; original assertions continued and test passed. See callback-probe-result.json.",
+      "id": "B1"
+    },
+    {
+      "id": "B2",
+      "severity": "P2",
+      "file": "crates/gammalooprs/src/graph/parse/finalized_reference.rs",
+      "line": 138,
+      "summary": "New exact finalized-graph reference regression has an uncertified routing sign change",
+      "evidence": "Approved-base binary passes; candidate fails fermion_amplitude diagram 0 edges. Internal photon edge 4 external signature is [Plus,Plus,Zero,Zero], unchanged fixture expects [Minus,Minus,Zero,Zero]; listed edge identities, orientation, particle, mass and numerator otherwise match at the first failing field.",
+      "scope": "New compared with approved base; distinct from three previously disclosed generator frame-numerator digest failures. A sign flip on this undirected propagator is not by itself proof of wrong physics.",
+      "pipeline_comparison": "Both routes generate e-/e+ -> mu-/mu+ tree diagrams with the same model and max_vertices=2/self_loops=false; the staged Request/build route replaces GenerationOptions generation. Both then convert finalized diagrams to GammaLoop. Current bridge clones native routing and only permutes external columns, so compare native finalized frames before attributing this to downstream algebra.",
+      "required_next_check": "Keep expected fixture intact. Locate the first changed native frame; certify all affected local numerator/routing/cut transformations and complete-reference equivalence without expanding graph numerators. Restore the promised stable frame or justify an authorized exact reference migration only after that certificate."
+    },
+    {
+      "id": "B3",
+      "severity": "P2",
+      "file": "crates/gammalooprs/src/graph/parse/from_dot.rs",
+      "line": 128,
+      "summary": "Unified import composes anonymous fragments before enforcing the runtime explicit-index boundary",
+      "evidence": "Approved-base runtime_graph_rejects_anonymous_ports_without_assigning_indices passes. Candidate reaches an incompatible tensor product for open(801,0) occurring on three ports instead of the retained requires-an-explicit-index diagnostic, failing parse/tests.rs:143.",
+      "scope": "New error-boundary regression on rejected invalid runtime input; no acceptance of an anonymous graph and no production physics corruption established. Distinct from A1 hidden edge-history transport.",
+      "required_next_check": "Preserve the anonymous/ranked-zero rejection assertion by checking the runtime explicit-index requirement at its owning boundary before aggregate composition, or supply a justified, non-weakening test migration. Cover graph prefactors, vertices, edges, scoped/unscoped anonymous ports and compact scalar contraction control."
+    }
+  ],
+  "known_cross_scope_impacts": [
+    {
+      "id": "C2",
+      "summary": "Confirmed HEP and graph checked-in type stubs still describe removed pre-staged APIs; 16 staged HEP classes and new Process factories absent. This is supplied as downstream impact of existing C2, not a duplicate finding.",
+      "detail": "stub-contract.json"
+    },
+    {
+      "id": "C1",
+      "summary": "Native graph mutation-epoch issue is owned by scope C. No duplicate probe or independent claim here."
+    },
+    {
+      "id": "A1",
+      "summary": "Scalar finalization shortcut losing retained hidden-index transport is owned by scope A and separate generation-staged-transport-fix lane; do not duplicate its B2 rerun. Direct consumers rely on the corrected transport owner."
+    }
+  ],
+  "checks": {
+    "isolated_python_controls": {
+      "passed": 18,
+      "details": "15 generation callback/GC/signal/selection/pairing/ownership controls, apply_feynman_rules output regression, standalone generation/graph/CFF/kinematics pipeline, exception/module-isolation test. Each in a fresh process using receipt-hash-verified native test binary.",
+      "log": "python-isolated.log"
+    },
+    "callback_guard_probe": {
+      "passed": 1,
+      "details": "Trace observes actual terminal callback identity and leaves original assertions unchanged. Old guard false; correct guard true.",
+      "result": "callback-probe-result.json"
+    },
+    "gamma_loop_consumers": {
+      "run": 124,
+      "passed": 122,
+      "failed": 2,
+      "skipped": 1843,
+      "log": "runtime-controls.log",
+      "run_id": "34a9c303-16d5-4b96-9173-a60141666ce3"
+    },
+    "offline_native_consumer": {
+      "status": "PASS",
+      "source": "crates/feynkit-py/tests/installed_offline_rendering.py",
+      "method": "Read-only sitecustomize trace uses the matching native modules already registered by the SHA-verified candidate standalone Python test, executes the unchanged consumer script with temporary module aliases, restores aliases, and continues original host assertions. No fixture edits or bypasses.",
+      "seconds": 1.68,
+      "log": "offline-probe.log",
+      "result": "offline-probe-result.json",
+      "scope": "Complete offline consumer source, not a wheel/distribution certification or full combined_community Rust test."
+    },
+    "approved_base_rechecks": {
+      "passed": 2,
+      "log": "base-controls.log",
+      "identity": "base-binary-identity.json"
+    },
+    "offline_combined_rust_test": {
+      "status": "CANCELLED supplemental rebuild, not counted",
+      "reason": "The required unchanged offline consumer script passed using the already SHA-verified candidate native host. Stopped only the redundant own Cargo/nextest rebuild; shared caches retained.",
+      "exit_code": 130,
+      "log": "offline.log"
+    },
+    "candidate_binary": {
+      "path": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/gammalooprs-78b1b1b87556b8bb",
+      "sha256": "44bd85266aebde9845c56fca06f1e58cc8904c05598451cb9747c649ea7d6a11"
+    }
+  },
+  "source_audit": {
+    "receipt_code_paths": 1379,
+    "receipt_mismatch_scope": "Only two post-code evidence JSON files differ; all production paths in recorded code_files match. Four recorded binary SHA256s match.",
+    "physics": "Inspected lazy Result propagation, runtime conversion/cut ownership, staged options and amplitude pairing. Newly reproduced exact reference and explicit-index diagnostic failures block approval; no wrong physical value has yet been established.",
+    "data_provenance": "590 changed consumer examples/test-data paths byte-identical to resolved18; 27 reconciliation/difference paths inventoried in consumer-data-provenance.json. This is source provenance, not physics certification.",
+    "scope_boundaries": "Minimal filtering and opt-in grouping are settled plan choices; migrated legacy callers carry explicit topology/cut settings. No source19+ production body import identified in reviewed consumer hunks. Names/route/Classes redesign and M-rebuild remain pending."
+  },
+  "diagnostics": [
+    "Initial shared-process 15-test libtest run passed but emitted two unsendable PyGraph finalizer warnings; all 18 fresh-process reruns passed without these warnings. Not treated as a proven production bug.",
+    "One stub-feature-only test selector matched zero tests in the ordinary binary; not counted as a pass.",
+    "Initial observation probe requested nonexistent n_edges property and failed due to the reviewer script; corrected probe uses len(view.edges()) and passes."
+  ],
+  "limits": [
+    "No B2/heavy four-loop/SM/oracle rerun, no five a_ddx/full combined physics matrix or benchmark.",
+    "No final wheel/Pyodide/standalone/Community distribution certification.",
+    "No full documentation product or generated-stub runtime audit. The 7 inherited/20 additional scope/anchor drifts remain separate source31 work; public stub drift needs the C2 fix.",
+    "Three historical frame hash failures are outside this scoped execution and remain unresolved at candidate; no blind rerecording.",
+    "Full combined_community Rust wrapper was not independently completed: the offline consumer source and original standalone host assertions were executed instead; extra network/browser wrapper cases are not newly certified."
+  ],
+  "required_next_checks": [
+    "Resolve B2/B3 with exact routing/frame and runtime anonymous-port boundary evidence; both failed candidate controls pass on the verified approved-base binary.",
+    "Finish callback rename in terminal assertion, native handwritten stub overrides and affected HEP docstrings; assert that completed-callback checks actually execute.",
+    "Regenerate HEP, graph, host and reference stubs through current owners and verify native surface/signatures; coordinate with existing generation-staged-graph-fixes lane for C2.",
+    "After fixes, rerun relevant staged Python/native consumer controls and aggregate all five scope reviews before source19."
+  ],
+  "retained_artifacts": "Unique ignored target/astra-staged-r1-downstream retains review.json, distinct finding receipts, base/candidate identities, source-provenance inventory, logs and reproducible read-only probe scripts. Temporary diff copies removed; no review-owned processes retained.",
+  "tracked_integrity": {
+    "candidate": "817b5886a50276efea05ab860d22016e1fb0c203",
+    "receipt_paths": 1379,
+    "post_code_receipts_only": [
+      "docs/architecture/evidence/generation-integration/execution.json",
+      "docs/architecture/evidence/generation-integration/wp3/replay.json"
+    ],
+    "all_production_paths_match": true,
+    "no_tracked_edits_or_refs": true
+  },
+  "processes_retained": [],
+  "logs": {
+    "base-controls.log": "9b357c1ce10e1f4622eca3764bc2da004d244d89e5a271e132a16b68a2a93544",
+    "callback-probe-final.log": "49a1ed4f1dcb3a9271bc83d17c13289b99b0255d4e40fb52dd3ec588753c7591",
+    "callback-probe.log": "8d2dbefd81c74fb7f03268ea3c83b699c4b381ebc036c2430917285964d6bba3",
+    "offline-probe.log": "eaddf4677fb50f499f19f6ef2a433128fdb4a2e8525acce97baf9a3f8b646ca1",
+    "offline.log": "0e22f85bc77cd4515aab9ed0222969e263f6c9961a5e14b7e1cf8d10449a41f4",
+    "python-controls.log": "a8de4b0749fc2707717521cc1a41c1a1b9190add38ab52a0846f275aea99675e",
+    "python-isolated.log": "9e24a8e12e93e5990e4a4b05a1edb317bd26f3d7f4e06211df0535874eed2836",
+    "runtime-controls.log": "6c63797b0dabfc2530d0b52afd45283b8bffd04abebe8e3df74732149391736e"
+  }
+}
