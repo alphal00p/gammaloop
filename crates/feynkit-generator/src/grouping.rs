@@ -1,3 +1,4 @@
+use crate::generation::FACTOR_HEADS;
 use std::{
     collections::{BTreeMap, BTreeSet},
     fmt,
@@ -1161,7 +1162,7 @@ fn collapse_groups(
                     GroupingError::SourceDiagramIndexOverflow(member.source_diagram)
                 })?;
                 factor += function!(
-                    symbol!("feynkit_generator_factor::NumeratorDependentGrouping"),
+                    FACTOR_HEADS.numerator_dependent_grouping,
                     Atom::num(source_diagram),
                     member.ratio.clone(),
                     member.overall_factor.clone()

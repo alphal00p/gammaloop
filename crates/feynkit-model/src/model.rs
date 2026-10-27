@@ -17,7 +17,7 @@ use symbolica::domains::rational::Rational;
 use symbolica::id::{Pattern, Replacement};
 use symbolica::parser::ParseSettings;
 use symbolica::printer::CanonicalOrderingSettings;
-use symbolica::{function, symbol};
+use symbolica::{function, symbol, try_symbol};
 
 use crate::{
     ComplexValue, EntityKind, EvaluatedValues, EvaluationRequest, ModelError, ModelEvaluator,
@@ -801,6 +801,21 @@ impl Model {
                 parameter.texname.as_deref(),
                 parameter.typstname.as_deref(),
             )?;
+        }
+        // Declare the coupling symbols in model order too. Symbolica orders the
+        // factors of a product by symbol creation, so a coupling first created
+        // by whichever generation thread instantiates its vertex first would
+        // make printed numerators depend on the thread schedule.
+        for coupling in &definition.couplings {
+            try_symbol!(&format!("UFO::{}", coupling.name)).map_err(|message| {
+                ModelError::SymbolicParse {
+                    kind: EntityKind::Coupling,
+                    name: coupling.name.clone(),
+                    field: "name",
+                    expression: coupling.name.clone(),
+                    message: message.to_string(),
+                }
+            })?;
         }
         let mut parameters = definition
             .parameters
@@ -2982,6 +2997,22 @@ mod tests {
                 ref target,
                 ..
             }) if name == "V1" && target == "missing"
+        ));
+    }
+
+    #[test]
+    fn rejects_coupling_names_that_are_not_symbols() {
+        let json = model_json("GC 1").replace(r#""name":"GC1""#, r#""name":"GC 1""#);
+        let error = Model::from_json(&json).unwrap_err();
+
+        assert!(matches!(
+            error,
+            ModelError::SymbolicParse {
+                kind: EntityKind::Coupling,
+                ref name,
+                field: "name",
+                ..
+            } if name == "GC 1"
         ));
     }
 

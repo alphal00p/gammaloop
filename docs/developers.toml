@@ -209,7 +209,9 @@ anchor = "pub fn generate("
 # Reviewed intent 2026-10-27 prefix fix: admit unreduced rules before checked
 # conservation rewriting, retaining the static template's interface/history.
 # Dynamic rules retain one actual-owner admission and compact materialization.
-digest = "8f5aa53995929e5e0572635cdb09d5764095b86d"
+# Integration review intent: preserve authoritative metadata and the current owner;
+# scoped source reconciliation and regression results are recorded in WP3 units03-07.
+digest = "b723525194b3a59789d47b1a1a10e2df95c0d83c"
 
 [[section.note.scope]]
 path = "crates/feynkit-model/src/model.rs"
@@ -237,7 +239,9 @@ anchor = "pub struct Model {"
 # Reviewed 2026-10-16: Canonical expression export makes fingerprints independent of registration order; model ownership and strict import validation remain unchanged.
 # Reviewed intent 2026-10-27: port FeynRules momentum reduction through the existing
 # admitted interaction owner; literal model data and metadata transport remain authoritative.
-digest = "bcc0498a65946d4de51c5ae10466696bf3f285ea"
+# Integration review intent: preserve authoritative metadata and the current owner;
+# scoped source reconciliation and regression results are recorded in WP3 units03-07.
+digest = "3887f65c1c670de301495664dd4d4929dd76f60d"
 
 [[section.note.scope]]
 path = "crates/feynkit-graph/src/lib.rs"
