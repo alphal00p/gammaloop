@@ -804,6 +804,25 @@ impl SymbolicTensor<PartialStructure> {
     }
 
     fn infer_with_contractions(atom: Atom) -> InferenceResult<(Self, bool)> {
+        if InterfaceInference::is_plain_scalar(atom.as_view()) {
+            // Eligibility proves an empty interface and construction history.
+            // Publish through the same metadata owner as full admission.
+            let value = Self::from_validated_parts(
+                atom,
+                PartialStructure::from_logical_slots([]),
+                Arc::new(ExplicitIndexOccurrences::default()),
+            );
+            let _ = value.proofs.intrinsic.set(true);
+            let _ = value.proofs.normalized_product.set(true);
+            let _ = value.proofs.rewrite.set(true);
+            let _ = value.proofs.algebra.set(true);
+            return Ok((value, false));
+        }
+        Self::admit_with_contractions(atom)
+    }
+
+    /// Full admission, including scopes and retained construction history.
+    fn admit_with_contractions(atom: Atom) -> InferenceResult<(Self, bool)> {
         let atom = DotNormalizer::nested_vectors(atom.as_view());
         let atom = InterfaceInference::lower_tensor_powers(atom.as_view())?.unwrap_or(atom);
         let mut inference = InterfaceInference {
@@ -3531,6 +3550,50 @@ impl InterfaceInference {
             )
     }
 
+    /// Whether admission is the identity on `value` and proves a scalar with
+    /// every intrinsic fact. Admission only reacts to symbols carrying a Spenso
+    /// tag (tensor, rank-one, representation, index and broadcast heads), to
+    /// the chain placeholders, to function heads owned by Spenso (brackets,
+    /// dots, chains, traces, scalar wrappers, projectors, index wrappers,
+    /// metrics), and to the callbacks of normalized or evaluated heads.
+    /// Function-free atoms, such as numbers and parameter products, are
+    /// decided by their symbols alone.
+    fn is_plain_scalar(value: AtomView<'_>) -> bool {
+        let tagged = |symbol: Symbol| {
+            symbol
+                .get_tags()
+                .iter()
+                .any(|tag| tag.starts_with("spenso::"))
+        };
+        !value.needs_normalization()
+            && match value {
+                AtomView::Num(_) => true,
+                AtomView::Var(variable) => {
+                    let symbol = variable.get_symbol();
+                    // Chain placeholders are Spenso symbols; the namespace test
+                    // spares every other symbol the placeholder comparison,
+                    // which decodes the variable again.
+                    !tagged(symbol)
+                        && (symbol.get_namespace() != "spenso"
+                            || !Self::is_chain_placeholder(value))
+                }
+                AtomView::Fun(function) => {
+                    let symbol = function.get_symbol();
+                    !tagged(symbol)
+                        && symbol.get_namespace() != "spenso"
+                        && symbol.get_normalization_function().is_none()
+                        && symbol.get_evaluation_info().is_none()
+                        && function.iter().all(Self::is_plain_scalar)
+                }
+                AtomView::Pow(power) => {
+                    let (base, exponent) = power.get_base_exp();
+                    Self::is_plain_scalar(base) && Self::is_plain_scalar(exponent)
+                }
+                AtomView::Mul(product) => product.iter().all(Self::is_plain_scalar),
+                AtomView::Add(sum) => sum.iter().all(Self::is_plain_scalar),
+            }
+    }
+
     fn is_unmaterialized_tensor_leaf(value: AtomView<'_>) -> bool {
         let AtomView::Fun(function) = value else {
             return false;
@@ -3821,6 +3884,7 @@ pub(crate) mod tests {
     mod authoritative_metadata;
     mod auto_axis;
     mod builtin_words;
+    mod scalar_admission;
 
     thread_local! {
         pub(in crate::tensor) static OCCURRENCE_FUNCTION_VISITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };

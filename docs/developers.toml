@@ -1411,6 +1411,21 @@ topics = ["integration", "testing", "precision"]
 review_triggers = ["crates/gammalooprs/src/utils/mod.rs", "docs/architecture/evidence/generation-numeric-comparisons/**"]
 
 
+[[section.note]]
+id = "generation-scalar-admission"
+title = "Generation scalar admission shortcut"
+summary = "Independent source14 port onto authoritative tensor metadata, with syntax eligibility and full-admission equivalence checks."
+source = "docs/architecture/generation-scalar-admission.typ"
+kind = "Implementation receipt"
+status = "Astra round 1 approved; cumulative integration awaiting review"
+lifecycle = "investigation"
+owner = "unassigned"
+reviewed_at = "2026-10-27"
+evidence_revision = "74cebf6c8f673f5849b26afe55fa98035d5eba1d"
+products = ["idenso"]
+topics = ["generation", "inference", "testing"]
+review_triggers = ["crates/idenso/src/tensor/inference.rs", "crates/idenso/src/tensor/inference/tests/scalar_admission.rs"]
+
 [[section]]
 id = "investigations"
 title = "Engineering investigations"

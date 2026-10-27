@@ -1,0 +1,53 @@
+{
+  "source": "14aff3bbdceb6687459efe4abcb96e9d760146f5",
+  "source_order": 14,
+  "base": "74cebf6c8f673f5849b26afe55fa98035d5eba1d",
+  "new_change": "rokpmnuwzquruoqqqoxwupmwqvpulzmv",
+  "bookmark": "generation-scalar-admission",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-scalar-admission",
+  "status": "awaiting independent Astra review; not integrated",
+  "disposition": {
+    "syntax_eligibility": "ported",
+    "equivalence_tests": "ported and adapted to authoritative history and proof caches",
+    "direct_obsolete_proof_initializer": "replaced with existing from_validated_parts publication and current derived facts",
+    "fixed_hash_keys": "deferred separate shared-inference performance change",
+    "lazy_fresh_index_state": "deferred separate shared-inference performance change",
+    "already_satisfied": "current from_validated_parts owns validated history publication; full infer_observed checks scopes, signatures and occurrences; existing typed algebra retains metadata across cancellation"
+  },
+  "changed_files": [
+    "crates/idenso/src/tensor/inference.rs",
+    "crates/idenso/src/tensor/inference/tests/scalar_admission.rs",
+    "docs/architecture/generation-scalar-admission.typ",
+    "docs/architecture/evidence/generation-integration/scalar-admission/receipt.json",
+    "docs/developers.toml"
+  ],
+  "benefit_check": {
+    "existing_counter": "tensor::inference::tests::INFERENCE_CALLS",
+    "test": "plain_scalar_skips_interface_discovery",
+    "input": "-𝑖*GC_11*ee^2*cw/sw in scalar_admission namespace",
+    "shortcut_discovery_calls": 0,
+    "full_discovery_calls": 1,
+    "scope": "discovery avoided; no wall-time or end-to-end performance claim"
+  },
+  "validation": {
+    "focused": "PASS: all five scalar_admission tests in final broader inference run, including registered-symbol equivalence, exact current proof state, oriented history and rejection cases",
+    "format": "PASS: cargo fmt -p idenso --check after final formatting",
+    "note": "Typst compile passed; registry TOML parse, unique entry, source and title checks passed",
+    "clippy": "PASS: cargo clippy -p idenso --lib --tests --locked -- -D warnings; dependency future-incompatibility notice for proc-macro-error2 v2.0.1 only",
+    "inference_regressions": "PASS: cargo test -p idenso tensor::inference::tests --lib -- --test-threads=2; 120 passed, 0 failed, 1070 filtered out; final runtime 0.44s",
+    "fixture_corrections": "Intermediate added-test failures: Debug included allocation addresses (replaced by oriented entries); closed powers and subtraction intentionally scope internal pairs (history fixture now uses distinct tensor heads and certified with_algebra_result). No production behavior or existing expectations changed.",
+    "policy_review": "Mandatory Rust ownership/import/error/initialization policies reviewed; no numerical changes, factor expansion or policy departures introduced."
+  },
+  "limits": [
+    "No full generation benchmark or integrated end-to-end measurement",
+    "No full workspace CI or documentation site build",
+    "No lockfile, template, snapshot, planner or transport API changes",
+    "Top-level NixCI enable=false preserved"
+  ],
+  "retained": [
+    "workspace and bookmark for independent review",
+    "structured receipt and registered Typst note",
+    "shared compilation caches preserved"
+  ],
+  "processes": "No task-owned background processes remain; all checks completed. Temporary source extracts and rendered PDF removed."
+}
