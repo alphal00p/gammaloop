@@ -1546,7 +1546,10 @@ agree exactly; all nineteen V_35 numerators are exact negatives of the frozen
 ones. Only those signs are refreshed from main. Topology, momentum bases,
 projectors and propagator phases remain unchanged, as do all independent RQFT
 Laurent expectations. The source card, baseline output and vertex-by-vertex
-certificate are in `target/readiness-repair/ghost-two-loop-main`.
+certificate are in `target/readiness-repair/ghost-two-loop-main`. That refresh
+followed main's `UUV1 = P(3,2)`. Restoring the FeynRules `P(3,2) + P(3,3)`
+(see `sm-conventions-audit.typ`) rebuilt these nineteen numerators, and the two
+of `ghost_lo.dot`, in that form; the RQFT expectations are again unchanged.
 
 Cross-section DOT exports now transport the runtime owner's existing cuts and
 threshold candidates through the native FeynmanDiagram validator. The transport

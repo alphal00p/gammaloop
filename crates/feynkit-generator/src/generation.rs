@@ -3641,9 +3641,12 @@ impl Generator {
                 {
                     let coupling = self.model.coupling_by_id(*coupling)?;
                     let coupling = Atom::var(symbol!(&format!("UFO::{}", coupling.name)));
-                    let lorentz = &self.model.lorentz_structure_by_id(*lorentz_name)?.structure;
+                    let lorentz = self
+                        .model
+                        .lorentz_structure_by_id(*lorentz_name)?
+                        .reduced_by_momentum_conservation();
                     let color = instantiation.instantiate(color, NumeratorSector::Color)?;
-                    let lorentz = instantiation.instantiate(lorentz, NumeratorSector::Spin)?;
+                    let lorentz = instantiation.instantiate(&lorentz, NumeratorSector::Spin)?;
                     terms.push(coupling * color * lorentz);
                 }
             }
@@ -7665,7 +7668,9 @@ mod tests {
     #[test]
     fn interaction_templates_preserve_rank_when_incident_momenta_cancel() {
         let mut definition = serde_json::to_value(scalar_model()).unwrap();
-        definition["lorentz_structures"][0]["structure"] = json!("P(idx(2,1),1)+P(idx(2,1),2)");
+        // Keep a shortest Lorentz rule: P1 + P2 would reduce to -P3 before
+        // aliasing. Equal-flow aliases cancel P1 - P2 after admission instead.
+        definition["lorentz_structures"][0]["structure"] = json!("P(idx(2,1),1)-P(idx(2,1),2)");
         let model = Model::from_json(&definition.to_string()).unwrap();
         let rule = model.vertex_rule_id("V1").unwrap();
         let generator = Generator::new(model);
@@ -7674,6 +7679,7 @@ mod tests {
             leg.color = 1;
         }
         legs[1].edge = legs[0].edge;
+        legs[1].flow = legs[0].flow;
         for owner in [4, 9] {
             let instantiation = NumeratorInstantiation {
                 owner: NumeratorOwner::Vertex(owner),

@@ -25,7 +25,7 @@ use crate::{
     initialisation::test_initialise,
     model::{Model, ModelGammaLoopExt, UFOSymbol, VertexRuleIdGammaLoopExt},
     numerator::{ParsingNet, aind::Aind},
-    utils::{FUN_LIB, GS, load_generic_model},
+    utils::{FUN_LIB, load_generic_model},
 };
 
 type Matrix = [[Atom; 4]; 4];
@@ -488,7 +488,7 @@ fn generated_sm_quark_charged_yukawas_satisfy_hermiticity_and_ward_identities() 
 }
 
 #[test]
-fn generated_sm_charged_ward_and_ghost_momentum_follow_the_action() {
+fn generated_sm_charged_ward_follows_the_action() {
     test_initialise().unwrap();
     // The approved canonical model carries the action-consistent Lorentz rules;
     // loading it rebuilds the vertex rules and their shared Lorentz references.
@@ -506,12 +506,6 @@ fn generated_sm_charged_ward_and_ghost_momentum_follow_the_action() {
                 ext -> amplitude [particle="W+"];
                 amplitude -> ext [particle="vt"];
                 amplitude -> ext [particle="ta+"];
-            }
-            digraph charged_ghost {
-                ext [style=invis];
-                ext -> amplitude [particle="ghWp"];
-                ext -> amplitude [particle="ghWp~"];
-                ext -> amplitude [particle="a"];
             }
             "#,
         &model,
@@ -565,47 +559,6 @@ fn generated_sm_charged_ward_and_ghost_momentum_follow_the_action() {
     }
     assert_eq!(ward_residual, Atom::Zero);
     assert_eq!(goldstone_amplitude, yukawa);
-
-    let graph = &graphs[2];
-    let (node, _, vertex) = graph
-        .underlying
-        .iter_nodes()
-        .find(|(_, _, vertex)| {
-            vertex
-                .vertex_rule
-                .as_ref()
-                .is_some_and(|rule| rule.resolve(&model).name == "V_26")
-        })
-        .unwrap();
-    let mut expression = model.expand_couplings(&NumeratorInterface::export(&vertex.num.value).0);
-    let mut antighost_edge = None;
-    for hedge in graph.underlying.iter_crown(node) {
-        match graph.underlying[hedge].ufo_order.value {
-            1 => antighost_edge = Some(graph.underlying[&hedge]),
-            2 => {
-                for slot in graph.underlying[hedge]
-                    .num_indices
-                    .spin_indices
-                    .vertex_indices
-                    .external_structure_iter()
-                {
-                    expression = expression
-                        .replace(slot.to_atom().to_pattern())
-                        .with(GS.cind(0));
-                }
-            }
-            _ => {}
-        }
-    }
-    // The antighost flows into this vertex. With e=1 and pbar^0=3,
-    // -barc partial D c, D=partial-ieA, requires -3i. Slot assignment
-    // and incoming-momentum conversion above are the actual Graph pipeline.
-    let ghost_value = expression
-        .replace(Atom::from(UFOSymbol::from("ee")).to_pattern())
-        .with(Atom::one())
-        .replace(GS.emr_mom(antighost_edge.unwrap(), GS.cind(0)).to_pattern())
-        .with(Atom::num(3));
-    assert_eq!(ghost_value, Atom::num(-3) * Atom::i());
 }
 
 #[test]

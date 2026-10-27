@@ -1,0 +1,635 @@
+{
+  "schema": 1,
+  "status": "in-progress; not a rebuilt candidate",
+  "fixed_target": {
+    "commit": "3f0df2a870806076820786994d4883decec8e9e3",
+    "tree": "3c91ba47525c627fbc02d79f5afa1d58aa7c5b66",
+    "parents": [
+      "f02faa90d55c1d0a875b5345c010f03746d29549"
+    ],
+    "subject": "Preserve tensor metadata and render notebook displays with MathML (#209)"
+  },
+  "frozen_v4": {
+    "commit": "e0a779808174c64057fecfd062c948b8de8e5c1f",
+    "tree": "d9811519406b5d6aef92403f5ee0c20993a39adf",
+    "parents": [
+      "dfe6387606e44a96f110c1ce03f52d92824dbdb1"
+    ],
+    "subject": "reduce structure-constant cycles through adjoint chains"
+  },
+  "pre_rebuild_ref": "generation-integration-pre-rebuild",
+  "pre_rebuild_commit": "5226894ee1af61797e6b819d7e801a22bf17bace",
+  "plan_ref_commit": "4374f72027b75df9ff95c5c7a725ee75beac27a8",
+  "ancestry": "Reviewed planning/evidence chain retained as non-code base on fixed target; new source ports appended without source rewrites.",
+  "units": [
+    {
+      "commit": "d8146dc2ad8c4f5272969310c4127bce3f0fe4f8",
+      "source_change": "kursouxxupmzxppvxqymtqwkwzvopklq",
+      "source_order": 1,
+      "disposition": "reconcile",
+      "planned_unit": "port-01",
+      "planned_order": 1,
+      "reason": "Port ghost model A and momentum-conservation reduction plus BRST fixtures onto current model/template owner; retain quartet correctness assertions.",
+      "status": "ported; focused validation passed; remaining WP3 integration pending",
+      "reconciliation": [
+        "Use existing #209 interaction_expression underneath admitted templates; do not restore monolithic admission.",
+        "Finalized-reference delta limited to three momentum strings; preserve current target symbol-tag spelling.",
+        "addbar/epemttbar source changes only update model fingerprints; apply those strings without replacing modern graph metadata.",
+        "Retain target registry structure; refresh only affected scope digests and document owner.",
+        "Top-level NixCI already false; source toggle delta unnecessary.",
+        "Retain all #209 hidden-zero rank/cache assertions: change its nonconserving P1+P2/opposite-flow toy fixture (now reduced to -P3) to shortest P1-P2/equal-flow aliases, so cancellation still occurs after admission. No expected value/assertion is changed."
+      ],
+      "new_change": "yxvutxrttxrwtnwxqpssvuxolovuslky",
+      "fixture_pipeline_comparison": {
+        "input": "Three-leg scalar toy model, P(idx(2,1),1)+P(idx(2,1),2), first two edge IDs aliased, opposite flows, unconstrained third momentum",
+        "old_route": [
+          "literal Lorentz rule",
+          "existing shared admission template",
+          "actual-owner localization and edge aliasing",
+          "zero tensor with retained rank/slot history"
+        ],
+        "ported_route": [
+          "LorentzStructure momentum-conservation reduction P1+P2=-P3",
+          "same existing shared admission template",
+          "same localization and aliasing",
+          "nonzero third momentum"
+        ],
+        "last_shared_boundary": "literal toy-model input",
+        "first_difference": "approved Lorentz reduction before admission",
+        "excluded": "No different template cache, localization or hidden-history mechanism: those owners remain shared. The old fixture used nonconserving synthetic momenta.",
+        "corrected_input": "Shortest P1-P2 rule with equal-flow aliasing; exact zero occurs only during specialization after shared admission. Existing assertions unchanged."
+      }
+    },
+    {
+      "commit": "098ed36d9f06a2db7bdba367acdd753787f99446",
+      "source_change": "myrqyuzquszvlksyrslronuqxunuqnwm",
+      "source_order": 2,
+      "disposition": "reconcile",
+      "planned_unit": "port-02",
+      "planned_order": 2,
+      "reason": "Keep the locked-kernel alignment policy, not the obsolete v4 revision, binary wasm or old dependency patches. Preserve accepted target kernel in all three locks and uv.",
+      "status": "pending",
+      "analysis": "Accepted #209 base already supplies the aligned main-branch kernel in root/Tydenso/notebook-host, host subset enforcement and uv branch. Historical c78cff pin, registry Graphica arrangement and generated WASM must not be ported; existing feature-isolation check passes. No source-02 code change is necessary for its reviewed alignment intent."
+    },
+    {
+      "commit": "9601eb6bd5da5b83685d7ed3d2dc13fb2a93b0cb",
+      "source_change": "mnylmtnoknkvqvwrskxuqoqxlzstykvt",
+      "source_order": 3,
+      "disposition": "reconcile",
+      "planned_unit": "port-03",
+      "planned_order": 3,
+      "reason": "Port spectator component planning onto current authoritative tensor metadata; preserve spectator invariance and mutation regressions.",
+      "status": "pending"
+    },
+    {
+      "commit": "1ebce5ed1e7396bd28686e5236f8862930a33523",
+      "source_change": "txukktrxpnqrustwtroqtznknyoxzmkn",
+      "source_order": 4,
+      "disposition": "reconcile",
+      "planned_unit": "port-04",
+      "planned_order": 4,
+      "reason": "Port scoped partner copies alongside planner; preserve non-colour epsilon bounds, scopes and signed transport.",
+      "status": "pending"
+    },
+    {
+      "commit": "19ccf3a6fe86c382480c02d93d6d8b984c85ffd0",
+      "source_change": "vqlsqwonqpvxkmrxqmqoornoqykomnqx",
+      "source_order": 5,
+      "disposition": "reconcile",
+      "planned_unit": "port-05",
+      "planned_order": 5,
+      "reason": "Reconcile shared colour representations and scoped-contraction docs with #209 tensor ownership; do not restore old interfaces.",
+      "status": "pending"
+    },
+    {
+      "commit": "ab40b7dc7daebe140ed97c18fc6acddda230eb47",
+      "source_change": "pyxxkprryykwusprvkolyrkxvplsnttr",
+      "source_order": 6,
+      "disposition": "reconcile",
+      "planned_unit": "port-06",
+      "planned_order": 6,
+      "reason": "Preserve fixed coupling and factor-head registration order inside staged construction; do not undo #209 template admission.",
+      "status": "pending"
+    },
+    {
+      "commit": "db7590285613f55a36f3b2e955e70e7785c27f49",
+      "source_change": "zxztmwpunllktxywrskxorzoztmvqwtz",
+      "source_order": 7,
+      "disposition": "reconcile",
+      "planned_unit": "port-07",
+      "planned_order": 7,
+      "reason": "Port canonical inferred port order through current NumeratorInterface::translate; preserve declared order and hidden index history from #209.",
+      "status": "pending"
+    },
+    {
+      "commit": "2e77886cde8d72e1e063cafced9a2738811abf20",
+      "source_change": "tyyyvnqqytqzqqqzwnrzltxlyultwvnw",
+      "source_order": 8,
+      "disposition": "retain",
+      "planned_unit": "port-08",
+      "planned_order": 8,
+      "reason": "Retain circular complex-phase comparison and relative phase tolerance; independent of metadata migration.",
+      "status": "pending"
+    },
+    {
+      "commit": "0eb460fd62c3b7fbd2a244ba13d8f38b60fbfad6",
+      "source_change": "mqrtpvykvroxolumuponxlvnkyplnuur",
+      "source_order": 9,
+      "disposition": "retain",
+      "planned_unit": "port-09",
+      "planned_order": 9,
+      "reason": "Retain imaginary-against-zero real ApproxEq correction; not supplied by phase-wraparound PR alone.",
+      "status": "pending"
+    },
+    {
+      "commit": "314a7f5349092a4b95944cae4abdb32d204da515",
+      "source_change": "msmnnywklznzkyslzspnykvstulxkvvq",
+      "source_order": 10,
+      "disposition": "drop-as-upstream",
+      "planned_unit": null,
+      "planned_order": null,
+      "reason": "Actual merged #175 is an ancestor of target; do not layer the dev-shell copy. Whole-commit patch IDs differ because merged #175 additionally changes .config/nextest.toml; flake.nix delta is byte-identical.",
+      "status": "pending"
+    },
+    {
+      "commit": "1de750c53193f573ed2cd6885a9dbeba065367d1",
+      "source_change": "mkkynrvssspronorumuurppvtpuyuwlq",
+      "source_order": 11,
+      "disposition": "drop-as-upstream",
+      "planned_unit": null,
+      "planned_order": null,
+      "reason": "Actual merged #176 is an ancestor of target; keep its run-card session behavior without duplicate copy.",
+      "status": "pending"
+    },
+    {
+      "commit": "b5e3c5e6a062da219d98384bf2cffdcc38dcd200",
+      "source_change": "nxmztorqonwmlzwrmzwnunsnqsnxopvl",
+      "source_order": 12,
+      "disposition": "superseded",
+      "planned_unit": null,
+      "planned_order": null,
+      "reason": "Drop the first isolated-product proof (nxmztorq). Redesigned #177 and final #210 complete colour algebra beside indexed spectators; not patch-equivalent to this first copy.",
+      "status": "pending"
+    },
+    {
+      "commit": "07c14f18d432788d113ac4d1a443e21b3e8345d8",
+      "source_change": "msqkzsytwonzpuopoyrlruntqnkmslrz",
+      "source_order": 13,
+      "disposition": "reconcile",
+      "planned_unit": "port-13",
+      "planned_order": 10,
+      "reason": "Retain intent of rendered ExecutionMode.Single docstring assertion; adapt to current #209 stub/display surface without weakening asserted rendering.",
+      "status": "pending"
+    },
+    {
+      "commit": "14aff3bbdceb6687459efe4abcb96e9d760146f5",
+      "source_change": "woqyvuynmtqxxzmzrqsntrxwtprmrkzz",
+      "source_order": 14,
+      "disposition": "reconcile",
+      "planned_unit": "port-14",
+      "planned_order": 11,
+      "reason": "#191 remains open and its plain-scalar shortcut is absent on target. Adapt eligibility and proof construction to #209 authoritative metadata; compare shortcut with full admission, including all registered symbols. Never overwrite #193 templates or resurrect obsolete TensorProofs fields.",
+      "status": "pending"
+    },
+    {
+      "commit": "711f9440b323166cbba92df4bea632b20121aa06",
+      "source_change": "uoqkkyuutpkpwmlwsvlrmxnpmumxmyrk",
+      "source_order": 15,
+      "disposition": "reconcile",
+      "planned_unit": "port-15",
+      "planned_order": 12,
+      "reason": "Keep removal of unused GPL plugin; integrate with current native drawing resources and retained Clarabel/NetworkX notices (WP11). Do not import stale generated assets.",
+      "status": "pending"
+    },
+    {
+      "commit": "9e737a18274991e8dc0542f777a6063acaf72fe8",
+      "source_change": "kvykwlrzowsrvvztrwuvmulronunrzok",
+      "source_order": 16,
+      "disposition": "reconcile",
+      "planned_unit": "port-16",
+      "planned_order": 13,
+      "reason": "Retain contact-first label cost after #178; regenerate drawing binaries only in owning implementation lane; preserve current rendering and notice ownership.",
+      "status": "pending"
+    },
+    {
+      "commit": "8cf6cecaf22be4d5c62d467b8e6827e80c6ba66d",
+      "source_change": "sptyyttxkwkrlluvpqqwkrvyymzwpuxp",
+      "source_order": 17,
+      "disposition": "squash",
+      "planned_unit": "staged-transplant",
+      "planned_order": 14,
+      "reason": "Combine conflicted transplant with vwptmtxs resolution and roxklnrz formatting as one clean staged-generation unit; use net resolved tree, never replay conflict container as code.",
+      "status": "pending"
+    },
+    {
+      "commit": "2b1ef4f07a44bc061bcc97c378bbdd9c41cb0e94",
+      "source_change": "vwptmtxsoyxuptvltmrwqkpplkmxspsp",
+      "source_order": 18,
+      "disposition": "squash",
+      "planned_unit": "staged-transplant",
+      "planned_order": null,
+      "reason": "Resolution belongs to sptyyttx unit; reconcile staged Request/DiagramSet/BuiltDiagramSet with #209 admitted templates and retain current tensor/display APIs.",
+      "status": "pending"
+    },
+    {
+      "commit": "8d49e6ecf0d8fb1169e7433f2c0b41048aa92e60",
+      "source_change": "yrpmmsunvpsxzkvootvxurynzyzpsvss",
+      "source_order": 19,
+      "disposition": "reconcile",
+      "planned_unit": "port-19",
+      "planned_order": 15,
+      "reason": "Adapt deterministic zero-colour removal to #210 completed colour-only algebra; remove dependency on obsolete PreparedNumerator::color_products_vanish. Retain canonical grouping and exact output comparisons.",
+      "status": "pending"
+    },
+    {
+      "commit": "8eeaeaaeb0fed758111e9f711eb256c4a5efbf75",
+      "source_change": "mpyquuutlzpvlwusqnrxlzkotwklwtxx",
+      "source_order": 20,
+      "disposition": "reconcile",
+      "planned_unit": "port-20",
+      "planned_order": 16,
+      "reason": "Retain sampled quotient normalization only with WP1 reviewed verdict/remedy. No exactness claim from matching sampled values; original numerator pair is the regression oracle.",
+      "status": "pending"
+    },
+    {
+      "commit": "78f55a6d68aef17897638bacd1d1492047711f75",
+      "source_change": "msurxwzpxkktnsprnztwnktlumnsorov",
+      "source_order": 21,
+      "disposition": "reconcile",
+      "planned_unit": "port-21",
+      "planned_order": 17,
+      "reason": "Retain nonfinite-sample rejection and physical card closure; carry reviewed WP1 production fallback regression with original budget/seed, distinct from samples=0 proof.",
+      "status": "pending"
+    },
+    {
+      "commit": "77dcd12272d0f86dc5309f8d74de94632a771b6e",
+      "source_change": "punkpusnwrokzynnnknxxyzmrnvryrko",
+      "source_order": 22,
+      "disposition": "retain",
+      "planned_unit": "port-22",
+      "planned_order": 18,
+      "reason": "Retain energy-flow scalar bubble orientation selection and its physical assertions.",
+      "status": "pending"
+    },
+    {
+      "commit": "967abd74e1843016d34f5e6f701cd4b7828768b6",
+      "source_change": "npztpvmozwmozmtrkqnuroxvtqmotoou",
+      "source_order": 23,
+      "disposition": "retain",
+      "planned_unit": "port-23",
+      "planned_order": 19,
+      "reason": "Retain corrected qqx_aaa colour-projector variance; preserve exact fixture physics.",
+      "status": "pending"
+    },
+    {
+      "commit": "a18babd0f5adb028d4bd0722ce386be93464839d",
+      "source_change": "ookmywxqtvwvuzmvzlszrkusmqmolrxl",
+      "source_order": 24,
+      "disposition": "reconcile",
+      "planned_unit": "port-24",
+      "planned_order": 20,
+      "reason": "Preserve projector half-edge slots starting at one; adapt generation command and native index serialization to #209 local-zero convention.",
+      "status": "pending"
+    },
+    {
+      "commit": "15f2aa1a11380f33325ce283a404753a9836882f",
+      "source_change": "uprxtpyzqyxyuooyqnymnnpltnupuwpy",
+      "source_order": 25,
+      "disposition": "reconcile",
+      "planned_unit": "port-25",
+      "planned_order": 21,
+      "reason": "Retain explicit legacy DOT conversion naming on current parser; no fallback restoring ambiguous legacy import.",
+      "status": "pending"
+    },
+    {
+      "commit": "8cf71575a739976295edb42eae2052d6b5e455ee",
+      "source_change": "nspktuturulolzqxqsrskmpqrmvmwzyn",
+      "source_order": 26,
+      "disposition": "retain",
+      "planned_unit": "port-26",
+      "planned_order": 22,
+      "reason": "Keep explicit RQFT ghost loop bases; no snapshot/count change is authorized by this disposition.",
+      "status": "pending"
+    },
+    {
+      "commit": "d17f3548821f76250e49056e6b684257e49d92ec",
+      "source_change": "xlxotqkxzmlzuwrvypktyqrytuusywmo",
+      "source_order": 27,
+      "disposition": "retain",
+      "planned_unit": "port-27",
+      "planned_order": 23,
+      "reason": "Keep co-oriented parallel-bundle LMB sampling with signed routing correctness tests.",
+      "status": "pending"
+    },
+    {
+      "commit": "2ec30ce37196011fbeb21af2822d655146b45a0f",
+      "source_change": "znotxmuqplopunyyoupttyqlspxtrmul",
+      "source_order": 28,
+      "disposition": "retain",
+      "planned_unit": "port-28",
+      "planned_order": 24,
+      "reason": "Keep zero-coefficient omission in affine sampling frames; preserve nonzero contributions.",
+      "status": "pending"
+    },
+    {
+      "commit": "dd3640cb8171fbdc455888e3b8fcf2de92514a32",
+      "source_change": "lrvklnoxsyzmpxpwzpkwymspoymxwzou",
+      "source_order": 29,
+      "disposition": "retain",
+      "planned_unit": "port-29",
+      "planned_order": 25,
+      "reason": "Retain already accepted CoolQM three-sigma gate and original fixed seed; no reseeding or broader tolerance.",
+      "status": "pending"
+    },
+    {
+      "commit": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "source_change": "lwlpypukowxvnxzolotymlkwounowwkr",
+      "source_order": 30,
+      "disposition": "reconcile",
+      "planned_unit": "port-30",
+      "planned_order": 26,
+      "reason": "Reconcile compile-time test source closure with current Nix crate groups; include new staged fixtures without reverting #209 browser/resource ownership.",
+      "status": "pending"
+    },
+    {
+      "commit": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "source_change": "sovlouyzzttyzptklsnvrtvpuurlwmmz",
+      "source_order": 31,
+      "disposition": "reconcile",
+      "planned_unit": "port-31",
+      "planned_order": 27,
+      "reason": "Recompute architecture scopes against rebuilt code; never copy historical digests over #209 records. Preserve historical reports separately.",
+      "status": "pending"
+    },
+    {
+      "commit": "351c85036778be709117a021fc5f1656bbd5a964",
+      "source_change": "zyqtxlzmluwyprqnzpkoxpvoyrzsnmrl",
+      "source_order": 32,
+      "disposition": "reconcile",
+      "planned_unit": "port-32",
+      "planned_order": 28,
+      "reason": "Update wheel contents prose to actual current resources; preserve #209 optional-widget/static-display contract and required notices.",
+      "status": "pending"
+    },
+    {
+      "commit": "ce9072e44a3335fdba7d223b0c3ae885cc29dc20",
+      "source_change": "mxynunqnvrvoslylvoyzovkwqkzprxzz",
+      "source_order": 33,
+      "disposition": "reconcile",
+      "planned_unit": "port-33",
+      "planned_order": 29,
+      "reason": "Adapt browser camera test to current native drawing APIs and offline Chromium owner; do not restore obsolete viewer or removed Typst renderer.",
+      "status": "pending"
+    },
+    {
+      "commit": "7e93e726e253ebb2a1af0d4b38177f3628d4b34b",
+      "source_change": "xwlpupspvzsqnoxtpmsmmvlxsqzmutov",
+      "source_order": 34,
+      "disposition": "reconcile",
+      "planned_unit": "port-34",
+      "planned_order": 30,
+      "reason": "Port FeynCalc gallery names to final staged API while retaining current tensor-expression and display examples.",
+      "status": "pending"
+    },
+    {
+      "commit": "8c12968bde84643623ca2f5099e0175180a73dc6",
+      "source_change": "vsmnrmwtrsmwqxlqzrssvxxslvyqxulz",
+      "source_order": 35,
+      "disposition": "reconcile",
+      "planned_unit": "port-35",
+      "planned_order": 31,
+      "reason": "Adapt Python scripts to current TensorExpression and native index boundary; do not import pre-#209 display tags.",
+      "status": "pending"
+    },
+    {
+      "commit": "5a99afbd1645250715ecf59361beb7ab4826d083",
+      "source_change": "ylkykurolvlzqqlkqsvyyruupktpvvws",
+      "source_order": 36,
+      "disposition": "retain",
+      "planned_unit": "port-36",
+      "planned_order": 32,
+      "reason": "Keep actionable data-asset upgrade errors; preserve installed resource discovery.",
+      "status": "pending"
+    },
+    {
+      "commit": "cfe9e8d103b3d2a4ebf1f276f61d8d6980e3d054",
+      "source_change": "roxklnrzrpvrmmvtwtowxywvulklswqm",
+      "source_order": 37,
+      "disposition": "squash",
+      "planned_unit": "staged-transplant",
+      "planned_order": null,
+      "reason": "Fold assertion rustfmt fixup into staged transplant unit; no independent conflict-bearing commit.",
+      "status": "pending"
+    },
+    {
+      "commit": "15dd7e1b188dad112d7887bdc6d769125b2697a1",
+      "source_change": "ymuswsmznnqtptlpmosmvlvznoyxwoyy",
+      "source_order": 38,
+      "disposition": "reconcile",
+      "planned_unit": "port-38",
+      "planned_order": 33,
+      "reason": "Retain first-principles mark geometry, with source/license audit in WP11; reproduce generated assets there rather than copying historical binaries.",
+      "status": "pending"
+    },
+    {
+      "commit": "854c4a7a4ac22ef6987e9446092560a3363f5d77",
+      "source_change": "uzltsrpqqlwwszzxkvmunltkyxlmqzvy",
+      "source_order": 39,
+      "disposition": "reconcile",
+      "planned_unit": "port-39",
+      "planned_order": 34,
+      "reason": "Retain compact-labelling frame anchoring and canonicalization tests on current tensor interfaces; separate stale bundled wasm output.",
+      "status": "pending"
+    },
+    {
+      "commit": "f6c29e4b324692e8fa185ac356dc66e1b1edd783",
+      "source_change": "xxomkxowznmkxusqwpxyppqtovtoyqoz",
+      "source_order": 40,
+      "disposition": "retain",
+      "planned_unit": "port-40",
+      "planned_order": 35,
+      "reason": "Keep accurate sewn_tadpoles veto documentation on staged options.",
+      "status": "pending"
+    },
+    {
+      "commit": "b69de4327cf27e8ba275300ab02d7151f472f047",
+      "source_change": "vsqmxsywwprlvkmxtlysrzonzyonulsw",
+      "source_order": 41,
+      "disposition": "reconcile",
+      "planned_unit": "port-41",
+      "planned_order": 36,
+      "reason": "Keep explicit previous filter settings in remaining run cards; adapt current schema, preserving accepted physics inventory.",
+      "status": "pending"
+    },
+    {
+      "commit": "40c126b1ff91a0c8c95480cacc8f5ba3ee0f1309",
+      "source_change": "swtwpqvyvoqyrqsulpkryqkxluzlokox",
+      "source_order": 42,
+      "disposition": "retain",
+      "planned_unit": "port-42",
+      "planned_order": 37,
+      "reason": "Keep per-stage Python progress coalescing and caller-thread/error ordering contract.",
+      "status": "pending"
+    },
+    {
+      "commit": "74fcd8e57e9fe256d4bc34b5d8ad93c97fc28848",
+      "source_change": "wqnmtlzuvwyuylvyswuwtkqmzqkyloyw",
+      "source_order": 43,
+      "disposition": "retain",
+      "planned_unit": "port-43",
+      "planned_order": 38,
+      "reason": "Keep terminal-pocket cut coverage and original assertions on staged cut implementation.",
+      "status": "pending"
+    },
+    {
+      "commit": "087bda82ce5a14dab092776ea470e66278dda12d",
+      "source_change": "klowxlpsrssumqqxmyqwrlnozwnxmtoy",
+      "source_order": 44,
+      "disposition": "reconcile",
+      "planned_unit": "port-44",
+      "planned_order": 39,
+      "reason": "Historical refreshed ghost/sunset expectations are provenance, not certification. Port only after WP9 exact correctness justification; unresolved rows remain failing with reasons, not re-recorded.",
+      "status": "pending"
+    },
+    {
+      "commit": "dfe6387606e44a96f110c1ce03f52d92824dbdb1",
+      "source_change": "nvkxyoplklpptmluvtzzvunrrukzplyl",
+      "source_order": 45,
+      "disposition": "reconcile",
+      "planned_unit": "port-45",
+      "planned_order": 40,
+      "reason": "Historical duplicate aa3 reference alignment is not new validation. Reconcile under WP9 exact standard; no automatic snapshot rewrite.",
+      "status": "pending"
+    },
+    {
+      "commit": "e0a779808174c64057fecfd062c948b8de8e5c1f",
+      "source_change": "kpslpwqzortppxynqtqnmxyxnxpyzsnn",
+      "source_order": 46,
+      "disposition": "reconcile",
+      "planned_unit": "port-46",
+      "planned_order": 41,
+      "reason": "Port order-independent structure-constant cycle reduction onto #210 colour completion and #209 tensor metadata; preserve symbol-registration perturbation tests.",
+      "status": "pending"
+    }
+  ],
+  "validation": {
+    "status": "pending",
+    "logs": "target/wp3",
+    "notes": [
+      "Initial isolated feynkit-model test lacked native feature and failed in Numerica before tests; corrected native invocation is running, no pin change.",
+      "Workspace fmt check reports inherited permutation.rs drift; changed-file formatting passed.",
+      "Zero selected tests, timeouts and skips are not passes."
+    ],
+    "completed": [
+      {
+        "check": "model momentum conservation regression",
+        "status": "passed",
+        "selected": 1,
+        "passed": 1,
+        "ignored": 0,
+        "command": "nix develop -c cargo test --locked --profile ci-optim -p feynkit-model --features native model::tests::momentum_conservation_shortens_only_reducible_lorentz_structures -- --exact",
+        "log": "target/wp3/port01-model-native-test.log"
+      },
+      {
+        "check": "native model Clippy",
+        "status": "passed",
+        "command": "nix develop -c cargo clippy --locked --profile ci-optim -p feynkit-model --features native --all-targets -- --deny warnings",
+        "log": "target/wp3/port01-model-clippy.log"
+      },
+      {
+        "check": "kernel feature isolation",
+        "status": "passed",
+        "command": "nix develop -c just check-symbolica-feature-isolation",
+        "log": "target/wp3/port01-feature-isolation.log"
+      },
+      {
+        "check": "changed Rust formatting and updated plan/WP2 Typst compilation",
+        "status": "passed",
+        "log": "target/wp3/port01-docs-format.log"
+      },
+      {
+        "check": "workspace formatting",
+        "status": "failed: inherited drift only",
+        "file": "crates/linnet/src/permutation.rs",
+        "log": "target/wp3/port01-fmt-check.log"
+      },
+      {
+        "check": "initial template/BRST run",
+        "status": "failed",
+        "selected": 6,
+        "passed": 5,
+        "failed": 1,
+        "skipped_by_filter": 1742,
+        "failure": "interaction_templates_preserve_rank_when_incident_momenta_cancel: synthetic P1+P2 becomes -P3 before aliasing",
+        "log": "target/wp3/port01-templates-brst.log",
+        "response": "Correct fixture without changing any assertion; corrected --lib run active."
+      },
+      {
+        "check": "initial workspace Clippy",
+        "status": "failed",
+        "log": "target/wp3/port01-workspace-clippy.log",
+        "failure": "clippy::double_must_use on newly annotated Atom-returning method; Atom already carries must_use",
+        "response": "Remove redundant annotation; model returns to previously passing targeted-Clippy source; rerun workspace Clippy."
+      },
+      {
+        "check": "corrected template and BRST nextest run",
+        "status": "passed",
+        "selected": 6,
+        "passed": 6,
+        "failed": 0,
+        "excluded_by_filter": 1649,
+        "run_id": "4bdc8734-ce62-4f1b-9ecc-8b0aa717e4ec",
+        "runtime_seconds": 13.697,
+        "log": "target/wp3/port01-templates-brst-corrected.log",
+        "tests": [
+          "generation::tests::interaction_templates_reuse_admission_and_localize_shifted_bound_indices",
+          "generation::tests::interaction_template_cache_retains_dummy_metadata_across_owners",
+          "generation::tests::interaction_templates_preserve_rank_when_incident_momenta_cancel",
+          "generation::tests::interaction_templates_use_canonical_named_interfaces_and_actual_owner_values",
+          "processes::cross_section::gauge_sewing_tests::massive_tau_covariant_cuts_satisfy_the_brst_quartet_identity",
+          "processes::cross_section::sewing_tests::generated_sm_charged_ward_follows_the_action"
+        ]
+      },
+      {
+        "check": "workspace Clippy after removing obsolete diagnostic phase",
+        "status": "passed command with inherited dependency warnings",
+        "command": "nix develop /nix/store/xrn91gkp7giwchhflr8pbl4hd1a6ycc6-nix-shell-env.drv -c just clippy -- --deny warnings",
+        "log": "target/wp3/port01-workspace-clippy-final.log",
+        "warnings": "Two vendored Clarabel warnings and proc-macro-error2 future incompatibility notice; no lint suppression added."
+      },
+      {
+        "check": "workspace formatting after Cargo edition-aware repair",
+        "status": "passed",
+        "log": "target/wp3/port01-fmt-final.log"
+      },
+      {
+        "check": "changed current documentation registry scope digests",
+        "status": "passed",
+        "scopes": 2,
+        "log": "target/wp3/port01-registry-scopes.json"
+      }
+    ],
+    "pending": [
+      "diagnostic capture regression run",
+      "all later WP3 matrix checks"
+    ]
+  },
+  "deferred": [
+    "WP4 names",
+    "WP5 route",
+    "WP6 Classes",
+    "WP9 historical snapshot certification",
+    "WP10 M-rebuild measurement",
+    "Final native/Pyodide/Community distribution certification"
+  ],
+  "processes": "Active build/check sessions retained until results collected.",
+  "extra_prerequisite": {
+    "change": "txxpwnnvymmwqprmxvqtnmzvzqyskwmm",
+    "commit": "52ac2eee4a1487bc79014c4f33f22b2854f80090",
+    "reason": "Fixed-target inherited unused Validation enum variant blocked denied-warning Clippy; remove it and its phase label. Cargo applies Linnet Rust 2021 formatting to the known permutation.rs drift. No production physics change or optimization.",
+    "files": [
+      "crates/idenso/src/reference_cases/timing.rs",
+      "crates/linnet/src/permutation.rs"
+    ]
+  }
+}

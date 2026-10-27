@@ -179,8 +179,13 @@ own workspace. Bounded: one regression, one bisect, one written verdict.
   the first bad commit when established, and a verdict: defect, permitted,
   test artefact, or unresolved. An unresolved correctness question blocks
   publication; it is not certified by matching samples.
-- #strong[Exit:] verdict reviewed; any fix is ported in WP3, not patched into
-  v4.
+- #strong[2026-10-27 result:] corrected certificate `f473709c` approved by Astra
+  round 2. B2 is closed for the original GL028/GL034 pair under 4D SU(3),
+  $N_28=(7/2)N_34$; stored sample and MT dependence cancels. No production fix
+  or bisect is justified. Port the original fixtures, signed provenance,
+  factor-preserving certificate and zero-sample/sampled controls in WP3.
+- #strong[Exit:] verdict reviewed; ignored original-pair regression explicitly
+  rerun on rebuilt (R) and final (F) tips.
 
 === WP2 Base and dependency
 <wp2>
