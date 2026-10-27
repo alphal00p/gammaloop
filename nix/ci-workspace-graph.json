@@ -103,6 +103,8 @@
       "spenso",
       "spenso-hep-lib"
     ],
+    "symbolica-data": [],
+    "symbolica-notation": [],
     "symbolica-utils": [],
     "three-dimensional-reps": [
       "linnet"
@@ -288,6 +290,8 @@
       ],
       "spenso-hep-lib": []
     },
+    "symbolica-data": {},
+    "symbolica-notation": {},
     "symbolica-utils": {},
     "three-dimensional-reps": {
       "linnet": [
@@ -323,6 +327,8 @@
     "spenso-hep-lib": "crates/spenso-hep-lib",
     "spenso-macros": "crates/spenso-macros",
     "spynso3": "crates/spynso3",
+    "symbolica-data": "crates/symbolica-data",
+    "symbolica-notation": "crates/symbolica-notation",
     "symbolica-utils": "crates/symbolica-utils",
     "three-dimensional-reps": "crates/three-dimensional-reps",
     "vakint": "crates/vakint"
@@ -352,6 +358,8 @@
     "spenso-hep-lib",
     "spenso-macros",
     "spynso3",
+    "symbolica-data",
+    "symbolica-notation",
     "symbolica-utils",
     "three-dimensional-reps",
     "vakint"
@@ -476,6 +484,8 @@
       "spenso-macros",
       "symbolica-utils"
     ],
+    "symbolica-data": [],
+    "symbolica-notation": [],
     "symbolica-utils": [],
     "three-dimensional-reps": [
       "linnet",
@@ -618,6 +628,8 @@
       "spenso-macros",
       "symbolica-utils"
     ],
+    "symbolica-data": [],
+    "symbolica-notation": [],
     "symbolica-utils": [],
     "three-dimensional-reps": [
       "linnet",
@@ -638,6 +650,7 @@
     "spenso",
     "spenso-hep-lib",
     "spynso3",
+    "symbolica-notation",
     "symbolica-utils",
     "three-dimensional-reps",
     "vakint"
@@ -656,6 +669,7 @@
     "spenso",
     "spenso-hep-lib",
     "spynso3",
+    "symbolica-notation",
     "symbolica-utils",
     "three-dimensional-reps",
     "vakint"
@@ -775,6 +789,8 @@
       "spenso",
       "spenso-hep-lib"
     ],
+    "symbolica-data": [],
+    "symbolica-notation": [],
     "symbolica-utils": [],
     "three-dimensional-reps": [
       "linnet"
@@ -988,6 +1004,8 @@
       ],
       "spenso-hep-lib": []
     },
+    "symbolica-data": {},
+    "symbolica-notation": {},
     "symbolica-utils": {},
     "three-dimensional-reps": {
       "linnet": [

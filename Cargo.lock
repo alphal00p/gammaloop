@@ -2027,6 +2027,8 @@ dependencies = [
  "num-integer",
  "num-traits",
  "numerica",
+ "proc-macro2",
+ "quote",
  "rand 0.8.6",
  "regex-automata",
  "regex-syntax",
@@ -5794,6 +5796,25 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "wide 1.7.0",
+]
+
+[[package]]
+name = "symbolica-data"
+version = "0.1.0"
+dependencies = [
+ "pyo3",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
+name = "symbolica-notation"
+version = "0.1.0"
+dependencies = [
+ "roxmltree 0.21.1",
+ "symbolica",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
