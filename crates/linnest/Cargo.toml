@@ -36,7 +36,7 @@ projection-service = []
 # Native SVG drawing of prepared graphs; Typst only typesets their labels.
 svg = ["dep:kurbo", "dep:kurvst", "dep:roxmltree"]
 custom = []
-typst-plugin = ["custom"]
+typst-plugin = ["custom", "linnet/wasm-no-js"]
 
 [[bin]]
 name = "impred-project"
