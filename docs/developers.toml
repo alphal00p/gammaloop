@@ -756,7 +756,7 @@ anchor = "pub(crate) struct MasterCatalog {"
 # Raw Float input keeps the expanded-only rule; master-dependent opaque or
 # denominator coefficients retain general exact combination. Symbolic/Numerical
 # finalization and snapshot/source ownership are unchanged.
-digest = "c865a8b7d93c2a9a8693250c9cad4a029123adb3"
+digest = "3fb643949df09af3e4b04e7d211560ec9f2ea916"
 
 [[section.note.scope]]
 path = "crates/vakint/src/precision.rs"

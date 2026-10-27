@@ -1192,6 +1192,7 @@ mod tests {
         let mut stream = bytes.as_slice();
         let original = Atom::import(&mut stream, None).unwrap();
         assert!(stream.is_empty());
+        assert!(!MasterCatalog::has_floating_coefficients(&original));
         let symbols: Vec<_> = MasterCatalog::referenced_masters(&original)
             .into_iter()
             .collect();
