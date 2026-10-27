@@ -180,6 +180,11 @@ sample retains its scope and age; caller forwarding and fresh OS memory samples 
 make old native observations current. Metadata overflow gives an unknown count and never
 introduces a reduction limit.
 
+The terminal and supervisor snapshot viewer clamp scrolling to each panel's actual
+wrapped content. Short panels remain visible while longer panels scroll; resizing or
+shrinking observations recompute the navigation extent. Panel titles show their
+current offset and final offset. This is display state only and cannot limit reduction.
+
 Numerical evaluation is a later boundary. Parametric backend output remains a Symbolica
 expression. `precision` prepares native numerical sources and contracts external momenta before
 delegating to Symbolica/Numerica's tracked evaluator. Each `NumericalCoefficient` owns its complex

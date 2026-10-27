@@ -547,7 +547,7 @@ fn worker(shared: Arc<Shared>, receiver: mpsc::Receiver<()>, options: RustRedMon
                 }
             }
             if let Some(ui) = terminal.as_mut()
-                && let Err(error) = ui.draw(&state, shared.started.elapsed(), no_color)
+                && let Err(error) = ui.draw(&mut state, shared.started.elapsed(), no_color)
             {
                 shared.fault(error.to_string());
                 break;
@@ -1520,7 +1520,9 @@ mod tests {
             let backend = ratatui::backend::TestBackend::new(220, 80);
             let mut terminal = ratatui::Terminal::new(backend).unwrap();
             terminal
-                .draw(|frame| super::super::tui::draw(frame, &view, false))
+                .draw(|frame| {
+                    super::super::tui::draw(frame, &view, false);
+                })
                 .unwrap();
             let rendered = terminal
                 .backend()

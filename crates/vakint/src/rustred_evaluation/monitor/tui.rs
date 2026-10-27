@@ -112,18 +112,25 @@ impl TerminalGuard {
 
     pub(super) fn draw(
         &mut self,
-        state: &MonitorState,
+        state: &mut MonitorState,
         now: Duration,
         no_color: bool,
     ) -> io::Result<()> {
         let view = state.view(now);
-        self.draw_view(&view, no_color)
+        let maximum_scroll = self.draw_view(&view, no_color)?;
+        // Keep the next key action relative to the visible position. Recompute
+        // every successful frame, including resizes and shrinking observations.
+        state.scroll = state.scroll.min(maximum_scroll);
+        Ok(())
     }
 
-    pub(super) fn draw_view(&mut self, view: &MonitorView, no_color: bool) -> io::Result<()> {
-        self.terminal
-            .draw(|frame| draw(frame, view, no_color))
-            .map(|_| ())
+    /// Return the shared scroll extent to the supervisor's existing view owner.
+    pub(super) fn draw_view(&mut self, view: &MonitorView, no_color: bool) -> io::Result<usize> {
+        let mut maximum_scroll = 0;
+        self.terminal.draw(|frame| {
+            maximum_scroll = draw(frame, view, no_color);
+        })?;
+        Ok(maximum_scroll)
     }
 }
 
@@ -177,10 +184,10 @@ pub(super) fn poll_action(timeout: Duration) -> io::Result<Option<UiAction>> {
 }
 
 /// Draw only supplied labels and values; estimates and metric scopes are model-owned.
-pub(super) fn draw(frame: &mut Frame<'_>, view: &MonitorView, no_color: bool) {
+pub(super) fn draw(frame: &mut Frame<'_>, view: &MonitorView, no_color: bool) -> usize {
     let area = frame.area();
     if area.width == 0 || area.height == 0 {
-        return;
+        return 0;
     }
     let [header, body, footer] = Layout::vertical([
         Constraint::Length(4),
@@ -214,11 +221,11 @@ pub(super) fn draw(frame: &mut Frame<'_>, view: &MonitorView, no_color: bool) {
         header,
     );
 
-    if body.width >= 88 && body.height >= 17 {
-        draw_panels(frame, body, view, no_color);
+    let maximum_scroll = if body.width >= 88 && body.height >= 17 {
+        draw_panels(frame, body, view, no_color)
     } else {
-        draw_compact(frame, body, view, no_color);
-    }
+        draw_compact(frame, body, view, no_color)
+    };
     frame.render_widget(
         Paragraph::new("q detach | space freeze | ↑↓ / PgUp PgDn scroll | ? help")
             .style(muted(no_color)),
@@ -227,6 +234,7 @@ pub(super) fn draw(frame: &mut Frame<'_>, view: &MonitorView, no_color: bool) {
     if view.show_help {
         draw_help(frame, area, no_color);
     }
+    maximum_scroll
 }
 
 fn panel(title: String, no_color: bool) -> Block<'static> {
@@ -256,6 +264,40 @@ fn rows<'a>(values: &'a [(String, String)], no_color: bool) -> Vec<Line<'a>> {
         .collect()
 }
 
+fn draw_scrolled(
+    frame: &mut Frame<'_>,
+    area: Rect,
+    title: &str,
+    lines: Vec<Line<'_>>,
+    scroll: usize,
+    no_color: bool,
+) -> usize {
+    let paragraph = Paragraph::new(lines).wrap(Wrap { trim: false });
+    let inner = Block::bordered().inner(area);
+    let maximum_scroll = if inner.width == 0 || inner.height == 0 {
+        0
+    } else {
+        paragraph
+            .line_count(inner.width)
+            .saturating_sub(usize::from(inner.height))
+            // Paragraph's scroll coordinate is u16, a display encoding bound.
+            .min(usize::from(u16::MAX))
+    };
+    let offset = scroll.min(maximum_scroll);
+    let title = if maximum_scroll > 0 {
+        format!("{title} · offset {offset} / {maximum_scroll}")
+    } else {
+        title.to_owned()
+    };
+    frame.render_widget(
+        paragraph
+            .block(panel(title, no_color))
+            .scroll((u16::try_from(offset).unwrap_or(u16::MAX), 0)),
+        area,
+    );
+    maximum_scroll
+}
+
 fn draw_rows(
     frame: &mut Frame<'_>,
     area: Rect,
@@ -263,29 +305,16 @@ fn draw_rows(
     values: &[(String, String)],
     scroll: usize,
     no_color: bool,
-) {
-    let title = if values.len() > usize::from(area.height.saturating_sub(2)) {
-        format!("{title} · offset {scroll} · clipped")
-    } else if scroll > 0 {
-        format!("{title} · offset {scroll}")
-    } else {
-        title.to_owned()
-    };
+) -> usize {
     let content = if values.is_empty() {
         vec![Line::from("No observation supplied").style(muted(no_color))]
     } else {
         rows(values, no_color)
     };
-    frame.render_widget(
-        Paragraph::new(content)
-            .block(panel(title, no_color))
-            .wrap(Wrap { trim: false })
-            .scroll((u16::try_from(scroll).unwrap_or(u16::MAX), 0)),
-        area,
-    );
+    draw_scrolled(frame, area, title, content, scroll, no_color)
 }
 
-fn draw_panels(frame: &mut Frame<'_>, area: Rect, view: &MonitorView, no_color: bool) {
+fn draw_panels(frame: &mut Frame<'_>, area: Rect, view: &MonitorView, no_color: bool) -> usize {
     let [left, right] =
         Layout::horizontal([Constraint::Percentage(52), Constraint::Percentage(48)]).areas(area);
     let [overview, frontier, estimates] = Layout::vertical([
@@ -300,6 +329,7 @@ fn draw_panels(frame: &mut Frame<'_>, area: Rect, view: &MonitorView, no_color: 
         Constraint::Ratio(1, 3),
     ])
     .areas(right);
+    let mut maximum_scroll = 0;
     for (area, title, values) in [
         (overview, "Observation", &view.overview),
         (frontier, "Frontier", &view.frontier),
@@ -307,23 +337,24 @@ fn draw_panels(frame: &mut Frame<'_>, area: Rect, view: &MonitorView, no_color: 
         (cache, "Cache / memory · scoped", &view.cache),
         (complexity, "Complexity · scoped", &view.complexity),
     ] {
-        draw_rows(frame, area, title, values, view.scroll, no_color);
+        maximum_scroll =
+            maximum_scroll.max(draw_rows(frame, area, title, values, view.scroll, no_color));
     }
     let mut lines = vec![Line::from("Dependency path").style(muted(no_color))];
     lines.extend(view.path.iter().map(|line| Line::from(line.as_str())));
     lines.push(Line::from("Events").style(muted(no_color)));
     lines.extend(view.events.iter().map(|line| Line::from(line.as_str())));
-    let title = format!("Path / events · line offset {}", view.scroll);
-    frame.render_widget(
-        Paragraph::new(lines)
-            .block(panel(title, no_color))
-            .wrap(Wrap { trim: false })
-            .scroll((u16::try_from(view.scroll).unwrap_or(u16::MAX), 0)),
+    maximum_scroll.max(draw_scrolled(
+        frame,
         details,
-    );
+        "Path / events",
+        lines,
+        view.scroll,
+        no_color,
+    ))
 }
 
-fn draw_compact(frame: &mut Frame<'_>, area: Rect, view: &MonitorView, no_color: bool) {
+fn draw_compact(frame: &mut Frame<'_>, area: Rect, view: &MonitorView, no_color: bool) -> usize {
     let mut lines = Vec::new();
     for (title, values) in [
         ("Observation", &view.overview),
@@ -340,16 +371,7 @@ fn draw_compact(frame: &mut Frame<'_>, area: Rect, view: &MonitorView, no_color:
     lines.extend(view.path.iter().map(|line| Line::from(line.as_str())));
     lines.push(Line::from("Events").style(muted(no_color)));
     lines.extend(view.events.iter().map(|line| Line::from(line.as_str())));
-    frame.render_widget(
-        Paragraph::new(lines)
-            .block(panel(
-                format!("Observations · line offset {}", view.scroll),
-                no_color,
-            ))
-            .wrap(Wrap { trim: false })
-            .scroll((u16::try_from(view.scroll).unwrap_or(u16::MAX), 0)),
-        area,
-    );
+    draw_scrolled(frame, area, "Observations", lines, view.scroll, no_color)
 }
 
 fn draw_help(frame: &mut Frame<'_>, area: Rect, no_color: bool) {
@@ -417,7 +439,11 @@ mod tests {
 
     fn render(view: &MonitorView, width: u16, height: u16, no_color: bool) -> Buffer {
         let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
-        terminal.draw(|frame| draw(frame, view, no_color)).unwrap();
+        terminal
+            .draw(|frame| {
+                draw(frame, view, no_color);
+            })
+            .unwrap();
         terminal.backend().buffer().clone()
     }
 
@@ -428,6 +454,15 @@ mod tests {
             .map(|cells| cells.iter().map(|cell| cell.symbol()).collect::<String>())
             .collect::<Vec<_>>()
             .join("\n")
+    }
+
+    fn render_state(terminal: &mut Terminal<TestBackend>, state: &mut MonitorState, now: Duration) {
+        let view = state.view(now);
+        let mut maximum_scroll = 0;
+        terminal
+            .draw(|frame| maximum_scroll = draw(frame, &view, true))
+            .unwrap();
+        state.scroll = state.scroll.min(maximum_scroll);
     }
 
     #[test]
@@ -503,8 +538,78 @@ mod tests {
         view.scroll = 18;
         let rendered = text(&render(&view, 150, 24, true));
         assert!(rendered.contains("Row 19:"));
-        assert!(rendered.contains("offset 18"));
+        assert!(rendered.contains("offset 16 / 16"));
         assert_eq!(view.frontier.len(), 20);
+    }
+
+    #[test]
+    fn repeated_down_actions_stop_at_wrapped_content_and_up_moves_immediately() {
+        let now = Duration::from_secs(3);
+        let mut state = MonitorState::default();
+        let mut supplied = view();
+        supplied.frontier = (0..20)
+            .map(|index| (format!("Row {index}"), "scoped observation".into()))
+            .collect();
+        state.frozen = Some(supplied.clone());
+        let mut terminal = Terminal::new(TestBackend::new(150, 24)).unwrap();
+        for action in [UiAction::PageDown; 12]
+            .into_iter()
+            .chain([UiAction::ScrollDown; 12])
+        {
+            state.apply(action, now);
+            render_state(&mut terminal, &mut state, now);
+        }
+        let bottom = text(terminal.backend().buffer());
+        assert!(bottom.contains("Row 19:"));
+        assert!(bottom.contains("Snapshot age:"));
+        assert!(bottom.contains("no cycle proof"));
+        let bottom_offset = state.scroll;
+        assert!(bottom_offset > 0 && bottom_offset < 20);
+        state.apply(UiAction::ScrollUp, now);
+        render_state(&mut terminal, &mut state, now);
+        assert_eq!(state.scroll, bottom_offset - 1);
+        assert_eq!(state.frozen.as_ref().unwrap().frontier, supplied.frontier);
+    }
+
+    #[test]
+    fn viewport_resize_and_shorter_content_reclamp_the_same_display_state() {
+        let now = Duration::from_secs(3);
+        let mut state = MonitorState::default();
+        let mut supplied = view();
+        supplied.frontier = (0..20)
+            .map(|index| {
+                (
+                    format!("Wrapped Unicode row {index}"),
+                    "λ ε 界 e\u{301} family · scoped observation with several words".into(),
+                )
+            })
+            .collect();
+        state.frozen = Some(supplied);
+        state.scroll = usize::MAX;
+        let render_viewport = |state: &mut MonitorState, width, height| {
+            let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+            render_state(&mut terminal, state, now);
+            text(terminal.backend().buffer())
+        };
+        // Compact and panel layouts use the same wrapping as the displayed
+        // Paragraph; character counts or numbers of input rows are insufficient.
+        assert!(render_viewport(&mut state, 54, 24).contains("no cycle proof"));
+        let compact_bottom = state.scroll;
+        state.scroll = usize::MAX;
+        let narrow = render_viewport(&mut state, 92, 50);
+        assert!(narrow.contains("Wrapped Unicode row 19:"));
+        let narrow_bottom = state.scroll;
+        assert!(compact_bottom > narrow_bottom);
+        let wide = render_viewport(&mut state, 220, 80);
+        assert!(wide.contains("Wrapped Unicode row 19:"));
+        assert!(state.scroll < narrow_bottom);
+        state.frozen = Some(view());
+        let shorter = render_viewport(&mut state, 220, 80);
+        assert_eq!(state.scroll, 0);
+        assert!(shorter.contains("Snapshot age:"));
+        state.scroll = usize::MAX;
+        render_viewport(&mut state, 1, 1);
+        assert_eq!(state.scroll, 0);
     }
 
     #[test]
@@ -631,7 +736,7 @@ mod tests {
 
     fn pty_error_case() -> io::Result<()> {
         let mut terminal = TerminalGuard::enter()?;
-        terminal.draw(&MonitorState::default(), Duration::ZERO, true)?;
+        terminal.draw(&mut MonitorState::default(), Duration::ZERO, true)?;
         pty_message("PTY_READY:error")?;
         Err(io::Error::other("intentional PTY component error"))
     }
@@ -734,7 +839,7 @@ mod tests {
         terminal
             .as_mut()
             .unwrap()
-            .draw(&state, started.elapsed(), true)
+            .draw(&mut state, started.elapsed(), true)
             .unwrap();
         pty_message(&format!("PTY_READY:{case}")).unwrap();
         let controls = [
@@ -774,7 +879,7 @@ mod tests {
                 terminal
                     .as_mut()
                     .unwrap()
-                    .draw(&state, started.elapsed(), true)
+                    .draw(&mut state, started.elapsed(), true)
                     .unwrap();
             }
             if matches!(action, UiAction::ToggleFreeze | UiAction::Detach) {
@@ -799,7 +904,7 @@ mod tests {
             "normal" => {
                 let mut terminal = TerminalGuard::enter().unwrap();
                 terminal
-                    .draw(&MonitorState::default(), Duration::ZERO, true)
+                    .draw(&mut MonitorState::default(), Duration::ZERO, true)
                     .unwrap();
                 pty_message("PTY_READY:normal").unwrap();
                 drop(terminal);
@@ -813,7 +918,7 @@ mod tests {
                 let result = std::panic::catch_unwind(|| {
                     let mut terminal = TerminalGuard::enter().unwrap();
                     terminal
-                        .draw(&MonitorState::default(), Duration::ZERO, true)
+                        .draw(&mut MonitorState::default(), Duration::ZERO, true)
                         .unwrap();
                     pty_message("PTY_READY:unwind").unwrap();
                     panic!("intentional PTY component unwind");
