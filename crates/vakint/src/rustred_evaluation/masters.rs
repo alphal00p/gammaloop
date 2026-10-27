@@ -1212,7 +1212,7 @@ mod tests {
         let combined = MasterCatalog::combine_master_coefficients(original);
         assert_eq!(
             MasterCatalog::referenced_masters(&combined),
-            symbols.iter().cloned().collect()
+            symbols.iter().cloned().collect::<BTreeSet<_>>()
         );
         let after: BTreeMap<_, _> = combined
             .coefficient_list::<i32>(&symbols)
