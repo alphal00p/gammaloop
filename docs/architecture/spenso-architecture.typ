@@ -1,8 +1,8 @@
 = Spenso implementation architecture
 
 #quote(block: true)[
-#strong[Status:] Current implementation architecture, audited against the Spenso source on
-2026-09-14.
+#strong[Status:] Current implementation architecture, reviewed against source
+`4a9ff115` on 2026-10-27. This source attestation does not claim builds or tests were run.
 
 This note covers the `spenso` Rust crate. `spenso-macros`, `spenso-hep-lib`, and `spynso3` are
 separate packages: they provide derives, concrete physics tensors, and a Python adapter rather
@@ -45,6 +45,12 @@ ordered slot vector, `NamedStructure` adds a global name and arguments, and
 canonical order alongside its immutable `CanonicalLayout`; `reindex_storage` instead returns
 `Reindexed`, with a checked pending index permutation to apply to the payload. `HasStructure`
 keeps metadata separate from that payload.
+
+`IndexedStructure` specializes the existing canonicalized ordered structure to `LibraryRep`
+and `AbstractIndex`; it is not a second tensor payload. The checked conversion from
+`PartialStructure` rejects unresolved ports, preserves stored canonical order and layout,
+and allocates no indices. `PartialStructure` retains explicit indices and occurrence-local
+open ports for symbolic composition.
 
 The principal materialized payloads are:
 
@@ -123,21 +129,30 @@ storage plus per-worker overlays, then rebases newly appended store indexes befo
 replacement. It deliberately falls back to sequential execution when Symbolica's Rayon support
 is disabled or the contraction strategy performs partial graph rewrites.
 
+`map_occurrences` maps each leaf against its current storage-port bindings, validates surviving
+slot multisets, and records storage permutations separately from logical position. Untouched
+aliases reuse mapped values with the same logical layout. `reindex_ports` applies simultaneous
+external-port assignments without relabeling unrelated internal contractions. Component
+execution rejects unmaterialized bound ports.
+
 === Symbolic parallelism and optimized sums
 
 With `shadowing`, the process-wide `SymbolicParallelism` policy controls Rayon work involving
-Symbolica atoms. `Auto` checks the Symbolica license once and uses a workload heuristic where an
-operation provides one; `Serial` disables Rayon; `Parallel` forces Rayon and bypasses `Auto`'s
-license safety check. Configure the policy before tensor work: changing it concurrently with an
-active operation is unsupported.
+Symbolica atoms. `Auto` keeps WebAssembly kernels serial; on native targets it checks the
+Symbolica license once and uses a workload heuristic where an operation supplies one.
+`Serial` disables Rayon; `Parallel` forces Rayon and bypasses `Auto`'s license safety check.
+Configure the policy before tensor work; concurrent reconfiguration is unsupported.
 
 The network `Parallel` execution strategy still falls back to `Sequential` when that policy
 resolves to serial or when the selected contraction strategy performs partial graph rewrites.
 Separately, `FastTensorSum`, `FastTensorSumContractible`, balanced scalar/tensor sums,
-contraction profiles, and pair estimates provide optional optimized paths inside the same
-network semantics. Unsupported shapes or unprofitable cases use the ordinary sum and
-contraction paths. Network counters and timers are opt-in diagnostic instrumentation; they do
-not change the execution result.
+contraction profiles and pair estimates provide optimized paths inside the same network
+semantics. Large factored tensor sums can stay lazy internally to avoid broadcasting large
+scalar coefficients. Ordinary terminal results are materialized unless lazy execution is
+explicitly selected. Completed execution waves release unused payloads while retaining live
+tensor handles and aliases. Scalar extraction from lazy leaves preserves their scales and
+contraction boundaries, including under powers. Counters and timers are opt-in diagnostics
+and do not change the execution result.
 
 == Symbolica parsing boundary
 
@@ -146,13 +161,23 @@ The `shadowing` feature enables `network::parsing`. `NetworkParse` and the more 
 programmatic construction. Dispatch recognizes addition, multiplication, integer powers, and
 functions before falling back to scalar or opaque-tensor construction.
 
-`ParseSettings` is semantic policy, not formatting: it controls scalar precontraction, first-term
-structure discovery, recursion depth, shorthand expansion versus opaque leaves, composite scalar
-handling, and how strictly a function must be tagged as a tensor. The tensor library resolves
-known keys; `TensorFromExpression` owns construction of an opaque tensor leaf; the function
-library owns supported opaque operations. Fresh dummy indices come from a parse-local
-`ParseState`, so callers combining independently parsed expressions must still manage index
-namespaces deliberately.
+`ParseSettings` is semantic policy, not formatting: it controls scalar precontraction,
+first-term discovery, arithmetic nesting depth, shorthand expansion, composite scalar handling
+and tensor-head classification. Products, sums and powers each count toward the depth limit;
+opaque inference is syntactic. Libraries resolve known tensors and supported function nodes;
+`TensorFromExpression` owns opaque tensor realization with its canonical layout.
+
+A parse-local `ParseState` reserves written slot-index spellings before allocating dummies;
+clones share its allocator and reservations. Lowered positive-power copies receive fresh
+internal indices while explicit boundary slots stay fixed. Independently parsed expressions
+still require deliberate namespace management.
+
+One operation-local `Construction` assembles the existing graph and store. Structure-only
+planning shares that parser without emitting topology. `try_from_admitted_view` enters trusted
+shallow planning only with opaque shorthand and depth one. `LeafInterfaceCache` stores exact
+boundary expressions' tensor classification and logical slots, never live occurrence bindings.
+Reuse requires unchanged admission and classification policy; callbacks and materialized
+rewrites leave the trusted path.
 
 The detailed dispatch and shorthand behavior are recorded in the
 #link("parsing-flow.typ")[Symbolica-to-network parsing flow]. Syntax and rewrite ownership across

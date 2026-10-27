@@ -3,7 +3,7 @@
 #let tutorial = [
 = Tutorial
 
-This tutorial uses Idenso's Python community module to contract one four-dimensional Minkowski
+This tutorial uses the shared tensor community module to contract one four-dimensional Minkowski
 metric tensor with a vector. It is intentionally small: the point is to establish the registered
 tensor syntax and observe one algebra pass before composing a larger Dirac or color pipeline.
 
@@ -13,9 +13,9 @@ pass and extend it into an algebra pipeline.
 
 == Prerequisites
 
-Idenso is mounted at `symbolica.community.idenso`; it is not installed by `pip install idenso`.
-Install the published Symbolica distribution, which bundles the Idenso and Spenso community
-modules, and verify the actual environment first:
+Idenso algebra is exposed through `symbolica.community.tensor`; it is not installed by
+`pip install idenso`. Install the published Symbolica distribution with the shared tensor
+community module, then verify the actual environment:
 
 // docs-example: syntax
 ```sh
@@ -67,7 +67,7 @@ version; inspect the expression structure instead of comparing exact text.
 ])
 
 #callout("Import before constructing expressions", [
-  Importing `symbolica.community.idenso` registers Idenso's representation and tensor symbols.
+  Importing `symbolica.community.tensor` registers the shared representation and tensor symbols.
   Construct the Spenso-compatible expression after that import so Idenso's matchers see the
   intended slots and tensor names.
 ])
@@ -77,21 +77,23 @@ version; inspect the expression structure instead of comparing exact text.
 Keep transformations observable while developing:
 
 - call `list_dangling` before and after a pass to catch accidental contractions;
-- use `wrap_dummies` before multiplying expressions built in independent index namespaces;
-- expand only the Minkowski, bispinor, or color sector needed by the next pass;
-- apply `simplify_metrics`, `simplify_gamma`, and `simplify_color` as distinct phases;
+- use `wrap_indices(header, dummies_only=True)` before multiplying expressions built in
+  independent index namespaces;
+- expand only the tensor sector needed by the next pass;
+- use `contract` for metric contraction and select gamma/color passes explicitly with
+  `simplify_algebra`;
 - canonicalize only after the physics-specific identities required by the calculation are
   explicit.
 
 == Troubleshooting and next steps
 
-- `ModuleNotFoundError` for `symbolica.community.idenso` means the installed Symbolica build
+- `ModuleNotFoundError` for `symbolica.community.tensor` means the installed Symbolica build
   does not include the native module; a `.pyi` type stub or source checkout alone is not enough.
 - If the metric remains unchanged, construct its slots with the same `Representation` and
   abstract index objects as the vector. Plain Symbolica functions do not automatically carry
   Spenso tensor structure.
-- If a free index disappears unexpectedly, inspect repeated names and use `wrap_dummies` before
-  combining separately constructed expressions.
+- If a free index disappears unexpectedly, inspect repeated names and use
+  `wrap_indices(header, dummies_only=True)` before combining separately constructed expressions.
 - Continue with the syntax-and-algebra manual, then use the Python and Rust API references for
   signatures and feature gates.
 ]

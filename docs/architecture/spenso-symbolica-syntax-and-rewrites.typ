@@ -1,9 +1,10 @@
 = Spenso Symbolica Syntax And Rewrite Idioms
 
 #quote(block: true)[
-#strong[Status:] Implemented reference; audited against Spenso and Idenso on 2026-09-14.
-Test-only printer and cyclic-trace expectations were reviewed on 2026-10-21; the represented
-algebra and rewrite contracts are unchanged.
+#strong[Status:] Implemented reference; source reviewed on 2026-10-27 against
+`4a9ff115`. The original audit was dated 2026-09-14; the historical 2026-10-21
+review covered printer and cyclic-trace test expectations. This revision also records
+the current typed planner, index and interface contracts. It did not rerun tests.
 
 The surface forms are owned by
 #link("../../crates/spenso/src/network/parsing/mod.rs")[Spenso parsing and materialization], while the
@@ -234,9 +235,13 @@ slots and creates intermediate dummy slots between adjacent factors. In opaque
 parsing, the chain or trace remains a leaf and its exposed structure is inferred
 from the endpoints and visible external slots.
 
-Chains and traces cannot be nested inside another chain or trace: they share
-one global `in`/`out` placeholder scope, so parsing rejects such nesting before
-either expanded or opaque inference.
+Chains and traces cannot consume another chain or trace inside the same
+structural placeholder scope: both use the global `in`/`out` symbols.
+Checked expanded and opaque parsing reject that nesting before inference;
+trusted admitted parsing requires the caller to have established the same
+fact. Scalar-tagged function metadata is opaque to this validation, so its
+contents are not structural tensor operands. `dot` is explicitly excluded
+from that metadata escape and its operands remain checked.
 
 The trace macro does the cyclic wrapping automatically:
 
@@ -497,10 +502,12 @@ let settings = MatchSettings {
 };
 ```
 
-Implement FORM-like simplifiers as ordered passes, not as one unordered
-`replace_multiple` table. Put cheap terminal rules first, then structural
-normalization, then broader recursive searches. If a pass can expose another
-rule in the same family, run to a fixed point with an equality guard.
+Keep identity kernels as ordered local rule applications. The public
+`simplify_algebra(AlgebraSettings)` and `contract(ContractSettings)` share one
+capability-driven domain planner. Enabled identities authorize their structural
+prerequisites; changed regions and admitted shallow graph boundaries determine
+subsequent work. Do not prescribe a fixed sequence of whole-expression family
+passes or use a whole-expression equality test as the planner's progress metric.
 
 Keep semantic boundaries clear:
 
@@ -518,5 +525,20 @@ Keep semantic boundaries clear:
 - Unit tests for narrow rule families should live next to the implementation.
   Larger FORM/FeynCalc/reference cases should stay in the broader test modules.
 
-The goal is source-backed named rule families plus a small ordered pass driver.
-Avoid a universal rewrite engine unless the algebraic strategy itself is shared.
+Source-backed identity kernels remain small and private; their public scheduling
+is the shared typed algebra/contraction engine. Notation conversion, index
+canonicalization and adjunction remain explicit independent operations.
+
+== Retained interfaces and index operations
+
+`SymbolicTensor<PartialStructure>` retains a logical interface beside its Atom.
+A ranked zero therefore remains a tensor even though its payload has no free slots.
+Typed operations validate changed interfaces and preserve exact deferred results.
+
+Raw `IndexTooling::canonize` admits source syntax before antisymmetric-zero pruning,
+retains representation duality wrappers and reconstructs the admitted graph without
+running unrequested tensor algebra. Closed scalar powers are scoped independently.
+`wrap_indices` uses `spenso::index_scope(header, index)`. Typed Dirac adjunction
+materializes unresolved axes before conjugation and preserves the declared logical
+axis correspondence, including for zero; `preserve_indices` controls the endpoint
+transpose convention. These are native source contracts, not validation claims.

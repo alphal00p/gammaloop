@@ -218,7 +218,16 @@
     "typst-renderer": [
       "symbolica-data"
     ],
-    "vakint": []
+    "vakint": [
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "feynkit-py",
+      "feynkit-tensor",
+      "idenso",
+      "spenso",
+      "spenso-macros"
+    ]
   },
   "normal_dependency_features": {
     "alphal00p-docs-builder": {
@@ -565,7 +574,16 @@
     "typst-renderer": {
       "symbolica-data": []
     },
-    "vakint": {}
+    "vakint": {
+      "feynkit-graph": [],
+      "feynkit-kinematics": [],
+      "feynkit-model": [],
+      "feynkit-py": [],
+      "feynkit-tensor": [],
+      "idenso": [],
+      "spenso": [],
+      "spenso-macros": []
+    }
   },
   "package_dirs": {
     "alphal00p-docs-builder": "crates/alphal00p-docs-builder",
@@ -1548,7 +1566,18 @@
     "typst-renderer": [
       "symbolica-data"
     ],
-    "vakint": []
+    "vakint": [
+      "feynkit-generator",
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "feynkit-py",
+      "feynkit-tensor",
+      "idenso",
+      "linnet",
+      "spenso",
+      "spenso-macros"
+    ]
   },
   "test_dependency_features": {
     "alphal00p-docs-builder": {
@@ -1906,7 +1935,18 @@
     "typst-renderer": {
       "symbolica-data": []
     },
-    "vakint": {}
+    "vakint": {
+      "feynkit-generator": [],
+      "feynkit-graph": [],
+      "feynkit-kinematics": [],
+      "feynkit-model": [],
+      "feynkit-py": [],
+      "feynkit-tensor": [],
+      "idenso": [],
+      "linnet": [],
+      "spenso": [],
+      "spenso-macros": []
+    }
   },
   "workspace_root": "."
 }

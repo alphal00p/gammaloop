@@ -4,8 +4,8 @@
 = Syntax, indices, and algebra passes
 
 Idenso consumes the Symbolica function form emitted for Spenso structures. Function heads carry
-representation meaning and their arguments carry abstract indices or tensor data. Import the
-Idenso community module before parsing so Symbolica attributes, Spenso tags, and dual
+representation meaning and their arguments carry abstract indices or tensor data. Import
+`symbolica.community.tensor` before parsing so Symbolica attributes, Spenso tags, and dual
 representations are registered in one deterministic order.
 
 == Indices and cooking
@@ -50,16 +50,16 @@ assert len(safe_product.list_dangling()) == 2
 
 The stable invariant is two free indices, `nu` and `rho`; the two occurrences of local `mu`
 belong to separate contractions after wrapping. The generated
-#link("reference/python/idenso-community/wrap_dummies-function/")[`wrap_dummies` reference] records the
-Python signature, while the exact
+#link("reference/python/spynso3/TensorExpression/")[`TensorExpression` reference] records
+`wrap_indices(header, dummies_only=True)`, while the exact
 #link("reference/rust/idenso/trait.IndexTooling.html")[`IndexTooling` Rustdoc] covers
 the underlying Rust boundary.
 
 #callout("Interpret index failures before simplifying", [
   More or fewer than two dangling indices means a name collided or a slot's representation or
   duality differs from the intended one. An unchanged plain Symbolica function means it was not
-  constructed through Spenso tensor names/representations, or the Idenso module was imported
-  only after parsing.
+  constructed through Spenso tensor names/representations, or the shared tensor module was
+  imported only after parsing.
   Correct those structural issues before metric, Dirac, or color simplification.
 ])
 

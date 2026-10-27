@@ -1452,6 +1452,12 @@ unit and it is also the terminal consumer\'s first context. The Python
 inventories remain separate because PyO3 stub registration uses a
 process-wide inventory.
 
+Exporter build contexts are enumerated from the exporter manifest's feature
+table. Local Cargo path-patch sources, including the native DOT parser,
+belong to the dependency and Rust-source closures that resolve them.
+Checked-in Community stubs and the notebook mini-host are explicit terminal
+documentation inputs.
+
 The producer is keyed only by Cargo manifests, Rust, Cargo
 configuration, and non-Cargo build inputs. It and its consumer use the
 same relative Cargo target, compile-time Symbolica setting,
@@ -1462,23 +1468,21 @@ change the reusable Cargo artifact. Checks whose Rust source is
 generated from the manuals remain in the terminal Pages derivation so
 they still validate the content being published.
 
-The terminal documentation derivation tests `linnet-py` in a virtual
-environment based on a Nix-composed Python that includes `typst-py`
-0.15.0. System site packages keep that wheel dependency available to
-the offline installer. `linnet-py` embeds its pinned CeTZ and oxifmt
-package trees and passes the staged copy to its in-process compiler, so
-its graph renderer never requires a network fetch or the documentation
-package cache. The terminal Python environment uses the same pinned docs
-package set to satisfy `linnet-py`'s exact `typst==0.15.0` dependency. Both
-Cargo and uv dependency resolution run offline; a mismatched Python package
-must fail locally instead of attempting a download inside the Nix sandbox.
-The broader documentation renderer still receives the package tree from
-`docsTypst` for MiTeX and other authored assets. These
-embedded package trees are compile-time `RustEmbed` inputs, so they
-intentionally enter the source key for `linnet-py` and aggregate Cargo
-producers that compile it. The package-specific source map keeps them out
-of unrelated per-crate producers, while downloaded Python wheels remain
-confined to the terminal documentation/runtime closure.
+The terminal documentation derivation builds and installs one shared
+Symbolica Community host from `examples/notebooks/symbolica-host`, then
+runs graph-test discovery against that host. The graph API and native SVG
+renderer retain their separate Rust owners. Its Nix-composed Python still
+provides the pinned Typst 0.15.0 wheel through system site packages. Cargo
+and uv resolve offline; a mismatched Python package must fail locally
+instead of attempting a download inside the Nix sandbox.
+
+Authored Typst pages use `docsTypst` and its reviewed package tree. Native
+renderer CSS, JavaScript, HTML, layout assets, and fixture manifests belong
+to the packages that embed them. The runtime font and resource closure is
+supplied separately through `SYMBOLICA_DATA_DIRECTORY`; it does not widen
+unrelated compilation producers. The package-specific source map preserves
+the distinction between compilation inputs, test fixtures, and terminal
+documentation/runtime inputs.
 
 == Follow-up: persistent Typst worlds in the live watcher
 <follow-up-persistent-typst-worlds>
@@ -1754,7 +1758,7 @@ The latest Pages tree and the immutable snapshot fixture are now separate,
 independently cacheable terminal derivations over the same Cargo producer.
 The lightweight full documentation check consumes both completed trees,
 installs them through the Pages history updater, and asserts the latest and
-snapshot routes for all five products together with the portal, developer
+snapshot routes for all six products together with the portal, developer
 pages, and generated API material. The manual NixCI graph orders both render
 jobs after the shared documentation Cargo artifact and orders the merge check
 after both renders, preventing concurrent consumers from rebuilding the same
