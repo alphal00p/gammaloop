@@ -58,7 +58,7 @@
       "command": "FEYNKIT_ORACLE_THREADS=1,8,32 nix develop -c cargo nextest run --locked --cargo-profile ci-optim --profile ci_gammaloop -p feynkit-generator -E 'test(ids_do_not_depend_on_threads_or_symbol_registration) | test(outputs_do_not_depend_on_index_registration_order)'",
       "pass_condition": "identical full graph/numerator/group outputs across fresh symbol orders and 1,8,32",
       "when": "rebuilt tip, only after the required registration harness correction makes FEYNKIT_ORACLE_THREADS drive both registration paths; current source command cannot certify this matrix",
-      "required_harness_correction": "Frozen v4 generation_oracle/main.rs ID test compares only 1 with 8 and 8 with preload (lines 415\u2013417); index-registration test hard-codes 8 threads (lines 470, 475). Neither consumes FEYNKIT_ORACLE_THREADS. Parameterize both harness paths for genuine fresh-process registration-order comparisons at each of 1, 8, 32 threads, comparing full graph/numerator/group outputs and preserving all existing assertions. Separate printed-output coverage is insufficient."
+      "required_harness_correction": "Frozen v4 generation_oracle/main.rs ID test directly compares ordinary 1-thread output against 8-thread-with-preload output (lines 415\u2013417); index-registration test hard-codes 8 threads (lines 470, 475). Neither consumes FEYNKIT_ORACLE_THREADS. Parameterize both harness paths for genuine fresh-process registration-order comparisons at each of 1, 8, 32 threads, comparing full graph/numerator/group outputs and preserving all existing assertions. Separate printed-output coverage is insufficient."
     },
     {
       "owner": "idenso colour perturbation",
@@ -98,10 +98,9 @@
     },
     {
       "owner": "WP1 original-pair/fallback owner",
-      "command": "Use the two exact test names and commands from the independently reviewed WP1 receipt; mandatory manifest amendment before WP3 exits",
-      "pass_condition": "factor-preserving original-pair exact ratio with samples=0 AND production sampled fallback at recorded seed/budget plus varied points; MT parameter contract stated",
-      "when": "rebuilt tip",
-      "blocked_by": "WP1 still running; test names are not invented here"
+      "command": "nix develop -c cargo test --locked -p feynkit-generator --profile dev-optim --lib grouping::tests::vacuum_group28_original_pair_identity -- --exact --ignored --nocapture",
+      "pass_condition": "One explicitly executed ignored regression: factor-preserving original pair certificate, zero-sample retention/ownership/weights, sampled/fallback matrix and stored-quotient cancellation; bounded original-pair scope",
+      "when": "rebuilt (R) and final (F) tips"
     },
     {
       "owner": "docs and generated asset owners",

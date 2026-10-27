@@ -1,9 +1,9 @@
 {
   "date": "2026-10-27",
-  "scope": "WP0 approved; WP2 ready for independent Astra review; WP1 running separately",
+  "scope": "WP0, WP1 and WP2 approved; WP3 in progress",
   "authorization": "Implement the plan, have Astra review at each impl step, and have sol implement",
   "implementer": "Sol",
-  "reviewer": "Astra (WP0 round 2 approved; WP2 independent review not yet run)",
+  "reviewer": "Astra; new independent WP3 review required",
   "workspace": "/shared/lcnbr/dev/gammaloop/generation-integration-plan",
   "base_commit": "3f0df2a870806076820786994d4883decec8e9e3",
   "plan_commit": "4374f72027b75df9ff95c5c7a725ee75beac27a8",
@@ -15,7 +15,7 @@
     "email": "im@lcnbr.ch"
   },
   "settled": {
-    "normalization": "symmetrized gg→ggg total 57/8 INCLUDING 2!·3! symmetry division",
+    "normalization": "symmetrized gg\u2192ggg total 57/8 INCLUDING 2!\u00b73! symmetry division",
     "memory": "measure current integration full-mode memory first, then propose justified limit; no pre-authorized <=1.2x ceiling",
     "solver": "retain Clarabel and ship required notices; replacement solver separate",
     "upstream": "#209 merged in accepted base; #193 admission through #209; #210 supersedes #177",
@@ -48,17 +48,36 @@
       "approval_basis": "coordinator brief for WP2, 2026-10-27; no invented review task identity"
     },
     "WP1": {
-      "status": "running separately",
-      "workspace": "/shared/lcnbr/dev/gammaloop/generation-b2-diagnosis",
-      "verdict": "not claimed"
+      "status": "approved",
+      "reviewer": "Astra",
+      "review_round": 2,
+      "commit": "f473709ce444fd99f5200fed0c9fcead48e8bf71",
+      "verdict": "B2 CLOSED for original GL028/GL034 under 4D SU(3): N28=(7/2)N34; displayed sample/MT dependence cancels; no production physics fix or bisect justified",
+      "regression_seconds": 6.32,
+      "scope": "Original pair only; carry complete certificate, fixtures, signed provenance, zero-sample controls, sampled matrix and stored quotient evidence. Rerun ignored regression at R and F."
     },
     "WP2": {
-      "status": "ready-for-review",
+      "status": "approved",
       "implementer": "Sol",
-      "reviewer": "Astra (separate review pending)",
+      "reviewer": "Astra",
       "change": "uqvxqplspvwvmzryvnnvusrsrmnzuypz",
       "manifest": "wp2/base-manifest.json",
-      "validation": "wp2/validation-matrix.json"
+      "validation": "wp2/validation-matrix.json",
+      "review_round": 2,
+      "commit": "5226894ee1af61797e6b819d7e801a22bf17bace"
+    },
+    "WP11-notices": {
+      "status": "approved",
+      "reviewer": "Astra",
+      "commit": "00df0507ded2b2ddce45b38e58311a0f8ea120c1",
+      "scope": "Four packaging and two Clinnet tests; Nix WASM and license output; 49 hashes; byte-exact notices; not final wheel certification or all WP11"
+    },
+    "WP3": {
+      "status": "in-progress",
+      "pre_rebuild_ref": "generation-integration-pre-rebuild",
+      "pre_rebuild_commit": "5226894ee1af61797e6b819d7e801a22bf17bace",
+      "ancestry": "Reviewed planning/evidence chain descends from fixed target 3f0df2a8 and is retained as non-code base.",
+      "review": "New independent Astra review required before WP4; no nested agents."
     }
   }
 }

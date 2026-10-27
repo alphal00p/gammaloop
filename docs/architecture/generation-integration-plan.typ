@@ -4,8 +4,9 @@
 #strong[Status:] accepted for execution on 2026-10-27. Sol implements each
 bounded step; parent Astra assigns independent Astra review after each step.
 WP0 evidence preservation and source availability was approved by Astra round 2
-(P2 closed, no remaining findings). WP1 is running separately; WP2 is ready for
-independent Astra review. Routine development and validation within accepted
+(P2 closed, no remaining findings). WP1 corrected certificate `f473709c` and WP2 correction `5226894e` were
+approved by Astra round 2. B2 is closed for the original GL028/GL034 pair,
+not all grouping physics. WP3 implementation is authorized. Routine development and validation within accepted
 packages need no repeated approval. Publication and destructive historical cleanup retain their
 explicit gates. The earlier stopped v5 rebuild remains historical; no rebuild
 is performed in WP0.
@@ -193,8 +194,8 @@ own workspace. Bounded: one regression, one bisect, one written verdict.
   (\#166, \#172–\#174, \#178, \#191, \#195–\#197,
   \#204) are still needed, with their current heads.
 - #strong[2026-10-27 result:] fixed target and all 46 source dispositions in
-  #link("generation-integration-wp2.typ")[WP2 base manifest]; ready for independent
-  Astra review. WP1 remains running separately. The user-selected merged base
+  #link("generation-integration-wp2.typ")[WP2 base manifest]; approved by Astra round 2 including `5226894e`.
+  WP1 corrected certificate `f473709c` is approved by Astra round 2. The user-selected merged base
   is settled; no renewed base approval is required.
 - #strong[Exit:] exact base/dependency manifest independently reviewed.
 

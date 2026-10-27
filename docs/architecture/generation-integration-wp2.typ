@@ -3,12 +3,14 @@
 
 == Fixed target and review state
 
-WP2 is ready for independent Astra review, not approved. Sol produced this
-manifest on 2026-10-27 without replaying code. WP0 at `12582cbd` plus
-`dc6f0b6b79f77c482e8747af0c7f12b817ffdaca` was independently approved by Astra
-in round 2 (P2 closed, no remaining findings), as supplied by the coordinator.
-WP1 is running separately in `generation-b2-diagnosis`; this record makes no
-claim about its verdict. WP3 waits for both reviewed packages.
+WP0 and correction `dc6f0b6b` were approved by Astra round 2. WP2 and
+correction `5226894e` were approved by Astra round 2, verifying all 46 source
+changes and 41 units. WP1 corrected certificate `f473709c` was approved by
+Astra round 2: B2 is closed for the original GL028/GL034 pair under 4D SU(3),
+with $N_28=(7/2)N_34$. No production physics fix or bisect is justified;
+this does not certify all grouping physics. Scoped notices patch `00df0507`
+was approved by Astra, with final distribution certification still outstanding.
+WP3 implementation is authorized.
 
 The agreed, already rebased integration target is
 `3f0df2a870806076820786994d4883decec8e9e3`, tree
@@ -131,7 +133,7 @@ Three harness discrepancies require bounded implementation work in WP3:
   Lorentz-zero graph checks. Do not edit the expected values.
 
 + Frozen v4 `generation_oracle/main.rs` compares ID registration only between
-  1 and 8 threads and between 8 and preload (lines 415–417); its index-order
+  ordinary 1-thread output against 8-thread-with-preload output (lines 415–417); its index-order
   test hard-codes 8 threads (lines 470, 475). Neither test consumes
   `FEYNKIT_ORACLE_THREADS`. Parameterize both harness paths in WP3 so each
   registration order runs in genuine fresh processes at each of 1, 8 and 32
@@ -160,7 +162,7 @@ Astra round 1 requested changes on
 `e8910d5d2f93e54066101cbc4661d0508d102c3f`: missing registration-order/thread
 coverage and repeated-run failure propagation. This bounded fix records the
 third WP3 harness correction and makes both repeated-run recipes fail on any
-required run. It awaits a new independent Astra review; no harness is changed.
+required run. Astra round 2 approved the correction. No harness was changed in WP2.
 
 The WP2 focused receipt records JSON/TOML structure, exact 46-change coverage,
 commit/tree/parent identities, ordered dependencies, baseline closures, source
