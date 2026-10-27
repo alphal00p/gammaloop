@@ -218,6 +218,9 @@ def run_case(binary, scenario, output, cpus):
                     observations.append(
                         {
                             "publication": published,
+                            "phase": monitor["phase"],
+                            "before_q": q_sent is None,
+                            "after_resume": detached is not None,
                             "event_age": monitor["event_age_seconds"],
                             "phase_elapsed": monitor["phase_elapsed_seconds"],
                             "sequence": document.get("sequence"),
@@ -275,24 +278,32 @@ def run_case(binary, scenario, output, cpus):
         if scenario == "blocked-publisher":
             assert b"PTY_SINK_RELEASED:blocked-publisher" in captured
         if scenario == "embedded-silence":
-            assert len(observations) >= 30
+            quiet_observations = [
+                row
+                for row in observations
+                if row["before_q"] and row["phase"] == "synthetic_opaque_call"
+            ]
+            assert len(quiet_observations) >= 30
             gaps = [
                 b["publication"] - a["publication"]
-                for a, b in itertools.pairwise(observations)
+                for a, b in itertools.pairwise(quiet_observations)
             ]
             assert max(gaps) < 2, "independent publication heartbeat stalled"
             assert (
-                observations[-1]["event_age"] >= 35
-                and observations[-1]["phase_elapsed"] >= 35
+                quiet_observations[-1]["event_age"] >= 35
+                and quiet_observations[-1]["phase_elapsed"] >= 35
             )
             sequences = {
-                row["sequence"] for row in observations if row["sequence"] is not None
+                row["sequence"]
+                for row in quiet_observations
+                if row["sequence"] is not None
             }
             assert len(sequences) == 1, "heartbeat fabricated native observer events"
-            verified = [row for row in observations if row["verified"]]
+            verified = [row for row in quiet_observations if row["verified"]]
             assert (
                 verified
-                and verified[0]["publication"] - observations[0]["publication"] < 2
+                and verified[0]["publication"] - quiet_observations[0]["publication"]
+                < 2
             )
             assert all(
                 row["rss"] and row["MemAvailable"] and row["resource_age"] < 1.5
@@ -300,7 +311,7 @@ def run_case(binary, scenario, output, cpus):
             )
             assert all(
                 row["verified"]
-                for row in observations
+                for row in quiet_observations
                 if row["publication"] >= verified[0]["publication"]
             )
         result.update(
@@ -336,6 +347,32 @@ def run_case(binary, scenario, output, cpus):
                         process.wait()
         finally:
             try:
+                result.update(
+                    observations=observations,
+                    quiet_phase_observations=[
+                        row
+                        for row in observations
+                        if row["before_q"] and row["phase"] == "synthetic_opaque_call"
+                    ],
+                    post_q_observations=[
+                        row
+                        for row in observations
+                        if not row["before_q"] and not row["after_resume"]
+                    ],
+                    post_resume_observations=[
+                        row for row in observations if row["after_resume"]
+                    ],
+                    quiet_seconds=(
+                        q_sent - ready
+                        if q_sent is not None and ready is not None
+                        else None
+                    ),
+                    detach_seconds=(
+                        detached - q_sent
+                        if detached is not None and q_sent is not None
+                        else None
+                    ),
+                )
                 (case / "terminal.bin").write_bytes(captured)
                 (case / "result.json").write_text(json.dumps(result, indent=2) + "\n")
             finally:
