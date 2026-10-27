@@ -989,7 +989,7 @@ class VakintExpression:
         r"""
         Display through Symbolica's native rich expression printer.
         """
-    def formatted(self, **options: typing.Any) -> typing.Any:
+    def formatted(self, **options: typing.Any) -> symbolica.FormattedOutput:
         r"""
         Return Symbolica's `FormattedOutput`; keyword options are forwarded unchanged.
         """
@@ -1111,7 +1111,7 @@ class VakintNumericalResult:
         Display remains available even when checked expression conversion fails.
         """
     def __repr__(self) -> builtins.str: ...
-    def formatted(self, **options: typing.Any) -> typing.Any:
+    def formatted(self, **options: typing.Any) -> symbolica.FormattedOutput:
         r"""
         Return Symbolica's `FormattedOutput`; keyword options are forwarded unchanged.
         """
