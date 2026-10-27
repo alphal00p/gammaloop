@@ -134,6 +134,12 @@ The `drawing` feature enables `cgmath` and the layout modules. The `symbolica` f
 the half-edge Symbolica adapter. These features extend data conversion or analysis; they do not
 change the involution and node-incidence contracts.
 
+The `wasm-no-js` feature opts the drawing solver into clock-free execution on
+unknown-OS WASM targets. Linnest selects it for standalone Typst plugins, where
+JavaScript timing imports cannot be resolved. Such builds report zero elapsed
+time and reject finite solver time limits explicitly. Browser builds retain
+clock support by default; native, Emscripten, and WASI clocks are unchanged.
+
 == Maintained invariants
 
 - An internal edge is always represented by two mutually paired half-edges; an external edge is

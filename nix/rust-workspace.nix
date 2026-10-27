@@ -2949,7 +2949,9 @@
       gammaloop-guppy-workspace-graph = guppyWorkspaceGraphCheck;
 
       linnest-wasm = pkgs.runCommand "linnest-wasm-check" {
-        nativeBuildInputs = [pkgs.wasm-tools];
+        nativeBuildInputs = [pkgs.wasm-tools docsTypst pkgs.jq];
+        TYPST_PACKAGE_CACHE_PATH = "${docsTypst}/lib/typst/packages";
+        TYPST_FONT_PATHS = docsFontPath;
       } ''
         test -s ${linnest-wasm}/linnest.wasm
         test -s ${linnest-wasm}/kurvst.wasm
@@ -2963,7 +2965,24 @@
         test -s ${linnest-wasm}/templates/crates/linnest/typst/src/lib.typ
         test -s ${linnest-wasm}/templates/crates/linnest/typst/src/curve.typ
         test -s ${linnest-wasm}/templates/crates/kurvst/typst/src/lib.typ
+
+        # Validation cannot detect imports that the standalone Typst host lacks.
+        # Exercise the freshly built plugin and its constrained ImPrEd solver.
+        cp -R ${linnest-wasm}/templates runtime
+        chmod u+w runtime
+        cp ${workspaceRoot}/tests/resources/graphs/double_triangle.dot runtime/double_triangle.dot
+        cat > runtime/layout-proof.typ <<'TYPST'
+        #import "crates/linnest/typst/src/lib.typ": graph, layout
+        #let original = graph.parse(read("double_triangle.dot")).first()
+        #let positioned = layout(original, layout-algo: "impred")
+        #metadata((nodes: graph.nodes(positioned), edges: graph.edges(positioned))) <layout-proof>
+        TYPST
         mkdir -p "$out"
+        typst query --root runtime runtime/layout-proof.typ '<layout-proof>' \
+          --field value --one > "$out/layout-proof.json"
+        jq -e '(.nodes | length == 6) and (.edges | length == 7) and
+          ([.nodes[].pos | .x, .y] | all(type == "number" and isfinite))' \
+          "$out/layout-proof.json"
       '';
     }
     // nextestChecks
