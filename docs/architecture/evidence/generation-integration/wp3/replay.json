@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "status": "in-progress; not a rebuilt candidate",
+  "status": "validated initial prefix only; WP3 incomplete; no rebuilt candidate",
   "fixed_target": {
     "commit": "3f0df2a870806076820786994d4883decec8e9e3",
     "tree": "3c91ba47525c627fbc02d79f5afa1d58aa7c5b66",
@@ -58,7 +58,8 @@
         "first_difference": "approved Lorentz reduction before admission",
         "excluded": "No different template cache, localization or hidden-history mechanism: those owners remain shared. The old fixture used nonconserving synthetic momenta.",
         "corrected_input": "Shortest P1-P2 rule with equal-flow aliasing; exact zero occurs only during specialization after shared admission. Existing assertions unchanged."
-      }
+      },
+      "new_commit": "821c0e7544f183dd5385d4f3933b4fe2cb57090b"
     },
     {
       "commit": "098ed36d9f06a2db7bdba367acdd753787f99446",
@@ -68,8 +69,9 @@
       "planned_unit": "port-02",
       "planned_order": 2,
       "reason": "Keep the locked-kernel alignment policy, not the obsolete v4 revision, binary wasm or old dependency patches. Preserve accepted target kernel in all three locks and uv.",
-      "status": "pending",
-      "analysis": "Accepted #209 base already supplies the aligned main-branch kernel in root/Tydenso/notebook-host, host subset enforcement and uv branch. Historical c78cff pin, registry Graphica arrangement and generated WASM must not be ported; existing feature-isolation check passes. No source-02 code change is necessary for its reviewed alignment intent."
+      "status": "no code replay: reviewed alignment intent already satisfied by accepted target",
+      "analysis": "Accepted #209 base already supplies the aligned main-branch kernel in root/Tydenso/notebook-host, host subset enforcement and uv branch. Historical c78cff pin, registry Graphica arrangement and generated WASM must not be ported; existing feature-isolation check passes. No source-02 code change is necessary for its reviewed alignment intent.",
+      "new_commit": "3f0df2a870806076820786994d4883decec8e9e3"
     },
     {
       "commit": "9601eb6bd5da5b83685d7ed3d2dc13fb2a93b0cb",
@@ -513,7 +515,7 @@
     }
   ],
   "validation": {
-    "status": "pending",
+    "status": "focused prefix checks completed; full WP3 exit matrix pending",
     "logs": "target/wp3",
     "notes": [
       "Initial isolated feynkit-model test lacked native feature and failed in Numerica before tests; corrected native invocation is running, no pin change.",
@@ -607,11 +609,43 @@
         "status": "passed",
         "scopes": 2,
         "log": "target/wp3/port01-registry-scopes.json"
+      },
+      {
+        "check": "first diagnostic capture selection",
+        "status": "failed: zero tests selected",
+        "selected": 0,
+        "exit_code": 4,
+        "log": "target/wp3/validation-gates-timing-tests.log",
+        "response": "Enable the existing reference-cases feature and rerun; corrected run active."
+      },
+      {
+        "check": "preserved source, plan and pre-rebuild refs",
+        "status": "passed",
+        "count": 11,
+        "log": "target/wp3/ref-integrity.json"
+      },
+      {
+        "check": "diagnostic capture tests with reference-cases feature",
+        "status": "passed",
+        "selected": 3,
+        "passed": 3,
+        "excluded_by_filter": 1185,
+        "run_id": "fd3f18b3-cba6-4b81-98f3-73f876e0c32b",
+        "runtime_seconds": 0.028,
+        "log": "target/wp3/validation-gates-timing-tests-corrected.log"
+      },
+      {
+        "check": "checkpoint plan Typst compilation",
+        "status": "passed",
+        "log": "target/wp3/plan-final-typst.log"
       }
     ],
     "pending": [
-      "diagnostic capture regression run",
-      "all later WP3 matrix checks"
+      "Remaining source units and their owner checks",
+      "Approved WP1 regression/provenance port and explicit ignored execution",
+      "Approved notices port, packaging workflow wiring and applicable checks",
+      "Four-loop, SM thread and fresh-process registration harness corrections",
+      "Entire rebuilt-tip validation matrix and final integration review"
     ]
   },
   "deferred": [
@@ -622,7 +656,7 @@
     "WP10 M-rebuild measurement",
     "Final native/Pyodide/Community distribution certification"
   ],
-  "processes": "Active build/check sessions retained until results collected.",
+  "processes": "No task build/test processes retained; all launched checks completed.",
   "extra_prerequisite": {
     "change": "txxpwnnvymmwqprmxvqtnmzvzqyskwmm",
     "commit": "52ac2eee4a1487bc79014c4f33f22b2854f80090",
@@ -631,5 +665,7 @@
       "crates/idenso/src/reference_cases/timing.rs",
       "crates/linnet/src/permutation.rs"
     ]
-  }
+  },
+  "cleanup": "Removed task-owned patch previews, patch backup and Typst PDFs. Retain logs, registry/ref integrity outputs and shared compiler/test artifacts for continuation and review. Shared caches and other workspaces untouched.",
+  "rust_policy": "New/substantially modified code reviewed for owner reuse, factorization, exact constants and import placement. Existing interaction/admission/cache owner retained; no production compatibility path or broad lint suppression added. Imported test helpers retain local factor ownership; no graph numerator expansion introduced. No intended departure from mandatory Rust policy."
 }

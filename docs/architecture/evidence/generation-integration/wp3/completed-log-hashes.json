@@ -1,11 +1,23 @@
 {
   "target/wp3/port01-docs-format.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "target/wp3/port01-workspace-clippy-corrected.log": "f2724aca6c7dc08a8ce92224cc512bbe2afbdbbad3525f85fd54e9ca70f0c0c8",
   "target/wp3/port01-format.log": "e553c2cef499b2101753f17512807ed67ea3ef219000254c442d12eaa1effd76",
+  "target/wp3/port01-workspace-clippy-final.log": "6493c70f183c0cb834cbd6aad70f59a951b3d39c32604854384fc740f034dc07",
+  "target/wp3/port01-templates-brst-corrected.log": "6dce7ac2c731ccf8ee09c065179dafc0ccba8ffabf8d2317e6b08452fdd99fdd",
+  "target/wp3/ref-integrity.json": "f7835ba4df0a30cd4f069f3d7b33db9aea864cd22e3973388dc94a71ef38a394",
   "target/wp3/port01-feature-isolation.log": "9464a53e4daf37cd0daaaeb42f50edc10a5da3ffac6c4f240981125db29d14e8",
   "target/wp3/port01-fmt-check.log": "6bde2981c5553f00989e0672e11e4cc4e4af6e97884113ad150853cb1767036c",
   "target/wp3/nix-init.log": "9464a53e4daf37cd0daaaeb42f50edc10a5da3ffac6c4f240981125db29d14e8",
   "target/wp3/port01-model-native-test.log": "56e711da84d7dc08a97b4265e4b6cac2ddda3a9d14e3758ba59768849c30b624",
+  "target/wp3/validation-gates-timing-tests-corrected.log": "c334fe25906b5897c544750b5215412e836d9969189e256b3a14551a6be755e2",
   "target/wp3/shell-tools.log": "b5625df6567403876766c51604f4cee27d418b3397806995a0a1f280d5c8f101",
   "target/wp3/port01-model-clippy.log": "61ea23db9a07ef5fcde5dc6268a6a427c228a6c17dd74b91b5c90caec0de6682",
-  "target/wp3/port01-model-test.log": "bd8cb5facf4756bf77651543d14bddac168e53ffc2048da24101aa43c67d7a79"
+  "target/wp3/format-repair.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "target/wp3/validation-gates-timing-tests.log": "4c640d2137d3894ec6b90501ba50165cb7e5caabe996276b16d924aa291ab39f",
+  "target/wp3/port01-registry-scopes.json": "0ad9d548de077ae536194ec6380ebbcd27015bd2cb529cfc470af58c6e776f8d",
+  "target/wp3/plan-final-typst.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "target/wp3/port01-templates-brst.log": "f75f709ce0017d97b924c6a9f34e7624fa4232f1631528130892a7db06d7fac1",
+  "target/wp3/port01-fmt-final.log": "1dadf1b63f3fc19e19b1e9fb9a6c3f7772d8ba250861dcced4346f892ae2fca3",
+  "target/wp3/port01-model-test.log": "bd8cb5facf4756bf77651543d14bddac168e53ffc2048da24101aa43c67d7a79",
+  "target/wp3/port01-workspace-clippy.log": "80364d6d40c845ee4f9076338d7372e72a969a3f1f4899ad5d49c9fcee67decb"
 }

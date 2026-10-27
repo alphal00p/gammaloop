@@ -206,6 +206,15 @@ own workspace. Bounded: one regression, one bisect, one written verdict.
 
 === WP3 Rebuild v5
 <wp3>
+- #strong[Implementation checkpoint 2026-10-27:] source unit 01 is ported through
+  the current admitted interaction owner. Focused model and six template/BRST
+  tests, kernel isolation, workspace Clippy and formatting passed after bounded
+  fixture and inherited validation-gate repairs. Unit 02's alignment intent is
+  satisfied by the accepted base; its old pin and WASM are not replayed. The
+  remaining source units, approved regression/notices ports, required harness
+  corrections and full rebuilt-tip matrix are still pending. This is not a
+  rebuilt candidate or M-rebuild. See `evidence/generation-integration/wp3/replay.json`.
+
 - `jj duplicate` the v4 chain (`kursouxx::kpslpwqz`) onto the WP2 base; do not
   rebase in place, so the 19 live workspaces on older lines stay valid.
 - Drop the empty \#175/\#176 copies and the first \#177 (`nxmztorq`); adapt
