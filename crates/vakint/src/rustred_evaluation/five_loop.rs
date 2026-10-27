@@ -676,19 +676,37 @@ impl Vakint {
                 matched.apply_replacement_rules()?;
                 term.apply_scalar_numerator_replacement_rules(&matched, settings)?;
                 log::debug!(target: "vakint::five_loop_match", "phase=symbolic_candidate_numerator numerator={}", term.numerator);
+                // This parent span includes callee cleanup. Its recorded
+                // subphases must not be added to it as disjoint durations.
+                let detailed_started = std::time::Instant::now();
                 let result =
-                    application.evaluate_detailed(&tensor_settings, term.numerator.as_view(), &matched, observation.as_deref_mut())?;
+                    application.evaluate_detailed(&tensor_settings, term.numerator.as_view(), &matched, observation.as_deref_mut());
+                log::debug!(target: "vakint::saved_application", "phase=detailed_evaluation_total elapsed_seconds={:.6}", detailed_started.elapsed().as_secs_f64());
+                let result = result?;
+                let merge_started = std::time::Instant::now();
+                MonitorContext::native_phase(observation.as_deref_mut(), "caller_result_merge", Some(result.value.as_view()));
                 value += result.value;
                 conditions.extend(result.nonzero_conditions);
                 families.extend(result.families);
+                log::debug!(target: "vakint::saved_application", "phase=caller_result_merge elapsed_seconds={:.6}", merge_started.elapsed().as_secs_f64());
             }
             MonitorContext::native_phase(observation.as_deref_mut(), "retained_master_combination", Some(value.as_view()));
+            let combination_started = std::time::Instant::now();
+            MonitorContext::native_phase(observation.as_deref_mut(), "retained_outer_exact_combination", Some(value.as_view()));
+            let value = super::combine_exact(value);
+            log::debug!(target: "vakint::saved_application", "phase=retained_outer_exact_combination elapsed_seconds={:.6}", combination_started.elapsed().as_secs_f64());
+            // The catalogue's own exact-combination and classification spans
+            // are children of this complete finalization call.
+            let finalization_started = std::time::Instant::now();
             let value = self.finalize_rustred(
-                super::combine_exact(value),
+                value,
                 settings,
                 5,
                 super::RustRedMasterMode::Retain,
-            )?;
+                observation.as_deref_mut(),
+            );
+            log::debug!(target: "vakint::saved_application", "phase=retained_finalization_total elapsed_seconds={:.6}", finalization_started.elapsed().as_secs_f64());
+            let value = value?;
             MonitorContext::native_phase(observation, "retained_output", Some(value.as_view()));
             Ok(RustRedSymbolicEvaluation {
                 value,
@@ -1090,6 +1108,12 @@ impl SavedApplication {
                 Err(error) => return Err(native_failure(error).into()),
             };
             log::debug!(target: "vakint::saved_application", "phase=terminal_geometry_and_lower_factors elapsed_seconds={:.6}", products_started.elapsed().as_secs_f64());
+            let guards_started = std::time::Instant::now();
+            MonitorContext::native_phase(
+                observation.as_deref_mut(),
+                "retained_guard_materialization",
+                None,
+            );
             for condition in normalized.nonzero_conditions() {
                 let condition = condition.to_expression();
                 if condition.is_zero()
@@ -1108,6 +1132,13 @@ impl SavedApplication {
                         .with(physical_dimension.to_pattern()),
                 );
             }
+            log::debug!(target: "vakint::saved_application", "phase=retained_guard_materialization elapsed_seconds={:.6}", guards_started.elapsed().as_secs_f64());
+            let coefficients_started = std::time::Instant::now();
+            MonitorContext::native_phase(
+                observation.as_deref_mut(),
+                "retained_coefficient_materialization",
+                Some(contribution.as_view()),
+            );
             for (product, coefficient) in normalized.terms() {
                 let master = product
                     .iter()
@@ -1126,6 +1157,7 @@ impl SavedApplication {
                     .with(physical_dimension.to_pattern())
                     * master;
             }
+            log::debug!(target: "vakint::saved_application", "phase=retained_coefficient_materialization elapsed_seconds={:.6}", coefficients_started.elapsed().as_secs_f64());
             let mass_power =
                 Atom::num((loop_count as i64, 2)) * &physical_dimension + Atom::num(exponent);
             value += contribution * spectator * input.mass_squared.clone().pow(mass_power);
@@ -1133,6 +1165,12 @@ impl SavedApplication {
         if !matches!(input.mass_squared.as_view(), AtomView::Num(_)) {
             conditions.insert(input.mass_squared);
         }
+        let normalization_started = std::time::Instant::now();
+        MonitorContext::native_phase(
+            observation.as_deref_mut(),
+            "retained_normalization_and_notation",
+            Some(value.as_view()),
+        );
         let value = value * Self::normalization(settings, loop_count)?;
         let value = if settings.use_dot_product_notation {
             value
@@ -1141,6 +1179,7 @@ impl SavedApplication {
             // requested presentation only to surviving external spectators.
             Vakint::convert_from_dot_notation(value.as_view())
         };
+        log::debug!(target: "vakint::saved_application", "phase=retained_normalization_and_notation elapsed_seconds={:.6}", normalization_started.elapsed().as_secs_f64());
         MonitorContext::native_phase(
             observation,
             "normalized_retained_output",

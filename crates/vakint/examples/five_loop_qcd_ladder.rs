@@ -912,7 +912,27 @@ fn main() -> fixture::Result<()> {
             "owner_preparation":"Measured cumulative deferred-owner preparation counters at data load, cache setup, and reduction boundaries",
             "pure_ibp_seconds":null,"terminal_substitution_seconds":null,
             "separate_native_phase_durations_available":false,
-            "phase_duration_estimates_by_subtraction":false
+            "phase_duration_estimates_by_subtraction":false,
+            "stage_accounting":{
+                "samples":"Every stages[name] entry is one completed span; repeated calls append samples. Sum samples within a phase, never all phases together.",
+                "disjoint_evaluation_spans":[
+                    "frontend_canonicalization","frontend_tensor_prepass",
+                    "frontend_admitted_witness_search","detailed_evaluation_total",
+                    "caller_result_merge","retained_outer_exact_combination",
+                    "retained_finalization_total"
+                ],
+                "nested_spans":{
+                    "detailed_evaluation_total":[
+                        "parent_transport_and_scalar_lowering","saved_rule_application",
+                        "terminal_geometry_and_lower_factors","retained_guard_materialization",
+                        "retained_coefficient_materialization","retained_normalization_and_notation"
+                    ],
+                    "retained_finalization_total":[
+                        "retained_catalogue_exact_combination","retained_catalogue_classification"
+                    ]
+                },
+                "unassigned":"Public evaluation minus disjoint spans still includes setup, replacements, integral splitting and caller cleanup; detailed total minus its children includes batching, assembly and callee cleanup. Neither residual is a pure IBP estimate."
+            }
         });
         let known = engine
             .master_symbols()?
@@ -1195,6 +1215,31 @@ mod cache_classification_tests {
             assert!(validate_hit_diagnostic(&diagnostic.hit_diagnostic(true)).is_err());
         }
         assert!(!logger.enabled(&metadata));
+    }
+
+    #[test]
+    fn physical_logger_keeps_repeated_nested_spans_separate_from_parent_totals() {
+        let logger = StageLogger {
+            phases: Mutex::new(BTreeMap::new()),
+            cache_hits: Mutex::new(CacheHitDiagnostic::new()),
+        };
+        for (phase, seconds) in [
+            ("retained_guard_materialization", 2.0),
+            ("retained_guard_materialization", 3.0),
+            ("detailed_evaluation_total", 7.0),
+        ] {
+            logger.log(
+                &log::Record::builder()
+                    .level(log::Level::Debug)
+                    .target("vakint::saved_application")
+                    .args(format_args!("phase={phase} elapsed_seconds={seconds}"))
+                    .build(),
+            );
+        }
+        let phases = logger.phases.lock().unwrap();
+        assert_eq!(phases["retained_guard_materialization"], [2.0, 3.0]);
+        assert_eq!(phases["detailed_evaluation_total"], [7.0]);
+        assert!(logger.cache_hits.lock().unwrap().hit_events.is_empty());
     }
 
     #[test]

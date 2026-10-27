@@ -76,7 +76,8 @@ fn bare_application_registry_view(engine: &Vakint, settings: &VakintSettings) {
             declared.clone(),
             settings,
             5,
-            crate::RustRedMasterMode::Retain
+            crate::RustRedMasterMode::Retain,
+            None,
         )
         .unwrap(),
         declared
@@ -86,7 +87,7 @@ fn bare_application_registry_view(engine: &Vakint, settings: &VakintSettings) {
         crate::RustRedMasterMode::Numerical,
     ] {
         let error = bare
-            .finalize_rustred(declared.clone(), settings, 5, mode)
+            .finalize_rustred(declared.clone(), settings, 5, mode, None)
             .unwrap_err()
             .to_string();
         assert!(
@@ -216,7 +217,8 @@ fn outside_recorded_rank(engine: &Vakint, settings: &VakintSettings) {
                 unknown.clone(),
                 settings,
                 5,
-                crate::RustRedMasterMode::Retain
+                crate::RustRedMasterMode::Retain,
+                None,
             )
             .unwrap(),
         unknown
@@ -226,7 +228,7 @@ fn outside_recorded_rank(engine: &Vakint, settings: &VakintSettings) {
         crate::RustRedMasterMode::Numerical,
     ] {
         let error = engine
-            .finalize_rustred(unknown.clone(), settings, 5, mode)
+            .finalize_rustred(unknown.clone(), settings, 5, mode, None)
             .unwrap_err()
             .to_string();
         assert!(error.contains("undeclared residual master"), "{error}");
@@ -236,7 +238,7 @@ fn outside_recorded_rank(engine: &Vakint, settings: &VakintSettings) {
         let zero = crate::vakint_parse!("ep^-2*((1-ep)^-1-1-ep)-(1-ep)^-1").unwrap();
         assert!(
             engine
-                .finalize_rustred(zero * &unknown, settings, 5, mode)
+                .finalize_rustred(zero * &unknown, settings, 5, mode, None)
                 .unwrap()
                 .is_zero()
         );
