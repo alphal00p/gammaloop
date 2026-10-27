@@ -1395,6 +1395,22 @@ products = ["feynkit", "gammaloop", "idenso"]
 topics = ["generation", "integration", "dependencies", "testing"]
 review_triggers = ["docs/architecture/evidence/generation-integration/wp2/**", "crates/feynkit-generator/src/**", "crates/idenso/src/**", "Cargo.lock"]
 
+[[section.note]]
+id = "generation-numeric-comparisons"
+title = "Generation integration numeric comparison slice"
+summary = "Independent WP3 source 08–09 port, precision and tolerance invariants, regression evidence and review handoff."
+source = "docs/architecture/generation-numeric-comparisons.typ"
+kind = "Execution record"
+status = "Astra round 2 approved; cumulative integration awaiting review"
+lifecycle = "investigation"
+owner = "unassigned"
+reviewed_at = "2026-10-27"
+review_ref = "c72726011f70640f1e20495f4f62d969afef6743"
+products = ["gammaloop"]
+topics = ["integration", "testing", "precision"]
+review_triggers = ["crates/gammalooprs/src/utils/mod.rs", "docs/architecture/evidence/generation-numeric-comparisons/**"]
+
+
 [[section]]
 id = "investigations"
 title = "Engineering investigations"

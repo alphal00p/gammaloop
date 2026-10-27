@@ -305,6 +305,195 @@ pub mod tracing;
 
 #[cfg(test)]
 mod tests {
+    use super::{ApproxEq, ArbPrec, Complex, F, FloatLike, QuadFloat, SamplingFloat};
+    use spenso::algebra::complex::SymbolicaComplex;
+    use symbolica::prelude::Real;
+
+    fn check_native_phase_residual<T: FloatLike>(exponent: i32) {
+        let one = F::<T>::default().one();
+        let delta = one.from_usize(10).powi(-exponent);
+        let tolerance = one.from_usize(10).powi(-exponent - 2);
+        let target = Complex::new(one.one(), one.zero());
+        let mut outcomes = Vec::new();
+        for sign in [-1, 1] {
+            let value = Complex::new(one.one(), &delta * one.from_i64(sign));
+            assert!(value.arg().abs() > tolerance);
+            outcomes.push([
+                value.approx_eq(&target, &tolerance),
+                value.approx_eq_res(&target, &tolerance).is_ok(),
+                target.approx_eq(&value, &tolerance),
+                target.approx_eq_res(&value, &tolerance).is_ok(),
+            ]);
+        }
+        assert_eq!(outcomes, [[false; 4]; 2]);
+    }
+
+    #[test]
+    fn complex_phase_residual_preserves_f64_precision() {
+        check_native_phase_residual::<f64>(17);
+    }
+
+    #[test]
+    fn complex_phase_residual_preserves_quad_precision() {
+        check_native_phase_residual::<QuadFloat>(35);
+    }
+
+    #[test]
+    fn complex_phase_residual_preserves_sampling_precision() {
+        check_native_phase_residual::<SamplingFloat>(80);
+    }
+
+    #[test]
+    fn complex_phase_residual_preserves_arb_precision() {
+        check_native_phase_residual::<ArbPrec>(305);
+    }
+
+    fn check_directed_mixed_normalization<T: FloatLike>() {
+        let one = F::<T>::default().one();
+        let tolerance = one.from_usize(9) / one.from_usize(40);
+        for sign in [-1, 1] {
+            for (component, reference, expected) in [(5, 4, false), (4, 5, true)] {
+                let real = one.from_i64(sign * reference);
+                let value = Complex::new(one.from_i64(sign * component), one.zero());
+                assert_eq!(value.approx_eq(&real, &tolerance), expected);
+                assert_eq!(real.approx_eq(&value, &tolerance), expected);
+                assert_eq!(value.approx_eq_res(&real, &tolerance).is_ok(), expected);
+                assert_eq!(real.approx_eq_res(&value, &tolerance).is_ok(), expected);
+            }
+        }
+    }
+
+    #[test]
+    fn complex_real_comparison_preserves_directed_normalization() {
+        check_directed_mixed_normalization::<f64>();
+        check_directed_mixed_normalization::<QuadFloat>();
+        check_directed_mixed_normalization::<SamplingFloat>();
+        check_directed_mixed_normalization::<ArbPrec>();
+    }
+
+    fn check_complex_phase_comparison<T: FloatLike>() {
+        let one = F::<T>::default().one();
+        let tolerance = one.from_usize(10).powi(-10);
+        let real = Complex::new(one.from_usize(2), one.zero());
+        let below = Complex::new(one.from_usize(2), -one.from_usize(10).powi(-12));
+        for (lhs, rhs) in [(&below, &real), (&real, &below)] {
+            assert!(lhs.approx_eq(rhs, &tolerance));
+            assert!(lhs.approx_eq_res(rhs, &tolerance).is_ok());
+        }
+        let roundoff = Complex::new(one.from_usize(2), -one.from_usize(10).powi(-20));
+        assert!(roundoff.approx_eq(&real, &tolerance));
+        assert!(real.approx_eq_res(&roundoff, &tolerance).is_ok());
+        let above_cut = Complex::new(-one.one(), one.from_usize(10).powi(-12));
+        let below_cut = Complex::new(-one.one(), -one.from_usize(10).powi(-12));
+        for (lhs, rhs) in [(&above_cut, &below_cut), (&below_cut, &above_cut)] {
+            assert!(lhs.approx_eq(rhs, &tolerance));
+            assert!(lhs.approx_eq_res(rhs, &tolerance).is_ok());
+        }
+        // Keep the branch-cut residual resolvable at each backend's native precision.
+        let displacement = one.epsilon() * one.from_usize(64);
+        let below_cut = Complex::new(-one.one(), -&displacement);
+        let above_cut = Complex::new(-one.one(), displacement);
+        for (factor, expected) in [(4, false), (256, true)] {
+            let tolerance = one.epsilon() * one.from_usize(factor);
+            for (lhs, rhs) in [(&above_cut, &below_cut), (&below_cut, &above_cut)] {
+                assert_eq!(lhs.approx_eq(rhs, &tolerance), expected);
+                assert_eq!(lhs.approx_eq_res(rhs, &tolerance).is_ok(), expected);
+            }
+        }
+        // Equal norms cannot hide a resolvable phase difference across zero.
+        let off_phase = Complex::new(one.from_usize(2), -one.from_usize(10).powi(-6));
+        for (lhs, rhs) in [(&off_phase, &real), (&real, &off_phase)] {
+            assert!(!lhs.approx_eq(rhs, &tolerance));
+            assert!(lhs.approx_eq_res(rhs, &tolerance).is_err());
+        }
+        // Away from zero, preserve relative phase tolerance (not absolute radians).
+        let angle = one.from_usize(2);
+        let target = Complex::new(angle.cos(), angle.sin());
+        for (factor, expected) in [(3, true), (6, false)] {
+            let shifted = &angle + &tolerance * one.from_usize(factor) / one.from_usize(2);
+            let value = Complex::new(shifted.cos(), shifted.sin());
+            for (lhs, rhs) in [(&value, &target), (&target, &value)] {
+                assert_eq!(lhs.approx_eq(rhs, &tolerance), expected);
+                assert_eq!(lhs.approx_eq_res(rhs, &tolerance).is_ok(), expected);
+            }
+        }
+        let zero = Complex::new(one.zero(), one.zero());
+        assert!(zero.approx_eq(&zero, &tolerance));
+        assert!(!real.approx_eq(&zero, &tolerance));
+        assert!(!zero.approx_eq(&real, &tolerance));
+    }
+
+    #[test]
+    fn complex_phases_compare_across_zero() {
+        check_complex_phase_comparison::<f64>();
+        check_complex_phase_comparison::<QuadFloat>();
+        check_complex_phase_comparison::<SamplingFloat>();
+        check_complex_phase_comparison::<ArbPrec>();
+    }
+
+    fn check_complex_real_comparison<T: FloatLike>() {
+        let one = F::<T>::default().one();
+        let tolerance = one.from_usize(10).powi(-10);
+        for real_part in [0, 2] {
+            let real = one.from_usize(real_part);
+            for (numerator, denominator, expected) in [
+                (0, 1, true),
+                (1, 2, true),
+                (-1, 2, true),
+                (1, 1, false),
+                (-1, 1, false),
+                (2, 1, false),
+                (-2, 1, false),
+            ] {
+                let imaginary = &tolerance * one.from_i64(numerator) / one.from_i64(denominator);
+                let value = Complex::new(one.from_usize(real_part), imaginary);
+                assert_eq!(value.approx_eq(&real, &tolerance), expected);
+                assert_eq!(real.approx_eq(&value, &tolerance), expected);
+                assert_eq!(value.approx_eq_res(&real, &tolerance).is_ok(), expected);
+                assert_eq!(real.approx_eq_res(&value, &tolerance).is_ok(), expected);
+            }
+            let wrong_real = Complex::new(&real + &one, one.zero());
+            assert!(!wrong_real.approx_eq(&real, &tolerance));
+            assert!(!real.approx_eq(&wrong_real, &tolerance));
+            assert!(wrong_real.approx_eq_res(&real, &tolerance).is_err());
+            assert!(real.approx_eq_res(&wrong_real, &tolerance).is_err());
+        }
+    }
+
+    #[test]
+    fn complex_compares_to_real_by_imaginary_magnitude() {
+        check_complex_real_comparison::<f64>();
+        check_complex_real_comparison::<QuadFloat>();
+        check_complex_real_comparison::<SamplingFloat>();
+        check_complex_real_comparison::<ArbPrec>();
+    }
+
+    #[test]
+    fn complex_comparison_rejects_invalid_and_overflowing_norms() {
+        let tolerance = F(1e-10);
+        let real = F(2.0);
+        let target = Complex::new(real, F(0.0));
+        for component in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            for value in [
+                Complex::new(real, F(component)),
+                Complex::new(F(component), F(0.0)),
+            ] {
+                assert!(!value.approx_eq(&real, &tolerance));
+                assert!(!real.approx_eq(&value, &tolerance));
+                assert!(value.approx_eq_res(&real, &tolerance).is_err());
+                assert!(real.approx_eq_res(&value, &tolerance).is_err());
+                for (lhs, rhs) in [(&value, &target), (&target, &value)] {
+                    assert!(!lhs.approx_eq(rhs, &tolerance));
+                    assert!(lhs.approx_eq_res(rhs, &tolerance).is_err());
+                }
+            }
+        }
+        // An overflowing norm must not be accepted as a zero/underflow case.
+        let overflowing = Complex::new(F(f64::MAX), F(f64::MAX));
+        assert!(!overflowing.approx_eq(&overflowing, &tolerance));
+        assert!(overflowing.approx_eq_res(&overflowing, &tolerance).is_err());
+    }
+
     #[test]
     fn native_hypot_preserves_finite_range() {
         use super::{ArbPrec, F};
@@ -2960,6 +3149,27 @@ impl<T: FloatLike> F<T> {
         F(self.0.rem_euclid(&rhs.0))
     }
 
+    /// Circular residual of signed phases in [-π, π], scaled by the reference
+    /// phase in [0, 2π). A zero reference keeps the residual absolute.
+    fn scaled_phase_difference(&self, other: &Self) -> Self {
+        let pi = self.PI();
+        let difference = self - other;
+        // Subtract nearby branch endpoints instead of cancelling a full turn.
+        // In particular, a tiny negative phase must never round-trip through TAU.
+        let difference = if difference > pi {
+            (self - &pi) - (other + &pi)
+        } else if difference < -&pi {
+            (self + &pi) - (other - &pi)
+        } else {
+            difference
+        };
+        if other.is_zero() {
+            difference
+        } else {
+            difference / other.rem_euclid(&self.TAU())
+        }
+    }
+
     #[allow(non_snake_case)]
     pub(crate) fn PI(&self) -> Self {
         F(self.0.PI())
@@ -4104,10 +4314,8 @@ impl<T: FloatLike> ApproxEq<Complex<F<T>>, F<T>> for Complex<F<T>> {
         } else if self.norm().is_zero() || other.norm().is_zero() {
             return true;
         }
-        let two_pi = self.re.PI() + self.re.PI();
-        let arg_self = self.arg().rem_euclid(&two_pi);
-        let arg_other = other.arg().rem_euclid(&two_pi);
-        if !arg_self.approx_eq(&arg_other, tolerance) {
+        let phase_difference = self.arg().scaled_phase_difference(&other.arg());
+        if !phase_difference.approx_eq(&phase_difference.zero(), tolerance) {
             return false;
         }
         true
@@ -4124,17 +4332,11 @@ impl<T: FloatLike> ApproxEq<Complex<F<T>>, F<T>> for Complex<F<T>> {
             return Ok(());
         }
 
-        let two_pi = self.re.PI() + self.re.PI();
-        let arg_self = self.arg().rem_euclid(&two_pi);
-        let arg_other = other.arg().rem_euclid(&two_pi);
-        // let arg_diff = (&self.arg() - &other.arg()).rem_euclid(&two_pi);
-        // let arg_zero = self.re.zero();
-        if !arg_self.approx_eq(&arg_other, tolerance) {
+        let phase_difference = self.arg().scaled_phase_difference(&other.arg());
+        if !phase_difference.approx_eq(&phase_difference.zero(), tolerance) {
             return Err(eyre!(
-                "Phases are not approximately equal: \n{:+e} - \n{:+e}= \n{:+e}!=0 with tolerance {:+e}",
-                arg_self,
-                arg_other,
-                &arg_self - &arg_other,
+                "Circular phase residual (reference-scaled) is not approximately zero: \n{:+e}!=0 with tolerance {:+e}",
+                phase_difference,
                 tolerance
             ));
         }
@@ -4142,12 +4344,14 @@ impl<T: FloatLike> ApproxEq<Complex<F<T>>, F<T>> for Complex<F<T>> {
     }
 }
 
+/// A complex number matches a real one when its real part does and its imaginary
+/// part is approximately zero, which `F::approx_eq` judges in absolute terms.
 impl<T: FloatLike> ApproxEq<F<T>, F<T>> for Complex<F<T>> {
     fn approx_eq(&self, other: &F<T>, tolerance: &F<T>) -> bool {
-        self.re.approx_eq(other, tolerance) && self.im.approx_eq(tolerance, tolerance)
+        self.re.approx_eq(other, tolerance) && self.im.approx_eq(&self.im.zero(), tolerance)
     }
     fn approx_eq_res(&self, other: &F<T>, tolerance: &F<T>) -> Result<()> {
-        if self.im.approx_eq(tolerance, tolerance) {
+        if !self.im.approx_eq(&self.im.zero(), tolerance) {
             return Err(eyre!(
                 "Non-zero imaginary part: \n{:+e} with tolerance {:+e}",
                 &self.im,
@@ -4168,26 +4372,11 @@ impl<T: FloatLike> ApproxEq<F<T>, F<T>> for Complex<F<T>> {
 
 impl<T: FloatLike> ApproxEq<Complex<F<T>>, F<T>> for F<T> {
     fn approx_eq(&self, other: &Complex<F<T>>, tolerance: &F<T>) -> bool {
-        other.re.approx_eq(self, tolerance) && other.im.approx_eq(tolerance, tolerance)
+        other.approx_eq(self, tolerance)
     }
 
     fn approx_eq_res(&self, other: &Complex<F<T>>, tolerance: &F<T>) -> Result<()> {
-        if other.im.approx_eq(tolerance, tolerance) {
-            return Err(eyre!(
-                "Non-zero imaginary part: \n{:+e} with tolerance {:+e}",
-                &other.im,
-                tolerance
-            ));
-        }
-        if !other.re.approx_eq(self, tolerance) {
-            return Err(eyre!(
-                "Real parts are not approximately equal: \n{:+e} != \n{:+e} with tolerance {:+e}",
-                &other.re,
-                self,
-                tolerance
-            ));
-        }
-        Ok(())
+        other.approx_eq_res(self, tolerance)
     }
 }
 

@@ -1,0 +1,292 @@
+{
+  "schema": 1,
+  "slice": "WP3 source units 08 and 09",
+  "status": "focused correction complete; awaiting NEW independent Astra review; not integrated",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-numeric-comparisons",
+  "approved_prefix": "74cebf6c8f673f5849b26afe55fa98035d5eba1d",
+  "bookmark": "generation-numeric-comparisons",
+  "implementation_commit": "c72726011f70640f1e20495f4f62d969afef6743",
+  "implementation_change": "nxyptxusqpoytlrtvvustsrwyllktmst",
+  "evidence_change": "vwwquqszvuvsklrppxstklrmumlnnmqy",
+  "sources": [
+    {
+      "unit": "08",
+      "commit": "2e77886cde8d72e1e063cafced9a2738811abf20",
+      "change": "tyyyvnqqytqzqqqzwnrzltxlyultwvnw",
+      "disposition": "ported, then precision-corrected after Astra round 1 P2; awaiting new review",
+      "new_commit": "c72726011f70640f1e20495f4f62d969afef6743",
+      "intent": "adjacent phase representatives on the circle; preserve relative phase tolerance",
+      "initial_port_commit": "19e0e9c27642523e0a430cdba0259d380e65c4f7"
+    },
+    {
+      "unit": "09",
+      "commit": "0eb460fd62c3b7fbd2a244ba13d8f38b60fbfad6",
+      "change": "mqrtpvykvroxolumuponxlvnkyplnuur",
+      "disposition": "original imaginary-to-zero fix preserved; directed normalization controls added; production unchanged in correction",
+      "new_commit": "19e0e9c27642523e0a430cdba0259d380e65c4f7",
+      "intent": "strict absolute imaginary-to-zero comparison; reverse direction delegates"
+    }
+  ],
+  "changed_files": [
+    "crates/gammalooprs/src/utils/mod.rs",
+    "docs/architecture/generation-numeric-comparisons.typ",
+    "docs/developers.toml",
+    "docs/architecture/evidence/generation-numeric-comparisons/receipt.json",
+    "docs/architecture/evidence/generation-numeric-comparisons/results.txt"
+  ],
+  "owners_and_callers": {
+    "comparison": "existing ApproxEq implementations in utils/mod.rs",
+    "phase_representation": "private F<T>::scaled_phase_difference, replacing the prior lossy phase-normalization helper",
+    "mixed_production_caller": "FourMomentum ApproxEq<Polarization<Complex<F<T>>>> in momentum/mod.rs",
+    "additional_owners_searched": [
+      "spenso Complex::arg/Real::norm",
+      "F<T> numeric helpers",
+      "ApproxEq call sites in momentum/model/settings/numerator"
+    ]
+  },
+  "backends": [
+    "f64",
+    "QuadFloat (double-double; active f128 alias)",
+    "SamplingFloat (VarFloat<256>)",
+    "ArbPrec (VarFloat<1000>)"
+  ],
+  "invariants": [
+    "No PartialEq/Eq changes or parallel comparison API",
+    "Generic constants and intermediates use native precision; no f64 conversion",
+    "Existing norm/real-part relative tolerance and zero-reference absolute rule retained",
+    "Native signed circular residual precedes directed reference scaling; reference normalization is denominator-only",
+    "Imaginary magnitude must be strictly below tolerance, including real reference zero",
+    "Boolean and Result comparisons agree in all new cases",
+    "Invalid/overflow values rejected with finite tolerance; no tolerance widening"
+  ],
+  "validation": [
+    {
+      "command": "nix develop /nix/store/shxam23fqq8axkbgh0pbji2fi1nc0b7d-nix-shell-env.drv -c cargo nextest run -p gammalooprs --lib --locked --cargo-profile ci-optim --profile ci_gammaloop --retries 0 -E 'test(complex_phase_residual_preserves_) or test(complex_real_comparison_preserves_directed_normalization)'",
+      "configuration": "new tests; unchanged faulty round-1 production owner",
+      "exit_code": 100,
+      "result": "4 precision regressions fail with identical negative/positive API matrices; directed mixed normalization test passes",
+      "log": "target/sol-numeric-round2/before.log"
+    },
+    {
+      "command": "nix develop /nix/store/shxam23fqq8axkbgh0pbji2fi1nc0b7d-nix-shell-env.drv -c cargo nextest run -p gammalooprs --lib --locked --cargo-profile ci-optim --profile ci_gammaloop --retries 0 -E 'test(utils::tests::) or test(momentum::tests::rotations)'",
+      "exit_code": 0,
+      "result": "34 passed; 1487 skipped; original 29 plus five new tests",
+      "run_id": "fa8d6e03-6376-42f7-9f5c-a001a42ec6de",
+      "log": "target/sol-numeric-round2/focused.log"
+    },
+    {
+      "command": "nix develop /nix/store/shxam23fqq8axkbgh0pbji2fi1nc0b7d-nix-shell-env.drv -c cargo nextest run -p gammalooprs --lib --locked --cargo-profile ci-optim --profile ci_gammaloop --retries 0 -E 'test(utils::tests::) or test(momentum::tests::rotations)'",
+      "configuration": "final committed source; confirms small test-construction cleanup made during the first compile",
+      "exit_code": 0,
+      "result": "34 passed; 1487 skipped",
+      "run_id": "3af1c031-c316-43d0-82b1-5209ccf16cdb",
+      "log": "target/sol-numeric-round2/final-focused.log"
+    },
+    {
+      "command": "nix develop /nix/store/shxam23fqq8axkbgh0pbji2fi1nc0b7d-nix-shell-env.drv -c cargo clippy -p gammalooprs --lib --tests --locked --profile ci-optim",
+      "exit_code": 0,
+      "result": "pass; only two inherited vendor/clarabel warnings; no changed-code warnings",
+      "log": "target/sol-numeric-round2/clippy.log"
+    },
+    {
+      "command": "nix develop /nix/store/shxam23fqq8axkbgh0pbji2fi1nc0b7d-nix-shell-env.drv -c just fmt",
+      "exit_code": 0,
+      "log": "target/sol-numeric-round2/format.log"
+    },
+    {
+      "command": "nix develop /nix/store/shxam23fqq8axkbgh0pbji2fi1nc0b7d-nix-shell-env.drv -c just fmt -- --check",
+      "exit_code": 0,
+      "log": "target/sol-numeric-round2/format-check.log"
+    },
+    {
+      "command": "nix develop /nix/store/shxam23fqq8axkbgh0pbji2fi1nc0b7d-nix-shell-env.drv -c typst compile docs/architecture/generation-numeric-comparisons.typ target/sol-numeric-round2/note.pdf",
+      "exit_code": 0,
+      "result": "final updated note compiles; scratch PDF removed",
+      "log": "target/sol-numeric-round2/typst.log"
+    },
+    {
+      "command": "Nix-store Python 3.13 tomllib/json/hashlib plus jj file show -r c72726011f70640f1e20495f4f62d969afef6743 crates/gammalooprs/src/utils/mod.rs",
+      "result": "unique registry ID/title/reference contract, original and Astra artifact hashes, final source identity, and current log hashes pass"
+    }
+  ],
+  "regressions": [
+    "zero-angle seam in both directions, including source tiny imaginary-roundoff case",
+    "negative-real branch cut in both directions",
+    "relative phase scaling around angle 2, inside and outside tolerance",
+    "resolvable phase mismatch despite equal norms",
+    "complex zero/nonzero controls",
+    "exact reals and signed imaginary half-tolerance perturbations",
+    "pure imaginary versus real zero in both directions",
+    "strict imaginary tolerance boundary and out-of-bound controls",
+    "real-part mismatch",
+    "NaN/infinite components and overflowing complex norms (binary64)",
+    "Separate precision regressions for exponents 17/35/80/305 on f64/QuadFloat/SamplingFloat/ArbPrec, both signs, both call directions, both APIs",
+    "Native epsilon-scaled branch-cut rejection and acceptance controls on all four backends",
+    "Unequal mixed real parts with native-context 9/40 tolerance, both signs and call directions"
+  ],
+  "rust_policy_review": {
+    "result": "final diff reviewed; no departures from documented allowances",
+    "notes": "Existing private F numeric helper adjusted; no new comparison API, clones, unsafe code, dependency changes or external caller changes. Generic constants, powers, epsilon and PI/TAU stay native."
+  },
+  "environment": {
+    "development_shell": "standard nix develop initially; realized pinned shell derivation reused for subsequent commands",
+    "SYMBOLICA_LICENSE": "existing exported value preserved, otherwise silently loaded from user config; value excluded from outputs",
+    "cache_policy": "no Cargo cache redirects or deletions; inherited development-shell behavior retained",
+    "NixCI": "top-level enable remains false"
+  },
+  "limitations": [
+    "Existing scalar relative comparison is directed; globally symmetric tolerance semantics are outside scope",
+    "Existing complex norm construction and finite-range/underflow behavior remain unchanged",
+    "No full physics suite, benchmarks, full documentation site suite, uploads or publication requested/performed",
+    "Local raw logs are ignored and retained in the task workspace; compact diagnostic excerpts are committed in results.txt",
+    "The correction has not yet received the required new independent Astra approval."
+  ],
+  "retained_artifacts": {
+    "workspace_and_bookmark": "retained for independent Astra review and parent integration",
+    "raw_logs": {
+      "baseline.log": {
+        "sha256": "9f2ff48fbcbf10ac57673caf3f7b718402e9f642389332c406fdf4a8a4a89653",
+        "bytes": 20959,
+        "retained": "ignored local log in task workspace"
+      },
+      "clippy.log": {
+        "sha256": "dd21fc6f806a1a184fafef3ca0eda6e39a1f818ed8fc0dab47e24283bc081628",
+        "bytes": 13600,
+        "retained": "ignored local log in task workspace"
+      },
+      "docs.log": {
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0,
+        "retained": "ignored local log in task workspace"
+      },
+      "fixed.log": {
+        "sha256": "ab5c648773b763dd9a3006bf9017784cb8ca55101884d3ddc6f3fe6ef22b661e",
+        "bytes": 1741,
+        "retained": "ignored local log in task workspace"
+      },
+      "format-check.log": {
+        "sha256": "b6e19c16e0d5f97094745b63c78c4f15238111c4de91b081bba774a71abff1e8",
+        "bytes": 27,
+        "retained": "ignored local log in task workspace"
+      },
+      "format.log": {
+        "sha256": "c1f7a030d9fc8cf9e69d42d7d602fdd179aeaeedba0a88e8ad449b9aaa5f1652",
+        "bytes": 17,
+        "retained": "ignored local log in task workspace"
+      }
+    },
+    "processes": "none from this task remain after validation",
+    "round1_review": {
+      "path": "target/astra-numeric-round1.RJeXH7",
+      "receipt_sha256": "89c4339fc56593948d3ce3b8157f5af5d4bd40781a9884c13541d250012ae73e",
+      "all_recorded_artifact_sizes_and_hashes_match": true
+    },
+    "round2_logs": {
+      "target/sol-numeric-round2/before.log": {
+        "bytes": 8574,
+        "sha256": "e134f53dd1a582e2d98380d01a1376112e6574f9e48a1711b276bd7909060f44"
+      },
+      "target/sol-numeric-round2/clippy.log": {
+        "bytes": 1471,
+        "sha256": "16b6ccc1f315d4c98a7576729f3b40f57b18d93dcebbb44be591e4ec35161d23"
+      },
+      "target/sol-numeric-round2/docs-checks.json": {
+        "bytes": 94,
+        "sha256": "4fdf19482bfc7a07988fedf3f7e72cb5e951b1df0d6fe404a5cae67f6a65bdd1"
+      },
+      "target/sol-numeric-round2/final-focused.log": {
+        "bytes": 1741,
+        "sha256": "c7eaa5ca6089472a358b34d7739dcf880ce6e817a5e1599d1baef9f11785c7bc"
+      },
+      "target/sol-numeric-round2/focused.log": {
+        "bytes": 1741,
+        "sha256": "5e2a30d21c3fd37818a0bc77560b66fb6f181d0f669646db38e22d06191a5f06"
+      },
+      "target/sol-numeric-round2/format-check.log": {
+        "bytes": 27,
+        "sha256": "b6e19c16e0d5f97094745b63c78c4f15238111c4de91b081bba774a71abff1e8"
+      },
+      "target/sol-numeric-round2/format.log": {
+        "bytes": 17,
+        "sha256": "c1f7a030d9fc8cf9e69d42d7d602fdd179aeaeedba0a88e8ad449b9aaa5f1652"
+      },
+      "target/sol-numeric-round2/typst.log": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    }
+  },
+  "integration_boundary": "Parent alone reconciles replay tracking and integrates after Astra approval; no other units, workspaces, refs, pushes or PRs modified",
+  "history": {
+    "initial_implementation_commit": "19e0e9c27642523e0a430cdba0259d380e65c4f7",
+    "initial_implementation_change": "lyowpuylmsrvkkypvqynmloputvslxou",
+    "initial_evidence_commit": "753edc2ac4dd34e33d22462f9a47708c04c9f183",
+    "initial_evidence_change": "sstmnpwumvsqtnmylqruroxnmmlplnqo",
+    "initial_port_validation": [
+      {
+        "command": "nix develop -c cargo test -p gammalooprs --lib --locked --profile ci-optim complex_",
+        "configuration": "new regression tests, old production implementation",
+        "exit_code": 101,
+        "result": "three new regressions fail; fourteen existing selected tests pass",
+        "log": "baseline.log"
+      },
+      {
+        "command": "nix develop /nix/store/shxam23fqq8axkbgh0pbji2fi1nc0b7d-nix-shell-env.drv -c cargo nextest run -p gammalooprs --lib --locked --cargo-profile ci-optim --profile ci_gammaloop --retries 0 -E 'test(utils::tests::) or test(momentum::tests::rotations)'",
+        "exit_code": 0,
+        "result": "29 passed; 1487 skipped, including one profile-default exclusion",
+        "run_id": "86b58338-d2ef-4a17-82b2-76950a97826e",
+        "log": "fixed.log"
+      },
+      {
+        "command": "nix develop /nix/store/shxam23fqq8axkbgh0pbji2fi1nc0b7d-nix-shell-env.drv -c cargo clippy -p gammalooprs --lib --tests --locked --profile ci-optim",
+        "exit_code": 0,
+        "result": "no warnings in changed code; two pre-existing vendor/clarabel warnings (unused import and mismatched lifetime syntax)",
+        "log": "clippy.log"
+      },
+      {
+        "command": "nix develop /nix/store/shxam23fqq8axkbgh0pbji2fi1nc0b7d-nix-shell-env.drv -c just fmt",
+        "exit_code": 0,
+        "log": "format.log"
+      },
+      {
+        "command": "nix develop /nix/store/shxam23fqq8axkbgh0pbji2fi1nc0b7d-nix-shell-env.drv -c just fmt -- --check",
+        "exit_code": 0,
+        "log": "format-check.log"
+      },
+      {
+        "command": "nix develop /nix/store/shxam23fqq8axkbgh0pbji2fi1nc0b7d-nix-shell-env.drv -c typst compile docs/architecture/generation-numeric-comparisons.typ target/numeric-comparisons/note.pdf",
+        "exit_code": 0,
+        "result": "compiled; scratch PDF removed",
+        "log": "docs.log"
+      },
+      {
+        "command": "Python tomllib: unique registry ID, existing source, first Typst title equals registry title",
+        "result": "pass"
+      }
+    ],
+    "review_round1": {
+      "verdict": "REQUEST_CHANGES",
+      "receipt": "target/astra-numeric-round1.RJeXH7/review.json"
+    }
+  },
+  "round2": {
+    "requested_base": "753edc2ac4dd34e33d22462f9a47708c04c9f183",
+    "implementation_sha256": "30a932cc51a6279111eab9fbfa47734c9b45c090701aa67993af133bd623d974",
+    "responses": [
+      {
+        "finding": "P2",
+        "status": "implemented; awaiting new independent review",
+        "response": "Compute the residual from native signed phases before any normalization; across the branch cut subtract nearby signed PI endpoints. Divide only the residual by the reference phase normalized to [0,TAU), preserving absolute zero-reference semantics. Both ApproxEq APIs use the existing scalar zero comparison.",
+        "proof": "All four new compiled backend regressions fail the old owner and pass the corrected owner; both signs, both comparison directions, and both APIs covered."
+      },
+      {
+        "finding": "P3",
+        "status": "implemented; awaiting new independent review",
+        "response": "Native-context tolerance 9/40 protects real-reference normalization: complex real part 5 versus real reference 4 rejects; 4 versus 5 passes; both signs and both mixed call directions agree with that directed contract.",
+        "proof": "Control passes both before and after P2 correction on all four supported backends."
+      }
+    ],
+    "scope": "Only existing numeric owner/helper, targeted tests, note/registry and evidence; source09 production, norm/underflow behavior, tolerances, public APIs and all other lanes unchanged",
+    "review_boundary": "NEW independent Astra approval required before parent integration; no later units advanced"
+  }
+}

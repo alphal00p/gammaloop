@@ -1,0 +1,156 @@
+
+failures:
+
+---- utils::tests::complex_comparison_rejects_invalid_and_overflowing_norms stdout ----
+The application panicked (crashed).
+Message:  assertion failed: value.approx_eq_res(&real, &tolerance).is_err()
+Location: crates/gammalooprs/src/utils/mod.rs:409
+
+Backtrace omitted. Run with RUST_BACKTRACE=1 environment variable to display it.
+Run with RUST_BACKTRACE=full to include source snippets.
+
+---- utils::tests::complex_compares_to_real_by_imaginary_magnitude stdout ----
+The application panicked (crashed).
+Message:  assertion `left == right` failed
+  left: false
+ right: true
+Location: crates/gammalooprs/src/utils/mod.rs:376
+
+Backtrace omitted. Run with RUST_BACKTRACE=1 environment variable to display it.
+Run with RUST_BACKTRACE=full to include source snippets.
+
+---- utils::tests::complex_phases_compare_across_zero stdout ----
+The application panicked (crashed).
+Message:  assertion failed: lhs.approx_eq(rhs, &tolerance)
+Location: crates/gammalooprs/src/utils/mod.rs:317
+
+Backtrace omitted. Run with RUST_BACKTRACE=1 environment variable to display it.
+Run with RUST_BACKTRACE=full to include source snippets.
+
+
+failures:
+    utils::tests::complex_compares_to_real_by_imaginary_magnitude
+    utils::tests::complex_comparison_rejects_invalid_and_overflowing_norms
+    utils::tests::complex_phases_compare_across_zero
+
+test result: FAILED. 14 passed; 3 failed; 0 ignored; 0 measured; 1499 filtered out; finished in 0.28s
+
+error: test failed, to rerun pass `-p gammalooprs --lib`
+
+FIXED OWNER/CALLER TESTS
+    Finished `ci-optim` profile [optimized] target(s) in 4m 49s
+────────────
+ Nextest run ID 86b58338-d2ef-4a17-82b2-76950a97826e with nextest profile: ci_gammaloop
+    Starting 29 tests across 1 binary (1487 tests skipped, including 1 test via profile.default.default-filter)
+────────────
+     Summary [   0.201s] 29 tests run: 29 passed, 1487 skipped
+
+CLIPPY
+warning: unused import: `super::super::traits::*`
+   --> vendor/clarabel/src/solver/core/solver.rs:470:9
+    |
+470 |     use super::super::traits::*;
+    |         ^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+    Checking indicatif v0.18.4
+    Checking string-template-plus v0.4.3
+    Checking ratatui-widgets v0.3.2
+    Checking statrs v0.16.1
+warning: hiding a lifetime that's elided elsewhere is confusing
+  --> vendor/clarabel/src/solver/core/kktsolvers/direct/quasidef/datamaps.rs:26:39
+   |
+26 |     pub(crate) fn to_sparse_expansion(&self) -> Option<SparseExpansionCone<T>> {
+   |                                       ^^^^^            ^^^^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+   |                                       |
+   |                                       the lifetime is elided here
+   |
+   = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+   = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default
+help: use `'_` for type paths
+   |
+26 |     pub(crate) fn to_sparse_expansion(&self) -> Option<SparseExpansionCone<'_, T>> {
+   |                                                                            +++
+
+warning: `clarabel` (lib) generated 2 warnings (run `cargo clippy --fix --lib -p clarabel -- ` to apply 2 suggestions)
+    Finished `ci-optim` profile [optimized] target(s) in 6m 25s
+
+FORMAT CHECK
+cargo fmt --all -- --check
+
+DOCUMENTATION
+Standalone Typst compilation: exit 0. Registry entry and title contract: pass.
+
+ROUND 2: ASTRA P2/P3 RESPONSE
+
+BASELINE (new tests, faulty production owner)
+ Nextest run ID 890b67ec-904e-4bb9-9f13-18af50f71e1b with nextest profile: ci_gammaloop
+        FAIL [   0.013s] (2/5) gammalooprs utils::tests::complex_phase_residual_preserves_f64_precision
+      left: [[true, true, true, true], [false, false, false, false]]
+     right: [[false, false, false, false], [false, false, false, false]]
+        FAIL [   0.014s] (3/5) gammalooprs utils::tests::complex_phase_residual_preserves_quad_precision
+      left: [[true, true, true, true], [false, false, false, false]]
+     right: [[false, false, false, false], [false, false, false, false]]
+        FAIL [   0.015s] (4/5) gammalooprs utils::tests::complex_phase_residual_preserves_arb_precision
+      left: [[true, true, true, true], [false, false, false, false]]
+     right: [[false, false, false, false], [false, false, false, false]]
+        FAIL [   0.016s] (5/5) gammalooprs utils::tests::complex_phase_residual_preserves_sampling_precision
+      left: [[true, true, true, true], [false, false, false, false]]
+     right: [[false, false, false, false], [false, false, false, false]]
+     Summary [   0.029s] 5 tests run: 1 passed, 4 failed, 1516 skipped
+        FAIL [   0.013s] (2/5) gammalooprs utils::tests::complex_phase_residual_preserves_f64_precision
+      left: [[true, true, true, true], [false, false, false, false]]
+     right: [[false, false, false, false], [false, false, false, false]]
+        FAIL [   0.014s] (3/5) gammalooprs utils::tests::complex_phase_residual_preserves_quad_precision
+      left: [[true, true, true, true], [false, false, false, false]]
+     right: [[false, false, false, false], [false, false, false, false]]
+        FAIL [   0.015s] (4/5) gammalooprs utils::tests::complex_phase_residual_preserves_arb_precision
+      left: [[true, true, true, true], [false, false, false, false]]
+     right: [[false, false, false, false], [false, false, false, false]]
+        FAIL [   0.016s] (5/5) gammalooprs utils::tests::complex_phase_residual_preserves_sampling_precision
+      left: [[true, true, true, true], [false, false, false, false]]
+     right: [[false, false, false, false], [false, false, false, false]]
+
+FINAL COMMITTED SOURCE
+    Finished `ci-optim` profile [optimized] target(s) in 5m 08s
+────────────
+ Nextest run ID 3af1c031-c316-43d0-82b1-5209ccf16cdb with nextest profile: ci_gammaloop
+    Starting 34 tests across 1 binary (1487 tests skipped, including 1 test via profile.default.default-filter)
+────────────
+     Summary [   0.227s] 34 tests run: 34 passed, 1487 skipped
+
+CLIPPY
+    Blocking waiting for file lock on build directory
+warning: unused import: `super::super::traits::*`
+   --> vendor/clarabel/src/solver/core/solver.rs:470:9
+    |
+470 |     use super::super::traits::*;
+    |         ^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+  --> vendor/clarabel/src/solver/core/kktsolvers/direct/quasidef/datamaps.rs:26:39
+   |
+26 |     pub(crate) fn to_sparse_expansion(&self) -> Option<SparseExpansionCone<T>> {
+   |                                       ^^^^^            ^^^^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+   |                                       |
+   |                                       the lifetime is elided here
+   |
+   = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+   = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default
+help: use `'_` for type paths
+   |
+26 |     pub(crate) fn to_sparse_expansion(&self) -> Option<SparseExpansionCone<'_, T>> {
+   |                                                                            +++
+
+warning: `clarabel` (lib) generated 2 warnings (run `cargo clippy --fix --lib -p clarabel -- ` to apply 2 suggestions)
+    Checking gammalooprs v0.3.4 (/shared/lcnbr/dev/gammaloop/generation-numeric-comparisons/crates/gammalooprs)
+    Finished `ci-optim` profile [optimized] target(s) in 5m 50s
+
+FORMAT CHECK
+cargo fmt --all -- --check
+
+DOCUMENTATION AND EVIDENCE
+Updated standalone Typst compilation: exit 0. Registry ID/title/reference and retained original/Astra/current artifact hashes: pass.
