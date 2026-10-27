@@ -5955,6 +5955,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "symbolica-data"
+version = "0.1.0"
+dependencies = [
+ "pyo3",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
+name = "symbolica-notation"
+version = "0.1.0"
+dependencies = [
+ "roxmltree 0.21.1",
+ "symbolica",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "symbolica-typst-atom-payload"
 version = "0.1.0"
 source = "git+https://github.com/symbolica-dev/symbolica-typst-plugin?rev=7f869adc14dcf2758bab16aaa25e06eb10ffbfad#7f869adc14dcf2758bab16aaa25e06eb10ffbfad"
