@@ -151,7 +151,13 @@ enum BuildScope {
     ProductPreview,
 }
 
-type LinkedPageIndex = HashMap<PathBuf, (HashSet<String>, Option<String>)>;
+struct LinkedPageMetadata {
+    anchors: HashSet<String>,
+    redirect: Option<String>,
+    inspection_actions: HashSet<usize>,
+}
+
+type LinkedPageIndex = HashMap<PathBuf, LinkedPageMetadata>;
 type LocalPathIndex = HashMap<PathBuf, Option<fs::FileType>>;
 type LinkRewriteIndex = HashMap<PathBuf, Vec<LinkRewrite>>;
 type LinkValidationState<'a> = (
@@ -193,6 +199,8 @@ struct LinkValidationPatterns {
     id: Regex,
     name: Regex,
     named_anchor: Regex,
+    svg_action_tag: Regex,
+    svg_attribute: Regex,
     redirect: Regex,
 }
 
@@ -208,6 +216,10 @@ impl LinkValidationPatterns {
             id: Regex::new(r#"(?i)(?:^|\s)id\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))"#)?,
             name: Regex::new(r#"(?i)(?:^|\s)name\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))"#)?,
             named_anchor: Regex::new(r"(?i)^<a\b")?,
+            svg_action_tag: Regex::new(r#"(?is)<(/?)([^\s/<>]+)(?:[^"'<>]|"[^"]*"|'[^']*')*>"#)?,
+            svg_attribute: Regex::new(
+                r#"(?is)\s+([^\s=/>]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?"#,
+            )?,
             redirect: Regex::new(
                 r#"(?i)<meta\b[^>]*\bcontent\s*=\s*["'][^"']*\burl=([^"']+)["'][^>]*>"#,
             )?,
@@ -227,7 +239,158 @@ impl LinkValidationPatterns {
         String::from_utf8(rendered).expect("masking HTML with spaces preserves UTF-8")
     }
 
-    fn page_metadata(&self, html: &str) -> (HashSet<String>, Option<String>) {
+    fn inherited_collections_href(
+        &self,
+        link: &LinkReference<'_>,
+        html: &str,
+    ) -> Option<&'static str> {
+        if !link.rustdoc || link.href != "index.html#insert-and-complex-keys" {
+            return None;
+        }
+        let html = self.rendered_html(html);
+        let before = html.get(..link.attribute.as_ref()?.attribute_range.start)?;
+        let method = &before[before.rfind("<details")?..];
+        if method.contains("</details>")
+            || !method.starts_with("<details class=\"toggle method-toggle\"")
+            || !method.contains("<section id=\"method.insert\"")
+        {
+            return None;
+        }
+        let inherited_btree_insert = self.tag.find_iter(method).any(|element| {
+            let tag = element.as_str();
+            if !tag.starts_with("<a ") || !tag.contains("class=\"src\"") {
+                return false;
+            }
+            self.href.captures(tag).is_some_and(|capture| {
+                (1..=3)
+                    .find_map(|index| capture.get(index))
+                    .and_then(|target| target.as_str().strip_prefix("https://doc.rust-lang.org/"))
+                    .and_then(|target| target.split_once('/'))
+                    .is_some_and(|(_, path)| {
+                        path.split('#').next() == Some("src/alloc/collections/btree/map.rs.html")
+                    })
+            })
+        });
+        // BTreeMap's inherited insert prose retains a module-relative link,
+        // even when Rustdoc renders it on another crate's Deref target page.
+        inherited_btree_insert.then_some(
+            "https://doc.rust-lang.org/std/collections/index.html#insert-and-complex-keys",
+        )
+    }
+
+    fn inspection_actions(&self, html: &str) -> HashSet<usize> {
+        let mut actions = HashSet::new();
+        let mut scopes: Vec<Vec<usize>> = Vec::new();
+        // Walk complete quoted tags: an attribute containing "<svg>" is not a graph.
+        for element in self.svg_action_tag.captures_iter(html) {
+            let tag = element.get(0).expect("complete HTML tag");
+            let name = element.get(2).expect("HTML tag name").as_str();
+            let closing = element.get(1).is_some_and(|value| value.as_str() == "/");
+            if name.eq_ignore_ascii_case("svg") {
+                if closing {
+                    if let Some(scope) = scopes.pop() {
+                        actions.extend(scope);
+                    }
+                } else if !tag.as_str().trim_end().ends_with("/>") {
+                    scopes.push(Vec::new());
+                }
+            } else if !closing
+                && name.eq_ignore_ascii_case("a")
+                && let Some(scope) = scopes.last_mut()
+            {
+                for capture in self.svg_attribute.captures_iter(tag.as_str()) {
+                    if !capture
+                        .get(1)
+                        .is_some_and(|name| name.as_str().eq_ignore_ascii_case("href"))
+                    {
+                        continue;
+                    }
+                    let Some(target) = (2..=4).find_map(|index| capture.get(index)) else {
+                        continue;
+                    };
+                    if Self::valid_inspection_action(target.as_str()) {
+                        scope.push(tag.start() + target.start());
+                    }
+                }
+            }
+        }
+        actions
+    }
+
+    // Linnest's transparent SVG inspection targets are typed actions, not page
+    // anchors. The JSON is XML-escaped once by both native and Typst renderers.
+    fn valid_inspection_action(href: &str) -> bool {
+        let Some((identity, payload)) = href
+            .strip_prefix("#linnet-")
+            .and_then(|s| s.split_once('?'))
+        else {
+            return false;
+        };
+        let Some((kind, id)) = identity.split_once('-') else {
+            return false;
+        };
+        if id.is_empty() || !id.bytes().all(|byte| byte.is_ascii_digit()) {
+            return false;
+        }
+        let Ok(id) = id.parse::<u64>() else {
+            return false;
+        };
+        // Decode ampersands last so a literal &quot; in user metadata is not decoded twice.
+        let payload = payload
+            .replace("&quot;", "\"")
+            .replace("&apos;", "'")
+            .replace("&#39;", "'")
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
+            .replace("&amp;", "&");
+        let Ok(Value::Object(fields)) = serde_json::from_str::<Value>(&payload) else {
+            return false;
+        };
+        let index = |key: &str| fields.get(key).and_then(Value::as_u64);
+        let endpoint = |key: &str| {
+            fields
+                .get(key)
+                .is_some_and(|v| v.is_null() || v.as_u64().is_some())
+        };
+        match kind {
+            "node" => {
+                fields
+                    .get("edges")
+                    .and_then(Value::as_array)
+                    .is_some_and(|edges| edges.iter().all(|edge| edge.as_u64().is_some()))
+                    && fields.get("node").is_none_or(|_| index("node") == Some(id))
+            }
+            "edge" | "halfedge" => {
+                if index("edge").is_none()
+                    || !endpoint("source")
+                    || !endpoint("sink")
+                    || !matches!(
+                        fields.get("orientation").and_then(Value::as_str),
+                        Some("default" | "reversed" | "undirected")
+                    )
+                {
+                    return false;
+                }
+                if kind == "edge" {
+                    index("edge") == Some(id)
+                        && fields
+                            .get("half-edge")
+                            .is_none_or(|_| index("half-edge").is_some())
+                } else {
+                    index("half-edge") == Some(id)
+                        && index("node").is_some()
+                        && endpoint("pair")
+                        && matches!(
+                            fields.get("flow").and_then(Value::as_str),
+                            Some("source" | "sink")
+                        )
+                }
+            }
+            _ => false,
+        }
+    }
+
+    fn page_metadata(&self, html: &str) -> LinkedPageMetadata {
         let mut anchors = HashSet::new();
         for element in self.tag.find_iter(html) {
             for capture in self.id.captures_iter(element.as_str()) {
@@ -248,7 +411,11 @@ impl LinkValidationPatterns {
             .captures(html)
             .and_then(|capture| capture.get(1))
             .map(|value| decode_html_text(value.as_str()));
-        (anchors, redirect)
+        LinkedPageMetadata {
+            anchors,
+            redirect,
+            inspection_actions: self.inspection_actions(html),
+        }
     }
 }
 
@@ -9457,7 +9624,7 @@ fn validate_local_target(
     if fragment.is_empty() {
         return Ok(());
     }
-    let load_page = |path: &Path| -> Result<(HashSet<String>, Option<String>)> {
+    let load_page = |path: &Path| -> Result<LinkedPageMetadata> {
         let html = fs::read_to_string(path)?;
         Ok(patterns.page_metadata(&patterns.rendered_html(&html)))
     };
@@ -9525,13 +9692,28 @@ fn validate_local_target(
         linked_pages.insert(resolved.clone(), load_page(&resolved)?);
     }
     let redirect_target = {
-        let (anchors, redirect_target) = linked_pages
+        let page = linked_pages
             .get(&resolved)
             .expect("linked page was inserted before fragment validation");
-        if fragment_exists(anchors) {
+        if link.href.starts_with("#linnet-") && link.href.contains('?') {
+            if link.source == resolved
+                && link.attribute.as_ref().is_some_and(|attribute| {
+                    page.inspection_actions
+                        .contains(&attribute.target_range.start)
+                })
+            {
+                return Ok(());
+            }
+            failures.push(format!(
+                "{source_display} -> {} (invalid SVG inspection action)",
+                link.href
+            ));
             return Ok(());
         }
-        redirect_target.clone()
+        if fragment_exists(&page.anchors) {
+            return Ok(());
+        }
+        page.redirect.clone()
     };
     if let Some(redirect_target) = redirect_target
         && let Some(redirected) =
@@ -9562,10 +9744,29 @@ fn validate_local_target(
             &linked_pages
                 .get(&redirected)
                 .expect("redirected page was inserted before fragment validation")
-                .0,
+                .anchors,
         ) {
             return Ok(());
         }
+    }
+    if let Some(target) =
+        patterns.inherited_collections_href(&link, &fs::read_to_string(link.source)?)
+    {
+        let attribute = link
+            .attribute
+            .as_ref()
+            .expect("inherited link has an attribute");
+        link_rewrites
+            .entry(link.source.to_path_buf())
+            .or_default()
+            .push(LinkRewrite {
+                range: attribute.target_range.clone(),
+                expected: link.href.to_owned(),
+                replacement: target.to_owned(),
+                target_before: link.href.to_owned(),
+                target_after: Some(target.to_owned()),
+            });
+        return Ok(());
     }
     failures.push(format!(
         "{source_display} -> {} (missing fragment)",
@@ -10833,13 +11034,13 @@ mod tests {
             .ancestors()
             .nth(2)
             .unwrap();
-        let arbitrary = workspace
-            .parent()
-            .unwrap()
-            .join("alphal00p-docs-unrelated-cache");
+        // In Nix the repository can be below TMPDIR, so its siblings are
+        // valid temporary roots. Use a root outside the allowed directories.
+        let arbitrary = workspace.ancestors().last().unwrap();
+        assert!(!arbitrary.starts_with(env::temp_dir()));
 
         assert!(prepare_persistent_rustdoc_target(workspace, workspace).is_err());
-        assert!(prepare_persistent_rustdoc_target(workspace, &arbitrary).is_err());
+        assert!(prepare_persistent_rustdoc_target(workspace, arbitrary).is_err());
         assert!(
             prepare_persistent_rustdoc_target(workspace, Path::new("target/watch/../../outside"))
                 .is_err()
@@ -10854,15 +11055,17 @@ mod tests {
         let temporary = tempfile::tempdir().unwrap();
         let workspace = temporary.path().join("workspace");
         fs::create_dir_all(workspace.join("target")).unwrap();
-        let repository = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .ancestors()
-            .nth(2)
-            .unwrap();
+        // The repository may itself be below TMPDIR in a Nix build. The
+        // filesystem root is outside both allowed roots in this fixture.
+        let outside = Path::new("/");
+        assert!(!outside.starts_with(fs::canonicalize(env::temp_dir()).unwrap()));
+        assert!(!outside.starts_with(fs::canonicalize(workspace.join("target")).unwrap()));
         let escape = temporary.path().join("escape");
-        symlink(repository, &escape).unwrap();
+        symlink(outside, &escape).unwrap();
 
-        let error =
-            prepare_persistent_rustdoc_target(&workspace, &escape.join("cache")).unwrap_err();
+        let leaf = temporary.path().file_name().unwrap();
+        assert!(!outside.join(leaf).exists());
+        let error = prepare_persistent_rustdoc_target(&workspace, &escape.join(leaf)).unwrap_err();
         assert!(format!("{error:#}").contains("escapes"));
     }
 
@@ -11054,6 +11257,208 @@ mod tests {
 
         let normalized = fs::read_to_string(rustdoc.join("index.html")).unwrap();
         assert_eq!(normalized, "<a>inherited type</a>");
+    }
+
+    fn inherited_btree_map_insert_html(href: &str) -> String {
+        format!(
+            r#"<details class="toggle method-toggle" open><summary>
+                <section id="method.insert" class="method">
+                <a class="src" href="https://doc.rust-lang.org/1.98.1/src/alloc/collections/btree/map.rs.html#1045-1047">Source</a>
+                </section></summary><div class="docblock">
+                <a href="{href}">module-level documentation</a>
+                </div></details>"#
+        )
+    }
+
+    #[test]
+    fn inherited_collections_links_are_repaired_in_model_and_facade_rustdoc() {
+        let builder = SiteBuilder::discover().unwrap();
+        let output = tempfile::tempdir().unwrap();
+        let href = "index.html#insert-and-complex-keys";
+        for component in ["feynkit_model", "feynkit"] {
+            let rustdoc = output.path().join("reference/rust").join(component);
+            fs::create_dir_all(&rustdoc).unwrap();
+            fs::write(rustdoc.join("index.html"), "<p>Local crate index</p>").unwrap();
+            fs::write(
+                rustdoc.join("struct.ParameterCard.html"),
+                inherited_btree_map_insert_html(href),
+            )
+            .unwrap();
+        }
+
+        builder
+            .validate_generated_links(output.path(), true, None)
+            .unwrap();
+        for component in ["feynkit_model", "feynkit"] {
+            let normalized = fs::read_to_string(
+                output
+                    .path()
+                    .join("reference/rust")
+                    .join(component)
+                    .join("struct.ParameterCard.html"),
+            )
+            .unwrap();
+            assert!(normalized.contains(
+                "href=\"https://doc.rust-lang.org/std/collections/index.html#insert-and-complex-keys\""
+            ));
+            assert!(!normalized.contains("href=\"index.html#insert-and-complex-keys\""));
+        }
+    }
+
+    #[test]
+    fn inherited_collections_link_repair_preserves_valid_local_fragments() {
+        let builder = SiteBuilder::discover().unwrap();
+        let output = tempfile::tempdir().unwrap();
+        let rustdoc = output.path().join("reference/rust/example");
+        fs::create_dir_all(&rustdoc).unwrap();
+        fs::write(
+            rustdoc.join("index.html"),
+            r#"<section id="insert-and-complex-keys">Local section</section>"#,
+        )
+        .unwrap();
+        let source = rustdoc.join("struct.Card.html");
+        let html = inherited_btree_map_insert_html("index.html#insert-and-complex-keys");
+        fs::write(&source, &html).unwrap();
+
+        builder
+            .validate_generated_links(output.path(), true, None)
+            .unwrap();
+        assert_eq!(fs::read_to_string(source).unwrap(), html);
+    }
+
+    #[test]
+    fn inherited_collections_link_repair_keeps_unrelated_links_strict() {
+        let builder = SiteBuilder::discover().unwrap();
+        let href = "index.html#insert-and-complex-keys";
+        let inherited = inherited_btree_map_insert_html(href);
+        for (directory, html) in [
+            (
+                "reference/rust/plain",
+                format!(r#"<a href="{href}">Local prose</a>"#),
+            ),
+            (
+                "reference/rust/own_source",
+                inherited.replace(
+                    "src/alloc/collections/btree/map.rs.html",
+                    "src/core/option.rs.html",
+                ),
+            ),
+            (
+                "reference/rust/other_method",
+                inherited.replace("method.insert", "method.remove"),
+            ),
+            (
+                "reference/rust/other_fragment",
+                inherited.replace("insert-and-complex-keys", "unrelated-fragment"),
+            ),
+            ("authored", inherited.clone()),
+        ] {
+            let output = tempfile::tempdir().unwrap();
+            let directory = output.path().join(directory);
+            fs::create_dir_all(&directory).unwrap();
+            fs::write(directory.join("index.html"), "<p>Local module</p>").unwrap();
+            let source = directory.join("struct.Card.html");
+            fs::write(&source, &html).unwrap();
+
+            let error = builder
+                .validate_generated_links(output.path(), true, None)
+                .unwrap_err();
+            assert!(format!("{error:#}").contains("missing fragment"));
+            assert_eq!(fs::read_to_string(source).unwrap(), html);
+        }
+    }
+
+    fn inspection_anchor(kind: &str, id: u64, payload: Value) -> String {
+        format!(
+            "<a href=\"{}\"><rect width=\"8\" height=\"8\"/></a>",
+            escape_html(&format!("#linnet-{kind}-{id}?{payload}"))
+        )
+    }
+
+    #[test]
+    fn generated_links_accept_typed_svg_inspection_actions_without_rewriting() {
+        let output = tempfile::tempdir().unwrap();
+        let path = output.path().join("index.html");
+        let edge = serde_json::json!({"edge": 40, "source": 10, "sink": null,
+            "orientation": "default", "half-edge": 81});
+        let half = serde_json::json!({"edge": 40, "source": 10, "sink": null,
+            "orientation": "default", "half-edge": 81, "node": 10,
+            "flow": "source", "pair": null});
+        let node = serde_json::json!({"edges": [40], "summary": "literal &quot; & <text>"});
+        let html = format!(
+            "<svg\n xmlns=\"http://www.w3.org/2000/svg\">{}{}{}</svg><svg>{}</svg>",
+            inspection_anchor("node", 10, node),
+            inspection_anchor("edge", 40, edge),
+            inspection_anchor("halfedge", 81, half),
+            inspection_anchor("node", 10, serde_json::json!({"edges": []}))
+        );
+        fs::write(&path, &html).unwrap();
+        SiteBuilder::discover()
+            .unwrap()
+            .validate_generated_links(output.path(), false, None)
+            .unwrap();
+        assert_eq!(fs::read_to_string(path).unwrap(), html);
+    }
+
+    #[test]
+    fn generated_links_keep_invalid_or_non_svg_inspection_actions_strict() {
+        let edge = serde_json::json!({"edge": 40, "source": 10, "sink": null,
+            "orientation": "default"});
+        let good = inspection_anchor("edge", 40, edge.clone());
+        let cases = [
+            good.clone(),
+            format!("<svg>{}</svg>", inspection_anchor("edge", 41, edge.clone())),
+            "<svg><a href=\"#linnet-node-0?invalid-json\">bad</a></svg>".to_owned(),
+            "<svg><a href=\"#linnet-node-0?[]\">bad</a></svg>".to_owned(),
+            format!(
+                "<svg>{}</svg>",
+                inspection_anchor("node", 10, serde_json::json!({"edges": ["40"]}))
+            ),
+            format!(
+                "<svg>{}</svg>",
+                inspection_anchor("node", 10, serde_json::json!({"edges": [], "node": 11}))
+            ),
+            format!(
+                "<svg>{}</svg>",
+                inspection_anchor("halfedge", 81, edge.clone())
+            ),
+            format!("<svg>{}</svg>", inspection_anchor("other", 40, edge)),
+            format!("<svg></svg>{good}"),
+            format!("<svg>{}</svg>", good.replace("href=", "src=")),
+            format!(
+                "<svg>{}</svg>",
+                good.replace("#linnet-", "other.html#linnet-")
+            ),
+            "<div id=\"linnet-node-0\"></div><a href=\"#linnet-node-0?invalid-json\">bad</a>"
+                .to_owned(),
+            format!("<svg-fake>{good}</svg-fake>"),
+            format!("<div title=\"<svg>\"></div>{good}<div title=\"</svg>\"></div>"),
+            "<svg><a title=' href=\"#linnet-node-0?{&quot;edges&quot;:[]}\"'>bad</a></svg>"
+                .to_owned(),
+            format!("<svg:fake>{good}</svg:fake>"),
+            format!("<svg.fake>{good}</svg.fake>"),
+            format!(
+                "<svg>{}</svg>",
+                good.replace("<a ", "<a:fake ").replace("</a>", "</a:fake>")
+            ),
+        ];
+        for (index, html) in cases.into_iter().enumerate() {
+            let output = tempfile::tempdir().unwrap();
+            let path = output.path().join("index.html");
+            fs::write(&path, &html).unwrap();
+            fs::write(output.path().join("other.html"), "<p>Other graph</p>").unwrap();
+            let error = SiteBuilder::discover()
+                .unwrap()
+                .validate_generated_links(output.path(), false, None)
+                .unwrap_err();
+            let expected = if index == 10 {
+                "missing fragment"
+            } else {
+                "invalid SVG inspection action"
+            };
+            assert!(format!("{error:#}").contains(expected));
+            assert_eq!(fs::read_to_string(path).unwrap(), html);
+        }
     }
 
     #[test]

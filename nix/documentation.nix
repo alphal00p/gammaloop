@@ -126,6 +126,14 @@ let
         (workspaceRoot + "/tests/resources/graphs/epemttbar.dot")
         (workspaceRoot + "/pyproject.toml")
         (workspaceRoot + "/crates/feynkit-py/python/symbolica/community/hepkit/__init__.pyi")
+        # Linked Python sources are terminal documentation inputs, separate
+        # from the reusable Rust producer and generated notebook exports.
+        (lib.fileset.fileFilter (file: lib.hasSuffix ".py" file.name) (
+          workspaceRoot + "/crates/feynkit-py"
+        ))
+        (lib.fileset.fileFilter (file: lib.hasSuffix ".py" file.name) (
+          workspaceRoot + "/examples/notebooks/feynkit"
+        ))
         (workspaceRoot + "/crates/linnet-py/python/symbolica/community/graph/__init__.pyi")
         (workspaceRoot + "/crates/linnet-py/examples/physics_render_settings.py")
         (workspaceRoot + "/crates/linnet-py/examples/layout_stream.py")

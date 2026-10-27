@@ -1234,7 +1234,11 @@ end_anchor = "documentationRegistry = builtins.fromTOML"
 # Reviewed 2026-10-27: Canonical Community stubs, complete mini-host source,
 # and the local DOT-parser path patch are included in their actual owners;
 # documentation content stays terminal.
-digest = "940dac4ecd145146e7dd642ac0a8716653aea8da"
+# Reviewed 2026-10-27: the FeynKit owner's authored Python sources and
+# notebooks now accompany their source links in the terminal documentation
+# closure. The .py filters exclude generated wheels/caches; Rust producer
+# inputs, features and artifact ownership are unchanged.
+digest = "432d714485625bba225446e22d794618c4e53516"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"
