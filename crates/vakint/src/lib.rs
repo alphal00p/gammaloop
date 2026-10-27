@@ -4458,8 +4458,15 @@ impl VakintExpression {
                     },
                     Some(raw.as_view()),
                 );
+                // Retention is combined by its catalogue owner. Substitution
+                // modes keep their existing precombination boundary.
+                let raw = if mode == RustRedMasterMode::Retain {
+                    raw
+                } else {
+                    rustred_evaluation::combine_exact(raw)
+                };
                 let numerator = vakint.finalize_rustred(
-                    rustred_evaluation::combine_exact(raw),
+                    raw,
                     settings,
                     loop_count,
                     mode,
@@ -8060,6 +8067,51 @@ mod tests {
             .evaluate_integral(&vakint, &settings, numerator.as_view(), &integral_specs)
             .unwrap();
         assert!(reduced.to_canonical_string().contains("RustRedMaster"));
+    }
+
+    #[test]
+    fn ordinary_retained_evaluation_preserves_complete_product_coefficients() {
+        let engine = Vakint::new().unwrap();
+        let settings = VakintSettings {
+            epsilon_symbol: "ep".into(),
+            evaluation_order: EvaluationOrder(vec![EvaluationMethod::RustRed(
+                RustRedEvaluationOptions {
+                    master_mode: RustRedMasterMode::Retain,
+                },
+            )]),
+            integral_normalization_factor: LoopNormalizationFactor::FMFTandMATAD,
+            use_dot_product_notation: true,
+            form_exe_path: "/must/not/invoke/form/for/offline-retention".into(),
+            ..Default::default()
+        };
+        // Vendored one-loop rules exercise the ordinary public expression
+        // pipeline without loading external packs or prepared caches.
+        let topology = vk_parse!("topo(I1L(muvsq,1))").unwrap();
+        let base = engine
+            .evaluate_integral(&settings, topology.as_view())
+            .unwrap();
+        let left = vk_parse!("RustRedMaster(retained_fixture_left,1)").unwrap();
+        let right = vk_parse!("RustRedMaster(retained_fixture_right,1)").unwrap();
+        let cancelled = vk_parse!("RustRedMaster(retained_fixture_cancelled,1)").unwrap();
+        let spectator = vk_parse!("user_space::c*user_space::spectator(a)").unwrap();
+        let first = vk_parse!("(1-ep)^-1").unwrap();
+        let second = vk_parse!("(2-ep)^-1").unwrap();
+        let zero = vk_parse!("ep^-2*((1-ep)^-1-1-ep)-(1-ep)^-1").unwrap();
+        let input = topology * &spectator * (&left * &first + &right * &second + zero * &cancelled);
+        let result = engine
+            .evaluate_integral(&settings, input.as_view())
+            .unwrap();
+        let coefficients = result.coefficient_list::<i32>(&[&left, &right, &cancelled]);
+        assert_eq!(coefficients.len(), 2);
+        for (product, coefficient) in coefficients {
+            let expected = if product == left {
+                &base * &spectator * &first
+            } else {
+                assert_eq!(product, right);
+                &base * &spectator * &second
+            };
+            assert!(rustred_evaluation::combine_exact(coefficient - expected).is_zero());
+        }
     }
 
     #[test]

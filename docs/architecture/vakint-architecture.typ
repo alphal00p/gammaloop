@@ -104,7 +104,8 @@ gracefully if surviving unknown integrals or declared terminals lack required co
 Uncomputed declared pack masters remain valid retained results. Prepared caches accept strict
 completed reductions, including valid captured descendants, and never store partial results.
 
-Retained master polynomials are combined once by the catalogue, independently for each full
+Ordinary evaluation and dedicated five-loop symbolic evaluation pass retained master polynomials
+to the same catalogue owner. It combines them once, independently for each full
 terminal-product scalar coefficient, including coefficients of undeclared residuals. Mass powers,
 measure normalization and symbolic spectators remain in those coefficients. A surviving terminal
 inside an opaque function or composite denominator requires general exact combination instead;

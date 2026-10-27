@@ -632,7 +632,11 @@ anchor = "pub struct Vakint {"
 # Reviewed 2026-10-27: the public exports add the opaque borrowed job monitor
 # scope and its completed-work wrapper. This file changes only those exports;
 # evaluation, expression ownership, resource budgets and guards are unchanged.
-digest = "43a5e4af2339904bfbb2c1723cf7535630366598"
+# Reviewed 2026-10-27: ordinary Retain evaluation passes merged contributions
+# directly to the shared catalogue combination owner. Symbolic/Numerical modes
+# retain their precombination boundary; scalar spectators, mass/normalization,
+# source identities and existing resource budgets keep the same owners.
+digest = "558bd7b98932b410822cb447412fedad044b3827"
 
 [[section.note.scope]]
 path = "crates/vakint/src/lorentz.rs"
