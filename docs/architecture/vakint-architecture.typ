@@ -177,6 +177,18 @@ summands and encoded bytes on its owning thread; they never scan or send its Ato
 indeterminate, and any native ETA remains a diagnostic estimate. Frozen native panels retain
 live status, phase clocks and resources. Detaching the terminal does not cancel calculation.
 
+Cheap genuine native root-collection/materialization notices also supply a
+separate collection-progress sample. Its coalesced roots completed/selected and
+one-based current contribution index/total come from existing observer metadata;
+the contribution index describes an item in progress, not completed assembly.
+This sample has its own source age and does not refresh the coherent frontier,
+rate or ETA census. Caller forwarding, status updates and UI heartbeats only age
+the last collection sample. Root/core completion clears current-item metadata,
+and a new native request clears the previous sample. The presentation copies
+bounded metadata without materializing coefficients, repeating algebra or
+changing the native dependency. A quiet sample cannot identify a particular
+GCD/normalization call or establish a remaining-work bound.
+
 `RustRedMonitorScope::run` extends this same request owner across a caller job.
 Its opaque borrowed scope keeps the native observer on the caller thread and
 exposes only phase notices, existing Atom-header samples, and actual completed

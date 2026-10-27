@@ -23,7 +23,8 @@ use symbolica::atom::AtomView;
 
 use super::{
     ApiStatus, CallerExpressionSample, DisplaySnapshot, FrontierCount, MonitorState, MonitorStatus,
-    RustRedMonitorDisplay, RustRedMonitorOptions, ScopeKind, StoredStateSample,
+    NativeCollectionSample, RustRedMonitorDisplay, RustRedMonitorOptions, ScopeKind,
+    StoredStateSample,
 };
 use crate::VakintError;
 
@@ -987,6 +988,8 @@ fn update_display(pending: &mut Pending, envelope: &Envelope<'_>, detail: bool, 
         display.quantitative_sample_sequence = 0;
         display.pending_unique = None;
         display.stored_state = None;
+        display.native_collection = None;
+        display.native_collection_sample_at = None;
     }
     if admission_start {
         display.native_observed_at = None;
@@ -1012,6 +1015,41 @@ fn update_display(pending: &mut Pending, envelope: &Envelope<'_>, detail: bool, 
             phase: phase.to_owned(),
             sampled_at: envelope.elapsed,
         });
+    }
+    if envelope.caller_phase.is_none()
+        && envelope.snapshot.is_some()
+        && matches!(
+            envelope.activity,
+            Activity::RootCollection | Activity::RootMaterialization
+        )
+    {
+        let current = envelope.activity == Activity::RootCollection
+            && envelope.status == Status::Running
+            && !matches!(
+                envelope.event,
+                Event::RootCollected | Event::CoreFinished | Event::RequestFinished
+            );
+        display.native_collection = Some(NativeCollectionSample {
+            completed_roots: envelope
+                .metrics
+                .requested_roots
+                .map(|_| envelope.metrics.completed_roots as u64),
+            total_roots: envelope.metrics.requested_roots.map(|v| v as u64),
+            contribution_index: current
+                .then_some(envelope.complexity.contribution_index)
+                .flatten(),
+            contribution_total: current
+                .then_some(envelope.complexity.contribution_total)
+                .flatten(),
+            source: match envelope.activity {
+                Activity::RootCollection => "native root collection",
+                _ => "native root materialization",
+            }
+            .into(),
+            sequence: envelope.sequence,
+            sample_age_seconds: Some(0.0),
+        });
+        display.native_collection_sample_at = Some(envelope.elapsed);
     }
     if envelope.activity != Activity::Caller
         && envelope.caller_phase.is_none()
@@ -2226,6 +2264,146 @@ mod tests {
             Some(Duration::from_secs(10))
         );
         assert_eq!(pending.display.quantitative_sample_sequence, 1);
+    }
+
+    #[test]
+    fn collection_activity_counters_do_not_depend_on_or_refresh_the_frontier_census() {
+        use rustred::solver::{
+            CandidateRoutedApplicationPhase, CandidateRoutedApplicationSnapshot,
+        };
+        // Actual native envelope fields, without a frontier projection, reduction
+        // or any symbolic payload. The coherent rate tuple is deliberately older.
+        let mut pending = Pending::default();
+        pending.display.quantitative_sample_at = Some(Duration::from_secs(10));
+        pending.display.quantitative_sample_sequence = 1;
+        pending.display.completed_roots = Some(1);
+        pending.display.total_roots = Some(1750);
+        pending.display.completed_unique = Some(5);
+        let mut envelope = Envelope::new(Event::ActivityStarted, "native-family");
+        envelope.activity = Activity::RootCollection;
+        envelope.snapshot = Some(CandidateRoutedApplicationSnapshot {
+            sequence: 42,
+            elapsed: Duration::from_secs(30),
+            phase: CandidateRoutedApplicationPhase::RootCollection,
+            status: Status::Running,
+            statistics: Default::default(),
+            unique_nodes: 20,
+            active_nodes: 1,
+            pending_frames: 12,
+            cached: Default::default(),
+            pinned: None,
+            eligible: None,
+        });
+        envelope.sequence = 42;
+        envelope.elapsed = Duration::from_secs(30);
+        envelope.metrics.requested_roots = Some(1750);
+        envelope.metrics.completed_roots = 177;
+        envelope.complexity.contribution_index = Some(3);
+        envelope.complexity.contribution_total = Some(153);
+        update_display(&mut pending, &envelope, false, false);
+        let sample = pending.display.native_collection.as_ref().unwrap();
+        assert_eq!(
+            (sample.completed_roots, sample.total_roots),
+            (Some(177), Some(1750))
+        );
+        assert_eq!(
+            (sample.contribution_index, sample.contribution_total),
+            (Some(3), Some(153))
+        );
+        assert_eq!(sample.sequence, 42);
+        assert_eq!(
+            pending.display.native_collection_sample_at,
+            Some(Duration::from_secs(30))
+        );
+        assert_eq!(
+            pending.display.quantitative_sample_at,
+            Some(Duration::from_secs(10))
+        );
+        assert_eq!(pending.display.quantitative_sample_sequence, 1);
+        assert_eq!(pending.display.completed_roots, Some(1));
+        assert_eq!(pending.display.completed_unique, Some(5));
+        assert!(!pending.display.request_finished);
+        assert_eq!(pending.display.status, MonitorStatus::Running);
+
+        // A saved/caller summary can repeat native fields without being a new
+        // native observation. It must not refresh collection age or counters.
+        envelope.caller_phase = Some("saved_terminal_forward");
+        envelope.sequence = 43;
+        envelope.elapsed = Duration::from_secs(40);
+        envelope.metrics.completed_roots = 999;
+        update_display(&mut pending, &envelope, true, false);
+        assert_eq!(
+            pending.display.native_collection.as_ref().unwrap().sequence,
+            42
+        );
+        assert_eq!(
+            pending.display.native_collection_sample_at,
+            Some(Duration::from_secs(30))
+        );
+        let mut state = MonitorState::default();
+        state.observe(pending.display.clone(), Duration::from_secs(100));
+        assert_eq!(
+            state.presentation(Duration::from_secs(136))["native_collection"]["sample_age_seconds"],
+            46.0
+        );
+        assert_eq!(pending.display.quantitative_sample_sequence, 1);
+
+        envelope.caller_phase = None;
+        envelope.event = Event::RootCollected;
+        envelope.sequence = 44;
+        envelope.elapsed = Duration::from_secs(50);
+        envelope.metrics.completed_roots = 178;
+        update_display(&mut pending, &envelope, false, false);
+        let sample = pending.display.native_collection.as_ref().unwrap();
+        assert_eq!(sample.completed_roots, Some(178));
+        assert!(sample.contribution_index.is_none() && sample.contribution_total.is_none());
+        assert!(!pending.display.request_finished);
+        envelope.event = Event::CoreFinished;
+        envelope.status = Status::Succeeded;
+        update_display(&mut pending, &envelope, false, false);
+        let sample = pending.display.native_collection.as_ref().unwrap();
+        assert!(sample.contribution_index.is_none() && sample.contribution_total.is_none());
+        assert!(!pending.display.request_finished);
+        envelope.status = Status::Running;
+        envelope.activity = Activity::RootMaterialization;
+        envelope.event = Event::ActivityStarted;
+        envelope.sequence = 45;
+        envelope.metrics.requested_roots = None;
+        update_display(&mut pending, &envelope, false, false);
+        let sample = pending.display.native_collection.as_ref().unwrap();
+        assert!(sample.completed_roots.is_none() && sample.total_roots.is_none());
+        assert!(sample.contribution_index.is_none() && sample.contribution_total.is_none());
+
+        envelope.activity = Activity::Admission;
+        envelope.caller_phase = Some("entry_admission");
+        envelope.snapshot = None;
+        update_display(&mut pending, &envelope, false, false);
+        assert!(pending.display.native_collection.is_none());
+        assert!(pending.display.native_collection_sample_at.is_none());
+        // A new native epoch also clears any prior collection observation.
+        envelope.activity = Activity::RootCollection;
+        envelope.caller_phase = None;
+        // No actual native snapshot: copied/default counters stay unobserved.
+        update_display(&mut pending, &envelope, false, false);
+        assert!(pending.display.native_collection.is_none());
+        envelope.snapshot = Some(CandidateRoutedApplicationSnapshot {
+            sequence: 46,
+            elapsed: Duration::from_secs(50),
+            phase: CandidateRoutedApplicationPhase::RootCollection,
+            status: Status::Running,
+            statistics: Default::default(),
+            unique_nodes: 20,
+            active_nodes: 1,
+            pending_frames: 12,
+            cached: Default::default(),
+            pinned: None,
+            eligible: None,
+        });
+        update_display(&mut pending, &envelope, false, false);
+        assert!(pending.display.native_collection.is_some());
+        envelope.activity = Activity::Expansion;
+        update_display(&mut pending, &envelope, false, true);
+        assert!(pending.display.native_collection.is_none());
     }
 
     #[test]

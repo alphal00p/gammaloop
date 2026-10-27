@@ -233,6 +233,8 @@ pub(super) struct DisplaySnapshot {
     /// Activity notices and forwarded summaries never advance these fields.
     pub quantitative_sample_at: Option<Duration>,
     pub quantitative_sample_sequence: u64,
+    pub native_collection: Option<NativeCollectionSample>,
+    pub native_collection_sample_at: Option<Duration>,
     pub sequence: u64,
     pub elapsed: Duration,
     pub phase: String,
@@ -275,6 +277,57 @@ pub(super) enum ApiStatus {
     Running,
     Succeeded,
     Failed,
+}
+
+/// Cheap actual collection activity, independent of the frontier/rate census.
+#[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub(super) struct NativeCollectionSample {
+    pub completed_roots: Option<u64>,
+    pub total_roots: Option<u64>,
+    /// One-based item being assembled, never a completed contribution count.
+    pub contribution_index: Option<usize>,
+    pub contribution_total: Option<usize>,
+    pub source: String,
+    pub sequence: u64,
+    pub sample_age_seconds: Option<f64>,
+}
+
+impl NativeCollectionSample {
+    pub(super) fn rows(&self) -> Vec<(String, String)> {
+        let count = |value: Option<u64>| value.map_or_else(|| "unknown".into(), |v| v.to_string());
+        vec![
+            (
+                "Current collection completed roots / total".into(),
+                format!(
+                    "{} / {}",
+                    count(self.completed_roots),
+                    count(self.total_roots)
+                ),
+            ),
+            (
+                "Contribution currently assembled (index / total)".into(),
+                format!(
+                    "{} / {} · current item, not completed work",
+                    count(self.contribution_index.map(|v| v as u64)),
+                    count(self.contribution_total.map(|v| v as u64))
+                ),
+            ),
+            (
+                "Collection source / sample age".into(),
+                format!(
+                    "{} / {}",
+                    if self.source.is_empty() {
+                        "unobserved"
+                    } else {
+                        &self.source
+                    },
+                    self.sample_age_seconds
+                        .map_or_else(|| "unknown".into(), |age| format!("{age:.1}s"))
+                ),
+            ),
+        ]
+    }
 }
 
 /// Caller loop units are distinct from native integrals and frontier metrics.
@@ -596,6 +649,7 @@ impl MonitorState {
             "event_age_seconds": (!self.latest.phase.is_empty()).then(|| now.saturating_sub(self.received_at).as_secs_f64()),
             "native_observation_age_seconds": self.latest.native_observed_at.map(|at| self.observation_age(at, now).as_secs_f64()),
             "native_quantitative_sample_age_seconds": self.latest.quantitative_sample_at.map(|at| self.observation_age(at, now).as_secs_f64()),
+            "native_collection": self.live_collection(now),
             "caller_work": self.latest.caller_work.as_ref().map(|work| serde_json::json!({
                 "scope": "current caller loop units; not native integral/frontier counts",
                 "phase": work.phase, "completed": work.completed, "total": work.total, "unit": work.unit,
@@ -649,6 +703,17 @@ impl MonitorState {
             }
         }
         resources
+    }
+
+    fn live_collection(&self, now: Duration) -> Option<NativeCollectionSample> {
+        self.latest.native_collection.as_ref().map(|sample| {
+            let mut sample = sample.clone();
+            sample.sample_age_seconds = self
+                .latest
+                .native_collection_sample_at
+                .map(|at| self.observation_age(at, now).as_secs_f64());
+            sample
+        })
     }
 
     fn observation_age(&self, sampled_at: Duration, now: Duration) -> Duration {
@@ -747,6 +812,9 @@ impl MonitorState {
                         | "Monitor scope"
                         | "Reduction API status"
                         | "Whole job finished"
+                        | "Current collection completed roots / total"
+                        | "Contribution currently assembled (index / total)"
+                        | "Collection source / sample age"
                 ) && let Some(row) = view.overview.iter_mut().find(|(name, _)| name == &label)
                 {
                     row.1 = value;
@@ -816,7 +884,7 @@ impl MonitorState {
         let mut cache = resources.rows();
         cache.extend(resources.guard.rows());
         cache.extend(snapshot.cache.iter().cloned());
-        MonitorView {
+        let mut view = MonitorView {
             title: match snapshot.scope_kind {
                 ScopeKind::Api => "RustRed · request",
                 ScopeKind::Job => "Vakint · job",
@@ -901,7 +969,7 @@ impl MonitorState {
                     snapshot.request_finished.to_string(),
                 ),
                 (
-                    "Native roots collected / selected".into(),
+                    "Native roots at frontier census".into(),
                     format!(
                         "{} / {}",
                         count(snapshot.completed_roots),
@@ -948,7 +1016,10 @@ impl MonitorState {
             estimates: self.estimates(age),
             path: snapshot.path.clone(),
             events: snapshot.events.clone(),
-        }
+        };
+        view.overview
+            .extend(self.live_collection(now).unwrap_or_default().rows());
+        view
     }
 
     fn symbolic_state_rows(&self, now: Duration) -> Vec<(String, String)> {

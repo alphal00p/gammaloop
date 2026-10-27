@@ -347,6 +347,15 @@ monitor owner; shutdown never synchronously logs through a potentially blocked s
 Observation adds overhead and does
 not establish master closure or an estimate of remaining work.
 
+Native collection progress has its own source age. Actual activity notices expose
+coalesced roots collected/selected and the current contribution's index/total;
+the latter identifies an item being assembled, not completed work. These cheap
+counters can advance while the bounded frontier census remains older. Their
+age increases during opaque algebra or stale publication; caller notices and UI
+heartbeats do not refresh it. Frontier and ETA sample ages keep their separate
+meaning. Collection counters neither imply fresh frontier data nor certify
+whole-job completion, and observing them performs no extra coefficient algebra.
+
 Rust callers can keep the same monitor active across a complete caller job with
 `RustRedMonitorScope::run(&options, |scope| { ... })`. The closure borrows one
 scope on its caller thread. `phase` names opaque work, `expression_phase` reads
