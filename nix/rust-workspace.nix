@@ -15,7 +15,7 @@
   inherit (pkgs) lib;
 
   documentation = import ./documentation.nix {
-    inherit self pkgs docsPkgs craneLib workspaceRoot cargoSources nonCargoBuildSources
+    inherit self pkgs docsPkgs craneLib workspaceRoot cargoSources localCargoPatchSources nonCargoBuildSources
       ciArgs ciCargoProfile
       dummyCargoTarget normalizeWorkspaceHackBuildScriptTimestampScript
       workspacePackageSrcFor workspaceMissingCargoTargetsScript
@@ -47,7 +47,17 @@
   workspacePrebuildPackage = "gammaloop-ci-prebuild";
   workspacePrebuildPackageDir = "crates/${workspacePrebuildPackage}";
 
-  cargoSources = craneLib.fileset.commonCargoSources workspaceRoot;
+  # Cargo path patches are dependencies, not workspace members. Preserve their
+  # manifests and implementation in every filtered dependency/build context.
+  localCargoPatchDirs = lib.filter (name: builtins.pathExists (workspaceRoot + "/vendor/${name}"))
+    ["clarabel" "dot-parser"];
+  localCargoPatchSources = lib.fileset.unions (
+    map (name: workspaceRoot + "/vendor/${name}") localCargoPatchDirs
+  );
+  cargoSources = lib.fileset.unions [
+    (craneLib.fileset.commonCargoSources workspaceRoot)
+    localCargoPatchSources
+  ];
 
   cargoVendorDir = craneLib.vendorCargoDeps {
     cargoLock = (workspaceRoot + "/Cargo.lock");
@@ -296,7 +306,7 @@
 
   workspaceDependencySrc = lib.fileset.toSource {
     root = workspaceRoot;
-    fileset = lib.fileset.unions workspaceDependencyManifestFiles;
+    fileset = lib.fileset.unions (workspaceDependencyManifestFiles ++ [localCargoPatchSources]);
   };
 
   cargoGraphGenerationSrc = lib.fileset.toSource {
@@ -306,6 +316,7 @@
       ++ workspaceDependencyBuildScripts
       ++ workspaceCargoTargetEntrypoints
       ++ [
+        localCargoPatchSources
         (workspaceRoot + "/.config/hakari.toml")
       ]
     );
@@ -609,6 +620,7 @@
       root = workspaceRoot;
       fileset = lib.fileset.unions (
         workspaceDependencyManifestFiles
+        ++ [localCargoPatchSources]
         ++ (workspacePackageBuildScriptsForSourcePackages sourcePackages)
         ++ map (package: packageSources.${package}.production) sourcePackages
         ++ lib.concatMap (package: packageSources.${package}.targets) packageSourcePackages
@@ -1948,6 +1960,15 @@
         doNotLinkInheritedArtifacts = args.doNotLinkInheritedArtifacts or true;
         doCheck = false;
         checkPhaseCargoCommand = "";
+
+        # Registry dependencies call these patched crates during prebuilds.
+        # Crane must not replace their implementation with workspace placeholders.
+        extraDummyScript = (args.extraDummyScript or "") + lib.concatMapStringsSep "\n" (name: ''
+          rm -rf "$out/vendor/${name}"
+          mkdir -p "$out/vendor"
+          cp -R --no-preserve=ownership ${workspaceDependencySrc}/vendor/${name} "$out/vendor/${name}"
+          chmod -R u+w "$out/vendor/${name}"
+        '') localCargoPatchDirs;
 
         postPatch =
           (args.postPatch or "")

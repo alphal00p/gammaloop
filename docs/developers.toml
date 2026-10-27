@@ -1267,7 +1267,7 @@ end_anchor = "documentationRegistry = builtins.fromTOML"
 # No-impact attestation 2026-09-29: the documentation source adds the Kurvst
 # knot-logo example imported by the GammaLoop marks; cache boundaries are
 # unchanged.
-digest = "7110bb47b3a576ab6987cfdf0d579f3aee98859f"
+digest = "96e7ae9bce54597531106e299032704ef3b8a906"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"
@@ -1276,7 +1276,7 @@ anchor = "workspaceDependencyManifestFiles ="
 end_anchor = "cargoGraphGenerationSrc ="
 # No architecture impact 2026-10-10: remove the inactive virtual-workspace
 # build.rs input; member build scripts retain the platform linking behavior.
-digest = "1783ac735c1881e1fc45d30750138beccf1e2814"
+digest = "6ae7769a5fab0c19db4004118a07e14882b6f4af"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"
