@@ -23,6 +23,8 @@ native = ["linnet-py/native", "feynkit-py/native", "spynso3/native"]
 wasm = ["linnet-py/wasm", "feynkit-py/wasm", "spynso3/wasm"]
 
 [patch.crates-io]
+# Keep direct and transitive solvers on the shared standalone-WASM-capable source.
+clarabel = { git = "https://github.com/oxfordcontrol/Clarabel.rs", rev = "14ad0f09073224e11ce13633d655547001072059" }
 # Match the shared HEPKit host's optional notebook components.
 typst-library = { git = "https://github.com/alphal00p/gammaloop", branch = "preserve-canonical-numerator-interfaces" }
 typst-svg = { git = "https://github.com/alphal00p/gammaloop", branch = "preserve-canonical-numerator-interfaces" }
