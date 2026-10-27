@@ -1245,6 +1245,11 @@ mod tests {
                 "vakint::VakintExpression::canonicalize",
             ),
             (
+                "vakint",
+                "NumericalEvaluationResult",
+                "vakint::precision::NumericalEvaluationResult",
+            ),
+            (
                 "gammaloop-api",
                 "ImportModel",
                 "gammaloop_api::commands::import::model::ImportModel",
@@ -1268,6 +1273,11 @@ mod tests {
             let source = item.source.unwrap();
             assert_eq!(source.identifier, expected);
             assert!(source.line > 0);
+            if id == "NumericalEvaluationResult" {
+                assert!(item.signature.as_deref().is_some_and(|signature| {
+                    signature.contains("struct NumericalEvaluationResult")
+                }));
+            }
             assert!(
                 item.signature
                     .is_some_and(|signature| !signature.is_empty())

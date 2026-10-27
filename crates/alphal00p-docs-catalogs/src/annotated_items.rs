@@ -1161,7 +1161,7 @@ fn vakint_expression_evaluate_integral() {}
     summary = "Stores numerical Laurent coefficients with independent component precision, source warnings and checked expression conversion.",
     format = "rust-markdown",
     source = "crates/vakint/src/precision.rs",
-    source_id = "vakint::NumericalEvaluationResult"
+    source_id = "vakint::precision::NumericalEvaluationResult"
 )]
 fn vakint_numerical_evaluation_result() {}
 
