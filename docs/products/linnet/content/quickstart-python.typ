@@ -27,8 +27,8 @@ maturin develop --locked \
   --manifest-path examples/notebooks/symbolica-host/Cargo.toml
 ```
 
-The declared Python dependencies install `typst` 0.15.0 alongside the extension. Python rendering
-uses that in-process binding; a `typst` command in `PATH` is neither required nor invoked.
+Python graph rendering uses native SVG geometry and embedded Rust Typst label typesetting.
+It requires neither the `typst` Python package nor a `typst` command in `PATH`.
 
 == Parse and inspect a graph
 

@@ -4,7 +4,6 @@
 #     "symbolica==3.0.1",
 #     "anywidget==0.9.18",
 #     "marimo==0.24.0",
-#     "typst==0.15.0",
 # ]
 # ///
 
