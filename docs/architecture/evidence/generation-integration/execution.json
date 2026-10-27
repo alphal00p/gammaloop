@@ -7,7 +7,7 @@
   "workspace": "/shared/lcnbr/dev/gammaloop/generation-integration-plan",
   "base_commit": "3f0df2a870806076820786994d4883decec8e9e3",
   "plan_commit": "4374f72027b75df9ff95c5c7a725ee75beac27a8",
-  "implementation_change": "vkylkmrqlonytwumskpqzlqsnwqkzusw",
+  "implementation_change": "zvnxkyswsytpvzqlsxrpnwuwknwmrtmo",
   "implementation_bookmark": "generation-integration",
   "preserved_plan_bookmark": "generation-integration-plan",
   "author": {
@@ -73,12 +73,12 @@
       "scope": "Four packaging and two Clinnet tests; Nix WASM and license output; 49 hashes; byte-exact notices; not final wheel certification or all WP11"
     },
     "WP3": {
-      "status": "incomplete WP3; prerequisite slice438b6150 APPROVED by Astra; drawing15/16 and atomic staged17/18/37 implementation and validation in progress; NEW independent Astra review required before source19",
+      "status": "Incomplete WP3; bounded drawing15/16+atomic17/18/37 candidate requires NEW independent Astra review before source19. Full rebuilt-tip matrix and later stages remain pending.",
       "pre_rebuild_ref": "generation-integration-pre-rebuild",
       "pre_rebuild_commit": "5226894ee1af61797e6b819d7e801a22bf17bace",
       "ancestry": "Reviewed planning/evidence chain descends from fixed target 3f0df2a8 and is retained as non-code base.",
-      "review": "Prerequisite438b6150 approved independently by Astra; current drawing+atomic transplant remains incomplete and requires NEW independent Astra review before source19",
-      "slice_receipt": "wp3/units03-07.json",
+      "review": "Approved input438b6150 and drawing98cbf5b8; NEW independent Astra review required on bounded drawing/staged candidate before source19.",
+      "slice_receipt": "wp3/drawing-staged15-18-37.json",
       "approved_prefix": "74cebf6c8f673f5849b26afe55fa98035d5eba1d",
       "parallel_lanes": {
         "numeric08-09": {
@@ -150,7 +150,10 @@
       "approved_slice_base": "9e2c4c23f3c48fb5df41edd2f5880097867dd117",
       "prerequisite_validation": "Approved by Astra: independent572 combined+2 exporter tests plus fmt/kernel/Typst/manifests/refs. Seven inherited stale registry digests tracked for source31/final reconciliation.",
       "pre_staged_ref": "generation-integration-pre-staged",
-      "pre_staged_commit": "438b61500da4b32841c64211103e5da6fc4c4a72"
+      "pre_staged_commit": "438b61500da4b32841c64211103e5da6fc4c4a72",
+      "implementation_change": "zvnxkyswsytpvzqlsxrpnwuwknwmrtmo",
+      "staged_code_commit": "f264028690d117b4b99c320b61b7f2d5d89222d0",
+      "current_slice_review": "Candidate complete for NEW independent Astra review; no further units authorized before that boundary."
     }
   }
 }

@@ -1,0 +1,331 @@
+{
+  "schema": 1,
+  "status": "Bounded WP3 candidate awaiting NEW independent Astra review; WP3 and later stages incomplete",
+  "implementer": "Sol",
+  "author": {
+    "name": "Lucien Huber",
+    "email": "im@lcnbr.ch"
+  },
+  "base": "438b61500da4b32841c64211103e5da6fc4c4a72",
+  "drawing_commit": "8430e701d858b07e40203a25bfc3b1fa61b15f4a",
+  "staged_commit": "f264028690d117b4b99c320b61b7f2d5d89222d0",
+  "staged_change": "zvnxkyswsytpvzqlsxrpnwuwknwmrtmo",
+  "source_mapping": {
+    "15": {
+      "commit": "711f9440b323166cbba92df4bea632b20121aa06",
+      "source_change": "uoqkkyuutpkpwmlwsvlrmxnpmumxmyrk",
+      "source_order": 15,
+      "planned_unit": "port-15",
+      "status": "Approved cumulative input integrated; this combined candidate awaits NEW Astra review",
+      "new_commit": "8430e701d858b07e40203a25bfc3b1fa61b15f4a",
+      "new_change": "pnmwqkotspwnsrmkyknlpszutqykvxpn"
+    },
+    "16": {
+      "commit": "9e737a18274991e8dc0542f777a6063acaf72fe8",
+      "source_change": "kvykwlrzowsrvvztrwuvmulronunrzok",
+      "source_order": 16,
+      "planned_unit": "port-16",
+      "status": "Approved cumulative input integrated; this combined candidate awaits NEW Astra review",
+      "new_commit": "8430e701d858b07e40203a25bfc3b1fa61b15f4a",
+      "new_change": "pnmwqkotspwnsrmkyknlpszutqykvxpn"
+    },
+    "17": {
+      "commit": "8cf6cecaf22be4d5c62d467b8e6827e80c6ba66d",
+      "source_change": "sptyyttxkwkrlluvpqqwkrvyymzwpuxp",
+      "source_order": 17,
+      "planned_unit": "staged-transplant",
+      "status": "Atomic resolved transplant candidate; NEW independent Astra review pending",
+      "new_commit": "f264028690d117b4b99c320b61b7f2d5d89222d0",
+      "new_change": "zvnxkyswsytpvzqlsxrpnwuwknwmrtmo"
+    },
+    "18": {
+      "commit": "2b1ef4f07a44bc061bcc97c378bbdd9c41cb0e94",
+      "source_change": "vwptmtxsoyxuptvltmrwqkpplkmxspsp",
+      "source_order": 18,
+      "planned_unit": "staged-transplant",
+      "status": "Atomic resolved transplant candidate; NEW independent Astra review pending",
+      "new_commit": "f264028690d117b4b99c320b61b7f2d5d89222d0",
+      "new_change": "zvnxkyswsytpvzqlsxrpnwuwknwmrtmo"
+    },
+    "37": {
+      "commit": "cfe9e8d103b3d2a4ebf1f276f61d8d6980e3d054",
+      "source_change": "roxklnrzrpvrmmvtwtowxywvulklswqm",
+      "source_order": 37,
+      "planned_unit": "staged-transplant",
+      "status": "Atomic resolved transplant candidate; NEW independent Astra review pending",
+      "new_commit": "f264028690d117b4b99c320b61b7f2d5d89222d0",
+      "new_change": "zvnxkyswsytpvzqlsxrpnwuwknwmrtmo",
+      "isolated_formatting": "Only cfe9e8d1 assertion formatting was considered; approved source16 and pinned formatting already supply that layout. No other roxklnrz or intervening code is included."
+    }
+  },
+  "drawing_input": {
+    "base": "74cebf6c8f673f5849b26afe55fa98035d5eba1d",
+    "production": "e59f02f7fba73bf1608486033f9cac5c7079733a",
+    "license_fix": "f181870f4423fa6013c0307e4df7cade57eaac38",
+    "registry_fix": "98cbf5b8f984e702f4699b1b176fbebfee059d3a",
+    "reviewer": "Astra coordinator R3 after independent Astra R1/R2",
+    "notice_patch_included": "00df0507ded2b2ddce45b38e58311a0f8ea120c1; not duplicated"
+  },
+  "atomic_source": {
+    "17": "8cf6cecaf22be4d5c62d467b8e6827e80c6ba66d",
+    "actual_parent": "9e737a18274991e8dc0542f777a6063acaf72fe8",
+    "18": "2b1ef4f07a44bc061bcc97c378bbdd9c41cb0e94",
+    "isolated37": "cfe9e8d103b3d2a4ebf1f276f61d8d6980e3d054",
+    "net_path_count": 1416,
+    "jj_change_entries": 1415,
+    "rename_accounting": "JJ reports the NetworkX native-to-linnet-py notice relocation as one entry; the complete no-renames Git diff has1416 paths. The authoritative native notice is explicitly retained.",
+    "final_path_receipt": "staged-net-files.json"
+  },
+  "owner_reconciliation": [
+    "Only actual source17 parent9e737a18 through resolved source18 is replayed. No serialized conflict container, intervening19–36 changes, frozen-source rebase or old-tree replacement.",
+    "Current admitted numerator/template cache replaces obsolete compiled-interaction/template/frame path. Raw validation/admission precedes checked conservation rewrite; actual-owner dynamic admission, outside-guard publication and shared templates remain.",
+    "Current NumeratorInterface owner retains declared/canonical inferred order, injective transport, hidden oriented index/zero history and reversed propagator interfaces. Spectator/scoped-partner,210 colour completion and approved scalar proof remain.",
+    "Current native MathML/static/optional-widget owners retained. Staged lazy numerator Result accessors and Rust/Python/CLI callers migrated. Current graph DSL uses one native NodeForest owner, not an old storage compatibility enum.",
+    "New typed callback uses GenerationDiagramView to avoid collision with current live DiagramView. Legacy Python convenience callers explicitly carry their former filter/cut inputs; cross-section final-cut symmetry stays on graph automorphisms.",
+    "Shared mark engine is the source17 prerequisite, not source38. Tiptoe attribution retained and delivered alongside byte-exact Clarabel/NetworkX texts by existing selectors, Nix inputs/copies, API/sdist/host license payloads.",
+    "Reviewed WP1 original fixtures/provenance/certificate ported with two exact test-only removed-presentation-tag bindings; no production grouping physics fix.",
+    "Four-loop split4664/306 asserted at1/8/32; SM3150|-9861/16 and both original Lorentz-zero controls execute at1/8; fresh-process symbol/index ID order verified and full graph/numerator/group output compared at1/8/32.",
+    "Mandatory import/format cleanup and source-preserving errors; necessary dependency edges generated by Hakari/CI workflows. Three locked kernels remain1a1829b1; no old pins/WASM copied."
+  ],
+  "wp1": {
+    "approved_input": "f473709ce444fd99f5200fed0c9fcead48e8bf71",
+    "fixtures": {
+      "crates/feynkit-generator/tests/fixtures/vacuum_b2/GL034.dot": "36ef89039f8ac71907dfea68b91cc89f26c1e6b29db37fc094d629417f2d63c1",
+      "crates/feynkit-generator/tests/fixtures/vacuum_b2/GL028.dot": "05d1b5b9de947ee6b41795ac062d6283602cc6d96490b09e025e35056ca8635e"
+    },
+    "adaptation": "Two exact test-only bindings of removed Q/edge presentation tags to current constructors; every reimport uses the same bound fixture strings. Original bytes, coefficients, owners/weights and full certificate/matrix assertions retained.",
+    "scope": "Original GL028/GL034, actual4D SU3, N28=(7/2)N34, zero-sample retention, sampled/fallback controls and stored quotient cancellation. Repeat at rebuiltR and finalF; no production correction or broad grouping certification."
+  },
+  "validation": [
+    {
+      "log": "target/wp3-drawing-transplant/combined-owner-controls.log",
+      "status": "PASS",
+      "result": "627 tests across5 binaries; numeric/inference/graph/model/admission/template/gauge;13.112s. Cached functional-body evidence; subsequent import-only cleanup checked separately.",
+      "sha256": "c30ad378fa6ebd7f61f5f07db95e2e7f2c62db47b1e0992f8a2b3433e1d0fe0b"
+    },
+    {
+      "log": "target/wp3-drawing-transplant/focused-candidate.log",
+      "status": "PASS",
+      "result": "283 current-tree tests across4 binaries;7.445s;208 excluded by selection, not passes.",
+      "sha256": "d5bd14e8d0ca7d1543f758f51a20a471702115f0171804c134862242dd61184e"
+    },
+    {
+      "log": "target/wp3-drawing-transplant/native-topology-controls.log",
+      "status": "PASS",
+      "result": "211 native topology/generation/canon/parser/subset controls;3.988s;237 excluded, not passes.",
+      "sha256": "dc1a8a7e5e7d73a9db633e623e42065138caa88293566794f48e43f46421acdd"
+    },
+    {
+      "log": "target/wp3-drawing-transplant/staged-drawing-python-tests2.log",
+      "status": "DIAGNOSTIC/SUPERSEDED",
+      "result": "458passed/2failed of460; eleven ignored/excluded not passes. Both bounded consumers subsequently fixed and passed below; no blanket final460-in-one-run claim.",
+      "sha256": "63c334e6b583be9cc699ec29e059c683768f5f6ac93c12bea88cb930339f1e05"
+    },
+    {
+      "log": "target/wp3-drawing-transplant/staged-python-caller-controls.log",
+      "status": "DIAGNOSTIC/PARTIAL",
+      "result": "Two selected: standalone pipeline passed; offline renderer failed on legacy cross final flag; final native-owner caller correction verified separately.",
+      "sha256": "7fc4888b2b7e4ba31d2030ef480111a0ef709aca8d343c6d97d5cad9ebd248b3"
+    },
+    {
+      "log": "target/wp3-drawing-transplant/offline-display-final.log",
+      "status": "PASS",
+      "result": "One full offline native/optional-widget rendering consumer passed after staged call/default/filter/cut migration;1.712s.",
+      "sha256": "0cbdb2995ad31ea91e35408f7e1db3fc37153465567358433265641b02a53068"
+    },
+    {
+      "log": "target/wp3-drawing-transplant/registration-controls-final.log",
+      "status": "PASS",
+      "result": "7 current oracle/census controls;5.090s. Genuine reversed symbol/index IDs asserted; ordinary/preload/reverse fresh processes at each1/8/32 compare full graph/numerator/group payloads.",
+      "sha256": "8d5f8305b6383ad9f999b4b6c455f4c0955ba782662ed9f71921c0d646c968e7"
+    },
+    {
+      "log": "target/wp3-drawing-transplant/four-loop-1-8-32.log",
+      "status": "PASS",
+      "result": "All three actual colour-filtered runs asserted4664retained/306zero and4970total; fail-on-any-run loop.",
+      "sha256": "45ddf9ff1b437ffedd14786dff496d0baf2841155dcb0e420a99ac3aae9833b5"
+    },
+    {
+      "log": "target/wp3-drawing-transplant/sm-filtered-1-8-certified.log",
+      "status": "PASS",
+      "result": "One harness executes original3150|-9861/16 plus both original physical Lorentz-zero controls at actual1and8;13.093s. Insta duplicate-context wrapper propagates Result and retains every assertion.",
+      "sha256": "6a26fe78f4be3ca6693d89aa3351d00a8ba9c3ed7f8f145bd5cd002ee34d9ba9"
+    },
+    {
+      "log": "target/wp3-drawing-transplant/wp1-regression-final.log",
+      "status": "PASS",
+      "result": "Exactly one ignored grouping::tests::vacuum_group28_original_pair_identity ran;2.61s. Original pair4D SU3 only; no production physics fix.",
+      "sha256": "3f7de51a15c5f5bc24e2837893524c709603739b14ac51f173de78f651d7b469"
+    },
+    {
+      "log": "target/wp3-drawing-transplant/staged-notices-tiptoe.log",
+      "status": "PASS",
+      "result": "4 packaging tests; exact Clarabel/NetworkX/Tiptoe bytes, API extraction/sdist and fixture-wheel License-File/RECORD;27.304s; not full distribution certification.",
+      "sha256": "f70b42c06f0b9872f92344a789c582f1d4760a223cd6499743c82a9de576dd79"
+    },
+    {
+      "log": "target/wp3-drawing-transplant/staged-native-wasm-tests.log",
+      "status": "PASS",
+      "result": "3 actual WASM seed/carrier/pin regressions;0.611s.",
+      "sha256": "b8d27e9c1f7ad53f580b0c08d13f42ec44ee8a11ee896915a2da387167726fa6"
+    },
+    {
+      "log": "target/wp3-drawing-transplant/staged-nix-wasm-check.log",
+      "status": "PASS",
+      "result": "Canonical Nix WASM/bundle check with all three third-party notices, exact SPDX expression and wasm-tools validation.",
+      "sha256": "8433d5e0aa321aa88a3c3ccf23f2924aa728a1c476af68e3fab6f8bafde9f638"
+    },
+    {
+      "log": "target/wp3-drawing-transplant/clippy-candidate4.log",
+      "status": "PASS",
+      "result": "Ten affected packages, all targets, no-deps, denied warnings; inherited Clarabel dependency warnings retained.",
+      "sha256": "5604c96267c31649d5bff126a7fd039cff8ebec9b60efe7ed80ac0244e83309e"
+    },
+    {
+      "log": "target/wp3-drawing-transplant/sm-harness-clippy.log",
+      "status": "PASS",
+      "result": "Affected integration test target, locked ci-optim, no-deps, denied warnings.",
+      "sha256": "6965830b8d82ac2bb71752dd14f2a315dd8f8dc3d1866e60e533422372a45725"
+    },
+    {
+      "log": "target/wp3-drawing-transplant/stubgen-candidate2.log",
+      "status": "PASS",
+      "result": "Current feynkit-py python_stubgen feature compiles, including new staged owners and current native display;16.51s.",
+      "sha256": "4116f90ccd95a421349ee370e32fafc45b304c2e948c5f285959867208d5a41d"
+    },
+    {
+      "log": "target/wp3-drawing-transplant/fmt-final.log",
+      "status": "PASS",
+      "result": "Pinned Nix just fmt; no broad lint/format suppression added.",
+      "sha256": "c1f7a030d9fc8cf9e69d42d7d602fdd179aeaeedba0a88e8ad449b9aaa5f1652"
+    },
+    {
+      "log": "target/wp3-drawing-transplant/kernel-candidate.log",
+      "status": "PASS",
+      "result": "Three locked kernels aligned1a1829b1 and host subset/feature isolation.",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "log": "target/wp3-drawing-transplant/hakari-verify.log",
+      "status": "PASS",
+      "result": "Canonical Hakari verification.",
+      "sha256": "704f7242c6f355e1c07d9f9ae6ea748231571460920e0647e0fad2f515d7c7f3"
+    },
+    {
+      "log": "target/wp3-drawing-transplant/ci-update-final.log",
+      "status": "PASS",
+      "result": "Canonical CI graph regenerated; top-level NixCI remains false.",
+      "sha256": "07d54af5c935ee5b3f971f89507147ed688a6c3cba60975d0bbf4ea3892d81ea"
+    },
+    {
+      "log": "target/wp3-drawing-transplant/docs-final.log",
+      "status": "PASS",
+      "result": "Canonical plan, bounded staged note and drawing note compiled; this is not a full documentation product check.",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "log": "target/wp3-drawing-transplant/registry-final.log",
+      "status": "INVENTORY/DEFERRED",
+      "result": "54valid scopes,7 inherited mismatches and20 additional scope/anchor mismatches explicitly deferred to source31/final; no full docs pass.",
+      "sha256": "54cad138b0746f3f5bea39188293d073faebf85d17eeef4e486acdf87672285c"
+    },
+    {
+      "log": "target/wp3-drawing-transplant/staged-svg-reproduction.log",
+      "status": "PASS",
+      "result": "34 current SVGs reproduced byte-exact in task-owned output; representative light/dark PNGs visually inspected.",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "log": "target/wp3-drawing-transplant/staged-visuals.log",
+      "status": "PASS",
+      "result": "Current manual PDF, light/dark representative PNGs compiled with timestamp0; native/static/optional-widget ownership retained.",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "log": "target/wp3-drawing-transplant/frame-diagnostic.log",
+      "status": "EXPECTED HISTORICAL ASSERTIONS STILL FAIL",
+      "result": "3 recorded frame rows fail only numeral payload digest; original assertions/expectations unchanged. Exact3-row serialized spelling+explicit-interface boundary certified separately, not a general physics certificate.",
+      "sha256": "66efc3eaf9041d3bd12e800052cf732440bc0f73a7bd13b5b1fa022f2d13bfbc"
+    },
+    {
+      "log": "target/wp3-drawing-transplant/frame-digest-boundary.log",
+      "status": "PASS DIAGNOSTIC",
+      "result": "All three native digests reproduced; verified old presentation spellings plus diagnostic omission of new interface fields exactly recover all recorded hashes. Actual native payloads and tests retain metadata.",
+      "sha256": "3b6a90c78cdfad9cd9b0315cd9097a76c022c587a408eaa22f8ce8a35fb83fd3"
+    }
+  ],
+  "legacy_frames": {
+    "scope": "diagnostic serialized spelling and explicit-interface field boundary only; current native payloads remain intact, no tensor rewriting or expectation changes",
+    "spellings": {
+      "gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q": "gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:q}::Q",
+      "gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::K": "gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:k}::K",
+      "gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::P": "gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript,spenso::tensor-label:p}::P",
+      "gammalooprs::{spenso::index}::edge": "gammalooprs::{spenso::index,spenso::index-label:e}::edge",
+      "gammalooprs::{spenso::index}::vertex": "gammalooprs::{spenso::index,spenso::index-label:v}::vertex"
+    },
+    "rows": [
+      {
+        "payload": "target/wp3-drawing-transplant/frame-diagnostic/oracle-failure-qed_eeaa_sign_L1_recorded_frame_row-538674/left.json",
+        "sha256": "91b8969d450231181c4f12b25c0b8402db4dc216c480fb8ced278ca02b3da3d0",
+        "diagrams": 66,
+        "native_digest_reproduced": 1831509842489383612,
+        "recorded_digest": 13627127486228112534,
+        "presentation_spelling_only_digest": 2337113648169949181,
+        "matches_recorded_after_spelling_only": false,
+        "without_interface_diagnostic": 18295774258756155923,
+        "spelling_and_without_interface_diagnostic": 13627127486228112534
+      },
+      {
+        "payload": "target/wp3-drawing-transplant/frame-diagnostic/oracle-failure-qed_eeaa_sign_L1_recorded_frame_row-538675/left.json",
+        "sha256": "4eb086c8ac5156be5be4cd94d51c0507b64984f5a81b1d6dbc389dbb5ac5f2cd",
+        "diagrams": 60,
+        "native_digest_reproduced": 17492405225653900047,
+        "recorded_digest": 13526262874643750147,
+        "presentation_spelling_only_digest": 12634529482205017412,
+        "matches_recorded_after_spelling_only": false,
+        "without_interface_diagnostic": 8891490337629772403,
+        "spelling_and_without_interface_diagnostic": 13526262874643750147
+      },
+      {
+        "payload": "target/wp3-drawing-transplant/frame-diagnostic/oracle-failure-xs_qed_aaee_lr_L2_recorded_frame_row-541518/left.json",
+        "sha256": "dc0458581a3f4f995f904931a4fc79a0777e4c0f44a455d6184480e095f7c9ae",
+        "diagrams": 130,
+        "native_digest_reproduced": 11122069825991028494,
+        "recorded_digest": 9770711142649904079,
+        "presentation_spelling_only_digest": 10620695785570712218,
+        "matches_recorded_after_spelling_only": false,
+        "without_interface_diagnostic": 293997465828926101,
+        "spelling_and_without_interface_diagnostic": 9770711142649904079
+      }
+    ]
+  },
+  "registry": {
+    "inventory": "target/wp3-drawing-transplant/registry-audit.json",
+    "inherited": 7,
+    "additional_deferred": 20,
+    "new_scoped_owners_validated": true,
+    "full_docs_pass": false
+  },
+  "kernel_commit": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+  "locks": {
+    "Cargo.lock": "def8dd7be5f208f4a290a4556081f7a63d10a5ae070c5df1808c1d350fa6161e",
+    "tydenso/Cargo.lock": "f1f0573d5f1c02d4ddb73d4491514cd291ae94ded7d84627342226917ca41dd0",
+    "examples/notebooks/symbolica-host/Cargo.lock": "03e18f00dbba096e08978063fd857d6558659f9f75e0ab09d73be3e543882c5a",
+    "uv.lock": "0ad8d1a18d9c520d298ff36ec20a746f9a63c7e0fdebe14e739a574cbb4fabf8"
+  },
+  "NixCI": false,
+  "full_matrix": "Pending after remaining source units; current selections overlap and are not summed as independent unique tests",
+  "deferred": [
+    "source19 onward",
+    "approved parallel inputs only on later parent assignment/review boundaries",
+    "source38 after transplant review and prerequisites through36; Tiptoe remains",
+    "source31/final documentation scope reconciliation",
+    "historical artifact row recertification; no forced recording or expectation refresh",
+    "full rebuilt-tip matrix including five fresh a_ddx, full oracle fast tier, BRST/epem/fixed-seed CoolQM combined sampling work",
+    "WP4 names/WP5 route/WP6 Classes redesign",
+    "M-rebuild memory/performance scheduling and measurement",
+    "final repaired/compressed native/Pyodide/standalone/Community artifact notice metadata/bytes/RECORD certification"
+  ],
+  "retained_artifacts": "Task target/wp3-drawing-transplant logs, exact source/net/merge inputs, structured full frame payloads, binary producers, source/asset identities and PNG/PDF previews; original refs and shared caches unchanged",
+  "next_gate": "STOP for NEW independent Astra review before further implementation or other-lane integration"
+}

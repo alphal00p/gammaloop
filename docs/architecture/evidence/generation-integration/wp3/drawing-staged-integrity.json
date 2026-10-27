@@ -1,0 +1,44 @@
+{
+  "code_commit": "f264028690d117b4b99c320b61b7f2d5d89222d0",
+  "preserved_refs": {
+    "generation-integration-source-v4": "e0a779808174c64057fecfd062c948b8de8e5c1f",
+    "generation-integration-source-stage1": "f25961e21689ed1a33365430b4566a9a2e9c319a",
+    "generation-integration-source-transplant": "4e00851731541be7de4626b7d1e5274d79b9eea8",
+    "generation-integration-source-upstream": "588148851e3e989ecbb7478279db7d46727e23a8",
+    "generation-integration-source-v2": "d9ff71a6826166e57bf3bba56ffcf8a57ffaf9db",
+    "generation-integration-source-pre-v2": "75b6c7a88fb099f142bcec9227ee614b6fc56376",
+    "generation-integration-source-v3": "dfe6387606e44a96f110c1ce03f52d92824dbdb1",
+    "generation-integration-source-v3-original": "6d207cfce36ab2bb128d92d67cc3da182afb0bb1",
+    "generation-integration-source-m1-source": "9540f5bbf7a96609e69af6983d2bf7325530126d",
+    "generation-integration-plan": "4374f72027b75df9ff95c5c7a725ee75beac27a8",
+    "generation-integration-pre-rebuild": "5226894ee1af61797e6b819d7e801a22bf17bace",
+    "generation-integration-pre-staged": "438b61500da4b32841c64211103e5da6fc4c4a72",
+    "generation-integration-staged-code": "f264028690d117b4b99c320b61b7f2d5d89222d0",
+    "generation-integration-drawing15-16": "8430e701d858b07e40203a25bfc3b1fa61b15f4a"
+  },
+  "manifest": "46 exact source rows/41 planned units",
+  "original_receipts": "immutable against438b6150",
+  "original_log_hashes_verified": 21,
+  "original_b2_fixture_bytes": {
+    "crates/feynkit-generator/tests/fixtures/vacuum_b2/GL034.dot": "36ef89039f8ac71907dfea68b91cc89f26c1e6b29db37fc094d629417f2d63c1",
+    "crates/feynkit-generator/tests/fixtures/vacuum_b2/GL028.dot": "05d1b5b9de947ee6b41795ac062d6283602cc6d96490b09e025e35056ca8635e"
+  },
+  "kernel": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+  "locks": {
+    "Cargo.lock": "def8dd7be5f208f4a290a4556081f7a63d10a5ae070c5df1808c1d350fa6161e",
+    "tydenso/Cargo.lock": "f1f0573d5f1c02d4ddb73d4491514cd291ae94ded7d84627342226917ca41dd0",
+    "examples/notebooks/symbolica-host/Cargo.lock": "03e18f00dbba096e08978063fd857d6558659f9f75e0ab09d73be3e543882c5a"
+  },
+  "approved_numeric_scalar_code_unchanged": true,
+  "conflicts": 0,
+  "NixCI": false,
+  "registry": {
+    "new_owned_scopes_valid": 4,
+    "inherited_deferred": 7,
+    "additional_source31_deferred": 20,
+    "full_documentation_pass": false
+  },
+  "selected_inventory": 283,
+  "net_paths": 1416,
+  "scope": "Static integrity for bounded candidate; NEW independent Astra review required"
+}
