@@ -296,7 +296,7 @@
       "sha256": "7e5fdf7b6ee3aaf04e464938e0d903c45a77eb136d5c6911b329aa2895460ab9",
       "archive": "scratch/resume-20261021/wind-down/handoff.typ",
       "status": "archived historical prose in Typst",
-      "encoding": "unchanged"
+      "encoding": "verbatim raw text wrapper"
     },
     {
       "source": "/common/dev/gammabench-runs/combined/m1-9540f5bb/m0-eager-summary.json",

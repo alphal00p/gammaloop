@@ -59,5 +59,109 @@
       "check": "Final JSON syntax, complete architecture registry/source set, current JJ revision conflict-free",
       "status": "passed"
     }
-  ]
+  ],
+  "fix_round_1": {
+    "date": "2026-10-27",
+    "finding": "Astra round 1 P2: historical handoff unclosed label",
+    "environment": "nix develop -c python3 - (inline focused verification; exported license preserved or silently loaded)",
+    "payloads_verified": 30,
+    "payload_check": "Decode every verbatim raw text wrapper with JSON string decoding; compare all archived payload byte counts and SHA-256 to evidence-inventory.json",
+    "handoff_original_sha256": "7e5fdf7b6ee3aaf04e464938e0d903c45a77eb136d5c6911b329aa2895460ab9",
+    "handoff_wrapper_sha256": "640602c40d8e01d986f7980a4412ca7f35d9ff5aed104016fde0ecee932cbbee",
+    "typst": [
+      {
+        "command": [
+          "typst",
+          "compile",
+          "--root",
+          ".",
+          "docs/architecture/evidence/generation-integration/scratch/resume-20261021/claude-v2/quotient/NOTES.typ",
+          "/shared/lcnbr/dev/gammaloop/generation-integration-plan/.wp0-r1-render-pwafzyvd/0.pdf"
+        ],
+        "input_sha256": "d261589b569df3a3db63db0a837f5aeeead3757a0e4884bb9def65a9ba2c765c",
+        "exit_code": 0,
+        "stderr": ""
+      },
+      {
+        "command": [
+          "typst",
+          "compile",
+          "--root",
+          ".",
+          "docs/architecture/evidence/generation-integration/scratch/resume-20261021/claude-v3/root/NOTES.typ",
+          "/shared/lcnbr/dev/gammaloop/generation-integration-plan/.wp0-r1-render-pwafzyvd/1.pdf"
+        ],
+        "input_sha256": "2a60a5c12c8b41ad4e980cc5c370a1786de1b6d258b22868afef57658cc79170",
+        "exit_code": 0,
+        "stderr": ""
+      },
+      {
+        "command": [
+          "typst",
+          "compile",
+          "--root",
+          ".",
+          "docs/architecture/evidence/generation-integration/scratch/resume-20261021/claude-v4/idenso-colour/NOTES.typ",
+          "/shared/lcnbr/dev/gammaloop/generation-integration-plan/.wp0-r1-render-pwafzyvd/2.pdf"
+        ],
+        "input_sha256": "a7cb89d5b7cf0a022b092805627bb9fcefd3d497e166ce2fa49d5b4abd7229d7",
+        "exit_code": 0,
+        "stderr": ""
+      },
+      {
+        "command": [
+          "typst",
+          "compile",
+          "--root",
+          ".",
+          "docs/architecture/evidence/generation-integration/scratch/resume-20261021/next-stages-preparation.typ",
+          "/shared/lcnbr/dev/gammaloop/generation-integration-plan/.wp0-r1-render-pwafzyvd/3.pdf"
+        ],
+        "input_sha256": "33a0d4617fbc8ec74ca631d3096c856ff45be8bea198b03822eefc674c6a59a3",
+        "exit_code": 0,
+        "stderr": ""
+      },
+      {
+        "command": [
+          "typst",
+          "compile",
+          "--root",
+          ".",
+          "docs/architecture/evidence/generation-integration/scratch/resume-20261021/wind-down/handoff.typ",
+          "/shared/lcnbr/dev/gammaloop/generation-integration-plan/.wp0-r1-render-pwafzyvd/4.pdf"
+        ],
+        "input_sha256": "640602c40d8e01d986f7980a4412ca7f35d9ff5aed104016fde0ecee932cbbee",
+        "exit_code": 0,
+        "stderr": ""
+      },
+      {
+        "command": [
+          "typst",
+          "compile",
+          "--root",
+          ".",
+          "docs/architecture/generation-integration-plan.typ",
+          "/shared/lcnbr/dev/gammaloop/generation-integration-plan/.wp0-r1-render-pwafzyvd/5.pdf"
+        ],
+        "input_sha256": "db6860f3fa10575da82619b711f2e561a905a58065690985bb45c9f6df9c453f",
+        "exit_code": 0,
+        "stderr": ""
+      },
+      {
+        "command": [
+          "typst",
+          "compile",
+          "--root",
+          ".",
+          "docs/architecture/generation-integration-wp0.typ",
+          "/shared/lcnbr/dev/gammaloop/generation-integration-plan/.wp0-r1-render-pwafzyvd/6.pdf"
+        ],
+        "input_sha256": "e73f550f0d5fb2fa914af604df4952d2ae9ad9b4e23052ee75a1142fea4dd3bd",
+        "exit_code": 0,
+        "stderr": ""
+      }
+    ],
+    "render_scratch": "removed after successful compilation",
+    "nixci_enable": "false"
+  }
 }
