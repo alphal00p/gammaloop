@@ -674,6 +674,23 @@ medians, final comparison or training-selection authority. The full collector
 guard files retain their canonical sorted/deduplicated policy; they are not
 evidence of the Native internal condition-vector order.
 
+The physical #raw("five_loop_qcd_ladder --classify-cache-hits") diagnostic
+uses that same lossless logger and reconciliation with one retained evaluation
+of an authenticated prepared input. It requires #raw("--cache") and
+#raw("experimental-rustred"), forbids fresh preparation, warm repetitions,
+running capture and presentation, and supplies no performance claim. Preserve
+its full trace, source/helper hashes and immutable cache identities before/after.
+Its reference must be a separately supervised classifier-off cached replay of
+the same final executable, prepared input, scientific definition, data and cache.
+Join both actual launch/completion records and exact retained result, family and
+full canonical guard-file hashes. The public guard file includes preparation
+conditions and is sorted/deduplicated; Native cache record guards retain their
+own original order. Historical physical results remain independent references,
+not substitutes for that same-cohort pair. The external
+#raw("vakint.physical-cache-usage-receipt.v1") adapter authenticates these
+source-specific records before reusing the existing per-dispatch classification
+contract; it does not create a synthetic Workload or widen campaign coverage.
+
 Loading, cache import, fresh graph preparation, lowering, deferred owner
 preparation, saved-application intervals, complete reduction and end-to-end time
 retain their original boundaries. Events may overlap. Owner preparation is

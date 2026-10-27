@@ -1,6 +1,10 @@
 //! Fresh-process public-evaluator measurements of a frozen cache suite.
 #[path = "build_cache/cache_file_args.rs"]
 mod cache_file_args;
+#[path = "build_cache/cache_hit_capture.rs"]
+mod cache_hit_capture;
+#[path = "build_cache/cache_identity.rs"]
+mod cache_identity;
 #[path = "build_cache/owner_proof.rs"]
 #[cfg_attr(
     not(test),
@@ -18,19 +22,19 @@ mod workload;
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs::{self, File, OpenOptions},
-    io::{Read, Write},
+    io::Write,
     path::{Path, PathBuf},
     process::{Command, Stdio},
-    sync::{
-        Mutex,
-        atomic::{AtomicBool, Ordering},
-    },
+    sync::Mutex,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
 use cache_file_args::CacheFileArgs;
+use cache_hit_capture::{CacheHitDiagnostic, ClassificationLogging};
+use cache_identity::{CacheIdentity, digest};
 use eyre::{Context, Result, bail, ensure};
 use owner_proof::OwnerProof;
+use owner_proof::validate_hit_diagnostic;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use symbolica::atom::{AtomCore, AtomView};
@@ -46,84 +50,10 @@ struct Stages {
     seconds: BTreeMap<String, Vec<f64>>,
     lowered: Vec<String>,
     warnings: Vec<String>,
-    input_roots: BTreeSet<Vec<i64>>,
-    input_roots_seen: bool,
-    input_roots_error: Option<String>,
-    input_dispatch_count: u64,
-    hit_events: Vec<Value>,
-    hit_error: Option<String>,
+    cache_hits: CacheHitDiagnostic,
 }
 
 impl Stages {
-    fn capture_input_roots(&mut self, message: &str) -> Result<()> {
-        let message: Value = serde_json::from_str(message)?;
-        ensure!(
-            message["phase"] == "input_roots",
-            "unknown input-root telemetry phase"
-        );
-        let roots: Vec<Vec<i64>> = serde_json::from_value(message["roots"].clone())?;
-        ensure!(
-            roots.iter().all(|root| root.len() == 15),
-            "invalid input-root telemetry arity"
-        );
-        self.input_roots_seen = true;
-        self.input_dispatch_count = self
-            .input_dispatch_count
-            .checked_add(1)
-            .ok_or_else(|| eyre::eyre!("input dispatch counter overflow"))?;
-        self.input_roots.extend(roots);
-        Ok(())
-    }
-
-    fn capture_hit_event(&mut self, message: &str) -> Result<()> {
-        let event: Value = serde_json::from_str(message)?;
-        ensure!(
-            event["schema"] == "vakint.cache-hit-events.v1",
-            "unknown cache-hit telemetry schema"
-        );
-        self.hit_events.try_reserve(1)?;
-        self.hit_events.push(event);
-        Ok(())
-    }
-
-    fn hit_diagnostic(&self, success: bool) -> Value {
-        json!({
-            "schema":"vakint.cache-hit-diagnostic.v1",
-            "interval_ns":0,"input_dispatch_count":self.input_dispatch_count,
-            "events":self.hit_events,
-            "error":self.hit_error.as_ref().or(self.input_roots_error.as_ref()),
-            "success":success,
-            "diagnostic_only":true,
-            "timing_scope":"Lossless observation overhead; not an unobserved performance sample",
-        })
-    }
-
-    fn save_hit_diagnostic(&self, directory: &Path, success: bool) -> Value {
-        let document = self.hit_diagnostic(success);
-        let validation = owner_proof::validate_hit_diagnostic(&document);
-        let mut receipt = json!({
-            "path":"cache-hit-events.json","sha256":null,
-            "diagnostic_only":true,"interval_ns":0,
-            "stream_complete":validation.is_ok(),
-            "classification_available":false,
-            "classification_requires":"Same-cohort recursive mapper certificate and offline hit join",
-            "error":validation.as_ref().err().map(ToString::to_string),
-        });
-        let path = directory.join("cache-hit-events.json");
-        // Evidence is published only after the full buffered stream has been
-        // written, synced and atomically renamed. Failure never invents counts
-        // or replaces the mathematical outcome with a telemetry error.
-        match write_json(&path, &document).and_then(|()| digest(&path)) {
-            Ok(hash) => receipt["sha256"] = hash.into(),
-            Err(error) => {
-                receipt["stream_complete"] = false.into();
-                receipt["error"] =
-                    format!("cache-hit evidence could not be committed: {error}").into();
-            }
-        }
-        receipt
-    }
-
     fn authenticate(
         &self,
         lowered: &[Vec<i64>],
@@ -133,11 +63,11 @@ impl Stages {
         case_id: &str,
     ) -> Result<bool> {
         ensure!(
-            self.input_roots_error.is_none(),
+            self.cache_hits.input_roots_error.is_none(),
             "invalid input-root telemetry: {:?}",
-            self.input_roots_error
+            self.cache_hits.input_roots_error
         );
-        if !self.input_roots_seen || lowered.is_empty() || protected.is_empty() {
+        if !self.cache_hits.input_roots_seen || lowered.is_empty() || protected.is_empty() {
             ensure!(
                 provisional,
                 "native key authentication unavailable: require complete telemetry and frozen protected_roots, or use --provisional without final claims"
@@ -146,11 +76,11 @@ impl Stages {
         }
         let lowered = lowered.iter().cloned().collect::<BTreeSet<_>>();
         ensure!(
-            self.input_roots == lowered,
+            self.cache_hits.input_roots == lowered,
             "public input lowered input roots differ from frozen lowered_roots"
         );
         if let Some(proof) = proof {
-            proof.observe(case_id, &self.input_roots, protected)?;
+            proof.observe(case_id, &self.cache_hits.input_roots, protected)?;
             Ok(true)
         } else {
             ensure!(
@@ -163,40 +93,18 @@ impl Stages {
 }
 
 struct StageLogger(Mutex<Stages>);
-// Configuration of the existing dedicated logger, not a reducer callback registry.
-static CLASSIFY_CACHE_HITS: AtomicBool = AtomicBool::new(false);
 static LOGGER: StageLogger = StageLogger(Mutex::new(Stages {
     seconds: BTreeMap::new(),
     lowered: Vec::new(),
     warnings: Vec::new(),
-    input_roots: BTreeSet::new(),
-    input_roots_seen: false,
-    input_roots_error: None,
-    input_dispatch_count: 0,
-    hit_events: Vec::new(),
-    hit_error: None,
+    cache_hits: CacheHitDiagnostic::new(),
 }));
-
-struct ClassificationLogging;
-
-impl ClassificationLogging {
-    fn enter(enabled: bool) -> Self {
-        CLASSIFY_CACHE_HITS.store(enabled, Ordering::Relaxed);
-        Self
-    }
-}
-
-impl Drop for ClassificationLogging {
-    fn drop(&mut self) {
-        CLASSIFY_CACHE_HITS.store(false, Ordering::Relaxed);
-    }
-}
 
 impl StageLogger {
     fn stages(&self) -> std::sync::MutexGuard<'_, Stages> {
         self.0.lock().unwrap_or_else(|poison| {
             let mut stages = poison.into_inner();
-            stages.hit_error = Some("cache-hit logger mutex was poisoned".into());
+            stages.cache_hits.hit_error = Some("cache-hit logger mutex was poisoned".into());
             stages
         })
     }
@@ -205,8 +113,7 @@ impl StageLogger {
 impl log::Log for StageLogger {
     fn enabled(&self, metadata: &log::Metadata<'_>) -> bool {
         if metadata.target() == "vakint::benchmark_cache_hits" {
-            return cfg!(feature = "experimental-rustred")
-                && CLASSIFY_CACHE_HITS.load(Ordering::Relaxed);
+            return cfg!(feature = "experimental-rustred") && ClassificationLogging::enabled();
         }
         metadata.level() <= log::Level::Warn
             || matches!(
@@ -223,16 +130,16 @@ impl log::Log for StageLogger {
         {
             let mut stages = self.stages();
             if record.target() == "vakint::benchmark_cache_hits" {
-                if stages.hit_error.is_none()
-                    && let Err(error) = stages.capture_hit_event(&message)
+                if stages.cache_hits.hit_error.is_none()
+                    && let Err(error) = stages.cache_hits.capture_hit_event(&message)
                 {
-                    stages.hit_error = Some(error.to_string());
+                    stages.cache_hits.hit_error = Some(error.to_string());
                 }
                 return;
             }
             if record.target() == "vakint::cache_workload" {
-                if let Err(error) = stages.capture_input_roots(&message) {
-                    stages.input_roots_error = Some(error.to_string());
+                if let Err(error) = stages.cache_hits.capture_input_roots(&message) {
+                    stages.cache_hits.input_roots_error = Some(error.to_string());
                 }
                 return;
             }
@@ -621,6 +528,11 @@ impl Options {
             "executable_sha256":digest(&std::env::current_exe()?)?,
             "compiled_driver_sha256":format!("{:x}",Sha256::digest(include_bytes!("measure_cache.rs"))),
             "compiled_workload_schema_sha256":format!("{:x}",Sha256::digest(include_bytes!("build_cache/workload.rs"))),
+            "collector_helper_sources_sha256":{
+                "crates/vakint/examples/build_cache/cache_identity.rs":format!("{:x}",Sha256::digest(include_bytes!("build_cache/cache_identity.rs"))),
+                "crates/vakint/examples/build_cache/cache_hit_diagnostic.rs":format!("{:x}",Sha256::digest(include_bytes!("build_cache/cache_hit_diagnostic.rs"))),
+                "crates/vakint/examples/build_cache/cache_hit_capture.rs":format!("{:x}",Sha256::digest(include_bytes!("build_cache/cache_hit_capture.rs"))),
+            },
             "compiled_owner_proof_sha256":format!("{:x}",Sha256::digest(include_bytes!("build_cache/owner_proof.rs"))),
             "compiled_cache_file_args_sha256":format!("{:x}",Sha256::digest(include_bytes!("build_cache/cache_file_args.rs"))),
             "owner_proof":OwnerProof::pinned_identity(&workload,&self.workload,&self.artifacts)?,
@@ -676,102 +588,6 @@ impl Options {
 /// Index bytes commit to native bindings, generations, ordered runs and chunk
 /// hashes. The native loader validates their framing and any payload it uses;
 /// this metadata identity does not reread or certify unused chunk payloads.
-#[derive(Debug, PartialEq, Eq)]
-enum CacheIdentity {
-    File(String),
-    Native(Value),
-}
-
-impl CacheIdentity {
-    fn read(path: &Path) -> Result<Self> {
-        // Preserve the established single-file behavior, including file symlinks.
-        if fs::metadata(path)?.is_file() {
-            return Ok(Self::File(digest(path)?));
-        }
-        ensure!(
-            fs::symlink_metadata(path)?.is_dir(),
-            "cache must be a regular file or native directory"
-        );
-        let bundle = path.join("bundle.rrindex");
-        let pack = path.join("cache.rrindex");
-        // Dangling index symlinks are present invalid inputs, not a fallback.
-        let bundle = bundle.is_symlink() || bundle.try_exists()?;
-        let pack = pack.is_symlink() || pack.try_exists()?;
-        ensure!(
-            bundle != pack,
-            "native cache needs exactly one bundle or pack index"
-        );
-        let mut indexes = BTreeMap::new();
-        if bundle {
-            Self::index(path, "bundle.rrindex", &mut indexes)?;
-            let bindings = path.join("bindings");
-            ensure!(
-                fs::symlink_metadata(&bindings)?.is_dir(),
-                "native bindings must be a regular directory"
-            );
-            for entry in fs::read_dir(bindings)? {
-                let entry = entry?;
-                let name = entry.file_name();
-                let name = name
-                    .to_str()
-                    .ok_or_else(|| eyre::eyre!("invalid native namespace"))?;
-                ensure!(
-                    name.len() == 64
-                        && name
-                            .bytes()
-                            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
-                        && entry.file_type()?.is_dir(),
-                    "native namespace must be a lowercase hash directory"
-                );
-                Self::index(
-                    path,
-                    &format!("bindings/{name}/cache.rrindex"),
-                    &mut indexes,
-                )?;
-            }
-            ensure!(indexes.len() > 1, "native bundle has no child indexes");
-        } else {
-            Self::index(path, "cache.rrindex", &mut indexes)?;
-        }
-        // Keep the aggregate stable even if a host enables serde_json/preserve_order.
-        let mut document = BTreeMap::from([
-            ("schema", json!("vakint.native-cache-index-identity.v1")),
-            ("layout", json!(if bundle { "bundle" } else { "pack" })),
-            ("indexes", json!(indexes)),
-        ]);
-        let sha256 = format!("{:x}", Sha256::digest(serde_json::to_vec(&document)?));
-        document.insert("sha256", sha256.into());
-        Ok(Self::Native(json!(document)))
-    }
-
-    fn index(root: &Path, relative: &str, indexes: &mut BTreeMap<String, Value>) -> Result<()> {
-        let path = root.join(relative);
-        let metadata = fs::symlink_metadata(&path)?;
-        ensure!(
-            metadata.is_file(),
-            "native index must be a regular file: {relative}"
-        );
-        indexes.insert(
-            relative.into(),
-            json!({"bytes":metadata.len(),"sha256":digest(&path)?}),
-        );
-        Ok(())
-    }
-}
-
-fn digest(path: &Path) -> Result<String> {
-    let mut input = File::open(path)?;
-    let mut digest = Sha256::new();
-    let mut block = [0; 65536];
-    loop {
-        let count = input.read(&mut block)?;
-        if count == 0 {
-            break;
-        }
-        digest.update(&block[..count]);
-    }
-    Ok(format!("{:x}", digest.finalize()))
-}
 
 fn write_json(path: &Path, value: &Value) -> Result<()> {
     write_bytes(path, &serde_json::to_vec_pretty(value)?)
@@ -1130,7 +946,7 @@ fn measure(options: &Options, root: &Root, identity: &Value, workload: &Workload
             "case_id":root.id,"variant":options.variant,"sample":options.sample,"input_sha256":format!("{:x}",Sha256::digest(input.to_canonical_string().as_bytes())),
             "declared_common_powers":root.powers,"rationale":root.rationale,
             "frozen_lowered_roots":root.lowered_roots,"frozen_protected_roots":root.protected_roots,
-            "actual_lowered_roots":stages.input_roots,
+            "actual_lowered_roots":stages.cache_hits.input_roots,
             "provisional":options.provisional,
             "owner_proof":proof.as_ref().map(OwnerProof::identity),"owner_proof_validation_seconds":owner_proof_seconds,
             "owner_root_correlations":proof.as_ref().map(OwnerProof::correlations),
@@ -1163,8 +979,9 @@ fn measure(options: &Options, root: &Root, identity: &Value, workload: &Workload
             receipt["running_cache_attached"] = running_cache_attached.into();
         }
         if options.classify_cache_hits {
-            receipt["cache_hit_diagnostic"] =
-                stages.save_hit_diagnostic(&options.work_dir, outcome.is_some());
+            receipt["cache_hit_diagnostic"] = stages
+                .cache_hits
+                .save_hit_diagnostic(&options.work_dir, outcome.is_some());
             receipt["performance_claim_allowed"] = false.into();
         }
         if let Some(proof) = &proof {
@@ -1189,7 +1006,7 @@ fn measure(options: &Options, root: &Root, identity: &Value, workload: &Workload
             .as_ref()
             .is_ok_and(|authenticated| *authenticated)
             .into();
-        receipt["native_key_authentication"] = if !stages.input_roots_seen {
+        receipt["native_key_authentication"] = if !stages.cache_hits.input_roots_seen {
             "unavailable"
         } else if authentication
             .as_ref()
@@ -2057,35 +1874,43 @@ mod tests {
     fn lossless_hit_buffer_preserves_multiplicity_and_dispatch_boundaries() -> Result<()> {
         let document = owner_proof::hit_diagnostic_fixture();
         let mut stages = Stages::default();
-        stages.capture_input_roots(&json!({"phase":"input_roots","roots":[]}).to_string())?;
+        stages
+            .cache_hits
+            .capture_input_roots(&json!({"phase":"input_roots","roots":[]}).to_string())?;
         for event in document["events"].as_array().unwrap() {
-            stages.capture_hit_event(&event.to_string())?;
+            stages.cache_hits.capture_hit_event(&event.to_string())?;
         }
-        assert_eq!(stages.hit_diagnostic(true), {
+        assert_eq!(stages.cache_hits.hit_diagnostic(true), {
             let mut expected = document;
             expected["diagnostic_only"] = true.into();
             expected["timing_scope"] =
                 "Lossless observation overhead; not an unobserved performance sample".into();
             expected
         });
-        assert!(owner_proof::validate_hit_diagnostic(&stages.hit_diagnostic(true)).is_ok());
+        assert!(
+            owner_proof::validate_hit_diagnostic(&stages.cache_hits.hit_diagnostic(true)).is_ok()
+        );
         let hit = stages
+            .cache_hits
             .hit_events
             .iter()
             .find(|event| event["event"] == "backing_hit")
             .unwrap()
             .clone();
-        stages.capture_hit_event(&hit.to_string())?;
+        stages.cache_hits.capture_hit_event(&hit.to_string())?;
         // Duplicate delivery is retained and fails reconciliation, not deduplicated away.
         assert_eq!(
             stages
+                .cache_hits
                 .hit_events
                 .iter()
                 .filter(|event| event["event"] == "backing_hit")
                 .count(),
             2
         );
-        assert!(owner_proof::validate_hit_diagnostic(&stages.hit_diagnostic(true)).is_err());
+        assert!(
+            owner_proof::validate_hit_diagnostic(&stages.cache_hits.hit_diagnostic(true)).is_err()
+        );
         Ok(())
     }
 
@@ -2093,12 +1918,20 @@ mod tests {
     fn missing_dispatch_and_cancelled_reduction_never_become_complete() -> Result<()> {
         let document = owner_proof::hit_diagnostic_fixture();
         let mut stages = Stages::default();
-        stages.hit_events = document["events"].as_array().unwrap().clone();
-        assert!(owner_proof::validate_hit_diagnostic(&stages.hit_diagnostic(true)).is_err());
-        stages.capture_input_roots(&json!({"phase":"input_roots","roots":[]}).to_string())?;
-        assert!(owner_proof::validate_hit_diagnostic(&stages.hit_diagnostic(false)).is_err());
-        stages.hit_error = Some("a telemetry record could not be retained".into());
-        assert!(owner_proof::validate_hit_diagnostic(&stages.hit_diagnostic(true)).is_err());
+        stages.cache_hits.hit_events = document["events"].as_array().unwrap().clone();
+        assert!(
+            owner_proof::validate_hit_diagnostic(&stages.cache_hits.hit_diagnostic(true)).is_err()
+        );
+        stages
+            .cache_hits
+            .capture_input_roots(&json!({"phase":"input_roots","roots":[]}).to_string())?;
+        assert!(
+            owner_proof::validate_hit_diagnostic(&stages.cache_hits.hit_diagnostic(false)).is_err()
+        );
+        stages.cache_hits.hit_error = Some("a telemetry record could not be retained".into());
+        assert!(
+            owner_proof::validate_hit_diagnostic(&stages.cache_hits.hit_diagnostic(true)).is_err()
+        );
         Ok(())
     }
 
@@ -2108,14 +1941,15 @@ mod tests {
         let first = vec![1_i64; 15];
         let second = vec![2_i64; 15];
         let mut stages = Stages::default();
-        stages.capture_input_roots(
+        stages.cache_hits.capture_input_roots(
             &json!({"phase":"input_roots","roots":[first.clone(),second]}).to_string(),
         )?;
-        stages.hit_events = document["events"].as_array().unwrap().clone();
-        let observed = owner_proof::validate_hit_diagnostic(&stages.hit_diagnostic(true))?;
+        stages.cache_hits.hit_events = document["events"].as_array().unwrap().clone();
+        let observed =
+            owner_proof::validate_hit_diagnostic(&stages.cache_hits.hit_diagnostic(true))?;
         // The raw logger cannot encode coefficient cancellation. Only the
         // native collected-root stream supplies the surviving combined seeds.
-        assert_eq!(stages.input_roots.len(), 2);
+        assert_eq!(stages.cache_hits.input_roots.len(), 2);
         assert_eq!(
             observed["dispatches"][0]["seeds"].as_array().unwrap().len(),
             1
@@ -2124,13 +1958,14 @@ mod tests {
             observed["dispatches"][0]["seeds"][0]["powers"],
             json!(first)
         );
-        stages.input_dispatch_count = u64::MAX;
+        stages.cache_hits.input_dispatch_count = u64::MAX;
         assert!(
             stages
+                .cache_hits
                 .capture_input_roots(&json!({"phase":"input_roots","roots":[]}).to_string())
                 .is_err()
         );
-        assert_eq!(stages.input_dispatch_count, u64::MAX);
+        assert_eq!(stages.cache_hits.input_dispatch_count, u64::MAX);
         Ok(())
     }
 
@@ -2139,9 +1974,11 @@ mod tests {
         let directory = tempfile::tempdir()?;
         let mut stages = Stages::default();
         let document = owner_proof::hit_diagnostic_fixture();
-        stages.hit_events = document["events"].as_array().unwrap().clone();
-        stages.input_dispatch_count = 1;
-        let committed = stages.save_hit_diagnostic(directory.path(), true);
+        stages.cache_hits.hit_events = document["events"].as_array().unwrap().clone();
+        stages.cache_hits.input_dispatch_count = 1;
+        let committed = stages
+            .cache_hits
+            .save_hit_diagnostic(directory.path(), true);
         assert_eq!(committed["stream_complete"], true);
         assert_eq!(committed["classification_available"], false);
         assert_eq!(
@@ -2150,7 +1987,7 @@ mod tests {
         );
         let blocker = directory.path().join("not-a-directory");
         fs::write(&blocker, b"preserve prior data")?;
-        let failed = stages.save_hit_diagnostic(&blocker, true);
+        let failed = stages.cache_hits.save_hit_diagnostic(&blocker, true);
         assert_eq!(failed["stream_complete"], false);
         assert_eq!(failed["classification_available"], false);
         assert!(failed["sha256"].is_null());
@@ -2161,18 +1998,18 @@ mod tests {
                 .contains("could not be committed")
         );
         assert_eq!(fs::read(&blocker)?, b"preserve prior data");
-        assert_eq!(stages.hit_diagnostic(true)["success"], true);
+        assert_eq!(stages.cache_hits.hit_diagnostic(true)["success"], true);
         Ok(())
     }
 
     #[test]
     fn classification_log_admission_is_released_on_scope_exit() {
-        assert!(!CLASSIFY_CACHE_HITS.load(Ordering::Relaxed));
+        assert!(!ClassificationLogging::enabled());
         {
             let _guard = ClassificationLogging::enter(true);
-            assert!(CLASSIFY_CACHE_HITS.load(Ordering::Relaxed));
+            assert!(ClassificationLogging::enabled());
         }
-        assert!(!CLASSIFY_CACHE_HITS.load(Ordering::Relaxed));
+        assert!(!ClassificationLogging::enabled());
     }
 
     #[test]
@@ -2387,6 +2224,7 @@ mod tests {
         );
         assert!(!stages.authenticate(&[], &[], true, None, &root.id).unwrap());
         stages
+            .cache_hits
             .capture_input_roots(
                 &json!({"phase":"input_roots","roots":[first.clone()]}).to_string(),
             )

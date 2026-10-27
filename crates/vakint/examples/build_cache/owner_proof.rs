@@ -6,6 +6,10 @@
 //! the complete original mass/coefficient/guard/handoff evidence remains pinned.
 //! A later release changing manifests needs explicit requalification; producer
 //! provenance is never silently relabeled as that release or consumer build.
+#[path = "cache_hit_diagnostic.rs"]
+mod cache_hit_diagnostic;
+pub(super) use cache_hit_diagnostic::{FrontierWork, validate_hit_diagnostic};
+
 use super::{
     digest,
     workload::{FrozenPublicSuites, OwnerProofAuthority, Root, Workload},
@@ -651,63 +655,16 @@ impl QualifiedEvidence {
     }
 }
 
-/// Full native work identity. A Route and an Apply of the same powers are
-/// different cache records; an Apply also carries its literal owner support.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub(super) struct FrontierWork {
-    pub(super) stage: String,
-    pub(super) powers: Vec<i64>,
-    owner: Option<Vec<bool>>,
+fn count(value: &Value, field: &str) -> Result<u64> {
+    value[field]
+        .as_u64()
+        .ok_or_else(|| eyre::eyre!("missing nonnegative counter {field}"))
 }
 
 impl FrontierWork {
     pub(super) fn route(powers: Vec<i64>) -> Result<Self> {
         Self::parse(&json!({"stage":"route","powers":powers,"owner_sector":null}))
     }
-
-    pub(super) fn parse(value: &Value) -> Result<Self> {
-        let stage = string(value, "stage")?.to_owned();
-        let powers: Vec<i64> = serde_json::from_value(value["powers"].clone())?;
-        ensure!(powers.len() == 15, "work identity must have fifteen axes");
-        ensure!(value.get("owner_sector").is_some(), "omitted owner support");
-        let owner = match stage.as_str() {
-            "route" => {
-                ensure!(
-                    value["owner_sector"].is_null(),
-                    "Route carries an Apply owner"
-                );
-                None
-            }
-            "apply" => {
-                let owner: Vec<bool> = serde_json::from_value(value["owner_sector"].clone())?;
-                ensure!(
-                    owner.len() == 15 && owner == Self::support(&powers),
-                    "Apply owner differs from literal support"
-                );
-                Some(owner)
-            }
-            _ => eyre::bail!("unknown cache work stage"),
-        };
-        Ok(Self {
-            stage,
-            powers,
-            owner,
-        })
-    }
-
-    fn support(powers: &[i64]) -> Vec<bool> {
-        powers.iter().map(|power| *power > 0).collect()
-    }
-
-    pub(super) fn document(&self) -> Value {
-        json!({"stage":self.stage,"powers":self.powers,"owner_sector":self.owner})
-    }
-}
-
-fn count(value: &Value, field: &str) -> Result<u64> {
-    value[field]
-        .as_u64()
-        .ok_or_else(|| eyre::eyre!("missing nonnegative counter {field}"))
 }
 
 /// A successful retained result can still contain unknown integrals. This
@@ -725,167 +682,6 @@ pub(super) fn validate_frontier_outputs(original: &Value, cached: &Value) -> Res
         );
     }
     Ok(())
-}
-
-/// Reconcile a lossless diagnostic with native per-dispatch counters. A latest
-/// monitor snapshot or a root union is deliberately insufficient evidence.
-pub(super) fn validate_hit_diagnostic(document: &Value) -> Result<Value> {
-    ensure!(
-        document["schema"] == "vakint.cache-hit-diagnostic.v1"
-            && document["interval_ns"] == 0
-            && document["success"] == true
-            && document.get("error").is_some_and(Value::is_null),
-        "incomplete cache-hit diagnostic"
-    );
-    let expected = count(document, "input_dispatch_count")?;
-    let mut dispatches = Vec::new();
-    let mut current: Option<Value> = None;
-    let mut roots = BTreeSet::new();
-    let mut hits = Vec::new();
-    let mut last_sequence = None;
-    let mut finished = false;
-    for event in array(document, "events")? {
-        ensure!(
-            !finished && event["schema"] == "vakint.cache-hit-events.v1",
-            "event after observer finish or wrong event schema"
-        );
-        let kind = string(event, "event")?;
-        if kind == "observer_finish" {
-            ensure!(
-                current.is_none()
-                    && event["observer_status"] == "Active"
-                    && event["operation_succeeded"] == true
-                    && event["interval_ns"] == 0
-                    && event.get("sequence").is_some_and(Value::is_null),
-                "observer detached, faulted or operation incomplete"
-            );
-            finished = true;
-            continue;
-        }
-        let sequence = count(event, "sequence")?;
-        ensure!(
-            last_sequence.is_none_or(|previous| sequence > previous),
-            "native event sequence is not increasing"
-        );
-        last_sequence = Some(sequence);
-        let family = string(event, "family_fingerprint")?;
-        ensure!(!family.trim().is_empty(), "omitted native family");
-        for field in [
-            "work",
-            "rootwork",
-            "requested_roots",
-            "completed_roots",
-            "persistent",
-            "status",
-        ] {
-            ensure!(
-                event.get(field).is_some(),
-                "omitted native event field {field}"
-            );
-        }
-        if !event["work"].is_null() {
-            FrontierWork::parse(&event["work"])?;
-        }
-        ensure!(
-            event["status"]
-                == if kind == "dispatch_finish" {
-                    "succeeded"
-                } else {
-                    "running"
-                },
-            "invalid native event status"
-        );
-        ensure!(
-            kind == "root_collected" || event["rootwork"].is_null(),
-            "unexpected root identity"
-        );
-        if kind == "dispatch_start" {
-            ensure!(current.is_none(), "nested or missing dispatch finish");
-            current = Some(json!({"ordinal":dispatches.len(),"family_fingerprint":family}));
-            roots.clear();
-            hits.clear();
-            continue;
-        }
-        let active = current
-            .as_ref()
-            .ok_or_else(|| eyre::eyre!("event without a dispatch start"))?;
-        ensure!(
-            active["family_fingerprint"] == family,
-            "dispatch family changed"
-        );
-        match kind {
-            "backing_hit" => hits.push(FrontierWork::parse(&event["work"])?),
-            "root_collected" => {
-                let root = FrontierWork::parse(&event["rootwork"])?;
-                let current = FrontierWork::parse(&event["work"])?;
-                ensure!(
-                    root.stage == "route" && current == root && roots.insert(root),
-                    "omitted, duplicate or non-Route collected root"
-                );
-            }
-            "dispatch_finish" => {
-                ensure!(event["status"] == "succeeded", "native dispatch failed");
-                let requested = count(event, "requested_roots")?;
-                ensure!(
-                    requested == count(event, "completed_roots")?
-                        && requested == u64::try_from(roots.len())?,
-                    "collected/requested/completed roots differ"
-                );
-                let persistent = &event["persistent"];
-                count(persistent, "lookups")?;
-                count(persistent, "misses")?;
-                let route = count(persistent, "route_hits")?;
-                let apply = count(persistent, "apply_hits")?;
-                ensure!(
-                    route == u64::try_from(hits.iter().filter(|hit| hit.stage == "route").count())?
-                        && apply
-                            == u64::try_from(
-                                hits.iter().filter(|hit| hit.stage == "apply").count()
-                            )?
-                        && route.checked_add(apply).is_some_and(|total| count(
-                            persistent,
-                            "requested_root_hits"
-                        )
-                        .ok()
-                        .and_then(
-                            |roots| roots.checked_add(count(persistent, "intermediate_hits").ok()?)
-                        ) == Some(total)),
-                    "lost cache-hit event or inconsistent native counters"
-                );
-                let mut normalized = current.take().unwrap();
-                normalized["seeds"] =
-                    json!(roots.iter().map(FrontierWork::document).collect::<Vec<_>>());
-                normalized["hits"] =
-                    json!(hits.iter().map(FrontierWork::document).collect::<Vec<_>>());
-                normalized["persistent"] = persistent.clone();
-                dispatches.push(normalized);
-            }
-            _ => eyre::bail!("unknown cache-hit event"),
-        }
-    }
-    ensure!(
-        finished && current.is_none() && u64::try_from(dispatches.len())? == expected,
-        "missing dispatch or observer completion"
-    );
-    let mut totals = serde_json::Map::new();
-    for field in [
-        "lookups",
-        "route_hits",
-        "apply_hits",
-        "requested_root_hits",
-        "intermediate_hits",
-        "misses",
-    ] {
-        let total = dispatches.iter().try_fold(0_u64, |total, dispatch| {
-            total
-                .checked_add(count(&dispatch["persistent"], field)?)
-                .ok_or_else(|| eyre::eyre!("persistent counter sum overflow"))
-        })?;
-        totals.insert(field.into(), json!(total));
-    }
-    Ok(
-        json!({"interval_ns":0,"input_dispatch_count":expected,"dispatches":dispatches,"persistent":totals}),
-    )
 }
 
 /// Only the labels needed to classify a native route result. Transport matrices
