@@ -3,8 +3,9 @@
 All graph weights, momentum routing, UV expansion, color/tensor reduction and
 IBP are shared APIs.  The only analytic integral input is I(1)|pole = M/eps;
 physical loop integration restores i/(16*pi**2), and a4 = gs**2/(16*pi**2).
-The SM model supplies the canonical UFO ghost rule; only the gluon gauge
-parameter is specialized here.
+The SM model supplies its antighost-derivative rule UUV1 = P(3,2) in the
+ordered [ghost, antighost, vector] vertex; only the gluon gauge parameter
+is specialized here.
 References: FeynCalcExamples/QCD/OneLoop/{Renormalization,GhGl-Gh}.
 """
 
@@ -45,9 +46,8 @@ mink, coad, metric, hedge, f = S(
     "gammalooprs::hedge",
     "spenso::f",
 )
-idx, dim, a, b, c, arguments = S(
+idx, a, b, c, arguments = S(
     "ghost_uv::idx_",
-    "ghost_uv::dim_",
     "ghost_uv::a",
     "ghost_uv::b",
     "ghost_uv::c",
@@ -95,9 +95,11 @@ for pdg in (9000005, -9000005):
         generated_diagrams[pdg, kind] = diagrams
         for diagram in diagrams:
             topology = tuple(sorted(vertex.interaction for vertex in diagram.vertices))
+            prefactor = diagram.numerator_prefactor_expression()
+            assert prefactor.is_scalar
             weight = (
                 diagram.overall_factor_expression(evaluate=True)
-                * diagram.numerator_prefactor_expression()
+                * prefactor.to_expression()
             )
             # Compare amputated ghost kernels in canonical field order.
             # Preserve all internal-loop and graph symmetry factors.
@@ -113,14 +115,22 @@ for pdg in (9000005, -9000005):
             assert weight == one
             # Keep every external Lorentz/color slot open; no polarization or
             # contraction with external momentum can hide an unwanted tensor.
-            numerator = model.expand_couplings(
-                diagram.numerator_expression().to_expression()
-            )
-            for half in diagram.half_edges:
-                if half.edge.is_external:
-                    numerator = numerator.replace(
-                        hedge(half.id, 1), [a, b, c][half.edge.external_index]
+            numerator = (
+                TensorExpression(
+                    model.expand_couplings(
+                        diagram.numerator_expression().to_expression()
                     )
+                )
+                .rename_indices(
+                    {
+                        hedge(half.id, 1): [a, b, c][half.edge.external_index]
+                        for half in diagram.half_edges
+                        if half.edge.is_external
+                    },
+                    intern="indices",
+                )
+                .to_expression()
+            )
             numerator = numerator.replace(coad(8, idx), coad(dA, idx))
             if loops:
                 numerator = diagram.uv_expansion(
@@ -128,8 +138,10 @@ for pdg in (9000005, -9000005):
                 ).to_expression()
             numerator = diagram.momentum_basis().route_expression(numerator)
             numerator = (
-                numerator.replace(mink(dim, idx), mink(D, idx))
-                .replace(mink(dim), mink(D))
+                TensorExpression(numerator)
+                .with_lorentz_dimension(D)
+                .to_expression()
+                .replace(hep.Symbols.dimension(), D)
                 .replace(mUV**2, M)
             )
             for match in list(numerator.match(den(ed, mom, ms, quad))):
@@ -141,20 +153,21 @@ for pdg in (9000005, -9000005):
                 )
             tensor = (
                 TensorExpression(numerator.expand())
-                .simplify_algebra(gamma=False, color=True)
-                .contract(collect_chains=False, collect_traces=False)
-                .to_dots()
+                .simplify_algebra(contract="dots", gamma=False, color=True)
                 .to_expression()
             )
             scalar = family.rewrite_numerator(
-                kinematics.apply(reducer.reduce(tensor)), [x]
+                kinematics.apply(reducer.reduce(tensor).to_expression()), [x]
             )
             scalar = (weight * scalar).together().expand()
             assert not scalar.matches(K(arguments))
             assert not scalar.matches(hedge(arguments))
             if not loops:
+                # -G f(A,c,barc) p_barc with all vertex momenta incoming.
+                # For an incoming ghost, p_barc=-P2 and f(b,a,c)=-f(a,b,c);
+                # for an incoming antighost, p_barc=P0 and f(b,c,a)=f(a,b,c).
                 expected_momentum = P(0, mink(D, b))
-                if pdg < 0:
+                if pdg > 0:
                     expected_momentum -= P(1, mink(D, b))
                 assert (scalar + gs * expected_momentum * color).expand() == zero
                 trees[pdg] = scalar

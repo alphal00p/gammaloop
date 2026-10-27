@@ -1,9 +1,8 @@
 use std::collections::BTreeMap;
 
-use symbolica::{
-    atom::{Atom, AtomCore},
-    tensors::matrix::Matrix,
-};
+use symbolica::atom::{Atom, AtomCore};
+use symbolica::tensors::matrix::Matrix;
+use symbolica::utils::resources;
 
 use super::{IntegralFamily, IntegralFamilyError};
 
@@ -26,11 +25,18 @@ impl IntegralFamily {
     ///
     /// `max_states` bounds processed exponent vectors, including intermediate
     /// states. Exceeding the budget returns an error rather than a partial result.
+    /// Active Symbolica resource budgets are checked between states and while
+    /// searching for denominator relations.
+    ///
+    /// # Errors
+    /// Returns an error for invalid powers or denominators, power overflow, or
+    /// an exhausted state or Symbolica resource budget.
     pub fn partial_fraction(
         &self,
         powers: &[i32],
         max_states: usize,
     ) -> Result<Vec<(Atom, Vec<i32>)>, IntegralFamilyError> {
+        resources::checkpoint()?;
         if powers.len() != self.denominators.len() {
             return Err(IntegralFamilyError::InvalidPowers);
         }
@@ -49,6 +55,7 @@ impl IntegralFamily {
         let mut result = Vec::new();
         let mut processed = 0;
         while let Some((powers, coefficient)) = pending.pop_last() {
+            resources::checkpoint()?;
             processed += 1;
             if processed > max_states {
                 return Err(IntegralFamilyError::PartialFractionLimit(max_states));
@@ -115,6 +122,7 @@ impl IntegralFamily {
                 }
             }
         }
+        resources::checkpoint()?;
         Ok(result)
     }
 
@@ -122,6 +130,7 @@ impl IntegralFamily {
         &self,
         support: &[usize],
     ) -> Result<Option<Dependence>, IntegralFamilyError> {
+        resources::checkpoint()?;
         if support.is_empty() {
             return Ok(None);
         }
@@ -133,6 +142,7 @@ impl IntegralFamily {
             .map_err(|e| IntegralFamilyError::InvalidBasis(e.to_string()))?;
         let mut rows = Vec::new();
         for (position, row) in matrix.row_iter().enumerate() {
+            resources::checkpoint()?;
             rows.push(row.to_vec());
             let candidate = Matrix::from_nested_vec(rows.clone(), matrix.field().clone())
                 .map_err(IntegralFamilyError::InvalidBasis)?;
@@ -179,7 +189,10 @@ impl IntegralFamily {
 mod tests {
     use super::*;
     use feynkit_kinematics::Kinematics;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::time::Duration;
     use symbolica::parse;
+    use symbolica::utils::resources::{ResourceBudget, ResourceLimitError, ResourceLimits};
 
     fn verify(
         denominators: Vec<Atom>,
@@ -287,6 +300,50 @@ mod tests {
             zero.partial_fraction(&[0], 10).unwrap(),
             vec![(Atom::one(), vec![0])]
         );
+    }
+
+    #[test]
+    fn resource_budgets_cancel_partial_fractions_and_restore_the_calling_scope() {
+        let k = parse!("apart_resource::k");
+        let kin = Kinematics::new();
+        let x = kin.scalar_product(&k, &k).unwrap();
+        let family = IntegralFamily::new(vec![k], vec![], vec![x.clone(), &x - 1], &kin).unwrap();
+        let expected = family.partial_fraction(&[2, 2], 100).unwrap();
+
+        let expired = ResourceBudget::new(ResourceLimits {
+            max_elapsed: Some(Duration::ZERO),
+            ..Default::default()
+        });
+        assert!(matches!(
+            expired.run(|| family.partial_fraction(&[2, 2], 100)),
+            Err(IntegralFamilyError::Resource(
+                ResourceLimitError::Elapsed { .. }
+            ))
+        ));
+
+        let polls = AtomicU64::new(0);
+        let growing_memory = ResourceBudget::with_memory_monitor(
+            ResourceLimits {
+                max_process_rss_bytes: Some(1),
+                ..Default::default()
+            },
+            move || {
+                Ok(if polls.fetch_add(1, Ordering::Relaxed) < 2 {
+                    0
+                } else {
+                    2
+                })
+            },
+        );
+        assert!(matches!(
+            growing_memory.run(|| family.partial_fraction(&[2, 2], 100)),
+            Err(IntegralFamilyError::Resource(ResourceLimitError::Memory {
+                rss_bytes: 2,
+                additional_bytes: 0,
+                limit_bytes: 1,
+            }))
+        ));
+        assert_eq!(family.partial_fraction(&[2, 2], 100).unwrap(), expected);
     }
 
     #[test]

@@ -11,7 +11,6 @@ use idenso::epsilon::EPSILON_SYMBOL;
 use idenso::tensor::composition::MatrixChannel;
 use idenso::tensor::inference::{InterfaceInference, TensorInferenceError};
 use idenso::tensor::{SymbolicTensor, composition};
-use pyo3::IntoPyObjectExt;
 use pyo3::exceptions::{
     PyIndexError, PyKeyboardInterrupt, PyOverflowError, PyRuntimeError, PyTypeError, PyValueError,
 };
@@ -3372,18 +3371,12 @@ impl TensorExpression {
         self_: PyRef<'_, Self>,
         py: Python<'_>,
         rhs: &Bound<'_, PyAny>,
-    ) -> PyResult<Py<PyAny>> {
-        match rhs.getattr("__symbolica_rmul__") {
-            Ok(product) => return product.call1((&self_,)).map(Bound::unbind),
-            Err(error) if error.is_instance_of::<pyo3::exceptions::PyAttributeError>(py) => {}
-            Err(error) => return Err(error),
-        }
+    ) -> PyResult<TensorDispatch> {
         if let Some(right) = concrete_network(rhs)? {
             return Self::promoted_network(&self_, py)?
                 .multiply_network(right)
                 .and_then(|network| Py::new(py, network))
-                .map(TensorDispatch::Network)
-                .and_then(|result| result.into_py_any(py));
+                .map(TensorDispatch::Network);
         }
         let left = Self::structured(&self_);
         let right = TensorOperand::extract(rhs)?.into_structured()?;
@@ -3391,35 +3384,6 @@ impl TensorExpression {
             .map_err(|error| PyValueError::new_err(error.to_string()).with_rust_cause(&error))
             .and_then(|value| Self::from_structured(py, value))
             .map(TensorDispatch::Expression)
-            .and_then(|result| result.into_py_any(py))
-    }
-
-    /// Preserve the tensor type when a Symbolica expression multiplies this tensor.
-    ///
-    /// Parameters
-    /// ----------
-    /// lhs : Expression
-    ///     Left operand; a tensor expression retains its tensor structure.
-    ///
-    /// Returns
-    /// -------
-    /// TensorExpression
-    ///     The same ordered product as ``lhs * self``.
-    ///
-    /// Examples
-    /// --------
-    /// >>> from symbolica import S
-    /// >>> from symbolica.community.tensor import Representation, TensorName
-    /// >>> vector = TensorName.vector("v")(Representation.euc(2))
-    /// >>> (S("x") * vector).rank
-    /// 1
-    #[gen_stub(override_return_type(type_repr = "TensorExpression"))]
-    fn __symbolica_rmul__(
-        self_: PyRef<'_, Self>,
-        py: Python<'_>,
-        lhs: &Bound<'_, PythonExpression>,
-    ) -> PyResult<TensorDispatch> {
-        Self::__rmul__(self_, py, lhs.as_any())
     }
 
     #[doc = python_doc!("TensorExpression.__rmul__")]

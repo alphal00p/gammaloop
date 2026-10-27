@@ -8441,13 +8441,13 @@ class Parameter:
     @property
     def typstname(self) -> typing.Optional[builtins.str]:
         r"""
-        Native Typst math label, without dollar delimiters.
+        Native Typst math label without dollar delimiters, or None if not supplied.
 
         Examples
         --------
         >>> from symbolica.community import hepkit as hep
-        >>> hep.Model.standard_model().parameter("aS").typstname
-        'alpha_s'
+        >>> hep.Model.phi4().parameter("lam").typstname
+        'lambda'
         """
     @property
     def name(self) -> builtins.str:
@@ -8778,24 +8778,25 @@ class Particle:
     @property
     def typstname(self) -> typing.Optional[builtins.str]:
         r"""
-        Native Typst math label, without dollar delimiters.
+        Native Typst math label without dollar delimiters, or None if not supplied.
 
         Examples
         --------
         >>> from symbolica.community import hepkit as hep
-        >>> hep.Model.qcd().particle("g").typstname
-        'g'
+        >>> hep.Model.phi4().particle("phi").typstname
+        'phi'
         """
     @property
     def antitypstname(self) -> typing.Optional[builtins.str]:
         r"""
-        Native Typst math label of the antiparticle, without dollar delimiters.
+        Native Typst math label of the antiparticle without dollar delimiters,
+        or None if not supplied.
 
         Examples
         --------
         >>> from symbolica.community import hepkit as hep
-        >>> hep.Model.qcd().particle("u").antitypstname
-        'overline(u)'
+        >>> hep.Model.phi4().particle("phi").antitypstname
+        'phi'
         """
     @property
     def name(self) -> builtins.str:
@@ -11159,13 +11160,16 @@ class TensorReductionError(FeynkitError):
     --------
     >>> from symbolica import S, E
     >>> from symbolica.community import hepkit as hep
-    >>> D, k, mu = S("D", "k", "mu")
-    >>> mink = S("spenso::mink")
-    >>> reducer = hep.TensorReducer(D, integrated=[k(mink(D))])
+    >>> from symbolica.community.tensor import Representation, TensorName
+    >>> D, mu = S("D", "mu")
+    >>> k = TensorName.vector("tensor_reduction_error_example::k")
+    >>> reducer = hep.TensorReducer(D)
     >>> try:
-    ...     scalar = reducer.reduce(k(mink(D, mu))**2)
+    ...     reducer.reduce(k(Representation.mink(D)(mu)))
     ... except hep.TensorReductionError as error:
-    ...     message = str(error)
+    ...     assert "no integrated vectors selected" in str(error)
+    ... else:
+    ...     raise AssertionError("expected a missing-selector error")
     """
     ...
 

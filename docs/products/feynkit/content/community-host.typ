@@ -24,8 +24,8 @@ PyO3, and the other community modules compatible with this checkout. The `ufo` f
 by default in the Python adapter; disable default features if the host intentionally omits UFO
 loading. The pure Rust facade has different defaults.
 
-The 3.0.1 dependency versions alone do not select the Community display APIs
-used by this checkout. Pin Symbolica, Numerica and Graphica together to the
+The 3.0.1 dependency versions alone do not select the Community extension and
+resource-budget APIs used by this checkout. Pin Symbolica, Numerica and Graphica together to the
 compatible public Symbolica revision below, alongside the Typst atom payload.
 These are the patches used by both this repository's root manifest and
 `examples/notebooks/symbolica-host/Cargo.toml`. Put them in the consuming host's
@@ -35,9 +35,9 @@ resolved Cargo lockfile with the host release:
 // docs-example: syntax
 ```toml
 [patch.crates-io]
-symbolica = { git = "https://github.com/symbolica-dev/symbolica", branch = "main" }
-numerica = { git = "https://github.com/symbolica-dev/symbolica", branch = "main" }
-graphica = { git = "https://github.com/symbolica-dev/symbolica", branch = "main" }
+symbolica = { git = "https://github.com/symbolica-dev/symbolica", branch = "community" }
+numerica = { git = "https://github.com/symbolica-dev/symbolica", branch = "community" }
+graphica = { git = "https://github.com/symbolica-dev/symbolica", branch = "community" }
 symbolica-typst-plugin = { git = "https://github.com/symbolica-dev/symbolica-typst-plugin", rev = "57b7455b37c30f4f87353c0073e49f5225e937ab" }
 ```
 

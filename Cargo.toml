@@ -95,10 +95,10 @@ which = "8.0.0"
 # Typst plugins have no JavaScript clock; retain infinite-time Clarabel solves.
 clarabel = { path = "vendor/clarabel" }
 # Shared lazy FormattedOutput; see examples/reproducers/symbolic-display in Feynkit.
-# Pin the shared kernel and numeric crates to upstream main together.
-symbolica = { git = "https://github.com/symbolica-dev/symbolica", branch = "main" }
-numerica = { git = "https://github.com/symbolica-dev/symbolica", branch = "main" }
-graphica = { git = "https://github.com/symbolica-dev/symbolica", branch = "main" }
+# Share the community kernel that supplies extension registration and resource budgets.
+symbolica = { git = "https://github.com/symbolica-dev/symbolica", branch = "community" }
+numerica = { git = "https://github.com/symbolica-dev/symbolica", branch = "community" }
+graphica = { git = "https://github.com/symbolica-dev/symbolica", branch = "community" }
 symbolica-typst-plugin = { git = "https://github.com/symbolica-dev/symbolica-typst-plugin", rev = "57b7455b37c30f4f87353c0073e49f5225e937ab" }
 
 # Reuse optimized Symbolica while keeping workspace debug builds inexpensive.
