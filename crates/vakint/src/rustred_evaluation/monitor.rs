@@ -379,7 +379,7 @@ impl MonitorState {
             "stored_symbolic_state": self.latest.stored_state.as_ref().map(|sample| serde_json::json!({
                 "scope": "native stored partitions; overlapping occurrences, not a global expression",
                 "family_fingerprint": sample.family_fingerprint,
-                "sample_age_seconds": now.saturating_sub(sample.sampled_at).as_secs_f64(),
+                "sample_age_seconds": self.observation_age(sample.sampled_at, now).as_secs_f64(),
                 "unstarted_roots": sample.counts.unstarted_roots,
                 "deferred_rule_maps": sample.counts.deferred_rule_maps,
                 "deferred_child_integral_occurrences": sample.counts.deferred_child_integral_occurrences,
@@ -390,7 +390,7 @@ impl MonitorState {
                 "phase": sample.phase,
                 "encoded_bytes": sample.encoded_bytes,
                 "stored_summands": sample.stored_summands,
-                "sample_age_seconds": now.saturating_sub(sample.sampled_at).as_secs_f64(),
+                "sample_age_seconds": self.observation_age(sample.sampled_at, now).as_secs_f64(),
             })),
             "estimates": live.estimates,
             "view": self.view(now),
@@ -421,6 +421,15 @@ impl MonitorState {
             }
         }
         resources
+    }
+
+    fn observation_age(&self, sampled_at: Duration, now: Duration) -> Duration {
+        // Native/caller samples use the observer clock; reception and rendering
+        // use the presentation clock. Their Instant origins need not coincide.
+        self.latest
+            .elapsed
+            .saturating_sub(sampled_at)
+            .saturating_add(now.saturating_sub(self.received_at))
     }
 
     pub(super) fn observe(&mut self, snapshot: DisplaySnapshot, now: Duration) {
@@ -699,7 +708,7 @@ impl MonitorState {
                     || "unobserved".into(),
                     |sample| format!("{} / {} · {} · age {}", sample.encoded_bytes,
                         count(sample.stored_summands), sample.phase,
-                        seconds(now.saturating_sub(sample.sampled_at))),
+                        seconds(self.observation_age(sample.sampled_at, now))),
                 ),
             ),
             (
@@ -723,7 +732,7 @@ impl MonitorState {
                 native.map_or_else(
                     || "no native stored-state sample".into(),
                     |sample| format!("{} · {}", sample.family_fingerprint,
-                        seconds(now.saturating_sub(sample.sampled_at))),
+                        seconds(self.observation_age(sample.sampled_at, now))),
                 ),
             ),
             (

@@ -174,8 +174,9 @@ fn stored_symbolic_partitions_and_caller_sizes_keep_independent_scopes_and_ages(
         phase: "scalar_input".into(),
         sampled_at: Duration::from_secs(2),
     });
-    state.observe(observed, Duration::from_secs(10));
-    let view = state.view(Duration::from_secs(13));
+    // Reception/rendering and native samples intentionally use different epochs.
+    state.observe(observed, Duration::from_secs(100));
+    let view = state.view(Duration::from_secs(103));
     assert_eq!(
         row(&view.complexity, "Native unstarted roots / output keys"),
         "2 / 3"
@@ -198,7 +199,7 @@ fn stored_symbolic_partitions_and_caller_sizes_keep_independent_scopes_and_ages(
             .iter()
             .any(|(label, _)| label == "Full symbolic expression size")
     );
-    let published = state.presentation(Duration::from_secs(13));
+    let published = state.presentation(Duration::from_secs(103));
     assert_eq!(
         published["stored_symbolic_state"]["sample_age_seconds"],
         5.0
