@@ -118,7 +118,7 @@ Names and integer indices are accepted for node and edge lookup. Topology proper
 field on `drawing` are mutable. Endpoint-specific `source(..., data=...)` and
 `sink(..., data=...)` payloads are optional; use them only when the application has distinct
 half-edge data. Drawing fields include labels and styles as well as placement,
-routing, rank, size, bend, decoration, and half-edge anchor information. Put a
+routing, rank, size, bend, decoration, and half-edge anchor information. Put an
 application-specific field such as a particle or cut identifier in `drawing.extensions`; built-in
 field names are reserved and Linnet assigns no domain meaning to extensions. The native renderer
 accepts the subset described below.
