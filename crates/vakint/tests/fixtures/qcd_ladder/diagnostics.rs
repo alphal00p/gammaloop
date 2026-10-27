@@ -522,11 +522,1086 @@ fn prepared_ladder_weighted_preflight_without_ibps() -> Result<()> {
     Ok(())
 }
 
+/// One selected-witness handoff for the physical replay and frozen public corpus.
+/// Native owner transport is inspected here; no saved IBP rule is applied.
+struct CampaignCensus<'a> {
+    engine: &'a Vakint,
+    application: &'a SavedApplication,
+    settings: &'a VakintSettings,
+    binding: &'a serde_json::Value,
+    evidence: &'a std::path::Path,
+    physical: Option<CensusProjection>,
+}
+
+impl CampaignCensus<'_> {
+    fn contribution(
+        &self,
+        index: usize,
+        identity: &str,
+        original: crate::VakintTerm,
+    ) -> Result<serde_json::Value> {
+        use serde_json::json;
+        use std::time::Instant;
+        let engine = self.engine;
+        let application = self.application;
+        let settings = self.settings;
+        let binding = self.binding;
+        let evidence = self.evidence;
+        let mass = Atom::var(vk_symbol!("mUV"));
+        let started = Instant::now();
+        eprintln!("qcd_campaign_census contribution={index} phase=selected_witness_begin");
+        let mut matched = engine
+            .match_rustred_input(
+                settings,
+                original.integral.as_view(),
+                original.numerator.as_view(),
+            )?
+            .ok_or("quadratic source has no verified geometric witness")?;
+        let matching_seconds = started.elapsed().as_secs_f64();
+        let selected_witness = matched.to_string();
+        matched.apply_replacement_rules()?;
+        let mut term = original;
+        term.apply_scalar_numerator_replacement_rules(&matched, settings)?;
+        let descriptor = select(&matched.canonical_topology)?;
+        let input = MatchedScalarInput::prepare(
+            term.numerator.as_view(),
+            &matched,
+            &descriptor.momenta,
+            descriptor.physical_slots,
+            15,
+            settings,
+            ScalarNumeratorForm::PreserveProducts,
+        )?;
+        let prepared = application
+            .prepared
+            .lock()
+            .map_err(|error| error.to_string())?;
+        let scalar = FamilyScalarNumeratorService::try_new(
+            prepared.family(),
+            S.dot,
+            (1..=5).map(|axis| S.k.call(axis)).collect(),
+            settings.rustred_scalar_numerator_limits,
+        )?;
+        capture_weighted_input(evidence, index, &input, prepared.family())?;
+        let started = Instant::now();
+        let lowered =
+            scalar.lower_weighted(&input.numerator, &input.target, &input.mass_squared)?;
+        let lowering_seconds = started.elapsed().as_secs_f64();
+        let mut records = Vec::new();
+        let mut batches = BTreeMap::<(Atom, i64), Vec<usize>>::new();
+        let mut owner_images = Vec::new();
+        let mut origin = None;
+        let context = prepared.family().coefficient_context();
+        let exact_limits = settings
+            .rustred_application_options
+            .reduction_limits
+            .exact_algebra;
+        for lowered_term in lowered.terms() {
+            let key = lowered_term.integral();
+            let weight = super::super::combine_exact(
+                lowered_term.coefficient().to_expression() * lowered_term.scalar_spectator(),
+            );
+            let degree = key.powers().iter().sum::<i64>();
+            let mut mass_powers = Vec::new();
+            if let Some(physical) = self.physical {
+                let (projection, _, engineering_degree_balance) = physical.parameters();
+                for (monomial, coefficient) in weight.coefficient_list::<u16>(&[&mass]) {
+                    if coefficient.is_zero() {
+                        continue;
+                    }
+                    let exponent = if monomial.is_one() {
+                        0
+                    } else if monomial == mass {
+                        1
+                    } else if let AtomView::Pow(power) = monomial.as_view() {
+                        if power.get_base() != mass.as_view() {
+                            return Err("non-mass monomial".into());
+                        }
+                        i64::try_from(power.get_exp())?
+                    } else {
+                        return Err("nonmonomial mass dependence".into());
+                    };
+                    if exponent < 0
+                        || exponent % 2 != 0
+                        || degree - exponent / 2 != engineering_degree_balance
+                    {
+                        return Err(format!(
+                        "mapped key violates exact {projection} engineering mass-dimension balance D_key-j={engineering_degree_balance}"
+                    )
+                    .into());
+                    }
+                    mass_powers.push(exponent / 2);
+                }
+            }
+            let admitted = prepared.routed_entry_is_admitted(key)?;
+            if !admitted {
+                eprintln!(
+                    "qcd_campaign_census uncovered contribution={index} family={} powers={:?} mass_squared_powers={mass_powers:?}",
+                    prepared.family().name(),
+                    key.powers()
+                );
+            }
+            let mut native_images = Vec::new();
+            let owner_route = if admitted || self.physical.is_none() {
+                let routed = prepared.route_entry_to_owner(key)?;
+                let mut images = Vec::new();
+                for (endpoint, coefficient) in routed.terms() {
+                    if coefficient.is_zero() {
+                        continue;
+                    }
+                    let owner_weight =
+                        super::super::combine_exact(&weight * coefficient.to_expression());
+                    if self.physical.is_none() {
+                        native_images.push((
+                            endpoint.clone(),
+                            context.try_mul(
+                                lowered_term.coefficient(),
+                                coefficient,
+                                exact_limits,
+                            )?,
+                        ));
+                    }
+                    images.push(json!({"powers": endpoint.powers(), "weight": owner_weight.to_canonical_string(),
+                        "transport_coefficient": coefficient.to_expression().to_canonical_string(),
+                        "recorded_owner_admitted":prepared.entry_is_admitted(endpoint)?}));
+                }
+                Some(
+                    json!({"images": images, "nonzero_conditions": routed.nonzero_conditions().iter()
+                    .map(|coefficient| coefficient.to_expression().to_canonical_string()).collect::<Vec<_>>()}),
+                )
+            } else {
+                None
+            };
+            let exponent = key
+                .powers()
+                .iter()
+                .try_fold(0_i128, |sum, power| sum.checked_sub(i128::from(*power)))
+                .ok_or("saved application mass exponent overflow")?;
+            let exponent = i64::try_from(exponent)
+                .map_err(|_| RustRedEvaluationError::MassExponentOverflow { exponent })?;
+            if self.physical.is_none() {
+                let anchor = *origin.get_or_insert(exponent);
+                let channel = SavedApplication::mass_channel(
+                    lowered_term.scalar_spectator(),
+                    &input.mass_squared,
+                    exponent,
+                    anchor,
+                    settings
+                        .rustred_scalar_numerator_limits
+                        .diagnostics_enabled
+                        .then_some(
+                            settings
+                                .rustred_scalar_numerator_limits
+                                .max_scalar_product_degree,
+                        ),
+                );
+                batches.entry(channel).or_default().push(records.len());
+            }
+            owner_images.push(native_images);
+            records.push(json!({"powers": key.powers(), "weight": weight.to_canonical_string(),
+                "coefficient":lowered_term.coefficient().to_expression().to_canonical_string(),
+                "scalar_spectator":lowered_term.scalar_spectator().to_canonical_string(),
+                "original_mass_exponent":exponent,
+                "D_key": degree,"r_idx":key.powers().iter().filter(|power|**power<0).map(|power|-power).sum::<i64>(),
+                "omega_uv_at_d4_with_mass_fixed":20-2*degree,
+                "admitted": admitted, "mass_squared_powers": mass_powers, "owner_route": owner_route}));
+        }
+        let mut requests = Vec::new();
+        for ((spectator, exponent), indices) in batches {
+            let ordinal = requests.len();
+            let mut owner_terms = BTreeMap::<IntegralKey, Coefficient>::new();
+            let mut transport_conditions = BTreeSet::new();
+            for &row in &indices {
+                for condition in records[row]["owner_route"]["nonzero_conditions"]
+                    .as_array()
+                    .ok_or("missing request transport conditions")?
+                {
+                    transport_conditions.insert(
+                        condition
+                            .as_str()
+                            .ok_or("invalid transport condition")?
+                            .to_owned(),
+                    );
+                }
+                for (owner, coefficient) in &owner_images[row] {
+                    if let std::collections::btree_map::Entry::Occupied(mut entry) =
+                        owner_terms.entry(owner.clone())
+                    {
+                        let sum = context.try_add(entry.get(), coefficient, exact_limits)?;
+                        if sum.is_zero() {
+                            entry.remove();
+                        } else {
+                            *entry.get_mut() = sum;
+                        }
+                    } else if !coefficient.is_zero() {
+                        owner_terms.insert(owner.clone(), coefficient.clone());
+                    }
+                }
+            }
+            let terms = indices.into_iter().map(|row| {
+                records[row]["request_ordinal"] = json!(ordinal);
+                json!({"source_root_row":row,"powers":lowered.terms()[row].integral().powers(),
+                    "coefficient":lowered.terms()[row].coefficient().to_expression().to_canonical_string()})
+            }).collect::<Vec<_>>();
+            requests.push(json!({"ordinal":ordinal,"scalar_spectator":spectator.to_canonical_string(),
+                "integer_mass_exponent":exponent,"terms":terms,
+                "transport_nonzero_conditions":transport_conditions,
+                "caller_nonzero_conditions":lowered.nonzero_conditions().iter().map(AtomCore::to_canonical_string).collect::<Vec<_>>(),
+                "combined_owner_terms":owner_terms.into_iter().map(|(key,coefficient)|
+                    json!({"powers":key.powers(),"coefficient":coefficient.to_expression().to_canonical_string(),"stage":"route"})).collect::<Vec<_>>(),
+                "scope":"Exact production request before IBP; Native coefficients combined only within this batch"}));
+        }
+        let row = json!({"contribution": index, "source_identity":identity,"binding":binding,"topology": matched.canonical_topology.get_integral().name,
+            "family_fingerprint": prepared.family().fingerprint(), "target": input.target.powers(),
+            "selected_witness":selected_witness,"routed_numerator":input.numerator.to_canonical_string(),
+            "request_batches":requests,
+            "mass_squared": input.mass_squared.to_canonical_string(), "matching_seconds": matching_seconds,
+            "lowering_seconds": lowering_seconds, "roots": records,
+            "nonzero_conditions": lowered.nonzero_conditions().iter().map(AtomCore::to_canonical_string).collect::<Vec<_>>()});
+        Ok(row)
+    }
+}
+
+/// Authenticated inputs for the existing manual census, never reduction receipts.
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PublicCensusCorpus {
+    schema: String,
+    data_path: PathBuf,
+    data_manifest_sha256: String,
+    loop_manifest_sha256: String,
+    application_sha256: String,
+    source_inventory: CensusEvidence,
+    cases: Vec<PublicCensusCase>,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CensusEvidence {
+    path: PathBuf,
+    sha256: String,
+}
+
+impl CensusEvidence {
+    fn bytes(&self) -> Result<Vec<u8>> {
+        if !self.path.is_absolute() {
+            return Err("census evidence paths must be absolute".into());
+        }
+        let bytes = std::fs::read(&self.path)?;
+        if format!("{:x}", Sha256::digest(&bytes)) != self.sha256 {
+            return Err(format!("census evidence changed: {}", self.path.display()).into());
+        }
+        Ok(bytes)
+    }
+}
+
+#[derive(Clone, serde::Deserialize, serde::Serialize)]
+#[serde(deny_unknown_fields)]
+struct PublicCensusCase {
+    id: String,
+    role: String,
+    public_input: String,
+    public_input_sha256: String,
+}
+
+#[derive(serde::Deserialize)]
+struct ExplicitSourceInventory {
+    schema: String,
+    raw_source_union_count: usize,
+    direct_owner_source_union_count: usize,
+    source_rows: Vec<ExplicitTrainingSource>,
+}
+
+#[derive(serde::Deserialize)]
+struct ExplicitTrainingSource {
+    source: String,
+    source_raw_keys: Vec<Vec<i64>>,
+    source_direct_owner_keys: Vec<Vec<i64>>,
+}
+
+#[derive(serde::Serialize)]
+struct SourceQualification {
+    source: String,
+    raw_keys: BTreeSet<Vec<i64>>,
+    direct_owner_keys: BTreeSet<Vec<i64>>,
+    historical_direct_owner_keys: BTreeSet<Vec<i64>>,
+    current_owner_images_match_historical: bool,
+}
+
+#[derive(serde::Serialize)]
+struct OwnerTransportImage {
+    powers: Vec<i64>,
+    coefficient: String,
+    recorded_owner_admitted: bool,
+}
+
+#[derive(serde::Serialize)]
+struct SourceTransport {
+    powers: Vec<i64>,
+    recorded_coverage_admitted: bool,
+    images: Vec<OwnerTransportImage>,
+    nonzero_conditions: Vec<String>,
+}
+
+#[derive(serde::Serialize)]
+struct CensusRoots {
+    #[serde(rename = "actual_lowered_roots")]
+    raw: BTreeSet<Vec<i64>>,
+    #[serde(rename = "protected_owner_roots")]
+    owners: BTreeSet<Vec<i64>>,
+    #[serde(rename = "original_coverage_admitted")]
+    covered: bool,
+}
+
+#[derive(serde::Serialize)]
+struct CaseSourceOverlap {
+    source: String,
+    raw_overlap: Vec<Vec<i64>>,
+    owner_overlap: Vec<Vec<i64>>,
+}
+
+#[derive(serde::Serialize)]
+struct CasePairOverlap {
+    left: String,
+    right: String,
+    raw_overlap: Vec<Vec<i64>>,
+    owner_overlap: Vec<Vec<i64>>,
+}
+
+#[derive(serde::Serialize)]
+struct CensusLowering {
+    parsed_input: String,
+    canonical_scalar_handoff: String,
+    #[serde(flatten)]
+    roots: CensusRoots,
+    explicit_sources_disjoint: bool,
+    nonempty_candidate: bool,
+    source_overlaps: Vec<CaseSourceOverlap>,
+    contributions: Vec<serde_json::Value>,
+}
+
+#[derive(serde::Serialize)]
+struct CaseQualification {
+    #[serde(flatten)]
+    case: PublicCensusCase,
+    family_fingerprint: String,
+    application_binding: serde_json::Value,
+    lowering_complete: bool,
+    #[serde(flatten)]
+    lowering: Option<CensusLowering>,
+    error: Option<String>,
+    native_before: String,
+    native_after: String,
+    native_work_unchanged: bool,
+    reduction_succeeded: Option<bool>,
+    ibp_application: bool,
+    frozen: bool,
+}
+
+impl CaseQualification {
+    fn qualified(&self) -> bool {
+        self.lowering_complete
+            && self.lowering.as_ref().is_some_and(|lowering| {
+                lowering.roots.covered
+                    && lowering.explicit_sources_disjoint
+                    && lowering.nonempty_candidate
+            })
+    }
+}
+
+impl PublicCensusCorpus {
+    fn validate(&self) -> Result<()> {
+        if self.schema != "vakint.public-input-lowering-corpus.v1" || self.cases.is_empty() {
+            return Err("unknown or empty public lowering corpus".into());
+        }
+        if self
+            .cases
+            .iter()
+            .filter(|case| case.role == "held_out")
+            .count()
+            < 12
+            || !self.cases.iter().any(|case| case.role == "tuning")
+        {
+            return Err("freeze at least twelve held-out inputs and one tuning input".into());
+        }
+        if !self.data_path.is_absolute() {
+            return Err("public census requires an absolute local data checkout".into());
+        }
+        for hash in [
+            &self.data_manifest_sha256,
+            &self.loop_manifest_sha256,
+            &self.application_sha256,
+            &self.source_inventory.sha256,
+        ] {
+            if hash.len() != 64 || !hash.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+                return Err("invalid public census evidence digest".into());
+            }
+        }
+        let mut ids = BTreeSet::new();
+        let mut inputs = BTreeSet::new();
+        for case in &self.cases {
+            if case.id.is_empty()
+                || !case
+                    .id
+                    .bytes()
+                    .all(|c| c.is_ascii_alphanumeric() || b"_-".contains(&c))
+                || !ids.insert(&case.id)
+                || !matches!(case.role.as_str(), "tuning" | "held_out")
+                || case.public_input.trim().is_empty()
+                || !inputs.insert(&case.public_input)
+                || format!("{:x}", Sha256::digest(case.public_input.as_bytes()))
+                    != case.public_input_sha256
+            {
+                return Err("invalid, duplicate or changed frozen public input".into());
+            }
+        }
+        Ok(())
+    }
+
+    /// A candidate inspection retains the full declaration and its role, but
+    /// never certifies that the complete held-out suite has been qualified.
+    fn selected_cases(&self, candidate: Option<&str>) -> Result<Vec<&PublicCensusCase>> {
+        match candidate {
+            None => Ok(self.cases.iter().collect()),
+            Some(id) => self
+                .cases
+                .iter()
+                .find(|case| case.id == id)
+                .map(|case| vec![case])
+                .ok_or_else(|| {
+                    format!("candidate {id:?} is absent from the input declaration").into()
+                }),
+        }
+    }
+
+    fn validate_data(&self) -> Result<()> {
+        for (file, expected) in [
+            ("manifest.json", &self.data_manifest_sha256),
+            ("5L/manifest.json", &self.loop_manifest_sha256),
+            ("5L/ibps/application.json", &self.application_sha256),
+        ] {
+            if format!(
+                "{:x}",
+                Sha256::digest(std::fs::read(self.data_path.join(file))?)
+            ) != *expected
+            {
+                return Err(format!("public census data binding changed: {file}").into());
+            }
+        }
+        Ok(())
+    }
+
+    /// Keep request identities even when display weights cancel across batches.
+    fn root_sets(contributions: &[serde_json::Value]) -> Result<CensusRoots> {
+        let mut raw = BTreeSet::new();
+        let mut owners = BTreeSet::new();
+        let mut covered = true;
+        for contribution in contributions {
+            for root in contribution["roots"]
+                .as_array()
+                .ok_or("missing complete raw roots")?
+            {
+                let powers: Vec<i64> = serde_json::from_value(root["powers"].clone())?;
+                if powers.len() != 15 {
+                    return Err("invalid raw root arity".into());
+                }
+                raw.insert(powers);
+                covered &= root["admitted"] == true;
+                for image in root["owner_route"]["images"]
+                    .as_array()
+                    .ok_or("missing complete owner transport")?
+                {
+                    let powers: Vec<i64> = serde_json::from_value(image["powers"].clone())?;
+                    if powers.len() != 15 {
+                        return Err("invalid owner root arity".into());
+                    }
+                    owners.insert(powers);
+                }
+            }
+        }
+        Ok(CensusRoots {
+            raw,
+            owners,
+            covered,
+        })
+    }
+
+    fn write_document(
+        directory: &std::path::Path,
+        name: &str,
+        value: &serde_json::Value,
+    ) -> Result<()> {
+        use std::io::Write;
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(directory.join(name))?;
+        serde_json::to_writer_pretty(&mut file, value)?;
+        file.write_all(b"\n")?;
+        file.sync_all()?;
+        std::fs::File::open(directory)?.sync_all()?;
+        Ok(())
+    }
+
+    fn keys(keys: &[Vec<i64>]) -> Result<BTreeSet<Vec<i64>>> {
+        let set = keys.iter().cloned().collect::<BTreeSet<_>>();
+        if keys.iter().any(|key| key.len() != 15) || keys.len() != set.len() {
+            return Err("census keys must be unique ordered fifteen-axis identities".into());
+        }
+        Ok(set)
+    }
+
+    fn compile_identity() -> Result<serde_json::Value> {
+        let mut identity = serde_json::Map::new();
+        for (name, value) in [
+            (
+                "base_main_revision",
+                option_env!("VAKINT_LOWERING_BUILD_BASE_REVISION"),
+            ),
+            (
+                "private_source_snapshot_sha256",
+                option_env!("VAKINT_LOWERING_BUILD_SOURCE_SHA256"),
+            ),
+            (
+                "native_revision",
+                option_env!("VAKINT_LOWERING_BUILD_NATIVE_REVISION"),
+            ),
+            (
+                "native_source_snapshot_sha256",
+                option_env!("VAKINT_LOWERING_BUILD_NATIVE_SHA256"),
+            ),
+            (
+                "kernel_revision",
+                option_env!("VAKINT_LOWERING_BUILD_KERNEL_REVISION"),
+            ),
+            ("rustc", option_env!("VAKINT_LOWERING_BUILD_RUSTC")),
+            ("profile", option_env!("VAKINT_LOWERING_BUILD_PROFILE")),
+        ] {
+            let value = value
+                .filter(|value| !value.trim().is_empty())
+                .ok_or_else(|| format!("missing census build identity: {name}"))?;
+            let expected = if name.ends_with("sha256") {
+                Some(64)
+            } else if name.ends_with("revision") {
+                Some(40)
+            } else {
+                None
+            };
+            if expected.is_some_and(|length| {
+                value.len() != length || !value.bytes().all(|byte| byte.is_ascii_hexdigit())
+            }) {
+                return Err(format!("invalid census build identity: {name}").into());
+            }
+            identity.insert(name.to_owned(), value.into());
+        }
+        identity.insert(
+            "diagnostic_source_sha256".into(),
+            format!("{:x}", Sha256::digest(include_bytes!("diagnostics.rs"))).into(),
+        );
+        identity.insert(
+            "executable_sha256".into(),
+            format!(
+                "{:x}",
+                Sha256::digest(std::fs::read(std::env::current_exe()?)?)
+            )
+            .into(),
+        );
+        Ok(identity.into())
+    }
+
+    fn run(path: PathBuf) -> Result<()> {
+        use crate::{
+            EvaluationMethod, EvaluationOrder, OfficialExternalDataOptions,
+            RustRedEvaluationOptions, RustRedMasterMode,
+        };
+        use serde_json::json;
+
+        let bytes = std::fs::read(&path)?;
+        let corpus: Self = serde_json::from_slice(&bytes)?;
+        corpus.validate()?;
+        let candidate = match std::env::var("VAKINT_PUBLIC_LOWERING_CASE") {
+            Ok(id) => Some(id),
+            Err(std::env::VarError::NotPresent) => None,
+            Err(error) => return Err(error.into()),
+        };
+        let selected_cases = corpus.selected_cases(candidate.as_deref())?;
+        let source_identity = Self::compile_identity()?;
+        let inventory_bytes = corpus.source_inventory.bytes()?;
+        let inventory: ExplicitSourceInventory = serde_json::from_slice(&inventory_bytes)?;
+        if inventory.schema != "vakint.five-source-current-public-root-audit.v1" {
+            return Err("unknown five-source exclusion inventory".into());
+        }
+        let sources = &inventory.source_rows;
+        let expected = BTreeSet::from([
+            "accepted-small-two-root",
+            "old-completed-node-prefix",
+            "q0-current-public-replay",
+            "tuning-120",
+            "q-monitor-1089",
+        ]);
+        let actual = sources
+            .iter()
+            .map(|source| source.source.as_str())
+            .collect::<BTreeSet<_>>();
+        if actual != expected || sources.len() != expected.len() {
+            return Err(
+                "all five explicit training source categories are required exactly once".into(),
+            );
+        }
+        corpus.validate_data()?;
+        let evidence = PathBuf::from(
+            std::env::var_os("VAKINT_QCD_WEIGHT_EVIDENCE")
+                .ok_or("set new census evidence directory")?,
+        );
+        if !evidence.is_absolute() {
+            return Err("census evidence directory must be absolute".into());
+        }
+        std::fs::create_dir(&evidence)?;
+        let mut settings = VakintSettings {
+            evaluation_order: EvaluationOrder(vec![EvaluationMethod::RustRed(
+                RustRedEvaluationOptions {
+                    master_mode: RustRedMasterMode::Retain,
+                },
+            )]),
+            form_exe_path: "/public-census-must-not-use-form".into(),
+            use_dot_product_notation: true,
+            ..Default::default()
+        };
+        settings.rustred_application_options.unresolved_policy =
+            rustred::solver::UnresolvedPolicy::Preserve;
+        settings.rustred_application_options.entry_coverage_policy =
+            rustred_app::SavedApplicationEntryCoveragePolicy::Advisory;
+        settings.rustred_application_options.cache_representation =
+            rustred::solver::CandidateCacheRepresentation::Sparse;
+        settings.rustred_application_options.preparation_workers = 1;
+        let mut engine = Vakint::new()?;
+        let load = engine.load_official_external_data(
+            5,
+            &OfficialExternalDataOptions {
+                local_artifacts_path: Some(corpus.data_path.clone()),
+                load_prepared_caches: false,
+                ..Default::default()
+            },
+        )?;
+        let cache_attachments = (1..=5)
+            .map(|loops| -> Result<_> {
+                Ok((loops, engine.cache_statistics(loops)?.has_read_backing()))
+            })
+            .collect::<Result<BTreeMap<_, _>>>()?;
+        if load
+            .loops
+            .iter()
+            .map(|pack| pack.loop_count)
+            .collect::<Vec<_>>()
+            != [1, 2, 3, 4, 5]
+            || load
+                .loops
+                .iter()
+                .any(|pack| pack.cache_loaded || pack.source != "local")
+            || cache_attachments.values().any(|attached| *attached)
+        {
+            return Err(
+                "census must load only local cumulative data without prepared caches".into(),
+            );
+        }
+        engine.validate_settings(&settings)?;
+        let application = engine.saved_application(&settings)?;
+        let binding = engine
+            .cache_statistics(5)?
+            .saved_application
+            .ok_or("missing application binding")?
+            .to_document()["binding"]
+            .clone();
+        let native_before = {
+            let prepared = application
+                .prepared
+                .lock()
+                .map_err(|error| error.to_string())?;
+            let owners = prepared.owner_preparation_statistics();
+            if owners.preparation_attempts != 0
+                || owners.prepared_owners != 0
+                || prepared.cache_statistics().rule_applications() != 0
+            {
+                return Err(
+                    "census session unexpectedly prepared owner formulas or applied rules".into(),
+                );
+            }
+            (
+                owners,
+                prepared.cache_statistics(),
+                prepared.cache_work_statistics(),
+            )
+        };
+        let mut mapped_sources = Vec::new();
+        let mut training_raw = BTreeSet::new();
+        let mut training_owners = BTreeSet::new();
+        let mut historical_training_owners = BTreeSet::new();
+        let mut training_transports = BTreeMap::<Vec<i64>, SourceTransport>::new();
+        let mut sources_agree = true;
+        for source in sources {
+            let raw = Self::keys(&source.source_raw_keys)?;
+            let historical_owners = Self::keys(&source.source_direct_owner_keys)?;
+            let mut owners = BTreeSet::new();
+            for key in &raw {
+                if !training_transports.contains_key(key) {
+                    let prepared = application
+                        .prepared
+                        .lock()
+                        .map_err(|error| error.to_string())?;
+                    let integral = IntegralKey::try_new(key.clone())?;
+                    let mapped = prepared.route_entry_to_owner(&integral)?;
+                    let images = mapped
+                        .terms()
+                        .iter()
+                        .filter(|(_, coefficient)| !coefficient.is_zero())
+                        .map(|(owner, coefficient)| -> Result<OwnerTransportImage> {
+                            Ok(OwnerTransportImage {
+                                powers: owner.powers().to_vec(),
+                                coefficient: coefficient.to_expression().to_canonical_string(),
+                                recorded_owner_admitted: prepared.entry_is_admitted(owner)?,
+                            })
+                        })
+                        .collect::<Result<Vec<_>>>()?;
+                    // This is routed_entry_is_admitted's original endpoint
+                    // predicate after a successful verified route, without
+                    // executing that same transport a second time.
+                    training_transports.insert(
+                        key.clone(),
+                        SourceTransport {
+                            powers: key.clone(),
+                            recorded_coverage_admitted: images
+                                .iter()
+                                .all(|image| image.recorded_owner_admitted),
+                            images,
+                            nonzero_conditions: mapped
+                                .nonzero_conditions()
+                                .iter()
+                                .map(|guard| guard.to_expression().to_canonical_string())
+                                .collect(),
+                        },
+                    );
+                }
+                for image in &training_transports[key].images {
+                    owners.insert(image.powers.clone());
+                }
+            }
+            sources_agree &= owners == historical_owners;
+            training_raw.extend(raw.iter().cloned());
+            training_owners.extend(owners.iter().cloned());
+            historical_training_owners.extend(historical_owners.iter().cloned());
+            mapped_sources.push(SourceQualification {
+                source: source.source.clone(),
+                raw_keys: raw,
+                current_owner_images_match_historical: owners == historical_owners,
+                direct_owner_keys: owners,
+                historical_direct_owner_keys: historical_owners,
+            });
+        }
+        if training_raw.len() != inventory.raw_source_union_count
+            || historical_training_owners.len() != inventory.direct_owner_source_union_count
+        {
+            return Err(
+                "complete source inventories differ from authenticated union counts".into(),
+            );
+        }
+        let family = application
+            .prepared
+            .lock()
+            .map_err(|error| error.to_string())?
+            .family()
+            .fingerprint()
+            .to_owned();
+        let mut rows = Vec::new();
+        for case in selected_cases {
+            engine.clear_rustred_application_cache()?;
+            let case_native_before = {
+                let prepared = application
+                    .prepared
+                    .lock()
+                    .map_err(|error| error.to_string())?;
+                (
+                    prepared.owner_preparation_statistics(),
+                    prepared.cache_statistics(),
+                    prepared.cache_work_statistics(),
+                )
+            };
+            let case_dir = evidence.join(&case.id);
+            std::fs::create_dir(&case_dir)?;
+            let outcome = (|| -> Result<CensusLowering> {
+                let input =
+                    crate::vakint_parse!(&case.public_input).map_err(|error| error.to_string())?;
+                let mut expression = VakintExpression::try_from(input.as_view())?;
+                expression.canonicalize(&settings, &engine.topologies, false)?;
+                expression.tensor_reduce(&engine, &settings)?;
+                let handoff = Atom::from(expression);
+                let terms = VakintExpression::split_integrals(handoff.as_view())?;
+                let census = CampaignCensus {
+                    engine: &engine,
+                    application: &application,
+                    settings: &settings,
+                    binding: &binding,
+                    evidence: &case_dir,
+                    physical: None,
+                };
+                let mut contributions = Vec::new();
+                for (index, term) in terms.into_iter().enumerate() {
+                    let identity = format!(
+                        "{:x}",
+                        Sha256::digest(serde_json::to_vec(&(
+                            term.integral.to_canonical_string(),
+                            term.numerator.to_canonical_string()
+                        ))?)
+                    );
+                    let row = census.contribution(index, &identity, term)?;
+                    contributions.push(row);
+                }
+                let roots = Self::root_sets(&contributions)?;
+                let overlaps = mapped_sources
+                    .iter()
+                    .map(|source| CaseSourceOverlap {
+                        source: source.source.clone(),
+                        raw_overlap: roots.raw.intersection(&source.raw_keys).cloned().collect(),
+                        owner_overlap: roots
+                            .owners
+                            .intersection(&source.direct_owner_keys)
+                            .cloned()
+                            .collect(),
+                    })
+                    .collect();
+                Ok(CensusLowering {
+                    parsed_input: input.to_canonical_string(),
+                    canonical_scalar_handoff: handoff.to_canonical_string(),
+                    explicit_sources_disjoint: roots.raw.is_disjoint(&training_raw)
+                        && roots.owners.is_disjoint(&training_owners),
+                    nonempty_candidate: !roots.raw.is_empty() && !roots.owners.is_empty(),
+                    roots,
+                    source_overlaps: overlaps,
+                    contributions,
+                })
+            })();
+            let (lowering, error) = match outcome {
+                Ok(lowering) => (Some(lowering), None),
+                Err(error) => (None, Some(error.to_string())),
+            };
+            let case_native_after = {
+                let prepared = application
+                    .prepared
+                    .lock()
+                    .map_err(|error| error.to_string())?;
+                (
+                    prepared.owner_preparation_statistics(),
+                    prepared.cache_statistics(),
+                    prepared.cache_work_statistics(),
+                )
+            };
+            let unchanged = case_native_before == case_native_after;
+            let row = CaseQualification {
+                case: case.clone(),
+                family_fingerprint: family.clone(),
+                application_binding: binding.clone(),
+                lowering_complete: lowering.is_some() && unchanged,
+                lowering,
+                error: if unchanged {
+                    error
+                } else {
+                    Some("lower-only case changed Native owner or cache work".into())
+                },
+                native_before: format!("{case_native_before:?}"),
+                native_after: format!("{case_native_after:?}"),
+                native_work_unchanged: unchanged,
+                reduction_succeeded: None,
+                ibp_application: false,
+                frozen: false,
+            };
+            Self::write_document(
+                &case_dir,
+                "qualification.json",
+                &serde_json::to_value(&row)?,
+            )?;
+            rows.push(row);
+        }
+        let native_after = {
+            let prepared = application
+                .prepared
+                .lock()
+                .map_err(|error| error.to_string())?;
+            (
+                prepared.owner_preparation_statistics(),
+                prepared.cache_statistics(),
+                prepared.cache_work_statistics(),
+            )
+        };
+        if native_before != native_after
+            || application
+                .cache
+                .lock()
+                .map_err(|error| error.to_string())?
+                .is_some()
+        {
+            return Err(
+                "lower-only corpus changed native owner/cache work or attached capture".into(),
+            );
+        }
+        let mut pairs = Vec::new();
+        for (index, row) in rows.iter().enumerate() {
+            let Some(lowering) = &row.lowering else {
+                continue;
+            };
+            for other in rows.iter().skip(index + 1) {
+                let Some(other_lowering) = &other.lowering else {
+                    continue;
+                };
+                pairs.push(CasePairOverlap {
+                    left: row.case.id.clone(),
+                    right: other.case.id.clone(),
+                    raw_overlap: lowering
+                        .roots
+                        .raw
+                        .intersection(&other_lowering.roots.raw)
+                        .cloned()
+                        .collect(),
+                    owner_overlap: lowering
+                        .roots
+                        .owners
+                        .intersection(&other_lowering.roots.owners)
+                        .cloned()
+                        .collect(),
+                });
+            }
+        }
+        let complete = sources_agree
+            && rows.iter().all(CaseQualification::qualified)
+            && pairs
+                .iter()
+                .all(|pair| pair.raw_overlap.is_empty() && pair.owner_overlap.is_empty());
+        let report = json!({"schema":if candidate.is_some() {"vakint.public-input-lowering-candidate-qualification.v1"} else {"vakint.public-input-lowering-owner-qualification.v1"},
+            "qualification_complete":candidate.is_none()&&complete,"candidate_qualified":candidate.as_ref().map(|_|complete),
+            "requested_candidate":candidate,"declared_case_count":corpus.cases.len(),
+            "source_identity":source_identity,"input_corpus":{"path":path,"sha256":format!("{:x}",Sha256::digest(&bytes))},
+            "source_inventory":{"path":corpus.source_inventory.path,"sha256":corpus.source_inventory.sha256},"data":load,
+            "persistent_cache_attachments":cache_attachments,
+            "data_manifest_sha256":corpus.data_manifest_sha256,"loop_manifest_sha256":corpus.loop_manifest_sha256,"application_sha256":corpus.application_sha256,
+            "semantic_binding":binding,"family_fingerprint":family,"application_options":format!("{:?}",settings.rustred_application_options),
+            "scalar_limits":format!("{:?}",settings.rustred_scalar_numerator_limits),"matching_limits":format!("{:?}",settings.rustred_momentum_match_limits),
+            "native_before":format!("{native_before:?}"),"native_after":format!("{native_after:?}"),"native_work_unchanged":true,
+            "coverage_authority":"Original recorded entry predicates; Advisory permits verified owner inspection only",
+            "sources":mapped_sources,"source_transports":training_transports.into_values().collect::<Vec<_>>(),"source_owner_images_match_historical":sources_agree,
+            "raw_source_union_count":training_raw.len(),"direct_owner_source_union_count":training_owners.len(),"cases":rows,"case_overlaps":pairs,
+            "reduction_succeeded":null,"ibp_application":false,"measurement_claim_allowed":false,"cache_selection_claim":false,"frozen":false,
+            "acceptance":"Requires independent coefficient/guard/exclusion postflight before freeze; incidental cache descendants are not excluded"});
+        if std::fs::read(&path)? != bytes || corpus.source_inventory.bytes()? != inventory_bytes {
+            return Err("corpus or source inventory changed during inspection".into());
+        }
+        corpus.validate_data()?;
+        Self::write_document(&evidence, "public-corpus-qualification.json", &report)?;
+        if !complete {
+            return Err("public corpus has incomplete, uncovered, zero or overlapping candidates; see qualification report".into());
+        }
+        Ok(())
+    }
+}
+
+#[test]
+fn public_census_requires_complete_immutable_input_identities() -> Result<()> {
+    use serde_json::{Value, json};
+    let cases = (0..13).map(|index| {
+        let input = format!("topo(prop(1,edge(1,1),k(1),1,{}))", index + 1);
+        json!({"id":format!("case-{index}"),"role":if index==0 {"tuning"} else {"held_out"},
+            "public_input_sha256":format!("{:x}",Sha256::digest(input.as_bytes())),"public_input":input})
+    }).collect::<Vec<_>>();
+    let document = json!({"schema":"vakint.public-input-lowering-corpus.v1","data_path":"/unused-local-checkout",
+        "data_manifest_sha256":"0".repeat(64),"loop_manifest_sha256":"1".repeat(64),"application_sha256":"2".repeat(64),
+        "source_inventory":{"path":"/unused-source-inventory","sha256":"3".repeat(64)},"cases":cases});
+    let valid = |value: Value| -> bool {
+        serde_json::from_value::<PublicCensusCorpus>(value)
+            .is_ok_and(|corpus| corpus.validate().is_ok())
+    };
+    assert!(valid(document.clone()));
+    let corpus: PublicCensusCorpus = serde_json::from_value(document.clone())?;
+    assert_eq!(corpus.selected_cases(None)?.len(), 13);
+    let selected = corpus.selected_cases(Some("case-12"))?;
+    assert_eq!(selected.len(), 1);
+    assert_eq!(selected[0].id, "case-12");
+    assert_eq!(selected[0].role, "held_out");
+    assert!(corpus.selected_cases(Some("missing-case")).is_err());
+    let mut changed = document.clone();
+    changed["cases"].as_array_mut().unwrap().pop();
+    assert!(!valid(changed), "eleven held-out inputs are insufficient");
+    for (field, replacement) in [
+        ("id", json!("case-1")),
+        ("id", json!("../escape")),
+        ("role", json!("training")),
+        ("role", json!("held_out")),
+        ("public_input", json!("changed")),
+        ("public_input_sha256", json!("0".repeat(64))),
+    ] {
+        let mut changed = document.clone();
+        changed["cases"][0][field] = replacement;
+        assert!(!valid(changed), "invalid corpus field accepted: {field}");
+    }
+    let mut changed = document.clone();
+    changed["reduction_succeeded"] = json!(true);
+    assert!(
+        !valid(changed),
+        "lower-only inputs cannot masquerade as reduction receipts"
+    );
+    let mut changed = document;
+    changed["cases"][0]["unknown"] = json!(true);
+    assert!(!valid(changed));
+    Ok(())
+}
+
+#[test]
+fn public_census_conservative_roots_survive_cross_request_cancellation() -> Result<()> {
+    use serde_json::json;
+    let raw = vec![1_i64; 15];
+    let owner = vec![2_i64; 15];
+    let zero = vec![0_i64; 15];
+    let contributions = [
+        json!({"roots":[{"powers":raw,"weight":"1","request_ordinal":0,"admitted":true,
+            "owner_route":{"images":[{"powers":owner,"weight":"1"}],"nonzero_conditions":["d-2"]}}]}),
+        json!({"roots":[{"powers":raw,"weight":"-1","request_ordinal":1,"admitted":true,
+            "owner_route":{"images":[{"powers":owner,"weight":"-1"}],"nonzero_conditions":["d-2"]}},
+            {"powers":zero,"weight":"1","request_ordinal":2,"admitted":false,
+            "owner_route":{"images":[],"nonzero_conditions":["d"]}}]}),
+    ];
+    let roots = PublicCensusCorpus::root_sets(&contributions)?;
+    assert_eq!(roots.raw, BTreeSet::from([raw, zero]));
+    assert_eq!(roots.owners, BTreeSet::from([owner]));
+    assert!(!roots.covered);
+    assert_eq!(
+        contributions[1]["roots"][1]["owner_route"]["nonzero_conditions"],
+        json!(["d"])
+    );
+    Ok(())
+}
+
+#[test]
+fn public_census_checks_key_arity_and_preserves_public_symbol_namespaces() -> Result<()> {
+    assert!(PublicCensusCorpus::keys(&[vec![1_i64; 14]]).is_err());
+    assert!(PublicCensusCorpus::keys(&[vec![1_i64; 15], vec![1_i64; 15]]).is_err());
+    assert_eq!(PublicCensusCorpus::keys(&[vec![1_i64; 15]])?.len(), 1);
+    Vakint::initialize_vakint_symbols();
+    let input = crate::vakint_parse!("dot(k(1),k(1))*topo(prop(1,edge(1,1),k(1),1,1))")
+        .map_err(|error| error.to_string())?;
+    let symbols = input.get_all_symbols(true);
+    for expected in [S.dot, S.k, S.topo, S.prop, S.edge] {
+        assert!(
+            symbols.contains(&expected),
+            "public input namespace changed"
+        );
+    }
+    Ok(())
+}
+
 /// Replays an explicitly supplied prepared integrand for an early campaign
 /// census. Fresh native preparation is still required by the slow acceptance.
 #[test]
 #[ignore = "manual selected-witness census; requires prepared input and explicit local external data"]
 fn prepared_ladder_selected_campaign_census_without_ibps() -> Result<()> {
+    if let Some(path) = std::env::var_os("VAKINT_PUBLIC_LOWERING_CORPUS") {
+        return PublicCensusCorpus::run(path.into());
+    }
     use crate::{
         EvaluationMethod, EvaluationOrder, OfficialExternalDataOptions, RustRedEvaluationOptions,
         RustRedMasterMode,
@@ -644,7 +1719,6 @@ fn prepared_ladder_selected_campaign_census_without_ibps() -> Result<()> {
         }
     }
     let mut contributions = Vec::new();
-    let mass = Atom::var(vk_symbol!("mUV"));
     for (index, original) in terms.into_iter().enumerate() {
         let identity = format!(
             "{:x}",
@@ -695,116 +1769,17 @@ fn prepared_ladder_selected_campaign_census_without_ibps() -> Result<()> {
             contributions.push(row);
             continue;
         }
-        let started = Instant::now();
-        eprintln!("qcd_campaign_census contribution={index} phase=selected_witness_begin");
-        let mut matched = engine
-            .match_rustred_input(
-                &settings,
-                original.integral.as_view(),
-                original.numerator.as_view(),
-            )?
-            .ok_or("quadratic source has no verified geometric witness")?;
-        let matching_seconds = started.elapsed().as_secs_f64();
-        matched.apply_replacement_rules()?;
-        let mut term = original;
-        term.apply_scalar_numerator_replacement_rules(&matched, &settings)?;
-        let descriptor = select(&matched.canonical_topology)?;
-        let input = MatchedScalarInput::prepare(
-            term.numerator.as_view(),
-            &matched,
-            &descriptor.momenta,
-            descriptor.physical_slots,
-            15,
-            &settings,
-            ScalarNumeratorForm::PreserveProducts,
-        )?;
-        let prepared = application
-            .prepared
-            .lock()
-            .map_err(|error| error.to_string())?;
-        let scalar = FamilyScalarNumeratorService::try_new(
-            prepared.family(),
-            S.dot,
-            (1..=5).map(|axis| S.k.call(axis)).collect(),
-            settings.rustred_scalar_numerator_limits,
-        )?;
-        capture_weighted_input(&evidence, index, &input, prepared.family())?;
-        let started = Instant::now();
-        let lowered =
-            scalar.lower_weighted(&input.numerator, &input.target, &input.mass_squared)?;
-        let lowering_seconds = started.elapsed().as_secs_f64();
-        let mut records = Vec::new();
-        for lowered_term in lowered.terms() {
-            let key = lowered_term.integral();
-            let weight = super::super::combine_exact(
-                lowered_term.coefficient().to_expression() * lowered_term.scalar_spectator(),
-            );
-            let degree = key.powers().iter().sum::<i64>();
-            let mut mass_powers = Vec::new();
-            for (monomial, coefficient) in weight.coefficient_list::<u16>(&[&mass]) {
-                if coefficient.is_zero() {
-                    continue;
-                }
-                let exponent = if monomial.is_one() {
-                    0
-                } else if monomial == mass {
-                    1
-                } else if let AtomView::Pow(power) = monomial.as_view() {
-                    if power.get_base() != mass.as_view() {
-                        return Err("non-mass monomial".into());
-                    }
-                    i64::try_from(power.get_exp())?
-                } else {
-                    return Err("nonmonomial mass dependence".into());
-                };
-                if exponent < 0
-                    || exponent % 2 != 0
-                    || degree - exponent / 2 != engineering_degree_balance
-                {
-                    return Err(format!(
-                        "mapped key violates exact {projection} engineering mass-dimension balance D_key-j={engineering_degree_balance}"
-                    )
-                    .into());
-                }
-                mass_powers.push(exponent / 2);
-            }
-            let admitted = prepared.routed_entry_is_admitted(key)?;
-            if !admitted {
-                eprintln!(
-                    "qcd_campaign_census uncovered contribution={index} family={} powers={:?} mass_squared_powers={mass_powers:?}",
-                    prepared.family().name(),
-                    key.powers()
-                );
-            }
-            let owner_route = if admitted {
-                let routed = prepared.route_entry_to_owner(key)?;
-                let mut images = Vec::new();
-                for (endpoint, coefficient) in routed.terms() {
-                    if coefficient.is_zero() {
-                        continue;
-                    }
-                    let owner_weight =
-                        super::super::combine_exact(&weight * coefficient.to_expression());
-                    images.push(json!({"powers": endpoint.powers(), "weight": owner_weight.to_canonical_string(),
-                        "transport_coefficient": coefficient.to_expression().to_canonical_string()}));
-                }
-                Some(
-                    json!({"images": images, "nonzero_conditions": routed.nonzero_conditions().iter()
-                    .map(|coefficient| coefficient.to_expression().to_canonical_string()).collect::<Vec<_>>()}),
-                )
-            } else {
-                None
-            };
-            records.push(json!({"powers": key.powers(), "weight": weight.to_canonical_string(),
-                "D_key": degree,"r_idx":key.powers().iter().filter(|power|**power<0).map(|power|-power).sum::<i64>(),
-                "omega_uv_at_d4_with_mass_fixed":20-2*degree,
-                "admitted": admitted, "mass_squared_powers": mass_powers, "owner_route": owner_route}));
+        let row = CampaignCensus {
+            engine: &engine,
+            application: &application,
+            settings: &settings,
+            binding: &binding,
+            evidence: &evidence,
+            physical: Some(CensusProjection::from_requested(
+                requested_projection.as_deref(),
+            )?),
         }
-        let row = json!({"contribution": index, "source_identity":identity,"binding":binding,"topology": matched.canonical_topology.get_integral().name,
-            "family_fingerprint": prepared.family().fingerprint(), "target": input.target.powers(),
-            "mass_squared": input.mass_squared.to_canonical_string(), "matching_seconds": matching_seconds,
-            "lowering_seconds": lowering_seconds, "roots": records,
-            "nonzero_conditions": lowered.nonzero_conditions().iter().map(AtomCore::to_canonical_string).collect::<Vec<_>>()});
+        .contribution(index, &identity, original)?;
         std::fs::write(
             evidence.join(format!("contribution-{identity}.json")),
             serde_json::to_vec_pretty(&row)?,
