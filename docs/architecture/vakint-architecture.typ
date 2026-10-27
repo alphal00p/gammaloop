@@ -104,6 +104,15 @@ gracefully if surviving unknown integrals or declared terminals lack required co
 Uncomputed declared pack masters remain valid retained results. Prepared caches accept strict
 completed reductions, including valid captured descendants, and never store partial results.
 
+Retained master polynomials are combined once by the catalogue, independently for each full
+terminal-product scalar coefficient, including coefficients of undeclared residuals. Mass powers,
+measure normalization and symbolic spectators remain in those coefficients. A surviving terminal
+inside an opaque function or composite denominator requires general exact combination instead;
+raw Float input keeps the expanded-only policy. The resulting sum need not have the same serialized
+shape as a single global rational expression. Agreement requires exact equality of every complete
+master-product coefficient and the full guard/family metadata, rather than matching term counts or
+a finite Laurent truncation.
+
 Both FORM-backed and RustRed evaluation use the same tagged sixth-root HPL evaluator. FORM
 reduction scripts and hard-coded master formulas remain intact. Opaque finite master data does
 not become an arbitrary-precision constant through a symbolic name.
@@ -224,7 +233,7 @@ the displayed sample age continues to grow instead of claiming fresh memory read
 
 Five-loop retained evaluation also reports coverage/mass batching (with actual lowered
 keys checked), guard and coefficient materialization, normalization and notation conversion,
-both outer and catalogue exact-combination passes, residual catalogue classification,
+catalogue coefficient combination, residual catalogue classification,
 result packing and natural completed-batch cleanup. Caller phases cover work before
 and after native reduction; monitoring inspects existing Atom headers rather than creating
 another expression for monitoring. Each recorded stage duration is one completed

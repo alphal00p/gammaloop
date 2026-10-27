@@ -730,11 +730,6 @@ impl Vakint {
                 families.extend(result.families);
                 log::debug!(target: "vakint::saved_application", "phase=caller_result_merge elapsed_seconds={:.6}", merge_started.elapsed().as_secs_f64());
             }
-            MonitorContext::native_phase(observation.as_deref_mut(), "retained_master_combination", Some(value.as_view()));
-            let combination_started = std::time::Instant::now();
-            MonitorContext::native_phase(observation.as_deref_mut(), "retained_outer_exact_combination", Some(value.as_view()));
-            let value = super::combine_exact(value);
-            log::debug!(target: "vakint::saved_application", "phase=retained_outer_exact_combination elapsed_seconds={:.6}", combination_started.elapsed().as_secs_f64());
             // The catalogue's own exact-combination and classification spans
             // are children of this complete finalization call.
             let finalization_started = std::time::Instant::now();
