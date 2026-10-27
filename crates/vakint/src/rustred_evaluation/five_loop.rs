@@ -616,7 +616,7 @@ impl Vakint {
         settings: &VakintSettings,
         input: AtomView,
     ) -> Result<RustRedSymbolicEvaluation, VakintError> {
-        self.evaluate_rustred_symbolic_observed(settings, input, None)
+        self.evaluate_rustred_symbolic_observed(settings, input, None, None)
     }
 
     /// Retain exact five-loop masters and guards with optional per-call diagnostics.
@@ -626,8 +626,8 @@ impl Vakint {
         input: AtomView,
         monitor: &RustRedMonitorOptions,
     ) -> Result<RustRedSymbolicEvaluation, VakintError> {
-        MonitorContext::run(monitor, |observation| {
-            self.evaluate_rustred_symbolic_observed(settings, input, observation)
+        MonitorContext::run(monitor, |observation, progress| {
+            self.evaluate_rustred_symbolic_observed(settings, input, observation, progress)
         })
     }
 
@@ -636,6 +636,7 @@ impl Vakint {
         settings: &VakintSettings,
         input: AtomView,
         mut observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
+        progress: Option<&super::monitor::CallerProgress>,
     ) -> Result<RustRedSymbolicEvaluation, VakintError> {
         settings.with_resource_budget(|| {
             MonitorContext::native_phase(observation.as_deref_mut(), "saved_application_preparation", Some(input));
@@ -680,7 +681,7 @@ impl Vakint {
                 // subphases must not be added to it as disjoint durations.
                 let detailed_started = std::time::Instant::now();
                 let result =
-                    application.evaluate_detailed(&tensor_settings, term.numerator.as_view(), &matched, observation.as_deref_mut());
+                    application.evaluate_detailed(&tensor_settings, term.numerator.as_view(), &matched, observation.as_deref_mut(), progress);
                 log::debug!(target: "vakint::saved_application", "phase=detailed_evaluation_total elapsed_seconds={:.6}", detailed_started.elapsed().as_secs_f64());
                 let result = result?;
                 let merge_started = std::time::Instant::now();
@@ -874,7 +875,7 @@ impl SavedApplication {
         observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
     ) -> Result<Atom, VakintError> {
         Ok(self
-            .evaluate_detailed(settings, numerator, matched, observation)?
+            .evaluate_detailed(settings, numerator, matched, observation, None)?
             .value)
     }
 
@@ -884,6 +885,7 @@ impl SavedApplication {
         numerator: AtomView,
         matched: &ReplacementRules,
         mut observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
+        progress: Option<&super::monitor::CallerProgress>,
     ) -> Result<RustRedSymbolicEvaluation, VakintError> {
         MonitorContext::native_phase(observation.as_deref_mut(), "scalar_lowering", None);
         let lowering_started = std::time::Instant::now();
@@ -1114,7 +1116,13 @@ impl SavedApplication {
                 "retained_guard_materialization",
                 None,
             );
-            for condition in normalized.nonzero_conditions() {
+            let mut guard_progress = progress.map(|owner| {
+                owner.phase(
+                    "retained_guard_materialization",
+                    normalized.nonzero_conditions().len(),
+                )
+            });
+            for (index, condition) in normalized.nonzero_conditions().iter().enumerate() {
                 let condition = condition.to_expression();
                 if condition.is_zero()
                     || condition
@@ -1131,6 +1139,9 @@ impl SavedApplication {
                         .replace(dimension.to_pattern())
                         .with(physical_dimension.to_pattern()),
                 );
+                if let Some(progress) = &mut guard_progress {
+                    progress.completed(index + 1);
+                }
             }
             log::debug!(target: "vakint::saved_application", "phase=retained_guard_materialization elapsed_seconds={:.6}", guards_started.elapsed().as_secs_f64());
             let coefficients_started = std::time::Instant::now();
@@ -1139,7 +1150,13 @@ impl SavedApplication {
                 "retained_coefficient_materialization",
                 Some(contribution.as_view()),
             );
-            for (product, coefficient) in normalized.terms() {
+            let mut coefficient_progress = progress.map(|owner| {
+                owner.phase(
+                    "retained_coefficient_materialization",
+                    normalized.terms().len(),
+                )
+            });
+            for (index, (product, coefficient)) in normalized.terms().iter().enumerate() {
                 let master = product
                     .iter()
                     .map(|factor| {
@@ -1156,6 +1173,9 @@ impl SavedApplication {
                     .replace(dimension.to_pattern())
                     .with(physical_dimension.to_pattern())
                     * master;
+                if let Some(progress) = &mut coefficient_progress {
+                    progress.completed(index + 1);
+                }
             }
             log::debug!(target: "vakint::saved_application", "phase=retained_coefficient_materialization elapsed_seconds={:.6}", coefficients_started.elapsed().as_secs_f64());
             let mass_power =
@@ -1497,7 +1517,7 @@ mod tests {
             .unwrap();
         assert_scalar_limit(
             application
-                .evaluate_detailed(&strict, term.numerator.as_view(), &matched, None)
+                .evaluate_detailed(&strict, term.numerator.as_view(), &matched, None, None)
                 .unwrap_err(),
         );
         let after = vakint.rustred_application_cache_statistics().unwrap();

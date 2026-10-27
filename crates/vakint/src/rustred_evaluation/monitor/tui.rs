@@ -196,7 +196,7 @@ pub(super) fn draw(frame: &mut Frame<'_>, view: &MonitorView, no_color: bool) ->
         return 0;
     }
     let [header, body, footer] = Layout::vertical([
-        Constraint::Length(4),
+        Constraint::Length(if area.width < 88 { 8 } else { 6 }),
         Constraint::Min(0),
         Constraint::Length(1),
     ])
@@ -427,13 +427,13 @@ fn draw_help(frame: &mut Frame<'_>, area: Rect, no_color: bool) {
     frame.render_widget(
         Paragraph::new(
             "q              Detach this display; reduction continues\n\
-             space          Freeze / resume only the display\n\
+             space          Freeze native panels; clocks and memory stay live\n\
              ↑ / ↓          Scroll all observation panels\n\
              PgUp / PgDn    Scroll by a page\n\
              ?              Close this help\n\n\
-             Age measures time since a native observation. Long native\n\
-             operations need not emit a heartbeat. Estimates are supplied\n\
-             by the model, not a percentage of an unknown dependency DAG.",
+             Observer, native and OS sample ages have distinct clocks.\n\
+             Opaque work is indeterminate; the UI heartbeat stays live.\n\
+             ETA is not a percentage of an unknown dependency DAG.",
         )
         .block(panel("Monitor help".into(), no_color))
         .wrap(Wrap { trim: false }),

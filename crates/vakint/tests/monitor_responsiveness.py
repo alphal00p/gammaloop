@@ -1,0 +1,382 @@
+"""Exercise synthetic monitor fixtures in a fresh, continuously drained real PTY.
+
+No registry, saved data, cache, numerical evaluator or reduction is loaded. The
+caller supplies the freshly built libtest ELF and its authenticated SHA256.
+"""
+
+from __future__ import annotations
+
+import argparse
+import codecs
+import fcntl
+import hashlib
+import itertools
+import json
+import os
+import pty
+import re
+import select
+import signal
+import struct
+import subprocess
+import sys
+import termios
+import time
+import unicodedata
+from pathlib import Path
+
+CASES = {
+    "embedded-silence": "rustred_evaluation::monitor::runtime::responsiveness_tests::real_pty_silent_or_blocked_publisher_keeps_controls_live",
+    "blocked-publisher": "rustred_evaluation::monitor::runtime::responsiveness_tests::real_pty_silent_or_blocked_publisher_keeps_controls_live",
+    "viewer-silence": "rustred_evaluation::monitor::viewer::tests::real_pty_silent_worker_keeps_live_resources_and_detaches_without_control",
+}
+CSI = re.compile(r"\x1b\[([0-?]*)([ -/]*)([@-~])")
+
+
+class Screen:
+    """The cursor-addressed VT subset emitted by Crossterm (no external package)."""
+
+    def __init__(self, width=240, height=80):
+        self.width, self.height = width, height
+        self.grid = [[" "] * width for _ in range(height)]
+        self.x = self.y = 0
+        self.pending = ""
+        self.decoder = codecs.getincrementaldecoder("utf-8")("replace")
+
+    def feed(self, data):
+        self.pending += self.decoder.decode(data)
+        while self.pending:
+            ch = self.pending[0]
+            if ch == "\x1b":
+                match = CSI.match(self.pending)
+                if not match:
+                    if self.pending.startswith("\x1b[") or len(self.pending) == 1:
+                        return
+                    self.pending = self.pending[2:]
+                    continue
+                self.pending = self.pending[match.end() :]
+                args, _, op = match.groups()
+                values = [int(v) if v else 0 for v in args.lstrip("?").split(";")]
+                n = values[0] or 1
+                if op in "Hf":
+                    self.y = min((values[0] or 1) - 1, self.height - 1)
+                    self.x = min(
+                        (values[1] if len(values) > 1 else 1) - 1, self.width - 1
+                    )
+                elif op == "G":
+                    self.x = min(n - 1, self.width - 1)
+                elif op == "d":
+                    self.y = min(n - 1, self.height - 1)
+                elif op in "ABCD":
+                    self.x = min(
+                        max(self.x + (n if op == "C" else -n if op == "D" else 0), 0),
+                        self.width - 1,
+                    )
+                    self.y = min(
+                        max(self.y + (n if op == "B" else -n if op == "A" else 0), 0),
+                        self.height - 1,
+                    )
+                elif op == "J" and values[0] in (2, 3):
+                    self.grid = [[" "] * self.width for _ in range(self.height)]
+                elif op == "K":
+                    start, end = (
+                        (0, self.width)
+                        if values[0] == 2
+                        else (0, self.x + 1)
+                        if values[0] == 1
+                        else (self.x, self.width)
+                    )
+                    self.grid[self.y][start:end] = [" "] * (end - start)
+                continue
+            self.pending = self.pending[1:]
+            if ch == "\r":
+                self.x = 0
+            elif ch == "\n":
+                self.y = min(self.y + 1, self.height - 1)
+            elif ch >= " " and not unicodedata.combining(ch):
+                if self.x >= self.width:
+                    self.x = 0
+                    self.y = min(self.y + 1, self.height - 1)
+                self.grid[self.y][self.x] = ch
+                self.x += 2 if unicodedata.east_asian_width(ch) in "WF" else 1
+
+    def text(self):
+        return "\n".join("".join(row).rstrip() for row in self.grid)
+
+
+def identity(pid):
+    path = Path("/proc") / str(pid)
+    stat = (path / "stat").read_text()
+    return {
+        "pid": pid,
+        "start_ticks": int(stat[stat.rfind(")") + 2 :].split()[19]),
+        "uid": path.stat().st_uid,
+    }
+
+
+def available():
+    return next(
+        int(line.split()[1]) * 1024
+        for line in Path("/proc/meminfo").read_text().splitlines()
+        if line.startswith("MemAvailable:")
+    )
+
+
+def run_case(binary, scenario, output, cpus):
+    case = output / scenario
+    case.mkdir()
+    snapshot = case / "snapshot.json"
+    master, slave = pty.openpty()
+    fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 80, 240, 0, 0))
+    original = termios.tcgetattr(slave)
+    env = os.environ.copy()
+    env.update(
+        TERM="xterm-256color",
+        VAKINT_MONITOR_PTY_SCENARIO=scenario,
+        VAKINT_MONITOR_PTY_SNAPSHOT=str(snapshot),
+        OMP_NUM_THREADS="1",
+        MKL_NUM_THREADS="1",
+        RAYON_NUM_THREADS="1",
+        TMPDIR=str(case),
+    )
+    env.pop("NO_COLOR", None)
+    command = [
+        "taskset",
+        "-c",
+        cpus,
+        str(binary),
+        "--exact",
+        CASES[scenario],
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1",
+        "--color",
+        "never",
+    ]
+    process = subprocess.Popen(
+        [sys.executable, str(Path(__file__).resolve()), "--pty-exec", *command],
+        stdin=slave,
+        stdout=slave,
+        stderr=slave,
+        env=env,
+        start_new_session=True,
+        close_fds=True,
+    )
+    owned = identity(process.pid)
+    pidfd = os.pidfd_open(process.pid)
+    captured = bytearray()
+    screen = Screen()
+    start = time.monotonic()
+    ready = q_sent = detached = None
+    actions = set()
+    observations = []
+    latest_publication = None
+    before_detach = None
+    result = {
+        "scenario": scenario,
+        "command": command,
+        "process": owned,
+        "floor_bytes": 110_000_000_000,
+    }
+    try:
+        while process.poll() is None:
+            now = time.monotonic()
+            if now - start > 50:
+                raise RuntimeError(
+                    "synthetic PTY fixture exceeded its diagnostic 50s deadline"
+                )
+            free = available()
+            if free < 110_000_000_000:
+                raise RuntimeError(
+                    "owned synthetic fixture stopped below its 110GB host floor"
+                )
+            if select.select([master], [], [], 0.05)[0]:
+                try:
+                    data = os.read(master, 65536)
+                except OSError:
+                    data = b""
+                captured.extend(data)
+                screen.feed(data)
+            if ready is None and f"PTY_READY:{scenario}".encode() in captured:
+                ready = now
+            if ready is None:
+                continue
+            elapsed = now - ready
+            for action, when, key in [
+                ("help", 3, b"?"),
+                ("close-help", 4, b"?"),
+                ("freeze", 8, b" "),
+            ]:
+                if elapsed >= when and action not in actions:
+                    os.write(master, key)
+                    actions.add(action)
+            if scenario == "embedded-silence" and snapshot.exists():
+                document = json.loads(snapshot.read_text())
+                monitor = document["monitor"]
+                published = monitor["published_unix_seconds"]
+                if published != latest_publication:
+                    observations.append(
+                        {
+                            "publication": published,
+                            "event_age": monitor["event_age_seconds"],
+                            "phase_elapsed": monitor["phase_elapsed_seconds"],
+                            "sequence": document.get("sequence"),
+                            "rss": monitor["resources"]["rss_bytes"],
+                            "MemAvailable": monitor["resources"]["mem_available_bytes"],
+                            "resource_age": monitor["resources"]["sample_age_seconds"],
+                            "verified": monitor["resources"][
+                                "process_identity_verified"
+                            ],
+                        }
+                    )
+                    latest_publication = published
+            if elapsed >= 36 and q_sent is None:
+                before_detach = screen.text()
+                (case / "screen-before-detach.txt").write_text(before_detach)
+                assert "synthetic" in before_detach and "active" in before_detach
+                assert "display frozen" in before_detach
+                assert (
+                    "Process RSS" in before_detach and "MemAvailable" in before_detach
+                )
+                assert "indeterminate" in before_detach.lower()
+                assert any(
+                    float(age) >= 35
+                    for age in re.findall(r"active (\d+\.\d+)s", before_detach)
+                )
+                if scenario == "blocked-publisher":
+                    assert b"PTY_SINK_BLOCKED:blocked-publisher" in captured
+                    assert b"PTY_SINK_RELEASED:blocked-publisher" not in captured
+                q_sent = now
+                os.write(master, b"q")
+            if q_sent is not None and detached is None:
+                if f"PTY_DETACHED:{scenario}".encode() in captured:
+                    detached = now
+                    assert detached - q_sent < 1, (
+                        "detach or terminal restoration took >=1s"
+                    )
+                    assert termios.tcgetattr(slave) == original, (
+                        "terminal state was not restored before producer resumed"
+                    )
+                    assert process.poll() is None, "paused caller unexpectedly finished"
+                    os.write(master, b"continue\n")
+                elif now - q_sent >= 1:
+                    raise RuntimeError("no detach acknowledgment within 1s")
+        while select.select([master], [], [], 0)[0]:
+            try:
+                data = os.read(master, 65536)
+            except OSError:
+                break
+            if not data:
+                break
+            captured.extend(data)
+        assert process.returncode == 0, captured.decode(errors="replace")[-5000:]
+        assert ready is not None and detached is not None
+        assert f"PTY_DONE:{scenario}".encode() in captured
+        if scenario == "blocked-publisher":
+            assert b"PTY_SINK_RELEASED:blocked-publisher" in captured
+        if scenario == "embedded-silence":
+            assert len(observations) >= 30
+            gaps = [
+                b["publication"] - a["publication"]
+                for a, b in itertools.pairwise(observations)
+            ]
+            assert max(gaps) < 2, "independent publication heartbeat stalled"
+            assert (
+                observations[-1]["event_age"] >= 35
+                and observations[-1]["phase_elapsed"] >= 35
+            )
+            sequences = {
+                row["sequence"] for row in observations if row["sequence"] is not None
+            }
+            assert len(sequences) == 1, "heartbeat fabricated native observer events"
+            verified = [row for row in observations if row["verified"]]
+            assert (
+                verified
+                and verified[0]["publication"] - observations[0]["publication"] < 2
+            )
+            assert all(
+                row["rss"] and row["MemAvailable"] and row["resource_age"] < 1.5
+                for row in verified
+            )
+            assert all(
+                row["verified"]
+                for row in observations
+                if row["publication"] >= verified[0]["publication"]
+            )
+        result.update(
+            status="PASS",
+            exit_code=process.returncode,
+            quiet_seconds=q_sent - ready,
+            detach_seconds=detached - q_sent,
+            elapsed_seconds=time.monotonic() - start,
+            observations=observations,
+        )
+    except BaseException as error:
+        result.update(status="FAIL", error=f"{type(error).__name__}: {error}")
+        raise
+    finally:
+        try:
+            if process.poll() is None:
+                try:
+                    still_owned = identity(process.pid) == owned
+                except (FileNotFoundError, ProcessLookupError):
+                    still_owned = False
+                if still_owned:
+                    try:
+                        os.killpg(process.pid, signal.SIGTERM)
+                    except ProcessLookupError:
+                        pass
+                    try:
+                        process.wait(timeout=1)
+                    except subprocess.TimeoutExpired:
+                        try:
+                            os.killpg(process.pid, signal.SIGKILL)
+                        except ProcessLookupError:
+                            pass
+                        process.wait()
+        finally:
+            try:
+                (case / "terminal.bin").write_bytes(captured)
+                (case / "result.json").write_text(json.dumps(result, indent=2) + "\n")
+            finally:
+                os.close(pidfd)
+                os.close(master)
+                os.close(slave)
+    return result
+
+
+def main():
+    if sys.argv[1:2] == ["--pty-exec"]:
+        # Popen already created a session; this fresh helper now claims its
+        # terminal and execs the fixture without an unsafe post-fork callback.
+        fcntl.ioctl(0, termios.TIOCSCTTY, 0)
+        os.execvp(sys.argv[2], sys.argv[2:])
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--binary", type=Path, required=True)
+    parser.add_argument("--binary-sha256", required=True)
+    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--cpus", default="200-203")
+    args = parser.parse_args()
+    assert args.binary.is_absolute() and args.output.is_absolute()
+    assert hashlib.sha256(args.binary.read_bytes()).hexdigest() == args.binary_sha256
+    args.output.mkdir()
+    results = [
+        run_case(args.binary, scenario, args.output, args.cpus) for scenario in CASES
+    ]
+    (args.output / "result.json").write_text(
+        json.dumps(
+            {
+                "schema": "vakint.synthetic-monitor-pty.v1",
+                "status": "PASS",
+                "binary": str(args.binary),
+                "binary_sha256": args.binary_sha256,
+                "cases": results,
+            },
+            indent=2,
+        )
+        + "\n"
+    )
+
+
+if __name__ == "__main__":
+    main()

@@ -708,3 +708,30 @@ fn current_canonical_degrees_are_not_maxima_or_physical_input_ranks() {
     assert!(row(&view.complexity, "Current canonical native key").contains("unknown"));
     assert_eq!(row(&view.complexity, "Max seen canonical R"), "99");
 }
+
+#[test]
+fn phase_clock_and_resources_remain_live_while_native_panels_are_frozen() {
+    let mut state = MonitorState::default();
+    let mut event = snapshot(10, 7, 3, 1);
+    event.phase = "retained_outer_exact_combination".into();
+    event.phase_started_at = Duration::from_secs(10);
+    state.observe(event, Duration::from_secs(20));
+    state.apply(UiAction::ToggleFreeze, Duration::from_secs(20));
+    state.latest.resources.rss_bytes = Some(12345);
+    state.latest.resource_sample_at = Some(Duration::from_secs(56));
+    let view = state.view(Duration::from_secs(56));
+    assert!(view.frozen);
+    assert!(view.subtitle.contains("active 36.0s"));
+    assert!(view.subtitle.contains("event age 36.0s"));
+    assert!(row(&view.cache, "Process RSS / peak").contains("12.1 KiB"));
+    assert!(state.presentation(Duration::from_secs(56))["caller_work"].is_null());
+    assert_eq!(
+        state.presentation(Duration::from_secs(56))["phase_elapsed_seconds"],
+        36.0
+    );
+    assert_eq!(
+        state.presentation(Duration::from_secs(56))["event_age_seconds"],
+        36.0
+    );
+    assert_eq!(state.latest.completed_unique, Some(3));
+}

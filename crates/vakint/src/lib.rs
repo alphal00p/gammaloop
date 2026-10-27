@@ -7085,7 +7085,7 @@ Evaluated (n_loops=1, mu_r=1) :
         input: AtomView,
         monitor: &RustRedMonitorOptions,
     ) -> Result<Atom, VakintError> {
-        MonitorContext::run(monitor, |observation| {
+        MonitorContext::run(monitor, |observation, _progress| {
             self.evaluate_observed(settings, input, observation)
         })
     }
