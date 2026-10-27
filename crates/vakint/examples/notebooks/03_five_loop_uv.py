@@ -277,6 +277,49 @@ def _(Gallery, benchmark_job, job_refresh, mo):
 
 @app.cell(hide_code=True)
 def _(Gallery, mo):
+    mo.vstack(
+        [
+            Gallery.section(
+                mo,
+                "05 / saved coefficients",
+                "Load the result without repeating its reduction",
+                "The exact retained Atom and 300-digit scalar coefficients are available offline in the companion example.",
+            ),
+            Gallery.metrics(
+                mo,
+                [
+                    ("55", "individual master identities"),
+                    ("58", "formal master products"),
+                    ("449", "scalar Laurent coefficients"),
+                    ("300", "validated exported decimal digits"),
+                ],
+            ),
+            Gallery.note(
+                mo,
+                "Masters remain formal",
+                "The scalar coefficients use unit mass and renormalization scale, retain GC_11^10, and include epsilon^5 with a coefficientwise O(epsilon^6) remainder. Five-loop master values are not evaluated; their own poles prevent interpreting this as a complete amplitude expansion through epsilon^5.",
+            ),
+            mo.md("""
+            From the repository root, verify all saved values without IBPs:
+
+            ```sh
+            python crates/vakint/examples/five_loop_q0_coefficients.py verify
+            ```
+
+            Native Atom and exact-ratio JSON preserve component precision.
+            Numerical `.expr` is a human display.
+
+            [Retained native Atom](https://github.com/alphal00p/gammaloop/raw/refs/heads/vakint_rustred/crates/vakint/examples/data/five_loop_q0/q0-retained.atom)
+            · [Coefficient records](https://github.com/alphal00p/gammaloop/blob/vakint_rustred/crates/vakint/examples/data/five_loop_q0/coefficient-table.json)
+            · [Conventions and commands](https://github.com/alphal00p/gammaloop/blob/vakint_rustred/crates/vakint/docs/five_loop_q0_coefficients.pdf)
+            """),
+        ]
+    )
+    return
+
+
+@app.cell(hide_code=True)
+def _(Gallery, mo):
     Gallery.footer(mo)
     return
 

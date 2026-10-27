@@ -1,0 +1,38 @@
+{
+  "schema": "vakint.q0-coefficient-export-repair-control.v1",
+  "status": "PASS",
+  "plan_sha256": "be8b021abab680b9e30f494b60a9e117321d8d989fb3e2370612e0dddfd9b4fa",
+  "root_go_sha256": "b1702d328d243882a64699f5195243c85dbd79a4f5d74beb766ca4f1cd0397c4",
+  "command": [
+    "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/consolidated-python-host-ed265/venv/bin/python",
+    "-B",
+    "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/q0-master-coefficient-artifacts-20261027/export-metadata-repair1/finalize_exports.py",
+    "--plan",
+    "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/q0-master-coefficient-artifacts-20261027/export-metadata-repair1/plan.json",
+    "--plan-sha256",
+    "be8b021abab680b9e30f494b60a9e117321d8d989fb3e2370612e0dddfd9b4fa",
+    "--output",
+    "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/q0-master-coefficient-artifacts-20261027/export-metadata-repair1/artifacts-run1"
+  ],
+  "cpus": [
+    180,
+    181,
+    182,
+    183
+  ],
+  "math_threads": 1,
+  "free_ram_floor_bytes": 110000000000,
+  "no_IBP_or_cache_io": true,
+  "numerical_coefficient_evaluations": 0,
+  "scope": "saved exact-zero export metadata and independent validation only",
+  "signals_sent": [],
+  "pid": 3478174,
+  "start_ticks": 115858654,
+  "returncode": 0,
+  "provenance_sha256": "941d5a2e888557e8cabd8e8ab118935e95631be0a16110bd28a41e49436db36a",
+  "elapsed_seconds": 2.204763890011236,
+  "minimum_machine_available_bytes": 620152381440,
+  "maximum_observed_rss_bytes": 65789952,
+  "maximum_observed_vmhwm_bytes": 65789952,
+  "memory_scope": "One-second exact owned PIDFD/start-tick samples; observed maxima may miss the final peak; no new process RAM quota."
+}

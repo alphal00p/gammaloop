@@ -1,0 +1,177 @@
+{
+  "schema": "vakint.saved-q0-coefficients.validation.v1",
+  "status": "PASS_FOCUSED_CHECKS",
+  "feature_base": "da901e0f87670fbed5d47660c42f6f30ba89d506",
+  "source_files": {
+    "nix/rust-workspace.nix": {
+      "sha256": "453ce28478673b13c14cfb5f56d529d0528c052e35d8ea1c25ff14a85a66424c",
+      "bytes": 121630
+    },
+    "crates/vakint/docs/five_loop_q0_coefficients.typ": {
+      "sha256": "ada0a0b2117bbcc03ac01fd8d8ffd244ba23bc9c85811809bea45fe4746895c1",
+      "bytes": 7258
+    },
+    "crates/vakint/docs/five_loop_q0_coefficients.pdf": {
+      "sha256": "f62bb76d4263af9125904a5287c41433346797b44d747d17d0606bf8ec02476a",
+      "bytes": 70497
+    },
+    "crates/vakint/tests/fixtures/qcd_ladder/preparation.typ": {
+      "sha256": "fe97d6f554fa407a13fe68052627e4a2616e71a1c5084ed7a7cd516b37e0c15c",
+      "bytes": 12587
+    },
+    "crates/vakint/tests/python/precision_inspection_smoke.py": {
+      "sha256": "e56449c07bffb07994538a510f2483d026c86ca752b619bba46e9e6d7bf12d95",
+      "bytes": 27244
+    },
+    "crates/vakint/examples/five_loop_qcd_ladder.rs": {
+      "sha256": "cf5954dc575251151fa2b84aab9f47e39809dc1c3b2a6a0fc870777b582a1844",
+      "bytes": 58448
+    },
+    "crates/vakint/examples/notebooks/03_five_loop_uv.py": {
+      "sha256": "3fbb0c4fedbbdb6114f3c2da1ccb358902a23b6886a5ce3cfb4b28ab0273087f",
+      "bytes": 12821
+    },
+    "crates/vakint/examples/five_loop_q0_coefficients.py": {
+      "sha256": "d46186dfc76320bbedcc5d7ba33b812f65f83a46335dd5803d68edc74b059d31",
+      "bytes": 2688
+    },
+    "crates/vakint/examples/q0_coefficients/__init__.py": {
+      "sha256": "d3c3dacc6f76170207275963998bc779651f6104b7e5813339b8ce9962ae60ea",
+      "bytes": 187
+    },
+    "crates/vakint/examples/q0_coefficients/artifacts.py": {
+      "sha256": "07b287a76bb04cd6eba4ae26fab3662cf404b10ffacdbd6e1e20b1c0983f7279",
+      "bytes": 17349
+    },
+    "crates/vakint/examples/q0_coefficients/generate.py": {
+      "sha256": "4772185e76cfb8cc6eba794a396c16138aea0b5537f75559402d53433be00ef9",
+      "bytes": 20213
+    },
+    "crates/vakint/examples/q0_coefficients/series.py": {
+      "sha256": "0fbef0e2f41ba9ed2ca6f6c3eae3bfaa5a8ddccde86bbfdc29999d3049829093",
+      "bytes": 23502
+    }
+  },
+  "asset_files": {
+    "coefficient-table.json": {
+      "sha256": "2e7624955a01f50a78a07e2f62ce05197b4e66fa4d2d25c90dd416b9deea2e8e",
+      "bytes": 4842059
+    },
+    "provenance.json": {
+      "sha256": "941d5a2e888557e8cabd8e8ab118935e95631be0a16110bd28a41e49436db36a",
+      "bytes": 209451
+    },
+    "q0-coefficients-300digits-through-epsilon5.atom": {
+      "sha256": "63987cf3773e78a9a07a199462717cd6900a1bd5898cbccd4abb1ec0ffc60680",
+      "bytes": 64763
+    },
+    "q0-coefficients-300digits-through-epsilon5.expr": {
+      "sha256": "77d1e6dc95b8c9c3fe5c7426581c29c86f87e0631bd9432606b8dc035770fab8",
+      "bytes": 152801
+    },
+    "q0-coefficients-exact-through-epsilon5.atom": {
+      "sha256": "788ce01d6851bb30bbca5faee203c839ed3a14ba82eadc2d8f4008e4043105c2",
+      "bytes": 54344
+    },
+    "q0-coefficients-exact-through-epsilon5.expr": {
+      "sha256": "eedc233a37e3b86c0f25b52b3051b0e46070ed2d7a96fa953e4952c57d0977b4",
+      "bytes": 223867
+    },
+    "q0-retained.atom": {
+      "sha256": "2a29e8c1169ea709aa406ba355f6dca88139f8f2ed2069821f0e898f6d368be4",
+      "bytes": 1321201
+    },
+    "q0-retained.expr": {
+      "sha256": "da909dc0b8f199a9ce46c27368bd2d1c88b277d72e765ab70f9a83680caa1212",
+      "bytes": 6683821
+    }
+  },
+  "receipt_files": {
+    "standalone-result.json": {
+      "sha256": "c1c54b6fe5f74c641cb9c00717cc9ebc69f466d7be9e70577bedc996bc5d5785",
+      "bytes": 2883
+    },
+    "standalone-control.json": {
+      "sha256": "576c1c9aca1b2a325a421bcb15ef2f09a900b0593159606b83613cbf8e2c70f5",
+      "bytes": 730
+    },
+    "canonical-consumer-result.json": {
+      "sha256": "bd01a7dc83661c62527967ab097701c682cae07732db5842c5cc8c2ebff2be31",
+      "bytes": 3474
+    },
+    "canonical-consumer-control.json": {
+      "sha256": "c74ca7f6994eea1762f891d0a9636bcf3870efb5b70139e48362b978af5de250",
+      "bytes": 735
+    },
+    "font-harness-failure-result.json": {
+      "sha256": "6ff4f453d7cd4fa965bbbbfa4b518b1c27bb54674c011fe41504711c2c3548e8",
+      "bytes": 3022
+    },
+    "font-harness-failure-control.json": {
+      "sha256": "42c1b79263a49498ae5b781952e9b5d7576bd02caf5087ae73bf061b0ddc2dc5",
+      "bytes": 691
+    },
+    "asset-validation-result.json": {
+      "sha256": "51d1d199db473e261bfeac37c4b56c1eb69aa00254fc064d7ffb13c94f6f4dc1",
+      "bytes": 3399
+    },
+    "asset-validation-control.json": {
+      "sha256": "6197637fb4af273e344a0b9fd2bdd3adca1c1444fb69f889e4008d858cb6e8ae",
+      "bytes": 1774
+    },
+    "export-resume-control.json": {
+      "sha256": "d2a19ea05794b66d7f9af61504b377f27008b3534bdad51b26816a0c5ce540af",
+      "bytes": 1721
+    },
+    "original-export-failure-control.json": {
+      "sha256": "20023e29ef99d5778bf265a23d92b2eaabd6a3d7be36bbe8f1be4c476a66b2b6",
+      "bytes": 1597
+    }
+  },
+  "scientific_input_sha256": "da909dc0b8f199a9ce46c27368bd2d1c88b277d72e765ab70f9a83680caa1212",
+  "asset_provenance_sha256": "941d5a2e888557e8cabd8e8ab118935e95631be0a16110bd28a41e49436db36a",
+  "scope": {
+    "individual_master_symbols": 55,
+    "formal_master_products": 58,
+    "scalar_Laurent_coefficients": 449,
+    "component_records": 898,
+    "included_epsilon_power": 5,
+    "coefficientwise_remainder_starts_at": 6,
+    "requested_decimal_precision": 300,
+    "fixed_guard_decimal_digits": 32,
+    "minimum_tracked_nonzero_decimal_precision": 330,
+    "exported_nonzero_decimal_precision": 300,
+    "actual_449_coefficient_fixture_regenerations_during_source_integration": 0
+  },
+  "independent_source_reviews": {
+    "public_artifact_loader_CLI_gallery_Nix_inputs": "PASS by /root/heavy_owned_native_file/writer_source_audit/public_q0_generator; source-only, no reviewer edits",
+    "exact_factorwise_algorithm_and_document_conventions": "PASS by exact-recurrence/source peers; independent native-unit Series and Fraction proof also exercised by tests",
+    "tests_and_documentation": "PASS by /root/heavy_owned_native_file/writer_source_audit/heavy_control_peer and its source peer; all executed source inputs recorded above"
+  },
+  "checks": {
+    "standalone": "26 tests:22 passed,4 external-data tests explicitly skipped; actual4111049372c0 host67937cb5291d/kernel9cd, not a fresh feature Rust build",
+    "canonical_consumer": "Read-only native/exact-ratio loader PASS in existingCommunity646b4a60/Vakint9c095d46/Native419/kernel9cd/PyO3.28.3; not final Main acceptance",
+    "synthetic_generator": "One 12-coefficient synthetic master-squared fixture per smoke invocation; original449-coefficient fixture was never regenerated",
+    "Ruff_format_and_check": "PASS",
+    "Rustfmt_changed_example": "PASS",
+    "Nix_runtime_source_syntax": "PASS via nix-instantiate --parse",
+    "Marimo_AST": "PASS in the existing canonical venv; standalone venv lacks Marimo and was not modified",
+    "Typst": "Two-pagePDF rendered with existingTypst0.15.1 and visually inspected by author and independent reviewer",
+    "git_diff_check": "PASS"
+  },
+  "preserved_failures": {
+    "font_harness": "First standalone suite had one pre-existing SVG display error because the private host was not configured with existing symbolica-fonts data. All8 new tests passed. Only the harness font directory was configured; source and assertions were unchanged for the successful rerun.",
+    "export_metadata": "All58 scientific/300digit passes completed before an exactzero storage precision mismatch caused the original5.009s export failure. A format-only2.205s resume repaired449zero metadata fields998\u21921104; native/text bytes and every nonzero bound stayed unchanged."
+  },
+  "production_design": {
+    "one_existing_API": true,
+    "private_ELF_loading_in_public_sources": false,
+    "pinned_raw_codec_decoder_in_public_sources": false,
+    "automatic_format_fallback": false,
+    "numerical_expr_is_human_display_only": true,
+    "native_and_ratio_JSON_are_lossless": true,
+    "normal_loader_performs_numerical_evaluation_or_IBPs": false,
+    "Mathematica_required": false
+  },
+  "remaining_acceptance": "Root owns final normal CI/upload, final canonical-host validation, documentation/browser freeze and publication after the in-flight monitoring integration."
+}

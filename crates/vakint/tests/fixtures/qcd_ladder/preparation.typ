@@ -177,3 +177,11 @@ Contribution ordinals are local to each run: compare the recorded family, key,
 and exact numerator rather than assuming that equal ordinals identify equal
 inputs. Its per-contribution histogram is also not a globally coalesced sum
 or proof that every equivalent momentum presentation is unsupported.
+
+== Saved zero-momentum coefficients
+
+#link("../../../docs/five_loop_q0_coefficients.typ")[The saved-result companion]
+loads the complete retained zero-momentum reduction and its 300-digit scalar
+master-product coefficients without repeating IBPs. The derived scalar jets
+include $epsilon^5$ with coefficientwise remainder $cal(O)(epsilon^6)$;
+all master integrals remain formal.

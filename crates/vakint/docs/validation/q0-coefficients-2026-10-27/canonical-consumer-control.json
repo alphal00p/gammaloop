@@ -1,0 +1,20 @@
+{
+  "status": "PASS",
+  "command": [
+    "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/community-official-cache-loader-host/venv/bin/python",
+    "-B",
+    "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/q0-coeff-publication-20261027/run_community2.py"
+  ],
+  "kind": "community",
+  "plan_sha256": "5cee3385d81e0221323b724019ee4a2b6c97e2fc8ebf28905a56f07fa56ca3cd",
+  "cpu": 181,
+  "math_threads": 1,
+  "free_ram_floor_bytes": 110000000000,
+  "signals_sent": [],
+  "pid": 764287,
+  "start_ticks": 116047908,
+  "returncode": 0,
+  "result_sha256": "bd01a7dc83661c62527967ab097701c682cae07732db5842c5cc8c2ebff2be31",
+  "elapsed_seconds": 3.0232026299927384,
+  "minimum_machine_available_bytes": 478632935424
+}

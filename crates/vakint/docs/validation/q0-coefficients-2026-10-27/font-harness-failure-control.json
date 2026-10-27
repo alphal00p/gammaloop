@@ -1,0 +1,20 @@
+{
+  "status": "FAILED",
+  "command": [
+    "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/consolidated-python-host-ed265/venv/bin/python",
+    "-B",
+    "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/q0-coeff-publication-20261027/run_standalone.py"
+  ],
+  "kind": "standalone",
+  "plan_sha256": "ff8d999dc005ee357d2f3c6557a95e3d464c9f3f8d9ef97c97b23257eefee7bf",
+  "cpu": 181,
+  "math_threads": 1,
+  "free_ram_floor_bytes": 110000000000,
+  "signals_sent": [],
+  "pid": 701377,
+  "start_ticks": 116034236,
+  "error": "ValueError: Python smoke failed",
+  "returncode": 1,
+  "elapsed_seconds": 3.0068514510057867,
+  "minimum_machine_available_bytes": 475591237632
+}

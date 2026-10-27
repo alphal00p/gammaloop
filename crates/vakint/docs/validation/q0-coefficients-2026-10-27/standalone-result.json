@@ -1,0 +1,58 @@
+{
+  "status": "PASS",
+  "tests_run": 26,
+  "skipped": 4,
+  "failures": [],
+  "errors": [],
+  "actual_native_host": {
+    "path": "/shared/codex-1/vakint_rustred/workspace/build/vakint-combined-cache-monitor-a7f/ci-optim/libvakint_hepkit_standalone.so",
+    "sha256": "67937cb5291d0470f9f6475fc856240584af7ac7c3f2ef109c452adcd59209bb",
+    "bytes": 211219392
+  },
+  "actual_native_host_origin": "4111049372c01df5eab8edf9d0b6c7e8b3c7fa72",
+  "Python_feature_base": "da901e0f87670fbed5d47660c42f6f30ba89d506",
+  "Python_sources": [
+    {
+      "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/vakint-q0-coefficient-artifacts-20261027/crates/vakint/tests/python/precision_inspection_smoke.py",
+      "sha256": "e56449c07bffb07994538a510f2483d026c86ca752b619bba46e9e6d7bf12d95",
+      "bytes": 27244
+    },
+    {
+      "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/vakint-q0-coefficient-artifacts-20261027/crates/vakint/examples/five_loop_q0_coefficients.py",
+      "sha256": "d46186dfc76320bbedcc5d7ba33b812f65f83a46335dd5803d68edc74b059d31",
+      "bytes": 2688
+    },
+    {
+      "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/vakint-q0-coefficient-artifacts-20261027/crates/vakint/examples/q0_coefficients/__init__.py",
+      "sha256": "d3c3dacc6f76170207275963998bc779651f6104b7e5813339b8ce9962ae60ea",
+      "bytes": 187
+    },
+    {
+      "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/vakint-q0-coefficient-artifacts-20261027/crates/vakint/examples/q0_coefficients/artifacts.py",
+      "sha256": "07b287a76bb04cd6eba4ae26fab3662cf404b10ffacdbd6e1e20b1c0983f7279",
+      "bytes": 17349
+    },
+    {
+      "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/vakint-q0-coefficient-artifacts-20261027/crates/vakint/examples/q0_coefficients/generate.py",
+      "sha256": "4772185e76cfb8cc6eba794a396c16138aea0b5537f75559402d53433be00ef9",
+      "bytes": 20213
+    },
+    {
+      "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/vakint-q0-coefficient-artifacts-20261027/crates/vakint/examples/q0_coefficients/series.py",
+      "sha256": "0fbef0e2f41ba9ed2ca6f6c3eae3bfaa5a8ddccde86bbfdc29999d3049829093",
+      "bytes": 23502
+    },
+    {
+      "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/q0-coeff-publication-20261027/run_standalone2.py",
+      "sha256": "81cc582c935b511532981f6fafa599497665a70ae7f2fdfda7473df4e57ae4aa",
+      "bytes": 1955
+    },
+    {
+      "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/q0-coeff-publication-20261027/control_smoke2.py",
+      "sha256": "810f2bac66c084ff019862813df578abd6a4c737c574302247ac4119407e07cb",
+      "bytes": 4638
+    }
+  ],
+  "actual_449_coefficient_fixture_regenerations": 0,
+  "scope": "changed pure Python feature plus pre-existing precision smoke; one synthetic 12-coefficient generator case; external-data classes skipped"
+}

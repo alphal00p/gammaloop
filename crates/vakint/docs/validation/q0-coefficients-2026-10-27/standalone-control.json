@@ -1,0 +1,20 @@
+{
+  "status": "PASS",
+  "command": [
+    "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/consolidated-python-host-ed265/venv/bin/python",
+    "-B",
+    "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/q0-coeff-publication-20261027/run_standalone2.py"
+  ],
+  "kind": "standalone",
+  "plan_sha256": "6c96503521e8924c594c6a257b4c7567a112cdb014a2165e12ea0bbf890ceb2c",
+  "cpu": 181,
+  "math_threads": 1,
+  "free_ram_floor_bytes": 110000000000,
+  "signals_sent": [],
+  "pid": 759201,
+  "start_ticks": 116046804,
+  "returncode": 0,
+  "result_sha256": "c1c54b6fe5f74c641cb9c00717cc9ebc69f466d7be9e70577bedc996bc5d5785",
+  "elapsed_seconds": 4.022605987032875,
+  "minimum_machine_available_bytes": 477939843072
+}

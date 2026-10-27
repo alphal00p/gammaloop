@@ -1,0 +1,37 @@
+{
+  "status": "PASS",
+  "command": [
+    "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/consolidated-python-host-ed265/venv/bin/python",
+    "-B",
+    "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/q0-master-coefficient-artifacts-20261027/export-metadata-repair1/validate_actual.py",
+    "--plan",
+    "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/q0-master-coefficient-artifacts-20261027/export-metadata-repair1/plan.json",
+    "--plan-sha256",
+    "be8b021abab680b9e30f494b60a9e117321d8d989fb3e2370612e0dddfd9b4fa",
+    "--producer-receipt-sha256",
+    "d2a19ea05794b66d7f9af61504b377f27008b3534bdad51b26816a0c5ce540af",
+    "--exact-text-max-bytes",
+    "223867",
+    "--report",
+    "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/q0-master-coefficient-artifacts-20261027/export-metadata-repair1/actual-validation/result.json"
+  ],
+  "plan_sha256": "be8b021abab680b9e30f494b60a9e117321d8d989fb3e2370612e0dddfd9b4fa",
+  "producer_receipt_sha256": "d2a19ea05794b66d7f9af61504b377f27008b3534bdad51b26816a0c5ce540af",
+  "validator_source": {
+    "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/q0-master-coefficient-artifacts-20261027/export-metadata-repair1/validate_actual.py",
+    "sha256": "d4e9758a03ce3a44315aa5d67802f5c99cffc0a63ef487de75e403c99f4d54c1",
+    "bytes": 15054
+  },
+  "cpu": 181,
+  "math_threads": 1,
+  "free_ram_floor_bytes": 110000000000,
+  "exact_text_byte_admission": 223867,
+  "numerical_evaluations": 0,
+  "signals_sent": [],
+  "pid": 3658471,
+  "start_ticks": 115868817,
+  "returncode": 0,
+  "result_sha256": "51d1d199db473e261bfeac37c4b56c1eb69aa00254fc064d7ffb13c94f6f4dc1",
+  "elapsed_seconds": 1.0059464569203556,
+  "minimum_machine_available_bytes": 610771763200
+}
