@@ -8,15 +8,16 @@ uses a document-processing workflow to explore the default drawing, layout selec
 styles computed from application data. Begin with the #link("quickstart/python/")[Python
 quickstart] for installation and basic graph queries.
 
-The notebook below loads automatically when it comes into view. Python, Linnet, and the Typst
-renderer run in your browser through WebAssembly. The first visit downloads their dependencies;
-no local Python installation or notebook server is needed.
+The notebook below loads automatically when it comes into view. Python, Linnet, and the native
+SVG renderer run in your browser through WebAssembly, with embedded Rust Typst label typesetting.
+The first visit downloads their dependencies; no local Python installation or notebook server
+is needed.
 
 == Try the rendering API
 
-Choose a layout and enable the custom line theme or half-edge IDs. Each change rebuilds the
-example graph and redraws it. The cells are editable, so you can change the workflow or its
-selectors and run the affected cell with its play button.
+Choose a layout and enable the custom line theme or endpoint IDs in edge labels. Each change
+rebuilds the example graph and redraws it. The cells are editable, so you can change the workflow
+or its selectors and run the affected cell with its play button.
 
 #context if target() == "html" {
   html.elem("div", attrs: (
@@ -41,18 +42,23 @@ selectors and run the affected cell with its play button.
 - Switch between *Force* and *Stable layered*. Both render the same graph; force layout tunes
   geometric positions, while the layered layout organizes the workflow in its chosen direction.
 - Enable *Custom Python line theme*. Edge selectors inspect each channel's protocol to choose
-  its color, label, and pattern. Endpoint selectors place direction marks using source/sink flow.
-- Enable *Half-edge IDs* to see how the incoming request and outgoing publication differ from
-  internal edges. The notebook reports the node, edge, and half-edge counts below the drawings.
+  its label and stroke color.
+- Enable *Endpoint IDs in edge labels* to append each edge's source and sink half-edge indices;
+  `open` denotes a missing endpoint. This makes the incoming request and outgoing publication
+  distinguishable from internal edges without adding half-edge drawing styles. The notebook
+  reports the node, edge, and half-edge counts below the drawings.
 - Switch the node store and inspect the payload checks. Node, edge, and endpoint dataclass
   instances remain attached by identity, including their shared runtime object.
 
 == The rendering boundary
 
 Returning a `Graph` from a cell invokes its SVG representation. `graph.to_svg()` explicitly
-produces the same kind of drawing; the notebook shows both forms. The graph's `RenderConfig`
+produces the same kind of drawing; the notebook shows both forms. The graph's `RenderSettings`
 combines layout options, drawing defaults, and Python selectors. Only topology and the selectors'
-typed drawing results pass to Typst; application payloads stay in Python.
+typed drawing results cross the renderer boundary; application payloads stay in Python.
+`graph.render()` captures an immutable drawing; use its `save(path)` method for file exports.
+The generic native SVG path supports labels and node/edge strokes, not executable Typst templates,
+wave decorations, or half-edge mark styles.
 
 The optional theme demonstrates that domain conventions belong in those selectors. It does not
 change the workflow records or require them to be serializable. For the complete types and

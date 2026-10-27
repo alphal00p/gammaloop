@@ -3,7 +3,6 @@
 # dependencies = [
 #     "symbolica==3.0.1",
 #     "marimo==0.24.0",
-#     "typst==0.15.0",
 # ]
 # ///
 
@@ -51,13 +50,14 @@ def _(mo):
     # Linnet Python rendering
 
     A graph's ordinary notebook representation is a model-neutral Linnest
-    drawing. `Graph._repr_svg_()` powers the automatic display; `to_svg()` and
-    `render(path)` expose the same embedded Rust Typst pipeline explicitly.
+    drawing with native SVG geometry and embedded Rust Typst label typesetting.
+    `Graph._repr_svg_()` powers the automatic display; `to_svg()` returns SVG,
+    and `render()` captures an immutable drawing with `save(path)` exports.
 
     Domain-specific conventions are ordinary Python render settings, not modes
     built into Linnet. The example data below is an application workflow: every
     node, edge, and half-edge carries an arbitrary Python dataclass instance
-    that is never serialized to Typst.
+    that is never sent to the renderer.
     """)
     return
 
@@ -86,7 +86,7 @@ def _(lp, mo):
     )
     show_half_edge_ids = mo.ui.checkbox(
         value=False,
-        label="Half-edge IDs (optional)",
+        label="Endpoint IDs in edge labels (optional)",
     )
     controls = mo.hstack(
         [node_store, layout_algorithm, custom_theme, show_half_edge_ids],
@@ -230,9 +230,8 @@ def _(
     graph.render_config = lp.RenderSettings(
         title="Document intake workflow",
         layouts=_layouts,
-        drawing=lp.DrawOptions(show_half_edge_ids=show_half_edge_ids.value),
     )
-    if custom_theme.value:
+    if custom_theme.value or show_half_edge_ids.value:
         _channel_colors = {
             "append log": lp.Color("purple"),
             "https": lp.Color("blue"),
@@ -240,37 +239,34 @@ def _(
         }
 
         def _channel_drawing(edge):
-            _paint = _channel_colors.get(edge.data.protocol, lp.Color("black"))
-            return lp.EdgeDrawing(
-                label=lp.TextLabel(edge.name or edge.data.protocol, fill=_paint),
-                style={
-                    "stroke": lp.Stroke(
-                        paint=_paint,
-                        thickness=lp.Length.pt(0.7),
-                    )
-                },
-                decoration=(
-                    lp.Pattern.Wave if edge.data.protocol == "stream" else lp.INHERIT
-                ),
+            _label = edge.name or edge.data.protocol
+            if show_half_edge_ids.value:
+                _source = (
+                    f"h_{edge.source.index}" if edge.source is not None else "open"
+                )
+                _sink = f"h_{edge.sink.index}" if edge.sink is not None else "open"
+                _label += f" [{_source} → {_sink}]"
+            _paint = (
+                _channel_colors.get(edge.data.protocol, lp.Color("black"))
+                if custom_theme.value
+                else lp.Color("black")
             )
-
-        def _direction_drawing(half_edge):
-            _edge = half_edge.edge
-            _arrow_half = _edge.sink if _edge.sink is not None else _edge.source
-            if _arrow_half is None or half_edge.index != _arrow_half.index:
-                return None
-            return lp.HalfEdgeDrawing(
-                style={
-                    "mark": lp.Mark.straight(),
-                    "mark-position": lp.MarkPosition.CenterIfDangling,
-                    "mark-orientation": lp.MarkOrientation.Edge,
-                }
+            return lp.EdgeDrawing(
+                label=lp.TextLabel(_label, fill=_paint),
+                style=(
+                    {
+                        "stroke": lp.Stroke(
+                            paint=_paint,
+                            thickness=lp.Length.pt(0.7),
+                        )
+                    }
+                    if custom_theme.value
+                    else lp.INHERIT
+                ),
             )
 
         graph.render_config.selectors = lp.DrawingSelectors(
             edge=_channel_drawing,
-            source=_direction_drawing,
-            sink=_direction_drawing,
         )
     mo.md(f"Constructed **{graph.n_nodes} nodes and {graph.n_edges} edges**.")
     return graph, receive_data, request_channel, request_port, runtime_context
@@ -282,14 +278,16 @@ def _(custom_theme, graph, mo):
         "The optional theme is enabled. It is assembled entirely in Python "
         "from typed drawing selectors and inspects the workflow payloads."
         if custom_theme.value
-        else "No custom theme is active; this is the default generic display."
+        else "No custom theme is active; the default line style is unchanged."
     )
     mo.md(f"""
     ## Automatic rich display
 
     The next cell returns the `Graph` itself, so Marimo discovers
-    `_repr_svg_()` and performs a fresh render. Generic drawings show
-    $n_i$ and $e_i$; the optional control adds $h_i$. {_overlay_note}
+    `_repr_svg_()` and performs a fresh render. The default labels are $n_i$
+    and $e_i$. The controls use channel names and can append each edge's source
+    and sink half-edge IDs to its label; `open` denotes a missing endpoint.
+    {_overlay_note}
 
     `{graph!r}`
     """)

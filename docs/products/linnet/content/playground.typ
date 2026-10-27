@@ -31,9 +31,10 @@ notebook server is needed. An internet connection is needed for the initial down
 
 == Geometry and final drawings
 
-The live SVG previews the solver's positions and edge geometry. Use
-#link("guides/linnest/")[Linnest] or the Python rendering API for final Typst drawings with
-measured labels, styles, and decorations.
+The live SVG previews the solver's positions and edge geometry. Use the
+#link("guides/python-rendering/")[Python rendering API] for native SVG drawings with measured
+labels and supported node/edge styles, or #link("guides/linnest/")[Linnest] when a Typst
+document owns the final drawing and its decorations.
 
 == Try the Python API
 
