@@ -325,25 +325,26 @@ impl PyParticle {
             .map_err(|error| PyValueError::new_err(error.to_string()))
     }
 
-    /// Native Typst math label, without dollar delimiters.
+    /// Native Typst math label without dollar delimiters, or None if not supplied.
     ///
     /// Examples
     /// --------
     /// >>> from symbolica.community import hepkit as hep
-    /// >>> hep.Model.qcd().particle("g").typstname
-    /// 'g'
+    /// >>> hep.Model.phi4().particle("phi").typstname
+    /// 'phi'
     #[getter]
     fn typstname(&self) -> Option<&str> {
         self.inner().typstname.as_deref()
     }
 
-    /// Native Typst math label of the antiparticle, without dollar delimiters.
+    /// Native Typst math label of the antiparticle without dollar delimiters,
+    /// or None if not supplied.
     ///
     /// Examples
     /// --------
     /// >>> from symbolica.community import hepkit as hep
-    /// >>> hep.Model.qcd().particle("u").antitypstname
-    /// 'overline(u)'
+    /// >>> hep.Model.phi4().particle("phi").antitypstname
+    /// 'phi'
     #[getter]
     fn antitypstname(&self) -> Option<&str> {
         self.inner().antitypstname.as_deref()
@@ -847,13 +848,13 @@ impl PyParameter {
         Atom::var(symbol!(&format!("UFO::{}", self.inner().name))).into()
     }
 
-    /// Native Typst math label, without dollar delimiters.
+    /// Native Typst math label without dollar delimiters, or None if not supplied.
     ///
     /// Examples
     /// --------
     /// >>> from symbolica.community import hepkit as hep
-    /// >>> hep.Model.standard_model().parameter("aS").typstname
-    /// 'alpha_s'
+    /// >>> hep.Model.phi4().parameter("lam").typstname
+    /// 'lambda'
     #[getter]
     fn typstname(&self) -> Option<&str> {
         self.inner().typstname.as_deref()

@@ -71,7 +71,7 @@ define_exception!(
     TensorReductionError,
     FeynkitError,
     pyo3_stub_gen::TypeInfo::unqualified("FeynkitError"),
-    "Failure while parsing or reducing a Lorentz tensor.\n\nExamples\n--------\n>>> from symbolica import S, E\n>>> from symbolica.community import hepkit as hep\n>>> D, k, mu = S(\"D\", \"k\", \"mu\")\n>>> mink = S(\"spenso::mink\")\n>>> reducer = hep.TensorReducer(D, integrated=[k(mink(D))])\n>>> try:\n...     scalar = reducer.reduce(k(mink(D, mu))**2)\n... except hep.TensorReductionError as error:\n...     message = str(error)"
+    "Failure while parsing or reducing a Lorentz tensor.\n\nExamples\n--------\n>>> from symbolica import S, E\n>>> from symbolica.community import hepkit as hep\n>>> from symbolica.community.tensor import Representation, TensorName\n>>> D, mu = S(\"D\", \"mu\")\n>>> k = TensorName.vector(\"tensor_reduction_error_example::k\")\n>>> reducer = hep.TensorReducer(D)\n>>> try:\n...     reducer.reduce(k(Representation.mink(D)(mu)))\n... except hep.TensorReductionError as error:\n...     assert \"no integrated vectors selected\" in str(error)\n... else:\n...     raise AssertionError(\"expected a missing-selector error\")"
 );
 #[cfg(feature = "ufo")]
 define_exception!(

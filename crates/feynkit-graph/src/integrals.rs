@@ -15,6 +15,7 @@ use symbolica::domains::{
 };
 use symbolica::poly::{PolyVariable, polynomial::MultivariatePolynomial};
 use symbolica::tensors::matrix::Matrix;
+use symbolica::utils::resources::ResourceLimitError;
 use thiserror::Error;
 
 mod diagram;
@@ -55,6 +56,8 @@ pub enum IntegralFamilyError {
     InvalidPowers,
     #[error("partial fractioning exceeded its {0}-state budget")]
     PartialFractionLimit(usize),
+    #[error(transparent)]
+    Resource(#[from] ResourceLimitError),
     #[error("a propagator power overflowed during partial fractioning")]
     PowerOverflow,
     #[error("incompatible integral-family mapping: {0}")]

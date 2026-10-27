@@ -29,7 +29,7 @@ class TensorOperationsTests(unittest.TestCase):
         vector = self.A(self.rep)("i")
         zero = sp.TensorExpression(0, structure=vector.structure)
         for tensor in (vector, zero):
-            for result in (self.x * tensor, tensor * self.x, self.x.__mul__(tensor)):
+            for result in (self.x * tensor, tensor * self.x):
                 with self.subTest(tensor=tensor, result=result):
                     self.assertIsInstance(result, sp.TensorExpression)
                     self.assertEqual(result.axes, tensor.axes)
@@ -37,17 +37,31 @@ class TensorOperationsTests(unittest.TestCase):
                         result.to_expression(), self.x * tensor.to_expression()
                     )
         raw = vector.to_expression()
-        self.assertEqual(raw.__mul__(vector), vector * vector)
+        self.assertEqual(raw * vector, vector * vector)
 
-    def test_tensor_product_supports_the_generic_extension_protocol(self):
+    def test_direct_scalar_multiplication_uses_expression_values(self):
+        vector = self.A(self.rep)("i")
+        zero = sp.TensorExpression(0, structure=vector.structure)
+        # A direct special-method call does not perform Python's reflected dispatch.
+        for tensor in (vector, zero):
+            with self.subTest(tensor=tensor):
+                result = self.x.__mul__(tensor)
+                self.assertIs(type(result), Expression)
+                self.assertEqual(result, self.x * tensor.to_expression())
+        raw = vector.to_expression()
+        result = raw.__mul__(vector)
+        self.assertIs(type(result), Expression)
+        self.assertEqual(result, raw * raw)
+
+    def test_expression_products_use_standard_reflected_multiplication(self):
         class Product:
-            def __symbolica_rmul__(self, left: Expression) -> tuple[Expression, str]:
+            def __rmul__(self, left: Expression) -> tuple[Expression, str]:
                 return left, "product"
 
-        tensor = self.A(self.rep)
-        result = tensor * Product()
-        self.assertIs(result[0], tensor)
+        result = self.x * Product()
+        self.assertIs(result[0], self.x)
         self.assertEqual(result[1], "product")
+        self.assertFalse(hasattr(sp.TensorExpression, "__symbolica_rmul__"))
 
     def test_gamma_product_prefers_the_unresolved_spinor_partner(self):
         spinor, vector = sp.Representation.bis(4), sp.Representation.mink(4)
