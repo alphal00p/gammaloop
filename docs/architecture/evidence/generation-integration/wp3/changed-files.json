@@ -1,5 +1,5 @@
 {
-  "scope": "Cumulative WP3 prefix and source03\u201307 review candidate; earlier inventories preserved historically",
+  "scope": "Cumulative WP3 prefix and source03\u201307 candidate including narrow P3 macro import correction; independent re-review pending",
   "files": [
     "assets/models/json/sm/sm.json",
     "assets/models/ufo/sm/lorentz.py",
@@ -81,6 +81,17 @@
       "docs/architecture/generation-integration-plan.typ",
       "docs/architecture/schoonschip-net-parsing.typ",
       "docs/developers.toml"
+    ]
+  },
+  "units03-07-policy-fix": {
+    "base": "1df953e95ebf77f0f8cc222fee17cc54ca186253",
+    "files": [
+      "crates/idenso/src/tensor/contract/factorized_tests.rs",
+      "docs/architecture/evidence/generation-integration/execution.json",
+      "docs/architecture/evidence/generation-integration/wp3/changed-files.json",
+      "docs/architecture/evidence/generation-integration/wp3/replay.json",
+      "docs/architecture/evidence/generation-integration/wp3/units03-07-policy-fix.json",
+      "docs/architecture/generation-integration-plan.typ"
     ]
   }
 }

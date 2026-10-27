@@ -7,7 +7,7 @@
   "workspace": "/shared/lcnbr/dev/gammaloop/generation-integration-plan",
   "base_commit": "3f0df2a870806076820786994d4883decec8e9e3",
   "plan_commit": "4374f72027b75df9ff95c5c7a725ee75beac27a8",
-  "implementation_change": "tvotsrruvzottmomuxqqxvywpvorpvzk",
+  "implementation_change": "nmunnnkuzukqruomukluqpmyznmntzxs",
   "implementation_bookmark": "generation-integration",
   "preserved_plan_bookmark": "generation-integration-plan",
   "author": {
@@ -77,7 +77,7 @@
       "pre_rebuild_ref": "generation-integration-pre-rebuild",
       "pre_rebuild_commit": "5226894ee1af61797e6b819d7e801a22bf17bace",
       "ancestry": "Reviewed planning/evidence chain descends from fixed target 3f0df2a8 and is retained as non-code base.",
-      "review": "Initial prefix corrected at 74cebf6c APPROVED by Astra, no remaining findings (P1/P3 closed); source03–07 implemented, NEW independent Astra slice review required before next step.",
+      "review": "Source03–07 Astra round1 REQUEST_CHANGES: only P3 macro imports, no semantic findings. Narrow correction applied; NEW independent Astra review pending. Prior approved74cebf6c unchanged.",
       "slice_receipt": "wp3/units03-07.json",
       "approved_prefix": "74cebf6c8f673f5849b26afe55fa98035d5eba1d",
       "parallel_lanes": {
@@ -106,7 +106,8 @@
         "benchmark-preparation": {
           "status": "separate preparation; M-rebuild not claimed"
         }
-      }
+      },
+      "policy_fix_receipt": "wp3/units03-07-policy-fix.json"
     }
   }
 }

@@ -213,7 +213,10 @@ own workspace. Bounded: one regression, one bisect, one written verdict.
   implemented: spectator planning, scoped partner copies, shared colour
   representations, deterministic registration and canonical inferred ports.
   Current metadata, declared port order, hidden-zero history and owner transport
-  remain authoritative. This slice awaits a NEW independent Astra review before
+  remain authoritative. Astra slice round 1 found only a P3 macro-import policy issue and no
+  semantic findings; its independent 418 tests and integrity checks passed.
+  The two calls now use a module-scope import, preserving their definitions and
+  assertions. The corrected slice awaits a NEW independent Astra review before
   further implementation or integration. See
   `evidence/generation-integration/wp3/units03-07.json` and `wp3/replay.json`.
   Source14's external scalar patch `872e84b2` is approved for later assigned

@@ -1,0 +1,86 @@
+{
+  "schema": 1,
+  "status": "P3 correction complete; NEW independent Astra review pending",
+  "base": "1df953e95ebf77f0f8cc222fee17cc54ca186253",
+  "change": "nmunnnkuzukqruomukluqpmyznmntzxs",
+  "review": {
+    "reviewer": "Astra",
+    "round": 1,
+    "verdict": "REQUEST_CHANGES",
+    "receipt": "target/astra-slice03-07-round1/review.json",
+    "sha256": "a48f3a2335eb81bbdeeba00ddfa4a157cb04aded4b01466d63cdb59ff46247ac",
+    "finding": "P3 mandatory macro import policy; no semantic findings",
+    "independent_validation": "418 tests, fmt, kernel isolation and ref/hash/manifest audits passed; prior Clippy evidence verified, not rerun"
+  },
+  "correction": {
+    "path": "crates/idenso/src/tensor/contract/factorized_tests.rs",
+    "import": "use spenso::{g, index_symbol, tensor_symbol, trace_sym};",
+    "calls": [
+      "tensor_symbol!(\"fused_raw_routing::scope_symmetric\"; Symmetric);",
+      "tensor_symbol!(\"fused_raw_routing::scope_antisymmetric\"; Antisymmetric);"
+    ],
+    "exact_diff_assertion": "Passed: only module-scope import addition and these two macro qualifications removed; definitions, arguments and assertions identical",
+    "inherited_qualified_calls": "Unrelated pre-existing qualified calls unchanged"
+  },
+  "checks": [
+    {
+      "name": "workspace formatting",
+      "command": "target/wp3-units03-07/run just fmt --check",
+      "log": "target/wp3-units03-07-policy-fix/fmt-final.log",
+      "status": "passed"
+    },
+    {
+      "name": "affected scoped-contraction regression and compilation",
+      "command": "target/wp3-units03-07/run cargo nextest run --locked --cargo-profile ci-optim --profile ci_gammaloop --retries 0 --test-threads 2 --lib -p idenso --features reference-cases -E 'test(partner_sum_scope_retains_deferred_non_colour_contractions)'",
+      "status": "passed",
+      "log": "target/wp3-units03-07-policy-fix/test-final.log",
+      "selected": 1,
+      "passed": 1,
+      "ignored_selected": 0,
+      "excluded_by_filter": 1191,
+      "run_id": "0feb4f06-93de-4c14-92f9-78e3b3838b57",
+      "runtime_seconds": 0.025,
+      "tests": [
+        "tensor::contract::factorized_tests::partner_sum_scope_retains_deferred_non_colour_contractions"
+      ],
+      "binaries": [
+        {
+          "path": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/idenso-81148b1fb98b142a",
+          "sha256": "ad003bfc442349f57ce5db598f83a33dd5064d64f7ca77d961ce7b4437166ed5"
+        }
+      ]
+    },
+    {
+      "name": "changed canonical plan Typst compile",
+      "status": "passed",
+      "log": "target/wp3-units03-07-policy-fix/typst.log"
+    },
+    {
+      "name": "preserved source refs/manifest/log hashes/locks/NixCI/registry integrity",
+      "status": "passed",
+      "log": "target/wp3-units03-07-policy-fix/integrity.log",
+      "counts": "11 refs,46 rows/41 units,21 original hashes,8 changed registry scopes; locks unchanged,NixCI=false,no conflicts"
+    }
+  ],
+  "not_rerun": [
+    "Prior418-test slice matrix",
+    "workspace Clippy",
+    "broad physics tests"
+  ],
+  "prior_evidence": "units03-07.json and reviewer receipt preserved unchanged; validation claims above apply only to narrow policy correction",
+  "superseded_attempt": "Initial scratch script asserted all qualified macro calls were new; existing call sites were present, so no edit occurred. Replaced only the two requested calls. test.log was an intermediate run; test-final.log definitively checks final source.",
+  "artifact_hashes": {
+    "target/wp3-units03-07-policy-fix/fmt-final.log": "1dadf1b63f3fc19e19b1e9fb9a6c3f7772d8ba250861dcced4346f892ae2fca3",
+    "target/wp3-units03-07-policy-fix/fmt.log": "1dadf1b63f3fc19e19b1e9fb9a6c3f7772d8ba250861dcced4346f892ae2fca3",
+    "target/wp3-units03-07-policy-fix/integrity.log": "8a743a534339335e3e6e157b1698c8fa722f5441a5240dc08eeb4b7516bce1e3",
+    "target/wp3-units03-07-policy-fix/inventory.json": "0db3dc385c2472004ca9c204aa5f6351ca196a1fe2c51325283b65c55debe4d8",
+    "target/wp3-units03-07-policy-fix/inventory.log": "35c5a3a07410a78f1bbf8a14acfd8e46ffa43574ca2b2314558d788ee168a355",
+    "target/wp3-units03-07-policy-fix/test-final.log": "0a6aed8f61a2f1eaf22ba81a80dbebc0cc2287910016324049f31d3258e71dc4",
+    "target/wp3-units03-07-policy-fix/test.log": "ceae64bc7eccad43ec79ab51cba61b8714e362817065a71923756a5f99833c46",
+    "target/wp3-units03-07-policy-fix/typst.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "resources": "Existing pinned Nix wrapper; silent license loading; CARGO_BUILD_JOBS=4,RAYON_NUM_THREADS=4,nextest threads2,locked,no retries,INSTA_UPDATE=no; no forced passes",
+  "processes_retained": [],
+  "parallel_lanes": "No scalar/numeric/drawing/sampling integration or later source implementation",
+  "next_gate": "NEW independent Astra review before approval or further implementation"
+}

@@ -10,7 +10,7 @@ use spenso::network::parsing::AtomStructureExt;
 use spenso::network::tags::SPENSO_TAG;
 use spenso::structure::TensorStructure;
 use spenso::structure::partial::{PartialStructure, PartialStructureExt};
-use spenso::{g, index_symbol, trace_sym};
+use spenso::{g, index_symbol, tensor_symbol, trace_sym};
 use std::sync::{Arc, Mutex};
 use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder};
 use symbolica::parser::ParseSettings;
@@ -40,8 +40,8 @@ fn contract(source: &Atom) -> SymbolicTensor<PartialStructure> {
 #[test]
 fn partner_sum_scope_retains_deferred_non_colour_contractions() {
     setup();
-    spenso::tensor_symbol!("fused_raw_routing::scope_symmetric"; Symmetric);
-    spenso::tensor_symbol!("fused_raw_routing::scope_antisymmetric"; Antisymmetric);
+    tensor_symbol!("fused_raw_routing::scope_symmetric"; Symmetric);
+    tensor_symbol!("fused_raw_routing::scope_antisymmetric"; Antisymmetric);
     // Rule (ii) is narrower than #151's fallback. These products have no
     // source binding a non-colour antisymmetric port, although their planner
     // declines and expanding them exposes further literal contractions.

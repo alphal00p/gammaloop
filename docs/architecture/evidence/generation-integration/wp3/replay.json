@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "status": "incomplete WP3; approved initial prefix, source03–07 implemented and awaiting NEW independent Astra slice review",
+  "status": "incomplete WP3; source03–07 Astra round1 requested P3 macro import correction; corrected candidate awaits NEW independent Astra review",
   "fixed_target": {
     "commit": "3f0df2a870806076820786994d4883decec8e9e3",
     "tree": "3c91ba47525c627fbc02d79f5afa1d58aa7c5b66",
@@ -83,7 +83,7 @@
       "planned_unit": "port-03",
       "planned_order": 3,
       "reason": "Port spectator component planning onto current authoritative tensor metadata; preserve spectator invariance and mutation regressions.",
-      "status": "implemented; NEW independent Astra source03–07 slice review pending",
+      "status": "implemented; Astra round1 P3 macro import correction applied, NEW independent review pending",
       "new_commit": "f6ba968d51644c360a2be32118fba1d193110d0e",
       "new_change": "snvrxlvztxmkypnqynrxoryqzqtrmtnq",
       "reconciliation": [
@@ -99,7 +99,7 @@
       "planned_unit": "port-04",
       "planned_order": 4,
       "reason": "Port scoped partner copies alongside planner; preserve non-colour epsilon bounds, scopes and signed transport.",
-      "status": "implemented; NEW independent Astra source03–07 slice review pending",
+      "status": "implemented; Astra round1 P3 macro import correction applied, NEW independent review pending",
       "new_commit": "b2da32765318cac573e908fed5f0af9319141503",
       "new_change": "ssylqpprunqktzynznnqzzztvytwyrvo",
       "reconciliation": [
@@ -116,7 +116,7 @@
       "planned_unit": "port-05",
       "planned_order": 5,
       "reason": "Reconcile shared colour representations and scoped-contraction docs with #209 tensor ownership; do not restore old interfaces.",
-      "status": "implemented; NEW independent Astra source03–07 slice review pending",
+      "status": "implemented; Astra round1 P3 macro import correction applied, NEW independent review pending",
       "new_commit": "df66f21394ed47a86e8cbf0b9d8da5c9b47cc7bc",
       "new_change": "rtwnvzwvmrsvqpmosxsorywvkkovsvlo",
       "reconciliation": [
@@ -133,7 +133,7 @@
       "planned_unit": "port-06",
       "planned_order": 6,
       "reason": "Preserve fixed coupling and factor-head registration order inside staged construction; do not undo #209 template admission.",
-      "status": "implemented; NEW independent Astra source03–07 slice review pending",
+      "status": "implemented; Astra round1 P3 macro import correction applied, NEW independent review pending",
       "new_commit": "56aa1c91cd0d9573a03c5122769c02ae0364e9e3",
       "new_change": "sosnkvsmokxxuqzyqoolqszplspyotyz",
       "reconciliation": [
@@ -150,7 +150,7 @@
       "planned_unit": "port-07",
       "planned_order": 7,
       "reason": "Port canonical inferred port order through current NumeratorInterface::translate; preserve declared order and hidden index history from #209.",
-      "status": "implemented; NEW independent Astra source03–07 slice review pending",
+      "status": "implemented; Astra round1 P3 macro import correction applied, NEW independent review pending",
       "new_commit": "f689e5b61c8b4dcc80c6d983b442e89b7a5c9852",
       "new_change": "oxotlonowrvstkrppyqrrzsmonywxssu",
       "reconciliation": [
@@ -766,5 +766,19 @@
     "benchmark-preparation": {
       "status": "separate preparation; M-rebuild not claimed"
     }
+  },
+  "slice_review": {
+    "round": 1,
+    "reviewer": "Astra",
+    "verdict": "REQUEST_CHANGES",
+    "candidate": "1df953e95ebf77f0f8cc222fee17cc54ca186253",
+    "semantic_findings": [],
+    "must_fix": "P3: two new qualified tensor_symbol macro calls; import at module scope",
+    "independent_checks": "418 tests, fmt, kernel isolation and manifest/ref/hash audits passed; Clippy evidence verified, not independently rerun",
+    "receipt": "target/astra-slice03-07-round1/review.json",
+    "receipt_sha256": "a48f3a2335eb81bbdeeba00ddfa4a157cb04aded4b01466d63cdb59ff46247ac",
+    "correction": "Two macro calls now use module-scope tensor_symbol import; definitions/arguments/assertions unchanged",
+    "next_gate": "NEW independent Astra review before further implementation/integration",
+    "fix_receipt": "units03-07-policy-fix.json"
   }
 }
