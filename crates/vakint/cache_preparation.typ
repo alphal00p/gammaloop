@@ -34,17 +34,36 @@ catalogue identities, dimension and normalization, plus the native family,
 physical arity and solver layer. Cache inventory, release labels, graph styling
 and numerical master values do not change this semantic identity.
 
-Loading verifies the complete file before replacing an attachment. Official
-data supplies independently authenticated compressed and decoded identities;
-an explicit trusted-generated path still checks the embedded decoded digest,
-gzip framing, native records and semantic binding. The decoder accepts exactly
-one gzip member within the selected codec's explicit size limits. The native shared
-coefficient table is imported once, and record lookups reuse its bounded index.
-The shared API's custom per-chunk bounds and per-lookup chunk-budget policy are
-unsupported for five loops and are rejected explicitly. Disk and index bounds
-still constrain the single file; reduction RAM uses the native runtime settings.
-Ordinary reduction never modifies the file. Corruption, incompatible data and
-native algebraic failures remain errors rather than cache misses.
+Loading authenticates the complete compressed and decoded payload, native
+framing, index and semantic binding before replacing an attachment. Official
+data supplies independently authenticated identities; an explicit trusted-generated
+path still checks its embedded native digest and gzip integrity. Exactly one
+gzip member is accepted. Source conditions, terminal identities and algebra are
+checked by the native solver at every cache hit.
+
+`RustRedCacheFileOptions` in Rust and `CacheFileOptions` in Python expose explicit
+compressed, decoded and index-byte grants. Omission retains the compact defaults
+of 95 MiB compressed and 1 GiB decoded. Official light publication independently
+retains the stricter 95,000,000-byte compressed cap. Larger explicit grants support
+an independently hosted heavy file without changing the native codec or reduction
+limits. Pack chunk settings remain separate from whole-file grants.
+
+Set `decoded_directory` to retain decoded bytes in a private file instead of RAM.
+The loader decompresses once and verifies the decoded store with bounded blocks.
+Its shared index retains block digests (32 bytes per 64 KiB), and selected range
+reads verify touched blocks. Only one verification block and the selected row or
+atom buffers are needed in addition to the index and admitted algebra. Truncated
+or changed backing bytes are errors. The private decoded file has no published pathname; reader forks share its descriptor,
+which closes when its last owner is dropped. No mapped memory is used.
+Symbolica state imports once on first use, and accessed coefficients remain in one
+shared lazy table. File-backed activation does not decode every coefficient;
+record semantics remain checked on each hit. The default memory path also checks
+all record contents eagerly.
+
+The per-lookup chunk-budget policy applies to 1L–4L directory packs rather than
+five-loop caches. Reduction RAM uses the native runtime settings. Ordinary reduction never
+modifies the input file. Corruption, incompatible data and native algebraic
+failures remain errors rather than cache misses.
 
 The five-loop workload must be an explicit selection of owner-mapped native
 roots in common-family namespace zero. There is no exhaustive default primer.
@@ -207,8 +226,8 @@ is unchanged.
 === Heavy and light five-loop delivery
 
 Keep the heavy cache as the full union of accumulated strict completed records.
-Provide its compressed local path and checked installation instructions for
-independent hosting. Do not upload that large archive to the external-data
+Provide its compressed native-file path and checked loading instructions for
+independent hosting. Do not upload that large file to the external-data
 repository or release. Preserve every source prefix used to construct it.
 
 Publish a separate light cache of at most 95,000,000 compressed bytes. Select
@@ -271,10 +290,43 @@ single-file export. `freeze_running_cache` returns a JSON-compatible descriptor
 and writes native binary index metadata to a new sidecar outside the delta;
 preserve that descriptor, its data
 directory and all explicit immutable bases. It does not copy the payloads or
-freeze other bases. A running/composed attachment cannot be exported through
-`save_cache(..., mode="full-snapshot")`; keep the frozen descriptor and its
-explicit bases instead. Detachment flushes but a retained control keeps the writer
-lease; `close()` flushes and releases it for all clones.
+freeze other bases. A composed immutable snapshot can be exported through
+`save_cache(..., mode="full-snapshot")`. A running attachment must first be
+explicitly closed with no pending records or writer error. Export checks its
+final committed generation and never flushes or closes a live writer implicitly.
+Keep frozen descriptors and every source prefix as provenance. Detachment flushes
+but a retained control keeps the writer lease; `close()` releases it for all clones.
+
+Single-file export streams existing native rows through disk spools and emits one
+shared coefficient table. It retains key/range metadata and each distinct compact
+coefficient in the native interner, rather than all coefficient-bearing records.
+Identical full records deduplicate; any differing coefficient or ordered guard
+variant is an explicit conflict, and no final file is published. Preserve the
+original sources when investigating a conflict. The report distinguishes input
+references, unique records, exact duplicates, spool bytes and the unique atom
+payload/index floor. These are not a bound on process RSS: the complete unique
+interner, native state and temporary algebra still require RAM. Spools can occupy
+up to twice the decoded grant while finalization runs, in addition to compressed
+output. A large export needs a measured census and sufficient disk and RAM.
+
+For an authenticated producer report and a loaded engine:
+
+```python
+from symbolica.community.hepkit import vakint
+identity = producer_report["single_file"]["identity"]
+file_options = vakint.CacheFileOptions(
+    max_compressed_bytes=identity["compressed_bytes"],
+    max_decoded_bytes=identity["decoded_bytes"],
+    decoded_directory="workspace/cache/decoded",
+)
+engine.load_cache(5, "workspace/cache/heavy.rrcache.gz", file_options=file_options)
+```
+
+The decoded directory must already exist. The same `file_options` argument is
+available on `save_cache`, `load_cache_snapshot`, `attach_running_cache` and
+`load_running_cache`. Save grants must cover the new output, which may exceed an
+older file after adding records. Neither storage choice changes the campaign,
+cache admission or reduction ordering.
 
 Monitoring defaults off. `evaluate_rustred_symbolic` and `prepare_cache` accept
 `monitor="off"|"json"|"tui"`, `progress_snapshot` and
@@ -859,8 +911,9 @@ retained payload and work counters with saturation, never estimates process RSS.
 `Vakint::save_cache` requires an explicit `RustRedCacheSaveMode`.
 `ResidentRoots` exports only completed records currently in RAM; never-loaded
 and evicted backing records are deliberately excluded. `FullSnapshot` instead
-copies every captured immutable base through bounded, checksum-verified byte
-transfers without decoding coefficients, then appends the resident overlay.
+includes every captured immutable base and the resident overlay. Lower loops use
+bounded, checksum-verified byte copies; five loops validate and stream the native
+rows into one shared-table file as described above.
 It requires a new destination. Source paths can subsequently move without
 invalidating a successfully completed portable snapshot.
 

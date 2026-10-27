@@ -24,6 +24,9 @@ pub struct RustRedRunningCacheOptions {
     pub native: SavedApplicationRunningCacheOptions,
     pub base_paths: Vec<std::path::PathBuf>,
     pub snapshots: Vec<RustRedRunningCacheSnapshot>,
+    /// Single-file base grants/storage; checkpoint directory bounds remain in
+    /// `native.storage`. All forks retain the opened file's shared lazy owner.
+    pub file_options: Option<super::RustRedCacheFileOptions>,
     /// False captures useful work without any persistent cache lookup. Native
     /// in-process memoization retains its ordinary semantics in either mode.
     pub read_backing: bool,
@@ -39,6 +42,7 @@ impl Default for RustRedRunningCacheOptions {
             native: Default::default(),
             base_paths: Vec::new(),
             snapshots: Vec::new(),
+            file_options: None,
             read_backing: true,
             read_delta: true,
         }
@@ -53,7 +57,14 @@ impl RustRedRunningCacheOptions {
         let mut bases = self
             .base_paths
             .iter()
-            .map(|path| Self::open_base(path, binding, self.native.storage))
+            .map(|path| {
+                Self::open_base(
+                    path,
+                    binding,
+                    self.native.storage,
+                    self.file_options.as_ref(),
+                )
+            })
             .collect::<Result<Vec<_>, _>>()?;
         for snapshot in &self.snapshots {
             if &snapshot.binding != binding {
@@ -75,6 +86,7 @@ impl RustRedRunningCacheOptions {
         path: &Path,
         binding: &rustred::persistence::application_cache::ApplicationCacheBinding,
         limits: rustred_app::SavedApplicationCachePackLimits,
+        file_options: Option<&super::RustRedCacheFileOptions>,
     ) -> Result<SavedApplicationRunningCacheBase, VakintError> {
         if path.is_dir() {
             if path.join("bundle.rrindex").exists() {
@@ -93,7 +105,8 @@ impl RustRedRunningCacheOptions {
                 .map_err(operation)
                 .map_err(Into::into);
         }
-        SavedApplicationCacheFile::open(path, binding, super::five::file_limits(limits)?)
+        let options = super::five::resolved_file_options(limits, file_options)?;
+        SavedApplicationCacheFile::open_with_options(path, binding, None, &options)
             .map(SavedApplicationRunningCacheBase::File)
             .map_err(operation)
             .map_err(Into::into)

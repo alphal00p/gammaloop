@@ -1,4 +1,4 @@
-"""Running-cache Python bindings on one coherently built canonical host.
+"""Running-cache Python bindings on one coherently built native host.
 
 VAKINT_TEST_EXTERNAL_DATA selects the authenticated local campaign. One engine
 loads it once, and the stored P65 graph supplies the existing five-tadpole input
@@ -14,14 +14,27 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from symbolica import E, core
-from symbolica.community.hepkit.vakint import (
-    MasterSymbol,
-    RunningCacheControl,
-    Vakint,
-    VakintEvaluationMethod,
-    integral_from_diagram,
-)
+if os.environ.get("VAKINT_TEST_HOST") == "standalone":
+    import vakint_hepkit_standalone as core
+    from vakint_hepkit_standalone import (
+        CacheFileOptions,
+        E,
+        MasterSymbol,
+        RunningCacheControl,
+        Vakint,
+        VakintEvaluationMethod,
+        integral_from_diagram,
+    )
+else:
+    from symbolica import E, core
+    from symbolica.community.hepkit.vakint import (
+        CacheFileOptions,
+        MasterSymbol,
+        RunningCacheControl,
+        Vakint,
+        VakintEvaluationMethod,
+        integral_from_diagram,
+    )
 
 
 def file_hashes(directory):
@@ -33,6 +46,44 @@ def file_hashes(directory):
 
 
 class RunningCacheSmoke(unittest.TestCase):
+    def test_closed_capture_exports_one_native_file_with_lazy_shared_loading(self):
+        self.obj.detach_cache(5)
+        reference = self.obj.evaluate_rustred_symbolic(self.input)
+        delta = self.directory / "single-file-delta"
+        output = self.directory / "single-file.rrcache.gz"
+        control = self.obj.attach_running_cache(5, delta, read_backing=False)
+        self.addCleanup(self.close_control, control)
+        self.addCleanup(self.obj.detach_cache, 5)
+        observed = self.obj.evaluate_rustred_symbolic(self.input)
+        self.assert_complete_native_result(observed, reference)
+        with self.assertRaisesRegex(ValueError, "explicitly closed"):
+            self.obj.save_cache(5, str(output), mode="full-snapshot")
+        self.assertFalse(output.exists())
+        self.assert_durable(control.close(), closed=True)
+        original = file_hashes(delta)
+        report = self.obj.save_cache(5, str(output), mode="full-snapshot")
+        self.assertTrue(report["complete"])
+        self.assertGreater(report["single_file"]["statistics"]["records"], 0)
+        identity = report["single_file"]["identity"]
+        decoded = self.directory / "single-file-decoded"
+        decoded.mkdir()
+        options = CacheFileOptions(
+            max_compressed_bytes=identity["compressed_bytes"],
+            max_decoded_bytes=identity["decoded_bytes"],
+            decoded_directory=str(decoded),
+        )
+        self.obj.load_cache(5, str(output), file_options=options)
+        before = self.obj.cache_statistics(5)["saved_application"]["file"]
+        self.assertEqual(before["state_imports"], 0)
+        self.assertEqual(before["decoded_coefficients"], 0)
+        cached = self.obj.evaluate_rustred_symbolic(self.input)
+        self.assert_complete_native_result(cached, reference)
+        after = self.assert_backing_hit()["saved_application"]["file"]
+        self.assertEqual(after["state_imports"], 1)
+        self.assertGreater(after["decoded_coefficients"], 0)
+        self.assertEqual(file_hashes(delta), original)
+        self.assertEqual(list(decoded.iterdir()), [])
+
     @classmethod
     def setUpClass(cls):
         if sys.flags.optimize or not core.is_licensed():

@@ -27,6 +27,10 @@ use rustred_app::{
 mod five;
 pub use five::RustRedSavedCacheStatistics;
 pub(super) use five::{SavedFiveLoopCache, saved_application_digest};
+pub use rustred_app::{
+    SavedApplicationCacheFileLimits as RustRedCacheFileLimits,
+    SavedApplicationCacheFileOptions as RustRedCacheFileOptions,
+};
 
 #[path = "cache_running.rs"]
 mod running;
@@ -94,10 +98,16 @@ pub struct RustRedCacheLoadOptions {
     /// falls back only on typed prospective lookup-work exhaustion.
     /// Supported for one through four loops; five loops reject an override.
     pub lookup_budget_policy: Option<CacheLookupBudgetPolicy>,
-    /// Five-loop single files support disk and index bounds, with fixed native
-    /// file-codec defaults. Custom per-chunk bounds apply only to 1L–4L packs
-    /// and are rejected for five loops.
+    /// Pack bounds for 1L–4L and five-loop checkpoint directories. Single-file
+    /// transport grants are configured independently through `file_options`.
     pub storage: SavedApplicationCachePackLimits,
+    /// Explicit single-file transport and decoded-store policy. Omission keeps
+    /// the compact defaults. Larger independently hosted files need explicit
+    /// grants; file-backed data retains a shared lazy coefficient table.
+    /// File-backed activation authenticates transport and complete framing;
+    /// full record semantics are checked by the native solver at each hit.
+    /// The default memory-backed path also validates all records eagerly.
+    pub file_options: Option<RustRedCacheFileOptions>,
     /// Authenticated official single-file identity. Explicit trusted-generated
     /// paths may omit it; their embedded digest and semantic binding are checked.
     pub file_identity: Option<rustred_app::SavedApplicationCacheFileIdentity>,
@@ -382,10 +392,10 @@ impl Vakint {
         if loop_count == 5 {
             return self.load_five_loop_cache(path.as_ref(), options);
         }
-        if options.file_identity.is_some() {
+        if options.file_identity.is_some() || options.file_options.is_some() {
             return Err(operation(rustred_app::AppError::new(
                 rustred_app::AppErrorKind::Input,
-                "single-file identity is only applicable to a five-loop cache",
+                "single-file identity/options are only applicable to a five-loop cache",
             ))
             .into());
         }

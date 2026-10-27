@@ -17,10 +17,19 @@ import unittest
 from pathlib import Path
 
 if os.environ.get("VAKINT_TEST_HOST") == "standalone":
-    from vakint_hepkit_standalone import E, Vakint, VakintEvaluationMethod
+    from vakint_hepkit_standalone import (
+        CacheFileOptions,
+        E,
+        Vakint,
+        VakintEvaluationMethod,
+    )
 else:
     from symbolica import E
-    from symbolica.community.hepkit.vakint import Vakint, VakintEvaluationMethod
+    from symbolica.community.hepkit.vakint import (
+        CacheFileOptions,
+        Vakint,
+        VakintEvaluationMethod,
+    )
 
 ROOTS = [(0, [power]) for power in range(5)]
 
@@ -47,6 +56,29 @@ class ProgressFailure(RuntimeError):
 
 
 class NativeCacheSmoke(unittest.TestCase):
+    def test_single_file_options_are_explicit_and_reject_lower_loop_pack_use(self):
+        defaults = CacheFileOptions()
+        self.assertEqual(defaults.max_compressed_bytes, 95 * 1024 * 1024)
+        self.assertEqual(defaults.max_decoded_bytes, 1024 * 1024 * 1024)
+        options = CacheFileOptions(
+            max_compressed_bytes=200_000_000,
+            max_decoded_bytes=2_000_000_000,
+            max_index_bytes=10_000_000,
+            decoded_directory=str(self.scratch),
+        )
+        self.assertEqual(options.max_compressed_bytes, 200_000_000)
+        self.assertEqual(options.max_decoded_bytes, 2_000_000_000)
+        self.assertEqual(options.max_index_bytes, 10_000_000)
+        with self.assertRaises(ValueError):
+            CacheFileOptions(max_decoded_bytes=1)
+        obj = engine()
+        output = self.scratch / "must-not-be-created"
+        with self.assertRaisesRegex(ValueError, "single-file"):
+            obj.load_cache(1, str(output), file_options=options)
+        with self.assertRaisesRegex(ValueError, "single-file"):
+            obj.save_cache(1, str(output), mode="resident-roots", file_options=options)
+        self.assertFalse(output.exists())
+
     def setUp(self):
         self.scratch = Path(tempfile.mkdtemp(prefix="vakint-cache-python-"))
 
