@@ -4,6 +4,7 @@ import json
 import sys
 from pathlib import Path
 
+from generalized_energy_display_browser import offline_fonts
 from playwright.sync_api import sync_playwright
 
 
@@ -14,10 +15,13 @@ def check(directory, executable, engine="chromium"):
             args=["--no-sandbox"] if engine == "chromium" else [],
         )
         page = browser.new_page(viewport={"width": 800, "height": 1000})
+        offline_fonts(page)
         errors = []
         page.on("pageerror", lambda error: errors.append(str(error)))
         for scope in ("orientation", "family"):
-            page.set_content((Path(directory) / f"{scope}.html").read_text())
+            page.set_content(
+                (Path(directory) / f"{scope}.html").read_text(encoding="utf-8")
+            )
             data = json.loads(page.locator("[data-cff]").text_content())
             assert data["scope"] == scope
             assert len(data["orientations"]) == 1
@@ -59,7 +63,7 @@ def check(directory, executable, engine="chromium"):
                 )
             assert not errors, errors
 
-        page.set_content((Path(directory) / "residue.html").read_text())
+        page.set_content((Path(directory) / "residue.html").read_text(encoding="utf-8"))
         data = json.loads(page.locator("[data-ltd]").text_content())
         assert data["scope"] == "residue" and len(data["residues"]) == 1
         residue = data["residues"][0]
@@ -82,7 +86,9 @@ def check(directory, executable, engine="chromium"):
         assert page.locator(".lp-equation .hs-factored-lhs").inner_text() == lhs
         assert not errors, errors
         for name in ("surface", "factor", "pair", "energy", "group"):
-            page.set_content((Path(directory) / f"{name}.html").read_text())
+            page.set_content(
+                (Path(directory) / f"{name}.html").read_text(encoding="utf-8")
+            )
             assert page.locator("[data-spenso-math]").count() > 0
             assert page.locator("math").count() > 0
             assert page.locator("math merror").count() == 0

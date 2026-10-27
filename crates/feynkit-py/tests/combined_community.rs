@@ -7,16 +7,13 @@ use feynkit_py::{FeynkitModule, PyFeynmanDiagram, PyModel};
 use linnet_py::GraphModule;
 #[cfg(not(feature = "linnet-python"))]
 use linnet_render_py::GraphModule;
-use pyo3::{
-    prelude::*,
-    types::{PyCFunction, PyDict, PyList, PyModule},
-};
+use pyo3::prelude::{Bound, Py, PyAnyMethods, PyDictMethods, PyModuleMethods, PyResult, Python};
+use pyo3::types::{PyCFunction, PyDict, PyList, PyModule};
 use spynso3::SpensoModule;
-use symbolica::{
-    api::python::{SymbolicaCommunityModule, create_symbolica_module},
-    atom::Atom,
-    parser::ParseSettings,
-};
+use symbolica::api::python;
+use symbolica::api::python::SymbolicaCommunityModule;
+use symbolica::atom::Atom;
+use symbolica::parser::ParseSettings;
 
 const FEYNKIT_WRAPPER: &str = include_str!("../python/symbolica/community/hepkit/__init__.py");
 #[cfg(feature = "linnet-python")]
@@ -34,7 +31,7 @@ fn shared_numeric_external_states_in_installed_host() {
     Python::attach(|py| -> PyResult<()> {
         let symbolica = install_package(py, "symbolica")?;
         let core = PyModule::new(py, "symbolica.core")?;
-        create_symbolica_module(&core)?;
+        python::create_symbolica_module(&core)?;
         py.import("sys")?
             .getattr("modules")?
             .set_item("symbolica.core", &core)?;
@@ -57,12 +54,52 @@ fn shared_numeric_external_states_in_installed_host() {
 }
 
 #[test]
+#[ignore = "browser fixture producer requires optional Marimo and AnyWidget; runs in the browser CI group"]
+fn browser_display_fixtures() {
+    Python::initialize();
+    Python::attach(|py| -> PyResult<()> {
+        let symbolica = install_package(py, "symbolica")?;
+        let core = PyModule::new(py, "symbolica.core")?;
+        python::create_symbolica_module(&core)?;
+        py.import("sys")?
+            .getattr("modules")?
+            .set_item("symbolica.core", &core)?;
+        symbolica.add("core", &core)?;
+        // Installed scripts import the public re-exports from the package root.
+        for name in ["E", "S", "Expression", "Replacement"] {
+            symbolica.add(name, core.getattr(name)?)?;
+        }
+        let community = install_package(py, "symbolica.community")?;
+        symbolica.add("community", &community)?;
+        register_native::<GraphModule>(&core)?;
+        register_native::<FeynkitModule>(&core)?;
+        register_native::<SpensoModule>(&core)?;
+        import_wrapper(py, &community, "symbolica.community.graph", GRAPH_WRAPPER)?;
+        import_wrapper(
+            py,
+            &community,
+            "symbolica.community.hepkit",
+            FEYNKIT_WRAPPER,
+        )?;
+        import_wrapper(py, &community, "symbolica.community.tensor", SPENSO_WRAPPER)?;
+        let code = CString::new(include_str!("browser_display_fixtures.py")).unwrap();
+        let locals = PyDict::new(py);
+        locals.set_item(
+            "test_directory",
+            concat!(env!("CARGO_MANIFEST_DIR"), "/tests"),
+        )?;
+        py.run(&code, Some(&locals), Some(&locals))
+    })
+    .unwrap();
+}
+
+#[test]
 fn qcd_rich_display_requires_no_python_rendering_packages() {
     Python::initialize();
     Python::attach(|py| -> PyResult<()> {
         let symbolica = install_package(py, "symbolica")?;
         let core = PyModule::new(py, "symbolica.core")?;
-        create_symbolica_module(&core)?;
+        python::create_symbolica_module(&core)?;
         py.import("sys")?
             .getattr("modules")?
             .set_item("symbolica.core", &core)?;
@@ -76,7 +113,9 @@ fn qcd_rich_display_requires_no_python_rendering_packages() {
         #[cfg(not(feature = "linnet-python"))]
         {
             let graph = py.import("symbolica.community.graph")?;
-            for name in ["DiagramRender", "RenderSettings", "LayoutSettings", "Stroke"] {
+            for name in [
+                "DiagramRender", "DiagramView", "RenderSettings", "LayoutSettings", "Stroke",
+            ] {
                 assert!(graph.hasattr(name)?, "missing shared display class {name}");
             }
             for name in ["Graph", "Subgraph", "node", "edge", "build"] {
@@ -102,21 +141,70 @@ fn qcd_rich_display_requires_no_python_rendering_packages() {
         symbolica.add("E", core.getattr("E")?)?;
         #[cfg(feature = "linnet-python")]
         {
-        let rendering_tests = CString::new(include_str!(
-            "../../linnet-py/tests/test_community_rendering.py"
-        )).unwrap();
-        locals.set_item("__name__", "community_rendering_tests")?;
-        py.run(&rendering_tests, Some(&locals), Some(&locals))?;
-        py.run(c"assert unittest.TextTestRunner().run(unittest.defaultTestLoader.loadTestsFromTestCase(CommunityRenderingTests)).wasSuccessful()", Some(&locals), Some(&locals))?;
+            let metrics_source = CString::new(include_str!("../../linnet-py/tests/rendering_metrics.py")).unwrap();
+            let metrics = PyModule::from_code(py, &metrics_source, c"rendering_metrics.py", c"rendering_metrics")?;
+            py.import("sys")?.getattr("modules")?.set_item("rendering_metrics", metrics)?;
+            let rendering_tests = CString::new(include_str!(
+                "../../linnet-py/tests/test_community_rendering.py"
+            )).unwrap();
+            locals.set_item("__name__", "community_rendering_tests")?;
+            py.run(&rendering_tests, Some(&locals), Some(&locals))?;
+            py.run(c"assert unittest.TextTestRunner().run(unittest.defaultTestLoader.loadTestsFromTestCase(CommunityRenderingTests)).wasSuccessful()", Some(&locals), Some(&locals))?;
         }
-        for name in ["network", "diagram"] {
-            let source = locals.get_item(name)?.unwrap().call_method0("to_linnest")?.extract::<String>()?;
-            let files = std::collections::BTreeMap::from([("main.typ".into(), source.into_bytes())]);
-            let pages = typst_renderer::Document::compile_sources(&files, "svg")
-                .map_err(pyo3::exceptions::PyRuntimeError::new_err)?;
-            assert_eq!(pages.len(), 1);
-        }
+        // The default host validates every label source without a Rust compiler.
+        // The optional typst-py harness owns actual vector-export compilation.
+        py.run(
+            cr#"
+for owner in (network, diagram):
+    view = owner.render()
+    request = view.measurement_request()
+    assert request["labels"]
+    snapshot = external_metrics_snapshot(view)
+    assert "<math" in snapshot.to_svg()
+    assert view.measured().to_svg() == snapshot.to_svg()
+assert "typst" not in sys.modules
+"#,
+            Some(&locals),
+            Some(&locals),
+        )?;
         Ok(())
+    })
+    .unwrap();
+}
+
+#[test]
+fn community_native_forwarding_uses_registered_owners() {
+    Python::initialize();
+    Python::attach(|py| -> PyResult<()> {
+        let symbolica = install_package(py, "symbolica")?;
+        let core = PyModule::new(py, "symbolica.core")?;
+        python::create_symbolica_module(&core)?;
+        py.import("sys")?
+            .getattr("modules")?
+            .set_item("symbolica.core", &core)?;
+        symbolica.add("core", &core)?;
+        let community = install_package(py, "symbolica.community")?;
+        symbolica.add("community", &community)?;
+        register_native::<GraphModule>(&core)?;
+        register_native::<FeynkitModule>(&core)?;
+        register_native::<SpensoModule>(&core)?;
+        let graph = import_wrapper(py, &community, "symbolica.community.graph", GRAPH_WRAPPER)?;
+        let fk = import_wrapper(
+            py,
+            &community,
+            "symbolica.community.hepkit",
+            FEYNKIT_WRAPPER,
+        )?;
+        let tensor = import_wrapper(py, &community, "symbolica.community.tensor", SPENSO_WRAPPER)?;
+        let locals = PyDict::new(py);
+        locals.set_item("fk", fk)?;
+        locals.set_item("tensor", tensor)?;
+        locals.set_item("graph", graph)?;
+        locals.set_item("core", core)?;
+        locals.set_item("MODEL_JSON", MODEL_JSON)?;
+        locals.set_item("standalone_host", false)?;
+        let code = CString::new(include_str!("native_forwarding.py")).unwrap();
+        py.run(&code, Some(&locals), Some(&locals))
     })
     .unwrap();
 }
@@ -209,7 +297,7 @@ fn feynkit_and_spenso_share_one_symbolica_kernel_in_both_import_orders() {
     Python::attach(|py| -> PyResult<()> {
         let symbolica = install_package(py, "symbolica")?;
         let core = PyModule::new(py, "symbolica.core")?;
-        create_symbolica_module(&core)?;
+        python::create_symbolica_module(&core)?;
         py.import("sys")?
             .getattr("modules")?
             .set_item("symbolica.core", &core)?;
@@ -298,6 +386,18 @@ fn feynkit_and_spenso_share_one_symbolica_kernel_in_both_import_orders() {
             locals.set_item("spenso", spenso)?;
             let assertions = CString::new(
                 r#"
+def external_metrics_snapshot(view):
+    # EXTERNAL METRICS FIXTURE in points, not browser measurements.
+    request = view.measurement_request()
+    return view.measured(measurements={
+        "id": request["id"],
+        "metrics": [
+            {"id": label["id"], "width": 24.0, "height": 12.0, "baseline": 9.0}
+            for label in request["labels"]
+        ],
+    })
+
+
 core.set_namespace("community_namespace_test")
 assert spenso.TensorName.vector("namespace_vector").to_expression() == core.S(
     "community_namespace_test::namespace_vector"
@@ -415,15 +515,55 @@ except feynkit.DiagramError:
     pass
 else:
     raise AssertionError("tensor reduction accepted both an expression and a projector")
-# Converting back to an ordinary expression keeps Symbolica's namespace and
-# nested bracket colors, just as if mink had no custom Spenso printer.
+# The parent's native MathML callback renders standalone spaces as family/dimension
+# subscripts; ordinary function calls retain parentheses. Both preserve namespace
+# options, and neither display changes the stored Symbolica expression.
+import re
+import xml.etree.ElementTree as ET
 ordinary_numerator = scalar_graphs[0].numerator_expression().to_expression()
-control_numerator = ordinary_numerator.replace(
-    mink(tensor_dimension), core.S("printer_control::mink")(tensor_dimension)
-)
-assert ordinary_numerator._repr_html_() == control_numerator._repr_html_()
+ordinary_before = bytes(ordinary_numerator.__getstate__())
+representation = mink(tensor_dimension)
+control_representation = core.S("printer_control::mink")(tensor_dimension)
+representation_html = representation._repr_html_()
+control_representation_html = control_representation._repr_html_()
+representation_math, control_math = [
+    ET.fromstring(re.search(r"<math\b[^>]*>.*?</math>", html, re.DOTALL).group())
+    for html in (representation_html, control_representation_html)
+]
+family_dimension = representation_math.find(".//{*}msub")
+assert family_dimension is not None and len(family_dimension) == 2, representation_html
+assert [node.text for node in family_dimension[0].iter() if node.tag.rsplit("}", 1)[-1] == "mi"] == ["mink"], representation_html
+assert [node.text for node in family_dimension[1].iter() if node.tag.rsplit("}", 1)[-1] == "mi"] == ["D"], representation_html
+assert representation_math.find(".//{*}mmultiscripts") is None
+assert all(node.get("title") is not None for node in control_math.findall(".//{*}msub")), control_representation_html
+assert [node.text for node in control_math.findall(".//{*}mi")] == ["mink", "D"], control_representation_html
+control_operators = [node.text for node in control_math.findall(".//{*}mo")]
+assert "(" in control_operators and ")" in control_operators, control_representation_html
+for value, namespace in ((representation, "spenso"), (control_representation, "printer_control")):
+    before_display = bytes(value.__getstate__())
+    for show_namespaces in (False, True):
+        plain = value.format(show_namespaces=show_namespaces, color_builtin_symbols=False, bracket_level_colors=None)
+        mathml = value.format(mode=core.PrintMode.MathML, show_namespaces=show_namespaces,
+                              color_builtin_symbols=False, bracket_level_colors=None)
+        math_root = ET.fromstring(f"<math>{mathml}</math>")
+        assert [node.text for node in math_root.findall(".//{*}mi")] == ["mink", "D"], mathml
+        head = f"{namespace}::mink" if show_namespaces else "mink"
+        dimension = "feynkit_py_test::D" if show_namespaces else "D"
+        assert plain == f"{head}({dimension})", plain
+        # Native MathML displays namespaces as subordinate badges on identifiers.
+        qualified = [node.get("title") for node in math_root.findall(".//{*}msub[@title]")]
+        badges = [node.text for node in math_root.findall(".//{*}mtext")]
+        if show_namespaces:
+            assert qualified == [f"{namespace}::mink", "feynkit_py_test::D"], mathml
+            assert badges == [namespace, "feynkit_py_test"], mathml
+        else:
+            assert "::" not in plain and "::" not in "".join(math_root.itertext())
+            assert qualified == badges == [], mathml
+    assert bytes(value.__getstate__()) == before_display
 assert "spenso::" not in ordinary_numerator._repr_html_()
 assert "spenso::mink" in ordinary_numerator.format(show_namespaces=True, color_builtin_symbols=False, bracket_level_colors=None)
+assert isinstance(ordinary_numerator, core.Expression)
+assert bytes(ordinary_numerator.__getstate__()) == ordinary_before
 
 assert scalar_graphs[0].numerator_expression().rank == 0
 denominator = indexed_diagram.denominator_expression()
@@ -450,23 +590,36 @@ assert "q_{1}" in indexed._repr_latex_()
 assert "Momentum" not in indexed.to_typst()
 # Raw index notation exposes the graph provenance under the alphabetic display default.
 raw_indices = spenso.DisplaySettings(index_style="raw")
-for label in ("e₇.₀", "v₇.₀"):
+for label in ("e₇", "v₇"):
     assert label in indexed.format_tensor(settings=raw_indices)
 for label in ("e", "v"):
-    assert f"{label}_{{7.0}}" in indexed.to_latex(settings=raw_indices)
-    assert f"attach({label},b:(7.0))" in indexed.to_typst(settings=raw_indices)
+    assert f"{label}_{{7}}" in indexed.to_latex(settings=raw_indices)
+    assert f"attach({label},b:(7))" in indexed.to_typst(settings=raw_indices)
 for vertex in indexed_diagram.vertices:
     assert isinstance(vertex.numerator_expression(), spenso.TensorExpression)
 for edge in indexed_diagram.edges:
     assert isinstance(edge.numerator_expression(), spenso.TensorExpression)
-# Rich output uses the embedded renderer in every installation.
-# Scalar graphs use the same dashed-particle styling as exported Typst figures.
-assert "stroke-dasharray" in diagram.render().to_svg()
-assert "stroke-dasharray" in diagram._repr_html_()
-# The portable renderer combines inverse factors without changing the tensor.
+# Scalar graphs retain dashed-particle styling in captured native snapshots.
+view = diagram.render()
+snapshot = external_metrics_snapshot(view)
+assert "stroke-dasharray" in snapshot.to_svg()
+assert "stroke-dasharray" in snapshot.to_html()
+assert view.measured().to_svg() == snapshot.to_svg()
+assert not hasattr(diagram, "_repr_html_")
+assert "DiagramView" in diagram._repr_mimebundle_(include=["text/plain"])["text/plain"]
+# Complete direct MathML uses fractions without changing normalized source factors.
 rational = indexed / core.Expression.parse("feynkit_py_test::x*feynkit_py_test::y")
 before_render = rational.to_expression()
 fraction_html = rational.to_html()
+fraction_math = ET.fromstring(re.search(r"<math\b[^>]*>.*?</math>", fraction_html, re.DOTALL).group())
+assert before_render.get_type() == core.AtomType.Mul
+source_factors = list(before_render)
+source_inverses = [tuple(factor) for factor in source_factors if factor.get_type() == core.AtomType.Pow]
+assert len(source_inverses) == 2
+assert {base for base, exponent in source_inverses} == {
+    core.S("feynkit_py_test::x"), core.S("feynkit_py_test::y"),
+}
+assert all(exponent == -1 for base, exponent in source_inverses)
 assert fraction_html.count("<mfrac>") == 1, fraction_html
 assert rational.to_expression() == before_render
 html = indexed.to_html()
@@ -475,8 +628,33 @@ assert "data:font" not in html
 assert "https://cdn.jsdelivr.net/gh/stipub/stixfonts@2.13b171/" in html
 assert "<div data-spenso-math>" in html
 assert "Momentum" not in html
-assert ">𝑞<" in html
-for output in (html, indexed.to_svg()):
+# Native MathML uses logical mi text; the math font supplies the italic glyph.
+indexed_math = ET.fromstring(re.search(r"<math\b[^>]*>.*?</math>", html, re.DOTALL).group())
+# Canonical provenance aliases: edge 7 -> mu, half-edges 7/8 -> nu/rho, vertex 7 -> sigma.
+expected_ports = {1: "ν", 2: "ρ", 3: "μ", 4: "σ"}
+for math_root, math_html in ((indexed_math, html), (fraction_math, fraction_html)):
+    q_labels = [
+        node for node in math_root.findall(".//{*}mmultiscripts")
+        if [token.text for token in node[0].iter() if token.tag.rsplit("}", 1)[-1] == "mi"] == ["q"]
+    ]
+    assert len(q_labels) == indexed.rank == 4, math_html
+    q_ports = {}
+    for label in q_labels:
+        assert len(label) >= 5 and len(label) % 2 == 1, math_html
+        momentum_id = int("".join(label[1].itertext()))
+        assert label[2].tag.rsplit("}", 1)[-1] == "none", math_html
+        assert label[-2].tag.rsplit("}", 1)[-1] == "none", math_html
+        ports = [token.text for script in list(label)[3:] for token in script.iter()
+                 if token.tag.rsplit("}", 1)[-1] == "mi"]
+        assert ports == [expected_ports[momentum_id]], math_html
+        assert momentum_id not in q_ports, math_html
+        q_ports[momentum_id] = ports[0]
+    assert q_ports == expected_ports, math_html
+# Validate the portable source project without invoking the optional compiler.
+project = indexed.to_typst_project()
+assert {"main.typ", "render.typ", "notation.typ", "tree.cbor"} <= project.keys()
+assert all(isinstance(value, bytes) and value for value in project.values())
+for output in (html, indexed.to_typst()):
     assert "SourceIndex" not in output
     assert "SinkIndex" not in output
     assert "EdgeDummy" not in output

@@ -1,9 +1,11 @@
 #[cfg(test)]
 use crate::shorthands::schoonschip::Schoonschip;
 use crate::tensor::CollectedOutput;
+use crate::tensor::composition::ExplicitIndexOccurrences;
 #[cfg(test)]
 use spenso::g;
 use std::cell::RefCell;
+use std::sync::Arc;
 use std::{collections::HashMap, sync::LazyLock};
 
 use spenso::{
@@ -533,7 +535,7 @@ impl SymbolicTensor<PartialStructure> {
         let _phase = crate::reference_cases::timing::scope(
             crate::reference_cases::timing::Phase::GammaKernel,
         );
-        self.ensure_validated()?;
+        self.explicit_index_occurrences()?;
         let representation = Bispinor {}.into();
         let dummies = Self::reserved_dummies([self]);
         let mut paired_metrics = HashMap::new();
@@ -707,6 +709,7 @@ impl SymbolicTensor<PartialStructure> {
                 &mut Self::from_validated_parts(
                     Atom::one(),
                     PartialStructure::from_logical_slots([]),
+                    Arc::default(),
                 ),
             )
         } else {
@@ -1126,7 +1129,7 @@ impl<'settings> DiracSimplifier<'settings> {
         let mut factors = Vec::with_capacity(nodes.len());
         let mut bindings = Vec::new();
         for node in nodes {
-            let (body, interface) = match &network.graph.graph[node] {
+            let (body, interface, history) = match &network.graph.graph[node] {
                 NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) => {
                     let tensor = &network.store.tensors[*index];
                     let external = tensor.structure.external_structure();
@@ -1140,6 +1143,13 @@ impl<'settings> DiracSimplifier<'settings> {
                             let port = external[position];
                             port.rep().slot(PartialIndex::Explicit(port.aind()))
                         })),
+                        Arc::clone(
+                            tensor
+                                .proofs
+                                .occurrences
+                                .get()
+                                .expect("parsed tensor history"),
+                        ),
                     )
                 }
                 NetworkNode::Leaf(NetworkLeaf::Scalar(index)) => {
@@ -1147,11 +1157,22 @@ impl<'settings> DiracSimplifier<'settings> {
                     (
                         network.store.get_scalar_ref(*index),
                         PartialStructure::from_logical_slots([]),
+                        Arc::new(ExplicitIndexOccurrences::default()),
                     )
                 }
                 // A coefficient which is itself a sum retains its complete
                 // admitted interface as one factor instead of exposing branches.
-                _ if node == root => (&coefficient.expression, coefficient.structure.clone()),
+                _ if node == root => (
+                    &coefficient.expression,
+                    coefficient.structure.clone(),
+                    Arc::clone(
+                        coefficient
+                            .proofs
+                            .occurrences
+                            .get()
+                            .expect("published index history"),
+                    ),
+                ),
                 _ => return Ok(None),
             };
             let ports = interface.logical_slots();
@@ -1164,7 +1185,7 @@ impl<'settings> DiracSimplifier<'settings> {
             {
                 bindings.push((argument, factors.len(), *port));
             }
-            let factor = SymbolicTensor::from_validated_parts(body.clone(), interface);
+            let factor = SymbolicTensor::from_validated_parts(body.clone(), interface, history);
             factor.observe_replacement(coefficient);
             factors.push(factor);
         }
@@ -1270,7 +1291,13 @@ impl<'settings> DiracSimplifier<'settings> {
                     // combines with already established coefficient boundaries.
                     let metric_interface =
                         InterfaceInference::replacement_interface(metric.as_view())?;
+                    let mut occurrences =
+                        ExplicitIndexOccurrences::from_interface(&metric_interface);
                     let mut interfaces = vec![metric_interface];
+                    for &position in &bound {
+                        occurrences.append(factors[position].explicit_index_occurrences()?);
+                    }
+                    occurrences.validate()?;
                     interfaces.extend(
                         bound
                             .iter()
@@ -1278,7 +1305,11 @@ impl<'settings> DiracSimplifier<'settings> {
                     );
                     let interface =
                         InterfaceInference::merge_explicit_interface_sequence(&interfaces)?;
-                    let input = SymbolicTensor::from_validated_parts(body.clone(), interface);
+                    let input = SymbolicTensor::from_validated_parts(
+                        body.clone(),
+                        interface,
+                        Arc::new(occurrences),
+                    );
                     input.observe_replacement(coefficient);
                     input.contract_parts(ContractSettings {
                         collect_chains: false,
@@ -1333,7 +1364,11 @@ impl<'settings> DiracSimplifier<'settings> {
         if terminal_pairs && let Some(collected) = collected.as_deref_mut() {
             collected.retain_product(&expression);
         }
-        let rewritten = SymbolicTensor::from_validated_parts(expression, interface);
+        let mut sources = vec![selected];
+        sources.extend(bindings.iter().map(|(_, position, _)| &factors[*position]));
+        let occurrences = ExplicitIndexOccurrences::product(&sources)?;
+        let rewritten =
+            SymbolicTensor::from_validated_parts(expression, interface, Arc::new(occurrences));
         let _ = rewritten.proofs.intrinsic.set(true);
         if terminal_pairs {
             let _ = rewritten.proofs.observations.set(std::sync::Arc::new(
@@ -1352,7 +1387,22 @@ impl<'settings> DiracSimplifier<'settings> {
                 .into_iter()
                 .filter(|port| !consumed.contains(port)),
         );
-        let remaining = SymbolicTensor::from_validated_parts(remaining, remaining_interface);
+        let sources = factors
+            .iter()
+            .enumerate()
+            .filter_map(|(position, factor)| {
+                (!bindings
+                    .iter()
+                    .any(|(_, consumed, _)| *consumed == position))
+                .then_some(factor)
+            })
+            .collect::<Vec<_>>();
+        let occurrences = ExplicitIndexOccurrences::product(&sources)?;
+        let remaining = SymbolicTensor::from_validated_parts(
+            remaining,
+            remaining_interface,
+            Arc::new(occurrences),
+        );
         let _ = remaining.proofs.intrinsic.set(true);
         remaining.observe_replacement(coefficient);
         *coefficient = remaining;

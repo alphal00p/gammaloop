@@ -16,26 +16,22 @@ graphs keep a fixed viewport height, with hover previews overlaid and click-to-p
 details. Displays preview at most six diagrams; `.diagrams` exposes the full
 collection. Single-diagram SVG and Typst exports remain available independently.
 
-
 For complete executable examples, open the #link("guides/showcases/")[FeynKit showcase gallery].
 
-Graph geometry, layout, and interaction are produced directly in Rust. The embedded
-Typst compiler typesets labels and formulas with bundled fonts; it does not load
-MiTeX, Linnest, or Kurvst Typst packages. NumPy is the host's only Python dependency
-for these notebook displays.
-
-The notebook compiler retains SVG output, HTML/MathML, text shaping, and math
-layout. It omits PDF/PNG export, PDF image import, WebAssembly plugins,
-syntax highlighting, bibliographies, JPEG/GIF/WebP decoding, and system font
-discovery. Labels can use normal Typst math and text, including bold and italic;
-raw text is displayed without syntax coloring. Fonts are bundled, so rendering
-works offline without Typst packages or a system installation. General document
-compilation remains available in the standalone tools.
+Graph geometry, layout and interaction use the native Rust renderer. Labels and
+formulas use direct MathML. The live notebook browser measures labels through
+AnyWidget before the existing native `Scene::render` draws the graph; this path
+has no Typst compiler. Graphs, subgraphs, process and generation collections,
+amplitudes, CFF and LTD graph explorers share this `DiagramView` lifecycle.
+Symbolic expression HTML is complete MathML; paged tensor output uses Symbolica's
+shared viewer with Spenso's direct semantic leaves.
 
 == Model labels
 
-Particles accept optional `typstname` and `antitypstname` fields; parameters accept
-`typstname`. Supply native Typst math without dollar delimiters, for example
+MathML particle labels display escaped literal `Particle.name` values. They do
+not interpret Typst source. Particles also accept optional `typstname` and
+`antitypstname` fields; parameters accept `typstname`. These apply to Typst and
+vector exports. Supply native Typst math without dollar delimiters, for example
 `"typstname": "alpha_s"` or `"antitypstname": "overline(u)"`. Built-in models
 supply these labels. Missing labels display the ordinary model name as escaped text.
 The separate `texname` and `antitexname` fields still control LaTeX output. Loading
@@ -43,25 +39,50 @@ parameter labels changes presentation only, preserving algebraic names and expre
 
 == Native SVG configuration
 
-`diagram.render(...)` returns a `DiagramRender` that displays the configured
-figure directly in IPython, Jupyter, and Marimo. The result retains its rendered
-SVG and labels, so later display and export reuse the same snapshot.
-Use `to_svg()` or `to_html()` for text exports, or `to_linnest()` for a
-self-contained Typst document embedding the SVG. The exported document needs
-no graph packages.
+`diagram.render(...)` returns a `DiagramView`. Displaying it in IPython, Jupyter
+or Marimo uses static output by default; with `anywidget`, it also sends the
+labels to the actual browser for measurement. Keep that view
+when you want to export the drawing:
 
 // docs-example: compile
 ```python
-from pathlib import Path
+from IPython.display import display
 
-drawing = diagram.render()
-Path("diagram.svg").write_text(drawing.to_svg(), encoding="utf-8")
-Path("diagram.typ").write_text(drawing.to_linnest(), encoding="utf-8")
-drawing
+view = diagram.render()
+display(view)
 ```
 
-Pass `graph.RenderSettings` as `config`. Shared layout, stroke, drawing options, and
-`DiagramRender` snapshots live in `symbolica.community.graph`. Named constructors support
+After measurement completes, use a later cell:
+
+```python
+snapshot = view.measured()
+snapshot.save("diagram.svg")
+html = snapshot.to_html()
+```
+
+The immutable `DiagramRender` retains the measured boxes and embedded math font.
+Its measured SVG contains XHTML `foreignObject` MathML and targets browsers.
+`measured()` raises while measurement is pending. Scripts explicitly request
+`view.measured(browser="chromium")` with optional Playwright and Chromium, or
+return a browser receipt from `view.measurement_request()` to
+`view.measured(measurements=receipt)`. Receipts must come from the same view;
+strict `measured()` never uses estimates or launches a browser implicitly.
+
+Default `view.snapshot()`, `view.to_svg()` and `view.to_html()` export complete
+static output without launching a browser. They reuse completed measurements,
+otherwise use optional typst-py outlining when available, otherwise estimated
+STIX MathML label bounds. Estimates leave measurement pending. Installing
+`anywidget` adds live notebook measurement; earlier snapshots remain immutable.
+
+
+For vector labels, call `outlined = view.outlined()` with optional Python
+typst-py (distribution `typst`). This route is required for PDF, PNG and Typst
+SVG import to avoid missing MathML labels. Use `outlined.save("diagram.pdf")`
+or `outlined.to_linnest()` for a self-contained Typst document embedding the
+outlined SVG. The document needs no graph packages.
+
+Pass `graph.RenderSettings` as `config`. Shared settings, `DiagramView` and
+`DiagramRender` live in `symbolica.community.graph`. Named constructors support
 editor completion and `help()`. Settings can be changed for future drawings; existing
 render results retain their original inputs. Diagram names appear in surrounding captions;
 set `title` explicitly to add a heading to the SVG. `DrawOptions.node_radius` uses graph
@@ -75,6 +96,7 @@ numeric values are rejected when constructing settings.
 Particle and momentum presentation uses boolean `hepkit.DiagramStyle` arguments:
 `show_particle`, `show_momentum`, `show_edge_index`, `show_node_index`,
 `momentum_arrows`, `split_initial_state`, and `debug` (node and edge indices).
+This script example explicitly measures with Chromium before exporting:
 
 // docs-example: compile
 ```python
@@ -87,15 +109,13 @@ settings = graph.RenderSettings(
     ),
 )
 style = hepkit.DiagramStyle(show_particle=False)
-drawing = diagram.render(momenta=True, config=settings, style=style)
-Path("momenta.svg").write_text(
-    drawing.to_svg(), encoding="utf-8"
-)
+view = diagram.render(momenta=True, config=settings, style=style)
+snapshot = view.measured(browser="chromium")
+snapshot.save("momenta.svg")
 basis = next(iter(diagram.loop_momentum_bases()))
-Path("alternative-routing.svg").write_text(
-    diagram.render(lmb=basis, config=settings).to_svg(), encoding="utf-8"
-)
-drawing
+alternative_view = diagram.render(lmb=basis, config=settings)
+alternative_view.measured(browser="chromium").save("alternative-routing.svg")
+snapshot
 ```
 
 `momenta=True` displays the stored routing. Passing `lmb=basis` enables momentum
@@ -119,10 +139,14 @@ The original particle
 line styles, labels, and transparent background are preserved. Model, generation, CFF and LTD
 objects also expose compact representations for inspection.
 
-For explicit Marimo embedding, use `mo.iframe(diagram.to_html())` so the interaction script
-runs. Displaying `diagram` directly already uses Marimo's interactive HTML path.
-Without scripts, inline SVG still shows native hover labels; embedding it as a static image
-shows the drawing. Figure selections are local browser state; they do not alter the Python
+For explicit Marimo embedding after measurement, use `mo.iframe(snapshot.to_html())`.
+Displaying `diagram` or `view` directly uses the live widget MIME path.
+`diagram.to_html(browser="chromium")` explicitly measures a fresh view for script
+export. Its default `browser=None` does not start a browser and it accepts no
+measurement receipt; retain `view` for notebook or external-browser receipts.
+Inline measured SVG needs browser support for XHTML MathML labels; use an
+outlined snapshot in consumers that require vector labels.
+Figure selections are local browser state; they do not alter the Python
 diagram or create a physics `Subgraph`. Copy the node and edge IDs from the details panel into
 `diagram.subgraph(nodes=[...], edges=[...])` for subsequent symbolic calculations, or use
 `diagram.filter(...)` to select by physics properties.
@@ -133,9 +157,7 @@ diagram, with the remaining graph muted and dotted:
 // docs-example: compile
 ```python
 region = diagram.filter(edge=lambda edge: edge.particle_name == "b")
-Path("highlighted-diagram.svg").write_text(
-    region.render().to_svg(), encoding="utf-8"
-)
+region.render().measured(browser="chromium").save("highlighted-diagram.svg")
 region
 ```
 
@@ -161,8 +183,8 @@ from rendering and requires that package only when explicitly used.
 
 == Configured amplitude collections
 
-`amplitude.render()` returns a `graph.DiagramRender` snapshot that displays directly
-in IPython, Jupyter, and Marimo. `config` accepts the same `RenderSettings` as
+`amplitude.render()` returns a `graph.DiagramView` that displays directly
+in IPython, Jupyter and Marimo. `config` accepts the same `RenderSettings` as
 individual diagrams, while `term_settings` controls the weighted tensor notation.
 The default preview shows six contributions; `max_diagrams=None` renders all.
 
@@ -170,16 +192,18 @@ The default preview shows six contributions; `max_diagrams=None` renders all.
 from symbolica.community.tensor import DisplaySettings
 from symbolica.community.hepkit import RenderSettings
 
-drawing = amplitude.render(
+view = amplitude.render(
     config=RenderSettings(show_momentum=True),
     max_diagrams=3,
     term_settings=DisplaySettings(show_dimensions=True),
 )
-drawing
-html = drawing.to_html()
-svg = drawing.diagrams[0].to_svg()
+snapshot = view.measured(browser="chromium")
+html = snapshot.to_html()
+svg = snapshot.diagrams[0].to_svg()
 ```
 
-The `diagrams` property contains only the rendered contributions, in amplitude
-order. Rendering captures a presentation snapshot and leaves the amplitude intact.
+The view's `diagrams` property contains configured child views; the measured
+snapshot contains child snapshots, in amplitude order. In notebooks, display
+`view` and retrieve `view.measured()` after completion to use the notebook's
+measurements. Rendering leaves the amplitude intact.
 ]

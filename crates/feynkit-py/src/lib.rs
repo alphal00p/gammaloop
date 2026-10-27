@@ -21,7 +21,11 @@ mod tensor;
 mod ufo;
 mod wavefunction;
 
-use pyo3::{prelude::*, types::PyModule};
+use pyo3::types::PyModule;
+use pyo3::types::PyModuleMethods;
+#[cfg(any(test, feature = "python_stubgen"))]
+use pyo3::types::{PyAnyMethods, PyDictMethods};
+use pyo3::{Bound, PyResult, Python};
 use symbolica::api::python::{Citation, SymbolicaCommunityModule};
 
 pub use amplitude::{PyAmplitude, PyAmplitudeLeg, PySquaredAmplitude};
@@ -409,7 +413,9 @@ fn record_tensor_usage() {
 
 #[cfg(test)]
 mod tests {
+    use spynso3::SpensoModule;
     use std::ffi::CString;
+    use symbolica::api::python;
 
     use pyo3::types::PyDict;
     use spynso3::expression::TensorExpression;
@@ -516,30 +522,19 @@ assert not missing, f"native classes missing from the generated stub: {missing}"
         Python::initialize();
         Python::attach(|py| {
             let module = registered_module(py);
-            // CFF presentation uses the tensor module supplied by the Community host.
-            let tensor = PyModule::new(py, "symbolica.community.tensor").unwrap();
-            spynso3::SpensoModule::register_module(&tensor).unwrap();
-            spynso3::SpensoModule::initialize(py).unwrap();
-            // Supply the complete Community package hierarchy used by display
-            // imports, without requiring a separately installed Python host.
-            let root = PyModule::new(py, "symbolica").unwrap();
-            let community = PyModule::new(py, "symbolica.community").unwrap();
-            root.add("__path__", Vec::<String>::new()).unwrap();
-            community.add("__path__", Vec::<String>::new()).unwrap();
-            root.add("community", &community).unwrap();
-            community.add("tensor", &tensor).unwrap();
-            community.add("hepkit", &module).unwrap();
-            let modules = py.import("sys").unwrap().getattr("modules").unwrap();
-            for (name, value) in [
-                ("symbolica", &root),
-                ("symbolica.community", &community),
-                ("symbolica.community.tensor", &tensor),
-                ("symbolica.community.hepkit", &module),
-            ] {
-                modules.set_item(name, value).unwrap();
-            }
+            let tensor = PyModule::new(py, "standalone_tensor").unwrap();
+            SpensoModule::register_module(&tensor).unwrap();
+            SpensoModule::initialize(py).unwrap();
+            let graph = PyModule::new(py, "standalone_graph").unwrap();
+            linnet_render_py::register(&graph).unwrap();
+            let core = PyModule::new(py, "standalone_core").unwrap();
+            python::create_symbolica_module(&core).unwrap();
             let locals = PyDict::new(py);
             locals.set_item("fk", &module).unwrap();
+            locals.set_item("tensor", &tensor).unwrap();
+            locals.set_item("graph", &graph).unwrap();
+            locals.set_item("core", &core).unwrap();
+            locals.set_item("standalone_host", true).unwrap();
             locals
                 .set_item("MODEL_JSON", NORMALIZED_SCALAR_MODEL)
                 .unwrap();
@@ -549,6 +544,19 @@ import sys
 
 assert "_gammaloop" not in sys.modules
 assert fk.__name__ == "symbolica.community.hepkit"
+
+
+def external_metrics_snapshot(view):
+    # EXTERNAL METRICS FIXTURE in points, not browser measurements.
+    request = view.measurement_request()
+    return view.measured(measurements={
+        "id": request["id"],
+        "metrics": [
+            {"id": label["id"], "width": 24.0, "height": 12.0, "baseline": 9.0}
+            for label in request["labels"]
+        ],
+    })
+
 
 model = fk.Model.from_json(MODEL_JSON)
 assert model.name == "scalars"
@@ -573,7 +581,11 @@ generated = process.generate_diagrams(loops=(0, 1), **generation_arguments)
 assert len(generated) > 0
 assert generated[0].name == next(iter(generated)).name
 assert generated.report.completed
-generation_html = generated._repr_html_()
+generation_view = generated.render(max_diagrams=2)
+assert len(generation_view.diagrams) == min(2, len(generated))
+generation_html = external_metrics_snapshot(generation_view).to_html()
+assert generated.render(max_diagrams=0).diagrams == []
+assert len(generated.render(max_diagrams=None).diagrams) == len(generated)
 assert "Generation result" in generation_html
 assert "retained diagrams" in generated.report._repr_html_()
 assert "particles" in model._repr_html_()
@@ -592,11 +604,17 @@ assert denominator.rank == 0
 assert "ZERO" not in str(denominator)
 assert denominator != 1
 integrand = loop_diagram.numerator_expression() / denominator
-diagram_svg = loop_diagram.render().to_svg()
+diagram_view = loop_diagram.render()
+diagram_snapshot = external_metrics_snapshot(diagram_view)
+diagram_svg = diagram_snapshot.to_svg()
 assert diagram_svg.startswith("<svg")
-assert loop_diagram.to_html() == loop_diagram._repr_html_()
-assert "<svg" in loop_diagram._repr_svg_()
-assert "Feynman diagram" in loop_diagram._repr_html_()
+assert diagram_snapshot.to_html() == diagram_snapshot._repr_html_()
+assert diagram_snapshot._repr_svg_() == diagram_svg
+assert diagram_view.measured().to_svg() == diagram_svg
+assert "Feynman diagram" in diagram_snapshot.to_html()
+assert not hasattr(loop_diagram, "_repr_html_")
+assert not hasattr(loop_diagram, "_repr_svg_")
+assert "DiagramView" in loop_diagram._repr_mimebundle_(include=["text/plain"])["text/plain"]
 
 json_diagram = fk.FeynmanDiagram.from_json(model, loop_diagram.to_json())
 dot_diagram = fk.FeynmanDiagram.from_dot(model, loop_diagram.to_dot())
@@ -624,7 +642,7 @@ assert set(routed) == {edge.id for edge in json_diagram.edges}
 cff = json_diagram.integrate_energy(method="cff")
 assert len(cff) > 0
 expression = cff.to_expression()
-assert "Cross-free family" in cff._repr_html_()
+assert "Cross-free family" in external_metrics_snapshot(cff.render()).to_html()
 assert "candidate orientations" in cff.report._repr_html_()
 
 momentum = fk.ThreeMomentum(3.0, 4.0, 0.0)
@@ -652,6 +670,8 @@ assert "_gammaloop" not in sys.modules
             .unwrap();
 
             py.run(&code, Some(&locals), Some(&locals)).unwrap();
+            let forwarding = CString::new(include_str!("../tests/native_forwarding.py")).unwrap();
+            py.run(&forwarding, Some(&locals), Some(&locals)).unwrap();
             let expression = locals.get_item("expression").unwrap().unwrap();
             assert!(expression.is_instance_of::<TensorExpression>());
             assert_eq!(

@@ -1,9 +1,13 @@
 //! Immutable render snapshots, shared by generic graphs and domain renderers.
-use pyo3::{
-    exceptions::{PyRuntimeError, PyValueError},
-    prelude::*,
-};
-use std::{path::PathBuf, sync::Arc};
+use crate::PyErrExt;
+use std::fs;
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use pyo3::exceptions::{PyRuntimeError, PyValueError};
+use pyo3::{pyclass, pymethods, PyResult};
+
+use crate::typst_export;
 
 /// An immutable native SVG rendering with file exports and notebook display.
 /// Geometry and typeset labels are captured when the result is created.
@@ -26,7 +30,7 @@ impl PyDiagramRender {
     pub fn new(svg: String, html: String) -> Self {
         Self {
             pages: Arc::new(vec![svg]),
-            html: Some(html),
+            html: Some(Self::without_font(&html)),
             diagrams: Vec::new(),
         }
     }
@@ -40,10 +44,25 @@ impl PyDiagramRender {
             .collect();
         Ok(Self {
             pages: Arc::new(pages),
-            html: Some(html),
+            html: Some(Self::without_font(&html)),
             diagrams,
         })
     }
+    // Only capture's exact font block is a resource, never arbitrary label text.
+    pub(crate) fn without_font(html: &str) -> String {
+        let mut output = String::with_capacity(html.len());
+        let mut rest = html;
+        while let Some(start) = rest.find("<style data-linnet-font=\"true\">") {
+            let Some(end) = rest[start..].find("</style>") else {
+                break;
+            };
+            output.push_str(&rest[..start]);
+            rest = &rest[start + end + "</style>".len()..];
+        }
+        output.push_str(rest);
+        output
+    }
+
     pub(crate) fn pages(&self) -> &[String] {
         &self.pages
     }
@@ -67,19 +86,39 @@ impl PyDiagramRender {
         Ok(self.pages().to_vec())
     }
     pub fn to_html(&self) -> PyResult<String> {
-        if let Some(html) = &self.html {
-            return Ok(html.clone());
-        }
-        Ok(format!(
-            "<figure class=\"linnet-graph\">{}</figure>",
-            self.pages().join("\n")
-        ))
+        let html = self.html.as_ref().map_or_else(
+            || {
+                format!(
+                    "<figure class=\"linnet-graph\">{}</figure>",
+                    Self::without_font(&self.pages().join("\n"))
+                )
+            },
+            String::clone,
+        );
+        let font = self.pages().iter().find_map(|page| {
+            let (_, rest) = page.split_once("<style data-linnet-font=\"true\"><![CDATA[")?;
+            rest.split_once("]]></style>").map(|(css, _)| css)
+        });
+        Ok(match font {
+            Some(css) => format!("<style data-linnet-font=\"true\">{css}</style>{html}"),
+            None => html,
+        })
     }
+
     fn to_linnest(&self) -> PyResult<String> {
+        if self
+            .pages()
+            .iter()
+            .any(|svg| svg.contains("class=\"linnet-math-label\""))
+        {
+            return Err(PyValueError::new_err(
+                "Typst SVG imports require outlined labels; call view.outlined() before exporting a Typst document",
+            ));
+        }
         Ok(self
             .pages()
             .iter()
-            .map(|svg| typst_renderer::Document::svg_source(svg))
+            .map(|svg| typst_export::svg_source(svg))
             .collect::<Vec<_>>()
             .join("\n#pagebreak()\n"))
     }
@@ -98,16 +137,18 @@ impl PyDiagramRender {
             }
         };
         if let Some(parent) = output.parent().filter(|path| !path.as_os_str().is_empty()) {
-            std::fs::create_dir_all(parent).map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+            fs::create_dir_all(parent)
+                .map_err(|e| PyRuntimeError::new_err(e.to_string()).with_rust_cause(&e))?;
         }
         if let Some(text) = text {
-            std::fs::write(&output, text).map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+            fs::write(&output, text)
+                .map_err(|e| PyRuntimeError::new_err(e.to_string()).with_rust_cause(&e))?;
             Ok(output)
         } else {
             let bytes = self.export_pages(extension)?;
             match bytes.as_slice() {
-                [page] => std::fs::write(&output, page)
-                    .map_err(|e| PyRuntimeError::new_err(e.to_string()))?,
+                [page] => fs::write(&output, page)
+                    .map_err(|e| PyRuntimeError::new_err(e.to_string()).with_rust_cause(&e))?,
                 _ => {
                     return Err(PyValueError::new_err(
                         "use save_pages() for multiple PNG pages",
@@ -134,13 +175,15 @@ impl PyDiagramRender {
                 ));
             }
         };
-        std::fs::create_dir_all(&directory).map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+        fs::create_dir_all(&directory)
+            .map_err(|e| PyRuntimeError::new_err(e.to_string()).with_rust_cause(&e))?;
         pages
             .into_iter()
             .enumerate()
             .map(|(index, page)| {
                 let path = directory.join(format!("page-{}.{format}", index + 1));
-                std::fs::write(&path, page).map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+                fs::write(&path, page)
+                    .map_err(|e| PyRuntimeError::new_err(e.to_string()).with_rust_cause(&e))?;
                 Ok(path)
             })
             .collect()
@@ -160,5 +203,33 @@ impl PyDiagramRender {
     }
     fn __repr__(&self) -> &'static str {
         "DiagramRender()"
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn html_shares_one_font_while_svg_pages_remain_standalone() {
+        let font =
+            "<style data-linnet-font=\"true\"><![CDATA[@font-face{font-family:test}]]></style>";
+        let svg = format!("<svg>{font}<path/></svg>");
+        let child = PyDiagramRender::new(svg.clone(), format!("<figure>{svg}</figure>"));
+        assert!(!child.html.as_ref().unwrap().contains("@font-face"));
+        assert_eq!(child.to_html().unwrap().matches("@font-face").count(), 1);
+        let collection = PyDiagramRender::from_diagrams(
+            vec![child.clone(), child.clone(), child],
+            format!("{svg}{svg}{svg}"),
+        )
+        .unwrap();
+        assert_eq!(
+            collection.to_html().unwrap().matches("@font-face").count(),
+            1
+        );
+        assert!(collection
+            .pages()
+            .iter()
+            .all(|page| page.matches("@font-face").count() == 1));
     }
 }

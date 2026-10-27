@@ -1,8 +1,9 @@
 (() => {
-  for (const root of document.querySelectorAll('.feynkit-collection')) {
-    if (root.dataset.ready) continue;
+  const start = (root) => {
+    if (root.dataset.ready) return;
+    const entries = [...root.querySelectorAll('template[data-feynkit-drawing]')];
+    if (entries.some(entry => !entry.content.querySelector('svg'))) return;
     root.dataset.ready = 'true';
-    const entries = [...root.querySelectorAll('template')];
     const mount = (index, stage) => {
       const fragment = entries[index].content.cloneNode(true);
       for (const svg of fragment.querySelectorAll('svg')) {
@@ -47,5 +48,8 @@
       });
     }
     if (buttons.length) buttons[0].click();
-  }
+  };
+  const startAll = () => document.querySelectorAll('.feynkit-collection').forEach(start);
+  document.addEventListener('linnet:rendered', startAll);
+  startAll();
 })();

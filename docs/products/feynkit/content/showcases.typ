@@ -49,8 +49,10 @@ Rust and Python references. For tensor-aware notation and algebraic identities, 
 == Running a notebook locally
 
 Use a shared Symbolica host containing FeynKit, as described in the
-#link("guides/community-host/")[host guide]. Its Python environment needs `marimo==0.24.0`,
-`typst==0.15.0`; Python `linnet` is optional for explicit graph interoperability.
+#link("guides/community-host/")[host guide]. Its Python environment needs `marimo==0.24.0`
+and `anywidget>=0.9,<1`; Python `linnet` is optional for explicit graph interoperability.
+Notebook graphs use browser-measured MathML. Install optional `typst>=0.15` for
+outlined graph labels and vector exports.
 The UFO example additionally needs Python 3.11 or newer and the
 #link("guides/showcases/ufo/")[pinned UFO loader 1.0.1]. Set
 `SYMBOLICA_LICENSE` through your local environment when required by your Symbolica

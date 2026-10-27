@@ -1474,23 +1474,16 @@ change the reusable Cargo artifact. Checks whose Rust source is
 generated from the manuals remain in the terminal Pages derivation so
 they still validate the content being published.
 
-The terminal documentation derivation tests Python `linnet` in a virtual
-environment based on a Nix-composed Python that includes `typst-py`
-0.15.0. System site packages keep that wheel dependency available to
-the offline installer. The `linnet` extension embeds its pinned CeTZ and oxifmt
-package trees and passes the staged copy to its in-process compiler, so
-its graph renderer never requires a network fetch or the documentation
-package cache. The terminal Python environment uses the same pinned docs
-package set to satisfy Python `linnet`'s exact `typst==0.15.0` dependency. Both
-Cargo and uv dependency resolution run offline; a mismatched Python package
-must fail locally instead of attempting a download inside the Nix sandbox.
-The broader documentation renderer still receives the package tree from
-`docsTypst` for MiTeX and other authored assets. These
-embedded package trees are compile-time `RustEmbed` inputs, so they
-intentionally enter the source key for `linnet-py` and aggregate Cargo
-producers that compile it. The package-specific source map keeps them out
-of unrelated per-crate producers, while downloaded Python wheels remain
-confined to the terminal documentation/runtime closure.
+The terminal documentation derivation builds the combined Community wheel from
+`examples/notebooks/symbolica-host/Cargo.toml` and installs it with
+`--offline --no-deps` into an isolated Python environment before exercising the
+Linnet Python surface. The host owns the single Symbolica extension. Cargo and
+uv run offline; runtime dependencies must already be staged in the terminal
+closure. Optional Python Typst compilation for vector export is separate from
+native notebook rendering and source-only Typst project export. The authored
+documentation renderer receives its package tree from `docsTypst` for MiTeX and
+other page assets. Embedded inputs enter only their owning package's producer
+source key; Python runtime dependencies remain in the terminal closure.
 
 === Community rendering and UFO runtime inputs
 
@@ -1499,19 +1492,26 @@ SVG renderer. The graph API remains in `linnet-py`, and both packages retain
 separate Cargo dependency boundaries. Typst authoring assets live under
 `vendor/typst-packages`; their consumers own those source inputs.
 Asset manifests accompany their owning packages in dependency and production
-builds. FeynKit's native notebook widgets also own their embedded CSS, JavaScript
+builds. `linnet-render-py` owns `data.json`, the checked-in browser font and the
+shared `view.py`/`view.js` measurement widget. Spynso retains its tensor Typst
+export sources, while Linnet's graph adapter retains its subgraph styling.
+FeynKit's native notebook widgets also own their embedded CSS, JavaScript
 and HTML inputs. Test producers explicitly stage their embedded Python, Atom,
 JSON and graph fixtures without adding those inputs to production packages.
-The `gammaloop-render-data` runtime package copies fonts from the
-Cargo-locked Typst asset release and the checked-in MathML font. Renderers retain
-their compiled hash checks. Only rendering test groups, doctests and documentation
-receive this resource closure; it remains separate from compiled producers.
+The `gammaloop-render-data` runtime package copies the checked-in MathML font
+and its license using the `linnet-render-py` asset manifest. The documentation test
+closure
+also stages the shared browser font and its license from `linnet-render-py/fonts`.
+Renderers retain their compiled hash checks. Only rendering test groups, doctests
+and documentation receive this resource closure; it remains separate from compiled
+producers.
 The development shell adds it to `SYMBOLICA_DATA_DIRECTORY`, preserving any
 additional directories already configured by the user.
 UFO import tests use the released wheels locked in `nix/ufo-runtime/uv.lock`
-(Symbolica 3.0.0 and ufo-model-loader 1.0.0). This runtime lock is independent
-of the root notebook environment's Community source pin. Native Rust continues
-to use the workspace Cargo lock. The UFO wheel closure is attached only to
+(Symbolica 3.0.0 and ufo-model-loader 1.0.1). This runtime lock is independent
+of the root environment's standalone Symbolica pin and the combined Community
+host's Cargo source pins. Native Rust continues to use the workspace Cargo lock.
+The UFO wheel closure is attached only to
 the selected runtime groups and does not enter unrelated compiled producers.
 
 == Follow-up: persistent Typst worlds in the live watcher

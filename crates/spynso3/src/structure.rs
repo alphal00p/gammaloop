@@ -1,4 +1,7 @@
 use idenso::representations::{ColorAdjoint, ColorFundamental, ColorSextet};
+use linnet_render_py::PyErrExt;
+use std::collections::BTreeMap;
+use symbolica_notation::{DisplayText, MathMlSubset, Notation};
 
 #[cfg(not(feature = "python_stubgen"))]
 use pyo3_stub_gen_derive::remove_gen_stub;
@@ -19,11 +22,7 @@ use pyo3_stub_gen::{
 };
 use spenso::structure::slot::DualSlotTo;
 use spenso::{
-    network::{
-        library::symbolic::ETS,
-        parsing::ShadowedStructure,
-        tags::{SPENSO_TAG, TENSOR_PRINT_CALLBACK_TAG, TENSOR_PRINT_HEAD_PREFIX},
-    },
+    network::{library::symbolic::ETS, parsing::ShadowedStructure, tags::SPENSO_TAG},
     structure::{
         Canonicalized, TensorStructure,
         abstract_index::AbstractIndex,
@@ -222,25 +221,44 @@ impl SpensoName {
     fn prepare_print(
         py: Python<'_>,
         print: Option<Py<PyAny>>,
-        tags: &mut Vec<String>,
-    ) -> PyResult<Option<Py<PyAny>>> {
+    ) -> PyResult<(Option<Py<PyAny>>, Option<Notation>)> {
         let Some(print) = print else {
-            return Ok(None);
+            return Ok((None, None));
         };
         if let Ok(mapping) = print.bind(py).cast::<PyDict>() {
-            let sources = mapping.extract::<std::collections::BTreeMap<String, String>>()?;
-            for (backend, source) in &sources {
-                if !matches!(backend.as_str(), "plain" | "latex" | "typst") {
+            let sources = mapping.extract::<BTreeMap<String, String>>()?;
+            let mut notation = Notation::default();
+            for (backend, source) in sources {
+                if !matches!(backend.as_str(), "plain" | "latex" | "typst" | "mathml") {
                     return Err(PyValueError::new_err(
-                        "print mapping keys must be 'plain', 'latex', or 'typst'",
+                        "print mapping keys must be 'plain', 'latex', 'typst', or 'mathml'",
                     ));
                 }
-                tags.push(format!("{TENSOR_PRINT_HEAD_PREFIX}{backend}:{source}"));
+                if backend == "mathml" {
+                    notation.mathml = Some(MathMlSubset::parse(&source).map_err(|error| {
+                        PyValueError::new_err(error.to_string()).with_rust_cause(&error)
+                    })?);
+                } else {
+                    let text = DisplayText::new(source).map_err(|error| {
+                        PyValueError::new_err(error.to_string()).with_rust_cause(&error)
+                    })?;
+                    match backend.as_str() {
+                        "plain" => notation.text.plain = Some(text),
+                        "latex" => notation.text.latex = Some(text),
+                        "typst" => notation.text.typst = Some(text),
+                        _ => unreachable!("backend validated above"),
+                    }
+                }
             }
-            Ok(None)
+            Ok((None, Some(notation)))
         } else if print.bind(py).is_callable() {
-            tags.push(TENSOR_PRINT_CALLBACK_TAG.to_owned());
-            Ok(Some(print))
+            Ok((
+                Some(print),
+                Some(Notation {
+                    custom_print: true,
+                    ..Notation::default()
+                }),
+            ))
         } else {
             Err(PyTypeError::new_err(
                 "print must be a mapping of backend names to strings, a callable, or None",
@@ -328,9 +346,14 @@ impl SpensoName {
     ///     Normalize a newly constructed call. A callable receives an Expression
     ///     and returns its normalized Expression; tensor interfaces must remain valid.
     /// print : dict of str to str or callable, optional
-    ///     A mapping with keys "plain", "latex", or "typst" changes just the
-    ///     displayed tensor name. Values are source without math delimiters,
-    ///     for example {"typst": "macron(J)"}. Spenso adds arguments and indices.
+    ///     A mapping with keys "plain", "latex", "typst", or "mathml" changes just the
+    ///     displayed tensor name. Plain, LaTeX and Typst values are bounded display
+    ///     text without math delimiters, for example {"typst": "overline(J)"}.
+    ///     MathML accepts a bounded presentation subset with validated attributes;
+    ///     executable markup, namespaces and unknown entities raise ValueError.
+    ///     Notation is process-local and is not saved with expressions. Equal
+    ///     re-registration succeeds; conflicting notation raises ValueError.
+    ///     Spenso adds arguments and indices.
     ///     A callable uses Symbolica's print callback convention and replaces
     ///     the complete display; returning None selects the standard display.
     /// derivative, series, eval : callable, optional
@@ -347,7 +370,7 @@ impl SpensoName {
     /// Examples
     /// --------
     /// >>> from symbolica.community.tensor import TensorName, Representation
-    /// >>> J = TensorName("Jbar", print={"typst": "macron(J)"})
+    /// >>> J = TensorName("Jbar", print={"typst": "overline(J)"})
     /// >>> vector = J(Representation.euc(3))
     /// >>> vector.rank
     /// 1
@@ -437,7 +460,7 @@ impl SpensoName {
             tags.push(SPENSO_TAG.rank1.clone());
         }
 
-        let print = Self::prepare_print(py, print, &mut tags)?;
+        let (print, notation) = Self::prepare_print(py, print)?;
         let names = PyTuple::new(py, [name])?;
         let expression_type = PythonExpression::type_object(py);
 
@@ -470,6 +493,11 @@ impl SpensoName {
         let AtomView::Var(name) = expression.as_view() else {
             unreachable!("a single Symbolica symbol constructor result is a variable")
         };
+        if let Some(notation) = notation {
+            notation.register(name.get_symbol()).map_err(|error| {
+                PyValueError::new_err(error.to_string()).with_rust_cause(&error)
+            })?;
+        }
         Ok(SpensoName {
             name: name.get_symbol(),
         })
@@ -504,9 +532,14 @@ impl SpensoName {
     ///     Normalize a newly constructed call. A callable receives an Expression
     ///     and returns its normalized Expression; tensor interfaces must remain valid.
     /// print : dict of str to str or callable, optional
-    ///     A mapping with keys "plain", "latex", or "typst" changes just the
-    ///     displayed tensor name. Values are source without math delimiters,
-    ///     for example {"typst": "macron(J)"}. Spenso adds arguments and indices.
+    ///     A mapping with keys "plain", "latex", "typst", or "mathml" changes just the
+    ///     displayed tensor name. Plain, LaTeX and Typst values are bounded display
+    ///     text without math delimiters, for example {"typst": "overline(J)"}.
+    ///     MathML accepts a bounded presentation subset with validated attributes;
+    ///     executable markup, namespaces and unknown entities raise ValueError.
+    ///     Notation is process-local and is not saved with expressions. Equal
+    ///     re-registration succeeds; conflicting notation raises ValueError.
+    ///     Spenso adds arguments and indices.
     ///     A callable uses Symbolica's print callback convention and replaces
     ///     the complete display; returning None selects the standard display.
     /// derivative, series, eval : callable, optional
@@ -523,7 +556,7 @@ impl SpensoName {
     /// Examples
     /// --------
     /// >>> from symbolica.community.tensor import TensorName, Representation
-    /// >>> J = TensorName.vector("Jbar_vector", print={"typst": "macron(J)"})
+    /// >>> J = TensorName.vector("Jbar_vector", print={"typst": "overline(J)"})
     /// >>> vector = J(Representation.euc(3))
     /// >>> vector.rank
     /// 1

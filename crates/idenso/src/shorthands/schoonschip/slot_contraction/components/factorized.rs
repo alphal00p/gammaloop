@@ -1873,7 +1873,7 @@ impl<'a> ComponentSum<'a, '_> {
         if replacements.is_empty() {
             return Some(source);
         }
-        let source = SymbolicTensor::from_normalized_parts(source, interface.clone());
+        let source = SymbolicTensor::from_declared_parts(source, interface.clone()).ok()?;
         let expression = crate::tensor::composition::rewrite_interface_ports(
             &source,
             &replacements,

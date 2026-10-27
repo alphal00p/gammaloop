@@ -1243,6 +1243,16 @@ impl Integrated<'_> {
             **out = function!(ETS.metric, &slots[0], &slots[1]);
         });
 
+        // Vakint's numeric dummy zero uses the same canonical local-zero spelling
+        // as public native labels before they reach the tensor owner.
+        res = res.replace_map(|view, _, out| {
+            if let AtomView::Fun(index) = view
+                && index.get_symbol() == GS.uvaind
+                && let Ok(index) = AbstractIndex::try_from(view)
+            {
+                **out = index.to_atom();
+            }
+        });
         res = res.replace(vakint::symbols::S.cmplx_i).with(Atom::i());
 
         res

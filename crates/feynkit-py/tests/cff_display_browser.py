@@ -8,7 +8,7 @@ import json
 import sys
 from pathlib import Path
 
-from generalized_energy_display_browser import assert_baselines
+from generalized_energy_display_browser import assert_baselines, offline_fonts
 from playwright.sync_api import sync_playwright
 
 
@@ -47,10 +47,11 @@ def main(directory, executable=None, engine="chromium"):
             args=["--no-sandbox"] if engine == "chromium" else [],
         )
         page = browser.new_page(viewport={"width": 800, "height": 1100})
+        offline_fonts(page)
         errors = []
         page.on("pageerror", lambda error: errors.append(str(error)))
         for source in sources:
-            page.set_content(source.read_text())
+            page.set_content(source.read_text(encoding="utf-8"))
             assert page.locator(".feynkit-cff-result[data-ready=true]").count() == 1
             data = payload(page)
             if data["orientations"]:
@@ -66,7 +67,7 @@ def main(directory, executable=None, engine="chromium"):
         # Nested sums used to wrap at every level in WebKit. Check at a normal
         # notebook cell width, not just a desktop-wide standalone document.
         # Preserve real line breaks on small screens, without overflow.
-        page.set_content((Path(directory) / "cff-2.html").read_text())
+        page.set_content((Path(directory) / "cff-2.html").read_text(encoding="utf-8"))
         choose_orientation(page, 97)
         equation = page.locator(".hs-factored-equation")
         page.set_viewport_size({"width": 736, "height": 1100})
@@ -87,7 +88,9 @@ def main(directory, executable=None, engine="chromium"):
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
         page.set_viewport_size({"width": 800, "height": 1100})
 
-        page.set_content((Path(directory) / "collection.html").read_text())
+        page.set_content(
+            (Path(directory) / "collection.html").read_text(encoding="utf-8")
+        )
         thumbnail = page.locator(".fk-thumbnail").first
         page.wait_for_function(
             "document.querySelector('.fk-thumbnail').naturalWidth > 0"
@@ -100,7 +103,7 @@ def main(directory, executable=None, engine="chromium"):
         assert thumbnail.get_attribute("src") != light
         assert page.locator(".fk-stage > svg").count() == 1
 
-        source = (Path(directory) / "cff-3.html").read_text()
+        source = (Path(directory) / "cff-3.html").read_text(encoding="utf-8")
         page.set_content(
             '<body data-theme="dark"><iframe style="width:736px;border:0" srcdoc="'
             + html.escape(source, quote=True)
@@ -146,7 +149,7 @@ def main(directory, executable=None, engine="chromium"):
             display.locator("[data-explorer] > summary").click()
             display.locator("[data-graph] .linnet-viewport").wait_for(state="visible")
         ids = page.locator("[id]").evaluate_all("nodes => nodes.map(n=>n.id)")
-        assert len(ids) == len(set(ids)), "SVG glyph IDs collide across displays"
+        assert len(ids) == len(set(ids)), "SVG IDs collide across displays"
         # The sum is also navigation: endpoints, adjacent terms, and one ID editor.
         choose_orientation(page, 10)
         assert root.locator("[data-sum-id]").evaluate_all(
@@ -271,16 +274,25 @@ def main(directory, executable=None, engine="chromium"):
         assert 0 < geometry["scale"] <= 4 / 3 + 1e-6, geometry
         assert abs(geometry["dx"]) < 1e-4 and abs(geometry["dy"]) < 1e-4, geometry
         # Edge bodies do not change orientation; only their arrowheads do.
-        arrow = graph.locator('[data-flip-edge][aria-disabled="false"]').first
-        edge = arrow.get_attribute("data-flip-edge")
-        before = root.locator("[data-sum-input]").input_value()
-        point = graph.locator(
-            f'path[data-edge="{edge}"][data-flow="source"]'
-        ).first.evaluate("""path => {
-          const p=path.getPointAtLength(path.getTotalLength()*.1);
-          const screen=new DOMPoint(p.x,p.y).matrixTransform(path.getScreenCTM());
-          return {x:screen.x,y:screen.y};
+        body = graph.evaluate("""graph => {
+          for (const arrow of graph.querySelectorAll('[data-flip-edge][aria-disabled="false"]')) {
+            const edge=arrow.dataset.flipEdge;
+            for (const path of graph.querySelectorAll(`path[data-edge="${edge}"]`)) {
+              for (const fraction of [.1,.3,.5,.7,.9]) {
+                const p=path.getPointAtLength(path.getTotalLength()*fraction);
+                const screen=new DOMPoint(p.x,p.y).matrixTransform(path.getScreenCTM());
+                // The old first-edge sample can lie beneath an arrow's hit area.
+                if (document.elementFromPoint(screen.x,screen.y) === path)
+                  return {edge,x:screen.x,y:screen.y};
+              }
+            }
+          }
+          throw new Error('no unobscured edge body click target');
         }""")
+        edge = body.pop("edge")
+        arrow = graph.locator(f'[data-flip-edge="{edge}"]')
+        before = root.locator("[data-sum-input]").input_value()
+        point = body
         page.mouse.click(**point)
         assert root.locator("[data-sum-input]").input_value() == before
         camera.focus()

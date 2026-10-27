@@ -7,9 +7,24 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 
+def external_metrics_snapshot(view):
+    # EXTERNAL METRICS FIXTURE in points, not browser measurements.
+    request = view.measurement_request()
+    return view.measured(
+        measurements={
+            "id": request["id"],
+            "metrics": [
+                {"id": label["id"], "width": 24.0, "height": 12.0, "baseline": 9.0}
+                for label in request["labels"]
+            ],
+        }
+    )
+
+
 def check_display(diagram, result):
     before = result.to_expression()
-    html = result._repr_html_()
+    view = result.render()
+    html = external_metrics_snapshot(view).to_html()
     assert result.to_expression() == before
     assert "</script><script>throw 'unsafe'</script>" not in html
     data = json.loads(
@@ -123,12 +138,12 @@ def check_cff_displays(fk, diagrams):
             pages.append(check_display(diagram, zero))
 
     # Collections share the same theme/frame helper; keep their preview contract.
-    collection = (
+    collection_owner = (
         fk.Model.phi3()
         .process(["phi"], ["phi", "phi"])
         .generate_diagrams(loops=0, max_vertices=1, progress=None)
-        ._repr_html_()
     )
+    collection = external_metrics_snapshot(collection_owner.render()).to_html()
     assert (
         'class="feynkit-collection" data-feynkit-notebook data-linnet-frame-owner'
         in collection
@@ -137,7 +152,7 @@ def check_cff_displays(fk, diagrams):
     if directory := os.environ.get("CFF_DISPLAY_TEST_OUTPUT"):
         target = Path(directory)
         target.mkdir(parents=True, exist_ok=True)
-        (target / "collection.html").write_text(collection)
+        (target / "collection.html").write_text(collection, encoding="utf-8")
         for index, html in enumerate(pages):
-            (target / f"cff-{index}.html").write_text(html)
+            (target / f"cff-{index}.html").write_text(html, encoding="utf-8")
     print(f"CFF explorer: {len(pages)} native displays passed")

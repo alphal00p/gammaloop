@@ -606,6 +606,7 @@ mod tests {
             hedge_poset::OwnedForestNode,
         },
     };
+    use idenso::representations::{ColorAdjoint, ColorFundamental, ColorSextet};
     use linnet::half_edge::{involution::EdgeIndex, subgraph::InternalSubGraph};
     use spenso::{
         network::tags::SPENSO_TAG,
@@ -614,9 +615,7 @@ mod tests {
     use symbolica::{parse, symbol};
 
     #[test]
-    fn final_color_collection_preserves_encoded_open_ports_and_dispatch_roots() -> Result<()> {
-        use idenso::representations::{ColorAdjoint, ColorFundamental, ColorSextet};
-
+    fn final_color_collection_preserves_native_open_ports_and_dispatch_roots() -> Result<()> {
         test_initialise()?;
         let raw = parse!(
             "1/3*gammalooprs::u(0,spenso::bis(4,gammalooprs::hedge(0,1)))*gammalooprs::ubar(1,spenso::bis(4,gammalooprs::hedge(1,1)))*spenso::g(spenso::cof(3,gammalooprs::hedge(1,1)),spenso::dind(spenso::cof(3,gammalooprs::hedge(0,1))))"
@@ -625,7 +624,7 @@ mod tests {
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
         let native = cooking.try_cook(raw.as_view())?;
-        assert_ne!(native, raw);
+        assert_eq!(native, raw);
         let tensor = SymbolicTensor::infer_indexed(native.clone())?;
         assert_eq!(tensor.rank(), 4);
         let tag = Atom::var(symbol!("final_color_collection_scope"));

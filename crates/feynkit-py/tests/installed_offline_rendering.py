@@ -1,4 +1,4 @@
-"""Community rendering uses no Python graph or Typst packages, including in WASM."""
+"""Offline prepared views use explicit metrics and never import optional compilers."""
 
 import builtins
 import importlib.abc
@@ -41,20 +41,69 @@ def import_without_renderers(name, globals=None, locals=None, fromlist=(), level
 builtins.__import__ = import_without_renderers
 
 
+def external_metrics_snapshot(view):
+    # EXTERNAL METRICS FIXTURE in points; no browser measurement is claimed.
+    request = view.measurement_request()
+    assert request["coordinate_system"] == "svg-user-units"
+    assert request["font_style"]["fontSize"] == "9px"
+    assert request["font_style"]["lineHeight"] == "1"
+    assert "points_per_css_pixel" not in request
+    assert [label["id"] for label in request["labels"]] == list(
+        range(len(request["labels"]))
+    )
+    for label in request["labels"]:
+        ET.fromstring(
+            f'<math xmlns="http://www.w3.org/1998/Math/MathML">{label["mathml"]}</math>'
+        )
+    return view.measured(
+        measurements={
+            "id": request["id"],
+            "metrics": [
+                {"id": label["id"], "width": 24.0, "height": 12.0, "baseline": 9.0}
+                for label in request["labels"]
+            ],
+        }
+    )
+
+
+def check_source_project(expression):
+    # Compilation belongs to the explicit optional typst-py harness.
+    before = expression.to_expression()
+    project = expression.to_typst_project()
+    assert {"main.typ", "render.typ", "notation.typ", "tree.cbor"} <= project.keys()
+    assert all(isinstance(value, bytes) and value for value in project.values())
+    assert expression.to_expression() == before
+    return project
+
+
 def check_render_snapshot(value):
     config = render.RenderSettings(drawing=render.DrawOptions(node_radius=5))
-    drawing = value.render(config=config)
+    view = value.render(config=config)
+    assert type(view) is render.DiagramView
+    config.drawing = render.DrawOptions(node_radius=6)
+    drawing = external_metrics_snapshot(view)
     assert isinstance(drawing, render.DiagramRender)
     svg, html = drawing.to_svg(), drawing.to_html()
     ET.fromstring(svg)
-    assert svg in html
+    # HTML shares the font at document scope; standalone SVG retains its copy.
+    without_font = re.sub(
+        r'<style data-linnet-font="true">.*?</style>', "", svg, flags=re.DOTALL
+    )
+    assert without_font in html
+    assert html.count("data:font/woff2;base64,") == 1
     assert drawing._repr_svg_() == svg
     assert drawing._repr_html_() == html
     assert drawing._mime_() == ("text/html", html)
-    assert "#image(bytes(" in drawing.to_linnest()
+    try:
+        drawing.to_linnest()
+    except ValueError as error:
+        assert "outlined labels" in str(error)
+    else:
+        raise AssertionError("MathML snapshot accepted an outlined Typst export")
     assert repr(drawing) == "DiagramRender()"
-    # Results snapshot mutable settings at construction.
-    config.drawing = render.DrawOptions(node_radius=6)
+    # Neither measuring nor later exports replay the captured mutable settings.
+    config.drawing = render.DrawOptions(node_radius=7)
+    assert view.measured().to_svg() == svg
     assert drawing.to_svg() == svg
     assert drawing._repr_html_() == html
     assert drawing._mime_() == ("text/html", html)
@@ -116,14 +165,19 @@ try:
         ),
     )
     assert settings.layouts.pass_count == 1
-    styled = ET.fromstring(process.render(config=settings).to_svg())
+    styled = ET.fromstring(
+        external_metrics_snapshot(process.render(config=settings)).to_svg()
+    )
     assert any(node.get("fill") == "#112233" for node in styled.iter())
     assert any(node.get("stroke") == "#445566" for node in styled.iter())
     assert any(node.get("stroke") == "#778899" for node in styled.iter())
     check_render_snapshot(process)
-    assert "<svg" in process._repr_html_()
+    assert not hasattr(process, "_repr_html_")
+    assert (
+        "DiagramView" in process._repr_mimebundle_(include=["text/plain"])["text/plain"]
+    )
     inclusive = process.with_final_state_alternatives([["g"], ["u", "u~"]])
-    combined = ET.fromstring(inclusive.render().to_svg())
+    combined = ET.fromstring(external_metrics_snapshot(inclusive.render()).to_svg())
     figures = combined.findall("{http://www.w3.org/2000/svg}svg")
     assert len(figures) == 2
     for figure in figures:
@@ -151,7 +205,9 @@ try:
         ),
     ):
         drawing = ET.fromstring(
-            model.process(incoming, outgoing).render(config=config).to_svg()
+            external_metrics_snapshot(
+                model.process(incoming, outgoing).render(config=config)
+            ).to_svg()
         )
         blob = drawing.find(ns + "circle")
         cx, cy, radius = (float(blob.attrib[k]) for k in ("cx", "cy", "r"))
@@ -183,24 +239,43 @@ try:
             # One-sided processes surround the blob instead of occupying a side.
             xs, ys = zip(*tips)
             assert min(xs) < cx < max(xs) and min(ys) < cy < max(ys)
-    ET.fromstring(model.process([], []).render().to_svg())
+    ET.fromstring(external_metrics_snapshot(model.process([], []).render()).to_svg())
     amplitude = process.generate_amplitude(loops=2, progress=None)
     assert len(amplitude.diagrams) == 48
-    assert "<svg" in amplitude._repr_html_()
-    for name in ("DiagramRender", "LayoutSettings", "Stroke", "RenderSettings"):
+    assert not hasattr(amplitude, "_repr_html_")
+    assert (
+        "DiagramView"
+        in amplitude._repr_mimebundle_(include=["text/plain"])["text/plain"]
+    )
+    assert "<svg" in external_metrics_snapshot(amplitude.render()).to_html()
+    for name in (
+        "DiagramRender",
+        "DiagramView",
+        "LayoutSettings",
+        "Stroke",
+        "RenderSettings",
+    ):
         assert getattr(render, name).__module__ == "symbolica.community.graph"
         assert not hasattr(spenso, name)
-    for name in ("DiagramRender", "LayoutSettings", "Stroke", "RenderSettings"):
+    for name in (
+        "DiagramRender",
+        "DiagramView",
+        "LayoutSettings",
+        "Stroke",
+        "RenderSettings",
+    ):
         assert not hasattr(hep, name)
     assert inspect.signature(amplitude.render).parameters["max_diagrams"].default == 6
-    snapshot = amplitude.render(
-        config=render.RenderSettings(
-            drawing=render.DrawOptions(
-                edge_stroke=render.Stroke(paint=render.Color("#123456"))
-            )
-        ),
-        max_diagrams=2,
-        term_settings=spenso.DisplaySettings(show_dimensions=True),
+    snapshot = external_metrics_snapshot(
+        amplitude.render(
+            config=render.RenderSettings(
+                drawing=render.DrawOptions(
+                    edge_stroke=render.Stroke(paint=render.Color("#123456"))
+                )
+            ),
+            max_diagrams=2,
+            term_settings=spenso.DisplaySettings(show_dimensions=True),
+        )
     )
     assert type(snapshot) is render.DiagramRender
     assert len(snapshot.diagrams) == 2
@@ -210,13 +285,16 @@ try:
     assert snapshot._repr_html_() == snapshot.to_html()
     assert "Showing 2 of 48" in snapshot.to_html()
     assert snapshot.to_html().count('class="fk-row"') == 2
-    assert amplitude.render(max_diagrams=0).diagrams == []
+    assert external_metrics_snapshot(amplitude.render(max_diagrams=0)).diagrams == []
     assert len(amplitude.diagrams) == 48
     small = hep.Amplitude(amplitude.diagrams[:2])
-    assert len(small.render(max_diagrams=None).diagrams) == 2
-    assert "Showing" not in small.render(max_diagrams=None).to_html()
+    assert len(external_metrics_snapshot(small.render(max_diagrams=None)).diagrams) == 2
+    assert (
+        "Showing"
+        not in external_metrics_snapshot(small.render(max_diagrams=None)).to_html()
+    )
     try:
-        amplitude.render(max_diagrams=-1)
+        external_metrics_snapshot(amplitude.render(max_diagrams=-1))
     except OverflowError:
         pass
     else:
@@ -228,14 +306,14 @@ try:
     renamed_data = json.loads(diagram.to_json())
     renamed_data["name"] = "caption-only-name"
     renamed = hep.FeynmanDiagram.from_json(model, json.dumps(renamed_data))
-    drawing = renamed.render()
+    drawing = external_metrics_snapshot(renamed.render())
     assert renamed.name in drawing.to_html()
-    assert drawing.to_svg() == diagram.render().to_svg()
+    assert drawing.to_svg() == external_metrics_snapshot(diagram.render()).to_svg()
     untitled_bounds = ET.fromstring(drawing.to_svg()).get("viewBox").split()
     titled_bounds = (
         ET.fromstring(
-            renamed.render(
-                config=render.RenderSettings(title="Explicit title")
+            external_metrics_snapshot(
+                renamed.render(config=render.RenderSettings(title="Explicit title"))
             ).to_svg()
         )
         .get("viewBox")
@@ -244,27 +322,40 @@ try:
     assert float(titled_bounds[3]) > float(untitled_bounds[3])
     style = hep.DiagramStyle(show_particle=False, show_node_index=True)
     basis = diagram.loop_momentum_basis
-    drawing = diagram.render(style=style, lmb=basis)
-    assert drawing.to_html() == diagram.to_html(style=style, lmb=basis)
-    assert drawing.to_linnest() == diagram.to_linnest(style=style, lmb=basis)
-    ET.fromstring(diagram.render().to_svg())
+    view = diagram.render(style=style, lmb=basis)
+    drawing = external_metrics_snapshot(view)
+    assert drawing.to_html() == view.measured().to_html()
+    assert drawing.to_svg() == view.measured().to_svg()
+    assert diagram.loop_momentum_basis.loop_edges == basis.loop_edges
+    assert "<math" in drawing.to_svg()
+    ET.fromstring(external_metrics_snapshot(diagram.render()).to_svg())
     ET.fromstring(
-        diagram.render(
-            config=render.RenderSettings(layouts=render.LayoutSettings(impred_steps=2)),
-            style=hep.DiagramStyle(show_particle=False),
+        external_metrics_snapshot(
+            diagram.render(
+                config=render.RenderSettings(
+                    layouts=render.LayoutSettings(impred_steps=2)
+                ),
+                style=hep.DiagramStyle(show_particle=False),
+            )
         ).to_svg()
     )
     expression = diagram.numerator_expression()
     assert isinstance(expression, spenso.TensorExpression)
     assert "<math" in expression.to_html()
-    ET.fromstring(expression.to_svg())
+    check_source_project(expression)
     # The remaining graph types also render without Typst graph plugins.
-    ET.fromstring(process.render(style=hep.DiagramStyle(show_particle=False)).to_svg())
+    ET.fromstring(
+        external_metrics_snapshot(
+            process.render(style=hep.DiagramStyle(show_particle=False))
+        ).to_svg()
+    )
     network = spenso.TensorNetwork(spenso.TensorExpression(S("direct_svg_test::x") + 2))
     ET.fromstring(
-        network.render(config=render.RenderSettings(title="Native network")).to_svg()
+        external_metrics_snapshot(
+            network.render(config=render.RenderSettings(title="Native network"))
+        ).to_svg()
     )
-    assert "#image(bytes(" in network.to_linnest()
+    assert network.to_typst()
     scalar = hep.Model.phi3()
     cross = scalar.process(["phi"], ["phi", "phi"]).generate_cross_section(
         loops=1, max_vertices=2, allow_self_loops=True, progress=None
@@ -441,7 +532,9 @@ try:
         assert len(tree.fundamental_cycle(internal_half.id).edges) == 1
     sewn_identities = None
     for split in (False, True):
-        svg = cross.render(style=hep.DiagramStyle(split_initial_state=split)).to_svg()
+        svg = external_metrics_snapshot(
+            cross.render(style=hep.DiagramStyle(split_initial_state=split))
+        ).to_svg()
         root = ET.fromstring(svg)
         targets = [n for n in root.iter() if "data-linnet-kind" in n.attrib]
         identities = {
@@ -469,24 +562,28 @@ try:
     labelled = hep.Model.from_json(json.dumps(custom))
     assert labelled.particle("phi").typstname == "alpha_1"
     assert json.loads(labelled.to_json())["particles"][0]["typstname"] == "alpha_1"
-    ET.fromstring(labelled.process(["phi"], ["phi"]).render().to_svg())
+    ET.fromstring(
+        external_metrics_snapshot(labelled.process(["phi"], ["phi"]).render()).to_svg()
+    )
     parameter = labelled.parameter("g").symbol
     assert "beta_2" in parameter.to_typst()
     assert "g" in spenso.TensorExpression(parameter).to_latex()
     assert "mitex" not in parameter.to_typst()
-    ET.fromstring(spenso.TensorExpression(parameter).to_svg())
-    # Every authored Standard Model label must compile without package access.
+    check_source_project(spenso.TensorExpression(parameter))
+    # Every authored Standard Model label must produce valid MathML offline.
     standard = hep.Model.standard_model()
     ET.fromstring(
-        standard.process([p.name for p in standard.particles], []).render().to_svg()
+        external_metrics_snapshot(
+            standard.process([p.name for p in standard.particles], []).render()
+        ).to_svg()
     )
     all_parameters = sum(p.symbol for p in standard.parameters)
-    ET.fromstring(spenso.TensorExpression(all_parameters).to_svg())
+    check_source_project(spenso.TensorExpression(all_parameters))
     assert not hasattr(sys.modules["symbolica.community"], "linnet")
     assert "linnet" not in sys.modules
     assert "typst" not in sys.modules
     print(
-        "Offline QCD process, 48 two-loop diagrams, cross sections, networks, and native Typst labels rendered"
+        "Offline QCD process, 48 two-loop diagrams, cross sections, networks, and MathML label sources validated with external metrics fixtures"
     )
 finally:
     builtins.__import__ = original_import

@@ -18,7 +18,7 @@ STUB = Path(__file__).resolve().parents[3] / "docs/api/python/spynso3.pyi"
 
 def declarations():
     """Yield each documented API entry once, combining identical overload docs."""
-    module = ast.parse(STUB.read_text())
+    module = ast.parse(STUB.read_text(encoding="utf-8"))
     yield "tensor", module
     seen = set()
     for declaration in module.body:

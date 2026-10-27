@@ -1,10 +1,8 @@
-use linnet_render_py::PyDiagramRender;
+use linnet_render_py::PyDiagramView;
 use linnet_render_py::PyRenderSettings;
-use std::{
-    collections::{BTreeMap, VecDeque},
-    sync::{Arc, Mutex},
-    time::{Duration, Instant},
-};
+use std::collections::{BTreeMap, VecDeque};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use symbolica::atom::Atom;
 
 use feynkit_generator::{
@@ -16,31 +14,29 @@ use feynkit_generator::{
 };
 use feynkit_graph::{DiagramId, EdgeId};
 use feynkit_model::Model;
-use pyo3::{
-    FromPyObject, IntoPyObjectExt,
-    exceptions::{PyIndexError, PyTypeError, PyValueError},
-    prelude::*,
-    types::{PyAny, PyBool, PyEllipsis, PyList, PyModule, PyString},
+use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
+use pyo3::prelude::{
+    Bound, IntoPyObject, Py, PyAnyMethods, PyErr, PyModuleMethods, PyResult, Python, pyclass,
+    pymethods,
 };
+use pyo3::types::{PyAny, PyBool, PyEllipsis, PyList, PyModule, PyString};
+use pyo3::{FromPyObject, IntoPyObjectExt};
 
 #[cfg(feature = "python_stubgen")]
-use pyo3_stub_gen::{
-    PyStubType, TypeInfo,
-    derive::{gen_stub_pyclass, gen_stub_pymethods},
-};
+use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
+#[cfg(feature = "python_stubgen")]
+use pyo3_stub_gen::{PyStubType, TypeInfo};
 
-use crate::{
-    amplitude::PyAmplitude,
-    error,
-    graph::PyFeynmanDiagram,
-    model::{PyModel, PyParticle, PyVertexRule},
-    progress::MarimoProgress,
-    render_settings::PyDiagramStyle,
-};
-use symbolica::{
-    api::python::{ConvertibleToExpression, PythonExpression, PythonGraph},
-    graph::Graph,
-};
+use crate::amplitude::PyAmplitude;
+use crate::display;
+use crate::display::PREVIEW_LIMIT;
+use crate::error;
+use crate::graph::PyFeynmanDiagram;
+use crate::model::{PyModel, PyParticle, PyVertexRule};
+use crate::progress::MarimoProgress;
+use crate::render_settings::PyDiagramStyle;
+use symbolica::api::python::{ConvertibleToExpression, PythonExpression, PythonGraph};
+use symbolica::graph::Graph;
 
 /// A model-independent way to identify an external particle.
 ///
@@ -606,7 +602,7 @@ impl PyProcess {
     ///
     /// >>> drawing = process.render()
     /// >>> drawing
-    /// >>> svg = drawing.to_svg()
+    /// >>> svg = drawing.measured(browser="chromium").to_svg()
     ///
     /// Parameters
     /// ----------
@@ -617,9 +613,10 @@ impl PyProcess {
     #[pyo3(signature = (*, config=None, style=None))]
     fn render(
         &self,
+        py: Python<'_>,
         config: Option<&PyRenderSettings>,
         style: Option<&PyDiagramStyle>,
-    ) -> PyResult<PyDiagramRender> {
+    ) -> PyResult<PyDiagramView> {
         let resolve = |state: &[ParticleSelector]| {
             state
                 .iter()
@@ -636,15 +633,15 @@ impl PyProcess {
             .iter()
             .map(|state| resolve(state))
             .collect::<PyResult<Vec<_>>>()?;
-        let svg = crate::display::process_svg(&self.model, &incoming, &outgoing, config, style)?;
+        let view = display::process_view(py, &self.model, &incoming, &outgoing, config, style)?;
         let html = format!(
-            "<figure class=\"feynkit-process\" style=\"max-width:100%;margin:.5rem 0\"><div style=\"width:360px;max-width:100%;overflow-x:auto\">{svg}</div><figcaption style=\"font-size:.85em;opacity:.75\">{}</figcaption></figure>",
-            crate::display::escape_html(&self.__repr__())
+            "<figure class=\"feynkit-process\" style=\"max-width:100%;margin:.5rem 0\"><div style=\"width:360px;max-width:100%;overflow-x:auto\"><!--linnet-svg-0--></div><figcaption style=\"font-size:.85em;opacity:.75\">{}</figcaption></figure>",
+            display::escape_html(&self.__repr__())
         );
-        Ok(PyDiagramRender::new(svg, html))
+        Ok(view.with_html(html))
     }
 
-    /// Display the process schematic in SVG-aware frontends.
+    /// Measure and display the process schematic in notebook frontends.
     ///
     /// Examples
     /// --------
@@ -652,20 +649,36 @@ impl PyProcess {
     ///
     /// >>> from IPython.display import display
     /// >>> display(process)
-    fn _repr_svg_(&self) -> PyResult<String> {
-        self.render(None, None)?.to_svg()
+    ///
+    /// Parameters
+    /// ----------
+    /// include : list[str] or None, optional
+    ///     MIME types requested by the frontend; None allows all available types.
+    /// exclude : list[str] or None, optional
+    ///     MIME types omitted from the frontend response.
+    #[pyo3(signature = (include=None, exclude=None))]
+    fn _repr_mimebundle_(
+        &self,
+        py: Python<'_>,
+        include: Option<Vec<String>>,
+        exclude: Option<Vec<String>>,
+    ) -> PyResult<Py<PyAny>> {
+        let view = self.render(py, None, None)?;
+        view._repr_mimebundle_(py, include, exclude)
     }
 
-    /// Display the process blob, model and active restrictions in notebooks.
+    /// Return Marimo MIME data with static output and an optional live widget.
     ///
     /// Examples
     /// --------
     /// Using the setup in the ``Process`` class example:
     ///
-    /// >>> from IPython.display import display
-    /// >>> display(process)
-    fn _repr_html_(&self) -> PyResult<String> {
-        self.render(None, None)?.to_html()
+    /// >>> view = process.render()
+    /// >>> view  # static output is immediate; an optional widget refines label sizes
+    /// >>> snapshot = view.measured(browser="chromium")
+    fn _mime_(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let view = self.render(py, None, None)?;
+        view._mime_(py)
     }
 
     /// Return a process accepting any of the supplied final states.
@@ -2738,17 +2751,34 @@ impl PyGenerationResult {
 
     /// Render a thumbnail strip and one shared interactive diagram viewer.
     ///
-    /// At most six diagrams are rendered so that displaying a large generation
-    /// result remains responsive. Access ``result.diagrams`` to inspect the
-    /// complete collection.
+    /// The view measures labels when displayed. By default it includes six
+    /// diagrams; ``max_diagrams=None`` includes the complete collection.
     ///
     /// Examples
     /// --------
     /// Using the setup in the ``GenerationResult`` class example:
     ///
-    /// >>> from IPython.display import display
-    /// >>> display(result)
-    fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
+    /// >>> view = result.render(max_diagrams=None)
+    /// >>> view
+    /// >>> snapshot = view.measured(browser="chromium")
+    ///
+    /// Parameters
+    /// ----------
+    /// config : RenderSettings or None, optional
+    ///     Layout, label and drawing settings shared by the displayed diagrams.
+    /// style : DiagramStyle or None, optional
+    ///     Particle, momentum and physical index presentation.
+    /// max_diagrams : int or None, optional
+    ///     Maximum displayed diagrams (default 6); None includes all, 0 none.
+    #[pyo3(signature = (*, config=None, style=None, max_diagrams=Some(6)),
+        text_signature = "($self, *, config=None, style=None, max_diagrams=6)")]
+    fn render(
+        &self,
+        py: Python<'_>,
+        config: Option<&PyRenderSettings>,
+        style: Option<&PyDiagramStyle>,
+        max_diagrams: Option<usize>,
+    ) -> PyResult<PyDiagramView> {
         let title = if self.cross_section {
             "Cross section"
         } else {
@@ -2764,7 +2794,7 @@ impl PyGenerationResult {
                 "incomplete"
             },
         );
-        crate::display::collection_html(
+        display::collection_view(
             py,
             title,
             &subtitle,
@@ -2774,11 +2804,51 @@ impl PyGenerationResult {
                 .cloned()
                 .map(PyFeynmanDiagram::from),
             None,
-            None,
-            None,
-            crate::display::PREVIEW_LIMIT,
+            config,
+            style,
+            max_diagrams.unwrap_or(self.inner.diagrams.len()),
         )
-        .map(|(html, _)| html)
+    }
+
+    /// Return widget MIME data for the compact generation-result explorer.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``GenerationResult`` class example:
+    ///
+    /// >>> view = result.render()
+    /// >>> view  # static output is immediate; an optional widget refines label sizes
+    /// >>> snapshot = view.measured(browser="chromium")
+    ///
+    /// Parameters
+    /// ----------
+    /// include : list[str] or None, optional
+    ///     MIME types requested by the frontend; None allows all available types.
+    /// exclude : list[str] or None, optional
+    ///     MIME types omitted from the frontend response.
+    #[pyo3(signature = (include=None, exclude=None))]
+    fn _repr_mimebundle_(
+        &self,
+        py: Python<'_>,
+        include: Option<Vec<String>>,
+        exclude: Option<Vec<String>>,
+    ) -> PyResult<Py<PyAny>> {
+        let view = self.render(py, None, None, Some(PREVIEW_LIMIT))?;
+        view._repr_mimebundle_(py, include, exclude)
+    }
+
+    /// Return Marimo MIME data with static output and an optional live widget.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``GenerationResult`` class example:
+    ///
+    /// >>> view = result.render(max_diagrams=None)
+    /// >>> view  # static output is immediate; an optional widget refines label sizes
+    /// >>> snapshot = view.measured(browser="chromium")
+    fn _mime_(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let view = self.render(py, None, None, Some(PREVIEW_LIMIT))?;
+        view._mime_(py)
     }
 
     /// Write a concise result summary to an IPython pretty printer.
@@ -3120,7 +3190,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
 mod tests {
     use std::ffi::CString;
 
-    use pyo3::types::PyDict;
+    use pyo3::types::{PyDict, PyDictMethods};
 
     use super::*;
 

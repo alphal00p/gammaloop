@@ -1,17 +1,25 @@
-"""Marimo must embed CFF scripts in an iframe when formatting the native object."""
+"""Marimo dispatch uses the shared CFF measurement widget and native payload."""
 
 import json
 import re
-from html.parser import HTMLParser
+from unittest.mock import patch
 
 import marimo as mo
 from symbolica.community import hepkit as hep
 
 
-class FrameParser(HTMLParser):
-    def handle_starttag(self, tag, attrs):
-        if tag == "iframe":
-            self.frame = dict(attrs)
+def external_metrics_snapshot(view):
+    # EXTERNAL METRICS FIXTURE in points, not browser measurements.
+    request = view.measurement_request()
+    return view.measured(
+        measurements={
+            "id": request["id"],
+            "metrics": [
+                {"id": label["id"], "width": 24.0, "height": 12.0, "baseline": 9.0}
+                for label in request["labels"]
+            ],
+        }
+    )
 
 
 model = hep.Model.phi3()
@@ -23,21 +31,38 @@ diagram = (
 cff = diagram.integrate_energy(method="cff")
 assert type(cff) is hep.CffRepresentation
 
-# Exercise Marimo's actual dispatch: a raw text/html MIME hook bypasses its
-# script isolation and leaves the CFF controls visible but inactive.
-parser = FrameParser()
-parser.feed(mo.as_html(cff).text)
-html = parser.frame["srcdoc"]
-assert "allow-scripts" in parser.frame.get("sandbox", "allow-scripts")
-# Marimo normalizes HTML whitespace; compare the native data after parsing it.
-payloads = [
-    json.loads(
-        re.search(
-            r'<script type="application/json" data-cff>(.*?)</script>', source
-        ).group(1)
-    )
-    for source in (html, cff._repr_html_())
-]
-assert payloads[0] == payloads[1]
-assert len(payloads[0]["orientations"]) == len(cff.orientations)
-print("CffRepresentation: Marimo dispatch embeds the native explorer in an iframe")
+# Exercise native-owner and prepared-view dispatch through the same widget adapter.
+view = cff.render()
+request = view.measurement_request()
+snapshot = external_metrics_snapshot(view)
+assert callable(cff._mime_) and callable(cff._repr_mimebundle_)
+assert not hasattr(cff, "_repr_html_")
+assert not hasattr(cff, "_repr_svg_")
+for value in (cff, view):
+    with patch.object(mo.ui, "anywidget", wraps=mo.ui.anywidget) as adapter:
+        markup = mo.as_html(value).text
+    adapter.assert_called_once()
+    widget = adapter.call_args.args[0]
+    try:
+        assert "marimo-ui-element" in markup
+        assert widget.request["labels"] == request["labels"]
+        assert "measure" in widget._esm
+        if value is view:
+            html = widget.rendered["html"]
+            # Marimo and static exports retain exactly the same native algebra.
+            payloads = [
+                json.loads(
+                    re.search(
+                        r'<script type="application/json" data-cff>(.*?)</script>',
+                        source,
+                    ).group(1)
+                )
+                for source in (html, snapshot.to_html())
+            ]
+            assert payloads[0] == payloads[1]
+            assert len(payloads[0]["orientations"]) == len(cff.orientations)
+    finally:
+        widget.close()
+print(
+    "CffRepresentation: Marimo dispatch retains the shared widget and native explorer"
+)

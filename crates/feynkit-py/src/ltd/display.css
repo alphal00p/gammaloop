@@ -54,9 +54,6 @@
 .feynkit-ltd-result .lp-math-label {
   color: var(--lp-fg);
 }
-.feynkit-ltd-result .lp-math-label use {
-  pointer-events: none;
-}
 .feynkit-ltd-result .lp-path {
   fill: none;
   stroke: var(--lp-muted);

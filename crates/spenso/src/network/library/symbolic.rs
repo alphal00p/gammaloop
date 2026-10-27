@@ -9,7 +9,7 @@ use symbolica::printer::{PrintState, PrintUserData};
 use symbolica::symbol;
 
 use crate::network::parsing::{AtomStructureExt, StrictTensorFilter};
-use crate::network::tags::{SPENSO_TAG, tensor_print};
+use crate::network::tags::{SPENSO_TAG, mathml, tensor_print};
 use crate::shadowing::symbolica_utils::{SpensoPrintBackend, SpensoPrintSettings};
 use crate::tensor_symbol;
 use crate::{
@@ -471,6 +471,10 @@ pub static ETS, ETS_INNER: ExplicitTensorSymbols = || ExplicitTensorSymbols {
     }),
     // sharp: symbol!("♯";Symmetric),
     metric: tensor_symbol!("g";Symmetric,Real,Linear;print = |a, opt, state| {
+
+        if opt.mode.is_mathml() {
+            return mathml::render(a, opt, state, &|_, _| None);
+        }
 
         if opt.mode.is_typst()
             && let Some(output) = tensor_print(a, opt, state)

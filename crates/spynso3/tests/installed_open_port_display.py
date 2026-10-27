@@ -1,11 +1,11 @@
 """Unresolved axes remain distinct from assigned and contracted index labels."""
 
+import importlib.util
 import re
 import unicodedata
 import unittest
 import xml.etree.ElementTree as ET
 
-import typst
 from symbolica import E, S, Symbol
 from symbolica.community.tensor import (
     AUTO,
@@ -18,10 +18,16 @@ from symbolica.community.tensor import (
     dot,
     trace,
 )
+from symbolica.community.tensor_native import _compile_typst
 
 
 def mathml(document):
-    return ET.fromstring(re.search(r"<math\b.*?</math>", document, re.DOTALL)[0])
+    root = ET.fromstring(re.search(r"<math\b.*?</math>", document, re.DOTALL)[0])
+    for node in root.iter():
+        node.tag = node.tag.rsplit("}", 1)[-1]
+    while len(root) == 1 and root[0].tag == "mrow":
+        root = root[0]
+    return root
 
 
 def visible_nodes(node):
@@ -33,7 +39,7 @@ def visible_nodes(node):
 
 def visible(node):
     text = "".join(child.text or "" for child in visible_nodes(node))
-    return "".join(unicodedata.normalize("NFKC", text).split())
+    return "".join(unicodedata.normalize("NFKC", text).split()).replace("·", "⋅")
 
 
 class OpenPortDisplayTests(unittest.TestCase):
@@ -41,13 +47,14 @@ class OpenPortDisplayTests(unittest.TestCase):
         settings = settings or DisplaySettings()
         original, structure = expression.to_expression(), expression.structure
         source = expression.to_typst(settings=settings)
-        native = typst.compile(f"$ {source} $".encode(), format="html").decode()
         rich = expression.to_html(settings=settings)
-        for document in (native, rich):
+        for document in (expression.formatted(settings=settings)._repr_html_(), rich):
             root = mathml(document)
             if isinstance(expected, tuple):
                 # Indexed components commute; each factor must retain its ports.
-                self.assertCountEqual([visible(factor) for factor in root], expected)
+                self.assertCountEqual(
+                    [visible(factor) for factor in root if visible(factor)], expected
+                )
             else:
                 self.assertEqual(visible(root), expected)
         self.assertNotIn("open_index", source)
@@ -64,20 +71,24 @@ class OpenPortDisplayTests(unittest.TestCase):
             for name in ("p", "q", "r", "s")
         )
         single, product = p * q, (p * q) * (r * s)
-        for value in (single, product):
-            source = value.to_typst()
-            native = typst.compile(f"$ {source} $".encode(), format="html").decode()
-            for document in (native, value.to_html()):
-                with self.subTest(product=value == product, native=document == native):
-                    nodes = list(mathml(document))
-                    dots = [i for i, node in enumerate(nodes) if node.text == "⋅"]
+        power = single**2
+        for value in (single, product, power):
+            original, structure = value.to_expression(), value.structure
+            for document in (value.formatted()._repr_html_(), value.to_html()):
+                with self.subTest(value=value):
+                    root = mathml(document)
+                    nodes = list(visible_nodes(root))
+                    dots = [
+                        i for i, node in enumerate(nodes) if node.text in ("⋅", "·")
+                    ]
                     self.assertEqual(len(dots), 2 if value == product else 1)
                     for i in dots:
                         # Keep ordinary glyph spacing inside each contraction.
-                        self.assertEqual(nodes[i].tag, "mi")
+                        self.assertEqual(nodes[i].tag, "mo")
                         self.assertNotEqual(nodes[i - 1].tag, "mspace")
                         self.assertNotEqual(nodes[i + 1].tag, "mspace")
                     if value == product:
+                        self.assertIn(visible(root), ("(p⋅q)(r⋅s)", "(r⋅s)(p⋅q)"))
                         gaps = [
                             n for n in nodes[dots[0] + 1 : dots[1]] if n.tag == "mspace"
                         ]
@@ -85,6 +96,15 @@ class OpenPortDisplayTests(unittest.TestCase):
                         self.assertEqual(gaps[0].attrib["width"], "0.12em")
                     else:
                         self.assertFalse(any(n.tag == "mspace" for n in nodes))
+                    if value == power:
+                        powers = [node for node in nodes if node.tag == "msup"]
+                        self.assertEqual(len(powers), 1)
+                        self.assertEqual(visible(powers[0][0]), "(p⋅q)")
+                        self.assertEqual(visible(powers[0][1]), "2")
+                    if value == single:
+                        self.assertEqual(visible(root), "p⋅q")
+            self.assertEqual(value.to_expression(), original)
+            self.assertEqual(value.structure, structure)
 
     def test_factories_and_user_tensors_share_the_same_placeholder_convention(self):
         rep = Representation.euc(3)
@@ -107,7 +127,6 @@ class OpenPortDisplayTests(unittest.TestCase):
                     )
                     self.assertTrue(all("spenso::" in n.attrib["title"] for n in tips))
         self.assertEqual(a(AUTO, "j")("i"), a("i", "j"))
-        self.assertIn("<svg", gamma.to_svg())
 
     def test_axis_numbers_exclude_scalar_arguments_and_preserve_dual_rows(self):
         rep = Representation("open_display::V", 3, is_self_dual=False)
@@ -121,9 +140,7 @@ class OpenPortDisplayTests(unittest.TestCase):
         settings = DisplaySettings(show_dimensions=True)
         for output in (
             a.to_html(settings=settings),
-            typst.compile(
-                f"$ {a.to_typst(settings=settings)} $".encode(), format="html"
-            ).decode(),
+            a.formatted(settings=settings)._repr_html_(),
         ):
             self.assertEqual(visible(mathml(output)).count("□"), 2)
 
@@ -132,7 +149,7 @@ class OpenPortDisplayTests(unittest.TestCase):
         p = TensorName.vector("open_display::p")(Representation.mink(4))
         self.assert_renderers_agree(p, "p□")
         scalar_product = dot(p, p)
-        self.assert_renderers_agree(scalar_product, "p⋅p")
+        self.assert_renderers_agree(scalar_product**2, "(p⋅p)2")
         self.assertNotIn("□", scalar_product.format_tensor())
         self.assertNotIn(r"\square", scalar_product.to_latex())
         self.assert_renderers_agree(gamma * gamma, "[γ□γ□]□0□1")
@@ -262,12 +279,8 @@ class OpenPortDisplayTests(unittest.TestCase):
             for value, prefix, suffix in cases:
                 with self.subTest(prefix=prefix, remaining=remaining):
                     original, structure = value.to_expression(), value.structure
-                    source = value.to_typst()
-                    native = typst.compile(
-                        f"$ {source} $".encode(), format="html"
-                    ).decode()
                     rich = value.to_html()
-                    for document in (native, rich):
+                    for document in (value.formatted()._repr_html_(), rich):
                         text = visible(mathml(document))
                         self.assertTrue(text.startswith(prefix), text)
                         self.assertTrue(text.endswith(suffix), text)
@@ -314,12 +327,9 @@ class OpenPortDisplayTests(unittest.TestCase):
                     self.assertEqual((before[component] - after[component]).expand(), 0)
 
                 qualified = DisplaySettings(show_dimensions=True)
-                native = typst.compile(
-                    f"$ {contracted.to_typst(settings=qualified)} $".encode(),
-                    format="html",
-                ).decode()
+                notebook = contracted.formatted(settings=qualified)._repr_html_()
                 rich = contracted.to_html(settings=qualified)
-                self.assertEqual(visible(mathml(native)), visible(mathml(rich)))
+                self.assertEqual(visible(mathml(notebook)), visible(mathml(rich)))
                 self.assertEqual(
                     sum(visible(mathml(rich)).count(marker) for marker in ("●", "■")),
                     filled,
@@ -349,20 +359,48 @@ class OpenPortDisplayTests(unittest.TestCase):
         ket = TensorName.vector("supplied_dual_ports::b")(rep)
         matrix = TensorName("supplied_dual_ports::M")
         value = matrix(bra.to_expression(), ket.to_expression(), rep)
-        nodes = self.assert_renderers_agree(value, "⟨a|M▶︎◀︎□|b⟩")
+        nodes = self.assert_renderers_agree(value, "⟨a|M▶◀□|b⟩")
         self.assertEqual(value.rank, 1)
         self.assertEqual(sum("data-spenso-open-axis" in n.attrib for n in nodes), 1)
         qualified = DisplaySettings(show_dimensions=True)
-        native = typst.compile(
-            f"$ {value.to_typst(settings=qualified)} $".encode(), format="html"
-        ).decode()
+        notebook = value.formatted(settings=qualified)._repr_html_()
         rich = value.to_html(settings=qualified)
-        self.assertEqual(visible(mathml(native)), visible(mathml(rich)))
-        for document in (native, rich):
+        self.assertEqual(visible(mathml(notebook)), visible(mathml(rich)))
+        for document in (notebook, rich):
             text = visible(mathml(document))
             self.assertEqual(text.count("◀"), 1)
             self.assertEqual(text.count("▶"), 1)
             self.assertEqual(text.count("□"), 1)
+
+    @unittest.skipUnless(
+        importlib.util.find_spec("typst") is not None,
+        "optional real SVG export requires the typst package",
+    )
+    def test_open_port_sources_and_public_svg_compile_with_optional_typst(self):
+        gamma = TensorExpression.dirac_gamma(4)
+        p = TensorName.vector("open_port_svg::p")(Representation.mink(4))
+        slash = (gamma(AUTO, AUTO, "mu") * p("mu")).contract()
+        for value in (
+            gamma,
+            gamma("a", "b", AUTO),
+            slash,
+            slash * slash,
+            TensorName("open_port_svg::A")(
+                Representation.euc(3), Representation.mink(4)
+            ),
+        ):
+            with self.subTest(value=value):
+                original = (bytes(value.__getstate__()), value.structure)
+                source = value.to_typst()
+                self.assertNotIn("open_index", source)
+                for svg in (
+                    bytes(_compile_typst(f"$ {source} $", "svg")).decode(),
+                    value.to_svg(),
+                ):
+                    self.assertEqual(ET.fromstring(svg).tag.rsplit("}", 1)[-1], "svg")
+                self.assertEqual(
+                    (bytes(value.__getstate__()), value.structure), original
+                )
 
     def test_collected_supplied_words_preserve_components_and_are_idempotent(self):
         spinor, mink = Representation.bis(4), Representation.mink(4)

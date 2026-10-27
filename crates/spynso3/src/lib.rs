@@ -1,6 +1,5 @@
-pub mod data_assets {
-    include!(concat!(env!("OUT_DIR"), "/data_assets.rs"));
-}
+use crate::display::DisplaySettings;
+pub use linnet_render_py::data_assets;
 
 #[macro_use]
 mod documentation;
@@ -13,48 +12,53 @@ use broadcast::SpensoBroadcastFunction;
 use library::{SpensorFunctionLibrary, SpensorLibrary};
 use network::{ConvertibleToSpensoNet, SpensoNet};
 
-use pyo3::{
-    PyClass,
-    exceptions::{self, PyIndexError, PyOverflowError, PyRuntimeError, PyTypeError},
-    prelude::*,
-    types::{PyComplex, PyDict, PyFloat, PyInt, PySlice, PyTuple, PyType},
+use pyo3::exceptions::{PyIndexError, PyOverflowError, PyRuntimeError, PyTypeError};
+use pyo3::types::{
+    PyAny, PyAnyMethods, PyDictMethods, PyListMethods, PyModule, PyModuleMethods, PySliceMethods,
+    PyTypeMethods,
 };
+use pyo3::types::{PyComplex, PyDict, PyFloat, PyInt, PySlice, PyTuple, PyType};
+use pyo3::{
+    Borrowed, Bound, FromPyObject, IntoPyObject, Py, PyErr, PyRef, PyResult, Python, pyclass,
+    pyfunction, pymethods, wrap_pyfunction,
+};
+use pyo3::{PyClass, exceptions};
 
 #[cfg(feature = "python_stubgen")]
-use pyo3_stub_gen::{
-    generate::MethodType,
-    inventory::submit,
-    type_info::{MethodInfo, ParameterDefault, ParameterInfo, ParameterKind, PyMethodsInfo},
+use pyo3_stub_gen::generate::MethodType;
+#[cfg(feature = "python_stubgen")]
+use pyo3_stub_gen::inventory::submit;
+#[cfg(feature = "python_stubgen")]
+use pyo3_stub_gen::type_info::{
+    MethodInfo, ParameterDefault, ParameterInfo, ParameterKind, PyMethodsInfo,
 };
 
-use spenso::{
-    algebra::complex::{Complex, RealOrComplex},
-    tensors::{
-        data::{DenseTensor, GetTensorData, SetTensorData, SparseOrDense, SparseTensor},
-        parametric::{ConcreteOrParam, ParamOrConcrete, ParamTensor},
-    },
+use spenso::algebra::complex::{Complex, RealOrComplex};
+use spenso::tensors::data::{
+    DenseTensor, GetTensorData, SetTensorData, SparseOrDense, SparseTensor,
 };
+use spenso::tensors::parametric::{ConcreteOrParam, ParamOrConcrete, ParamTensor};
 
-use spenso::{
-    network::parsing::ShadowedStructure,
-    structure::{
-        Canonicalized, HasStructure, OrderedStructure, ScalarTensor, TensorDataLayout,
-        TensorDataLayoutError, TensorStructure,
-        abstract_index::AbstractIndex,
-        partial::{PartialStructure, PartialStructureExt},
-        slot::IsAbstractSlot,
-    },
-    tensors::{complex::RealOrComplexTensor, data::DataTensor, parametric::MixedTensor},
+use spenso::network::parsing::ShadowedStructure;
+use spenso::structure::abstract_index::AbstractIndex;
+use spenso::structure::partial::{PartialStructure, PartialStructureExt};
+use spenso::structure::slot::IsAbstractSlot;
+use spenso::structure::{
+    Canonicalized, HasStructure, OrderedStructure, ScalarTensor, TensorDataLayout,
+    TensorDataLayoutError, TensorStructure,
 };
-use symbolica::{
-    api::python::{Citation, SymbolicaCommunityModule},
-    prelude::*,
-};
+use spenso::tensors::complex::RealOrComplexTensor;
+use spenso::tensors::data::DataTensor;
+use spenso::tensors::parametric::MixedTensor;
+use symbolica::api::python::{Citation, SymbolicaCommunityModule};
+use symbolica::prelude::*;
 
 use symbolica::api::python::{ConvertibleToExpression, PythonExpression, PythonFormattedOutput};
 
 #[cfg(feature = "python_stubgen")]
-use pyo3_stub_gen::{PyStubType, TypeInfo, derive::*, impl_stub_type};
+use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
+#[cfg(feature = "python_stubgen")]
+use pyo3_stub_gen::{PyStubType, TypeInfo, impl_stub_type};
 
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::derive::{gen_stub_pyclass_enum, gen_stub_pyfunction};
@@ -263,7 +267,7 @@ define_spenso_python_surface! {
             "ReductionStatus",
         ],
         display => [
-            "DisplaySettings", "format_tensor", "to_typst", "to_html", "to_svg", "formatted",
+            "DisplaySettings", "format_tensor", "to_typst", "to_typst_project", "to_html", "to_svg", "formatted",
             "load_math_font",
         ],
         pattern => ["PortPattern", "TensorPattern"],
@@ -320,7 +324,7 @@ pub enum AtomsOrFloats {
 impl<'a, 'py> FromPyObject<'a, 'py> for AtomsOrFloats {
     type Error = PyErr;
 
-    fn extract(value: pyo3::Borrowed<'a, 'py, PyAny>) -> Result<Self, Self::Error> {
+    fn extract(value: Borrowed<'a, 'py, PyAny>) -> Result<Self, Self::Error> {
         // Check typed interfaces before inherited numeric coercion can erase them,
         // particularly for tensor-valued zeros.
         let components = value.extract::<Vec<Bound<'py, PyAny>>>()?;
@@ -386,7 +390,7 @@ fn tensor_data_layout(interface: &PartialStructure) -> PyResult<TensorDataLayout
 impl<'a, 'py> FromPyObject<'a, 'py> for TensorDataDescriptor {
     type Error = PyErr;
 
-    fn extract(value: pyo3::Borrowed<'a, 'py, PyAny>) -> Result<Self, Self::Error> {
+    fn extract(value: Borrowed<'a, 'py, PyAny>) -> Result<Self, Self::Error> {
         let expression = value
             .extract::<PyRef<'_, TensorExpression>>()
             .map_err(|_| {
@@ -921,7 +925,7 @@ impl Spensor {
     fn format_tensor(
         &self,
         show_dimensions: Option<bool>,
-        settings: Option<PyRef<'_, display::DisplaySettings>>,
+        settings: Option<PyRef<'_, DisplaySettings>>,
     ) -> PyResult<String> {
         let settings = display::resolved_settings(show_dimensions, settings.as_deref());
         display::validate_plain_source_settings(&settings)?;
@@ -968,11 +972,39 @@ impl Spensor {
     fn to_typst(
         &self,
         show_dimensions: Option<bool>,
-        settings: Option<PyRef<'_, display::DisplaySettings>>,
+        settings: Option<PyRef<'_, DisplaySettings>>,
     ) -> PyResult<String> {
         let settings = display::resolved_settings(show_dimensions, settings.as_deref());
         display::validate_typst_source_settings(&settings)?;
         Ok(display::concrete_tensor_to_typst(self, &settings))
+    }
+
+    /// Return the source files of a complete Typst project without compiling it.
+    /// Custom notation is source code for `notation.typ` in the returned mapping.
+    ///
+    /// # Errors
+    ///
+    /// Returns a Python exception if the tensor cannot be serialized. Registered
+    /// Python printer exceptions are logged and decline the override, allowing
+    /// native fallback. Exporting does not import or invoke a compiler.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import Representation, Tensor, TensorName
+    /// >>> tensor = Tensor.dense(TensorName("A")(Representation.euc(2)), [1., 2.])
+    /// >>> project = tensor.to_typst_project()
+    /// >>> sorted(project)
+    /// ['main.typ', 'notation.typ', 'render.typ', 'tree.cbor']
+    #[pyo3(signature = (show_dimensions = None, *, settings = None, notation_source = None))]
+    fn to_typst_project<'py>(
+        &self,
+        py: Python<'py>,
+        show_dimensions: Option<bool>,
+        settings: Option<PyRef<'_, DisplaySettings>>,
+        notation_source: Option<String>,
+    ) -> PyResult<Bound<'py, PyDict>> {
+        let settings = display::resolved_settings(show_dimensions, settings.as_deref());
+        display::concrete_tensor_to_typst_project(py, self, &settings, notation_source.as_deref())
     }
 
     /// Create a rich display value for a notebook.
@@ -985,8 +1017,8 @@ impl Spensor {
     /// settings : DisplaySettings, optional
     ///     Tensor notation and display choices. Defaults to DisplaySettings().
     /// notation_source : str, optional
-    ///     Custom Typst notation source used by the rich renderer. This is
-    ///     Typst code, not a filename; omit it for the supplied tensor notation.
+    ///     Unsupported for HTML and formatted output; raises ValueError.
+    ///     Use to_typst_project() or to_svg() for custom Typst notation.
     ///
     /// Returns
     /// -------
@@ -997,6 +1029,11 @@ impl Spensor {
     /// -----
     /// Components follow logical axis order. Large static displays show a
     /// bounded preview rather than every component.
+    ///
+    /// # Errors
+    ///
+    /// Returns ValueError for Typst notation or incomplete MathML. Registered Python
+    /// printer exceptions are logged and decline the override, allowing native fallback.
     ///
     /// Examples
     /// --------
@@ -1009,13 +1046,12 @@ impl Spensor {
     #[pyo3(signature = (show_dimensions = None, *, settings = None, notation_source = None))]
     fn formatted(
         &self,
-        py: Python<'_>,
         show_dimensions: Option<bool>,
-        settings: Option<PyRef<'_, display::DisplaySettings>>,
+        settings: Option<PyRef<'_, DisplaySettings>>,
         notation_source: Option<String>,
-    ) -> PythonFormattedOutput {
+    ) -> PyResult<PythonFormattedOutput> {
         let settings = display::resolved_settings(show_dimensions, settings.as_deref());
-        display::format_concrete_tensor_output_rich(py, self, &settings, notation_source.as_deref())
+        display::format_concrete_tensor_output_rich(self, &settings, notation_source.as_deref())
     }
 
     /// Render the tensor as an HTML fragment.
@@ -1028,8 +1064,8 @@ impl Spensor {
     /// settings : DisplaySettings, optional
     ///     Tensor notation and display choices. Defaults to DisplaySettings().
     /// notation_source : str, optional
-    ///     Custom Typst notation source used by the rich renderer. This is
-    ///     Typst code, not a filename; omit it for the supplied tensor notation.
+    ///     Unsupported for HTML and formatted output; raises ValueError.
+    ///     Use to_typst_project() or to_svg() for custom Typst notation.
     ///
     /// Returns
     /// -------
@@ -1038,9 +1074,8 @@ impl Spensor {
     ///
     /// Notes
     /// -----
-    /// Mathematical rendering uses the embedded Typst compiler. The returned
-    /// string is not automatically displayed; pass it to the notebook's HTML
-    /// or SVG display facility.
+    /// Mathematical rendering uses direct MathML without a Typst compiler.
+    /// Pass the returned fragment to the notebook's HTML display facility.
     ///
     /// Components follow logical axis order. Large static displays show a
     /// bounded preview rather than every component.
@@ -1049,6 +1084,11 @@ impl Spensor {
     /// Matrix toggle. Dark mode follows the surrounding page. The color scale
     /// measures stored component payload bytes, not total process memory. Use
     /// DisplaySettings(tensor_view="matrix") for static mathematical HTML.
+    ///
+    /// # Errors
+    ///
+    /// Returns ValueError for Typst notation or incomplete MathML. Registered Python
+    /// printer exceptions are logged and decline the override, allowing native fallback.
     ///
     /// Examples
     /// --------
@@ -1063,7 +1103,7 @@ impl Spensor {
         &self,
         py: Python<'_>,
         show_dimensions: Option<bool>,
-        settings: Option<PyRef<'_, display::DisplaySettings>>,
+        settings: Option<PyRef<'_, DisplaySettings>>,
         notation_source: Option<String>,
     ) -> PyResult<String> {
         let settings = display::resolved_settings(show_dimensions, settings.as_deref());
@@ -1090,12 +1130,17 @@ impl Spensor {
     ///
     /// Notes
     /// -----
-    /// Mathematical rendering uses the embedded Typst compiler. The returned
-    /// string is not automatically displayed; pass it to the notebook's HTML
-    /// or SVG display facility.
+    /// SVG export uses the optional Python package typst (typst-py).
+    /// Pass the returned markup to the notebook's SVG display facility.
     ///
     /// Components follow logical axis order. Large static displays show a
     /// bounded preview rather than every component.
+    ///
+    /// # Errors
+    ///
+    /// Returns ImportError if optional typst-py is unavailable, or RuntimeError if
+    /// compilation fails. Registered Python printer exceptions are logged and decline
+    /// the override, allowing native fallback.
     ///
     /// Examples
     /// --------
@@ -1110,15 +1155,15 @@ impl Spensor {
         &self,
         py: Python<'_>,
         show_dimensions: Option<bool>,
-        settings: Option<PyRef<'_, display::DisplaySettings>>,
+        settings: Option<PyRef<'_, DisplaySettings>>,
         notation_source: Option<String>,
     ) -> PyResult<String> {
         let settings = display::resolved_settings(show_dimensions, settings.as_deref());
         display::concrete_tensor_to_svg(py, self, &settings, notation_source.as_deref())
     }
 
-    fn _repr_html_(&self, py: Python<'_>) -> Option<String> {
-        display::concrete_tensor_to_html(py, self, &display::DisplaySettings::default(), None).ok()
+    fn _repr_html_(&self, py: Python<'_>) -> PyResult<Option<String>> {
+        display::concrete_tensor_to_html(py, self, &DisplaySettings::default(), None).map(Some)
     }
 
     fn _repr_latex_(&self) -> Option<String> {
@@ -1331,10 +1376,11 @@ impl Spensor {
     ///     corresponding axis unchanged. A Slot must have the matching
     ///     representation. Repeated compatible labels cause contraction.
     /// intern : {"indices", "flattened"} or None, optional
-    ///     Encode compound index labels before checking the tensor structure.
+    ///     Encode unknown function-valued index labels before checking the tensor structure.
     ///     "indices" retains reversible payloads; "flattened" creates readable names.
     ///     Both preserve index tags and leave scalar arguments and tensor heads intact.
-    ///     None leaves labels unchanged and requires ordinary atomic index labels.
+    ///     Native index forms, including named, scoped, and open indices, remain unchanged.
+    ///     None accepts native index forms without encoding unknown function labels.
     ///
     /// Returns
     /// -------
@@ -1373,10 +1419,11 @@ impl Spensor {
     ///     corresponding axis unchanged. A Slot must have the matching
     ///     representation. Repeated compatible labels cause contraction.
     /// intern : {"indices", "flattened"} or None, optional
-    ///     Encode compound index labels before checking the tensor structure.
+    ///     Encode unknown function-valued index labels before checking the tensor structure.
     ///     "indices" retains reversible payloads; "flattened" creates readable names.
     ///     Both preserve index tags and leave scalar arguments and tensor heads intact.
-    ///     None leaves labels unchanged and requires ordinary atomic index labels.
+    ///     Native index forms, including named, scoped, and open indices, remain unchanged.
+    ///     None accepts native index forms without encoding unknown function labels.
     ///
     /// Returns
     /// -------
@@ -1415,10 +1462,11 @@ impl Spensor {
     ///     Keys must identify existing external axes. Each axis may be renamed
     ///     once; renaming must preserve the external interface.
     /// intern : {"indices", "flattened"} or None, optional
-    ///     Encode compound index labels before checking the tensor structure.
+    ///     Encode unknown function-valued index labels before checking the tensor structure.
     ///     "indices" retains reversible payloads; "flattened" creates readable names.
     ///     Both preserve index tags and leave scalar arguments and tensor heads intact.
-    ///     None leaves labels unchanged and requires ordinary atomic index labels.
+    ///     Native index forms, including named, scoped, and open indices, remain unchanged.
+    ///     None accepts native index forms without encoding unknown function labels.
     ///
     /// Returns
     /// -------
@@ -1509,10 +1557,11 @@ impl Spensor {
     ///     corresponding axis unchanged. A Slot must have the matching
     ///     representation. Repeated compatible labels cause contraction.
     /// intern : {"indices", "flattened"} or None, optional
-    ///     Encode compound index labels before checking the tensor structure.
+    ///     Encode unknown function-valued index labels before checking the tensor structure.
     ///     "indices" retains reversible payloads; "flattened" creates readable names.
     ///     Both preserve index tags and leave scalar arguments and tensor heads intact.
-    ///     None leaves labels unchanged and requires ordinary atomic index labels.
+    ///     Native index forms, including named, scoped, and open indices, remain unchanged.
+    ///     None accepts native index forms without encoding unknown function labels.
     ///
     /// Returns
     /// -------
@@ -2232,7 +2281,7 @@ mod tests {
             ParamOrConcrete::new_scalar(ConcreteOrParam::Concrete(RealOrComplex::Complex(
                 Complex::new(1., 2.),
             ))),
-            SymbolicTensor::new(Atom::Zero, interface),
+            SymbolicTensor::new(Atom::Zero, interface).unwrap(),
             None,
             Vec::new(),
         );

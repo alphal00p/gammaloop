@@ -70,7 +70,7 @@ fn declared_parts_check_rank_and_open_order_without_replaying_callbacks() {
 }
 
 #[test]
-fn explicit_ports_keep_logical_axes_when_symbolic_dimensions_reorder() {
+fn explicit_ports_keep_declared_logical_axes_when_payload_factors_reorder() {
     crate::test_support::test_initialize();
     type Tensor = ParamTensor<ShadowedStructure<AbstractIndex>>;
     type Lib = TensorLibrary<ParamTensor<ExplicitKey<AbstractIndex>>, AbstractIndex>;
@@ -89,9 +89,13 @@ fn explicit_ports_keep_logical_axes_when_symbolic_dimensions_reorder() {
     ];
     heads.sort_by_key(|&head| function!(head, &physical_slot));
     let [low, middle, high] = heads;
-    let source =
-        SymbolicTensor::infer(function!(middle, &symbolic_slot) * function!(high, &physical_slot))
-            .unwrap();
+    let source = SymbolicTensor::from_declared_parts(
+        function!(middle, &symbolic_slot) * function!(high, &physical_slot),
+        PartialStructure::from_logical_slots(
+            [symbolic, physical].map(|rep| rep.slot(PartialIndex::Explicit(index))),
+        ),
+    )
+    .unwrap();
     let mapped = function!(middle, &symbolic_slot) * function!(low, &physical_slot);
     let inferred = SymbolicTensor::infer(mapped.clone()).unwrap();
     assert_eq!(
@@ -444,7 +448,7 @@ fn changed_auto_axis_order_cannot_relabel_asymmetric_components() {
     assert_eq!(component(physical), Atom::num(14));
     // This is the old unsafe result: keeping only the anonymous layout causes
     // positional materialization to swap the two component coordinates.
-    let positional = SymbolicTensor::new(changed.clone(), source.structure.clone());
+    let positional = SymbolicTensor::new(changed.clone(), source.structure.clone()).unwrap();
     assert_eq!(
         component(positional.materialize_interface_ports(&bindings).unwrap()),
         Atom::num(15)

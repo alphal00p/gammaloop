@@ -1,4 +1,4 @@
-use super::{Dash, Scene, Stroke};
+use super::{Dash, LabelSource, Scene, Stroke};
 use serde::Deserialize;
 use serde_json::{Map, Value};
 
@@ -20,7 +20,7 @@ impl Config {
 
     pub fn apply(&self, scene: &mut Scene) -> Result<(), String> {
         if let Some(title) = &self.title {
-            scene.title = Some(format!("#{title:?}"));
+            scene.title = Some(LabelSource::text(title));
         }
         if !self.layouts.is_empty() {
             let defaults = scene.layout.clone();

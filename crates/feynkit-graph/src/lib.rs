@@ -57,39 +57,38 @@ pub fn momentum_symbol() -> symbolica::atom::Symbol {
     symbols::momentum()
 }
 
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    fmt::{self, Write},
-    str::FromStr,
-    sync::{Arc, OnceLock},
-};
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt;
+use std::fmt::Write;
+use std::str::FromStr;
+use std::sync::{Arc, OnceLock};
 
 pub use feynkit_kinematics::MomentumSignature;
 use feynkit_kinematics::Signature;
 use feynkit_model::{Model, ModelError, ModelFingerprint, Particle, ParticleId, VertexRuleId};
+use idenso::cook::CookingError;
 use idenso::tensor::SymbolicTensor;
-use linnet::{
-    half_edge::{
-        HedgeGraph, NodeIndex,
-        builder::HedgeGraphBuilder,
-        involution::{EdgeIndex, Flow, HedgePair, Orientation},
-        subgraph::{Inclusion, SuBitGraph, SubSetLike, SubSetOps},
-        tree::SimpleTraversalTree,
-    },
-    parser::{DotGraph, set::DotGraphSet},
-};
+use idenso::tensor::composition::TensorCompositionError;
+use idenso::tensor::inference::TensorInferenceError;
+use linnet::half_edge::builder::HedgeGraphBuilder;
+use linnet::half_edge::involution::{EdgeIndex, Flow, HedgePair, Orientation};
+use linnet::half_edge::subgraph::{Inclusion, SuBitGraph, SubSetLike, SubSetOps};
+use linnet::half_edge::tree::SimpleTraversalTree;
+use linnet::half_edge::{HedgeGraph, NodeIndex};
+use linnet::parser::DotGraph;
+use linnet::parser::set::DotGraphSet;
 use serde::{Deserialize, Serialize};
+use spenso::structure::abstract_index::AbstractIndexError;
 use spenso::structure::partial::PartialStructure;
 #[cfg(test)]
 use spenso::structure::partial::PartialStructureExt;
 use spenso::structure::representation::{Minkowski, RepName};
-use symbolica::{
-    atom::{Atom, AtomCore, UserData},
-    graph::Graph as CanonicalGraph,
-    parser::{ParseSettings, Token},
-    state::{State, Workspace},
-    with_default_namespace,
-};
+use spenso::structure::slot::SlotError;
+use symbolica::atom::{Atom, AtomCore, UserData};
+use symbolica::graph::Graph as CanonicalGraph;
+use symbolica::parser::{ParseSettings, Token};
+use symbolica::state::{State, Workspace};
+use symbolica::with_default_namespace;
 use thiserror::Error;
 
 /// Stable vertex identifier in a [`FeynmanDiagram`].
@@ -431,6 +430,7 @@ impl LoopMomentumBasis {
 }
 
 /// Errors produced while constructing or transforming diagrams.
+/// See [`NumeratorInterface`] for fallible source admission and a complete round trip.
 #[derive(Debug, Error)]
 pub enum DiagramError {
     #[error(transparent)]
@@ -526,10 +526,31 @@ pub enum DiagramError {
         "diagram-wide numerator differs from the product of the vertex and edge numerator fragments"
     )]
     NumeratorFragmentMismatch,
+    /// Source notation could not be encoded during tensor admission or transport.
+    #[error("{operation}: {source}")]
+    TensorCooking {
+        operation: &'static str,
+        #[source]
+        source: Box<CookingError>,
+    },
+    /// A declared source port is not a supported tensor slot.
+    #[error("{operation}: {source}")]
+    TensorSlot {
+        operation: &'static str,
+        #[source]
+        source: Box<SlotError>,
+    },
+    /// A transported tensor label is not a valid abstract index.
+    #[error("{operation}: {source}")]
+    TensorIndex {
+        operation: &'static str,
+        #[source]
+        source: Box<AbstractIndexError>,
+    },
     #[error("invalid diagram tensor: {0}")]
-    Tensor(#[from] idenso::tensor::inference::TensorInferenceError),
+    Tensor(#[from] TensorInferenceError),
     #[error("incompatible diagram tensor product: {0}")]
-    TensorComposition(#[from] idenso::tensor::composition::TensorCompositionError),
+    TensorComposition(#[from] TensorCompositionError),
     #[error("cannot replace the numerator of a diagram without an interaction vertex")]
     MissingNumeratorAnchor,
     #[error("diagram invariant failed while {operation}: {message}")]
@@ -537,6 +558,9 @@ pub enum DiagramError {
         operation: &'static str,
         message: String,
     },
+    /// Native drawing settings were rejected by the scene configuration owner.
+    #[error("invalid scene configuration: {0}")]
+    SceneConfiguration(String),
     #[error("failed to format DOT")]
     Formatting(#[from] std::fmt::Error),
     #[error("the diagram has no loop-momentum basis")]
@@ -676,13 +700,12 @@ impl FeynmanDiagram {
     fn fragment_numerator(
         graph: &HedgeGraph<DiagramEdge, DiagramVertex>,
     ) -> Result<SymbolicTensor<PartialStructure>, DiagramError> {
-        graph
-            .iter_edges()
-            .map(|(_, _, edge)| &edge.data.numerator)
-            .chain(graph.iter_nodes().map(|(_, _, vertex)| &vertex.numerator))
-            .try_fold(SymbolicTensor::infer(Atom::one())?, |product, factor| {
-                Ok(product.multiply(factor)?)
-            })
+        Ok(SymbolicTensor::multiply_many(
+            graph
+                .iter_edges()
+                .map(|(_, _, edge)| &edge.data.numerator)
+                .chain(graph.iter_nodes().map(|(_, _, vertex)| &vertex.numerator)),
+        )?)
     }
 
     /// Replace local numerator fragments in the finalized index frame and
@@ -2997,7 +3020,10 @@ impl DiagramSourceMap {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use spenso::structure::representation::Euclidean;
+    use spenso::tensor_symbol;
     use std::sync::Arc;
+    use symbolica::function;
 
     fn scalar_model() -> Arc<Model> {
         Arc::new(Model::from_json(
@@ -4377,6 +4403,68 @@ mod tests {
             diagram.with_numerator(SymbolicTensor::infer(Atom::num(7)).unwrap()),
             Err(DiagramError::MissingNumeratorAnchor)
         ));
+    }
+
+    #[test]
+    fn fragment_products_reconstruct_positional_interfaces_and_ranked_zero() {
+        let original = one_loop();
+        let vertex = original.vertices().next().unwrap().0;
+        let edge = original
+            .edges()
+            .find(|(_, _, data)| data.external.is_none())
+            .unwrap()
+            .0;
+        let matrix = NumeratorInterface::admit(
+            function!(
+                tensor_symbol!("feynkit_graph::fragment_positional_matrix"),
+                Minkowski {}.new_rep(4).to_symbolic([]),
+                Euclidean {}.new_rep(2).to_symbolic([])
+            ),
+            None,
+        )
+        .unwrap()
+        .permuted(&[1, 0])
+        .unwrap();
+        let zero = matrix.with_checked_expression(Atom::Zero).unwrap();
+        for fragment in [matrix, zero] {
+            let diagram = original
+                .clone()
+                .with_numerator_fragments(
+                    [(vertex, fragment)],
+                    [(edge, SymbolicTensor::infer(Atom::num(3)).unwrap())],
+                )
+                .unwrap();
+            let expected = diagram
+                .graph
+                .iter_edges()
+                .map(|(_, _, edge)| &edge.data.numerator)
+                .chain(
+                    diagram
+                        .graph
+                        .iter_nodes()
+                        .map(|(_, _, vertex)| &vertex.numerator),
+                )
+                .try_fold(
+                    SymbolicTensor::infer(Atom::one()).unwrap(),
+                    |product, factor| product.multiply(factor),
+                )
+                .unwrap();
+            assert!(diagram.numerator().same_value(&expected));
+            assert_eq!(diagram.numerator().rank(), 2);
+            for reconstructed in [
+                diagram.clone().with_numerator_fragments([], []).unwrap(),
+                FeynmanDiagram::from_json(diagram.model_arc(), &diagram.to_json().unwrap())
+                    .unwrap(),
+                FeynmanDiagram::from_dot(diagram.model_arc(), &diagram.to_dot().unwrap()).unwrap(),
+            ] {
+                assert!(reconstructed.numerator().same_value(&expected));
+                assert_eq!(
+                    reconstructed.numerator().structure().logical_slots(),
+                    expected.structure().logical_slots()
+                );
+                reconstructed.validate().unwrap();
+            }
+        }
     }
 
     #[test]

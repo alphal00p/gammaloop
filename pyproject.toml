@@ -30,6 +30,8 @@ dependencies = [
 
 [project.optional-dependencies]
 notebook-display = ["anywidget>=0.9,<1"]
+graph-export = ["playwright>=1.55,<2"]
+typst-export = ["typst>=0.15"]
 
 [project.urls]
 homepage = "https://alphaloop.ch"
@@ -98,6 +100,6 @@ enabled = true
 [tool.uv]
 package = false
 
-# The Python distribution is not yet on PyPI; use the community source branch.
+# The Python distribution is not yet on PyPI; use the upstream main source branch.
 [tool.uv.sources]
-symbolica = { git = "https://github.com/symbolica-dev/symbolica.git", branch = "community" }
+symbolica = { git = "https://github.com/symbolica-dev/symbolica.git", branch = "main" }

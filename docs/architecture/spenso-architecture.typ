@@ -9,6 +9,14 @@ separate packages: they provide derives, concrete physics tensors, and a Python 
 than a second tensor engine.
 ]
 
+== Shared display notation
+
+`symbolica-notation` owns `IndexDisplay`, its validation, escaped rendering and
+existing `spenso::index-display-v1` encoding. It depends only on Symbolica and
+`thiserror` and is shared with graph presentation without a Spenso dependency.
+Representation metadata, palettes, classes and row placement remain in Spenso.
+The extraction preserves rendered bytes and portable math-display attachments.
+
 == Boundaries
 
 Spenso is an in-process, generic tensor and tensor-network library. Its implementation is split
@@ -289,3 +297,42 @@ The eager boundary also resolves completed lazy scaled tensors and tensor sums
 through `result_tensor`, preserving their coefficients and logical coordinates.
 Odd tensor powers preserve the remaining base after paired contractions. Completed execution waves
 release unused store payloads while retaining live aliases and tensor handles.
+
+== Process-local notation registry
+
+The shared notation crate also owns `Notation`: an optional structured index
+label, an optional structured head, and bounded plain/LaTeX/Typst display text.
+`Notation::register` is idempotent for equal values and rejects conflicts;
+`Notation::lookup` returns a shared immutable handle. An empty lazy map makes no
+Symbolica calls during initialization. Locks cover only lookup and insertion,
+never print callbacks, and poisoned locks fail explicitly. Renderers offer the
+symbol callback first, then registered notation, then an escaped symbol name.
+Display-only tags and tensor-head user data are never read for presentation.
+The callback ownership flag distinguishes user callbacks from Spenso callbacks
+that delegate back into the renderer. No tags or user data change on registration.
+Python print mappings validate display text and parse allowlisted MathML into a
+private escaped presentation tree, bounded by bytes, depth and node count.
+Typst source exports populate document settings keyed by full symbol name:
+`tensor-labels` contains head visuals, `index-labels` contains records with
+`label` and `visual`, and `callback-symbols` lists callback-owned functions.
+`print-heads` and `print-calls` retain target-specific overrides. Endpoint labels
+`s` and `t` still suppress their ordinary slot one.
+Notation is never implicitly serialized by Symbolica `Expression.save` or
+`State::export`. Spenso-aware portable exports explicitly collect referenced
+registry entries in `spenso.notation`, version 1. Each fully qualified symbol
+identity keys a CBOR map with optional `index-label`, `head`, `plain`, `latex`,
+`typst`, and `mathml`. Callback code and callback ownership markers remain
+process-local; imports preserve identical existing local registrations. Structured labels reuse the bounded `spenso.math-display` tree
+encoding; display-identity index symbols retain that separate identity schema.
+Notation maps are limited to 64 KiB each and 128 declarations per set, within
+the common attachment limits of 256 records and 1 MiB total. Text overrides
+are limited to 4096 UTF-8 bytes; display trees share a 64-node budget and depth
+16; MathML is parsed through the 4096-byte, 256-node, depth-16 allowlist.
+Import validates all declarations and conflicts before atom import, then
+registers names atomically without guessing symbol tags or attributes. Equal
+imports are idempotent; conflicting local notation produces a named typed error.
+Tydenso regenerates attachments only for output references, and its Typst layer
+turns validated structured labels into content and treats transported Typst
+overrides as text, never executable source. Imported `DisplayText` values retain
+a literal mode so subsequent Rust and Python Typst or LaTeX source exports also
+escape them. Trusted local source overrides retain their existing behavior.

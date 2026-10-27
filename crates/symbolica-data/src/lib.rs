@@ -2,6 +2,10 @@
 //! The same interface reads files in native/Pyodide filesystems or accepts bytes
 //! supplied by an async host. Missing or damaged assets never enter the cache.
 
+/// Python host registration; see [`python::register`].
+#[cfg(feature = "python")]
+pub mod python;
+
 use std::{
     collections::BTreeMap,
     fs,

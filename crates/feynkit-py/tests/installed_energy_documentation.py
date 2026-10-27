@@ -56,7 +56,7 @@ def check_doc(name, doc, setup=""):
 
 
 checked = 0
-for cls in ast.parse(STUB.read_text()).body:
+for cls in ast.parse(STUB.read_text(encoding="utf-8")).body:
     if not isinstance(cls, ast.ClassDef) or cls.name not in CLASSES:
         continue
     native = getattr(hep, cls.name)

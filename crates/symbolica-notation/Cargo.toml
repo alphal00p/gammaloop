@@ -1,0 +1,11 @@
+[package]
+name = "symbolica-notation"
+version = "0.1.0"
+edition = "2024"
+description = "Process-local display notation for Symbolica symbols."
+license = "MIT"
+
+[dependencies]
+roxmltree = "0.21.1"
+symbolica = { workspace = true, default-features = false }
+thiserror = { workspace = true }

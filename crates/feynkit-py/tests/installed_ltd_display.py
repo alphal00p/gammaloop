@@ -3,12 +3,26 @@
 import json
 import re
 import sys
-from html.parser import HTMLParser
 from pathlib import Path
+from unittest.mock import patch
 
 import marimo as mo
 from symbolica import E, S
 from symbolica.community import hepkit as hep
+
+
+def external_metrics_snapshot(view):
+    # EXTERNAL METRICS FIXTURE in points, not browser measurements.
+    request = view.measurement_request()
+    return view.measured(
+        measurements={
+            "id": request["id"],
+            "metrics": [
+                {"id": label["id"], "width": 24.0, "height": 12.0, "baseline": 9.0}
+                for label in request["labels"]
+            ],
+        }
+    )
 
 
 def payload(source):
@@ -19,18 +33,14 @@ def payload(source):
     )
 
 
-class FrameParser(HTMLParser):
-    def handle_starttag(self, tag, attrs):
-        if tag == "iframe":
-            self.frame = dict(attrs)
-
-
 def check(diagram, name, directory):
     ltd = diagram.integrate_energy(method="ltd")
     assert type(ltd) is hep.LtdRepresentation
     assert repr(ltd).startswith("LtdRepresentation(residues=")
     before = ltd.to_expression(expand_surfaces=False)
-    source = ltd._repr_html_()
+    view = ltd.render()
+    request = view.measurement_request()
+    source = external_metrics_snapshot(view).to_html()
     assert ltd.to_expression(expand_surfaces=False) == before
     data = payload(source)
     assert len(data["residues"]) == len(ltd)
@@ -38,10 +48,20 @@ def check(diagram, name, directory):
     assert [
         data["edges"][i] for i in data["reference_chords"]
     ] == diagram.loop_momentum_basis.loop_edges
-    parser = FrameParser()
-    parser.feed(mo.as_html(ltd).text)
-    assert "allow-scripts" in parser.frame.get("sandbox", "allow-scripts")
-    assert payload(parser.frame["srcdoc"]) == data
+    assert callable(ltd._mime_) and callable(ltd._repr_mimebundle_)
+    for value in (ltd, view):
+        with patch.object(mo.ui, "anywidget", wraps=mo.ui.anywidget) as adapter:
+            markup = mo.as_html(value).text
+        adapter.assert_called_once()
+        widget = adapter.call_args.args[0]
+        try:
+            assert "marimo-ui-element" in markup
+            assert widget.request["labels"] == request["labels"]
+            assert "measure" in widget._esm
+            if value is view:
+                assert payload(widget.rendered["html"]) == data
+        finally:
+            widget.close()
 
     # Compare the complete displayed scalar products against native Symbolica
     # residues. This catches lost coefficients, multiplicities and ID remapping.
@@ -89,7 +109,7 @@ def check(diagram, name, directory):
                     value /= surfaces[surface]
                 reconstructed += value
         assert (reconstructed - native).together().is_zero(), (name, r["id"])
-    (directory / f"ltd-{name}.html").write_text(source)
+    (directory / f"ltd-{name}.html").write_text(source, encoding="utf-8")
     return ltd, data
 
 
@@ -138,7 +158,10 @@ def main(directory):
     assert (ltd.to_expression() - cff).together().is_zero()
 
     triple = hep.FeynmanDiagram.from_dot(
-        model, (Path(__file__).parent / "fixtures/ltd_three_loop.dot").read_text()
+        model,
+        (Path(__file__).parent / "fixtures/ltd_three_loop.dot").read_text(
+            encoding="utf-8"
+        ),
     )
     _, data = check(triple, "three-loop", directory)
     assert triple.loop_count == 3 and len(data["residues"]) == 56
@@ -211,12 +234,17 @@ def main(directory):
     unsafe = hep.FeynmanDiagram.from_dot(
         model,
         (Path(__file__).parent / "fixtures/ltd_three_loop.dot")
-        .read_text()
+        .read_text(encoding="utf-8")
         .replace("triple_box", "unsafe</script><script>throw 1</script>"),
     )
-    source = unsafe.integrate_energy(method="ltd")._repr_html_()
+    unsafe_view = unsafe.integrate_energy(method="ltd").render()
+    source = external_metrics_snapshot(unsafe_view).to_html()
     assert "</script><script>throw 1</script>" not in source
-    (directory / "ltd-multiple.html").write_text(ltd._repr_html_() + ltd._repr_html_())
+    repeated_view = ltd.render()
+    repeated_source = external_metrics_snapshot(repeated_view).to_html()
+    (directory / "ltd-multiple.html").write_text(
+        repeated_source + repeated_source, encoding="utf-8"
+    )
     print(
         "LtdRepresentation: native algebra, ordered routing, repeated poles and Marimo dispatch passed"
     )

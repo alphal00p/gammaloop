@@ -17,6 +17,7 @@ build = "build.rs"
 bench = false
 
 [dependencies]
+symbolica-notation = { workspace = true }
 dyn-clone = "1.0.17"
 feynkit-amplitude = { version = "0.1.0", path = "../feynkit-amplitude", default-features = false }
 ahash = { workspace = true, features = ["serde"] }

@@ -13,7 +13,9 @@ from symbolica.community import hepkit as fk
 from symbolica.community.tensor import TensorExpression
 
 source = json.loads(
-    (Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json").read_text()
+    (Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json").read_text(
+        encoding="utf-8"
+    )
 )
 source["name"] = "adjoint_scalar_example"
 for particle in source["particles"]:

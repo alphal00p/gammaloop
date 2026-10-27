@@ -15,7 +15,7 @@ import types
 import typing
 from typing import overload
 from symbolica import ComplexFloat, Float
-from symbolica.community.graph import DiagramRender, RenderSettings
+from symbolica.community.graph import DiagramView, RenderSettings
 from symbolica.community.tensor import DisplaySettings, Slot, TensorExpression, TensorName
 from symbolica.core import Expression
 
@@ -174,9 +174,9 @@ class Amplitude:
 
         >>> print(amplitude)
         """
-    def render(self, *, config: typing.Optional[RenderSettings] = None, style: typing.Optional[DiagramStyle] = None, max_diagrams: typing.Optional[builtins.int] = 6, term_settings: typing.Optional[DisplaySettings] = None) -> DiagramRender:
+    def render(self, *, config: typing.Optional[RenderSettings] = None, style: typing.Optional[DiagramStyle] = None, max_diagrams: typing.Optional[builtins.int] = 6, term_settings: typing.Optional[DisplaySettings] = None) -> DiagramView:
         r"""
-        Render a configurable snapshot of the amplitude's diagrams and weighted terms.
+        Prepare a browser-measured view of the amplitude's diagrams and weighted terms.
 
         Examples
         --------
@@ -184,7 +184,8 @@ class Amplitude:
 
         >>> from symbolica.community.graph import RenderSettings, DrawOptions
         >>> drawing = amplitude.render(config=RenderSettings(drawing=DrawOptions(node_radius=5)), max_diagrams=2)
-        >>> html = drawing.to_html()
+        >>> snapshot = drawing.measured(browser="chromium")
+        >>> html = snapshot.to_html()
 
         Parameters
         ----------
@@ -197,7 +198,7 @@ class Amplitude:
         term_settings : DisplaySettings, optional
             Tensor notation settings for each weighted contribution.
         """
-    def _repr_html_(self) -> builtins.str:
+    def _repr_mimebundle_(self, include: typing.Optional[typing.Sequence[builtins.str]] = None, exclude: typing.Optional[typing.Sequence[builtins.str]] = None) -> typing.Any:
         r"""
         Render compact diagram rows with weighted operators and expandable graphs.
 
@@ -207,6 +208,25 @@ class Amplitude:
 
         >>> from IPython.display import display
         >>> display(amplitude)
+
+        Parameters
+        ----------
+        include : list[str] or None, optional
+            MIME types requested by the frontend; None allows all available types.
+        exclude : list[str] or None, optional
+            MIME types omitted from the frontend response.
+        """
+    def _mime_(self) -> typing.Any:
+        r"""
+        Return Marimo MIME data with static output and an optional live widget.
+
+        Examples
+        --------
+        Using the setup in the ``Amplitude`` class example:
+
+        >>> view = amplitude.render()
+        >>> view  # static output is immediate; an optional widget refines label sizes
+        >>> snapshot = view.measured(browser="chromium")
         """
 
 class AmplitudeError(FeynkitError):
@@ -563,13 +583,40 @@ class CffOrientation:
         TensorExpression
             This orientation's contribution to the CFF energy integral.
         """
-    def _repr_html_(self) -> builtins.str:
+    def render(self) -> DiagramView:
+        r"""
+        Prepare this orientation's explorer for display or explicit measurement.
+
+        Examples
+        --------
+        >>> view = orientation.render()
+        >>> snapshot = view.measured(browser="chromium")
+        """
+    def _repr_mimebundle_(self, include: typing.Optional[typing.Sequence[builtins.str]] = None, exclude: typing.Optional[typing.Sequence[builtins.str]] = None) -> typing.Any:
         r"""
         Inspect this orientation's family sum and fixed energy-flow graph.
 
         Examples
         --------
-        >>> html = orientation._repr_html_()
+        >>> from IPython.display import display
+        >>> display(orientation)
+
+        Parameters
+        ----------
+        include : list[str] or None, optional
+            MIME types requested by the frontend; None allows all available types.
+        exclude : list[str] or None, optional
+            MIME types omitted from the frontend response.
+        """
+    def _mime_(self) -> typing.Any:
+        r"""
+        Return Marimo MIME data with static output and an optional live widget.
+
+        Examples
+        --------
+        >>> view = orientation.render()
+        >>> view  # static output is immediate; an optional widget refines label sizes
+        >>> snapshot = view.measured(browser="chromium")
         """
     def _display_(self) -> typing.Any:
         r"""
@@ -914,7 +961,17 @@ class CffRepresentation:
 
         >>> print(result)
         """
-    def _repr_html_(self) -> builtins.str:
+    def render(self) -> DiagramView:
+        r"""
+        Prepare a browser-measured orientation, family and surface explorer.
+
+        Examples
+        --------
+        >>> view = result.render()
+        >>> view
+        >>> snapshot = view.measured(browser="chromium")
+        """
+    def _repr_mimebundle_(self, include: typing.Optional[typing.Sequence[builtins.str]] = None, exclude: typing.Optional[typing.Sequence[builtins.str]] = None) -> typing.Any:
         r"""
         Explore orientations, factored families and surface regions on the native graph.
 
@@ -928,13 +985,31 @@ class CffRepresentation:
 
         >>> from IPython.display import display
         >>> display(result)
+
+        Parameters
+        ----------
+        include : list[str] or None, optional
+            MIME types requested by the frontend; None allows all available types.
+        exclude : list[str] or None, optional
+            MIME types omitted from the frontend response.
+        """
+    def _mime_(self) -> typing.Any:
+        r"""
+        Return Marimo MIME data with static output and an optional live widget.
+
+        Examples
+        --------
+        Using the setup in the ``CffRepresentation`` class example:
+
+        >>> view = result.render()
+        >>> view  # static output is immediate; an optional widget refines label sizes
+        >>> snapshot = view.measured(browser="chromium")
         """
     def _display_(self) -> typing.Any:
         r"""
-        Return Marimo's interactive presentation in a script-enabled iframe.
+        Return a Marimo widget when available, otherwise static HTML.
 
-        Marimo uses this hook automatically when displaying the result.
-        Other notebook frontends use ``_repr_html_`` without requiring Marimo.
+        Notebook MIME hooks use the same DiagramView display contract.
 
         Examples
         --------
@@ -1345,13 +1420,40 @@ class CrossFreeFamily:
         TensorExpression
             The complete family contribution, including its evaluated numerator and energy factors.
         """
-    def _repr_html_(self) -> builtins.str:
+    def render(self) -> DiagramView:
+        r"""
+        Prepare this family's explorer for display or explicit measurement.
+
+        Examples
+        --------
+        >>> view = family.render()
+        >>> snapshot = view.measured(browser="chromium")
+        """
+    def _repr_mimebundle_(self, include: typing.Optional[typing.Sequence[builtins.str]] = None, exclude: typing.Optional[typing.Sequence[builtins.str]] = None) -> typing.Any:
         r"""
         Inspect only this family's contribution and surface circlings.
 
         Examples
         --------
-        >>> html = family._repr_html_()
+        >>> from IPython.display import display
+        >>> display(family)
+
+        Parameters
+        ----------
+        include : list[str] or None, optional
+            MIME types requested by the frontend; None allows all available types.
+        exclude : list[str] or None, optional
+            MIME types omitted from the frontend response.
+        """
+    def _mime_(self) -> typing.Any:
+        r"""
+        Return Marimo MIME data with static output and an optional live widget.
+
+        Examples
+        --------
+        >>> view = family.render()
+        >>> view  # static output is immediate; an optional widget refines label sizes
+        >>> snapshot = view.measured(browser="chromium")
         """
     def _display_(self) -> typing.Any:
         r"""
@@ -3750,10 +3852,11 @@ class FeynmanDiagram:
         """
     def to_linnest(self, *, config: typing.Optional[RenderSettings] = None, style: typing.Optional[DiagramStyle] = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | None = None) -> builtins.str:
         r"""
-        Export a self-contained Typst document embedding the rendered SVG.
+        Export a self-contained Typst document embedding an outlined SVG.
 
         Uses the same ``config``, ``momenta``, ``lmb`` and ``highlight`` settings
-        as ``render``. Labels are already typeset; compiling the exported source
+        as ``render``. This explicit vector export uses the optional Python
+        ``typst`` compiler to outline labels; compiling the exported source
         needs no Linnest, Kurvst, MiTeX, or model assets.
 
         Examples
@@ -3776,13 +3879,14 @@ class FeynmanDiagram:
         highlight : Subgraph or None, optional
             Region to highlight in the complete diagram.
         """
-    def render(self, *, config: typing.Optional[RenderSettings] = None, style: typing.Optional[DiagramStyle] = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | None = None) -> DiagramRender:
+    def render(self, *, config: typing.Optional[RenderSettings] = None, style: typing.Optional[DiagramStyle] = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | None = None) -> DiagramView:
         r"""
-        Create a displayable snapshot using the shared physics renderer.
+        Prepare a browser-measured view using the shared physics renderer.
 
-        All graph geometry is drawn in Rust; the embedded Typst compiler typesets
-        labels and titles. ``LayoutSettings(impred_labels=True)`` refines the layout
-        around the drawn labels. No Python renderer or Typst graph package is needed.
+        The notebook browser measures MathML labels and titles, then Rust draws
+        graph geometry. ``LayoutSettings(impred_labels=True)`` refines the layout
+        around those measurements. Scripts must supply measurements or explicitly
+        select a browser with ``drawing.measured(browser="chromium")`` before export.
 
         Examples
         --------
@@ -3793,7 +3897,7 @@ class FeynmanDiagram:
         ...     layouts=LayoutSettings(impred_steps=100))
         >>> drawing = diagram.render(momenta=True, config=settings, style=hep.DiagramStyle(show_particle=False))
         >>> drawing
-        >>> svg = drawing.to_svg()
+        >>> svg = drawing.measured(browser="chromium").to_svg()
         >>> drawing = diagram.render(lmb=next(iter(diagram.loop_momentum_bases())))
 
         Parameters
@@ -3815,16 +3919,16 @@ class FeynmanDiagram:
             Highlight a region while preserving the full diagram as muted context.
             A Subgraph highlights its own region by default.
         """
-    def to_html(self, *, config: typing.Optional[RenderSettings] = None, style: typing.Optional[DiagramStyle] = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | None = None) -> builtins.str:
+    def to_html(self, *, config: typing.Optional[RenderSettings] = None, style: typing.Optional[DiagramStyle] = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | None = None, browser: typing.Optional[builtins.str] = None) -> builtins.str:
         r"""
-        Render an HTML figure with the same options and hover information as ``render``.
+        Export a complete static HTML figure with the same options as ``render``.
 
         Examples
         --------
         Using the setup in the ``FeynmanDiagram`` class example:
 
         >>> import marimo as mo
-        >>> mo.iframe(diagram.to_html(momenta=True))
+        >>> mo.iframe(diagram.to_html(momenta=True, browser="chromium"))
 
         Parameters
         ----------
@@ -3838,8 +3942,13 @@ class FeynmanDiagram:
             Routing from this diagram; also enables momentum display.
         highlight : Subgraph or None, optional
             Region to highlight in the complete diagram.
+        browser : {"chromium"} or None, optional
+            Explicit headless browser for script exports; none is started implicitly.
+            Defaults use a completed measurement, optional Typst, or estimated
+            MathML label sizes. For exact notebook measurements, use
+            ``render().measured().to_html()`` on the displayed view instead.
         """
-    def _repr_html_(self) -> builtins.str:
+    def _repr_mimebundle_(self, include: typing.Optional[typing.Sequence[builtins.str]] = None, exclude: typing.Optional[typing.Sequence[builtins.str]] = None) -> typing.Any:
         r"""
         Render the diagram as HTML in Marimo, Jupyter, and IPython.
 
@@ -3849,17 +3958,25 @@ class FeynmanDiagram:
 
         >>> from IPython.display import display
         >>> display(diagram)
+
+        Parameters
+        ----------
+        include : list[str] or None, optional
+            MIME types requested by the frontend; None allows all available types.
+        exclude : list[str] or None, optional
+            MIME types omitted from the frontend response.
         """
-    def _repr_svg_(self) -> builtins.str:
+    def _mime_(self) -> typing.Any:
         r"""
-        Return the raw SVG representation used by rich notebook frontends.
+        Return Marimo MIME data for the browser-measured diagram view.
 
         Examples
         --------
         Using the setup in the ``FeynmanDiagram`` class example:
 
-        >>> from IPython.display import display
-        >>> display(diagram)
+        >>> view = diagram.render(momenta=True)
+        >>> view  # notebook display measures labels before mounting the diagram
+        >>> snapshot = view.measured(browser="chromium")
         """
     def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None:
         r"""
@@ -4757,20 +4874,60 @@ class GenerationResult:
 
         >>> print(result)
         """
-    def _repr_html_(self) -> builtins.str:
+    def render(self, *, config: typing.Optional[RenderSettings] = None, style: typing.Optional[DiagramStyle] = None, max_diagrams: typing.Optional[builtins.int] = 6) -> DiagramView:
         r"""
         Render a thumbnail strip and one shared interactive diagram viewer.
 
-        At most six diagrams are rendered so that displaying a large generation
-        result remains responsive. Access ``result.diagrams`` to inspect the
-        complete collection.
+        The view measures labels when displayed. By default it includes six
+        diagrams; ``max_diagrams=None`` includes the complete collection.
 
         Examples
         --------
         Using the setup in the ``GenerationResult`` class example:
 
-        >>> from IPython.display import display
-        >>> display(result)
+        >>> view = result.render(max_diagrams=None)
+        >>> view
+        >>> snapshot = view.measured(browser="chromium")
+
+        Parameters
+        ----------
+        config : RenderSettings or None, optional
+            Layout, label and drawing settings shared by the displayed diagrams.
+        style : DiagramStyle or None, optional
+            Particle, momentum and physical index presentation.
+        max_diagrams : int or None, optional
+            Maximum displayed diagrams (default 6); None includes all, 0 none.
+        """
+    def _repr_mimebundle_(self, include: typing.Optional[typing.Sequence[builtins.str]] = None, exclude: typing.Optional[typing.Sequence[builtins.str]] = None) -> typing.Any:
+        r"""
+        Return widget MIME data for the compact generation-result explorer.
+
+        Examples
+        --------
+        Using the setup in the ``GenerationResult`` class example:
+
+        >>> view = result.render()
+        >>> view  # static output is immediate; an optional widget refines label sizes
+        >>> snapshot = view.measured(browser="chromium")
+
+        Parameters
+        ----------
+        include : list[str] or None, optional
+            MIME types requested by the frontend; None allows all available types.
+        exclude : list[str] or None, optional
+            MIME types omitted from the frontend response.
+        """
+    def _mime_(self) -> typing.Any:
+        r"""
+        Return Marimo MIME data with static output and an optional live widget.
+
+        Examples
+        --------
+        Using the setup in the ``GenerationResult`` class example:
+
+        >>> view = result.render(max_diagrams=None)
+        >>> view  # static output is immediate; an optional widget refines label sizes
+        >>> snapshot = view.measured(browser="chromium")
         """
     def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None:
         r"""
@@ -6933,7 +7090,17 @@ class LtdRepresentation:
 
         >>> print(ltd)
         """
-    def _repr_html_(self) -> builtins.str:
+    def render(self) -> DiagramView:
+        r"""
+        Prepare a browser-measured residue and surface-pair explorer.
+
+        Examples
+        --------
+        >>> view = ltd.render()
+        >>> view
+        >>> snapshot = view.measured(browser="chromium")
+        """
+    def _repr_mimebundle_(self, include: typing.Optional[typing.Sequence[builtins.str]] = None, exclude: typing.Optional[typing.Sequence[builtins.str]] = None) -> typing.Any:
         r"""
         Explore native residues, surface pairs, and region-relative pole signs.
 
@@ -6946,10 +7113,29 @@ class LtdRepresentation:
 
         >>> from IPython.display import display
         >>> display(ltd)
+
+        Parameters
+        ----------
+        include : list[str] or None, optional
+            MIME types requested by the frontend; None allows all available types.
+        exclude : list[str] or None, optional
+            MIME types omitted from the frontend response.
+        """
+    def _mime_(self) -> typing.Any:
+        r"""
+        Return Marimo MIME data with static output and an optional live widget.
+
+        Examples
+        --------
+        Using the setup in ``LtdRepresentation``:
+
+        >>> view = ltd.render()
+        >>> view  # static output is immediate; an optional widget refines label sizes
+        >>> snapshot = view.measured(browser="chromium")
         """
     def _display_(self) -> typing.Any:
         r"""
-        Embed the explorer in Marimo's script-enabled notebook frame.
+        Return a Marimo widget when available, otherwise static HTML.
 
         Examples
         --------
@@ -7092,13 +7278,40 @@ class LtdResidue:
         TensorExpression
             The scalar residue, including multiplicities and on-shell energy factors.
         """
-    def _repr_html_(self) -> builtins.str:
+    def render(self) -> DiagramView:
+        r"""
+        Prepare this residue's explorer for notebook display or explicit measurement.
+
+        Examples
+        --------
+        >>> view = residue.render()
+        >>> snapshot = view.measured(browser="chromium")
+        """
+    def _repr_mimebundle_(self, include: typing.Optional[typing.Sequence[builtins.str]] = None, exclude: typing.Optional[typing.Sequence[builtins.str]] = None) -> typing.Any:
         r"""
         Inspect this residue's expression, fixed cuts and surface pairs.
 
         Examples
         --------
-        >>> html = residue._repr_html_()
+        >>> from IPython.display import display
+        >>> display(residue)
+
+        Parameters
+        ----------
+        include : list[str] or None, optional
+            MIME types requested by the frontend; None allows all available types.
+        exclude : list[str] or None, optional
+            MIME types omitted from the frontend response.
+        """
+    def _mime_(self) -> typing.Any:
+        r"""
+        Return Marimo MIME data with static output and an optional live widget.
+
+        Examples
+        --------
+        >>> view = residue.render()
+        >>> view  # static output is immediate; an optional widget refines label sizes
+        >>> snapshot = view.measured(browser="chromium")
         """
     def _display_(self) -> typing.Any:
         r"""
@@ -9275,7 +9488,7 @@ class Process:
         >>> repr(process)
         'Process("sm": [e-, e+] -> [mu-, mu+])'
         """
-    def render(self, *, config: typing.Optional[RenderSettings] = None, style: typing.Optional[DiagramStyle] = None) -> DiagramRender:
+    def render(self, *, config: typing.Optional[RenderSettings] = None, style: typing.Optional[DiagramStyle] = None) -> DiagramView:
         r"""
         Create a displayable blob with the process's physical incoming and outgoing particles.
         Alternative final states are displayed as separate schematics.
@@ -9286,7 +9499,7 @@ class Process:
 
         >>> drawing = process.render()
         >>> drawing
-        >>> svg = drawing.to_svg()
+        >>> svg = drawing.measured(browser="chromium").to_svg()
 
         Parameters
         ----------
@@ -9295,9 +9508,9 @@ class Process:
         config : RenderSettings or None, optional
             Particle-label, layout and drawing overrides shared with Feynman diagrams.
         """
-    def _repr_svg_(self) -> builtins.str:
+    def _repr_mimebundle_(self, include: typing.Optional[typing.Sequence[builtins.str]] = None, exclude: typing.Optional[typing.Sequence[builtins.str]] = None) -> typing.Any:
         r"""
-        Display the process schematic in SVG-aware frontends.
+        Measure and display the process schematic in notebook frontends.
 
         Examples
         --------
@@ -9305,17 +9518,25 @@ class Process:
 
         >>> from IPython.display import display
         >>> display(process)
+
+        Parameters
+        ----------
+        include : list[str] or None, optional
+            MIME types requested by the frontend; None allows all available types.
+        exclude : list[str] or None, optional
+            MIME types omitted from the frontend response.
         """
-    def _repr_html_(self) -> builtins.str:
+    def _mime_(self) -> typing.Any:
         r"""
-        Display the process blob, model and active restrictions in notebooks.
+        Return Marimo MIME data with static output and an optional live widget.
 
         Examples
         --------
         Using the setup in the ``Process`` class example:
 
-        >>> from IPython.display import display
-        >>> display(process)
+        >>> view = process.render()
+        >>> view  # static output is immediate; an optional widget refines label sizes
+        >>> snapshot = view.measured(browser="chromium")
         """
     def with_final_state_alternatives(self, alternatives: typing.Sequence[typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int]]) -> Process:
         r"""

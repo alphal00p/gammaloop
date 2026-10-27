@@ -733,7 +733,7 @@ mod tests {
         let label = spenso::index_symbol!("idenso::symmetric_prefix_zero::edge");
         let slots = (0..5)
             .map(|index| {
-                let index = function!(label, Atom::num(index), Atom::num(0));
+                let index = function!(label, Atom::num(index));
                 let admitted = AbstractIndex::from_view(index.as_view()).unwrap();
                 assert_eq!(admitted.to_atom(), index);
                 ColorAdjoint {}.to_symbolic([Atom::num(8), index])

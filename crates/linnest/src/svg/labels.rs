@@ -2,11 +2,263 @@
 //! annotation search `draw.typ` runs. Candidates and the search exchange the
 //! same records as the Typst renderer, so both route labels identically.
 use std::collections::BTreeMap;
+use std::fmt::Write as _;
+use std::num::ParseFloatError;
 
 use kurbo::{BezPath, CubicBez, Point, Shape};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use roxmltree::{Document, Error as XmlError};
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
-use super::{curves, marks, UNIT};
+use super::{curves, marks, output, UNIT};
+
+/// Invalid label sources, measurements, or compiled label pages.
+///
+/// See [`LabelMetrics::validate`] for handling invalid measurements and
+/// [`super::Scene::typeset_mathml`] for importing a complete scene.
+#[derive(Debug, Error)]
+pub enum LabelError {
+    /// A browser rectangle contains invalid values or an outside baseline.
+    #[error(
+        "label metrics must be finite and nonnegative, with baseline within height: {metrics:?}"
+    )]
+    InvalidMetrics { metrics: LabelMetrics },
+    /// CeTZ's width, content height, baseline, or bounds are invalid.
+    #[error("invalid CeTZ label measurements: {metrics:?}")]
+    InvalidCetzMetrics { metrics: [f64; 4] },
+    /// The fragment is not well-formed XML; retains the parser diagnostic.
+    #[error("invalid MathML label fragment: {0}")]
+    InvalidMathml(#[source] XmlError),
+    /// A fragment contains another math root or a foreign namespace.
+    #[error("MathML label must be a fragment without a math root or foreign elements")]
+    ForeignMathml,
+    /// The zero-based page (including the title) has no vector source.
+    #[error("label page {page} has no Typst source for vector export")]
+    MissingTypstSource { page: usize },
+    /// The compiled page lacks the expected SVG/measurement structure.
+    #[error("invalid typeset label page")]
+    InvalidPage,
+    /// A compiled measurement is not a floating-point value.
+    #[error("invalid typeset label measurement: {0}")]
+    InvalidMeasurement(#[source] ParseFloatError),
+    /// A compiled label lacks the CeTZ measurement link.
+    #[error("typeset label page has no measurements")]
+    MissingMeasurements,
+    /// A requested title page is absent.
+    #[error("typeset label document has no title page")]
+    MissingTitle,
+    /// Browser measurements must cover the title and labels in order.
+    #[error("MathML measurements do not match the scene's title and label pages: expected {expected}, got {actual}")]
+    MeasurementCount { expected: usize, actual: usize },
+    /// Compiled pages must cover exactly the scene's content labels.
+    #[error(
+        "typeset pages do not match the scene's label pages: expected {expected}, got {actual}"
+    )]
+    PageCount { expected: usize, actual: usize },
+}
+
+/// Label content shared by browser measurement and native SVG output.
+///
+/// See [`Self::text`] for plain text or [`super::Scene::typeset_mathml`] for
+/// a MathML-only label. Sources are validated when imported with measurements.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct LabelSource {
+    /// Complete MathML fragment, without a `math` root, XHTML, or host markers.
+    pub mathml: String,
+    /// Optional Typst content expression for vector exports.
+    pub typst: Option<String>,
+}
+
+impl LabelSource {
+    /// Escape plain text for browser measurement and optional vector export.
+    ///
+    /// ```
+    /// use linnest::svg::LabelSource;
+    /// let label = LabelSource::text("a < b");
+    /// assert_eq!(label.mathml, "<mtext>a &lt; b</mtext>");
+    /// assert_eq!(label.typst.as_deref(), Some("\"a < b\""));
+    /// ```
+    #[must_use]
+    pub fn text(text: &str) -> Self {
+        Self {
+            mathml: format!("<mtext>{}</mtext>", output::xml_escape(text)),
+            typst: Some(Self::typst_text(text)),
+        }
+    }
+
+    /// A quoted Typst string expression, without a markup-mode `#` prefix.
+    ///
+    /// Used by [`Self::text`], whose example shows the resulting expression.
+    #[must_use]
+    pub fn typst_text(text: &str) -> String {
+        let mut literal = String::with_capacity(text.len() + 2);
+        literal.push('"');
+        for character in text.chars() {
+            match character {
+                '\\' => literal.push_str("\\\\"),
+                '"' => literal.push_str("\\\""),
+                '\n' => literal.push_str("\\n"),
+                '\r' => literal.push_str("\\r"),
+                '\t' => literal.push_str("\\t"),
+                character if character.is_control() => {
+                    write!(literal, "\\u{{{:x}}}", character as u32)
+                        .expect("formatting into a String cannot fail");
+                }
+                character => literal.push(character),
+            }
+        }
+        literal.push('"');
+        literal
+    }
+
+    /// Estimate a label at the fixed 9px STIX Two Math display style.
+    ///
+    /// Counts decoded Unicode characters at 7 units each and reserves 12 units
+    /// per nested structural MathML level. Width is bounded to 16384 and height
+    /// to 4096 user units; empty labels have a zero rectangle. This deliberately
+    /// overestimates ordinary inline labels but cannot predict font shaping,
+    /// stretchy operators, tables, or CSS. Measure for accurate geometry.
+    ///
+    /// ```
+    /// use linnest::svg::LabelSource;
+    /// assert_eq!(LabelSource::text("").estimated_metrics()?.width, 0.0);
+    /// assert!(LabelSource::text("momentum").estimated_metrics()?.width > 9.0);
+    /// # Ok::<(), linnest::svg::LabelError>(())
+    /// ```
+    ///
+    /// # Errors
+    /// Returns the same invalid MathML errors as measured label import.
+    pub fn estimated_metrics(&self) -> Result<LabelMetrics, LabelError> {
+        let math = format!("<math>{}</math>", self.mathml);
+        let document = Document::parse(&math).map_err(LabelError::InvalidMathml)?;
+        let mut characters = 0usize;
+        let mut depth = 0usize;
+        for node in document.descendants().filter(|node| node.is_text()) {
+            characters = characters.saturating_add(node.text().unwrap_or("").chars().count());
+            depth = depth.max(
+                node.ancestors()
+                    .filter(|ancestor| {
+                        ancestor.is_element()
+                            && matches!(
+                                ancestor.tag_name().name(),
+                                "mfrac"
+                                    | "msqrt"
+                                    | "mroot"
+                                    | "msub"
+                                    | "msup"
+                                    | "msubsup"
+                                    | "munder"
+                                    | "mover"
+                                    | "munderover"
+                                    | "mtable"
+                                    | "mtr"
+                            )
+                    })
+                    .count(),
+            );
+        }
+        let metrics = if characters == 0 {
+            LabelMetrics {
+                width: 0.0,
+                height: 0.0,
+                baseline: 0.0,
+            }
+        } else {
+            let height = (12.0 + 12.0 * depth.min(340) as f64).min(4096.0);
+            LabelMetrics {
+                width: (7.0 * characters.min(2340) as f64 + 6.0).min(16384.0),
+                height,
+                baseline: height * 0.75,
+            }
+        };
+        self.typeset_mathml(metrics)?;
+        Ok(metrics)
+    }
+
+    pub(super) fn typeset_mathml(&self, metrics: LabelMetrics) -> Result<LabelPage, LabelError> {
+        metrics.validate()?;
+        let math = format!(
+            r#"<math xmlns="http://www.w3.org/1998/Math/MathML">{}</math>"#,
+            self.mathml
+        );
+        let document = Document::parse(&math).map_err(LabelError::InvalidMathml)?;
+        if document.root_element().descendants().skip(1).any(|node| {
+            node.is_element()
+                && (node.tag_name().namespace() != Some("http://www.w3.org/1998/Math/MathML")
+                    || node.tag_name().name() == "math")
+        }) {
+            return Err(LabelError::ForeignMathml);
+        }
+        // The outer SVG maps one user unit to one point. CSS px inside the
+        // foreignObject are user units, so 9px here renders as 9 physical points.
+        let body = format!(
+            r#"<foreignObject x="0" y="0" width="{}" height="{}"><div xmlns="http://www.w3.org/1999/xhtml" class="linnet-math-label" style="font-size:9px;line-height:1;width:max-content">{math}</div></foreignObject>"#,
+            metrics.width, metrics.height,
+        );
+        Ok(LabelPage { metrics, body })
+    }
+}
+
+/// Browser-measured label rectangle and distance from its top to the baseline.
+/// Every dimension is in points, matching the native SVG's user units.
+///
+/// This is an untrusted measurement record; [`Self::validate`] checks its
+/// values at the rendering boundary and provides an example.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct LabelMetrics {
+    pub width: f64,
+    pub height: f64,
+    pub baseline: f64,
+}
+
+impl LabelMetrics {
+    /// Check the rectangle before it enters sizing or collision calculations.
+    ///
+    /// # Errors
+    /// Returns [`LabelError::InvalidMetrics`] for nonfinite or negative values,
+    /// or a baseline below the rectangle. Empty boxes are valid.
+    ///
+    /// ```
+    /// use linnest::svg::{LabelError, LabelMetrics};
+    /// let metrics = LabelMetrics { width: 12.0, height: 9.0, baseline: 7.0 };
+    /// metrics.validate()?;
+    /// let invalid = LabelMetrics { baseline: 10.0, ..metrics };
+    /// assert!(matches!(invalid.validate(), Err(LabelError::InvalidMetrics { .. })));
+    /// # Ok::<(), LabelError>(())
+    /// ```
+    pub fn validate(&self) -> Result<(), LabelError> {
+        if [self.width, self.height, self.baseline]
+            .iter()
+            .any(|value| !value.is_finite() || *value < 0.0)
+            || self.baseline > self.height
+        {
+            return Err(LabelError::InvalidMetrics { metrics: *self });
+        }
+        Ok(())
+    }
+
+    /// CeTZ reports content width/height and one-line baseline/bounds heights.
+    /// Its actual box includes the bounds below that baseline; the last line's
+    /// baseline is the content height, including preceding lines.
+    fn from_cetz([width, height, baseline, bounds]: [f64; 4]) -> Result<Self, LabelError> {
+        if [width, height, baseline, bounds]
+            .iter()
+            .any(|value| !value.is_finite() || *value < 0.0)
+        {
+            return Err(LabelError::InvalidCetzMetrics {
+                metrics: [width, height, baseline, bounds],
+            });
+        }
+        let metrics = Self {
+            width,
+            height: height + bounds - baseline,
+            baseline: height,
+        };
+        metrics.validate()?;
+        Ok(metrics)
+    }
+}
 
 /// Clearance between an external label and its free endpoint.
 const EXTERNAL_GAP: f64 = 0.25;
@@ -72,17 +324,19 @@ impl Bounds {
     }
 }
 
-/// One typeset page: its size and SVG body in points. Label pages also carry
-/// the content measurements CeTZ uses (width, height, line baseline, line bounds).
+/// One typeset label's actual rectangle/baseline and SVG body, in points.
+///
+/// See [`super::Scene::typeset_mathml`] for constructing measured pages.
 #[derive(Clone, Debug)]
 pub struct LabelPage {
-    pub width: f64,
-    pub height: f64,
+    pub metrics: LabelMetrics,
     pub body: String,
-    pub metrics: Option<[f64; 4]>,
 }
 
 /// A scene's typeset title and label pages, with their merged glyph definitions.
+///
+/// See [`super::Scene::typeset_mathml`] for browser measurements or [`Self::read`]
+/// for the optional vector compiler's pages.
 #[derive(Clone, Debug, Default)]
 pub struct Typeset {
     pub title: Option<LabelPage>,
@@ -108,8 +362,8 @@ impl LabelPage {
     }
 
     /// Read one SVG page, collecting its glyph symbols into `defs`.
-    fn read(svg: &str, defs: &mut BTreeMap<String, String>) -> Result<Self, String> {
-        let invalid = || "invalid typeset label page".to_owned();
+    fn read(svg: &str, defs: &mut BTreeMap<String, String>) -> Result<Self, LabelError> {
+        let invalid = || LabelError::InvalidPage;
         let view_box = svg.split("viewBox=\"0 0 ").nth(1).ok_or_else(invalid)?;
         let mut size = view_box
             .split('"')
@@ -117,17 +371,22 @@ impl LabelPage {
             .ok_or_else(invalid)?
             .split(' ')
             .map(str::parse::<f64>);
-        let (Some(Ok(width)), Some(Ok(height))) = (size.next(), size.next()) else {
-            return Err(invalid());
-        };
+        let width = size
+            .next()
+            .ok_or_else(invalid)?
+            .map_err(LabelError::InvalidMeasurement)?;
+        let height = size
+            .next()
+            .ok_or_else(invalid)?
+            .map_err(LabelError::InvalidMeasurement)?;
         let open = svg.find('>').ok_or_else(invalid)? + 1;
         let close = svg
             .find("<defs")
             .or_else(|| svg.rfind("</svg>"))
             .ok_or_else(invalid)?;
-        let mut body = svg[open..close].to_owned();
+        let mut body = svg.get(open..close).ok_or_else(invalid)?.to_owned();
         let metrics = match body.find(&format!("<a href=\"{METRICS_LINK}")) {
-            None => None,
+            None => return Err(LabelError::MissingMeasurements),
             Some(start) => {
                 let end = start + body[start..].find("</a>").ok_or_else(invalid)? + "</a>".len();
                 let link: String = body.drain(start..end).collect();
@@ -140,13 +399,23 @@ impl LabelPage {
                     .map(str::parse::<f64>);
                 let mut metrics = [0.0; 4];
                 for metric in &mut metrics {
-                    *metric = values.next().and_then(Result::ok).ok_or_else(invalid)?;
+                    *metric = values
+                        .next()
+                        .ok_or_else(invalid)?
+                        .map_err(LabelError::InvalidMeasurement)?;
                 }
-                Some(metrics)
+                if values.next().is_some() {
+                    return Err(invalid());
+                }
+                LabelMetrics::from_cetz(metrics)?
             }
         };
+        if !width.is_finite() || !height.is_finite() || width < 0.0 || height < 0.0 {
+            return Err(invalid());
+        }
         if let (Some(start), Some(end)) = (svg.find("<defs"), svg.rfind("</defs>")) {
-            let inner = &svg[start + svg[start..].find('>').ok_or_else(invalid)? + 1..end];
+            let inner_start = start + svg[start..].find('>').ok_or_else(invalid)? + 1;
+            let inner = svg.get(inner_start..end).ok_or_else(invalid)?;
             for symbol in inner.split("<symbol").filter(|symbol| !symbol.is_empty()) {
                 let id = symbol
                     .split("id=\"")
@@ -157,18 +426,26 @@ impl LabelPage {
                     .or_insert_with(|| format!("<symbol{symbol}"));
             }
         }
-        Ok(Self {
-            width,
-            height,
-            body,
-            metrics,
-        })
+        Ok(Self { body, metrics })
     }
 }
 
 impl Typeset {
     /// Read the SVG pages of a scene's label document, title first when present.
-    pub fn read(svgs: &[String], title: bool) -> Result<Self, String> {
+    ///
+    /// # Errors
+    /// Returns [`LabelError`] for invalid SVG pages, absent measurements, or a
+    /// missing title. Parser errors retain their original source.
+    ///
+    /// ```
+    /// use linnest::svg::{LabelError, Typeset};
+    /// let svg = r#"<svg viewBox="0 0 12 9"><g/><a href="linnest-metrics:12,7,7,9"><rect/></a></svg>"#.to_owned();
+    /// let labels = Typeset::read(&[svg], false)?;
+    /// assert_eq!(labels.pages[0].metrics.height, 9.0);
+    /// assert!(labels.title.is_none());
+    /// # Ok::<(), LabelError>(())
+    /// ```
+    pub fn read(svgs: &[String], title: bool) -> Result<Self, LabelError> {
         let mut defs = BTreeMap::new();
         let mut pages = svgs
             .iter()
@@ -176,7 +453,7 @@ impl Typeset {
             .collect::<Result<Vec<_>, _>>()?;
         let title = if title {
             if pages.is_empty() {
-                return Err("typeset label document has no title page".to_owned());
+                return Err(LabelError::MissingTitle);
             }
             Some(pages.remove(0))
         } else {
@@ -319,11 +596,10 @@ pub(super) struct Placement {
     pub arrow_carriers: Option<Vec<BezPath>>,
 }
 
-/// CeTZ `content` corners (NW, NE, SW, SE) relative to the placement point.
-fn content_corners([width, height, baseline, bounds]: [f64; 4], anchor: Anchor) -> [[f64; 3]; 4] {
-    let measure = |pt: f64| (pt / UNIT).abs();
-    let w = measure(width) / 2.0;
-    let h = (measure(height) + measure(bounds) - measure(baseline)).abs() / 2.0;
+/// Actual rectangle corners (NW, NE, SW, SE) relative to the placement point.
+fn content_corners(metrics: LabelMetrics, anchor: Anchor) -> [[f64; 3]; 4] {
+    let w = metrics.width / UNIT / 2.0;
+    let h = metrics.height / UNIT / 2.0;
     let offset = match anchor {
         Anchor::East => [-w, 0.0],
         Anchor::West => [w, 0.0],
@@ -382,7 +658,7 @@ fn positions(total: f64, preferred: f64, low: f64, high: f64) -> Vec<f64> {
 /// interleaved by position.
 pub(super) fn carrier_candidates(
     path: &BezPath,
-    metrics: [f64; 4],
+    metrics: LabelMetrics,
     gap: f64,
 ) -> Result<Vec<Candidate>, String> {
     let total = curves::length(path);
@@ -421,7 +697,7 @@ pub(super) fn carrier_candidates(
 /// interleaved. Returns the candidates and the offset carriers.
 pub(super) fn momentum_candidates(
     path: &BezPath,
-    metrics: [f64; 4],
+    metrics: LabelMetrics,
     side: f64,
     offset: f64,
 ) -> Result<(Vec<Candidate>, Vec<BezPath>), String> {
@@ -489,7 +765,7 @@ pub(super) fn endpoint_candidates(
     at: [f64; 2],
     direction: [f64; 2],
     anchor: Anchor,
-    metrics: [f64; 4],
+    metrics: LabelMetrics,
 ) -> Result<Vec<Candidate>, String> {
     CandidateSpec {
         gap: EXTERNAL_GAP,
@@ -747,4 +1023,68 @@ pub(super) fn overlaps(
         }
     }
     (overlapping, hits, pairs / 2)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::error::Error as _;
+
+    #[test]
+    fn label_parse_failures_retain_their_sources_and_never_slice_invalid_pages() {
+        let label = LabelSource {
+            mathml: "<mi>".into(),
+            typst: None,
+        };
+        let metrics = LabelMetrics {
+            width: 12.0,
+            height: 9.0,
+            baseline: 7.0,
+        };
+        let error = label.typeset_mathml(metrics).unwrap_err();
+        assert!(matches!(error, LabelError::InvalidMathml(_)));
+        assert!(error.source().unwrap().is::<XmlError>());
+        let page =
+            r#"<svg viewBox="0 0 12 9"><a href="linnest-metrics:bad,7,7,9"><rect/></a></svg>"#;
+        let error = Typeset::read(&[page.into()], false).unwrap_err();
+        assert!(matches!(error, LabelError::InvalidMeasurement(_)));
+        assert!(error.source().unwrap().is::<ParseFloatError>());
+        let malformed = r#"</svg><svg viewBox="0 0 12 9">"#;
+        assert!(matches!(
+            Typeset::read(&[malformed.into()], false),
+            Err(LabelError::InvalidPage)
+        ));
+    }
+
+    #[test]
+    fn text_sources_escape_mathml_and_typst_at_the_shared_boundary() {
+        let text = "a<\"&\\b\n\t#[]";
+        let source = LabelSource::text(text);
+        assert_eq!(source.mathml, "<mtext>a&lt;&quot;&amp;\\b\n\t#[]</mtext>");
+        assert_eq!(source.typst.as_deref(), Some("\"a<\\\"&\\\\b\\n\\t#[]\""));
+        assert_eq!(LabelSource::typst_text("\0\r"), "\"\\u{0}\\r\"");
+        let encoded = serde_json::to_string(&source).unwrap();
+        assert_eq!(
+            serde_json::from_str::<LabelSource>(&encoded).unwrap(),
+            source
+        );
+    }
+
+    #[test]
+    fn cetz_import_normalizes_multiline_rectangle_and_baseline_once() {
+        let metrics = LabelMetrics::from_cetz([27.0, 19.0, 7.0, 10.0]).unwrap();
+        assert_eq!(
+            metrics,
+            LabelMetrics {
+                width: 27.0,
+                height: 22.0,
+                baseline: 19.0
+            }
+        );
+        let corners = content_corners(metrics, Anchor::Center);
+        assert_eq!(corners[0], [-1.0, 11.0 / UNIT, 0.0]);
+        assert_eq!(corners[3], [1.0, -11.0 / UNIT, 0.0]);
+        assert_eq!(content_corners(metrics, Anchor::West)[0][0], 0.0);
+        assert_eq!(content_corners(metrics, Anchor::North)[0][1], 0.0);
+    }
 }

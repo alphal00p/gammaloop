@@ -28,7 +28,7 @@ for propagator in definition["propagators"]:
     propagator["denominator"] = propagator["denominator"].replace("mass", "importMass")
 with tempfile.TemporaryDirectory() as directory:
     path = Path(directory) / "labelled.json"
-    path.write_text(json.dumps(definition))
+    path.write_text(json.dumps(definition), encoding="utf-8")
     imported = hep.UfoLoader(simplify_model=False).load(path).model
     mass = imported.parameter("importMass")
     assert mass.texname == "m_{test}"

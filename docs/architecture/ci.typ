@@ -87,6 +87,26 @@ cannot select individual tests. Explicitly requesting
 The NLO acceptance cases share one executable. Their assertions, workloads
 and runtime worker reservations are unchanged.
 
+== Browser and widget coverage
+
+`checks.x86_64-linux.gammaloop-nextest-browser` is a separate licensed runtime
+check, scheduled by the `gammaloop-nextest-browser` NixCI launcher. It reuses
+per-crate nextest archives for Linnet rendering, Spynso and FeynKit. Nixpkgs
+from `flake.lock` supplies Chromium, Python Playwright, AnyWidget, Marimo and typst-py;
+there is no browser installation or package resolution at test time. The same
+pinned STIX Two Math assets used by the documentation renderer enter through
+`SYMBOLICA_DATA_DIRECTORY`. Browser font requests are fulfilled from that bundle.
+
+The check runs the ignored real widget/Chromium regressions, the native MathML
+producer/client round trip, tensor font/layout and library-grid checks, and
+FeynKit CFF/LTD/scoped energy displays. Fixtures come from the archived native
+owners, with disposable loopback servers and browser processes owned by the
+runner. Optional Typst-only tests also run in this dependency-complete group. Ordinary Spynso nextest runs include the paging harness; only
+its live AnyWidget case skips when that optional package cannot import.
+The embedded interpreter is the PyO3 compile interpreter, whose store closure
+contains Python's standard library. The browser group adds its optional Python
+packages through `PYTHONPATH`, without changing the compiled interpreter.
+
 == Fast tests and the full main suite
 
 The shared Nextest configuration owns test selection. Ordinary local test

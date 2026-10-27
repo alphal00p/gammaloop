@@ -375,7 +375,7 @@ impl SlotContraction {
                 let ports = interface.logical_slots();
                 let [target] = ports.as_slice() else { continue };
                 if matches!(target.aind, PartialIndex::Explicit(_)) || !target.rep().matches(&representation) { continue }
-                let operand = SymbolicTensor::from_normalized_parts(operand.to_owned(), interface);
+                let Ok(operand) = SymbolicTensor::from_declared_parts(operand.to_owned(), interface) else { continue };
                 if let Ok(result) = rewrite_interface_ports(
                     &operand,
                     &std::collections::HashMap::from([(0, vector.to_owned())]),

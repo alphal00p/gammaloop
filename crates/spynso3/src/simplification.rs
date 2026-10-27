@@ -196,56 +196,25 @@ assert hasattr(sp.Tensor, 'contract_ports')
     }
 
     #[test]
-    fn network_tooling_failures_are_python_value_errors() {
+    fn malformed_declared_parts_are_python_value_errors() {
         Python::initialize();
-        Python::attach(|py| -> PyResult<()> {
-            let module = PyModule::new(py, "spenso")?;
-            register(&module)?;
+        Python::attach(|py| {
             let malformed = FunctionBuilder::new(SPENSO_TAG.dot)
                 .add_arg(Atom::var(symbol!("malformed_dot_operand")))
                 .finish();
-            // Deliberately inject malformed internals to test tooling error translation.
-            let expression = TensorExpression::from_parts_unchecked(
+            let error = TensorExpression::from_atom_interface(
                 py,
                 malformed,
                 PartialStructure::from_logical_slots([]),
-                None,
-                Vec::new(),
-            )?;
-
-            let error = expression
-                .bind(py)
-                .call_method0("undo_dots")
-                .expect_err("malformed dot notation should return an error");
-            assert!(error.is_instance_of::<NetworkToolingError>(py));
+            )
+            .expect_err("malformed external parts must be rejected at intake");
             assert!(error.is_instance_of::<PyValueError>(py));
-            assert!(error.to_string().contains("cannot parse tensor network"));
-            assert!(error.to_string().contains("Invalid dot function"));
-
-            let error = expression
-                .bind(py)
-                .call_method0("canonize")
-                .expect_err("malformed dot notation should not canonicalize");
-            assert!(error.is_instance_of::<CanonicalizationError>(py));
-            assert!(error.is_instance_of::<PyValueError>(py));
-            assert!(error.to_string().contains("cannot parse tensor network"));
-            assert!(error.to_string().contains("Invalid dot function"));
-
-            let error = expression
-                .bind(py)
-                .call_method0("dirac_adjoint")
-                .expect_err("malformed dot notation should not have a Dirac adjoint");
-            assert!(error.is_instance_of::<DiracAdjointError>(py));
-            assert!(error.is_instance_of::<PyValueError>(py));
-            // Source admission now diagnoses this before network materialization.
             assert!(
                 error
                     .to_string()
                     .contains("dot requires exactly two operands")
             );
-            Ok(())
-        })
-        .unwrap();
+        });
     }
 
     #[test]

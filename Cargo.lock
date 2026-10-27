@@ -94,9 +94,7 @@ dependencies = [
  "typst",
  "typst-bundle",
  "typst-kit",
- "typst-library",
  "typst-pdf",
- "typst-svg",
  "walkdir",
 ]
 
@@ -262,7 +260,7 @@ version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40c48f72fd53cd289104fc64099abca73db4166ad86ea0b4341abe65af83dadc"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -273,7 +271,7 @@ checksum = "291e6a250ff86cd4a820112fb8898808a366d8f9f58ce16d1f538353ad55747d"
 dependencies = [
  "anstyle",
  "once_cell_polyfill",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1008,7 +1006,7 @@ version = "3.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "faf9468729b8cbcea668e36183cb69d317348c2e08e994829fb56ebfdfbaac34"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1143,6 +1141,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77745e017f5edba1a9c1d854f6f3a52dac8a12dd5af5d2f54aecf61e43d80d30"
 dependencies = [
  "libm",
+]
+
+[[package]]
+name = "corosensei"
+version = "0.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6886a0c0f263965933c438626e7179139a62b978a33aa18281cbf0cd5a975f34"
+dependencies = [
+ "autocfg",
+ "cfg-if",
+ "libc",
+ "scopeguard",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -1583,7 +1594,7 @@ dependencies = [
  "libc",
  "option-ext",
  "redox_users",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1771,7 +1782,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1894,6 +1905,7 @@ dependencies = [
  "serde_json",
  "spenso",
  "symbolica",
+ "symbolica-notation",
  "thiserror 2.0.18",
  "three-dimensional-reps",
  "typed-index-collections",
@@ -1934,6 +1946,7 @@ dependencies = [
  "serde_json",
  "spenso",
  "symbolica",
+ "symbolica-notation",
  "symbolica-utils",
  "thiserror 2.0.18",
 ]
@@ -1993,7 +2006,6 @@ dependencies = [
  "spynso3",
  "symbolica",
  "tempfile",
- "typst-renderer",
 ]
 
 [[package]]
@@ -2447,6 +2459,7 @@ dependencies = [
  "spenso-hep-lib",
  "statrs",
  "symbolica",
+ "symbolica-notation",
  "symbolica-utils",
  "tabled",
  "thiserror 2.0.18",
@@ -2593,7 +2606,7 @@ dependencies = [
 [[package]]
 name = "graphica"
 version = "3.0.1"
-source = "git+https://github.com/symbolica-dev/symbolica?branch=community#c78cffc20f318df1fce50539a587cbe8ffc717c0"
+source = "git+https://github.com/symbolica-dev/symbolica?branch=main#1a1829b1f3d0a88b53b44085b3b9f34ef77945b3"
 dependencies = [
  "ahash 0.8.12",
  "dyn-clone",
@@ -3177,6 +3190,7 @@ dependencies = [
  "spenso",
  "spenso-macros",
  "symbolica",
+ "symbolica-notation",
  "symbolica-utils",
  "thiserror 2.0.18",
  "tracing",
@@ -3399,7 +3413,7 @@ checksum = "3640c1c38b8e4e43584d8df18be5fc6b0aa314ce6ebf51b53313d4306cca8e46"
 dependencies = [
  "hermit-abi",
  "libc",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3791,8 +3805,10 @@ dependencies = [
  "serde",
  "serde_json",
  "symbolica",
+ "symbolica-data",
+ "symbolica-notation",
  "tempfile",
- "typst-renderer",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -4175,7 +4191,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4284,7 +4300,7 @@ dependencies = [
 [[package]]
 name = "numerica"
 version = "3.0.1"
-source = "git+https://github.com/symbolica-dev/symbolica?branch=community#c78cffc20f318df1fce50539a587cbe8ffc717c0"
+source = "git+https://github.com/symbolica-dev/symbolica?branch=main#1a1829b1f3d0a88b53b44085b3b9f34ef77945b3"
 dependencies = [
  "ahash 0.8.12",
  "astro-float",
@@ -5709,7 +5725,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6279,6 +6295,7 @@ dependencies = [
  "serde_json",
  "spenso-macros",
  "symbolica",
+ "symbolica-notation",
  "symbolica-typst-plugin",
  "symbolica-utils",
  "tabled",
@@ -6320,7 +6337,6 @@ name = "spynso3"
 version = "0.1.2"
 dependencies = [
  "ahash 0.8.12",
- "ciborium",
  "eyre",
  "idenso",
  "itertools 0.14.0",
@@ -6336,11 +6352,10 @@ dependencies = [
  "spenso-hep-lib",
  "spenso-macros",
  "symbolica",
- "symbolica-data",
+ "symbolica-notation",
  "symbolica-typst-plugin",
  "tabled",
  "thiserror 2.0.18",
- "typst-renderer",
  "xpct",
 ]
 
@@ -6360,7 +6375,7 @@ dependencies = [
  "cfg-if",
  "libc",
  "psm",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6524,7 +6539,7 @@ dependencies = [
 [[package]]
 name = "symbolica"
 version = "3.0.1"
-source = "git+https://github.com/symbolica-dev/symbolica?branch=community#c78cffc20f318df1fce50539a587cbe8ffc717c0"
+source = "git+https://github.com/symbolica-dev/symbolica?branch=main#1a1829b1f3d0a88b53b44085b3b9f34ef77945b3"
 dependencies = [
  "ahash 0.8.12",
  "append-only-vec",
@@ -6559,15 +6574,26 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "wide 1.7.0",
+ "xmlparser",
 ]
 
 [[package]]
 name = "symbolica-data"
 version = "0.1.0"
 dependencies = [
+ "pyo3",
  "serde",
  "serde_json",
  "sha2",
+]
+
+[[package]]
+name = "symbolica-notation"
+version = "0.1.0"
+dependencies = [
+ "roxmltree 0.21.1",
+ "symbolica",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -6593,12 +6619,13 @@ dependencies = [
 
 [[package]]
 name = "symjit"
-version = "2.27.0"
+version = "2.27.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f06329022a5123536f7fd50eb01b3e885dfafe3983f90a0d7b17408f4d0469ea"
+checksum = "9d5297d2ef25e396f984747fd0e480aaabb08e40e424f9cd07811efc6b20c140"
 dependencies = [
  "ahash 0.8.12",
  "anyhow",
+ "corosensei",
  "hashbrown 0.16.1",
  "hugepage-rs",
  "lazy_static",
@@ -6766,7 +6793,7 @@ dependencies = [
  "getrandom 0.4.2",
  "once_cell",
  "rustix 1.1.4",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6798,7 +6825,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "230a1b821ccbd75b185820a1f1ff7b14d21da1e442e22c0863ea5f08771a8874"
 dependencies = [
  "rustix 1.1.4",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -7583,6 +7610,8 @@ dependencies = [
 [[package]]
 name = "typst-library"
 version = "0.15.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "12becd02464849f1507f3c4ef3f401a4d28d5938cc74b6acc6f1d703458bf393"
 dependencies = [
  "arrayvec",
  "az",
@@ -7729,27 +7758,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "typst-renderer"
-version = "0.1.0"
-dependencies = [
- "comemo",
- "serde_json",
- "symbolica-data",
- "tempfile",
- "typst",
- "typst-assets",
- "typst-html",
- "typst-kit",
- "typst-layout",
- "typst-library",
- "typst-pdf",
- "typst-render",
- "typst-svg",
-]
-
-[[package]]
 name = "typst-svg"
 version = "0.15.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5df6dc785695aae085678bd6657aa04a1d26058a76ed042e738658078bca681e"
 dependencies = [
  "base64 0.22.1",
  "comemo",
@@ -8680,7 +8692,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -9068,6 +9080,12 @@ dependencies = [
  "libc",
  "rustix 1.1.4",
 ]
+
+[[package]]
+name = "xmlparser"
+version = "0.13.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "66fee0b777b0f5ac1c69bb06d361268faafa61cd4682ae064a171c16c433e9e4"
 
 [[package]]
 name = "xmlwriter"

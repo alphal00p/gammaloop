@@ -90,7 +90,7 @@ pub(crate) fn contracted_atom(
 ) -> Result<symbolica::atom::Atom, crate::tensor::inference::TensorInferenceError> {
     use crate::tensor::{SymbolicTensor, inference::InterfaceInference};
     let interface = InterfaceInference::replacement_interface(expression)?;
-    SymbolicTensor::checked_parts(expression.to_owned(), interface)?
+    SymbolicTensor::from_produced_parts(expression.to_owned(), interface)?
         .contract(Default::default())
         .map(SymbolicTensor::into_expression)
 }

@@ -146,7 +146,10 @@ def output_block(values, slug, assets, rsvg_convert):
     for index, value in enumerate(values):
         if slug == "network":
             svg = (
-                value.render().to_svg().replace("<svg ", '<svg data-theme="light" ', 1)
+                value.render()
+                .outlined()
+                .to_svg()
+                .replace("<svg ", '<svg data-theme="light" ', 1)
             )
         elif slug == "components":
             svg = wrapped_component_svg(value)

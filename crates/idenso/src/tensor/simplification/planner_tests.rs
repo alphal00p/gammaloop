@@ -605,17 +605,26 @@ fn regional_inventory_preserves_a_surviving_head_and_reuses_scalar_spectators() 
     use observation::{DomainObservations, REUSED_REGIONS};
     crate::test_support::test_initialize();
     let epsilon = *crate::epsilon::EPSILON_SYMBOL;
-    let left = FunctionBuilder::new(epsilon)
-        .add_arg(Atom::var(symbol!("inventory_left")))
-        .finish();
-    let right = FunctionBuilder::new(epsilon)
-        .add_arg(Atom::var(symbol!("inventory_right")))
-        .finish();
+    let vector = spenso::vector_symbol!("inventory_vector");
+    let determinant = |owner| {
+        FunctionBuilder::new(epsilon)
+            .add_args((0..4).map(|axis| {
+                FunctionBuilder::new(vector)
+                    .add_arg(Atom::var(owner))
+                    .add_arg(Atom::num(axis))
+                    .add_arg(spenso::mink!(4))
+                    .finish()
+            }))
+            .finish()
+    };
+    let left = determinant(symbol!("inventory_left"));
+    let right = determinant(symbol!("inventory_right"));
     let spectator =
         (Atom::var(symbol!("inventory_x")) + Atom::var(symbol!("inventory_y"))).pow(100);
     let original = &left * &right * &spectator;
     let tensor =
-        SymbolicTensor::from_normalized_parts(original, PartialStructure::from_logical_slots([]));
+        SymbolicTensor::from_declared_parts(original, PartialStructure::from_logical_slots([]))
+            .unwrap();
     let observed = tensor.reduction_observations();
     assert_eq!(observed.candidates.counts[4], 2);
     assert_eq!(observed.epsilon_degree, 2);

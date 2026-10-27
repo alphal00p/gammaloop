@@ -8,6 +8,13 @@ The canonical documentation is the [FeynKit manual](../../docs/products/feynkit/
 - [Python quickstart](../../docs/products/feynkit/content/quickstart-python.typ): load a model, generate diagrams, and construct CFF expressions.
 - [Host integration and stub verification](../../docs/products/feynkit/content/community-host.typ): register and package the module, refresh its API reference, and check an installed host.
 - [Vacuum tensor reduction](../../docs/products/feynkit/content/tensor-reduction.typ): select integrated momenta while retaining external vectors.
-- [Notebook rendering](../../docs/products/feynkit/content/notebooks.typ): Typst source, SVG, HTML, and rich display.
+- [Notebook rendering](../../docs/products/feynkit/content/notebooks.typ): native SVG/MathML, static snapshots, optional vector exports, and rich display.
 
 Browse the [published manual and API reference](https://alphal00p.github.io/gammaloop/products/feynkit/latest/).
+
+Graph rendering returns `DiagramView`: default SVG/HTML exports are static,
+while `measured()` requires completed browser measurement and `outlined()` uses
+optional typst-py. MIME display adds a widget when `anywidget` is installed.
+The host no longer embeds the Rust Typst compiler. See the
+[Python display migration notes](../../docs/products/feynkit/content/community-host.typ)
+for removed hooks, snapshot defaults, notation, and `symbolica.data` resources.

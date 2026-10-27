@@ -1,14 +1,15 @@
 use std::collections::BTreeMap;
 
 use linnest::{
-    encode_graph_spec_bytes, TypstEdgeSpec, TypstEndpointSpec, TypstGraphSpec, TypstNodeSpec,
+    encode_graph_spec_bytes, TypstEdgeSpec, TypstEndpointSpec, TypstGraphSpec,
+    TypstGraphSpecEnvelope, TypstNodeSpec,
 };
 use linnet::half_edge::builder::{HedgeData, HedgeGraphBuilder};
 use linnet::half_edge::involution::{Flow, Hedge, HedgePair, Orientation};
 use linnet::half_edge::subgraph::{Inclusion, SubSetLike};
 use pyo3::exceptions::{PyReferenceError, PyRuntimeError, PyValueError};
-use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyDict, PyDictMethods, PyList, PyListMethods};
+use pyo3::{Bound, Py, PyResult, Python};
 
 use crate::dot::PyGlobalData;
 use crate::drawing::{element_drawing, DrawingKind};
@@ -21,6 +22,7 @@ use crate::typst::{
     evaluate_selector, render_config_transport, PyRenderSettings, RenderSettingsTransport,
     SelectorCallbacks,
 };
+use crate::PyDiagramView;
 
 fn base_elements(py: Python<'_>, graph: &PyGraph) -> PyResult<Py<PyDict>> {
     let state = graph.state.borrow();
@@ -301,27 +303,12 @@ fn topology_spec(graph: &PyGraph) -> PyResult<Vec<u8>> {
     encode_graph_spec_bytes(&spec).map_err(PyRuntimeError::new_err)
 }
 
-pub(crate) fn graph_to_svg(
-    py: Python<'_>,
-    graph: &Py<PyGraph>,
-    config: Option<&Bound<'_, PyAny>>,
-) -> PyResult<String> {
-    let pages = render_graph(py, graph, config, None)?.to_svg_pages()?;
-    match pages.as_slice() {
-        [svg] => Ok(svg.clone()),
-        _ => Err(PyRuntimeError::new_err(format!(
-            "Typst SVG render produced {} pages; expected exactly one",
-            pages.len()
-        ))),
-    }
-}
-
 pub(crate) fn render_graph(
     py: Python<'_>,
     graph: &Py<PyGraph>,
     config: Option<&Bound<'_, PyAny>>,
     subgraph: Option<&PySubgraph>,
-) -> PyResult<crate::PyDiagramRender> {
+) -> PyResult<PyDiagramView> {
     // Validate before callbacks and again after preparation of the graph records.
     if let Some(subgraph) = subgraph {
         subgraph.selection_for(py, graph, graph.borrow(py).revision()?)?;
@@ -347,10 +334,10 @@ pub(crate) fn render_graph(
     } else {
         None
     };
-    let envelope: linnest::TypstGraphSpecEnvelope = ciborium::from_reader(topology.as_slice())
+    let envelope: TypstGraphSpecEnvelope = ciborium::from_reader(topology.as_slice())
         .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
     let scene = transport.native_scene(envelope.graph, selection.as_ref(), None)?;
-    crate::PyDiagramRender::from_scene(py, scene, None)
+    PyDiagramView::from_scene(py, scene, None)
 }
 
 /// Supply live generic graph views only when the optional Linnet bindings are registered.
@@ -443,25 +430,38 @@ pub(crate) fn scene_selectors(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::PyDiagramRender;
+    use pyo3::types::PyAnyMethods;
+    use pyo3::types::{PyModule, PyModuleMethods};
+    use pyo3::PyRef;
+    use std::ffi::CString;
 
     #[test]
-    fn compiled_graph_inspection_preserves_native_drawing() {
+    fn measured_graph_inspection_preserves_native_drawing() {
         Python::initialize();
         Python::attach(|py| -> PyResult<()> {
             let modules = py.import("sys")?.getattr("modules")?;
-            let symbolica = pyo3::types::PyModule::new(py, "symbolica")?;
-            let community = pyo3::types::PyModule::new(py, "symbolica.community")?;
+            let symbolica = PyModule::new(py, "symbolica")?;
+            let community = PyModule::new(py, "symbolica.community")?;
             symbolica.add("community", &community)?;
             modules.set_item("symbolica", &symbolica)?;
             modules.set_item("symbolica.community", &community)?;
-            let linnet = pyo3::types::PyModule::new(py, "symbolica.community.graph")?;
+            let linnet = PyModule::new(py, "symbolica.community.graph")?;
             community.add("graph", &linnet)?;
             crate::register(&linnet)?;
             py.import("sys")?
                 .getattr("modules")?
                 .set_item("symbolica.community.graph", &linnet)?;
-            let source =
-                std::ffi::CString::new(include_str!("../tests/test_svg_interaction.py")).unwrap();
+            let metrics_source =
+                CString::new(include_str!("../tests/rendering_metrics.py")).unwrap();
+            let metrics = PyModule::from_code(
+                py,
+                &metrics_source,
+                c"rendering_metrics.py",
+                c"rendering_metrics",
+            )?;
+            modules.set_item("rendering_metrics", &metrics)?;
+            let source = CString::new(include_str!("../tests/test_svg_interaction.py")).unwrap();
             let fixture = PyModule::from_code(
                 py,
                 &source,
@@ -471,7 +471,11 @@ mod tests {
             let case = fixture.getattr("SvgInteractionTests")?.call0()?;
             case.call_method0("setUp")?;
             let graph = case.getattr("graph")?.extract::<Py<PyGraph>>()?;
-            let drawing = render_graph(py, &graph, None, None)?;
+            let view = render_graph(py, &graph, None, None)?;
+            let drawing = metrics
+                .call_method1("external_metrics_snapshot", (Py::new(py, view)?,))?
+                .extract::<PyRef<'_, PyDiagramRender>>()?
+                .clone();
             let pages = drawing.to_svg_pages()?;
             assert_eq!(pages.len(), 1);
             case.call_method1(

@@ -59,11 +59,21 @@ topology filters, and execution settings as keywords. These settings belong to e
 obtained from that model can select external states.
 
 In notebooks, displaying a `Process` draws the external states around a central blob.
-`process.render()` returns a displayable `DiagramRender` and accepts typed settings,
+`process.render()` returns a displayable `DiagramView` and accepts typed settings,
 for example `process.render(config=fk.RenderSettings(node_radius=5))`.
 Use `help(fk.RenderSettings)` to discover the options.
-Use the result's `to_svg()` to export the schematic as text. Alternative final
-states are drawn separately.
+Retain the view and display it so the notebook browser can measure its labels.
+Once measurement completes, `view.measured().to_svg()` exports the schematic as
+text. Scripts can explicitly request a local browser with
+`view.measured(browser="chromium").to_svg()`; strict `measured()` raises while
+labels are pending. Alternative final states are drawn separately.
+
+Default `view.snapshot()`, `view.to_svg()` and `view.to_html()` export complete
+static output without launching a browser. They reuse completed measurements,
+otherwise use optional typst-py outlining when available, otherwise estimated
+STIX MathML label bounds. Estimates leave measurement pending. Installing
+`anywidget` adds live notebook measurement; earlier snapshots remain immutable.
+
 
 Model members display their defining data and expressions, rather than only their names:
 

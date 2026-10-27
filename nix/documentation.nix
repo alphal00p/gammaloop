@@ -403,6 +403,14 @@ let
     # The complete Community wheel embeds its graph renderer.
     uv pip install --offline --no-deps --python "$linnet_python/bin/python" \
       "$linnet_wheels"/*.whl
+    # Exercise installed-wheel discovery offline with the pinned resource bytes
+    # in the same package layout used by symbolica-fonts on PyPI.
+    "$linnet_python/bin/python" - <<'PY'
+    import shutil
+    from pathlib import Path
+    from symbolica import data
+    shutil.copytree("${symbolicaRenderData}", Path(data.__file__).parent / "_data/fonts")
+    PY
     "$linnet_python/bin/python" -m unittest discover -s crates/linnet-py/tests -p 'test_*.py'
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-builder -- check
     svg_assets="$TMPDIR/alphal00p-svg-assets"

@@ -1,60 +1,103 @@
 //! Canonical graph symbols shared with GammaLoop.
-use spenso::{
-    network::tags::{COMPONENT_LABELS_SUBSCRIPT_TAG, SPENSO_TAG},
-    shadowing::symbolica_utils::SpensoPrintSettings,
-    utils::{to_subscript, to_superscript},
-};
-use spenso::{spenso_print_scripted_indexed, symbolica_init::SymbolicaInitLazy};
+//!
+//! Polarization heads and graph-owned index labels retain their meaning in MathML:
+//! ```
+//! use feynkit_graph::symbols;
+//! use spenso::structure::representation::{Minkowski, RepName};
+//! use symbolica::atom::AtomCore;
+//! use symbolica::printer::{PrintMode, PrintOptions};
+//! let index = symbols::hedge_index().call((3, 1));
+//! let slot = Minkowski {}.new_rep(4).to_symbolic([index]);
+//! for head in [symbols::epsilon(), symbols::epsilonbar()] {
+//!     let expression = head.call((7, slot.clone()));
+//!     let html = expression.printer(PrintOptions {
+//!         mode: PrintMode::MathML, ..PrintOptions::default()
+//!     }).to_string();
+//!     assert!(html.contains("<mmultiscripts>"));
+//! }
+//! ```
+use spenso::network::tags;
+use spenso::network::tags::{COMPONENT_LABELS_SUBSCRIPT_TAG, SPENSO_TAG};
+use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
+use spenso::spenso_print_scripted_indexed;
+use symbolica_notation::{DisplayText, IndexDisplay, Notation, TextOverrides};
+
+use spenso::symbolica_init::SymbolicaInitLazy;
+use spenso::utils;
 use std::sync::LazyLock;
-use symbolica::{
-    atom::{Atom, AtomView, Symbol},
-    printer::PrintUserData,
-    symbol,
-};
+use symbolica::atom::{Atom, AtomView, Symbol};
+use symbolica::printer::PrintUserData;
+use symbolica::symbol;
 
 pub fn momentum() -> Symbol {
     static SYMBOL: LazyLock<Symbol> = LazyLock::new(|| {
-        symbol!(
+        let symbol = symbol!(
             "gammalooprs::Q",
-            print = spenso::network::tags::tensor_print,
+            print = tags::tensor_print,
             tags = [
                 SPENSO_TAG.rank1.clone(),
                 SPENSO_TAG.tensor.clone(),
-                COMPONENT_LABELS_SUBSCRIPT_TAG.to_owned(),
-                "spenso::tensor-label:q".to_owned()
+                COMPONENT_LABELS_SUBSCRIPT_TAG.to_owned()
             ]
-        )
+        );
+        Notation {
+            head: Some(IndexDisplay::symbol("q").expect("the canonical label is valid")),
+            ..Notation::default()
+        }
+        .register(symbol)
+        .expect("the canonical graph symbol has one notation");
+        symbol
     });
     *SymbolicaInitLazy::new(&SYMBOL)
 }
 
 pub fn edge_index() -> Symbol {
     static SYMBOL: LazyLock<Symbol> = LazyLock::new(|| {
-        symbol!(
+        let symbol = symbol!(
             "gammalooprs::edge",
-            print = spenso::network::tags::tensor_print,
-            tags = [SPENSO_TAG.index.clone(), "spenso::index-label:e".to_owned()]
-        )
+            print = tags::tensor_print,
+            tags = [SPENSO_TAG.index.clone()]
+        );
+        Notation {
+            index_label: Some(IndexDisplay::symbol("e").expect("the canonical label is valid")),
+            ..Notation::default()
+        }
+        .register(symbol)
+        .expect("the canonical graph symbol has one notation");
+        symbol
     });
     *SymbolicaInitLazy::new(&SYMBOL)
 }
 
 pub fn vertex_index() -> Symbol {
     static SYMBOL: LazyLock<Symbol> = LazyLock::new(|| {
-        symbol!(
+        let symbol = symbol!(
             "gammalooprs::vertex",
-            print = spenso::network::tags::tensor_print,
-            tags = [SPENSO_TAG.index.clone(), "spenso::index-label:v".to_owned()]
-        )
+            print = tags::tensor_print,
+            tags = [SPENSO_TAG.index.clone()]
+        );
+        Notation {
+            index_label: Some(IndexDisplay::symbol("v").expect("the canonical label is valid")),
+            ..Notation::default()
+        }
+        .register(symbol)
+        .expect("the canonical graph symbol has one notation");
+        symbol
     });
     *SymbolicaInitLazy::new(&SYMBOL)
 }
 
+/// Half-edge-owned abstract indices `hedge(owner, local_index)`, or `hedge(owner)`
+/// for local zero.
+/// See the polarization example in [`crate::symbols`].
 pub fn hedge_index() -> Symbol {
     static SYMBOL: LazyLock<Symbol> = LazyLock::new(|| {
-        symbol!(
+        let symbol = symbol!(
             "gammalooprs::hedge",
-            print = |a, opt, _state| {
+            print = |a, opt, state| {
+                if opt.mode.is_mathml() {
+                    return tags::tensor_print(a, opt, state);
+                }
                 match opt.custom_print_mode.get("spenso") {
                     Some(PrintUserData::Integer(i)) => {
                         let AtomView::Fun(f) = a else {
@@ -76,9 +119,9 @@ pub fn hedge_index() -> Symbol {
                             }
                             first = false;
                             if index_subscripts {
-                                out.push_str(&to_superscript(i));
+                                out.push_str(&utils::to_superscript(i));
                             } else {
-                                out.push_str(&to_subscript(i));
+                                out.push_str(&utils::to_subscript(i));
                             }
                         }
                         Some(out)
@@ -87,7 +130,14 @@ pub fn hedge_index() -> Symbol {
                 }
             },
             tags = [SPENSO_TAG.index.clone()]
-        )
+        );
+        Notation {
+            index_label: Some(IndexDisplay::symbol("h").expect("the canonical label is valid")),
+            ..Notation::default()
+        }
+        .register(symbol)
+        .expect("the canonical graph symbol has one notation");
+        symbol
     });
     *SymbolicaInitLazy::new(&SYMBOL)
 }
@@ -115,32 +165,44 @@ pub fn dimension() -> Symbol {
 
 pub fn loop_momentum() -> Symbol {
     static SYMBOL: LazyLock<Symbol> = LazyLock::new(|| {
-        symbol!(
+        let symbol = symbol!(
             "gammalooprs::K",
-            print = spenso::network::tags::tensor_print,
+            print = tags::tensor_print,
             tags = [
                 SPENSO_TAG.rank1.clone(),
                 SPENSO_TAG.tensor.clone(),
-                COMPONENT_LABELS_SUBSCRIPT_TAG.to_owned(),
-                "spenso::tensor-label:k".to_owned()
+                COMPONENT_LABELS_SUBSCRIPT_TAG.to_owned()
             ]
-        )
+        );
+        Notation {
+            head: Some(IndexDisplay::symbol("k").expect("the canonical label is valid")),
+            ..Notation::default()
+        }
+        .register(symbol)
+        .expect("the canonical graph symbol has one notation");
+        symbol
     });
     *SymbolicaInitLazy::new(&SYMBOL)
 }
 
 pub fn external_momentum() -> Symbol {
     static SYMBOL: LazyLock<Symbol> = LazyLock::new(|| {
-        symbol!(
+        let symbol = symbol!(
             "gammalooprs::P",
-            print = spenso::network::tags::tensor_print,
+            print = tags::tensor_print,
             tags = [
                 SPENSO_TAG.rank1.clone(),
                 SPENSO_TAG.tensor.clone(),
-                COMPONENT_LABELS_SUBSCRIPT_TAG.to_owned(),
-                "spenso::tensor-label:p".to_owned()
+                COMPONENT_LABELS_SUBSCRIPT_TAG.to_owned()
             ]
-        )
+        );
+        Notation {
+            head: Some(IndexDisplay::symbol("p").expect("the canonical label is valid")),
+            ..Notation::default()
+        }
+        .register(symbol)
+        .expect("the canonical graph symbol has one notation");
+        symbol
     });
     *SymbolicaInitLazy::new(&SYMBOL)
 }
@@ -191,23 +253,17 @@ pub fn vbar() -> Symbol {
     *SymbolicaInitLazy::new(&SYMBOL)
 }
 
+/// Rank-one polarization tensor with a physical momentum ID and Lorentz slot.
+/// See the MathML example in [`crate::symbols`].
 pub fn epsilon() -> Symbol {
     static SYMBOL: LazyLock<Symbol> = LazyLock::new(|| {
         symbol!(
             "gammalooprs::ϵ",
-            print = |a, opt, _state| { spenso_print_scripted_indexed!(a, opt, "ϵ") },
-            tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
-        )
-    });
-    *SymbolicaInitLazy::new(&SYMBOL)
-}
-
-pub fn epsilonbar() -> Symbol {
-    static SYMBOL: LazyLock<Symbol> = LazyLock::new(|| {
-        symbol!(
-            "gammalooprs::ϵbar",
-            print = |a, opt, _state| {
-                spenso_print_scripted_indexed!(a, opt, "ϵ̅", "overline(epsilon.alt)")
+            print = |a, opt, state| {
+                if opt.mode.is_mathml() {
+                    return tags::tensor_print(a, opt, state);
+                }
+                spenso_print_scripted_indexed!(a, opt, "ϵ")
             },
             tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
         )
@@ -215,11 +271,135 @@ pub fn epsilonbar() -> Symbol {
     *SymbolicaInitLazy::new(&SYMBOL)
 }
 
+/// Conjugate polarization tensor; the bar is presentation metadata on its head.
+/// Source serialization retains the canonical symbol. See [`crate::symbols`].
+pub fn epsilonbar() -> Symbol {
+    static SYMBOL: LazyLock<Symbol> = LazyLock::new(|| {
+        let symbol = symbol!(
+            "gammalooprs::ϵbar",
+            print = |a, opt, state| {
+                if opt.mode.is_mathml() {
+                    return tags::tensor_print(a, opt, state);
+                }
+                spenso_print_scripted_indexed!(
+                    a,
+                    opt,
+                    if opt.mode.is_latex() {
+                        r"\bar{\epsilon}"
+                    } else {
+                        "ϵ̅"
+                    },
+                    "overline(epsilon.alt)"
+                )
+            },
+            tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
+        );
+        Notation {
+            head: Some(
+                IndexDisplay::math(
+                    "overline",
+                    vec![IndexDisplay::symbol("ϵ").expect("epsilon is a valid symbol label")],
+                )
+                .expect("overline takes one argument"),
+            ),
+            text: TextOverrides {
+                plain: Some(DisplayText::new("ϵ̅").expect("epsilon bar is valid display text")),
+                latex: Some(
+                    DisplayText::new(r"\bar{\epsilon}").expect("epsilon bar is valid display text"),
+                ),
+                typst: Some(
+                    DisplayText::new("overline(epsilon.alt)")
+                        .expect("epsilon bar is valid display text"),
+                ),
+            },
+            ..Notation::default()
+        }
+        .register(symbol)
+        .expect("the canonical polarization symbol has one notation");
+        symbol
+    });
+    *SymbolicaInitLazy::new(&SYMBOL)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use spenso::network::tags::mathml;
     use spenso::structure::abstract_index::AIND_SYMBOLS;
-    use symbolica::{atom::AtomCore, printer::PrintOptions};
+    use symbolica::atom::AtomCore;
+    use symbolica::parse;
+    use symbolica::printer::{PrintMode, PrintOptions, PrintState};
+
+    #[test]
+    fn epsilonbar_canonical_roundtrip_preserves_bar_and_open_axis() {
+        // Exercise the ordinary global initializer rather than registering a
+        // test-only replacement for the production symbol.
+        let original = parse!("gammalooprs::ϵbar(7,spenso::mink(4))");
+        assert_eq!(original.as_view().get_symbol(), Some(epsilonbar()));
+        let bytes = original.as_view().get_data().to_vec();
+        let source = original.to_canonical_string();
+        let reparsed = Atom::parse(&source, "gammalooprs", Default::default()).unwrap();
+        assert_eq!(reparsed, original);
+        assert_eq!(reparsed.to_canonical_string(), source);
+        assert!(epsilonbar().has_tag(&SPENSO_TAG.rank1));
+        assert!(epsilonbar().has_tag(&SPENSO_TAG.tensor));
+
+        let options = PrintOptions {
+            mode: PrintMode::MathML,
+            hide_all_namespaces: true,
+            ..PrintOptions::new()
+        };
+        let native = reparsed.printer(options.clone()).to_string();
+        let html = mathml::render(reparsed.as_view(), &options, &PrintState::new(), &|_, _| {
+            None
+        })
+        .unwrap();
+        let exported =
+            mathml::expression(reparsed.as_view(), &options, &PrintState::new(), &|_, _| {
+                None
+            })
+            .unwrap();
+        for rendered in [&native, &html, &exported] {
+            assert!(
+                rendered.contains("<mover accent=\"true\"><mi>ϵ</mi><mo>¯</mo></mover>"),
+                "{rendered}"
+            );
+            assert!(rendered.contains("<mmultiscripts>"), "{rendered}");
+            assert!(!rendered.contains("ϵbar"), "{rendered}");
+        }
+        for rendered in [&html, &exported] {
+            assert!(
+                rendered.contains("data-spenso-open-axis=\"0\""),
+                "{rendered}"
+            );
+            assert!(rendered.contains("Unresolved axis 0"), "{rendered}");
+        }
+        assert!(
+            tags::prepare_tensor_print(&reparsed)
+                .printer(PrintOptions::typst())
+                .to_string()
+                .contains("overline(epsilon.alt)")
+        );
+        let latex = PrintOptions {
+            custom_print_mode: SpensoPrintSettings::typst().into(),
+            ..PrintOptions::latex()
+        };
+        assert!(
+            reparsed
+                .printer(latex.clone())
+                .to_string()
+                .contains(r"\bar{\epsilon}")
+        );
+        assert!(
+            tags::prepare_tensor_print(&reparsed)
+                .printer(latex)
+                .to_string()
+                .contains(r"\bar{\epsilon}")
+        );
+        assert_eq!(original.as_view().get_data(), bytes);
+        assert_eq!(reparsed.as_view().get_data(), bytes);
+        assert_eq!(reparsed.to_canonical_string(), source);
+    }
 
     #[test]
     fn momentum_components_keep_object_indices() {

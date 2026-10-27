@@ -1,6 +1,10 @@
 //! Regressions carried from the retired symbolic-network strategies.
 use super::*;
 use crate::shorthands::schoonschip::Schoonschip;
+use crate::test_support;
+use spenso::structure::abstract_index::AbstractIndex;
+use spenso::structure::{HasStructure, ScalarTensor};
+use spenso::{mink, tensor_symbol};
 use spenso::{
     network::{library::symbolic::ETS, parsing::StructureFromAtom},
     structure::{
@@ -30,26 +34,51 @@ fn callback_contraction(
     );
     // Parsed operands and StructureContract already establish these encoded
     // occurrence owners; final callback output still receives interface checks.
+    let mut history = metric.proofs.occurrences.get().unwrap().as_ref().clone();
+    history.append(tensor.proofs.occurrences.get().unwrap());
+    history.validate()?;
     let source = SymbolicTensor::from_validated_parts(
         Atom::mul_many([&metric.expression, &tensor.expression]),
         interface,
+        Arc::new(history),
     );
-    let expression = source
-        .contract(ContractSettings {
-            collect_chains: false,
-            collect_traces: false,
-            ..Default::default()
-        })?
-        .into_expression();
+    let contracted = source.contract(ContractSettings {
+        collect_chains: false,
+        collect_traces: false,
+        ..Default::default()
+    })?;
     let value = SymbolicTensor {
-        expression,
+        expression: contracted.expression,
         structure,
         is_metric: false,
         is_composite: true,
-        proofs: Default::default(),
+        proofs: contracted.proofs.algebra_result(),
     };
     value.validate_rewritten_interface(&value.expression)?;
     Ok(value)
+}
+
+#[test]
+fn scalar_field_intake_retains_internal_pairs_and_closes_power_scopes() {
+    test_support::test_initialize();
+    let port = mink!(4, 99651);
+    let slot = LibrarySlot::<AbstractIndex>::try_from(port.as_view()).unwrap();
+    let left = FunctionBuilder::new(tensor_symbol!("scalar_field_pair_left"))
+        .add_arg(&port)
+        .finish();
+    let right = FunctionBuilder::new(tensor_symbol!("scalar_field_pair_right"))
+        .add_arg(&port)
+        .finish();
+    let expression = left * right;
+    let scalar: SymbolicTensor = SymbolicTensor::new_scalar(expression);
+    assert!(scalar.structure.is_scalar());
+    assert_eq!(scalar.proofs.validated.get(), Some(&true));
+    assert_eq!(scalar.proofs.occurrences.get().unwrap().count(slot), 2);
+    let base = scalar.clone().scalar_power_base().unwrap();
+    let powered: SymbolicTensor = SymbolicTensor::new_scalar(base.pow(2));
+    assert!(powered.proofs.occurrences.get().unwrap().is_empty());
+    let number: SymbolicTensor = SymbolicTensor::new_scalar(Atom::num(3));
+    assert!(number.proofs.occurrences.get().unwrap().is_empty());
 }
 
 #[test]

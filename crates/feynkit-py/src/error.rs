@@ -1,3 +1,4 @@
+use linnet_render_py::PyErrExt;
 use pyo3::{PyErr, create_exception, exceptions::PyException, types::PyModuleMethods};
 
 #[cfg(feature = "python_stubgen")]
@@ -104,7 +105,7 @@ pub(crate) fn recompute(error: feynkit_model::RecomputeError<PyErr>) -> PyErr {
 }
 
 pub(crate) fn diagram(error: feynkit_graph::DiagramError) -> PyErr {
-    DiagramError::new_err(error.to_string())
+    DiagramError::new_err(error.to_string()).with_rust_cause(&error)
 }
 
 pub(crate) fn generation(error: feynkit_generator::GenerationError) -> PyErr {

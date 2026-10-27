@@ -539,7 +539,7 @@ impl SpensorLibrary {
         let descriptor = SymbolicTensor::from_signature(&key)
             .map_err(|error| exceptions::PyRuntimeError::new_err(error.to_string()))?;
         let descriptor =
-            SymbolicTensor::checked_parts(descriptor.into_expression(), reference.interface)
+            SymbolicTensor::from_produced_parts(descriptor.into_expression(), reference.interface)
                 .map_err(|error| exceptions::PyRuntimeError::new_err(error.to_string()))?;
         // Validate concrete dimensions before invoking dimension-dependent factories.
         let descriptor = TensorDataDescriptor::new(descriptor, reference.name, reference.args)?;

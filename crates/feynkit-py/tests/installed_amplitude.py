@@ -7,6 +7,21 @@ from symbolica import E, S
 from symbolica.community import hepkit as hep
 from symbolica.community.tensor import TensorExpression
 
+
+def external_metrics_snapshot(view):
+    # EXTERNAL METRICS FIXTURE in points, not browser measurements.
+    request = view.measurement_request()
+    return view.measured(
+        measurements={
+            "id": request["id"],
+            "metrics": [
+                {"id": label["id"], "width": 24.0, "height": 12.0, "baseline": 9.0}
+                for label in request["labels"]
+            ],
+        }
+    )
+
+
 model = hep.Model.standard_model()
 generated = model.process(
     ["e-", "e+"], ["a", "a"], vertex_allow=["V_98"]
@@ -34,7 +49,7 @@ assert "term_0_dummy" not in str(amplitude.expression())
 assert amplitude.conjugate().is_conjugated
 assert not amplitude.conjugate().conjugate().is_conjugated
 assert "conj" not in str(amplitude.conjugate().expression().to_expression())
-assert amplitude._repr_html_()
+assert external_metrics_snapshot(amplitude.render()).to_html()
 
 squared = amplitude.squared()
 assert squared.expression().rank == 8

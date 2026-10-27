@@ -79,8 +79,35 @@ Do not link Spynso into `gammaloop._gammaloop` or distribute it as a second nati
 
 GammaLoop owns the Spynso source and bundled Tydenso `render.typ` and `notation.typ` assets;
 Symbolica Community owns the wheel. Their native dependencies must resolve one Symbolica
-source revision. Typst, its fonts, and offline packages are embedded in the Rust
-extension. No Python compiler package is required.
+source revision. HTML uses direct MathML without a Typst compiler. Source-only
+Typst projects remain available, and vector exports use optional Python typst-py
+(distribution `typst`).
+
+=== Notebook expression display
+
+Interactive tensor output uses Symbolica's shared responsive MathML renderer
+and official `MathMLViewer::expression` factory. Symbolica owns arithmetic,
+cursor caching and navigation, with the same eight width-fitting layouts,
+nested omissions, inline expansion, hover previews, inspection, and keyboard
+zoom as `expression.to_expression()`. Spenso supplies only tensor notation
+leaves through its bounded native Rust MathML printer. The viewer retains typed
+metadata, local index aliases and a bounded leaf cache while preserving logical
+index order and the source expression. Paging uses no CBOR render tree, Typst
+compiler or notation worker.
+
+Use `expression.paged(page_size=25)` to request the tensor viewer explicitly.
+`expression.to_expression().mathml_viewer()` opens the same viewer with
+native Symbolica notation. Page sizes range from 1 to 500; rendering budgets
+may shorten a page. `paged()`, `formatted()` and expression `to_html()` reject
+`notation_source` with `ValueError`. Explicit `to_html()` emits complete direct
+MathML without paging or Typst compilation. Custom Typst notation is available
+through `to_typst_project()` and optional vector `to_svg()` export.
+
+Notebook widgets need `anywidget`. This checkout declares `notebook-display`
+(`anywidget>=0.9,<1`), `graph-export` (`playwright>=1.55,<2`) and `typst-export`
+(`typst>=0.15`) extras in GammaLoop and the isolated notebook host. These are not
+a claim about extras in the currently released external Community wheel.
+Headless graph measurement also needs `python -m playwright install chromium`.
 
 === Pyodide builds
 
@@ -184,36 +211,68 @@ Mathematical objects expose notebook HTML and LaTeX displays. `TensorNetwork` dr
 current executable graph in notebooks, using Linnest's operator and typed-leaf styles.
 The renderer passes native node, edge, and half-edge identities directly to Linnest's
 graph builder; DOT remains a separate export format.
-`render(config=...)` returns a displayable `DiagramRender` snapshot, while
-`to_linnest(config=...)` returns a self-contained Typst document embedding the SVG.
-Both accept typed `graph.RenderSettings` values. Rust draws the graph directly
-and the embedded Typst compiler typesets labels without graph plugins or MiTeX.
-
-Use `drawing.to_svg()` or `drawing.to_html()` for string exports. Graph settings are
-typed values with discoverable constructors:
+`render(config=...)` returns a `DiagramView`. Its AnyWidget measures direct
+MathML labels in the actual notebook browser, then Rust's existing
+`Scene::render` draws the graph. Graph settings are typed values with
+discoverable constructors:
 
 ```python
-from symbolica.community.graph import RenderSettings, LayoutSettings, LayoutAlgorithm, DrawOptions, Stroke, Color
+from IPython.display import display
+from symbolica.community.graph import (
+    Color, DrawOptions, LayoutAlgorithm, LayoutSettings, RenderSettings, Stroke,
+)
 
-drawing = network.render(config=RenderSettings(
+view = network.render(config=RenderSettings(
     layouts=LayoutSettings(algorithm=LayoutAlgorithm.Dot),
     drawing=DrawOptions(edge_stroke=Stroke(paint=Color("#6f4d85"), thickness=1.5)),
 ))
-drawing  # Displays directly in IPython, Jupyter, and Marimo.
+display(view)
 ```
 
-`RenderSettings`, `LayoutSettings`, `Stroke`, and `DiagramRender` belong to
+After browser measurement completes, retrieve the same view in a later cell:
+
+```python
+snapshot = view.measured()
+svg = snapshot.to_svg()
+html = snapshot.to_html()
+snapshot.save("network.svg")
+```
+
+The immutable `DiagramRender` retains the measured boxes and embedded math font.
+Its SVG contains XHTML `foreignObject` MathML and is intended for browsers.
+Scripts can explicitly use `view.measured(browser="chromium")` with Playwright
+and Chromium, or send the same view's `measurement_request()` to a browser and
+return its receipt to `view.measured(measurements=receipt)`. Strict `measured()`
+raises while labels are pending and never uses estimates or an implicit browser.
+
+Default `view.snapshot()`, `view.to_svg()` and `view.to_html()` export complete
+static output without launching a browser. They reuse completed measurements,
+otherwise use optional typst-py outlining when available, otherwise estimated
+STIX MathML label bounds. Estimates leave measurement pending. Installing
+`anywidget` adds live notebook measurement; earlier snapshots remain immutable.
+
+
+`view.outlined()` instead uses optional typst-py to create a vector-label
+snapshot. Use it for PDF, PNG and Typst SVG import, whose consumers otherwise
+omit MathML labels. `network.to_linnest(config=...)` takes this outlined route
+and returns a self-contained Typst document embedding the SVG.
+
+`RenderSettings`, `LayoutSettings`, `Stroke`, `DiagramView` and `DiagramRender` belong to
 `symbolica.community.graph`, backed by the shared Linnet rendering bindings.
 HepKit keeps its physics-specific `DiagramStyle` and uses the same layout,
 stroke, and snapshot types.
 
-`to_html(config=...)` wraps the graph in a figure labelled `TensorNetwork`.
+`snapshot.to_html()` wraps the graph in a figure labelled `TensorNetwork`.
+`network.to_html(config=..., browser="chromium")` explicitly measures a fresh
+view for script export. Its default `browser=None` does not start a browser,
+and the owner method accepts no measurement receipt; retain `view` for that.
 Its execution summary uses `network.status` to show remaining nodes, operations,
 contractions, and ready operations. “Graph reduced” means no graph work remains;
 library or deferred results can still require materialization. Displaying the network
-does not execute it; redisplay a stepped or executed network to update the snapshot.
-Tensor labels use the registered tensor-name printer, including custom Typst heads
-and scalar arguments. Edge slots use the same Typst index notation as the slot display, with
+does not execute it; render a new view after stepping or executing the network.
+Tensor labels use the registered tensor-name MathML printer and scalar
+arguments. Custom Typst heads apply to outlined exports. Edge slots use the
+same direct MathML index notation as the slot display, with
 alphabet aliases assigned across the entire network. The inspector retains exact indices.
 Hover summaries identify the node or edge kind. Clicking
 shows tensor storage and ports, operator inputs, or contraction indices and metric
@@ -708,9 +767,10 @@ sandboxed frame and requires no live Python callbacks or external assets.
 
 `TensorExpression` and `Tensor` expose semantic display methods. A network's
 `expression()` provides the same formula display separately from its graph.
-Symbolic notebook outputs render the complete expression in HTML, LaTeX, and
-pretty text, regardless of its size. Display preserves factorization and ordered
-ports without expanding or simplifying the calculation.
+Symbolic notebook outputs use the shared viewer for interactive presentation.
+Explicit HTML, LaTeX and pretty-text exports retain the complete expression.
+Display preserves factorization and ordered ports without expanding or
+simplifying the calculation.
 
 The notebook frontend can impose its own output limit. Marimo's
 `tool.marimo.runtime.output_max_bytes` setting in `pyproject.toml` controls that
@@ -719,15 +779,19 @@ terms.
 
 `TensorExpression.formatted()` and the free `formatted(expression)` defer each
 backend until the notebook requests it and cache that representation. Their
-plain-text fallback also includes the complete expression. Settings are captured
-when creating the display value; custom printers run when a backend is first
-requested. Create a new formatted value to reflect later changes to printer rules.
+settings are captured when creating the display value; custom printers run when
+a backend is first requested. Create a new formatted value to reflect later
+changes to printer rules.
+Supplying `notation_source` raises `ValueError`, as it does for `paged()` and
+expression `to_html()`.
 The explicit `to_html()`, `to_svg()`, `to_latex()`, `to_typst()`, and
 `format_tensor()` methods provide the same complete expression in the requested
 format.
 
 `DisplaySettings` controls the ports, Schoonschip, and call layouts, dimensions, parentheses,
-commas, symbol scripts, component notation, and index/factor spacing. Positional calls such as `to_typst(True)`
+commas, symbol scripts, component notation, and index/factor spacing. In the pager,
+`factor_gap` controls spacing inside semantic tensor notation, such as chains and traces;
+Symbolica retains its own spacing between arithmetic factors. Positional calls such as `to_typst(True)`
 and `formatted(True)` still request dimensions. Rich Typst output collects inverse factors
 at the same product level into a single fraction, including rational coefficients.
 The default `ports` layout displays vectors inserted into tensors with bras and kets.
@@ -798,17 +862,33 @@ from symbolica.community.tensor import Representation, TensorName
 
 Jbar = TensorName(
     "Jbar",
-    print={"typst": "macron(J)", "latex": r"\bar{J}"},
+    print={
+        "typst": "overline(J)",
+        "latex": r"\bar{J}",
+        "mathml": "<mover><mi>J</mi><mo>¯</mo></mover>",
+    },
 )(Representation.bis(4))
 ```
 
-Mapping values are trusted backend source without math delimiters. Spenso adds ordinary
+Plain, LaTeX and Typst mapping values are bounded display text without math delimiters.
+MathML accepts only presentation elements (`mi`, `mn`, `mo`, `mtext`, `mrow`,
+`msub`, `msup`, `msubsup`, `mover`, `munder`, `munderover`, `mfrac`, `msqrt`,
+`mroot`, `mspace`, `menclose`) and validated presentation attributes. Executable
+markup, namespaces, comments, processing instructions, CDATA, unknown entities,
+and unsupported attributes raise `ValueError`. Input is limited to 4096 bytes,
+256 nodes and 16 levels. Spenso reconstructs escaped output from the parsed tree.
+Equal notation may be registered repeatedly; a different mapping for the same
+symbol raises `ValueError`. Registration lives in this process and is not stored
+by `Expression.save` or canonical strings. Spenso adds ordinary
 arguments, abstract indices, and component coordinates, including inside concrete tensor
 matrices. An omitted backend keeps the ordinary name; `plain` can also be supplied.
+The `mathml` value is a fragment without a `<math>` root and supplies the head
+for interactive paging, rich display and complete HTML exports.
 A callable retains Symbolica's `print(expression, mode=..., **options)` signature and
 replaces the complete tensor display. Returning `None` selects standard tensor notation.
-Notebook rendering evaluates local callbacks before sending their visual output to Typst;
-the callable itself is not serialized into portable Atom payloads.
+For custom MathML output it must handle `PrintMode.MathML` and return a fragment.
+Typst-only sources apply to Typst projects and vector exports. The callable itself
+is not serialized into portable Atom payloads.
 
 Concrete tensor components default to $A(x,7)^(0,1)$. Choose
 `DisplaySettings(component_style="array")` for $A(x,7)[0,1]$, or
@@ -835,10 +915,10 @@ graph_indices = numerator.formatted(settings=DisplaySettings(index_style="graph"
 raw_indices = numerator.formatted(settings=DisplaySettings(index_style="raw"))
 ```
 
-`to_typst` and `format_tensor` emit source using the ports layout. Schoonschip, call, and
-custom-spacing settings require Tydenso's Typst notation layer; use HTML, SVG, or notebook
-display for those settings. Source-only methods reject unsupported settings rather than
-silently ignoring them.
+`to_typst` and `format_tensor` emit source using the ports layout. Schoonschip,
+call and custom-spacing settings are supported by native MathML paging and
+explicit HTML/SVG rendering. Source-only methods reject unsupported settings
+rather than silently ignoring them.
 
 A supplied rank-one tensor fills an argument position in the ports layout.
 A filled marker distinguishes it from an unresolved axis: inline-metric spaces
@@ -870,7 +950,7 @@ pslash = indexed.contract()
 pslash.formatted()
 ```
 
-HTML and SVG rendering use the embedded compiler:
+HTML emits complete direct MathML. This display needs no Typst compiler:
 
 // docs-example: compile
 ```python
@@ -879,30 +959,52 @@ from symbolica.community.tensor import DisplaySettings, TensorExpression
 trace = TensorExpression.gamma5(4).trace()
 compact = DisplaySettings.schoonschip()
 html = trace.to_html(settings=compact)
-svg = trace.to_svg(settings=compact)
 rich = trace.formatted(settings=compact)
 ```
 
-Python uses the bundled Typst render/notation assets directly, without calling the Tydenso
-Wasm plugin. Explicit `to_html` and `to_svg` calls report compilation errors.
-Notebook `_repr_html_` and `formatted()` retain their LaTeX or text fallback on rendering errors. `TensorNetwork.__str__` prints the source formula and `to_dot()` returns
+For custom Typst notation,
+`to_typst_project(settings=..., notation_source=...)` returns a `dict[str, bytes]`
+with `main.typ`, `render.typ`, `notation.typ` and `tree.cbor`. It exports the rich
+render tree and bundled sources without invoking a compiler. Bare `to_typst()`
+retains its existing source-only contract.
+
+```python
+project = trace.to_typst_project(settings=compact)
+assert set(project) == {"main.typ", "render.typ", "notation.typ", "tree.cbor"}
+```
+
+Expression `trace.to_svg(settings=compact)` uses optional Python typst-py
+(distribution `typst`, version 0.15 or newer) and reports compilation errors.
+The native extension contains no Rust Typst compiler. Notebook rich display
+retains its LaTeX or text fallback on rendering errors.
+`TensorNetwork.__str__` prints the source formula and `to_dot()` returns
 the current graph. Its graph renderer uses Linnet's prepared-render pipeline and reports
 rendering errors directly. Use `to_expression().to_latex()` when raw Symbolica notation is
 needed instead of tensor-aware notation.
 
-HTML output keeps selectable native MathML and embeds the same STIX Two Math font as
-the documentation site, including in standalone offline notebooks. Math defaults to
+HTML output keeps selectable native MathML and uses STIX Two Math. Include
+`load_math_font()` once in the output document to embed the font for offline use;
+isolated frames need their own copy. Math defaults to
 21 px with padding and horizontal scrolling for long expressions. Set the CSS custom
 property `--spenso-math-font-size` on the notebook or an output container to change
 the base size; nested scripts retain their relative sizing.
 
 Idenso reductions return typed `TensorExpression` values with these display methods.
 Call `to_expression()` explicitly when an ordinary Symbolica expression is needed.
-HTML, SVG, and rich-display functions accept `notation_source` as a trusted, complete
-replacement for the bundled `notation.typ`, not a style fragment. Typst executes that source;
-it must implement the expected notation interface and must not come from untrusted input.
-Display customization stays outside Atom payloads; portable representation and math-label
-declarations continue to travel with the expressions.
+`to_typst_project()` and expression `to_svg()` accept `notation_source` as a
+trusted, complete replacement for the bundled `notation.typ`; compilation
+executes that source, which must implement the expected notation interface.
+`formatted()`, `paged()` and expression `to_html()` reject it with `ValueError`.
+Direct MathML never parses Typst source; custom HTML printers supply MathML fragments.
+Display notation stays process-local for ordinary Symbolica `Expression.save`
+and state exports. Spenso-aware exports such as `to_typst_project()` explicitly
+include referenced notation in validated `spenso.notation` version-1 attachments,
+alongside representation and display-identity index declarations. Heads and index
+labels use structured display trees; text overrides are bounded, and MathML
+passes the presentation allowlist. Import rejects conflicting local notation
+before importing atoms; identical re-import is safe. Callback implementations
+never travel. Tydenso renders transported Typst overrides as literal display
+text; executable custom source remains an explicit trusted document input.
 
 == Citation tracking
 

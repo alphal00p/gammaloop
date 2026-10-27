@@ -13,6 +13,21 @@ from symbolica.community import graph as linnet
 from symbolica.community import hepkit as fk
 from symbolica.community.tensor import TensorExpression
 
+
+def external_metrics_snapshot(view):
+    # EXTERNAL METRICS FIXTURE in points, not browser measurements.
+    request = view.measurement_request()
+    return view.measured(
+        measurements={
+            "id": request["id"],
+            "metrics": [
+                {"id": label["id"], "width": 24.0, "height": 12.0, "baseline": 9.0}
+                for label in request["labels"]
+            ],
+        }
+    )
+
+
 model = fk.Model(Path(__file__).parent / "fixtures/scalars_2p_3p.json")
 diagrams = (
     model.process(
@@ -189,7 +204,9 @@ for candidate in cross_section.topology_threshold_candidates:
     assert isinstance(candidate.right, fk.Subgraph)
 assert any(
     "is_cut" in json.loads(element.get("data-linnet-detail", "{}"))
-    for element in ET.fromstring(cross_section.render().to_svg()).iter()
+    for element in ET.fromstring(
+        external_metrics_snapshot(cross_section.render()).to_svg()
+    ).iter()
 )
 assert (
     fk.FeynmanDiagram.from_json(model, cross_section.to_json()).to_json()

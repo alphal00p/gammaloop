@@ -1,17 +1,20 @@
 use crate::tensor::inference::InterfaceInference;
 use ahash::HashMap;
 use spenso::network::tags::SPENSO_TAG;
+use spenso::structure::abstract_index::{AIND_SYMBOLS, AbstractIndex, AbstractIndexError};
 use std::sync::{Arc, Mutex};
-use symbolica::{
-    atom::{
-        Atom, AtomCore, AtomView, FunctionBuilder, NamespacedSymbol, Symbol, SymbolBuilder,
-        UserData, representation::FunView,
-    },
-    coefficient::CoefficientView,
-    parser::{ParseSettings, Token},
+use symbolica::atom::representation::FunView;
+use symbolica::atom::{
+    Atom, AtomCore, AtomView, FunctionBuilder, NamespacedSymbol, Symbol, SymbolBuilder, UserData,
 };
+use symbolica::coefficient::CoefficientView;
+use symbolica::parser::{ParseSettings, Token};
+use thiserror::Error;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, thiserror::Error)]
+/// Failures when encoding symbolic function, dimension, or index payloads.
+///
+/// See the [native-index example](CookSettings::indices).
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Error)]
 pub enum CookingError {
     #[error("cannot flatten a sum into a cooked symbol")]
     Add,
@@ -37,6 +40,8 @@ pub enum CookingError {
     UnsupportedDimensionPayload,
     #[error("cyclic reversible index payload")]
     CyclicIndexPayload,
+    #[error("invalid native index: {0}")]
+    InvalidIndex(#[from] AbstractIndexError),
 }
 
 impl CookingError {
@@ -110,6 +115,13 @@ pub enum CookSourceFilter {
         dimensions: bool,
         filter: Option<CookTagFilter>,
     },
+}
+
+/// Whether the function itself is an index identity or an ordinary payload.
+#[derive(Clone, Copy, Debug)]
+enum CookContext {
+    Function,
+    Index,
 }
 
 impl CookSourceFilter {
@@ -315,6 +327,26 @@ impl CookSettings {
         }
     }
 
+    /// Intern unsupported function labels inside representation slots, preserving
+    /// the index forms already understood by `AbstractIndex`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use idenso::CookSettings;
+    /// use idenso::CookingError;
+    /// use spenso::structure::abstract_index::AbstractIndex;
+    /// use spenso::structure::representation::{Euclidean, RepName};
+    /// use spenso::structure::slot::IsAbstractSlot;
+    ///
+    /// let port = Euclidean {}
+    ///     .new_rep(3)
+    ///     .to_lib()
+    ///     .slot::<AbstractIndex, _>(AbstractIndex::Normal(7))
+    ///     .to_atom();
+    /// assert_eq!(CookSettings::indices().try_cook_indices(port.as_view())?, port);
+    /// # Ok::<(), CookingError>(())
+    /// ```
     pub fn indices() -> Self {
         Self {
             mode: CookMode::FlattenedSymbol,
@@ -465,8 +497,8 @@ impl CookSettings {
                 return;
             };
 
-            match self.cook_function_symbol(f, filter) {
-                Ok(Some(cooked)) => **out = Atom::var(cooked),
+            match self.cook_function_atom(f, filter, CookContext::Function) {
+                Ok(Some(cooked)) => **out = cooked,
                 Ok(None) => {}
                 Err(e) => error.set_once(e),
             }
@@ -563,9 +595,20 @@ impl CookSettings {
     }
 
     /// Cook one function call into an atom, or return it unchanged if skipped.
+    /// Index-payload settings preserve validated native index forms.
+    /// See [`Self::indices`] for native-index preservation.
+    ///
+    /// # Errors
+    ///
+    /// Rejects malformed native index functions, unsupported payload shapes, or
+    /// symbol creation failures.
     pub fn cook_function(&self, fun: FunView<'_>) -> Result<Atom, CookingError> {
-        self.cook_function_symbol(fun, self.source.index_payload_filter())
-            .map(|symbol| symbol.map_or_else(|| fun.as_view().to_owned(), Atom::var))
+        let context = match self.source {
+            CookSourceFilter::RepresentationPayload { indices: true, .. } => CookContext::Index,
+            _ => CookContext::Function,
+        };
+        self.cook_function_atom(fun, self.source.index_payload_filter(), context)
+            .map(|atom| atom.unwrap_or_else(|| fun.as_view().to_owned()))
     }
 
     fn cook_representation_payloads(
@@ -605,10 +648,10 @@ impl CookSettings {
             let cooked_index = if indices && let Some(AtomView::Fun(index)) = index {
                 match cooked_indices
                     .entry(index.as_view().to_owned())
-                    .or_insert_with(|| self.cook_function_symbol(index, filter))
+                    .or_insert_with(|| self.cook_function_atom(index, filter, CookContext::Index))
                     .clone()
                 {
-                    Ok(value) => value.map(Atom::var),
+                    Ok(value) => value,
                     Err(e) => {
                         error.set_once(e);
                         return;
@@ -719,21 +762,35 @@ impl CookSettings {
         Self::portable_dimension(atom.as_view()).then_some(atom)
     }
 
-    fn cook_function_symbol(
+    fn cook_function_atom(
         &self,
         fun: FunView<'_>,
         filter: Option<&CookTagFilter>,
-    ) -> Result<Option<Symbol>, CookingError> {
+        context: CookContext,
+    ) -> Result<Option<Atom>, CookingError> {
         let explicit_output_tags = self.output_tags.explicit_tags();
         if filter.is_some_and(|filter| !filter.matches(fun.get_symbol(), explicit_output_tags)) {
             return Ok(None);
+        }
+
+        let head = fun.get_symbol();
+        if matches!(context, CookContext::Index) {
+            if head == AIND_SYMBOLS.openind || head == AbstractIndex::scope_symbol() {
+                return Ok(Some(Atom::from(AbstractIndex::try_from(fun.as_view())?)));
+            }
+            if head.has_tag(&SPENSO_TAG.index)
+                && let Ok(index) = AbstractIndex::try_from(fun.as_view())
+            {
+                return Ok(Some(Atom::from(index)));
+            }
         }
 
         let output_tags = self.output_tags.tags_for(fun.get_symbol(), filter);
         match self.mode {
             CookMode::FlattenedSymbol => {
                 let name = CookFunctionName::from_fun(fun)?;
-                self.build_symbol(name, None, &output_tags).map(Some)
+                self.build_symbol(name, None, &output_tags)
+                    .map(|symbol| Some(Atom::var(symbol)))
             }
             CookMode::ReversibleEncoding => self
                 .build_symbol(
@@ -741,7 +798,7 @@ impl CookSettings {
                     Some(fun.as_view().to_owned()),
                     &output_tags,
                 )
-                .map(Some),
+                .map(|symbol| Some(Atom::var(symbol))),
         }
     }
 
@@ -971,17 +1028,18 @@ impl CookFunctionName {
 
 #[cfg(test)]
 mod tests {
+    use super::{CookMode, CookSettings, CookingError};
+    use crate::test_support::test_initialize;
+    use crate::{Cookable, coad, test_support};
     use spenso::network::tags::SPENSO_TAG;
-    use symbolica::{
-        atom::{
-            Atom, AtomView, FunctionBuilder, NamespacedSymbol, Symbol, SymbolBuilder, UserData,
-        },
-        parse_lit, symbol,
+    use spenso::structure::abstract_index::{AIND_SYMBOLS, AbstractIndex};
+    use spenso::structure::slot::ParseableAind;
+    use spenso::{index_symbol, mink};
+    use symbolica::atom::{
+        Atom, AtomCore, AtomView, FunctionBuilder, NamespacedSymbol, Symbol, SymbolBuilder,
+        UserData,
     };
-
-    use crate::{Cookable, test_support::test_initialize};
-
-    use super::CookSettings;
+    use symbolica::{function, parse_lit, symbol};
 
     struct CookedIndex;
 
@@ -1058,6 +1116,182 @@ mod tests {
         assert!(symbol.has_tag("idenso::reversible_index"));
         assert_eq!(symbol.get_data(), &UserData::Atom(parse_lit!(f(0))));
         assert_eq!(cooked.uncook_with_settings(&settings), expr);
+    }
+
+    #[test]
+    fn native_index_forms_survive_both_interning_modes() {
+        test_support::test_initialize();
+        let head = index_symbol!("idenso::native_cooking_index");
+        let named = AbstractIndex::Named(head.into(), 17, 2);
+        let indices = [
+            Atom::num(17),
+            Atom::num(-17),
+            parse_lit!(3 / 5),
+            Atom::var(symbol!("native_cooking_mu")),
+            named.to_atom(),
+            AbstractIndex::Open { owner: 17, axis: 2 }.to_atom(),
+            named.scoped(symbol!("native_cooking_scope")).to_atom(),
+        ];
+        for mode in [CookMode::FlattenedSymbol, CookMode::ReversibleEncoding] {
+            let settings = CookSettings::indices().with_mode(mode);
+            for index in &indices {
+                let slot = mink!(4, index.clone());
+                assert_eq!(settings.try_cook(slot.as_view()).unwrap(), slot);
+                assert_eq!(settings.try_cook_indices(slot.as_view()).unwrap(), slot);
+                if let Some(function) = index.as_fun_view() {
+                    assert_eq!(settings.cook_function(function).unwrap(), *index);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn interning_mixed_indices_preserves_native_labels_and_shared_unknown_identity() {
+        test_support::test_initialize();
+        let native = function!(index_symbol!("idenso::mixed_native_index"), 17, 2);
+        let opaque = parse_lit!(mixed_opaque_index(17, 2));
+        let tensor = symbol!("mixed_index_cooking_tensor");
+        let source = function!(
+            tensor,
+            mink!(4, native.clone()),
+            mink!(4, opaque.clone()),
+            coad!(8, opaque.clone())
+        );
+        for mode in [CookMode::FlattenedSymbol, CookMode::ReversibleEncoding] {
+            let settings = CookSettings::indices().with_mode(mode);
+            let interned = settings
+                .cook_function(opaque.as_fun_view().unwrap())
+                .unwrap();
+            assert!(matches!(interned.as_view(), AtomView::Var(_)));
+            let expected = function!(
+                tensor,
+                mink!(4, native.clone()),
+                mink!(4, interned.clone()),
+                coad!(8, interned.clone())
+            );
+            let actual = settings.try_cook_indices(source.as_view()).unwrap();
+            assert_eq!(actual, expected);
+            assert_eq!(settings.try_cook_indices(actual.as_view()).unwrap(), actual);
+            if mode == CookMode::ReversibleEncoding {
+                assert_eq!(settings.uncook(actual.as_view()), source);
+            }
+
+            // The separate all-function cooking operation retains its contract.
+            let generic = CookSettings::flattened().with_mode(mode);
+            assert!(matches!(
+                generic
+                    .cook_function(native.as_fun_view().unwrap())
+                    .unwrap()
+                    .as_view(),
+                AtomView::Var(_)
+            ));
+            assert!(matches!(
+                generic.try_cook(native.as_view()).unwrap().as_view(),
+                AtomView::Var(_)
+            ));
+        }
+    }
+
+    #[test]
+    fn interning_accepts_opaque_tagged_heads_and_preserves_native_calls() {
+        test_support::test_initialize();
+        let head = index_symbol!("idenso::malformed_native_index");
+        // Register GammaLoop-style heads before cooking, as in a shared process.
+        let dummy = index_symbol!("idenso::cooking_gammaloop::dummy");
+        let hedge = index_symbol!("idenso::cooking_gammaloop::hedge");
+        let opaque = [function!(head, 17, -1), function!(head, 17, 2, 3)];
+        let native = [
+            function!(head, 17),
+            function!(head, 17, 2),
+            function!(dummy, 1),
+            function!(hedge, 3),
+        ];
+        for mode in [CookMode::FlattenedSymbol, CookMode::ReversibleEncoding] {
+            let settings = CookSettings::indices().with_mode(mode);
+            for index in &opaque {
+                if mode == CookMode::FlattenedSymbol && *index == function!(head, 17, -1) {
+                    // Base flattened naming contains a literal minus sign, which
+                    // Symbolica rejects. Preserve that symbol-creation error.
+                    assert!(matches!(
+                        settings.cook_function(index.as_fun_view().unwrap()),
+                        Err(CookingError::Symbolica(_))
+                    ));
+                    assert!(matches!(
+                        settings.try_cook_indices(mink!(4, index.clone()).as_view()),
+                        Err(CookingError::Symbolica(_))
+                    ));
+                    continue;
+                }
+                let cooked = settings
+                    .cook_function(index.as_fun_view().unwrap())
+                    .unwrap();
+                assert!(matches!(cooked.as_view(), AtomView::Var(_)));
+                assert_eq!(
+                    settings
+                        .try_cook_indices(mink!(4, index.clone()).as_view())
+                        .unwrap(),
+                    mink!(4, cooked.clone())
+                );
+                if mode == CookMode::ReversibleEncoding {
+                    assert_eq!(settings.uncook(cooked.as_view()), *index);
+                }
+            }
+            for native in &native {
+                assert_eq!(
+                    settings
+                        .cook_function(native.as_fun_view().unwrap())
+                        .unwrap(),
+                    *native
+                );
+                let slot = mink!(4, native.clone());
+                assert_eq!(settings.try_cook_indices(slot.as_view()).unwrap(), slot);
+            }
+        }
+    }
+
+    #[test]
+    fn index_cooking_canonicalizes_local_zero_aliases() {
+        test_support::test_initialize();
+        let head = index_symbol!("idenso::cooking_local_zero");
+        let canonical = function!(head, 17);
+        let alias = function!(head, 17, 0);
+        for mode in [CookMode::FlattenedSymbol, CookMode::ReversibleEncoding] {
+            let settings = CookSettings::indices().with_mode(mode);
+            assert_eq!(
+                settings
+                    .cook_function(alias.as_fun_view().unwrap())
+                    .unwrap(),
+                canonical
+            );
+            let mixed = mink!(4, canonical.clone()) * mink!(4, alias.clone());
+            let expected = mink!(4, canonical.clone()).pow(2);
+            assert_eq!(
+                settings.try_cook_indices(mixed.as_view()).unwrap(),
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn interning_rejects_malformed_spenso_owned_index_calls() {
+        test_support::test_initialize();
+        let invalid = [
+            function!(AbstractIndex::scope_symbol(), 17, 2),
+            function!(AIND_SYMBOLS.openind, 17, -1),
+        ];
+        for mode in [CookMode::FlattenedSymbol, CookMode::ReversibleEncoding] {
+            let settings = CookSettings::indices().with_mode(mode);
+            for index in &invalid {
+                assert!(matches!(
+                    settings.cook_function(index.as_fun_view().unwrap()),
+                    Err(CookingError::InvalidIndex(_))
+                ));
+                assert!(matches!(
+                    settings.try_cook_indices(mink!(4, index.clone()).as_view()),
+                    Err(CookingError::InvalidIndex(_))
+                ));
+            }
+        }
     }
 
     #[test]

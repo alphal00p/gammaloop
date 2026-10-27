@@ -9,6 +9,21 @@ from symbolica import E, Replacement, S
 from symbolica.community import hepkit as hep
 from symbolica.community.tensor import TensorExpression
 
+
+def external_metrics_snapshot(view):
+    # EXTERNAL METRICS FIXTURE in points, not browser measurements.
+    request = view.measurement_request()
+    return view.measured(
+        measurements={
+            "id": request["id"],
+            "metrics": [
+                {"id": label["id"], "width": 24.0, "height": 12.0, "baseline": 9.0}
+                for label in request["labels"]
+            ],
+        }
+    )
+
+
 Q, OSE, CIND, T = S("gammalooprs::Q", "gammalooprs::OSE", "spenso::cind", "cff_test_t")
 
 
@@ -68,7 +83,8 @@ def check(diagram, numerator, output=None):
             .is_zero()
         )
     if output is not None:
-        source = result._repr_html_()
+        view = result.render()
+        source = external_metrics_snapshot(view).to_html()
         data = json.loads(
             re.search(
                 r'<script type="application/json" data-cff>(.*?)</script>', source
@@ -99,7 +115,7 @@ def check(diagram, numerator, output=None):
             .together()
             .is_zero()
         )
-        output.write_text(source)
+        output.write_text(source, encoding="utf-8")
     return result
 
 
@@ -133,7 +149,10 @@ def main(directory):
     }""",
     )
     triple = hep.FeynmanDiagram.from_dot(
-        model, (Path(__file__).parent / "fixtures/ltd_three_loop.dot").read_text()
+        model,
+        (Path(__file__).parent / "fixtures/ltd_three_loop.dot").read_text(
+            encoding="utf-8"
+        ),
     )
     for diagram in (double, triple):
         selected = diagram.loop_momentum_basis.loop_edges[0]

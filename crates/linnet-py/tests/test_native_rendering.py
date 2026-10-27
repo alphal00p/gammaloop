@@ -6,6 +6,7 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from rendering_metrics import external_metrics_snapshot
 from symbolica.community import graph
 
 
@@ -25,8 +26,9 @@ class NativeRenderingTests(unittest.TestCase):
         svg = result.to_svg()
         self.assertIn("data-linnet-kind", svg)
         self.assertEqual(ET.fromstring(svg).get("data-linnet-renderer"), "native")
-        # Portable Typst exports embed the immutable native SVG.
-        self.assertIn("image", result.to_linnest())
+        # MathML snapshots require an explicit outlined export for Typst.
+        with self.assertRaisesRegex(ValueError, "outlined labels"):
+            result.to_linnest()
         root = ET.fromstring(svg)
         for target in root.iter():
             kind = target.get("data-linnet-kind")
@@ -45,12 +47,30 @@ class NativeRenderingTests(unittest.TestCase):
             self.graph.empty_subgraph(),
         ):
             with self.subTest(owner=type(owner).__name__):
-                result = owner.render()
+                view = owner.render()
+                self.assertIs(type(view), graph.DiagramView)
+                result = external_metrics_snapshot(view)
                 self.assert_native(result)
                 self.assertEqual(result.to_svg(), result.to_svg_pages()[0])
                 self.assertEqual(result._mime_(), ("text/html", result.to_html()))
-        self.assertIn("#c58b13", self.graph.subgraph(edges=["ab"]).render().to_svg())
-        self.assertNotIn("#c58b13", self.graph.empty_subgraph().render().to_svg())
+        for owner, highlighted in (
+            (self.graph.subgraph(edges=["ab"]), True),
+            (self.graph.empty_subgraph(), False),
+        ):
+            with self.subTest(highlighted=highlighted):
+                svg = external_metrics_snapshot(owner.render()).to_svg()
+                painted = []
+                for element in ET.fromstring(svg).iter():
+                    if element.tag.rsplit("}", 1)[-1] == "style":
+                        continue
+                    paints = [element.get("stroke", ""), element.get("fill", "")]
+                    for declaration in element.get("style", "").split(";"):
+                        property_name, _, value = declaration.partition(":")
+                        if property_name.strip().lower() in {"stroke", "fill"}:
+                            paints.append(value)
+                    if any(paint.strip().lower() == "#c58b13" for paint in paints):
+                        painted.append(element)
+                self.assertEqual(bool(painted), highlighted)
 
     def test_native_styles_selectors_and_snapshots(self):
         calls = []
@@ -70,28 +90,44 @@ class NativeRenderingTests(unittest.TestCase):
             ),
             selectors=graph.DrawingSelectors(node=node_style),
         )
-        result = self.graph.render(config=config)
+        view = self.graph.render(config=config)
+        self.assertEqual(calls, [0, 1, 2])
+        config.drawing = graph.DrawOptions(node_fill=graph.Color("#abcdef"))
+        self.graph.node("a").drawing.label = graph.TextLabel("changed")
+        self.graph.add_node(graph.node("before measurement"))
+        result = external_metrics_snapshot(view)
         self.assert_native(result)
         self.assertEqual(calls, [0, 1, 2])
         svg = result.to_svg()
         self.assertIn("#123456", svg)
         self.assertIn("#246813", svg)
-        config.drawing = graph.DrawOptions(node_fill=graph.Color("#abcdef"))
-        self.graph.node("a").drawing.label = graph.TextLabel("changed")
+        self.assertIn("<mtext>selected</mtext>", svg)
+        self.assertNotIn("<mtext>changed</mtext>", svg)
+        self.assertNotIn("before measurement", svg)
+        self.graph.node("a").drawing.label = graph.TextLabel("changed again")
         self.graph.add_node(graph.node("later"))
         self.assertEqual(result.to_svg(), svg)
         self.assertEqual(calls, [0, 1, 2])
         with TemporaryDirectory() as directory:
-            for suffix in ("svg", "html", "typ", "pdf", "png"):
+            for suffix in ("svg", "html"):
                 path = result.save(Path(directory) / f"native.{suffix}")
                 self.assertGreater(path.stat().st_size, 0)
+            for suffix in ("typ", "pdf", "png"):
+                with (
+                    self.subTest(suffix=suffix),
+                    self.assertRaisesRegex(
+                        ValueError if suffix == "typ" else RuntimeError,
+                        "outlined labels",
+                    ),
+                ):
+                    result.save(Path(directory) / f"native.{suffix}")
 
     def test_multiple_layout_passes_use_native_geometry(self):
         advanced = graph.RenderSettings(
             layouts=graph.LayoutSettings(impred_steps=1).then(impred_steps=1),
             drawing=graph.DrawOptions(node_fill=graph.Color("#246813")),
         )
-        result = self.graph.render(config=advanced)
+        result = external_metrics_snapshot(self.graph.render(config=advanced))
         self.assert_native(result)
         self.assertIn("#246813", result.to_svg())
         # A selection containing only one half of an internal edge must retain

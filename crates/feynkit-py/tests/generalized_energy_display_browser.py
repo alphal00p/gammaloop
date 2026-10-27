@@ -6,6 +6,23 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 
+def offline_fonts(page):
+    """Keep all browser resources offline, serving the repository's pinned font."""
+
+    def resource(route):
+        if route.request.url.endswith("/STIXTwoMath-Regular.woff2"):
+            route.fulfill(
+                path=Path(__file__).parents[2]
+                / "linnet-render-py/fonts/STIXTwoMath-Regular.woff2",
+                content_type="font/woff2",
+                headers={"Access-Control-Allow-Origin": "*"},
+            )
+        else:
+            raise AssertionError(f"unexpected browser resource: {route.request.url}")
+
+    page.route("**/*", resource)
+
+
 def assert_baselines(page):
     groups = page.locator(".hs-factored-equation").evaluate("""root => {
         const baseline = element => {
@@ -67,22 +84,14 @@ def main(directory, ltd_directory, executable, engine="chromium"):
             args=["--no-sandbox"] if engine == "chromium" else [],
         )
         page = browser.new_page(viewport={"width": 736, "height": 1100})
-        page.route(
-            "**/*STIXTwoMath-Regular.woff2",
-            lambda route: route.fulfill(
-                path=Path(__file__).parents[2]
-                / "spynso3/typst/STIXTwoMath-Regular.woff2",
-                content_type="font/woff2",
-                headers={"Access-Control-Allow-Origin": "*"},
-            ),
-        )
+        offline_fonts(page)
         errors = []
         page.on("pageerror", lambda e: errors.append(str(e)))
         for source in sorted(directory.glob("cff-degree-*.html")):
             print(f"{engine}: {source.name}", flush=True)
             # Measure one unwrapped math row; small-screen wrapping is checked below.
             page.set_viewport_size({"width": 3200, "height": 1100})
-            page.set_content(source.read_text())
+            page.set_content(source.read_text(encoding="utf-8"))
             page.wait_for_selector(".feynkit-cff-result[data-ready]")
             page.evaluate("document.fonts.load('19px \"STIX Two Math\"'); true")
             page.wait_for_function("document.fonts.check('19px \"STIX Two Math\"')")
@@ -133,7 +142,9 @@ def main(directory, ltd_directory, executable, engine="chromium"):
                 )
             assert not errors, errors
         page.set_viewport_size({"width": 3200, "height": 1100})
-        page.set_content((ltd_directory / "ltd-raised.html").read_text())
+        page.set_content(
+            (ltd_directory / "ltd-raised.html").read_text(encoding="utf-8")
+        )
         page.evaluate("document.fonts.load('19px \"STIX Two Math\"'); true")
         page.wait_for_function("document.fonts.check('19px \"STIX Two Math\"')")
         assert_math_fonts(page, engine)

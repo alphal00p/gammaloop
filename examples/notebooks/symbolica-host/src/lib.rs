@@ -3,7 +3,9 @@ use pyo3::{
     types::{PyAnyMethods, PyModule, PyModuleMethods},
     wrap_pyfunction,
 };
+use spynso3::data_assets::ALL as RENDER_ASSETS;
 use symbolica::api::python::{Citation, SymbolicaCommunityModule, create_symbolica_module};
+use symbolica_data::python as data;
 
 macro_rules! register_module {
     ($m:expr, $module_type:ty) => {{
@@ -30,6 +32,7 @@ macro_rules! register_module {
 #[pymodule]
 fn core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     create_symbolica_module(m)?;
+    data::register(m, RENDER_ASSETS)?;
     register_module!(m, linnet_py::GraphModule);
     m.add_function(pyo3::wrap_pyfunction!(get_citations, m)?)?;
     register_module!(m, feynkit_py::FeynkitModule);

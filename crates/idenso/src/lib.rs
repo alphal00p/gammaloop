@@ -355,7 +355,7 @@ impl tensor::SymbolicTensor<PartialStructure> {
     /// As for axis permutation, unresolved axes acquire independent graph labels
     /// before the operation; their public logical order remains unchanged.
     pub fn dirac_adjoint(&self, preserve_indices: bool) -> Result<Self, AdjointError> {
-        self.ensure_validated()?;
+        self.explicit_index_occurrences()?;
         let materialized;
         let source = if self.structure().open_positions().is_empty() {
             self
@@ -820,14 +820,14 @@ pub mod test {
         let bis = LibraryRep::from(Bispinor {}).new_rep(4);
         let raw = function!(
             matrix,
-            bis.to_symbolic([function!(label, 3, 0)]),
+            bis.to_symbolic([function!(label, 3)]),
             bis.to_symbolic([function!(label, 3, 1)])
         );
         let cooking = CookSettings::indices()
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
         let native = cooking.try_cook(raw.as_view()).unwrap();
-        assert_ne!(native, raw);
+        assert_eq!(native, raw, "valid native index labels are preserved");
         let inferred = SymbolicTensor::infer(native).unwrap();
         let mut slots = inferred.structure().logical_slots();
         slots.reverse();

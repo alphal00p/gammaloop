@@ -8,8 +8,9 @@ uses a document-processing workflow to explore the default drawing, layout selec
 styles computed from application data. Begin with the #link("quickstart/python/")[Python
 quickstart] for installation and basic graph queries.
 
-The notebook below loads automatically when it comes into view. Python, Linnet, and the Typst
-renderer run in your browser through WebAssembly. The first visit downloads their dependencies;
+The notebook below loads automatically when it comes into view. Python and Linnet
+run through WebAssembly; the browser measures MathML labels for native graph drawing.
+The first visit downloads their dependencies;
 no local Python installation or notebook server is needed.
 
 == Try the rendering API
@@ -49,7 +50,7 @@ selectors and run the affected cell with its play button.
 
 == Default layout and controls
 
-`Graph.to_svg()`, `Graph.render()` and Feynman diagram rendering use the shared
+`Graph.render()` and Feynman diagram rendering use the shared
 EC-planarization and ImPrEd pipeline by default. The same implementation runs
 in direct Typst and in CLI drawings. Layout controls remain explicit:
 
@@ -62,7 +63,8 @@ config = linnet.RenderSettings(
         impred_external_max_points=2,
     )
 )
-svg = graph.to_svg(config=config)
+view = graph.render(config=config)
+view
 ```
 
 The #link("reference/typst/layout/")[layout guide] describes every ImPrEd control.
@@ -71,11 +73,13 @@ such as `LayoutAlgorithm.Force` continue to select their respective algorithms.
 
 == The rendering boundary
 
-Returning a `Graph` from a cell invokes its interactive HTML representation. `graph.to_svg()`
-explicitly produces the same native drawing with hover labels, pinned click details, and local
-selection using Shift-, Ctrl-, or Meta-click. These interactions do not update Python graph
-selections automatically. In Marimo, direct rich display enables the embedded script; when
-embedding the SVG explicitly, use `mo.iframe(graph.to_svg())`.
+Returning a `Graph` from a cell invokes its live widget MIME representation.
+`view = graph.render()` captures selectors and settings in a `DiagramView`;
+displaying it uses AnyWidget to measure MathML labels in the actual notebook
+browser. The measurements then feed the existing native `Scene::render` path.
+The completed drawing has hover labels, pinned click details and local selection
+using Shift-, Ctrl-, or Meta-click. These interactions do not update Python graph
+selections automatically. Display `view` directly in Marimo, IPython or Jupyter.
 Drag the drawing to pan, or use Ctrl/Meta-scroll to zoom gently around the pointer.
 At 100%, SVG points retain their physical size, so equally styled labels, vertices,
 and strokes have the same size across drawings. The viewport grows vertically to
@@ -86,15 +90,54 @@ drawing without enlarging it above 100%. Hover previews details beside the graph
 and below it in narrow outputs. The preview disappears when the pointer leaves the element;
 keyboard focus also previews details. Clicking pins the details until the panel is closed.
 The graph's `RenderSettings` combines layout options, drawing defaults, and Python selectors.
-`Graph` and `Subgraph` drawings use Rust for layout and SVG geometry; Typst typesets
-only their labels and titles. `LayoutSettings.then(...)` and `LayoutSettings.sequence(...)`
+`Graph` and `Subgraph` drawings use Rust for layout and SVG geometry, with direct
+MathML labels and titles. Generic `TextLabel` styles and `MathSymbol` Greek
+identifiers and scripts retain their typed meaning through `IndexDisplay`.
+No Typst parser is involved. `LayoutSettings.then(...)` and `LayoutSettings.sequence(...)`
 run native passes in order, continuing from the preceding geometry. Unsupported settings
 raise an error; Python has no full-document Typst renderer or template fallback.
 
-`render()` evaluates selectors once and captures the resulting SVG. SVG, PDF, PNG, and
-portable Typst exports all use that immutable geometry. PDF and PNG conversion runs directly
-on the SVG, while portable Typst source embeds it as an image. The Python renderer bundles
-no Typst plugin binaries or package cache.
+Keep the view when you want to export the notebook's drawing:
+
+```python
+from IPython.display import display
+
+view = graph.render(config=config)
+display(view)
+```
+
+After measurement completes, run a later cell:
+
+```python
+snapshot = view.measured()
+svg = snapshot.to_svg()
+html = snapshot.to_html()
+snapshot.save("workflow.svg")
+```
+
+The immutable `DiagramRender` retains the measured boxes and embedded math font.
+Its SVG uses XHTML `foreignObject` MathML and is a browser-oriented artifact.
+For explicit Marimo embedding after measurement, use `mo.iframe(snapshot.to_html())`.
+
+Scripts explicitly choose `view.measured(browser="chromium")`, requiring
+Playwright and Chromium. Alternatively, a browser can measure the probes from
+`view.measurement_request()` and return its receipt to
+`view.measured(measurements=receipt)`. Receipts belong to that same view;
+`graph.to_svg(browser="chromium")` creates a fresh view instead. Pending
+`measured()` calls raise an error; strict measurement never uses estimates.
+
+Default `view.snapshot()`, `view.to_svg()` and `view.to_html()` export complete
+static output without launching a browser. They reuse completed measurements,
+otherwise use optional typst-py outlining when available, otherwise estimated
+STIX MathML label bounds. Estimates leave measurement pending. Installing
+`anywidget` adds live notebook measurement; earlier snapshots remain immutable.
+
+
+Use `outlined = view.outlined()` for vector-label SVG through optional Python
+typst-py (distribution `typst`). PDF, PNG and Typst SVG import require this
+route to retain labels. `outlined.save("workflow.pdf")` converts that SVG, and
+`outlined.to_linnest()` embeds it in portable Typst source. The native extension
+contains no Rust Typst compiler or graph plugin runtime.
 Feynman diagrams and tensor networks retain their own default styles; passing shared drawing
 overrides is an explicit customization.
 

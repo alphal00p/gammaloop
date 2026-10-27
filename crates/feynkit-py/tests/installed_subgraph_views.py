@@ -8,6 +8,21 @@ from symbolica.community import graph as linnet
 from symbolica.community import hepkit as fk
 from symbolica.community.tensor import TensorExpression
 
+
+def external_metrics_snapshot(view):
+    # EXTERNAL METRICS FIXTURE in points, not browser measurements.
+    request = view.measurement_request()
+    return view.measured(
+        measurements={
+            "id": request["id"],
+            "metrics": [
+                {"id": label["id"], "width": 24.0, "height": 12.0, "baseline": 9.0}
+                for label in request["labels"]
+            ],
+        }
+    )
+
+
 model = fk.Model(Path(__file__).parent / "fixtures/scalars_2p_3p.json")
 diagram = next(
     candidate
@@ -66,8 +81,10 @@ assert (~internal).linnet_selection == external.linnet_selection
 assert all(isinstance(item, fk.Subgraph) for item in internal.connected_components())
 assert isinstance(internal.boundary(), fk.Subgraph)
 assert isinstance(internal.bridges(), fk.Subgraph)
-assert "<svg" in internal.render().to_svg()
-assert "<figure" in internal._repr_html_()
+view = internal.render()
+drawing = external_metrics_snapshot(view)
+assert "<svg" in drawing.to_svg()
+assert "<figure" in drawing.to_html()
 assert diagram.to_json() == snapshot
 
 # Full excision preserves all physics but starts an independent owner.

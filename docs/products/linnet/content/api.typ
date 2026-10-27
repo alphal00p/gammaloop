@@ -46,10 +46,11 @@ The `linnet-py` binding library owns `symbolica.community.graph`. Install the co
 Symbolica Community wheel to use its builders, live graph views, subgraphs, DOT codecs,
 layout streams, graph algorithms, and rendering. There is no separate Linnet Python wheel.
 
-`RenderSettings` combines drawing options, layout sequences, selectors, templates, and
-export configuration. `LayoutSettings`, `Stroke`, and `DiagramRender` are shared by graphs,
-HepKit diagrams, and tensor networks. Ordinary domain drawings use native SVG geometry and
-embedded Typst labels. Layout pass sequences run natively; unsupported settings raise errors.
+`RenderSettings` combines drawing options, layout sequences, and selectors.
+`LayoutSettings`, `Stroke`, `DiagramView`, and `DiagramRender` are shared by graphs,
+HepKit diagrams, and tensor networks. The notebook browser measures direct MathML labels
+before Rust lays out and draws the graph. Layout pass sequences run natively;
+unsupported settings raise errors.
 
 ```python
 from symbolica.community import graph
@@ -62,10 +63,11 @@ settings = graph.RenderSettings(
 )
 ```
 
-Call `.render(config=settings)` to capture a `DiagramRender`. Its SVG, HTML, portable Typst,
-and file exports reuse the snapshot, even after later graph or settings mutations.
+Call `.render(config=settings)` to prepare a `DiagramView`, then display that same view.
+After browser measurement completes, `view.measured()` returns an immutable `DiagramRender`.
+Its SVG, HTML, and file exports reuse the snapshot, even after later graph or settings mutations.
 HepKit's physics-specific options live in `DiagramStyle`, passed separately as `style`.
-For multipage renders, use `to_svg_pages()`; `to_svg()` requires exactly one page.
+For multipage snapshots, use `to_svg_pages()`; `to_svg()` requires exactly one page.
 
 `Graph.generate()` takes `EdgeSignature` values and returns graph/group-size pairs.
 `HalfEdge` is a live graph view. Canonicalization and isomorphism compare expression-compatible
@@ -282,11 +284,12 @@ dangling edges or edges whose endpoints are outside the traversal tree. An `Orie
 edges, the orientation of each edge relative to the cut, and its winding number against a cycle from
 the same graph revision.
 
-=== Typed Typst configuration
+=== Typed drawing configuration
 
-Plain Python strings are always escaped Typst strings, never source expressions. `None` maps to
-Typst `none`, `AUTO` maps to `auto`, and `INHERIT` leaves the value from the preceding
-configuration layer intact. The closed native-value model also includes `Length`, `Ratio`,
+Plain Python strings are data, never executable source expressions. `TextLabel` carries text
+and `MathSymbol` carries mathematical labels. `AUTO` selects a field's automatic value, and
+`INHERIT` leaves the value from the preceding configuration layer intact.
+The closed native-value model also includes `Length`, `Ratio`,
 `RelativeLength`, `Angle`, `Fraction`, `Color`, `Stroke`, `Dash`, `Insets`, `Mark`, `TextLabel`,
 and `MathSymbol`, plus recursively validated arrays and string-keyed dictionaries. Finite
 layout, placement, routing, anchor, pattern, mark, and debug choices use their exported enums;
@@ -330,9 +333,8 @@ graph.render_config = RenderSettings(
     ),
 )
 
-output = graph.render().save("diagram.pdf")
-svg = graph.to_svg()
-graph  # the final expression in a notebook renders inline
+view = graph.render()
+view  # the notebook browser measures labels and completes this view
 ```
 
 SVG output preserves the native drawing and adds vertex, edge, and half-edge inspection.
@@ -374,28 +376,54 @@ region = graph.subgraph(edges=["propagator"])
 region
 ```
 
-Its `_repr_html_()` and `_repr_svg_()` show the full owning graph, highlight the selected
-half-edges, and draw the complement dotted and muted through Linnest's subgraph drawing mode.
+The notebook view shows the full owning graph, highlights the selected
+half-edges, and draws the complement dotted and muted through Linnest's subgraph drawing mode.
 Selecting one half of a paired edge highlights only that half; selected isolated nodes are
 highlighted too. The display uses the owner's layout, drawing values, and render configuration
-without changing the graph or its stored settings. `region.to_svg(config=None)` returns the
-same SVG explicitly, and `region.render(config=None)` prepares it for inspection or
-export through `DiagramRender`. Like other selection operations, rendering checks the topology
+without changing the graph or its stored settings. `region.render(config=None)` prepares a
+`DiagramView`; retain it for browser display and later snapshot exports.
+Like other selection operations, rendering checks the topology
 revision and raises `ReferenceError` for a stale selection.
 
 The graph's `render_config` is overlaid by a sparse per-call `config`.
-`render(config=None).save(output)` writes PDF, SVG, PNG, HTML, or portable Typst according to
-the output suffix. `save_pages(directory, format="svg")` exports each captured page separately.
-`to_svg(config=None)` returns SVG text; `_repr_html_()` supplies interactive notebook display.
-Rendering evaluates selectors once and captures native SVG geometry and typeset labels in an
-immutable `DiagramRender`. Arbitrary Python `.data` stays in Python; selectors may explicitly
-convert it to drawing values.
+Preparing a view evaluates selectors once and retains the resulting drawing inputs.
+Arbitrary Python `.data` stays in Python; selectors may explicitly convert it to drawing values.
+Display the retained view, then capture it in a later notebook cell after the drawing appears:
 
-Typst runs in-process only for labels and titles. Python does not expose `from_sources`,
-`typst_source`, custom templates, `source_root`, or `template_options`, and ships no Linnest,
-Kurvst, CeTZ, or MiTeX plugin assets. Standalone Typst packages remain separate tools.
-PDF and PNG exports convert the captured SVG directly. `to_linnest()` emits portable Typst
-source that embeds the same SVG; it does not execute a second layout.
+```python
+snapshot = view.measured()
+svg = snapshot.to_svg()
+snapshot.save("diagram.svg")
+snapshot.save("diagram.html")
+```
+
+Default `view.snapshot()`, `view.to_svg()` and `view.to_html()` export complete
+static output without launching a browser. They reuse completed measurements,
+otherwise use optional typst-py outlining when available, otherwise estimated
+STIX MathML label bounds. Estimates leave measurement pending. Installing
+`anywidget` adds live notebook measurement; earlier snapshots remain immutable.
+
+An unfinished view raises a measurement-pending error only for strict `measured()`.
+No browser is started automatically. Scripts can explicitly use
+`view.measured(browser="chromium")`; install Playwright and Chromium first.
+The measured SVG embeds its font and XHTML `foreignObject` MathML labels.
+`snapshot.save_pages(directory, format="svg")` exports every captured SVG page.
+
+Vector-label exports are a separate explicit operation using optional Python
+`typst>=0.15`. They do not require a browser:
+
+```python
+vector = view.outlined()
+vector.save("diagram.pdf")
+vector.save("diagram.png")
+vector.save("diagram.typ")
+```
+
+Outlining measures labels with Typst and runs native layout for those boxes; it does not
+replace the browser-measured snapshot. PDF and PNG conversion uses the outlined SVG.
+`vector.to_linnest()` emits portable Typst source embedding that SVG.
+Default notebook rendering has no Typst compiler dependency. Standalone Typst packages
+and the documentation builder's Typst compiler remain independent tools.
 
 The notebook display is generic and model-neutral, including for graphs with dangling edges.
 Domain renderers supply their own native scenes and labels. Use typed settings and Python
@@ -406,7 +434,8 @@ config = RenderSettings(
     layouts=LayoutSettings(impred_steps=50).then(impred_steps=20),
     drawing=DrawOptions(node_fill=Color("teal")),
 )
-drawing = graph.render(config=config)
+view = graph.render(config=config)
+view
 ```
 
 Layout passes execute natively in order. An ImPrEd pass following another ImPrEd pass retains
@@ -423,7 +452,7 @@ Python drawing selectors belong on `RenderSettings.selectors`. They may inspect 
 but must return the corresponding detached `NodeDrawing`, `EdgeDrawing`, or `HalfEdgeDrawing`, or
 `None` when no defaults apply. Selector fields fill only drawing fields that are absent on the
 element, so explicit element drawing remains authoritative. Only the validated drawing snapshot
-crosses the Python-to-Typst boundary. The example above happens to color an application-defined edge
+crosses the drawing boundary. The example above happens to color an application-defined edge
 payload; custom particle styling works the same way and is not a special Linnet mode:
 
 ```python
@@ -496,7 +525,7 @@ iterator. Frames own their position data; changing an earlier frame's returned a
 cannot affect later frames. Node names and endpoint indices stay in the same order.
 This proof of concept supports a single DOT graph and the force algorithm. Its numeric
 geometry includes explicit DOT placement constraints and per-edge spring lengths, but
-not Typst label measurement, styling, or final label relaxation. It does not alter an
+not browser label measurement, styling, or final label relaxation. It does not alter an
 existing Python `Graph` or its payloads.
 
 Custom graph behavior is expressed through Python drawing selectors and native scenes.

@@ -1,6 +1,8 @@
 //! Ordered symbolic products with explicit endpoints and their scalar contractions.
 
 use std::collections::HashMap;
+use std::slice;
+use std::sync::Arc;
 
 use spenso::{
     network::tags::SPENSO_TAG,
@@ -14,15 +16,22 @@ use spenso::{
 };
 use symbolica::atom::Atom;
 
-use super::{MatrixChannel, PortPair, SymbolicTensor, TensorCompositionError, port_atom};
+use super::{
+    ExplicitIndexOccurrences, MatrixChannel, PortPair, SymbolicTensor, TensorCompositionError,
+    port_atom,
+};
+use crate::tensor::inference::{InterfaceInference, TensorInterface};
 
 impl SymbolicTensor<PartialStructure> {
     /// Project an ordered group of compatible matrix factors, retaining an open
     /// channel so the group can be embedded in a larger chain or trace.
+    /// The returned selected channel remains usable if projection produces zero.
+    /// Groups whose coincident outer endpoints close into a scalar trace are
+    /// outside this open-channel operation.
     pub fn project_factors(
         factors: &[Self],
         projector: FactorProjector,
-    ) -> Result<Self, TensorCompositionError> {
+    ) -> Result<(Self, MatrixChannel), TensorCompositionError> {
         let Some((first, rest)) = factors.split_first() else {
             return Err(TensorCompositionError::NoMatrixChannel);
         };
@@ -39,30 +48,73 @@ impl SymbolicTensor<PartialStructure> {
         let first_channel = first
             .matrix_channel()
             .ok_or(TensorCompositionError::NoMatrixChannel)?;
+        let slots = first.structure.logical_slots();
+        let input = slots[first_channel.input];
+        let output = slots[first_channel.output];
         let mut value = first.chain_form(first_channel)?;
-        let channel = MatrixChannel {
+        let mut channel = MatrixChannel {
             input: 0,
             output: 1,
-        };
+        }
+        .remap_output(input, output, &value.structure)?;
         for factor in rest {
             let other = factor
                 .matrix_channel()
                 .ok_or(TensorCompositionError::NoMatrixChannel)?;
+            let input = value.structure.logical_slots()[channel.input];
+            let output = factor.structure.logical_slots()[other.output];
             value = value.compose(factor, channel, other)?;
+            channel = MatrixChannel {
+                input: 0,
+                output: 1,
+            }
+            .remap_output(input, output, &value.structure)?;
         }
         let slots = value.structure.logical_slots();
+        let input = slots[channel.input];
+        let output = slots[channel.output];
         let (coefficient, payload) = value.chain_parts(channel)?;
         let projected = projector.apply(payload);
-        let expression =
-            coefficient * SPENSO_TAG.chain(port_atom(slots[0]), port_atom(slots[1]), [projected]);
-        Self::new(expression, value.structure).validate_rewrite(&factors.iter().collect::<Vec<_>>())
+        let expression = if value.is_zero() || coefficient.is_zero() || projected.is_zero() {
+            Atom::Zero
+        } else {
+            coefficient * SPENSO_TAG.chain(port_atom(input), port_atom(output), [projected])
+        };
+        // Composition may have materialized anonymous ports into explicit
+        // contractions. Their history belongs to the composed carrier, even
+        // when the projected payload vanishes.
+        value.explicit_index_occurrences()?;
+        let occurrences = Arc::clone(
+            value
+                .proofs
+                .occurrences
+                .get()
+                .expect("published index history"),
+        );
+        let value =
+            Self::from_validated_parts(expression, value.structure, occurrences).finish_parts()?;
+        let value =
+            value.validate_rewrite("project_factors", &factors.iter().collect::<Vec<_>>())?;
+        let channel = channel.remap_output(input, output, &value.structure)?;
+        Ok((value, channel))
     }
 
     /// Expand only normalized factor projectors, preserving the tensor interface
     /// and leaving unrelated products and sums factored.
     pub fn expand_projectors(&self) -> Result<Self, TensorCompositionError> {
-        Self::new(self.expression.expand_projectors(), self.structure.clone())
-            .validate_rewrite(&[self])
+        self.explicit_index_occurrences()?;
+        Self::from_validated_parts(
+            self.expression.expand_projectors(),
+            self.structure.clone().into_algebra_result(),
+            Arc::clone(
+                self.proofs
+                    .occurrences
+                    .get()
+                    .expect("published index history"),
+            ),
+        )
+        .finish_parts()?
+        .validate_rewrite("expand_projectors", &[self])
     }
 
     /// Choose the explicit index shared by a contracted pair, avoiding dummy capture.
@@ -77,20 +129,22 @@ impl SymbolicTensor<PartialStructure> {
             .unwrap_or_else(|| Self::reserved_dummies([self, right]).fresh_index()))
     }
 
-    /// Fill selected unresolved ports, preserving the order of surviving ports.
+    /// Fill selected ports and contract repeated compatible explicit indices.
+    /// Surviving ports retain their established order.
     pub fn indexed(
         &self,
         replacements: &HashMap<usize, AbstractIndex>,
     ) -> Result<Self, TensorCompositionError> {
-        let expression = self.materialize_interface_ports(replacements)?;
-        let mut logical = self.structure.logical_slots();
-        for (&position, &index) in replacements {
-            logical[position].set_aind(PartialIndex::Explicit(index));
+        let mut value = self.reindex_interface_ports(replacements)?;
+        let structure = InterfaceInference::merge_explicit_interface_sequence(slice::from_ref(
+            &value.structure,
+        ))?
+        .canonicalize_open_ports();
+        if structure != value.structure {
+            value.structure = structure;
+            value.proofs = value.proofs.algebra_result();
         }
-        let value = Self::checked_parts(expression, PartialStructure::from_logical_slots(logical))
-            .map_err(|error| TensorCompositionError::InvalidResultInterface(error.to_string()))?
-            .normalize_closed_root_chain()?;
-        value.validate_rewrite(&[self])
+        value.normalize_closed_root_chain()
     }
 
     /// Explicitly choose dot notation for the sole ports of two rank-one tensors.
@@ -113,11 +167,18 @@ impl SymbolicTensor<PartialStructure> {
         } else {
             self.compact_dot_expression(right)?
         };
-        super::validate_explicit_index_occurrences(&atom)?;
-        Self::new(atom, PartialStructure::from_logical_slots([])).validate_rewrite(&[self, right])
+        let occurrences = ExplicitIndexOccurrences::product(&[self, right])?;
+        Self::from_validated_parts(
+            atom,
+            PartialStructure::from_logical_slots([]),
+            Arc::new(occurrences),
+        )
+        .finish_parts()?
+        .validate_rewrite("dot", &[self, right])
     }
 
-    /// Present one selected channel first while retaining spectator-port order.
+    /// Give one channel explicit endpoints without changing leaf arguments.
+    /// Named free axes use canonical order; positional axes retain their roles.
     pub fn chain_form(&self, channel: MatrixChannel) -> Result<Self, TensorCompositionError> {
         if channel.input == channel.output {
             return Err(TensorCompositionError::DegenerateChannel {
@@ -143,7 +204,7 @@ impl SymbolicTensor<PartialStructure> {
             let (coefficient, factors) = self.chain_parts(channel)?;
             coefficient * SPENSO_TAG.chain(port_atom(input), port_atom(output), factors)
         };
-        let structure = PartialStructure::from_logical_slots(
+        let structure = Self::composite_interface(
             [input, output].into_iter().chain(
                 slots
                     .into_iter()
@@ -154,7 +215,19 @@ impl SymbolicTensor<PartialStructure> {
                     .map(|(_, slot)| slot),
             ),
         );
-        Self::new(expression, structure).validate_rewrite(&[self])
+        self.explicit_index_occurrences()?;
+        Self::from_validated_parts(
+            expression,
+            structure,
+            Arc::clone(
+                self.proofs
+                    .occurrences
+                    .get()
+                    .expect("published index history"),
+            ),
+        )
+        .finish_parts()?
+        .validate_rewrite("chain_form", &[self])
     }
 
     /// Build an ordered chain with explicit input and output slots.
@@ -183,13 +256,13 @@ impl SymbolicTensor<PartialStructure> {
             } else {
                 (
                     SPENSO_TAG.chain(start.to_atom(), end.to_atom(), std::iter::empty::<Atom>()),
-                    PartialStructure::from_logical_slots([
+                    Self::composite_interface([
                         start.rep().slot(PartialIndex::Explicit(start.aind())),
                         end.rep().slot(PartialIndex::Explicit(end.aind())),
                     ]),
                 )
             };
-            return Self::checked_parts(expression, structure).map_err(|error| {
+            return Self::from_produced_parts(expression, structure).map_err(|error| {
                 TensorCompositionError::InvalidResultInterface(error.to_string())
             });
         };
@@ -197,16 +270,27 @@ impl SymbolicTensor<PartialStructure> {
         let channel = first
             .matrix_channel()
             .ok_or(TensorCompositionError::NoMatrixChannel)?;
+        let slots = first.structure.logical_slots();
+        let input = slots[channel.input];
+        let output = slots[channel.output];
         let mut value = first.chain_form(channel)?;
-        let channel = MatrixChannel {
+        let mut channel = MatrixChannel {
             input: 0,
             output: 1,
-        };
+        }
+        .remap_output(input, output, &value.structure)?;
         for factor in factors {
             let factor_channel = factor
                 .matrix_channel()
                 .ok_or(TensorCompositionError::NoMatrixChannel)?;
+            let input = value.structure.logical_slots()[channel.input];
+            let output = factor.structure.logical_slots()[factor_channel.output];
             value = value.compose(factor, channel, factor_channel)?;
+            channel = MatrixChannel {
+                input: 0,
+                output: 1,
+            }
+            .remap_output(input, output, &value.structure)?;
         }
         let slots = value.structure.logical_slots();
         if start.rep() != slots[channel.input].rep() || end.rep() != slots[channel.output].rep() {
@@ -217,10 +301,12 @@ impl SymbolicTensor<PartialStructure> {
         if start.aind() == end.aind() {
             value.trace_ports(channel)
         } else {
-            value.indexed(&HashMap::from([
+            let mut value = value.indexed(&HashMap::from([
                 (channel.input, start.aind()),
                 (channel.output, end.aind()),
-            ]))
+            ]))?;
+            value.structure = value.structure.into_algebra_result();
+            Ok(value)
         }
     }
 
@@ -230,7 +316,7 @@ impl SymbolicTensor<PartialStructure> {
         factors: &[Self],
     ) -> Result<Self, TensorCompositionError> {
         let Some((first, factors)) = factors.split_first() else {
-            return Self::checked_parts(
+            return Self::from_produced_parts(
                 SPENSO_TAG.trace(representation.to_symbolic([]), std::iter::empty::<Atom>()),
                 PartialStructure::from_logical_slots([]),
             )
@@ -255,6 +341,7 @@ impl SymbolicTensor<PartialStructure> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support;
     use spenso::{
         network::library::symbolic::ETS,
         structure::{dimension::Dimension, representation::ExtendibleReps},
@@ -271,6 +358,102 @@ mod tests {
                 rep.slot(PartialIndex::open(1)),
             ]),
         )
+        .unwrap()
+    }
+
+    #[test]
+    fn zero_factor_projection_retains_materialized_contraction_history() {
+        test_support::test_initialize();
+        let rep = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(3));
+        let source = matrix("projected_history_zero", rep);
+        let zero = source.try_sub(&source).unwrap();
+        let right = matrix("projected_history_right", rep)
+            .reindex_interface_ports(&HashMap::from([(0, AbstractIndex::Normal(50))]))
+            .unwrap();
+        let channel = MatrixChannel {
+            input: 0,
+            output: 1,
+        };
+        let direct = zero.compose(&right, channel, channel).unwrap();
+        let (projected, selected) =
+            SymbolicTensor::project_factors(&[zero, right], FactorProjector::Symmetric).unwrap();
+        assert!(projected.is_zero());
+        assert_eq!(projected.structure, direct.structure);
+        assert_eq!(selected, channel);
+        let index = rep.slot(AbstractIndex::Normal(50));
+        assert_eq!(direct.explicit_index_occurrences().unwrap().count(index), 2);
+        assert_eq!(
+            projected.explicit_index_occurrences().unwrap().count(index),
+            2
+        );
+        let probe = SymbolicTensor::infer(
+            FunctionBuilder::new(SPENSO_TAG.tensor_symbol("projected_history_probe"))
+                .add_arg(index.to_atom())
+                .finish(),
+        )
+        .unwrap();
+        for value in [direct, projected] {
+            assert!(matches!(
+                value.outer(&probe),
+                Err(TensorCompositionError::InvalidExplicitMultiplicity { occurrences: 3, .. })
+            ));
+        }
+    }
+
+    #[test]
+    fn factor_projection_returns_selected_zero_channel_and_rejects_closed_groups() {
+        test_support::test_initialize();
+        let channel = ExtendibleReps::MINKOWSKI.new_rep(Dimension::Concrete(4));
+        let spectator = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(4));
+        let factor = |name, index| {
+            SymbolicTensor::infer(
+                FunctionBuilder::new(SPENSO_TAG.tensor_symbol(name))
+                    .add_arg(channel.to_symbolic([]))
+                    .add_arg(channel.to_symbolic([]))
+                    .add_arg(
+                        spectator
+                            .slot::<AbstractIndex, _>(AbstractIndex::Normal(index))
+                            .to_atom(),
+                    )
+                    .finish(),
+            )
+            .unwrap()
+        };
+        let left = factor("selected_projection_left", 7);
+        let zero = left.try_sub(&left).unwrap();
+        let right = factor("selected_projection_right", 11);
+        let (projected, selected) =
+            SymbolicTensor::project_factors(&[zero, right], FactorProjector::Symmetric).unwrap();
+        assert!(projected.is_zero());
+        assert_eq!(projected.rank(), 4);
+        assert_eq!(projected.matrix_channel(), None);
+        assert_eq!(
+            selected,
+            MatrixChannel {
+                input: 0,
+                output: 1
+            }
+        );
+        let slots = projected.structure.logical_slots();
+        assert_eq!(slots[selected.input].rep(), channel);
+        assert_eq!(slots[selected.output].rep(), channel);
+
+        let named = |name, input, output| {
+            let ports = [input, output]
+                .map(|index| channel.slot(PartialIndex::Explicit(AbstractIndex::Normal(index))));
+            SymbolicTensor::from_declared_parts(
+                FunctionBuilder::new(SPENSO_TAG.tensor_symbol(name))
+                    .add_args(ports.map(port_atom))
+                    .finish(),
+                PartialStructure::from_logical_slots(ports),
+            )
+            .unwrap()
+        };
+        let first = named("selected_projection_closed_first", 90, 50);
+        let second = named("selected_projection_closed_second", 50, 90);
+        assert!(
+            SymbolicTensor::project_factors(&[first, second], FactorProjector::Symmetric).is_err()
+        );
     }
 
     #[test]
@@ -351,10 +534,29 @@ mod tests {
             .indexed(&HashMap::from([(0, index), (1, index)]))
             .unwrap();
         assert!(indexed.is_scalar());
-        let zero = SymbolicTensor::new(Atom::Zero, value.structure.clone());
+        assert_eq!(
+            indexed
+                .explicit_index_occurrences()
+                .unwrap()
+                .count(rep.slot(index)),
+            2
+        );
+        let zero = SymbolicTensor::new(Atom::Zero, value.structure.clone()).unwrap();
         let indexed_zero = zero.indexed(&HashMap::from([(0, index)])).unwrap();
         assert_eq!(indexed_zero.rank(), 2);
         assert!(indexed_zero.expression.is_zero());
+        let closed_zero = zero
+            .indexed(&HashMap::from([(0, index), (1, index)]))
+            .unwrap();
+        assert!(closed_zero.is_scalar());
+        assert!(closed_zero.is_zero());
+        assert_eq!(
+            closed_zero
+                .explicit_index_occurrences()
+                .unwrap()
+                .count(rep.slot(index)),
+            2
+        );
         let incompatible = ExtendibleReps::MINKOWSKI.new_rep(Dimension::Concrete(4));
         assert!(SymbolicTensor::chain(rep.slot(index), incompatible.slot(index), &[]).is_err());
         assert!(value.dot(&value).is_err());

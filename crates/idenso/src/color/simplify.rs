@@ -345,7 +345,13 @@ impl SymbolicTensor<PartialStructure> {
                     // This certificate is local to the enabled color policy.
                     // Restore ordinary observations before returning to the planner.
                     let status = root.proofs.frontier;
-                    root = Self::from_validated_parts(expression, root.structure);
+                    let history = Arc::clone(
+                        root.proofs
+                            .occurrences
+                            .get()
+                            .expect("published index history"),
+                    );
+                    root = Self::from_validated_parts(expression, root.structure, history);
                     root.proofs.frontier = status;
                     let _ = root.proofs.observations.set(Arc::new(
                         DomainObservations::terminal_polynomial(&root.structure, true),

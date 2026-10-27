@@ -137,11 +137,25 @@ def wasm_runtime_smoke() -> None:
     assert selected_half_edges == list(range(graph.n_half_edges))
     assert not hasattr(prepared, "typst_source")
 
-    svg = prepared.to_svg()
+    # EXTERNAL METRICS FIXTURE in points; the browser roundtrip is tested separately.
+    request = prepared.measurement_request()
+    snapshot = prepared.measured(
+        measurements={
+            "id": request["id"],
+            "metrics": [
+                {"id": label["id"], "width": 24.0, "height": 12.0, "baseline": 9.0}
+                for label in request["labels"]
+            ],
+        }
+    )
+    svg = snapshot.to_svg()
+    assert selected_nodes == list(range(graph.n_nodes))
+    assert selected_edges == list(range(graph.n_edges))
+    assert selected_half_edges == list(range(graph.n_half_edges))
     assert svg.lstrip().startswith("<svg")
     assert svg.rstrip().endswith("</svg>")
 
 
 class WasmRuntimeTests(unittest.TestCase):
-    def test_dot_selectors_and_typst_render(self) -> None:
+    def test_dot_selectors_and_measured_render(self) -> None:
         wasm_runtime_smoke()

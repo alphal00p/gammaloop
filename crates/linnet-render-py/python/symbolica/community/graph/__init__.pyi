@@ -15,6 +15,7 @@ __all__ = [
     "Dash",
     "DebugLevel",
     "DiagramRender",
+    "DiagramView",
     "DrawOptions",
     "DrawingSelectors",
     "Fraction",
@@ -280,6 +281,161 @@ class DiagramRender:
     def _repr_html_(self) -> builtins.str: ...
     def _repr_svg_(self) -> typing.Optional[builtins.str]: ...
     def _mime_(self) -> tuple[builtins.str, builtins.str]: ...
+    def __repr__(self) -> builtins.str: ...
+
+@typing.final
+class DiagramView:
+    r"""
+    A resolved drawing with static exports and optional browser measurements.
+
+    Clones retain the same scenes, receipt identity, and completion cells. A
+    widget and its caller therefore observe the same completed snapshot. Each
+    freshly constructed view has a new identity; receipts belong to that view,
+    and a completed view rejects different measurements. SVG/HTML exports are
+    immutable snapshots and never trigger implicit remeasurement.
+
+    With the generic graph bindings installed:
+
+    >>> from symbolica.community.graph import DotCodec, Graph
+    >>> graph = Graph.from_dot("graph { a -- b }", DotCodec.topology())
+    >>> view = graph.render()
+    >>> static = view.snapshot()  # Complete static output with default settings.
+    >>> svg = static.to_svg()
+    >>> measured = view.measured(browser="chromium")  # Explicit Playwright capture.
+    >>> outlined = view.outlined()  # Optional typst-py vector labels.
+    >>> static.to_svg() == svg  # Earlier snapshots remain immutable.
+    True
+    """
+    @property
+    def diagrams(self) -> builtins.list[DiagramView]:
+        r"""
+        Configured child views for a collection, retaining their original scenes.
+        See [`Self`] for an example. Returned clones share child completion state.
+        """
+    def measurement_request(self) -> dict:
+        r"""
+        The exact ordered MathML probes, fixed font, and receipt identity.
+
+        See [`Self`] for the measurement lifecycle. A receipt must echo this
+        request's `id` and contain one finite, nonnegative rectangle per label in
+        request order. All dimensions and the baseline are SVG user units (points).
+
+        # Errors
+        Returns a Python error if bundled font loading, hashing, or request
+        serialization fails. No browser or notebook dependency is imported here.
+        """
+    def measured(self, measurements: typing.Optional[dict] = None, *, browser: typing.Optional[builtins.str] = None) -> DiagramRender:
+        r"""
+        Obtain a completed immutable snapshot, or explicitly measure using Chromium.
+
+        See [`Self`] for an example. Calling without arguments reuses completion;
+        pending labels need either an external receipt or explicit browser mode.
+        The same receipt is idempotent, including through a retained clone.
+        Notebook widgets allow 15 seconds for font-resource transfer, followed by
+        a separate five-second browser layout deadline. Explicit Chromium capture
+        has the font inline and a five-second measurement deadline; expiry raises
+        Python `TimeoutError`. Widgets retain static output on either timeout.
+
+        # Errors
+        Returns `ValueError` for conflicting arguments, an unsupported browser,
+        stale/malformed receipts, changed measurements, or invalid label sources.
+        Returns `RuntimeError` while measurement is pending or native rendering
+        fails. Optional browser setup and execution errors propagate as Python
+        errors. Failed capture does not publish this view's completed snapshot;
+        child views already completed remain independently usable.
+        """
+    def outlined(self) -> DiagramRender:
+        r"""
+        Outline labels with the optional Python Typst compiler; no browser is used.
+
+        See [`Self`] for an example. The vector snapshot has its own completion
+        cell, shared by clones, and never changes an existing measured export.
+
+        # Errors
+        Returns `ValueError` if labels lack Typst sources or captured MathML has
+        no retained scene, `ImportError` if the optional `typst` package is absent,
+        or a Python error on compilation/rendering failure. Compiler exceptions
+        retain their Python cause via [`typst_export::compile_sources`].
+        """
+    def snapshot(self, *, browser: typing.Optional[builtins.str] = None) -> DiagramRender:
+        r"""
+        Static export owner: completed measurement, optional Typst, then estimates.
+
+        Estimates use [`LabelSource::estimated_metrics`] at the request's fixed
+        9px STIX style. They never complete measurement; a later receipt replaces
+        them. See [`Self::to_svg`] for an export example.
+
+        # Errors
+        Propagates label validation, optional compiler, and rendering errors.
+        """
+    def to_svg(self) -> builtins.str:
+        r"""
+        Return a static single-page SVG; see [`Self`] for an example.
+
+        # Errors
+        Propagates [`Self::snapshot`] errors and rejects multipage snapshots.
+        """
+    def to_svg_pages(self) -> builtins.list[builtins.str]:
+        r"""
+        Return independent strings for all static pages; see [`Self`].
+
+        # Errors
+        Propagates [`Self::snapshot`] errors.
+        """
+    def to_html(self) -> builtins.str:
+        r"""
+        Return static HTML with its shared font resource; see [`Self`].
+
+        # Errors
+        Propagates [`Self::snapshot`] errors.
+        """
+    def save(self, output: builtins.str | os.PathLike | pathlib.Path) -> pathlib.Path:
+        r"""
+        Save a static snapshot, selecting the format by suffix.
+
+        >>> from symbolica.community.graph import DotCodec, Graph
+        >>> view = Graph.from_dot("graph { a -- b }", DotCodec.topology()).render()
+        >>> path = view.save("diagram.svg")
+
+        # Errors
+        Propagates [`Self::snapshot`] errors, filesystem/export errors, and
+        invalid format/page-count errors. PDF/PNG need an outlined snapshot.
+        """
+    def widget(self) -> typing.Any:
+        r"""
+        Optional notebook dependencies are imported only when displaying a view.
+        The widget retains a clone of the backend owner until it is closed.
+
+        >>> from symbolica.community.graph import DotCodec, Graph
+        >>> view = Graph.from_dot("graph { a -- b }", DotCodec.topology()).render()
+        >>> widget = view.widget()  # Requires anywidget in this environment.
+
+        # Errors
+        Propagates font/request errors and Python import or widget setup errors.
+        """
+    def _repr_mimebundle_(self, include: typing.Optional[typing.Sequence[builtins.str]] = None, exclude: typing.Optional[typing.Sequence[builtins.str]] = None) -> typing.Any:
+        r"""
+        Static Jupyter bundle with an optional widget, respecting MIME filters.
+        See [`Self::widget`] for explicit notebook construction.
+
+        # Errors
+        Propagates widget setup and Python MIME protocol errors.
+        """
+    def _display_(self) -> typing.Any:
+        r"""
+        Marimo adapter: retained widget when available, otherwise static HTML.
+        See [`Self::widget`] for explicit widget construction.
+
+        # Errors
+        Propagates widget errors and missing/failed Marimo imports or adapters.
+        """
+    def _mime_(self) -> typing.Any:
+        r"""
+        Marimo MIME hook for [`Self::_display_`]; see [`Self::widget`].
+
+        # Errors
+        Propagates display adapter and Python MIME protocol errors.
+        """
     def __repr__(self) -> builtins.str: ...
 
 @typing.final

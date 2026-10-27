@@ -1,26 +1,20 @@
 //! Whole tensor-leaf substitutions with locally checked interfaces.
 
-use std::{
-    collections::{HashMap, HashSet, hash_map::Entry},
-    sync::Arc,
+use super::composition::ExplicitIndexOccurrences;
+use super::inference::{InterfaceInference, TensorInferenceError};
+use super::{SymbolicTensor, composition};
+use spenso::structure::partial::PartialStructure;
+use spenso::structure::slot::SlotMatcher;
+use std::collections::hash_map::Entry;
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
+use symbolica::atom::{Atom, AtomOrView, AtomView, Symbol};
+use symbolica::id::{
+    AtomMatchIterator, Condition, Match, MatchSettings, Pattern, PatternRestriction, ReplaceWith,
+    WrappedMatchStack,
 };
-
-use spenso::structure::{partial::PartialStructure, slot::SlotMatcher};
-use symbolica::{
-    atom::{Atom, AtomOrView, AtomView, Symbol},
-    id::{
-        AtomMatchIterator, Condition, Match, MatchSettings, Pattern, PatternRestriction,
-        ReplaceWith, WrappedMatchStack,
-    },
-    state::Workspace,
-    transformer::TransformerError,
-};
-
-use super::{
-    SymbolicTensor,
-    composition::{self, ExplicitIndexOccurrences},
-    inference::{InterfaceInference, TensorInferenceError},
-};
+use symbolica::state::Workspace;
+use symbolica::transformer::TransformerError;
 
 type Result<T> = std::result::Result<T, TensorInferenceError>;
 
@@ -149,12 +143,45 @@ impl SymbolicTensor<PartialStructure> {
     /// Tensor arguments and scalar metadata are opaque. Each reduced RHS must
     /// retain the matched leaf's external ports without adding encoded indices
     /// or increasing their multiplicities. Zero retains the typed interface.
-    /// Sources and results with unresolved ports, user normalization hooks, or
-    /// unsupported tensor powers are rejected.
+    /// Sources with unresolved ports, user normalization hooks, or unsupported
+    /// tensor powers are rejected. Raw RHS expressions must also have normalized
+    /// intrinsic leaves and valid encoded interfaces.
     /// Conditions run for every candidate match; RHS callbacks run only on cache
     /// misses. Set the rule's `rhs_cache_size` to zero for side-effecting callbacks.
     /// As with the other certified algebra operations, `self` must already have
     /// a valid established interface and explicit-index multiplicities.
+    ///
+    /// # Errors
+    ///
+    /// Rejects unsupported source syntax, invalid source metadata, malformed rule bindings,
+    /// or a replacement that changes the matched interface or introduces index uses.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use std::slice;
+    /// use idenso::tensor::{SymbolicTensor, TensorRule};
+    /// use idenso::tensor::inference::TensorInferenceError;
+    /// use spenso::structure::abstract_index::AbstractIndex;
+    /// use spenso::structure::representation::{Euclidean, RepName};
+    /// use spenso::structure::slot::IsAbstractSlot;
+    /// use spenso::tensor_symbol;
+    /// use symbolica::atom::AtomCore;
+    /// use symbolica::function;
+    ///
+    /// let slot = Euclidean {}
+    ///     .new_rep(3)
+    ///     .to_lib()
+    ///     .slot::<AbstractIndex, _>(AbstractIndex::Normal(7));
+    /// let from = function!(tensor_symbol!("docs::rule_from"), slot.to_atom());
+    /// let to = function!(tensor_symbol!("docs::rule_to"), slot.to_atom());
+    /// let source = SymbolicTensor::infer(from.clone())?.finish_parts()?;
+    /// let rule = TensorRule::new(from.to_pattern(), to.clone().into(), None, 0)?;
+    /// let replaced = source.replace(&rule)?;
+    /// assert_eq!(replaced.expression(), &to);
+    /// assert!(source.replace_rules(slice::from_ref(&rule))?.same_value(&replaced));
+    /// # Ok::<(), TensorInferenceError>(())
+    /// ```
     pub fn replace(&self, rule: &TensorRule<'_>) -> Result<Self> {
         self.replace_rules(std::slice::from_ref(rule))
     }
@@ -163,6 +190,11 @@ impl SymbolicTensor<PartialStructure> {
     /// The first matching rule owns a leaf, including identity replacements;
     /// emitted RHS leaves are not matched again in the same stage. Conditions
     /// and bounded RHS caches remain local to each rule and this application.
+    /// See the [single-rule example](Self::replace), including ordered rule application.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same admission and per-binding errors as [`Self::replace`].
     pub fn replace_rules(&self, rules: &[TensorRule<'_>]) -> Result<Self> {
         if rules.is_empty() {
             return Ok(self.clone());
@@ -172,26 +204,29 @@ impl SymbolicTensor<PartialStructure> {
                 "tensor-safe replacement requires normalized intrinsic tensor leaves with explicit ports and supported powers",
             ));
         }
+        self.explicit_index_occurrences()?;
         let mut replacement = TensorReplacement {
             rules: rules.iter().map(RuleApplication::new).collect(),
             source_signatures: HashMap::new(),
-            proof: InterfaceInference::default(),
-            rewrite_preserved: true,
             slots: SlotMatcher::default(),
         };
         match replacement.apply(self.expression.as_view())? {
             AtomOrView::View(_) => Ok(self.clone()),
             expression => {
-                let result =
-                    Self::from_normalized_parts(expression.into_owned(), self.structure.clone());
-                // Per-binding checks and product coalescence established the
-                // result interface. Unsupported but valid powers do not inherit
-                // the stronger leaf-rewrite proof.
-                let _ = result.proofs.validated.set(true);
-                if replacement.rewrite_preserved {
-                    let _ = result.proofs.rewrite.set(true);
-                    let _ = result.proofs.algebra.set(true);
-                }
+                let mut result = Self::from_validated_parts(
+                    expression.into_owned(),
+                    self.structure.clone(),
+                    Arc::clone(
+                        self.proofs
+                            .occurrences
+                            .get()
+                            .expect("published index history"),
+                    ),
+                );
+                // Every binding preserves ports and bounds its explicit indices
+                // by the source. Retain that conservative metadata even when
+                // normalization cancels leaves or coalesces them into powers.
+                result.proofs = self.proofs.algebra_result();
                 Ok(result)
             }
         }
@@ -245,8 +280,6 @@ impl<'source, 'rule, 'rhs> RuleApplication<'source, 'rule, 'rhs> {
 struct TensorReplacement<'source, 'rule, 'rhs> {
     rules: Vec<RuleApplication<'source, 'rule, 'rhs>>,
     source_signatures: HashMap<AtomView<'source>, Signature>,
-    proof: InterfaceInference,
-    rewrite_preserved: bool,
     slots: SlotMatcher,
 }
 
@@ -274,27 +307,7 @@ impl<'source> TensorReplacement<'source, '_, '_> {
                 {
                     return Ok(value.into());
                 }
-                let result = Atom::mul_many(factors.iter().map(AtomOrView::as_view));
-                // Coalescing two distinct tensor leaves can create a power even
-                // though both source and local RHS passed the leaf proof. Check
-                // only this changed product when normalization exposes one.
-                let needs_power_check = match result.as_view() {
-                    AtomView::Pow(_) => !self
-                        .proof
-                        .algebra_preserves_leaf_interfaces(result.as_view()),
-                    AtomView::Mul(product) => product.iter().any(|factor| {
-                        matches!(factor, AtomView::Pow(_))
-                            && !self.proof.algebra_preserves_leaf_interfaces(factor)
-                    }),
-                    _ => false,
-                };
-                if needs_power_check {
-                    self.rewrite_preserved = false;
-                    let expected = InterfaceInference::replacement_interface(value)?;
-                    SymbolicTensor::validate_encoded_interface(&result, &expected)?;
-                    composition::validate_explicit_index_occurrences(&result)?;
-                }
-                Ok(result.into())
+                Ok(Atom::mul_many(factors.iter().map(AtomOrView::as_view)).into())
             }
             AtomView::Fun(function)
                 if self.rules.iter().any(|application| {
@@ -395,11 +408,6 @@ impl<'source> TensorReplacement<'source, '_, '_> {
                     "tensor replacement RHS requires normalized intrinsic leaves",
                 ));
             }
-            // Normalization can turn equal indexed factors into a power. The
-            // checked signature below validates that power's interface and its
-            // explicit-index bounds; it need not carry the stronger certificate
-            // required to rewrite its leaves again without checking.
-            self.rewrite_preserved &= self.proof.rewrites_preserve_leaf_interfaces(rhs.as_view());
             Arc::new(Signature::observe(rhs.as_view(), &mut self.slots)?)
         };
         if !source.accepts(&signature, rhs.is_zero()) {
@@ -422,26 +430,28 @@ impl<'source> TensorReplacement<'source, '_, '_> {
 
 #[cfg(test)]
 mod tests {
+
+    use super::super::composition::TensorCompositionError;
+    use super::super::inference::tests::{
+        INFERENCE_CALLS, OCCURRENCE_FUNCTION_VISITS, SCOPE_VALIDATIONS,
+    };
     use super::*;
-    use spenso::{
-        network::tags::SPENSO_TAG,
-        structure::{
-            abstract_index::AbstractIndex,
-            dimension::Dimension,
-            partial::{PartialIndex, PartialStructureExt},
-            representation::{ExtendibleReps, RepName},
-            slot::IsAbstractSlot,
-        },
-    };
+    use crate::test_support;
+    use spenso::network::tags::SPENSO_TAG;
+    use spenso::structure::abstract_index::AbstractIndex;
+    use spenso::structure::dimension::Dimension;
+    use spenso::structure::partial::{PartialIndex, PartialStructureExt};
+    use spenso::structure::representation::{ExtendibleReps, RepName};
+    use spenso::structure::slot::IsAbstractSlot;
+    use spenso::structure::{HasStructure, OrderedStructure, TensorStructure};
+    use spenso::tensor_symbol;
     use std::cell::Cell;
-    use std::sync::{
-        Arc, Mutex,
-        atomic::{AtomicUsize, Ordering},
-    };
-    use symbolica::{
-        atom::{AtomCore, FunctionBuilder},
-        id::ConditionResult,
-    };
+    use std::slice;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{Arc, Mutex};
+    use symbolica::atom::{AtomCore, FunctionBuilder};
+    use symbolica::id::ConditionResult;
+    use symbolica::symbol;
 
     thread_local! {
         pub(super) static SIGNATURE_OBSERVATIONS: Cell<usize> = const { Cell::new(0) };
@@ -459,8 +469,10 @@ mod tests {
     }
 
     fn typed(expression: Atom) -> SymbolicTensor<PartialStructure> {
-        let raw = SymbolicTensor::<PartialStructure>::infer(expression).unwrap();
-        SymbolicTensor::checked_parts(raw.expression, raw.structure).unwrap()
+        SymbolicTensor::<PartialStructure>::infer(expression)
+            .unwrap()
+            .finish_parts()
+            .unwrap()
     }
 
     #[test]
@@ -746,31 +758,84 @@ mod tests {
     }
 
     #[test]
-    fn tensor_replacement_checks_new_powers_and_rejects_source_powers_before_rhs() {
-        let f = spenso::tensor_symbol!("safe_replace_power_f");
-        let g = spenso::tensor_symbol!("safe_replace_power_g");
+    fn tensor_replacement_cancellation_retains_source_dummy_history_without_output_observation() {
+        test_support::test_initialize();
+        let f = tensor_symbol!("rule_cancellation_f");
+        let g = tensor_symbol!("rule_cancellation_g");
+        let index = AbstractIndex::Normal(81321);
+        let port = ExtendibleReps::MINKOWSKI
+            .new_rep(Dimension::Concrete(4))
+            .slot(index);
+        let a = port.to_atom();
+        let diagonal = leaf(f, &[a.clone(), a.clone()]);
+        let x = Atom::var(symbol!("rule_cancellation_x"));
+        let admitted = typed(&diagonal * &x);
+        // Publication must carry history before replacement can erase its payload.
+        let history = Arc::clone(admitted.proofs.occurrences.get().unwrap());
+        let source =
+            SymbolicTensor::from_validated_parts(admitted.expression, admitted.structure, history);
+        assert!(source.proofs.occurrences.get().is_some());
+        let collision = typed(leaf(g, &[a]));
+        let rule = TensorRule::new(diagonal.to_pattern(), x.pow(-1).into(), None, 0).unwrap();
+        assert!(rule.literal_rhs.is_some());
+        SCOPE_VALIDATIONS.with(|count| count.set(0));
+        OCCURRENCE_FUNCTION_VISITS.with(|count| count.set(0));
+        INFERENCE_CALLS.with(|count| count.set(0));
+        SIGNATURE_OBSERVATIONS.with(|count| count.set(0));
+
+        let result = source.replace(&rule).unwrap();
+        assert_eq!(result.expression, Atom::one());
+        assert_eq!(result.structure, source.structure);
+        // Only the matched leaf requires a signature; the normalized output
+        // inherits admission and shares the completed source metadata.
+        assert_eq!(SIGNATURE_OBSERVATIONS.with(Cell::get), 1);
+        assert_eq!(SCOPE_VALIDATIONS.with(Cell::get), 1);
+        assert_eq!(INFERENCE_CALLS.with(Cell::get), 0);
+        let visits = OCCURRENCE_FUNCTION_VISITS.with(Cell::get);
+        let cloned = result.clone();
+        for value in [&result, &cloned] {
+            assert!(Arc::ptr_eq(
+                source.proofs.occurrences.get().unwrap(),
+                value.proofs.occurrences.get().unwrap(),
+            ));
+            assert_eq!(value.explicit_index_occurrences().unwrap().count(port), 2);
+            assert!(matches!(
+                value.multiply(&collision),
+                Err(TensorCompositionError::InvalidExplicitMultiplicity { occurrences: 3, .. })
+            ));
+        }
+        assert_eq!(SCOPE_VALIDATIONS.with(Cell::get), 1);
+        assert_eq!(OCCURRENCE_FUNCTION_VISITS.with(Cell::get), visits);
+        assert_eq!(INFERENCE_CALLS.with(Cell::get), 0);
+    }
+
+    #[test]
+    fn tensor_replacement_carries_coalesced_powers_and_rejects_source_powers_before_rhs() {
+        let f = tensor_symbol!("safe_replace_power_f");
+        let g = tensor_symbol!("safe_replace_power_g");
         let a = slot(81301);
-        let fa = leaf(f, std::slice::from_ref(&a));
+        let fa = leaf(f, slice::from_ref(&a));
         let ga = leaf(g, &[a]);
         let source = typed(&fa * &ga);
-        let result = source
-            .replace(&TensorRule::new(fa.to_pattern(), ga.clone().into(), None, 0).unwrap())
-            .unwrap();
+        let rule = TensorRule::new(fa.to_pattern(), ga.clone().into(), None, 0).unwrap();
+        assert!(rule.literal_rhs.is_some());
+        SCOPE_VALIDATIONS.with(|count| count.set(0));
+        INFERENCE_CALLS.with(|count| count.set(0));
+        let result = source.replace(&rule).unwrap();
         assert_eq!(result.expression, ga.clone().pow(2));
         assert!(result.is_scalar());
-        let invalid = SymbolicTensor::<PartialStructure>::new(&fa * ga.pow(2), source.structure);
-        let calls = Arc::new(AtomicUsize::new(0));
-        let seen = calls.clone();
-        let rhs = ReplaceWith::Map(Box::new(move |_| {
-            seen.fetch_add(1, Ordering::Relaxed);
-            Atom::Zero
-        }));
+        assert!(Arc::ptr_eq(
+            source.proofs.occurrences.get().unwrap(),
+            result.proofs.occurrences.get().unwrap(),
+        ));
+        assert_eq!(SCOPE_VALIDATIONS.with(Cell::get), 1);
+        assert_eq!(INFERENCE_CALLS.with(Cell::get), 0);
+        assert!(result.proofs.rewrite.get().is_none());
+        assert!(result.proofs.algebra.get().is_none());
+        assert!(!result.rewrites_preserve_interface());
         assert!(
-            invalid
-                .replace(&TensorRule::new(fa.to_pattern(), rhs.clone(), None, 0).unwrap())
-                .is_err()
+            SymbolicTensor::<PartialStructure>::new(&fa * ga.pow(2), source.structure).is_err()
         );
-        assert_eq!(calls.load(Ordering::Relaxed), 0);
     }
 
     #[test]
@@ -1199,14 +1264,17 @@ mod tests {
             Atom::Zero
         }));
         for source in [
-            SymbolicTensor::checked_parts(Atom::one(), PartialStructure::from_logical_slots([]))
-                .unwrap(),
-            SymbolicTensor::checked_parts(
+            SymbolicTensor::from_produced_parts(
+                Atom::one(),
+                PartialStructure::from_logical_slots([]),
+            )
+            .unwrap(),
+            SymbolicTensor::from_produced_parts(
                 leaf(scalar, std::slice::from_ref(&fa)),
                 PartialStructure::from_logical_slots([]),
             )
             .unwrap(),
-            SymbolicTensor::new(Atom::Zero, source.structure.clone()),
+            SymbolicTensor::new(Atom::Zero, source.structure.clone()).unwrap(),
         ] {
             let result = source
                 .replace(&TensorRule::new(pattern.clone(), rhs.clone(), None, 0).unwrap())
@@ -1327,7 +1395,7 @@ mod tests {
         let f = spenso::tensor_symbol!("safe_replace_opaque_f");
         let fa = leaf(f, &[slot(81701)]);
         let scalar_head = symbolica::symbol!("safe_replace_opaque_scalar"; Scalar);
-        let source = SymbolicTensor::checked_parts(
+        let source = SymbolicTensor::from_produced_parts(
             leaf(scalar_head, std::slice::from_ref(&fa)),
             PartialStructure::from_logical_slots([]),
         )
@@ -1343,7 +1411,8 @@ mod tests {
         let unresolved = SymbolicTensor::new(
             leaf(f, &[m.to_symbolic([])]),
             PartialStructure::from_logical_slots([m.slot(PartialIndex::open(0))]),
-        );
+        )
+        .unwrap();
         assert!(
             unresolved
                 .replace(
@@ -1386,19 +1455,16 @@ mod tests {
 
     #[test]
     fn carried_rule_proof_survives_identity_and_is_cleared_by_mutable_structure() {
-        use super::super::inference::tests::SCOPE_VALIDATIONS;
-        use spenso::structure::{HasStructure, OrderedStructure, TensorStructure};
-
-        let f = spenso::tensor_symbol!("carried_rule_source");
-        let g = spenso::tensor_symbol!("carried_rule_result");
+        let f = tensor_symbol!("carried_rule_source");
+        let g = tensor_symbol!("carried_rule_result");
         let a = slot(81941);
         let inferred =
-            SymbolicTensor::<PartialStructure>::infer(leaf(f, std::slice::from_ref(&a))).unwrap();
+            SymbolicTensor::<PartialStructure>::infer(leaf(f, slice::from_ref(&a))).unwrap();
         assert_eq!(inferred.proofs.validated.get(), Some(&true));
         let (expression, structure) = inferred.into_parts();
         // Detached storage must establish its own facts even when its parts
         // came from a previously checked value.
-        let source = SymbolicTensor::from_normalized_parts(expression, structure);
+        let source = SymbolicTensor::from_declared_parts(expression, structure).unwrap();
         let rule = TensorRule::new(
             source.expression.to_pattern(),
             leaf(g, &[a]).into(),
@@ -1409,7 +1475,7 @@ mod tests {
         SCOPE_VALIDATIONS.with(|count| count.set(0));
         assert!(source.rewrites_preserve_interface());
         let established = SCOPE_VALIDATIONS.with(Cell::get);
-        assert!(established > 0);
+        assert_eq!(established, 0);
         assert!(source.rewrites_preserve_interface());
         let same = source
             .with_checked_expression(source.expression.clone())
@@ -1418,7 +1484,14 @@ mod tests {
         assert_eq!(SCOPE_VALIDATIONS.with(Cell::get), established);
 
         let changed = source.replace(&rule).unwrap();
-        assert_eq!(changed.proofs.rewrite.get(), Some(&true));
+        assert_eq!(changed.proofs.validated.get(), Some(&true));
+        assert!(changed.proofs.rewrite.get().is_none());
+        assert!(changed.proofs.algebra.get().is_none());
+        assert!(changed.proofs.intrinsic.get().is_none());
+        assert_eq!(
+            changed.proofs.normalized_product.get(),
+            source.proofs.normalized_product.get()
+        );
         let after_binding_checks = SCOPE_VALIDATIONS.with(Cell::get);
         assert!(changed.rewrites_preserve_interface());
         assert_eq!(SCOPE_VALIDATIONS.with(Cell::get), after_binding_checks);
@@ -1440,18 +1513,21 @@ mod tests {
         assert!(ordered.proofs.algebra.get().is_none());
         *ordered.mut_structure() = OrderedStructure::new(Vec::new()).into_canonical();
         let (expression, structure) = ordered.into_parts();
-        let changed = SymbolicTensor::from_normalized_parts(
-            expression,
-            PartialStructure::from_logical_slots(structure.external_structure()),
+        assert!(
+            SymbolicTensor::from_declared_parts(
+                expression,
+                PartialStructure::from_logical_slots(structure.external_structure()),
+            )
+            .is_err()
         );
-        assert!(!changed.rewrites_preserve_interface());
-        assert!(changed.replace(&rule).is_err());
 
         let (expression, _) = source.into_parts();
-        let detached = SymbolicTensor::from_normalized_parts(
-            expression,
-            PartialStructure::from_logical_slots([]),
+        assert!(
+            SymbolicTensor::from_declared_parts(
+                expression,
+                PartialStructure::from_logical_slots([]),
+            )
+            .is_err()
         );
-        assert!(!detached.rewrites_preserve_interface());
     }
 }

@@ -13,6 +13,20 @@ from symbolica.community import hepkit as hep
 from symbolica.community import tensor
 
 
+def external_metrics_snapshot(view):
+    # EXTERNAL METRICS FIXTURE in points, not browser measurements.
+    request = view.measurement_request()
+    return view.measured(
+        measurements={
+            "id": request["id"],
+            "metrics": [
+                {"id": label["id"], "width": 24.0, "height": 12.0, "baseline": 9.0}
+                for label in request["labels"]
+            ],
+        }
+    )
+
+
 class MathText(HTMLParser):
     def __init__(self, source):
         super().__init__()
@@ -92,7 +106,8 @@ def main(directory):
         "quadratic": diagram.integrate_energy(method="cff", numerator=numerator),
         "ltd": diagram.integrate_energy(method="ltd"),
     }.items():
-        source = result._repr_html_()
+        view = result.render()
+        source = external_metrics_snapshot(view).to_html()
         kind = "ltd" if name == "ltd" else "cff"
         data = json.loads(
             re.search(
@@ -116,7 +131,7 @@ def main(directory):
         for energy in result.on_shell_energies.values():
             check_math(energy._repr_html_())
         check_math(result.to_expression()._repr_html_())
-        (directory / f"{name}.html").write_text(source)
+        (directory / f"{name}.html").write_text(source, encoding="utf-8")
     print(
         "Canonical OSE and indexed momenta: identity, powers, native/tensor math and CFF/LTD labels passed"
     )

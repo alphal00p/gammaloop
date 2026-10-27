@@ -50,7 +50,7 @@
   # Cargo path patches are dependencies, not workspace members. Preserve their
   # manifests and implementation in every filtered dependency/build context.
   localCargoPatchDirs = lib.filter (name: builtins.pathExists (workspaceRoot + "/vendor/${name}"))
-    ["clarabel" "dot-parser" "typst-library" "typst-svg"];
+    ["clarabel" "dot-parser"];
   localCargoPatchSources = lib.fileset.unions (
     map (name: workspaceRoot + "/vendor/${name}") localCargoPatchDirs
   );
@@ -120,12 +120,12 @@
     (workspaceRoot + "/crates/linnest/typst/typst.toml")
     (workspaceRoot + "/crates/linnet-py/README.md")
     (workspaceRoot + "/crates/linnet-py/typst/subgraph.css")
-    # Reviewed 2026-09-14: Spynso's embedded Typst renderer is also a build input;
-    # adding its source directory does not change the documentation cache boundaries.
+    # Tensor export sources, browser runtime, and fonts are build inputs.
     (workspaceRoot + "/crates/spynso3/typst")
-    (workspaceRoot + "/crates/spynso3/data.json")
-    (workspaceRoot + "/crates/typst-renderer/fonts")
-    (workspaceRoot + "/crates/typst-renderer/data.json")
+    (workspaceRoot + "/crates/linnet-render-py/data.json")
+    (workspaceRoot + "/crates/linnet-render-py/fonts")
+    (workspaceRoot + "/crates/linnet-render-py/src/view.py")
+    (workspaceRoot + "/crates/linnet-render-py/src/view.js")
     (workspaceRoot + "/crates/vakint/form_src")
     (workspaceRoot + "/crates/vakint/templates")
   ];
@@ -485,9 +485,13 @@
       "crates/linnet-py/README.md"
       "crates/linnet-py/typst/subgraph.css"
     ];
-    "linnet-render-py" = [ ];
-    spynso3 = ["crates/spynso3/typst" "crates/spynso3/data.json"];
-    "typst-renderer" = ["crates/typst-renderer/fonts" "crates/typst-renderer/data.json"];
+    spynso3 = ["crates/spynso3/typst"];
+    "linnet-render-py" = [
+      "crates/linnet-render-py/fonts"
+      "crates/linnet-render-py/data.json"
+      "crates/linnet-render-py/src/view.py"
+      "crates/linnet-render-py/src/view.js"
+    ];
     vakint = [
       "crates/vakint/form_src"
       "crates/vakint/templates"
@@ -495,11 +499,22 @@
   };
 
   workspacePackageExtraSourceRoots.compileTimeTest = {
+    spynso3 = [
+      "crates/spynso3/tests/installed_symbolic_preview.py"
+      "crates/spynso3/tests/installed_tensor_paging.py"
+    ];
     idenso = [
       "crates/idenso/tests/fixtures/aa_aa_2l_gl16_odd_trace_term.sym"
       "crates/idenso/tests/fixtures/d11_contracted_temporal_chain.sym"
     ];
-    "linnet-py" = ["crates/linnet-py/tests/test_svg_interaction.py"];
+    "linnet-py" = [
+      "crates/linnet-py/tests/test_svg_interaction.py"
+      "crates/linnet-py/tests/rendering_metrics.py"
+    ];
+    "linnet-render-py" = [
+      "crates/linnet-render-py/tests/mathml_view_support.py"
+      "crates/linnet-render-py/tests/mathml_view_collections.py"
+    ];
     linnet = ["crates/linnet/src/half_edge/layout/impred/fixtures"];
     linnest = [
       "crates/linnest/layout/native/fixtures"
@@ -522,10 +537,13 @@
       "crates/feynkit-py/python/symbolica/community/hepkit/__init__.py"
       "crates/feynkit-py/tests/fixtures"
       "crates/feynkit-py/tests/cff_display.py"
+      "crates/feynkit-py/tests/browser_display_fixtures.py"
       "crates/feynkit-py/tests/installed_wavefunctions.py"
       "crates/feynkit-py/tests/installed_offline_rendering.py"
+      "crates/feynkit-py/tests/native_forwarding.py"
       "crates/spynso3/tests/installed_tensor_network_display.py"
       "crates/linnet-py/tests/test_community_rendering.py"
+      "crates/linnet-py/tests/rendering_metrics.py"
       "crates/linnet-py/python/symbolica/community/graph/__init__.py"
       "crates/linnet-render-py/python/symbolica/community/graph/__init__.py"
     ];
@@ -569,6 +587,10 @@
   };
 
   workspacePackageExtraSourceRoots.runtimeTest = {
+    spynso3 = ["crates/spynso3/tests/browser_math_font.py" "crates/spynso3/tests/browser_tensor_explorer.py"];
+    "linnet-render-py" = ["crates/linnet-render-py/tests"];
+    "feynkit-py" = ["crates/feynkit-py/tests"];
+
     "alphal00p-docs-builder" = [
       "assets/embedded/drawing/templates"
       "assets/gammalooplogo-dark.svg"
@@ -587,8 +609,8 @@
       "crates/spenso-macros/CHANGELOG.typ"
       "crates/spenso/CHANGELOG.typ"
       "crates/spynso3/CHANGELOG.typ"
-      "crates/spynso3/typst/STIX-Two-OFL.txt"
-      "crates/spynso3/typst/STIXTwoMath-Regular.woff2"
+      "crates/linnet-render-py/fonts/STIX-Two-OFL.txt"
+      "crates/linnet-render-py/fonts/STIXTwoMath-Regular.woff2"
       "docs"
       "examples/cli/aa_aa/2L/graphs"
       "examples/cli/gg_hhh/3L/3L_graph.dot"
@@ -667,45 +689,33 @@
   # Supply the host-owned assets expected by the native renderers. Keep this
   # runtime closure separate from compiled producers and notebook resource wheels.
   symbolicaRenderData = let
-    locked = lib.findFirst (package: package.name == "typst-assets")
-      (throw "Cargo.lock must contain typst-assets")
-      (builtins.fromTOML (builtins.readFile (workspaceRoot + "/Cargo.lock"))).package;
-    fonts = pkgs.fetchurl {
-      url = "https://static.crates.io/crates/typst-assets/typst-assets-${locked.version}.crate";
-      sha256 = locked.checksum;
-    };
     assets = lib.fileset.toSource {
       root = workspaceRoot;
       fileset = lib.fileset.unions
-        (workspacePackageExtraFilesetsForSourcePackages "production" ["typst-renderer" "spynso3"]);
+        (workspacePackageExtraFilesetsForSourcePackages "production" ["linnet-render-py"]);
     };
   in pkgs.runCommand "gammaloop-render-data" {
     nativeBuildInputs = [pkgs.python313];
   } ''
-    tar -xzf ${fonts}
     python3 - <<'PY'
     import json, os, shutil
     from pathlib import Path
     destination = Path(os.environ["out"])
-    provider = Path("typst-assets-${locked.version}")
-    for consumer in ("typst-renderer", "spynso3"):
+    for consumer in ("linnet-render-py",):
         root = Path("${assets}") / "crates" / consumer
         for asset in json.loads((root / "data.json").read_text())["assets"]:
             name, path = Path(asset["name"]), Path(asset["path"])
             assert not name.is_absolute() and ".." not in name.parts
             assert not path.is_absolute() and ".." not in path.parts
-            package = asset.get("package")
-            assert package in (None, "typst-assets")
-            source = (provider if package else root) / path
+            assert asset.get("package") is None
+            source = root / path
             output = destination / name
             output.parent.mkdir(parents=True, exist_ok=True)
             if output.exists():
                 assert output.read_bytes() == source.read_bytes(), name
             else:
                 shutil.copyfile(source, output)
-    shutil.copyfile(Path("${assets}") / "crates/typst-renderer/fonts/NOTICE", destination / "NOTICE")
-    for license in provider.glob("LICENSE*"):
-        shutil.copyfile(license, destination / license.name)
+    shutil.copyfile(Path("${assets}") / "crates/linnet-render-py/fonts/STIX-Two-OFL.txt", destination / "STIX-Two-OFL.txt")
     PY
   '';
 
@@ -1380,6 +1390,7 @@
   nextestPython = pkgs.python313.withPackages (pythonPackages: [
     pythonPackages.numpy
   ]);
+  browserPython = pkgs.python313.withPackages (p: [p.numpy p.playwright p.anywidget p.marimo p.typst]);
   nextestUfoPython = pkgs.python313.withPackages (pythonPackages: let
     # UFO tests consume released wheels; notebook development pins the separate
     # combined Community host in the root Python environment.
@@ -2719,6 +2730,9 @@
     // lib.optionalAttrs (target.name == "clinnet") {
       # The Typst behaviour tests fail rather than skip without Typst 0.15.
       runtimeTools = [docsTypst];
+    }
+    // lib.optionalAttrs (target.runtimeBrowser or false) {
+      runtimeTools = [browserPython pkgs.chromium];
     })
   ci.groups;
 
@@ -2937,6 +2951,16 @@
       SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
     } // lib.optionalAttrs (target.runtimeRenderData or false) {
       SYMBOLICA_DATA_DIRECTORY = symbolicaRenderData;
+    } // lib.optionalAttrs (target.runtimeBrowser or false) {
+      PYTHONPATH = "${browserPython}/${pythonSitePackages}";
+      LINNET_TEST_CHROMIUM = "${pkgs.chromium}/bin/chromium";
+      MATHML_CHROMIUM_EXECUTABLE = "${pkgs.chromium}/bin/chromium";
+      MATHML_CHROMIUM_VERSION = pkgs.chromium.version;
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1";
+      LINNET_MATHML_BROWSER_ENGINES = "chromium";
+      # Chromium still needs fallback fonts for empty MathML probes and static
+      # snapshots while the widget's bundled math font is unavailable.
+      FONTCONFIG_FILE = pkgs.makeFontsConf {fontDirectories = [pkgs.dejavu_fonts];};
     }) (''
       if [ -z "''${SYMBOLICA_LICENSE:-}" ]; then
         echo "Missing SYMBOLICA_LICENSE environment variable" >&2
@@ -2951,6 +2975,13 @@
       # targets that do not consume any files from them.
       mkdir -p tests/resources examples/cli
       ${workspaceMissingCargoTargetsScript}
+    '' + lib.optionalString (target.runtimeBrowser or false) ''
+      export XDG_CACHE_HOME="$TMPDIR/browser-cache"
+      export XDG_CONFIG_HOME="$TMPDIR/browser-config"
+      mkdir -p "$XDG_CACHE_HOME" "$XDG_CONFIG_HOME"
+      export SPENSO_MATHML_BROWSER_FIXTURES="$PWD/tensor-browser.json"
+      export CFF_DISPLAY_TEST_OUTPUT="$PWD/cff-browser"
+      export FEYNKIT_BROWSER_FIXTURES="$PWD/feynkit-browser"
     '' + lib.optionalString (target.name == "docs") ''
       # Tests such as trybuild invoke Cargo again at runtime. Point
       # those nested invocations at the same vendored dependency
@@ -3020,6 +3051,7 @@
             --workspace-remap . \
             --profile ${lib.escapeShellArg profile} \
             ${lib.optionalString ((target.runFilter or null) != null) "-E ${lib.escapeShellArg target.runFilter}"} \
+            ${lib.optionalString (target.runtimeBrowser or false) "--run-ignored all"} \
             --no-fail-fast --final-status-level fail --no-tests=pass \
             ${lib.optionalString (partition != null) "--partition ${lib.escapeShellArg partition}"}
           package_status=$?
@@ -3032,6 +3064,22 @@
           fi
         '')
         target.packages}
+    '' + lib.optionalString (target.runtimeBrowser or false) ''
+      if [ "$status" -eq 0 ]; then
+        python3 crates/spynso3/tests/browser_math_font.py \
+          --fixtures tensor-browser.json --chromium "$LINNET_TEST_CHROMIUM" \
+          --font "$SYMBOLICA_DATA_DIRECTORY/render/fonts/STIXTwoMath-Regular.woff2" || status=$?
+        python3 crates/spynso3/tests/browser_tensor_explorer.py \
+          --fixtures tensor-browser.json --chromium "$LINNET_TEST_CHROMIUM" || status=$?
+        python3 crates/feynkit-py/tests/cff_display_browser.py cff-browser "$LINNET_TEST_CHROMIUM" chromium || status=$?
+        python3 crates/feynkit-py/tests/ltd_display_browser.py feynkit-browser/ltd "$LINNET_TEST_CHROMIUM" chromium || status=$?
+        python3 crates/feynkit-py/tests/energy_scoped_display_browser.py feynkit-browser/scoped "$LINNET_TEST_CHROMIUM" chromium || status=$?
+        python3 crates/feynkit-py/tests/generalized_energy_display_browser.py feynkit-browser/generalized feynkit-browser/ltd "$LINNET_TEST_CHROMIUM" chromium || status=$?
+        python3 ${./browser-check.py} \
+          ${nextestBinarySetForTarget target}/${nextestArchiveNameFor target "linnet-render-py"} || status=$?
+        cp -R .local/graph-mathml-labels/browser "$out/browser"
+      fi
+    '' + ''
       exit "$status"
     '');
 
