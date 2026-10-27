@@ -2557,7 +2557,7 @@ impl VakintTerm {
         source_id: usize,
         mut observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
     ) -> Result<IntegralEvaluation, VakintError> {
-        MonitorContext::native_phase(observation.as_deref_mut(), "topology_matching");
+        MonitorContext::native_phase(observation.as_deref_mut(), "topology_matching", None);
         self.stage_numerical_inputs(vakint, settings)?;
         let mut integral_specs = if let Some(replacement_rules) =
             vakint.match_topologies_for_settings(settings, self.integral.as_view())?
@@ -2582,7 +2582,7 @@ impl VakintTerm {
         let scalar_five_loop =
             matches!(integral_specs.canonical_topology, Topology::FiveLoop(_)) && scalar_rustred;
         if scalar_five_loop {
-            MonitorContext::native_phase(observation.as_deref_mut(), "routing_verification");
+            MonitorContext::native_phase(observation.as_deref_mut(), "routing_verification", None);
             integral_specs = vakint
                 .match_rustred_input(settings, self.integral.as_view(), self.numerator.as_view())?
                 .unwrap_or(integral_specs);
@@ -4414,7 +4414,7 @@ impl VakintExpression {
         mut observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
     ) -> Result<(), VakintError> {
         settings.with_resource_budget(|| {
-            MonitorContext::native_phase(observation.as_deref_mut(), "integral_reduction");
+            MonitorContext::native_phase(observation.as_deref_mut(), "integral_reduction", None);
             let mut complete = Vec::new();
             let mut numerical = Atom::Zero;
             let mut numerical_vectors = std::collections::BTreeSet::new();
@@ -4454,6 +4454,7 @@ impl VakintExpression {
                         RustRedMasterMode::Symbolic => "symbolic_master_substitution",
                         RustRedMasterMode::Numerical => "numerical_master_substitution",
                     },
+                    Some(raw.as_view()),
                 );
                 let numerator = vakint.finalize_rustred(
                     rustred_evaluation::combine_exact(raw),
@@ -4473,7 +4474,11 @@ impl VakintExpression {
                 }
             }
             if !numerical.is_zero() {
-                MonitorContext::native_phase(observation, "numerical_materialization");
+                MonitorContext::native_phase(
+                    observation,
+                    "numerical_materialization",
+                    Some(numerical.as_view()),
+                );
                 complete.push(VakintTerm {
                     integral: Atom::one(),
                     numerator: vakint.resolve_rustred_numerical(
@@ -7090,20 +7095,26 @@ Evaluated (n_loops=1, mu_r=1) :
         mut observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
     ) -> Result<Atom, VakintError> {
         settings.with_resource_budget(|| {
-            MonitorContext::native_phase(observation.as_deref_mut(), "input_preparation");
+            MonitorContext::native_phase(
+                observation.as_deref_mut(),
+                "input_preparation",
+                Some(input),
+            );
             self.validate_settings(settings)?;
             let mut vakint_expr = VakintExpression::prepare_evaluation(input, self, settings)?;
-            MonitorContext::native_phase(observation.as_deref_mut(), "canonicalization");
+            MonitorContext::native_phase(observation.as_deref_mut(), "canonicalization", None);
             vakint_expr.canonicalize_with(settings, false, |input| {
                 self.match_topologies_for_settings(settings, input)
             })?;
-            MonitorContext::native_phase(observation.as_deref_mut(), "tensor_prepass");
+            MonitorContext::native_phase(observation.as_deref_mut(), "tensor_prepass", None);
             for term in &mut vakint_expr.0 {
                 resources::checkpoint()?;
                 term.tensor_reduce_for_evaluation(self, settings)?;
             }
-            vakint_expr.evaluate_integral_observed(self, settings, observation)?;
-            Ok(vakint_expr.into())
+            vakint_expr.evaluate_integral_observed(self, settings, observation.as_deref_mut())?;
+            let result: Atom = vakint_expr.into();
+            MonitorContext::native_phase(observation, "evaluation_output", Some(result.as_view()));
+            Ok(result)
         })
     }
 

@@ -638,13 +638,13 @@ impl Vakint {
         mut observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
     ) -> Result<RustRedSymbolicEvaluation, VakintError> {
         settings.with_resource_budget(|| {
-            MonitorContext::native_phase(observation.as_deref_mut(), "saved_application_preparation");
+            MonitorContext::native_phase(observation.as_deref_mut(), "saved_application_preparation", Some(input));
             self.validate_settings(settings)?;
             let application = self.saved_application(settings)?;
             let mut expression = VakintExpression::try_from(input)?;
             log::debug!(target: "vakint::five_loop_match", "phase=symbolic_input input={input}");
             let canonical_started = std::time::Instant::now();
-            MonitorContext::native_phase(observation.as_deref_mut(), "canonicalization");
+            MonitorContext::native_phase(observation.as_deref_mut(), "canonicalization", None);
             expression.canonicalize(settings, &self.topologies, false)?;
             log::debug!(target: "vakint::saved_application", "phase=frontend_canonicalization elapsed_seconds={:.6}", canonical_started.elapsed().as_secs_f64());
             log::debug!(target: "vakint::five_loop_match", "phase=symbolic_canonical input={expression}");
@@ -654,17 +654,21 @@ impl Vakint {
             let mut tensor_settings = settings.clone();
             tensor_settings.use_dot_product_notation = true;
             let tensor_started = std::time::Instant::now();
-            MonitorContext::native_phase(observation.as_deref_mut(), "tensor_prepass");
+            MonitorContext::native_phase(observation.as_deref_mut(), "tensor_prepass", None);
             expression.tensor_reduce(self, &tensor_settings)?;
             log::debug!(target: "vakint::saved_application", "phase=frontend_tensor_prepass elapsed_seconds={:.6}", tensor_started.elapsed().as_secs_f64());
             log::debug!(target: "vakint::five_loop_match", "phase=symbolic_tensor_reduced input={expression}");
             let mut value = Atom::Zero;
             let mut conditions = BTreeSet::new();
             let mut families = BTreeMap::new();
-            for mut term in VakintExpression::split_integrals(Atom::from(expression).as_view())? {
+            let expression = Atom::from(expression);
+            MonitorContext::native_phase(observation.as_deref_mut(), "scalar_input", Some(expression.as_view()));
+            let terms = VakintExpression::split_integrals(expression.as_view())?;
+            drop(expression);
+            for mut term in terms {
                 symbolica::utils::resources::checkpoint()?;
                 let matching_started = std::time::Instant::now();
-                MonitorContext::native_phase(observation.as_deref_mut(), "routing_verification");
+                MonitorContext::native_phase(observation.as_deref_mut(), "routing_verification", None);
                 let mut matched = self
                     .match_rustred_input(settings, term.integral.as_view(), term.numerator.as_view())?
                     .ok_or_else(|| failure("input has no registered topology match"))?;
@@ -678,13 +682,14 @@ impl Vakint {
                 conditions.extend(result.nonzero_conditions);
                 families.extend(result.families);
             }
-            MonitorContext::native_phase(observation, "retained_master_combination");
+            MonitorContext::native_phase(observation.as_deref_mut(), "retained_master_combination", Some(value.as_view()));
             let value = self.finalize_rustred(
                 super::combine_exact(value),
                 settings,
                 5,
                 super::RustRedMasterMode::Retain,
             )?;
+            MonitorContext::native_phase(observation, "retained_output", Some(value.as_view()));
             Ok(RustRedSymbolicEvaluation {
                 value,
                 nonzero_conditions: conditions.into_iter().collect(),
@@ -862,7 +867,7 @@ impl SavedApplication {
         matched: &ReplacementRules,
         mut observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
     ) -> Result<RustRedSymbolicEvaluation, VakintError> {
-        MonitorContext::native_phase(observation.as_deref_mut(), "scalar_lowering");
+        MonitorContext::native_phase(observation.as_deref_mut(), "scalar_lowering", None);
         let lowering_started = std::time::Instant::now();
         let descriptor = select(&matched.canonical_topology)?;
         let input = MatchedScalarInput::prepare(
@@ -963,10 +968,14 @@ impl SavedApplication {
         let mut families = BTreeMap::new();
         for ((spectator, exponent), terms) in batches {
             let application_started = std::time::Instant::now();
-            MonitorContext::native_phase(observation.as_deref_mut(), "saved_rule_application");
+            MonitorContext::native_phase(
+                observation.as_deref_mut(),
+                "saved_rule_application",
+                None,
+            );
             let reduced = self.reduce_saved(&mut application, terms, observation.as_deref_mut())?;
             log::debug!(target: "vakint::saved_application", "phase=saved_rule_application elapsed_seconds={:.6}", application_started.elapsed().as_secs_f64());
-            MonitorContext::native_phase(observation.as_deref_mut(), "terminal_geometry");
+            MonitorContext::native_phase(observation.as_deref_mut(), "terminal_geometry", None);
             let products_started = std::time::Instant::now();
             let mut contribution = Atom::Zero;
             let mut products = Vec::new();
@@ -1050,6 +1059,7 @@ impl SavedApplication {
             MonitorContext::native_phase(
                 observation.as_deref_mut(),
                 "lower_factor_normalization_unobserved",
+                None,
             );
             let normalized = self
                 .product_reducer
@@ -1131,6 +1141,11 @@ impl SavedApplication {
             // requested presentation only to surviving external spectators.
             Vakint::convert_from_dot_notation(value.as_view())
         };
+        MonitorContext::native_phase(
+            observation,
+            "normalized_retained_output",
+            Some(value.as_view()),
+        );
         Ok(RustRedSymbolicEvaluation {
             value,
             nonzero_conditions: conditions.into_iter().collect(),

@@ -208,7 +208,8 @@ impl ActiveViewer {
                     .push_str(&format!(" · snapshot published {age:.1}s ago"));
             }
         }
-        self.terminal.draw_view(&view, self.no_color)?;
+        let maximum_scroll = self.terminal.draw_view(&view, self.no_color)?;
+        self.scroll = self.scroll.min(maximum_scroll);
         Ok(true)
     }
 }

@@ -291,6 +291,7 @@ impl Vakint {
                         }
                         _ => "cache_preparation_incomplete",
                     },
+                    None,
                 );
             }
             result
@@ -306,7 +307,7 @@ impl Vakint {
         observer: impl FnMut(&CachePreparationReport) -> Result<(), rustred_app::AppError>,
         mut observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
     ) -> Result<CachePreparationReport, VakintError> {
-        MonitorContext::native_phase(observation.as_deref_mut(), "cache_preparation_setup");
+        MonitorContext::native_phase(observation.as_deref_mut(), "cache_preparation_setup", None);
         resource_checkpoint()?;
         if loop_count == 5 {
             return self.prepare_five_loop_cache(
@@ -317,7 +318,7 @@ impl Vakint {
                 observation,
             );
         }
-        MonitorContext::native_phase(observation, "lower_loop_cache_preparation_unobserved");
+        MonitorContext::native_phase(observation, "lower_loop_cache_preparation_unobserved", None);
         if options.checkpoint_path.is_some() {
             return Err(operation(rustred_app::AppError::new(
                 rustred_app::AppErrorKind::Input,

@@ -168,6 +168,28 @@ and native observer, reporting phases, counters, bounded frontier samples, and i
 process and system memory observations. Any ETA remains a diagnostic estimate. Detaching the
 terminal display does not cancel the calculation.
 
+Symbolic sizes follow the objects actually stored by each owner. The caller reports the
+encoded byte length and stored summands of its existing Atom at phase boundaries, without
+formatting or constructing another expression. Native reports unstarted coalesced roots,
+deferred rule maps and their child-integral occurrences, and collected output keys. Deferred
+maps include the current map while its coefficients are being combined. These partitions
+can overlap; they are not summed into a distinct-integral count or the size of an expanded
+global expression, which the depth-first reducer never materializes. Native coefficient
+byte censuses remain clone-owned bounds, distinct from Atom bytes and process RSS. Each
+sample retains its scope and age; caller forwarding and fresh OS memory samples do not
+make old native observations current. Metadata overflow gives an unknown count and never
+introduces a reduction limit.
+
+The terminal and supervisor snapshot viewer clamp scrolling to each panel's actual
+wrapped content. Short panels remain visible while longer panels scroll; resizing or
+shrinking observations recompute the navigation extent. Panel titles show their
+current offset and final offset. This is display state only and cannot limit reduction.
+OS memory is displayed in explicitly labeled IEC units; exact byte counts remain
+available in the snapshot's `resources` object. Display rounding never changes a
+reported guard threshold or its separately authenticated coverage. Restrained metric
+accents distinguish current integrals, work counts, time and memory; unknown values
+remain labeled and terminal color suppression leaves their content unchanged.
+
 Numerical evaluation is a later boundary. Parametric backend output remains a Symbolica
 expression. `precision` prepares native numerical sources and contracts external momenta before
 delegating to Symbolica/Numerica's tracked evaluator. Each `NumericalCoefficient` owns its complex

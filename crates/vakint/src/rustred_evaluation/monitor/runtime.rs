@@ -19,10 +19,11 @@ use rustred::solver::{
     CandidateRoutedObserverControl as Control, CandidateRoutedObserverStatus,
     CandidateRoutedWorkRef,
 };
+use symbolica::atom::AtomView;
 
 use super::{
-    DisplaySnapshot, FrontierCount, LatestJsonFile, MonitorState, MonitorStatus,
-    RustRedMonitorDisplay, RustRedMonitorOptions, SnapshotWriter,
+    CallerExpressionSample, DisplaySnapshot, FrontierCount, LatestJsonFile, MonitorState,
+    MonitorStatus, RustRedMonitorDisplay, RustRedMonitorOptions, SnapshotWriter, StoredStateSample,
 };
 use crate::VakintError;
 
@@ -84,7 +85,8 @@ impl MonitorHandle {
             pending.caller_phase = phase.to_owned();
         }
         let initial = MonitorContext::is_initial_snapshot(envelope);
-        let forced = initial
+        let admission_start = MonitorContext::is_saved_admission_start(envelope);
+        let forced = initial || admission_start
             // A fast native batch still has one coherent final quantitative
             // sample, even when its regular sampling interval has not elapsed.
             || (matches!(envelope.event, Event::CoreFinished)
@@ -95,6 +97,7 @@ impl MonitorHandle {
                 Event::RequestFinished | Event::CycleDetected
             );
         pending.force_publish |= initial
+            || admission_start
             || matches!(envelope.event, Event::CycleDetected)
             || (envelope.activity == Activity::Caller && envelope.request_finished);
         let due = forced
@@ -199,7 +202,7 @@ impl MonitorContext {
                 }
             };
             let mut observer = Observer::new(observation, &mut callback);
-            Self::native_phase(Some(&mut observer), "request_start");
+            Self::native_phase(Some(&mut observer), "request_start", None);
             let result = operation(Some(&mut observer));
             let phase = phase_handle
                 .as_ref()
@@ -216,6 +219,7 @@ impl MonitorContext {
             };
             final_event.snapshot = observer.last_snapshot();
             final_event.metrics = observer.last_metrics();
+            final_event.stored_state = observer.last_stored_state();
             observer.emit(final_event);
             (result, observer.status())
         };
@@ -251,6 +255,16 @@ impl MonitorContext {
             && envelope
                 .snapshot
                 .is_some_and(|snapshot| snapshot.sequence == 1)
+    }
+
+    fn is_saved_admission_start(envelope: &Envelope<'_>) -> bool {
+        // PreparedSavedApplication clears the observer's native summary before
+        // this boundary. Preflight can fail without producing a new core sample.
+        envelope.activity == Activity::Admission
+            && envelope.event == Event::ActivityStarted
+            && envelope.caller_phase == Some("entry_admission")
+            && envelope.snapshot.is_none()
+            && envelope.stored_state.is_none()
     }
 
     #[cfg(feature = "experimental-rustred")]
@@ -336,11 +350,24 @@ impl MonitorContext {
         })
     }
 
-    pub(crate) fn native_phase(observer: Option<&mut Observer<'_>>, phase: &str) {
-        if let Some(observer) = observer {
+    pub(crate) fn native_phase(
+        observer: Option<&mut Observer<'_>>,
+        phase: &str,
+        expression: Option<AtomView<'_>>,
+    ) {
+        if let Some(observer) = observer
+            && observer.status() == CandidateRoutedObserverStatus::Active
+        {
             let mut event = Envelope::new(Event::CallerProgress, "");
             event.activity = Activity::Caller;
             event.caller_phase = Some(phase);
+            if let Some(expression) = expression {
+                // Read existing encoded headers, never format or construct an
+                // expression for telemetry. These are caller Atom units, not
+                // Native coefficient clone bounds or distinct integral keys.
+                event.complexity.terms = Some(expression.nterms());
+                event.complexity.encoded_expression_bytes = Some(expression.get_byte_size());
+            }
             observer.emit(event);
         }
     }
@@ -520,7 +547,7 @@ fn worker(shared: Arc<Shared>, receiver: mpsc::Receiver<()>, options: RustRedMon
                 }
             }
             if let Some(ui) = terminal.as_mut()
-                && let Err(error) = ui.draw(&state, shared.started.elapsed(), no_color)
+                && let Err(error) = ui.draw(&mut state, shared.started.elapsed(), no_color)
             {
                 shared.fault(error.to_string());
                 break;
@@ -648,11 +675,50 @@ fn update_display(pending: &mut Pending, envelope: &Envelope<'_>, detail: bool, 
     } else {
         MonitorStatus::Running
     };
-    if initial {
+    let admission_start = MonitorContext::is_saved_admission_start(envelope);
+    if initial || admission_start {
         display.native_epoch = display.native_epoch.saturating_add(1);
         display.quantitative_sample_at = None;
         display.quantitative_sample_sequence = 0;
         display.pending_unique = None;
+        display.stored_state = None;
+    }
+    if admission_start {
+        display.native_observed_at = None;
+        display.unique_entered = 0;
+        display.completed_unique = None;
+        display.completion_attempts = None;
+        display.active_nodes = 0;
+        display.pending_frames = 0;
+        display.completed_roots = None;
+        display.total_roots = None;
+        display.root_output_terms = None;
+        display.cache.clear();
+        display.complexity.clear();
+        display.path.clear();
+    }
+    if envelope.activity == Activity::Caller
+        && let Some(phase) = envelope.caller_phase
+        && let Some(encoded_bytes) = envelope.complexity.encoded_expression_bytes
+    {
+        display.caller_expression = Some(CallerExpressionSample {
+            encoded_bytes,
+            stored_summands: envelope.complexity.terms,
+            phase: phase.to_owned(),
+            sampled_at: envelope.elapsed,
+        });
+    }
+    if envelope.activity != Activity::Caller
+        && envelope.caller_phase.is_none()
+        && let Some(counts) = envelope.stored_state
+    {
+        // These O(1) structural counters are current at their own native safe
+        // boundary. A forwarded saved/caller summary never refreshes this age.
+        display.stored_state = Some(StoredStateSample {
+            counts,
+            family_fingerprint: envelope.family_fingerprint.to_owned(),
+            sampled_at: envelope.elapsed,
+        });
     }
     if detail
         && envelope.activity != Activity::Caller
@@ -1086,6 +1152,125 @@ impl GuardBinding<'_> {
 mod tests {
     use super::*;
 
+    #[test]
+    fn caller_atom_sizes_read_existing_representation_and_detachment_stops_delivery() {
+        let expression = crate::vakint_parse!("(size_x+size_y)^9+size_z").unwrap();
+        let mut records = Vec::new();
+        {
+            let mut callback = |envelope: &Envelope<'_>| {
+                records.push((
+                    envelope.activity,
+                    envelope.caller_phase.unwrap().to_owned(),
+                    envelope.complexity,
+                ));
+                Ok(Control::Detach)
+            };
+            let mut observer = Observer::new(Default::default(), &mut callback);
+            MonitorContext::native_phase(None, "disabled", Some(expression.as_view()));
+            MonitorContext::native_phase(
+                Some(&mut observer),
+                "factored_input",
+                Some(expression.as_view()),
+            );
+            assert_eq!(observer.status(), CandidateRoutedObserverStatus::Detached);
+            MonitorContext::native_phase(
+                Some(&mut observer),
+                "detached",
+                Some(expression.as_view()),
+            );
+        }
+        assert_eq!(records.len(), 1);
+        let (activity, phase, size) = &records[0];
+        assert_eq!(*activity, Activity::Caller);
+        assert_eq!(phase, "factored_input");
+        assert_eq!(size.terms, Some(expression.nterms()));
+        assert_eq!(
+            size.encoded_expression_bytes,
+            Some(expression.as_view().get_byte_size())
+        );
+        assert_eq!(size.coefficient_bytes, None);
+        assert_eq!(size.coefficient_terms, None);
+    }
+
+    #[test]
+    fn stored_state_age_is_not_refreshed_by_forwarding_or_caller_atom_samples() {
+        use rustred::solver::CandidateRoutedStoredState;
+        let mut pending = Pending::default();
+        let mut envelope = Envelope::new(Event::ActivityStarted, "native-family");
+        envelope.sequence = 2;
+        envelope.elapsed = Duration::from_secs(3);
+        envelope.stored_state = Some(CandidateRoutedStoredState {
+            unstarted_roots: Some(2),
+            deferred_rule_maps: Some(3),
+            deferred_child_integral_occurrences: Some(7),
+            collected_output_integrals: Some(1),
+        });
+        update_display(&mut pending, &envelope, false, false);
+        assert_eq!(
+            pending.display.stored_state.as_ref().unwrap().sampled_at,
+            Duration::from_secs(3)
+        );
+        assert!(pending.display.quantitative_sample_at.is_none());
+
+        envelope.activity = Activity::TerminalSubstitution;
+        envelope.caller_phase = Some("terminal_substitution");
+        envelope.elapsed = Duration::from_secs(8);
+        envelope.native_summary_age = Some(Duration::from_secs(5));
+        update_display(&mut pending, &envelope, true, false);
+        assert_eq!(
+            pending.display.stored_state.as_ref().unwrap().sampled_at,
+            Duration::from_secs(3)
+        );
+
+        envelope.activity = Activity::Caller;
+        envelope.caller_phase = Some("retained_output");
+        envelope.elapsed = Duration::from_secs(11);
+        envelope.complexity.terms = Some(4);
+        envelope.complexity.encoded_expression_bytes = Some(217);
+        update_display(&mut pending, &envelope, true, false);
+        assert_eq!(
+            pending
+                .display
+                .caller_expression
+                .as_ref()
+                .unwrap()
+                .sampled_at,
+            Duration::from_secs(11)
+        );
+        assert_eq!(
+            pending.display.stored_state.as_ref().unwrap().sampled_at,
+            Duration::from_secs(3)
+        );
+
+        // The saved application clears its native summary before preflight.
+        // A failure here never produces a first core snapshot.
+        envelope = Envelope::new(Event::ActivityStarted, "next-family");
+        envelope.caller_phase = Some("entry_admission");
+        envelope.elapsed = Duration::from_secs(12);
+        update_display(&mut pending, &envelope, true, false);
+        assert!(pending.display.stored_state.is_none());
+        assert!(pending.display.native_observed_at.is_none());
+        assert!(pending.display.completed_roots.is_none());
+        assert!(pending.display.quantitative_sample_at.is_none());
+        envelope.event = Event::RequestFinished;
+        envelope.activity = Activity::Caller;
+        envelope.status = Status::Failed;
+        envelope.request_finished = true;
+        envelope.elapsed = Duration::from_secs(13);
+        update_display(&mut pending, &envelope, true, false);
+        assert!(pending.display.stored_state.is_none());
+        assert_eq!(pending.display.status, MonitorStatus::Failed);
+        assert_eq!(
+            pending
+                .display
+                .caller_expression
+                .as_ref()
+                .unwrap()
+                .encoded_bytes,
+            217
+        );
+    }
+
     #[cfg(target_os = "linux")]
     #[test]
     fn guard_attachment_requires_bound_live_identity_freshness_and_actual_slot_coverage() {
@@ -1239,7 +1424,7 @@ mod tests {
         let failure = MonitorContext::run::<()>(&options, |mut observer| {
             // Real OS sampling/file publication; synthetic control events only.
             // No saved application, coefficient, cache or reduction is loaded.
-            MonitorContext::native_phase(observer.as_deref_mut(), "synthetic_busy_phase");
+            MonitorContext::native_phase(observer.as_deref_mut(), "synthetic_busy_phase", None);
             let deadline = Instant::now() + Duration::from_secs(5);
             let first = loop {
                 if let Ok(bytes) = std::fs::read(&path) {
@@ -1335,7 +1520,9 @@ mod tests {
             let backend = ratatui::backend::TestBackend::new(220, 80);
             let mut terminal = ratatui::Terminal::new(backend).unwrap();
             terminal
-                .draw(|frame| super::super::tui::draw(frame, &view, false))
+                .draw(|frame| {
+                    super::super::tui::draw(frame, &view, false);
+                })
                 .unwrap();
             let rendered = terminal
                 .backend()
@@ -1345,12 +1532,12 @@ mod tests {
                 .map(|cell| cell.symbol())
                 .collect::<String>();
             for label in [
-                "VmRSS / VmHWM",
+                "Process RSS / peak",
                 "MemAvailable / MemFree",
                 "usable / unused",
                 "MemTotal",
                 "sample age",
-                "Full symbolic expression size",
+                "Caller Atom bytes / stored summands",
                 "CycleDetected",
                 "Failed",
             ] {
@@ -1379,7 +1566,7 @@ mod tests {
             }
             let first = std::fs::read(&path).unwrap();
             for _ in 0..100 {
-                MonitorContext::native_phase(observer.as_deref_mut(), "busy_phase");
+                MonitorContext::native_phase(observer.as_deref_mut(), "busy_phase", None);
             }
             thread::sleep(Duration::from_millis(100));
             assert_eq!(
