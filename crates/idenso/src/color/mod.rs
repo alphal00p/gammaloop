@@ -438,7 +438,7 @@ impl ColorInvariantPrintKind {
                 Self::mathml_group(&arguments.join("<mo>,</mo>"))
             )
         };
-        if state.in_exp_base {
+        if state.in_exp_base && alias.is_none() {
             source = Self::mathml_group(&source);
         }
         (source.len() <= 4096).then_some(source)
@@ -968,6 +968,21 @@ mod mathml_tests {
             let native = atom.printer(PrintOptions::mathml()).to_string();
             assert!(native.contains(script), "{native}");
             assert!(!native.contains("spenso::"));
+            for exponent in [4, -4, -1] {
+                let power = atom.pow(Atom::num(exponent));
+                for (opt, alias) in [
+                    (PrintOptions::mathml(), script),
+                    (options(SpensoPrintSettings::compact()), plain),
+                ] {
+                    let native = power.printer(opt).to_string();
+                    assert!(native.contains(alias), "{native}");
+                    assert!(!native.contains("<mo>(</mo>"), "{native}");
+                    assert!(
+                        native.contains(if exponent == -1 { "<mfrac>" } else { "<msup>" }),
+                        "{native}"
+                    );
+                }
+            }
         }
         assert_eq!(
             ColorInvariantPrintKind::color_count(
