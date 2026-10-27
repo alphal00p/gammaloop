@@ -93,7 +93,9 @@ dependencies = [
  "typst",
  "typst-bundle",
  "typst-kit",
+ "typst-library",
  "typst-pdf",
+ "typst-svg",
  "walkdir",
 ]
 
