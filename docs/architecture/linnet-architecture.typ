@@ -82,7 +82,9 @@ half-edge representation in that partition.
 Joining extends the stores and then revalidates node incidence; sewing converts matched identity
 half-edges into pairs. `HedgeGraph::check` verifies involutivity and that every `EdgeIndex` points
 to the same `HedgePair` recorded by `SmartEdgeVec`. Node-store operations provide the additional
-partition and incidence checks.
+partition and incidence checks. When node identification takes separate half-edge iteration and
+membership inputs, both must describe the same selection; iteration order determines the order
+of node identification.
 
 Algorithms consume the graph together with an explicit subgraph when boundary behavior matters.
 Traversal and cycle/cut routines operate on those views. Directed algorithms take a
@@ -94,8 +96,10 @@ and rejects cycles; transitive closure and reduction first require that DAG chec
 delete complete half-edge pairs rather than one side of an edge.
 
 Exhaustive circuit enumeration requires an explicit cycle-rank bound and rejects powersets that
-the platform cannot represent before enumeration. Tadpole classification similarly validates and
-canonicalizes a non-empty terminal set, compares components against every terminal-incident edge,
+the platform cannot represent before enumeration. The controlled variant also accepts caller-owned
+fallible checkpoints throughout powerset work; cancellation returns an error, never a partial
+cycle set. Linnet does not own the caller's resource monitor. Tadpole classification similarly
+validates and canonicalizes a non-empty terminal set, compares components against every terminal-incident edge,
 and returns deduplicated structural results. These guards make malformed input return errors and
 keep retained node-identification history on canonical structural paths instead of panic paths.
 

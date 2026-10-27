@@ -2,7 +2,7 @@
 
 #quote(block: true)[
 #strong[Status:] Current implementation architecture, audited against the Vakint source on
-2026-10-21.
+2026-10-27.
 
 This note describes the Rust engine and its optional Symbolica community-module wrapper. Backend
 availability and numerical coverage depend on the selected topology, epsilon depth, and installed
@@ -74,6 +74,12 @@ validated packs are reused offline. Activation is transactional and replaces inc
 and numerical context. Explicit IBP, saved-application and cache paths remain available. See
 the crate's `external_data.typ` for loading and release conventions.
 
+Prepared caches attach by default when the selected data supplies them. Official loading can
+set `load_prepared_caches` to false to activate the validated registry without importing those
+caches. A saved-application path inside a recognized release uses that release's cumulative
+snapshot; a bare application supplies terminal declarations without inventing coefficient or
+graph records.
+
 RustRed master modes are `Retain`, `Symbolic` and `Numerical`, with numerical substitution the
 default. Symbolic mode expands exact coefficients and retains labeled numerical-only coefficients;
 the originating engine can resolve those symbols later. After exact combination, evaluation checks
@@ -91,9 +97,12 @@ registry without choosing a numerical fallback. Loading rejects declarations tha
 evaluators, reserved Vakint symbols, existing period aliases or master basis identities.
 
 Campaign certification is advisory outside its recorded predicates. Safe partial reductions retain
-family-qualified unknown integrals and warn with parent-topology graph references. Numerical
-evaluation lists unresolved masters and uncomputed declared terminals. Prepared caches accept
-strict completed reductions, including valid captured descendants, and never store partial results.
+family-qualified unknown integrals. After exact combination, Retain mode warns with sorted,
+deduplicated undeclared identities and authenticated candidate parent-topology graph references;
+a common family does not imply a unique parent. Symbolic and Numerical substitution both fail
+gracefully if surviving unknown integrals or declared terminals lack required coefficients.
+Uncomputed declared pack masters remain valid retained results. Prepared caches accept strict
+completed reductions, including valid captured descendants, and never store partial results.
 
 Both FORM-backed and RustRed evaluation use the same tagged sixth-root HPL evaluator. FORM
 reduction scripts and hard-coded master formulas remain intact. Opaque finite master data does
@@ -152,6 +161,13 @@ pySecDec covers topologies registered for that numerical path. RustRed uses load
 checks actual coefficient availability after reduction. Failure to find a method is an
 explicit `NoEvaluationMethodFound` error, not an implicit fallback.
 
+Optional request resources impose caller-selected process-RSS and elapsed-time ceilings;
+omitted ceilings and count diagnostics remain disabled. Cooperative checkpoints cannot provide
+a hard deadline inside an opaque call. `evaluate_with_monitor` uses the ordinary reduction path
+and native observer, reporting phases, counters, bounded frontier samples, and independent
+process and system memory observations. Any ETA remains a diagnostic estimate. Detaching the
+terminal display does not cancel the calculation.
+
 Numerical evaluation is a later boundary. Parametric backend output remains a Symbolica
 expression. `precision` prepares native numerical sources and contracts external momenta before
 delegating to Symbolica/Numerica's tracked evaluator. Each `NumericalCoefficient` owns its complex
@@ -160,6 +176,12 @@ exact-zero status and bounded/estimated quality. `NumericalEvaluationResult` own
 coefficient map, requested decimal precision and structured source warnings. The optional second
 result remains the backend's statistical uncertainty series, separate from arithmetic and
 source-data uncertainty.
+
+Raw coefficient records retain the evaluated midpoint and its enclosure. Checked symbolic
+export enforces requested and achieved precision without lowering the raw midpoint first.
+Inspection lookups explicitly cap their returned numerical values to the request and source
+availability. Represented external dot products use the same component source identities and
+reject incompatible dimensions or missing momenta.
 
 Public MATAD/FMFT numerical master-substitution helpers prepare the same finite-source identities
 and exact Gamma expressions used by the complete engine. Laurent expansion and normalization
@@ -201,6 +223,8 @@ Master records expose every available epsilon coefficient, per-coefficient symbo
 validated source precision and a native FeynKit diagram with authenticated powers, numerator and
 loop-momentum routing. Declared uncomputed terminals remain inspectable with empty coefficient
 maps. Inspection does not download data or use FORM's private tables.
+Bare saved applications may announce master identities without authenticated graph payloads;
+`get_master` then reports that the matching external-data pack is required.
 
 == External tools and feature boundaries
 
@@ -249,6 +273,11 @@ cross the API as checked Symbolica expressions or precision-bearing Laurent reco
 workspaces are implementation artifacts unless cleanup is disabled or a reuse directory is
 explicitly supplied. RustRed's external packs and native prepared caches are explicit durable
 data, validated against their schemas and authenticated program bindings before attachment.
+
+A running five-loop cache may append strict completed native Route/Apply nodes during ordinary
+reductions. Explicit flush reports acknowledge durable records; freezing records a generation
+descriptor for later read-only attachment. Loading an immutable snapshot has no writer and
+captures no new records. Partial reductions never enter distributed strict caches.
 
 A reproducible result therefore depends on more than the input expression: record the topology
 form, numerator, normalization convention, epsilon depth, decimal precision, backend order and

@@ -1,8 +1,9 @@
 = Idenso implementation architecture
 
 #quote(block: true)[
-#strong[Status:] Current implementation architecture, audited against the Idenso source on
-2026-09-14.
+#strong[Status:] Current implementation architecture; source reviewed on 2026-10-27
+against `4a9ff115`. The original source audit was dated 2026-09-14. This update did
+not rerun the validation commands described below.
 
 This note covers the `idenso` Rust crate: representation-aware Symbolica transformations built
 on Spenso's tensor syntax and network parser. It does not describe concrete tensor-component
@@ -22,7 +23,8 @@ follows:
 - `dirac`, `color`, and `epsilon` own domain-specific identities and settings;
 - `IndexTooling` and `cook` provide expression preparation, index hygiene,
   compact symbol encodings, and canonicalization;
-- the optional `python` module registers a Symbolica community-module facade.
+- `spynso3` owns the unified `symbolica.community.tensor` Python facade; its
+  `TensorExpression` wraps the shared native symbolic tensor.
 
 Idenso always depends on Spenso with `shadowing`, as well as Linnet and Symbolica. It reuses
 Spenso's representation tags, slot parser, tensor-network graph, and contraction scheduling;
@@ -49,88 +51,66 @@ must not treat printed names alone as a complete serialized registry.
 
 == Core symbolic representation
 
-`SymbolicTensor<Aind>` carries four fields:
+`SymbolicTensor<S, E = Atom>` owns a structure `S` and a symbolic payload `E`.
+The default structure is `OrderedStructure<LibraryRep, AbstractIndex>`; explicit
+ordered tensors support network execution, while `SymbolicTensor<PartialStructure>`
+retains logical port order and occurrence-local unresolved indices for composition.
+An owned `Atom` is the usual payload; borrowed atom views use the same carrier.
+The `is_metric` and `is_composite` operation flags are part of value identity.
+Private proof and observation caches belong to that immutable payload/interface;
+changed or untrusted reconstructions establish or invalidate the applicable facts.
 
-- an `OrderedStructure<LibraryRep, Aind>` containing the external slots;
-- the owned Symbolica `Atom` expression;
-- `is_metric`, used by contraction-specialized identities;
-- `is_composite`, distinguishing a direct tensor function from an expression-backed leaf.
+The interface remains meaningful when the expression is zero. Checked constructors
+validate nonzero payloads against their declared ports, and typed operations carry
+the logical interface through composition, rewriting and conjugation. Callers inspect
+`expression()` and `structure()`; a plain Atom alone cannot encode the rank of zero.
 
-It implements both `TensorStructure` and `HasStructure`. Structural methods delegate to the
-ordered slots, while permutations rewrite slot atoms and introduce identity tensors when
-needed. Its generic `Contract` implementation multiplies the two atoms and merges their
-structures; domain-specific cleanup is a later rewrite stage rather than component-wise
-evaluation.
-
-`SymbolicNet<Aind>` is a Spenso `Network` whose local tensors are `SymbolicTensor`, whose scalars
-are Symbolica atoms, and whose function keys are Symbolica symbols. `SymbolicNetParse` forces
-Spenso's `ContainsReps` tensor filter, so representation-bearing functions can become tensor
-leaves even without a separate tensor tag. `SymbolicNetExt::simple_execute` uses sequential
-Spenso execution and reconstructs the final atom from zero, one, or the result tensor.
-
-This representation is deliberately ephemeral. It is a topology-aware vehicle for parsing,
-canonicalization, and contractions; the authoritative public result of Idenso transformations is
-normally an `Atom`.
+`SymbolicNet<Aind, E = Atom>` reuses Spenso's graph and store. The ordered specialization
+implements direct structural contraction by multiplying the symbolic payloads and
+merging their interfaces. Shared typed `contract` and `simplify_algebra` operations
+return a tensor, retaining its interface and exact unprocessed expression.
 
 == Rewrite families and execution flow
 
-Idenso does not expose one universal simplification pipeline. Each family selects and owns its
-normal form:
+Public algebra reduction is selected through `AlgebraSettings` on
+`SymbolicTensor<PartialStructure>::simplify_algebra`. Gamma, color and epsilon
+capabilities are explicit; each enabled identity permits its structural prerequisites.
+`AlgebraContraction` selects additional structural work and desired output notation.
+The same domain planner also serves `contract(ContractSettings)`. It reconsiders
+changed regions and retains unrelated scalar factorization rather than imposing a
+fixed sequence of whole-expression simplifiers.
 
-- `IndexTooling` parses enough structure to canonicalize tensor indices, list dangling slots,
-  wrap all indices or only dummies, form adjoints, and alias tensor subexpressions;
-- `MetricSimplifier` and `Chain` normalize metrics, dot products, open chains, and closed traces;
-- `GammaSimplifier` collects bispinor chains and applies dimension-gated Clifford, trace,
-  projector, gamma5, and optional four-dimensional epsilon rules;
-- `ColorSimplifier` collects fundamental color lines, closes traces, applies generator,
-  structure-constant, Fierz, and Casimir rules, prunes antisymmetric zero terms, and iterates to a
-  fixed point;
-- `EpsilonSimplifier` owns epsilon contractions and reductions;
-- `Cookable` replaces selected functions or representation-index payloads with compact symbols,
-  either as readable flattened names or reversible Symbolica `UserData::Atom` encodings.
+`IndexTooling` still supplies raw-Atom canonicalization, conjugation and index hygiene.
+Canonicalization admits the full source before antisymmetric-zero pruning, preserves
+representation duality wrappers, and reconstructs the validated graph without executing
+unrequested tensor algebra. Closed scalar powers are scoped independently before
+index labeling. `wrap_indices` uses `spenso::index_scope(header, index)` so wrapped
+indices remain valid native abstract indices.
 
-Settings objects are part of the semantics. Gamma ordering and trace evaluation, color Fierz and
-invariant substitutions, Schoonschip depth and traversal, and cooking source/tag filters can all
-change the result form. Reproducible callers should record the exact settings and the order in
-which independent rewrite families ran.
+Cooking is separate from algebra selection. `CookSettings` controls function, index and
+dimension payload encodings, source filters and output tags. Notation conversions
+`to_dots`, `undo_dots`, `undo_chain` and `undo_trace` are explicit tensor operations;
+collecting a trace does not evaluate it. Dimension-gated gamma and epsilon identities
+continue to require the appropriate representation dimension.
 
-Ordinary closed traces reuse the open-word adjacent and repeated-pair Clifford
-rules before expanding the remaining trace into pairings. Generated metric terms
-use the existing chain-aware Schoonschip contraction. The same dimension guards
-apply to open and closed words; a formal Lorentz dimension does not authorize
-four-dimensional gamma5 or Chisholm rules.
+== Schoonschip contraction and the shared planner
 
-Most pattern engines use a local fixed-point loop: transform the current atom, compare it with
-the previous atom, and stop when unchanged. That guarantees termination only for the implemented
-oriented rule set; custom rules composed by a caller remain the caller's responsibility.
+`contract(ContractSettings)` and `simplify_algebra(AlgebraSettings)` use the same
+outside-in domain planner. Structural work reads a borrowed, shallow Spenso network
+with opaque tensorial leaves and uses Idenso's factorized slot contractor. A contraction
+order or representation filter selects eligible work; unaffected factors stay intact.
+`expand = false` retains independent sum alternatives while allowing permitted index
+substitutions. Algebra identities may still perform distribution required by that identity.
 
-== Schoonschip network path
+`max_passes` is an optional explicit budget; both public settings types default to no
+limit. `ReductionStatus::{Complete, Deferred, Capped}` reports completion relative
+to the requested policy without dropping the exact remaining expression.
 
-The Schoonschip-style simplifier is the main bridge from domain rewrites to Spenso network
-execution:
-
-```text
-Atom or one term of an Add
-  -> normalize dot-product syntax
-  -> parse a SymbolicNet with opaque shorthand leaves
-  -> limit parser depth and composite-scalar recursion from settings
-  -> execute sequentially with a Schoonschip contraction strategy
-  -> choose tensor pairs by degree or expression-size policy
-  -> simplify the contracted symbolic boundary
-  -> extract an Atom and normalize dots again
-  -> repeat until unchanged, unless SinglePass was selected
-```
-
-Additions are processed term by term. `SchoonschipSettings` chooses single-pass or recursive
-depth-/breadth-first traversal, parse depth, contracted-sum expansion, chain-like function and
-rank-one handling, and one of several topology- or expression-size contraction orders. The
-custom `Schoonschipify` strategies plug into Spenso's `ContractionStrategy`; they do not replace
-Spenso's graph or store.
-
-The direct pattern path exposed by `schoonschip_with_settings` applies the local metric/function
-replacement families without building the full network. The network path is preferable when
-contraction topology and ordering matter. Their exact behavior and settings are detailed in the
-#link("schoonschip-net-parsing.typ")[Schoonschip network parsing note].
+The old raw `Schoonschip` trait in `shorthands/schoonschip/api.rs` is now compiled
+only for unit-test oracle use. `SchoonschipSettings` is crate-private configuration
+for a local metric/vector fallback; it no longer owns public traversal, parser-depth
+or contraction-order modes. The detailed current boundary is described in the
+#link("schoonschip-net-parsing.typ")[Schoonschip contraction note].
 
 == Parsing, shorthand, and index invariants
 
@@ -139,12 +119,11 @@ abstract index, and dual orientation. Products contract matching dual slots; add
 expose compatible external structure. `chain`, `trace`, `dot`, metrics, and bracket-like syntax
 are parser-owned shorthands rather than arbitrary opaque functions.
 
-`UndoShorthands` selects Spenso `ShorthandParsing::Expand` modes, parses a symbolic network, and
-executes it to reconstruct explicit tensor products with fresh parse-local dummies. The
-Schoonschip path instead requests opaque shorthand with fast structure inference so it can
-simplify contraction boundaries selectively. These two modes are intentionally different:
-expansion exposes topology but can grow expressions, while opaque inference preserves compact
-syntax and trusts the inferred external slots.
+The explicit `undo_dots`, `undo_chain` and `undo_trace` operations select the corresponding
+Spenso expansion mode and reconstruct that notation with fresh parse-local dummies. The shared
+contraction engine instead keeps tensorial leaves opaque and validates their observed interfaces;
+there is no `Fast`/`Expanded` opaque-inference selector. Construction, notation expansion and
+algebra reduction are separate policies.
 
 Index wrapping is an ownership operation. `list_dangling` discovers external slots from a parsed
 network; `wrap_dummies` changes only non-external index payloads; `wrap_indices` changes every
@@ -156,68 +135,63 @@ The shared concrete syntax and which crate owns each rewrite are specified in th
 
 == Features and serialization
 
-Idenso defaults to `native`, forwarding GMP/MPFR support; `wasm` selects the Wasm backend with
-default features disabled. The core Rust rewrite layer always includes Symbolica and Spenso's
-`shadowing` support. `python` enables community-module functions and automatic representation
-initialization; `python_stubgen` adds stub metadata and enables Symbolica's stub surface.
-`reference-cases` exposes the otherwise test-only curated identity cases.
+Idenso defaults to `native`, forwarding GMP/MPFR support; `wasm` selects the Wasm
+backend with default features disabled. The Rust algebra layer always uses Spenso's
+`shadowing` support. `reference-cases` exposes curated identity fixtures. Python and
+stub generation belong to `spynso3`'s unified tensor facade; Idenso has no separate
+`python` or `python_stubgen` Cargo feature or community module.
 
-The optional `bincode` feature derives binary encoding only for Idenso's zero-sized
-representation marker types. `SymbolicTensor`, rewrite settings, symbol registries, networks,
-and cooked expressions do not form an Idenso checkpoint format. Reversible cooking stores the
-source atom in Symbolica symbol user data and derives a stable-looking hash name, but recovery
-still depends on the matching Symbolica registry and cooking settings. Printed or binary names
-alone are not a portable physics-result archive.
+With `bincode`, `SymbolicTensor<PartialStructure>` encodes its Atom payload, logical
+slot order, and metric/composite flags. Decode uses Symbolica's state map and validates
+the payload/interface before returning a tensor. Proof, observation and planner caches
+are never serialized; this is not a versioned workspace or cross-version checkpoint promise.
+
+Reversible function/index cooking normally stores an Atom in Symbolica symbol user data
+and requires the corresponding registry for restoration. Compound dimension cooking is
+different: reversible mode uses the owner's portable textual dimension encoding, accepts
+only supported exact rational arithmetic, and rejects function/callback-dependent or
+metadata-bearing dimensions; the registered scalar color parameter `Nc` remains
+  explicitly supported. Ordinary atomic dimensions stay unchanged.
 
 == Ownership and error boundaries
 
-Most high-level identity traits take an `Atom` or `AtomView` and return a newly owned `Atom`;
-Symbolica owns internal expression memory and symbol metadata. Settings are borrowed for one
-transformation. Parsed `SymbolicNet` values, dummy libraries, and contraction plans are local to
-the call and are discarded after atom extraction.
+The shared symbolic tensor owns its logical interface and payload; settings are borrowed
+for a transformation. Immutable tensors may retain validated interface facts, regional
+observations and a shallow graph. A changed result must invalidate or re-establish those
+facts rather than treating cached observations as independent authority.
 
-Fallible structural entry points use typed errors: `SymbolicNetParse` returns
-`TensorNetworkError`, structure inference returns `StructureError`, `dirac_adjoint` reports
-`AdjointError`, and `CookSettings::try_cook`/`try_cook_indices` report `CookingError`.
-Canonicalization returns `CanonicalizationError`; dangling-index queries and dummy wrapping
-return `IndexToolingError`. Shorthand expansion, network Schoonschip passes, and
-`simple_execute` return `Result<Atom, NetworkToolingError>` rather than unwrapping parser or
-execution failures. The direct pattern-based `schoonschip` path still returns an `Atom`.
-
-Domain simplifiers usually leave unmatched syntax unchanged rather than diagnosing it as an
-error. A successful return therefore means the configured rewrite reached its fixed point, not
-that every physics object was recognized or eliminated. Verification should inspect residual
-representation-bearing factors when completeness matters.
+Typed construction, composition, contraction and algebra operations return
+`TensorInferenceError` on incompatible interfaces or unsupported admission. Raw network
+parsing/execution retains `NetworkToolingError`; adjunction, cooking, canonicalization
+and index tooling preserve their respective typed errors. Unmatched identity syntax may
+remain exactly represented. Inspect `reduction_status()` and the remaining expression;
+a successful call alone is not a promise that every possible algebraic identity was applied.
 
 == Maintained invariants
 
-- Tensor structure is inferred from tagged representation arguments, including dimension and
-  dual orientation; function spelling alone is insufficient.
-- `SymbolicTensor.structure` and the slot atoms inside `expression` must describe the same
-  external indices. Permutation operations rewrite both sides together.
-- Dummy indices introduced by parsing or shorthand expansion are fresh only within that parse
-  state. Cross-expression hygiene remains explicit through wrapping or canonicalization.
-- Dimension-specific identities fire only when the required representation dimension can be
-  established; four-dimensional gamma/epsilon rules are not generic-dimensional rules.
-- Fixed-point simplifiers compare whole Symbolica atoms, so canonical ordering and normalization
-  are part of their termination contract.
-- A reversible cooked symbol is meaningful only with its Symbolica user data and matching tag
-  policy; a flattened cooked name intentionally cannot reconstruct its source.
-- Schoonschip contraction order is semantic/performance policy over one parsed network. Changing
-  it must not be confused with changing the parser's shorthand or depth policy.
+- A tensor's logical interface is authoritative for ranked zero and unresolved ports;
+  nonzero payloads must agree with the checked interface.
+- Representation, dimension, dual orientation and logical port order matter independently
+  of printed function names. Index transformations transport the interface and payload together.
+- Dummy allocation is scoped; independent expressions need explicit index hygiene.
+- Four-dimensional identities require an established four-dimensional representation.
+- Planner completion is relative to the requested capabilities and output policy. Deferred
+  or budget-capped work preserves the exact remaining expression.
+- Function/index user-data cooking requires the matching symbol registry. Portable cooked
+  dimensions follow their separate validated textual encoding contract.
 
 == Verification and related documentation
 
-Tests live beside tensor parsing and canonicalization, cooking, index tooling, shorthand
-expansion, Schoonschip traversal and contraction orders, metric/chain normalization, and the
-Dirac, color, and epsilon rules. Snapshot tests pin canonical Symbolica strings. Curated FORM
-and FeynCalc examples are reference fixtures checked by tests; they are not runtime calls to
-those external systems. Benchmarks separately cover Schoonschip modes and vertex-algebra paths.
+Tests live beside tensor parsing and canonicalization, cooking, index tooling, typed
+composition and interface validation, contraction planning, notation conversion, and the
+Dirac, color and epsilon kernels. Curated FORM and FeynCalc examples are reference fixtures,
+not runtime calls to those systems. The benchmark sources remain separate from the
+source-review evidence recorded here.
 
-The default boundary is exercised with `cargo test -p idenso`. Optional representation encoding
-uses `cargo test -p idenso --features bincode`; community-module and stub coverage require their
-respective Python features. The `reference-cases` feature makes the curated cases available to
-non-test consumers but does not add a second simplifier.
+The native boundary is exercised with `cargo test -p idenso`; optional tensor/representation
+encoding uses `cargo test -p idenso --features bincode`. Python and stub coverage belong to the
+shared `spynso3` host. `reference-cases` makes curated fixtures available to non-test consumers.
+These commands describe coverage entry points; this source review did not execute them.
 
 For supported workflows, start with the
 #link("../../../products/idenso/latest/tutorial/")[controlled identity tutorial], continue with
@@ -227,5 +201,5 @@ and consult the
 specification]. Exact public signatures are in the
 #link("../../../products/idenso/latest/reference/rust/idenso/")[native Idenso Rustdoc]
 and the
-#link("../../../products/idenso/latest/reference/python/idenso-community/")[Python community
+#link("../../../products/idenso/latest/reference/python/spynso3/")[shared tensor Python
 module reference].
