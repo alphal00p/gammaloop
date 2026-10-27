@@ -13632,7 +13632,7 @@ mod tests {
             }
         }
 
-        assert_eq!(alias_count, 23);
+        assert_eq!(alias_count, 25);
     }
 
     #[test]
