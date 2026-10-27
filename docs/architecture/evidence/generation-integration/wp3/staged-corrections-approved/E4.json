@@ -1,0 +1,79 @@
+{
+  "reviewer": "Astra coordinator (gpt-6-astra)",
+  "verdict": "APPROVE metadata-only correction; E4 closed",
+  "candidate": "edabf052c5780be6460a9043cb9704e1583a2e4c",
+  "parent": "817b5886a50276efea05ab860d22016e1fb0c203",
+  "code_revision": "f264028690d117b4b99c320b61b7f2d5d89222d0",
+  "production_changes": 0,
+  "changed_files": [
+    "docs/architecture/evidence/generation-integration/execution.json",
+    "docs/architecture/evidence/generation-integration/wp3/drawing-staged-artifacts.json",
+    "docs/architecture/evidence/generation-integration/wp3/replay.json",
+    "docs/architecture/evidence/generation-integration/wp3/staged-evidence-correction.json",
+    "docs/architecture/evidence/generation-integration/wp3/staged-evidence-files.json",
+    "docs/architecture/evidence/generation-integration/wp3/staged-round1/A.json",
+    "docs/architecture/evidence/generation-integration/wp3/staged-round1/B.json",
+    "docs/architecture/evidence/generation-integration/wp3/staged-round1/C.json",
+    "docs/architecture/evidence/generation-integration/wp3/staged-round1/D-round2.json",
+    "docs/architecture/evidence/generation-integration/wp3/staged-round1/D.json",
+    "docs/architecture/evidence/generation-integration/wp3/staged-round1/E.json",
+    "docs/architecture/generation-integration-plan.typ",
+    "docs/architecture/generation-integration-wp3-staged.typ",
+    "docs/developers.toml"
+  ],
+  "code_hashes_checked": 1377,
+  "artifact_hashes_checked": 137,
+  "binary_hashes_checked": 4,
+  "archived_reviews_byte_identical": {
+    "A": "4bfee4e712405181509c3a34fe7c54cd1a735e9afaf0cdff23358584a4c7b938",
+    "B": "7b3f6545258b76d50416f11d108dcce09763b2890a5adaebb01562e1b8064a40",
+    "C": "a88fef71d571d385d4dce55c9c43b1c7dee9e5e2053478656b69d6e683ba094f",
+    "D": "1d636a47228d2b4da44a7d0ff8e65d6da2587ed17d2e1439ba2c796a419863d2",
+    "E": "c883f47b11741e062e95ccb66a20eb538b951e2a48cf65885f2e2e81ce01bfed",
+    "D-round2": "4af6beaf4e7fc142b8796fae62f62d75a3fdd558ffddb8709592a4b726f8a6ee"
+  },
+  "tracked_blobs_matched": 3354,
+  "preserved_refs_checked": {
+    "generation-integration-source-v4": "e0a779808174c64057fecfd062c948b8de8e5c1f",
+    "generation-integration-source-stage1": "f25961e21689ed1a33365430b4566a9a2e9c319a",
+    "generation-integration-source-transplant": "4e00851731541be7de4626b7d1e5274d79b9eea8",
+    "generation-integration-source-upstream": "588148851e3e989ecbb7478279db7d46727e23a8",
+    "generation-integration-source-v2": "d9ff71a6826166e57bf3bba56ffcf8a57ffaf9db",
+    "generation-integration-source-pre-v2": "75b6c7a88fb099f142bcec9227ee614b6fc56376",
+    "generation-integration-source-v3": "dfe6387606e44a96f110c1ce03f52d92824dbdb1",
+    "generation-integration-source-v3-original": "6d207cfce36ab2bb128d92d67cc3da182afb0bb1",
+    "generation-integration-source-m1-source": "9540f5bbf7a96609e69af6983d2bf7325530126d",
+    "generation-integration": "817b5886a50276efea05ab860d22016e1fb0c203",
+    "generation-integration-wp3-prefix": "817b5886a50276efea05ab860d22016e1fb0c203",
+    "generation-integration-staged17-18-37": "817b5886a50276efea05ab860d22016e1fb0c203",
+    "generation-integration-plan": "4374f72027b75df9ff95c5c7a725ee75beac27a8",
+    "generation-integration-pre-rebuild": "5226894ee1af61797e6b819d7e801a22bf17bace",
+    "generation-integration-units03-07": "9e2c4c23f3c48fb5df41edd2f5880097867dd117",
+    "generation-integration-prerequisites08-14": "438b61500da4b32841c64211103e5da6fc4c4a72",
+    "generation-integration-pre-staged": "438b61500da4b32841c64211103e5da6fc4c4a72"
+  },
+  "correction_bookmark_verified": true,
+  "typst": [
+    {
+      "source": "docs/architecture/generation-integration-plan.typ",
+      "sha256": "daaf15897cfb9af163affd724e14149bcef8400ce5e913b9d3df082d545491c9",
+      "result": "passed"
+    },
+    {
+      "source": "docs/architecture/generation-integration-wp3-staged.typ",
+      "sha256": "566ff1df4cfc7beb516c1dba908261f8c85e3117d2787cb37d658f9da18d2c0e",
+      "result": "passed"
+    }
+  ],
+  "titles": "exact registry matches",
+  "NixCI": false,
+  "runtime_tests": "not run; no production changes",
+  "limits": [
+    "Aggregate staged candidate remains REQUEST_CHANGES. A/B/C/E code corrections still pending independent review.",
+    "D1-D3 approved standalone b106; not integrated here.",
+    "Three imported historical frame assertions still fail; no physics proof inferred from spelling/interface diagnostic.",
+    "Source30 closure and source31 7+20 scope/anchor mismatches remain pending.",
+    "Final WASM/manual/distributions, full WP3 physics and benchmarks remain pending."
+  ],
+  "cleanup": "Temporary PDFs removed; review.json retained. The audit script is recorded in the parent tool history. No runtime processes retained."
+}

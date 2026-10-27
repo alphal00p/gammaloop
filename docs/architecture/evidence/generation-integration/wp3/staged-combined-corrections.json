@@ -1,0 +1,97 @@
+{
+  "status": "Combined A1+B2/B3+D corrections; new independent Astra review required; not whole WP3 approval",
+  "base": "edabf052c5780be6460a9043cb9704e1583a2e4c",
+  "code_commit": "1263f4fdbdffeb48a16a6c835c056e4e99c0d135",
+  "frozen_original_candidate": "817b5886a50276efea05ab860d22016e1fb0c203",
+  "approvals": {
+    "A": {
+      "verdict": "APPROVE scoped only",
+      "tip": "39e88ddff27c1279188a2ad50ab1197f75ad899e",
+      "receipt": "docs/architecture/evidence/generation-integration/wp3/staged-corrections-approved/A.json",
+      "sha256": "30ba841aeddf35ec807d5bdc87da6485a995366234c89c030b0de8f9e5a4e79a"
+    },
+    "B": {
+      "verdict": "APPROVE scoped only",
+      "tip": "5ac772ac04209582147ba9b5e6204b74c488216a",
+      "receipt": "docs/architecture/evidence/generation-integration/wp3/staged-corrections-approved/B.json",
+      "sha256": "b19e3beaed08d7433e67f4125913bad42025ba9dc30203e3e3f7f31092bdfb35"
+    },
+    "D": {
+      "verdict": "APPROVE scoped only",
+      "tip": "b1061d715bca86d2d29df0f108576c001a29b22a",
+      "receipt": "docs/architecture/evidence/generation-integration/wp3/staged-corrections-approved/D.json",
+      "sha256": "4af6beaf4e7fc142b8796fae62f62d75a3fdd558ffddb8709592a4b726f8a6ee"
+    },
+    "E4": {
+      "verdict": "APPROVE scoped only",
+      "tip": "edabf052c5780be6460a9043cb9704e1583a2e4c",
+      "receipt": "docs/architecture/evidence/generation-integration/wp3/staged-corrections-approved/E4.json",
+      "sha256": "f14c4f0dd03c0d030188bdb0b84dac5b7e87c1072b732c09c6cfb3922af2d310"
+    }
+  },
+  "mapping": {
+    "A1": {
+      "source": "39e88ddff27c1279188a2ad50ab1197f75ad899e",
+      "production": "7918d2a6c596c86519907bec96a6ca8a5776bea8",
+      "new_code": "1263f4fdbdffeb48a16a6c835c056e4e99c0d135"
+    },
+    "B2/B3": {
+      "source": "5ac772ac04209582147ba9b5e6204b74c488216a",
+      "production": [
+        "dd04519db55b524e8fde66904c1d5db8b675f049",
+        "ae7171920ed67bdd33fed5f7075ca55f62b5b3bc",
+        "4766d2585f4da849642648d3c066a14e379e60d9"
+      ],
+      "new_code": "1263f4fdbdffeb48a16a6c835c056e4e99c0d135"
+    },
+    "D1/D2/D3": {
+      "source": "b1061d715bca86d2d29df0f108576c001a29b22a",
+      "new_code": "1263f4fdbdffeb48a16a6c835c056e4e99c0d135"
+    }
+  },
+  "code_files": {
+    ".github/workflows/linnet-py-wasm.yml": "85f4b6e4c2f1a3426fdab46b5d23225d34e969ef8dacace3838063562a998f54",
+    "crates/feynkit-graph/src/finalization.rs": "7f537b6608fd6f82402675fc28f2e0907d3916a0df5fae8c03412ad1273da221",
+    "crates/feynkit-graph/src/numerator_interface.rs": "596a58fda9f2f182ba19a3da2457b3ed45e73b554d1dd67092cc42a4c2f68ed8",
+    "crates/gammalooprs/src/graph/parse/finalized_reference.json": "0e7da593639ea81ab81f733d5ef52f8aa578565648d0a8bb15fb9f6b2e4aa815",
+    "crates/gammalooprs/src/graph/parse/finalized_reference.rs": "620ff06b0c9f5359588fb92c3686215ae0daddc11acd6675b14a214aa3e01e54",
+    "crates/gammalooprs/src/graph/parse/from_dot.rs": "e1f6220b809ffc60ed7662d03ecaac4ebb3d7fc27817dde1795623217b45065b",
+    "crates/gammalooprs/src/graph/parse/mod.rs": "ec955ce2891d6eb28a49b9fbf74b783c762eafd1a3030ff355d6c48a579ffbb6",
+    "crates/gammalooprs/src/graph/parse/tests.rs": "5c0a0edeb92703571ca2b6f0c602f67222fe90513dc3bdee25405f09f3692c49",
+    "crates/linnest/src/svg/marks.rs": "a606cff09508b0abc344ed93db07def9df879cb1b92fad8bba99c74c07bc1a81",
+    "crates/linnest/src/svg/mod.rs": "a3aec874ac7b197058f230a62ec475831c46ac2ec87a379b1e90d8f232c6556e",
+    "docs/architecture/evidence/generation-drawing-notices/staged-corrections.json": "3112910b023be04298d31e2b5153c68010a5c65fdc5b1edc394fd4a68c6cfe90",
+    "docs/architecture/evidence/generation-integration/runtime-admission/approved-finalized-reference.json": "b3bfd1e5e8f4635176f86613e9f3a7aa600acfc2cc8dd43cc5794ed987b3206e",
+    "docs/architecture/evidence/generation-integration/runtime-admission.json": "93602a61b9137fb99a11b2c05a876989cc1f8f491aa1ffd04d66422c35147b7d",
+    "docs/architecture/evidence/generation-staged-transport-fix/receipt.json": "f226869f9492dfcbb5196e53dea386ab8fe086eece4165d9d231075050551c1a",
+    "docs/architecture/generation-drawing-notices.typ": "bdc94f6b0d33decc2871156149ce0fb63e9b23973392fb2c224edd7881af1f07",
+    "docs/architecture/generation-runtime-admission.typ": "f91cd6a0ad63eb8345540aa4d1f133eda90da7ce004557a062770267d126c7f8",
+    "docs/architecture/generation-staged-transport-fix.typ": "329e47d01c1f207126452f5662fbb304133207e54a497d318490f47f988cad4d",
+    "docs/developers.toml": "6120ce86787facb6b875eb5f3d00518a033d6a2798c0ca79d554620c52dbe3f6",
+    "just/drawing.just": "91fd65747acfd10cb9845415b1eca11a9d1bfeca6b4be06bd51744f70c83198a",
+    "tests/packaging/test_drawing_notices.py": "857a3da13666fe9b40b0c701a9d4be6111f984937f64a6c94aed323ef3e10c15"
+  },
+  "provenance": "All cumulative changes from817b applied once onto approved edab; docs registry adds both owner notes without overwriting E4 bookkeeping. Frozen code hashes above do not hash this mutable receipt. Imported lane receipts describe their original revisions and checks, not combined runs.",
+  "scope": "No source19+, no graph/Python correction or later source integration. No new physical expectation except approved exact reference migration.",
+  "combined_invariants": "Finalization always uses admitted translate; identity certificate checks expression and ALL retained renamings after index validation/injectivity. Raw admission, shared templates and declared/inferred ports unchanged.",
+  "graph_gate": "Cumulative4b60161dd503bc870434a9ae6951003bc1dc2132 (ba375387/891d plus1a68c9a8) awaits Astra round3; NOT applied.",
+  "later_available": {
+    "22-24": "735d599a665acbce1577b2c40d149c152f01543d APPROVE; only after21, staged/card reconciliation required",
+    "25/36": "c0e9ce68c325f9d597847d68cc4f1c924da29f19",
+    "27-29": "c82916079b5cc643151e0213499ca9875739a4e3",
+    "46": "2a6ee257165cc1cbd2beb923729d09bab21ecdd3",
+    "22-24-review": "/shared/lcnbr/dev/gammaloop/generation-projector-flow/target/astra-projector-flow-r1-20261027/review.json"
+  },
+  "pending_gates": [
+    "Three newly imported historical frame hash assertions FAIL; representation diagnostic only, not physics proof or B2 routing closure.",
+    "Source31: seven inherited and twenty new scope/anchor mismatches; Kurvst PDF stale.",
+    "Source30 compile-time closure omits request_decorator_contract.py and generation_reports/*.txt.",
+    "DOT sorted content/count check does not certify incidence.",
+    "Full WP3 matrix, five fresh a_ddx, BRST, combined physics and benchmark remain pending.",
+    "Final Linnest WASM data/name provenance unresolved; no byte-exact reproduction claim.",
+    "Actual final sdist build/install, native/Pyodide/Community wheels and installed behavior remain pending."
+  ],
+  "checks": {
+    "status": "running; finalized results will replace this status before candidate handoff"
+  }
+}

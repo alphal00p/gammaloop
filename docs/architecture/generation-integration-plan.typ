@@ -233,7 +233,9 @@ own workspace. Bounded: one regression, one bisect, one written verdict.
   reviews at `817b5886`. E4 metadata provenance is corrected separately and
   awaits NEW independent review; code correction lanes remain separate. Scope D
   round2 approves isolated `b1061d7` only, available for later integration.
-  Frozen candidate bookmarks remain at `817b5886`; WP3 remains incomplete.
+  Original atomic candidate remains frozen at `817b5886`. Approved cumulative
+  A1, consumer B2/B3 and D1–D3 are combined on approved E4 for NEW independent
+  review; graph/Python approval is still pending. No source19 starts; WP3 remains incomplete.
   Source38 awaits the reviewed transplant and prerequisites through port36.
   Approved input25/36 and cumulative sampling27–29 remain separate for later
   integration; no benchmark milestone is claimed. Full rebuilt-tip validation

@@ -128,3 +128,26 @@ sections. Actual sdist build/install, repaired native/Pyodide/Community wheels,
 installed behavior, full WP3, five fresh a_ddx, BRST, combined physics and
 M-rebuild remain pending. Projector22–24 is unapproved; approved input25/36,
 sampling27–29 and color46 remain separate later inputs. No source19 is started.
+
+
+== Combined correction candidate
+
+A1 at `39e88ddf` (code `7918d2a6`), consumer B2/B3 at `5ac772ac`
+(cumulative `dd04519d`, `ae717192`, `4766d258`), D1–D3 at `b1061d7`
+and E4 at `edabf052` each received scoped independent approval. Their exact
+reviews and cumulative source-to-code mappings are retained in
+`evidence/generation-integration/wp3/staged-combined-corrections.json`.
+The combined code is `1263f4fd`; original `817b5886` remains frozen.
+Owner notes and original lane receipts retain their historical revision meaning.
+
+The combined correction always transports hidden scalar history in finalization,
+while the identity shortcut requires unchanged expression and every retained
+index renaming. Runtime anonymous-index policy precedes fragment composition.
+The exact reference migration retains the immutable old reference and certified
+signed local factors, affine frames, cuts, denominators and weights. It does not
+expand graph numerators or close the three historical frame-hash failures.
+
+Graph/Python corrections through `4b60161d` are not integrated: final C2 round3
+approval remains pending.
+Sources22–24 are approved for later ordered replay after21; they are not included.
+This combined candidate requires NEW independent Astra review before source19.

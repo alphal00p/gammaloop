@@ -171,5 +171,12 @@
       "Final Linnest WASM data/name provenance unresolved; no byte-exact reproduction claim.",
       "Actual final sdist build/install, native/Pyodide/Community wheels and installed behavior remain pending."
     ]
+  },
+  "combined_staged_corrections": {
+    "status": "Combined approved A1+B2/B3+D on approved E4; validation in progress; NEW independent review before19",
+    "code_commit": "1263f4fdbdffeb48a16a6c835c056e4e99c0d135",
+    "receipt": "docs/architecture/evidence/generation-integration/wp3/staged-combined-corrections.json",
+    "graph_python": "not integrated; final approval pending",
+    "later_projector": "735d599a approved, only later after21"
   }
 }

@@ -1,0 +1,209 @@
+{
+  "verdict": "APPROVE",
+  "status": "Completed NEW independent Scope B round 2 review; B2 and B3 only",
+  "reviewer": "Astra",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-staged-parser-fixes",
+  "reviewed_tip": "5ac772ac04209582147ba9b5e6204b74c488216a",
+  "reviewed_code": "4766d2585f4da849642648d3c066a14e379e60d9",
+  "candidate_parent": "817b5886a50276efea05ab860d22016e1fb0c203",
+  "approved_base": "438b61500da4b32841c64211103e5da6fc4c4a72",
+  "scope": "Consumer exact finalized-reference routing B2 and runtime anonymous-port B3. Not historical GL028/034 B2, not B1, not A1, and not whole-candidate/WP3 approval.",
+  "findings": [],
+  "closures": [
+    {
+      "id": "B2",
+      "original_severity": "P2",
+      "status": "CLOSED",
+      "file": "crates/gammalooprs/src/graph/parse/finalized_reference.rs",
+      "line": 142,
+      "evidence": "All 20 old/current diagrams pass a separately authored exact witness verifier over every stored snapshot field: six scalar amplitudes, one scalar cross section, four fermion amplitudes, eight vector amplitudes, one fermion cross section. Fresh source-matched final Rust exports equal the submitted native/runtime/denominator inputs.",
+      "minimal_frame": "The photon discrepancy is the v0/v1 reflection and h4/h5 exchange, with Q4 -> -Q4; external owners are fixed. The interaction IDs and exact local factors match under that whole map. It is not a one-edge physics sign repair.",
+      "independent_checks": [
+        "Diagram, vertex, edge and half-edge bijections; pair reconstruction; incidence, stored flow, UFO slots, particle IDs, mass and dummy/orientation data. Reflected species all self-conjugate; directed lines never use a negative frame sign.",
+        "Exact native Atom equality after independently implemented recursive simultaneous owner transport for every local factor, aggregate, prefactor, projector and overall/symmetry factor; representation dimensions and variance wrappers retained. No graph numerator expansion or numerical sampling.",
+        "Every signed routing row in the old formal chart, including fixed external shifts; explicit external labels fixed; both spanning trees and loop complements valid. Six vector graphs change tree/carrier. The single-loop block has determinant +/-1, so the absolute loop integration Jacobian is one. Redundant dependent external columns are retained as constrained data, not incorrectly inverted.",
+        "Initial cut, all physical cut partitions/opposites and threshold partitions match. The endpoint flow times literal momentum sign is unchanged, preserving the positive-energy cut carrier.",
+        "Actual native denominator product equals the complete immutable-mass unit-power quadratic product, including owners and symbolic Lorentz dimension. Denominator evenness is not used to choose a numerator sign. The old denominator constructor is unchanged semantically; no widths or custom prescriptions are instantiated in this owner."
+      ],
+      "migration_audit": "The frozen reference bytes equal the approved-base and original-candidate fixture. Reviewed the entire certificate and inverse-map/Fraction derivation scripts. The current data selects a proposed isomorphism and coordinate chart, which are independently certified; local factors and retained expectations are derived from the immutable old reference. The current runtime snapshot is read only by final comparison, not copied into expected data. The derived-file SHA equals the checked-in fixture. No blind rerecord, tolerance/physics assertion weakening, or production sign patch.",
+      "mutation_sensitivity": "Eight corrupted witnesses/data are rejected: missing photon reflection sign, dropped external shift, whole local fermion sign, Q-only odd-term sign with mass and denominator unchanged, wrong mass, doubled denominator power, reversed cut endpoint, wrong overall weight.",
+      "limits": "Certifies the full stored reference boundary for these five requests, <=2 vertices and <=1 independent loop. Not a proof of arbitrary topology, hidden tensor history, every native JSON metadata field, numerical evaluation or distribution behavior."
+    },
+    {
+      "id": "B3",
+      "original_severity": "P2",
+      "status": "CLOSED",
+      "file": "crates/gammalooprs/src/graph/parse/from_dot.rs",
+      "line": 129,
+      "supporting_locations": [
+        "crates/gammalooprs/src/graph/parse/mod.rs:565",
+        "crates/feynkit-graph/src/numerator_interface.rs:333",
+        "crates/gammalooprs/src/graph/parse/tests.rs:100",
+        "crates/gammalooprs/src/graph/parse/tests.rs:188"
+      ],
+      "evidence": "The existing runtime validator checks prefactor, projector, every vertex and edge before aggregate multiplication. It permits explicit inter-fragment contractions while retaining runtime anonymous-port refusal; the subsequent aggregate still permits only the established external colour ports.",
+      "identity_guard": "Source explicit-index metadata is validated and collected before the shortcut, including hidden collision history; expression equality AND identity of every retained renaming are required. The shortcut clones the authoritative tensor, preserving layout, representations, scopes and proofs. Nonidentity hidden h1->h9 on zero still takes checked transport and retains third-occurrence refusal. Injectivity checks still precede the shortcut. This is not the rejected scalar/no-head gate; finalization.rs is unchanged.",
+      "coverage": "Independent rerun passes the original zero/compact-scalar assertion, all 3 port forms x 4 fragment owners x zero/nonzero cases, malformed JSON typed-source precedence, and native identity/ranked-zero/hidden-history/collision/scoped/declaration-order controls. Nonzero inputs already rejected by native TensorInferenceError retain that source error; zero cases still require the runtime explicit-index diagnostic.",
+      "policy": "No anonymous-index assignment, fallback parser, compatibility API, changed admission owner, weakened original ranked-zero expectation or tracked skip filter."
+    }
+  ],
+  "independent_execution": {
+    "runtime_tests": {
+      "run": 49,
+      "passed": 49,
+      "failed": 0,
+      "skipped_not_counted": 1480,
+      "run_id": "9fc68fde-037b-4291-9f30-08f8c6180390",
+      "log": "runtime-controls.log",
+      "inventory": "runtime-test-names.json",
+      "cargo_freshness_seconds": 0.39
+    },
+    "native_tests": {
+      "run": 25,
+      "passed": 25,
+      "failed": 0,
+      "skipped_not_counted": 169,
+      "run_id": "fdc201ca-52f3-4b64-9e44-fb0d8daedfe9",
+      "log": "native-controls.log",
+      "cargo_freshness_seconds": 0.32
+    },
+    "fresh_finalized_export": {
+      "run": 1,
+      "passed": 1,
+      "coverage_note": "Duplicate of one of the 49 runtime tests, used to capture fresh final-code data; not additional distinct test coverage.",
+      "log": "fresh-boundary.log",
+      "trace": "boundary-logs/gammaloop-test-1188684.jsonl"
+    },
+    "approved_and_staged_controls": {
+      "approved-B2": {
+        "exit": 0,
+        "tests": 1,
+        "expected_outcome": true
+      },
+      "approved-B3": {
+        "exit": 0,
+        "tests": 1,
+        "expected_outcome": true
+      },
+      "staged-B2": {
+        "exit": 101,
+        "tests": 1,
+        "expected_outcome": true
+      },
+      "staged-B3": {
+        "exit": 101,
+        "tests": 1,
+        "expected_outcome": true
+      }
+    },
+    "independent_proof": {
+      "diagrams": 20,
+      "tree_changes": 6,
+      "negative_controls_rejected": 8,
+      "report": "independent-proof.json",
+      "script": "independent-proof.py",
+      "host_test": "tests::standalone_python_pipeline_covers_generation_graphs_cff_and_kinematics",
+      "host_result": "PASS, 1 executed test; original assertions continue after proof",
+      "log": "independent-proof.log",
+      "scope": "Host supplies the unchanged pinned core algebra and model symbol registration. Final Rust export supplies reviewed physical data. Not a new feynkit-py build or distribution certificate."
+    },
+    "counts": "74 distinct current Rust tests passed; no skipped/zero-selected cases counted. Old two passes/two expected failures, fresh duplicate export and one host execution are reported separately."
+  },
+  "reused_evidence": {
+    "base_source_attestation": "Base binary code739b1f6a differs from approved438b6150 only in eight documentation/evidence paths (independently inspected); binary SHA reverified and both B2/B3 controls newly rerun.",
+    "staged_host_attestation": "Inherited original Scope B source attestation; candidate runtime and core-host SHAs reverified. Current Cargo freshness checks reused final workspace binaries with default package features, --lib, ci-optim, --locked; test inventory retained.",
+    "clippy": "Reused SHA-verified native-clippy and clippy-migrated receipts against unchanged reviewed sources. Native clean; GammaLoop has only two inherited Clarabel warnings. No fresh Clippy execution claimed.",
+    "format_docs": "Reused SHA-verified fmt-final, typst-final and registered-title results. No full docs product build claimed.",
+    "raw_artifacts": "All 83 implementation artifact hashes match before and after review; original and correction artifacts preserved."
+  },
+  "identity": {
+    "tracked_workspace": {
+      "commit": "5ac772ac04209582147ba9b5e6204b74c488216a",
+      "tracked_blobs": 3349,
+      "bytes": 100486368,
+      "mismatches": [],
+      "submodules_not_recursed": [],
+      "method": "jj resolved shared Git object store; read-only git ls-tree, exact blob hashes of workspace bytes; no snapshot/ref update"
+    },
+    "files_and_binaries": "identity.json",
+    "nix": "nix-identity.json",
+    "final_binary": {
+      "path": "/common/build-cache/lcnbr/78/3737f438fa4d7e/ci-optim/deps/gammalooprs-d550f986c4ae73f4",
+      "sha256": "bacaa25766ddc1b81a60123ee39b23d1bd5d11358e22ee68e71a7f653b1ffd35",
+      "matches": true
+    },
+    "native_binary": {
+      "path": "/common/build-cache/lcnbr/78/3737f438fa4d7e/ci-optim/deps/feynkit_graph-d372e25a36c0835e",
+      "sha256": "729972357d1ffd6e339553cad812652bb4e5fe7b7096a5adb25597d98f820ab7",
+      "matches": true
+    },
+    "core_checker_host": {
+      "path": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/feynkit_py-9f7622fa85dbd250",
+      "sha256": "06d000de00378e92d69b5cdb84638aceeb111d2c29e4603debfb7ca1dbd60045",
+      "matches": true
+    },
+    "old_fixture_sha256": "b3bfd1e5e8f4635176f86613e9f3a7aa600acfc2cc8dd43cc5794ed987b3206e",
+    "new_fixture_sha256": "0e7da593639ea81ab81f733d5ef52f8aa578565648d0a8bb15fb9f6b2e4aa815",
+    "protected_inputs": "No diff from817b in root/Tydenso/host locks, nix-ci.nix, Clarabel or finalization.rs. Models match438b and817b. Lock changes between438b and817b are inherited integration work, not this correction.",
+    "nix_reuse_limit": "Current shell differs from retained shell only by clinnet dev-executable derivation and output path; compiler/Python/libraries/shell configuration match, clinnet not invoked. No build-dir override/cache seeding/deletion. No configured .envrc found. License preserved/loaded without output."
+  },
+  "source_audit": {
+    "read": "Main and selected-workspace AGENTS/CONTRIBUTING; complete original Scope B and relevant Scope A/A1 receipts; all2047 lines of runtime-admission.json; complete runtime admission Typst note; changed Rust hunks; full proof and migration scripts; relevant native tensor, rule application, denominator, bridge and cut owners in current/base sources.",
+    "rust_policy": "New production behavior extends existing owners, uses borrowed fragments and structured source propagation, preserves checked metadata and arbitrary-precision symbolic data. The identity return needs its independent owned result; its clone retains authoritative carrier/proofs. No new unsafe, lossy numeric conversion or additional abstraction/compatibility owner. New/substantially modified code reviewed against mandatory policy; no newly introduced departure identified. Unchanged legacy style is not treated as new compliance.",
+    "assertions": "Reference test accumulates differences but still asserts all expected fields and case/count inventory. Independently checked identical full field-key sets. Four unchanged whole-numerator-expansion helper callers are excluded only by review command, never tracked changes."
+  },
+  "omitted_and_pending": [
+    "The four broad parser parity tests listed in runtime-admission.json were intentionally not executed because their shared helper expands graph numerators. No full parse-suite claim.",
+    "A1 hidden-history finalization correction remains a separate lane; this review neither integrates nor approves it. B1/C1/C2 and drawing/projector corrections are separate.",
+    "Three imported historical frame assertions remain pending; spelling/interface diagnostics are not physics proof. This consumer B2 closure does not close those failures.",
+    "Source30 compiletime closure, source31 seven inherited plus20 additional scopes, full WP3 matrix, five fresh a_ddx, BRST, combined CoolQM+epem, numeric/sampling controls remain pending.",
+    "Final WASM/manual/native/Pyodide/Community distribution certification and memory/performance measurements remain pending. No heavy physics, benchmark or final distribution claim.",
+    "Native denominator proof domain is symbolic quadratic propagators, unit powers and formal Lorentz momenta. Widths, imaginary prescriptions/custom UFO denominator formulas and general multiloop transformations are outside this certificate.",
+    "No source19+ naming/route/Classes implementation, parent integration, ref changes or publication performed."
+  ],
+  "postintegration_checks": [
+    "Against the actual combined commit, rerun the74 selected runtime/native controls and capture the20 exact finalized-reference outputs; retain the frozen approved fixture and this certificate identity.",
+    "Run a combined A1+B3 regression: nonidentity owner transport of public AND hidden indices through finalization and runtime import, including scalar zero, ranked zero, scopes, canonical-looking declared order and retained third-occurrence/dummy-capture refusal. Check truly unchanged open-port identity still survives until runtime rejection.",
+    "After other correction lanes join, rerun their scoped consumers and obtain all required fresh reviews. Keep historical frame, full physics, docs-scope, distribution and measurement gates open until separately satisfied."
+  ],
+  "cleanup": {
+    "tracked_edits": false,
+    "ref_changes": false,
+    "main_checked_out_files_modified": false,
+    "nested_agents": false,
+    "processes_retained": [],
+    "artifacts_retained": "Unique ignored target/astra-parser-r2-20261027 contains the review, reproducible independent verifier/hook, source/binary/tree identity, fresh native/runtime/denominator payloads and logs for review/continuation. Existing task workspace and all parent evidence retained; nothing published or integrated."
+  },
+  "review_tool_attempts": [
+    "Initial bare-python identity read found no python3 before performing any check; all executed checks used the verified Nix shell. Initial Nix JSON reader assumed the older output shape and was corrected for the derivations wrapper. Neither failed tool attempt is counted as product validation."
+  ],
+  "review_artifacts_sha256": {
+    "approved-B2.log": "822350e270c0b08a210e6bd54c30332fb78f71ddf0fa4ad2d9875bc8f2034c31",
+    "approved-B3.log": "1aee030b255c2ea85423117b7a1f571080997540316b7230c39dcb01d7dc99dc",
+    "boundary-logs/gammaloop-test-1188684.jsonl": "792a4c52687de8ad09f62fba0e6d5c0032ca6205a73476de9057bf0115b34173",
+    "current-tests.json": "98b8fa0f2ef7a216fb19e903713ea63940e82c475a46cd6f704b4973068daed1",
+    "denominators.json": "b7ce3b151ab8598dd1bb510ceade6473fa810ab1c9b762fadbfabe7a103b842d",
+    "finish-identity.py": "96661c8d8165db1040aa336df31fe3a5260c76f63c51a918bc424e00bb07ec4f",
+    "fresh-boundary.log": "491cf8861eecd0785b5e00357d30195c305b70674af3410f75869cb05be8a6b1",
+    "identity.json": "10a9320bbca8d6b5aaa37f3f40ac930d72ef6db0caf9c8ef6efa065b1585176c",
+    "identity.py": "3e4599c2f830845dca18847046cba1bbae1eee99acf8f5af9dbd015662bbfb58",
+    "independent-proof.json": "4927c2c9067fa0714d459042086fd13f14fb15baf6ee14faff43962ed3458024",
+    "independent-proof.log": "0ca4a20a646cdfc3cae359dcf9041a9f97cf30341c4eadf1add4006452c5a3e4",
+    "independent-proof.py": "789a3254717e6dc4cc9f2c28132190942f0c16661ae9c8b4961534e177009e99",
+    "native-controls.log": "b378bed38f2dd045ebadd0eb5984989d5751f9a7c70735833757fa86c86a749a",
+    "native.json": "72cc2960d291965e0ddad669d5525c5b8604a481de07e959632d6ed207b4141b",
+    "nix-identity.json": "6b09a53edd153564cfc33c270c2dd435bba021bd4b71ed7f756424b85989c3eb",
+    "old-controls.json": "4e23a9eb452fd96dc62e5e0ed170efdc8d5589f7aabddcd2ac1ad76006642ce2",
+    "probe/sitecustomize.py": "3e84df4d7b8747fdecebcc704cdd8c0207bd106cdbff474eed3d2ffb8dbbf8b3",
+    "reflected-species.json": "e1b7fb0744fbd6587161b9cf7041b8d6bd1482ee67fa44c3e0c5861a62108418",
+    "run.sh": "e87bb9c311bc62a91ad4172ec10ad1709a389fa9934a36244408430d16c73ec0",
+    "runtime-controls.log": "cbb210fc6432dee45fe9d8b90c8c340fb5b7c4b945ac6298137f48b8f2dceba2",
+    "runtime-test-names.json": "c5b1bb0820f94abbfd48575459b2cd0ac039e82a439d229bf85f4d127441a1aa",
+    "runtime.json": "d4e800170d505667b076ede00cc67013fda251759076db2c84c9b0571929093e",
+    "shell-and-build.log": "1b89138d19650f4d18a8f3e118d7a8da84f91fccb49b4572d0da2250e33e8b17",
+    "staged-B2.log": "5f6e6bf70959a714df45fa61ce436213b19dbe6093a3ac72b77346b65ab980c8",
+    "staged-B3.log": "476379587a4bb1850a1aa69e4b968ce6fa2ec3f7f9374b9fca76c113ebac080d",
+    "tree-integrity.json": "d150fc3f5fd119f0b5decdd2040b06c8f2b845a012b3025ba7e55420c9668a64",
+    "tree-integrity.py": "9167d2f12cd5ee28a569054dd3a2fa294f94a657c520ba974a6a3b45560f5ec2"
+  }
+}

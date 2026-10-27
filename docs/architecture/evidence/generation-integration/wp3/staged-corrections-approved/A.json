@@ -1,0 +1,114 @@
+{
+  "review": "Astra NEW independent Scope A ROUND2",
+  "verdict": "APPROVE",
+  "scope": "Bounded A1 transport correction and its unchanged admission/template/B2 controls only",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-staged-transport-fix",
+  "bookmark": "generation-staged-transport-fix",
+  "candidate": "39e88ddff27c1279188a2ad50ab1197f75ad899e",
+  "code_commit": "7918d2a6c596c86519907bec96a6ca8a5776bea8",
+  "parent": "817b5886a50276efea05ab860d22016e1fb0c203",
+  "approved_integration_base": "438b61500da4b32841c64211103e5da6fc4c4a72",
+  "original_review": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-staged-r1-production/review.json",
+  "findings": [],
+  "closure": [
+    {
+      "id": "A1",
+      "original_severity": "P1",
+      "status": "closed",
+      "path": "crates/feynkit-graph/src/finalization.rs",
+      "production_lines": [
+        330,
+        338
+      ],
+      "regression_lines": [
+        1549,
+        1643
+      ],
+      "reason": "The scalar/visible-head gate is removed. For every existing generated FinalFrame, all admitted vertex and edge fragments, explicit aggregate, prefactor and projector pass through the unchanged NumeratorInterface::translate owner. Imports and the metadata-free overall Atom retain their previous paths.",
+      "owner_audit": "translate enumerates retained explicit indices plus interface/payload identities, rejects noninjective mappings, checks callback interface output and transfers occurrence/orientation history through with_renamed_indices. That owner maps retained slots and validates multiplicities while retaining logical order; no second metadata owner or re-admission was added.",
+      "regression": "Two nonidentity owner maps times five destinations; checked scalar zero has retained source history, final history is compared with explicit transport, later third occurrence is rejected and an unrelated vector produces a valid ranked zero. Final graph validation is still required.",
+      "fixture_honesty": "Initial aggregate fixture correctly failed NumeratorFragmentMismatch. Only a plain zero vertex fragment was added so the explicit aggregate agrees in value while its hidden history still exists solely on the aggregate. No assertion was removed or weakened; final test module is byte-identical in old and corrected retained sources.",
+      "negative_control": "Independently reran the retained SHA256-verified old executable. Exactly one test failed with edge(0,1) versus expected edge(2,1). Old production bytes equal parent817b; final corrected test passes all ten subcases. The old executable stops at the first failing subcase; no claim of ten separately executed old failures."
+    }
+  ],
+  "independent_checks": {
+    "passing_tests": 47,
+    "per_package": {
+      "feynkit-graph": 30,
+      "feynkit-generator": 16,
+      "feynkit-model": 1
+    },
+    "ignored_b2_executed": true,
+    "ignored_tests": 0,
+    "zero_test_runs": 0,
+    "new_regression_executed": true,
+    "old_negative_control": {
+      "path": "/common/build-cache/lcnbr/39/38dcfde7c00a27/ci-optim/deps/feynkit_graph-d372e25a36c0835e",
+      "sha256": "31c31114ee0760b4be806a4827c500e8a5e0ce8f2ddc2b280d66cf97041d3173",
+      "expected": "31c31114ee0760b4be806a4827c500e8a5e0ce8f2ddc2b280d66cf97041d3173",
+      "command": [
+        "/common/build-cache/lcnbr/39/38dcfde7c00a27/ci-optim/deps/feynkit_graph-d372e25a36c0835e",
+        "finalization::tests::finalization_transports_hidden_scalar_history_in_every_tensor_destination",
+        "--exact",
+        "--nocapture",
+        "--test-threads=2"
+      ],
+      "exit": 101,
+      "result": "Expected old shortcut failure: edge(0,1) vs edge(2,1)",
+      "log": "/shared/lcnbr/dev/gammaloop/generation-staged-transport-fix/target/astra-transport-r2-20261027T222928Z/old-regression-independent.log",
+      "log_sha256": "85b41c3c9557db8dd86f898acfc14d8255cce03ca09fa02cdcd78f7716b6c9ac"
+    },
+    "source_identity": "All 3348 tracked paths match final39e88ddf, verified before and after execution. Exactly four changed files; code7918d2a6 to final adds only receipt.json.",
+    "binary_identity": "Current Cargo --locked --profile ci-optim --lib --no-run reports all three package test executables fresh in 0.50s, with the recorded SHA256s. Feature/source/profile identities retained in binary-identity.json. Explicit ignored B2 standalone Cargo run reused its own matching recorded executable.",
+    "evidence": "All 23 embedded source/log/runner/binary artifact hashes verified; original Astra reproducer copied exactly; old production and final regression-test byte identity independently checked.",
+    "registry": "New title, registration and exact closure scope digest verified independently with canonical Git blob hashing. Existing registrations structurally identical to parent; exactly 27 pre-existing scope/anchor mismatches remain.",
+    "details": "checks.json, binary-identity.json, identity.json, tracked-inventory.json, scope-audit.json, registry-scopes.json"
+  },
+  "source_audit": {
+    "minimality": "Only finalization.rs changes production/test code. No tracked tests, snapshots, expectations, manifests, grouping production, kernel pins, locks or CI toggle modified elsewhere.",
+    "raw_admission": "Reviewed interaction_template raw admission and classification before conserved momentum rewriting or alias specialization; dynamic rules still admit once at actual owner.",
+    "publication": "Reviewed template construction outside locks and immutable entry publication, plus authoritative history completion before template reuse; unchanged.",
+    "b2": "Read original-pair certificate through color-sector reconstruction, finite SU3 color factors 7/3 and -2/3, exact component C/gamma identities, factor-preserving local-loop similarity/canonical dummy relabelling, asserted production zero-sample singleton identities/unit ratios/weights, and seeds3/7/11 canonical on/off fallback matrix. Independently executed explicit ignored test: N28=(7/2)N34. Numerical samples are supplemental, not the symbolic proof. No grouping physics change.",
+    "policy": "New imports at test-module scope; existing transport/error owner reused; exact integer atoms; factorized numerator preserved; no new abstraction, weakening assertion, normalization expansion or identified Rust-policy departure."
+  },
+  "reused_checks": {
+    "sol_239_controls": "Hash-verified retained controls and runner inspected; all 239 recorded executions pass. Not counted as 239 independent reruns.",
+    "format_clippy_typst": "Retained successful fmt, relevant feynkit-graph Clippy (zero warnings), and Typst compile evidence hash-verified and reused for unchanged code. Not independently rerun."
+  },
+  "environment": {
+    "shell": "/nix/store/3jxbvlchm6afbs8fsi3md5n9ic3azic2-nix-shell-env.drv",
+    "shell_verification": "Core toolchain/library/build inputs and shellHook match current evaluated shell; only native Clinnet renderer build input differs. See nix-shell-comparison.json.",
+    "profile": "ci-optim",
+    "jobs": 2,
+    "test_threads": 2,
+    "rayon_threads": 2,
+    "insta_update": "no",
+    "license": "Existing export preserved or silently loaded from XDG/home config; no value retained.",
+    "cargo_cache": "/common/build-cache/lcnbr/{workspace-path-hash}; no override/manual seeding/deletion",
+    "setup_diagnostics": "Ambient python3 was unavailable; used Nix Python. Initial git discovery assumed a colocated checkout and failed before writing; subsequent read-only Git queries use main/.git with explicit feature work-tree. Neither setup failure is a test result."
+  },
+  "limits": [
+    "Approval covers A1 on final39e88ddf only, not wholecandidate/WP3 or any other correction branch.",
+    "Separate parser correction changes NumeratorInterface; neither its new identity certificate nor combined interaction is certified here.",
+    "Three inherited historical frame assertions remain unresolved and were not rerun. A spelling/interface representation diagnostic is not physics equivalence proof.",
+    "Consumer Scope B2 finalized-reference routing/sign certificate remains distinct from the passing original-pair grouping B2 test.",
+    "Source30 compile-time closure and source31 seven inherited plus twenty added documentation mismatches remain pending.",
+    "No full WP3/four-loop/SM fresh-process matrix, five fresh a_ddx, BRST, combined CoolQM+epem, complete numeric/sampling matrix, performance/memory measurements, final WASM/manual/native/Pyodide/Community distribution certification.",
+    "No source19+ continuation, naming/route/Classes implementation, integration, publication or all-group physics approval."
+  ],
+  "required_postintegration_checks": [
+    "After combining the parser NumeratorInterface correction with this transport fix, rebuild matching binaries and rerun this ten-subcase finalization regression, parser identity certificate, native/encoded/scoped/anonymous/declared-order/ranked-zero/interface-history controls, and raw admission/template actual-owner/publication controls.",
+    "Rerun the explicit ignored original-pair B2 certificate on the combined source; preserve the separate downstream B2 frame-equivalence gate.",
+    "Coordinator must aggregate all remaining independent scope reviews and pending integration/physics/documentation/distribution gates before source19 continuation."
+  ],
+  "cleanup": {
+    "tracked_edits": false,
+    "ref_changes": false,
+    "nested_agents": false,
+    "publication": false,
+    "integration": false,
+    "processes_retained": [],
+    "retained": "/shared/lcnbr/dev/gammaloop/generation-staged-transport-fix/target/astra-transport-r2-20261027T222928Z contains independent receipt, reproducible review scripts, source/binary inventories and useful validation logs. Original and correction evidence, workspace/bookmark and shared caches preserved for continuation.",
+    "unneeded_artifacts_removed": "Transient binary test listings removed after retaining exact selection and binary identities; no other contributor artifacts touched."
+  }
+}
