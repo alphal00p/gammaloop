@@ -1,0 +1,25 @@
+{
+  "source": "/shared/codex/dev/gammaloop/main",
+  "roots": [
+    "e0a77980",
+    "f25961e2",
+    "4e008517",
+    "d9ff71a6",
+    "75b6c7a8",
+    "dfe63876",
+    "6d207cfc",
+    "9540f5bb"
+  ],
+  "excluded_existing_ancestor": "58814885",
+  "source_rc": 0,
+  "destination_rc": 0,
+  "pack": "pack\t68e843b3bac6dbab8c82f388102969b804c18a50",
+  "errors": "",
+  "completion": {
+    "reason": "Existing local history contained missing ancestral trees; imported only missing objects from complete source traversal",
+    "objects": 5898,
+    "pack": "pack\tcc17908316b0963d837faeedbb8074536f28b356",
+    "source_rc": 0,
+    "destination_rc": 0
+  }
+}

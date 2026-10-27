@@ -1,0 +1,35 @@
+{
+  "completed_utc": "2026-10-21T13:59:54.253542+00:00",
+  "workspace": "/shared/codex/dev/gammaloop/linnet-generation-combined",
+  "commit": "75b6c7a88fb099f142bcec9227ee614b6fc56376",
+  "tree": "7287ec6e3f2b8aa33729eee17f9ac12d2a533906",
+  "tracked_files_verified": 3551,
+  "mismatches": [],
+  "process_scan_prefix": "/tmp/codex-combined-s2/",
+  "excluded_receipt_lineage": [
+    1,
+    61012,
+    1563808,
+    1563811,
+    1632826,
+    3478601,
+    3480759
+  ],
+  "remaining_task_path_processes": [],
+  "nix_ci_enable": false,
+  "coordinator_receipts": {
+    "fixes": {
+      "path": "/tmp/codex-combined-s2/resume-20261021/fixes/wind-down-20261021.json",
+      "sha256": "d862574c192f6c57fd29072c28a73622f9c8b8a9fc9ab6ec3627ddc8d7182587"
+    },
+    "drawing": {
+      "path": "/tmp/codex-combined-s2/resume-20261021/drawing151/wind-down-receipt.json",
+      "sha256": "0b507ca2c58a9130cac4337829823c0b11766b71097ccaa32d61d34b3bf83b43"
+    },
+    "extras": {
+      "path": "/tmp/codex-combined-s2/resume-20261021/parallel/recovery/wind-down.json",
+      "sha256": "e49a028a565cbf82147a232490e5fc2c79e70303623ca74aca9811edfccb7e01"
+    }
+  },
+  "no_build_test_experiment_or_source_mutation": true
+}

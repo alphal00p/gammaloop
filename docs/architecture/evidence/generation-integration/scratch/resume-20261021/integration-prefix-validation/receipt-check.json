@@ -1,0 +1,99 @@
+{
+  "passed": true,
+  "receipt_files_verified": true,
+  "source_checks_complete": true,
+  "checkout_released": true,
+  "released_at": "2026-10-21T11:55:27.792814+00:00",
+  "tested": {
+    "workspace": "/shared/codex/dev/gammaloop/linnet-generation-combined",
+    "commit": "3f6670be5a1d6e967c02e6673a8136085693b669",
+    "parent": "501c93fe3915106c2558c028fe1b64c58a2186fa",
+    "tree": "9f8bbc82a4854e501bed28fa53194ffee9c99263",
+    "tracked_file_count": 3502,
+    "timestamp": "2026-10-21T11:32:52.457623+00:00"
+  },
+  "counts": {
+    "run": 1645,
+    "passed": 1645,
+    "failed": 0,
+    "skipped": 1715,
+    "timed_out": 0
+  },
+  "commands": [
+    {
+      "name": "tool-versions",
+      "exitcode": 0,
+      "counts": null,
+      "run_id": null
+    },
+    {
+      "name": "metadata",
+      "exitcode": 0,
+      "counts": null,
+      "run_id": null
+    },
+    {
+      "name": "formatting",
+      "exitcode": 0,
+      "counts": null,
+      "run_id": null
+    },
+    {
+      "name": "library-tests",
+      "exitcode": 0,
+      "counts": {
+        "run": 1609,
+        "passed": 1609,
+        "failed": 0,
+        "skipped": 24,
+        "timed_out": 0
+      },
+      "run_id": "8dcd9f2e-8f16-45bd-91a8-c963fc6db9d4"
+    },
+    {
+      "name": "package-regressions",
+      "exitcode": 0,
+      "counts": {
+        "run": 23,
+        "passed": 23,
+        "failed": 0,
+        "skipped": 0,
+        "timed_out": 0
+      },
+      "run_id": "ede14724-ea97-4aec-a274-151982234986"
+    },
+    {
+      "name": "linnest-ec-seed-regressions",
+      "exitcode": 0,
+      "counts": {
+        "run": 11,
+        "passed": 11,
+        "failed": 0,
+        "skipped": 178,
+        "timed_out": 0
+      },
+      "run_id": "8e2751ed-e98c-4d88-9dbd-ecdbde8f9642"
+    },
+    {
+      "name": "caller-regressions",
+      "exitcode": 0,
+      "counts": {
+        "run": 2,
+        "passed": 2,
+        "failed": 0,
+        "skipped": 1513,
+        "timed_out": 0
+      },
+      "run_id": "18f9127b-3e44-4b9d-9fe4-cd446f91dfdc"
+    },
+    {
+      "name": "clippy",
+      "exitcode": 0,
+      "counts": null,
+      "run_id": null
+    }
+  ],
+  "remaining_scoped_checks": [],
+  "retained_processes": [],
+  "report": "/tmp/codex-combined-s2/resume-20261021/integration-prefix-validation/final-report.json"
+}

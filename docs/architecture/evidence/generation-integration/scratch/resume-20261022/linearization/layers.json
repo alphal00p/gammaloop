@@ -1,0 +1,163 @@
+[
+  {
+    "source": "48f046f7350cdce0b5092a3c1a70f04b1510cc1b",
+    "copy": "8d49e6ecf0d8fb1169e7433f2c0b41048aa92e60",
+    "resolution": "grouping.rs from independently reviewed 75b6"
+  },
+  {
+    "source": "309ba0ed0a015ebc75ae1d64cb4f92bbaa90a00a",
+    "copy": "8eeaeaaeb0fed758111e9f711eb256c4a5efbf75",
+    "resolution": "automatic replay on resolved A"
+  },
+  {
+    "source": "9c59b16c3acf9f03cc70a3969de2f400e2894b5c",
+    "copy": "78f55a6d68aef17897638bacd1d1492047711f75",
+    "parent": "8eeaeaaeb0fed758111e9f711eb256c4a5efbf75",
+    "resolution": "automatic replay"
+  },
+  {
+    "source": "d24004b33a99309fce718fcfaf490ed6208c0ee0",
+    "copy": "77dcd12272d0f86dc5309f8d74de94632a771b6e",
+    "parent": "78f55a6d68aef17897638bacd1d1492047711f75",
+    "resolution": "automatic replay"
+  },
+  {
+    "source": "feeae769038299b503ccca4947356e5321505b98",
+    "copy": "967abd74e1843016d34f5e6f701cd4b7828768b6",
+    "parent": "77dcd12272d0f86dc5309f8d74de94632a771b6e",
+    "resolution": "automatic replay"
+  },
+  {
+    "source": "93765cf489feccb43ed1af8a2a6d82ec0b337c43",
+    "copy": "a18babd0f5adb028d4bd0722ce386be93464839d",
+    "parent": "967abd74e1843016d34f5e6f701cd4b7828768b6",
+    "resolution": "automatic replay"
+  },
+  {
+    "source": "9f792f1d8d6a663c35f7d9837a913e0878ca2655",
+    "copy": "15f2aa1a11380f33325ce283a404753a9836882f",
+    "parent": "a18babd0f5adb028d4bd0722ce386be93464839d",
+    "resolution": "automatic replay"
+  },
+  {
+    "source": "c5a28fd74624e55a1021cee1688e1fcb86045b43",
+    "copy": "8cf71575a739976295edb42eae2052d6b5e455ee",
+    "parent": "15f2aa1a11380f33325ce283a404753a9836882f",
+    "resolution": "automatic replay"
+  },
+  {
+    "source": "c85c44094dbca465890fc8a52b152a1d3eb5b8d3",
+    "copy": "d17f3548821f76250e49056e6b684257e49d92ec",
+    "parent": "8cf71575a739976295edb42eae2052d6b5e455ee",
+    "resolution": "automatic replay"
+  },
+  {
+    "source": "bacc0dc8967e83ab52e6a8d4a8c646efe3f264b8",
+    "copy": "2ec30ce37196011fbeb21af2822d655146b45a0f",
+    "parent": "d17f3548821f76250e49056e6b684257e49d92ec",
+    "resolution": "automatic replay"
+  },
+  {
+    "source": "4463a7ee23cde1d524e34cc544ce5b457852acf9",
+    "copy": "dd3640cb8171fbdc455888e3b8fcf2de92514a32",
+    "parent": "2ec30ce37196011fbeb21af2822d655146b45a0f",
+    "resolution": "automatic replay"
+  },
+  {
+    "source": "3cadc5b755ea7afa674ac6bf7a229df7104691d2",
+    "copy": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+    "parent": "dd3640cb8171fbdc455888e3b8fcf2de92514a32",
+    "resolution": "automatic replay"
+  },
+  {
+    "source": "11abdbf96bcc075ed6791fe0888858b6f9fad4e8",
+    "copy": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+    "parent": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+    "resolution": "developers.toml from independently reviewed 75b6"
+  },
+  {
+    "source": "448277a0b29f166bf2d38683dc093c08253b9845",
+    "copy": "351c85036778be709117a021fc5f1656bbd5a964",
+    "parent": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+    "resolution": "automatic replay"
+  },
+  {
+    "source": "c2687514bc243137b01343e0ca8acbeca4eb105e",
+    "copy": "ce9072e44a3335fdba7d223b0c3ae885cc29dc20",
+    "parent": "351c85036778be709117a021fc5f1656bbd5a964",
+    "resolution": "automatic replay"
+  },
+  {
+    "source": "c769f6b70e2acfc4954b8ac4486a91d0f11b6d5d",
+    "copy": "7e93e726e253ebb2a1af0d4b38177f3628d4b34b",
+    "parent": "ce9072e44a3335fdba7d223b0c3ae885cc29dc20",
+    "resolution": "automatic replay"
+  },
+  {
+    "source": "9a6b13031c0e782505372b99e64cdd27dd83fbe7",
+    "copy": "8c12968bde84643623ca2f5099e0175180a73dc6",
+    "parent": "7e93e726e253ebb2a1af0d4b38177f3628d4b34b",
+    "resolution": "automatic replay"
+  },
+  {
+    "source": "e98dd69a9c4fca0e7a9ace99ec70ce12248b4329",
+    "copy": "5a99afbd1645250715ecf59361beb7ab4826d083",
+    "parent": "8c12968bde84643623ca2f5099e0175180a73dc6",
+    "resolution": "automatic replay"
+  },
+  {
+    "source": "e10d25f580b17d09e77146b6822dc9b5ba18fe5a",
+    "copy": "cfe9e8d103b3d2a4ebf1f276f61d8d6980e3d054",
+    "parent": "5a99afbd1645250715ecf59361beb7ab4826d083",
+    "initial_conflict": "crates/feynkit-generator/src/grouping.rs 3-sided conflict\ndocs/developers.toml                3-sided conflict\n",
+    "resolution": "Redundant grouping and registry resolutions removed: parent files already byte-identical to e10d25f5. Retained assertion reformat only."
+  },
+  {
+    "source": "b0c05ac8e6989e45de393892ca7ebc3eb753fbec",
+    "copy": "15dd7e1b188dad112d7887bdc6d769125b2697a1",
+    "parent": "cfe9e8d103b3d2a4ebf1f276f61d8d6980e3d054",
+    "resolution": "automatic replay"
+  },
+  {
+    "source": "db5774fa29a35063584f639a439edb62afa24cb1",
+    "copy": "854c4a7a4ac22ef6987e9446092560a3363f5d77",
+    "parent": "15dd7e1b188dad112d7887bdc6d769125b2697a1",
+    "resolution": "automatic replay"
+  },
+  {
+    "source": "9188631125f94fcbffea216f7d778aec418d7704",
+    "copy": "f6c29e4b324692e8fa185ac356dc66e1b1edd783",
+    "parent": "854c4a7a4ac22ef6987e9446092560a3363f5d77",
+    "resolution": "automatic replay"
+  },
+  {
+    "source": "d73993666878be78fa2fd6b59b935bc46696a7aa",
+    "copy": "b69de4327cf27e8ba275300ab02d7151f472f047",
+    "parent": "f6c29e4b324692e8fa185ac356dc66e1b1edd783",
+    "resolution": "automatic replay"
+  },
+  {
+    "source": "3f25682eb17ae34e10f524a3885b289156f39081",
+    "copy": "40c126b1ff91a0c8c95480cacc8f5ba3ee0f1309",
+    "parent": "b69de4327cf27e8ba275300ab02d7151f472f047",
+    "resolution": "automatic replay"
+  },
+  {
+    "source": "79255c0ab682250b3874510e1fd22a62ddc74748",
+    "copy": "74fcd8e57e9fe256d4bc34b5d8ad93c97fc28848",
+    "parent": "40c126b1ff91a0c8c95480cacc8f5ba3ee0f1309",
+    "resolution": "automatic replay"
+  },
+  {
+    "source": "05006de521333a7c70ce0bace23212413c220bf7",
+    "copy": "087bda82ce5a14dab092776ea470e66278dda12d",
+    "parent": "74fcd8e57e9fe256d4bc34b5d8ad93c97fc28848",
+    "resolution": "automatic replay"
+  },
+  {
+    "source": "6d207cfce36ab2bb128d92d67cc3da182afb0bb1",
+    "copy": "dfe6387606e44a96f110c1ce03f52d92824dbdb1",
+    "parent": "087bda82ce5a14dab092776ea470e66278dda12d",
+    "resolution": "automatic replay"
+  }
+]

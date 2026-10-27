@@ -1,0 +1,31 @@
+{
+  "status": "complete: history reconstruction only, final source tree unchanged",
+  "workspace": "/shared/codex/dev/gammaloop/linnet-generation-combined",
+  "base": "2b1ef4f07a44bc061bcc97c378bbdd9c41cb0e94",
+  "source_tip": "6d207cfce36ab2bb128d92d67cc3da182afb0bb1",
+  "source_bookmark_preserved": "combined-integration-v3",
+  "new_tip": "dfe6387606e44a96f110c1ce03f52d92824dbdb1",
+  "new_bookmark": "combined-integration-v3-linearized",
+  "same_tree": "1fc62584e241d44d0e2352aa848201f99830a0ee",
+  "copied_layers": 27,
+  "conflicted_new_layers": 0,
+  "author": "Lucien Huber <im@lcnbr.ch>",
+  "resolutions": [
+    "A copy owns the reviewed grouping.rs resolution from 75b6; quotient changes replay cleanly on it.",
+    "C registry copy owns the reviewed developers.toml resolution from 75b6.",
+    "The later redundant grouping/registry resolution was removed after both parent files proved byte-identical to e10d25f5. That layer now only reformats the label Score assertion."
+  ],
+  "checks": [
+    "All new layers have conflict=false and retain the requested author.",
+    "The ABC checkpoint equals original e10d25f5 byte for byte.",
+    "The final tree equals original tested v3; complete jj diff is empty.",
+    "Top-level NixCI remains disabled."
+  ],
+  "validation_limit": "No tests or builds were repeated: final source is unchanged. Intermediate layers are conflict-free but not independently build-tested. Earlier v3 runtime evidence remains source-applicable; existing limitations remain.",
+  "source_report": "/common/dev/gammaloop/handoffs/linnet-generation-combined/prepare/root-integration-v3.json",
+  "layers": "layers.json",
+  "commands": "commands.log",
+  "remote_actions": false,
+  "old_commits_rewritten": false,
+  "pending": ["idenso independent reviews", "drawing math/contact/fidelity reviews and remaining implementation", "extras evidence and review gates", "final feature composition, assets, documentation and publication workflow"]
+}

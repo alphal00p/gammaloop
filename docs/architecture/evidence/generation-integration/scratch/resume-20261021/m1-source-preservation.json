@@ -1,0 +1,9 @@
+{
+  "repository_workspace": "/shared/codex/dev/gammaloop/linnet-generation-combined",
+  "local_bookmark": "generation-m1-source-9540f5bb",
+  "exact_commit": "9540f5bbf7a96609e69af6983d2bf7325530126d",
+  "change_id": "xspzosrlwtmrxtvyotlprkxxrosmyqln",
+  "reason": "Keep the exact unpublished GammaLoop source of gammabench M1 reachable through garbage collection. M1 remains local evidence; M2 is recorded at the eventual published commit.",
+  "working_copy_unchanged": "swztlkyxkrryxrynwrlvwnwzukunrprp 64a27bf078436103a3f548c756d69c53bca7a573",
+  "remote_actions": false
+}

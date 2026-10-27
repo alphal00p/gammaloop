@@ -1,0 +1,115 @@
+{
+  "status": "paused at user request; graceful wind-down complete",
+  "completed_utc": "2026-10-21T13:59:54.253542+00:00",
+  "current_source": {
+    "commit": "75b6c7a88fb099f142bcec9227ee614b6fc56376",
+    "tree": "7287ec6e3f2b8aa33729eee17f9ac12d2a533906",
+    "bookmark": "combined-integration-abc-provisional",
+    "provisional": true,
+    "runtime_validated": false
+  },
+  "last_runtime_checkpoint": {
+    "commit": "2b1ef4f07a44bc061bcc97c378bbdd9c41cb0e94",
+    "tree": "058e6a31b7ef9948619332dafd5356145fac1509",
+    "bookmark": "combined-transplant-runtime-validated",
+    "tests_passed": 1426,
+    "runtime_failures": 0,
+    "formatting_only_failure_subsequently_repaired": true
+  },
+  "static_checks_current": "two edited Rust files pass format with their package-declared editions",
+  "root_tasks": [
+    {
+      "label": "fixes",
+      "taskId": "node:delegated-task:command%3Amcp%3A97575a56-869e-4b9e-84c3-0562ba1a42b8%3Adelegate-task%3Aresume-20261021-fixes-v1",
+      "status": "completed",
+      "workState": "result_available",
+      "hasPendingChildRuns": false,
+      "hasPendingQuestion": false,
+      "pendingApproval": null,
+      "latestTerminalStatus": "completed"
+    },
+    {
+      "label": "drawing",
+      "taskId": "node:delegated-task:command%3Amcp%3A97575a56-869e-4b9e-84c3-0562ba1a42b8%3Adelegate-task%3Aresume-20261021-drawing151-v1",
+      "status": "completed",
+      "workState": "result_available",
+      "hasPendingChildRuns": false,
+      "hasPendingQuestion": false,
+      "pendingApproval": null,
+      "latestTerminalStatus": "completed"
+    },
+    {
+      "label": "extras",
+      "taskId": "node:delegated-task:command%3Amcp%3A97575a56-869e-4b9e-84c3-0562ba1a42b8%3Adelegate-task%3Aresume-20261021-extras-v1",
+      "status": "completed",
+      "workState": "result_available",
+      "hasPendingChildRuns": false,
+      "hasPendingQuestion": false,
+      "pendingApproval": null,
+      "latestTerminalStatus": "completed"
+    },
+    {
+      "label": "transplant_review",
+      "taskId": "node:delegated-task:command%3Amcp%3A3bb2b7a4-38ae-4d40-8bdb-b964be4f8e88%3Adelegate-task%3Acombined-transplant-resolution-review-20261021-r1",
+      "status": "completed",
+      "workState": "result_available",
+      "hasPendingChildRuns": false,
+      "hasPendingQuestion": false,
+      "pendingApproval": null,
+      "latestTerminalStatus": "completed"
+    },
+    {
+      "label": "transplant_validation",
+      "taskId": "node:delegated-task:command%3Amcp%3A3bb2b7a4-38ae-4d40-8bdb-b964be4f8e88%3Adelegate-task%3Acombined-transplant-native-validation-20261021-v1",
+      "status": "completed",
+      "workState": "result_available",
+      "hasPendingChildRuns": false,
+      "hasPendingQuestion": false,
+      "pendingApproval": null,
+      "latestTerminalStatus": "completed"
+    },
+    {
+      "label": "abc_review",
+      "taskId": "node:delegated-task:command%3Amcp%3A3bb2b7a4-38ae-4d40-8bdb-b964be4f8e88%3Adelegate-task%3Acombined-abc-merge-review-20261021-r1",
+      "status": "completed",
+      "workState": "result_available",
+      "hasPendingChildRuns": false,
+      "hasPendingQuestion": false,
+      "pendingApproval": null,
+      "latestTerminalStatus": "completed"
+    }
+  ],
+  "coordinator_receipts": {
+    "fixes": {
+      "path": "/tmp/codex-combined-s2/resume-20261021/fixes/wind-down-20261021.json",
+      "sha256": "d862574c192f6c57fd29072c28a73622f9c8b8a9fc9ab6ec3627ddc8d7182587"
+    },
+    "drawing": {
+      "path": "/tmp/codex-combined-s2/resume-20261021/drawing151/wind-down-receipt.json",
+      "sha256": "0b507ca2c58a9130cac4337829823c0b11766b71097ccaa32d61d34b3bf83b43"
+    },
+    "extras": {
+      "path": "/tmp/codex-combined-s2/resume-20261021/parallel/recovery/wind-down.json",
+      "sha256": "e49a028a565cbf82147a232490e5fc2c79e70303623ca74aca9811edfccb7e01"
+    }
+  },
+  "source_audit": "/tmp/codex-combined-s2/resume-20261021/wind-down/audit.json",
+  "handoff": "/tmp/codex-combined-s2/resume-20261021/wind-down/handoff.typ",
+  "remaining_processes": [],
+  "nix_ci_enable": false,
+  "source_mismatches": [],
+  "retained_workspaces_and_caches": true,
+  "new_work_requires_user_resume": true,
+  "remote_actions_during_wind_down": false,
+  "remaining": [
+    "actual ABC runtime/B physics/performance checks",
+    "quotient correctness R2/runtime",
+    "four additional ready-layer merge conflicts",
+    "remaining25 U3 grouped rows",
+    "solver uncertainty/distance audit",
+    "Shift13valid radial failures and final parity",
+    "six contacts/four identities/control/full96 integrated ledger",
+    "P1/P2 incomplete gates, A6 decision",
+    "final assets/notices/docs/history/validation/M2/later stages"
+  ]
+}

@@ -1,0 +1,117 @@
+{
+  "date": "2026-10-27",
+  "source_repository": "/shared/codex/dev/gammaloop/main",
+  "access": "JJ config-id permission denied in both repositories; read-only Git with command-scoped safe.directory succeeds in Codex repo; requested objects absent in common rich-display Git store",
+  "baselines": [
+    {
+      "label": "v4",
+      "commit": "e0a779808174c64057fecfd062c948b8de8e5c1f",
+      "tree": "d9811519406b5d6aef92403f5ee0c20993a39adf",
+      "parents": [
+        "dfe6387606e44a96f110c1ce03f52d92824dbdb1"
+      ],
+      "bookmark": "generation-integration-source-v4",
+      "local_jj_identity": "kpslpwqzortppxynqtqnmxyxnxpyzsnn e0a779808174c64057fecfd062c948b8de8e5c1f",
+      "missing_objects": []
+    },
+    {
+      "label": "stage1",
+      "commit": "f25961e21689ed1a33365430b4566a9a2e9c319a",
+      "tree": "41c3f39aaaa7eb3088e31b9c655625aa9ca3fbc2",
+      "parents": [
+        "f9dc5531314cb8e079d11240f8fcf7b339486607",
+        "e7432a39f08a480834babcef2911f96cb43e968e"
+      ],
+      "bookmark": "generation-integration-source-stage1",
+      "local_jj_identity": "oynmqpxpwvpzssytrnrzkovoznlnroxo f25961e21689ed1a33365430b4566a9a2e9c319a",
+      "missing_objects": []
+    },
+    {
+      "label": "transplant",
+      "commit": "4e00851731541be7de4626b7d1e5274d79b9eea8",
+      "tree": "23d466d43237f625c4251e04f1d57f1d064afe8f",
+      "parents": [
+        "c45ab00285291aefcb5915e8313dca928967e87c"
+      ],
+      "bookmark": "generation-integration-source-transplant",
+      "local_jj_identity": "xspzosrlwtmrxtvyotlprkxxrosmyqln 4e00851731541be7de4626b7d1e5274d79b9eea8",
+      "missing_objects": []
+    },
+    {
+      "label": "upstream",
+      "commit": "588148851e3e989ecbb7478279db7d46727e23a8",
+      "tree": "f7209e0c4acccaf50edb3fcb76dd71f01f1b9838",
+      "parents": [
+        "d39d9bf206d8f858efedc9281f034cddb50c51fa"
+      ],
+      "bookmark": "generation-integration-source-upstream",
+      "local_jj_identity": "yunvslvltxolmoqlvylxlmmwsqyqsnsr 588148851e3e989ecbb7478279db7d46727e23a8",
+      "missing_objects": []
+    },
+    {
+      "label": "v2",
+      "commit": "d9ff71a6826166e57bf3bba56ffcf8a57ffaf9db",
+      "tree": "b603915b7424e4c0e8748e209bb1d9b35a0cbc56",
+      "parents": [
+        "6733266b2c9fe31da5594aceb6433d25bbb7fc96"
+      ],
+      "bookmark": "generation-integration-source-v2",
+      "local_jj_identity": "qwpqosutmqwrvyqrvpukmqvtpkotzlzt d9ff71a6826166e57bf3bba56ffcf8a57ffaf9db",
+      "missing_objects": []
+    },
+    {
+      "label": "pre-v2",
+      "commit": "75b6c7a88fb099f142bcec9227ee614b6fc56376",
+      "tree": "7287ec6e3f2b8aa33729eee17f9ac12d2a533906",
+      "parents": [
+        "748691c5d5da63fced55c888885f4a7620b01bba"
+      ],
+      "bookmark": "generation-integration-source-pre-v2",
+      "local_jj_identity": "zwmyvwvmoyqtomsnmtnvxmurxyvmkttw 75b6c7a88fb099f142bcec9227ee614b6fc56376",
+      "missing_objects": []
+    },
+    {
+      "label": "v3",
+      "commit": "dfe6387606e44a96f110c1ce03f52d92824dbdb1",
+      "tree": "1fc62584e241d44d0e2352aa848201f99830a0ee",
+      "parents": [
+        "087bda82ce5a14dab092776ea470e66278dda12d"
+      ],
+      "bookmark": "generation-integration-source-v3",
+      "local_jj_identity": "nvkxyoplklpptmluvtzzvunrrukzplyl dfe6387606e44a96f110c1ce03f52d92824dbdb1",
+      "missing_objects": []
+    },
+    {
+      "label": "v3-original",
+      "commit": "6d207cfce36ab2bb128d92d67cc3da182afb0bb1",
+      "tree": "1fc62584e241d44d0e2352aa848201f99830a0ee",
+      "parents": [
+        "05006de521333a7c70ce0bace23212413c220bf7"
+      ],
+      "bookmark": "generation-integration-source-v3-original",
+      "local_jj_identity": "pzusvqwkttwkwntvkupkutszvwmzpnuo 6d207cfce36ab2bb128d92d67cc3da182afb0bb1",
+      "missing_objects": []
+    },
+    {
+      "label": "m1-source",
+      "commit": "9540f5bbf7a96609e69af6983d2bf7325530126d",
+      "tree": "e8b7d68a12a3bfa3da0946fad452e091a0186bb8",
+      "parents": [
+        "0b1c30df62c221d0ad28dd1f23d274855b57426b"
+      ],
+      "bookmark": "generation-integration-source-m1-source",
+      "local_jj_identity": "xspzosrlwtmrxtvyotlprkxxrosmyqln 9540f5bbf7a96609e69af6983d2bf7325530126d",
+      "missing_objects": []
+    }
+  ],
+  "gammabench_m1": {
+    "repository": "/shared/codex/dev/gammabench/main",
+    "commit_tree": "49f4408e3882c346044c7a1b4435103c85dd043c 79b13755cb5822c9eb5cbc9f73f306d3e011a3bd",
+    "status": "readable external source; not imported into unrelated GammaLoop history",
+    "historical_change": "sqypvunv",
+    "snapshots": "/common/dev/gammabench-runs/combined/m1-9540f5bb"
+  },
+  "v4_ancestry_conflicts": [
+    "sptyyttxkwkrlluvpqqwkrvyymzwpuxp 8cf6cecaf22be4d5c62d467b8e6827e80c6ba66d"
+  ]
+}

@@ -1,0 +1,108 @@
+{
+  "lane": "quotient (claude-v2)",
+  "completed_utc": "2026-10-21T14:58:41Z",
+  "pin": {
+    "commit": "e3f9ee3369a743703d9452988351584e429888bf",
+    "tree": "de0b767132c126e8c28b8814cdd503e6a2cdad38",
+    "parent": "36c14173beac7921489fb5914d1150542cb76050",
+    "parent_tree": "57727c7284189e6f3e18927959e78d8b6c70692d",
+    "A": "3cd9f13e5706c348e8c935d17aa8b37652230040",
+    "A_tree": "3e76413726804b7db7df75a09093bd279bdc7f12",
+    "workspace": "/shared/codex/dev/gammaloop/review-sampled-quotient-correctness",
+    "workspace_at": "41c2a1a3 (empty child, bookmark review-sampled-quotient-correctness-r2), unchanged and clean"
+  },
+  "T1_correctness": {
+    "input_hashes_match_R2": 10,
+    "production_prefix_sha256": {
+      "36c14173": "fd4643b5...",
+      "e3f9ee33": "d571975f..."
+    },
+    "targeted_local": "targeted.log: 10/10 pass (ci-optim, ci_gammaloop, FEYNKIT_QUOTIENT_REGISTRATION unset)",
+    "six_children_direct": "physical-children.log: forward/reverse x 1/8/32 each exit 0; parent exit 0",
+    "frozen36_negative_rerun": "both nonfinite tests fail (exit 101) on retained binary e1b0357b (production = 36c1)",
+    "package_local": "346 passed, 45 skipped"
+  },
+  "T2_runtime": {
+    "archive_drv": "/nix/store/b1w4zdb2yhq2im3q6i00qfrn33pmgfzl-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0.drv",
+    "archive_out": "/nix/store/i08xj0h68hd2qzdja0lsim30f18mccw2-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0",
+    "derivations_realized": 54,
+    "runtime_source": "/nix/store/vl7n47wvpwlq58bz16g6wpi2h9cxbxr2-source",
+    "physical": {
+      "drv": "/nix/store/3l3mjn7d8ziji240rlz58f2ksf0adl0b-quotient-generator-runtime-physical.drv",
+      "status": 0,
+      "result": "1 passed, 390 skipped"
+    },
+    "package": {
+      "drv": "/nix/store/sny0ncji9mabwdi4ksjkpclpcncb7y1h-quotient-generator-runtime-package.drv",
+      "status": 0,
+      "result": "346 passed, 45 skipped"
+    },
+    "card_removed_control": {
+      "drv": "/nix/store/jyyq33fn1c2bma2j08pirzdaq4srkp8v-quotient-generator-runtime-physical-without-card.drv",
+      "result": "fails: NotFound /build/source/crates/feynkit-generator/../../assets/models/json/sm/restrict_default.json"
+    },
+    "method": "generator-runtime.nix overrides the actual checks.gammaloop-nextest-feynkit; same inputs/env/script prefix, archive set replaced by the generator archive"
+  },
+  "T3_fixes": "none needed; no new change created",
+  "integration_probe": "e3f9-minus-A delta merges cleanly (temp object dir) onto 75b6c7a8 and combined-integration-v2 f5d1968a; no jj conflict entries, one card registry entry, compare() identical; not compiled",
+  "cost": "no new measurements; normalizer +3.10% Ir / +4.88% deep bytes (performance.json, allocations-deep.json) and guard increment frozen36->e3f9 +0.012..0.024% Ir, ~0 bytes (fix-r1-performance.json) are separate receipts, not summed",
+  "retained": [
+    "this directory (logs, DOT exports, scripts, receipts)",
+    "nix store outputs (not GC-rooted)",
+    "review workspace + bookmark unchanged (no ignored outputs left)"
+  ],
+  "removed": [
+    "own workspace target/ (junit kept as package-local-junit.xml)",
+    "temporary merge-probe objects",
+    "fix-r1 ignored test outputs in the review workspace (tests/artifacts/, tests/tests/.test_feyngen.rs.pending-snap)",
+    "fix-r2 source export src-e3f9 (+ its target/) and CLI binaries (hashes in fix-r2/bins.sha256)"
+  ],
+  "fix_r1": {
+    "completed_utc": "2026-10-21T16:55:56Z",
+    "source_change": "none; both findings verified and resolved by corrected disclosure (no code change, as the findings recommend). 36c14173, e3f9ee33, A and the workspace @ 41c2a1a3 are unchanged (grouping.rs sha 9a9a948a restored and verified, jj st clean).",
+    "F1_canonical_mode": {
+      "verdict": "confirmed",
+      "code": "Superseded by .fix_r2.F1 (the fix-r1 text put the canonical-mode change in compare_atoms; it comes from the sampled fallback). compare() with check_canonical_numerator=true runs the exact compare_atoms(&candidate.exact, &master.exact) first and returns only when it is Some (grouping.rs:1802-1813); otherwise it runs the sample loop, which holds the 36c1 sample-quotient normalizer and the e3f9 nonfinite operand guard (1814-1861). With samples = 0 the loop is empty and the result is None.",
+      "DIS19_U3_spec": "fix-r1 'canonical' runs used the default 5 samples, i.e. canonical with sampled fallback: A 76 (GL01{0:-2,1:1}, GL03{2:-2,3:1}), e3f9 74 == e3f9 sampled; c1 == c32. Pure canonical (samples 0) is in .fix_r2.F1.",
+      "physics": "GL00/GL02 are the two orientations of the u-quark triangle (GC_2), GL01/GL03 of the d-quark triangle (GC_1); each loop has three vector couplings (photon + two gluons) with symmetric Tr(TaTb), so the orientations cancel by charge conjugation (Furry), the argument the committed 2>N [{2}] test comment already uses. The exact canonical comparison finds the u/d ratio -2 but not the orientation ratio -1 at both A and e3f9; at e3f9 the sampled fallback finds the -1 and the cancelled group is dropped.",
+      "CI": "test_feyngen ci_gammaloop: the same 22 tests pass at A and at e3f9 (17 skipped). Canonical-mode rows among them: cp_fix_from_symbolica, test_generate_sm_a_ddx, test_vacuum_amplitude_generation_full_sm_two_loop. No committed test pins the canonical-mode orientation cancellation."
+    },
+    "F2_DIS19_wording": {
+      "verdict": "confirmed, refined",
+      "labels": "At the reviewed source DIS19 raw is 92 (U3 baseline 861285cf: 72). Fixture GL68 (u, GC_2) matches current raw GL00/GL02 and fixture GL29 (d, GC_1) current raw GL01/GL03 by coupling/particle signature; current raw GL29/GL68 are unrelated graphs (GC_10, three gluons). No -2 group survives at e3f9.",
+      "historical_54": "4>N [{1}] (test_dis_isr row at line 1611): e3f9 54 graphs, singles 40, all eight Group(ratio 1, weight -1) terms, total 32 = committed row index-free; A 58 / singles 36 (the four triangle singletons) cannot match under any master choice. Member indices are 24/25/34/35/42/43/46/47 at A and e3f9 versus 15/16/18/19/58/59/61/62 in the snapshot (export index space == test index space, shown by dis_isr-8), so the row is reproduced index-free, not byte for byte.",
+      "row_1087": "4>N [{2}] (line 1614): e3f9 1087 graphs, singles 1700/3, 354 group terms; 15 terms differ and re-mastering 9 groups reproduces the snapshot multiset exactly (master_choice.py). A 1250 / 340 terms cannot match.",
+      "dis_isr_8": "test_dis_isr (ci_slow, main-only gammaloop-nextest-long partitions) fails first at dis_isr-8 (2>N [{3}], line 1585) with byte-identical diffs at A and e3f9: same total -1049/21, renumbered members and 2 re-mastered groups. Pre-existing, outside this lane; the test stops before lines 1611/1614.",
+      "still_uncertified": "other 25 grouped rows, DIS20 and vacuum snapshot items (not examined in this lane)"
+    },
+    "logs": "fix-r1/: build-cli-{e3f9,A}.log, proc-{e3f9,A}-c{1,32}.out, proc/ (DOT exports + .part), master-choice.log, feyngen-{e3f9,A}{,-dis-isr}.log + junit, swap-A.log, bins.sha256 (CLI binaries removed)"
+  },
+  "fix_r2": {
+    "completed_utc": "2026-10-21T17:37:33Z",
+    "source_change": "none. 36c14173, e3f9ee33, A and the review workspace @ 41c2a1a3 are unchanged (grouping.rs sha 9a9a948a, jj st clean). The F1 fix is the corrected disclosure; the stale comment is left to root's integrated copy (see F1.stale_comment).",
+    "F1_mechanism": {
+      "verdict": "confirmed",
+      "code": "compare() (grouping.rs:1802-1861): exact compare_atoms first; if None and samples > 0 (CLI default 5) it falls back to the sample loop with the 36c1 sample-quotient normalizer and the e3f9 guard (1824). Canonical mode with samples > 0 therefore inherits every sampled-path change. 36c1 also put the normalizer and a finite-ratio check into compare_atoms' exact quotient path; no outcome change was observed there.",
+      "DIS19_U3_spec": {
+        "builds": "own dev-optim cli builds from a git-archive export of e3f9 (tree de0b7671; bin sha e920c1cf) and of the same export with A's grouping.rs (sha 3cdfa7e9; bin sha f7d06ba0); A..e3f9 production diff is grouping.rs only",
+        "pure_canonical_samples_0": "A 76 == e3f9 76 at c1 and c32, partitions byte-identical (sha 30f33a68): GL01{0:-2,1:1}, GL03{2:-2,3:1} weight 1 each, plus 4 pairs at weight -2; equal to the reviewer's canon-pure and to fix-r1's A canonical-with-fallback",
+        "canonical_default_samples_c32": "A 76 (== pure canonical) -> e3f9 74 (sha f03302b6 == e3f9 sampled == fix-r1 e3f9 dis19-canon c1/c32 == reviewer canon-fallback); the A->e3f9 diff is GL01/GL03 only",
+        "conclusion": "the canonical-mode 76 -> 74 comes entirely from the sampled fallback; the exact canonical comparison is unchanged on DIS19"
+      },
+      "CI": "test_feyngen ci_gammaloop (fix-r1 junit, 22 passed / 0 failures at A and e3f9): pure-canonical rows test_generate_sm_a_ddx lines 1488/1489 and test_vacuum_amplitude_generation_full_sm_two_loop lines 1876/1879 pass at both; canonical-with-fallback row cp_fix_from_symbolica line 1335 passes at both. example_graph_count (line 1718, samples 3) is in mod failing, not CI.",
+      "retracted_claims": [
+        "'canonical grouping now also finds these proportional and cancelling pairs' through compare_atoms in the canonical comparison",
+        "'e3f9 finds both' (u/d -2 and orientation -1) in the canonical comparison",
+        "'only e3f9's nonfinite operand guard is sampled-only' (the guard runs in canonical mode whenever samples > 0)"
+      ],
+      "disclosure": "check_canonical_numerator=true compares canonical numerators first. When that comparison fails and samples > 0 (default 5), it falls back to the sampled certificate, so every sampled-path change (the 36c1 normalizer and the e3f9 nonfinite guard) also changes canonical-mode results. With default samples, DIS19 canonical goes from 76 to 74 through this fallback. Pure canonical (samples 0) is unchanged on DIS19: 76 at both A and e3f9, with identical partitions. 36c1 also adds the normalizer and a finite-ratio check to the exact path in compare_atoms, but no outcome change was observed there; the CI pure-canonical rows pass at both.",
+      "stale_comment": "grouping.rs:1820-1821 'The optional raw tensor comparison above keeps its existing policy.' (from klllrpqq, predates A) is stale since 36c1 added ratio.is_finite() to compare_atoms. Not edited here: 36c1 made it stale and must not be rewritten, the finding marks the edit optional, and a comment-only edit of e3f9 would invalidate the pinned R2 approvals and the realized Nix archive. Suggested wording for root's integrated copy: '// This certificate is restricted to completed finite component samples. // The canonical comparison above checks finiteness only of its quotient.'"
+    },
+    "F2_workspace_outputs": {
+      "verdict": "confirmed",
+      "evidence": "tests/artifacts/ (15 test dirs, 5.6 MB, born 16:35 in my feyngen-e3f9 run) and tests/tests/.test_feyngen.rs.pending-snap (born 16:41; run ids 54c8b4e8 and 971b85ef hold the dis_isr-8 line-1585 diffs, 100eba9b only null pass markers; all three are my fix-r1 runs). Both ignored (.gitignore tests/artifacts/, *.pending-snap).",
+      "action": "removed both; nothing else in the workspace was written after 13:50 apart from grouping.rs, whose content is unchanged (sha 9a9a948a, restored after the fix-r1 A swap); jj st clean"
+    },
+    "logs": "fix-r2/: build-{e3f9,A}.log, bins.sha256 (binaries removed), run-{A,e3f9}-c{1,32}.out, proc/{A,e3f9}-c{1,32}/canon-pure{,.part,.log}, proc/{A,e3f9}-c32/canon-fallback{,.part,.log}, run.sh, build.sh, receipt.before-fix-r2.json"
+  }
+}

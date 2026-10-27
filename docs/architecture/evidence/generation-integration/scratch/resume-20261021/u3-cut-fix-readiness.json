@@ -1,0 +1,16 @@
+{
+  "change_id": "szvwyrkyopmmusrmtpkomxzkytkqwmxx",
+  "commit": "7cc4f4c378ec48e4a7e3a28fd512ce301a53e7c6",
+  "bookmark": "ci-slow-zero-colour-cut-fix",
+  "parent": "588148851e3e989ecbb7478279db7d46727e23a8",
+  "nix_ci_enable": false,
+  "regression_before_fix": "1 test ran, failed: 0 cuts versus expected 1",
+  "after_fix": "Linnet/generator 387 of 387 pass; nextest e5170416-6ac0-48d7-a49a-170a9b8cced0; clippy and fmt exit0",
+  "fixed_production_source_sha256": "eff9d0e7fecdfc9d94d2d1c89cd0ef8824575ac7f08cda7082dfd989dcef50fc",
+  "source_identity": "Current half_edge.rs byte-identical to archived fixed source used for independent aa2 proof; DOT hashes verified",
+  "aa2_assertions": "Original 40 diagrams and -40 raw total preserved, explanatory colour comment only",
+  "snapshot_expectations_changed": false,
+  "u3_overall_ready": false,
+  "pending": ["grouped snapshot/history analysis", "DIS19 under-grouping triage", "formal physics review"],
+  "forced_snapshot_runs": "aa/DIS collections complete using INSTA_FORCE_PASS; collection only, not passing expectation validation. epem and3lraw pending."
+}

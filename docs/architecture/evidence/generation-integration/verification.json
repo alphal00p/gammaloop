@@ -1,0 +1,63 @@
+{
+  "date": "2026-10-27",
+  "environment": "nix develop -c python3 .wp0-check.py (one-off script removed after successful focused verification; its SHA-256 is in execution.json)",
+  "results": [
+    {
+      "check": "JSON syntax and all archived payload SHA-256 values (decoded historical prose where wrapped)",
+      "status": "passed"
+    },
+    {
+      "check": "TOML parse and both changed registry title/source contracts",
+      "status": "passed"
+    },
+    {
+      "command": [
+        "typst",
+        "compile",
+        "--root",
+        ".",
+        "docs/architecture/generation-integration-plan.typ",
+        ".wp0-generation-integration-plan.pdf"
+      ],
+      "exit_code": 0,
+      "stderr": "",
+      "status": "passed"
+    },
+    {
+      "command": [
+        "typst",
+        "compile",
+        "--root",
+        ".",
+        "docs/architecture/generation-integration-wp0.typ",
+        ".wp0-generation-integration-wp0.pdf"
+      ],
+      "exit_code": 0,
+      "stderr": "",
+      "status": "passed"
+    },
+    {
+      "check": "All nine pinned baseline reachable-object closures",
+      "status": "passed"
+    },
+    {
+      "command": [
+        "nix",
+        "eval",
+        "--file",
+        "nix-ci.nix",
+        "enable"
+      ],
+      "status": "passed",
+      "output": "false"
+    },
+    {
+      "check": "Full docs-check and physics tests",
+      "status": "not run: bounded evidence/docs-only step; focused checks used"
+    },
+    {
+      "check": "Final JSON syntax, complete architecture registry/source set, current JJ revision conflict-free",
+      "status": "passed"
+    }
+  ]
+}

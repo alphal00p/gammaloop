@@ -1,0 +1,703 @@
+{
+  "scope": "assembled_prerequisite_prefix_only",
+  "pending_planner_and_new_drawing_are_intentionally_out_of_scope": true,
+  "tested": {
+    "workspace": "/shared/codex/dev/gammaloop/linnet-generation-combined",
+    "commit": "3f6670be5a1d6e967c02e6673a8136085693b669",
+    "parent": "501c93fe3915106c2558c028fe1b64c58a2186fa",
+    "tree": "9f8bbc82a4854e501bed28fa53194ffee9c99263",
+    "tracked_file_count": 3502,
+    "timestamp": "2026-10-21T11:32:52.457623+00:00"
+  },
+  "reference": "combined-integration-prerequisites",
+  "source_matches_tested_commit": {
+    "matches_commit": true,
+    "files_checked": 3502,
+    "differences": []
+  },
+  "source_diff": {
+    "tracked_file_count": 3502,
+    "changed_files": {},
+    "unchanged": true
+  },
+  "workspace_identity_unchanged": true,
+  "committed_diff_empty_before_and_after": true,
+  "stages": [
+    {
+      "name": "tool-versions",
+      "environment_entrypoint": [
+        "direnv",
+        "exec",
+        "..",
+        "nix",
+        "develop",
+        "path:/shared/codex/dev/gammaloop/linnet-generation-combined",
+        "-c",
+        "python3",
+        "/tmp/codex-combined-s2/resume-20261021/integration-prefix-validation/validate.py",
+        "identity"
+      ],
+      "argv": [
+        "bash",
+        "-c",
+        "set -e\ncargo --version\ncargo nextest --version\nrustc --version\njust --version"
+      ],
+      "command": "bash -c 'set -e\ncargo --version\ncargo nextest --version\nrustc --version\njust --version'",
+      "cwd": "/shared/codex/dev/gammaloop/linnet-generation-combined",
+      "started": "2026-10-21T11:32:52.481180+00:00",
+      "environment_overrides": {
+        "CARGO_BUILD_JOBS": "8",
+        "NEXTEST_TEST_THREADS": "8",
+        "RAYON_NUM_THREADS": "8",
+        "INSTA_UPDATE": "no",
+        "GL_TEST_LOG_DIR": "/tmp/codex-combined-s2/resume-20261021/integration-prefix-validation/test-logs"
+      },
+      "exitcode": 0,
+      "duration_seconds": 0.05074000358581543,
+      "finished": "2026-10-21T11:32:52.531897+00:00",
+      "log": "/tmp/codex-combined-s2/resume-20261021/integration-prefix-validation/tool-versions.log",
+      "status": "passed",
+      "timeout_lines": []
+    },
+    {
+      "name": "metadata",
+      "environment_entrypoint": [
+        "direnv",
+        "exec",
+        "..",
+        "nix",
+        "develop",
+        "path:/shared/codex/dev/gammaloop/linnet-generation-combined",
+        "-c",
+        "python3",
+        "/tmp/codex-combined-s2/resume-20261021/integration-prefix-validation/validate.py",
+        "identity"
+      ],
+      "argv": [
+        "cargo",
+        "metadata",
+        "--locked",
+        "--offline",
+        "--format-version",
+        "1"
+      ],
+      "command": "cargo metadata --locked --offline --format-version 1",
+      "cwd": "/shared/codex/dev/gammaloop/linnet-generation-combined",
+      "started": "2026-10-21T11:32:52.532501+00:00",
+      "environment_overrides": {
+        "CARGO_BUILD_JOBS": "8",
+        "NEXTEST_TEST_THREADS": "8",
+        "RAYON_NUM_THREADS": "8",
+        "INSTA_UPDATE": "no",
+        "GL_TEST_LOG_DIR": "/tmp/codex-combined-s2/resume-20261021/integration-prefix-validation/test-logs"
+      },
+      "exitcode": 0,
+      "duration_seconds": 0.5066256523132324,
+      "finished": "2026-10-21T11:32:53.039109+00:00",
+      "log": "/tmp/codex-combined-s2/resume-20261021/integration-prefix-validation/metadata.log",
+      "status": "passed",
+      "timeout_lines": []
+    },
+    {
+      "name": "formatting",
+      "environment_entrypoint": [
+        "direnv",
+        "exec",
+        "..",
+        "nix",
+        "develop",
+        "path:/shared/codex/dev/gammaloop/linnet-generation-combined",
+        "-c",
+        "python3",
+        "/tmp/codex-combined-s2/resume-20261021/integration-prefix-validation/validate.py",
+        "identity"
+      ],
+      "argv": [
+        "cargo",
+        "fmt",
+        "-p",
+        "feynkit-model",
+        "-p",
+        "feynkit-graph",
+        "-p",
+        "feynkit-generator",
+        "-p",
+        "idenso",
+        "-p",
+        "linnet",
+        "--",
+        "--check"
+      ],
+      "command": "cargo fmt -p feynkit-model -p feynkit-graph -p feynkit-generator -p idenso -p linnet -- --check",
+      "cwd": "/shared/codex/dev/gammaloop/linnet-generation-combined",
+      "started": "2026-10-21T11:32:53.049108+00:00",
+      "environment_overrides": {
+        "CARGO_BUILD_JOBS": "8",
+        "NEXTEST_TEST_THREADS": "8",
+        "RAYON_NUM_THREADS": "8",
+        "INSTA_UPDATE": "no",
+        "GL_TEST_LOG_DIR": "/tmp/codex-combined-s2/resume-20261021/integration-prefix-validation/test-logs"
+      },
+      "exitcode": 0,
+      "duration_seconds": 2.401130437850952,
+      "finished": "2026-10-21T11:32:55.450149+00:00",
+      "log": "/tmp/codex-combined-s2/resume-20261021/integration-prefix-validation/formatting.log",
+      "status": "passed",
+      "timeout_lines": []
+    },
+    {
+      "name": "library-tests",
+      "environment_entrypoint": [
+        "direnv",
+        "exec",
+        "..",
+        "nix",
+        "develop",
+        "path:/shared/codex/dev/gammaloop/linnet-generation-combined",
+        "-c",
+        "python3",
+        "/tmp/codex-combined-s2/resume-20261021/integration-prefix-validation/validate.py",
+        "identity"
+      ],
+      "argv": [
+        "cargo",
+        "nextest",
+        "run",
+        "--config-file",
+        "/tmp/codex-combined-s2/resume-20261021/integration-prefix-validation/nextest-validation.toml",
+        "--locked",
+        "--offline",
+        "--cargo-profile",
+        "ci-optim",
+        "--profile",
+        "ci_gammaloop",
+        "--no-fail-fast",
+        "--test-threads",
+        "8",
+        "-p",
+        "feynkit-model",
+        "-p",
+        "feynkit-graph",
+        "-p",
+        "feynkit-generator",
+        "-p",
+        "idenso",
+        "-p",
+        "linnet",
+        "--lib"
+      ],
+      "command": "cargo nextest run --config-file /tmp/codex-combined-s2/resume-20261021/integration-prefix-validation/nextest-validation.toml --locked --offline --cargo-profile ci-optim --profile ci_gammaloop --no-fail-fast --test-threads 8 -p feynkit-model -p feynkit-graph -p feynkit-generator -p idenso -p linnet --lib",
+      "cwd": "/shared/codex/dev/gammaloop/linnet-generation-combined",
+      "started": "2026-10-21T11:32:55.451090+00:00",
+      "environment_overrides": {
+        "CARGO_BUILD_JOBS": "8",
+        "NEXTEST_TEST_THREADS": "8",
+        "RAYON_NUM_THREADS": "8",
+        "INSTA_UPDATE": "no",
+        "GL_TEST_LOG_DIR": "/tmp/codex-combined-s2/resume-20261021/integration-prefix-validation/test-logs"
+      },
+      "exitcode": 0,
+      "duration_seconds": 464.3673822879791,
+      "finished": "2026-10-21T11:40:39.818436+00:00",
+      "log": "/tmp/codex-combined-s2/resume-20261021/integration-prefix-validation/library-tests.log",
+      "status": "passed",
+      "timeout_lines": [],
+      "summaries": [
+        "    Starting 1609 tests across 5 binaries (24 tests skipped, including 2 tests via profile.default.default-filter)",
+        "     Summary [  38.948s] 1609 tests run: 1609 passed, 24 skipped"
+      ],
+      "counts": {
+        "run": 1609,
+        "passed": 1609,
+        "failed": 0,
+        "skipped": 24,
+        "timed_out": 0
+      },
+      "nextest_run_id": "8dcd9f2e-8f16-45bd-91a8-c963fc6db9d4",
+      "per_binary_counts": [
+        {
+          "name": "feynkit-generator",
+          "tests": "126",
+          "skipped": "0",
+          "errors": "0",
+          "failures": "0"
+        },
+        {
+          "name": "feynkit-graph",
+          "tests": "127",
+          "skipped": "0",
+          "errors": "0",
+          "failures": "0"
+        },
+        {
+          "name": "feynkit-model",
+          "tests": "39",
+          "skipped": "0",
+          "errors": "0",
+          "failures": "0"
+        },
+        {
+          "name": "idenso",
+          "tests": "1056",
+          "skipped": "0",
+          "errors": "0",
+          "failures": "0"
+        },
+        {
+          "name": "linnet",
+          "tests": "261",
+          "skipped": "0",
+          "errors": "0",
+          "failures": "0"
+        }
+      ],
+      "failure_lines": [],
+      "diagnostic_source_lines": [
+        "   --> vendor/clarabel/src/solver/core/solver.rs:470:9",
+        "  --> vendor/clarabel/src/solver/core/kktsolvers/direct/quasidef/datamaps.rs:26:39"
+      ]
+    },
+    {
+      "name": "package-regressions",
+      "environment_entrypoint": [
+        "direnv",
+        "exec",
+        "..",
+        "nix",
+        "develop",
+        "path:/shared/codex/dev/gammaloop/linnet-generation-combined",
+        "-c",
+        "python3",
+        "/tmp/codex-combined-s2/resume-20261021/integration-prefix-validation/validate.py",
+        "identity"
+      ],
+      "argv": [
+        "cargo",
+        "nextest",
+        "run",
+        "--config-file",
+        "/tmp/codex-combined-s2/resume-20261021/integration-prefix-validation/nextest-validation.toml",
+        "--locked",
+        "--offline",
+        "--cargo-profile",
+        "ci-optim",
+        "--profile",
+        "ci_gammaloop",
+        "--no-fail-fast",
+        "--test-threads",
+        "8",
+        "-p",
+        "feynkit-model",
+        "-p",
+        "feynkit-generator",
+        "-p",
+        "idenso",
+        "-p",
+        "linnet",
+        "--test",
+        "gammaloop_fixtures",
+        "--test",
+        "amplitude",
+        "--test",
+        "momentum_tensor",
+        "--test",
+        "builder_retention",
+        "--test",
+        "expanded_traces",
+        "--test",
+        "bare_symb"
+      ],
+      "command": "cargo nextest run --config-file /tmp/codex-combined-s2/resume-20261021/integration-prefix-validation/nextest-validation.toml --locked --offline --cargo-profile ci-optim --profile ci_gammaloop --no-fail-fast --test-threads 8 -p feynkit-model -p feynkit-generator -p idenso -p linnet --test gammaloop_fixtures --test amplitude --test momentum_tensor --test builder_retention --test expanded_traces --test bare_symb",
+      "cwd": "/shared/codex/dev/gammaloop/linnet-generation-combined",
+      "started": "2026-10-21T11:40:39.819433+00:00",
+      "environment_overrides": {
+        "CARGO_BUILD_JOBS": "8",
+        "NEXTEST_TEST_THREADS": "8",
+        "RAYON_NUM_THREADS": "8",
+        "INSTA_UPDATE": "no",
+        "GL_TEST_LOG_DIR": "/tmp/codex-combined-s2/resume-20261021/integration-prefix-validation/test-logs"
+      },
+      "exitcode": 0,
+      "duration_seconds": 50.22146201133728,
+      "finished": "2026-10-21T11:41:30.040854+00:00",
+      "log": "/tmp/codex-combined-s2/resume-20261021/integration-prefix-validation/package-regressions.log",
+      "status": "passed",
+      "timeout_lines": [],
+      "summaries": [
+        "    Starting 23 tests across 6 binaries",
+        "     Summary [   0.143s] 23 tests run: 23 passed, 0 skipped"
+      ],
+      "counts": {
+        "run": 23,
+        "passed": 23,
+        "failed": 0,
+        "skipped": 0,
+        "timed_out": 0
+      },
+      "nextest_run_id": "ede14724-ea97-4aec-a274-151982234986",
+      "failure_lines": [],
+      "diagnostic_source_lines": [
+        "   --> vendor/clarabel/src/solver/core/solver.rs:470:9",
+        "  --> vendor/clarabel/src/solver/core/kktsolvers/direct/quasidef/datamaps.rs:26:39"
+      ]
+    },
+    {
+      "name": "linnest-ec-seed-regressions",
+      "environment_entrypoint": [
+        "direnv",
+        "exec",
+        "..",
+        "nix",
+        "develop",
+        "path:/shared/codex/dev/gammaloop/linnet-generation-combined",
+        "-c",
+        "python3",
+        "/tmp/codex-combined-s2/resume-20261021/integration-prefix-validation/validate.py",
+        "identity"
+      ],
+      "argv": [
+        "cargo",
+        "nextest",
+        "run",
+        "--config-file",
+        "/tmp/codex-combined-s2/resume-20261021/integration-prefix-validation/nextest-validation.toml",
+        "--locked",
+        "--offline",
+        "--cargo-profile",
+        "ci-optim",
+        "--profile",
+        "ci_gammaloop",
+        "--no-fail-fast",
+        "--test-threads",
+        "8",
+        "-p",
+        "linnest",
+        "--lib",
+        "-E",
+        "test(ec_seed::)"
+      ],
+      "command": "cargo nextest run --config-file /tmp/codex-combined-s2/resume-20261021/integration-prefix-validation/nextest-validation.toml --locked --offline --cargo-profile ci-optim --profile ci_gammaloop --no-fail-fast --test-threads 8 -p linnest --lib -E 'test(ec_seed::)'",
+      "cwd": "/shared/codex/dev/gammaloop/linnet-generation-combined",
+      "started": "2026-10-21T11:41:30.041872+00:00",
+      "environment_overrides": {
+        "CARGO_BUILD_JOBS": "8",
+        "NEXTEST_TEST_THREADS": "8",
+        "RAYON_NUM_THREADS": "8",
+        "INSTA_UPDATE": "no",
+        "GL_TEST_LOG_DIR": "/tmp/codex-combined-s2/resume-20261021/integration-prefix-validation/test-logs"
+      },
+      "exitcode": 0,
+      "duration_seconds": 59.7380256652832,
+      "finished": "2026-10-21T11:42:29.779862+00:00",
+      "log": "/tmp/codex-combined-s2/resume-20261021/integration-prefix-validation/linnest-ec-seed-regressions.log",
+      "status": "passed",
+      "timeout_lines": [],
+      "summaries": [
+        "    Starting 11 tests across 1 binary (178 tests skipped)",
+        "     Summary [   0.086s] 11 tests run: 11 passed, 178 skipped"
+      ],
+      "counts": {
+        "run": 11,
+        "passed": 11,
+        "failed": 0,
+        "skipped": 178,
+        "timed_out": 0
+      },
+      "nextest_run_id": "8e2751ed-e98c-4d88-9dbd-ecdbde8f9642",
+      "per_binary_counts": [
+        {
+          "name": "linnest",
+          "tests": "11",
+          "skipped": "0",
+          "errors": "0",
+          "failures": "0"
+        }
+      ],
+      "failure_lines": [],
+      "diagnostic_source_lines": [
+        "   --> vendor/clarabel/src/solver/core/solver.rs:470:9",
+        "  --> vendor/clarabel/src/solver/core/kktsolvers/direct/quasidef/datamaps.rs:26:39"
+      ]
+    },
+    {
+      "name": "caller-regressions",
+      "environment_entrypoint": [
+        "direnv",
+        "exec",
+        "..",
+        "nix",
+        "develop",
+        "path:/shared/codex/dev/gammaloop/linnet-generation-combined",
+        "-c",
+        "python3",
+        "/tmp/codex-combined-s2/resume-20261021/integration-prefix-validation/validate.py",
+        "identity"
+      ],
+      "argv": [
+        "cargo",
+        "nextest",
+        "run",
+        "--config-file",
+        "/tmp/codex-combined-s2/resume-20261021/integration-prefix-validation/nextest-validation.toml",
+        "--locked",
+        "--offline",
+        "--cargo-profile",
+        "ci-optim",
+        "--profile",
+        "ci_gammaloop",
+        "--no-fail-fast",
+        "--test-threads",
+        "8",
+        "-p",
+        "gammalooprs",
+        "-p",
+        "gammaloop-integration-tests",
+        "--lib",
+        "-E",
+        "test(=utils::tests::complex_phases_compare_across_zero) or test(=tests::run_card_set_commands_reach_the_test_session)"
+      ],
+      "command": "cargo nextest run --config-file /tmp/codex-combined-s2/resume-20261021/integration-prefix-validation/nextest-validation.toml --locked --offline --cargo-profile ci-optim --profile ci_gammaloop --no-fail-fast --test-threads 8 -p gammalooprs -p gammaloop-integration-tests --lib -E 'test(=utils::tests::complex_phases_compare_across_zero) or test(=tests::run_card_set_commands_reach_the_test_session)'",
+      "cwd": "/shared/codex/dev/gammaloop/linnet-generation-combined",
+      "started": "2026-10-21T11:42:29.780590+00:00",
+      "environment_overrides": {
+        "CARGO_BUILD_JOBS": "8",
+        "NEXTEST_TEST_THREADS": "8",
+        "RAYON_NUM_THREADS": "8",
+        "INSTA_UPDATE": "no",
+        "GL_TEST_LOG_DIR": "/tmp/codex-combined-s2/resume-20261021/integration-prefix-validation/test-logs"
+      },
+      "exitcode": 0,
+      "duration_seconds": 646.1265661716461,
+      "finished": "2026-10-21T11:53:15.907129+00:00",
+      "log": "/tmp/codex-combined-s2/resume-20261021/integration-prefix-validation/caller-regressions.log",
+      "status": "passed",
+      "timeout_lines": [],
+      "summaries": [
+        "    Starting 2 tests across 2 binaries (1513 tests skipped)",
+        "     Summary [   0.229s] 2 tests run: 2 passed, 1513 skipped"
+      ],
+      "counts": {
+        "run": 2,
+        "passed": 2,
+        "failed": 0,
+        "skipped": 1513,
+        "timed_out": 0
+      },
+      "nextest_run_id": "18f9127b-3e44-4b9d-9fe4-cd446f91dfdc",
+      "per_binary_counts": [
+        {
+          "name": "gammalooprs",
+          "tests": "1",
+          "skipped": "0",
+          "errors": "0",
+          "failures": "0"
+        },
+        {
+          "name": "gammaloop-integration-tests",
+          "tests": "1",
+          "skipped": "0",
+          "errors": "0",
+          "failures": "0"
+        }
+      ],
+      "failure_lines": [],
+      "diagnostic_source_lines": [
+        "   --> vendor/clarabel/src/solver/core/solver.rs:470:9",
+        "  --> vendor/clarabel/src/solver/core/kktsolvers/direct/quasidef/datamaps.rs:26:39"
+      ]
+    },
+    {
+      "name": "clippy",
+      "environment_entrypoint": [
+        "direnv",
+        "exec",
+        "..",
+        "nix",
+        "develop",
+        "path:/shared/codex/dev/gammaloop/linnet-generation-combined",
+        "-c",
+        "python3",
+        "/tmp/codex-combined-s2/resume-20261021/integration-prefix-validation/validate.py",
+        "identity"
+      ],
+      "argv": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--offline",
+        "--profile",
+        "ci-optim",
+        "-p",
+        "feynkit-model",
+        "-p",
+        "feynkit-graph",
+        "-p",
+        "feynkit-generator",
+        "-p",
+        "idenso",
+        "-p",
+        "linnet",
+        "--lib",
+        "--tests"
+      ],
+      "command": "cargo clippy --locked --offline --profile ci-optim -p feynkit-model -p feynkit-graph -p feynkit-generator -p idenso -p linnet --lib --tests",
+      "cwd": "/shared/codex/dev/gammaloop/linnet-generation-combined",
+      "started": "2026-10-21T11:53:15.907822+00:00",
+      "environment_overrides": {
+        "CARGO_BUILD_JOBS": "8",
+        "NEXTEST_TEST_THREADS": "8",
+        "RAYON_NUM_THREADS": "8",
+        "INSTA_UPDATE": "no",
+        "GL_TEST_LOG_DIR": "/tmp/codex-combined-s2/resume-20261021/integration-prefix-validation/test-logs"
+      },
+      "exitcode": 0,
+      "duration_seconds": 52.90192222595215,
+      "finished": "2026-10-21T11:54:08.809723+00:00",
+      "log": "/tmp/codex-combined-s2/resume-20261021/integration-prefix-validation/clippy.log",
+      "status": "passed",
+      "timeout_lines": [],
+      "warning_lines": [
+        "warning: unused import: `super::super::traits::*`",
+        "warning: hiding a lifetime that's elided elsewhere is confusing",
+        "warning: `clarabel` (lib) generated 2 warnings (run `cargo clippy --fix --lib -p clarabel -- ` to apply 2 suggestions)",
+        "warning: the following packages contain code that will be rejected by a future version of Rust: proc-macro-error2 v2.0.1"
+      ]
+    }
+  ],
+  "resolved_symbolica_source": [
+    {
+      "name": "numerica",
+      "version": "3.0.1",
+      "source": "git+https://github.com/symbolica-dev/symbolica?rev=c78cffc20f318df1fce50539a587cbe8ffc717c0#c78cffc20f318df1fce50539a587cbe8ffc717c0",
+      "manifest_path": "/home/codex/.cargo/git/checkouts/symbolica-db3dbb7e8d40efb5/c78cffc/lib/numerica/Cargo.toml"
+    },
+    {
+      "name": "symbolica",
+      "version": "3.0.1",
+      "source": "git+https://github.com/symbolica-dev/symbolica?rev=c78cffc20f318df1fce50539a587cbe8ffc717c0#c78cffc20f318df1fce50539a587cbe8ffc717c0",
+      "manifest_path": "/home/codex/.cargo/git/checkouts/symbolica-db3dbb7e8d40efb5/c78cffc/Cargo.toml"
+    }
+  ],
+  "pin_and_ec_payload_checks": {
+    "timestamp": "2026-10-21T11:32:18.306364+00:00",
+    "checks": {
+      "symbolica": {
+        "patch": {
+          "git": "https://github.com/symbolica-dev/symbolica",
+          "rev": "c78cffc20f318df1fce50539a587cbe8ffc717c0"
+        },
+        "lock_entries": [
+          {
+            "name": "symbolica",
+            "version": "3.0.1",
+            "source": "git+https://github.com/symbolica-dev/symbolica?rev=c78cffc20f318df1fce50539a587cbe8ffc717c0#c78cffc20f318df1fce50539a587cbe8ffc717c0"
+          }
+        ],
+        "passed": true
+      },
+      "numerica": {
+        "patch": {
+          "git": "https://github.com/symbolica-dev/symbolica",
+          "rev": "c78cffc20f318df1fce50539a587cbe8ffc717c0"
+        },
+        "lock_entries": [
+          {
+            "name": "numerica",
+            "version": "3.0.1",
+            "source": "git+https://github.com/symbolica-dev/symbolica?rev=c78cffc20f318df1fce50539a587cbe8ffc717c0#c78cffc20f318df1fce50539a587cbe8ffc717c0"
+          }
+        ],
+        "passed": true
+      },
+      "removed_payloads": {
+        "crates/linnest/typst/ec-layout.wasm": true,
+        "crates/linnest/typst/LICENSE.ec-layout": true,
+        "crates/linnest/layout/native/plugin.cpp": true
+      },
+      "no_ec_layout_cargo_dependency": true,
+      "consumed_input_reference_scan": {
+        "hits": [],
+        "passed": true,
+        "scope": [
+          "nix",
+          "flake.nix",
+          "Cargo.toml",
+          "Cargo.lock",
+          "crates/clinnet/build.rs",
+          "crates/linnest/typst",
+          "assets/embedded/drawing"
+        ]
+      },
+      "retained_reference_tooling": {
+        "paths": [
+          "crates/linnest/layout/native/CMakeLists.txt",
+          "crates/linnest/layout/native/build.py",
+          "crates/linnest/layout/native/spqr.hpp",
+          "crates/linnest/layout/native/protocol.typ"
+        ],
+        "notes": "OGDF reference tooling remains for local comparison. nix/rust-workspace.nix compileTimeTest selects only native/fixtures; nonCargoBuildSources and Linnest WASM filesets select the Rust/WASM payload and networkx/clarabel notices, not the native C++ build sources. Cargo manifests do not invoke the native reference build."
+      }
+    },
+    "passed": true
+  },
+  "realized_nix_source_filesets": [
+    {
+      "derivation": "/nix/store/1z43hcp1b9q2mdqzkd7nx8yqa3xld7bq-linnest-wasm-0.1.0.drv",
+      "source": "/nix/store/dxs7ndnc7n33chlh4hy6g582qig1x8zw-source",
+      "ec_layout_or_native_cpp_files": [],
+      "retained_native_fixture_files": [],
+      "passed": true,
+      "source_exists": true,
+      "source_file_count": 2484
+    },
+    {
+      "derivation": "/nix/store/ijqlfd360ihprr596fbfp6xcafy9xgs0-clinnet-0.1.8.drv",
+      "source": "/nix/store/yqz810awwmcn4wm4dd88x8lfiqmj3g4s-source",
+      "ec_layout_or_native_cpp_files": [],
+      "retained_native_fixture_files": [],
+      "passed": true,
+      "source_exists": true,
+      "source_file_count": 597
+    }
+  ],
+  "artifact_cleanup": {
+    "path": "/shared/codex/dev/gammaloop/linnet-generation-combined/crates/linnet/output.svg",
+    "tracked": false,
+    "existed_before_tests": true,
+    "sha256": "91caf4ebafa83d85a7196dfbc541be6ecaf838e418453eceb942ebaee03b63b0",
+    "mtime_ns": 1792533977810912723,
+    "mode": 33188,
+    "after_test_sha256": "91caf4ebafa83d85a7196dfbc541be6ecaf838e418453eceb942ebaee03b63b0",
+    "restored_or_preserved": true
+  },
+  "execution": {
+    "session_id": 90646,
+    "completed": true,
+    "retained_processes": [],
+    "completion_notifications": "No separate command-completion notification tool was exposed; the existing command session was awaited in bounded intervals.",
+    "session_closed": true,
+    "exitcode": 0
+  },
+  "retained_artifacts": {
+    "directory": "/tmp/codex-combined-s2/resume-20261021/integration-prefix-validation",
+    "purpose": "Command logs, exit codes, source identity snapshots, and reproducible validation scripts; shared Cargo/Nix caches preserved."
+  },
+  "source_fixes": false,
+  "test_expectation_edits": false,
+  "metadata_mutations_requested_or_performed": false,
+  "remote_actions": false,
+  "completed_at": "2026-10-21T11:54:16.289359+00:00",
+  "test_totals": {
+    "run": 1645,
+    "passed": 1645,
+    "failed": 0,
+    "skipped": 1715,
+    "timed_out": 0
+  },
+  "blockers": [],
+  "passed": true,
+  "checkout_released": true,
+  "released_at": "2026-10-21T11:55:27.792814+00:00",
+  "remaining_scoped_checks": [],
+  "scope_note": "Validates the frozen prerequisite prefix only. Queued planner/coupling, U1, L1, U2, and other new drawing/transplant work require subsequent changed-tree validation."
+}

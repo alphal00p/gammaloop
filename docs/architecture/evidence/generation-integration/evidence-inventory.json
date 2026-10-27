@@ -1,0 +1,310 @@
+{
+  "date": "2026-10-27",
+  "policy": "Only bounded integration receipts; no binaries, caches, drawing coordinator archives or fresh success claims. Historical receipt paths retain original provenance.",
+  "entries": [
+    {
+      "source": "/common/dev/gammaloop/handoffs/linnet-generation-combined/prepare/root-integration-b-quotient.json",
+      "purpose": "Plan baseline, correctness or benchmark provenance",
+      "bytes": 152519,
+      "sha256": "039ff581bff9ba72657076b90cd9edacded15531e7d5f7d90f822b511d7da09d",
+      "archive": "handoff/prepare/root-integration-b-quotient.json",
+      "status": "archived; historical receipt, not rerun"
+    },
+    {
+      "source": "/common/dev/gammaloop/handoffs/linnet-generation-combined/prepare/root-integration-v3.json",
+      "purpose": "Plan baseline, correctness or benchmark provenance",
+      "bytes": 102974,
+      "sha256": "b1612251229c57b36ea10a8394ee7f39351e994b8aad56e399aea6e40de3ad1d",
+      "archive": "handoff/prepare/root-integration-v3.json",
+      "status": "archived; historical receipt, not rerun"
+    },
+    {
+      "source": "/common/dev/gammaloop/handoffs/linnet-generation-combined/prepare/fix-round-prep.json",
+      "purpose": "Plan baseline, correctness or benchmark provenance",
+      "bytes": 101460,
+      "sha256": "ea55ccc5bd69e8853e9bd830a9331ebd11b6b454aa263bc09e7426e58393144c",
+      "archive": "handoff/prepare/fix-round-prep.json",
+      "status": "archived; historical receipt, not rerun"
+    },
+    {
+      "source": "/common/dev/gammaloop/handoffs/linnet-generation-combined/prepare/planner-scoped-151.json",
+      "purpose": "Plan baseline, correctness or benchmark provenance",
+      "bytes": 44167,
+      "sha256": "28d3750ff751947dd24c2fed1f56b19336a625c350080c9a0a2abe31c3f61c5b",
+      "archive": "handoff/prepare/planner-scoped-151.json",
+      "status": "archived; historical receipt, not rerun"
+    },
+    {
+      "source": "/common/dev/gammaloop/handoffs/linnet-generation-combined/prepare/planner-spectators-impl.json",
+      "purpose": "Plan baseline, correctness or benchmark provenance",
+      "bytes": 14860,
+      "sha256": "e7e64dd6dcb25a6e5fced1e5f9c75906e9334a164d0ba717c3860a5d5feed1be",
+      "archive": "handoff/prepare/planner-spectators-impl.json",
+      "status": "archived; historical receipt, not rerun"
+    },
+    {
+      "source": "/common/dev/gammaloop/handoffs/linnet-generation-combined/decisions/ghost.json",
+      "purpose": "Plan baseline, correctness or benchmark provenance",
+      "bytes": 76525,
+      "sha256": "053237ff8a63d421bfe8cd9ce3d030b65e83796e66e368a4c2cdddeb5b1b7bdc",
+      "archive": "handoff/decisions/ghost.json",
+      "status": "archived; historical receipt, not rerun"
+    },
+    {
+      "source": "/common/dev/gammaloop/handoffs/linnet-generation-combined/combine/phase1-results.json",
+      "purpose": "Plan baseline, correctness or benchmark provenance",
+      "bytes": 75999,
+      "sha256": "312425365d5e064d1c0b94a65a0b3aad9fa695c1d4a371cc9124d4ad185c4448",
+      "archive": "handoff/combine/phase1-results.json",
+      "status": "archived; historical receipt, not rerun"
+    },
+    {
+      "source": "/common/dev/gammaloop/handoffs/linnet-generation-combined/combine/rebase-58814885-results.json",
+      "purpose": "Plan baseline, correctness or benchmark provenance",
+      "bytes": 15445,
+      "sha256": "a904f4aca560f81cb80d8c7779cce41cb2efdbc91a5c4e8eac87686d98305f67",
+      "archive": "handoff/combine/rebase-58814885-results.json",
+      "status": "archived; historical receipt, not rerun"
+    },
+    {
+      "source": "/common/dev/gammaloop/handoffs/linnet-generation-combined/gammabench/m0-results.json",
+      "purpose": "Plan baseline, correctness or benchmark provenance",
+      "bytes": 43197,
+      "sha256": "e74c58d648ea6e10c2b507a63348ab769accaeb87958f88af318551743c21fa7",
+      "archive": "handoff/gammabench/m0-results.json",
+      "status": "archived; historical receipt, not rerun"
+    },
+    {
+      "source": "/common/dev/gammaloop/handoffs/linnet-generation-combined/gammabench/m2-prep.json",
+      "purpose": "Plan baseline, correctness or benchmark provenance",
+      "bytes": 50511,
+      "sha256": "2c266097efc347caf5299a46fdf05a87efc72f2b4d43332f9959cdcccb276abe",
+      "archive": "handoff/gammabench/m2-prep.json",
+      "status": "archived; historical receipt, not rerun"
+    },
+    {
+      "source": "/common/dev/gammaloop/handoffs/linnet-generation-combined/gammabench/native-counters.json",
+      "purpose": "Plan baseline, correctness or benchmark provenance",
+      "bytes": 66181,
+      "sha256": "083490b986df00222323029a79fac8dee24c36a36a37e7c3f7d1bb14676eb02f",
+      "archive": "handoff/gammabench/native-counters.json",
+      "status": "archived; historical receipt, not rerun"
+    },
+    {
+      "source": "/common/dev/gammaloop/handoffs/linnet-generation-combined/gammabench/session2-capture-and-staged.json",
+      "purpose": "Plan baseline, correctness or benchmark provenance",
+      "bytes": 67864,
+      "sha256": "c5ff7ea4fb415aa1c214c854651f01f4018cddcd661ec163296e46219883008f",
+      "archive": "handoff/gammabench/session2-capture-and-staged.json",
+      "status": "archived; historical receipt, not rerun"
+    },
+    {
+      "source": "/tmp/codex-combined-s2/resume-20261021/m1-source-preservation.json",
+      "purpose": "WP1/WP3 source and validation context; later API preparation",
+      "bytes": 575,
+      "sha256": "64f0325129bca6731bfa4913b5d9c6454cd7ef8daf70e133a270fba52cb2f76c",
+      "archive": "scratch/resume-20261021/m1-source-preservation.json",
+      "status": "archived; historical receipt, not rerun"
+    },
+    {
+      "source": "/tmp/codex-combined-s2/resume-20261021/claude-v2/quotient/receipt.json",
+      "purpose": "WP1/WP3 source and validation context; later API preparation",
+      "bytes": 11700,
+      "sha256": "916e12893eb64f62a262ca965f7ce84d75829f8738539a92098428decea83e42",
+      "archive": "scratch/resume-20261021/claude-v2/quotient/receipt.json",
+      "status": "archived; historical receipt, not rerun"
+    },
+    {
+      "source": "/tmp/codex-combined-s2/resume-20261021/wind-down/receipt.json",
+      "purpose": "WP1/WP3 source and validation context; later API preparation",
+      "bytes": 4685,
+      "sha256": "44c50bc182b41e2ca6d22b5d8c56abdc771ab65745f7d9cdf79c61d89852572a",
+      "archive": "scratch/resume-20261021/wind-down/receipt.json",
+      "status": "archived; historical receipt, not rerun"
+    },
+    {
+      "source": "/tmp/codex-combined-s2/resume-20261021/wind-down/audit.json",
+      "purpose": "WP1/WP3 source and validation context; later API preparation",
+      "bytes": 1201,
+      "sha256": "fd78f98345dc3235c26c18959ca0fe14696a04bb818a1d77b7b86e1bb625fb58",
+      "archive": "scratch/resume-20261021/wind-down/audit.json",
+      "status": "archived; historical receipt, not rerun"
+    },
+    {
+      "source": "/tmp/codex-combined-s2/resume-20261021/integration-prefix-validation/final-report.json",
+      "purpose": "WP1/WP3 source and validation context; later API preparation",
+      "bytes": 24447,
+      "sha256": "5efbb67776a9205b158a0a94c10a6d5403748928361bd91eb5c8b6abc2736dc6",
+      "archive": "scratch/resume-20261021/integration-prefix-validation/final-report.json",
+      "status": "archived; historical receipt, not rerun"
+    },
+    {
+      "source": "/tmp/codex-combined-s2/resume-20261021/integration-prefix-validation/receipt-check.json",
+      "purpose": "WP1/WP3 source and validation context; later API preparation",
+      "bytes": 2283,
+      "sha256": "c1c168c8414e3a2e3ede1e0d4ce3dcdc05889e32c3796cae45b59325bb0e6bd4",
+      "archive": "scratch/resume-20261021/integration-prefix-validation/receipt-check.json",
+      "status": "archived; historical receipt, not rerun"
+    },
+    {
+      "source": "/tmp/codex-combined-s2/resume-20261022/linearization/report.json",
+      "purpose": "WP1/WP3 source and validation context; later API preparation",
+      "bytes": 1967,
+      "sha256": "bfcfa6c13dc652c4b753a467255361a65121e3daaacaaf8d0703555e8ec7a17f",
+      "archive": "scratch/resume-20261022/linearization/report.json",
+      "status": "archived; historical receipt, not rerun"
+    },
+    {
+      "source": "/tmp/codex-combined-s2/resume-20261022/linearization/layers.json",
+      "purpose": "WP1/WP3 source and validation context; later API preparation",
+      "bytes": 6107,
+      "sha256": "bc60df756d12e652cc0faa61f5c4e63a187bc821b9c67b79d0bbbf316b787240",
+      "archive": "scratch/resume-20261022/linearization/layers.json",
+      "status": "archived; historical receipt, not rerun"
+    },
+    {
+      "source": "/tmp/codex-combined-s2/resume-20261022/idenso-integration-preview.json",
+      "purpose": "WP1/WP3 source and validation context; later API preparation",
+      "bytes": 2567,
+      "sha256": "52bd3175c71259f0ffbe409a33e74d2946c094123b88b9b89abbb081c049c596",
+      "archive": "scratch/resume-20261022/idenso-integration-preview.json",
+      "status": "archived; historical receipt, not rerun"
+    },
+    {
+      "source": "/tmp/codex-combined-s2/resume-20261021/dis19-quotient-fix-direction.json",
+      "purpose": "WP1/WP3 source and validation context; later API preparation",
+      "bytes": 772,
+      "sha256": "2793235c24e300a6e176ef7fd05cb61e5c5622e6e2c17edc8a76caa6275e610e",
+      "archive": "scratch/resume-20261021/dis19-quotient-fix-direction.json",
+      "status": "archived; historical receipt, not rerun"
+    },
+    {
+      "source": "/tmp/codex-combined-s2/resume-20261021/u3-cut-fix-readiness.json",
+      "purpose": "WP1/WP3 source and validation context; later API preparation",
+      "bytes": 1113,
+      "sha256": "79264eddeb3632c2fbbf5593b570258c89e30d1e065710bd176625add72e9c3e",
+      "archive": "scratch/resume-20261021/u3-cut-fix-readiness.json",
+      "status": "archived; historical receipt, not rerun"
+    },
+    {
+      "source": "/tmp/codex-combined-s2/resume-20261021/parallel/U3-historical-79c9-r1/report.json",
+      "purpose": "WP1/WP3 source and validation context; later API preparation",
+      "bytes": 15347,
+      "sha256": "dd68b58cac03469e1dd5f9f9f0e0df7b38a91c9d7582fcaa16a64f234853316b",
+      "archive": "scratch/resume-20261021/parallel/U3-historical-79c9-r1/report.json",
+      "status": "archived; historical receipt, not rerun"
+    },
+    {
+      "source": "/tmp/codex-combined-s2/resume-20261021/next-stages-preparation.typ",
+      "purpose": "WP1/WP3 source and validation context; later API preparation",
+      "bytes": 5759,
+      "sha256": "33a0d4617fbc8ec74ca631d3096c856ff45be8bea198b03822eefc674c6a59a3",
+      "archive": "scratch/resume-20261021/next-stages-preparation.typ",
+      "status": "archived; historical receipt, not rerun"
+    },
+    {
+      "source": "/common/dev/gammaloop/handoffs/linnet-generation-combined/HANDOFF.md",
+      "bytes": 81407,
+      "sha256": "f767edcbe86f04761d6c8809bd5ecb12a340e8959ea9b9bfaa26b671fd2fbdfd",
+      "status": "read-only durable external source; not copied"
+    },
+    {
+      "source": "/common/dev/gammaloop/handoffs/linnet-generation-combined/review/plan-review-2026-10-22.md",
+      "bytes": 51360,
+      "sha256": "568e53652a51ab347168c3a4c7d08b59e91860d21bd487b684523b039d065675",
+      "status": "read-only durable external source; not copied"
+    },
+    {
+      "source": "/common/dev/gammaloop/handoffs/linnet-generation-combined/decisions/names-routed-classes.md",
+      "bytes": 21936,
+      "sha256": "ae6145844252c9d9cbf3c714050360b17d1e0063eebb2cce1c55416abe515cd1",
+      "status": "read-only durable external source; not copied"
+    },
+    {
+      "source": "/tmp/claude-1114/-common-dev-gammaloop-feynkit-rich-display/1ab6f973-6084-463e-9460-126883baae2c/scratchpad/review-v4",
+      "purpose": "Raw review counters, exactness and slow-lane logs",
+      "regenerate": "WP1 exact pair/fallback regression; WP7 callgrind three repeats; WP8 DHAT; WP9 slow/heavy tests on pinned revisions",
+      "status": "inaccessible; claims remain reported",
+      "error": "[Errno 13] Permission denied: '/tmp/claude-1114/-common-dev-gammaloop-feynkit-rich-display/1ab6f973-6084-463e-9460-126883baae2c/scratchpad/review-v4'"
+    },
+    {
+      "source": "/tmp/claude-1114/-common-dev-gammaloop-feynkit-rich-display/1ab6f973-6084-463e-9460-126883baae2c/scratchpad/ghostwf/explain-names-routing",
+      "purpose": "Names, route and Classes prototype measurements",
+      "regenerate": "WP4 name/id matrix and canonical sort costs; WP5 routed equivalence; WP6 Auto/None gate",
+      "status": "inaccessible; claims remain reported",
+      "error": "[Errno 13] Permission denied: '/tmp/claude-1114/-common-dev-gammaloop-feynkit-rich-display/1ab6f973-6084-463e-9460-126883baae2c/scratchpad/ghostwf/explain-names-routing'"
+    },
+    {
+      "source": "/common/dev/gammabench-runs/combined/m1-9540f5bb",
+      "purpose": "M1 raw snapshots",
+      "regenerate": "Use gammabench 49f4408e and GammaLoop 9540f5bb, preserving lazy/eager contracts; new runs must be new snapshots",
+      "status": "external directory readable; not archived",
+      "children": [
+        "build-options.log",
+        "build.log",
+        "count",
+        "finish",
+        "full-public",
+        "full-public-eager",
+        "heavy-counters",
+        "heavy-counters.log",
+        "m0-eager-summary.json",
+        "materialized",
+        "pairs",
+        "register-count.log",
+        "register-full-public-eager.log",
+        "register-full-public.log",
+        "register-materialized.log",
+        "run-all.log",
+        "run-all.sh",
+        "run-heavy-counters.sh",
+        "smoke",
+        "tabulate.py"
+      ]
+    },
+    {
+      "source": "/tmp/codex-combined-s2/resume-20261021/claude-v2/quotient/NOTES.md",
+      "purpose": "Historical integration/quotient resumption context; claims may be superseded",
+      "bytes": 9633,
+      "sha256": "98f296e9eecb512f29ba4043fae67fe6609fc2a31b006dd70f9ed06ca0f9863e",
+      "archive": "scratch/resume-20261021/claude-v2/quotient/NOTES.typ",
+      "status": "archived historical prose in Typst",
+      "encoding": "verbatim raw text wrapper"
+    },
+    {
+      "source": "/tmp/codex-combined-s2/resume-20261021/claude-v3/root/NOTES.md",
+      "purpose": "Historical integration/quotient resumption context; claims may be superseded",
+      "bytes": 10054,
+      "sha256": "6c20462b727c652abec59bddc907def0027a578fd7c58026fa7ee5bec5a78552",
+      "archive": "scratch/resume-20261021/claude-v3/root/NOTES.typ",
+      "status": "archived historical prose in Typst",
+      "encoding": "verbatim raw text wrapper"
+    },
+    {
+      "source": "/tmp/codex-combined-s2/resume-20261021/claude-v4/idenso-colour/NOTES.md",
+      "purpose": "Historical integration/quotient resumption context; claims may be superseded",
+      "bytes": 21271,
+      "sha256": "8212a8350011a3db13cb322206ffec12f47c534cfc8e256d886edd4756a403ed",
+      "archive": "scratch/resume-20261021/claude-v4/idenso-colour/NOTES.typ",
+      "status": "archived historical prose in Typst",
+      "encoding": "verbatim raw text wrapper"
+    },
+    {
+      "source": "/tmp/codex-combined-s2/resume-20261021/wind-down/handoff.typ",
+      "purpose": "Historical integration/quotient resumption context; claims may be superseded",
+      "bytes": 11460,
+      "sha256": "7e5fdf7b6ee3aaf04e464938e0d903c45a77eb136d5c6911b329aa2895460ab9",
+      "archive": "scratch/resume-20261021/wind-down/handoff.typ",
+      "status": "archived historical prose in Typst",
+      "encoding": "unchanged"
+    },
+    {
+      "source": "/common/dev/gammabench-runs/combined/m1-9540f5bb/m0-eager-summary.json",
+      "purpose": "M1 comparison provenance",
+      "bytes": 15343,
+      "sha256": "8eb15e3bc3c7b966ca2163aca2f189dd9cfcebbd7f8a225e23c8446b391fbdc5",
+      "archive": "gammabench/m0-eager-summary.json",
+      "status": "archived historical JSON"
+    }
+  ]
+}

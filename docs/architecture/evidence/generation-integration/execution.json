@@ -1,0 +1,37 @@
+{
+  "date": "2026-10-27",
+  "scope": "WP0 only; implemented, pending parent-assigned independent Astra review",
+  "authorization": "Implement the plan, have Astra review at each impl step, and have sol implement",
+  "implementer": "Sol",
+  "reviewer": "Astra (separate round assigned by parent; not yet run)",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-integration-plan",
+  "base_commit": "3f0df2a870806076820786994d4883decec8e9e3",
+  "plan_commit": "4374f72027b75df9ff95c5c7a725ee75beac27a8",
+  "implementation_change": "ynkllqowwqltnkoszlpwqtxyrumpsupr",
+  "implementation_bookmark": "generation-integration",
+  "preserved_plan_bookmark": "generation-integration-plan",
+  "author": {
+    "name": "Lucien Huber",
+    "email": "im@lcnbr.ch"
+  },
+  "settled": {
+    "normalization": "symmetrized gg→ggg total 57/8 INCLUDING 2!·3! symmetry division",
+    "memory": "measure current integration full-mode memory first, then propose justified limit; no pre-authorized <=1.2x ceiling",
+    "solver": "retain Clarabel and ship required notices; replacement solver separate",
+    "upstream": "#209 merged in accepted base; #193 admission through #209; #210 supersedes #177",
+    "authorization_trail": "U-1 settled",
+    "lazy_rule_set": "separate lane dropped"
+  },
+  "gates": [
+    "publication",
+    "destructive historical cleanup"
+  ],
+  "historical_claims": "reported, not recertified",
+  "retained": [
+    "workspace and named implementation/source refs",
+    "imported baseline Git objects",
+    "bounded evidence archive and verification receipts"
+  ],
+  "processes_retained": [],
+  "verification_script_sha256": "07b0519cbea54e8ef6888409b9bdaa7d0250fa61b569f0239f157fec8e393951"
+}

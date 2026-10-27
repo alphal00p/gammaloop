@@ -1,0 +1,633 @@
+[
+  {
+    "type": "result",
+    "key": "v2:be13930617b0167f9559063e886dd68638f3d4161fd132b3db633465088b4616",
+    "agentId": "a32d75c4c79b3a2e0",
+    "result": {
+      "key": "uv-attribution",
+      "ready": true,
+      "workspace": "/shared/codex/dev/gammaloop/uv-attr-a (variants also in uv-attr-c, uv-attr-e, uv-attr-ce, uv-attr-b, uv-attr-h, uv-attr-p)",
+      "changes": [
+        {
+          "change_id": "snuyswtk",
+          "commit": "3059d42568",
+          "parent": "75b6c7a8",
+          "title": "scratch: uv attribution variant a (75b6 as is) [empty, not for integration]"
+        },
+        {
+          "change_id": "nwkzuvuy",
+          "commit": "9294507324",
+          "parent": "75b6c7a8",
+          "title": "scratch: variant c (slot_contraction.rs + components.rs from 39e3a72a) [not for integration]"
+        },
+        {
+          "change_id": "pzuxovvr",
+          "commit": "80401112d8",
+          "parent": "75b6c7a8",
+          "title": "scratch: variant e (model-order coupling loop removed from feynkit-model Model::new) [not for integration]"
+        },
+        {
+          "change_id": "ozwmxwlv",
+          "commit": "f7289e9c5c",
+          "parent": "75b6c7a8",
+          "title": "scratch: variant ce (c and e combined) [not for integration]"
+        },
+        {
+          "change_id": "zzutvmln",
+          "commit": "f3e59b56d6",
+          "parent": "75b6c7a8",
+          "title": "scratch: variant b (rqft_ghG_3l.dot from 39e3a72a) [not for integration]"
+        },
+        {
+          "change_id": "zxztptro",
+          "commit": "86a132ffc6",
+          "parent": "39e3a72a",
+          "title": "scratch: variant h (39e3a72a with the 75b6 lmb_id pins; h0 = built before the pins) [not for integration]"
+        },
+        {
+          "change_id": "oxxoylvp",
+          "commit": "384a65a857",
+          "parent": "75b6c7a8",
+          "title": "scratch: prototype p (undo_chain before the integrated cleanup) [not for integration]"
+        }
+      ],
+      "summary": "I found the change that carries the RQFT UV residual against 39e3. It is the model-order coupling registration in feynkit-model Model::new: the loop from #197 (pyxxkprr) at 75b6. The same loop was already in the old stack's xspzosrl, which is why the old a9 binary shows the residual too. The #151 work (#196 planner with opaque spectators plus rule (ii)) does not carry it. The DOT input does not carry it, and nor does the rest of the transplant.\n\nAll numbers are Callgrind UV Ir medians (renormalization_part), 3 runs for d42/d45 and 5 for d47; every run passed.\n- **75b6 as is (a):** UV is 1.064 / 1.093 / 1.331 of 39e3 on d42 / d45 / d47. This reproduces the b-gates numbers.\n- **Coupling loop removed (e):** UV drops to 0.980 / 0.976 / 0.969 of 39e3, and the whole test to 0.897 / 0.883 / 0.888.\n- **Loop removed plus 39e3's two idenso #151 files (ce):** UV is 0.998 / 0.994 / 0.997 of 39e3. Its UV expressions match 39e3 byte for byte on d45 and d47.\n- **#196 itself:** it lowers Ir in both coupling orders (a/c 0.979 / 0.835 / 0.977; e/ce 0.982 / 0.982 / 0.972).\n\nThe extra cost is avoidable, not the price of a semantic change. The loop only changes the order in which symbols are created, and all tests pass against the same RQFT references. In model order, the three-f colour triangle in the outer forest nodes (d42 node 9, d45 node 10, d47 nodes 10–11) arrives as `chain(coad(a),coad(b),f(in,out,c),f(in,out,d))*f(d,c,e)` instead of `trace(coad(8),cyclic(f,f,f))`. Only the trace form gets reduced in the cleanup of each integrated counterterm. As a result, 5,000–15,000 unreduced f with distinct dummy indices reach the Laurent series (×6.8 Ir), vakint (+3.7G) and index inference (+8.6G).\n\nA native structural survey of all 67 per-diagram ghost tests finds the same effect, though with no Ir: 22 diagrams carry 4–300× more unreduced f under model order. Rule (ii) copies nothing on these tests, so the \"copied partner sums\" explanation does not apply.\n\nOptions are listed per item; the idenso design choice is yours. Nothing was committed to shared history, and #196/#197 are untouched.",
+      "items": [
+        {
+          "item": "(a) 75b6 as is",
+          "outcome": "done",
+          "details": "Built in uv-attr-a (bin/test_renormalization-a, sha 2bf41453). UV / whole medians: d42 54.75 / 62.21G, d45 48.24 / 55.65G, d47 68.94 / 76.36G. All 5 d47 runs landed in the main mode (76.28–76.45G whole). This reproduces b-gates k6 (54.82 / 48.24 / 69.03). My own 39e3 build h0 reproduces the historical h39e3 (UV 51.47 / 44.13 / 51.81 vs 51.44 / 44.11 / 52.09), so a/h0 = 1.064 / 1.093 / 1.331 UV and 0.964 / 0.974 / 1.177 whole. These match the b-gates residuals."
+        },
+        {
+          "item": "(b) 75b6 with the old rqft_ghG_3l.dot from 39e3",
+          "outcome": "done",
+          "details": "The literal swap cannot run. All 11 Callgrind runs exit 101 at import: 'Graph d1 does not contract every tensor index ... hedge(h,k) ... counted from one', with coad(8,hedge(0)) and coad(8,hedge(1)) left dangling. This is because 39e3's file uses zero-based hedge(n) (the one-based convention came with nspuxtuv). The two dot files differ only by (i) that hedge form (39e3's file with hedge(n)→hedge(n,1) is byte-identical to 48f046f7's) and (ii) the 21 lmb_id pins. Without the pins, 75b6 is b-gates k4 (d47 154G): a different question. I separated input from code by two controls instead:\n- h1 (39e3 code plus 75b6's pins) equals h0: UV 1.001 / 0.999 / 1.001, identical stage sizes. So the pins reproduce 39e3's bases.\n- ce (75b6 code with 75b6's dot) reproduces 39e3's UV expressions byte for byte on d45 and d47.\nThe input carries none of the residual."
+        },
+        {
+          "item": "(c) 75b6 with idenso's partner-sum/planner code reverted to the 39e3 (vxwullus) version",
+          "outcome": "done",
+          "details": "The revert applies cleanly: `jj restore --from 39e3a72a` of slot_contraction.rs and slot_contraction/components.rs. On 58814885::75b6 only #196's commits touch these files, and the result builds. UV results:\n- c (epsilon-only arm, model order kept): 55.92 / 57.79 / 70.55G (d47 range 54.94–70.58, one of five runs in the low mode). That is 1.087 / 1.310 / 1.362 of 39e3: no better than 75b6, and worse on d45.\n- Factorial controls: e (coupling loop removed, #196 kept) 50.42 / 43.07 / 50.18G; ce (both removed) 51.35 / 43.88 / 51.64G ≈ 39e3.\n- #196 effect: a/c 0.979 / 0.835 / 0.977, e/ce 0.982 / 0.982 / 0.972. #196 lowers cost in both orders. With the planner, the colour f left after cleanup in d47 nodes 5–6 drops from 858 to 3–9.\nSo the #151 treatment carries no residual. Its swap from epsilon-only explains nothing, and rule (ii) copies no partner sums on these tests."
+        },
+        {
+          "item": "(d) Profile diffs and other suspects",
+          "outcome": "done",
+          "details": "Diffs are in diffs/*.txt, made by cmp.py over callgrind_annotate --inclusive tables. Between 39e3 and 75b6 on d47, UV is +16.96G:\n- Laurent series in integrated.rs: 2.01→9.51G (×4.7)\n- idenso index inference (infer_view): +6.9G\n- vakint evaluate_integral: +3.8G\n- numerator construction: −2.9G, cheaper at 75b6 on all three diagrams; DOT import also cheaper, 12.5G→7.0G\nThe slot-contraction and planner functions themselves stay under 1G.\nThe controlled diff from e to a shows the same signature (series ×6.8, inference +8.6G, vakint +3.7G). The diff from h0 to ce is only −0.19G in UV.\nMechanism, from logged integrands and cleanup outputs (mech/colour-notation.txt, mech/example-node10.txt): in model order (a, c) the three-f triangle comes as an open adjoint chain times a bare f; in default order (h0, ce, e) it comes as a trace, which the cleanup reduces to 0 f, while the chain form leaves 5152 to 8064 unreduced f per node.\nThe historical a9 binary (epsilon-only, no #196, but the coupling loop already in xspzosrl) already shows UV +8.8% / +31.4% / +35.4%. So the residual entered with xspzosrl's loop, and the #196/#197 swap slightly reduced it.\nPrototype p (undo_chain before the cleanup in integrated.rs) changes nothing (same unreduced f), so a gammalooprs-side unfold is not a fix.\nA native survey of all 67 per-diagram tests (no Ir) finds 22 diagrams with 4–300× more unreduced f under model order; total cleanup output is 59.6 MB vs 45.3 MB."
+        },
+        {
+          "item": "Which change carries the residual; real cost or avoidable overhead",
+          "outcome": "done",
+          "details": "Carrier: the model-order registration of the UFO::GC_* coupling symbols in feynkit-model Model::new (#197 pyxxkprr at 75b6; the same loop arrived earlier with xspzosrl). Removing it alone makes 75b6 cheaper than 39e3 in UV on all three diagrams. Removing it together with the #151 files reproduces 39e3.\n\nIt is avoidable overhead, not the cost of a correctness or semantic change. The loop only changes symbol creation order (a determinism fix with no mathematical effect), and the results are identical: all variants pass the same RQFT references.\n\nThe overhead comes from idenso's colour notation being order-dependent. Depending on symbol order, the same f-triangle comes out as `trace(coad(8),cyclic(f,f,f))`, which is reduced downstream, or as `chain(a,b,f(c),f(d))*f(d,c,e)`, which is not.\n\nThe d47 low-mode runs (75b6 71.9G, c 54.9G, a9 62.4G) are probably hash-order runs that land in the trace form; I did not verify this per run.\n\nRule (ii) copying partner sums is not the cause: it copies none on these tests, and #196 lowers Ir."
+        },
+        {
+          "item": "Options (user decides; #196/#197 unchanged)",
+          "outcome": "needs-user",
+          "details": "1. Fix in idenso (recommended follow-up): make colour-cycle handling independent of factor order. Either close adjoint f-loops as traces when forming chains, or let the kernel reduce mixed chain*f cycles (the triangle to CA/2·f, the box to CA²). Expected result: about the e numbers (UV 0.97–0.98, whole about 0.89 of 39e3 on d42/d45/d47), and probably no d47 bimodality. This needs a design and review on your side.\n2. Accept 75b6 as is and record the follow-up. Whole-test Ir is already below 39e3 on d42/d45 (0.964 / 0.974); d47 is +17.7% whole and +33.1% UV. Tests pass.\n3. Not recommended: choose another deterministic coupling order to win these three diagrams. It is arbitrary, the survey shows other diagrams would move unpredictably, and it hides the idenso defect.\n4. Ruled out: unfolding chains in the gammalooprs cleanup (prototype p) does not help."
+        }
+      ],
+      "tests_run": [
+        "cargo test -p gammalooprs --test test_renormalization --profile ci-optim --no-run (variants a, c, e, ce, b, h0, h1, p; all built)",
+        "valgrind --tool=callgrind test_renormalization-<v> --exact finite_part_ghost_3loop_d42|d45|d47 --test-threads 1 (RAYON_NUM_THREADS=1, logging off): 3/3/5 runs each for a, c, e, ce, h0, h1 (66 runs, all passed); b 11 runs fail at import (expected, hedge(n) dot)",
+        "native diagnostic-stage/integrand/collect probes (GL_LOGFILE_FILTER) on d42/d45/d47 for a, e, c, ce, h0, h1, p (4 runs each for stage sizes); all passed",
+        "native survey of all 67 finite_part_ghost_3loop_dN tests for h0, ce, e, a, c (335 runs, all passed)"
+      ],
+      "measurements": "Callgrind medians, UV = AmplitudeGraph::renormalization_part, G Ir (whole test in parentheses), d42 / d45 / d47 (n = 3 / 3 / 5):\n- h0 (39e3): 51.47 (64.55) / 44.13 (57.16) / 51.81 (64.87)\n- h1 (39e3 + pins): 51.53 / 44.08 / 51.84\n- ce: 51.35 (58.80) / 43.88 (51.28) / 51.64 (59.08)\n- e: 50.42 (57.87) / 43.07 (50.47) / 50.18 (57.61)\n- c: 55.92 (63.37) / 57.79 (65.19) / 70.55 (77.97), d47 range 54.94–70.58\n- a (75b6): 54.75 (62.21) / 48.24 (55.65) / 68.94 (76.36)\n\nUV/h0:\n- a: 1.064 / 1.093 / 1.331\n- e: 0.980 / 0.976 / 0.969\n- ce: 0.998 / 0.994 / 0.997\n\nEffects:\n- coupling registration: a/e 1.086 / 1.120 / 1.374\n- #196: a/c 0.979 / 0.835 / 0.977; e/ce 0.982 / 0.982 / 0.972\n\nRun-to-run spread within each variant is at most 0.5% except the d47 bimodality in c (1/5 low). Variant a d47 was 5/5 in the main mode.",
+      "open_issues": [
+        "Your decision: fix the order-dependent adjoint chain/trace handling in idenso (option 1), or accept 75b6 and record a follow-up (option 2). I made no change to #196, #197 or any shared change.",
+        "Not verified per run: that the d47 low-mode runs (75b6 71.9G, c 54.9G, a9 62.4G) are hash-order runs that land in the trace form.",
+        "The survey (structure only, no Ir) shows the same notation effect in 22 of 67 RQFT ghost diagrams. I measured Ir on d42, d45 and d47 only.",
+        "Retained for review: workspaces uv-attr-a, -c, -e, -ce, -b, -h and -p. Each holds one scratch change on 75b6 (h on 39e3), never to be integrated; their diffs are in patches/. Also retained: the lane scratch (431 MB of binaries, callgrind runs, probes and survey). No processes are left. Other agents' /tmp/nix-shell.* directories were left untouched."
+      ],
+      "scratch": "/tmp/codex-combined-s2/resume-20261021/claude-v3/uv-attribution (NOTES.md, table.txt, summary.txt, diffs/, mech/colour-notation.txt, mech/example-node10.txt, survey/summary.txt, patches/, bin/sha256.txt, cg/)"
+    }
+  },
+  {
+    "type": "result",
+    "key": "v2:f4d055afdfbfa7ebbe5b238622fc0d1598091c8e64c4b2d372678b9335f8e404",
+    "agentId": "a06ea8fb131bf76f0",
+    "result": {
+      "key": "root-v3",
+      "ready": true,
+      "workspace": "/shared/codex/dev/gammaloop/linnet-generation-combined",
+      "bookmark": "combined-integration-v3",
+      "changes": [
+        {
+          "change_id": "zmryplxzkuruxruksmvyusskosqutlly",
+          "commit": "309ba0ed0a015ebc75ae1d64cb4f92bbaa90a00a",
+          "parent": "48f046f7350cdce0b5092a3c1a70f04b1510cc1b",
+          "title": "normalize sampled grouping quotients (copy of 36c14173 + reviewed comment fix + corrected disclosure)"
+        },
+        {
+          "change_id": "urulzsymvuwvqzxpzqrmkmszynrrzxmy",
+          "commit": "9c59b16c3acf9f03cc70a3969de2f400e2894b5c",
+          "parent": "309ba0ed0a015ebc75ae1d64cb4f92bbaa90a00a",
+          "title": "reject nonfinite grouping samples and supply the physical test card (copy of e3f9ee33)"
+        },
+        {
+          "change_id": "rkwnswmz..rmwqrwkz (6 B copies)",
+          "commit": "c85c44094dbca465890fc8a52b152a1d3eb5b8d3",
+          "parent": "9c59b16c3acf9f03cc70a3969de2f400e2894b5c",
+          "title": "B: d24004b3 feeae769 93765cf4 9f792f1d c5a28fd7 c85c4409 (last = co-orient parallel bundles in LMB sampling channels); interdiff vs v2 copies empty"
+        },
+        {
+          "change_id": "oozykprsskvynykvuwwvykwouykpnvql",
+          "commit": "bacc0dc8967e83ab52e6a8d4a8c646efe3f264b8",
+          "parent": "c85c44094dbca465890fc8a52b152a1d3eb5b8d3",
+          "title": "skip zero coefficients in affine sampling frames (copy of wkmsrwtx)"
+        },
+        {
+          "change_id": "sxxvzkkprlsymspnrnwosxtmqyxknuou",
+          "commit": "4463a7ee23cde1d524e34cc544ce5b457852acf9",
+          "parent": "bacc0dc8967e83ab52e6a8d4a8c646efe3f264b8",
+          "title": "widen the cool-QM acceptance gate to three sigma (new)"
+        },
+        {
+          "change_id": "tstxpymz..xztptzpm (7 C copies)",
+          "commit": "e98dd69a9c4fca0e7a9ace99ec70ce12248b4329",
+          "parent": "4463a7ee23cde1d524e34cc544ce5b457852acf9",
+          "title": "C: 3cadc5b7 11abdbf9 448277a0 c2687514 c769f6b7 9a6b1303 e98dd69a; interdiff vs v2 copies empty"
+        },
+        {
+          "change_id": "pprkrxrzzptmlpzryqtkwtoklmnpsqtn",
+          "commit": "e10d25f580b17d09e77146b6822dc9b5ba18fe5a",
+          "parent": "e98dd69a9c4fca0e7a9ace99ec70ce12248b4329",
+          "title": "resolve reviewed generation fixes and registry history (copy of 75b6; conflict-free, = 75b6 + quotient delta)"
+        },
+        {
+          "change_id": "ysuvnuuw..myovtwyp (7 copies)",
+          "commit": "05006de521333a7c70ce0bace23212413c220bf7",
+          "parent": "e10d25f580b17d09e77146b6822dc9b5ba18fe5a",
+          "title": "arrowheads b0c05ac8, A6 db5774fa, S 91886311 d7399366 3f25682e, U3 79255c0a 05006de5; interdiff vs v2 copies empty"
+        },
+        {
+          "change_id": "pzusvqwkttwkwntvkupkutszvwmzpnuo",
+          "commit": "6d207cfce36ab2bb128d92d67cc3da182afb0bb1",
+          "parent": "05006de521333a7c70ce0bace23212413c220bf7",
+          "title": "align duplicate aa3 ghost-loop reference (v3 tip, tree 1fc62584e241d44d0e2352aa848201f99830a0ee)"
+        }
+      ],
+      "summary": "combined-integration-v3 is at pzusvqwk 6d207cfc (tree 1fc62584). The order is: the quotient fix (36c1 → e3f9) right after root's A copy, then B (6), the sampler fix copy, the new 3σ gate commit, C (7), the 75b6 resolution, arrowheads, A6, S (3) and U3 (3). All 26 commits are root-owned and authored by Lucien Huber; nix-ci's top-level enable is false in each.\n\ncombined-integration-v2 still points at d9ff71a6. I did not insert with `jj duplicate -A`, because jj would then have rebased every descendant of the A copy. That includes wkmsrwtx itself (bookmark b-gates-affine-zero-skip) and the scratch working-copy commits of three b-gates workspaces and the v2 base-check workspace. So v3 is a parallel chain of duplicates, and nothing that existed before was rewritten.\n\nMy first attempt was wrong, and I caught it before any build. I had made the comment fix by editing jj's conflict markers on the conflicted copy. jj read the edit back in a way that, after the later layers were copied, silently dropped A's `color_products_vanish` definition from the 75b6 copy. I abandoned that attempt and redid the two edits on clean copies, then rebased them into place. In the final chain the 75b6 copy is conflict-free and byte-identical to an independent `git merge-file` of 75b6 with the quotient delta, for both grouping.rs and the nix file. Every other copied layer has an empty interdiff against its v2 copy.\n\nThe whole difference between the v2 and v3 tips is grouping.rs, the three quotient fixtures, maps.rs (+3), one nix line and cool_qm_eos.rs.\n\nThe full previous suite plus the requested additions passes at the tip, and no failure was introduced. B is no longer provisional:\n- CoolQM: the sampler is unbiased, the user's 3σ gate is in, and the test passes at 2.077σ.\n- RQFT cost: no B commit adds cost, and the copied sampler fix removes the +3.5% per-sample Ir.\n\nI did not edit any old description to say this.",
+      "items": [
+        {
+          "item": "(1) Insert the sampled-quotient fix right after root's copy of A (36c14173, then e3f9ee33), with the comment fix and the corrected disclosure in the 36c1 copy",
+          "outcome": "done",
+          "details": "Commits:\n- zmryplxz 309ba0ed (copy of 36c14173) on vxlkqtuz 48f046f7.\n- urulzsym 9c59b16c (copy of e3f9ee33) on top of it.\n\nHow they were made:\n- Both edits were done on clean copies on 3cd9f13e (the originals' own parent), then `jj rebase -s` moved them onto vxlkqtuz. Both copies are now 2-sided, like A.\n- The 36c1 copy changes exactly one line from 36c14173. In grouping.rs, 'The optional raw tensor comparison above keeps its existing policy.' becomes '// The canonical comparison above checks finiteness only of its quotient.'\n- e3f9's guard is inserted directly after that line, so the two edits conflicted. I kept both: the new comment, then the guard. The e3f9 copy's tree is e3f9ee33 plus that one line.\n\nDescription of the 36c1 copy:\n- Canonical mode with samples > 0 falls back to the sampled certificate, so DIS19 canonical goes from 76 to 74 with default samples.\n- Pure canonical (samples 0) stays at 76.\n- DIS19 is described as the u/d quark-triangle (Furry) cancellation of raw GL00-GL03; the u triangles are -2 times the d triangles.\n- It mentions the comment fix.\n\nDescription of the e3f9 copy: the stale 'runtime remains unverified (54 unrealized builds)' sentence is replaced by the quotient lane's verified Nix runtime result.\n\nThe 75b6 copy pprkrxrz is conflict-free. merge-check.sh confirms its grouping.rs and nix/rust-workspace.nix equal `git merge-file` of 75b6, A and (e3f9 + comment) byte for byte. So the reviewed ABC resolution (color_products_vanish defined and used, the twelve-zero regression kept once) and the full quotient semantics are both present.\n\nThe discarded first attempt and every hunk are recorded in /tmp/codex-combined-s2/resume-20261021/claude-v3/root/resolutions-v3.md."
+        },
+        {
+          "item": "(2) Place the sampler cost fix wkmsrwtx right after root's copy of B's sampler commit",
+          "outcome": "done",
+          "details": "oozykprs bacc0dc8 is the copy of wkmsrwtx, on rmwqrwkz c85c4409 (the copy of kyomplxz 'co-orient parallel bundles in LMB sampling channels').\n- Its diff is maps.rs +3 only, and its interdiff against wkmsrwtx is empty.\n- Like the B copies, it inherits only the A grouping.rs conflict.\n- The description replaces the v2 change id '(kyomplxz)' with the parent's title and gains the trailer.\n- The original wkmsrwtx 761bbf32 and its bookmark b-gates-affine-zero-skip are unchanged."
+        },
+        {
+          "item": "(3) New commit after (2): cool_qm_eos_nlo_matches_example_target gate from 2σ to 3σ, seed and budget unchanged, argument in the message",
+          "outcome": "done",
+          "details": "sxxvzkkp 4463a7ee 'widen the cool-QM acceptance gate to three sigma'.\n\nCode change:\n- Adds `const PULL_LIMIT: f64 = 3.0` with a two-line rationale comment.\n- `delta <= 2.0 * error` becomes `delta <= PULL_LIMIT * error`.\n- Seed 1337, the 750k budget and the 1.5x relative-error ceiling are unchanged. No other test file is touched.\n\nThe commit message states the argument:\n- A fixed-seed check against a 2σ gate fails about 5% of the time for an unbiased sampler whenever the sampler changes the drawn points.\n- The co-orientation is a measure-preserving reflection of the unit cube on every CoolQM channel (13 graph/channel pairs).\n- 100 seeds per sampler were fixed before the runs. New sampler: mean -0.014, sd 1.055, KS p 0.88. Old sampler: mean +0.003, sd 0.956, KS p 0.71. Two-sample KS p 0.79.\n- Seed 1337 at 2.077σ reproduces bit for bit; a 3σ gate fails an unbiased estimator 0.27% of the time.\n\nAt the tip the test passes in 60 s with -6.235(61)e-2 at Δ = 2.077σ, the same as the B-gates seed-1337 value (to the printed precision)."
+        },
+        {
+          "item": "Rebase of later layers, conflict resolution record, bookmarks",
+          "outcome": "done",
+          "details": "Later layers:\n- B (6), C (7), the 75b6 resolution, arrowheads, A6, S (3) and U3 (3) were duplicated onto the new chain.\n- Every jj interdiff against the v2 copies is empty.\n- The C copies keep the inherited grouping.rs/developers.toml conflicts, which the 75b6 copy resolves, exactly as in v2.\n\nResolved hunks:\n- grouping.rs comment vs guard, in the e3f9 copy.\n- The 75b6 copy, which needed no manual hunk once the copies were composed correctly (verified independently).\n\nBoth are recorded with side and reason in /tmp/codex-combined-s2/resume-20261021/claude-v3/root/resolutions-v3.md.\n\nBookmarks:\n- combined-integration-v3 points at pzusvqwk 6d207cfc.\n- combined-integration-v2 stays at d9ff71a6, combined-integration-abc-provisional at 75b6, and b-gates-affine-zero-skip at wkmsrwtx.\n- Root @ is xvprwvns (empty) on the tip.\n- The 26 commits of the discarded first attempt were abandoned."
+        },
+        {
+          "item": "Asset freshness (linnest.wasm/kurvst.wasm per layer via nix, docs SVGs)",
+          "outcome": "done",
+          "details": "No regeneration was needed.\n\nPer-layer wasm check (assets/wasm-per-layer.txt):\n- I ran `nix build git+file:///shared/codex/dev/gammaloop/main?rev=<commit>#linnest-wasm` for all 9 non-conflicted v3 layers, from pprkrxrz to pzusvqwk.\n- All 9 are FRESH: linnest c0fff773…/kurvst 0a369613… from the A6 copy on, a9438c1d…/7ef174a7… at the 75b6 copy.\n- linnest depends only on linnet, not on feynkit-generator or gammalooprs. So the inserted changes (grouping.rs, fixtures, maps.rs, nix card line, test) are not wasm inputs. The conflicted layers cannot be built, as in v2.\n\nAt the tip:\n- wasm_verify against d9ff71a6: WASM OK, matches the nix bundle, no exports added or removed.\n- `just docs-svg-assets-check` passes; the 34/34 rendered SVGs are byte-identical.\n- The 11/11 kurvst/linnest PDFs are SAME."
+        },
+        {
+          "item": "Validation of the tip (previous full suite + oracle 1/8/32, test_feyngen, CoolQM, quotient tests, physical six-process regression at 1 and 32 threads, DIS19)",
+          "outcome": "done",
+          "details": "Tip 6d207cfc, dev env dumped from it.\n\nPrevious suite:\n- Tracked hashes unchanged (3551 = 3548 + 3 fixtures).\n- fmt passes for the 8 packages, feynkit-py and the integration tests.\n- Core library tests 433/433 (+5 quotient tests), including the 464-record fixture run.\n- Drawing 882/882; Typst sandbox 3/3; utils/model 118/118; canonical drawing 2/2; feynkit-py 35/35.\n- test_feyngen 22/22.\n- Scoped clippy passes for the 8 packages, feynkit-py and the integration tests' --tests. The only warnings are the clarabel dependency warnings, as in v2.\n- feynkit-community stub check passes; U3 pocket/A6 targeted tests 8/8.\n\nRequested additions:\n- Generation oracle fast tier with FEYNKIT_ORACLE_THREADS=1,8,32: 364/364.\n- The ten quotient targeted tests: 10/10.\n- cool_qm passes.\n- Physical regression, run directly on the ci-optim test binary: the six children forward/reverse × 1/8/32 each exit 0, and the parent exits 0 with RAYON_NUM_THREADS=1 and =32. Both nonfinite tests pass at rayon 1 and 32.\n\nDIS19, from my own dev-optim CLI builds:\n\n| | raw | sampled | canonical, default samples | pure canonical |\n|---|---|---|---|---|\n| d9ff71a6 | 92 | 78 | 76 | 76 |\n| v3 tip | 92 | 74 | 74 | 76 |\n\n- At the v3 tip the 1-core and 32-core runs give the same partitions. The sampled and canonical-with-samples partition f03302b6 equals the quotient lane's e3f9. The pure canonical partition 30f33a68 is identical at both commits.\n- The only change is that GL00-GL03 drop out."
+        },
+        {
+          "item": "Every failure classified: pre-existing at d9ff71a6 (same output) or introduced (fix in the causing layer)",
+          "outcome": "done",
+          "details": "No failure was introduced, so no layer was changed for this task.\n\nPre-existing failures with the same output as d9ff71a6:\n- ruff on the 3 generated .pyi stubs. The output is byte-identical to the v2 run, and this is not a repo check.\n- U3 slow rows, checked with INSTA_FORCE_PASS and compared with the v2 lane's d9ff71a6 logs in u3-joined-v3.tsv. There are 25 mismatches at both tips: 23 have the same actual output, and 2070/2079 equal the v2 rerun (the nondeterministic vacuum Group(28) ratio). These are the label rows 2062/2074 (still Group(2)+Group(4)), the aa rows 2038/2041 and the 21 uncertified rows.\n\nU3's certified rows 1815, 2005, 2037, 2073, 2075 and 2078 still pass."
+        }
+      ],
+      "tests_run": [
+        "validate.sh batch at 6d207cfc (runs/validation-batch.log, validation/stages/STATUS): tracked-hash before/after 3551 unchanged; cargo fmt 8 pkgs + feynkit-py + gammaloop-integration-tests: pass",
+        "nextest ci-optim/ci_gammaloop core lib (feynkit-generator/graph/model): 433/433",
+        "nextest drawing (linnet linnest kurvst clinnet, linnest/svg): 882/882; test_wasm.py Typst sandbox 3/3; gammalooprs utils/model 118/118; canonical model drawing integration 2/2; feynkit-py lib 35/35",
+        "nextest test_feyngen default filter: 22/22",
+        "cargo clippy scoped 8 pkgs + feynkit-py + gammaloop-integration-tests --tests (ci-optim): pass (clarabel dependency warnings only, as v2)",
+        "ruff format --check: rc=1, output byte-identical to the v2 run (generated .pyi stubs; pre-existing)",
+        "FEYNKIT_ORACLE_THREADS=1,8,32 just generation-oracle --test-threads 1: 364/364",
+        "quotient targeted (10 tests incl. sampled_quotient_does_not_group_nonfinite_operands, sampled_quotient_checks_nonfinite_operands_in_every_sample, sampled_quotient_groups_physical_local_factors): 10/10",
+        "cool_qm_eos::cool_qm_eos_nlo_matches_example_target: PASS (-6.235(61)e-2, 2.077 sigma, 60 s)",
+        "physical-children.sh: FEYNKIT_QUOTIENT_REGISTRATION forward/reverse:1/8/32 direct runs 6/6 exit 0; parent with RAYON_NUM_THREADS=1 and 32 exit 0; nonfinite tests at rayon 1/32 exit 0",
+        "DIS19 (dis19/run.sh) at d9ff71a6 and v3 tip, c1 and c32: raw/sampled/canon-fallback/canon-pure as reported",
+        "u3-slow.sh (4 slow/failing test_feyngen tests, INSTA_FORCE_PASS) at v3 tip: compared with the v2-tip logs via make-u3-tables.sh",
+        "U3 pocket + A6 compact_input targeted: 8/8",
+        "feynkit-community stub check: pass",
+        "just docs-svg-assets-check: pass; render-docs-svg-assets.sh 34/34 identical; 11/11 PDFs identical",
+        "nix build #linnest-wasm for 9 non-conflicted v3 layers: all FRESH; wasm_verify.py: WASM OK",
+        "merge-check.sh: 75b6-copy grouping.rs and nix/rust-workspace.nix == git merge-file(75b6, A, e3f9+comment)"
+      ],
+      "measurements": "I ran no Callgrind measurements in this lane; the earlier receipts still apply:\n- wkmsrwtx: CoolQM per-sample Ir goes from 355.6k to 340.4k (−4.3%; −1.0% against the sampler before the co-orientation), with bit-identical outputs (b-gates lane).\n- The quotient's own costs stay separate (quotient lane).\n\nTiming context only, not a gate:\n- DIS19 canonical with default samples: 166 s at c32 and 428 s at c1. Pure canonical: 4–11 s.\n- CoolQM acceptance: 60 s.\n- Generation oracle fast tier: 1155 s.",
+      "open_issues": [
+        "Pre-existing and unchanged from v2: U3 label rows 2062/2074 (the stack gives Group(2)+Group(4); left to the U3 owner), aa rows 2038/2041, 21 uncertified U3 rows, and the nondeterministic vacuum Group(28) ratio in rows 2070/2079.",
+        "Conflicted intermediate layers (the quotient copies, B, sampler fix, gate commit and C) cannot be built individually, as in v2. Final history linearization is still pending; the 75b6 copy remains the single resolution point.",
+        "Old descriptions are unchanged by design. A's copy still says the DIS19 sampled comparison 'remains open'; the quotient copies right above it fix that. B's sampler copy still says the CoolQM test is 'left unchanged'; the new gate commit settles it. B is no longer provisional (stated in NOTES and here).",
+        "The colocated git refs in main/.git do not yet have combined-integration-v3. They appear the next time jj runs in the colocated main workspace; I ran no global jj git export. Use pzusvqwk / 6d207cfce36ab2bb128d92d67cc3da182afb0bb1 directly.",
+        "Retained for review: workspace /shared/codex/dev/gammaloop/combined-integration-v3-base-check (an empty commit trnqptsn on d9ff71a6, never integrate). It holds the dev-optim CLI behind the d9ff71a6 DIS19 comparison. The v2 lane's combined-integration-v2-base-check and the b-gates workspaces are untouched."
+      ],
+      "scratch": "/tmp/codex-combined-s2/resume-20261021/claude-v3/root contains:\n- NOTES.md\n- resolutions-v3.md\n- desc/: the description texts\n- merge-check.sh and merge-check/\n- tip-delta-v2-to-v3.diff\n- validate.sh, run.sh, devenv.sh (v3 tip) and devenv-d9ff71a6.sh\n- validation/stages and junit\n- runs/*.log\n- assets/: wasm-per-layer.txt, svg-tip and pdf-tip\n- dis19/proc with partitions; bins.sha256 (the binaries themselves were removed)\n- u3-joined-v3.tsv and u3-mismatches-*.tsv\n- physical-children.sh\n\nNo processes of this lane remain."
+    }
+  },
+  {
+    "type": "result",
+    "key": "v2:e397b312a5f00f37572f68102ffc92f6045eb8128c53aff3a85cb28be3df41e6",
+    "agentId": "a6c390c407efe6575",
+    "result": {
+      "lens": "resolutions",
+      "verdict": "needs-fixes",
+      "findings": [
+        {
+          "severity": "low",
+          "where": "/tmp/codex-combined-s2/resume-20261021/claude-v3/root/resolutions-v3.md ('Description edits on root copies': 'All four gain the Co-Authored-By trailer'); report item (2) ('...with the parent's title and gains the trailer')",
+          "problem": "This claim does not reproduce for the W copy. wkmsrwtx already ends with the Co-Authored-By trailer, so oozykprs did not gain it. The only description change in oozykprs is the '(kyomplxz)' sentence. G (sxxvzkkp) is a new commit, so 'gain' does not apply to it either. The commits themselves are fine; only the record and the report misstate this.",
+          "evidence": "`jj log -r wkmsrwtx -T description | tail -3` ends with 'Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>'. `diff <(desc wkmsrwtx) <(desc oozykprs)` shows only the change at lines 3-6: 'Co-orienting parallel bundles (kyomplxz) samples a parent LMB channel' becomes 'Co-orienting parallel bundles in LMB sampling channels samples a parent'. `jj interdiff --from wkmsrwtx --to oozykprs` touches only JJ-COMMIT-DESCRIPTION.",
+          "fix": "Rewrite the sentence in resolutions-v3.md and in report item (2). zmryplxz and urulzsym gain the trailer; oozykprs keeps the trailer wkmsrwtx already had; sxxvzkkp is new. No commit change is needed."
+        },
+        {
+          "severity": "low",
+          "where": "/tmp/codex-combined-s2/resume-20261021/claude-v3/root/resolutions-v3.md (chain list 'wkmsrwtx -> oozykprs', 'new: sxxvzkkp'; 'Discarded first attempt')",
+          "problem": "The provenance record is incomplete. oozykprs and sxxvzkkp were not duplicated from wkmsrwtx or written fresh. They were duplicated from the abandoned attempt-1 commits 99696ac4 (kvluwwsw) and 2ca0f859 (qsopmvrw). Those commits sat on the chain whose grouping.rs conflict algebra was polluted. Only NOTES.md says this. resolutions-v3.md says that attempt's 26 commits were all abandoned and nothing more. I checked the outcome and it is harmless, but a reader of the resolution record cannot see that.",
+          "evidence": "`jj evolog -r oozykprs` shows bacc0dc8 on c85c4409, which is a duplicate of 99696ac4 (parent 9eb5cd32, CONFLICT). `jj evolog -r sxxvzkkp` shows 4463a7ee, a duplicate of 2ca0f859 (parent 99696ac4). Harmless: `jj debug tree` gives grouping.rs term ids [29bca4eb,1b2a3e09,e55936e6] for rmwqrwkz, oozykprs, sxxvzkkp and every C copy (C copies add a redundant 1b2a3e09 pair, as in v2's qumukrrp). `jj diff --stat -r oozykprs` touches maps.rs only, and sxxvzkkp touches cool_qm_eos.rs only.",
+          "fix": "Add one line to resolutions-v3.md naming the attempt-1 duplicate sources of W and G. It should say that their conflict terms match rmwqrwkz's (jj debug tree), so no attempt-1 pollution carried over. No commit change is needed."
+        }
+      ],
+      "reproduced": "Everything I checked reproduces except the two record-wording points above. The v3 commits and the tip are correct; the only fixes needed are wording in resolutions-v3.md and the report.\n\nMethod: read-only jj on the root, plus my own workspace review-v3-root-v3-resolutions at 6d207cfc. The workspace is now forgotten, its empty scratch commit abandoned, its directory removed, and no processes remain. Evidence is in /tmp/codex-combined-s2/resume-20261021/claude-v3/reviews/root-v3-resolutions (merge/, conf/, generator-lib.log, quotient-targeted.log, NOTES.md).\n\n**Chain**\n- vxlkqtuz → zmryplxz → urulzsym → B copies (6, ending rmwqrwkz) → oozykprs → sxxvzkkp → C copies (7) → pprkrxrz → 8 later layers → pzusvqwk 6d207cfc.\n- 26 commits, linear, no merges, no divergence. Author and committer are Lucien Huber <im@lcnbr.ch> on all 26.\n- The last `enable =` in nix-ci.nix is `enable = false;` (top level, line 562) in all 26.\n- Bookmarks: v3 → 6d207cfc; v2 still d9ff71a6; abc-provisional still 75b6; b-gates-affine-zero-skip still wkmsrwtx 761bbf32. The attempt-1 ids (mrmtuvtq, kvluwwsw, qsopmvrw) are no longer visible.\n\n**Conflicted commits**\n- jj log shows 18 conflicted commits in the v3 chain: the pre-existing A copy plus 17 new ones (Q1, Q2, B×6, W, G, C×7).\n- All are inherited, with the same shape as v2. Each conflicted v3 copy has the same conflicted file set as its v2 counterpart: grouping.rs 2-sided, plus developers.toml from tlpywkqo on. Q1 and Q2 sit on the A copy and have grouping.rs only.\n- grouping.rs keeps the same 3 conflict hunks as the A copy.\n- No commit from pprkrxrz to the tip is conflicted.\n\n**Raw conflict algebra (jj debug tree, grouping.rs)**\n- A copy = [29bca4eb (2b1e), 1b2a3e09 (217c), 75513fa6 (3cd9)].\n- zmryplxz = [.., ddc86c8c], which is the clean 922bfd43.\n- urulzsym and every B/W/G/C copy = [.., e55936e6], which is the clean 3b65ef71.\n- So A's blob cancels correctly; the attempt-1 base-term pollution is absent.\n- pprkrxrz and the tip = 89b064bf. This equals `git hash-object` of my independent merge.\n\n**Copies vs originals**\n- `jj diff 36c14173 → 922bfd43` changes exactly one line: grouping.rs:1821 'The optional raw tensor comparison above keeps its existing policy.' → '// The canonical comparison above checks finiteness only of its quotient.'\n- `jj diff e3f9ee33 → 3b65ef71` changes that same line only.\n- `jj interdiff 922bfd43→309ba0ed` and `3b65ef71→9c59b16c` are empty, so these were pure rebases.\n- Hunk 1 resolution keeps both sides: the new comment, then e3f9's guard unchanged.\n- W's interdiff against wkmsrwtx touches only the description.\n- G changes only tests/tests/test_nlo_acceptance/cool_qm_eos.rs:\n  - adds `PULL_LIMIT: f64 = 3.0` with a comment;\n  - `delta <= 2.0 * error` → `delta <= PULL_LIMIT * error`;\n  - SEED 1337, N_SAMPLES 750_000, the 1.5× relative-error limit and the real-part check are unchanged.\n- Descriptions, authors and author timestamps of all 22 B/C/resolution/later copies are byte-identical to their v2 copies.\n\n**Hunk 2 (pprkrxrz)**\n- My own `git merge-file` of 75b6c7a8 with base 3cd9f13e and theirs e3f9ee33 (comment applied by sed) merges cleanly (rc 0).\n- The result is byte-identical to pprkrxrz for all five files: grouping.rs, nix/rust-workspace.nix, GL29.dot, GL68.dot and prepared_samples.json.\n- In grouping.rs, A→75b6 differs only by API renames (FACTOR_HEADS, DiagramPair, name().unwrap()), which the quotient delta does not touch. color_products_vanish is defined at :423 and used at :645.\n- compare() at the tip has the comment followed by the guard. compare_atoms has the scalar finite check, the normalizer and the final `is_finite` check.\n- The nix card entry sits in runtimeTest. It is separate from C's compileTimeTest feynkit-generator fixtures entry, and there is no duplicate attribute.\n\n**Later layers**\n- Tip grouping.rs equals the resolution copy's, so A6, S and U3 do not touch it.\n- v2→v3 deltas for all 9 non-conflicted layers have the same content (7 files, +511/−5); only the nix hunk header shifts.\n- The tip delta equals the quotient delta (content of A→e3f9c) + the wkmsrwtx diff + G.\n- The materialized grouping.rs deltas for every v2→v3 B/W/G/C pair equal the A copy → Q2 delta (marker labels differ only).\n- So v2's S/U3 resolutions carry over byte-for-byte.\n\n**Gate argument**\n- Matches claude-v2/b-gates/coolqm-primary.json:\n  - new sampler: pull mean −0.01396, sd 1.0550, KS p 0.879;\n  - old sampler: +0.00343, 0.9557, KS p 0.710;\n  - two-sample KS p 0.794.\n- Seed 1337: new (0.06235151 − 0.06107724)/0.00061351 = 2.077σ; old 1.083σ.\n- inspect/compare.txt lists 13 graph/channel pairs: GL5 ×1, GL0/1/3/4 ×3.\n- Two-sided Gaussian tail fractions: 0.27% at 3σ, 4.55% at 2σ.\n- The lane's tip log shows −6.235(61)e-2, Δ = 2.077σ, PASS.\n\n**Semantics (my own build at 6d207cfc)**\n- feynkit-generator --lib: 210 passed, 4 skipped.\n- Targeted: 12/12 pass, including:\n  - sampled_quotient_does_not_group_nonfinite_operands\n  - sampled_quotient_checks_nonfinite_operands_in_every_sample\n  - sampled_quotient_groups_physical_local_factors\n  - the zero-colour tests"
+    }
+  },
+  {
+    "type": "result",
+    "key": "v2:ef4d38ca9092726fcf062f6fbc0735b3b125c01cef4b8ce160d6187aec102cb5",
+    "agentId": "a9d3cc16f7802a1ca",
+    "result": {
+      "lens": "attribution",
+      "verdict": "needs-fixes",
+      "findings": [
+        {
+          "severity": "medium",
+          "where": "Report summary ('Only the trace form gets reduced in the cleanup'), the carrier item ('chain(a,b,f(c),f(d))*f(d,c,e), which is not [reduced]'), option 1 and its expected result; NOTES.md section Mechanism",
+          "problem": "The stated mechanism does not reproduce. The chain*f notation is reduced by the cleanup, including in 75b6 code, so chain-versus-trace notation is not what leaves the f unreduced. Option 1's prescribed idenso fix (close adjoint f-loops as traces, or reduce mixed chain*f cycles) and its forecast ('about the e numbers', 'probably no d47 bimodality') therefore rest on an unsupported mechanism.",
+          "evidence": "I ran native mech probes with the lane's own binaries (input/collect logging, RAYON 1). On d47 the node 10/11 notation depends on hash order even without model order. h0 runs 1 and 10 of 11, ce run 6 of 11, and e runs 4, 7 and 11 of 11 carry `chain(coad(8,cd9d5d),coad(8,cbd7bb),f(in,out,coad(8,d_1000010)),f(in,out,coad(8,d_1000009)))*f(coad(8,d_1000009),coad(8,d_1000010),coad(8,c38405))`, which is exactly the shape the report calls unreduced. Their node 10-11 cleanup outputs are byte-identical to the trace-form runs (0 f), and s3out is unchanged (h0/ce 741483). In the other direction, a's native d47 low mode (3 of 6 runs, s3out 1340602, node 10 left with 728 f instead of 5880) keeps the chain form (16 chain / 0 trace, 24 / 0). The lane's own prototype p (undo_chain before the cleanup) also changed nothing, which fits notation not being the blocker. The unreduced cases instead show model-order-specific labelling. In a-d45 node 10 the same chain*f appears under two dummy labellings (d_1000003/4 and d_1000006/7) and leaves 5152 f. In a-d47 the contraction goes through cooked indices (c0c2b3, cd84d5). Files: reviews/uv-attribution-attribution/mech/{h0-d47-1,h0-d47-10,ce-d47-6,e-d47-4,a-d47-1..6}/ and logs/mech-*.out.",
+          "fix": "Keep the carrier conclusion; it reproduces. State that the mechanism is open: what distinguishes reduced from unreduced runs correlates with model order but is not chain-versus-trace notation. Reframe option 1 as 'diagnose why the integrated cleanup leaves f under model-order labelling (relabelled or cooked contracted indices)'. Drop the 'about e numbers / no bimodality' forecast."
+        },
+        {
+          "severity": "medium",
+          "where": "Summary bullet '#196 itself: it lowers Ir in both coupling orders (a/c ... 0.977)', item (c), measurements 'Variant a d47 was 5/5 in the main mode'",
+          "problem": "On d47 under model order the #196 effect depends on the hash mode, and the median of 5 hides this. The claim 'lowers Ir in both orders' holds for d42, d45 and the default order, but not robustly for d47 in model order.",
+          "evidence": "I ran 10 Callgrind runs per variant on d47 with my own builds. a: 8 runs at 68.94-69.04 and 2 at 64.37/64.41 (so not 5/5 main mode; b-gates k6 also had 1 of 6 low). c: 8 at 70.44-70.56 and 2 at 54.88/54.90 (the lane had 1 of 5 low). Main against main, a/c = 0.979. Low against low, a/c = 1.173. Mode-weighted means are 68.07 vs 67.35 (a/c 1.011). c's low mode is 15-20% below both of a's modes. In the default order the effect is unimodal and real: e/ce = 0.971 on d47 and 0.982 on d45.",
+          "fix": "Report per-mode values and frequencies for a and c on d47 (n>=10). Say that #196 lowers cost in the default order and on d42/d45, while on d47 in model order it is mode-dependent (roughly neutral on average). The 'does not carry the residual' conclusion still holds, because a/e = 1.376 (low-mode a 64.39 is still 1.28x e) and ce/h = 0.998."
+        },
+        {
+          "severity": "low",
+          "where": "Summary 'Its UV expressions match 39e3 byte for byte on d45 and d47'; item (b) 'reproduces 39e3's UV expressions byte for byte'",
+          "problem": "This is overstated. What matches is the stage byte totals, not the expressions.",
+          "evidence": "The lane's own mech logs differ. The node 7 integrand differs (for example '-1/6*spenso::chain' vs '+1/6*spenso::chain' in d47 input line 7), and the node 7 collect differs: d45 'n-terms: 54, byte size: 663500' vs '64, 663501', d47 60 vs 70. In my repeats the input line-7 difference appears in all 3 ce runs against h0. Collect outputs match only for some run pairs (ce r1 == h0 r2) because of hash-order variation (h0 r1 vs r2 also differ in collect lines 4-6).",
+          "fix": "Reword: 'identical stage byte sizes and identical f counts; cleanup outputs equal up to hash-order run-to-run variation; node 7's integrand differs in sign and labelling'."
+        },
+        {
+          "severity": "low",
+          "where": "Carrier item and open_issues: 'd47 low-mode runs ... are probably hash-order runs that land in the trace form'",
+          "problem": "The conjecture is refuted, not just unverified.",
+          "evidence": "a's native low mode (s3out 1340602; 3 of my 6 runs) has chain form at nodes 10/11 (16/0, 24/0). The lane's own c-d47 mech run (s3out 897536 mode, node 10/11 at 728/1008 f) is also chain form (18/0/55, 27/0/82). In my Callgrind data c's low mode (54.9G) has integrated::series at 2.61G against 10.06G in the high mode, yet native runs in this mode still carry the chain form.",
+          "fix": "Drop the conjecture, or replace it with: 'low modes keep the chain form; fewer f survive at node 10'."
+        },
+        {
+          "severity": "low",
+          "where": "Item (d) and summary: 'A native survey of all 67 per-diagram tests finds 22 diagrams with 4–300× more unreduced f'",
+          "problem": "The ratio range is misstated, and the survey is a single run per diagram per variant despite the known hash-order modes.",
+          "evidence": "From survey/summary.txt: d24 14324>13778 (1.04x), d26 23661>17781 (1.33x), d43 78>40 (1.95x), d38 981>253 (3.88x). Only 18 of the 22 are 4x or more. Each cell is one native run (survey-one.sh), while a's d47 is bimodal natively (3 of 6 low).",
+          "fix": "State '22 diagrams more (18 of them ≥4×)' and add the single-run caveat."
+        },
+        {
+          "severity": "low",
+          "where": "Item (c): 'With the planner, the colour f left after cleanup in d47 nodes 5–6 drops from 858 to 3–9'; NOTES '#196 planner reduces nodes 5/6 (858 f -> 6..9) in both orders'",
+          "problem": "This is only true in the default order. In model order, node 6 keeps 447 f.",
+          "evidence": "The lane's mech/colour-notation.txt shows a-d47-collect '5:6 6:447', and all 6 of my native a d47 runs show 6:447. e shows 5:6/9, 6:3.",
+          "fix": "Qualify: 858 → 3–9 in the default order; node 6 is 858 → 447 under model order."
+        },
+        {
+          "severity": "low",
+          "where": "Summary and item (c): 'Rule (ii) copies nothing on these tests'",
+          "problem": "This is inferred, not measured. No counter on the partner-sum copy path was run.",
+          "evidence": "There is no instrumentation in the scratch. My check is consistent with the claim: the logged UV integrands contain no non-colour antisymmetric heads (heads seen: Q, mink, dot, coad, denom, f, idx, cof, cas, chain, g, trace, cyclic, sym, Gamma, PolyGamma).",
+          "fix": "Mark it as an inference from the absence of bound non-colour antisymmetric tensors, or count rule-(ii) copies once with a debug counter."
+        }
+      ],
+      "reproduced": "The Ir attribution reproduces; the mechanism claim does not. I made my own scratch workspaces at 75b6 (now forgotten, changes abandoned, directories removed) and built four variants myself with ci-optim: a (as is), e (coupling loop deleted; diff identical to the lane's e patch), c (39e3's slot_contraction.rs and components.rs; identical to the lane's c) and ce (identical to the lane's ce). The 39e3 baseline is the b-gates h39e3 binary (sha c702f9ea), which the lane did not build.\n\nCallgrind UV medians (renormalization_part, RAYON 1, one thread, logs off); all 50 runs passed:\n- **d45 (n=3, deterministic):** h 44.115, a 48.243, e 43.079, c 57.739, ce 43.864. Ratios: a/h 1.094, e/h 0.977, ce/h 0.994, c/h 1.309, a/e 1.120, a/c 0.836, e/ce 0.982.\n- **d47:** h 51.732 (n=5), e 50.128 (n=5), ce 51.639 (n=5), a 68.987 (n=10; 2 low at 64.4), c 70.469 (n=10; 2 low at 54.9). Ratios: a/h 1.334, e/h 0.969, ce/h 0.998, a/e 1.376, e/ce 0.971.\n\nThese match the lane within 0.3%. The carrier is the model-order coupling loop: both a modes are above e and 39e3, and the loop is absent at 39e3, present in both xspzosrl revisions and in pyxxkprr, and absent in pyxxkprr's parent. #196 does not carry the residual. The DOT input is neutral: 39e3's file with hedge(n)→hedge(n,1) is identical to 48f046f7's, and otherwise it differs from 75b6 only by the 21 pins and a comment. On 58814885::75b6 the c files are touched only by mnylmtno and txukktrx (copies of #196) and by vqlsqwon (refactor and docs).\n\nNot reproduced: chain*f inputs are fully reduced in the h0, ce and e runs that happen to get that notation (cleanup outputs byte-identical to the trace runs). Low modes keep the chain form. The #196 effect on d47 in model order depends on the mode.\n\nScratch: /tmp/codex-combined-s2/resume-20261021/claude-v3/reviews/uv-attribution-attribution (NOTES.md, summary.txt, per-variant.txt, cg/, mech/, my-*.diff; binaries deleted, sha256.txt kept). No processes left."
+    }
+  },
+  {
+    "type": "result",
+    "key": "v2:b316331fb436617b0d36b7fd132f4e07c0225b2960202645abf49d0fcababf42",
+    "agentId": "a2779df4f5eb268f8",
+    "result": {
+      "lens": "validation",
+      "verdict": "ok",
+      "findings": [],
+      "reproduced": "Every claim I was asked to check reproduced, and every failure attribution holds. I ran everything in two scratch jj workspaces of my own: review-v3-root-v3-validation at 6d207cfc (tree 1fc62584) and review-v3-root-v3-validation-base at d9ff71a6 (tree b603915b). Each used a dev env dumped with `nix print-dev-env` from its own commit; the two dumps differ only in clinnet. Nothing in the root workspace was edited.\n\nChecks at the v3 tip:\n- Generation oracle fast tier (`just generation-oracle --test-threads 1`, FEYNKIT_ORACLE_THREADS=1,8,32; the default is also 1,8,32): \"Summary [1141.066s] 364 tests run: 364 passed, 580 skipped\".\n- test_feyngen, ci_gammaloop default filter: \"22 tests run: 22 passed, 17 skipped\".\n- CoolQM cool_qm_eos_nlo_matches_example_target: passes in 60.07 s. Final table row \"-6.235(61)e-2 … Δ = 2.077σ\".\n- Quotient tests on the ci-optim feynkit-generator binary:\n  - via nextest (the two nonfinite tests plus the physical parent): 3/3 pass.\n  - sampled_quotient_does_not_group_nonfinite_operands and sampled_quotient_checks_nonfinite_operands_in_every_sample: rc=0 at RAYON_NUM_THREADS 1 and 32.\n  - The quotient lane's ten targeted tests: 10/10. Core library (generator, graph, model): 433/433.\n- Physical six-process regression: children forward:32 and reverse:32 run directly, rc=0. The parent, which spawns all six forward/reverse × 1/8/32, has rc=0 with RAYON_NUM_THREADS=32 and with 1.\n- Assets:\n  - `nix build git+file:///shared/codex/dev/gammaloop/main?rev=6d207cfc…#linnest-wasm` gives /nix/store/bvv3x57q…: linnest c0fff773…, kurvst 0a369613…. These equal the committed files, and the committed blobs are identical to d9ff71a6's.\n  - `just docs-svg-assets-check` rc=0.\n  - jj interdiff of each of the 22 v3 copies against its v2 copy is 0 lines.\n  - The four new commits touch only grouping.rs, the fixtures, the nix card line, maps.rs (+3) and cool_qm_eos.rs, so none are wasm inputs.\n  - nix-ci.nix's last `enable =` is false in all 26 commits. The originals 36c14173, e3f9ee33 and wkmsrwtx 761bbf32 are not rewritten, and their bookmarks are unchanged.\n\nDIS19 (U3 spec, my own dev-optim CLI builds at both commits):\n\n| | raw | sampled | canonical, default samples | pure canonical (samples 0) |\n|---|---|---|---|---|\n| d9ff71a6, 32 cores | 92 | 78 | 76 | 76 |\n| v3 tip, 32 cores | 92 | 74 | 74 (159 s) | 76 |\n\n- At 1 core the v3 tip gives the same partitions for pure canonical (30f33a68) and sampled (f03302b6).\n- The partition sha256 values match the lane's: f7549c01, 957bb766, 30f33a68 and f03302b6.\n- d9ff→v3 sampled diff: only \"GL00..GL03: (single) | -1\" disappear.\n- d9ff→v3 canonical-default diff: only \"GL01: 0:-2 1:1\" and \"GL03: 2:-2 3:1\" disappear.\n- The pure-canonical partitions are byte-identical at both commits.\n- So the description's 78→74, 76→74 (default samples) and 76 (pure) all hold.\n\nFailure attribution, both sides rerun independently with INSTA_FORCE_PASS:\n- U3 slow tests (four test_feyngen tests): 25 mismatches at the v3 tip and 25 at d9ff71a6. Lines, expected values, actual values and expressions are identical between my two runs. That includes 2062/2074, the aa rows 2038/2041 and 2070/2079; in my runs 2070/2079 both drew Group(28,(-11+7𝑖)…).\n  - Against the v2 lane's d9ff-tree log, only 2070/2079 differ, and my d9ff run equals the v2 lane's vacuum rerun. This confirms the nondeterminism.\n  - The certified rows 1815, 2005, 2037, 2073, 2075 and 2078 pass.\n- ruff format --check: byte-identical output at both commits. The 3 generated .pyi stubs would be reformatted, and all 5 file blobs are identical. Pre-existing.\n- CoolQM at d9ff71a6 fails the old 2σ gate: \"-6.235151199609049e-2 +/- 6.135067530338064e-4 … delta/sigma=2.0770339965928217\". Its 23 iteration-table rows are textually identical to the v3 run. So the copied wkmsrwtx changes no output to the printed precision, and the v3 pass comes only from the user-approved 3σ gate.\n- Extra check, outside the requested suite: test_dis_isr (ci_slow lane), run at both commits.\n  - Rows 1585/1599 mismatch with identical actual output at both commits, so they are pre-existing.\n  - Rows 1611/1614 move from count mismatches at d9ff (58 vs 54, 1250 vs 1087) to the committed counts and constants at v3 (54 | 40+…, 1087 | 1700/3+…). Only the group labels still differ.\n  - So the quotient insertion improves this test rather than breaking it.\n\nCleanup: both review workspaces were forgotten, their empty @ commits abandoned and their directories removed. No processes remain. Logs, partitions and tables are kept in /tmp/codex-combined-s2/resume-20261021/claude-v3/reviews/root-v3-validation (runs/, dis19/*.part, u3-*.tsv, disisr-*.tsv, bins.sha256)."
+    }
+  },
+  {
+    "type": "result",
+    "key": "v2:e4a7b42b1a857689ffc0c19f47b319ebe4723076d00ad81ec9d689577f9a7a7a",
+    "agentId": "a3436a8199c6ca0a2",
+    "result": {
+      "key": "root-v3",
+      "ready": true,
+      "workspace": "/shared/codex/dev/gammaloop/linnet-generation-combined",
+      "bookmark": "combined-integration-v3",
+      "changes": [
+        {
+          "change_id": "zmryplxzkuruxruksmvyusskosqutlly",
+          "commit": "309ba0ed0a015ebc75ae1d64cb4f92bbaa90a00a",
+          "parent": "48f046f7350cdce0b5092a3c1a70f04b1510cc1b",
+          "title": "normalize sampled grouping quotients (copy of 36c14173 + reviewed comment fix + corrected disclosure)"
+        },
+        {
+          "change_id": "urulzsymvuwvqzxpzqrmkmszynrrzxmy",
+          "commit": "9c59b16c3acf9f03cc70a3969de2f400e2894b5c",
+          "parent": "309ba0ed0a015ebc75ae1d64cb4f92bbaa90a00a",
+          "title": "reject nonfinite grouping samples and supply the physical test card (copy of e3f9ee33)"
+        },
+        {
+          "change_id": "rkwnswmz..rmwqrwkz (6 B copies)",
+          "commit": "c85c44094dbca465890fc8a52b152a1d3eb5b8d3",
+          "parent": "9c59b16c3acf9f03cc70a3969de2f400e2894b5c",
+          "title": "B: d24004b3 feeae769 93765cf4 9f792f1d c5a28fd7 c85c4409 (last = co-orient parallel bundles in LMB sampling channels); interdiff vs v2 copies empty"
+        },
+        {
+          "change_id": "oozykprsskvynykvuwwvykwouykpnvql",
+          "commit": "bacc0dc8967e83ab52e6a8d4a8c646efe3f264b8",
+          "parent": "c85c44094dbca465890fc8a52b152a1d3eb5b8d3",
+          "title": "skip zero coefficients in affine sampling frames (copy of wkmsrwtx)"
+        },
+        {
+          "change_id": "sxxvzkkprlsymspnrnwosxtmqyxknuou",
+          "commit": "4463a7ee23cde1d524e34cc544ce5b457852acf9",
+          "parent": "bacc0dc8967e83ab52e6a8d4a8c646efe3f264b8",
+          "title": "widen the cool-QM acceptance gate to three sigma (new)"
+        },
+        {
+          "change_id": "tstxpymz..xztptzpm (7 C copies)",
+          "commit": "e98dd69a9c4fca0e7a9ace99ec70ce12248b4329",
+          "parent": "4463a7ee23cde1d524e34cc544ce5b457852acf9",
+          "title": "C: 3cadc5b7 11abdbf9 448277a0 c2687514 c769f6b7 9a6b1303 e98dd69a; interdiff vs v2 copies empty"
+        },
+        {
+          "change_id": "pprkrxrzzptmlpzryqtkwtoklmnpsqtn",
+          "commit": "e10d25f580b17d09e77146b6822dc9b5ba18fe5a",
+          "parent": "e98dd69a9c4fca0e7a9ace99ec70ce12248b4329",
+          "title": "resolve reviewed generation fixes and registry history (copy of 75b6; conflict-free, = 75b6 + quotient delta)"
+        },
+        {
+          "change_id": "ysuvnuuw..myovtwyp (7 copies)",
+          "commit": "05006de521333a7c70ce0bace23212413c220bf7",
+          "parent": "e10d25f580b17d09e77146b6822dc9b5ba18fe5a",
+          "title": "arrowheads b0c05ac8, A6 db5774fa, S 91886311 d7399366 3f25682e, U3 79255c0a 05006de5; interdiff vs v2 copies empty"
+        },
+        {
+          "change_id": "pzusvqwkttwkwntvkupkutszvwmzpnuo",
+          "commit": "6d207cfce36ab2bb128d92d67cc3da182afb0bb1",
+          "parent": "05006de521333a7c70ce0bace23212413c220bf7",
+          "title": "align duplicate aa3 ghost-loop reference (v3 tip, tree 1fc62584e241d44d0e2352aa848201f99830a0ee)"
+        }
+      ],
+      "summary": "combined-integration-v3 is at pzusvqwk 6d207cfc (tree 1fc62584) and the full suite passes there. No failure was introduced; the only failures are the same ones already present at d9ff71a6.\n\nThe order is: the quotient fix (36c1, then e3f9) right after root's A copy, then B (6), the sampler-fix copy, the new 3σ gate commit, C (7), the 75b6 resolution, arrowheads, A6, S (3) and U3 (3). All 26 commits are root-owned and authored by Lucien Huber, and nix-ci's top-level enable is false in each.\n\ncombined-integration-v2 still points at d9ff71a6. I did not insert with `jj duplicate -A`, because jj would then have rebased every descendant of the A copy. That includes wkmsrwtx itself (bookmark b-gates-affine-zero-skip) and the scratch working-copy commits of three b-gates workspaces and the v2 base-check workspace. So v3 is a parallel chain of duplicates, and nothing that existed before was rewritten.\n\nMy first attempt was wrong, and I caught it before any build. I had made the comment fix by editing jj's conflict markers on the conflicted copy. When the later layers were copied on top, this silently dropped A's `color_products_vanish` definition from the 75b6 copy. I abandoned that attempt and redid the two edits on clean copies.\n\nIn the final chain:\n- The 75b6 copy is conflict-free and byte-identical to an independent `git merge-file` of 75b6 with the quotient delta, for both grouping.rs and the nix file.\n- Every other copied layer has an empty interdiff against its v2 copy.\n- The whole v2-to-v3 tip difference is grouping.rs, the three quotient fixtures, maps.rs (+3), one nix line and cool_qm_eos.rs.\n\nB is no longer provisional:\n- CoolQM: the sampler is unbiased, the user's 3σ gate is in, and the test passes at 2.077σ.\n- RQFT cost: no B commit adds cost, and the copied sampler fix removes the +3.5% per-sample Ir.\nI did not edit any old description to say this.\n\nFix round 1: both findings were confirmed and corrected in the resolution record. No commit, tree or bookmark changed, so no check needed re-running.\n- The trailer statement was wrong: wkmsrwtx already had the Co-Authored-By trailer.\n- The record now says that the sampler-fix copy and the gate commit were duplicated from abandoned first-attempt commits, and that `jj debug tree` shows none of that attempt's damage carried over.",
+      "items": [
+        {
+          "item": "(1) Insert the sampled-quotient fix right after root's copy of A (36c14173, then e3f9ee33), with the comment fix and the corrected disclosure in the 36c1 copy",
+          "outcome": "done",
+          "details": "Commits:\n- zmryplxz 309ba0ed (copy of 36c14173) on vxlkqtuz 48f046f7.\n- urulzsym 9c59b16c (copy of e3f9ee33) on top of it.\n\nHow they were made:\n- Both edits were done on clean copies on 3cd9f13e (the originals' own parent), then `jj rebase -s` moved them onto vxlkqtuz. Both copies are now 2-sided conflicts, like A.\n- The 36c1 copy changes exactly one line from 36c14173. In grouping.rs, '// The optional raw tensor comparison above keeps its existing policy.' becomes '// The canonical comparison above checks finiteness only of its quotient.'\n- e3f9's guard is inserted directly after that line, so the two edits conflicted. I kept both: the new comment, then the guard. The e3f9 copy's tree is e3f9ee33 plus that one line.\n\nDescription of the 36c1 copy:\n- Canonical mode with samples > 0 falls back to the sampled certificate, so DIS19 canonical goes from 76 to 74 with default samples.\n- Pure canonical (samples 0) stays at 76.\n- DIS19 is described as the u/d quark-triangle (Furry) cancellation of raw GL00-GL03.\n- It mentions the comment fix.\n\nDescription of the e3f9 copy: the stale '54 unrealized builds' sentence is replaced by the quotient lane's verified Nix runtime result.\n\nThe 75b6 copy pprkrxrz is conflict-free. merge-check.sh confirms its grouping.rs and nix/rust-workspace.nix equal `git merge-file` of 75b6, A and (e3f9 + comment) byte for byte. So the reviewed ABC resolution (color_products_vanish defined and used, the twelve-zero regression kept once) and the full quotient semantics are both present."
+        },
+        {
+          "item": "(2) Place the sampler cost fix wkmsrwtx right after root's copy of B's sampler commit",
+          "outcome": "done",
+          "details": "oozykprs bacc0dc8 is the copy of wkmsrwtx, on rmwqrwkz c85c4409 (the copy of kyomplxz 'co-orient parallel bundles in LMB sampling channels').\n- Its diff is maps.rs +3 only, and its content interdiff against wkmsrwtx is empty.\n- Its grouping.rs conflict terms are rmwqrwkz's: [29bca4eb, 1b2a3e09, e55936e6].\n- Description: only the '(kyomplxz)' sentence changed, replaced by the parent's title. The Co-Authored-By trailer was already on wkmsrwtx and is kept.\n- Provenance: it was duplicated from the abandoned first-attempt commit kvluwwsw 99696ac4 (wkmsrwtx + that description edit). See the fix-round item.\n- The original wkmsrwtx 761bbf32 and its bookmark b-gates-affine-zero-skip are unchanged."
+        },
+        {
+          "item": "(3) New commit after (2): cool_qm_eos_nlo_matches_example_target gate from 2σ to 3σ, seed and budget unchanged, argument in the message",
+          "outcome": "done",
+          "details": "sxxvzkkp 4463a7ee 'widen the cool-QM acceptance gate to three sigma'.\n\nCode change:\n- Adds `const PULL_LIMIT: f64 = 3.0` with a rationale comment.\n- `delta <= 2.0 * error` becomes `delta <= PULL_LIMIT * error`.\n- Seed 1337, the 750k budget and the 1.5x relative-error ceiling are unchanged. No other test or gate is touched.\n\nThe commit message states the argument:\n- A fixed-seed check against a 2σ gate fails about 5% of the time for an unbiased sampler whenever the sampler changes the drawn points.\n- The co-orientation is a measure-preserving reflection of the unit cube on every CoolQM channel.\n- 100 seeds per sampler were pre-registered. New sampler: mean -0.014, sd 1.055, KS p 0.88. Old sampler: mean +0.003, sd 0.956, KS p 0.71. Two-sample KS p 0.79.\n- Seed 1337 at 2.077σ reproduces bit for bit.\n\nAt the tip the test passes in 60 s with -6.235(61)e-2 at Δ = 2.077σ, matching the B-gates seed-1337 value.\n\nProvenance: it was duplicated from the abandoned first-attempt commit qsopmvrw 2ca0f859. Its own diff is cool_qm_eos.rs only, and its grouping.rs conflict terms equal rmwqrwkz's."
+        },
+        {
+          "item": "Rebase of later layers, conflict resolution record, bookmarks",
+          "outcome": "done",
+          "details": "Later layers:\n- B (6), C (7), the 75b6 resolution, arrowheads, A6, S (3) and U3 (3) were duplicated onto the new chain.\n- Every jj interdiff against the v2 copies is empty.\n- The C copies keep the inherited grouping.rs/developers.toml conflicts, which the 75b6 copy resolves, exactly as in v2.\n\nResolved hunks:\n- Hunk 1 (e3f9 copy): comment vs guard, kept both.\n- Hunk 2 (75b6 copy): no manual hunk was needed; the result was verified with git merge-file.\n\nBoth are recorded with side and reason in /tmp/codex-combined-s2/resume-20261021/claude-v3/root/resolutions-v3.md, along with the discarded first attempt and the W/G provenance.\n\nBookmarks:\n- combined-integration-v3 points at pzusvqwk 6d207cfc.\n- combined-integration-v2 stays at d9ff71a6, combined-integration-abc-provisional at 75b6c7a8, and b-gates-affine-zero-skip at wkmsrwtx 761bbf32.\n- Root @ is xvprwvns (empty) on the tip.\n- The 26 first-attempt commits were abandoned (hidden)."
+        },
+        {
+          "item": "Asset freshness (linnest.wasm/kurvst.wasm per layer via nix, docs SVGs)",
+          "outcome": "done",
+          "details": "No regeneration was needed.\n\nPer-layer wasm check (assets/wasm-per-layer.txt):\n- I ran `nix build git+file:///shared/codex/dev/gammaloop/main?rev=<commit>#linnest-wasm` for all 9 non-conflicted v3 layers, from pprkrxrz to pzusvqwk.\n- All 9 are FRESH: linnest a9438c1d…/kurvst 7ef174a7… at the 75b6 copy; kurvst 0a369613… from arrowheads on; linnest c0fff773… from A6 on.\n- linnest depends only on linnet, not on feynkit-generator or gammalooprs, so the inserted changes are not wasm inputs. The conflicted layers cannot be built, as in v2.\n\nAt the tip:\n- wasm_verify against d9ff71a6: WASM OK, no export changes.\n- `just docs-svg-assets-check` rc=0.\n- SVG render 34/34 identical.\n- Typst PDFs 11/11 SAME."
+        },
+        {
+          "item": "Validate the tip: the previous round's full suite plus the oracle at 1/8/32, test_feyngen, CoolQM, the quotient tests, the physical six-process regression at 1/32 and DIS19",
+          "outcome": "done",
+          "details": "Validation batch on 6d207cfc (validation/stages/STATUS, BATCH FINISHED 19:14:50Z):\n- Tracked-hash check before and after: rc 0 (3551 files = v2's 3548 + 3 fixtures).\n- cargo fmt: 8 packages, feynkit-py and integration tests all pass.\n- Core lib 433/433; drawing (linnest/svg) 882/882; typst sandbox 3/3.\n- gammalooprs utils/model 118/118; canonical model drawing 2/2; feynkit-py 35/35.\n- test_feyngen 22/22.\n- Scoped clippy (+feynkit-py, +integration tests --tests) passes; only the clarabel dependency warnings, as in v2.\n- Generation oracle with FEYNKIT_ORACLE_THREADS=1,8,32: 364/364.\n- Quotient targeted 10/10, including sampled_quotient_does_not_group_nonfinite_operands and sampled_quotient_checks_nonfinite_operands_in_every_sample.\n- cool_qm_eos_nlo_matches_example_target passes.\n\nPhysical regression (runs/physical-children.log): six children forward/reverse at 1/8/32 threads, the parent at RAYON 1 and 32, and both nonfinite tests at RAYON 1/32 all exit 0.\n\nDIS19 (dis19/run-*.out):\n- v3: raw 92; sampled 74 (part f03302b6); canonical with default samples 74 (c1 and c32, f03302b6); pure canonical 76 (30f33a68).\n- d9ff: sampled 78; canonical 76.\n- The only difference is that GL00-GL03 disappear, which matches the corrected disclosure.\n\nOther checks:\n- feynkit-community stub check passes.\n- U3 pocket/A6 targeted 8/8.\n- u3-slow: no row differs from d9ff71a6."
+        },
+        {
+          "item": "Failure triage (pre-existing at d9ff71a6 vs introduced)",
+          "outcome": "done",
+          "details": "Nothing was introduced, and no layer fix was needed.\n\nPre-existing failures, same output as at d9ff71a6:\n- U3 label rows 2062/2074.\n- aa rows 2038/2041.\n- The 21 uncertified U3 rows.\n- Rows 2070/2079 (vacuum Group(28) is nondeterministic; v3 matches a v2 re-run).\n- ruff format --check rc=1 on 3 generated .pyi stubs, with output byte-identical to v2. This is not a repo check.\n\nThe certified rows 1815, 2005, 2037, 2073, 2075 and 2078 pass."
+        },
+        {
+          "item": "Fix round 1, finding 1: trailer claim for the W copy and G",
+          "outcome": "done",
+          "details": "Confirmed:\n- wkmsrwtx already ends with 'Co-Authored-By: Claude Opus 5.5'.\n- The only difference between the wkmsrwtx and oozykprs descriptions is lines 3-6, the '(kyomplxz)' sentence.\n- 36c14173 and e3f9ee33 lack the trailer.\n\nFixed (record only):\n- resolutions-v3.md now says that zmryplxz and urulzsym gain the trailer, oozykprs keeps the one wkmsrwtx had, and sxxvzkkp is new.\n- Report item (2) is corrected accordingly.\n\nNo commit change."
+        },
+        {
+          "item": "Fix round 1, finding 2: provenance of W/G from the first-attempt commits",
+          "outcome": "done",
+          "details": "Confirmed:\n- `jj evolog` shows oozykprs is a duplicate of 99696ac4 (kvluwwsw) and sxxvzkkp of 2ca0f859 (qsopmvrw). Both sources are hidden.\n\nVerified harmless:\n- `jj debug tree` on grouping.rs gives [29bca4eb, 1b2a3e09, e55936e6] for urulzsym, rmwqrwkz, oozykprs, sxxvzkkp and tstxpymz. The first-attempt sources had [dbad8a5e, cb1f05e0, f89e6723].\n- xztptzpm has the redundant 1b2a3e09 pair, as v2's qumukrrp does.\n- The W and G diffs are maps.rs +3 and cool_qm_eos.rs only. Interdiffs wkmsrwtx→oozykprs and 2ca0f859→sxxvzkkp are empty (content).\n\nA provenance paragraph was added to the chain list in resolutions-v3.md. NOTES.md has a fix-round entry. No commit change."
+        }
+      ],
+      "tests_run": [
+        "validate.sh batch on 6d207cfc via the dumped dev env: tracked-hash before/after, cargo fmt --check (8 packages + feynkit-py + gammaloop-integration-tests), nextest ci-optim core lib (433/433), drawing --features linnest/svg (882/882), typst sandbox test_wasm.py (3/3), gammalooprs utils/model (118/118), canonical model drawing (2/2), feynkit-py lib (35/35), test_feyngen (22/22), scoped clippy (+feynkit-py, +integration tests), ruff format --check (rc=1, identical to v2)",
+        "FEYNKIT_ORACLE_THREADS=1,8,32 just generation-oracle (364/364)",
+        "quotient targeted 10 tests incl. sampled_quotient_does_not_group_nonfinite_operands and sampled_quotient_checks_nonfinite_operands_in_every_sample (10/10)",
+        "cool_qm_eos::cool_qm_eos_nlo_matches_example_target (pass, 2.077 sigma, 60 s)",
+        "physical-children.sh: sampled_quotient_groups_physical_local_factors forward/reverse x 1/8/32 threads + parent at RAYON_NUM_THREADS=1 and 32 + both nonfinite tests at RAYON 1/32 (all exit 0)",
+        "DIS19 grouping check, CLI dev-optim at v3 tip and d9ff71a6: raw / sampled / pure canonical / canonical with default samples, at 1 and 32 cores",
+        "nix build git+file:///shared/codex/dev/gammaloop/main?rev=<commit>#linnest-wasm for 9 layers (all FRESH); wasm_verify.py; just docs-svg-assets-check; render-docs-svg-assets.sh (34/34); typst PDF check (11/11 SAME)",
+        "feynkit-community stub check; U3 pocket/A6 targeted (8/8); u3-slow at the v3 tip compared with the v2 tip",
+        "Fix round 1 (record checks only): jj log descriptions, jj evolog, jj debug tree on grouping.rs, jj diff --stat, jj interdiff for oozykprs/sxxvzkkp"
+      ],
+      "measurements": "DIS19:\n- v3 tip: raw 92; sampled 74 (part f03302b6, c1 == c32); canonical with default samples 74 (c1 428 s, c32 166 s); pure canonical 76 (part 30f33a68, = d9ff).\n- d9ff71a6: sampled 78 (957bb766); canonical 76.\n\nCoolQM seed 1337 at the tip: -6.235(61)e-2, Δ = 2.077σ, 60 s.\n\nGeneration oracle at 1/8/32 threads: 364 tests in 1155 s.\n\nNo Callgrind run in this lane. The RQFT/CoolQM Ir claims (B adds no cost; wkmsrwtx removes +3.5% per CoolQM sample, 355.6k → 343.9k) come from the b-gates lane and carry over unchanged, because the interdiffs of oozykprs vs wkmsrwtx and of all B copies vs v2 are empty.",
+      "open_issues": [
+        "Pre-existing failures carried unchanged from d9ff71a6: U3 label rows 2062/2074, aa rows 2038/2041, 21 uncertified U3 rows, the nondeterministic vacuum Group(28) ratio in rows 2070/2079, and ruff on 3 generated .pyi stubs.",
+        "The copies between A and the 75b6 resolution (Q1, Q2, B, W, G, C) carry the inherited grouping.rs (and from C on, developers.toml) conflicts, as in v2, so they cannot be built individually.",
+        "The colocated git refs in main/.git do not have combined-integration-v3 yet, because I did not run a global jj git export. Use pzusvqwk / 6d207cfce36ab2bb128d92d67cc3da182afb0bb1 directly.",
+        "Kept: workspace /shared/codex/dev/gammaloop/combined-integration-v3-base-check (@ trnqptsn, empty, on d9ff71a6; never integrate). It holds the d9ff dev-optim CLI used for the DIS19 comparison. Remove it once review no longer needs the comparison."
+      ],
+      "scratch": "/tmp/codex-combined-s2/resume-20261021/claude-v3/root (NOTES.md, resolutions-v3.md, validation/, runs/, assets/, dis19/, merge-check/, desc/, u3 tables). No processes of this lane are running."
+    }
+  },
+  {
+    "type": "result",
+    "key": "v2:6a85039a70f686065c213b112730281f8a7d7583bfc0c82fe76c627d7a64dddb",
+    "agentId": "a5558f440e0ba0bac",
+    "result": {
+      "lens": "re-review",
+      "verdict": "ok",
+      "findings": [],
+      "reproduced": "Both earlier findings are fixed, and I reproduced each against the jj store with --ignore-working-copy and no workspace edits. Fix round 1 introduced no regression.\n\nF1 (trailer claim) is fixed.\n- In resolutions-v3.md, 'Description edits on root copies' now says:\n  - zmryplxz and urulzsym gain the trailer; 36c14173 and e3f9ee33 lack it (their last lines are prose).\n  - oozykprs keeps wkmsrwtx's trailer, and its only change is the '(kyomplxz)' sentence.\n  - sxxvzkkp is new.\n- Report item (2) says the same.\n- Reproduced:\n  - The last description line of zmryplxz, urulzsym, wkmsrwtx, oozykprs and sxxvzkkp is the Co-Authored-By trailer.\n  - `diff desc(wkmsrwtx) desc(oozykprs)` differs only at lines 3-6.\n  - `jj interdiff --from wkmsrwtx --to oozykprs` is empty.\n\nF2 (provenance) is fixed.\n- resolutions-v3.md now has a 'Provenance of W and G' bullet. It names the sources kvluwwsw 99696ac4 and qsopmvrw 2ca0f859, their attempt-1 terms and the copies' clean terms.\n- Report items (2) and (3) and NOTES 'Fix round 1' state the same.\n- Reproduced:\n  - `jj evolog`: oozykprs bacc0dc8 was duplicated from 99696ac4 (parent 9eb5cd32), and sxxvzkkp 4463a7ee from 2ca0f859 (parent 99696ac4). Both sources are hidden and conflicted.\n  - `jj debug tree` grouping.rs terms:\n    - [29bca4eb, 1b2a3e09, e55936e6] for urulzsym, rmwqrwkz, oozykprs, sxxvzkkp and tstxpymz.\n    - xztptzpm has the same three plus the redundant 1b2a3e09 pair; v2's qumukrrp has that pair too, with 75513fa6 as its third term.\n    - 99696ac4 and 2ca0f859 have [dbad8a5e, cb1f05e0, f89e6723].\n    - pprkrxrz is resolved to the single blob 89b064bf.\n  - `jj interdiff` is empty for 2ca0f859 -> sxxvzkkp and for 99696ac4 -> oozykprs.\n\nNo regressions.\n- The chain vxlkqtuz::combined-integration-v3 matches the report's ids exactly: 309ba0ed, 9c59b16c, d24004b3..c85c4409, bacc0dc8, 4463a7ee, 3cadc5b7..e98dd69a, e10d25f5, b0c05ac8..6d207cfc.\n- All copies are authored by im@lcnbr.ch, and the conflict flags match the report: conflicted up to the C copies, clean from pprkrxrz on.\n- The tip 6d207cfc has tree 1fc62584e241d44d0e2352aa848201f99830a0ee and 3551 tracked entries.\n- Bookmarks are unchanged:\n  - combined-integration-v2 = qwpqosut d9ff71a6\n  - b-gates-affine-zero-skip = wkmsrwtx 761bbf32\n  - combined-integration-abc-provisional = zwmyvwvm 75b6c7a8\n  - root @ = xvprwvns 9e85b243 (empty) on the tip\n- Every op after the build (19:46-19:59) belongs to another lane or to review scratch:\n  - drawing-epem-rank-audit\n  - the pr177-zero-color-readiness describe in feynkit-rebase-review\n  - uv-attr-r\n  - forgetting and abandoning the review-v3-root-v3-validation workspaces\n  None of them touches a root chain commit.\n- NOTES states that B is no longer provisional and that the old descriptions were not edited.\n- NOTES reports that combined-integration-v3-base-check is intentionally retained (empty @ on d9ff71a6, never integrate)."
+    }
+  },
+  {
+    "type": "result",
+    "key": "v2:d7123f7471cd808ab46f9f9951e5d8ca63cd83518c39c204529074b0934a242a",
+    "agentId": "a6c10b6e9bed309fc",
+    "result": {
+      "key": "uv-attribution",
+      "ready": true,
+      "workspace": "/shared/codex/dev/gammaloop/uv-attr-a (variants also in uv-attr-c, uv-attr-e, uv-attr-ce, uv-attr-b, uv-attr-h, uv-attr-p, and the new counter variant uv-attr-r)",
+      "changes": [
+        {
+          "change_id": "snuyswtk",
+          "commit": "3059d42568",
+          "parent": "75b6c7a8",
+          "title": "scratch: uv attribution variant a (75b6 as is) [empty, not for integration]"
+        },
+        {
+          "change_id": "nwkzuvuy",
+          "commit": "9294507324",
+          "parent": "75b6c7a8",
+          "title": "scratch: variant c (slot_contraction.rs + components.rs from 39e3a72a) [not for integration]"
+        },
+        {
+          "change_id": "pzuxovvr",
+          "commit": "80401112d8",
+          "parent": "75b6c7a8",
+          "title": "scratch: variant e (model-order coupling loop removed from feynkit-model Model::new) [not for integration]"
+        },
+        {
+          "change_id": "ozwmxwlv",
+          "commit": "f7289e9c5c",
+          "parent": "75b6c7a8",
+          "title": "scratch: variant ce (c and e combined) [not for integration]"
+        },
+        {
+          "change_id": "zzutvmln",
+          "commit": "f3e59b56d6",
+          "parent": "75b6c7a8",
+          "title": "scratch: variant b (rqft_ghG_3l.dot from 39e3a72a) [not for integration]"
+        },
+        {
+          "change_id": "zxztptro",
+          "commit": "86a132ffc6",
+          "parent": "39e3a72a",
+          "title": "scratch: variant h (39e3a72a with the 75b6 lmb_id pins; h0 = built before the pins) [not for integration]"
+        },
+        {
+          "change_id": "oxxoylvp",
+          "commit": "384a65a857",
+          "parent": "75b6c7a8",
+          "title": "scratch: prototype p (undo_chain before the integrated cleanup) [not for integration]"
+        },
+        {
+          "change_id": "tswlnuty",
+          "commit": "4402b92c4c",
+          "parent": "75b6c7a8",
+          "title": "scratch: variant r (75b6 + stderr counter on rule-(ii) partner-sum copies) [not for integration]"
+        }
+      ],
+      "summary": "The RQFT UV residual against 39e3 comes from the model-order coupling registration in feynkit-model Model::new. That is the #197 loop (pyxxkprr) at 75b6. The same loop was already in the old stack's xspzosrl, which is why the old a9 binary also shows the residual. The residual does not come from the #151 work (#196), from the DOT input, or from the rest of the transplant.\n\nNumbers are Callgrind UV medians (renormalization_part), relative to 39e3. Run counts: 3 for d42 and d45, 5 for d47, and 10 for a and c on d47. Every run passed.\n- **75b6 as is (a):** 1.064 / 1.093 / 1.331 on d42 / d45 / d47. This reproduces the b-gates numbers.\n- **Coupling loop removed (e):** UV 0.980 / 0.976 / 0.969, and 0.897 / 0.883 / 0.888 for the whole test.\n- **Loop removed and 39e3's two idenso #151 files restored (ce):** UV 0.998 / 0.994 / 0.997. Stage byte totals and per-node f counts are the same as 39e3, but individual expressions differ in labelling.\n- **#196:** It lowers UV Ir in the default order (e/ce 0.982 / 0.982 / 0.972) and on d42/d45 in model order (a/c 0.979 / 0.835). On d47 in model order it depends on the hash mode: 0.979 between main modes, 1.173 between low modes, 1.013 on the mean of 20 runs. On average that is about neutral.\n\n**Mechanism, corrected after review.** The extra f do not come from the integrated cleanup. Node 10's 5,152 f on d45 are already in the raw vakint output. They are left behind by idenso's colour simplification at the start of to_vakint_integrand. In the default symbol order, that step reduces the colour factors of the outer forest nodes (d42 node 9, d45 node 10, d47 nodes 10–11) to zero f in every run. That holds whether the integrand writes the triangle as a trace or as chain*f; on d47, 8 of the 24 default-order runs had the chain form. In model order, it leaves chains whose open endpoint is contracted with a generator label of the same chain or of another chain, for example `chain(coad(d1),coad(Y),f(d0),f(X),f(d1),f(d0))`. Vakint then multiplies these out into 5,152–8,064 f per node, which drives the Laurent series (×6.8 Ir), vakint (+3.7G) and index inference (+8.6G). I have not identified which idenso rule fails. The d47 bimodality is the number of these stuck terms at node 10: 16 of 16 in the main mode, 2 of 16 in the low mode.\n\nThis is avoidable overhead, not the cost of a semantic change. a and e differ only in the order symbols are created, and both pass the same RQFT references. Rule (ii) is not involved: a counter records 0 partner-sum copies in all 67 ghost tests, while the same counter records 5 in idenso's own unit tests.\n\nOptions are listed below; the idenso design choice is yours. Nothing was committed to shared history, and #196/#197 are untouched.",
+      "items": [
+        {
+          "item": "(a) 75b6 as is",
+          "outcome": "done",
+          "details": "Built in uv-attr-a (bin/test_renormalization-a, sha 2bf41453). UV / whole medians:\n- d42: 54.75 / 62.21G\n- d45: 48.24 / 55.65G\n- d47 (10 runs): 68.96 / 76.39G, with 9 runs in the main mode (median 68.98) and 1 low (64.38).\n\nThe review's 10 runs of its own build agree: pooled, that is 17 main at 68.99 and 3 low at 64.38. The earlier '5/5 main mode' only reflected the first 5 runs.\n\nThese results reproduce b-gates k6 (54.82 / 48.24 / 69.03). My own 39e3 build h0 reproduces the historical h39e3 (UV 51.47 / 44.13 / 51.81 against 51.44 / 44.11 / 52.09). So a/h0 = 1.064 / 1.093 / 1.331 for UV and 0.964 / 0.974 / 1.178 for the whole test."
+        },
+        {
+          "item": "(b) 75b6 with the old rqft_ghG_3l.dot from 39e3",
+          "outcome": "done",
+          "details": "The literal swap cannot run. All 11 Callgrind runs exit 101 at import with 'Graph d1 does not contract every tensor index ... hedge(h,k) ... counted from one': 39e3's file uses zero-based hedge(n). Its only other difference from 75b6's file is the 21 lmb_id pins. Without the pins, 75b6 is b-gates k4 (d47 154G), which is a different question.\n\nI separated the input from the code with two controls instead:\n- **h1 (39e3 code with 75b6's pins) equals h0:** UV 1.001 / 0.999 / 1.001, with identical stage sizes. So the pins reproduce 39e3's bases.\n- **ce (75b6 code, 75b6's dot):** on d45 and d47 it has the same stage byte totals as 39e3 at every stage (for example s2out 1788871, s3out 741483 on d47) and the same per-node f counts. The expressions are not byte-identical: node 7's integrand differs in colour labelling and term signs, and cleanup outputs match only up to run-to-run hash-order variation.\n\nThe input carries none of the residual."
+        },
+        {
+          "item": "(c) 75b6 with idenso's partner-sum/planner code reverted to the 39e3 (vxwullus) version",
+          "outcome": "done",
+          "details": "The revert applies cleanly: `jj restore --from 39e3a72a` of slot_contraction.rs and components.rs; it builds.\n\n**c (epsilon-only, model order kept):** UV 55.92 / 57.79G on d42 / d45. On d47, 10 runs give 8 main (median 70.51) and 2 low (54.90); the median is 70.48. Pooled with the review's runs: 16 main and 4 low out of 20.\n\nFactorial controls:\n- e: 50.42 / 43.07 / 50.18G\n- ce: 51.35 / 43.88 / 51.64G, about 39e3\n\n**#196 effect:**\n- Default order: e/ce = 0.982 / 0.982 / 0.972. It is unimodal and real.\n- Model order on d42/d45: a/c = 0.979 / 0.835.\n- Model order on d47: mode-dependent. Main 0.979, low 1.173, pooled mean 1.013, so about neutral.\n\nOn d47, f left after the cleanup at nodes 5/6 is 858/858 without #196 (h0, ce, c). With #196 it is 6–9/3 in default order (e) and 6/447 in model order (a).\n\n**Rule (ii), now measured:** variant r (75b6 plus a stderr counter on the rule-(ii) branch) shows 0 admissions and 0 copies in all 67 finite_part_ghost_3loop tests, all passing. In idenso's partner-sum unit tests the same counter shows 6 admissions and 5 copies.\n\nSo #151 carries no residual, and no partner sums are copied on these tests."
+        },
+        {
+          "item": "(d) Profile diffs and other suspects",
+          "outcome": "done",
+          "details": "Diffs are in diffs/*.txt, from callgrind_annotate --inclusive. From 39e3 to 75b6 on d47, UV grows by 16.96G:\n- Laurent series: 2.01 → 9.51G\n- index inference (infer_view): +6.9G\n- vakint evaluate_integral: +3.8G\n- numerator construction: −2.9G\n- DOT import: 12.5 → 7.0G\nThe slot-contraction and planner functions stay under 1G. The controlled diff from e to a shows the same signature (series ×6.8, inference +8.6G, vakint +3.7G). From h0 to ce, UV changes by only −0.19G.\n\n**Corrected mechanism** (fix1/stages.sh, vk.sh, vk-summary.txt):\n- In a, the d45 node-10 f count is 5152 in the raw vakint output, after the first contraction and after collection; in e it is 0 at all three. So the cleanup neither creates nor removes them.\n- The reduction happens, or fails, in the idenso colour simplification at the start of to_vakint_integrand (the 'Admitted color result' log).\n- **Default order (h0, ce, e):** d47 nodes 10/11 reach 0 f in 24 of 24 runs, although the integrand had chain or mixed notation in 8 of them (h0 4/8, ce 1/8, e 3/8). The same holds for d42 node 9 and d45 node 10.\n- **Model order (a, c):** the step leaves chains whose open endpoint is contracted with a generator label of the same chain or another chain:\n  - d47 n10/11: `chain(coad(d1),coad(Y),f(d0),f(X),f(d1),f(d0))` (14 / 21 terms)\n  - d45 n10: `chain(coad(d0),coad(X),f(d2),f(d3),f(d0))*f(d2,d3,Y)`\n  - d42 n9: `chain(coad(d1),coad(Y),f(d0),f(d2))*chain(coad(X),coad(d2),f(d0),f(d1))`\n- Lorentz materialization expands these, and vakint multiplies them out.\n- d45 n10's integrand has the same chain*f shape as a reduced h0 d47 run, so the notation alone is not the trigger.\n\nPrototype p (undo_chain before the cleanup) found no chains left to undo, which is why it changed nothing.\n\nThe historical a9 (coupling loop already in xspzosrl, epsilon-only) already shows UV +8.8% / +31.4% / +35.4%.\n\n**Native survey** (no Ir, one run per diagram and variant): 22 of 67 diagrams carry more unreduced f under model order, 18 of them 4× or more (range 1.04–307×). Total cleanup output is 59.6 vs 45.3 MB."
+        },
+        {
+          "item": "Which change carries the residual; real cost or avoidable overhead",
+          "outcome": "done",
+          "details": "**Carrier:** the model-order registration of the UFO::GC_* coupling symbols in feynkit-model Model::new (#197 pyxxkprr at 75b6; the same loop came earlier with xspzosrl). Removing it alone makes 75b6 cheaper than 39e3 in UV on all three diagrams (0.980 / 0.976 / 0.969). Removing it together with the #151 files reproduces 39e3 (0.998 / 0.994 / 0.997).\n\n**It is avoidable overhead.** a and e differ only in the order symbols are created, and every variant passes the same RQFT references. The cost arises because idenso's colour simplification depends on symbol order: in model order it leaves chains closed on their own generator labels, which then reach vakint as 5,152–8,064 explicit f per node.\n\n**d47 bimodality in model order** (native, a 3/16 and c 2/16 low-mode runs): the low mode has fewer stuck terms at node 10, 2 of 16 instead of 16 of 16 (raw 728 instead of 5880 f; for c also node 11, 1008 instead of 8064). Low modes keep the chain notation, which refutes the earlier trace-form conjecture.\n\n**Rule (ii) is not the cause:** it made 0 copies (measured), and #196 lowers or keeps Ir."
+        },
+        {
+          "item": "Options (user decides; #196/#197 unchanged)",
+          "outcome": "needs-user",
+          "details": "1. **Fix in idenso (recommended follow-up, your design):** find why the colour simplifier in to_vakint_integrand gives a symbol-order-dependent result. Then either have it close chains whose open endpoint is contracted with a generator label (of the same chain or another one), or make its combination order independent of symbol IDs. Reproducer inputs are the logged node colour factors: fix1/a-d45-1-n10-in.txt is stuck in model order, and the same structure reduces in default order (h0-d47-1-n10-in.txt). I give no Ir forecast. For reference, e (same code, default order, these nodes fully reduced) measures UV 0.980 / 0.976 / 0.969 of 39e3.\n2. **Accept 75b6 as is and record the follow-up.** The whole test is already below 39e3 on d42/d45 (0.964 / 0.974). d47 is +17.8% whole and +33% UV, and bimodal. Tests pass.\n3. **Not recommended:** pick another deterministic coupling order to win these diagrams. It is arbitrary, other diagrams would move unpredictably (survey), and it hides the idenso dependence.\n4. **Ruled out:** a gammalooprs-side unfold in the cleanup (prototype p). The f are already explicit before the cleanup."
+        },
+        {
+          "item": "Fix round 1: review findings (reviews/uv-attribution-attribution)",
+          "outcome": "done",
+          "details": "All 7 findings were verified and are now reflected in the report and NOTES.md.\n1. **Mechanism (CONFIRMED).** Chain*f is reduced in default order. I went further and localized the failure to idenso's colour simplification in to_vakint_integrand, before vakint; the cleanup is not involved. The stuck forms are named, option 1 is reframed, and the forecast is dropped.\n2. **#196 on d47 is mode-dependent (CONFIRMED).** 5 more Callgrind runs each for a and c (n = 10 each), reported per mode, pooled with the review's runs.\n3. **'Byte for byte' was overstated (CONFIRMED).** Reworded.\n4. **The low-mode conjecture was wrong (CONFIRMED and refuted).** Replaced with the measured explanation: fewer stuck terms at node 10.\n5. **Survey ratios (CONFIRMED).** Now 22 diagrams, 18 of them 4× or more, range 1.04–307×, single-run caveat added.\n6. **Node 6 under model order (CONFIRMED).** Qualified: 447 f under model order.\n7. **Rule (ii) (CONFIRMED as unmeasured).** Now measured with a counter: 0 copies in 67 tests, with a positive control in idenso's unit tests."
+        }
+      ],
+      "tests_run": [
+        "cargo test -p gammalooprs --test test_renormalization --profile ci-optim --no-run (variants a, c, e, ce, b, h0, h1, p; and r in this round; all built)",
+        "valgrind --tool=callgrind test_renormalization-<v> --exact finite_part_ghost_3loop_d42|d45|d47 --test-threads 1 (RAYON_NUM_THREADS=1, logging off): 3/3/5 runs each for a, c, e, ce, h0, h1 (66 runs, all passed); b: 11 runs fail at import (expected: hedge(n) dot)",
+        "this round: valgrind callgrind d47 runs r6-r10 for a and c (10 runs, all passed; a and c now n=10 on d47)",
+        "this round: native probes with colour-stage logging (fix1/stages.sh, vk.sh): d45 a/e; d47 h0, ce, e x8 and a, c x16; d42 a x2, e x2, h0, c (all passed)",
+        "this round: native finite_part_ghost_3loop_d12..d78 with the variant r counter binary, --nocapture (67 runs, all passed; 0 rule-(ii) admissions/copies)",
+        "this round: cargo test -p idenso --lib --profile ci-optim -- partner --nocapture in uv-attr-r (8 passed; counter positive control: 6 admissions, 5 copies)",
+        "earlier: native diagnostic-stage probes, mechanism probes and the 67-diagram x 5-variant survey (335 runs, all passed)"
+      ],
+      "measurements": "Callgrind UV (renormalization_part) medians in G Ir, whole test in parentheses:\n- **h0 (39e3):** 51.47 (64.55) / 44.13 (57.16) / 51.81 (64.87)\n- **a (75b6):** 54.75 (62.21) / 48.24 (55.65) / 68.96 (76.39), d47 n=10: 9 main @68.98, 1 low @64.38\n- **c:** 55.92 / 57.79 / 70.48 (77.90), d47 n=10: 8 main @70.51, 2 low @54.90\n- **e:** 50.42 (57.87) / 43.07 (50.47) / 50.18 (57.61)\n- **ce:** 51.35 (58.80) / 43.88 (51.28) / 51.64 (59.08)\n- **h1:** 51.53 / 44.08 / 51.84\n\nRatios:\n- a/h0 UV: 1.064 / 1.093 / 1.331\n- e/h0 UV: 0.980 / 0.976 / 0.969 (whole 0.897 / 0.883 / 0.888)\n- ce/h0 UV: 0.998 / 0.994 / 0.997\n- a/e: 1.086 / 1.120 / 1.375 (d47 low-mode a is still 1.283× e)\n- #196 in default order (e/ce): 0.982 / 0.982 / 0.972\n- #196 in model order (a/c): 0.979 / 0.835 on d42/d45; d47 main 0.979, low 1.173, mean of 20 pooled runs (lane plus review) 1.013\n\nProfile, e to a on d47: integrated::series 1.40 → 9.52G, infer_view +8.6G, vakint +3.7G.\n\nNative colour counts (f after colour simplification → raw vakint f):\n- Model order: d45 n10 48 → 5152; d47 n10 56 → 5880 (low mode 8 → 728); d47 n11 84 → 8064; d42 n9 48 → 5152\n- Default order: 0 → 0 at those nodes in every run\n\nRule-(ii) copies at 75b6: 0 in 67 tests.",
+      "open_issues": [
+        "The idenso colour-simplifier rule that becomes symbol-order dependent is not identified. The stuck forms and reproducer inputs are in fix1/ (a-d45-1-n10-*.txt, h0-d47-1-n10-*.txt). Diagnosing it inside idenso is the user's call (option 1).",
+        "d47 stays bimodal in model order. Callgrind low-mode frequency is a 3/20 and c 4/20 pooled; natively a 3/16 and c 2/16. Default order (e, ce, h0) shows no such modes in these runs.",
+        "Retained for review, never to be integrated: the uv-attr-{a,c,e,ce,b,h,p,r} workspaces (scratch changes only; diffs in patches/), bin/ (9 binaries plus sha256.txt), cg/ (76 Callgrind runs), and fix1/ (colour-stage logs, 87 MB). No lane processes are running."
+      ],
+      "scratch": "/tmp/codex-combined-s2/resume-20261021/claude-v3/uv-attribution (NOTES.md has a 'FIX ROUND 1' section. New material is in fix1/: stages.sh, vk.sh, vksum.sh, vk-summary.txt, vk/, st/, the node colour files *-n*-in.txt / *-col.txt, cg-d47-ac.txt, rule2.txt, rule2-control.log. Also new: patches/uv-attr-r.diff and bin/test_renormalization-r. The review evidence is in ../reviews/uv-attribution-attribution.)"
+    }
+  },
+  {
+    "type": "result",
+    "key": "v2:974fb52ef65cd36fda55ddd014f9c70a56380a2ebe2ba7bd53eae17b58b1e64e",
+    "agentId": "ab481d34d3793d1a5",
+    "result": {
+      "lens": "re-review",
+      "verdict": "ok",
+      "findings": [
+        {
+          "severity": "low",
+          "where": "Updated report summary, 'Mechanism, corrected after review': 'The extra f do not come from the integrated cleanup.'",
+          "problem": "This is too broad. On d47, part of the model-order surplus does arise in the integrated cleanup: at node 6 the cleanup keeps all 447 f under model order but reduces them to 3 in the default order. The report's own item (c) gives the same numbers (6/447 in model order vs 6–9/3 in default order). The statement holds for the dominant outer nodes (d42 n9, d45 n10, d47 n10/11).",
+          "evidence": "st.sh, raw vakint f | cleanup-collect f per node, lane binaries, all runs pass (reviews/uv-attribution-re-review/logs/st.out). a d47 n6: 447|447 in 4/4 runs. e d47 n6: 447|3 in 4/4 runs. d45 n10: a 5152|5152, e 0|0, which confirms the d45 claim. That leaves 444 of about 14.4k extra f on d47 (about 3%) that arise in the cleanup.",
+          "fix": "Qualify the sentence: 'The outer-node f (d42 n9, d45 n10, d47 n10/11) do not come from the cleanup. A small surplus at d47 node 6 (447 vs 3 f) does arise in the cleanup under model order.'"
+        },
+        {
+          "severity": "low",
+          "where": "Summary: 'The d47 bimodality is the number of these stuck terms at node 10: 16 of 16 in the main mode, 2 of 16 in the low mode.'",
+          "problem": "This is correct for a but incomplete for c. In c's low mode, node 11 also unsticks (24 integrand terms down to 3 stuck; 8064 down to 1008 raw f). That is most of c's 15.6G low-mode drop, compared with a's 4.6G. It is also why the low-vs-low a/c ratio is 1.173, the main point of the '#196 is mode-dependent on d47' statement.",
+          "evidence": "vk.sh native probes (logs/vk1.out): c d47 low mode in 4/10 runs. n10: colour output 2 chains / 8 f, raw 728. n11: 3 chains / 12 f, raw 1008. c main mode: 14/56 → 5880 and 21/84 → 8064. In a's low mode (3/12 runs) node 11 stays at 21 chains / 8052 f. The lane's NOTES (fix round 1, item 1) already says 'c also node 11'; the summary drops it.",
+          "fix": "Add: 'In c's low mode node 11 also reduces (3 instead of 24 stuck terms), which is why c's low mode is much deeper and why a/c low-vs-low is 1.173.'"
+        },
+        {
+          "severity": "low",
+          "where": "Summary: 'I have not identified which idenso rule fails' / option 1 (diagnose idenso under model order)",
+          "problem": "This is not a defect: the report correctly leaves the idenso rule open. The data do give a sharper trigger that would narrow option 1's diagnosis. Under model order, every integrand chain*f term at an outer node whose adjoint contraction uses a spenso::d_N dummy stays stuck, and every term whose labels are all cooked reduces. In the default order, the dummy terms reduce as well. The d47 modes are simply whether the big term group arrives with cooked labels (node 10, 14 terms; for c also node 11, 24 terms).",
+          "evidence": "py/groups.py over 131 outer-node observations (logs/groups.txt). Model order (a, c): 57 of 57 observations have dummy terms, and all of them are stuck. In the 14 mixed observations the stuck count equals the dummy-term count exactly, for example a-d47-1 n10 D=2 K=14 → 2 stuck, n11 D=21 K=3 → 21, and c-d47-1 n10 D=2 → 2, n11 D=3 → 3. Default order (h0, ce, e): 17 of 17 observations with dummy terms reduce to 0 f. Example: a-d45 n10 integrand chain(Kd9d5d,Kbd7bb,f(d1000004),f(d1000003))*f(d1000003,d1000004,K38405) stays stuck, while the same shape with cooked labels reduces in a-d47's low mode.",
+          "fix": "Optionally add this as a lead for option 1: 'under model order idenso's colour simplification fails on terms contracted through spenso::d_N dummies but succeeds on cooked labels'. The idenso decision stays with the user."
+        },
+        {
+          "severity": "low",
+          "where": "/tmp/codex-combined-s2/resume-20261021/claude-v3/uv-attribution/NOTES.md, sections 'Native diagnostic-stage probes', 'Callgrind', 'Mechanism' and 'CONCLUSION (18:53 UTC)'",
+          "problem": "The pre-fix sections still state superseded claims and are not marked inline. Examples: 'reproduces 39e3's UV expressions byte for byte', 'only the trace form is reduced in the integrated cleanup', '#196 lowers cost in both orders (a/c ... 0.977)', '4-300x', and option 1's forecast 'expected ~e numbers and likely no d47 bimodality'. 'FIX ROUND 1' retracts most of these further down. An agent resuming from NOTES and reading top-down gets conflicting statements.",
+          "evidence": "NOTES.md lines in 'CONCLUSION (18:53 UTC)' are unchanged. Only the appended 'FIX ROUND 1' section corrects them. Item 1 calls the trace-form mechanism 'WRONG, superseded'; item 3 says 'Not byte for byte'; item 2 says the effect is mode-dependent; item 5 gives 18 of 22 ≥4×. The option-1 forecast is not retracted anywhere.",
+          "fix": "Mark the pre-fix Mechanism and CONCLUSION sections as superseded by FIX ROUND 1, or update them in place, including the option-1 forecast."
+        }
+      ],
+      "reproduced": "All 7 earlier findings are fixed or validly refuted, and I reproduced each one with the lane's own binaries (sha256 values match bin/sha256.txt). I did not edit the workspaces; the scratch is in /tmp/codex-combined-s2/resume-20261021/claude-v3/reviews/uv-attribution-re-review, and no processes are left.\n\n(1) Mechanism. I ran 78 native probes logging the integrand, idenso's 'Admitted color result' and the raw vakint output; all passed. In the default order (h0, ce, e) the outer nodes reach 0 f in every run: d42 9 runs, d45 9, d47 26. That includes runs whose integrand had chain or mixed notation (d47: h0 4/10, ce 2/6, e 3/10). Under model order (a, c) chains remain stuck: d42 24 chains / 48 f → 5152, d45 12/48 → 5152, d47 14/56 → 5880 and 21/84 → 8064. The cleanup leaves d45 node 10 unchanged (a 5152 raw → 5152 collect; e 0 → 0). The new mechanism therefore holds, except for d47 node 6 (finding 1).\n\n(2) Callgrind data. Recomputed from cg files: a d47 median 68.957 over 10 runs (9 main at 68.978, 1 low at 64.379); c median 70.477 (8 main at 70.513, 2 low at 54.902). Pooled with the review's runs: a 17 main / 3 low, c 16 main / 4 low; a/c is 0.979 main, 1.173 low and 1.013 on the mean. All 76 non-b runs passed; b exits 101 at import in 11/11 runs.\n\n(3) ce vs h0. Stage byte totals are equal on d45 and d47. On d42, s1in differs (80050 vs 80254) but the other stages are equal. Item (b) already says 'on d45 and d47'; the summary does not.\n\n(4) The trace-form conjecture is gone. The native low mode is a 3/12, c 4/10; both keep chain notation.\n\n(5) Survey: 22 diagrams, 18 of them ≥4×, range 1.04–307×, a 59.63 vs e 45.30 MB. This matches survey/summary.txt; the single-run caveat is stated.\n\n(6) Cleanup f at nodes 5/6 on d47: a 6/447, e 6–9/3, h0/ce/c 858/858.\n\n(7) Rule (ii). The counter in variant r sits on the rule-(ii) branch (partner Add admitted via binds_antisymmetric) and its strings are in bin r. On d15, d18, d20, d26, d37, d42, d45, d47 and d48 it records 0 admissions and 0 copies, all passing. The lane's 67-test file shows 67 × 0/0. Rerunning the idenso partner-sum unit tests with the counter binary gives 6 admissions and 5 copies.\n\nOther checks:\n- xspzosrl (both divergent revisions) and pyxxkprr contain the coupling loop; pyxxkprr- and 39e3 do not.\n- The e→a profile diff checks: series 1.40 → 9.52 (×6.79), infer_view'2 +8.64G, evaluate_integral +3.75G.\n- The scratch changes have no bookmarks or children, and #196/#197 are untouched.\n- I could only see the report up to 'It is avoidable over', so I did not check the options text."
+    }
+  }
+]

@@ -1,0 +1,9 @@
+{
+  "state": "root authorized scoped correctness fix",
+  "owner": "FIXES grouping lane; separate child above immutable A3cd9",
+  "baseline": "3cd9f13e5706c348e8c935d17aa8b37652230040",
+  "cause": "sampled quotient scalarity rejects uncancelled colour tensors although canonical quotient is -2",
+  "boundary": "compare_atoms ratio normalization/scalar certification",
+  "required": "existing normalization owner, factor-preserving exact ratio, default sampled regression and nonproportional/zero/interface controls, bounded Ir/allocation checks, new independent review",
+  "forbidden": "graph-numerator expansion, canonical-only replacement of sampled mode, fixture/snapshot weakening, CoolQM or RQFT gate waiver, broad backend redesign, cross-lane edits or publication"
+}

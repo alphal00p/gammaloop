@@ -1,0 +1,305 @@
+{
+  "kind": "bounded-historical-U3-member-export",
+  "completed_utc": "2026-10-21T13:40:19.503712+00:00",
+  "bounded_task_status": "complete",
+  "whole_U3_verdict": "needs-fixes",
+  "ready": false,
+  "workspace": "/shared/codex/dev/gammaloop/ci-slow-zero-colour-snapshots",
+  "authorized_scope": "One historical79 build and minimum DIS19/vac4 exports; no subdelegation, implementation or expectation edits, integration, rebase, remote/ref or publishing operations. FIXES/A retains sampled quotient ownership.",
+  "changes": {
+    "new_commits": [],
+    "production_changes": [],
+    "expectation_changes": [],
+    "config_only_child_needed": false,
+    "historical_child_preserved": "195e6f8b94986fd854bb96f1b131a74c0de244ed",
+    "upstream_tree": "652fcb8bafea657531813bac1c2e1bce715f6b3c",
+    "historical_child_diff_from_upstream": ""
+  },
+  "build": {
+    "upstream": "79c954094b97adba6927cfc4054f5f434603ae68",
+    "build_child": "195e6f8b94986fd854bb96f1b131a74c0de244ed",
+    "tree": "652fcb8bafea657531813bac1c2e1bce715f6b3c",
+    "exit": 0,
+    "actual_cargo_builds": 1,
+    "duration_reported": "20m17s",
+    "budget_seconds": 1800,
+    "command": [
+      "cargo",
+      "build",
+      "--locked",
+      "--offline",
+      "-j",
+      "4",
+      "-p",
+      "gammaloop-api",
+      "--bin",
+      "gammaloop",
+      "--no-default-features",
+      "--features",
+      "cli",
+      "--profile",
+      "dev-optim",
+      "--message-format=json-render-diagnostics"
+    ],
+    "features": [
+      "cli"
+    ],
+    "profile": "dev-optim",
+    "locked": true,
+    "offline": true,
+    "jobs": 4,
+    "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8",
+    "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+    "shell_drv": "/nix/store/daxw3k0cr3k31ckl9zfr4g89rfrkrszx-nix-shell-env.drv",
+    "source_manifest": "/tmp/codex-combined-s2/resume-20261021/parallel/U3-historical-79c9-r1/historical-source-manifest.json",
+    "provenance": "/tmp/codex-combined-s2/resume-20261021/parallel/U3-historical-79c9-r1/build-provenance.json",
+    "binary": "/tmp/codex-combined-s2/resume-20261021/parallel/U3-historical-79c9-r1/gammaloop-79c95409-verified",
+    "binary_sha256": "2be6aac430a95a9a318c1a00e6619d3c8b5412ca8d06f1377d59d3a8276d4537",
+    "cargo_fresh_flag": false,
+    "artifact_mtime_utc": "2026-10-21T13:30:18.858148+00:00",
+    "prebuild_tooling_failures": [
+      {
+        "stage": "provenance before Cargo",
+        "failure": "implicit git discovery failed",
+        "cargo_started": false,
+        "restoration": "verified exact2eda"
+      },
+      {
+        "stage": "provenance before Cargo",
+        "failure": "initial explicit metadata path absent; actual git_target resolved to main/.git",
+        "cargo_started": false,
+        "restoration": "verified exact2eda"
+      }
+    ],
+    "license_values_recorded": false,
+    "cache_configuration": {
+      "path": "/home/codex/.cargo/config.toml",
+      "sha256": "e106437e469b6f2fdd80d9598af0bf5e78c51f308b9273fe19f76e99398d44b0",
+      "build_dir": "/common/build-cache/codex/{workspace-path-hash}"
+    },
+    "model_sha256": "95716e0deeabe7bce3638fdc69264022f9a25ddad63a97e6441bf4843cd1ec41",
+    "restriction_sha256": "c683f9abb9459375865ef694edea38890ffd78a0b8f118a25db3c3de09a8a1cb",
+    "cargo_lock_sha256": "975290c423f548da2587697698ef70fc45e9cc613fb90984ca2698280f1391e1"
+  },
+  "exports": [
+    {
+      "tag": "dis19-raw",
+      "exit": 0,
+      "count": 72,
+      "seconds": 1.168492078781128,
+      "log": "/tmp/codex-combined-s2/resume-20261021/parallel/U3-historical-79c9-r1/dis19-raw.log.typ",
+      "input": "/tmp/codex-combined-s2/resume-20261021/parallel/U3-historical-79c9-r1/dis19-raw.input.json",
+      "binary_sha256": "2be6aac430a95a9a318c1a00e6619d3c8b5412ca8d06f1377d59d3a8276d4537",
+      "complete": true
+    },
+    {
+      "tag": "dis19-sampled",
+      "exit": 0,
+      "count": 58,
+      "seconds": 3.9038190841674805,
+      "log": "/tmp/codex-combined-s2/resume-20261021/parallel/U3-historical-79c9-r1/dis19-sampled.log.typ",
+      "input": "/tmp/codex-combined-s2/resume-20261021/parallel/U3-historical-79c9-r1/dis19-sampled.input.json",
+      "binary_sha256": "2be6aac430a95a9a318c1a00e6619d3c8b5412ca8d06f1377d59d3a8276d4537",
+      "complete": true
+    },
+    {
+      "tag": "vac4-raw",
+      "exit": 0,
+      "count": 270,
+      "seconds": 6.03558874130249,
+      "log": "/tmp/codex-combined-s2/resume-20261021/parallel/U3-historical-79c9-r1/vac4-raw.log.typ",
+      "input": "/tmp/codex-combined-s2/resume-20261021/parallel/U3-historical-79c9-r1/vac4-raw.input.json",
+      "binary_sha256": "2be6aac430a95a9a318c1a00e6619d3c8b5412ca8d06f1377d59d3a8276d4537",
+      "complete": true
+    },
+    {
+      "tag": "vac4-grouped",
+      "exit": 0,
+      "count": 176,
+      "seconds": 14.69369888305664,
+      "log": "/tmp/codex-combined-s2/resume-20261021/parallel/U3-historical-79c9-r1/vac4-grouped.log.typ",
+      "input": "/tmp/codex-combined-s2/resume-20261021/parallel/U3-historical-79c9-r1/vac4-grouped.input.json",
+      "binary_sha256": "2be6aac430a95a9a318c1a00e6619d3c8b5412ca8d06f1377d59d3a8276d4537",
+      "complete": true
+    },
+    {
+      "tag": "vac4-nonfact-raw",
+      "exit": 0,
+      "count": 206,
+      "seconds": 4.339731693267822,
+      "log": "/tmp/codex-combined-s2/resume-20261021/parallel/U3-historical-79c9-r1/vac4-nonfact-raw.log.typ",
+      "input": "/tmp/codex-combined-s2/resume-20261021/parallel/U3-historical-79c9-r1/vac4-nonfact-raw.input.json",
+      "binary_sha256": "2be6aac430a95a9a318c1a00e6619d3c8b5412ca8d06f1377d59d3a8276d4537",
+      "complete": true
+    },
+    {
+      "tag": "vac4-nonfact-grouped",
+      "exit": 0,
+      "count": 128,
+      "seconds": 11.36282992362976,
+      "log": "/tmp/codex-combined-s2/resume-20261021/parallel/U3-historical-79c9-r1/vac4-nonfact-grouped.log.typ",
+      "input": "/tmp/codex-combined-s2/resume-20261021/parallel/U3-historical-79c9-r1/vac4-nonfact-grouped.input.json",
+      "binary_sha256": "2be6aac430a95a9a318c1a00e6619d3c8b5412ca8d06f1377d59d3a8276d4537",
+      "complete": true
+    }
+  ],
+  "comparison_summary": [
+    {
+      "case": "dis19-sampled",
+      "historical_raw": 72,
+      "historical_grouped": 58,
+      "modern_raw": 72,
+      "modern_grouped": 58,
+      "complete_local_graph_and_signed_route_correspondence": true,
+      "unchanged_classes": 58,
+      "historical_changed_classes": 0,
+      "modern_changed_classes": 0,
+      "boundary": "This certifies literal cross-version raw member identity and exported partitions/ratios. Independent physical scalar identities for changing groups are separately required."
+    },
+    {
+      "case": "vac4-grouped",
+      "historical_raw": 270,
+      "historical_grouped": 176,
+      "modern_raw": 270,
+      "modern_grouped": 176,
+      "complete_local_graph_and_signed_route_correspondence": true,
+      "unchanged_classes": 176,
+      "historical_changed_classes": 0,
+      "modern_changed_classes": 0,
+      "boundary": "This certifies literal cross-version raw member identity and exported partitions/ratios. Independent physical scalar identities for changing groups are separately required."
+    },
+    {
+      "case": "vac4-nonfact-grouped",
+      "historical_raw": 206,
+      "historical_grouped": 128,
+      "modern_raw": 206,
+      "modern_grouped": 128,
+      "complete_local_graph_and_signed_route_correspondence": true,
+      "unchanged_classes": 128,
+      "historical_changed_classes": 0,
+      "modern_changed_classes": 0,
+      "boundary": "This certifies literal cross-version raw member identity and exported partitions/ratios. Independent physical scalar identities for changing groups are separately required."
+    }
+  ],
+  "raw_weight_differences": {
+    "dis19-raw": 0,
+    "vac4-raw": 0,
+    "vac4-nonfact-raw": 0
+  },
+  "comparison_controls": {
+    "generation_threads": 1,
+    "maximum_concurrent_export_jobs": 1,
+    "seed": 3,
+    "samples": 5,
+    "model_import": "sm.json -> built-in sm-default",
+    "model_and_restriction_equal_to_restored_tree": true,
+    "parameter_reseeds_or_threshold_changes": [],
+    "historical_cli_semantic_changes": [],
+    "extra_modern_check": {
+      "purpose": "Fill the missing saved nonfactorizable grouped DOT for exact comparison",
+      "binary": "/tmp/codex-combined-s2/parallel/U3/bins/gammaloop-base",
+      "binary_sha256": "861285cf8e36fc7ad80b704d0d361d9d438236d023fb4a964cc59b0eeaa26645",
+      "result": {
+        "exit": 0,
+        "count": 128,
+        "seconds": 12.178064107894897,
+        "binary_sha256": "861285cf8e36fc7ad80b704d0d361d9d438236d023fb4a964cc59b0eeaa26645",
+        "complete": true
+      }
+    }
+  },
+  "proof_scope": {
+    "method": "Every raw source matched with literal directed vertex/particle-coloured graph and endpoint/port labels plus literal local tensors/projector, and an exact affine unimodular signed-route substitution fixing external momenta. No WL-only equivalence. Every master matches its raw local payload; every group has an exact rational signed-weight sum. Partitions and master-independent scalar ratios match across versions.",
+    "vac4_all_missing": [
+      4,
+      17,
+      84,
+      139,
+      149,
+      157
+    ],
+    "vac4_nonfact_missing": [
+      4,
+      17,
+      68,
+      105,
+      115,
+      123
+    ],
+    "nonfact_missing_to_all": {
+      "4": 4,
+      "17": 17,
+      "68": 84,
+      "105": 139,
+      "115": 149,
+      "123": 157
+    },
+    "zero_certificate_limit": "The six physical omissions are the same in79 and588. Prior numerical-zero evidence remains numerical; no new exact SU3 zero certificate or original178/130 regrouping witness was supplied.",
+    "known_DIS19_pair": "Consumed existing independent local-factor proof and verified its DOT hashes. The same raw factors and four singleton master weights-1 occur at79 for GL29/68 and GL31/67. This localizes the known sampled under-grouping at or before79; no prepared-pair capture or local-factor reduction repeated. Existing canonical56 and original54 remain separate unproved comparisons.",
+    "amplitude_error_claim": false
+  },
+  "missing_comparisons": [
+    {
+      "revision": "ae45d231fa54a22775923b3dcd993fba414e8dbb",
+      "scope": "DIS19 old54 and other original DIS grouped references",
+      "origin_change": "qmvpwvvu",
+      "needed": "A genuinely attributed compatible raw/member/scalar/weight export at the reference-authoring checkpoint, or archived native grouping payload.79 already produces58. Invalid ae45/466f aliases cannot supply it;95fc aborts tensor arity. No additional build authorized or attempted here."
+    },
+    {
+      "revision": "ad0f3b8ff0b2d7a7a3c8bec3dd0e95c88df671fb",
+      "scope": "vac4 old178 and nonfactorizable130",
+      "origin_change": "mkrltkoyywpqszoonwsmywnululovmzk",
+      "origin_file": "tests/test_feyngen.rs",
+      "origin_lines": [
+        523,
+        532
+      ],
+      "needed": "Reference-authoring raw/group member and exact local scalar certificates, or equivalent archived payload; demonstrate the actual178->176 and130->128 partition changes. Current79 and588 partitions are identical. The source commit itself explicitly reports remaining discrepancies; its assertions are not independently certified by this investigation."
+    }
+  ],
+  "remaining_grouped_rows_uncertified": 25,
+  "optional_other_cases": "No DIS8/14/20 or vac2/3 matrix added:the minimum already shows79 misses the original checkpoints. No further historical builds attempted.",
+  "final_restoration": {
+    "utc": "2026-10-21T13:40:13.165138+00:00",
+    "commit": "2eda205980328f36ed84289e9054f7220add747c",
+    "hashes": {
+      "crates/linnet/src/half_edge.rs": "eff9d0e7fecdfc9d94d2d1c89cd0ef8824575ac7f08cda7082dfd989dcef50fc",
+      "tests/tests/test_feyngen.rs": "0679c3b2785c2926dbe4390f22a2b70e2ef7db047dfedc1f2bbc01ce3798c055"
+    },
+    "aa2_rows": [
+      {
+        "line": 1812,
+        "text": "assert_snapshot!(feyngen_str(&mut cli, \"xs\", \"a a > t t~ | a t g b ghg QED^2==4 [{{2}} QCD=1] --filter-zero-color --numerator-grouping no_grouping\",false)?,@\"40 | -40 = -40\");"
+      },
+      {
+        "line": 2036,
+        "text": "assert_snapshot!(feyngen_str(&mut cli, \"xs\", \"a a > t t~ | a t g b ghg QED^2==4 [{{2}} QCD=1] --filter-zero-color --numerator-grouping no_grouping\",false)?,@\"40 | -40 = -40\");"
+      }
+    ],
+    "nix_ci_false": true,
+    "durable_refs": "2eda205980328f36ed84289e9054f7220add747c ci-slow-zero-colour-aa3-reference\n195e6f8b94986fd854bb96f1b131a74c0de244ed ci-slow-zero-colour-snapshots-historical-79c95409\n79c954094b97adba6927cfc4054f5f434603ae68 feynkit-approved-bookkeeping-20261017",
+    "clean_against_exact_saved_working_copy_commit": true,
+    "clean_proof": "A normal jj status with explicit approved identity left @ exactly2eda; original complete tracked Rust/Cargo/model manifest matches. The displayed M test_feyngen is the saved meaningful2eda change against its parent, not new unsnapshotted edits.",
+    "all_U3_local_refs": "ci-slow-zero-colour-aa3-reference: ylwnston 2eda2059 align duplicate aa3 ghost-loop reference\nci-slow-zero-colour-certified-snapshots: xtltnuoy 579663b8 refresh certified ghost and sunset snapshots\nci-slow-zero-colour-cut-fix: szvwyrky 7cc4f4c3 find cuts behind source terminal pockets\nci-slow-zero-colour-snapshots-historical-79c95409: lyxlnrlu 195e6f8b (empty) scratch: historical build 79c95409 (not for commit)",
+    "historical_child_unchanged": true,
+    "normal_workspace_cli_removed": "/shared/codex/dev/gammaloop/ci-slow-zero-colour-snapshots/target/dev-optim/gammaloop",
+    "own_worker_processes_remaining": []
+  },
+  "cleanup": {
+    "removed_workspace_historical_cli": "/shared/codex/dev/gammaloop/ci-slow-zero-colour-snapshots/target/dev-optim/gammaloop",
+    "sha256": "2be6aac430a95a9a318c1a00e6619d3c8b5412ca8d06f1377d59d3a8276d4537",
+    "reason": "Fresh historical executable retained in owned evidence directory; remove the workspace launch path to prevent accidental use with restored implementation. Shared Cargo build cache and reusable dependencies preserved.",
+    "retained_executable": "/tmp/codex-combined-s2/resume-20261021/parallel/U3-historical-79c9-r1/gammaloop-79c95409-verified",
+    "private_state_directories_remaining": []
+  },
+  "retained_artifacts": {
+    "directory": "/tmp/codex-combined-s2/resume-20261021/parallel/U3-historical-79c9-r1",
+    "purpose": "Verified standalone historical binary, original/historical source manifests, exact DOTs and local factor/route inventories, group signed-factor/scalar/master-weight payloads, physical correspondence proofs, inputs, logs, build receipt and restoration proof for review and continuation.",
+    "shared_build_cache": "Preserved /common/build-cache and reusable compilation dependencies.",
+    "private_state_directories_remaining": []
+  },
+  "existing_tests": "No prior completed387/387 library, unforced default-aa, Clippy or formatting checks repeated.",
+  "source_record_matches_across_overlapping_cases": 548,
+  "unchanged_member_ratio_class_comparisons_across_overlapping_cases": 362,
+  "final_verification": "/tmp/codex-combined-s2/resume-20261021/parallel/U3-historical-79c9-r1/final-verification.json"
+}

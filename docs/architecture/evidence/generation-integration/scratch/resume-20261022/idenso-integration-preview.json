@@ -1,0 +1,48 @@
+{
+  "status": "All three source review lenses accepted; local combined-integration-v4 recorded; no publication authorized yet.",
+  "original_source": "6749de08dd5015d5a0bbc747f6a32ab37f9cbd49",
+  "original_parent": "588148851e3e989ecbb7478279db7d46727e23a8",
+  "integration_parent": "dfe6387606e44a96f110c1ce03f52d92824dbdb1",
+  "preview": "e0a779808174c64057fecfd062c948b8de8e5c1f",
+  "preview_tree": "d9811519406b5d6aef92403f5ee0c20993a39adf",
+  "bookmark": "combined-idenso-colour-review-preview",
+  "conflicts": false,
+  "working_checkout_unchanged": "dfe6387606e44a96f110c1ce03f52d92824dbdb1",
+  "copied_paths": [
+    "crates/idenso/src/color/simplify.rs",
+    "crates/idenso/src/color/test/label_order.rs",
+    "crates/idenso/src/color/test/mod.rs",
+    "docs/architecture/idenso-architecture.typ"
+  ],
+  "measured_downstream_source": "42434c94453f6d05bb30226d900d2e29b93f8b78",
+  "difference_from_measured_source": "Only docs/architecture/idenso-architecture.typ differs; every other tracked file is identical, including all implementation, tests, dependency manifests and lockfiles.",
+  "reviews": {
+    "algebra": {
+      "verdict": "ok",
+      "report": "idenso-reviews/algebra/report.json",
+      "sha256": "97f98e9cbb5c8af43fe7cf87362f421e16dbb9c6ba1a2a518dc243658a10ce97"
+    },
+    "quality": {
+      "verdict": "ok after Q1/Q2/Q3 wording fixes",
+      "report": "idenso-reviews/quality-wording-r3/report.json",
+      "sha256": "0c6e8d08c03cba56e8df2caa0408d7bfc4d6e6d97d11df82211e362beebf66a9"
+    },
+    "determinism_performance": {
+      "verdict": "ok",
+      "report": "idenso-reviews/determinism/report.json",
+      "sha256": "f7980010b48613bed304f8a358c7ceb1c4c223afdacd8b30fa224a294e1cd187"
+    }
+  },
+  "authoritative_draft": "idenso-reviews/pr-draft-quality-fixed.json",
+  "source_qualification": "No runtime checks repeated for this metadata-only composition. Existing downstream source-specific results apply to identical executable source, with all recorded limits retained. Final combined-tree documentation and integration validation remain pending.",
+  "limitations": [
+    "SU(2)/SU(3) component checks are not a universal all-N numerical proof.",
+    "Historical baseline executable provenance limitation remains explicit.",
+    "Open-tree canonical spelling and downstream universal cost are not certified.",
+    "Pre-existing d22 RQFT discrepancy remains."
+  ],
+  "remote_actions": false,
+  "old_sources_rewritten": false,
+  "accepted_local_bookmark": "combined-integration-v4",
+  "updated_utc": "2026-10-22T09:03:01.845097+00:00"
+}
