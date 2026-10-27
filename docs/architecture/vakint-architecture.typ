@@ -301,6 +301,19 @@ reductions. Explicit flush reports acknowledge durable records; freezing records
 descriptor for later read-only attachment. Loading an immutable snapshot has no writer and
 captures no new records. Partial reductions never enter distributed strict caches.
 
+Single-file cache admission uses `RustRedCacheFileOptions` (`CacheFileOptions` in Python) for
+compressed, decoded and owned-index byte grants and an optional decoded-store directory. Omitted
+grants retain the compact distribution defaults; larger independently hosted files require
+explicit grants. These do not enlarge runtime RAM, work, queue or eviction policies. File-backed
+loading authenticates transport and framing before attachment, shares a lazy coefficient table,
+and checks complete record semantics at each solver hit.
+
+Five-loop `FullSnapshot` export combines completed attached-base records and resident completed
+nodes into one compressed native file with a shared coefficient table. An attached running
+writer must be closed first, and the destination must be new. One- through four-loop exports
+retain their native base-copy and checkpoint workflow. Python forwards the same file options
+and snapshot operation to Rust; it does not implement another cache format.
+
 A reproducible result therefore depends on more than the input expression: record the topology
 form, numerator, normalization convention, epsilon depth, decimal precision, backend order and
 options, numerical masses and external momenta, executable versions, and whether a pySecDec

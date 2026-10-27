@@ -581,7 +581,7 @@ status = "Implemented · reviewed 2026-10-27"
 lifecycle = "current"
 owner = "unassigned"
 reviewed_at = "2026-10-27"
-review_ref = "4a9ff115480f0ad05f8c2d10fc2f5b5f8b34c519"
+review_ref = "f4c143b7545922a6b34b3eb017c36ff254b20816"
 products = ["vakint"]
 topics = ["topologies", "canonicalization", "tensor reduction", "precision", "inspection", "FORM", "pySecDec"]
 review_triggers = ["crates/vakint/src/**", "crates/vakint/templates/**", "crates/vakint/form_src/**", "crates/vakint/build.rs", "crates/vakint/Cargo.toml"]
@@ -620,7 +620,10 @@ anchor = "pub struct Vakint {"
 # Reviewed 2026-10-27: The note records request-owned resource/monitor
 # diagnostics and strict running-cache snapshots while preserving typed scalar
 # transport and the existing reduction-stage ownership.
-digest = "bca77b1f623a4487d9edbe78f64cd06fcfbc2bbf"
+# Reviewed 2026-10-27: explicit cache-file grants are independent of runtime
+# cache policies. Phase observers sample existing input, substitution and output
+# Atoms; the documented observation scopes and reduction ownership are unchanged.
+digest = "9a1e3a0e281b5030c35028a43b3b69c4004ee318"
 
 [[section.note.scope]]
 path = "crates/vakint/src/lorentz.rs"
@@ -670,7 +673,10 @@ anchor = "pub struct VakintWrapper {"
 # Reviewed 2026-10-27: The note records staged loaders, prepared-cache opt-
 # out, running-cache snapshots and optional monitoring; Python remains a
 # direct Rust facade with one numerical registry and kernel.
-digest = "15c7845ecff8c82045de6b3e0244798f40fc1840"
+# Reviewed 2026-10-27: Python registers and forwards the native cache-file
+# grants. The persistence section now distinguishes one-file five-loop full
+# snapshots from lower-loop base-copy exports, including the closed-writer rule.
+digest = "177de6160b2d5b41a649814228c59c0da6780ed7"
 
 [[section.note.scope]]
 path = "crates/vakint/src/symbolica_community_module/numerical.rs"
