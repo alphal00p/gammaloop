@@ -1478,6 +1478,7 @@ impl VakintWrapper {
     /// be closed. Lower loops retain native byte-copy/checkpoint reporting.
     /// Every full snapshot requires a new destination.
     #[pyo3(signature = (n_loops, output_path, *, mode, disk_bytes=None, resume=false, file_options=None))]
+    #[allow(clippy::too_many_arguments)]
     pub fn save_cache(
         &self,
         py: Python<'_>,

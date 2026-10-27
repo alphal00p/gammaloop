@@ -679,7 +679,10 @@ anchor = "pub struct VakintWrapper {"
 # Reviewed 2026-10-27: Python registers and forwards the native cache-file
 # grants. The persistence section now distinguishes one-file five-loop full
 # snapshots from lower-loop base-copy exports, including the closed-writer rule.
-digest = "177de6160b2d5b41a649814228c59c0da6780ed7"
+# Reviewed 2026-10-27: save_cache keeps its existing flat Python keyword
+# signature; the same narrow argument-count annotation used by neighboring
+# wrappers changes no dispatch, resource or persistence behavior.
+digest = "9527c453ea94e223843e852622461aae87f9f077"
 
 [[section.note.scope]]
 path = "crates/vakint/src/symbolica_community_module/numerical.rs"
