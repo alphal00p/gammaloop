@@ -277,6 +277,21 @@ impl Default for ResourceGuardView {
 }
 
 impl ResourceUsage {
+    /// Rounded display only; serialized observations retain exact byte counts.
+    fn display_bytes(bytes: Option<u64>) -> String {
+        let Some(bytes) = bytes else {
+            return "unknown".into();
+        };
+        let units = ["B", "KiB", "MiB", "GiB", "TiB", "PiB", "EiB"];
+        let exponent = (bytes.max(1).ilog2() / 10) as usize;
+        if exponent == 0 {
+            format!("{bytes} B")
+        } else {
+            let scale = (1_u64 << (10 * exponent)) as f64;
+            format!("{:.1} {}", bytes as f64 / scale, units[exponent])
+        }
+    }
+
     #[cfg(any(target_os = "linux", test))]
     fn from_proc(status: &str, meminfo: &str) -> Self {
         let mut sample = Self {
@@ -553,24 +568,28 @@ impl MonitorState {
         let resources = self.live_resources(now);
         let mut cache = vec![
             (
-                "Process VmRSS / VmHWM bytes".into(),
+                "Process RSS / peak".into(),
                 format!(
                     "{} / {} (current / process peak; not payload)",
-                    count(resources.rss_bytes),
-                    count(resources.peak_rss_bytes)
+                    ResourceUsage::display_bytes(resources.rss_bytes),
+                    ResourceUsage::display_bytes(resources.peak_rss_bytes)
                 ),
             ),
             (
-                "Host MemAvailable / MemFree bytes".into(),
+                "Host MemAvailable / MemFree".into(),
                 format!(
                     "{} / {} (usable / unused)",
-                    count(resources.mem_available_bytes),
-                    count(resources.mem_free_bytes)
+                    ResourceUsage::display_bytes(resources.mem_available_bytes),
+                    ResourceUsage::display_bytes(resources.mem_free_bytes)
                 ),
             ),
             (
-                "Host MemTotal bytes".into(),
-                count(resources.mem_total_bytes),
+                "Host MemTotal".into(),
+                ResourceUsage::display_bytes(resources.mem_total_bytes),
+            ),
+            (
+                "Memory units / raw values".into(),
+                "IEC units; exact bytes retained in resources JSON".into(),
             ),
             (
                 "OS memory source / sample age".into(),
@@ -598,8 +617,8 @@ impl MonitorState {
         cache.push((
             "Guard MemAvailable floor / report age".into(),
             format!(
-                "{} bytes / {} (explicit local policy only)",
-                count(resources.guard.threshold_bytes),
+                "{} / {} (explicit local policy only)",
+                ResourceUsage::display_bytes(resources.guard.threshold_bytes),
                 resources
                     .guard
                     .report_age_seconds

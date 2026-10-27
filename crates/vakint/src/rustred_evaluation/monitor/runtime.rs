@@ -1532,7 +1532,7 @@ mod tests {
                 .map(|cell| cell.symbol())
                 .collect::<String>();
             for label in [
-                "VmRSS / VmHWM",
+                "Process RSS / peak",
                 "MemAvailable / MemFree",
                 "usable / unused",
                 "MemTotal",

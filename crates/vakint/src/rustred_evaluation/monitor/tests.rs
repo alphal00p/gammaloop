@@ -42,6 +42,61 @@ fn proc_memory_preserves_process_peak_and_host_usable_unused_scopes() {
 }
 
 #[test]
+fn readable_memory_uses_iec_units_without_changing_exact_raw_observations() {
+    for (bytes, expected) in [
+        (None, "unknown"),
+        (Some(0), "0 B"),
+        (Some(1023), "1023 B"),
+        (Some(1024), "1.0 KiB"),
+        (Some(1024 * 1024), "1.0 MiB"),
+        (Some(50_000_000_000), "46.6 GiB"),
+        (Some(u64::MAX), "16.0 EiB"),
+    ] {
+        assert_eq!(ResourceUsage::display_bytes(bytes), expected);
+    }
+    let mut state = MonitorState::default();
+    state.latest.resources = ResourceUsage {
+        rss_bytes: Some(50_000_000_000),
+        peak_rss_bytes: Some(64 * 1024 * 1024 * 1024),
+        mem_total_bytes: Some(u64::MAX),
+        mem_available_bytes: Some(1024 * 1024 * 1024),
+        mem_free_bytes: Some(0),
+        guard: ResourceGuardView {
+            threshold_bytes: Some(50_000_000_000),
+            ..Default::default()
+        },
+        ..Default::default()
+    };
+    let published = state.presentation(Duration::ZERO);
+    let view = state.view(Duration::ZERO);
+    assert_eq!(
+        row(&view.cache, "Process RSS / peak"),
+        "46.6 GiB / 64.0 GiB (current / process peak; not payload)"
+    );
+    assert_eq!(
+        row(&view.cache, "Host MemAvailable / MemFree"),
+        "1.0 GiB / 0 B (usable / unused)"
+    );
+    assert!(row(&view.cache, "Memory units / raw values").contains("resources JSON"));
+    assert!(
+        row(&view.cache, "Guard MemAvailable floor / report age")
+            .starts_with("46.6 GiB / unknown (explicit local policy only)")
+    );
+    assert_eq!(published["resources"]["rss_bytes"], 50_000_000_000_u64);
+    assert_eq!(published["resources"]["mem_free_bytes"], 0);
+    assert_eq!(published["resources"]["mem_total_bytes"], u64::MAX);
+    assert_eq!(
+        published["resources"]["guard"]["threshold_bytes"],
+        50_000_000_000_u64
+    );
+    assert_eq!(published["resources"]["guard"]["status"], "unknown");
+    assert_eq!(
+        published["resources"]["guard"]["current_process_covered"],
+        false
+    );
+}
+
+#[test]
 fn proc_memory_missing_malformed_units_duplicates_and_overflow_stay_unknown() {
     assert!(ResourceUsage::from_proc("", "").source.is_none());
     for status in [
@@ -89,7 +144,7 @@ fn display_freeze_does_not_freeze_live_resource_json_or_its_age() {
     state.observe(failed, Duration::from_secs(6));
     let frozen = state.view(Duration::from_secs(7));
     assert!(frozen.frozen);
-    assert!(row(&frozen.cache, "Process VmRSS / VmHWM bytes").starts_with("1024 /"));
+    assert!(row(&frozen.cache, "Process RSS / peak").starts_with("1.0 KiB /"));
     let live = serde_json::to_value(state.live_resources(Duration::from_secs(7))).unwrap();
     assert_eq!(live["rss_bytes"], 3 * 1024);
     assert_eq!(live["mem_available_bytes"], 4 * 1024);
@@ -147,7 +202,7 @@ fn fresh_os_memory_does_not_refresh_native_progress_eta_or_infer_cycle() {
     );
     assert_eq!(view.status, MonitorStatus::Running);
     assert!(view.events.is_empty());
-    assert!(row(&view.cache, "Host MemAvailable / MemFree bytes").contains("usable / unused"));
+    assert!(row(&view.cache, "Host MemAvailable / MemFree").contains("usable / unused"));
     let json = serde_json::to_value(state.live_resources(Duration::from_secs(6))).unwrap();
     assert_eq!(json["mem_available_bytes"], 80 * 1024);
     assert_eq!(json["mem_free_bytes"], 30 * 1024);

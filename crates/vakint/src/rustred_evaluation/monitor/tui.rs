@@ -202,11 +202,7 @@ pub(super) fn draw(frame: &mut Frame<'_>, view: &MonitorView, no_color: bool) ->
         MonitorStatus::Partial => ("Returned partial", Color::Yellow),
         MonitorStatus::Detached => ("Detached", Color::Yellow),
     };
-    let status_style = if no_color {
-        Style::default().add_modifier(Modifier::BOLD)
-    } else {
-        Style::default().fg(color).add_modifier(Modifier::BOLD)
-    };
+    let status_style = highlighted(color, no_color);
     let mut status_line = vec![Span::styled(status, status_style)];
     if view.frozen {
         status_line.push(Span::raw("  |  display frozen; reduction continues"));
@@ -240,16 +236,50 @@ pub(super) fn draw(frame: &mut Frame<'_>, view: &MonitorView, no_color: bool) ->
 fn panel(title: String, no_color: bool) -> Block<'static> {
     Block::bordered()
         .border_type(BorderType::Rounded)
-        .border_style(muted(no_color))
-        .title(Line::from(title).style(Style::default().add_modifier(Modifier::BOLD)))
+        .border_style(if no_color {
+            Style::default()
+        } else {
+            Style::default().fg(Color::DarkGray)
+        })
+        .title(Line::from(title).style(highlighted(Color::LightBlue, no_color)))
 }
 
 fn muted(no_color: bool) -> Style {
     if no_color {
         Style::default()
     } else {
-        Style::default().fg(Color::DarkGray)
+        Style::default().fg(Color::Gray)
     }
+}
+
+fn highlighted(color: Color, no_color: bool) -> Style {
+    let style = Style::default().add_modifier(Modifier::BOLD);
+    if no_color { style } else { style.fg(color) }
+}
+
+fn metric_style(label: &str, value: &str, no_color: bool) -> Style {
+    if value.contains("unknown") || value.contains("unobserved") {
+        return muted(no_color).add_modifier(Modifier::ITALIC);
+    }
+    let color = match label {
+        "Current canonical native key" | "Caller Atom bytes / stored summands" => {
+            Color::LightMagenta
+        }
+        "Current canonical R / A / D" | "Elapsed at observation" => Color::LightCyan,
+        "Roots collected / selected" | "Completed unique identities (not closure)" => {
+            Color::LightGreen
+        }
+        "Active unique identities"
+        | "Pending operational frames"
+        | "Pending unique identities"
+        | "Native root output terms (sampled)"
+        | "Native unstarted roots / output keys"
+        | "Native deferred maps / child occurrences" => Color::LightYellow,
+        "Process RSS / peak" | "Host MemAvailable / MemFree" | "Host MemTotal" => Color::LightBlue,
+        _ if label.ends_with("ETA") || label.starts_with("Max seen canonical") => Color::LightCyan,
+        _ => return Style::default(),
+    };
+    highlighted(color, no_color)
 }
 
 fn rows<'a>(values: &'a [(String, String)], no_color: bool) -> Vec<Line<'a>> {
@@ -258,7 +288,7 @@ fn rows<'a>(values: &'a [(String, String)], no_color: bool) -> Vec<Line<'a>> {
         .map(|(label, value)| {
             Line::from(vec![
                 Span::styled(format!("{label}: "), muted(no_color)),
-                Span::raw(value.as_str()),
+                Span::styled(value.as_str(), metric_style(label, value, no_color)),
             ])
         })
         .collect()
@@ -363,7 +393,7 @@ fn draw_compact(frame: &mut Frame<'_>, area: Rect, view: &MonitorView, no_color:
         ("Complexity · scoped", &view.complexity),
         ("Estimates · supplied model", &view.estimates),
     ] {
-        lines.push(Line::from(title).style(Style::default().add_modifier(Modifier::BOLD)));
+        lines.push(Line::from(title).style(highlighted(Color::LightBlue, no_color)));
         lines.extend(rows(values, no_color));
         lines.push(Line::default());
     }
@@ -477,7 +507,7 @@ mod tests {
         let view = state.view(Duration::from_secs(3));
         let rendered = text(&render(&view, 220, 80, false));
         for label in [
-            "VmRSS / VmHWM",
+            "Process RSS / peak",
             "MemAvailable / MemFree",
             "usable / unused",
             "MemTotal",
@@ -526,6 +556,74 @@ mod tests {
                     .all(|cell| cell.fg == Color::Reset && cell.bg == Color::Reset)
             );
         }
+    }
+
+    #[test]
+    fn accents_make_key_metrics_readable_and_leave_unknowns_and_no_color_honest() {
+        let mut view = view();
+        view.overview = vec![("Elapsed at observation".into(), "7.2s".into())];
+        view.frontier = vec![
+            (
+                "Completed unique identities (not closure)".into(),
+                "123".into(),
+            ),
+            ("Pending unique identities".into(), "456".into()),
+        ];
+        view.cache = vec![("Process RSS / peak".into(), "12.5 GiB".into())];
+        view.complexity = vec![
+            ("Current canonical native key".into(), "Route [2,1]".into()),
+            ("Current canonical R / A / D".into(), "0 / 3 / 3".into()),
+        ];
+        view.estimates = vec![
+            ("Root-rate ETA".into(), "42.0s (local observed work)".into()),
+            ("Discovered-frontier ETA".into(), "warmup / unknown".into()),
+        ];
+        let buffer = render(&view, 220, 80, false);
+        for (value, expected) in [
+            ("7.2s", Color::LightCyan),
+            ("123", Color::LightGreen),
+            ("456", Color::LightYellow),
+            ("12.5 GiB", Color::LightBlue),
+            ("Route [2,1]", Color::LightMagenta),
+            ("0 / 3 / 3", Color::LightCyan),
+            ("42.0s (local observed work)", Color::LightCyan),
+            ("warmup / unknown", Color::Gray),
+        ] {
+            let characters = value.chars().map(|ch| ch.to_string()).collect::<Vec<_>>();
+            let rendered = buffer
+                .content
+                .windows(characters.len())
+                .find(|cells| {
+                    cells
+                        .iter()
+                        .zip(&characters)
+                        .all(|(cell, ch)| cell.symbol() == ch)
+                })
+                .expect(value);
+            assert!(rendered.iter().all(|cell| cell.fg == expected), "{value}");
+            if value.contains("unknown") {
+                assert!(
+                    rendered
+                        .iter()
+                        .all(|cell| cell.modifier.contains(Modifier::ITALIC))
+                );
+            } else {
+                assert!(
+                    rendered
+                        .iter()
+                        .all(|cell| cell.modifier.contains(Modifier::BOLD))
+                );
+            }
+        }
+        let plain = render(&view, 220, 80, true);
+        assert!(
+            plain
+                .content
+                .iter()
+                .all(|cell| cell.fg == Color::Reset && cell.bg == Color::Reset)
+        );
+        // Color changes neither the supplied values/scopes nor the viewport.
+        assert_eq!(text(&plain), text(&buffer));
     }
 
     #[test]

@@ -184,6 +184,11 @@ The terminal and supervisor snapshot viewer clamp scrolling to each panel's actu
 wrapped content. Short panels remain visible while longer panels scroll; resizing or
 shrinking observations recompute the navigation extent. Panel titles show their
 current offset and final offset. This is display state only and cannot limit reduction.
+OS memory is displayed in explicitly labeled IEC units; exact byte counts remain
+available in the snapshot's `resources` object. Display rounding never changes a
+reported guard threshold or its separately authenticated coverage. Restrained metric
+accents distinguish current integrals, work counts, time and memory; unknown values
+remain labeled and terminal color suppression leaves their content unchanged.
 
 Numerical evaluation is a later boundary. Parametric backend output remains a Symbolica
 expression. `precision` prepares native numerical sources and contracts external momenta before
