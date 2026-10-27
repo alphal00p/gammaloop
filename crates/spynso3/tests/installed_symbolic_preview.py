@@ -71,7 +71,7 @@ class SymbolicDisplayTests(unittest.TestCase):
             root = ET.fromstring(
                 re.search(r"<math\b[^>]*>.*?</math>", html, re.DOTALL).group()
             )
-            self.assertIsNotNone(root.find(".//{*}mmultiscripts"))
+            self.assertIsNotNone(root.find(".//{*}msup"))
             tokens = [
                 node.text
                 for node in root.iter()

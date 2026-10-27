@@ -944,15 +944,33 @@ impl<'a> Render<'a> {
         if columns.is_empty() {
             return base;
         }
+        let row = columns[0].1;
+        if columns.iter().all(|(_, current)| *current == row) {
+            // One script box avoids reserving empty opposing columns and their
+            // trailing space when every index has the same variance.
+            let mut scripts = String::new();
+            for (position, (source, _)) in columns.iter().enumerate() {
+                if position != 0 {
+                    scripts.push_str(&Self::space(&self.index_gap));
+                }
+                scripts.push_str(source);
+            }
+            let tag = match row {
+                IndexRow::Top => "msup",
+                IndexRow::Bottom => "msub",
+            };
+            return format!("<{tag}><mrow>{base}</mrow><mrow>{scripts}</mrow></{tag}>");
+        }
         let mut scripts = String::new();
         for (position, (source, row)) in columns.iter().enumerate() {
-            if position != 0 {
-                let gap = Self::space(&self.index_gap);
-                scripts.push_str(&format!("<mrow>{gap}</mrow><mrow>{gap}</mrow>"));
-            }
+            let gap = if position == 0 {
+                String::new()
+            } else {
+                Self::space(&self.index_gap)
+            };
             scripts.push_str(&match row {
-                IndexRow::Top => format!("<none/><mrow>{source}</mrow>"),
-                IndexRow::Bottom => format!("<mrow>{source}</mrow><none/>"),
+                IndexRow::Top => format!("<none/><mrow>{gap}{source}</mrow>"),
+                IndexRow::Bottom => format!("<mrow>{gap}{source}</mrow><none/>"),
             });
         }
         format!("<mmultiscripts><mrow>{base}</mrow>{scripts}</mmultiscripts>")
@@ -1413,7 +1431,7 @@ mod tests {
         })
         .unwrap();
         assert_eq!(html.matches("<mi>outer</mi>").count(), 41);
-        assert!(html.contains("<mmultiscripts>") && html.contains("<mi>Nested</mi>"));
+        assert!(html.contains("<msup>") && html.contains("<mi>Nested</mi>"));
         assert!(html.contains("<mi>mu</mi>"));
         for label in 0..80 {
             assert!(
@@ -1538,7 +1556,7 @@ mod tests {
         assert!(html.contains("<mi mathcolor=\"purple\">𝒜</mi>"), "{html}");
         assert_eq!(html.matches("<mi>DerivativeArgument</mi>").count(), 3);
         assert_eq!(html.matches("<mi mathcolor=\"orange\">α</mi>").count(), 3);
-        assert!(html.contains("<mmultiscripts>") && html.contains("<mo>&#x2061;</mo>"));
+        assert!(html.contains("<msup>") && html.contains("<mo>&#x2061;</mo>"));
         assert!(!html.contains('⋯') && !html.contains("data-symbolica-"));
         assert_eq!(value.as_view().get_data(), original);
     }
@@ -2104,7 +2122,10 @@ mod tests {
             "{html}"
         );
         assert!(html.contains("<mrow><mo>▶</mo></mrow><none/>"), "{html}");
-        assert!(html.contains("<none/><mrow><mo>◀</mo></mrow>"), "{html}");
+        assert!(
+            html.contains("<none/><mrow><mspace width=\"0.08em\"/><mo>◀</mo></mrow>"),
+            "{html}"
+        );
         for layout in ["schoonschip", "call"] {
             options.custom_print_mode.insert(
                 "spenso.tensor_layout".to_owned(),
@@ -2435,6 +2456,42 @@ mod tests {
     }
 
     #[test]
+    fn same_variance_indices_share_one_script_box() {
+        let head = tensor_symbol!("compact_mathml_scripts::T");
+        let mu = symbol!("compact_mathml_scripts::mu");
+        let nu = symbol!("compact_mathml_scripts::nu");
+        let upper = function!(head, mink!(4, Atom::var(mu)), mink!(4, Atom::var(nu)));
+        let lower = function!(
+            head,
+            dind!(lor!(4, Atom::var(mu))),
+            dind!(lor!(4, Atom::var(nu)))
+        );
+        let mut options = options();
+        options.custom_print_mode.insert(
+            "spenso.index_gap".to_owned(),
+            PrintUserData::String("0.2em".to_owned()),
+        );
+        for (value, tag) in [(&upper, "msup"), (&lower, "msub")] {
+            for html in [
+                scoped(value, &options),
+                expression(value.as_view(), &options, &PrintState::new(), &|_, _| None).unwrap(),
+            ] {
+                assert!(
+                    html.contains(&format!("<{tag}><mrow><mi>T</mi></mrow>")),
+                    "{html}"
+                );
+                assert!(!html.contains("<mmultiscripts>"), "{html}");
+                assert!(!html.contains("<none/>"), "{html}");
+                assert!(html.contains("<mspace width=\"0.2em\"/>"), "{html}");
+                assert!(
+                    html.find("<mi>mu</mi>").unwrap() < html.find("<mi>nu</mi>").unwrap(),
+                    "{html}"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn tensor_scripts_keep_rows_arguments_and_power_grouping() {
         let head = tensor_symbol!("native_mathml_print::T");
         let value = function!(
@@ -2447,16 +2504,28 @@ mod tests {
         let mut state = PrintState::new();
         let html = render(value.as_view(), &options, &state, &|_, _| None).unwrap();
         assert!(html.contains("<mi>parameter</mi>"), "{html}");
-        assert!(html.contains("<none/><mrow><mi>mu</mi></mrow>"), "{html}");
-        assert!(html.contains("<mrow><mi>nu</mi></mrow><none/>"), "{html}");
+        assert!(
+            html.contains("<none/><mrow><mspace width=\"0.08em\"/><mi>mu</mi></mrow>"),
+            "{html}"
+        );
+        assert!(
+            html.contains("<mrow><mspace width=\"0.08em\"/><mi>nu</mi></mrow><none/>"),
+            "{html}"
+        );
+        assert_eq!(
+            html.matches("<mspace width=\"0.08em\"/>").count(),
+            2,
+            "{html}"
+        );
         state.in_exp_base = true;
         assert_eq!(
             render(value.as_view(), &options, &state, &|_, _| None).unwrap(),
             group(html)
         );
 
+        // Exceed the traversal bound even when compact scripts reduce HTML size.
         let oversized = FunctionBuilder::new(head)
-            .add_args((0..65).map(Atom::num))
+            .add_args((0..257).map(Atom::num))
             .finish();
         assert!(render(oversized.as_view(), &options, &state, &|_, _| None).is_none());
     }
@@ -2473,10 +2542,7 @@ mod tests {
             function!(q, 3, mink!(4))
         );
         let html = render(valid.as_view(), &options, &state, &|_, _| None).unwrap();
-        assert!(
-            html.contains("<mmultiscripts><mrow><mi>p</mi></mrow>"),
-            "{html}"
-        );
+        assert!(html.contains("<msub><mrow><mi>p</mi></mrow>"), "{html}");
         assert!(html.contains("<mn>2</mn>"), "{html}");
         assert!(html.contains(">·</mo>"), "{html}");
         assert!(!html.contains("□"), "{html}");
@@ -2660,6 +2726,7 @@ mod tests {
         let options = options();
         for (left, right, first_lower, second_lower) in [
             (first.clone(), second.clone(), false, false),
+            (first.clone(), dind!(second.clone()), false, true),
             (dind!(first.clone()), second.clone(), true, false),
             (dind!(first.clone()), dind!(second.clone()), true, true),
         ] {
@@ -2669,16 +2736,50 @@ mod tests {
             assert!(html.contains("<mi>g</mi>"), "{html}");
             assert!(html.contains("<mi>metric_mu</mi>"), "{html}");
             assert!(html.contains("<mi>metric_nu</mi>"), "{html}");
-            let [first, second] =
-                [("metric_mu", first_lower), ("metric_nu", second_lower)].map(|(label, lower)| {
-                    let index = format!("<mrow><mi>{label}</mi></mrow>");
-                    if lower {
+            let ordered = value
+                .as_view()
+                .children()
+                .map(|argument| {
+                    let slot = tags::tensor_slot(argument).unwrap();
+                    let (label, lower) = if slot.index.get_symbol() == Some(mu) {
+                        ("metric_mu", first_lower)
+                    } else {
+                        assert_eq!(slot.index.get_symbol(), Some(nu));
+                        ("metric_nu", second_lower)
+                    };
+                    assert_eq!(slot.row == IndexRow::Bottom, lower);
+                    (label, lower)
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(ordered.len(), 2);
+            if first_lower == second_lower {
+                let tag = if first_lower { "msub" } else { "msup" };
+                assert!(
+                    html.contains(&format!("<{tag}><mrow><mi>g</mi></mrow>")),
+                    "{html}"
+                );
+                assert!(!html.contains("<none/>"), "{html}");
+            } else {
+                for (position, (label, lower)) in ordered.iter().copied().enumerate() {
+                    let gap = if position == 0 {
+                        ""
+                    } else {
+                        "<mspace width=\"0.08em\"/>"
+                    };
+                    let index = format!("<mrow>{gap}<mi>{label}</mi></mrow>");
+                    let expected = if lower {
                         format!("{index}<none/>")
                     } else {
                         format!("<none/>{index}")
-                    }
-                });
-            assert!(html.contains(&first) && html.contains(&second), "{html}");
+                    };
+                    assert!(html.contains(&expected), "{html}");
+                }
+            }
+            assert!(
+                html.find(&format!("<mi>{}</mi>", ordered[0].0)).unwrap()
+                    < html.find(&format!("<mi>{}</mi>", ordered[1].0)).unwrap(),
+                "{html}"
+            );
             assert_eq!(
                 fragment(html.clone()).unwrap(),
                 format!("<mrow>{}</mrow>", scoped(&value, &options))
@@ -2750,7 +2851,10 @@ mod tests {
         let dual = dind!(function!(rep.symbol(), 3, index));
         let html = render(dual.as_view(), &options, &PrintState::new(), &|_, _| None).unwrap();
         assert!(html.contains("<mo>*</mo>"), "{html}");
-        assert!(html.contains("</mrow><none/>"), "{html}");
+        assert!(
+            html.ends_with("<mrow><mi>standalone_i</mi></mrow></msub>"),
+            "{html}"
+        );
         let mut power = PrintState::new();
         power.in_exp_base = true;
         assert_eq!(
