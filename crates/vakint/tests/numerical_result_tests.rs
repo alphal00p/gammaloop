@@ -1,4 +1,8 @@
-use symbolica::domains::float::{Complex, Float};
+use symbolica::{
+    atom::AtomView,
+    coefficient::CoefficientView,
+    domains::float::{Complex, Float},
+};
 use vakint::{NumericalEvaluationResult, VakintSettings};
 
 #[test]
@@ -142,7 +146,27 @@ fn explicit_decimal_precision_suffixes_do_not_gain_requested_digits() {
     .unwrap();
     let coefficient = &result.coefficients()[&1];
     let declared = Float::parse("1.2345`5", None).unwrap();
-    assert!(coefficient.value().re.prec() <= declared.prec());
+    // Raw midpoints keep guard precision. Only checked symbolic conversion
+    // encodes the independently achieved accuracy of each component.
+    let exported = coefficient.to_atom().unwrap();
+    let AtomView::Num(number) = exported.as_view() else {
+        panic!("expected an exported numerical coefficient")
+    };
+    let CoefficientView::Float(real, imaginary) = number.get_coeff_view() else {
+        panic!("expected exported componentwise Float precision")
+    };
+    let real = real.to_float();
+    let imaginary = imaginary.to_float();
+    assert!(real.prec() <= declared.prec());
+    for (value, precision) in [
+        (&real, coefficient.precision().real()),
+        (&imaginary, coefficient.precision().imaginary()),
+    ] {
+        assert!(value.prec() <= precision.significant_bits().unwrap());
+    }
+    assert!(imaginary.prec() > Float::parse("1`60", None).unwrap().prec());
+    // Vakint's decimal export cap includes the tracked leading bit.
+    assert!(imaginary.prec() <= Float::parse("1`80", None).unwrap().prec() + 1);
     assert!(coefficient.precision().real().significant_digits().unwrap() <= 5);
     assert!(
         coefficient
@@ -153,12 +177,24 @@ fn explicit_decimal_precision_suffixes_do_not_gain_requested_digits() {
             > 60
     );
     assert!(result.warnings().iter().any(|warning| {
-        warning.requested_decimal_precision == 80
+        warning.epsilon_power == Some(1)
+            && warning.requested_decimal_precision == 80
+            && warning.achieved_decimal_precision.is_none()
+            && warning.data_version == "explicit numerical inputs"
             && warning.sources.iter().any(|source| {
-                source
-                    .available_decimal_precision
-                    .is_some_and(|digits| digits <= 5)
+                source.identity == "imported epsilon^1 input 0"
+                    && source.epsilon_power == Some(1)
+                    && source
+                        .available_decimal_precision
+                        .is_some_and(|digits| digits <= 5)
             })
+    }));
+    assert!(result.warnings().iter().any(|warning| {
+        warning.epsilon_power == Some(1)
+            && warning.requested_decimal_precision == 80
+            && warning
+                .achieved_decimal_precision
+                .is_some_and(|digits| digits <= 5)
     }));
 }
 
