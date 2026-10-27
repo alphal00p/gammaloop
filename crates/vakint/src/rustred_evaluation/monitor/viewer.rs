@@ -69,7 +69,11 @@ use std::{
 };
 
 #[cfg(feature = "progress-tui")]
-use super::{MonitorStatus, MonitorView, ResourceUsage, UiAction, tui};
+use super::{
+    MonitorStatus, MonitorView, ResourceUsage, UiAction,
+    runtime::{ResourceBinding, ResourceTask},
+    tui,
+};
 
 #[cfg(feature = "progress-tui")]
 #[derive(serde::Deserialize)]
@@ -135,8 +139,6 @@ struct ReaderUpdate {
     published: Option<Arc<PublishedView>>,
     received_at: Instant,
     publication_age: Option<Duration>,
-    resources: ResourceUsage,
-    sampled_at: Instant,
     fault: Option<io::Error>,
 }
 
@@ -188,23 +190,37 @@ impl Drop for SnapshotReader {
 
 #[cfg(feature = "progress-tui")]
 impl SnapshotReader {
-    fn new(path: PathBuf, worker_pid: u32, attached: Option<f64>) -> io::Result<Self> {
+    fn new(
+        path: PathBuf,
+        worker_pid: u32,
+        attached: Option<f64>,
+        binding: ResourceBinding,
+    ) -> io::Result<Self> {
+        let mut stamp = None;
+        Self::with_reader(worker_pid, attached, binding, move || {
+            Self::read(&path, &mut stamp)
+        })
+    }
+
+    fn with_reader(
+        worker_pid: u32,
+        attached: Option<f64>,
+        binding: ResourceBinding,
+        mut read: impl FnMut() -> io::Result<Option<PublishedView>> + Send + 'static,
+    ) -> io::Result<Self> {
         let state = Arc::new(ReaderState::default());
         let writer = Arc::clone(&state);
         let worker = thread::Builder::new()
             .name("rustred-snapshot-reader".into())
             .spawn(move || {
-                let mut sampler = super::runtime::ResourceSampler::new(worker_pid);
-                let mut stamp = None;
                 let mut published = None;
                 let mut received_at = Instant::now();
                 let mut publication_age = None;
                 while !writer.stopped.load(Ordering::Relaxed) {
-                    let read = Self::read(&path, &mut stamp);
-                    let fault = match read {
+                    let fault = match read() {
                         Ok(Some(view))
                             if view.matches_worker(worker_pid, attached)
-                                && view.bind_resources(&mut sampler) =>
+                                && view.bind_resources(&binding) =>
                         {
                             received_at = Instant::now();
                             publication_age = view.publication_age();
@@ -218,18 +234,10 @@ impl SnapshotReader {
                     if writer.stopped.load(Ordering::Relaxed) {
                         break;
                     }
-                    let sampled_at = Instant::now();
-                    let resources = if failed {
-                        ResourceUsage::default()
-                    } else {
-                        sampler.sample()
-                    };
                     let update = ReaderUpdate {
                         published: published.clone(),
                         received_at,
                         publication_age,
-                        resources,
-                        sampled_at,
                         fault,
                     };
                     if failed {
@@ -279,17 +287,13 @@ impl SnapshotReader {
 
 #[cfg(feature = "progress-tui")]
 impl PublishedView {
-    fn bind_resources(&self, sampler: &mut super::runtime::ResourceSampler) -> bool {
+    fn bind_resources(&self, binding: &ResourceBinding) -> bool {
         let Some(expected) = self.worker_start_ticks else {
             // A legacy record can still be inspected, but supplies no identity.
             return true;
         };
-        if let Some(bound) = sampler.bound_start_ticks() {
-            // Never adopt a later process which happens to reuse this PID.
-            return bound == expected;
-        }
-        sampler.bind_start_ticks(expected);
-        true
+        // The capability cannot retain the task or adopt a reused PID.
+        binding.try_bind_start_ticks(expected)
     }
 
     fn verified_resources(&self, sample: &ResourceUsage) -> ResourceUsage {
@@ -436,11 +440,12 @@ struct ActiveViewer {
     attached: Instant,
     attached_unix_seconds: Option<f64>,
     reader: Option<SnapshotReader>,
+    resource_task: Option<ResourceTask>,
     latest: Arc<PublishedView>,
     received_at: Instant,
     publication_age: Option<Duration>,
     phase_observed_at: Instant,
-    resources: Option<(ResourceUsage, Instant)>,
+    resources: Option<(ResourceUsage, Duration)>,
     frozen: Option<Arc<PublishedView>>,
     show_help: bool,
     scroll: usize,
@@ -451,6 +456,7 @@ impl Drop for ActiveViewer {
     fn drop(&mut self) {
         // Stop the reader before restoring the terminal. No join or I/O occurs.
         self.reader = None;
+        self.resource_task = None;
     }
 }
 
@@ -485,6 +491,7 @@ impl ActiveViewer {
                 .ok()
                 .map(|now| now.as_secs_f64()),
             reader: None,
+            resource_task: None,
             latest: Arc::new(PublishedView {
                 view: MonitorView {
                     title: "RustRed · worker snapshot".into(),
@@ -524,20 +531,26 @@ impl ActiveViewer {
     }
 
     fn bind_worker(&mut self, worker_pid: u32) -> io::Result<()> {
-        self.reader = Some(SnapshotReader::new(
+        let resources = ResourceTask::new_attachment(worker_pid, self.attached)?;
+        let reader = SnapshotReader::new(
             self.path.clone(),
             worker_pid,
             self.attached_unix_seconds,
-        )?);
+            resources.binding(),
+        )?;
+        self.reader = Some(reader);
+        self.resource_task = Some(resources);
         Ok(())
     }
 
     fn receive(&mut self) -> io::Result<()> {
+        if let Some(sample) = self.resource_task.as_ref().and_then(ResourceTask::take) {
+            self.resources = Some(sample);
+        }
         if let Some(update) = self.reader.as_ref().and_then(|reader| reader.state.take()) {
             if let Some(error) = update.fault {
                 return Err(error);
             }
-            self.resources = Some((update.resources, update.sampled_at));
             if let Some(published) = update.published
                 && !Arc::ptr_eq(&published, &self.latest)
             {
@@ -705,10 +718,11 @@ impl ActiveViewer {
         }
         let sample = if let Some((resources, sampled_at)) = &self.resources {
             let mut resources = resources.clone();
-            resources.sample_age_seconds = resources
-                .source
-                .as_ref()
-                .map(|_| now.saturating_duration_since(*sampled_at).as_secs_f64());
+            resources.sample_age_seconds = resources.source.as_ref().map(|_| {
+                now.saturating_duration_since(self.attached)
+                    .saturating_sub(*sampled_at)
+                    .as_secs_f64()
+            });
             resources
         } else {
             ResourceUsage::default()
@@ -807,8 +821,6 @@ mod tests {
             published: None,
             received_at: Instant::now(),
             publication_age: None,
-            resources: ResourceUsage::default(),
-            sampled_at: Instant::now(),
             fault: None,
         }
     }
@@ -885,19 +897,20 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn admitted_start_identity_never_rebinds_to_a_reused_pid() {
-        let mut sampler = super::super::runtime::ResourceSampler::new(u32::MAX);
+        let resources = ResourceTask::new_attachment(u32::MAX, Instant::now()).unwrap();
+        let binding = resources.binding();
         let envelope: SnapshotEnvelope = serde_json::from_value(snapshot(u32::MAX, 10.0)).unwrap();
         let mut view = envelope.monitor.unwrap();
-        assert!(view.bind_resources(&mut sampler));
+        assert!(view.bind_resources(&binding));
         assert!(
-            sampler.bound_start_ticks().is_none(),
+            binding.bound_start_ticks().is_none(),
             "legacy snapshot bound a PID"
         );
         view.worker_start_ticks = Some(100);
-        assert!(view.bind_resources(&mut sampler));
+        assert!(view.bind_resources(&binding));
         view.worker_start_ticks = Some(101);
-        assert!(!view.bind_resources(&mut sampler));
-        assert_eq!(sampler.bound_start_ticks(), Some(100));
+        assert!(!view.bind_resources(&binding));
+        assert_eq!(binding.bound_start_ticks(), Some(100));
         let live = view.verified_resources(&ResourceUsage {
             process_pid: Some(u32::MAX),
             process_start_ticks: Some(100),
@@ -917,6 +930,8 @@ mod tests {
 
         let (mut child, mut output) = paused_child();
         let mut sampler = super::super::runtime::ResourceSampler::new(child.0.id());
+        let resources = ResourceTask::new_attachment(child.0.id(), Instant::now()).unwrap();
+        let binding = resources.binding();
         let start =
             super::super::runtime::ResourceSampler::current_start_ticks(child.0.id()).unwrap();
         let envelope: SnapshotEnvelope =
@@ -924,7 +939,8 @@ mod tests {
         let mut view = envelope.monitor.unwrap();
         assert!(sampler.bound_start_ticks().is_none());
         assert!(!sampler.sample().process_identity_verified);
-        assert!(view.bind_resources(&mut sampler));
+        assert!(view.bind_resources(&binding));
+        sampler.bind_start_ticks(binding.bound_start_ticks().unwrap());
         let recorded = sampler.sample();
         assert!(view.verified_resources(&recorded).process_identity_verified);
         view.resources = Some(recorded);
@@ -999,9 +1015,12 @@ mod tests {
         let state = ReaderState::default();
         let _ = state.publish(update());
         let mut replacement = update();
-        replacement.resources.rss_bytes = Some(123);
+        replacement.publication_age = Some(Duration::from_secs(123));
         let _ = state.publish(replacement);
-        assert_eq!(state.take().unwrap().resources.rss_bytes, Some(123));
+        assert_eq!(
+            state.take().unwrap().publication_age,
+            Some(Duration::from_secs(123))
+        );
         assert!(state.take().is_none());
         let locked = state.latest.lock().unwrap();
         let started = Instant::now();
@@ -1046,6 +1065,73 @@ mod tests {
         release.send(()).unwrap();
         finished.recv_timeout(Duration::from_secs(1)).unwrap();
         assert!(state.take().is_none());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn blocked_snapshot_read_does_not_block_os_samples_or_detach() {
+        let started = Instant::now();
+        let pid = std::process::id();
+        let published = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs_f64();
+        let envelope: SnapshotEnvelope = serde_json::from_value(snapshot(pid, published)).unwrap();
+        let mut first = envelope.monitor;
+        let resources = ResourceTask::new_attachment(pid, started).unwrap();
+        let binding = resources.binding();
+        let reader_binding = binding.clone();
+        let (blocked, in_read) = std::sync::mpsc::channel();
+        let (release, wait) = std::sync::mpsc::channel();
+        let (returned, read_finished) = std::sync::mpsc::channel();
+        let reader = SnapshotReader::with_reader(pid, Some(published), reader_binding, move || {
+            if let Some(first) = first.take() {
+                return Ok(Some(first));
+            }
+            blocked.send(()).unwrap();
+            wait.recv().unwrap();
+            returned.send(()).unwrap();
+            Ok(None)
+        })
+        .unwrap();
+        in_read.recv_timeout(Duration::from_secs(2)).unwrap();
+        let state = Arc::clone(&reader.state);
+        let initial = state.take().unwrap();
+        assert_eq!(initial.published.unwrap().worker_pid, Some(pid));
+        let deadline = Instant::now() + Duration::from_secs(8);
+        let mut samples = Vec::new();
+        while samples.len() < 3 {
+            if let Some((sample, at)) = resources.take()
+                && sample.process_identity_verified
+            {
+                assert!(sample.rss_bytes.is_some() && sample.mem_available_bytes.is_some());
+                assert!(started.elapsed().saturating_sub(at) <= Duration::from_millis(2500));
+                assert!(samples.last().is_none_or(|previous| at > *previous));
+                samples.push(at);
+            }
+            assert!(
+                Instant::now() < deadline,
+                "independent OS sampling stopped during blocked read"
+            );
+            assert!(state.take().is_none(), "blocked reader fabricated progress");
+            thread::sleep(Duration::from_millis(5));
+        }
+        assert!(samples.last().unwrap().saturating_sub(samples[0]) >= Duration::from_millis(1500));
+        let detached_at = Instant::now();
+        drop(reader);
+        drop(resources);
+        assert!(detached_at.elapsed() < Duration::from_secs(1));
+        assert!(
+            !binding.try_bind_start_ticks(binding.bound_start_ticks().unwrap()),
+            "reader retained the sampler owner after detach"
+        );
+        assert!(state.stopped.load(Ordering::Relaxed));
+        release.send(()).unwrap();
+        read_finished.recv_timeout(Duration::from_secs(1)).unwrap();
+        assert!(
+            state.take().is_none(),
+            "stopped reader published after its I/O returned"
+        );
     }
 
     #[test]
@@ -1191,7 +1277,10 @@ mod tests {
                         let (resources, at) = active.resources.as_ref().unwrap();
                         assert!(resources.rss_bytes.is_some());
                         assert!(resources.mem_available_bytes.is_some());
-                        assert!(at.elapsed() < Duration::from_secs(1));
+                        assert!(
+                            active.attached.elapsed().saturating_sub(*at)
+                                <= Duration::from_millis(2500)
+                        );
                     }
                     observed_silence = true;
                 }

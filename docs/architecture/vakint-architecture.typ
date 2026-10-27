@@ -180,16 +180,20 @@ live status, phase clocks and resources. Detaching the terminal does not cancel 
 A bounded latest-value publisher owns blocking snapshot I/O separately from the terminal.
 It preserves atomic replacement and checks cancellation and destination ownership immediately
 before commit. A stalled final publication is canceled after a short diagnostic drain instead
-of blocking the scientific result; telemetry errors do not change that result. External
-attachments likewise read/parse snapshots on their reader. Live process resources require
+of blocking the scientific result; telemetry errors remain in the monitor's fault state.
+Shutdown never delivers a synchronous logger warning through a potentially blocked sink.
+External attachments read/parse snapshots separately from their existing process-resource
+task, so a stalled snapshot read cannot stop resource sampling. Live process resources require
 the bound worker PID and start time to match; exited, reused or legacy-unverified targets
 retain explicitly aged recorded values, while host memory can refresh independently. Input
-and drawing remain responsive when producer updates stop.
+and drawing remain responsive when producer updates stop. If OS sampling itself stalls,
+the displayed sample age continues to grow instead of claiming fresh memory readings.
 
-Five-loop retained evaluation also reports guard and coefficient materialization,
-normalization and notation conversion, both outer and catalogue exact-combination
-passes, and residual catalogue classification. These caller phases continue after
-native reduction finishes; they inspect existing Atom headers rather than creating
+Five-loop retained evaluation also reports coverage/mass batching (with actual lowered
+keys checked), guard and coefficient materialization, normalization and notation conversion,
+both outer and catalogue exact-combination passes, residual catalogue classification,
+result packing and natural completed-batch cleanup. Caller phases cover work before
+and after native reduction; monitoring inspects existing Atom headers rather than creating
 another expression for monitoring. Each recorded stage duration is one completed
 span, with repeated calls retained separately. `detailed_evaluation_total` includes
 its reduction and materialization children plus callee cleanup;

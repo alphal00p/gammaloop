@@ -4,7 +4,7 @@ use std::{
     collections::VecDeque,
     io,
     sync::{
-        Arc, Mutex,
+        Arc, Mutex, OnceLock,
         atomic::{AtomicBool, Ordering},
         mpsc::{self, SyncSender},
     },
@@ -500,9 +500,11 @@ impl MonitorContext {
                 worker: Some(worker),
             },
             Err(error) => {
-                log::warn!("RustRed monitor could not start: {error}");
+                handle
+                    .shared
+                    .fault(format!("monitor could not start: {error}"));
                 Self {
-                    handle: None,
+                    handle: Some(handle),
                     worker: None,
                 }
             }
@@ -516,14 +518,15 @@ impl MonitorContext {
         }
         if let Some(worker) = self.worker.take()
             && worker.join().is_err()
+            && let Some(handle) = &self.handle
         {
-            log::warn!("RustRed monitor worker unwound; scientific result is unchanged");
+            handle
+                .shared
+                .fault("monitor worker unwound; scientific result is unchanged".into());
         }
-        if let Some(handle) = &self.handle
-            && let Some(fault) = &handle.shared.pending().fault
-        {
-            log::warn!("RustRed monitor telemetry stopped: {fault}");
-        }
+        // A detached publisher may still own stderr's global lock. Delivering
+        // a synchronous logger warning here could wait on that same sink and
+        // undo the bounded diagnostic shutdown. Keep faults in the owner state.
         self.handle = None;
     }
 }
@@ -743,7 +746,9 @@ fn worker_with_publisher(
             thread::sleep(Duration::from_millis(50).saturating_sub(published.elapsed()));
         }
     }
-    publisher.finish();
+    if let Some(fault) = publisher.finish() {
+        shared.fault(fault);
+    }
 }
 
 fn work_label(work: CandidateRoutedWorkRef<'_>) -> String {
@@ -1039,10 +1044,36 @@ fn update_display(pending: &mut Pending, envelope: &Envelope<'_>, detail: bool, 
 
 /// Existing resource sampling on an I/O owner, with one completed sample slot.
 /// A blocked guard file or OS read cannot own the terminal or its shutdown.
-struct ResourceTask {
+pub(super) struct ResourceTask {
     latest: Arc<Mutex<Option<(super::ResourceUsage, Duration)>>>,
     stopped: Arc<AtomicBool>,
+    #[cfg(any(feature = "progress-tui", test))]
+    binding: Arc<OnceLock<u64>>,
     _worker: JoinHandle<()>,
+}
+
+/// The snapshot reader can authenticate a target without retaining its sampler.
+#[cfg(any(feature = "progress-tui", test))]
+#[derive(Clone)]
+pub(super) struct ResourceBinding {
+    identity: Arc<OnceLock<u64>>,
+    stopped: Arc<AtomicBool>,
+}
+
+#[cfg(any(feature = "progress-tui", test))]
+impl ResourceBinding {
+    pub(super) fn try_bind_start_ticks(&self, start: u64) -> bool {
+        if self.stopped.load(Ordering::Acquire) {
+            return false;
+        }
+        let _ = self.identity.set(start);
+        !self.stopped.load(Ordering::Acquire) && self.identity.get() == Some(&start)
+    }
+
+    #[cfg(test)]
+    pub(super) fn bound_start_ticks(&self) -> Option<u64> {
+        self.identity.get().copied()
+    }
 }
 
 impl ResourceTask {
@@ -1052,15 +1083,47 @@ impl ResourceTask {
         interval: Duration,
         started: Instant,
     ) -> io::Result<Self> {
+        Self::spawn(pid, guard, interval, started, false)
+    }
+
+    #[cfg(any(feature = "progress-tui", test))]
+    pub(super) fn new_attachment(pid: u32, started: Instant) -> io::Result<Self> {
+        Self::spawn(pid, None, Duration::from_secs(1), started, true)
+    }
+
+    #[cfg(any(feature = "progress-tui", test))]
+    pub(super) fn binding(&self) -> ResourceBinding {
+        ResourceBinding {
+            identity: Arc::clone(&self.binding),
+            stopped: Arc::clone(&self.stopped),
+        }
+    }
+
+    fn spawn(
+        pid: u32,
+        guard: Option<std::path::PathBuf>,
+        interval: Duration,
+        started: Instant,
+        attachment: bool,
+    ) -> io::Result<Self> {
         let latest = Arc::new(Mutex::new(None));
         let stopped = Arc::new(AtomicBool::new(false));
+        let binding = Arc::new(OnceLock::new());
         let output = Arc::clone(&latest);
         let stop = Arc::clone(&stopped);
+        let identity = Arc::clone(&binding);
         let worker = thread::Builder::new()
             .name("vakint-monitor-resources".into())
             .spawn(move || {
-                let mut sampler = ResourceSampler::new(pid);
+                let mut sampler = if attachment {
+                    ResourceSampler::unbound(pid)
+                } else {
+                    ResourceSampler::new(pid)
+                };
                 while !stop.load(Ordering::Acquire) {
+                    if let Some(start) = identity.get() {
+                        sampler.bind_start_ticks(*start);
+                    }
                     // Conservative age starts before OS and possibly slow guard I/O.
                     let sampled_at = started.elapsed();
                     let sample = resource_usage(&mut sampler, guard.as_deref());
@@ -1076,11 +1139,13 @@ impl ResourceTask {
         Ok(Self {
             latest,
             stopped,
+            #[cfg(any(feature = "progress-tui", test))]
+            binding,
             _worker: worker,
         })
     }
 
-    fn take(&self) -> Option<(super::ResourceUsage, Duration)> {
+    pub(super) fn take(&self) -> Option<(super::ResourceUsage, Duration)> {
         self.latest.try_lock().ok()?.take()
     }
 }
@@ -1101,6 +1166,16 @@ pub(super) struct ResourceSampler {
 }
 
 impl ResourceSampler {
+    fn unbound(pid: u32) -> Self {
+        Self {
+            pid,
+            #[cfg(target_os = "linux")]
+            previous: None,
+            #[cfg(target_os = "linux")]
+            identity: None,
+        }
+    }
+
     pub(super) fn new(pid: u32) -> Self {
         Self {
             pid,
@@ -1113,7 +1188,6 @@ impl ResourceSampler {
         }
     }
 
-    #[cfg(any(feature = "progress-tui", test))]
     pub(super) fn bind_start_ticks(&mut self, expected: u64) {
         #[cfg(target_os = "linux")]
         {
@@ -1126,7 +1200,7 @@ impl ResourceSampler {
         let _ = expected;
     }
 
-    #[cfg(any(feature = "progress-tui", test))]
+    #[cfg(test)]
     pub(super) fn bound_start_ticks(&self) -> Option<u64> {
         #[cfg(target_os = "linux")]
         {
@@ -2430,6 +2504,43 @@ mod benchmark_tests {
 mod responsiveness_tests {
     use super::*;
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn attachment_sampling_starts_unbound_and_retains_one_worker_identity() {
+        let started = Instant::now();
+        let task = ResourceTask::new_attachment(std::process::id(), started).unwrap();
+        let binding = task.binding();
+        let deadline = Instant::now() + Duration::from_secs(4);
+        let initial = loop {
+            if let Some((sample, _)) = task.take() {
+                break sample;
+            }
+            assert!(Instant::now() < deadline);
+            thread::sleep(Duration::from_millis(5));
+        };
+        assert!(initial.mem_available_bytes.is_some());
+        assert!(!initial.process_identity_verified && initial.rss_bytes.is_none());
+        assert!(binding.bound_start_ticks().is_none());
+        let start = ResourceSampler::current_start_ticks(std::process::id()).unwrap();
+        assert!(binding.try_bind_start_ticks(start));
+        assert!(binding.try_bind_start_ticks(start));
+        assert!(!binding.try_bind_start_ticks(start + 1));
+        loop {
+            if let Some((sample, at)) = task.take()
+                && sample.process_identity_verified
+            {
+                assert_eq!(sample.process_start_ticks, Some(start));
+                assert!(sample.rss_bytes.is_some());
+                assert!(started.elapsed().saturating_sub(at) <= Duration::from_millis(2500));
+                break;
+            }
+            assert!(Instant::now() < deadline);
+            thread::sleep(Duration::from_millis(5));
+        }
+        drop(task);
+        assert!(!binding.try_bind_start_ticks(start));
+    }
+
     #[test]
     fn pending_native_lock_does_not_block_heartbeat_or_os_samples() {
         let directory = tempfile::tempdir().unwrap();
@@ -2749,5 +2860,105 @@ mod responsiveness_tests {
         assert!(!crossterm::terminal::is_raw_mode_enabled().unwrap());
         println!("PTY_DONE:{scenario}");
         std::io::stdout().flush().unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    #[ignore = "requires the synthetic controller's full undrained stderr pipe"]
+    fn blocked_stderr_and_enabled_logger_do_not_block_scientific_completion() {
+        use std::io::Write;
+        use std::sync::atomic::AtomicUsize;
+
+        struct StderrLogger;
+        static LOG_CALLS: AtomicUsize = AtomicUsize::new(0);
+        static LOGGER: StderrLogger = StderrLogger;
+        impl log::Log for StderrLogger {
+            fn enabled(&self, metadata: &log::Metadata<'_>) -> bool {
+                metadata.level() <= log::Level::Warn
+            }
+            fn log(&self, record: &log::Record<'_>) {
+                if self.enabled(record.metadata()) {
+                    LOG_CALLS.fetch_add(1, Ordering::Relaxed);
+                    writeln!(io::stderr(), "{}", record.args()).unwrap();
+                }
+            }
+            fn flush(&self) {}
+        }
+        log::set_logger(&LOGGER).unwrap();
+        log::set_max_level(log::LevelFilter::Warn);
+        assert!(log::log_enabled!(log::Level::Warn));
+
+        let shared = Arc::new(Shared::new());
+        let (wake, receiver) = mpsc::sync_channel(1);
+        let handle = MonitorHandle {
+            shared: Arc::clone(&shared),
+            wake,
+            interval: Duration::from_secs(60),
+        };
+        let options = RustRedMonitorOptions {
+            display: RustRedMonitorDisplay::Json,
+            interval: Duration::from_secs(60),
+            ..Default::default()
+        };
+        let (entered, ready) = mpsc::channel();
+        let worker_shared = Arc::clone(&shared);
+        let presenter = thread::spawn(move || {
+            worker_with_publisher(
+                worker_shared,
+                receiver,
+                options,
+                move |_options, stderr_json, _owner| {
+                    assert!(stderr_json);
+                    let mut entered = Some(entered);
+                    super::super::publication::SnapshotPublisher::spawn(move |document, _active| {
+                        let stderr = io::stderr();
+                        let mut locked = stderr.lock();
+                        if let Some(entered) = entered.take() {
+                            entered.send(()).unwrap();
+                        }
+                        // The controller filled this actual pipe before
+                        // launching us and cannot drain it until completion.
+                        let mut stream = super::super::SnapshotWriter::new(&mut locked);
+                        stream.write(document)
+                    })
+                },
+            )
+        });
+        let mut context = MonitorContext {
+            handle: Some(handle.clone()),
+            worker: Some(presenter),
+        };
+        let mut callback = |envelope: &Envelope<'_>| handle.observe(envelope);
+        let mut observer = Observer::new(Default::default(), &mut callback);
+        MonitorContext::native_phase(Some(&mut observer), "synthetic_stderr_call", None);
+        ready.recv_timeout(Duration::from_secs(2)).unwrap();
+        println!("STDERR_WRITER_LOCKED");
+        io::stdout().flush().unwrap();
+        // The only scientific operation in this synthetic control is exact.
+        let scientific_result = 17;
+        let started = Instant::now();
+        context.finish();
+        assert!(started.elapsed() < Duration::from_secs(1));
+        assert_eq!(scientific_result, 17);
+        assert_eq!(LOG_CALLS.load(Ordering::Relaxed), 0);
+        assert!(
+            handle
+                .shared
+                .pending()
+                .fault
+                .as_deref()
+                .is_some_and(|fault| fault.contains("did not drain"))
+        );
+        println!("STDERR_SCIENTIFIC_COMPLETE:17");
+        io::stdout().flush().unwrap();
+        let mut line = String::new();
+        io::stdin().read_line(&mut line).unwrap();
+        assert_eq!(line.trim(), "continue");
+        // Delivery succeeds once the controller drains the pipe, proving that
+        // the enabled logger really uses the blocked stderr sink.
+        log::warn!("STDERR_LOGGER_CONFIRMED_AFTER_DRAIN");
+        assert_eq!(LOG_CALLS.load(Ordering::Relaxed), 1);
+        println!("STDERR_DONE");
+        io::stdout().flush().unwrap();
     }
 }

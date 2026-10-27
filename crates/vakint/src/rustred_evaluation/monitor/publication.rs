@@ -148,7 +148,9 @@ impl SnapshotPublisher {
                     .queue
                     .lock()
                     .unwrap_or_else(std::sync::PoisonError::into_inner);
-                queue.error = result.err().map(|error| error.to_string());
+                if let Some(error) = result.err() {
+                    queue.error.get_or_insert_with(|| error.to_string());
+                }
                 queue.done = true;
                 worker.ready.notify_all();
             })?;
@@ -201,17 +203,22 @@ impl SnapshotPublisher {
         true
     }
 
-    pub(super) fn finish(&self) {
+    pub(super) fn finish(&self) -> Option<String> {
         // A diagnostic sink receives a short drain allowance, never an
         // unbounded join. Its delayed atomic commit is revoked on timeout.
         if !self.close(Duration::from_millis(100)) {
-            log::warn!(
-                "RustRed final monitor publication did not drain; pending telemetry cancelled, scientific result unchanged"
-            );
+            let mut queue = self
+                .shared
+                .queue
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            queue.error.get_or_insert_with(|| {
+                "final monitor publication did not drain; pending telemetry cancelled, scientific result unchanged".into()
+            });
         }
-        if let Some(error) = self.error() {
-            log::warn!("RustRed monitor publication failed: {error}");
-        }
+        // Never call a synchronous logger here: the blocked writer can own the
+        // same stderr lock used by that logger. Return the owned fault instead.
+        self.error()
     }
 }
 

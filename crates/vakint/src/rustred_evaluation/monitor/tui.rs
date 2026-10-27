@@ -214,10 +214,11 @@ pub(super) fn draw(frame: &mut Frame<'_>, view: &MonitorView, no_color: bool) ->
         status_line.push(Span::raw("  |  display frozen; reduction continues"));
     }
     frame.render_widget(
-        Paragraph::new(vec![
-            Line::from(status_line),
-            Line::from(view.subtitle.as_str()),
-        ])
+        Paragraph::new(
+            std::iter::once(Line::from(status_line))
+                .chain(view.subtitle.lines().map(Line::from))
+                .collect::<Vec<_>>(),
+        )
         .block(panel(view.title.clone(), no_color))
         .wrap(Wrap { trim: false }),
         header,
@@ -529,6 +530,17 @@ mod tests {
             assert!(rendered.contains(label), "missing {label}: {rendered}");
         }
         assert!(rendered.contains("Local observations"));
+    }
+
+    #[test]
+    fn live_phase_and_resource_headlines_remain_separate_lines() {
+        let mut view = view();
+        view.subtitle = "active phase 36.0s\nRSS 12 MiB / host available 400 GiB".into();
+        let rendered = text(&render(&view, 220, 24, false));
+        let rows = rendered.lines().collect::<Vec<_>>();
+        assert!(rows[2].contains("active phase 36.0s"));
+        assert!(!rows[2].contains("RSS"));
+        assert!(rows[3].contains("RSS 12 MiB / host available 400 GiB"));
     }
 
     #[test]

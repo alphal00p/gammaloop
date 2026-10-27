@@ -382,6 +382,134 @@ def run_case(binary, scenario, output, cpus):
     return result
 
 
+def run_blocked_stderr(binary, output, cpus):
+    """Keep the actual stderr pipe full until scientific completion is reported."""
+    case = output / "blocked-stderr"
+    case.mkdir()
+    read_fd, write_fd = os.pipe()
+    os.set_blocking(write_fd, False)
+    filled = 0
+    while True:
+        try:
+            filled += os.write(write_fd, b"x" * 65536)
+        except BlockingIOError:
+            break
+    assert filled == fcntl.fcntl(write_fd, fcntl.F_GETPIPE_SZ)
+    os.set_blocking(write_fd, True)
+    command = [
+        "taskset",
+        "-c",
+        cpus,
+        str(binary),
+        "--exact",
+        "rustred_evaluation::monitor::runtime::responsiveness_tests::blocked_stderr_and_enabled_logger_do_not_block_scientific_completion",
+        "--ignored",
+        "--nocapture",
+        "--test-threads=1",
+        "--color",
+        "never",
+    ]
+    process = subprocess.Popen(
+        command,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=write_fd,
+        start_new_session=True,
+    )
+    os.close(write_fd)
+    owned = identity(process.pid)
+    stdout = bytearray()
+    stderr = bytearray()
+    started = time.monotonic()
+    locked = completed = None
+    result = {
+        "command": command,
+        "process": owned,
+        "initial_full_pipe_bytes": filled,
+        "stderr_undrained_until_scientific_completion": True,
+    }
+    try:
+        assert process.stdout is not None and process.stdin is not None
+        while completed is None:
+            now = time.monotonic()
+            if now - started > 8:
+                raise RuntimeError("completion blocked behind an undrained stderr pipe")
+            if available() < 110_000_000_000:
+                raise RuntimeError("owned stderr fixture stopped below110GB host floor")
+            if select.select([process.stdout], [], [], 0.05)[0]:
+                chunk = os.read(process.stdout.fileno(), 65536)
+                stdout.extend(chunk)
+            if locked is None and b"STDERR_WRITER_LOCKED" in stdout:
+                locked = now
+            if b"STDERR_SCIENTIFIC_COMPLETE:17" in stdout:
+                completed = now
+            if process.poll() is not None:
+                raise RuntimeError("stderr fixture exited before the completion marker")
+        assert locked is not None and completed - locked < 1
+        pending = struct.unpack(
+            "I", fcntl.ioctl(read_fd, termios.FIONREAD, struct.pack("I", 0))
+        )[0]
+        assert pending == filled, "stderr was unexpectedly consumed before completion"
+        # The logger and pending writer may run only after this deliberate drain.
+        while len(stderr) < filled:
+            stderr.extend(os.read(read_fd, filled - len(stderr)))
+        process.stdin.write(b"continue\n")
+        process.stdin.flush()
+        while process.poll() is None:
+            if time.monotonic() - started > 10:
+                raise RuntimeError(
+                    "stderr fixture did not finish after its sink drained"
+                )
+            for stream in select.select([read_fd, process.stdout], [], [], 0.05)[0]:
+                chunk = os.read(
+                    stream if isinstance(stream, int) else stream.fileno(), 65536
+                )
+                (stderr if isinstance(stream, int) else stdout).extend(chunk)
+        for stream in [read_fd, process.stdout]:
+            while select.select([stream], [], [], 0)[0]:
+                chunk = os.read(
+                    stream if isinstance(stream, int) else stream.fileno(), 65536
+                )
+                if not chunk:
+                    break
+                (stderr if isinstance(stream, int) else stdout).extend(chunk)
+        assert process.returncode == 0, stdout.decode(errors="replace")
+        assert b"STDERR_DONE" in stdout
+        assert b"STDERR_LOGGER_CONFIRMED_AFTER_DRAIN" in stderr
+        result.update(
+            status="PASS",
+            exit_code=process.returncode,
+            locked_to_complete_seconds=completed - locked,
+            elapsed_seconds=time.monotonic() - started,
+        )
+    except BaseException as error:
+        result.update(status="FAIL", error=f"{type(error).__name__}: {error}")
+        raise
+    finally:
+        try:
+            if process.poll() is None:
+                try:
+                    still_owned = identity(process.pid) == owned
+                except (FileNotFoundError, ProcessLookupError):
+                    still_owned = False
+                if still_owned:
+                    try:
+                        os.killpg(process.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    process.wait()
+        finally:
+            (case / "stdout.bin").write_bytes(stdout)
+            (case / "stderr.bin").write_bytes(stderr)
+            (case / "result.json").write_text(json.dumps(result, indent=2) + "\n")
+            os.close(read_fd)
+            if process.stdout is not None:
+                process.stdout.close()
+            if process.stdin is not None:
+                process.stdin.close()
+    return result
+
+
 def main():
     if sys.argv[1:2] == ["--pty-exec"]:
         # Popen already created a session; this fresh helper now claims its
@@ -400,6 +528,7 @@ def main():
     results = [
         run_case(args.binary, scenario, args.output, args.cpus) for scenario in CASES
     ]
+    blocked_stderr = run_blocked_stderr(args.binary, args.output, args.cpus)
     (args.output / "result.json").write_text(
         json.dumps(
             {
@@ -408,6 +537,7 @@ def main():
                 "binary": str(args.binary),
                 "binary_sha256": args.binary_sha256,
                 "cases": results,
+                "blocked_stderr": blocked_stderr,
             },
             indent=2,
         )
