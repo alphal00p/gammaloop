@@ -12,12 +12,15 @@ mod marks;
 mod output;
 
 use kurbo::{BezPath, Point};
+use kurvst::marks::{MarkDrawable, MarkGeometryMode, MarkGeometryOutput, MarkSpec, MarkStation};
 use linnet::half_edge::involution::EdgeIndex;
 use linnet::half_edge::layout::impred::{EdgeLabel, ImpredConfig};
 use linnet::half_edge::subgraph::{ModifySubSet, SuBitGraph};
+use marks::Batch;
 pub use marks::MarkPaint;
 use roxmltree::Document;
 use serde_json::{Map, Value};
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use crate::{ImpredRun, TypstDotEdge, TypstDotEndpoint, TypstDotNode, TypstGraph, TypstGraphSpec};
@@ -73,8 +76,8 @@ pub struct NodeDrawing {
 pub struct EdgeDrawing {
     pub stroke: Stroke,
     pub pattern: Option<Pattern>,
-    pub flow_arrow: kurvst::marks::MarkSpec,
-    pub momentum_arrow: kurvst::marks::MarkSpec,
+    pub flow_arrow: MarkSpec,
+    pub momentum_arrow: MarkSpec,
     pub flow_arrow_paints: Vec<MarkPaint>,
     pub momentum_arrow_paints: Vec<MarkPaint>,
     /// Particle-flow arrowhead along (`true`) or against the edge orientation.
@@ -457,7 +460,7 @@ enum Element {
         stroke: Stroke,
     },
     Mark {
-        drawable: kurvst::marks::MarkDrawable,
+        drawable: MarkDrawable,
         paint: MarkPaint,
         width: f64,
     },
@@ -564,7 +567,7 @@ impl Drawing {
         let mut placements = Vec::new();
         let mut fixed_arrows = Vec::new();
         let mut region_hrefs = Vec::new();
-        let mut batch = marks::Batch::new();
+        let mut batch = Batch::new();
         let mut edge_geometry = Vec::new();
         let mut momentum = Vec::new();
         for (edge, carrier) in laid.edges.iter().zip(&laid.carriers) {
@@ -622,8 +625,7 @@ impl Drawing {
                     0.0,
                 )?;
                 let template = batch.template(&drawing.momentum_arrow, &arrow_stroke())?;
-                fixed_arrow =
-                    Some(batch.push(template, &arrow, kurvst::marks::MarkStation::End, true));
+                fixed_arrow = Some(batch.push(template, &arrow, MarkStation::End, true));
             }
             edge_geometry.push(EdgeGeometry {
                 edge: edge.edge,
@@ -701,7 +703,7 @@ impl Drawing {
 
         // Every head, fixed decoration and searched proposal shares this one
         // candidate preparation pass. Do not call the engine inside edge loops.
-        let candidates = batch.geometry(kurvst::marks::MarkGeometryMode::Candidates)?;
+        let candidates = batch.geometry(MarkGeometryMode::Candidates)?;
         for (index, proposals) in momentum {
             placements[index].candidates = proposals.resolve(&candidates.marks)?;
         }
@@ -754,9 +756,8 @@ impl Drawing {
                 .filter_map(|(placement, &choice)| placement.candidates[choice].arrow_mark),
         );
         let geometry = batch.selected(&selected)?;
-        let heads: std::collections::BTreeMap<_, _> =
-            selected.into_iter().zip(geometry.marks).collect();
-        let shafts: std::collections::BTreeMap<_, _> = geometry
+        let heads: BTreeMap<_, _> = selected.into_iter().zip(geometry.marks).collect();
+        let shafts: BTreeMap<_, _> = geometry
             .shafts
             .into_iter()
             .map(|shaft| (shaft.carrier, shaft))
@@ -1064,7 +1065,7 @@ impl Drawing {
     fn paint_edge(
         drawing: &EdgeDrawing,
         shaft: &BezPath,
-        mark: Option<&kurvst::marks::MarkGeometryOutput>,
+        mark: Option<&MarkGeometryOutput>,
         href: &str,
         layers: &mut Vec<Element>,
         strokes: &mut Vec<CollisionStroke>,
@@ -1116,7 +1117,7 @@ impl Drawing {
     }
 
     fn paint_head(
-        mark: kurvst::marks::MarkGeometryOutput,
+        mark: MarkGeometryOutput,
         paints: &[MarkPaint],
         width: f64,
         layers: &mut Vec<Element>,
@@ -1136,7 +1137,7 @@ impl Drawing {
 
     fn paint_arrow(
         drawing: &EdgeDrawing,
-        mark: &kurvst::marks::MarkGeometryOutput,
+        mark: &MarkGeometryOutput,
         shaft: &BezPath,
         href: &str,
         layers: &mut Vec<Element>,
@@ -1808,15 +1809,12 @@ mod tests {
 
     #[test]
     fn one_candidate_and_one_selected_geometry_call_cover_the_entire_drawing() {
-        marks::Batch::take_calls();
+        Batch::take_calls();
         let scene = bubble(true);
         scene.render(typeset(&scene)).unwrap();
         assert_eq!(
-            marks::Batch::take_calls(),
-            [
-                kurvst::marks::MarkGeometryMode::Candidates,
-                kurvst::marks::MarkGeometryMode::Selected,
-            ]
+            Batch::take_calls(),
+            [MarkGeometryMode::Candidates, MarkGeometryMode::Selected]
         );
     }
 
@@ -1967,7 +1965,7 @@ mod tests {
             "parts":[{"shape":"circle"},{"gap":{"points":2,"ratio":0}},{"shape":"stealth"}]
         }))
         .unwrap();
-        let mut batch = marks::Batch::new();
+        let mut batch = Batch::new();
         let template = batch
             .template(&drawing.momentum_arrow, &arrow_stroke())
             .unwrap();
@@ -1985,9 +1983,7 @@ mod tests {
             &mut batch,
         )
         .unwrap();
-        let geometry = batch
-            .geometry(kurvst::marks::MarkGeometryMode::Candidates)
-            .unwrap();
+        let geometry = batch.geometry(MarkGeometryMode::Candidates).unwrap();
         let candidates = proposals.resolve(&geometry.marks).unwrap();
         for candidate in candidates {
             let geometry = batch.selected(&[candidate.arrow_mark.unwrap()]).unwrap();

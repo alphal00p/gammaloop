@@ -1,0 +1,125 @@
+{
+  "schema": 1,
+  "scope": "Bounded ScopeD D1-D3 corrections only",
+  "state": "implementation complete; new independent Astra review required before integration",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-staged-drawing-fixes",
+  "source_candidate": "817b5886a50276efea05ab860d22016e1fb0c203",
+  "source_base": "438b61500da4b32841c64211103e5da6fc4c4a72",
+  "change_id": "zlzwmtltsknrzzxzwynmwylrsvuloprt",
+  "bookmark": "generation-staged-drawing-fixes",
+  "author": "Lucien Huber <im@lcnbr.ch>",
+  "review_source": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-staged-r1-drawings/review.json",
+    "sha256": "1d636a47228d2b4da44a7d0ff8e65d6da2587ed17d2e1439ba2c796a419863d2",
+    "decision": "REQUEST_CHANGES"
+  },
+  "responses": {
+    "D1": "Both sync recipes install Kurvst LICENSE* using their existing install_assets owner. The regression executes both actual source-copy helpers on existing extracted bundles with LICENSE.tiptoe removed, then checks all root-license bytes and mark.typ. The common production notice owner and authoritative texts are unchanged.",
+    "D2": "Move gate after declared Rust1.98.1 setup; install Python3.13 and Maturin==1.15.0. Existing packaging-test owner shares both fixture manifests with explicit online cargo fetch preparation; offline cargo/maturin fixture commands remain offline. Actual initially empty Cargo home passes all five tests. Injected cargo exit42 fails preparation before any tests and fails the offline test, both propagated as exit1. No skips or warm-cache seed.",
+    "D3": "Import BTreeMap, cfg(test) RefCell and mem, EdgeDrawing, Batch and Kurvst mark types at module scope; use imported names in new shared-mark adapters and their tests. Leave unrelated historical type paths untouched. No semantic, precision, error conversion or geometry changes; no Rust-policy departures."
+  },
+  "changed_file_sha256": {
+    ".github/workflows/linnet-py-wasm.yml": "85f4b6e4c2f1a3426fdab46b5d23225d34e969ef8dacace3838063562a998f54",
+    "crates/linnest/src/svg/marks.rs": "a606cff09508b0abc344ed93db07def9df879cb1b92fad8bba99c74c07bc1a81",
+    "crates/linnest/src/svg/mod.rs": "a3aec874ac7b197058f230a62ec475831c46ac2ec87a379b1e90d8f232c6556e",
+    "docs/architecture/generation-drawing-notices.typ": "bdc94f6b0d33decc2871156149ce0fb63e9b23973392fb2c224edd7881af1f07",
+    "just/drawing.just": "91fd65747acfd10cb9845415b1eca11a9d1bfeca6b4be06bd51744f70c83198a",
+    "tests/packaging/test_drawing_notices.py": "857a3da13666fe9b40b0c701a9d4be6111f984937f64a6c94aed323ef3e10c15"
+  },
+  "receipt_identity_note": "This tracked receipt excludes its own hash and enclosing commit ID to avoid self-reference; stable change ID plus complete source/input hashes identify the work. Final commit ID is recorded in the handoff and untracked final-state.json.",
+  "preserved_input_sha256": {
+    "Cargo.lock": "def8dd7be5f208f4a290a4556081f7a63d10a5ae070c5df1808c1d350fa6161e",
+    "tydenso/Cargo.lock": "f1f0573d5f1c02d4ddb73d4491514cd291ae94ded7d84627342226917ca41dd0",
+    "examples/notebooks/symbolica-host/Cargo.lock": "03e18f00dbba096e08978063fd857d6558659f9f75e0ab09d73be3e543882c5a",
+    "uv.lock": "0ad8d1a18d9c520d298ff36ec20a746f9a63c7e0fdebe14e739a574cbb4fabf8",
+    "flake.lock": "e10c5893b513d4c7120d841b47fbfddffb3ac4f1f5cb46a18c0f7542cbde8534",
+    "nix-ci.nix": "e031749e51a33ee48bc5c653d13c2dc7e7d3a51bddea77fc3c67d01ac217c540",
+    "crates/linnest/build_assets.rs": "563cb2fe49034d946366cdd723f1f7fa779ec6494de9a898717c4a01cccd3936",
+    "vendor/clarabel/LICENSE.md": "6e2f382771f8aab58e4868ddd0afe0c2fefe6b54f9681493a9c3d0f32906cfe1",
+    "crates/linnest/layout/native/LICENSE.networkx": "6025f323ea29dc2f0ee0abd9523bf910186f55b0e148e6ebf646c55566278e2e",
+    "crates/linnest/typst/LICENSE": "397f68dfabb4c82acba023b23a640974a8444f8fca6a6655475ea3c3f902f22a",
+    "crates/linnest/typst/LICENSE.clarabel": "6e2f382771f8aab58e4868ddd0afe0c2fefe6b54f9681493a9c3d0f32906cfe1",
+    "crates/linnest/typst/LICENSE.networkx": "6025f323ea29dc2f0ee0abd9523bf910186f55b0e148e6ebf646c55566278e2e",
+    "crates/kurvst/typst/LICENSE": "397f68dfabb4c82acba023b23a640974a8444f8fca6a6655475ea3c3f902f22a",
+    "crates/kurvst/typst/LICENSE.tiptoe": "d66fa6047eae941af8c532d6361f73dc36423deb0c50b73094cebb63b36e5b4d",
+    "crates/kurvst/src/marks.rs": "83342ab168d78376e71bc59fdbb0286aa2e5f29d3b2e96635f74a14266d95dae",
+    "crates/kurvst/typst/src/mark.typ": "5b3ccc758a90a88ac25c16913fb13270ed7435d9e7000d6b75938f965c9e4fe2",
+    "crates/kurvst/typst/kurvst.wasm": "6da2f870339592b6c7fedbad62e07921342e083f3e5eaf1c861a6e7dd292149e",
+    "crates/linnest/typst/linnest.wasm": "c921635e81cf38e34232782f39f3aef65eaac188f57584ff37ee942bbeb72e9d",
+    "crates/kurvst/typst/docs/manual.pdf": "67379fe2b543e5617e49626a5715bb7d98a79679021d1fc65ea418d9fe72ebd1"
+  },
+  "checks": [
+    {
+      "name": "clean-cache packaging",
+      "tool_install": "Pinned Maturin1.15.0 independently installed from Python package distribution into a fresh task-owned venv; version verified; venv removed. See ci-tool-install.log.",
+      "result": "PASS: 5 tests in64.665s; no skips",
+      "command": "CARGO_BUILD_JOBS=2 nix develop --max-jobs 2 --cores 2 -c bash -c 'python3 --version; cargo --version; maturin --version; mkdir target/staged-drawing-fixes/clean-cargo-home; export CARGO_HOME=\"$PWD/target/staged-drawing-fixes/clean-cargo-home\"; python3 tests/packaging/test_drawing_notices.py --prepare-offline-fixtures -v'",
+      "tools": "Python3.13.15; cargo1.98.1; maturin1.15.0",
+      "cache": "New task-owned empty Cargo home, no developer cache/config copied. Explicit fixture fetch precedes offline builds. Root sdist metadata may itself fetch workspace dependencies online. Existing compiler/build caches are preserved and not reset or overridden."
+    },
+    {
+      "name": "failure propagation",
+      "result": "PASS: injected cargo exit42 causes bootstrap exit1 before test execution and offline fixture test exit1",
+      "command": "nix develop /nix/store/60rl7l3n96rrk6hcyi2my43azjhbrckz-nix-shell-env.drv -c bash target/staged-drawing-fixes/check-failure-propagation.sh",
+      "logs": [
+        "failure-propagation.log",
+        "bootstrap-failure.log",
+        "offline-failure.log"
+      ]
+    },
+    {
+      "name": "scoped Rust validation",
+      "result": "PASS: linnest all-target Clippy with -D warnings; 103 label/SVG/mark nextest tests, 237 skipped by selection; changed-file rustfmt edition2021 and Ruff formatting; Typst note compile timestamp0",
+      "command": "CARGO_BUILD_JOBS=2 RAYON_NUM_THREADS=2 INSTA_UPDATE=no nix develop /nix/store/60rl7l3n96rrk6hcyi2my43azjhbrckz-nix-shell-env.drv -c bash target/staged-drawing-fixes/validate-scoped.sh",
+      "script": "validate-scoped.sh contains exact cargo/format/Typst invocations",
+      "warnings": "Two inherited Clarabel dependency warnings: unused traits glob and mismatched lifetime syntax. No warnings in changed Linnest code."
+    },
+    {
+      "name": "actual committed Typst WASM runtime",
+      "result": "PASS: 3 tests in0.732s; no skips; typst availability explicitly checked",
+      "command": "nix develop /nix/store/60rl7l3n96rrk6hcyi2my43azjhbrckz-nix-shell-env.drv -c bash -c 'command -v typst; TMPDIR=\"$PWD/target/staged-drawing-fixes\" python3 crates/linnest/layout/native/test_wasm.py -v'"
+    }
+  ],
+  "environment": "License preserved if already exported, otherwise silently loaded from current user XDG config; no license output. Canonical Nix shell initially realized from this feature workspace; its realized shell derivation was reused for later checks to avoid rebuilding unrelated Clinnet tools. Rust1.98.1 and linker settings checked. No CARGO_TARGET_DIR override, shared cache deletion, kernel pin changes, NixCI enablement, upload or push.",
+  "initial_attempts": "First scoped command stopped at missing ruff in canonical PATH (exit127); resolved with explicit Nix-store Ruff0.16.3. Superseded shell-realization-only commands were stopped; their results are not claimed as validation. The first complete Rust selection passed103 tests, then its running script retained an incorrect edition2024 format check and exited1. Corrected to the Linnest crate edition2021 and reran the final scoped script successfully. The initial log is retained.",
+  "prior_review_checks_not_repeated": "Prior canonical Nix WASM license/SPDX validity check,34 recorded SVG hashes and two exact independent renders remain prior evidence, not renewed final artifact certification.",
+  "pending_gates": [
+    {
+      "kind": "WASM reproduction",
+      "detail": "Fresh canonical Nix Kurvst matches committed SHA6da2f870339592b6c7fedbad62e07921342e083f3e5eaf1c861a6e7dd292149e. Linnest differs: committed c921635e81cf38e34232782f39f3aef65eaac188f57584ff37ee942bbeb72e9d vs rebuilt530c89c785284be1351ba4acb2ac948ce3e7e13590c3190b58e44857197d483b. All executable/code sections match. Data section differs by156 bytes (two repeated64-byte blocks and28 isolated bytes), name section differs; printable data strings match. Linnet enables AHash compile-time RNG (already present in base) and imports moved source locations; these are plausible causes, not a completed byte-level provenance proof. Do not claim byte-exact final Linnest reproduction. Required: final-source/seed/source-location audit and renewed bundle/runtime/SVG certification."
+    },
+    {
+      "kind": "Generated manual",
+      "detail": "Kurvst manual.typ now documents Mark specifications/Tiptoe; committed manual.pdf remains base blob2c4b32df552e86ab8b6d3133c2903e624e018a83 and lacks that section. A fresh timestamp0 compile succeeds (db25c8b6bd9ef4fe93891e3d82271568abe880b8dec9dd91f3c01d525b65cfaf). Treat as explicitly outstanding source31/final-doc artifact work, not current-documentation certification."
+    },
+    {
+      "kind": "Distribution",
+      "detail": "Actual final repaired/compressed native host and Pyodide wheels and external Community locked-revision wheels remain unverified: inspect final METADATA License-File entries, shipped license bytes and RECORD hashes, then installed offline/static/optional-widget behavior. Root sdist test proves inclusion/extraction only, not build/install of the final archive. Standalone Linnet packaging remains absent: any later restoration must retain license-files=[LICENSE,licenses/*], required Clarabel/NetworkX and retained Tiptoe attribution, and actual-wheel inspection. Source38 may remove Tiptoe only after replacing its owner."
+    },
+    {
+      "kind": "Cross-scope",
+      "detail": "No whole-candidate, physics, oracle, full documentation, full460, final distribution or WP3 approval claimed. Historical3 frame hashes and7+20 registry mismatches were not reclassified as passes or investigated outside this scope."
+    }
+  ],
+  "retained_evidence": {
+    "directory": "target/staged-drawing-fixes",
+    "sha256": {
+      "ci-tool-install.log": "bcfaa126311204134d94dd98ac7b8da59b77e8ce824be860e0d15c16c3687e73",
+      "scoped-validation-initial.log": "482bd43536663d2862154f809ad8380d617a6b1d2f3483b9808b9985457d6073",
+      "scoped-clippy.log": "70872d5e73fbd57317be8b8a59c969378623f9275fe96f792113c6d703a2649b",
+      "clean-packaging.log": "ed0ee9cff1fcf1055914e3cf0d513442b6eb773fc07b7c93462998599956f445",
+      "scoped-validation.log": "f4f9d6fa5cb74d8b3c2ad0c12eca416e90eece9b0a28e326fe687d88210e05d6",
+      "wasm-runtime.log": "8a1b9d212cc96d66735a1e522ac7d2ddcc56967fb106838bd3c4b389aea0478d",
+      "failure-propagation.log": "4fde9c65ebaa3e3c1e82eefbacf3712c76a6b87b9807cbad182f416fba2dfcda",
+      "bootstrap-failure.log": "17bf8bf714d4539f15c956aceb9ca20f3b923ee4e5f23209eb84872c66bc6244",
+      "offline-failure.log": "0ae7653b94c4aebde5a457304de6ca11cc9543ed674a3b4c45c9a2e9811ad5fe",
+      "reused-shell-environment.log": "6e4db676bd12cd7f4e7cfe76aba18e14796bdbbf310933d09a9eb27204bd4371",
+      "notices.pdf": "e7d7b120265a5d59dca379f943b8866e5a2a66eb9763b15aba065ba236273c77",
+      "validate-scoped.sh": "c78b08e87d8eafc227f0f6df08a2b0ab89d76f2b26b3eb9695e83aa84b8d1541",
+      "check-failure-propagation.sh": "113d18d7ecabe674cf3eb20905bf803ec61d2740673f9864cbf065ad5b0da52e"
+    },
+    "cache": "Task-owned initially empty clean-cargo-home retained with fetched dependencies for independent review; temporary fixtures and injected tools cleaned.",
+    "processes": "All task-owned checks finished; no retained background process."
+  },
+  "boundaries": "Frozen/source/other contributor refs and checked-out files untouched. No source19+, parallel ports or source38 geometry replacement; retained Tiptoe. Three historical frame expectations and7 inherited+20 new doc scope issues untouched. No parent integration or publication."
+}

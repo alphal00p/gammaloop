@@ -4,7 +4,10 @@
 //! current main's Standard Model corrections and the native initial-state and
 //! ghost-loop conventions. Every coordinate and symbolic fragment is compared
 //! exactly, without reimporting or rewriting the stored reference.
+//! The staged frame migration is certified against the preserved approved input
+//! in docs/architecture/evidence/generation-integration/runtime-admission.json.
 
+use crate::debug_tags;
 use crate::graph::Graph;
 use crate::uv::UltravioletGraph;
 use feynkit_generator::{
@@ -12,6 +15,7 @@ use feynkit_generator::{
 };
 use linnet::half_edge::involution::Hedge;
 use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
+use serde_json::ser;
 use serde_json::{Value, json};
 use symbolica::atom::AtomCore;
 
@@ -119,7 +123,19 @@ fn finalized_graph_matches_gammaloop_reference() {
         assert!(!generated.is_empty(), "{name}");
         let snapshots = generated
             .iter()
-            .map(|diagram| snapshot(&Graph::from_feynkit(diagram, None, true).unwrap(), &model))
+            .map(|diagram| {
+                let snapshot = snapshot(&Graph::from_feynkit(diagram, None, true).unwrap(), &model);
+                debug_tags!(#generation, #graph, #inspect, #dump;
+                    stage = "finalized_reference_boundary",
+                    case = name,
+                    file.native = %diagram.to_json().unwrap(),
+                    file.denominator = %diagram.denominator_expression().unwrap().to_canonical_string(),
+                    file.public_routing = ?diagram.clone().with_canonical_loop_momentum_basis().unwrap().loop_momentum_basis(),
+                    file.runtime = %snapshot,
+                    "Finalized native and runtime reference frames"
+                );
+                snapshot
+            })
             .collect::<Vec<_>>();
         result.insert(name.into(), json!(snapshots));
     }
@@ -129,14 +145,25 @@ fn finalized_graph_matches_gammaloop_reference() {
         result.keys().collect::<Vec<_>>(),
         expected.keys().collect::<Vec<_>>()
     );
+    let mut differences = Vec::new();
     for (name, diagrams) in &result {
         let diagrams = diagrams.as_array().unwrap();
         let reference = expected[name].as_array().unwrap();
         assert_eq!(diagrams.len(), reference.len(), "diagram inventory: {name}");
         for (index, (actual, expected)) in diagrams.iter().zip(reference).enumerate() {
             for (field, expected) in expected.as_object().unwrap() {
-                assert_eq!(&actual[field], expected, "{name} diagram {index}: {field}");
+                if &actual[field] != expected {
+                    differences.push(json!({
+                        "case": name, "diagram": index, "field": field,
+                        "actual": actual[field], "expected": expected,
+                    }));
+                }
             }
         }
     }
+    assert!(
+        differences.is_empty(),
+        "{}",
+        ser::to_string_pretty(&differences).unwrap()
+    );
 }

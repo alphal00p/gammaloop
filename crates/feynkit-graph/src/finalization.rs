@@ -327,13 +327,11 @@ impl FeynmanDiagramBuilder {
             }
             Ok(())
         };
-        // Tensor ports may name indices even when the expression does not, as
-        // for a ranked zero; scalar payloads without an index head are final.
+        // Admitted tensors may retain contracted indices even in a scalar
+        // literal zero. The interface owner transports that hidden history too.
         let translate =
             |tensor: &mut SymbolicTensor<PartialStructure>| -> Result<(), DiagramError> {
-                if let Some(frame) = &frame
-                    && !(tensor.is_scalar() && !owners.contains(tensor.expression()))
-                {
+                if let Some(frame) = &frame {
                     *tensor = NumeratorInterface::translate(tensor, |atom| relabel(frame, atom))?;
                 }
                 Ok(())
@@ -1059,6 +1057,9 @@ mod tests {
     use crate::tests::scalar_model;
     use crate::{DiagramCut, DiagramCutSide, DiagramThresholdCandidate, VertexSlot};
     use feynkit_model::{ModelError, ParticleId, VertexRuleId};
+    use spenso::structure::representation::{Minkowski, RepName};
+    use std::collections::HashSet;
+    use symbolica::function;
     use symbolica::parser::ParseSettings;
 
     /// An edge of a generated diagram, in provisional order.
@@ -1542,6 +1543,104 @@ mod tests {
         let diagram = builder.build().unwrap();
         let expected = NumeratorInterface::admit(fragment(true), None).unwrap();
         assert!(diagram.numerator().unwrap().same_value(&expected));
+    }
+
+    #[test]
+    fn finalization_transports_hidden_scalar_history_in_every_tensor_destination() {
+        // Both owner maps are nonidentity: internal provisional edge/half-edge 0
+        // follows the external legs. Scalar rank and a literal zero payload do
+        // not expose the contracted index retained by checked rewriting.
+        for owner in [symbols::edge_index(), symbols::hedge_index()] {
+            for destination in 0..5 {
+                let mut builder = generated(
+                    scalar_model(),
+                    2,
+                    &[
+                        Internal(0, 1, "phi"),
+                        Leg(1, Source, "phi", Out, 1),
+                        Leg(0, Sink, "phi", In, 0),
+                    ],
+                );
+                for vertex in &mut builder.vertices {
+                    vertex.interaction = None;
+                }
+                builder.edges[1].1.source_slot = VertexSlot(1);
+                builder.edges[2].1.target_slot = VertexSlot(1);
+                let (_, frame) = final_graph(&builder);
+                let final_index = if owner == symbols::edge_index() {
+                    frame.edges[0]
+                } else {
+                    frame.half_edges[0][0].0
+                };
+                assert_ne!(final_index, 0);
+                let label = function!(owner, 0, 1);
+                let final_label = function!(owner, final_index, 1);
+                let port = Minkowski {}.new_rep(4).to_symbolic([label.clone()]);
+                let contracted = NumeratorInterface::admit(
+                    function!(symbols::momentum(), 0, &port)
+                        * function!(symbols::momentum(), 0, &port),
+                    None,
+                )
+                .unwrap();
+                assert!(contracted.is_scalar());
+                let zero = contracted.with_checked_expression(Atom::Zero).unwrap();
+                assert_eq!(zero.explicit_indices().unwrap().count(), 1);
+                let expected = NumeratorInterface::translate::<DiagramError>(&zero, |atom| {
+                    Ok(atom
+                        .replace(label.to_pattern())
+                        .with(final_label.to_pattern()))
+                })
+                .unwrap();
+                match destination {
+                    0 => builder.vertices[0].numerator = zero,
+                    1 => builder.edges[0].1.numerator = zero,
+                    2 => {
+                        // Keep the explicit aggregate consistent with its
+                        // fragments; the aggregate alone carries the history.
+                        builder.vertices[0].numerator =
+                            NumeratorInterface::admit(Atom::Zero, None).unwrap();
+                        builder.numerator = Some(zero);
+                    }
+                    3 => builder.numerator_prefactor = zero,
+                    4 => builder.projector = zero,
+                    _ => unreachable!(),
+                }
+                let diagram = builder.build().unwrap();
+                diagram.validate().unwrap();
+                let actual = match destination {
+                    0 => &diagram.vertex(Some(VertexId(0))).unwrap().numerator,
+                    1 => &diagram.graph[EdgeIndex(frame.edges[0])].numerator,
+                    2 => diagram.numerator().unwrap(),
+                    3 => diagram.numerator_prefactor(),
+                    4 => diagram.projector(),
+                    _ => unreachable!(),
+                };
+                assert!(actual.is_scalar() && actual.is_zero());
+                assert_eq!(
+                    actual.explicit_indices().unwrap().collect::<HashSet<_>>(),
+                    expected.explicit_indices().unwrap().collect::<HashSet<_>>(),
+                    "owner {owner:?}, destination {destination}",
+                );
+                let probe = |label| {
+                    NumeratorInterface::admit(
+                        function!(
+                            symbols::momentum(),
+                            1,
+                            Minkowski {}.new_rep(4).to_symbolic([label])
+                        ),
+                        None,
+                    )
+                    .unwrap()
+                };
+                // Reject a third occurrence, but retain a new free port in a
+                // legitimate multiplication by an unrelated vector.
+                assert!(actual.multiply(&probe(final_label)).is_err());
+                let free = probe(function!(owner, 99, 1));
+                let product = actual.multiply(&free).unwrap();
+                assert!(product.is_zero());
+                assert!(!product.is_scalar());
+            }
+        }
     }
 
     #[test]

@@ -13,6 +13,46 @@ title = "Implemented architecture"
 summary = "How the current runtime, physics layers, parsers, and symbolic engines are organized."
 
 [[section.note]]
+id = "generation-runtime-admission"
+title = "Generation runtime tensor admission"
+summary = "Runtime explicit-index validation before fragment composition and an exact staged native-frame equivalence certificate awaiting review."
+source = "docs/architecture/generation-runtime-admission.typ"
+kind = "Implementation record"
+status = "Explicit-index fix and certified frame migration awaiting independent review"
+lifecycle = "investigation"
+owner = "unassigned"
+reviewed_at = "2026-10-27"
+review_ref = "817b5886a50276efea05ab860d22016e1fb0c203"
+products = ["gammaloop", "feynkit"]
+topics = ["generation", "parsing", "validation"]
+review_triggers = ["crates/gammalooprs/src/graph/parse/**", "crates/feynkit-graph/src/numerator_interface.rs"]
+
+[[section.note]]
+id = "generation-staged-transport-fix"
+title = "Generation staged scalar transport fix"
+summary = "A1 response: generated finalization transports hidden scalar index history through the existing admitted interface owner."
+source = "docs/architecture/generation-staged-transport-fix.typ"
+kind = "Implementation receipt"
+status = "Candidate; new independent Astra review required"
+lifecycle = "investigation"
+owner = "unassigned"
+reviewed_at = "2026-10-27"
+review_ref = "817b5886a50276efea05ab860d22016e1fb0c203"
+products = ["gammaloop", "linnet", "feynkit"]
+topics = ["generation", "validation"]
+review_triggers = ["crates/feynkit-graph/src/finalization.rs", "crates/feynkit-graph/src/numerator_interface.rs"]
+
+[[section.note.scope]]
+path = "crates/feynkit-graph/src/finalization.rs"
+symbol = "generated admitted tensor transport"
+anchor = "        // Admitted tensors may retain contracted indices even in a scalar\n"
+end_anchor = "        for (_, _, vertex) in graph.iter_nodes_mut() {"
+# A1 implementation attestation 2026-10-27: use the existing interface owner even
+# for scalar literal zeros with retained contracted history. New review pending;
+# unrelated historical scope fingerprints remain unchanged.
+digest = "ccbf0871fd75826f2cfaf68ba676bbbb7f85db78"
+
+[[section.note]]
 id = "generation-drawing-ports"
 title = "Generation drawing ports"
 summary = "Independent plugin removal and contact-first label replay, approved notice preservation, and the deferred shared mark-engine prerequisite."

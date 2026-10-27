@@ -327,6 +327,14 @@ impl NumeratorInterface {
                 **output = target.clone();
             }
         });
+        // Identity transport must retain the admitted carrier, including open
+        // ports that indexed renaming cannot introduce. Check the entire retained
+        // history map: a zero payload alone does not prove unchanged indices.
+        if expression == *tensor.expression()
+            && renaming.iter().all(|(source, target)| source == target)
+        {
+            return Ok(tensor.clone());
+        }
         if !tensor.structure().open_positions().is_empty() && !expression.is_zero() {
             if logical == original_slots {
                 return Ok(tensor
@@ -653,6 +661,78 @@ mod tests {
                     .map(|index| rep.slot(PartialIndex::Explicit(index)))
                     .collect::<Vec<_>>()
             );
+        }
+    }
+
+    #[test]
+    fn identity_transport_preserves_open_ports_and_ranked_zero() {
+        let rep = Minkowski {}.new_rep(4);
+        let open = AbstractIndex::Open {
+            owner: 801,
+            axis: 0,
+        };
+        let head = tensor_symbol!("feynkit_graph::identity_open_ports");
+        for port in [
+            rep.to_symbolic([]),
+            rep.slot::<AbstractIndex, _>(open).to_atom(),
+            rep.slot::<AbstractIndex, _>(open.scoped(symbol!("identity_open_scope")))
+                .to_atom(),
+        ] {
+            for (expression, interface) in [
+                (Atom::Zero, Some(NumeratorInterface(vec![port.clone()]))),
+                (function!(head, &port), None),
+            ] {
+                let source = NumeratorInterface::admit(expression, interface).unwrap();
+                let mapped =
+                    NumeratorInterface::translate::<DiagramError>(&source, |atom| Ok(atom.clone()))
+                        .unwrap();
+                assert!(mapped.same_value(&source));
+                assert_eq!(
+                    mapped.structure().logical_slots(),
+                    source.structure().logical_slots()
+                );
+                assert_eq!(
+                    mapped.explicit_indices().unwrap().collect::<HashSet<_>>(),
+                    source.explicit_indices().unwrap().collect::<HashSet<_>>()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn zero_transport_checks_hidden_indices_before_certifying_identity() {
+        let rep = Minkowski {}.new_rep(4);
+        let source_index = AbstractIndex::Named(symbols::hedge_index().into(), 1, 1);
+        let target_index = AbstractIndex::Named(symbols::hedge_index().into(), 9, 1);
+        let port = |index: AbstractIndex| rep.slot::<AbstractIndex, _>(index).to_atom();
+        let left = tensor_symbol!("feynkit_graph::identity_history_left");
+        let right = tensor_symbol!("feynkit_graph::identity_history_right");
+        let source = NumeratorInterface::admit(
+            function!(left, port(source_index)) * function!(right, port(source_index)),
+            None,
+        )
+        .unwrap()
+        .with_checked_expression(Atom::Zero)
+        .unwrap();
+        assert!(source.is_scalar());
+        let same = NumeratorInterface::translate::<DiagramError>(&source, |atom| Ok(atom.clone()))
+            .unwrap();
+        let mapped = NumeratorInterface::translate::<DiagramError>(&source, |atom| {
+            Ok(atom
+                .replace(source_index.to_atom().to_pattern())
+                .with(target_index.to_atom()))
+        })
+        .unwrap();
+        for (value, retained) in [(&same, source_index), (&mapped, target_index)] {
+            assert!(value.is_zero());
+            assert!(value.is_scalar());
+            assert_eq!(
+                value.explicit_indices().unwrap().collect::<HashSet<_>>(),
+                HashSet::from([retained])
+            );
+            let probe = NumeratorInterface::admit(function!(left, port(retained)), None).unwrap();
+            assert!(matches!(value.multiply(&probe),
+                Err(TensorCompositionError::InvalidExplicitMultiplicity { index, occurrences: 3 }) if index == retained));
         }
     }
 

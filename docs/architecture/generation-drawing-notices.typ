@@ -82,3 +82,44 @@ The original workspace and bookmark `generation-drawing-notices` are retained
 unchanged. The drawing replay preserves the common license selector and
 NetworkX/Clarabel files; see #link("generation-drawing-ports.typ")[its receipt]
 for current validation and deferred mark-engine work.
+
+== Staged drawing correction review
+
+The bounded D1–D3 correction starts from the frozen staged candidate
+`817b5886a50276efea05ab860d22016e1fb0c203`. Both development sync recipes now copy
+all Kurvst root licenses, including retained Tiptoe attribution, alongside the
+shared mark source. The packaging regression upgrades an existing extracted
+bundle with its Tiptoe notice deliberately absent and compares every restored
+root notice byte for both recipes. The common production asset selector and
+authoritative Clarabel, NetworkX and Tiptoe license texts remain unchanged.
+
+The Community WASM workflow installs its declared Rust toolchain, Python 3.13
+and pinned Maturin before the packaging gate. An explicit online preparation
+step in the existing packaging test owner fetches the same two fixture manifests
+used by the offline build tests; preparation errors propagate before tests run.
+New shared-mark adapters use explicit module-scope type imports. The
+#link("evidence/generation-drawing-notices/staged-corrections.json")[correction receipt]
+records the exact changes, commands, results, identities and retained evidence.
+This correction awaits a new independent Astra review before integration.
+
+Artifact certification remains narrower than source validation. The previous
+canonical Nix Kurvst WASM reproduces its committed bytes. The previous fresh
+Linnest WASM differs from the committed artifact in data and name sections,
+although executable/code sections match. Compile-time AHash RNG and source
+location changes are plausible causes, not a proven explanation. Final source,
+seed and source-location auditing and renewed bundle/runtime/SVG certification
+remain required; this correction performs no determinism refactor.
+
+The committed Kurvst manual PDF still lacks the new mark-specification section,
+although the manual source compiles. Generated manual work belongs to source31
+and the final documentation gate. Actual final repaired/compressed native,
+Pyodide and externally locked Community wheels still require installed behavior
+checks and inspection of METADATA License-File entries, notice bytes and RECORD
+hashes. Fixture wheels do not certify those distributions. Standalone Linnet
+packaging remains absent; restoration must carry its root and third-party
+licenses, including Tiptoe while this engine remains present.
+
+Three historical frame-hash assertions and the seven inherited plus twenty new
+documentation-scope issues remain parent review items. Their expectations and
+unrelated scope digests are unchanged. No full-candidate, physics, final manual,
+distribution or WP3 approval is claimed here.

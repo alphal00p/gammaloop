@@ -1,0 +1,212 @@
+{
+  "schema": 1,
+  "finding": "Astra scope A A1 (P1): scalar finalization skipped hidden contracted index history",
+  "status": "candidate; new independent Astra review required",
+  "approved_base": "438b61500da4b32841c64211103e5da6fc4c4a72",
+  "reviewed_candidate": "817b5886a50276efea05ab860d22016e1fb0c203",
+  "code_commit": "7918d2a6c596c86519907bec96a6ca8a5776bea8",
+  "code_change": "xnzywynqvmmvqlpwzlzukrvuputttmuw",
+  "files": [
+    "crates/feynkit-graph/src/finalization.rs",
+    "docs/architecture/generation-staged-transport-fix.typ",
+    "docs/developers.toml",
+    "docs/architecture/evidence/generation-staged-transport-fix/receipt.json"
+  ],
+  "code_file_identities": [
+    {
+      "path": "crates/feynkit-graph/src/finalization.rs",
+      "sha256": "7f537b6608fd6f82402675fc28f2e0907d3916a0df5fae8c03412ad1273da221"
+    },
+    {
+      "path": "docs/architecture/generation-staged-transport-fix.typ",
+      "sha256": "329e47d01c1f207126452f5662fbb304133207e54a497d318490f47f988cad4d"
+    },
+    {
+      "path": "docs/developers.toml",
+      "sha256": "4e508737edc98ab9bc469d79390b976a46c7c485be151fdc80536a074e1567b6"
+    }
+  ],
+  "response": "Remove only the scalar/visible-expression shortcut; every generated admitted tensor delegates to existing NumeratorInterface::translate. Imports and plain overall-factor atoms retain their existing paths.",
+  "preserved": "Raw admission before momentum reduction; checked-zero history; declared/inferred ports; dynamic actual-owner rules; shared template publication; graph numerator factorization. No new metadata owner, grouping physics, kernel/lock or historical expectation edits.",
+  "environment": {
+    "nix_shell": "/nix/store/3jxbvlchm6afbs8fsi3md5n9ic3azic2-nix-shell-env.drv",
+    "profile": "ci-optim",
+    "profile_authority": "justfile ci_cargo_profile and canonical CI recipes",
+    "kernel": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+    "jobs": 2,
+    "test_threads": 2,
+    "rayon_threads": 2,
+    "license": "Existing environment preserved or silently loaded; value not recorded.",
+    "cargo_cache": "Existing ~/.cargo/config.toml build.build-dir=/common/build-cache/lcnbr/{workspace-path-hash}; no overrides or manual seeding.",
+    "nix_ci_enable": false
+  },
+  "old_failure": {
+    "command": "nix develop <recorded-shell> -c cargo test --locked -p feynkit-graph --profile ci-optim --lib finalization::tests::finalization_transports_hidden_scalar_history_in_every_tensor_destination -- --exact --nocapture",
+    "exit": 101,
+    "tests_executed": 1,
+    "result": "Retained edge(0,1), expected edge(2,1).",
+    "provenance": {
+      "base": "817b5886a50276efea05ab860d22016e1fb0c203",
+      "old_production_exact_base": true,
+      "regression_test_byte_identical_before_after": true,
+      "old_full_sha256": "d17faed9614f0a3d8b221c06f1e5a1725ca0c136e4821a37050a6d854b0691ba",
+      "new_full_sha256": "7f537b6608fd6f82402675fc28f2e0907d3916a0df5fae8c03412ad1273da221",
+      "old_production_sha256": "f898ec16fe21f8802de53b1ed5516d8f3595fce2679556d6d1ed4db8a34e071a",
+      "new_production_sha256": "2375ca870b779662a15d392ab743d8a4c7a54565eb9f9cbe7a81ec59a8eee6e5",
+      "astra_original_sha256": "0279ad170e3ce1fc739fa310db89dc5ad1a25898716824a5d5ec66bf7e2d0d63"
+    },
+    "binary_sha256_at_run": "31c31114ee0760b4be806a4827c500e8a5e0ce8f2ddc2b280d66cf97041d3173",
+    "source": {
+      "path": "target/transport-fix/finalization-old-with-regression.rs",
+      "sha256": "d17faed9614f0a3d8b221c06f1e5a1725ca0c136e4821a37050a6d854b0691ba"
+    },
+    "log": {
+      "path": "target/transport-fix/old-regression.log",
+      "sha256": "fe09513c80f10848054596749b8097f1384bad31bc4e7d250a2ad29c083e5f0f"
+    },
+    "astra_original": {
+      "path": "target/transport-fix/astra-original-reproducer.rs",
+      "sha256": "0279ad170e3ce1fc739fa310db89dc5ad1a25898716824a5d5ec66bf7e2d0d63"
+    }
+  },
+  "new_pass": {
+    "command": "nix develop <recorded-shell> -c python3 target/transport-fix/run-controls.py",
+    "build_command": "cargo test --locked --profile ci-optim --lib --no-run --message-format=json -p feynkit-generator -p feynkit-graph -p feynkit-model",
+    "passed": 239,
+    "failed": 0,
+    "ignored": 0,
+    "zero_test_passes": 0,
+    "by_package": {
+      "feynkit-generator": 75,
+      "feynkit-graph": 123,
+      "feynkit-model": 41
+    },
+    "regression_command": [
+      "/common/build-cache/lcnbr/39/38dcfde7c00a27/ci-optim/deps/feynkit_graph-cd64d0419fd79674",
+      "finalization::tests::finalization_transports_hidden_scalar_history_in_every_tensor_destination",
+      "--exact",
+      "--nocapture",
+      "--test-threads=2"
+    ],
+    "regression_log": {
+      "path": "target/transport-fix/feynkit-graph__finalization_tests_finalization_transports_hidden_scalar_history_in_every_tensor_destination.log",
+      "sha256": "3b25376e9047b97451ced43c3e0aa5dfdfc32924f1f5c66f400c11881af839e3"
+    },
+    "subcases": "Two retained owner kinds (edge/half-edge), five tensor destinations (vertex/edge fragment, explicit aggregate, prefactor, projector). Nonidentity frame, expected history, third-occurrence rejection and collision-free ranked-zero multiplication.",
+    "b2_command": [
+      "cargo",
+      "test",
+      "--locked",
+      "-p",
+      "feynkit-generator",
+      "--profile",
+      "ci-optim",
+      "--lib",
+      "grouping::tests::vacuum_group28_original_pair_identity",
+      "--",
+      "--exact",
+      "--ignored",
+      "--nocapture",
+      "--test-threads=2"
+    ],
+    "b2_result": "Explicit ignored original GL028/GL034, four-dimensional SU3, N28=(7/2) N34 passed. No grouping physics edit.",
+    "b2_log": {
+      "path": "target/transport-fix/feynkit-generator__grouping_tests_vacuum_group28_original_pair_identity.log",
+      "sha256": "78878ed0baaf402391dedf41b6cd1b96823c91fab1f02f5741cf8ccee6457de7"
+    },
+    "b2_binary": {
+      "path": "/common/build-cache/lcnbr/39/38dcfde7c00a27/ci-optim/deps/feynkit_generator-820ca450194b8779",
+      "sha256": "b64ca54e84fc86748eb07d3ea6d0f36bb38aff813f9d0561a6cdc9887853eda1"
+    },
+    "binaries": {
+      "feynkit-generator": {
+        "path": "/common/build-cache/lcnbr/39/38dcfde7c00a27/ci-optim/deps/feynkit_generator-039d3c12db70059a",
+        "sha256": "a31a5e2a19c9584c8f76fc3cc6ccb75a780b9b3a76603e60964f34a0de07dea2"
+      },
+      "feynkit-model": {
+        "path": "/common/build-cache/lcnbr/39/38dcfde7c00a27/ci-optim/deps/feynkit_model-0cde7ac9c12446cb",
+        "sha256": "c7b947d478fe4cc9fa187712b4eb3f24d6b807f024300eeadc9fc00e1598ec13"
+      },
+      "feynkit-graph": {
+        "path": "/common/build-cache/lcnbr/39/38dcfde7c00a27/ci-optim/deps/feynkit_graph-cd64d0419fd79674",
+        "sha256": "a5097f62d199a0b938787eaf060134f40c1b1f53b8b3af4f209b110dd762afe9"
+      }
+    },
+    "selection": {
+      "path": "target/transport-fix/original-control-selection.json",
+      "sha256": "a49079fbf7cfbf2fe5a9ba50f105356d8abec82796f8db2ad8d21e4cadf8df39"
+    },
+    "results": {
+      "path": "target/transport-fix/controls.json",
+      "sha256": "790da564c7b197674fb9274e3e6c4684f8d977811724fa7103f08ce6c7c3f912"
+    },
+    "runner": {
+      "path": "target/transport-fix/run-controls.py",
+      "sha256": "7b540e4ef7b83e1b371767c2c9bcc1010aeb57387a111c7f885c25799893fdda"
+    }
+  },
+  "static_checks": [
+    {
+      "command": "nix develop <recorded-shell> -c just fmt -- --check",
+      "exit": 0,
+      "log": {
+        "path": "target/transport-fix/fmt.log",
+        "sha256": "b6e19c16e0d5f97094745b63c78c4f15238111c4de91b081bba774a71abff1e8"
+      }
+    },
+    {
+      "command": "nix develop <recorded-shell> -c cargo clippy -p feynkit-graph --all-targets --locked --profile ci-optim",
+      "exit": 0,
+      "warnings": 0,
+      "log": {
+        "path": "target/transport-fix/clippy.log",
+        "sha256": "c4e6efd43f7d52df78282610b9e211820a6dce4307aeff1ca43e8d02b323b63c"
+      }
+    },
+    {
+      "command": "nix develop <recorded-shell> -c typst compile --root . docs/architecture/generation-staged-transport-fix.typ target/transport-fix/note.pdf",
+      "exit": 0,
+      "log": {
+        "path": "target/transport-fix/note-typst.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      }
+    },
+    {
+      "command": "nix develop <recorded-shell> -c python3 target/transport-fix/check-note.py",
+      "exit": 0,
+      "scope": "New note title, registration and exact closure fingerprint; every pre-existing registration structurally identical to reviewed candidate.",
+      "existing_stale_scopes": 27,
+      "log": {
+        "path": "target/transport-fix/note-registry.log",
+        "sha256": "2b0fc9d52f413941bbd8ae9140174904c4b3fb0435884d0364214381c7148b70"
+      },
+      "inventory": {
+        "path": "target/transport-fix/registry-scopes.json",
+        "sha256": "032cdfa2edf5f2150f1a634aa8f750c44d6c877c540270074d206f8e17785564"
+      },
+      "checker": {
+        "path": "target/transport-fix/check-note.py",
+        "sha256": "e9ff0451769e15691218cdc6a5b13ae1309ec84911a114130fdde265779b3dcf"
+      }
+    }
+  ],
+  "fixture_diagnostic": {
+    "result": "First fixed run passed original238 controls; new explicit-aggregate case correctly rejected zero aggregate with unit fragments. Corrected only the fixture by adding a plain zero vertex fragment; aggregate remains the checked zero with retained history. Final test definition rerun on both old and fixed production.",
+    "log": {
+      "path": "target/transport-fix/regression-fixture-mismatch.log",
+      "sha256": "df4e527b2a370d58354467c00d5cf904f2274adc16f4d2b81a8ec7cb6a8af1dc"
+    },
+    "initial_results": {
+      "path": "target/transport-fix/controls-initial.json",
+      "sha256": "4d596e737ec60bde94969fd116d6198ed6b84f7bed813e5a994eef303501951f"
+    }
+  },
+  "rust_policy_review": "Module-scope explicit imports, existing transport/error ownership, exact integer atoms and no numerator expansion; no policy departure.",
+  "limits": [
+    "Three historical frame digest failures unchanged and not rerun here.",
+    "Seven inherited plus twenty staged documentation scope/anchor mismatches remain; no full documentation-green claim.",
+    "Full heavy physics, four-loop/SM fresh-process matrix, distribution certification and other independent scopes not run here.",
+    "All remaining review scopes must aggregate before source19 continuation."
+  ],
+  "cleanup": "Own unused listings, initial-format/shell-probe logs and restoration copy removed. Useful inputs, provenance, controls, scripts, logs, note PDF and configured shared cache retained for new independent review. No own running processes, push, publication, PR, main integration, other-workspace edits or historical cleanup."
+}

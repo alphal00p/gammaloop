@@ -1,5 +1,4 @@
 use feynkit_graph::DOD;
-use std::collections::HashSet;
 use std::ops::Deref;
 
 use crate::cff::surface::SurfaceCache;
@@ -557,14 +556,15 @@ impl Graph {
                 self.name
             );
         }
-        Self::require_contracted_indices(&full_num.into(), &HashSet::new())
+        Self::require_contracted_indices(&full_num.into(), |_| false)
     }
 
-    /// Fail when a full numerator leaves a tensor port uncontracted, other than the
-    /// explicitly indexed slots in `open`.
+    /// Reject anonymous tensor ports and explicit slots not accepted by `open`.
+    /// A fragment may leave explicit slots for other fragments to contract; a full
+    /// numerator may leave only the external colour slots of its projector.
     pub(crate) fn require_contracted_indices(
         full_numerator: &SymbolicTensor<PartialStructure>,
-        open: &HashSet<Atom>,
+        open: impl Fn(&Atom) -> bool,
     ) -> Result<()> {
         // Tensor structures keep their indices encoded; compare their source spelling.
         let cooking = CookSettings::indices()
@@ -589,7 +589,7 @@ impl Graph {
                 // Anonymous ports stay unresolved; products only rename them apart.
                 .filter(|slot| !slot.contains_symbol(AIND_SYMBOLS.openind));
                 match explicit {
-                    Some(slot) => (!open.contains(&slot))
+                    Some(slot) => (!open(&slot))
                         .then(|| format!("{}:{}", slot.log_print(None), slot.to_plain_string())),
                     None => Some(format!(
                         "unresolved port of {}: GammaLoop requires an explicit index",

@@ -9,7 +9,12 @@ use serde::Deserialize;
 use serde_json::json;
 
 use super::labels::Bounds;
-use super::{Stroke, UNIT};
+use super::{EdgeDrawing, Stroke, UNIT};
+#[cfg(test)]
+use std::cell::RefCell;
+use std::collections::BTreeMap;
+#[cfg(test)]
+use std::mem;
 
 /// Paint overrides stay outside the shared geometry flags, in flattened leaf order.
 #[derive(Clone, Default, Deserialize)]
@@ -19,7 +24,7 @@ pub struct MarkPaint {
     pub stroke: Option<String>,
 }
 
-impl super::EdgeDrawing {
+impl EdgeDrawing {
     /// Preserve the notebook flow size rather than the catalogue's larger default.
     pub fn default_flow_arrow() -> MarkSpec {
         serde_json::from_value(json!({
@@ -43,12 +48,12 @@ impl super::EdgeDrawing {
 
 pub(super) struct Batch {
     spec: MarkGeometrySpec,
-    templates: std::collections::BTreeMap<String, usize>,
+    templates: BTreeMap<String, usize>,
 }
 
 #[cfg(test)]
 thread_local! {
-    static GEOMETRY_CALLS: std::cell::RefCell<Vec<MarkGeometryMode>> = const { std::cell::RefCell::new(Vec::new()) };
+    static GEOMETRY_CALLS: RefCell<Vec<MarkGeometryMode>> = const { RefCell::new(Vec::new()) };
 }
 
 impl Batch {
@@ -60,7 +65,7 @@ impl Batch {
                 placements: Vec::new(),
                 mode: MarkGeometryMode::Candidates,
             },
-            templates: std::collections::BTreeMap::new(),
+            templates: BTreeMap::new(),
         }
     }
 
@@ -168,7 +173,7 @@ impl Batch {
 
     #[cfg(test)]
     pub(super) fn take_calls() -> Vec<MarkGeometryMode> {
-        GEOMETRY_CALLS.with(|calls| std::mem::take(&mut *calls.borrow_mut()))
+        GEOMETRY_CALLS.with(|calls| mem::take(&mut *calls.borrow_mut()))
     }
 }
 
@@ -186,6 +191,7 @@ impl Bounds {
 
 #[cfg(test)]
 mod tests {
+    use super::super as svg;
     use super::*;
     use kurbo::{PathEl, Point};
     use kurvst::marks::MarkFit;
@@ -204,9 +210,9 @@ mod tests {
 
     #[test]
     fn explicit_defaults_resolve_in_one_drawing_unit_conversion() {
-        let context = Batch::context(&super::super::arrow_stroke());
-        let flow = super::super::EdgeDrawing::default_flow_arrow();
-        let momentum = super::super::EdgeDrawing::default_momentum_arrow();
+        let context = Batch::context(&svg::arrow_stroke());
+        let flow = EdgeDrawing::default_flow_arrow();
+        let momentum = EdgeDrawing::default_momentum_arrow();
         assert!(
             (flow.length.unwrap().resolve(context).unwrap() - 0.4409448818897638).abs() < 1e-14
         );
@@ -227,8 +233,8 @@ mod tests {
     #[test]
     fn templates_are_deduplicated_by_geometry_and_line_context() {
         let mut batch = Batch::new();
-        let mark = super::super::EdgeDrawing::default_momentum_arrow();
-        let stroke = super::super::arrow_stroke();
+        let mark = EdgeDrawing::default_momentum_arrow();
+        let stroke = svg::arrow_stroke();
         let first = batch.template(&mark, &stroke).unwrap();
         assert_eq!(batch.template(&mark.clone(), &stroke).unwrap(), first);
         let mut other_paint = stroke.clone();
@@ -246,7 +252,7 @@ mod tests {
         path.line_to((3.0, 0.0));
         let mut batch = Batch::new();
         let template = batch
-            .template(&mark("triangle"), &super::super::arrow_stroke())
+            .template(&mark("triangle"), &svg::arrow_stroke())
             .unwrap();
         batch.push(template, &path, MarkStation::End, true);
         batch.place(template, 0, MarkStation::Start, false);
@@ -272,12 +278,10 @@ mod tests {
             PathEl::MoveTo(Point::new(10.0, 0.0)),
             PathEl::LineTo(Point::new(13.0, 0.0)),
         ]);
-        let mark = super::super::EdgeDrawing::default_flow_arrow();
+        let mark = EdgeDrawing::default_flow_arrow();
         for forward in [true, false] {
             let mut batch = Batch::new();
-            let template = batch
-                .template(&mark, &super::super::arrow_stroke())
-                .unwrap();
+            let template = batch.template(&mark, &svg::arrow_stroke()).unwrap();
             batch.centered(template, &path, 0.5, forward);
             let result = batch.geometry(MarkGeometryMode::Selected).unwrap();
             let head = &result.marks[0];
@@ -306,9 +310,7 @@ mod tests {
         for mark in specs {
             for forward in [true, false] {
                 let mut batch = Batch::new();
-                let template = batch
-                    .template(&mark, &super::super::arrow_stroke())
-                    .unwrap();
+                let template = batch.template(&mark, &svg::arrow_stroke()).unwrap();
                 let index = batch.centered(template, &path, 0.5, forward);
                 let geometry = batch.selected(&[index]).unwrap();
                 let bounds = geometry.marks[0].footprint.path.bounding_box();
@@ -345,9 +347,7 @@ mod tests {
                 ] {
                     let request = || {
                         let mut batch = Batch::new();
-                        let template = batch
-                            .template(&mark, &super::super::arrow_stroke())
-                            .unwrap();
+                        let template = batch.template(&mark, &svg::arrow_stroke()).unwrap();
                         batch.push(template, &path, MarkStation::End, true);
                         batch
                     };

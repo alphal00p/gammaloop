@@ -1,0 +1,2047 @@
+{
+  "status": "B2/B3 corrections and exact migration ready for NEW independent Astra review; no parent integration/publication",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-staged-parser-fixes",
+  "bookmark": "generation-staged-parser-fixes",
+  "author": "Lucien Huber <im@lcnbr.ch>",
+  "production_tip_commit": "4766d2585f4da849642648d3c066a14e379e60d9",
+  "production_tip_change": "kxuqpmllxwmnmpxnlznuooloupvyuyss",
+  "production_commits": [
+    {
+      "commit": "dd04519db55b524e8fde66904c1d5db8b675f049",
+      "change": "kwmruunrxqwqnzkqkpuownxqoplsosso",
+      "purpose": "GammaLoop explicit-index admission before aggregate composition"
+    },
+    {
+      "commit": "ae7171920ed67bdd33fed5f7075ca55f62b5b3bc",
+      "change": "tnwnqkvmltrpoyxywylpzvwqwqtstlto",
+      "purpose": "Native certified identity transport, retained-history controls, final anonymous/source-error controls"
+    },
+    {
+      "commit": "4766d2585f4da849642648d3c066a14e379e60d9",
+      "change": "kxuqpmllxwmnmpxnlznuooloupvyuyss",
+      "purpose": "Explicit reference migration derived from frozen approved data and certified frame maps"
+    }
+  ],
+  "candidate_input": "817b5886a50276efea05ab860d22016e1fb0c203",
+  "approved_base": "438b61500da4b32841c64211103e5da6fc4c4a72",
+  "source_files_sha256": {
+    "crates/feynkit-graph/src/numerator_interface.rs": "596a58fda9f2f182ba19a3da2457b3ed45e73b554d1dd67092cc42a4c2f68ed8",
+    "crates/gammalooprs/src/graph/parse/from_dot.rs": "e1f6220b809ffc60ed7662d03ecaac4ebb3d7fc27817dde1795623217b45065b",
+    "crates/gammalooprs/src/graph/parse/mod.rs": "ec955ce2891d6eb28a49b9fbf74b783c762eafd1a3030ff355d6c48a579ffbb6",
+    "crates/gammalooprs/src/graph/parse/tests.rs": "5c0a0edeb92703571ca2b6f0c602f67222fe90513dc3bdee25405f09f3692c49",
+    "crates/gammalooprs/src/graph/parse/finalized_reference.rs": "620ff06b0c9f5359588fb92c3686215ae0daddc11acd6675b14a214aa3e01e54",
+    "crates/gammalooprs/src/graph/parse/finalized_reference.json": "0e7da593639ea81ab81f733d5ef52f8aa578565648d0a8bb15fb9f6b2e4aa815",
+    "docs/architecture/generation-runtime-admission.typ": "f91cd6a0ad63eb8345540aa4d1f133eda90da7ce004557a062770267d126c7f8",
+    "docs/developers.toml": "6765c997fb40d038ba99a4e66a8bcaa9720860d6fdc19ba1289433d37bd6bc55",
+    "docs/architecture/evidence/generation-integration/runtime-admission/approved-finalized-reference.json": "b3bfd1e5e8f4635176f86613e9f3a7aa600acfc2cc8dd43cc5794ed987b3206e"
+  },
+  "unchanged_inputs_sha256": {
+    "assets/models/json/scalars/scalars.json": "1c37541108670bc8049215f83346a8d9a1feb8b56bdeff3a5de1e9f982e10899",
+    "assets/models/json/sm/sm.json": "a0193ae09a6f920c8fcfbe8231c6a70e820b82b573257e07c216bdcd8e57acd9",
+    "Cargo.lock": "def8dd7be5f208f4a290a4556081f7a63d10a5ae070c5df1808c1d350fa6161e",
+    "tydenso/Cargo.lock": "f1f0573d5f1c02d4ddb73d4491514cd291ae94ded7d84627342226917ca41dd0",
+    "examples/notebooks/symbolica-host/Cargo.lock": "03e18f00dbba096e08978063fd857d6558659f9f75e0ab09d73be3e543882c5a"
+  },
+  "B3": {
+    "outcome": "PASS. Every ranked-zero anonymous-port case keeps the runtime requires-an-explicit-index diagnostic, with no assigned indices.",
+    "approved_pipeline": [
+      "Linnet source parse",
+      "ParseGraph fragment admission to indexed runtime storage",
+      "reject unresolved ports",
+      "aggregate validation"
+    ],
+    "staged_before_fix": [
+      "DotDiagram retains portable partial interfaces",
+      "native edge-local translation and omitted Feynman rules",
+      "aggregate composition",
+      "runtime policy"
+    ],
+    "first_different_boundary": "Runtime explicit-index policy was reached after aggregate composition; three Open(801,0) occurrences failed first. Fixing that order exposed identity edge translation rejecting an unchanged open index before runtime admission.",
+    "fixed_pipeline": [
+      "Native source parsing/admission (real errors retain precedence)",
+      "edge shorthand translation with identity certified over payload and ALL retained index mappings",
+      "omitted Feynman rules",
+      "existing GammaLoop validator checks each prefactor/projector/vertex/edge interface",
+      "aggregate composition",
+      "full explicit-port closure except external colour",
+      "runtime enrichment"
+    ],
+    "owners": [
+      "Graph::from_dot_diagram",
+      "Graph::require_contracted_indices",
+      "NumeratorInterface::translate"
+    ],
+    "identity_certificate": "The native return is allowed only when translated expression equals the original AND every retained-history renaming is identity. It is not a scalar/no-head shortcut. Hidden h1->h9 transport still runs for zero and retains the third-occurrence collision refusal. A1 finalization.rs is unchanged and unreviewed A1 work is not incorporated.",
+    "coverage": "Three port forms (compact, unscoped open, scoped open) x four owners x zero/nonzero tensor input, plus original compact scalar contraction control. Original zero diagnostic requirements remain mandatory. Added nonzero declarations may instead keep a typed native TensorInferenceError before runtime policy. Separate malformed JSON interface test checks typed source precedence.",
+    "source_errors": "I/O/model/parser paths are unchanged. Native tensor admission errors retain sources. No alternate parser, legacy fallback, compatibility API or anonymous-index assignment."
+  },
+  "B2": {
+    "outcome": "PASS after explicitly authorized, exactly certified reference migration. No production physics sign patch.",
+    "shared_inputs": "Same builtin scalar/SM model files, same processes and loop/cut modes; model files byte-identical to approved base.",
+    "approved_pipeline": [
+      "GenerationOptions",
+      "legacy discovery/canonical frame",
+      "native finalization/local rules",
+      "mechanical GammaLoop enrichment",
+      "exact reference"
+    ],
+    "staged_pipeline": [
+      "Request discovery/DiagramSet preparation",
+      "NumeratorOptions build/native frame",
+      "mechanical GammaLoop enrichment",
+      "exact reference"
+    ],
+    "first_observed_difference": "Native finalized frame BEFORE downstream GammaLoop algebra; exact earlier internal divergence not dynamically instrumented. Physical canonical-frame selection/native assembly changed upstream.",
+    "minimal_reproducer": "e-/e+ -> mu-/mu+, tree, max_vertices=2, self_loops=false. Diagram0 photon edge4 changes -P0-P1 to +P0+P1 together with vertex reflection and half-edge4/5 exchange.",
+    "minimal_map": {
+      "vertex_current_to_old": [
+        1,
+        0
+      ],
+      "edge_current_to_old": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "hedge_current_to_old": [
+        0,
+        1,
+        2,
+        3,
+        5,
+        4
+      ],
+      "literal_momentum_signs": [
+        1,
+        1,
+        1,
+        1,
+        -1
+      ]
+    },
+    "exclusions": [
+      "Changed incidence already exists at input to the shared downstream bridge.",
+      "The same model bytes and exact local-factor identities rule out a model or shared-algebra explanation for the bounded discrepancy.",
+      "Denominator evenness is never used to infer an odd numerator sign or reassign a numerator carrier.",
+      "Six vector diagrams choose another tree/carrier; exact affine loop pullback with unimodular block is checked instead of assuming identical coordinates."
+    ],
+    "request_matrix": [
+      {
+        "case": "scalar_amplitude",
+        "model": "scalars",
+        "process": "scalar_1 -> scalar_1",
+        "loops": "total=1",
+        "diagrams": 6
+      },
+      {
+        "case": "scalar_cross_section",
+        "model": "scalars",
+        "process": "scalar_1 -> scalar_1 scalar_1",
+        "loops": "forward=1",
+        "diagrams": 1
+      },
+      {
+        "case": "fermion_amplitude",
+        "model": "sm",
+        "process": "e- e+ -> mu- mu+",
+        "loops": "total=0",
+        "diagrams": 4
+      },
+      {
+        "case": "vector_amplitude",
+        "model": "sm",
+        "process": "g -> g",
+        "loops": "total=1",
+        "diagrams": 8
+      },
+      {
+        "case": "fermion_cross_section",
+        "model": "sm",
+        "process": "e- e+ -> a",
+        "loops": "forward=0",
+        "diagrams": 1
+      }
+    ],
+    "common_settings": "Run threads=1; max_vertices=2/self_loops=false; cross-section blobs=1/spectators=0; default numerators and Naming prefix D; no source19+ API.",
+    "exact_certificate": {
+      "review_status": "Awaiting new independent Astra review; compared against the preserved approved reference",
+      "method": "Exact native Atom equality after simultaneous local owner/signed-Q substitution; exact integer affine carrier pullback; no expansion or numeric sampling",
+      "cases": {
+        "scalar_amplitude": [
+          {
+            "current_diagram": 0,
+            "reference_diagram": 0,
+            "status": "PASS",
+            "vertex_map": [
+              1,
+              0
+            ],
+            "edge_map": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "momentum_signs": [
+              1,
+              1,
+              -1,
+              -1
+            ],
+            "half_edge_map": [
+              0,
+              1,
+              3,
+              2,
+              5,
+              4
+            ],
+            "carrier_pullback_rows": [
+              [
+                -1,
+                0,
+                0
+              ],
+              [
+                0,
+                1,
+                0
+              ],
+              [
+                0,
+                1,
+                0
+              ]
+            ],
+            "old_loop_carriers": [
+              2
+            ],
+            "old_external_carriers": [
+              0,
+              1
+            ],
+            "current_tree_mapped_to_reference_edges": [
+              3
+            ],
+            "reference_tree_edges": [
+              3
+            ],
+            "current_loop_carriers_mapped_to_reference_edges": [
+              2
+            ],
+            "actual_denominator": "gammalooprs::{scalar}::denom(2,gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2),0,spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim))))*gammalooprs::{scalar}::denom(3,gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3),0,spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim))))",
+            "denominator_checks": [
+              {
+                "current_edge": 2,
+                "reference_edge": 2,
+                "literal_carrier_sign": -1,
+                "mass_squared": "0",
+                "reference_polynomial": "spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)))"
+              },
+              {
+                "current_edge": 3,
+                "reference_edge": 3,
+                "literal_carrier_sign": -1,
+                "mass_squared": "0",
+                "reference_polynomial": "spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)))"
+              }
+            ]
+          },
+          {
+            "current_diagram": 1,
+            "reference_diagram": 1,
+            "status": "PASS",
+            "vertex_map": [
+              0,
+              1
+            ],
+            "edge_map": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "momentum_signs": [
+              1,
+              1,
+              1,
+              1
+            ],
+            "half_edge_map": [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5
+            ],
+            "carrier_pullback_rows": [
+              [
+                1,
+                0,
+                0
+              ],
+              [
+                0,
+                1,
+                0
+              ],
+              [
+                0,
+                1,
+                0
+              ]
+            ],
+            "old_loop_carriers": [
+              2
+            ],
+            "old_external_carriers": [
+              0,
+              1
+            ],
+            "current_tree_mapped_to_reference_edges": [
+              3
+            ],
+            "reference_tree_edges": [
+              3
+            ],
+            "current_loop_carriers_mapped_to_reference_edges": [
+              2
+            ],
+            "actual_denominator": "gammalooprs::{scalar}::denom(2,gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2),0,spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim))))*gammalooprs::{scalar}::denom(3,gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3),UFO::{}::mass_scalar_1^2,-1*UFO::{}::mass_scalar_1^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim))))",
+            "denominator_checks": [
+              {
+                "current_edge": 2,
+                "reference_edge": 2,
+                "literal_carrier_sign": 1,
+                "mass_squared": "0",
+                "reference_polynomial": "spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)))"
+              },
+              {
+                "current_edge": 3,
+                "reference_edge": 3,
+                "literal_carrier_sign": 1,
+                "mass_squared": "UFO::{}::mass_scalar_1^2",
+                "reference_polynomial": "-1*UFO::{}::mass_scalar_1^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)))"
+              }
+            ]
+          },
+          {
+            "current_diagram": 2,
+            "reference_diagram": 2,
+            "status": "PASS",
+            "vertex_map": [
+              0,
+              1
+            ],
+            "edge_map": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "momentum_signs": [
+              1,
+              1,
+              1,
+              1
+            ],
+            "half_edge_map": [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5
+            ],
+            "carrier_pullback_rows": [
+              [
+                1,
+                0,
+                0
+              ],
+              [
+                0,
+                1,
+                0
+              ],
+              [
+                0,
+                1,
+                0
+              ]
+            ],
+            "old_loop_carriers": [
+              2
+            ],
+            "old_external_carriers": [
+              0,
+              1
+            ],
+            "current_tree_mapped_to_reference_edges": [
+              3
+            ],
+            "reference_tree_edges": [
+              3
+            ],
+            "current_loop_carriers_mapped_to_reference_edges": [
+              2
+            ],
+            "actual_denominator": "gammalooprs::{scalar}::denom(2,gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2),0,spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim))))*gammalooprs::{scalar}::denom(3,gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3),UFO::{}::mass_scalar_2^2,-1*UFO::{}::mass_scalar_2^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim))))",
+            "denominator_checks": [
+              {
+                "current_edge": 2,
+                "reference_edge": 2,
+                "literal_carrier_sign": 1,
+                "mass_squared": "0",
+                "reference_polynomial": "spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)))"
+              },
+              {
+                "current_edge": 3,
+                "reference_edge": 3,
+                "literal_carrier_sign": 1,
+                "mass_squared": "UFO::{}::mass_scalar_2^2",
+                "reference_polynomial": "-1*UFO::{}::mass_scalar_2^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)))"
+              }
+            ]
+          },
+          {
+            "current_diagram": 3,
+            "reference_diagram": 3,
+            "status": "PASS",
+            "vertex_map": [
+              1,
+              0
+            ],
+            "edge_map": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "momentum_signs": [
+              1,
+              1,
+              -1,
+              -1
+            ],
+            "half_edge_map": [
+              0,
+              1,
+              3,
+              2,
+              5,
+              4
+            ],
+            "carrier_pullback_rows": [
+              [
+                -1,
+                0,
+                0
+              ],
+              [
+                0,
+                1,
+                0
+              ],
+              [
+                0,
+                1,
+                0
+              ]
+            ],
+            "old_loop_carriers": [
+              2
+            ],
+            "old_external_carriers": [
+              0,
+              1
+            ],
+            "current_tree_mapped_to_reference_edges": [
+              3
+            ],
+            "reference_tree_edges": [
+              3
+            ],
+            "current_loop_carriers_mapped_to_reference_edges": [
+              2
+            ],
+            "actual_denominator": "gammalooprs::{scalar}::denom(2,gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2),UFO::{}::mass_scalar_1^2,-1*UFO::{}::mass_scalar_1^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim))))*gammalooprs::{scalar}::denom(3,gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3),UFO::{}::mass_scalar_1^2,-1*UFO::{}::mass_scalar_1^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim))))",
+            "denominator_checks": [
+              {
+                "current_edge": 2,
+                "reference_edge": 2,
+                "literal_carrier_sign": -1,
+                "mass_squared": "UFO::{}::mass_scalar_1^2",
+                "reference_polynomial": "-1*UFO::{}::mass_scalar_1^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)))"
+              },
+              {
+                "current_edge": 3,
+                "reference_edge": 3,
+                "literal_carrier_sign": -1,
+                "mass_squared": "UFO::{}::mass_scalar_1^2",
+                "reference_polynomial": "-1*UFO::{}::mass_scalar_1^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)))"
+              }
+            ]
+          },
+          {
+            "current_diagram": 4,
+            "reference_diagram": 4,
+            "status": "PASS",
+            "vertex_map": [
+              0,
+              1
+            ],
+            "edge_map": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "momentum_signs": [
+              1,
+              1,
+              1,
+              1
+            ],
+            "half_edge_map": [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5
+            ],
+            "carrier_pullback_rows": [
+              [
+                1,
+                0,
+                0
+              ],
+              [
+                0,
+                1,
+                0
+              ],
+              [
+                0,
+                1,
+                0
+              ]
+            ],
+            "old_loop_carriers": [
+              2
+            ],
+            "old_external_carriers": [
+              0,
+              1
+            ],
+            "current_tree_mapped_to_reference_edges": [
+              3
+            ],
+            "reference_tree_edges": [
+              3
+            ],
+            "current_loop_carriers_mapped_to_reference_edges": [
+              2
+            ],
+            "actual_denominator": "gammalooprs::{scalar}::denom(2,gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2),UFO::{}::mass_scalar_1^2,-1*UFO::{}::mass_scalar_1^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim))))*gammalooprs::{scalar}::denom(3,gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3),UFO::{}::mass_scalar_2^2,-1*UFO::{}::mass_scalar_2^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim))))",
+            "denominator_checks": [
+              {
+                "current_edge": 2,
+                "reference_edge": 2,
+                "literal_carrier_sign": 1,
+                "mass_squared": "UFO::{}::mass_scalar_1^2",
+                "reference_polynomial": "-1*UFO::{}::mass_scalar_1^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)))"
+              },
+              {
+                "current_edge": 3,
+                "reference_edge": 3,
+                "literal_carrier_sign": 1,
+                "mass_squared": "UFO::{}::mass_scalar_2^2",
+                "reference_polynomial": "-1*UFO::{}::mass_scalar_2^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)))"
+              }
+            ]
+          },
+          {
+            "current_diagram": 5,
+            "reference_diagram": 5,
+            "status": "PASS",
+            "vertex_map": [
+              1,
+              0
+            ],
+            "edge_map": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "momentum_signs": [
+              1,
+              1,
+              -1,
+              -1
+            ],
+            "half_edge_map": [
+              0,
+              1,
+              3,
+              2,
+              5,
+              4
+            ],
+            "carrier_pullback_rows": [
+              [
+                -1,
+                0,
+                0
+              ],
+              [
+                0,
+                1,
+                0
+              ],
+              [
+                0,
+                1,
+                0
+              ]
+            ],
+            "old_loop_carriers": [
+              2
+            ],
+            "old_external_carriers": [
+              0,
+              1
+            ],
+            "current_tree_mapped_to_reference_edges": [
+              3
+            ],
+            "reference_tree_edges": [
+              3
+            ],
+            "current_loop_carriers_mapped_to_reference_edges": [
+              2
+            ],
+            "actual_denominator": "gammalooprs::{scalar}::denom(2,gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2),UFO::{}::mass_scalar_2^2,-1*UFO::{}::mass_scalar_2^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim))))*gammalooprs::{scalar}::denom(3,gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3),UFO::{}::mass_scalar_2^2,-1*UFO::{}::mass_scalar_2^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim))))",
+            "denominator_checks": [
+              {
+                "current_edge": 2,
+                "reference_edge": 2,
+                "literal_carrier_sign": -1,
+                "mass_squared": "UFO::{}::mass_scalar_2^2",
+                "reference_polynomial": "-1*UFO::{}::mass_scalar_2^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)))"
+              },
+              {
+                "current_edge": 3,
+                "reference_edge": 3,
+                "literal_carrier_sign": -1,
+                "mass_squared": "UFO::{}::mass_scalar_2^2",
+                "reference_polynomial": "-1*UFO::{}::mass_scalar_2^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)))"
+              }
+            ]
+          }
+        ],
+        "scalar_cross_section": [
+          {
+            "current_diagram": 0,
+            "reference_diagram": 0,
+            "status": "PASS",
+            "vertex_map": [
+              1,
+              0
+            ],
+            "edge_map": [
+              0,
+              1,
+              2
+            ],
+            "momentum_signs": [
+              1,
+              -1,
+              -1
+            ],
+            "half_edge_map": [
+              0,
+              2,
+              1,
+              4,
+              3,
+              5
+            ],
+            "carrier_pullback_rows": [
+              [
+                -1,
+                0
+              ],
+              [
+                0,
+                1
+              ]
+            ],
+            "old_loop_carriers": [
+              1
+            ],
+            "old_external_carriers": [
+              0
+            ],
+            "current_tree_mapped_to_reference_edges": [
+              2
+            ],
+            "reference_tree_edges": [
+              2
+            ],
+            "current_loop_carriers_mapped_to_reference_edges": [
+              1
+            ],
+            "actual_denominator": "gammalooprs::{scalar}::denom(1,gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(1),UFO::{}::mass_scalar_1^2,-1*UFO::{}::mass_scalar_1^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(1,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(1,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim))))*gammalooprs::{scalar}::denom(2,gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2),UFO::{}::mass_scalar_1^2,-1*UFO::{}::mass_scalar_1^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim))))",
+            "denominator_checks": [
+              {
+                "current_edge": 1,
+                "reference_edge": 1,
+                "literal_carrier_sign": -1,
+                "mass_squared": "UFO::{}::mass_scalar_1^2",
+                "reference_polynomial": "-1*UFO::{}::mass_scalar_1^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(1,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(1,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)))"
+              },
+              {
+                "current_edge": 2,
+                "reference_edge": 2,
+                "literal_carrier_sign": -1,
+                "mass_squared": "UFO::{}::mass_scalar_1^2",
+                "reference_polynomial": "-1*UFO::{}::mass_scalar_1^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)))"
+              }
+            ]
+          }
+        ],
+        "fermion_amplitude": [
+          {
+            "current_diagram": 0,
+            "reference_diagram": 0,
+            "status": "PASS",
+            "vertex_map": [
+              1,
+              0
+            ],
+            "edge_map": [
+              0,
+              1,
+              2,
+              3,
+              4
+            ],
+            "momentum_signs": [
+              1,
+              1,
+              1,
+              1,
+              -1
+            ],
+            "half_edge_map": [
+              0,
+              1,
+              2,
+              3,
+              5,
+              4
+            ],
+            "carrier_pullback_rows": [
+              [
+                1,
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                1,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                1,
+                0
+              ],
+              [
+                1,
+                1,
+                -1,
+                0
+              ]
+            ],
+            "old_loop_carriers": [],
+            "old_external_carriers": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "current_tree_mapped_to_reference_edges": [
+              4
+            ],
+            "reference_tree_edges": [
+              4
+            ],
+            "current_loop_carriers_mapped_to_reference_edges": [],
+            "actual_denominator": "gammalooprs::{scalar}::denom(4,gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(4),0,spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(4,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(4,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim))))",
+            "denominator_checks": [
+              {
+                "current_edge": 4,
+                "reference_edge": 4,
+                "literal_carrier_sign": -1,
+                "mass_squared": "0",
+                "reference_polynomial": "spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(4,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(4,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)))"
+              }
+            ]
+          },
+          {
+            "current_diagram": 1,
+            "reference_diagram": 3,
+            "status": "PASS",
+            "vertex_map": [
+              1,
+              0
+            ],
+            "edge_map": [
+              0,
+              1,
+              2,
+              3,
+              4
+            ],
+            "momentum_signs": [
+              1,
+              1,
+              1,
+              1,
+              -1
+            ],
+            "half_edge_map": [
+              0,
+              1,
+              2,
+              3,
+              5,
+              4
+            ],
+            "carrier_pullback_rows": [
+              [
+                1,
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                1,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                1,
+                0
+              ],
+              [
+                1,
+                1,
+                -1,
+                0
+              ]
+            ],
+            "old_loop_carriers": [],
+            "old_external_carriers": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "current_tree_mapped_to_reference_edges": [
+              4
+            ],
+            "reference_tree_edges": [
+              4
+            ],
+            "current_loop_carriers_mapped_to_reference_edges": [],
+            "actual_denominator": "gammalooprs::{scalar}::denom(4,gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(4),UFO::{}::MZ^2,-1*UFO::{}::MZ^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(4,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(4,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim))))",
+            "denominator_checks": [
+              {
+                "current_edge": 4,
+                "reference_edge": 4,
+                "literal_carrier_sign": -1,
+                "mass_squared": "UFO::{}::MZ^2",
+                "reference_polynomial": "-1*UFO::{}::MZ^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(4,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(4,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)))"
+              }
+            ]
+          },
+          {
+            "current_diagram": 2,
+            "reference_diagram": 2,
+            "status": "PASS",
+            "vertex_map": [
+              1,
+              0
+            ],
+            "edge_map": [
+              0,
+              1,
+              2,
+              3,
+              4
+            ],
+            "momentum_signs": [
+              1,
+              1,
+              1,
+              1,
+              -1
+            ],
+            "half_edge_map": [
+              0,
+              1,
+              2,
+              3,
+              5,
+              4
+            ],
+            "carrier_pullback_rows": [
+              [
+                1,
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                1,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                1,
+                0
+              ],
+              [
+                1,
+                1,
+                -1,
+                0
+              ]
+            ],
+            "old_loop_carriers": [],
+            "old_external_carriers": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "current_tree_mapped_to_reference_edges": [
+              4
+            ],
+            "reference_tree_edges": [
+              4
+            ],
+            "current_loop_carriers_mapped_to_reference_edges": [],
+            "actual_denominator": "gammalooprs::{scalar}::denom(4,gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(4),UFO::{}::MH^2,-1*UFO::{}::MH^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(4,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(4,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim))))",
+            "denominator_checks": [
+              {
+                "current_edge": 4,
+                "reference_edge": 4,
+                "literal_carrier_sign": -1,
+                "mass_squared": "UFO::{}::MH^2",
+                "reference_polynomial": "-1*UFO::{}::MH^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(4,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(4,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)))"
+              }
+            ]
+          },
+          {
+            "current_diagram": 3,
+            "reference_diagram": 1,
+            "status": "PASS",
+            "vertex_map": [
+              1,
+              0
+            ],
+            "edge_map": [
+              0,
+              1,
+              2,
+              3,
+              4
+            ],
+            "momentum_signs": [
+              1,
+              1,
+              1,
+              1,
+              -1
+            ],
+            "half_edge_map": [
+              0,
+              1,
+              2,
+              3,
+              5,
+              4
+            ],
+            "carrier_pullback_rows": [
+              [
+                1,
+                0,
+                0,
+                0
+              ],
+              [
+                0,
+                1,
+                0,
+                0
+              ],
+              [
+                0,
+                0,
+                1,
+                0
+              ],
+              [
+                1,
+                1,
+                -1,
+                0
+              ]
+            ],
+            "old_loop_carriers": [],
+            "old_external_carriers": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "current_tree_mapped_to_reference_edges": [
+              4
+            ],
+            "reference_tree_edges": [
+              4
+            ],
+            "current_loop_carriers_mapped_to_reference_edges": [],
+            "actual_denominator": "gammalooprs::{scalar}::denom(4,gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(4),UFO::{}::MZ^2,-1*UFO::{}::MZ^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(4,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(4,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim))))",
+            "denominator_checks": [
+              {
+                "current_edge": 4,
+                "reference_edge": 4,
+                "literal_carrier_sign": -1,
+                "mass_squared": "UFO::{}::MZ^2",
+                "reference_polynomial": "-1*UFO::{}::MZ^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(4,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(4,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)))"
+              }
+            ]
+          }
+        ],
+        "vector_amplitude": [
+          {
+            "current_diagram": 0,
+            "reference_diagram": 1,
+            "status": "PASS",
+            "vertex_map": [
+              1,
+              0
+            ],
+            "edge_map": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "momentum_signs": [
+              1,
+              1,
+              -1,
+              -1
+            ],
+            "half_edge_map": [
+              0,
+              1,
+              3,
+              2,
+              5,
+              4
+            ],
+            "carrier_pullback_rows": [
+              [
+                -1,
+                0,
+                0
+              ],
+              [
+                0,
+                1,
+                0
+              ],
+              [
+                0,
+                1,
+                0
+              ]
+            ],
+            "old_loop_carriers": [
+              2
+            ],
+            "old_external_carriers": [
+              0,
+              1
+            ],
+            "current_tree_mapped_to_reference_edges": [
+              3
+            ],
+            "reference_tree_edges": [
+              3
+            ],
+            "current_loop_carriers_mapped_to_reference_edges": [
+              2
+            ],
+            "actual_denominator": "gammalooprs::{scalar}::denom(2,gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2),0,spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim))))*gammalooprs::{scalar}::denom(3,gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3),0,spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim))))",
+            "denominator_checks": [
+              {
+                "current_edge": 2,
+                "reference_edge": 2,
+                "literal_carrier_sign": -1,
+                "mass_squared": "0",
+                "reference_polynomial": "spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)))"
+              },
+              {
+                "current_edge": 3,
+                "reference_edge": 3,
+                "literal_carrier_sign": -1,
+                "mass_squared": "0",
+                "reference_polynomial": "spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)))"
+              }
+            ]
+          },
+          {
+            "current_diagram": 1,
+            "reference_diagram": 0,
+            "status": "PASS",
+            "vertex_map": [
+              0,
+              1
+            ],
+            "edge_map": [
+              0,
+              1,
+              2,
+              3
+            ],
+            "momentum_signs": [
+              1,
+              1,
+              1,
+              1
+            ],
+            "half_edge_map": [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5
+            ],
+            "carrier_pullback_rows": [
+              [
+                1,
+                0,
+                0
+              ],
+              [
+                0,
+                1,
+                0
+              ],
+              [
+                0,
+                1,
+                0
+              ]
+            ],
+            "old_loop_carriers": [
+              2
+            ],
+            "old_external_carriers": [
+              0,
+              1
+            ],
+            "current_tree_mapped_to_reference_edges": [
+              3
+            ],
+            "reference_tree_edges": [
+              3
+            ],
+            "current_loop_carriers_mapped_to_reference_edges": [
+              2
+            ],
+            "actual_denominator": "gammalooprs::{scalar}::denom(2,gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2),0,spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim))))*gammalooprs::{scalar}::denom(3,gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3),0,spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim))))",
+            "denominator_checks": [
+              {
+                "current_edge": 2,
+                "reference_edge": 2,
+                "literal_carrier_sign": 1,
+                "mass_squared": "0",
+                "reference_polynomial": "spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)))"
+              },
+              {
+                "current_edge": 3,
+                "reference_edge": 3,
+                "literal_carrier_sign": 1,
+                "mass_squared": "0",
+                "reference_polynomial": "spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)))"
+              }
+            ]
+          },
+          {
+            "current_diagram": 2,
+            "reference_diagram": 5,
+            "status": "PASS",
+            "vertex_map": [
+              1,
+              0
+            ],
+            "edge_map": [
+              0,
+              1,
+              3,
+              2
+            ],
+            "momentum_signs": [
+              1,
+              1,
+              1,
+              1
+            ],
+            "half_edge_map": [
+              0,
+              1,
+              4,
+              5,
+              2,
+              3
+            ],
+            "carrier_pullback_rows": [
+              [
+                1,
+                -1,
+                0
+              ],
+              [
+                0,
+                1,
+                0
+              ],
+              [
+                0,
+                1,
+                0
+              ]
+            ],
+            "old_loop_carriers": [
+              2
+            ],
+            "old_external_carriers": [
+              0,
+              1
+            ],
+            "current_tree_mapped_to_reference_edges": [
+              2
+            ],
+            "reference_tree_edges": [
+              3
+            ],
+            "current_loop_carriers_mapped_to_reference_edges": [
+              3
+            ],
+            "actual_denominator": "gammalooprs::{scalar}::denom(2,gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2),UFO::{}::MU^2,-1*UFO::{}::MU^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim))))*gammalooprs::{scalar}::denom(3,gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3),UFO::{}::MU^2,-1*UFO::{}::MU^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim))))",
+            "denominator_checks": [
+              {
+                "current_edge": 2,
+                "reference_edge": 3,
+                "literal_carrier_sign": 1,
+                "mass_squared": "UFO::{}::MU^2",
+                "reference_polynomial": "-1*UFO::{}::MU^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)))"
+              },
+              {
+                "current_edge": 3,
+                "reference_edge": 2,
+                "literal_carrier_sign": 1,
+                "mass_squared": "UFO::{}::MU^2",
+                "reference_polynomial": "-1*UFO::{}::MU^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)))"
+              }
+            ]
+          },
+          {
+            "current_diagram": 3,
+            "reference_diagram": 6,
+            "status": "PASS",
+            "vertex_map": [
+              1,
+              0
+            ],
+            "edge_map": [
+              0,
+              1,
+              3,
+              2
+            ],
+            "momentum_signs": [
+              1,
+              1,
+              1,
+              1
+            ],
+            "half_edge_map": [
+              0,
+              1,
+              4,
+              5,
+              2,
+              3
+            ],
+            "carrier_pullback_rows": [
+              [
+                1,
+                -1,
+                0
+              ],
+              [
+                0,
+                1,
+                0
+              ],
+              [
+                0,
+                1,
+                0
+              ]
+            ],
+            "old_loop_carriers": [
+              2
+            ],
+            "old_external_carriers": [
+              0,
+              1
+            ],
+            "current_tree_mapped_to_reference_edges": [
+              2
+            ],
+            "reference_tree_edges": [
+              3
+            ],
+            "current_loop_carriers_mapped_to_reference_edges": [
+              3
+            ],
+            "actual_denominator": "gammalooprs::{scalar}::denom(2,gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2),UFO::{}::MC^2,-1*UFO::{}::MC^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim))))*gammalooprs::{scalar}::denom(3,gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3),UFO::{}::MC^2,-1*UFO::{}::MC^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim))))",
+            "denominator_checks": [
+              {
+                "current_edge": 2,
+                "reference_edge": 3,
+                "literal_carrier_sign": 1,
+                "mass_squared": "UFO::{}::MC^2",
+                "reference_polynomial": "-1*UFO::{}::MC^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)))"
+              },
+              {
+                "current_edge": 3,
+                "reference_edge": 2,
+                "literal_carrier_sign": 1,
+                "mass_squared": "UFO::{}::MC^2",
+                "reference_polynomial": "-1*UFO::{}::MC^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)))"
+              }
+            ]
+          },
+          {
+            "current_diagram": 4,
+            "reference_diagram": 7,
+            "status": "PASS",
+            "vertex_map": [
+              1,
+              0
+            ],
+            "edge_map": [
+              0,
+              1,
+              3,
+              2
+            ],
+            "momentum_signs": [
+              1,
+              1,
+              1,
+              1
+            ],
+            "half_edge_map": [
+              0,
+              1,
+              4,
+              5,
+              2,
+              3
+            ],
+            "carrier_pullback_rows": [
+              [
+                1,
+                -1,
+                0
+              ],
+              [
+                0,
+                1,
+                0
+              ],
+              [
+                0,
+                1,
+                0
+              ]
+            ],
+            "old_loop_carriers": [
+              2
+            ],
+            "old_external_carriers": [
+              0,
+              1
+            ],
+            "current_tree_mapped_to_reference_edges": [
+              2
+            ],
+            "reference_tree_edges": [
+              3
+            ],
+            "current_loop_carriers_mapped_to_reference_edges": [
+              3
+            ],
+            "actual_denominator": "gammalooprs::{scalar}::denom(2,gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2),UFO::{}::MT^2,-1*UFO::{}::MT^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim))))*gammalooprs::{scalar}::denom(3,gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3),UFO::{}::MT^2,-1*UFO::{}::MT^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim))))",
+            "denominator_checks": [
+              {
+                "current_edge": 2,
+                "reference_edge": 3,
+                "literal_carrier_sign": 1,
+                "mass_squared": "UFO::{}::MT^2",
+                "reference_polynomial": "-1*UFO::{}::MT^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)))"
+              },
+              {
+                "current_edge": 3,
+                "reference_edge": 2,
+                "literal_carrier_sign": 1,
+                "mass_squared": "UFO::{}::MT^2",
+                "reference_polynomial": "-1*UFO::{}::MT^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)))"
+              }
+            ]
+          },
+          {
+            "current_diagram": 5,
+            "reference_diagram": 2,
+            "status": "PASS",
+            "vertex_map": [
+              1,
+              0
+            ],
+            "edge_map": [
+              0,
+              1,
+              3,
+              2
+            ],
+            "momentum_signs": [
+              1,
+              1,
+              1,
+              1
+            ],
+            "half_edge_map": [
+              0,
+              1,
+              4,
+              5,
+              2,
+              3
+            ],
+            "carrier_pullback_rows": [
+              [
+                1,
+                -1,
+                0
+              ],
+              [
+                0,
+                1,
+                0
+              ],
+              [
+                0,
+                1,
+                0
+              ]
+            ],
+            "old_loop_carriers": [
+              2
+            ],
+            "old_external_carriers": [
+              0,
+              1
+            ],
+            "current_tree_mapped_to_reference_edges": [
+              2
+            ],
+            "reference_tree_edges": [
+              3
+            ],
+            "current_loop_carriers_mapped_to_reference_edges": [
+              3
+            ],
+            "actual_denominator": "gammalooprs::{scalar}::denom(2,gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2),UFO::{}::MD^2,-1*UFO::{}::MD^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim))))*gammalooprs::{scalar}::denom(3,gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3),UFO::{}::MD^2,-1*UFO::{}::MD^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim))))",
+            "denominator_checks": [
+              {
+                "current_edge": 2,
+                "reference_edge": 3,
+                "literal_carrier_sign": 1,
+                "mass_squared": "UFO::{}::MD^2",
+                "reference_polynomial": "-1*UFO::{}::MD^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)))"
+              },
+              {
+                "current_edge": 3,
+                "reference_edge": 2,
+                "literal_carrier_sign": 1,
+                "mass_squared": "UFO::{}::MD^2",
+                "reference_polynomial": "-1*UFO::{}::MD^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)))"
+              }
+            ]
+          },
+          {
+            "current_diagram": 6,
+            "reference_diagram": 3,
+            "status": "PASS",
+            "vertex_map": [
+              1,
+              0
+            ],
+            "edge_map": [
+              0,
+              1,
+              3,
+              2
+            ],
+            "momentum_signs": [
+              1,
+              1,
+              1,
+              1
+            ],
+            "half_edge_map": [
+              0,
+              1,
+              4,
+              5,
+              2,
+              3
+            ],
+            "carrier_pullback_rows": [
+              [
+                1,
+                -1,
+                0
+              ],
+              [
+                0,
+                1,
+                0
+              ],
+              [
+                0,
+                1,
+                0
+              ]
+            ],
+            "old_loop_carriers": [
+              2
+            ],
+            "old_external_carriers": [
+              0,
+              1
+            ],
+            "current_tree_mapped_to_reference_edges": [
+              2
+            ],
+            "reference_tree_edges": [
+              3
+            ],
+            "current_loop_carriers_mapped_to_reference_edges": [
+              3
+            ],
+            "actual_denominator": "gammalooprs::{scalar}::denom(2,gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2),UFO::{}::MS^2,-1*UFO::{}::MS^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim))))*gammalooprs::{scalar}::denom(3,gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3),UFO::{}::MS^2,-1*UFO::{}::MS^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim))))",
+            "denominator_checks": [
+              {
+                "current_edge": 2,
+                "reference_edge": 3,
+                "literal_carrier_sign": 1,
+                "mass_squared": "UFO::{}::MS^2",
+                "reference_polynomial": "-1*UFO::{}::MS^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)))"
+              },
+              {
+                "current_edge": 3,
+                "reference_edge": 2,
+                "literal_carrier_sign": 1,
+                "mass_squared": "UFO::{}::MS^2",
+                "reference_polynomial": "-1*UFO::{}::MS^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)))"
+              }
+            ]
+          },
+          {
+            "current_diagram": 7,
+            "reference_diagram": 4,
+            "status": "PASS",
+            "vertex_map": [
+              1,
+              0
+            ],
+            "edge_map": [
+              0,
+              1,
+              3,
+              2
+            ],
+            "momentum_signs": [
+              1,
+              1,
+              1,
+              1
+            ],
+            "half_edge_map": [
+              0,
+              1,
+              4,
+              5,
+              2,
+              3
+            ],
+            "carrier_pullback_rows": [
+              [
+                1,
+                -1,
+                0
+              ],
+              [
+                0,
+                1,
+                0
+              ],
+              [
+                0,
+                1,
+                0
+              ]
+            ],
+            "old_loop_carriers": [
+              2
+            ],
+            "old_external_carriers": [
+              0,
+              1
+            ],
+            "current_tree_mapped_to_reference_edges": [
+              2
+            ],
+            "reference_tree_edges": [
+              3
+            ],
+            "current_loop_carriers_mapped_to_reference_edges": [
+              3
+            ],
+            "actual_denominator": "gammalooprs::{scalar}::denom(2,gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2),UFO::{}::MB^2,-1*UFO::{}::MB^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim))))*gammalooprs::{scalar}::denom(3,gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3),UFO::{}::MB^2,-1*UFO::{}::MB^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim))))",
+            "denominator_checks": [
+              {
+                "current_edge": 2,
+                "reference_edge": 3,
+                "literal_carrier_sign": 1,
+                "mass_squared": "UFO::{}::MB^2",
+                "reference_polynomial": "-1*UFO::{}::MB^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(3,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)))"
+              },
+              {
+                "current_edge": 3,
+                "reference_edge": 2,
+                "literal_carrier_sign": 1,
+                "mass_squared": "UFO::{}::MB^2",
+                "reference_polynomial": "-1*UFO::{}::MB^2+spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)))"
+              }
+            ]
+          }
+        ],
+        "fermion_cross_section": [
+          {
+            "current_diagram": 0,
+            "reference_diagram": 0,
+            "status": "PASS",
+            "vertex_map": [
+              0,
+              1
+            ],
+            "edge_map": [
+              0,
+              1,
+              2
+            ],
+            "momentum_signs": [
+              1,
+              1,
+              1
+            ],
+            "half_edge_map": [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5
+            ],
+            "carrier_pullback_rows": [
+              [
+                1,
+                0
+              ],
+              [
+                0,
+                1
+              ]
+            ],
+            "old_loop_carriers": [],
+            "old_external_carriers": [
+              0,
+              1
+            ],
+            "current_tree_mapped_to_reference_edges": [
+              2
+            ],
+            "reference_tree_edges": [
+              2
+            ],
+            "current_loop_carriers_mapped_to_reference_edges": [],
+            "actual_denominator": "gammalooprs::{scalar}::denom(2,gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2),0,spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim))))",
+            "denominator_checks": [
+              {
+                "current_edge": 2,
+                "reference_edge": 2,
+                "literal_carrier_sign": 1,
+                "mass_squared": "0",
+                "reference_polynomial": "spenso::{symmetric,linear,scalar}::dot(gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)),gammalooprs::{spenso::rank1,spenso::tensor,spenso::component-labels:subscript}::Q(2,spenso::{spenso::representation,spenso::self_dual}::mink(gammalooprs::{}::dim)))"
+              }
+            ]
+          }
+        ]
+      },
+      "limits": [
+        "Only the five exact-reference requests (20 diagrams, at most two vertices and one independent loop); not a full physics, benchmark or distribution certification.",
+        "Certifies the complete stored snapshot fields; the snapshot does not attest retained hidden-index collision history or portable tensor metadata beyond its explicit symbolic factors. Scope A1 remains separate.",
+        "No kernel, lock, generation topology/cut policy or numerator-owner change; no source19+ migration."
+      ],
+      "denominator_domain": "Native quadratic internal-edge propagators, symbolic Lorentz dimension, unit powers; external/dummy edges, widths, imaginary prescriptions and custom UFO denominator formulas are not instantiated at this owner.",
+      "independent_argument": "A bijection of physical incidence with equal local factors after literal signed owner transport and equal global/projector/cut data preserves their factorized product. Every denominator matches the same particle mass and multiplicity, with evenness used only for the separately signed carrier. The exact full-row affine pullback, with unimodular loop block and fixed external carriers, proves equality in one formal momentum chart even when spanning trees differ. No arbitrary momentum in a local numerator is reassigned by denominator equivalence.",
+      "complete": true,
+      "input_identity": {
+        "code_commit": "ae7171920ed67bdd33fed5f7075ca55f62b5b3bc",
+        "binary": "/shared/lcnbr/dev/gammaloop/generation-staged-parser-fixes/target/parser-fixes/pre-migration-gammalooprs",
+        "binary_sha256": "52b6fa9bd7a3d02297ae633e4652ec623fade138dc2b2e4980afb039d905fd39",
+        "source_sha256": {
+          "crates/feynkit-graph/src/numerator_interface.rs": "596a58fda9f2f182ba19a3da2457b3ed45e73b554d1dd67092cc42a4c2f68ed8",
+          "crates/gammalooprs/src/graph/parse/from_dot.rs": "e1f6220b809ffc60ed7662d03ecaac4ebb3d7fc27817dde1795623217b45065b",
+          "crates/gammalooprs/src/graph/parse/mod.rs": "ec955ce2891d6eb28a49b9fbf74b783c762eafd1a3030ff355d6c48a579ffbb6",
+          "crates/gammalooprs/src/graph/parse/tests.rs": "5c0a0edeb92703571ca2b6f0c602f67222fe90513dc3bdee25405f09f3692c49",
+          "crates/gammalooprs/src/graph/parse/finalized_reference.rs": "42fa17c5d2fc971f26b5094da67cb089e36133f77147bd3c1b10fa5b55e6041d"
+        },
+        "reference_sha256": "b3bfd1e5e8f4635176f86613e9f3a7aa600acfc2cc8dd43cc5794ed987b3206e",
+        "trace_sha256": {
+          "target/parser-fixes/runtime-boundary-logs/gammaloop-test-2145496.jsonl": "2a6a6a4c6f3ba5d67bc9b71958a9f574490ae2fda342178134b4c41bed1e8fbb"
+        },
+        "request_counts": {
+          "scalar_amplitude": 6,
+          "scalar_cross_section": 1,
+          "fermion_amplitude": 4,
+          "vector_amplitude": 8,
+          "fermion_cross_section": 1
+        },
+        "status": "source-matched current GammaLoop test binary; B2 still fails unchanged reference; B3 direct and other 48/49 controls pass",
+        "original_binary_path": "/common/build-cache/lcnbr/78/3737f438fa4d7e/ci-optim/deps/gammalooprs-d550f986c4ae73f4",
+        "archive_reason": "Retain the exact pre-reference-migration current producer for independent review; not a Cargo cache input.",
+        "checker_host_sha256": "06d000de00378e92d69b5cdb84638aceeb111d2c29e4603debfb7ca1dbd60045",
+        "checker_role": "Pinned core algebra checker only. Physical native frames and denominators come from the source-matched current GammaLoop Rust test export; old-host generation only registers the same frozen model/core definitions."
+      }
+    },
+    "migration": {
+      "method": "Frozen old reference + certified bijections, inverse literal signed owner substitutions and exact Fraction carrier solve. Current runtime captures used only for final equality check.",
+      "approved_reference_sha256": "b3bfd1e5e8f4635176f86613e9f3a7aa600acfc2cc8dd43cc5794ed987b3206e",
+      "certificate_input": {
+        "code_commit": "ae7171920ed67bdd33fed5f7075ca55f62b5b3bc",
+        "binary": "/shared/lcnbr/dev/gammaloop/generation-staged-parser-fixes/target/parser-fixes/pre-migration-gammalooprs",
+        "binary_sha256": "52b6fa9bd7a3d02297ae633e4652ec623fade138dc2b2e4980afb039d905fd39",
+        "source_sha256": {
+          "crates/feynkit-graph/src/numerator_interface.rs": "596a58fda9f2f182ba19a3da2457b3ed45e73b554d1dd67092cc42a4c2f68ed8",
+          "crates/gammalooprs/src/graph/parse/from_dot.rs": "e1f6220b809ffc60ed7662d03ecaac4ebb3d7fc27817dde1795623217b45065b",
+          "crates/gammalooprs/src/graph/parse/mod.rs": "ec955ce2891d6eb28a49b9fbf74b783c762eafd1a3030ff355d6c48a579ffbb6",
+          "crates/gammalooprs/src/graph/parse/tests.rs": "5c0a0edeb92703571ca2b6f0c602f67222fe90513dc3bdee25405f09f3692c49",
+          "crates/gammalooprs/src/graph/parse/finalized_reference.rs": "42fa17c5d2fc971f26b5094da67cb089e36133f77147bd3c1b10fa5b55e6041d"
+        },
+        "reference_sha256": "b3bfd1e5e8f4635176f86613e9f3a7aa600acfc2cc8dd43cc5794ed987b3206e",
+        "trace_sha256": {
+          "target/parser-fixes/runtime-boundary-logs/gammaloop-test-2145496.jsonl": "2a6a6a4c6f3ba5d67bc9b71958a9f574490ae2fda342178134b4c41bed1e8fbb"
+        },
+        "request_counts": {
+          "scalar_amplitude": 6,
+          "scalar_cross_section": 1,
+          "fermion_amplitude": 4,
+          "vector_amplitude": 8,
+          "fermion_cross_section": 1
+        },
+        "status": "source-matched current GammaLoop test binary; B2 still fails unchanged reference; B3 direct and other 48/49 controls pass",
+        "original_binary_path": "/common/build-cache/lcnbr/78/3737f438fa4d7e/ci-optim/deps/gammalooprs-d550f986c4ae73f4",
+        "archive_reason": "Retain the exact pre-reference-migration current producer for independent review; not a Cargo cache input.",
+        "checker_host_sha256": "06d000de00378e92d69b5cdb84638aceeb111d2c29e4603debfb7ca1dbd60045",
+        "checker_role": "Pinned core algebra checker only. Physical native frames and denominators come from the source-matched current GammaLoop Rust test export; old-host generation only registers the same frozen model/core definitions."
+      },
+      "checked_diagrams": 20,
+      "differences": [],
+      "complete": true,
+      "derived_reference_sha256": "0e7da593639ea81ab81f733d5ef52f8aa578565648d0a8bb15fb9f6b2e4aa815",
+      "checked_in_reference_sha256": "0e7da593639ea81ab81f733d5ef52f8aa578565648d0a8bb15fb9f6b2e4aa815",
+      "applied": true
+    },
+    "derivation": "Expected data comes from preserved approved reference, inverse certified diagram/vertex/edge/half-edge maps, literal signed owner substitutions and exact Fraction carrier solve. Captured current runtime data is used ONLY as independent final equality check. Every field of 20 diagrams matches. No snapshot-recording mode, numerical sample, graph numerator expansion or tolerance change.",
+    "approved_reference_path": "docs/architecture/evidence/generation-integration/runtime-admission/approved-finalized-reference.json",
+    "approved_reference_sha256": "b3bfd1e5e8f4635176f86613e9f3a7aa600acfc2cc8dd43cc5794ed987b3206e",
+    "migrated_reference_sha256": "0e7da593639ea81ab81f733d5ef52f8aa578565648d0a8bb15fb9f6b2e4aa815"
+  },
+  "checks": {
+    "new_pre_fix_rechecks": {
+      "approved_base_B2": "PASS",
+      "approved_base_B3": "PASS",
+      "staged_B2": "FAIL",
+      "staged_B3": "FAIL",
+      "scope": "Original controls using source-attested, SHA-verified retained binaries; not newly rebuilt base/candidate."
+    },
+    "native_before_fix": {
+      "run": 2,
+      "passed": 1,
+      "failed": 1,
+      "skipped": 192
+    },
+    "native_after_fix": {
+      "run": 25,
+      "passed": 25,
+      "failed": 0,
+      "skipped": 169
+    },
+    "native_clippy": {
+      "exit": 0,
+      "warnings": 0
+    },
+    "final_gamma_clippy": {
+      "exit": 0,
+      "warnings": "Only two inherited Clarabel unused-import/lifetime warnings."
+    },
+    "before_reference_migration": {
+      "run": 49,
+      "passed": 48,
+      "failed": 1,
+      "skipped": 1480
+    },
+    "after_reference_migration": {
+      "run": 49,
+      "passed": 49,
+      "failed": 0,
+      "skipped": 1480
+    },
+    "exact_controls_after_migration": {
+      "B2": 0,
+      "B3": 0
+    },
+    "current_exact_certificate_and_derivation": {
+      "exit": 0,
+      "diagrams": 20,
+      "complete": true
+    },
+    "fmt": 0,
+    "typst": 0,
+    "registered_title": "PASS: registered Typst title and unique top-level heading",
+    "excluded_tests": {
+      "names": [
+        "native_amplitude_runtime_enrichment_preserves_every_graph_coordinate",
+        "native_cross_section_runtime_enrichment_preserves_cuts_and_positive_external_flow",
+        "native_compton_runtime_enrichment_preserves_sewn_fermions",
+        "native_runtime_enrichment_preserves_explicit_loop_order"
+      ],
+      "reason": "Their existing parity helper expands graph numerators. Kept unchanged and excluded only by local command filter; no repository skip/config change. No full parse-suite claim."
+    },
+    "diagnostic_attempts": [
+      "Initial broad nextest was suspended before tests; its cargo no-run succeeded in38m47s; launcher retired and pipe drained. No tests or full-suite claim.",
+      "Moving runtime policy exposed original edge-zero identity transport refusal, reproduced independently by native source matrix and new native identity test. First native post-fix attempt used incompatible declared metadata on a nonzero tensor; final unit uses inferred nonzero source and declared zeros.",
+      "An added vector prototype used spatial Q3 with an unsupported open-index grammar; true source diagnosis correctly won. Final anonymous tensor coverage uses a generic tensor head, preserving momentum-diagnostic precedence and all original zero assertions."
+    ]
+  },
+  "provenance": {
+    "approved_base_binary": {
+      "path": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/gammalooprs-40fc3c8e4cb2f3a1",
+      "sha256": "38378d9da99d7bbab681761dd582f7fe8414382c2d4fc7370e3a5f7c91b18c21",
+      "source_attestation": "Inherited approved-base receipt; both controls newly rerun."
+    },
+    "staged_binary": {
+      "path": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/gammalooprs-78b1b1b87556b8bb",
+      "sha256": "44bd85266aebde9845c56fca06f1e58cc8904c05598451cb9747c649ea7d6a11",
+      "source_attestation": "Inherited817b production-path attestation; both failures newly rerun."
+    },
+    "core_checker_host": {
+      "path": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/feynkit_py-9f7622fa85dbd250",
+      "sha256": "06d000de00378e92d69b5cdb84638aceeb111d2c29e4603debfb7ca1dbd60045",
+      "role": "Unchanged pinned core checker and baseline standalone consumer. Current physical frames/denominators originate from current Rust producer recorded in certificate, not this old native generator."
+    },
+    "current_producer": {
+      "code_commit": "ae7171920ed67bdd33fed5f7075ca55f62b5b3bc",
+      "binary": "/shared/lcnbr/dev/gammaloop/generation-staged-parser-fixes/target/parser-fixes/pre-migration-gammalooprs",
+      "binary_sha256": "52b6fa9bd7a3d02297ae633e4652ec623fade138dc2b2e4980afb039d905fd39",
+      "source_sha256": {
+        "crates/feynkit-graph/src/numerator_interface.rs": "596a58fda9f2f182ba19a3da2457b3ed45e73b554d1dd67092cc42a4c2f68ed8",
+        "crates/gammalooprs/src/graph/parse/from_dot.rs": "e1f6220b809ffc60ed7662d03ecaac4ebb3d7fc27817dde1795623217b45065b",
+        "crates/gammalooprs/src/graph/parse/mod.rs": "ec955ce2891d6eb28a49b9fbf74b783c762eafd1a3030ff355d6c48a579ffbb6",
+        "crates/gammalooprs/src/graph/parse/tests.rs": "5c0a0edeb92703571ca2b6f0c602f67222fe90513dc3bdee25405f09f3692c49",
+        "crates/gammalooprs/src/graph/parse/finalized_reference.rs": "42fa17c5d2fc971f26b5094da67cb089e36133f77147bd3c1b10fa5b55e6041d"
+      },
+      "reference_sha256": "b3bfd1e5e8f4635176f86613e9f3a7aa600acfc2cc8dd43cc5794ed987b3206e",
+      "trace_sha256": {
+        "target/parser-fixes/runtime-boundary-logs/gammaloop-test-2145496.jsonl": "2a6a6a4c6f3ba5d67bc9b71958a9f574490ae2fda342178134b4c41bed1e8fbb"
+      },
+      "request_counts": {
+        "scalar_amplitude": 6,
+        "scalar_cross_section": 1,
+        "fermion_amplitude": 4,
+        "vector_amplitude": 8,
+        "fermion_cross_section": 1
+      },
+      "status": "source-matched current GammaLoop test binary; B2 still fails unchanged reference; B3 direct and other 48/49 controls pass",
+      "original_binary_path": "/common/build-cache/lcnbr/78/3737f438fa4d7e/ci-optim/deps/gammalooprs-d550f986c4ae73f4",
+      "archive_reason": "Retain the exact pre-reference-migration current producer for independent review; not a Cargo cache input."
+    },
+    "final_binary_sha256_record": "bacaa25766ddc1b81a60123ee39b23d1bd5d11358e22ee68e71a7f653b1ffd35  /common/build-cache/lcnbr/78/3737f438fa4d7e/ci-optim/deps/gammalooprs-d550f986c4ae73f4",
+    "native_owner_binary_sha256_record": "729972357d1ffd6e339553cad812652bb4e5fe7b7096a5adb25597d98f820ab7  /common/build-cache/lcnbr/78/3737f438fa4d7e/ci-optim/deps/feynkit_graph-d372e25a36c0835e",
+    "nix": "Default repo devShell evaluated n0h44zrrj07wzhj5r7d2mv1pvzsq3df7; its realized9kksnzlvcy77yvdvlmcx1az90ixkg9h7 env reused with unchanged dependencies. Normal Cargo/shared-cache configuration, jobs=2, no CARGO_TARGET_DIR override or manual cache seeding. Exported license preserved or silently loaded."
+  },
+  "commands": {
+    "gamma": "CARGO_BUILD_JOBS=2 RAYON_NUM_THREADS=2 INSTA_UPDATE=no nix develop <verified-shell> -c cargo nextest run -p gammalooprs --lib --cargo-profile ci-optim --profile ci_gammaloop --locked --no-fail-fast -E \"test(graph::parse::) & not (test(native_amplitude_runtime_enrichment_preserves_every_graph_coordinate) | test(native_cross_section_runtime_enrichment_preserves_cuts_and_positive_external_flow) | test(native_compton_runtime_enrichment_preserves_sewn_fermions) | test(native_runtime_enrichment_preserves_explicit_loop_order))\"",
+    "native": "cargo nextest run -p feynkit-graph --lib --cargo-profile ci-optim --profile ci_gammaloop --locked --no-fail-fast -E \"test(numerator_interface::tests::) | test(compact_dot::tests::) | test(routing::)\"",
+    "clippy": "cargo clippy -p feynkit-graph --lib --tests --locked --profile ci-optim; cargo clippy -p gammalooprs --lib --tests --locked --profile ci-optim (sequential, Nix/jobs2)",
+    "current_export": "SHA-verified current Rust binary --exact graph::parse::tests::finalized_reference::finalized_graph_matches_gammaloop_reference, GL_DISPLAY_FILTER=off, GL_LOGFILE_FILTER=[{#generation,#graph,#inspect,#dump}]=debug, GL_TEST_LOG_DIR=target/parser-fixes/runtime-boundary-logs",
+    "proof": "PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=$PWD/target/parser-fixes/current-probe nix develop <verified-shell> -c <verified-checker-host> tests::standalone_python_pipeline_covers_generation_graphs_cff_and_kinematics --exact --test-threads=1 --nocapture",
+    "proof_scripts": [
+      "target/parser-fixes/extract-current-frames.py",
+      "target/parser-fixes/current-probe/sitecustomize.py",
+      "target/parser-fixes/certify-reference-frames.py",
+      "target/parser-fixes/derive-reference-migration.py"
+    ]
+  },
+  "inheritance_vs_new": "Input refs/source-binary attestations/ScopeB findings inherited. Both old failures/base passes, code corrections, native and runtime checks, current Rust exports, exact core proof/migration derivation, Clippy/fmt/local note rendering and title checks are newly executed here.",
+  "limits": [
+    "NEW independent Astra review required before any integration; no parent refs/files, publication or source19+ continuation modified.",
+    "Complete stored-reference boundary only (20 graphs, max2 vertices, max1 independent loop); no general proof for other physics/benchmarks/distributions.",
+    "Native denominator domain excludes widths, imaginary prescriptions and custom UFO formulas.",
+    "Stored snapshot does not attest hidden-index collision history beyond explicit factors; focused native collision tests cover the new no-op guard, but A1 finalization remains separate and unincorporated.",
+    "Four unchanged expansion-helper callers excluded; no full parser-suite certification.",
+    "B1 callback guards, C1/C2 epochs/stubs, drawing and projector-flow lanes not incorporated.",
+    "Three historical generator frame hashes and inherited7/additional20 docs-scope drifts remain parent gates; no blind refresh.",
+    "No full docs product/distribution/wheel/heavy four-loop/oracle/benchmark certification; no kernel/lock/CI-toggle change."
+  ],
+  "cleanup": {
+    "processes_retained": [],
+    "artifacts": "Ignored target/parser-fixes retains logs, source/binary SHA identities, current native/runtime/denominator exports, exact proof/derivation scripts, rendered note and195MiB exact pre-migration producer for review (not a Cargo input). Shared caches preserved; obsolete own scratch removed."
+  },
+  "artifact_sha256": {
+    "target/parser-fixes/anonymous-native-matrix.json": "638a87844a039569b1b4a98dc84a74f7a4de6ee94b749216d9e7d206f420aac0",
+    "target/parser-fixes/anonymous-native-matrix.log": "2edf5084b7aab2e0df8491e9414f1a35f623d6ed31891605a018aaf91a58701b",
+    "target/parser-fixes/approved-base-anonymous.log": "3d95c6749f296a4ad3517b4cc016719d015c3a52b1dbc3efde9fc3794dbe6767",
+    "target/parser-fixes/approved-base-binary.sha256": "962550c46350fa115a7d536f6db6e6791060b432360e32f9a34936e97cfc36c2",
+    "target/parser-fixes/approved-base-routing.log": "4f0eb33d558d01048e982fa41979209930f3f2c4a1eb0b99b838728b2bf5039c",
+    "target/parser-fixes/before-native-binary.sha256": "61a6a3c2c74219dd57416b2db8f25b326063590ba486ce8e23172f6688cacefc",
+    "target/parser-fixes/build-artifacts.jsonl": "68b95eb1224a377edddd769b527bead8dd0f6ed950d42cc06021f3e7dbadf247",
+    "target/parser-fixes/certify-first-frame.py": "84ef5ef8896e8d3a1bd3a7bd19474736f697382223a324587642b8c9ba39caf7",
+    "target/parser-fixes/certify-reference-frames.py": "94f5a222ca05c0545668da15306e9044faf1e6deeabb903bb0473b6306997790",
+    "target/parser-fixes/clippy-after-native.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "target/parser-fixes/clippy-after-native.log": "9779c2f320ffc2674ebde1b274c9872114e503666349ab4ba8395f5c092083e2",
+    "target/parser-fixes/clippy-final-owner.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "target/parser-fixes/clippy-final-owner.log": "a577bd3c613305d2044cf88874ab851a19efc2fc508add9d251c5038751bc807",
+    "target/parser-fixes/clippy-final.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "target/parser-fixes/clippy-final.log": "4d90807196d09abb44fbb8a23d609eb49e2c6947ec00884ba64234809793178c",
+    "target/parser-fixes/clippy-migrated.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "target/parser-fixes/clippy-migrated.log": "aa5979a0c3aadaa20c29c6894a7ba1198ecfdf8aa767423464f92713099ea0c5",
+    "target/parser-fixes/clippy.log": "9f840a95e5329659a52e300e393657262494e828dcf3138fb70abf08b35eb0ab",
+    "target/parser-fixes/compile-only.log": "df5d1326e885470dc82bbf6e1ed8301ae656af6a1f1d7af859c21576c35ae1ef",
+    "target/parser-fixes/controls-after-native.exit": "eea8254c7500ba3de996aa8ad6af399183f04e17d4a8102fde539dbc93a90012",
+    "target/parser-fixes/controls-after-native.log": "f62078eab1c3d62b83e0031c76b1c952de22f0b59b1381771ad40bb83facfd8e",
+    "target/parser-fixes/controls-final-owner.exit": "eea8254c7500ba3de996aa8ad6af399183f04e17d4a8102fde539dbc93a90012",
+    "target/parser-fixes/controls-final-owner.log": "b5679c66aa70ad4801d4ab32f74b367e3b9c5b9fa2442c1b923bfb46f11cbeaa",
+    "target/parser-fixes/controls-migrated.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "target/parser-fixes/controls-migrated.log": "d96a7f0522b8243da2eb51b6cce877a56d5f368c6f5644e7801a4fe24b8c0058",
+    "target/parser-fixes/current-anonymous.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "target/parser-fixes/current-anonymous.log": "eae20634b673097af4eb2b28b9d1a271b8199da6d7d3215eb28f3d0d2d8a3e0e",
+    "target/parser-fixes/current-binary.sha256": "8c50de261c7c78b12dfd078079d9f4a0ddf52f00a6f5e2db53b1205237f596c5",
+    "target/parser-fixes/current-boundary.exit": "39b8dc3fc8b44765c8e6f1adee04c5b465e555ab791cc42d0d9e810d5b64297c",
+    "target/parser-fixes/current-boundary.log": "bfd1a3ee040ba985061954ec1b918d2df9681eb157f12f5f3564af9305e381dc",
+    "target/parser-fixes/current-certificate.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "target/parser-fixes/current-native-denominators.json": "b7ce3b151ab8598dd1bb510ceade6473fa810ab1c9b762fadbfabe7a103b842d",
+    "target/parser-fixes/current-native-frames.json": "2e0fc6bfbc02152153937643dbf8336dd64374e3805aa2771e79d75f71e065a7",
+    "target/parser-fixes/current-native-producer.json": "48a18a753359c75138d84ed2dd9a05059ea68f150abbc94c94b0fcf22c7066ae",
+    "target/parser-fixes/current-probe/sitecustomize.py": "04f935dde3f6f5f864ae987de216520742a108b1fe60f383efd02fafd1ae8970",
+    "target/parser-fixes/current-reference-certificate.log": "d7f01dc4a87f79da637b5c68dcc972d1bde354e5152e29c954499d42603d001a",
+    "target/parser-fixes/current-runtime-frames.json": "642dc57ac1b32327cc528819a214f3b7a0d5e770c5537284697c8ac3bf89eeef",
+    "target/parser-fixes/derive-reference-migration.py": "23cb162e3f4b5018735a8d91ebd21a6f668f118bfdbec43575154fbe33545689",
+    "target/parser-fixes/extract-current-frames.py": "400cfb23672db24518535ced242dfe9e3a1da4fd4419ba48214352c8678d7c79",
+    "target/parser-fixes/factor-preserving-controls-r1.log": "16f8f6cea4185c8cf02463ee81c7a78ddc84ca6a14e9896556e7b17d6369bc61",
+    "target/parser-fixes/factor-preserving-controls.exit": "eea8254c7500ba3de996aa8ad6af399183f04e17d4a8102fde539dbc93a90012",
+    "target/parser-fixes/factor-preserving-controls.log": "16bbaedcb1edd34c47246ac802ff77e7a34087541235d5385c15136847573673",
+    "target/parser-fixes/final-binary.sha256": "d00877b32ecca982173359b1969a3e520b03ce4cef8ca1be7cdadd3f5997e42d",
+    "target/parser-fixes/final-exact-anonymous.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "target/parser-fixes/final-exact-anonymous.log": "94c87e6050c4e56ba9d40d0f43bbfbd64e9b25837b2b96002791e82f8868c2c7",
+    "target/parser-fixes/final-exact-reference.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "target/parser-fixes/final-exact-reference.log": "6dade91724ebc5192404809f759d8ea60910243cd7540a500aaeb1a4f6f96fa3",
+    "target/parser-fixes/final-tests-build.log": "037aaf163665964659022aaedff519ed5290bceb28354be9cd4baad1aa367077",
+    "target/parser-fixes/final-tests.json": "98b8fa0f2ef7a216fb19e903713ea63940e82c475a46cd6f704b4973068daed1",
+    "target/parser-fixes/first-frame-certificate.json": "e57ef5448eb2dc23fb4fb675c3710da0be5833def062d97c410937005addab9a",
+    "target/parser-fixes/first-frame-certificate.log": "1fbc0f022a110da6b743152934ebbb2765768aaa021a863e93c139371c5fd112",
+    "target/parser-fixes/fmt-final.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "target/parser-fixes/fmt-final.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "target/parser-fixes/generator-unified.diff": "13b6946eef92d0477792bbab2fe880e74a58cb0ac280e9cff9cb81b936a023d0",
+    "target/parser-fixes/native-base.diff": "17bfb2c22d745b809aeee2da3408fa84a0a5a6b312690fb9e8a1587e02051a46",
+    "target/parser-fixes/native-candidate-all.json": "bb68397d24940c5ca04ed52b23c2347a62bb9ebb1f3b427584e1ea206692dd8e",
+    "target/parser-fixes/native-clippy.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "target/parser-fixes/native-clippy.log": "af581c3f243f5b265e7cccd43ae76ec065d17ffd707ee374eff20209661e3ac3",
+    "target/parser-fixes/native-denominators.json": "b7ce3b151ab8598dd1bb510ceade6473fa810ab1c9b762fadbfabe7a103b842d",
+    "target/parser-fixes/native-identity-before.log": "d7e50901f48baf384384d7283751242d01cd18443cc592b533aea5646fb05792",
+    "target/parser-fixes/native-owner-binary.sha256": "c1faf5f9d832bea77c3261fbf2932383d898ed40bae4affbe42dcc33d2315159",
+    "target/parser-fixes/native-owner-controls-r1.log": "04710fdd3d808dfe29dc3196c755fc6040995dc9a5b9dbeb753d76ae0a88490f",
+    "target/parser-fixes/native-owner-controls.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "target/parser-fixes/native-owner-controls.log": "8e9e23dafb5377c36739d37e6f744ac2d7e687fd05ededf4c796b92b822a6642",
+    "target/parser-fixes/native-probe/sitecustomize.py": "1e67acf13f7561d9a8b72e5a498baf8d4b080f5645d81a762c2e012e4806fc1e",
+    "target/parser-fixes/native-probe-all.log": "1fbc0f022a110da6b743152934ebbb2765768aaa021a863e93c139371c5fd112",
+    "target/parser-fixes/native-probe.log": "2cd5a53f452da002b176acdab74a6b15885b2a13bde4e05814b30c77c867100d",
+    "target/parser-fixes/note-title.log": "9aefcd46895ce2843e38435c5c1cc876352bb4f03fc93a03b9a67e559c198294",
+    "target/parser-fixes/pre-fix-anonymous.log": "d2116818614ef8e4e29496ec9fef9a482a3a1dd05e89bd0c7f44d922e9cf56b6",
+    "target/parser-fixes/pre-fix-binary.sha256": "a9a4f745ff6b61550be48249b50f1951f95c885e5f1b70c5c2e4f8d5de3ccdc5",
+    "target/parser-fixes/pre-fix-routing.log": "a386ef0a152f583fe132d2170c86ca6cc7f67ac9103913088c216424a66330a3",
+    "target/parser-fixes/pre-migration-gammalooprs": "52b6fa9bd7a3d02297ae633e4652ec623fade138dc2b2e4980afb039d905fd39",
+    "target/parser-fixes/probe-anonymous-native.py": "776442d4450252e9073d86efd75a63fa8728cdb89cb226aaebaa2f8fdbed6fd6",
+    "target/parser-fixes/reference-certificate-attempt.log": "2edf5084b7aab2e0df8491e9414f1a35f623d6ed31891605a018aaf91a58701b",
+    "target/parser-fixes/reference-frame-certificate-attempt.json": "3625583fb2ecd8d24fc0378e693764d9cf10a8f2d736859306a59495e6d0a0dd",
+    "target/parser-fixes/reference-frame-certificate-current.json": "c709b2e1ae7118dca7060cb4f0787cde17022c604035e335be53a42f315c2a20",
+    "target/parser-fixes/reference-migration-derivation.json": "5bfd691a2df0b55c4658673a44d72311d3f007fcd35fb7406e26b06971394470",
+    "target/parser-fixes/reference-migration-derivation.log": "f3efeed5d6c52edc7f506628a203340fa7da7d8fba003177c753941540316198",
+    "target/parser-fixes/reference-migration-derived.json": "0e7da593639ea81ab81f733d5ef52f8aa578565648d0a8bb15fb9f6b2e4aa815",
+    "target/parser-fixes/runtime-admission.pdf": "b43e7ef6f87a70f529b29fe237cf59f62f72304d4a852684b19cb3b0978691bd",
+    "target/parser-fixes/runtime-boundary-logs/gammaloop-test-2145496.jsonl": "2a6a6a4c6f3ba5d67bc9b71958a9f574490ae2fda342178134b4c41bed1e8fbb",
+    "target/parser-fixes/typst-final.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "target/parser-fixes/typst-final.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}

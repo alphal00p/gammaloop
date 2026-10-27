@@ -2,6 +2,7 @@
 
 use std::collections::HashSet;
 use std::fs;
+use std::iter;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -122,15 +123,41 @@ impl Graph {
     pub(crate) fn from_dot_diagram(dot: &DotDiagram) -> Result<Self> {
         warn_about_unknown_attributes(dot);
         let diagram = dot.apply_feynman_rules()?;
+        // Check retained interfaces before aggregate composition. Explicit indices
+        // may contract across fragments; anonymous ports cannot define a runtime
+        // graph interface, including on a ranked zero.
+        for fragment in iter::once(diagram.numerator_prefactor())
+            .chain(iter::once(diagram.projector()))
+            .chain(
+                diagram
+                    .underlying()
+                    .iter_nodes()
+                    .map(|(_, _, vertex)| &vertex.numerator),
+            )
+            .chain(
+                diagram
+                    .underlying()
+                    .iter_edges()
+                    .map(|(_, _, edge)| &edge.data.numerator),
+            )
+        {
+            Self::require_contracted_indices(fragment, |_| true).with_context(|| {
+                format!(
+                    "Invalid runtime tensor interface in graph '{}'",
+                    diagram.name().unwrap_or("<unnamed>")
+                )
+            })?;
+        }
         // Uncontracted indices leave no scalar to evaluate; integrand generation would
         // only find out after expanding the whole network.
-        Self::require_contracted_indices(
-            &diagram
-                .numerator()?
-                .multiply(diagram.numerator_prefactor())?
-                .multiply(diagram.projector())?,
-            &Self::external_colour_indices(&diagram)?,
-        )
+        let full_numerator = diagram
+            .numerator()?
+            .multiply(diagram.numerator_prefactor())?
+            .multiply(diagram.projector())?;
+        let external_colour_indices = Self::external_colour_indices(&diagram)?;
+        Self::require_contracted_indices(&full_numerator, |slot| {
+            external_colour_indices.contains(slot)
+        })
         .with_context(|| {
             format!(
                 "Graph '{}' does not contract every tensor index, so it has no scalar value. \

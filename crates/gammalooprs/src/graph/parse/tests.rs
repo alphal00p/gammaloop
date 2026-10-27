@@ -1,23 +1,30 @@
+use color_eyre::Result;
 use feynkit_graph::{DiagramEdge, EdgeEndpoints, EdgeId, VertexId};
+use idenso::tensor::inference::TensorInferenceError;
 use linnet::half_edge::NodeIndex;
 use linnet::half_edge::involution::{EdgeIndex, HedgePair};
 use linnet::half_edge::subgraph::SubSetLike;
+use serde_json::Error as JsonError;
+use serde_json::ser;
 use spenso::network::tags::SPENSO_TAG;
-use spenso::structure::abstract_index::AIND_SYMBOLS;
+use spenso::structure::abstract_index::{AIND_SYMBOLS, AbstractIndex};
 use spenso::structure::representation::{Minkowski, RepName};
+use spenso::structure::slot::IsAbstractSlot;
+use spenso::tensor_symbol;
 use symbolica::atom::{Atom, AtomCore, FunctionBuilder};
+use symbolica::function;
 use symbolica::parse;
 use symbolica::symbol;
 use typed_index_collections::ti_vec;
 
-use super::Graph;
+use super::{Graph, NumeratorInterface};
 use crate::dot;
 use crate::graph::parse::{IntoGraph, complete_group_parsing};
 use crate::graph::{FeynmanGraph, GraphGroup};
 use crate::initialisation::test_initialise;
 use crate::momentum::sample::LoopIndex;
 use crate::processes::DotExportSettings;
-use crate::utils::GS;
+use crate::utils::{self, GS};
 use crate::uv::UltravioletGraph;
 use crate::uv::uv_graph::UVE;
 
@@ -54,7 +61,6 @@ fn parse_triangle_fixture(loop_edge: usize, loop_edge_mass: Option<i64>) -> Grap
 
 #[test]
 fn numerator_interface_source_roundtrip_keeps_two_identical_open_axes() {
-    use super::NumeratorInterface;
     use idenso::tensor::SymbolicTensor;
     use spenso::structure::partial::{
         OpenPortId, PartialIndex, PartialStructure, PartialStructureExt,
@@ -93,25 +99,23 @@ fn numerator_interface_source_roundtrip_keeps_two_identical_open_axes() {
 
 #[test]
 fn runtime_graph_rejects_anonymous_ports_without_assigning_indices() {
-    use super::NumeratorInterface;
-    use spenso::structure::abstract_index::AbstractIndex;
-    use spenso::structure::slot::IsAbstractSlot;
-
     test_initialise().unwrap();
-    let model = crate::utils::load_generic_model("scalars");
+    let model = utils::load_generic_model("scalars");
     let rep = Minkowski {}.new_rep(4).to_lib();
     let anonymous = AbstractIndex::Open {
         owner: 801,
         axis: 0,
     };
+    let vector_head = tensor_symbol!("gammalooprs::runtime_anonymous_vector");
     for port in [
         rep.to_symbolic([]),
         rep.slot::<AbstractIndex, _>(anonymous).to_atom(),
         rep.slot::<AbstractIndex, _>(anonymous.scoped(symbol!("runtime_open_scope")))
             .to_atom(),
     ] {
+        let vector = function!(vector_head, &port);
         let interface = NumeratorInterface(vec![port]);
-        let metadata = serde_json::to_string(&interface.to_json()).unwrap();
+        let metadata = ser::to_string(&interface.to_json()).unwrap();
         // A portable ranked zero is valid source data. GammaLoop requires an
         // explicit graph interface even when its expression vanishes.
         assert_eq!(
@@ -120,30 +124,45 @@ fn runtime_graph_rejects_anonymous_ports_without_assigning_indices() {
                 .rank(),
             1
         );
-        for source in [
-            triangle_fixture(3, None).replace(
-                "graph [projector=\"1\"]",
-                &format!(
-                    "graph [projector=\"1\" num=\"0\" numerator_prefactor_interface={metadata}]"
+        for expression in [Atom::Zero, vector] {
+            let ranked_zero = expression.is_zero();
+            let expression = ser::to_string(&expression.to_canonical_string()).unwrap();
+            for source in [
+                triangle_fixture(3, None).replace(
+                    "graph [projector=\"1\"]",
+                    &format!("graph [projector={expression} projector_interface={metadata}]"),
                 ),
-            ),
-            triangle_fixture(3, None).replace(
-                "node [num=\"1\"]",
-                &format!("node [num=\"0\" num_interface={metadata}]"),
-            ),
-            triangle_fixture(3, None).replace(
-                "edge [pdg=1000 num=\"1\" dir=none]",
-                &format!("edge [pdg=1000 num=\"0\" num_interface={metadata} dir=none]"),
-            ),
-        ] {
-            let result: color_eyre::Result<Graph> = source.into_graph(&model);
-            let error = result
-                .err()
-                .expect("anonymous runtime ports must be rejected");
-            assert!(
-                format!("{error:#}").contains("requires an explicit index"),
-                "{error:?}"
-            );
+                triangle_fixture(3, None).replace(
+                    "graph [projector=\"1\"]",
+                    &format!(
+                        "graph [projector=\"1\" num={expression} \
+                         numerator_prefactor_interface={metadata}]"
+                    ),
+                ),
+                triangle_fixture(3, None).replace(
+                    "node [num=\"1\"]",
+                    &format!("node [num={expression} num_interface={metadata}]"),
+                ),
+                triangle_fixture(3, None).replace(
+                    "edge [pdg=1000 num=\"1\" dir=none]",
+                    &format!("edge [pdg=1000 num={expression} num_interface={metadata} dir=none]"),
+                ),
+            ] {
+                let result: Result<Graph> = source.into_graph(&model);
+                let error = result
+                    .err()
+                    .expect("anonymous runtime ports must be rejected");
+                let diagnostic = format!("{error:#}");
+                let runtime_refusal = diagnostic.contains("requires an explicit index");
+                // An authored open index in a nonzero payload can already fail
+                // native interface transport. Preserve that typed source error;
+                // ranked zeros must reach the runtime explicit-index boundary.
+                let native_refusal = !ranked_zero
+                    && error
+                        .chain()
+                        .any(|cause| cause.is::<TensorInferenceError>());
+                assert!(runtime_refusal || native_refusal, "{error:?}");
+            }
         }
     }
     // Compact internal contractions are scalar; fully indexed interfaces do
@@ -154,7 +173,7 @@ fn runtime_graph_rejects_anonymous_ports_without_assigning_indices() {
         "graph [projector=\"1\"]",
         &format!(
             "graph [projector=\"1\" num={}]",
-            serde_json::to_string(&scalar.to_canonical_string()).unwrap()
+            ser::to_string(&scalar.to_canonical_string()).unwrap()
         ),
     );
     let graph: Graph = source.into_graph(&model).unwrap();
@@ -166,8 +185,32 @@ fn runtime_graph_rejects_anonymous_ports_without_assigning_indices() {
 }
 
 #[test]
+fn runtime_interface_validation_preserves_native_source_errors() {
+    test_initialise().unwrap();
+    let model = utils::load_generic_model("scalars");
+    let interface = NumeratorInterface(vec![Minkowski {}.new_rep(4).to_symbolic([])]);
+    let metadata = ser::to_string(&interface.to_json()).unwrap();
+    let source = triangle_fixture(3, None)
+        .replace(
+            "graph [projector=\"1\"]",
+            &format!("graph [projector=\"1\" num=\"0\" numerator_prefactor_interface={metadata}]"),
+        )
+        .replace(
+            "edge [pdg=1000 num=\"1\" dir=none]",
+            "edge [pdg=1000 num=\"1\" num_interface=\"not-json\" dir=none]",
+        );
+    // Source admission must finish before the runtime-only interface policy.
+    let error = Graph::from_dot(&source, &model)
+        .err()
+        .expect("malformed edge interface metadata must fail native admission");
+    assert!(
+        error.chain().any(|cause| cause.is::<JsonError>()),
+        "{error:?}"
+    );
+}
+
+#[test]
 fn runtime_and_canonical_dot_preserve_ranked_zero_fragments() {
-    use super::NumeratorInterface;
     test_initialise().unwrap();
     let model = crate::utils::load_generic_model("scalars");
     let canonical = Graph::from_dot(
@@ -218,12 +261,10 @@ fn runtime_and_canonical_dot_preserve_ranked_zero_fragments() {
 
 #[test]
 fn global_tensor_json_and_dot_roundtrips_preserve_zero_ports_and_logical_order() {
-    use super::NumeratorInterface;
     use crate::numerator::GlobalPrefactor;
     use crate::uv::UltravioletGraph;
     use idenso::tensor::SymbolicTensor;
     use spenso::structure::IndexedStructure;
-    use spenso::structure::abstract_index::AbstractIndex;
     test_initialise().unwrap();
     let representation = Minkowski {}.new_rep(4).to_lib();
     let interface: IndexedStructure = [41, 37]
@@ -1199,7 +1240,6 @@ fn native_self_energy_tensor_ports_match_runtime_component_interfaces() {
     use idenso::representations::Bispinor;
     use spenso::network::library::symbolic::ETS;
     use spenso::structure::TensorStructure;
-    use spenso::structure::slot::IsAbstractSlot;
     use symbolica::function;
 
     test_initialise().unwrap();
