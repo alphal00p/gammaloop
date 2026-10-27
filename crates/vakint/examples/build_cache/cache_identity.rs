@@ -9,6 +9,9 @@ use std::{
     path::Path,
 };
 
+/// Index bytes commit to native bindings, generations, ordered runs and chunk
+/// hashes. The native loader validates their framing and any payload it uses;
+/// this metadata identity does not reread or certify unused chunk payloads.
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum CacheIdentity {
     File(String),

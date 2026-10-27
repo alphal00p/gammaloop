@@ -585,10 +585,6 @@ impl Options {
     }
 }
 
-/// Index bytes commit to native bindings, generations, ordered runs and chunk
-/// hashes. The native loader validates their framing and any payload it uses;
-/// this metadata identity does not reread or certify unused chunk payloads.
-
 fn write_json(path: &Path, value: &Value) -> Result<()> {
     write_bytes(path, &serde_json::to_vec_pretty(value)?)
 }
