@@ -20,6 +20,26 @@ Held-out suites forbid #raw("--running-cache"): ordinary #raw("load_cache") may 
 in-process memory but never captures records or modifies the supplied cache.
 Preserve all prefixes separately and benchmark an immutable completed snapshot.
 
+Both #raw("measure_cache") and #raw("five_loop_qcd_ladder") accept explicit
+single-file grants through #raw("--cache-max-compressed-bytes N"),
+#raw("--cache-max-decoded-bytes N"), and #raw("--cache-max-index-bytes N").
+Omitting them retains the public API's compact defaults. Set grants from the
+authenticated cache inventory and available resources; a refusal never raises
+them automatically or retries a reduction. Decoded bytes include the native
+header, while the index grant covers retained native indices rather than total
+process RAM. These flags require #raw("--cache") and do not apply to directory
+packs. Record-count diagnostics are not a cache sizing control.
+
+For a large independently hosted file, also pass
+#raw("--cache-decoded-directory PATH") with an existing workspace directory.
+The native reader decompresses into private owned disk storage and shares one
+lazy symbolic-state import across its reader forks. The collector resolves the
+directory to an absolute path before loading or spawning workers. Resolved byte
+grants and directory are recorded under #raw("cache_file_options"); suite workers
+receive the same policy, and resume rejects a different one. Uncached comparison
+samples retain this configured policy in their identity while attaching no cache.
+Cache loading remains outside the reduction timer.
+
 Single-file records retain their existing #raw("cache_sha256") field unchanged.
 Directories instead set #raw("cache_native_index_identity"), with SHA-256 and byte
 lengths for the top bundle index and every child native index, or the standalone

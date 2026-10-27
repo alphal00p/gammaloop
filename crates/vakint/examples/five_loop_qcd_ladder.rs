@@ -1,4 +1,6 @@
 //! Prepare the complete physical five-loop source, or reuse its verified scalar input.
+#[path = "build_cache/cache_file_args.rs"]
+mod cache_file_args;
 #[path = "../tests/fixtures/qcd_ladder/mod.rs"]
 mod fixture;
 #[path = "build_cache/resource_guard_admission.rs"]
@@ -23,7 +25,7 @@ use vakint::{
     RustRedRunningCacheOptions, Vakint, VakintSettings,
 };
 
-const USAGE: &str = "usage: five_loop_qcd_ladder --work-dir PATH [--artifacts PATH] [--projection quadratic|zero-momentum] [--coefficient-representation sparse|factorized] [--prepared-input PATH|--fresh-prepare] [--prepare-only|--dress-only] [--cache PATH] [--running-cache PATH] [--running-cache-capture-only] [--running-cache-no-read-delta] [--warm] [--monitor] [--progress-snapshot PATH] [--progress-interval-seconds N]\nMonitoring defaults off. --monitor requires progress-tui and defaults its snapshot to work-dir/monitor.json. A snapshot path enables native JSON without a TUI; interval defaults to 1s and must be finite and nonnegative. Monitored timings include diagnostic observation overhead.";
+const USAGE: &str = "usage: five_loop_qcd_ladder --work-dir PATH [--artifacts PATH] [--projection quadratic|zero-momentum] [--coefficient-representation sparse|factorized] [--prepared-input PATH|--fresh-prepare] [--prepare-only|--dress-only] [--cache PATH] [--cache-max-compressed-bytes N] [--cache-max-decoded-bytes N] [--cache-max-index-bytes N] [--cache-decoded-directory PATH] [--running-cache PATH] [--running-cache-capture-only] [--running-cache-no-read-delta] [--warm] [--monitor] [--progress-snapshot PATH] [--progress-interval-seconds N]\nCache file options require --cache. Byte grants are explicit and never raised automatically; compact defaults apply when omitted. --cache-decoded-directory selects file-backed decoded storage in an existing directory.\nMonitoring defaults off. --monitor requires progress-tui and defaults its snapshot to work-dir/monitor.json. A snapshot path enables native JSON without a TUI; interval defaults to 1s and must be finite and nonnegative. Monitored timings include diagnostic observation overhead.";
 
 struct StageLogger(Mutex<BTreeMap<String, Vec<f64>>>);
 static LOGGER: StageLogger = StageLogger(Mutex::new(BTreeMap::new()));
@@ -180,6 +182,7 @@ fn main() -> fixture::Result<()> {
     let mut work = None;
     let mut artifacts = None;
     let mut cache = None;
+    let mut cache_file_options = cache_file_args::CacheFileArgs::default();
     let mut running_cache = None;
     let mut running_cache_capture_only = false;
     let mut running_cache_no_read_delta = false;
@@ -210,6 +213,12 @@ fn main() -> fixture::Result<()> {
             }
             Some("--cache") => {
                 cache = Some(PathBuf::from(arguments.next().ok_or("missing cache path")?))
+            }
+            Some(flag) if cache_file_args::CacheFileArgs::recognizes(flag) => {
+                let value = arguments
+                    .next()
+                    .ok_or_else(|| format!("missing value for {flag}"))?;
+                cache_file_options.set(flag, value)?;
             }
             Some("--running-cache") => {
                 running_cache = Some(PathBuf::from(
@@ -272,6 +281,7 @@ fn main() -> fixture::Result<()> {
             _ => return Err(USAGE.into()),
         }
     }
+    cache_file_options.normalize(cache.as_deref())?;
     if fresh_prepare && prepared_input.is_some() {
         return Err("--fresh-prepare cannot be combined with --prepared-input".into());
     }
@@ -382,6 +392,7 @@ fn main() -> fixture::Result<()> {
             "profile":option_env!("VAKINT_CACHE_BUILD_PROFILE"),
         },
         "executable_sha256":format!("{:x}", Sha256::digest(std::fs::read(std::env::current_exe()?)?)),
+        "compiled_cache_file_args_sha256":format!("{:x}", Sha256::digest(include_bytes!("build_cache/cache_file_args.rs"))),
         "fresh_native_preparation":fresh_native_preparation,
         "input_mode":if fresh_native_preparation {"fresh"} else {"prepared"},
         "fixture_sources_sha256":manifest.producer.fixture_sources_sha256,
@@ -401,6 +412,7 @@ fn main() -> fixture::Result<()> {
         "contributions":prepared.contributions, "input_sha256":manifest.input.sha256,
         "input_bytes":manifest.input.bytes, "prepared_nonzero_conditions":prepared.nonzero_conditions.iter().map(AtomCore::to_canonical_string).collect::<Vec<_>>(),
         "persistent_cache":cache, "running_cache_path":running_cache,
+        "cache_file_options":cache_file_options.document()?,
         "running_cache_capture_only":running_cache_capture_only,
         "running_cache_read_delta":!running_cache_no_read_delta,
         "reduction_completed":false});
@@ -480,7 +492,7 @@ fn main() -> fixture::Result<()> {
     let owners_after_data_load = engine.rustred_application_owner_preparation_statistics()?;
     if let Some(cache) = &cache {
         let started = Instant::now();
-        engine.load_cache(5, cache, &Default::default())?;
+        engine.load_cache(5, cache, &cache_file_options.load_options())?;
         report["cache_loading_seconds"] = json!(started.elapsed().as_secs_f64());
         engine.clear_cache(5)?;
     }

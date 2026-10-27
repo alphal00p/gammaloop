@@ -1,4 +1,6 @@
 //! Fresh-process public-evaluator measurements of a frozen cache suite.
+#[path = "build_cache/cache_file_args.rs"]
+mod cache_file_args;
 #[path = "build_cache/owner_proof.rs"]
 #[cfg_attr(
     not(test),
@@ -26,6 +28,7 @@ use std::{
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
+use cache_file_args::CacheFileArgs;
 use eyre::{Context, Result, bail, ensure};
 use owner_proof::OwnerProof;
 use serde_json::{Value, json};
@@ -266,6 +269,7 @@ struct Options {
     workload: PathBuf,
     source_census: PathBuf,
     cache: Option<PathBuf>,
+    cache_file_options: CacheFileArgs,
     running_cache: Option<PathBuf>,
     running_cache_capture_only: bool,
     running_cache_no_read_delta: bool,
@@ -392,6 +396,7 @@ impl Options {
         let mut workload = None;
         let mut source_census = None;
         let mut cache = None;
+        let mut cache_file_options = CacheFileArgs::default();
         let mut running_cache = None;
         let mut running_cache_capture_only = false;
         let mut running_cache_no_read_delta = false;
@@ -413,6 +418,9 @@ impl Options {
                 println!(
                     "measure_cache --artifacts PATH --workload JSON --source-census FILE --work-dir PATH\n\
                      [--cache FILE.gz|NATIVE_DIRECTORY] [--suite tuning|held-out] [--repetitions N] [--max-case-seconds N]\n\
+                     [--cache-max-compressed-bytes N] [--cache-max-decoded-bytes N] [--cache-max-index-bytes N]\n\
+                     [--cache-decoded-directory PATH] uses file-backed decoded storage in an existing directory.\n\
+                     File grants require --cache; omitted grants keep compact defaults and are never raised automatically.\n\
                      [--running-cache PATH] [--running-cache-capture-only] persist completed native records.\n\
                      PATH is a capture root; each case/sample/variant owns a separate native delta.\n\
                      Capture-only disables persistent reads and cannot be combined with --cache.\n\
@@ -466,6 +474,9 @@ impl Options {
                 "--workload" => workload = Some(value.into()),
                 "--source-census" => source_census = Some(value.into()),
                 "--cache" => cache = Some(value.into()),
+                flag if CacheFileArgs::recognizes(flag) => {
+                    cache_file_options.set(flag, value.into())?;
+                }
                 "--running-cache" => running_cache = Some(value.into()),
                 "--work-dir" => work_dir = Some(value.into()),
                 "--suite" => suite = value,
@@ -483,6 +494,7 @@ impl Options {
                 _ => bail!("unknown argument {arg}"),
             }
         }
+        cache_file_options.normalize(cache.as_deref())?;
         ensure!(
             matches!(suite.as_str(), "tuning" | "held-out"),
             "unknown suite"
@@ -552,6 +564,7 @@ impl Options {
                 .ok_or_else(|| eyre::eyre!("--source-census is required"))?,
             work_dir: work_dir.ok_or_else(|| eyre::eyre!("--work-dir is required"))?,
             cache,
+            cache_file_options,
             running_cache,
             running_cache_capture_only,
             running_cache_no_read_delta,
@@ -570,6 +583,31 @@ impl Options {
         }))
     }
 
+    fn append_cache_file_arguments(&self, command: &mut Command) {
+        let Some(options) = self.cache_file_options.load_options().file_options else {
+            return;
+        };
+        for (flag, bytes) in [
+            (
+                "--cache-max-compressed-bytes",
+                options.limits.max_compressed_bytes,
+            ),
+            (
+                "--cache-max-decoded-bytes",
+                options.limits.max_decoded_bytes(),
+            ),
+            (
+                "--cache-max-index-bytes",
+                options.limits.chunk.max_index_owned_bytes,
+            ),
+        ] {
+            command.arg(flag).arg(bytes.to_string());
+        }
+        if let Some(directory) = options.decoded_directory {
+            command.arg("--cache-decoded-directory").arg(directory);
+        }
+    }
+
     fn identity(&self) -> Result<Value> {
         let workload: Workload = serde_json::from_slice(&fs::read(&self.workload)?)?;
         let mut identity = json!({
@@ -579,10 +617,12 @@ impl Options {
             "source_census_sha256":digest(&self.source_census)?,
             "data_manifest_sha256":digest(&self.artifacts.join("manifest.json"))?,
             "cache_sha256":null,
+            "cache_file_options":self.cache_file_options.document()?,
             "executable_sha256":digest(&std::env::current_exe()?)?,
             "compiled_driver_sha256":format!("{:x}",Sha256::digest(include_bytes!("measure_cache.rs"))),
             "compiled_workload_schema_sha256":format!("{:x}",Sha256::digest(include_bytes!("build_cache/workload.rs"))),
             "compiled_owner_proof_sha256":format!("{:x}",Sha256::digest(include_bytes!("build_cache/owner_proof.rs"))),
+            "compiled_cache_file_args_sha256":format!("{:x}",Sha256::digest(include_bytes!("build_cache/cache_file_args.rs"))),
             "owner_proof":OwnerProof::pinned_identity(&workload,&self.workload,&self.artifacts)?,
             "compiled_cargo_lock_sha256":format!("{:x}",Sha256::digest(include_bytes!("../../../Cargo.lock"))),
             "build_rustc":option_env!("VAKINT_CACHE_BUILD_RUSTC"),
@@ -863,7 +903,11 @@ fn measure(options: &Options, root: &Root, identity: &Value, workload: &Workload
     let data_loading_seconds = started.elapsed().as_secs_f64();
     let cache_started = Instant::now();
     if options.variant == "cached" {
-        engine.load_cache(5, options.cache.as_ref().unwrap(), &Default::default())?;
+        engine.load_cache(
+            5,
+            options.cache.as_ref().unwrap(),
+            &options.cache_file_options.load_options(),
+        )?;
         engine.clear_cache(5)?;
     }
     let cache_loading_seconds = cache_started.elapsed().as_secs_f64();
@@ -1450,6 +1494,7 @@ fn main() -> Result<()> {
                         if let Some(deadline) = deadline {
                             command.arg("--worker-deadline").arg(deadline.to_string());
                         }
+                        options.append_cache_file_arguments(&mut command);
                         let launched = command
                             .arg("--work-dir")
                             .arg(&directory)
@@ -1704,6 +1749,95 @@ mod tests {
         args.extend_from_slice(extra);
         Options::parse_args(args.into_iter().map(str::to_owned))?
             .ok_or_else(|| eyre::eyre!("unexpected help request"))
+    }
+
+    #[test]
+    fn cache_file_cli_rejects_orphans_and_preserves_explicit_zero_grants() -> Result<()> {
+        for (flag, value) in [
+            ("--cache-max-compressed-bytes", "0"),
+            ("--cache-max-decoded-bytes", "1048576"),
+            ("--cache-max-index-bytes", "0"),
+            ("--cache-decoded-directory", "unopened-directory"),
+        ] {
+            let error = parsed_options(&[flag, value]).err().unwrap();
+            assert!(error.to_string().contains("require --cache"));
+        }
+        let options = parsed_options(&[
+            "--cache",
+            "cache.rrcache.gz",
+            "--cache-max-compressed-bytes",
+            "0",
+            "--cache-max-index-bytes",
+            "0",
+        ])?;
+        let policy = options.cache_file_options.document()?;
+        assert_eq!(policy["max_compressed_bytes"], 0);
+        assert_eq!(policy["max_index_bytes"], 0);
+        assert!(parsed_options(&["--cache", "cache.gz", "--cache-max-records", "1"]).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn cache_file_worker_arguments_preserve_policy_and_resume_identity() -> Result<()> {
+        let scratch = tempfile::tempdir()?;
+        fs::create_dir(scratch.path().join("decoded"))?;
+        let directory = scratch.path().join("decoded/../decoded");
+        let args = [
+            "--artifacts",
+            "data",
+            "--workload",
+            "workload.json",
+            "--source-census",
+            "census.json",
+            "--work-dir",
+            "measurement",
+            "--cache",
+            "cache.rrcache.gz",
+            "--cache-max-compressed-bytes",
+            "0",
+            "--cache-max-decoded-bytes",
+            "2147483648",
+            "--cache-max-index-bytes",
+            "0",
+            "--cache-decoded-directory",
+            directory.to_str().unwrap(),
+        ]
+        .map(str::to_owned);
+        let parent = Options::parse_args(args.clone().into_iter())?.unwrap();
+        let mut command = Command::new("unlaunched-collector");
+        command.args(args).args([
+            "--worker",
+            "--case-id",
+            "case",
+            "--variant",
+            "cached",
+            "--sample",
+            "0",
+        ]);
+        parent.append_cache_file_arguments(&mut command);
+        let worker = Options::parse_args(
+            command
+                .get_args()
+                .map(|arg| arg.to_str().unwrap().to_owned()),
+        )?
+        .unwrap();
+        assert_eq!(parent.cache_file_options, worker.cache_file_options);
+        let policy = parent.cache_file_options.document()?;
+        assert_eq!(policy, worker.cache_file_options.document()?);
+        assert_eq!(
+            policy["decoded_directory"],
+            serde_json::to_value(scratch.path().join("decoded").canonicalize()?)?
+        );
+        let identity = json!({"cache_file_options":policy});
+        let receipt = json!({"identity":identity,"case_id":"case","variant":"cached","sample":0});
+        validate_receipt(&receipt, &identity, "case", "cached", 0)?;
+        let mut changed = identity.clone();
+        changed["cache_file_options"]["max_index_bytes"] = 1.into();
+        assert!(validate_receipt(&receipt, &changed, "case", "cached", 0).is_err());
+        let mut omitted = Command::new("unlaunched-collector");
+        parsed_options(&[])?.append_cache_file_arguments(&mut omitted);
+        assert_eq!(omitted.get_args().count(), 0);
+        Ok(())
     }
 
     #[test]
