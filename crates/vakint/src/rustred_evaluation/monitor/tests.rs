@@ -6,7 +6,8 @@ fn snapshot(seconds: u64, entered: u64, completed: u64, roots: u64) -> DisplaySn
         elapsed: Duration::from_secs(seconds),
         quantitative_sample_at: Some(Duration::from_secs(seconds)),
         quantitative_sample_sequence: seconds + 1,
-        phase: "coefficient_combination".into(),
+        phase: "native coefficient combination".into(),
+        native_work_active: true,
         unique_entered: entered,
         completed_unique: Some(completed),
         completion_attempts: Some(completed),
@@ -714,6 +715,7 @@ fn phase_clock_and_resources_remain_live_while_native_panels_are_frozen() {
     let mut state = MonitorState::default();
     let mut event = snapshot(10, 7, 3, 1);
     event.phase = "retained_outer_exact_combination".into();
+    event.native_work_active = false;
     event.phase_started_at = Duration::from_secs(10);
     state.observe(event, Duration::from_secs(20));
     state.apply(UiAction::ToggleFreeze, Duration::from_secs(20));
@@ -734,4 +736,75 @@ fn phase_clock_and_resources_remain_live_while_native_panels_are_frozen() {
         36.0
     );
     assert_eq!(state.latest.completed_unique, Some(3));
+}
+
+#[test]
+fn completed_native_frontier_never_finishes_or_zeroes_the_public_postprocessing_eta() {
+    let mut state = MonitorState::default();
+    let mut first = snapshot(0, 7, 0, 0);
+    first.total_roots = Some(1);
+    state.observe(first, Duration::from_secs(90));
+    let mut core = snapshot(10, 7, 7, 1);
+    core.total_roots = Some(1);
+    core.pending_unique.as_mut().unwrap().count = 0;
+    core.native_observed_at = Some(Duration::from_secs(10));
+    core.native_work_active = false;
+    core.status = MonitorStatus::Succeeded;
+    state.observe(core, Duration::from_secs(100));
+    let just_finished = state.view(Duration::from_secs(100));
+    assert_eq!(just_finished.status, MonitorStatus::Running);
+    assert!(
+        just_finished
+            .estimates
+            .iter()
+            .filter(|(label, _)| label.ends_with("ETA"))
+            .all(|(_, value)| value.contains("indeterminate"))
+    );
+    state.apply(UiAction::ToggleFreeze, Duration::from_secs(100));
+    let mut caller = state.latest.clone();
+    caller.phase = "retained_coefficient_materialization".into();
+    caller.phase_started_at = Duration::from_secs(11);
+    caller.elapsed = Duration::from_secs(11);
+    caller.sequence += 1;
+    caller.status = MonitorStatus::Running;
+    caller.caller_work = Some(CallerWork {
+        phase: caller.phase.clone(),
+        completed: 1,
+        total: 58,
+        unit: "master products materialized".into(),
+        sampled_at: Duration::from_secs(101),
+    });
+    state.observe(caller, Duration::from_secs(101));
+    let view = state.view(Duration::from_secs(137));
+    assert!(view.frozen);
+    assert_eq!(view.status, MonitorStatus::Running);
+    assert!(
+        view.subtitle
+            .contains("retained coefficient materialization")
+            && view.subtitle.contains("active 36.0s")
+    );
+    assert_eq!(
+        row(&view.overview, "Phase"),
+        "retained_coefficient_materialization"
+    );
+    assert!(
+        row(&view.overview, "Caller phase progress")
+            .contains("1 / 58 master products materialized")
+    );
+    assert_eq!(
+        row(&view.overview, "Native roots collected / selected"),
+        "1 / 1"
+    );
+    assert!(
+        view.estimates
+            .iter()
+            .filter(|(label, _)| label.ends_with("ETA"))
+            .all(|(_, value)| value.contains("indeterminate"))
+    );
+    assert!(row(&view.estimates, "Estimate scope").contains("excludes caller postprocessing"));
+    assert!(
+        !state.presentation(Duration::from_secs(137))["native_work_active"]
+            .as_bool()
+            .unwrap()
+    );
 }

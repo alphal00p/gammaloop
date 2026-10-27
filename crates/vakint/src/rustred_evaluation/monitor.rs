@@ -233,6 +233,7 @@ pub(super) struct DisplaySnapshot {
     pub elapsed: Duration,
     pub phase: String,
     pub phase_started_at: Duration,
+    pub native_work_active: bool,
     pub caller_work: Option<CallerWork>,
     pub status: MonitorStatus,
     pub request_finished: bool,
@@ -262,6 +263,7 @@ pub(super) struct CallerWork {
     pub phase: String,
     pub completed: usize,
     pub total: usize,
+    pub unit: String,
     pub sampled_at: Duration,
 }
 
@@ -566,13 +568,14 @@ impl MonitorState {
         let live = self.live_view(now);
         serde_json::json!({
             "phase": self.latest.phase,
+            "native_work_active": self.latest.native_work_active,
             "phase_elapsed_seconds": (!self.latest.phase.is_empty()).then(|| self.observation_age(self.latest.phase_started_at, now).as_secs_f64()),
             "event_age_seconds": (!self.latest.phase.is_empty()).then(|| now.saturating_sub(self.received_at).as_secs_f64()),
             "native_observation_age_seconds": self.latest.native_observed_at.map(|at| self.observation_age(at, now).as_secs_f64()),
             "native_quantitative_sample_age_seconds": self.latest.quantitative_sample_at.map(|at| self.observation_age(at, now).as_secs_f64()),
             "caller_work": self.latest.caller_work.as_ref().map(|work| serde_json::json!({
                 "scope": "current caller loop units; not native integral/frontier counts",
-                "phase": work.phase, "completed": work.completed, "total": work.total,
+                "phase": work.phase, "completed": work.completed, "total": work.total, "unit": work.unit,
                 "sample_age_seconds": now.saturating_sub(work.sampled_at).as_secs_f64(),
             })),
             "status": format!("{:?}", live.status),
@@ -825,9 +828,10 @@ impl MonitorState {
                         },
                         |work| {
                             format!(
-                                "{} / {} current-loop items · sample age {}",
+                                "{} / {} {} · sample age {}",
                                 work.completed,
                                 work.total,
+                                work.unit,
                                 seconds(now.saturating_sub(work.sampled_at))
                             )
                         },
@@ -847,7 +851,7 @@ impl MonitorState {
                     snapshot.request_finished.to_string(),
                 ),
                 (
-                    "Roots collected / selected".into(),
+                    "Native roots collected / selected".into(),
                     format!(
                         "{} / {}",
                         count(snapshot.completed_roots),
@@ -948,7 +952,7 @@ impl MonitorState {
         let mut rows = vec![
             (
                 "Estimate scope".into(),
-                "Observed local work only; future discovery excluded".into(),
+                "Native dispatch only; excludes caller postprocessing and future discovery".into(),
             ),
             (
                 "Estimate sample age".into(),
@@ -972,6 +976,12 @@ impl MonitorState {
                 "Low confidence: heuristic; no remaining-work certificate or global bound".into(),
             ),
         ];
+        if !self.latest.native_work_active {
+            rows[2].1 = "indeterminate · no active native dispatch; caller work is separate".into();
+            rows[3].1 = "indeterminate · no active native dispatch; caller work is separate".into();
+            rows[4].1 = "last native sample only".into();
+            return rows;
+        }
         let (Some(first), Some(last)) = (self.samples.front(), self.samples.back()) else {
             return rows;
         };

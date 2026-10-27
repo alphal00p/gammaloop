@@ -178,11 +178,12 @@ pub(crate) struct CallerProgress {
 }
 
 impl CallerProgress {
-    pub(crate) fn phase(&self, phase: &str, total: usize) -> CallerPhase<'_> {
+    pub(crate) fn phase(&self, phase: &str, total: usize, unit: &str) -> CallerPhase<'_> {
         let mut progress = CallerPhase {
             owner: self,
             phase: phase.to_owned(),
             total,
+            unit: unit.to_owned(),
             last: Instant::now(),
         };
         progress.publish(0);
@@ -194,12 +195,27 @@ pub(crate) struct CallerPhase<'a> {
     owner: &'a CallerProgress,
     phase: String,
     total: usize,
+    unit: String,
     last: Instant,
 }
 
 impl CallerPhase<'_> {
     pub(crate) fn completed(&mut self, completed: usize) {
         if completed == self.total || self.last.elapsed() >= Duration::from_secs(1) {
+            self.publish(completed);
+        }
+    }
+
+    pub(crate) fn completed_expression(
+        &mut self,
+        completed: usize,
+        expression: AtomView<'_>,
+        observer: Option<&mut Observer<'_>>,
+    ) {
+        if completed == self.total || self.last.elapsed() >= Duration::from_secs(1) {
+            // A real completed caller item, not a UI heartbeat. Read the
+            // existing partial contribution's headers on its owning thread.
+            MonitorContext::native_phase(observer, &self.phase, Some(expression));
             self.publish(completed);
         }
     }
@@ -217,6 +233,7 @@ impl CallerPhase<'_> {
             phase: self.phase.clone(),
             completed,
             total: self.total,
+            unit: self.unit.clone(),
             sampled_at: handle.shared.started.elapsed(),
         });
         // A caller counter does not refresh a native event/rate clock.
@@ -780,6 +797,10 @@ fn update_display(pending: &mut Pending, envelope: &Envelope<'_>, detail: bool, 
         display.caller_work = None;
     }
     display.phase = phase;
+    display.native_work_active = envelope.activity != Activity::Caller
+        && envelope.caller_phase.is_none()
+        && envelope.status == Status::Running
+        && !matches!(envelope.event, Event::CoreFinished | Event::RequestFinished);
     let outer_finished = envelope.activity == Activity::Caller && envelope.request_finished;
     display.request_finished = outer_finished;
     display.status = if outer_finished {
@@ -2440,7 +2461,10 @@ mod responsiveness_tests {
                 "retained_guard_materialization",
                 None,
             );
-            let mut progress = progress.unwrap().phase("retained_guard_materialization", 7);
+            let mut progress =
+                progress
+                    .unwrap()
+                    .phase("retained_guard_materialization", 7, "guards processed");
             thread::sleep(Duration::from_millis(1100));
             progress.completed(7);
             let deadline = Instant::now() + Duration::from_secs(3);
@@ -2469,6 +2493,48 @@ mod responsiveness_tests {
             Ok(())
         })
         .unwrap();
+    }
+
+    #[test]
+    fn coefficient_progress_samples_existing_partial_atom_headers() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("partial-atom.json");
+        let options = RustRedMonitorOptions {
+            progress_snapshot: Some(path.clone()),
+            ..Default::default()
+        };
+        let atom = crate::utils::vakint_macros::vk_parse!("partial_header_x+2").unwrap();
+        MonitorContext::run(&options, |mut observer, owner| {
+            MonitorContext::native_phase(
+                observer.as_deref_mut(),
+                "retained_coefficient_materialization",
+                None,
+            );
+            let mut phase = owner.unwrap().phase(
+                "retained_coefficient_materialization",
+                2,
+                "master products materialized",
+            );
+            phase.completed_expression(2, atom.as_view(), observer.as_deref_mut());
+            Ok(())
+        })
+        .unwrap();
+        let document: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+        assert_eq!(
+            document["monitor"]["caller_expression"]["encoded_bytes"],
+            atom.as_view().get_byte_size()
+        );
+        assert_eq!(
+            document["monitor"]["caller_expression"]["stored_summands"],
+            atom.as_view().nterms()
+        );
+        assert_eq!(document["monitor"]["caller_work"]["completed"], 2);
+        assert_eq!(
+            document["monitor"]["caller_work"]["unit"],
+            "master products materialized"
+        );
+        assert_eq!(document["monitor"]["native_work_active"], false);
     }
 
     #[cfg(target_os = "linux")]

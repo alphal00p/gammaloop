@@ -88,6 +88,8 @@ struct PublishedView {
     #[serde(default)]
     phase: Option<String>,
     #[serde(default)]
+    native_work_active: Option<bool>,
+    #[serde(default)]
     phase_elapsed_seconds: Option<f64>,
     #[serde(default)]
     event_age_seconds: Option<f64>,
@@ -502,6 +504,7 @@ impl ActiveViewer {
                 worker_pid: None,
                 worker_start_ticks: None,
                 phase: None,
+                native_work_active: None,
                 phase_elapsed_seconds: None,
                 event_age_seconds: None,
                 native_observation_age_seconds: None,
@@ -689,7 +692,8 @@ impl ActiveViewer {
         {
             *age = seconds(quantitative_age);
         }
-        if quantitative_age.is_none_or(|age| age >= Duration::from_secs(1))
+        if (self.latest.native_work_active != Some(true)
+            || quantitative_age.is_none_or(|age| age >= Duration::from_secs(1)))
             && view.status == MonitorStatus::Running
         {
             for (label, estimate) in &mut view.estimates {

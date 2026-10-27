@@ -1120,6 +1120,7 @@ impl SavedApplication {
                 owner.phase(
                     "retained_guard_materialization",
                     normalized.nonzero_conditions().len(),
+                    "guards processed",
                 )
             });
             for (index, condition) in normalized.nonzero_conditions().iter().enumerate() {
@@ -1154,6 +1155,7 @@ impl SavedApplication {
                 owner.phase(
                     "retained_coefficient_materialization",
                     normalized.terms().len(),
+                    "master products materialized",
                 )
             });
             for (index, (product, coefficient)) in normalized.terms().iter().enumerate() {
@@ -1174,7 +1176,11 @@ impl SavedApplication {
                     .with(physical_dimension.to_pattern())
                     * master;
                 if let Some(progress) = &mut coefficient_progress {
-                    progress.completed(index + 1);
+                    progress.completed_expression(
+                        index + 1,
+                        contribution.as_view(),
+                        observation.as_deref_mut(),
+                    );
                 }
             }
             log::debug!(target: "vakint::saved_application", "phase=retained_coefficient_materialization elapsed_seconds={:.6}", coefficients_started.elapsed().as_secs_f64());

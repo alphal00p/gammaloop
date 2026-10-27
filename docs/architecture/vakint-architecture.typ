@@ -171,7 +171,9 @@ coalescing JSON sink receives these views independently; a blocked sink remains 
 to its read-only attachment instead of blocking input or pretending to publish new data.
 Phase elapsed time, caller-event age, native sample age and OS sample age have separate clocks;
 heartbeats do not advance native counters or imply algebraic progress. Guard/coefficient
-materialization reports actual completed/total loop items. Opaque calls remain explicitly
+materialization reports actual guards processed and master products materialized.
+Rate-limited coefficient updates also read the existing partial contribution's stored
+summands and encoded bytes on its owning thread; they never scan or send its Atom. Opaque calls remain explicitly
 indeterminate, and any native ETA remains a diagnostic estimate. Frozen native panels retain
 live status, phase clocks and resources. Detaching the terminal does not cancel calculation.
 
