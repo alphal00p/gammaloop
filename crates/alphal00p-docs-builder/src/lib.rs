@@ -1767,6 +1767,11 @@ impl SiteBuilder {
                 source.display(),
                 typst.display()
             );
+            // This exact fragment is embedded by the CFF renderer, not authored
+            // repository prose; neighboring documentation follows the Typst policy.
+            if source == Path::new("crates/feynkit-py/src/cff/display.html") {
+                continue;
+            }
             if !matches!(
                 source.file_name().and_then(|name| name.to_str()),
                 Some("AGENTS.md" | "README.md")
@@ -10416,6 +10421,27 @@ mod tests {
         assert!(error.contains("masters_summary.md"));
         fs::remove_file(summary).unwrap();
         builder.check_prose_sources().unwrap();
+    }
+
+    #[test]
+    fn prose_source_gate_distinguishes_runtime_template_from_neighboring_prose() {
+        let temporary = tempfile::tempdir().unwrap();
+        let mut builder = SiteBuilder::discover().unwrap();
+        builder.root = temporary.path().to_path_buf();
+        let asset = temporary
+            .path()
+            .join("crates/feynkit-py/src/cff/display.html");
+        fs::create_dir_all(asset.parent().unwrap()).unwrap();
+        fs::write(&asset, "<div data-explorer></div>").unwrap();
+        builder.check_prose_sources().unwrap();
+
+        let prose = asset.parent().unwrap().join("new-note.html");
+        fs::write(&prose, "New prose").unwrap();
+        assert!(builder.check_prose_sources().is_err());
+        fs::remove_file(prose).unwrap();
+
+        fs::write(asset.with_extension("typ"), "= Parallel prose").unwrap();
+        assert!(builder.check_prose_sources().is_err());
     }
 
     #[test]
