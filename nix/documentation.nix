@@ -5,6 +5,7 @@
   craneLib,
   workspaceRoot,
   cargoSources,
+  localCargoPatchSources,
   nonCargoBuildSources,
   ciArgs,
   ciCargoProfile,
@@ -154,6 +155,7 @@ let
     fileset = lib.fileset.unions [
       (craneLib.fileset.cargoTomlAndLock workspaceRoot)
       (craneLib.fileset.rust workspaceRoot)
+      localCargoPatchSources
       (workspaceRoot + "/.cargo/config.toml")
       (lib.fileset.difference nonCargoBuildSources (
         lib.fileset.unions [
