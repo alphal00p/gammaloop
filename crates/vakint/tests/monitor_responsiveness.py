@@ -10,6 +10,7 @@ import argparse
 import codecs
 import fcntl
 import hashlib
+import html
 import itertools
 import json
 import os
@@ -29,6 +30,15 @@ CASES = {
     "embedded-silence": "rustred_evaluation::monitor::runtime::responsiveness_tests::real_pty_silent_or_blocked_publisher_keeps_controls_live",
     "blocked-publisher": "rustred_evaluation::monitor::runtime::responsiveness_tests::real_pty_silent_or_blocked_publisher_keeps_controls_live",
     "viewer-silence": "rustred_evaluation::monitor::viewer::tests::real_pty_silent_worker_keeps_live_resources_and_detaches_without_control",
+    "job-preparation": "rustred_evaluation::monitor::runtime::responsiveness_tests::real_pty_job_scope_covers_preparation_and_post_api_silence",
+    "job-output": "rustred_evaluation::monitor::runtime::responsiveness_tests::real_pty_job_scope_covers_preparation_and_post_api_silence",
+}
+PHASES = {
+    "embedded-silence": "synthetic_opaque_call",
+    "blocked-publisher": "synthetic_opaque_call",
+    "viewer-silence": "synthetic_paused_producer",
+    "job-preparation": "prepared_input_loading",
+    "job-output": "result_expression_serialization",
 }
 CSI = re.compile(r"\x1b\[([0-?]*)([ -/]*)([@-~])")
 
@@ -39,6 +49,8 @@ class Screen:
     def __init__(self, width=240, height=80):
         self.width, self.height = width, height
         self.grid = [[" "] * width for _ in range(height)]
+        self.styles = [[("#dddddd", "#000000", False)] * width for _ in range(height)]
+        self.fg, self.bg, self.bold = "#dddddd", "#000000", False
         self.x = self.y = 0
         self.pending = ""
         self.decoder = codecs.getincrementaldecoder("utf-8")("replace")
@@ -78,6 +90,10 @@ class Screen:
                     )
                 elif op == "J" and values[0] in (2, 3):
                     self.grid = [[" "] * self.width for _ in range(self.height)]
+                    self.styles = [
+                        [(self.fg, self.bg, self.bold)] * self.width
+                        for _ in range(self.height)
+                    ]
                 elif op == "K":
                     start, end = (
                         (0, self.width)
@@ -87,6 +103,11 @@ class Screen:
                         else (self.x, self.width)
                     )
                     self.grid[self.y][start:end] = [" "] * (end - start)
+                    self.styles[self.y][start:end] = [(self.fg, self.bg, self.bold)] * (
+                        end - start
+                    )
+                elif op == "m":
+                    self.sgr(values)
                 continue
             self.pending = self.pending[1:]
             if ch == "\r":
@@ -98,10 +119,95 @@ class Screen:
                     self.x = 0
                     self.y = min(self.y + 1, self.height - 1)
                 self.grid[self.y][self.x] = ch
+                self.styles[self.y][self.x] = (self.fg, self.bg, self.bold)
                 self.x += 2 if unicodedata.east_asian_width(ch) in "WF" else 1
 
     def text(self):
         return "\n".join("".join(row).rstrip() for row in self.grid)
+
+    def sgr(self, values):
+        palette = [
+            "#000000",
+            "#cd0000",
+            "#00cd00",
+            "#cdcd00",
+            "#0000ee",
+            "#cd00cd",
+            "#00cdcd",
+            "#e5e5e5",
+            "#7f7f7f",
+            "#ff0000",
+            "#00ff00",
+            "#ffff00",
+            "#5c5cff",
+            "#ff00ff",
+            "#00ffff",
+            "#ffffff",
+        ]
+        index = 0
+        while index < len(values):
+            value = values[index]
+            if value == 0:
+                self.fg, self.bg, self.bold = "#dddddd", "#000000", False
+            elif value in (1, 22):
+                self.bold = value == 1
+            elif value in (39, 49):
+                if value == 39:
+                    self.fg = "#dddddd"
+                else:
+                    self.bg = "#000000"
+            elif 30 <= value <= 37 or 90 <= value <= 97:
+                self.fg = palette[value - (30 if value < 90 else 82)]
+            elif 40 <= value <= 47 or 100 <= value <= 107:
+                self.bg = palette[value - (40 if value < 100 else 92)]
+            elif value in (38, 48) and index + 1 < len(values):
+                color = None
+                if values[index + 1] == 2 and index + 4 < len(values):
+                    color = "#" + "".join(
+                        f"{v:02x}" for v in values[index + 2 : index + 5]
+                    )
+                    index += 4
+                elif values[index + 1] == 5 and index + 2 < len(values):
+                    n = values[index + 2]
+                    if n < 16:
+                        color = palette[n]
+                    elif n < 232:
+                        n -= 16
+                        levels = [0, 95, 135, 175, 215, 255]
+                        color = "#" + "".join(
+                            f"{levels[v]:02x}" for v in (n // 36, n // 6 % 6, n % 6)
+                        )
+                    else:
+                        color = "#" + f"{8 + 10 * (n - 232):02x}" * 3
+                    index += 2
+                if color is not None:
+                    if value == 38:
+                        self.fg = color
+                    else:
+                        self.bg = color
+            index += 1
+
+    def svg(self):
+        """Render only the captured cell grid and its actual ANSI SGR colors."""
+        parts = [
+            f'<svg xmlns="http://www.w3.org/2000/svg" width="{self.width * 8}" height="{self.height * 18}" viewBox="0 0 {self.width * 8} {self.height * 18}">',
+            "<metadata>Actual captured VT cells; ANSI true colors retained; default xterm black background, light foreground; monospace cell8x18.</metadata>",
+            '<rect width="100%" height="100%" fill="#000000"/>',
+            '<g font-family="DejaVu Sans Mono,Liberation Mono,monospace" font-size="14">',
+        ]
+        for y, row in enumerate(self.grid):
+            for x, ch in enumerate(row):
+                fg, bg, bold = self.styles[y][x]
+                if bg != "#000000":
+                    parts.append(
+                        f'<rect x="{x * 8}" y="{y * 18}" width="8" height="18" fill="{bg}"/>'
+                    )
+                if ch != " ":
+                    weight = ' font-weight="bold"' if bold else ""
+                    parts.append(
+                        f'<text x="{x * 8}" y="{y * 18 + 14}" fill="{fg}"{weight}>{html.escape(ch)}</text>'
+                    )
+        return "".join(parts) + "</g></svg>"
 
 
 def identity(pid):
@@ -140,6 +246,10 @@ def run_case(binary, scenario, output, cpus):
         TMPDIR=str(case),
     )
     env.pop("NO_COLOR", None)
+    control_read = control_write = None
+    if scenario.startswith("job-"):
+        control_read, control_write = os.pipe()
+        env["VAKINT_MONITOR_PTY_CONTROL_FD"] = str(control_write)
     command = [
         "taskset",
         "-c",
@@ -161,10 +271,14 @@ def run_case(binary, scenario, output, cpus):
         env=env,
         start_new_session=True,
         close_fds=True,
+        pass_fds=(() if control_write is None else (control_write,)),
     )
+    if control_write is not None:
+        os.close(control_write)
     owned = identity(process.pid)
     pidfd = os.pidfd_open(process.pid)
     captured = bytearray()
+    control = bytearray()
     screen = Screen()
     start = time.monotonic()
     ready = q_sent = detached = None
@@ -177,6 +291,9 @@ def run_case(binary, scenario, output, cpus):
         "command": command,
         "process": owned,
         "floor_bytes": 110_000_000_000,
+        "control_markers": "PTY stdout"
+        if control_read is None
+        else "dedicated inherited pipe",
     }
     try:
         while process.poll() is None:
@@ -190,15 +307,24 @@ def run_case(binary, scenario, output, cpus):
                 raise RuntimeError(
                     "owned synthetic fixture stopped below its 110GB host floor"
                 )
-            if select.select([master], [], [], 0.05)[0]:
+            for descriptor in select.select(
+                [master] + ([] if control_read is None else [control_read]),
+                [],
+                [],
+                0.05,
+            )[0]:
                 try:
-                    data = os.read(master, 65536)
+                    data = os.read(descriptor, 65536)
                 except OSError:
                     data = b""
-                captured.extend(data)
-                screen.feed(data)
-            if ready is None and f"PTY_READY:{scenario}".encode() in captured:
-                ready = now
+                if descriptor == master:
+                    captured.extend(data)
+                    screen.feed(data)
+                else:
+                    control.extend(data)
+            messages = captured if control_read is None else control
+            if ready is None and f"PTY_READY:{scenario}".encode() in messages:
+                ready = time.monotonic()
             if ready is None:
                 continue
             elapsed = now - ready
@@ -210,7 +336,10 @@ def run_case(binary, scenario, output, cpus):
                 if elapsed >= when and action not in actions:
                     os.write(master, key)
                     actions.add(action)
-            if scenario == "embedded-silence" and snapshot.exists():
+            if (
+                scenario in ("embedded-silence", "job-preparation", "job-output")
+                and snapshot.exists()
+            ):
                 document = json.loads(snapshot.read_text())
                 monitor = document["monitor"]
                 published = monitor["published_unix_seconds"]
@@ -230,13 +359,22 @@ def run_case(binary, scenario, output, cpus):
                             "verified": monitor["resources"][
                                 "process_identity_verified"
                             ],
+                            "scope_kind": monitor.get("scope_kind"),
+                            "api_status": monitor.get("api_status"),
+                            "job_finished": monitor.get("job_finished"),
+                            "status": monitor["status"],
+                            "owner": monitor["request_sequence"],
                         }
                     )
                     latest_publication = published
             if elapsed >= 36 and q_sent is None:
                 before_detach = screen.text()
                 (case / "screen-before-detach.txt").write_text(before_detach)
-                assert "synthetic" in before_detach and "active" in before_detach
+                (case / "screen-before-detach.svg").write_text(screen.svg())
+                assert (
+                    PHASES[scenario].replace("_", " ") in before_detach
+                    and "active" in before_detach
+                )
                 assert "display frozen" in before_detach
                 assert (
                     "Process RSS" in before_detach and "MemAvailable" in before_detach
@@ -249,11 +387,11 @@ def run_case(binary, scenario, output, cpus):
                 if scenario == "blocked-publisher":
                     assert b"PTY_SINK_BLOCKED:blocked-publisher" in captured
                     assert b"PTY_SINK_RELEASED:blocked-publisher" not in captured
-                q_sent = now
+                q_sent = time.monotonic()
                 os.write(master, b"q")
             if q_sent is not None and detached is None:
-                if f"PTY_DETACHED:{scenario}".encode() in captured:
-                    detached = now
+                if f"PTY_DETACHED:{scenario}".encode() in messages:
+                    detached = time.monotonic()
                     assert detached - q_sent < 1, (
                         "detach or terminal restoration took >=1s"
                     )
@@ -272,16 +410,23 @@ def run_case(binary, scenario, output, cpus):
             if not data:
                 break
             captured.extend(data)
+        if control_read is not None:
+            while select.select([control_read], [], [], 0)[0]:
+                data = os.read(control_read, 65536)
+                if not data:
+                    break
+                control.extend(data)
+        messages = captured if control_read is None else control
         assert process.returncode == 0, captured.decode(errors="replace")[-5000:]
         assert ready is not None and detached is not None
-        assert f"PTY_DONE:{scenario}".encode() in captured
+        assert f"PTY_DONE:{scenario}".encode() in messages
         if scenario == "blocked-publisher":
             assert b"PTY_SINK_RELEASED:blocked-publisher" in captured
-        if scenario == "embedded-silence":
+        if scenario in ("embedded-silence", "job-preparation", "job-output"):
             quiet_observations = [
                 row
                 for row in observations
-                if row["before_q"] and row["phase"] == "synthetic_opaque_call"
+                if row["before_q"] and row["phase"] == PHASES[scenario]
             ]
             assert len(quiet_observations) >= 30
             gaps = [
@@ -314,6 +459,29 @@ def run_case(binary, scenario, output, cpus):
                 for row in quiet_observations
                 if row["publication"] >= verified[0]["publication"]
             )
+            if scenario.startswith("job-"):
+                assert {row["owner"] for row in observations} == {
+                    quiet_observations[0]["owner"]
+                }
+                assert all(
+                    row["scope_kind"] == "job"
+                    and row["status"] == "Running"
+                    and row["job_finished"] is False
+                    for row in quiet_observations
+                )
+                expected_api = (
+                    "NotStarted" if scenario == "job-preparation" else "Succeeded"
+                )
+                assert all(
+                    row["api_status"] == expected_api for row in quiet_observations
+                )
+                final = json.loads(snapshot.read_text())["monitor"]
+                assert (
+                    final["job_finished"] is True
+                    and final["api_status"] == "Succeeded"
+                    and final["status"] == "Succeeded"
+                )
+                assert (case / "completed-job.json").read_text() == "17\n"
         result.update(
             status="PASS",
             exit_code=process.returncode,
@@ -352,7 +520,7 @@ def run_case(binary, scenario, output, cpus):
                     quiet_phase_observations=[
                         row
                         for row in observations
-                        if row["before_q"] and row["phase"] == "synthetic_opaque_call"
+                        if row["before_q"] and row["phase"] == PHASES[scenario]
                     ],
                     post_q_observations=[
                         row
@@ -374,11 +542,14 @@ def run_case(binary, scenario, output, cpus):
                     ),
                 )
                 (case / "terminal.bin").write_bytes(captured)
+                (case / "control.bin").write_bytes(control)
                 (case / "result.json").write_text(json.dumps(result, indent=2) + "\n")
             finally:
                 os.close(pidfd)
                 os.close(master)
                 os.close(slave)
+                if control_read is not None:
+                    os.close(control_read)
     return result
 
 

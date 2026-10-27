@@ -177,6 +177,27 @@ summands and encoded bytes on its owning thread; they never scan or send its Ato
 indeterminate, and any native ETA remains a diagnostic estimate. Frozen native panels retain
 live status, phase clocks and resources. Detaching the terminal does not cancel calculation.
 
+`RustRedMonitorScope::run` extends this same request owner across a caller job.
+Its opaque borrowed scope keeps the native observer on the caller thread and
+exposes only phase notices, existing Atom-header samples, and actual completed
+caller-item counters. `evaluate_rustred_symbolic_in_scope` reborrows that observer
+for the ordinary retained-evaluation implementation; it creates no second
+presenter, solver, cache or reduction path. Reduction API status is separate from
+whole-job completion. An API return leaves the job active, including during
+opaque output or cache-close work, until the outer closure returns. The
+closure's result and error retain precedence over telemetry faults. Invalid
+options use its declared `From<VakintError>` conversion; disabled options start
+no monitor workers. The existing single-API convenience path and lossless
+cache-hit classification retain their own completion boundaries.
+
+The physical five-loop collector enters a job scope after guard admission and
+initial setup, covering preparation/loading through result and guard writes,
+running-cache flush and close, and the final report write. Its guard counter
+advances only after each existing serialization step succeeds. The original
+calculation, durability and error-handling order remains intact; stdout is
+delivered after terminal restoration. Frozen displays keep API and whole-job
+status live alongside clocks and resources.
+
 A bounded latest-value publisher owns blocking snapshot I/O separately from the terminal.
 It preserves atomic replacement and checks cancellation and destination ownership immediately
 before commit. A stalled final publication is canceled after a short diagnostic drain instead

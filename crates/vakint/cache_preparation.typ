@@ -347,6 +347,30 @@ monitor owner; shutdown never synchronously logs through a potentially blocked s
 Observation adds overhead and does
 not establish master closure or an estimate of remaining work.
 
+Rust callers can keep the same monitor active across a complete caller job with
+`RustRedMonitorScope::run(&options, |scope| { ... })`. The closure borrows one
+scope on its caller thread. `phase` names opaque work, `expression_phase` reads
+an existing Atom's headers, and `work_phase` returns a `RustRedMonitorWork` whose
+`completed` counter records real completed items. Finish that counter's borrow
+before starting another scope operation. Use
+`evaluate_rustred_symbolic_in_scope` for reduction inside the scope; it shares
+the existing observer and presenter. Returning from that API updates its own
+status while the whole job remains active until the closure returns. The
+ordinary `evaluate_rustred_symbolic_with_monitor` convenience call still ends
+its monitor with that single API call. The closure's error is returned unchanged;
+its error type must implement `From<VakintError>` for invalid monitor options.
+Disabled options start no monitor workers. Lossless cache-hit classification
+keeps its separate per-API diagnostic contract and cannot use a job scope.
+
+The #link("examples/five_loop_qcd_ladder.rs")[physical collector] uses one job
+scope after guard admission and initial setup. It covers input preparation or
+loading, data and cache loading, cold and optional warm reduction, result and
+guard serialization, cache flush and close, and the final report write.
+Guard serialization counts successful guard writes. The display distinguishes
+reduction API status from whole-job completion; a returned reduction does not
+declare the later output work complete. Dress-only and prepare-only paths end
+after their own work, and final stdout is printed after terminal restoration.
+
 The #link("examples/measure_cache.rs")[suite measurement driver] runs each
 case, repetition and cache variant in a fresh process. Both variants load the
 same authenticated local checkout with `load_prepared_caches: false`, so no

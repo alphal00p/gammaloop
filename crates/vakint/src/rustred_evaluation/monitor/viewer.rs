@@ -693,8 +693,14 @@ impl ActiveViewer {
             .retain(|(label, _)| !live_rows.iter().any(|(live, _)| label == live));
         view.overview.extend(live_rows);
         for (label, value) in &self.latest.view.overview {
-            if matches!(label.as_str(), "Caller phase progress" | "Request finished")
-                && let Some(row) = view.overview.iter_mut().find(|(name, _)| name == label)
+            if matches!(
+                label.as_str(),
+                "Caller phase progress"
+                    | "Request finished"
+                    | "Monitor scope"
+                    | "Reduction API status"
+                    | "Whole job finished"
+            ) && let Some(row) = view.overview.iter_mut().find(|(name, _)| name == label)
             {
                 row.1 = value.clone();
             }

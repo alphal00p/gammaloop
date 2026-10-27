@@ -269,6 +269,18 @@ fn metric_style(label: &str, value: &str, no_color: bool) -> Style {
         return muted(no_color).add_modifier(Modifier::ITALIC);
     }
     let color = match label {
+        "Monitor scope" => ACCENT_MAGENTA,
+        "Reduction API status" => match value {
+            "Succeeded" => ACCENT_GREEN,
+            "Failed" => Color::Red,
+            "Running" => ACCENT_CYAN,
+            _ => Color::Gray,
+        },
+        "Whole job finished" => match value {
+            "true" => ACCENT_GREEN,
+            "false" => ACCENT_AMBER,
+            _ => Color::Gray,
+        },
         "Current canonical native key" | "Caller Atom bytes / stored summands" => ACCENT_MAGENTA,
         "Current canonical R / A / D" | "Elapsed at observation" => ACCENT_CYAN,
         "Roots collected / selected" | "Completed unique identities (not closure)" => ACCENT_GREEN,

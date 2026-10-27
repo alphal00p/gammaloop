@@ -34,8 +34,8 @@ use std::{
 use symbolica::atom::{Atom, AtomCore, AtomView};
 use vakint::{
     EvaluationMethod, EvaluationOrder, OfficialExternalDataOptions, RustRedEvaluationOptions,
-    RustRedMasterMode, RustRedMonitorDisplay, RustRedMonitorOptions, RustRedRunningCacheControl,
-    RustRedRunningCacheOptions, Vakint, VakintSettings,
+    RustRedMasterMode, RustRedMonitorDisplay, RustRedMonitorOptions, RustRedMonitorScope,
+    RustRedRunningCacheControl, RustRedRunningCacheOptions, Vakint, VakintSettings,
 };
 
 const USAGE: &str = "usage: five_loop_qcd_ladder --work-dir PATH [--artifacts PATH] [--projection quadratic|zero-momentum] [--coefficient-representation sparse|factorized] [--prepared-input PATH|--fresh-prepare] [--prepare-only|--dress-only] [--cache PATH] [--cache-max-compressed-bytes N] [--cache-max-decoded-bytes N] [--cache-max-index-bytes N] [--cache-decoded-directory PATH] [--running-cache PATH] [--running-cache-capture-only] [--running-cache-no-read-delta] [--warm] [--classify-cache-hits] [--monitor] [--progress-snapshot PATH] [--progress-interval-seconds N]\nCache file options require --cache. Byte grants are explicit and never raised automatically; compact defaults apply when omitted. --cache-decoded-directory selects file-backed decoded storage in an existing directory.\n--classify-cache-hits requires experimental-rustred, --cache and an existing --prepared-input (or prepared work directory). It runs one retained functional diagnostic; fresh preparation, warm runs, running caches and monitoring are forbidden. Diagnostic timings cannot support performance claims.\nMonitoring defaults off. --monitor requires progress-tui and defaults its snapshot to work-dir/monitor.json. A snapshot path enables native JSON without a TUI; interval defaults to 1s and must be finite and nonnegative. Monitored timings include diagnostic observation overhead.";
@@ -481,687 +481,737 @@ fn main() -> fixture::Result<()> {
     };
     log::set_logger(&LOGGER).map_err(|error| error.to_string())?;
     log::set_max_level(log::LevelFilter::Debug);
-    if dress_only {
-        let started = Instant::now();
-        let generated = fixture::dress(&work)?;
-        println!(
-            "{}",
-            json!({"event":"native_qcd_ladder_dressed", "seconds":started.elapsed().as_secs_f64(),
-            "diagrams":generated.diagrams.len(), "loops":generated.diagrams[0].loop_count()})
-        );
-        return Ok(());
-    }
-    let total_started = Instant::now();
-    if prepared_input.is_none() && fixture::LadderFixture::has_prepared_input(&work)? {
-        if fresh_prepare {
-            return Err("--fresh-prepare requires a new --work-dir; preserve the completed prepared-input bundle".into());
+    let operation = |mut scope: Option<&mut RustRedMonitorScope<'_, '_>>| -> fixture::Result<serde_json::Value> {
+        if dress_only {
+            if let Some(scope) = scope.as_deref_mut() { scope.phase("diagram_dressing"); }
+            let started = Instant::now();
+            let generated = fixture::dress(&work)?;
+            return Ok(json!({"event":"native_qcd_ladder_dressed", "seconds":started.elapsed().as_secs_f64(),
+                "diagrams":generated.diagrams.len(), "loops":generated.diagrams[0].loop_count()}));
         }
-        prepared_input = Some(work.clone());
-    }
-    validate_classification(
-        classify_cache_hits,
-        cache.as_deref(),
-        classification_incompatible,
-        prepared_input.is_some(),
-    )?;
-    let fresh_native_preparation = prepared_input.is_none();
-    let input_started = Instant::now();
-    let prepared = match &prepared_input {
-        Some(directory) => fixture::LadderFixture::load_prepared(directory, projection)?,
-        None => fixture::prepare(&work, projection)?,
-    };
-    let input_loading_seconds =
-        (!fresh_native_preparation).then(|| input_started.elapsed().as_secs_f64());
-    let manifest_directory = prepared_input.as_ref().unwrap_or(&work);
-    let manifest = match &prepared.prepared_input {
-        Some(manifest) => manifest.clone(),
-        None => prepared.save_prepared(&work)?,
-    };
-    let manifest_path =
-        std::fs::canonicalize(manifest_directory.join(fixture::PREPARED_INPUT_MANIFEST))?;
-    let sources: [(&str, &[u8]); 7] = [
-        (
-            "mod.rs",
-            include_bytes!("../tests/fixtures/qcd_ladder/mod.rs"),
-        ),
-        (
-            "physical.rs",
-            include_bytes!("../tests/fixtures/qcd_ladder/physical.rs"),
-        ),
-        (
-            "projector.rs",
-            include_bytes!("../tests/fixtures/qcd_ladder/projector.rs"),
-        ),
-        (
-            "vacuum.rs",
-            include_bytes!("../tests/fixtures/qcd_ladder/vacuum.rs"),
-        ),
-        (
-            "ladder.dot",
-            include_bytes!("../tests/fixtures/qcd_ladder/ladder.dot"),
-        ),
-        ("qcd.json", include_bytes!("../tests/fixtures/qcd.json")),
-        ("phi3.json", include_bytes!("../tests/fixtures/phi3.json")),
-    ];
-    let source_hashes = sources
-        .into_iter()
-        .map(|(name, bytes)| (name, format!("{:x}", Sha256::digest(bytes))))
-        .collect::<BTreeMap<_, _>>();
-    let mut report = json!({"schema":"vakint.qcd-ladder.benchmark.v1", "projection":prepared.projection,
-        "coefficient_representation":representation_name,
-        "source_commit":git(&["rev-parse", "HEAD"]), "source_dirty":git(&["status", "--porcelain"]).map(|value| !value.is_empty()),
-        "compiled_cohort":{
-            "main_revision":option_env!("VAKINT_CACHE_BUILD_GIT_REVISION"),
-            "native_revision":option_env!("VAKINT_CACHE_BUILD_RUSTRED_REVISION"),
-            "kernel_revision":option_env!("VAKINT_CACHE_BUILD_SYMBOLICA_REVISION"),
-            "main_source_snapshot_sha256":option_env!("VAKINT_CACHE_BUILD_MAIN_SOURCE_SNAPSHOT_SHA256"),
-            "native_source_snapshot_sha256":option_env!("VAKINT_CACHE_BUILD_NATIVE_SOURCE_SNAPSHOT_SHA256"),
-            "rustc":option_env!("VAKINT_CACHE_BUILD_RUSTC"),
-            "profile":option_env!("VAKINT_CACHE_BUILD_PROFILE"),
-        },
-        "executable_sha256":format!("{:x}", Sha256::digest(std::fs::read(std::env::current_exe()?)?)),
-        "collector_source_sha256":format!("{:x}", Sha256::digest(include_bytes!("five_loop_qcd_ladder.rs"))),
-        "collector_helper_sources_sha256":collector_helper_sources(),
-        "master_mode":"retain",
-        "guard_policy":"canonical-full-sorted-deduplicated",
-        "cache_identity":cache_identity(cache.as_deref())?,
-        "cache_identity_after":null,
-        "cache_hit_diagnostic_enabled":classify_cache_hits,
-        "diagnostic_only":classify_cache_hits,
-        "performance_claim":false,
-        "warm_requested":warm,
-        "cache_hit_diagnostic":null,
-        "input_canonical_sha256":format!("{:x}",Sha256::digest(prepared.input.to_canonical_string().as_bytes())),
-        "compiled_cache_file_args_sha256":format!("{:x}", Sha256::digest(include_bytes!("build_cache/cache_file_args.rs"))),
-        "fresh_native_preparation":fresh_native_preparation,
-        "input_mode":if fresh_native_preparation {"fresh"} else {"prepared"},
-        "fixture_sources_sha256":manifest.producer.fixture_sources_sha256,
-        "consumer_fixture_sources_sha256":source_hashes,
-        "prepared_input":{"manifest_path":manifest_path,
-            "manifest_sha256":format!("{:x}",Sha256::digest(std::fs::read(&manifest_path)?)),
-            "manifest":manifest},
-        "input_loading_seconds":input_loading_seconds,
-        "preparation":if fresh_native_preparation {serde_json::to_value(&prepared.timings)?} else {serde_json::Value::Null},
-        "preparation_seconds":fresh_native_preparation.then_some(prepared.preparation_seconds),
-        "end_to_end_scope":if fresh_native_preparation {"fresh native preparation through cold result serialization"} else {"verified prepared-input loading through cold result serialization; original preparation excluded"},
-        "scalar_terms":prepared.scalar_terms,
-        "preparation_policy":{"fixture_work_count_overrides":false,
-            "optional_numerator_denominator_cancellation":false,
-            "optional_scalar_expansion":false,"scalar_term_count":"stored representation",
-            "native_denominator_basis_lowering":"required by saved-index application"},
-        "contributions":prepared.contributions, "input_sha256":manifest.input.sha256,
-        "input_bytes":manifest.input.bytes, "prepared_nonzero_conditions":prepared.nonzero_conditions.iter().map(AtomCore::to_canonical_string).collect::<Vec<_>>(),
-        "persistent_cache":cache, "running_cache_path":running_cache,
-        "cache_file_options":cache_file_options.document()?,
-        "running_cache_capture_only":running_cache_capture_only,
-        "running_cache_read_delta":!running_cache_no_read_delta,
-        "reduction_completed":false});
-    if monitor.enabled() {
-        report["monitor"] = json!({
-            "display": match monitor.display {
-                RustRedMonitorDisplay::Off => "off",
-                RustRedMonitorDisplay::Tui => "tui",
-                RustRedMonitorDisplay::Json => "json",
+        let total_started = Instant::now();
+        if let Some(scope) = scope.as_deref_mut() { scope.phase("prepared_input_selection"); }
+        if prepared_input.is_none() && fixture::LadderFixture::has_prepared_input(&work)? {
+            if fresh_prepare {
+                return Err("--fresh-prepare requires a new --work-dir; preserve the completed prepared-input bundle".into());
+            }
+            prepared_input = Some(work.clone());
+        }
+        validate_classification(
+            classify_cache_hits,
+            cache.as_deref(),
+            classification_incompatible,
+            prepared_input.is_some(),
+        )?;
+        let fresh_native_preparation = prepared_input.is_none();
+        let input_started = Instant::now();
+        if let Some(scope) = scope.as_deref_mut() { scope.phase(if fresh_native_preparation { "scalar_input_preparation" } else { "prepared_input_loading" }); }
+        let prepared = match &prepared_input {
+            Some(directory) => fixture::LadderFixture::load_prepared(directory, projection)?,
+            None => fixture::prepare(&work, projection)?,
+        };
+        let input_loading_seconds =
+            (!fresh_native_preparation).then(|| input_started.elapsed().as_secs_f64());
+        if let Some(scope) = scope.as_deref_mut() { scope.phase("prepared_input_authentication_and_report"); }
+        let manifest_directory = prepared_input.as_ref().unwrap_or(&work);
+        let manifest = match &prepared.prepared_input {
+            Some(manifest) => manifest.clone(),
+            None => prepared.save_prepared(&work)?,
+        };
+        let manifest_path =
+            std::fs::canonicalize(manifest_directory.join(fixture::PREPARED_INPUT_MANIFEST))?;
+        let sources: [(&str, &[u8]); 7] = [
+            (
+                "mod.rs",
+                include_bytes!("../tests/fixtures/qcd_ladder/mod.rs"),
+            ),
+            (
+                "physical.rs",
+                include_bytes!("../tests/fixtures/qcd_ladder/physical.rs"),
+            ),
+            (
+                "projector.rs",
+                include_bytes!("../tests/fixtures/qcd_ladder/projector.rs"),
+            ),
+            (
+                "vacuum.rs",
+                include_bytes!("../tests/fixtures/qcd_ladder/vacuum.rs"),
+            ),
+            (
+                "ladder.dot",
+                include_bytes!("../tests/fixtures/qcd_ladder/ladder.dot"),
+            ),
+            ("qcd.json", include_bytes!("../tests/fixtures/qcd.json")),
+            ("phi3.json", include_bytes!("../tests/fixtures/phi3.json")),
+        ];
+        let source_hashes = sources
+            .into_iter()
+            .map(|(name, bytes)| (name, format!("{:x}", Sha256::digest(bytes))))
+            .collect::<BTreeMap<_, _>>();
+        let mut report = json!({"schema":"vakint.qcd-ladder.benchmark.v1", "projection":prepared.projection,
+            "coefficient_representation":representation_name,
+            "source_commit":git(&["rev-parse", "HEAD"]), "source_dirty":git(&["status", "--porcelain"]).map(|value| !value.is_empty()),
+            "compiled_cohort":{
+                "main_revision":option_env!("VAKINT_CACHE_BUILD_GIT_REVISION"),
+                "native_revision":option_env!("VAKINT_CACHE_BUILD_RUSTRED_REVISION"),
+                "kernel_revision":option_env!("VAKINT_CACHE_BUILD_SYMBOLICA_REVISION"),
+                "main_source_snapshot_sha256":option_env!("VAKINT_CACHE_BUILD_MAIN_SOURCE_SNAPSHOT_SHA256"),
+                "native_source_snapshot_sha256":option_env!("VAKINT_CACHE_BUILD_NATIVE_SOURCE_SNAPSHOT_SHA256"),
+                "rustc":option_env!("VAKINT_CACHE_BUILD_RUSTC"),
+                "profile":option_env!("VAKINT_CACHE_BUILD_PROFILE"),
             },
-            "progress_snapshot": monitor.progress_snapshot,
-            "interval_seconds": monitor.interval.as_secs_f64(),
-            "diagnostic_timing": true,
-        });
-    }
-    write_report(&report)?;
-    if prepare_only {
-        println!("{report}");
-        return Ok(());
-    }
-    let mut settings = VakintSettings {
-        evaluation_order: EvaluationOrder(vec![EvaluationMethod::RustRed(
-            RustRedEvaluationOptions {
-                master_mode: RustRedMasterMode::Retain,
-            },
-        )]),
-        form_exe_path: "/qcd-ladder-must-not-use-form".into(),
-        use_dot_product_notation: true,
-        ..Default::default()
-    };
-    // Match the ordinary five-loop evaluator's effective native policy, so
-    // the recorded options describe the application that actually runs.
-    settings.rustred_application_options.unresolved_policy =
-        rustred::solver::UnresolvedPolicy::Preserve;
-    settings.rustred_application_options.cache_representation = coefficient_representation;
-    // The public loader prepares its default Sparse session. Selecting
-    // Factorized reloads that session on the first evaluation; retain and
-    // report this setup cost instead of introducing another loading path.
-    report["representation_setup"] = json!({
-        "initial_data_load":"sparse",
-        "evaluation_requested":representation_name,
-        "first_evaluation_reloads_application":coefficient_representation != CandidateCacheRepresentation::Sparse,
-        "reload_timing_scope":"Any representation reload is included in reduction_seconds, not data_loading_seconds",
-        "owner_preparation_counter_scope":"Before/after counters belong to different sessions when the representation reloads; their subtraction is not an isolated same-session preparation measurement"
-    });
-    report["conventions"] = json!({
-        "integral_normalization":format!("{:?}",settings.integral_normalization_factor),
-        "integral_normalization_expression":settings.get_integral_normalization_factor_atom()?.to_canonical_string(),
-        "epsilon_symbol":settings.epsilon_symbol,
-        "mass_convention":"one common denominator mass mUV; massless quark numerators",
-        "application_options":format!("{:?}",settings.rustred_application_options),
-        "scalar_limits":format!("{:?}",settings.rustred_scalar_numerator_limits),
-        "matching_limits":format!("{:?}",settings.rustred_momentum_match_limits)});
-    let started = Instant::now();
-    let mut engine = Vakint::new()?;
-    let loaded = engine.load_official_external_data(
-        5,
-        &OfficialExternalDataOptions {
-            local_artifacts_path: artifacts,
-            load_prepared_caches: false,
-            ..Default::default()
-        },
-    )?;
-    let caches_before = (1..=5)
-        .map(|loops| Ok((loops, engine.cache_statistics(loops)?.has_read_backing())))
-        .collect::<fixture::Result<BTreeMap<_, _>>>()?;
-    if caches_before.values().any(|attached| *attached) {
-        return Err("baseline must never import a persistent cache".into());
-    }
-    report["data_manifest_sha256"] = json!(format!(
-        "{:x}",
-        Sha256::digest(std::fs::read(loaded.path.join("manifest.json"))?)
-    ));
-    report["data"] = serde_json::to_value(loaded)?;
-    report["data_loading_seconds"] = json!(started.elapsed().as_secs_f64());
-    report["loading_stages"] = json!(*LOGGER.phases.lock().map_err(|error| error.to_string())?);
-    let owners_after_data_load = engine.rustred_application_owner_preparation_statistics()?;
-    if let Some(cache) = &cache {
-        let started = Instant::now();
-        engine.load_cache(5, cache, &cache_file_options.load_options())?;
-        report["cache_loading_seconds"] = json!(started.elapsed().as_secs_f64());
-        engine.clear_cache(5)?;
-    }
-    let running_read_backing = running_cache.is_some() && !running_cache_capture_only;
-    let running_started = Instant::now();
-    let running_control = running_cache
-        .as_ref()
-        .map(|path| {
-            engine.attach_running_cache(
-                5,
-                path,
-                &RustRedRunningCacheOptions {
-                    read_backing: running_read_backing,
-                    read_delta: !running_cache_no_read_delta,
-                    ..Default::default()
+            "executable_sha256":format!("{:x}", Sha256::digest(std::fs::read(std::env::current_exe()?)?)),
+            "collector_source_sha256":format!("{:x}", Sha256::digest(include_bytes!("five_loop_qcd_ladder.rs"))),
+            "collector_helper_sources_sha256":collector_helper_sources(),
+            "master_mode":"retain",
+            "guard_policy":"canonical-full-sorted-deduplicated",
+            "cache_identity":({
+                if let Some(scope) = scope.as_deref_mut() { scope.phase("initial_cache_identity_verification"); }
+                let identity = cache_identity(cache.as_deref())?;
+                if let Some(scope) = scope.as_deref_mut() { scope.phase("prepared_input_report"); }
+                identity
+            }),
+            "cache_identity_after":null,
+            "cache_hit_diagnostic_enabled":classify_cache_hits,
+            "diagnostic_only":classify_cache_hits,
+            "performance_claim":false,
+            "warm_requested":warm,
+            "cache_hit_diagnostic":null,
+            "input_canonical_sha256":format!("{:x}",Sha256::digest(prepared.input.to_canonical_string().as_bytes())),
+            "compiled_cache_file_args_sha256":format!("{:x}", Sha256::digest(include_bytes!("build_cache/cache_file_args.rs"))),
+            "fresh_native_preparation":fresh_native_preparation,
+            "input_mode":if fresh_native_preparation {"fresh"} else {"prepared"},
+            "fixture_sources_sha256":manifest.producer.fixture_sources_sha256,
+            "consumer_fixture_sources_sha256":source_hashes,
+            "prepared_input":{"manifest_path":manifest_path,
+                "manifest_sha256":format!("{:x}",Sha256::digest(std::fs::read(&manifest_path)?)),
+                "manifest":manifest},
+            "input_loading_seconds":input_loading_seconds,
+            "preparation":if fresh_native_preparation {serde_json::to_value(&prepared.timings)?} else {serde_json::Value::Null},
+            "preparation_seconds":fresh_native_preparation.then_some(prepared.preparation_seconds),
+            "end_to_end_scope":if fresh_native_preparation {"fresh native preparation through cold result serialization"} else {"verified prepared-input loading through cold result serialization; original preparation excluded"},
+            "scalar_terms":prepared.scalar_terms,
+            "preparation_policy":{"fixture_work_count_overrides":false,
+                "optional_numerator_denominator_cancellation":false,
+                "optional_scalar_expansion":false,"scalar_term_count":"stored representation",
+                "native_denominator_basis_lowering":"required by saved-index application"},
+            "contributions":prepared.contributions, "input_sha256":manifest.input.sha256,
+            "input_bytes":manifest.input.bytes, "prepared_nonzero_conditions":prepared.nonzero_conditions.iter().map(AtomCore::to_canonical_string).collect::<Vec<_>>(),
+            "persistent_cache":cache, "running_cache_path":running_cache,
+            "cache_file_options":cache_file_options.document()?,
+            "running_cache_capture_only":running_cache_capture_only,
+            "running_cache_read_delta":!running_cache_no_read_delta,
+            "reduction_completed":false});
+        if monitor.enabled() {
+            report["monitor"] = json!({
+                "display": match monitor.display {
+                    RustRedMonitorDisplay::Off => "off",
+                    RustRedMonitorDisplay::Tui => "tui",
+                    RustRedMonitorDisplay::Json => "json",
                 },
-            )
-        })
-        .transpose()?;
-    let evaluation = (|| -> fixture::Result<()> {
-        report["running_cache_loading_seconds"] = json!(
-            running_control
-                .as_ref()
-                .map(|_| running_started.elapsed().as_secs_f64())
-        );
-        report["running_cache_read_backing"] = json!(running_read_backing);
-        report["running_cache_attached"] =
-            json!(running_control.is_some() && engine.cache_statistics(5)?.attached);
-        let caches_during_evaluation = (1..=5)
+                "progress_snapshot": monitor.progress_snapshot,
+                "interval_seconds": monitor.interval.as_secs_f64(),
+                "diagnostic_timing": true,
+                "scope":"job", "api_completion":"separate from durable outputs and cache closure",
+            });
+        }
+        if let Some(scope) = scope.as_deref_mut() { scope.phase("durable_report_write"); }
+        write_report(&report)?;
+        if prepare_only {
+            return Ok(report);
+        }
+        let mut settings = VakintSettings {
+            evaluation_order: EvaluationOrder(vec![EvaluationMethod::RustRed(
+                RustRedEvaluationOptions {
+                    master_mode: RustRedMasterMode::Retain,
+                },
+            )]),
+            form_exe_path: "/qcd-ladder-must-not-use-form".into(),
+            use_dot_product_notation: true,
+            ..Default::default()
+        };
+        // Match the ordinary five-loop evaluator's effective native policy, so
+        // the recorded options describe the application that actually runs.
+        settings.rustred_application_options.unresolved_policy =
+            rustred::solver::UnresolvedPolicy::Preserve;
+        settings.rustred_application_options.cache_representation = coefficient_representation;
+        // The public loader prepares its default Sparse session. Selecting
+        // Factorized reloads that session on the first evaluation; retain and
+        // report this setup cost instead of introducing another loading path.
+        report["representation_setup"] = json!({
+            "initial_data_load":"sparse",
+            "evaluation_requested":representation_name,
+            "first_evaluation_reloads_application":coefficient_representation != CandidateCacheRepresentation::Sparse,
+            "reload_timing_scope":"Any representation reload is included in reduction_seconds, not data_loading_seconds",
+            "owner_preparation_counter_scope":"Before/after counters belong to different sessions when the representation reloads; their subtraction is not an isolated same-session preparation measurement"
+        });
+        report["conventions"] = json!({
+            "integral_normalization":format!("{:?}",settings.integral_normalization_factor),
+            "integral_normalization_expression":settings.get_integral_normalization_factor_atom()?.to_canonical_string(),
+            "epsilon_symbol":settings.epsilon_symbol,
+            "mass_convention":"one common denominator mass mUV; massless quark numerators",
+            "application_options":format!("{:?}",settings.rustred_application_options),
+            "scalar_limits":format!("{:?}",settings.rustred_scalar_numerator_limits),
+            "matching_limits":format!("{:?}",settings.rustred_momentum_match_limits)});
+        let started = Instant::now();
+        if let Some(scope) = scope.as_deref_mut() { scope.phase("external_data_loading"); }
+        let mut engine = Vakint::new()?;
+        let loaded = engine.load_official_external_data(
+            5,
+            &OfficialExternalDataOptions {
+                local_artifacts_path: artifacts,
+                load_prepared_caches: false,
+                ..Default::default()
+            },
+        )?;
+        let caches_before = (1..=5)
             .map(|loops| Ok((loops, engine.cache_statistics(loops)?.has_read_backing())))
             .collect::<fixture::Result<BTreeMap<_, _>>>()?;
-        if caches_during_evaluation.iter().any(|(&loops, &attached)| {
-            attached != ((cache.is_some() || running_read_backing) && loops == 5)
-        }) {
-            return Err(
-                "measurement persistent backing differs from the declared five-loop cache policy"
-                    .into(),
-            );
+        if caches_before.values().any(|attached| *attached) {
+            return Err("baseline must never import a persistent cache".into());
         }
-        report["persistent_cache_attached"] = json!(caches_during_evaluation[&5]);
-        report["persistent_cache_attachments_before"] = json!(caches_before);
-        report["persistent_cache_attachments_during_evaluation"] = json!(caches_during_evaluation);
-        report["persistent_cache_policy"] =
-            json!(if running_read_backing && running_cache_no_read_delta {
-                "immutable-five-loop-base-only-with-running-capture"
-            } else if running_read_backing && cache.is_some() {
-                "manual-five-loop-base-and-running-delta"
-            } else if running_read_backing {
-                "running-five-loop-delta"
-            } else if cache.is_some() {
-                "manual-five-loop-only"
-            } else {
-                "none"
-            });
-        let flush_running_cache =
-            |phase: &str| -> (serde_json::Value, Option<Box<dyn std::error::Error>>) {
-                let Some(control) = &running_control else {
-                    return (serde_json::Value::Null, None);
-                };
-                let started = Instant::now();
-                let flushed = control.flush();
-                let seconds = started.elapsed().as_secs_f64();
-                let flush_complete = flushed.as_ref().is_ok_and(|report| {
-                    report.pending_records == 0 && report.writer_error.is_none()
+        report["data_manifest_sha256"] = json!(format!(
+            "{:x}",
+            Sha256::digest(std::fs::read(loaded.path.join("manifest.json"))?)
+        ));
+        report["data"] = serde_json::to_value(loaded)?;
+        report["data_loading_seconds"] = json!(started.elapsed().as_secs_f64());
+        report["loading_stages"] = json!(*LOGGER.phases.lock().map_err(|error| error.to_string())?);
+        let owners_after_data_load = engine.rustred_application_owner_preparation_statistics()?;
+        if let Some(cache) = &cache {
+            let started = Instant::now();
+            if let Some(scope) = scope.as_deref_mut() { scope.phase("persistent_cache_loading"); }
+            engine.load_cache(5, cache, &cache_file_options.load_options())?;
+            report["cache_loading_seconds"] = json!(started.elapsed().as_secs_f64());
+            engine.clear_cache(5)?;
+        }
+        if let Some(scope) = scope.as_deref_mut() { scope.phase("running_cache_attachment"); }
+        let running_read_backing = running_cache.is_some() && !running_cache_capture_only;
+        let running_started = Instant::now();
+        let running_control = running_cache
+            .as_ref()
+            .map(|path| {
+                engine.attach_running_cache(
+                    5,
+                    path,
+                    &RustRedRunningCacheOptions {
+                        read_backing: running_read_backing,
+                        read_delta: !running_cache_no_read_delta,
+                        ..Default::default()
+                    },
+                )
+            })
+            .transpose()?;
+        let evaluation = (|| -> fixture::Result<()> {
+            report["running_cache_loading_seconds"] = json!(
+                running_control
+                    .as_ref()
+                    .map(|_| running_started.elapsed().as_secs_f64())
+            );
+            report["running_cache_read_backing"] = json!(running_read_backing);
+            report["running_cache_attached"] =
+                json!(running_control.is_some() && engine.cache_statistics(5)?.attached);
+            let caches_during_evaluation = (1..=5)
+                .map(|loops| Ok((loops, engine.cache_statistics(loops)?.has_read_backing())))
+                .collect::<fixture::Result<BTreeMap<_, _>>>()?;
+            if caches_during_evaluation.iter().any(|(&loops, &attached)| {
+                attached != ((cache.is_some() || running_read_backing) && loops == 5)
+            }) {
+                return Err(
+                    "measurement persistent backing differs from the declared five-loop cache policy"
+                        .into(),
+                );
+            }
+            report["persistent_cache_attached"] = json!(caches_during_evaluation[&5]);
+            report["persistent_cache_attachments_before"] = json!(caches_before);
+            report["persistent_cache_attachments_during_evaluation"] = json!(caches_during_evaluation);
+            report["persistent_cache_policy"] =
+                json!(if running_read_backing && running_cache_no_read_delta {
+                    "immutable-five-loop-base-only-with-running-capture"
+                } else if running_read_backing && cache.is_some() {
+                    "manual-five-loop-base-and-running-delta"
+                } else if running_read_backing {
+                    "running-five-loop-delta"
+                } else if cache.is_some() {
+                    "manual-five-loop-only"
+                } else {
+                    "none"
                 });
-                let document = match &flushed {
-                    Ok(report) => Some(report.to_document()),
-                    Err(_) => control.report().ok().map(|report| report.to_document()),
-                };
-                let flush_error = flushed.as_ref().err().map(ToString::to_string).or_else(|| {
-                    (!flush_complete)
-                        .then(|| "native flush did not commit all accepted records".to_owned())
-                });
-                let mut persistence_error: Option<Box<dyn std::error::Error>> = flushed
-                    .err()
-                    .map(|error| Box::new(error) as Box<dyn std::error::Error>);
-                if persistence_error.is_none() && !flush_complete {
-                    persistence_error =
-                        Some("native flush did not commit all accepted records".into());
-                }
-                let mut snapshot_seconds = None;
-                let mut snapshot_sidecar = None;
-                let mut snapshot_descriptor = None;
-                let mut snapshot_error = None;
-                let snapshot = if flush_complete {
+            let flush_running_cache =
+                |phase: &str| -> (serde_json::Value, Option<Box<dyn std::error::Error>>) {
+                    let Some(control) = &running_control else {
+                        return (serde_json::Value::Null, None);
+                    };
                     let started = Instant::now();
-                    let frozen = (|| -> fixture::Result<serde_json::Value> {
-                        let delta = fs::canonicalize(
-                            running_cache
-                                .as_ref()
-                                .ok_or("running cache has no delta path")?,
-                        )?;
-                        let directory = fs::canonicalize(&work)?.join("running-cache-snapshots");
-                        if directory.starts_with(&delta) {
-                            return Err("snapshot must be outside the running delta".into());
+                    let flushed = control.flush();
+                    let seconds = started.elapsed().as_secs_f64();
+                    let flush_complete = flushed.as_ref().is_ok_and(|report| {
+                        report.pending_records == 0 && report.writer_error.is_none()
+                    });
+                    let document = match &flushed {
+                        Ok(report) => Some(report.to_document()),
+                        Err(_) => control.report().ok().map(|report| report.to_document()),
+                    };
+                    let flush_error = flushed.as_ref().err().map(ToString::to_string).or_else(|| {
+                        (!flush_complete)
+                            .then(|| "native flush did not commit all accepted records".to_owned())
+                    });
+                    let mut persistence_error: Option<Box<dyn std::error::Error>> = flushed
+                        .err()
+                        .map(|error| Box::new(error) as Box<dyn std::error::Error>);
+                    if persistence_error.is_none() && !flush_complete {
+                        persistence_error =
+                            Some("native flush did not commit all accepted records".into());
+                    }
+                    let mut snapshot_seconds = None;
+                    let mut snapshot_sidecar = None;
+                    let mut snapshot_descriptor = None;
+                    let mut snapshot_error = None;
+                    let snapshot = if flush_complete {
+                        let started = Instant::now();
+                        let frozen = (|| -> fixture::Result<serde_json::Value> {
+                            let delta = fs::canonicalize(
+                                running_cache
+                                    .as_ref()
+                                    .ok_or("running cache has no delta path")?,
+                            )?;
+                            let directory = fs::canonicalize(&work)?.join("running-cache-snapshots");
+                            if directory.starts_with(&delta) {
+                                return Err("snapshot must be outside the running delta".into());
+                            }
+                            fs::create_dir_all(&directory)?;
+                            let directory = fs::canonicalize(directory)?;
+                            if directory.starts_with(&delta) {
+                                return Err(
+                                    "snapshot directory resolves inside the running delta".into()
+                                );
+                            }
+                            let stamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
+                            let sidecar = directory.join(format!(
+                                "ladder-{phase}-{}-{stamp}.rrindex",
+                                std::process::id()
+                            ));
+                            let descriptor = sidecar.with_extension("json");
+                            if sidecar.exists() || descriptor.exists() {
+                                return Err("preserve the existing running-cache snapshot".into());
+                            }
+                            snapshot_sidecar = Some(sidecar.clone());
+                            snapshot_descriptor = Some(descriptor.clone());
+                            let document = control.snapshot(&sidecar)?.to_document();
+                            let mut file = OpenOptions::new()
+                                .write(true)
+                                .create_new(true)
+                                .open(&descriptor)?;
+                            serde_json::to_writer_pretty(&mut file, &document)?;
+                            file.sync_all()?;
+                            File::open(directory)?.sync_all()?;
+                            Ok(document)
+                        })();
+                        snapshot_seconds = Some(started.elapsed().as_secs_f64());
+                        match frozen {
+                            Ok(document) => Some(document),
+                            Err(error) => {
+                                snapshot_error = Some(error.to_string());
+                                persistence_error = Some(error);
+                                None
+                            }
                         }
-                        fs::create_dir_all(&directory)?;
-                        let directory = fs::canonicalize(directory)?;
-                        if directory.starts_with(&delta) {
-                            return Err(
-                                "snapshot directory resolves inside the running delta".into()
-                            );
-                        }
+                    } else {
+                        None
+                    };
+                    let mut receipt = json!({
+                        "path":running_cache,"read_backing":running_read_backing,
+                        "phase":phase,"read_delta":!running_cache_no_read_delta,
+                        "flush_seconds":seconds,"report":document,
+                        "flush_error":flush_error,"flush_complete":flush_complete,
+                        "snapshot":snapshot,"snapshot_error":snapshot_error,"snapshot_seconds":snapshot_seconds,
+                        "snapshot_sidecar":snapshot_sidecar,"snapshot_descriptor":snapshot_descriptor,
+                    });
+                    let saved = (|| -> fixture::Result<()> {
                         let stamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
-                        let sidecar = directory.join(format!(
-                            "ladder-{phase}-{}-{stamp}.rrindex",
+                        let temporary = work.join(format!(
+                            "running-cache-{phase}-{}-{stamp}.json.pending",
                             std::process::id()
                         ));
-                        let descriptor = sidecar.with_extension("json");
-                        if sidecar.exists() || descriptor.exists() {
-                            return Err("preserve the existing running-cache snapshot".into());
-                        }
-                        snapshot_sidecar = Some(sidecar.clone());
-                        snapshot_descriptor = Some(descriptor.clone());
-                        let document = control.snapshot(&sidecar)?.to_document();
                         let mut file = OpenOptions::new()
                             .write(true)
                             .create_new(true)
-                            .open(&descriptor)?;
-                        serde_json::to_writer_pretty(&mut file, &document)?;
+                            .open(&temporary)?;
+                        serde_json::to_writer_pretty(&mut file, &receipt)?;
                         file.sync_all()?;
-                        File::open(directory)?.sync_all()?;
-                        Ok(document)
+                        fs::rename(&temporary, work.join("running-cache.json"))?;
+                        File::open(&work)?.sync_all()?;
+                        Ok(())
                     })();
-                    snapshot_seconds = Some(started.elapsed().as_secs_f64());
-                    match frozen {
-                        Ok(document) => Some(document),
-                        Err(error) => {
-                            snapshot_error = Some(error.to_string());
+                    if let Err(error) = saved {
+                        eprintln!("could not write running-cache receipt: {error}");
+                        receipt["receipt_error"] = json!(error.to_string());
+                        if persistence_error.is_none() {
                             persistence_error = Some(error);
-                            None
                         }
                     }
-                } else {
-                    None
+                    (receipt, persistence_error)
                 };
-                let mut receipt = json!({
-                    "path":running_cache,"read_backing":running_read_backing,
-                    "phase":phase,"read_delta":!running_cache_no_read_delta,
-                    "flush_seconds":seconds,"report":document,
-                    "flush_error":flush_error,"flush_complete":flush_complete,
-                    "snapshot":snapshot,"snapshot_error":snapshot_error,"snapshot_seconds":snapshot_seconds,
-                    "snapshot_sidecar":snapshot_sidecar,"snapshot_descriptor":snapshot_descriptor,
-                });
-                let saved = (|| -> fixture::Result<()> {
-                    let stamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
-                    let temporary = work.join(format!(
-                        "running-cache-{phase}-{}-{stamp}.json.pending",
-                        std::process::id()
-                    ));
-                    let mut file = OpenOptions::new()
-                        .write(true)
-                        .create_new(true)
-                        .open(&temporary)?;
-                    serde_json::to_writer_pretty(&mut file, &receipt)?;
-                    file.sync_all()?;
-                    fs::rename(&temporary, work.join("running-cache.json"))?;
-                    File::open(&work)?.sync_all()?;
-                    Ok(())
-                })();
-                if let Err(error) = saved {
-                    eprintln!("could not write running-cache receipt: {error}");
-                    receipt["receipt_error"] = json!(error.to_string());
-                    if persistence_error.is_none() {
-                        persistence_error = Some(error);
+            let start_telemetry = |phase| {
+                let Some(control) = &running_control else {
+                    return (None, None);
+                };
+                match RunningTelemetry::start(control.clone(), work.clone(), phase) {
+                    Ok(telemetry) => (Some(telemetry), None),
+                    Err(error) => {
+                        eprintln!("could not start running-cache telemetry: {error}");
+                        let _ = RunningTelemetry::write_atomic(
+                            &work.join("running-cache-telemetry-error.json"),
+                            &json!({"pid":std::process::id(),"phase":phase,
+                            "utc_unix_seconds":SystemTime::now().duration_since(UNIX_EPOCH).ok().map(|time|time.as_secs_f64()),
+                            "error":error.to_string(),"reporter_started":false}),
+                        );
+                        (None, Some(error.to_string()))
                     }
                 }
-                (receipt, persistence_error)
             };
-        let start_telemetry = |phase| {
-            let Some(control) = &running_control else {
-                return (None, None);
-            };
-            match RunningTelemetry::start(control.clone(), work.clone(), phase) {
-                Ok(telemetry) => (Some(telemetry), None),
-                Err(error) => {
-                    eprintln!("could not start running-cache telemetry: {error}");
-                    let _ = RunningTelemetry::write_atomic(
-                        &work.join("running-cache-telemetry-error.json"),
-                        &json!({"pid":std::process::id(),"phase":phase,
-                        "utc_unix_seconds":SystemTime::now().duration_since(UNIX_EPOCH).ok().map(|time|time.as_secs_f64()),
-                        "error":error.to_string(),"reporter_started":false}),
-                    );
-                    (None, Some(error.to_string()))
-                }
-            }
-        };
-        let owners_before = engine.rustred_application_owner_preparation_statistics()?;
-        LOGGER
-            .phases
-            .lock()
-            .map_err(|error| error.to_string())?
-            .clear();
-        let (telemetry, telemetry_error) = start_telemetry("cold");
-        report["running_cache_telemetry_start_error"] = json!(telemetry_error);
-        report["execution_threads"] = json!({"math":1,
-        "native_io_writer":usize::from(running_control.is_some()),
-        "telemetry":usize::from(telemetry.is_some()),
-        "scope":"dedicated collector math, native writer and telemetry; not measured OS thread count"});
-        let started = Instant::now();
-        let outcome = {
-            let _logging = ClassificationLogging::enter(classify_cache_hits);
-            if monitor.enabled() || classify_cache_hits {
-                engine.evaluate_rustred_symbolic_with_monitor(
-                    &settings,
-                    prepared.input.as_view(),
-                    &monitor,
-                )
-            } else {
-                engine.evaluate_rustred_symbolic(&settings, prepared.input.as_view())
-            }
-        };
-        report["reduction_seconds"] = json!(started.elapsed().as_secs_f64());
-        if classify_cache_hits {
-            let diagnostic = LOGGER.cache_hits.lock().unwrap_or_else(|poison| {
-                let mut diagnostic = poison.into_inner();
-                diagnostic.hit_error = Some("cache-hit logger mutex was poisoned".into());
-                diagnostic
-            });
-            report["cache_hit_diagnostic"] = diagnostic.save_hit_diagnostic(&work, outcome.is_ok());
-        }
-        report["running_cache_telemetry"] = telemetry
-            .map(RunningTelemetry::stop)
-            .unwrap_or(serde_json::Value::Null);
-        // The control does not borrow the reducer. Flush completed native nodes
-        // before fallible telemetry or error propagation can leave this scope.
-        let (running_receipt, running_flush_error) = flush_running_cache("cold");
-        report["running_cache"] = running_receipt;
-        report["end_to_end_seconds"] = json!(total_started.elapsed().as_secs_f64());
-        let result = match outcome {
-            Ok(result) => result,
-            Err(error) => {
-                report["reduction_error"] = json!(error.to_string());
-                report["warnings"] = json!(WARNINGS.lock().ok().map(|warnings| warnings.clone()));
-                report["stages"] = json!(LOGGER.phases.lock().ok().map(|stages| stages.clone()));
-                if let Err(receipt_error) = write_report(&report) {
-                    eprintln!("could not write failed reduction receipt: {receipt_error}");
-                }
-                return Err(error.into());
-            }
-        };
-        report["warnings"] = json!(*WARNINGS.lock().map_err(|error| error.to_string())?);
-        report["stages"] = json!(*LOGGER.phases.lock().map_err(|error| error.to_string())?);
-        report["cache_statistics"] = json!(format!(
-            "{:?}",
-            engine.rustred_application_cache_statistics()?
-        ));
-        report["witness_cache_statistics"] = json!(format!(
-            "{:?}",
-            engine.rustred_application_witness_cache_statistics()?
-        ));
-        report["saved_application_cache"] = engine
-            .cache_statistics(5)?
-            .saved_application
-            .map(|statistics| statistics.to_document())
-            .unwrap_or(serde_json::Value::Null);
-        let owners_after = engine.rustred_application_owner_preparation_statistics()?;
-        report["owner_preparation"] = json!({
-            "declared_owners":owners_after.declared_owners,
-            "prepared_owners":owners_after.prepared_owners,
-            "failed_owners":owners_after.failed_owners,
-            "preparation_attempts":owners_after.preparation_attempts,
-            "prepared_owners_after_data_load":owners_after_data_load.prepared_owners,
-            "prepared_owners_after_cache_setup":owners_before.prepared_owners,
-            "preparation_attempts_after_data_load":owners_after_data_load.preparation_attempts,
-            "preparation_attempts_after_cache_setup":owners_before.preparation_attempts,
-            "preparation_during_load_seconds":owners_after_data_load.preparation_time.as_secs_f64(),
-            "preparation_during_cache_setup_seconds":owners_before.preparation_time.saturating_sub(owners_after_data_load.preparation_time).as_secs_f64(),
-            "preparation_during_reduction_seconds":owners_after.preparation_time.saturating_sub(owners_before.preparation_time).as_secs_f64()
-        });
-        report["native_timing_scope"] = json!({
-            "saved_rule_application":"Native entry transport, lazy owner preparation, DAG reduction, exact sum, and terminal substitution",
-            "owner_preparation":"Measured cumulative deferred-owner preparation counters at data load, cache setup, and reduction boundaries",
-            "pure_ibp_seconds":null,"terminal_substitution_seconds":null,
-            "separate_native_phase_durations_available":false,
-            "phase_duration_estimates_by_subtraction":false,
-            "stage_accounting":StageLogger::stage_accounting()
-        });
-        let known = engine
-            .master_symbols()?
-            .into_iter()
-            .map(|symbol| symbol.as_atom().clone())
-            .collect::<BTreeSet<_>>();
-        let mut masters = BTreeSet::new();
-        result.value.visitor(&mut |part| {
-        if matches!(part, AtomView::Fun(function) if function.get_symbol() == vakint::vakint_symbol!("RustRedMaster")) {
-            masters.insert(part.to_owned());
-            return false;
-        }
-        true
-    });
-        let unknown = masters
-            .difference(&known)
-            .map(AtomCore::to_canonical_string)
-            .collect::<BTreeSet<_>>();
-        let unknown_bytes = serde_json::to_vec_pretty(&unknown)?;
-        std::fs::write(work.join("unknown-masters.json"), &unknown_bytes)?;
-        report["catalogue_closure"] = json!({"closed":unknown.is_empty(),"master_count":masters.len(),
-        "unknown_count":unknown.len(),"unknown_file":"unknown-masters.json",
-        "unknown_sha256":format!("{:x}",Sha256::digest(&unknown_bytes)),"unknown_preview":unknown.iter().take(8).collect::<Vec<_>>()});
-        let value = result.value.to_canonical_string();
-        report["result_sha256"] = json!(format!("{:x}", Sha256::digest(value.as_bytes())));
-        report["result_bytes"] = json!(value.len());
-        let d = rustred::algebra::CoefficientContext::try_new(["d"])?
-            .parameter("d")
-            .ok_or("missing native dimension")?
-            .to_expression();
-        let physical_d = Atom::num(4)
-            - Atom::num(2) * Atom::var(vakint::vakint_symbol!(settings.epsilon_symbol.as_str()));
-        let complete_conditions = result
-            .nonzero_conditions
-            .iter()
-            .cloned()
-            .chain(
-                prepared
-                    .nonzero_conditions
-                    .iter()
-                    .map(|condition| condition.replace(d.clone()).with(physical_d.clone())),
-            )
-            .collect::<BTreeSet<_>>();
-        if complete_conditions.iter().any(AtomCore::is_zero) {
-            return Err("a complete nonzero condition vanished".into());
-        }
-        let conditions_path = work.join("nonzero-conditions.symbolica");
-        let mut conditions_output = BufWriter::new(std::fs::File::create(&conditions_path)?);
-        let mut conditions_digest = Sha256::new();
-        let mut conditions_preview = Vec::new();
-        for (index, condition) in complete_conditions.iter().enumerate() {
-            let text = condition.to_canonical_string();
-            conditions_output.write_all(text.as_bytes())?;
-            conditions_output.write_all(b"\n")?;
-            conditions_digest.update(text.as_bytes());
-            conditions_digest.update(b"\n");
-            if index < 3 {
-                let mut preview = text.chars().take(180).collect::<String>();
-                if text.chars().count() > 180 {
-                    preview.push('…');
-                }
-                conditions_preview.push(preview);
-            }
-        }
-        conditions_output.flush()?;
-        report["guards"] = json!({"count":complete_conditions.len(),
-        "sha256":format!("{:x}",conditions_digest.finalize()),
-        "file":"nonzero-conditions.symbolica", "preview":conditions_preview,
-        "includes_preparation_conditions":true});
-        report["families"] = json!(
-            result
-                .families
-                .iter()
-                .map(|(symbol, identity)| (symbol.to_canonical_string(), identity))
-                .collect::<BTreeMap<_, _>>()
-        );
-        std::fs::write(work.join("result.symbolica"), value)?;
-        report["retained_result_available"] = json!(true);
-        report["reduction_completed"] = json!(unknown.is_empty());
-        // Include cold-result classification and artifact serialization, while
-        // keeping the optional warm repetition outside the cold total.
-        report["end_to_end_seconds"] = json!(total_started.elapsed().as_secs_f64());
-        if let Some(error) = running_flush_error {
-            report["running_cache_capture_failed"] = json!(true);
-            if let Err(receipt_error) = write_report(&report) {
-                eprintln!("could not write failed running-cache receipt: {receipt_error}");
-            }
-            return Err(error);
-        }
-        if warm {
+            let owners_before = engine.rustred_application_owner_preparation_statistics()?;
             LOGGER
                 .phases
                 .lock()
                 .map_err(|error| error.to_string())?
                 .clear();
-            let (telemetry, telemetry_error) = start_telemetry("warm");
-            report["warm_running_cache_telemetry_start_error"] = json!(telemetry_error);
+            let (telemetry, telemetry_error) = start_telemetry("cold");
+            report["running_cache_telemetry_start_error"] = json!(telemetry_error);
+            report["execution_threads"] = json!({"math":1,
+            "native_io_writer":usize::from(running_control.is_some()),
+            "telemetry":usize::from(telemetry.is_some()),
+            "scope":"dedicated collector math, native writer and telemetry; not measured OS thread count"});
             let started = Instant::now();
-            let outcome = if monitor.enabled() {
-                engine.evaluate_rustred_symbolic_with_monitor(
-                    &settings,
-                    prepared.input.as_view(),
-                    &monitor,
-                )
-            } else {
-                engine.evaluate_rustred_symbolic(&settings, prepared.input.as_view())
+            let outcome = {
+                let _logging = ClassificationLogging::enter(classify_cache_hits);
+                if let Some(scope) = scope.as_deref_mut() {
+                    engine.evaluate_rustred_symbolic_in_scope(&settings, prepared.input.as_view(), scope)
+                } else if monitor.enabled() || classify_cache_hits {
+                    engine.evaluate_rustred_symbolic_with_monitor(
+                        &settings,
+                        prepared.input.as_view(),
+                        &monitor,
+                    )
+                } else {
+                    engine.evaluate_rustred_symbolic(&settings, prepared.input.as_view())
+                }
             };
-            report["warm_reduction_seconds"] = json!(started.elapsed().as_secs_f64());
-            report["warm_running_cache_telemetry"] = telemetry
+            report["reduction_seconds"] = json!(started.elapsed().as_secs_f64());
+            if classify_cache_hits {
+                let diagnostic = LOGGER.cache_hits.lock().unwrap_or_else(|poison| {
+                    let mut diagnostic = poison.into_inner();
+                    diagnostic.hit_error = Some("cache-hit logger mutex was poisoned".into());
+                    diagnostic
+                });
+                report["cache_hit_diagnostic"] = diagnostic.save_hit_diagnostic(&work, outcome.is_ok());
+            }
+            if let Some(scope) = scope.as_deref_mut() { scope.phase("cache_telemetry_finalization"); }
+            report["running_cache_telemetry"] = telemetry
                 .map(RunningTelemetry::stop)
                 .unwrap_or(serde_json::Value::Null);
-            let (running_receipt, running_flush_error) = flush_running_cache("warm");
-            report["warm_running_cache"] = running_receipt;
-            let second = match outcome {
+            // The control does not borrow the reducer. Flush completed native nodes
+            // before fallible telemetry or error propagation can leave this scope.
+            if let Some(scope) = scope.as_deref_mut() { scope.phase("running_cache_flush"); }
+            let (running_receipt, running_flush_error) = flush_running_cache("cold");
+            report["running_cache"] = running_receipt;
+            report["end_to_end_seconds"] = json!(total_started.elapsed().as_secs_f64());
+            let result = match outcome {
                 Ok(result) => result,
                 Err(error) => {
-                    report["warm_reduction_error"] = json!(error.to_string());
+                    report["reduction_error"] = json!(error.to_string());
+                    report["warnings"] = json!(WARNINGS.lock().ok().map(|warnings| warnings.clone()));
+                    report["stages"] = json!(LOGGER.phases.lock().ok().map(|stages| stages.clone()));
+                    if let Some(scope) = scope.as_deref_mut() { scope.phase("durable_report_write"); }
                     if let Err(receipt_error) = write_report(&report) {
-                        eprintln!("could not write failed warm reduction receipt: {receipt_error}");
+                        eprintln!("could not write failed reduction receipt: {receipt_error}");
                     }
                     return Err(error.into());
                 }
             };
+            if let Some(scope) = scope.as_deref_mut() { scope.phase("evaluation_statistics"); }
+            report["warnings"] = json!(*WARNINGS.lock().map_err(|error| error.to_string())?);
+            report["stages"] = json!(*LOGGER.phases.lock().map_err(|error| error.to_string())?);
+            report["cache_statistics"] = json!(format!(
+                "{:?}",
+                engine.rustred_application_cache_statistics()?
+            ));
+            report["witness_cache_statistics"] = json!(format!(
+                "{:?}",
+                engine.rustred_application_witness_cache_statistics()?
+            ));
+            report["saved_application_cache"] = engine
+                .cache_statistics(5)?
+                .saved_application
+                .map(|statistics| statistics.to_document())
+                .unwrap_or(serde_json::Value::Null);
+            let owners_after = engine.rustred_application_owner_preparation_statistics()?;
+            report["owner_preparation"] = json!({
+                "declared_owners":owners_after.declared_owners,
+                "prepared_owners":owners_after.prepared_owners,
+                "failed_owners":owners_after.failed_owners,
+                "preparation_attempts":owners_after.preparation_attempts,
+                "prepared_owners_after_data_load":owners_after_data_load.prepared_owners,
+                "prepared_owners_after_cache_setup":owners_before.prepared_owners,
+                "preparation_attempts_after_data_load":owners_after_data_load.preparation_attempts,
+                "preparation_attempts_after_cache_setup":owners_before.preparation_attempts,
+                "preparation_during_load_seconds":owners_after_data_load.preparation_time.as_secs_f64(),
+                "preparation_during_cache_setup_seconds":owners_before.preparation_time.saturating_sub(owners_after_data_load.preparation_time).as_secs_f64(),
+                "preparation_during_reduction_seconds":owners_after.preparation_time.saturating_sub(owners_before.preparation_time).as_secs_f64()
+            });
+            report["native_timing_scope"] = json!({
+                "saved_rule_application":"Native entry transport, lazy owner preparation, DAG reduction, exact sum, and terminal substitution",
+                "owner_preparation":"Measured cumulative deferred-owner preparation counters at data load, cache setup, and reduction boundaries",
+                "pure_ibp_seconds":null,"terminal_substitution_seconds":null,
+                "separate_native_phase_durations_available":false,
+                "phase_duration_estimates_by_subtraction":false,
+                "stage_accounting":StageLogger::stage_accounting()
+            });
+            if let Some(scope) = scope.as_deref_mut() { scope.phase("result_catalogue_classification"); }
+            let known = engine
+                .master_symbols()?
+                .into_iter()
+                .map(|symbol| symbol.as_atom().clone())
+                .collect::<BTreeSet<_>>();
+            let mut masters = BTreeSet::new();
+            result.value.visitor(&mut |part| {
+            if matches!(part, AtomView::Fun(function) if function.get_symbol() == vakint::vakint_symbol!("RustRedMaster")) {
+                masters.insert(part.to_owned());
+                return false;
+            }
+            true
+        });
+            let unknown = masters
+                .difference(&known)
+                .map(AtomCore::to_canonical_string)
+                .collect::<BTreeSet<_>>();
+            let unknown_bytes = serde_json::to_vec_pretty(&unknown)?;
+            std::fs::write(work.join("unknown-masters.json"), &unknown_bytes)?;
+            report["catalogue_closure"] = json!({"closed":unknown.is_empty(),"master_count":masters.len(),
+            "unknown_count":unknown.len(),"unknown_file":"unknown-masters.json",
+            "unknown_sha256":format!("{:x}",Sha256::digest(&unknown_bytes)),"unknown_preview":unknown.iter().take(8).collect::<Vec<_>>()});
+            if let Some(scope) = scope.as_deref_mut() { scope.expression_phase("result_expression_serialization", result.value.as_view()); }
+            let value = result.value.to_canonical_string();
+            report["result_sha256"] = json!(format!("{:x}", Sha256::digest(value.as_bytes())));
+            report["result_bytes"] = json!(value.len());
+            let d = rustred::algebra::CoefficientContext::try_new(["d"])?
+                .parameter("d")
+                .ok_or("missing native dimension")?
+                .to_expression();
+            let physical_d = Atom::num(4)
+                - Atom::num(2) * Atom::var(vakint::vakint_symbol!(settings.epsilon_symbol.as_str()));
+            if let Some(scope) = scope.as_deref_mut() { scope.phase("result_guard_combination"); }
+            let complete_conditions = result
+                .nonzero_conditions
+                .iter()
+                .cloned()
+                .chain(
+                    prepared
+                        .nonzero_conditions
+                        .iter()
+                        .map(|condition| condition.replace(d.clone()).with(physical_d.clone())),
+                )
+                .collect::<BTreeSet<_>>();
+            if complete_conditions.iter().any(AtomCore::is_zero) {
+                return Err("a complete nonzero condition vanished".into());
+            }
+            let conditions_path = work.join("nonzero-conditions.symbolica");
+            let mut conditions_output = BufWriter::new(std::fs::File::create(&conditions_path)?);
+            let mut conditions_digest = Sha256::new();
+            let mut conditions_preview = Vec::new();
+            {
+            let mut progress = scope.as_deref_mut().map(|scope| scope.work_phase("result_guard_serialization", complete_conditions.len(), "guards serialized"));
+            for (index, condition) in complete_conditions.iter().enumerate() {
+                let text = condition.to_canonical_string();
+                conditions_output.write_all(text.as_bytes())?;
+                conditions_output.write_all(b"\n")?;
+                conditions_digest.update(text.as_bytes());
+                conditions_digest.update(b"\n");
+                if index < 3 {
+                    let mut preview = text.chars().take(180).collect::<String>();
+                    if text.chars().count() > 180 {
+                        preview.push('…');
+                    }
+                    conditions_preview.push(preview);
+                }
+                if let Some(progress) = &mut progress { progress.completed(index + 1); }
+            }
+            }
+            if let Some(scope) = scope.as_deref_mut() { scope.phase("result_guard_flush"); }
+            conditions_output.flush()?;
+            report["guards"] = json!({"count":complete_conditions.len(),
+            "sha256":format!("{:x}",conditions_digest.finalize()),
+            "file":"nonzero-conditions.symbolica", "preview":conditions_preview,
+            "includes_preparation_conditions":true});
+            if let Some(scope) = scope.as_deref_mut() { scope.phase("result_family_serialization"); }
+            report["families"] = json!(
+                result
+                    .families
+                    .iter()
+                    .map(|(symbol, identity)| (symbol.to_canonical_string(), identity))
+                    .collect::<BTreeMap<_, _>>()
+            );
+            if let Some(scope) = scope.as_deref_mut() { scope.phase("result_expression_write"); }
+            std::fs::write(work.join("result.symbolica"), value)?;
+            report["retained_result_available"] = json!(true);
+            report["reduction_completed"] = json!(unknown.is_empty());
+            // Include cold-result classification and artifact serialization, while
+            // keeping the optional warm repetition outside the cold total.
+            report["end_to_end_seconds"] = json!(total_started.elapsed().as_secs_f64());
             if let Some(error) = running_flush_error {
                 report["running_cache_capture_failed"] = json!(true);
+                if let Some(scope) = scope.as_deref_mut() { scope.phase("durable_report_write"); }
                 if let Err(receipt_error) = write_report(&report) {
                     eprintln!("could not write failed running-cache receipt: {receipt_error}");
                 }
                 return Err(error);
             }
-            report["warm_stages"] =
-                json!(*LOGGER.phases.lock().map_err(|error| error.to_string())?);
-            if !(result.value - second.value).together().expand().is_zero()
-                || result.nonzero_conditions != second.nonzero_conditions
-                || result.families != second.families
-            {
-                return Err("warm reduction failed exact result/guard/family parity".into());
+            if warm {
+                LOGGER
+                    .phases
+                    .lock()
+                    .map_err(|error| error.to_string())?
+                    .clear();
+                let (telemetry, telemetry_error) = start_telemetry("warm");
+                report["warm_running_cache_telemetry_start_error"] = json!(telemetry_error);
+                let started = Instant::now();
+                let outcome = if let Some(scope) = scope.as_deref_mut() {
+                    engine.evaluate_rustred_symbolic_in_scope(&settings, prepared.input.as_view(), scope)
+                } else if monitor.enabled() {
+                    engine.evaluate_rustred_symbolic_with_monitor(
+                        &settings,
+                        prepared.input.as_view(),
+                        &monitor,
+                    )
+                } else {
+                    engine.evaluate_rustred_symbolic(&settings, prepared.input.as_view())
+                };
+                report["warm_reduction_seconds"] = json!(started.elapsed().as_secs_f64());
+                report["warm_running_cache_telemetry"] = telemetry
+                    .map(RunningTelemetry::stop)
+                    .unwrap_or(serde_json::Value::Null);
+                if let Some(scope) = scope.as_deref_mut() { scope.phase("warm_running_cache_flush"); }
+                let (running_receipt, running_flush_error) = flush_running_cache("warm");
+                report["warm_running_cache"] = running_receipt;
+                let second = match outcome {
+                    Ok(result) => result,
+                    Err(error) => {
+                        report["warm_reduction_error"] = json!(error.to_string());
+                        if let Some(scope) = scope.as_deref_mut() { scope.phase("durable_report_write"); }
+                        if let Err(receipt_error) = write_report(&report) {
+                            eprintln!("could not write failed warm reduction receipt: {receipt_error}");
+                        }
+                        return Err(error.into());
+                    }
+                };
+                if let Some(error) = running_flush_error {
+                    report["running_cache_capture_failed"] = json!(true);
+                    if let Some(scope) = scope.as_deref_mut() { scope.phase("durable_report_write"); }
+                    if let Err(receipt_error) = write_report(&report) {
+                        eprintln!("could not write failed running-cache receipt: {receipt_error}");
+                    }
+                    return Err(error);
+                }
+                report["warm_stages"] =
+                    json!(*LOGGER.phases.lock().map_err(|error| error.to_string())?);
+                if let Some(scope) = scope.as_deref_mut() { scope.phase("warm_exact_parity"); }
+                if !(result.value - second.value).together().expand().is_zero()
+                    || result.nonzero_conditions != second.nonzero_conditions
+                    || result.families != second.families
+                {
+                    return Err("warm reduction failed exact result/guard/family parity".into());
+                }
+                report["warm_exact_parity"] = json!(true);
             }
-            report["warm_exact_parity"] = json!(true);
+            Ok(())
+        })();
+        // Close exactly once after the final cold/warm durability barrier. Even an
+        // ordinary calculation/reporting error must release the physical writer.
+        if let Some(scope) = scope.as_deref_mut() { scope.phase("running_cache_close"); }
+        let close_error = running_control.as_ref().and_then(|control| {
+            let started = Instant::now();
+            let closed = control.close();
+            let document = match &closed {
+                Ok(closed) => Some(closed.to_document()),
+                Err(_) => control.report().ok().map(|report| report.to_document()),
+            };
+            report["running_cache_close"] = json!({"seconds":started.elapsed().as_secs_f64(),
+                "report":document,"error":closed.as_ref().err().map(ToString::to_string)});
+            closed.err()
+        });
+        if let Some(scope) = scope.as_deref_mut() { scope.phase("running_cache_terminal_receipt"); }
+        let terminal_receipt_error = running_control.as_ref().and_then(|_| {
+            let mut terminal = if warm && !report["warm_running_cache"].is_null() {
+                report["warm_running_cache"].clone()
+            } else {
+                report["running_cache"].clone()
+            };
+            terminal["flush_report"] = terminal["report"].clone();
+            terminal["report"] = report["running_cache_close"]["report"].clone();
+            terminal["close"] = report["running_cache_close"].clone();
+            terminal["terminal"] = json!(true);
+            terminal["utc_unix_seconds"] = json!(
+                SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .ok()
+                    .map(|time| time.as_secs_f64())
+            );
+            RunningTelemetry::write_atomic(&work.join("running-cache.json"), &terminal).err()
+        });
+        if let Some(error) = &terminal_receipt_error {
+            report["running_cache_terminal_receipt_error"] = json!(error.to_string());
+            eprintln!("could not write terminal running-cache receipt: {error}");
         }
-        Ok(())
-    })();
-    // Close exactly once after the final cold/warm durability barrier. Even an
-    // ordinary calculation/reporting error must release the physical writer.
-    let close_error = running_control.as_ref().and_then(|control| {
-        let started = Instant::now();
-        let closed = control.close();
-        let document = match &closed {
-            Ok(closed) => Some(closed.to_document()),
-            Err(_) => control.report().ok().map(|report| report.to_document()),
-        };
-        report["running_cache_close"] = json!({"seconds":started.elapsed().as_secs_f64(),
-            "report":document,"error":closed.as_ref().err().map(ToString::to_string)});
-        closed.err()
-    });
-    let terminal_receipt_error = running_control.as_ref().and_then(|_| {
-        let mut terminal = if warm && !report["warm_running_cache"].is_null() {
-            report["warm_running_cache"].clone()
-        } else {
-            report["running_cache"].clone()
-        };
-        terminal["flush_report"] = terminal["report"].clone();
-        terminal["report"] = report["running_cache_close"]["report"].clone();
-        terminal["close"] = report["running_cache_close"].clone();
-        terminal["terminal"] = json!(true);
-        terminal["utc_unix_seconds"] = json!(
-            SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .ok()
-                .map(|time| time.as_secs_f64())
-        );
-        RunningTelemetry::write_atomic(&work.join("running-cache.json"), &terminal).err()
-    });
-    if let Some(error) = &terminal_receipt_error {
-        report["running_cache_terminal_receipt_error"] = json!(error.to_string());
-        eprintln!("could not write terminal running-cache receipt: {error}");
-    }
-    let cache_identity_result = cache_identity(cache.as_deref());
-    match &cache_identity_result {
-        Ok(identity) => report["cache_identity_after"] = identity.clone(),
-        Err(error) => report["cache_identity_error"] = json!(error.to_string()),
-    }
-    if let Err(error) = evaluation {
-        if let Err(receipt_error) = write_report(&report) {
-            eprintln!("could not write terminal reduction receipt: {receipt_error}");
+        if let Some(scope) = scope.as_deref_mut() { scope.phase("final_cache_identity_verification"); }
+        let cache_identity_result = cache_identity(cache.as_deref());
+        match &cache_identity_result {
+            Ok(identity) => report["cache_identity_after"] = identity.clone(),
+            Err(error) => report["cache_identity_error"] = json!(error.to_string()),
         }
-        return Err(error);
-    }
-    let final_cache_identity = match cache_identity_result {
-        Ok(identity) => identity,
-        Err(error) => {
+        if let Err(error) = evaluation {
+            if let Some(scope) = scope.as_deref_mut() { scope.phase("durable_report_write"); }
+            if let Err(receipt_error) = write_report(&report) {
+                eprintln!("could not write terminal reduction receipt: {receipt_error}");
+            }
+            return Err(error);
+        }
+        let final_cache_identity = match cache_identity_result {
+            Ok(identity) => identity,
+            Err(error) => {
+                if let Some(scope) = scope.as_deref_mut() { scope.phase("durable_report_write"); }
+                write_report(&report)?;
+                return Err(error.to_string().into());
+            }
+        };
+        if final_cache_identity != report["cache_identity"] {
+            report["cache_identity_error"] = json!("cache identity changed during evaluation");
+            if let Some(scope) = scope.as_deref_mut() { scope.phase("durable_report_write"); }
             write_report(&report)?;
-            return Err(error.to_string().into());
+            return Err("cache identity changed during evaluation".into());
         }
-    };
-    if final_cache_identity != report["cache_identity"] {
-        report["cache_identity_error"] = json!("cache identity changed during evaluation");
+        if let Some(error) = close_error {
+            report["running_cache_capture_failed"] = json!(true);
+            if let Some(scope) = scope.as_deref_mut() { scope.phase("durable_report_write"); }
+            if let Err(receipt_error) = write_report(&report) {
+                eprintln!("could not write terminal running-cache receipt: {receipt_error}");
+            }
+            return Err(error.into());
+        }
+        if let Some(error) = terminal_receipt_error {
+            return Err(error.into());
+        }
+        if let Some(scope) = scope { scope.phase("final_durable_report"); }
         write_report(&report)?;
-        return Err("cache identity changed during evaluation".into());
-    }
-    if let Some(error) = close_error {
-        report["running_cache_capture_failed"] = json!(true);
-        if let Err(receipt_error) = write_report(&report) {
-            eprintln!("could not write terminal running-cache receipt: {receipt_error}");
-        }
-        return Err(error.into());
-    }
-    if let Some(error) = terminal_receipt_error {
-        return Err(error.into());
-    }
-    write_report(&report)?;
-    println!("{report}");
+        Ok(report)
+    };
+    // Classification retains its existing single-API lossless observer contract.
+    let output = if classify_cache_hits {
+        operation(None)
+    } else {
+        RustRedMonitorScope::run(&monitor, |scope| operation(Some(scope)))
+    }?;
+    // Deliver stdout after the TUI is restored; all durable artifacts are done.
+    println!("{output}");
     Ok(())
 }
 

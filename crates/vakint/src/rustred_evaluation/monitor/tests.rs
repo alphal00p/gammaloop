@@ -809,3 +809,29 @@ fn completed_native_frontier_never_finishes_or_zeroes_the_public_postprocessing_
             .unwrap()
     );
 }
+
+#[test]
+fn frozen_job_keeps_api_and_whole_job_completion_distinct() {
+    let mut state = MonitorState::default();
+    let mut event = snapshot(10, 7, 7, 1);
+    event.scope_kind = ScopeKind::Job;
+    event.api_status = ApiStatus::Running;
+    event.native_work_active = false;
+    state.observe(event, Duration::from_secs(10));
+    state.apply(UiAction::ToggleFreeze, Duration::from_secs(10));
+    state.latest.api_status = ApiStatus::Succeeded;
+    state.latest.phase = "result_expression_serialization".into();
+    let serializing = state.view(Duration::from_secs(46));
+    assert!(serializing.frozen);
+    assert_eq!(serializing.status, MonitorStatus::Running);
+    assert_eq!(
+        row(&serializing.overview, "Reduction API status"),
+        "Succeeded"
+    );
+    assert_eq!(row(&serializing.overview, "Whole job finished"), "false");
+    state.latest.request_finished = true;
+    state.latest.status = MonitorStatus::Succeeded;
+    let finished = state.view(Duration::from_secs(47));
+    assert_eq!(finished.status, MonitorStatus::Succeeded);
+    assert_eq!(row(&finished.overview, "Whole job finished"), "true");
+}
