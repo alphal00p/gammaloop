@@ -30,8 +30,7 @@ use enum_dispatch::enum_dispatch;
 use eyre::{Context, eyre};
 use gammaloop_sample::{DiscreteGraphSample, GammaLoopSample, parameterize};
 use itertools::Itertools;
-use linnet::half_edge::involution::EdgeVec;
-use linnet::half_edge::involution::Orientation;
+use linnet::half_edge::involution::{EdgeVec, HedgePair, Orientation};
 use linnet::half_edge::subgraph::SubSetLike;
 use linnet::half_edge::subgraph::subset::SubSet;
 use momtrop::SampleGenerator;
@@ -2602,7 +2601,28 @@ impl LmbMultiChannelingSetup {
                 .map(|(edge, mass)| (edge.0, mass.map_ref(|value| F::<T>::from_ff64(*value))))
                 .collect();
         }
+        context.antiparallel_edges = self.antiparallel_edges();
         catalogue.compile(&context, programs)
+    }
+
+    /// Edges of the master graph stored against the first edge that joins the
+    /// same two vertices. Stored directions are arbitrary for undirected edges and
+    /// follow fermion flow otherwise, so they need not co-orient a bundle.
+    fn antiparallel_edges(&self) -> BTreeSet<usize> {
+        let graph = &self.graph.underlying;
+        let mut bundle_directions = BTreeMap::new();
+        graph
+            .iter_edges()
+            .filter_map(|(pair, edge, _)| match pair {
+                HedgePair::Paired { source, sink } => {
+                    let direction = (graph.node_id(source), graph.node_id(sink));
+                    let bundle = (direction.0.min(direction.1), direction.0.max(direction.1));
+                    (*bundle_directions.entry(bundle).or_insert(direction) != direction)
+                        .then_some(edge.0)
+                }
+                _ => None,
+            })
+            .collect()
     }
 
     /// Compile channels after preparing the external data needed by every
@@ -5898,6 +5918,7 @@ pub(crate) mod tests {
     };
     use crate::cff::OrientationID;
     use crate::dot;
+    use crate::graph::parse::NumeratorInterface;
     use crate::graph::{FeynmanGraph, Graph, GroupId, LMBext, LmbIndex, LoopMomentumBasis};
     use crate::initialisation::test_initialise;
     use crate::momentum::ThreeMomentum;
@@ -5910,13 +5931,15 @@ pub(crate) mod tests {
     use crate::settings::runtime::{
         DiscreteGraphSamplingSettings, DiscreteGraphSamplingType, HFunctionSettings,
         MultiChannelingSettings, ParameterizationSettings, Precision, SamplingChannelDefinition,
-        SamplingChannelSelection, SamplingSettings, StabilitySettings,
+        SamplingChannelSelection, SamplingChannelWeight, SamplingSettings, StabilitySettings,
     };
-    use crate::utils::F;
+    use crate::utils;
+    use crate::utils::{F, GS};
     use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
     use linnet::half_edge::subgraph::subset::SubSet;
     use linnet::half_edge::subgraph::{ModifySubSet, SubSetLike};
     use std::sync::OnceLock;
+    use symbolica::atom::AtomCore;
     use typed_index_collections::TiVec;
 
     /// Use the existing generated scalar cut fixture for a fixed-source body
@@ -8999,6 +9022,385 @@ pub(crate) mod tests {
     }
 
     #[test]
+    fn lmb_sampling_detects_only_oppositely_stored_parallel_edges() {
+        test_initialise().unwrap();
+        let graph: Graph = dot!(
+            digraph parallel_directions {
+                graph [projector=1]
+                edge [particle=H num=1 mass=0]
+                node [num=1]
+                ext [style=invis]
+                ext -> A [id=0]
+                A -> B [id=1 lmb_id=0]
+                B -> A [id=2 lmb_id=1]
+                A -> B [id=3]
+                B -> ext [id=4]
+            }
+        )
+        .unwrap();
+        let setup = LmbMultiChannelingSetup {
+            master_edge_masses: Default::default(),
+            sampling_bridge: Default::default(),
+            sampling_bridge_quad: Default::default(),
+            sampling_bridge_fixed256: Default::default(),
+            sampling_bridge_arb: Default::default(),
+            sampling_source: Default::default(),
+            sampling_catalogue: Default::default(),
+            sampling_programs: Default::default(),
+            lmb_basis_ids: Default::default(),
+            all_bases: graph.generate_loop_momentum_bases(),
+            graph,
+        };
+        assert_eq!(setup.antiparallel_edges(), [2].into_iter().collect());
+    }
+
+    #[test]
+    fn graph_derived_two_loop_reflections_preserve_local_odd_numerator_and_partition() {
+        test_initialise().unwrap();
+        let model = utils::load_generic_model("sm");
+        let graph: Graph = dot!(
+            digraph mixed_two_loop_bundle {
+                graph [projector=1]
+                node [num=1]
+                edge [particle=H num=1 mass=0]
+                ext [style=invis]
+                ext -> A [id=0]
+                A -> B [id=1 lmb_id=0 mass=1 num="1+Q(1,spenso::cind(2))^2"]
+                B -> A [id=2 lmb_id=1 mass=2 num="Q(2,spenso::cind(1))"]
+                A -> B [id=3 mass=3 num="1+Q(3,spenso::cind(3))^2"]
+                B -> ext [id=4]
+            }, &model
+        )
+        .unwrap();
+        // Match the literal edge factors before evaluating their product. The odd
+        // factor belongs only to edge 2; no graph numerator is distributed.
+        for (edge, expected) in [
+            (
+                EdgeIndex(1),
+                GS.emr_mom(EdgeIndex(1), GS.cind(2)).pow(2) + 1,
+            ),
+            (EdgeIndex(2), GS.emr_mom(EdgeIndex(2), GS.cind(1))),
+            (
+                EdgeIndex(3),
+                GS.emr_mom(EdgeIndex(3), GS.cind(3)).pow(2) + 1,
+            ),
+        ] {
+            assert_eq!(
+                NumeratorInterface::export(&graph.underlying[edge].num.value).0,
+                expected
+            );
+        }
+        let all_bases = graph.generate_loop_momentum_bases();
+        assert_eq!(all_bases.len(), 3);
+        let external_moms: ExternalFourMomenta<F<f64>> =
+            (0..graph.loop_momentum_basis.ext_edges.len())
+                .map(|_| [F(4.0), F(0.7), F(-0.4), F(1.1)].into())
+                .collect();
+        let external = external_moms
+            .iter()
+            .map(|p| {
+                [
+                    p.temporal.value.0,
+                    p.spatial.px.0,
+                    p.spatial.py.0,
+                    p.spatial.pz.0,
+                ]
+            })
+            .collect::<Vec<_>>();
+        let mut setup = LmbMultiChannelingSetup {
+            master_edge_masses: Default::default(),
+            sampling_bridge: Default::default(),
+            sampling_bridge_quad: Default::default(),
+            sampling_bridge_fixed256: Default::default(),
+            sampling_bridge_arb: Default::default(),
+            sampling_source: Default::default(),
+            sampling_catalogue: Default::default(),
+            sampling_programs: Default::default(),
+            lmb_basis_ids: (0..all_bases.len()).map(LmbIndex::from).collect(),
+            all_bases,
+            graph,
+        };
+        setup
+            .warm_up_masses(&RuntimeSettings::default(), &model)
+            .unwrap();
+        assert_eq!(setup.antiparallel_edges(), [2].into_iter().collect());
+        let route = |basis: &LoopMomentumBasis, loops: &LoopMomenta<F<f64>>| {
+            [EdgeIndex(1), EdgeIndex(2), EdgeIndex(3)].map(|edge| {
+                let signature = &basis.edge_signatures[edge];
+                signature.internal.apply_typed(loops)
+                    + signature.external.apply(&external_moms.raw).spatial
+            })
+        };
+        let numerator = |q: &[ThreeMomentum<F<f64>>; 3]| {
+            (1.0 + q[0].py.0.powi(2)) * q[1].px.0 * (1.0 + q[2].pz.0.powi(2))
+        };
+        let close = |actual: f64, expected: f64, boundary: &str| {
+            assert!(
+                (actual - expected).abs() <= 2.0e-11 * (1.0 + expected.abs()),
+                "{boundary}: {actual} != {expected}"
+            );
+        };
+        let mut saw_mixed_reflection = false;
+        let mut saw_external_shift = false;
+        let mut saw_reflected_parent = false;
+        let mut saw_nonuniform_partition = false;
+        for parent_id in 0..setup.all_bases.len() {
+            setup.graph.loop_momentum_basis = setup.all_bases[LmbIndex::from(parent_id)].clone();
+            let parent = &setup.graph.loop_momentum_basis;
+            for weight in [
+                SamplingChannelWeight::MapDensity,
+                SamplingChannelWeight::Ose,
+            ] {
+                let mut settings = ParameterizationSettings::default();
+                settings.sampling_channels.default_channel_selection = vec!["auto:lmb".into()];
+                settings.sampling_channels.weight = weight;
+                settings.sampling_channels.alpha = 2.5;
+                let context = SamplingChannelCompileContext::new(
+                    setup.graph.name.clone(),
+                    parent.loop_edges.iter().map(|edge| edge.0).collect(),
+                    settings.clone(),
+                    2.0,
+                    2,
+                );
+                let resolved = resolve_sampling_channel_selection(
+                    &setup.graph.name,
+                    &settings.sampling_channels,
+                )
+                .unwrap();
+                let catalogue = setup
+                    .sampling_channel_catalogue(&resolved, &settings)
+                    .unwrap();
+                let programs = catalogue
+                    .compile_programs(6, &HFunctionSettings::default())
+                    .unwrap();
+                let bridge = setup
+                    .compile_sampling_channel_bridge_with_external(
+                        &catalogue, &programs, &context, &external,
+                    )
+                    .unwrap();
+                assert_eq!(bridge.channels().len(), 3);
+                for (channel_id, channel) in bridge.channels().iter().enumerate() {
+                    let basis_id = channel.basis_id.unwrap();
+                    let selected = &setup.all_bases[LmbIndex::from(basis_id)];
+                    assert_eq!(selected.ext_edges, parent.ext_edges);
+                    let frame = setup.lmb_frame_map::<f64>(selected, &external).unwrap();
+                    saw_mixed_reflection |= selected.loop_edges.contains(&EdgeIndex(2))
+                        && frame
+                            .matrix()
+                            .chunks(6)
+                            .any(|row| row.iter().filter(|&&c| c != 0.0).count() > 1);
+                    saw_external_shift |= frame.translation().iter().any(|&c| c != 0.0);
+                    saw_reflected_parent |=
+                        basis_id == parent_id && selected.loop_edges.contains(&EdgeIndex(2));
+                    for x in [
+                        [0.31, 0.42, 0.57, 0.66, 0.24, 0.83],
+                        [0.73, 0.61, 0.22, 0.46, 0.79, 0.35],
+                    ] {
+                        // Independent boundary: parameterize the native blocks,
+                        // reflect only the fixture's reversed edge, then apply
+                        // graph signatures directly, without any affine matrix.
+                        let (native, jacobian) =
+                            utils::global_parameterize(&x.map(F), F(2.0), &settings);
+                        let loops: LoopMomenta<F<f64>> = native
+                            .into_iter()
+                            .zip(&selected.loop_edges)
+                            .map(|([px, py, pz], edge)| {
+                                if *edge == EdgeIndex(2) {
+                                    ThreeMomentum::new(-px, -py, -pz)
+                                } else {
+                                    ThreeMomentum::new(px, py, pz)
+                                }
+                            })
+                            .collect();
+                        let expected_edges = route(selected, &loops);
+                        let mapped = bridge
+                            .forward(SamplingChannelId::from(channel_id), &x)
+                            .unwrap();
+                        saw_nonuniform_partition |= mapped
+                            .partition
+                            .weights
+                            .iter()
+                            .any(|weight| (weight - 1.0 / 3.0).abs() > 1.0e-6);
+                        let expected_parent = parent
+                            .loop_edges
+                            .iter()
+                            .flat_map(|edge| {
+                                let p = &expected_edges[edge.0 - 1];
+                                [p.px.0, p.py.0, p.pz.0]
+                            })
+                            .collect::<Vec<_>>();
+                        for (&actual, &expected) in
+                            mapped.raw_coordinates.iter().zip(&expected_parent)
+                        {
+                            close(
+                                actual,
+                                expected,
+                                "signed master routing including external shift",
+                            );
+                        }
+                        close(
+                            mapped.map.jacobian,
+                            jacobian.0,
+                            "measure-preserving reflection",
+                        );
+                        let master_loops: LoopMomenta<F<f64>> = mapped
+                            .raw_coordinates
+                            .as_chunks::<3>()
+                            .0
+                            .iter()
+                            .map(|p| ThreeMomentum::new(F(p[0]), F(p[1]), F(p[2])))
+                            .collect();
+                        let actual_edges = route(parent, &master_loops);
+                        for (actual, expected) in actual_edges.iter().zip(&expected_edges) {
+                            for (a, b) in [actual.px.0, actual.py.0, actual.pz.0].into_iter().zip([
+                                expected.px.0,
+                                expected.py.0,
+                                expected.pz.0,
+                            ]) {
+                                close(a, b, "signed physical edge momentum");
+                            }
+                        }
+                        let conserved = actual_edges[0] - actual_edges[1] + actual_edges[2];
+                        for (a, b) in [conserved.px.0, conserved.py.0, conserved.pz.0]
+                            .into_iter()
+                            .zip([0.7, -0.4, 1.1])
+                        {
+                            close(a, b, "vertex momentum conservation");
+                        }
+                        let odd = numerator(&actual_edges);
+                        assert!(odd.abs() > 1.0e-6, "odd numerator must detect a sign loss");
+                        close(
+                            odd,
+                            numerator(&expected_edges),
+                            "factorized edge-local odd numerator",
+                        );
+                        let mut flipped = actual_edges;
+                        flipped[1] = -flipped[1];
+                        close(numerator(&flipped), -odd, "odd edge orientation control");
+                        let energies = setup.graph.get_energy_cache(
+                            &model,
+                            &master_loops,
+                            &external_moms,
+                            parent,
+                        );
+                        let scores = bridge
+                            .channels()
+                            .iter()
+                            .map(|other| {
+                                let basis =
+                                    &setup.all_bases[LmbIndex::from(other.basis_id.unwrap())];
+                                match weight {
+                                    SamplingChannelWeight::MapDensity => {
+                                        let momenta = basis
+                                            .loop_edges
+                                            .iter()
+                                            .map(|edge| {
+                                                let p = actual_edges[edge.0 - 1];
+                                                if *edge == EdgeIndex(2) { -p } else { p }
+                                            })
+                                            .collect::<Vec<_>>();
+                                        utils::global_inv_parameterize(&momenta, F(2.0), &settings)
+                                            .1
+                                            .0
+                                    }
+                                    SamplingChannelWeight::Ose => {
+                                        2.0_f64.powf(2.0 * settings.sampling_channels.alpha - 6.0)
+                                            * basis
+                                                .loop_edges
+                                                .iter()
+                                                .map(|edge| energies[*edge].0)
+                                                .product::<f64>()
+                                                .powf(-settings.sampling_channels.alpha)
+                                    }
+                                    _ => {
+                                        unreachable!("only the two declared partitions are tested")
+                                    }
+                                }
+                            })
+                            .collect::<Vec<_>>();
+                        let total = scores.iter().sum::<f64>();
+                        let mut weighted_odd = 0.0;
+                        for (other_id, score) in scores.iter().enumerate() {
+                            close(
+                                mapped.partition.log_scores[other_id].unwrap().exp(),
+                                *score,
+                                "independent physical inverse-density/OSE score",
+                            );
+                            close(
+                                mapped.partition.weights[other_id],
+                                score / total,
+                                "normalized partition weight",
+                            );
+                            let inverse = bridge
+                                .inverse(SamplingChannelId::from(other_id), &mapped.raw_coordinates)
+                                .unwrap()
+                                .unwrap();
+                            close(
+                                inverse.map.jacobian * inverse.map.inverse_jacobian,
+                                1.0,
+                                "inverse density/Jacobian",
+                            );
+                            if other_id == channel_id {
+                                for (&actual, expected) in inverse.map.coordinates.iter().zip(x) {
+                                    close(actual, expected, "selected cube coordinates");
+                                }
+                            }
+                            let round_trip = bridge
+                                .forward(
+                                    SamplingChannelId::from(other_id),
+                                    &inverse.map.coordinates,
+                                )
+                                .unwrap();
+                            for (&a, &b) in round_trip
+                                .raw_coordinates
+                                .iter()
+                                .zip(&mapped.raw_coordinates)
+                            {
+                                close(a, b, "foreign-basis forward/inverse round trip");
+                            }
+                            close(
+                                inverse.partition.weights[other_id],
+                                score / total,
+                                "inverse partition consistency",
+                            );
+                            weighted_odd += odd
+                                * inverse.map.jacobian
+                                * inverse.partition.weights[other_id]
+                                * inverse.map.inverse_jacobian;
+                        }
+                        close(
+                            mapped.partition.weights.iter().sum(),
+                            1.0,
+                            "partition of unity",
+                        );
+                        close(
+                            weighted_odd,
+                            numerator(&expected_edges),
+                            "partitioned odd numerator transport",
+                        );
+                    }
+                }
+            }
+        }
+        assert!(
+            saw_mixed_reflection,
+            "must mix both loop momenta while reflecting only edge 2"
+        );
+        assert!(
+            saw_external_shift,
+            "must exercise nonzero affine external shifts"
+        );
+        assert!(
+            saw_reflected_parent,
+            "must exercise reflection in the parent LMB itself"
+        );
+        assert!(
+            saw_nonuniform_partition,
+            "partition weights must be nontrivial"
+        );
+    }
+
+    #[test]
     fn canonical_lmb_density_partition_matches_inverse_jacobians() {
         test_initialise().unwrap();
         let mut graph: Graph = dot!(
@@ -9030,6 +9432,7 @@ pub(crate) mod tests {
             graph: graph.clone(),
             all_bases,
         };
+        assert!(setup.antiparallel_edges().is_empty());
         let loop_moms: LoopMomenta<F<f64>> = graph
             .loop_momentum_basis
             .loop_edges

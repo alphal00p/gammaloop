@@ -46,6 +46,11 @@ With `monte_carlo`, the channel is another adaptive discrete coordinate. Keep
 partition rather than merely disabling advanced maps. By default multichanneling is off and
 all three sum modes are `summed`.
 
+A complete LMB channel samples the momentum of each basis edge along the stored direction of the first
+edge joining the same two vertices. The channels through a bubble or another bundle of parallel
+edges therefore map one cube point to points related by permuting the bundle's edges, whatever
+direction each edge is stored in.
+
 #table(
   columns: (auto, 1fr),
   table.header([*Selector*], [*Expansion*]),

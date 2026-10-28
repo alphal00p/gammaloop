@@ -1,0 +1,708 @@
+{
+  "schema": 1,
+  "status": "STOP: implementation and scoped validation complete; NEW independent Astra review required before ordered main integration",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-sampling-fixes",
+  "base": "f2e32c44c986058ede1d7e585b9e2e4fefe1110c",
+  "base_code": "0d13655702c2986f2fc7923fd9121278c4439709",
+  "bookmark": "generation-sampling-fixes-staged",
+  "old_approved_tip": "c82916079b5cc643151e0213499ca9875739a4e3",
+  "old_production": "0b78ec9570547393b59a88d8dac51d907902a5d4",
+  "old_evidence": "21274d1442f57a33ca7c48629d9644f7fa8d228b",
+  "old_bookmark": "generation-sampling-fixes",
+  "source_mapping": [
+    {
+      "order": 27,
+      "source": "d17f3548821f76250e49056e6b684257e49d92ec",
+      "disposition": "cumulative approved production and controls retained; native staged graph/parser fixtures",
+      "new_commit": "a205202b17b1c915190e17aa615cb4fe76391102",
+      "new_change": "ouunvrvzqqkvvysouponpwqxqtptswtq"
+    },
+    {
+      "order": 28,
+      "source": "2ec30ce37196011fbeb21af2822d655146b45a0f",
+      "disposition": "exact numeric-domain zero affine filtering; small nonzero precision control retained",
+      "new_commit": "a205202b17b1c915190e17aa615cb4fe76391102",
+      "new_change": "ouunvrvzqqkvvysouponpwqxqtptswtq"
+    },
+    {
+      "order": 29,
+      "source": "dd3640cb8171fbdc455888e3b8fcf2de92514a32",
+      "disposition": "specifically approved fixed-seed CoolQM 3-sigma gate retained",
+      "new_commit": "a205202b17b1c915190e17aa615cb4fe76391102",
+      "new_change": "ouunvrvzqqkvvysouponpwqxqtptswtq"
+    },
+    {
+      "source": "c82916079b5cc643151e0213499ca9875739a4e3",
+      "disposition": "additive P3 graph-derived mixed two-loop regression retained",
+      "new_commit": "a205202b17b1c915190e17aa615cb4fe76391102",
+      "new_change": "ouunvrvzqqkvvysouponpwqxqtptswtq"
+    }
+  ],
+  "physics_contract": {
+    "CoolQM": {
+      "seed": 1337,
+      "samples": 750000,
+      "target": -0.0610772376129,
+      "pull_limit": 3,
+      "relative_error_limit": "1.5 * 0.009980780719103282",
+      "master_labels": "inherited staged GL0, GL1, GL3, GL4, GL5; not restored to old labels"
+    },
+    "epem": {
+      "seed": 220311038,
+      "samples_per_slot": 60000,
+      "routes": "integrated, local-only, local-only-no-threshold; direct3D, explicit3D, projected4D-to-CFF",
+      "scales": "m_uv, mu_r, localization scale"
+    },
+    "P3": {
+      "parents": 3,
+      "channels": 3,
+      "cube_points": 2,
+      "partition_modes": [
+        "map_density",
+        "ose"
+      ],
+      "generating_cases": 36,
+      "inverse_checks": 108,
+      "limit": "weighted numerator sum certifies partition unity, not independent full-evaluator multiplicity; channel identity lookup plus existing catalogue/dedup coverage"
+    }
+  },
+  "environment": {
+    "cargo_build_jobs": 2,
+    "test_threads": 2,
+    "acceptance_test_threads": 1,
+    "initial_command": "nix develop -c ...",
+    "realized_shell": "/nix/store/cjcdfaz0mfh9svpk13gd48l3j5zmdms2-nix-shell-env.drv",
+    "license": "existing export preserved or silently loaded from current-user XDG config",
+    "shared_cache": "/common/build-cache/lcnbr/46/585a60ab753d72",
+    "target_override": false,
+    "cache_copy_seeding_or_deletion": false,
+    "nixci": false,
+    "command_prefix": "CARGO_BUILD_JOBS=2 NEXTEST_TEST_THREADS=2 nix develop /nix/store/cjcdfaz0mfh9svpk13gd48l3j5zmdms2-nix-shell-env.drv -c"
+  },
+  "limits": [
+    "Preparation only on independently approved staged22-26; source19-21 grouping missing. Ordered main replay must be19-21 then22-26 then27-29 with fresh combined acceptance.",
+    "Historical74ce physics passes are not new staged evidence.",
+    "No BRST, fullWP3, hundred-seed study, unrelated heavy physics, or full-evaluator multiplicity certificate.",
+    "Inherited source31 scope drift and staged22 audit P3 correction remain outside this lane; no unrelated scope/digest refresh.",
+    "No nested agents, main integration, push, upload, PR, publication or remote mutation."
+  ],
+  "retained": "Original approved tip/bookmark/reviews, current task workspace, fresh logs and producer identities, configured shared caches; all retained for independent review and continuation.",
+  "implementation_commit": "a205202b17b1c915190e17aa615cb4fe76391102",
+  "implementation_change": "ouunvrvzqqkvvysouponpwqxqtptswtq",
+  "evidence_change": "oomruyulutzmqyzqsxknxnxmmpowklkq",
+  "source_audit": {
+    "base": "f2e32c44c986058ede1d7e585b9e2e4fefe1110c",
+    "old": "c82916079b5cc643151e0213499ca9875739a4e3",
+    "checks": {
+      "crates/gammalooprs/src/integrands/process/mod.rs:    fn antiparallel_edges(": true,
+      "crates/gammalooprs/src/integrands/process/sampling/maps.rs:    pub(super) fn identity(": true,
+      "crates/gammalooprs/src/integrands/process/sampling/maps.rs:    fn apply(&self, matrix:": true,
+      "crates/gammalooprs/src/integrands/process/sampling/selection.rs:fn compile_lmb_map<": true,
+      "both_graph_regressions_exact_after_native_parser_migration": true,
+      "CoolQM_test_exact_old_except_inherited_staged_master_labels": true,
+      "all_protected_paths_unchanged": true,
+      "original_bookmark_preserved": true,
+      "unique_registry_ids": true,
+      "owned_title": true,
+      "owned_canonical_scopes": true
+    },
+    "protected": {
+      "crates/gammalooprs/src/utils/mod.rs": true,
+      "crates/gammalooprs/src/momentum/mod.rs": true,
+      "Cargo.toml": true,
+      "Cargo.lock": true,
+      "flake.lock": true,
+      "uv.lock": true,
+      "nix-ci.nix": true,
+      "tydenso/Cargo.toml": true,
+      "tydenso/Cargo.lock": true,
+      "crates/feynkit-graph/src/finalization.rs": true,
+      "crates/feynkit-graph/src/numerator_interface.rs": true,
+      "crates/feynkit-graph/src/lib.rs": true,
+      "crates/gammalooprs/src/graph/parse/from_dot.rs": true,
+      "crates/symbolica-data/src/lib.rs": true,
+      "docs/architecture/evidence/generation-integration/execution.json": true,
+      "crates/linnest/layout/coordinates.py": true,
+      "crates/linnest/layout/ec_planarity.py": true,
+      "crates/linnest/layout/geometry.py": true,
+      "crates/linnest/layout/insertion.py": true,
+      "crates/linnest/layout/movement.py": true,
+      "crates/linnest/layout/native/CMakeLists.txt": true,
+      "crates/linnest/layout/native/LICENSE.networkx": true,
+      "crates/linnest/layout/native/build.py": true,
+      "crates/linnest/layout/native/coordinates.hpp": true,
+      "crates/linnest/layout/native/embedding.hpp": true,
+      "crates/linnest/layout/native/fixtures/constraints.json": true,
+      "crates/linnest/layout/native/fixtures/seeds.json": true,
+      "crates/linnest/layout/native/main.cpp": true,
+      "crates/linnest/layout/native/protocol.typ": true,
+      "crates/linnest/layout/native/seed.hpp": true,
+      "crates/linnest/layout/native/spqr.hpp": true,
+      "crates/linnest/layout/native/test_layout.cpp": true,
+      "crates/linnest/layout/native/test_native.py": true,
+      "crates/linnest/layout/native/test_seed.py": true,
+      "crates/linnest/layout/native/test_wasm.py": true,
+      "crates/linnest/layout/planarization.py": true,
+      "crates/linnest/layout/pyproject.toml": true,
+      "crates/linnest/layout/seed.py": true,
+      "crates/linnest/layout/solver.py": true,
+      "crates/linnest/layout/uv.lock": true,
+      "examples/layout/embedding_constraints/algorithm.typ": true,
+      "examples/layout/embedding_constraints/cli.py": true,
+      "examples/layout/embedding_constraints/diagrams.json": true,
+      "examples/layout/embedding_constraints/pyproject.toml": true,
+      "examples/layout/embedding_constraints/test_coordinates.py": true,
+      "examples/layout/embedding_constraints/test_ec_fidelity.py": true,
+      "examples/layout/embedding_constraints/test_ec_planarity.py": true,
+      "examples/layout/embedding_constraints/test_insertion.py": true,
+      "examples/layout/embedding_constraints/test_seed.py": true,
+      "examples/layout/embedding_constraints/uv.lock": true,
+      "examples/notebooks/symbolica-host/Cargo.lock": true,
+      "examples/notebooks/symbolica-host/Cargo.toml": true,
+      "examples/notebooks/symbolica-host/compress_wheel.py": true,
+      "examples/notebooks/symbolica-host/licenses/clarabel-LICENSE": true,
+      "examples/notebooks/symbolica-host/licenses/networkx-LICENSE": true,
+      "examples/notebooks/symbolica-host/licenses/tiptoe-LICENSE": true,
+      "examples/notebooks/symbolica-host/pyproject.toml": true,
+      "examples/notebooks/symbolica-host/python/symbolica/__init__.py": true,
+      "examples/notebooks/symbolica-host/python/symbolica/community/__init__.py": true,
+      "examples/notebooks/symbolica-host/python/symbolica/community/graph/__init__.pyi": true,
+      "examples/notebooks/symbolica-host/python/symbolica/community/graph/py.typed": true,
+      "examples/notebooks/symbolica-host/python/symbolica/community/hepkit/__init__.pyi": true,
+      "examples/notebooks/symbolica-host/python/symbolica/community/idenso/__init__.py": true,
+      "examples/notebooks/symbolica-host/python/symbolica/community/tensor/__init__.py": true,
+      "examples/notebooks/symbolica-host/python/symbolica/community/tensor/__init__.pyi": true,
+      "examples/notebooks/symbolica-host/python/symbolica/community/tensor/py.typed": true,
+      "examples/notebooks/symbolica-host/python/symbolica/data.py": true,
+      "examples/notebooks/symbolica-host/src/lib.rs": true,
+      "nix/ufo-runtime/pyproject.toml": true,
+      "nix/ufo-runtime/uv.lock": true
+    },
+    "owned_scopes": [
+      {
+        "path": "crates/gammalooprs/src/integrands/process/mod.rs",
+        "symbol": "bundle incidence",
+        "digest": "fa84abc99317adbeae2c80083e8a6eeffce546ab",
+        "match": true
+      },
+      {
+        "path": "crates/gammalooprs/src/integrands/process/sampling/maps.rs",
+        "symbol": "signed affine input blocks",
+        "digest": "c914fffdc29bc975430dc87ee68bda2e11c2fc5c",
+        "match": true
+      },
+      {
+        "path": "crates/gammalooprs/src/integrands/process/sampling/maps.rs",
+        "symbol": "exact zero affine coefficients",
+        "digest": "08c5ff1dc2daf0f7e601b640de95ccd36a3a8b15",
+        "match": true
+      },
+      {
+        "path": "crates/gammalooprs/src/integrands/process/sampling/selection.rs",
+        "symbol": "shared signed LMB frame",
+        "digest": "cb0a19bd463a7c4f03905dff4e66f8c37e38b69b",
+        "match": true
+      },
+      {
+        "path": "crates/gammalooprs/src/integrands/process/mod.rs",
+        "symbol": "graph-derived reflection controls",
+        "digest": "a07a79ea2a2ab2ba9e0544357f113fd7ceaf2a60",
+        "match": true
+      },
+      {
+        "path": "tests/tests/test_nlo_acceptance/cool_qm_eos.rs",
+        "symbol": "fixed seed CoolQM gate",
+        "digest": "fd8f5ff00a6b7b7cf3b3b5299f61624dcd7cbc79",
+        "match": true
+      }
+    ],
+    "source_sha256": {
+      "crates/gammalooprs/src/integrands/process/mod.rs": "8d22c67f564cc9cf51dc1bd6ba2223ee9e852a8ad45496dcac569c25a6bd64a6",
+      "crates/gammalooprs/src/integrands/process/sampling/maps.rs": "d89d63d90297439f5727e01974f5d7ea343166889b445e9388279712e11f7570",
+      "crates/gammalooprs/src/integrands/process/sampling/selection.rs": "893de80db39b8cd04834b6d364e2bac54d742d2a9273d6b733a0bf2d02c59c8a",
+      "tests/tests/test_nlo_acceptance/cool_qm_eos.rs": "ba0ebab13a1e4e18933aebea9d82da3cdea8c622d7c114a2c1f432d390389223"
+    }
+  },
+  "patch_audit": {
+    "maps_patch_exact": true,
+    "selection_added_removed_lines_exact": true
+  },
+  "old_approvals_and_receipts": [
+    {
+      "path": "tests/artifacts/sampling-review-round1.YDvTJe/review.json",
+      "sha256": "04dbc54059c3b1911deed98ab305c268f3970bd46266814e15a1b2cb361a7bef",
+      "verdict": "APPROVE"
+    },
+    {
+      "path": "target/astra-p3-review-c8291607/review.json",
+      "sha256": "65586ca81e25eb0a644f52b324a21fa7c87f8c764655ffad8f005cfdc849e1f1",
+      "verdict": "APPROVE"
+    },
+    {
+      "path": "../generation-projector-flow/target/astra-staged22-26-r1-20261028/review.json",
+      "sha256": "1a99162b17aeeb5c5d64870cd879db91b1031f25f4e3c5ce180704f584cb89b2",
+      "verdict": "APPROVE"
+    },
+    {
+      "immutable_commit": "c82916079b5cc643151e0213499ca9875739a4e3",
+      "path": "docs/architecture/evidence/generation-integration/sampling/receipt.json",
+      "sha256": "303f4039b233a0afe34f758ffdf157a815f6c9ccfbe91e297d0c23355a35c4f1"
+    },
+    {
+      "immutable_commit": "c82916079b5cc643151e0213499ca9875739a4e3",
+      "path": "docs/architecture/evidence/generation-integration/sampling-p3/receipt.json",
+      "sha256": "3c502a6eb2712213601c95321a69823f342c1a00ca6adb756d8824ab9bd8112b"
+    }
+  ],
+  "static_checks": {
+    "fmt": 0,
+    "typst_html_compile": 0,
+    "kernel_isolation": 0,
+    "owned_canonical_registry_scopes": 6,
+    "full_docs": "current-workspace canonical check validates owned note and six scopes, then stops at the known inherited state.rs scope failure",
+    "scoped_clippy": "PASS: gammalooprs and integration-tests all-targets, --deny warnings; only inherited vendored Clarabel diagnostics"
+  },
+  "validation_pending": [],
+  "changed_files": [
+    "M crates/gammalooprs/src/integrands/process/mod.rs",
+    "M crates/gammalooprs/src/integrands/process/sampling/maps.rs",
+    "M crates/gammalooprs/src/integrands/process/sampling/selection.rs",
+    "A docs/architecture/evidence/generation-sampling-staged/receipt.json",
+    "A docs/architecture/generation-sampling-staged.typ",
+    "M docs/developers.toml",
+    "M docs/products/gammaloop/content/sampling.typ",
+    "M tests/tests/test_nlo_acceptance/cool_qm_eos.rs"
+  ],
+  "test_inventory": {
+    "old_log": "target/astra-p3-review-c8291607/structural.log",
+    "old_count": 178,
+    "new_log": "target/sampling-staged/sampling-final.log",
+    "new_count": 179,
+    "missing": [],
+    "added": [
+      "graph::parse::tests::rqft_ghost_explicit_bases_preserve_signed_native_routing"
+    ],
+    "all_original_178_selected_controls_pass": true
+  },
+  "sampling": {
+    "status": "PASS",
+    "exit_code": 0,
+    "run_id": "c885656e-a1e3-492d-8535-14d22ee4953c",
+    "passed": 179,
+    "skipped": 1359,
+    "test_seconds": 18.053,
+    "original178_inventory_complete": true,
+    "command": "cargo nextest run --cargo-metadata target/sampling-staged/cargo-metadata.json --binaries-metadata target/sampling-staged/sampling-binaries.json -E 'test(integrands::process::sampling) or test(lmb_sampling_detects) or test(canonical_lmb_density) or test(lmb_frame) or test(signed) or test(graph_derived_two_loop_reflections)' --test-threads 2 --status-level pass --final-status-level fail",
+    "log": "target/sampling-staged/sampling-final.log",
+    "producer_recertification": "final hashed binaries; nextest reuse mode; no compilation"
+  },
+  "numeric": {
+    "status": "PASS",
+    "exit_code": 0,
+    "run_id": "7347065d-d9ce-418f-8e84-6a03a49d599b",
+    "passed": 34,
+    "skipped": 1504,
+    "test_seconds": 0.401,
+    "backends": [
+      "f64",
+      "QuadFloat (active f128 alias)",
+      "SamplingFloat VarFloat<256>",
+      "ArbPrec VarFloat<1000>"
+    ],
+    "log": "target/sampling-staged/numeric-final.log",
+    "producer_recertification": "final hashed binaries; nextest reuse mode; no compilation",
+    "command": "cargo nextest run --cargo-metadata target/sampling-staged/cargo-metadata.json --binaries-metadata target/sampling-staged/sampling-binaries.json -E 'test(utils::tests::) or test(momentum::tests::rotations)' --test-threads 2 --status-level pass --final-status-level fail"
+  },
+  "checks": [
+    {
+      "name": "numeric",
+      "command": "cargo nextest run -p gammalooprs --lib --cargo-profile dev-optim --locked -E 'test(utils::tests::) or test(momentum::tests::rotations)' --test-threads 2 --status-level pass --final-status-level fail",
+      "exit_code": 0,
+      "seconds": 1.5195648670196533,
+      "log": "target/sampling-staged/numeric.log"
+    },
+    {
+      "name": "acceptance",
+      "command": "cargo nextest run -p gammaloop-integration-tests --test test_nlo_acceptance --cargo-profile dev-optim --locked -E 'test(cool_qm_eos_nlo_matches_example_target) or test(epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes)' --test-threads 1 --status-level pass --success-output immediate",
+      "exit_code": 0,
+      "seconds": 1883.3936998844147,
+      "log": "target/sampling-staged/acceptance.log"
+    },
+    {
+      "name": "clippy",
+      "command": "cargo clippy -p gammalooprs -p gammaloop-integration-tests --all-targets --locked --profile dev-optim -- --deny warnings",
+      "exit_code": 0,
+      "seconds": 504.3662631511688,
+      "log": "target/sampling-staged/clippy.log"
+    },
+    {
+      "name": "fmt-check",
+      "command": "just fmt --check",
+      "exit_code": 0,
+      "seconds": 11.957465648651123,
+      "log": "target/sampling-staged/fmt-check.log"
+    },
+    {
+      "name": "kernel",
+      "command": "just check-symbolica-feature-isolation",
+      "exit_code": 0,
+      "seconds": 0.8133339881896973,
+      "log": "target/sampling-staged/kernel.log"
+    },
+    {
+      "name": "typst",
+      "command": "typst compile --features html --format html --root . docs/architecture/generation-sampling-staged.typ target/sampling-staged/note.html",
+      "exit_code": 0,
+      "seconds": 0.11736917495727539,
+      "log": "target/sampling-staged/typst.log"
+    },
+    {
+      "name": "reference",
+      "command": "cargo run --locked --profile dev-optim -p alphal00p-docs-catalogs --features gammaloop-reference --bin alphal00p-docs-gammaloop-reference -- --check",
+      "exit_code": -2,
+      "seconds": 133.3833146095276,
+      "log": "target/sampling-staged/reference.log",
+      "credit": false,
+      "disposition": "own redundant attempt interrupted; exact canonical approved-base reference certificate and unchanged metadata-owner/output closure reused"
+    },
+    {
+      "name": "docs",
+      "command": "../generation-projector-flow/target/dev-optim/alphal00p-docs-builder check",
+      "exit_code": 1,
+      "seconds": 0.1266775131225586,
+      "log": "target/sampling-staged/docs.log",
+      "credit": false,
+      "disposition": "base embedded root; superseded by current-workspace docs-current check"
+    },
+    {
+      "name": "sampling-list",
+      "command": "cargo nextest list -p gammalooprs --lib --cargo-profile dev-optim --locked --message-format json",
+      "exit_code": 0,
+      "seconds": 87.05803155899048,
+      "log": "target/sampling-staged/sampling-list.log"
+    },
+    {
+      "name": "acceptance-list",
+      "command": "cargo nextest list -p gammaloop-integration-tests --test test_nlo_acceptance --cargo-profile dev-optim --locked --message-format json",
+      "exit_code": 0,
+      "seconds": 110.15431213378906,
+      "log": "target/sampling-staged/acceptance-list.log"
+    }
+  ],
+  "physics": {
+    "status": "PASS",
+    "exit_code": 0,
+    "run_id": "1c0af686-e8de-4200-86ab-ca6b84f8038c",
+    "passed": 2,
+    "skipped": 3,
+    "test_seconds": 132.795,
+    "CoolQM": {
+      "passed": true,
+      "test_seconds": 63.181,
+      "displayed_result": "-6.235(61)e-2",
+      "displayed_pull_sigma": 2.077,
+      "displayed_relative_error_percent": 0.984,
+      "seed": 1337,
+      "samples": 750000,
+      "gate_sigma": 3,
+      "target_and_error_semantics_unchanged": true
+    },
+    "epem": {
+      "passed": true,
+      "displayed_nominal_result": "+8.04(61)e-3",
+      "displayed_nominal_relative_error_percent": 7.54,
+      "route_and_scale_controls": "all original assertions retained and passed",
+      "test_seconds": 69.608
+    },
+    "log": "target/sampling-staged/acceptance-final.log",
+    "producer_recertification": "final hashed binaries; nextest reuse mode; no compilation",
+    "command": "cargo nextest run --cargo-metadata target/sampling-staged/cargo-metadata.json --binaries-metadata target/sampling-staged/acceptance-binaries.json -E 'test(cool_qm_eos_nlo_matches_example_target) or test(epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes)' --test-threads 1 --status-level pass --final-status-level fail --success-output immediate"
+  },
+  "superseded_docs_attempt": {
+    "binary": "/shared/lcnbr/dev/gammaloop/generation-projector-flow/target/dev-optim/alphal00p-docs-builder",
+    "sha256": "3c0725ef457400a8c9a7b104b0dafa1232c24496d6dd7aff6139e2a6e2f10dcd",
+    "source_base": "f2e32c44c986058ede1d7e585b9e2e4fefe1110c",
+    "source_and_lock_diff": "",
+    "command": "../generation-projector-flow/target/dev-optim/alphal00p-docs-builder check",
+    "cwd": "/shared/lcnbr/dev/gammaloop/generation-sampling-fixes",
+    "exit_code": 1,
+    "canonical_new_scopes_precede_inherited_failure": false,
+    "limitation": "Historical base failure reproduction only; current-workspace builder required.",
+    "credit": "none for staged tree; binary discover() embeds original CARGO_MANIFEST_DIR"
+  },
+  "docs_producer": {
+    "binary": "/shared/lcnbr/dev/gammaloop/generation-sampling-fixes/target/dev-optim/alphal00p-docs-builder",
+    "sha256": "dba6fc323624f5781ebf2c69306dc45d85550037b9ad34d5f9a3665d197a2908",
+    "workspace_embedded_by_CARGO_MANIFEST_DIR": "/shared/lcnbr/dev/gammaloop/generation-sampling-fixes",
+    "command": "cargo run --locked --profile dev-optim -p alphal00p-docs-builder -- check",
+    "exit_code": 1,
+    "log": "target/sampling-staged/docs-current.log",
+    "six_owned_scopes_checked_before_inherited_failure": true,
+    "first_failure": "gammaloop-architecture state.rs stale digest: expected5113940a12e8bac5ec042c59db01bd0ecfb05ef0, actual3598dbe299f9a32da1ed8d034706a82959d84abb",
+    "same_first_error_as_reviewed_base": true,
+    "not_a_full_docs_pass": true
+  },
+  "reference_metadata": {
+    "status": "REUSED canonical approved-base check with unchanged metadata source closure",
+    "base": "f2e32c44c986058ede1d7e585b9e2e4fefe1110c",
+    "unchanged_paths": [
+      "crates/gammaloop-api",
+      "crates/alphal00p-docs-catalogs",
+      "crates/alphal00p-docs-macros",
+      "crates/alphal00p-docs-schema",
+      "crates/gammalooprs/src/settings",
+      "crates/gammalooprs/src/utils",
+      "docs/api/generated/gammaloop-reference.json",
+      "assets/schemas",
+      "Cargo.toml",
+      "Cargo.lock"
+    ],
+    "source_diff": "",
+    "baseline_check": {
+      "name": "reference-check",
+      "command": "cargo run --locked --profile dev-optim -p alphal00p-docs-catalogs --features gammaloop-reference --bin alphal00p-docs-gammaloop-reference -- --check",
+      "exit_code": 0,
+      "test_summaries": [],
+      "zero_test_result": false,
+      "phase": "current candidate",
+      "log": "target/generation-projector-flow-staged/reference-check.log",
+      "log_sha256": "9f8bc0f32178bdb435ae5789055b08ec67a39856fe466f09c3411a2a4702c157"
+    },
+    "baseline_log_absolute": "/shared/lcnbr/dev/gammaloop/generation-projector-flow/target/generation-projector-flow-staged/reference-check.log",
+    "baseline_log_sha256_verified": "9f8bc0f32178bdb435ae5789055b08ec67a39856fe466f09c3411a2a4702c157",
+    "independent_review": "../generation-projector-flow/target/astra-staged22-26-r1-20261028/review.json",
+    "sampling_changes_outside_metadata_closure": "Only runtime affine methods, compile context, private co-orientation owner and test code changed. Serialized settings/schema/CLI owners and generated output are byte-unchanged.",
+    "fresh_current_reference_build": "abandoned after source-closure proof; no pass credit",
+    "independent_reference_check": {
+      "review_exit_code": 0,
+      "log": "../generation-projector-flow/target/astra-staged22-26-r1-20261028/reference.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "docs_scope_limit_detail": "First canonical failure is inherited state.rs drift. The older whole-file process/mod.rs architecture scope was already stale and this sampling patch changes that file further; no claim that all old scope payloads remain byte-identical, and no unrelated digest/anchor refresh or staged22 audit repair is made here.",
+  "deduplicated_counts": {
+    "sampling": 179,
+    "numeric": 34,
+    "overlap": 1,
+    "unique_unit_tests": 212,
+    "acceptance": 2,
+    "unique_total": 214,
+    "repeated_runs_not_added": true
+  },
+  "final_recertification": [
+    {
+      "name": "sampling",
+      "command": "cargo nextest run --cargo-metadata target/sampling-staged/cargo-metadata.json --binaries-metadata target/sampling-staged/sampling-binaries.json -E 'test(integrands::process::sampling) or test(lmb_sampling_detects) or test(canonical_lmb_density) or test(lmb_frame) or test(signed) or test(graph_derived_two_loop_reflections)' --test-threads 2 --status-level pass --final-status-level fail",
+      "exit_code": 0,
+      "seconds": 18.24502921104431,
+      "log": "target/sampling-staged/sampling-final.log",
+      "reuse_mode_no_compilation": true
+    },
+    {
+      "name": "numeric",
+      "command": "cargo nextest run --cargo-metadata target/sampling-staged/cargo-metadata.json --binaries-metadata target/sampling-staged/sampling-binaries.json -E 'test(utils::tests::) or test(momentum::tests::rotations)' --test-threads 2 --status-level pass --final-status-level fail",
+      "exit_code": 0,
+      "seconds": 0.5718386173248291,
+      "log": "target/sampling-staged/numeric-final.log",
+      "reuse_mode_no_compilation": true
+    },
+    {
+      "name": "acceptance",
+      "command": "cargo nextest run --cargo-metadata target/sampling-staged/cargo-metadata.json --binaries-metadata target/sampling-staged/acceptance-binaries.json -E 'test(cool_qm_eos_nlo_matches_example_target) or test(epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes)' --test-threads 1 --status-level pass --final-status-level fail --success-output immediate",
+      "exit_code": 0,
+      "seconds": 132.99286437034607,
+      "log": "target/sampling-staged/acceptance-final.log",
+      "reuse_mode_no_compilation": true
+    }
+  ],
+  "metadata_api_attempt": {
+    "exit_code": 96,
+    "tests_executed": 0,
+    "credit": false,
+    "reason": "Full test-list JSON is not binaries-only reuse metadata; corrected exact metadata projection before final recertification.",
+    "log": "target/sampling-staged/sampling-final-metadata-attempt.log"
+  },
+  "producers": [
+    {
+      "suite": {
+        "package-name": "gammalooprs",
+        "binary-id": "gammalooprs",
+        "binary-name": "gammalooprs",
+        "package-id": "path+file:///shared/lcnbr/dev/gammaloop/generation-sampling-fixes/crates/gammalooprs#0.3.4",
+        "kind": "lib",
+        "binary-path": "/common/build-cache/lcnbr/46/585a60ab753d72/dev-optim/deps/gammalooprs-a941761db6d1e7be",
+        "build-platform": "target",
+        "cwd": "/shared/lcnbr/dev/gammaloop/generation-sampling-fixes/crates/gammalooprs",
+        "status": "listed"
+      },
+      "sha256": "0359ddcc819d7955892a9a0cf11379322e993ec643fc7d361c525acb7898ff98",
+      "bytes": 2289190608,
+      "source_commit": "a205202b17b1c915190e17aa615cb4fe76391102",
+      "hash_unchanged_across_final_tests": true,
+      "features": {
+        "test-lib-gammalooprs.json": "[\"default\"]"
+      },
+      "build_directory": "/common/build-cache/lcnbr/46/585a60ab753d72"
+    },
+    {
+      "suite": {
+        "package-name": "gammaloop-integration-tests",
+        "binary-id": "gammaloop-integration-tests::test_nlo_acceptance",
+        "binary-name": "test_nlo_acceptance",
+        "package-id": "path+file:///shared/lcnbr/dev/gammaloop/generation-sampling-fixes/tests#gammaloop-integration-tests@0.1.0",
+        "kind": "test",
+        "binary-path": "/common/build-cache/lcnbr/46/585a60ab753d72/dev-optim/deps/test_nlo_acceptance-231c6758786127e5",
+        "build-platform": "target",
+        "cwd": "/shared/lcnbr/dev/gammaloop/generation-sampling-fixes/tests",
+        "status": "listed"
+      },
+      "sha256": "425648be76457c27a193a792f2ec3e637d66872975504aea9174dfb6220ed91c",
+      "bytes": 2323017976,
+      "source_commit": "a205202b17b1c915190e17aa615cb4fe76391102",
+      "hash_unchanged_across_final_tests": true,
+      "features": {
+        "test-integration-test-test_nlo_acceptance.json": "[\"default\"]"
+      },
+      "build_directory": "/common/build-cache/lcnbr/46/585a60ab753d72"
+    }
+  ],
+  "producer_full_record": {
+    "path": "target/sampling-staged/producers-final.json",
+    "sha256": "a95f2abd2b784445af62a8f37b5fa9e6c197566c3302dc430f20ffeaa25f9121",
+    "cargo_u64_fingerprints": "Python integer parsing/writing; no JavaScript Number roundtrip"
+  },
+  "required_future_work": [
+    "NEW independent Astra review of this exact staged reconciliation.",
+    "Ordered main replay: sources19-21, then22-26, then27-29; final combined grouping, numeric, sampling and physics acceptance.",
+    "Inherited docs/scope repair, staged22 audit P3 correction at main integration, BRST and fullWP3 remain future work."
+  ],
+  "policy_departures": [],
+  "cleanup": "Own redundant reference Cargo process and its two orphan compiler children stopped; all final checks/runs complete. No task background process retained. Shared caches and partial normal build products preserved. Unused patch/registration scratch removed; review logs, source/metadata audits and named workspace retained.",
+  "completed_at_utc": "2026-10-28T06:07:37.367290+00:00",
+  "transcripts": {
+    "target/sampling-staged/acceptance-final.log": {
+      "sha256": "5b53fbe28c799a224b3e1b78b7cb08206080957e6b71db78cd09e92e48458668",
+      "bytes": 160878
+    },
+    "target/sampling-staged/acceptance-list.log": {
+      "sha256": "b9c84ccf5adedf3f04114c23da71e7a899ba702ce4f4d653341f1873d97cfc9a",
+      "bytes": 4007
+    },
+    "target/sampling-staged/acceptance.log": {
+      "sha256": "26aad44b221efd7f0c23f315cfbc705c378fdde534081792ed644dddcbc0ac73",
+      "bytes": 164185
+    },
+    "target/sampling-staged/cargo-metadata.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "target/sampling-staged/check-driver.log": {
+      "sha256": "1a5127db15c1c3b467f208198344c32f23a0122cd68c1057e0409ef749cd4c35",
+      "bytes": 2842
+    },
+    "target/sampling-staged/clippy.log": {
+      "sha256": "26c2d3284cbe9467a901981f67850d24ef2ba18a0c6f262a9245116287bd0666",
+      "bytes": 4992
+    },
+    "target/sampling-staged/docs-current.log": {
+      "sha256": "eb3d6ff091c68793f323360d9f778dd54f6fc2685a4a20d1ddfeeb3c92973364",
+      "bytes": 4986
+    },
+    "target/sampling-staged/docs.log": {
+      "sha256": "5fed05bd1e11a60cfd0b0d55f43ab06598e6931e59891248f015b45e3b829c16",
+      "bytes": 329
+    },
+    "target/sampling-staged/fmt-check.log": {
+      "sha256": "1dadf1b63f3fc19e19b1e9fb9a6c3f7772d8ba250861dcced4346f892ae2fca3",
+      "bytes": 24
+    },
+    "target/sampling-staged/fmt.log": {
+      "sha256": "16a7ef024c320c64fff0e2dc1db98c9631ef554c4e2843e0dd25961ef3487ec8",
+      "bytes": 576
+    },
+    "target/sampling-staged/kernel.log": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    "target/sampling-staged/metadata-attempt-driver.log": {
+      "sha256": "e894195b80e44ea3163f94b0f2e9c2b0de43a56e122b9b04357e012065802925",
+      "bytes": 601
+    },
+    "target/sampling-staged/numeric-final.log": {
+      "sha256": "fe5eaddf33ec5507f016ed40b18ffa5fae9bb4a965b2e51619160991128a3f00",
+      "bytes": 4357
+    },
+    "target/sampling-staged/numeric.log": {
+      "sha256": "ee34411b88b1dfa1accd4cf1752fac7f7619c02d3c669c45b0785243aca7ff60",
+      "bytes": 5661
+    },
+    "target/sampling-staged/recertify-driver.log": {
+      "sha256": "67225163c16dc67c034bfa2a66a6c68bd7abbd98bd7b6b5c5b5be93a2c5ecdab",
+      "bytes": 1658
+    },
+    "target/sampling-staged/reference.log": {
+      "sha256": "3ce5cd20110696b1744d161393f4955af6597629cdc7c9541b75e4132f131323",
+      "bytes": 1207
+    },
+    "target/sampling-staged/sampling-final-metadata-attempt.log": {
+      "sha256": "5a7124839c48c95723bbc13b94cbf613abbfe02491015a106d2a8a1f09d2f77c",
+      "bytes": 228
+    },
+    "target/sampling-staged/sampling-final.log": {
+      "sha256": "a877cbb41c0c084a5782ee1191e0524eef669eb3fe22cd6700f3950685167b12",
+      "bytes": 27599
+    },
+    "target/sampling-staged/sampling-list.log": {
+      "sha256": "03bb74e8f98cb2b6799fa80bb15e7ed0de2df64c976fbf73e5a8129e62a33167",
+      "bytes": 246398
+    },
+    "target/sampling-staged/sampling.log": {
+      "sha256": "13fcc572e179802a383c67e797e23fc2f4484b1d4ef62fdcf47e142520f259a0",
+      "bytes": 32529
+    },
+    "target/sampling-staged/source-audit.log": {
+      "sha256": "3173f7682cde7513762688567ec7b00a67e9b623759f8b0e7dc8b95490ff48bb",
+      "bytes": 690
+    },
+    "target/sampling-staged/typst.log": {
+      "sha256": "d103175d5ac5ba1d2d4afae2e801958a1e0dafae1b43ffe6f1f44f3783a2f3ce",
+      "bytes": 250
+    }
+  },
+  "retained_artifact_hashes": {
+    "target/sampling-staged/cargo-metadata.json": "3017b7b620c498e160e541c3afa685714010254b82a175ce3469913c8e9915bd",
+    "target/sampling-staged/sampling-binaries.json": "e62ef2beab73254a39e1f27c3651daf854c4b80c4e80ff84541e2291972fb075",
+    "target/sampling-staged/acceptance-binaries.json": "d54ab8f557084df973f93e38f94d57daf3d0a82213a6b898df18d2cb02772a95",
+    "target/sampling-staged/source-audit.py": "0718c66f443c4da2b4116970b465972ed4a9a6b17f6bc451bfcdbaaa675e43e1",
+    "target/sampling-staged/reference-reuse.json": "22d18d690c1d28e31467e7c3850f3af0b9ca3d917fafa90c370ae9159de8dc5d",
+    "target/sampling-staged/recertify.py": "f1f167ed833a27c14e8c2e9102e6df3176690b3f43fe3a7fd1cbb74379cec17f"
+  },
+  "initial_runs": [
+    {
+      "name": "sampling",
+      "run_id": "cb745dc0-4ac1-493f-8b6c-19746ae7048b",
+      "passed": 179,
+      "skipped": 1359,
+      "test_seconds": 20.874,
+      "log": "target/sampling-staged/sampling.log"
+    },
+    {
+      "name": "numeric",
+      "run_id": "1954f623-61da-425a-849b-1a66c4883321",
+      "passed": 34,
+      "skipped": 1504,
+      "test_seconds": 0.397,
+      "log": "target/sampling-staged/numeric.log"
+    },
+    {
+      "name": "acceptance",
+      "run_id": "eb666dca-c1f1-44dd-87a0-7bb163b2f26b",
+      "passed": 2,
+      "skipped": 3,
+      "test_seconds": 142.777,
+      "log": "target/sampling-staged/acceptance.log"
+    }
+  ],
+  "initial_sampling_build_command": "CARGO_BUILD_JOBS=2 NEXTEST_TEST_THREADS=2 nix develop -c cargo nextest run -p gammalooprs --lib --cargo-profile dev-optim --locked -E 'test(integrands::process::sampling) or test(lmb_sampling_detects) or test(canonical_lmb_density) or test(lmb_frame) or test(signed) or test(graph_derived_two_loop_reflections)' --test-threads 2 --status-level pass --final-status-level fail",
+  "metadata_listing_relink": "Listing after Clippy relinked both executables. Final no-build recertification ran the hashed captured binaries; both hashes verified unchanged afterwards."
+}

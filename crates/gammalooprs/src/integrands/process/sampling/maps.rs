@@ -648,6 +648,53 @@ impl<T: FloatLike> SamplingMapAffine<T> {
         })
     }
 
+    pub(super) fn identity(dimension: usize) -> Result<Self> {
+        let zero = F::<T>::default().zero();
+        let matrix = (0..dimension)
+            .map(|row| {
+                (0..dimension)
+                    .map(|column| {
+                        if row == column {
+                            zero.one().0
+                        } else {
+                            zero.0.clone()
+                        }
+                    })
+                    .collect()
+            })
+            .collect();
+        Self::new(matrix, vec![zero.0; dimension])
+    }
+
+    /// Precompose with the reversal of the selected three-momentum input blocks,
+    /// which leaves the Jacobian unchanged.
+    pub(super) fn with_reversed_input_blocks(&self, reversed: &[bool]) -> Result<Self> {
+        if 3 * reversed.len() != self.dimension {
+            return Err(eyre!(
+                "affine sampling map with dimension {} cannot reverse {} three-momentum blocks",
+                self.dimension,
+                reversed.len()
+            ));
+        }
+        let matrix = self
+            .matrix
+            .chunks(self.dimension)
+            .map(|row| {
+                row.iter()
+                    .zip(reversed.iter().flat_map(|&block| [block; 3]))
+                    .map(|(value, reverse)| {
+                        if reverse {
+                            (-F(value.clone())).0
+                        } else {
+                            value.clone()
+                        }
+                    })
+                    .collect()
+            })
+            .collect();
+        Self::new(matrix, self.translation.clone())
+    }
+
     pub fn dimension(&self) -> usize {
         self.dimension
     }
@@ -701,6 +748,9 @@ impl<T: FloatLike> SamplingMapAffine<T> {
                 matrix[row * self.dimension..(row + 1) * self.dimension]
                     .iter()
                     .zip(input)
+                    // Routing frames are sparse signed incidences; an exact zero
+                    // coefficient adds nothing.
+                    .filter(|(coefficient, _)| !coefficient.is_zero())
                     .fold(F(translation[row].clone()), |sum, (coefficient, value)| {
                         sum + F(coefficient.clone()) * F(value.clone())
                     })
@@ -3262,6 +3312,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::utils::QuadFloat;
 
     #[test]
     fn lu_h_proposal_radius_stops_at_declared_accuracy_without_changing_density() {
@@ -3973,6 +4024,28 @@ mod tests {
         for (actual, expected) in inverse.coordinates.iter().zip([0.2, -0.4]) {
             assert!((actual - expected).abs() < 1.0e-14);
         }
+    }
+
+    #[test]
+    fn affine_map_preserves_small_nonzero_coefficients_at_active_precision() {
+        fn check<T: FloatLike>() {
+            let one = F::<T>::default().one();
+            let zero = one.zero();
+            let small = one.epsilon() / one.from_usize(16);
+            let map = SamplingMapAffine::new(
+                vec![
+                    vec![one.0.clone(), small.0.clone()],
+                    vec![zero.0.clone(), one.0.clone()],
+                ],
+                vec![zero.0.clone(); 2],
+            )
+            .unwrap();
+            let point = map.apply(&map.matrix, &[zero.0, one.0], &map.translation);
+            assert_eq!(point[0], small.0);
+            assert!(!point[0].is_zero());
+        }
+        check::<f64>();
+        check::<QuadFloat>();
     }
 
     #[test]

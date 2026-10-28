@@ -13,6 +13,60 @@ title = "Implemented architecture"
 summary = "How the current runtime, physics layers, parsers, and symbolic engines are organized."
 
 [[section.note]]
+id = "generation-sampling-staged"
+title = "Staged signed sampling reconciliation"
+summary = "Approved sampling27–29 and graph-derived mixed two-loop controls on staged22–26; ordered combined integration awaits review."
+source = "docs/architecture/generation-sampling-staged.typ"
+kind = "Implementation receipt"
+status = "Preparation; NEW independent Astra review required"
+lifecycle = "investigation"
+owner = "unassigned"
+products = ["gammaloop"]
+topics = ["sampling", "generation", "validation"]
+review_triggers = ["crates/gammalooprs/src/integrands/process/**", "tests/tests/test_nlo_acceptance/**"]
+
+[[section.note.scope]]
+path = "crates/gammalooprs/src/integrands/process/mod.rs"
+symbol = "bundle incidence"
+anchor = "    fn antiparallel_edges(&self)"
+end_anchor = "    /// Compile channels after preparing"
+digest = "fa84abc99317adbeae2c80083e8a6eeffce546ab"
+
+[[section.note.scope]]
+path = "crates/gammalooprs/src/integrands/process/sampling/maps.rs"
+symbol = "signed affine input blocks"
+anchor = "    pub(super) fn identity("
+end_anchor = "    pub fn dimension(&self) -> usize {\n        self.dimension\n    }\n\n    pub fn determinant("
+digest = "c914fffdc29bc975430dc87ee68bda2e11c2fc5c"
+
+[[section.note.scope]]
+path = "crates/gammalooprs/src/integrands/process/sampling/maps.rs"
+symbol = "exact zero affine coefficients"
+anchor = "    fn apply(&self, matrix:"
+end_anchor = "    fn validate_dimension("
+digest = "08c5ff1dc2daf0f7e601b640de95ccd36a3a8b15"
+
+[[section.note.scope]]
+path = "crates/gammalooprs/src/integrands/process/sampling/selection.rs"
+symbol = "shared signed LMB frame"
+anchor = "fn compile_lmb_map<"
+end_anchor = "impl SamplingChannelCatalogue {"
+digest = "cb0a19bd463a7c4f03905dff4e66f8c37e38b69b"
+
+[[section.note.scope]]
+path = "crates/gammalooprs/src/integrands/process/mod.rs"
+symbol = "graph-derived reflection controls"
+anchor = "    fn lmb_sampling_detects_only_oppositely_stored_parallel_edges()"
+end_anchor = "    fn canonical_lmb_density_partition_matches_inverse_jacobians()"
+digest = "a07a79ea2a2ab2ba9e0544357f113fd7ceaf2a60"
+
+[[section.note.scope]]
+path = "tests/tests/test_nlo_acceptance/cool_qm_eos.rs"
+symbol = "fixed seed CoolQM gate"
+anchor = "fn cool_qm_eos_nlo_matches_example_target()"
+digest = "fd8f5ff00a6b7b7cf3b3b5299f61624dcd7cbc79"
+
+[[section.note]]
 id = "generation-projector-flow-staged"
 title = "Staged projector flow and DOT boundaries"
 summary = "Sources 22–26 reconciled onto the approved staged base, with factor-preserving projector and explicit DOT/LMB boundary controls."

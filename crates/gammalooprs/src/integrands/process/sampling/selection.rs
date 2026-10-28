@@ -750,6 +750,11 @@ pub struct SamplingChannelCompileContext<T: FloatLike = f64> {
     /// Exact generated-parent to master routing, including external shifts.
     pub lmb_frame_maps: BTreeMap<usize, SamplingMapAffine<T>>,
     pub lmb_frame_maps_by_edges: BTreeMap<Vec<usize>, SamplingMapAffine<T>>,
+    /// Edges stored against the first edge that joins the same two vertices.
+    /// LMB channels sample their reversed momenta: with one common direction, the
+    /// channels of a parallel bundle sample points related by its edge
+    /// permutations, whatever the stored directions.
+    pub antiparallel_edges: BTreeSet<usize>,
 }
 
 impl<T: FloatLike> SamplingChannelCompileContext<T> {
@@ -773,6 +778,7 @@ impl<T: FloatLike> SamplingChannelCompileContext<T> {
             orientation: None,
             lmb_frame_maps: BTreeMap::new(),
             lmb_frame_maps_by_edges: BTreeMap::new(),
+            antiparallel_edges: BTreeSet::new(),
         }
     }
 
@@ -2316,35 +2322,50 @@ fn compile_lmb_map<T: FloatLike>(
         channel: channel.to_owned(),
         error: error.to_string(),
     })?;
-    if edges == context.parent_lmb {
-        return Ok(CompiledSamplingMap::Lmb(lmb));
-    }
-    let frame = match basis_id {
-        Some(id) => context.lmb_frame_maps.get(&id),
-        None => context.lmb_frame_maps_by_edges.get(edges),
+    let invalid_frame = |error: String| SamplingChannelCompileError::InvalidLmbFrameMap {
+        channel: channel.to_owned(),
+        basis_id: basis_id.unwrap_or(usize::MAX),
+        error,
     };
-    let Some(frame) = frame else {
-        return Err(SamplingChannelCompileError::MissingLmbFrameMap {
-            channel: channel.to_owned(),
-            basis_id,
-            edges: edges.to_vec(),
-            parent_lmb: context.parent_lmb.clone(),
-        });
-    };
+    let reversed = edges
+        .iter()
+        .map(|edge| context.antiparallel_edges.contains(edge))
+        .collect::<Vec<_>>();
     let expected_dimension = 3 * context.n_loop_momenta;
-    if frame.dimension() != expected_dimension {
-        return Err(SamplingChannelCompileError::InvalidLmbFrameMap {
-            channel: channel.to_owned(),
-            basis_id: basis_id.unwrap_or(usize::MAX),
-            error: format!(
+    let identity;
+    let frame = if edges == context.parent_lmb {
+        if !reversed.contains(&true) {
+            return Ok(CompiledSamplingMap::Lmb(lmb));
+        }
+        identity = SamplingMapAffine::identity(expected_dimension)
+            .map_err(|error| invalid_frame(error.to_string()))?;
+        &identity
+    } else {
+        let frame = match basis_id {
+            Some(id) => context.lmb_frame_maps.get(&id),
+            None => context.lmb_frame_maps_by_edges.get(edges),
+        };
+        let Some(frame) = frame else {
+            return Err(SamplingChannelCompileError::MissingLmbFrameMap {
+                channel: channel.to_owned(),
+                basis_id,
+                edges: edges.to_vec(),
+                parent_lmb: context.parent_lmb.clone(),
+            });
+        };
+        if frame.dimension() != expected_dimension {
+            return Err(invalid_frame(format!(
                 "affine frame dimension {} does not match parent raw dimension {expected_dimension}",
                 frame.dimension()
-            ),
-        });
-    }
+            )));
+        }
+        frame
+    };
     Ok(CompiledSamplingMap::Affine {
         map: Box::new(CompiledSamplingMap::Lmb(lmb)),
-        frame: frame.clone(),
+        frame: frame
+            .with_reversed_input_blocks(&reversed)
+            .map_err(|error| invalid_frame(error.to_string()))?,
     })
 }
 
@@ -6224,6 +6245,72 @@ mod tests {
             Some(SamplingChannelCompileError::MissingLmbFrameMap { .. })
         ));
         assert!(error.to_string().contains("no affine frame map"));
+    }
+
+    #[test]
+    fn lmb_channels_sample_parallel_bundles_in_one_direction() {
+        // Edges 0 and 1 form a bubble that carries P from vertex a to vertex b.
+        let external = vec![0.3, -0.2, 0.7];
+        let context = |frame_sign: f64, antiparallel: &[usize]| {
+            let mut context = SamplingChannelCompileContext::<f64>::new(
+                "G",
+                vec![0],
+                ParameterizationSettings::default(),
+                100.0,
+                1,
+            );
+            let matrix = (0..3)
+                .map(|row| {
+                    (0..3)
+                        .map(|column| if row == column { frame_sign } else { 0.0 })
+                        .collect()
+                })
+                .collect();
+            context.lmb_frame_maps_by_edges.insert(
+                vec![1],
+                SamplingMapAffine::new(matrix, external.clone()).unwrap(),
+            );
+            context.antiparallel_edges = antiparallel.iter().copied().collect();
+            context
+        };
+        let x = [0.31, 0.42, 0.57];
+        // Edge 1 stored as a -> b routes q0 = P - q1; stored as b -> a, q0 = P + q1.
+        let parallel = compile_lmb_map("lmb", None, &[1], &context(-1.0, &[]))
+            .unwrap()
+            .forward(&x)
+            .unwrap();
+        let antiparallel = compile_lmb_map("lmb", None, &[1], &context(1.0, &[1]))
+            .unwrap()
+            .forward(&x)
+            .unwrap();
+        assert_eq!(parallel.point, antiparallel.point);
+        assert_eq!(parallel.jacobian, antiparallel.jacobian);
+
+        for (sign, reversed) in [(-1.0, &[][..]), (1.0, &[1][..])] {
+            let map = compile_lmb_map("lmb", None, &[1], &context(sign, reversed)).unwrap();
+            let inverse = map.inverse(&parallel.point).unwrap().unwrap();
+            for (actual, expected) in inverse.coordinates.iter().zip(x) {
+                assert!((actual - expected).abs() < 1.0e-12);
+            }
+            assert!((inverse.inverse_jacobian * parallel.jacobian - 1.0).abs() < 1.0e-12);
+        }
+
+        // A reversed parent edge is sampled reversed as well.
+        let parent = compile_lmb_map("lmb", None, &[0], &context(1.0, &[])).unwrap();
+        assert!(matches!(parent, CompiledSamplingMap::Lmb(_)));
+        let parent = parent.forward(&x).unwrap();
+        let reversed = compile_lmb_map("lmb", None, &[0], &context(1.0, &[0]))
+            .unwrap()
+            .forward(&x)
+            .unwrap();
+        assert!(
+            parent
+                .point
+                .iter()
+                .zip(&reversed.point)
+                .all(|(parent, reversed)| *parent == -*reversed)
+        );
+        assert_eq!(parent.jacobian, reversed.jacobian);
     }
 
     #[test]
