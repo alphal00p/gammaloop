@@ -5,27 +5,60 @@
 //! final represented value exactly once. These helpers do not by themselves
 //! enable an exact consumer mode: every enclosing count, bin and capability must
 //! also be checked. Legacy rounded moments cannot initialize this state.
+//!
+//! # Example
+//!
+//! Preserve a small spread over a large offset, merge independent sample sets,
+//! and round only the final estimate and uncertainty:
+//!
+//! ```
+//! use gammaloop_statistics::{ExactF64Moments, ExactMomentError, MomentOrder};
+//!
+//! # fn main() -> Result<(), ExactMomentError> {
+//! let mut samples = ExactF64Moments::empty(MomentOrder::Second);
+//! samples.push(134_217_728.0)?;
+//! let mut batch = ExactF64Moments::empty(MomentOrder::Second);
+//! batch.push(134_217_729.0)?;
+//! samples.merge(&batch)?;
+//! assert_eq!(samples.mean()?, 134_217_728.5);
+//! assert_eq!(samples.histogram_sem()?, 0.5);
+//! let json = samples.to_canonical_json()?;
+//! assert_eq!(ExactF64Moments::from_json(&json)?, samples);
+//! # Ok(())
+//! # }
+//! ```
 
-use numerica::domains::{
-    float::{Float, Real, RealLike, RoundingDirection},
-    integer::Integer,
-    rational::Rational,
-};
+use numerica::domains::float::{Float, Real, RealLike, RoundingDirection};
+use numerica::domains::integer::Integer;
+use numerica::domains::rational::Rational;
+use schemars::{JsonSchema, Schema, SchemaGenerator};
+use serde::de::Error as DeserializeError;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use std::borrow::Cow;
+use std::result::Result as StdResult;
 use thiserror::Error;
 
+/// Largest count in the v1 wire format; see the [crate example](crate).
 pub const MAX_SAMPLE_COUNT: u64 = i64::MAX as u64;
+/// Maximum canonical size of one moment object; see [`ExactF64Moments::from_json`].
 pub const MAX_CANONICAL_OBJECT_BYTES: usize = 12_288;
+/// Maximum exact objects allowed by an enclosing snapshot protocol.
 pub const MAX_EXACT_OBJECTS: usize = 16_384;
+/// Maximum enclosing JSON frame size; see [`ExactF64Moments::from_json`].
 pub const MAX_JSON_FRAME_BYTES: usize = 16 * 1024 * 1024;
 const PRECISIONS: [u32; 8] = [128, 256, 512, 1024, 2048, 4096, 8192, 16_384];
 
+/// Highest stored raw power, selected as in the [crate example](crate).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MomentOrder {
+    /// Sum, absolute sum, and squared sum, sufficient for means and SEMs.
     Second,
+    /// Also retain cubic and quartic sums for higher-order consumers.
     Fourth,
 }
 
+/// Invalid samples, wire data, unsupported operations, or uncertifiable reports.
+/// The [crate example](crate) propagates these failures to its caller.
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
 pub enum ExactMomentError {
     #[error("sample must be finite binary64")]
@@ -52,10 +85,11 @@ pub enum ExactMomentError {
     Unsupported(&'static str),
 }
 
-type Result<T> = std::result::Result<T, ExactMomentError>;
+type Result<T> = StdResult<T, ExactMomentError>;
 
 /// Zero rounding is permitted only for non-authoritative raw diagnostics in a
 /// mandatory exact mode. Primary estimates and uncertainties use `Strict`.
+/// See [`certified_round_f64`] for the reporting boundary.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReportPolicy {
     Strict,
@@ -64,6 +98,10 @@ pub enum ReportPolicy {
 
 /// Fields are private so every state is constructed from actual samples or a
 /// checked canonical payload. Rational's backend-specific serde is never used.
+/// See the [crate example](crate) for collection, merging, and checked decoding.
+///
+/// Decoding checks canonical encoding, resource bounds and necessary moment
+/// identities. For one or two samples it reconstructs the represented values.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExactF64Moments {
     sample_count: u64,
@@ -74,6 +112,7 @@ pub struct ExactF64Moments {
 }
 
 impl ExactF64Moments {
+    /// Start an empty sample set at the selected order; see the [crate example](crate).
     pub fn empty(order: MomentOrder) -> Self {
         Self {
             sample_count: 0,
@@ -84,10 +123,12 @@ impl ExactF64Moments {
         }
     }
 
+    /// Number of independent samples, including implicit zeros.
     pub fn sample_count(&self) -> u64 {
         self.sample_count
     }
 
+    /// Highest retained raw power, fixed at construction.
     pub fn order(&self) -> MomentOrder {
         if self.higher.is_some() {
             MomentOrder::Fourth
@@ -96,36 +137,44 @@ impl ExactF64Moments {
         }
     }
 
+    /// Exact signed sum of the represented samples.
     pub fn sum(&self) -> &Rational {
         &self.sum
     }
+    /// Exact sum of their absolute values.
     pub fn sum_abs(&self) -> &Rational {
         &self.sum_abs
     }
+    /// Exact sum of sample squares, retaining contributions below binary64 range.
     pub fn sum_squared(&self) -> &Rational {
         &self.sum_squared
     }
+    /// Cubic and quartic sums, present only for [`MomentOrder::Fourth`].
     pub fn higher(&self) -> Option<(&Rational, &Rational)> {
         self.higher.as_ref().map(|(third, fourth)| (third, fourth))
     }
 
     /// Transactional append of one fully weighted, grouped sample, including 0.
+    ///
+    /// # Errors
+    /// Rejects nonfinite input and count overflow without changing this state.
     pub fn push(&mut self, sample: f64) -> Result<()> {
         let x = Rational::try_from(sample).map_err(|_| ExactMomentError::NonFiniteSample)?;
-        let mut next = self.clone();
-        next.sample_count = checked_count(self.sample_count, 1)?;
-        next.sum += &x;
-        next.sum_abs += x.abs();
+        let sample_count = checked_count(self.sample_count, 1)?;
+        // Both fallible checks precede mutation; additive exact arithmetic below
+        // preserves the invariant without copying every stored rational.
+        self.sample_count = sample_count;
+        self.sum += &x;
+        self.sum_abs += x.abs();
         let square = &x * &x;
-        next.sum_squared += &square;
-        if let Some((third, fourth)) = &mut next.higher {
+        self.sum_squared += &square;
+        if let Some((third, fourth)) = &mut self.higher {
             *third += &square * &x;
             *fourth += &square * &square;
         }
         // Actual finite samples preserve the moment inequalities by construction.
         // Count bounds imply the fixed dyadic resource bounds, without a GCD or
         // decimal serialization on every sample.
-        *self = next;
         Ok(())
     }
 
@@ -135,6 +184,10 @@ impl ExactF64Moments {
         Ok(())
     }
 
+    /// Merge independent samples transactionally, as in the [crate example](crate).
+    ///
+    /// # Errors
+    /// Rejects differing orders, count overflow, and invalid merged moments.
     pub fn merge(&mut self, other: &Self) -> Result<()> {
         if self.order() != other.order() {
             return Err(ExactMomentError::OrderMismatch);
@@ -168,6 +221,7 @@ impl ExactF64Moments {
         ))
     }
 
+    /// Reject a mismatch with an enclosing histogram or accumulator count.
     pub fn validate_count(&self, enclosing_count: u64) -> Result<()> {
         if self.sample_count != enclosing_count {
             return Err(invalid("sample_count differs from enclosing accumulator"));
@@ -180,10 +234,13 @@ impl ExactF64Moments {
         &Rational::from(self.sample_count) * &self.sum_squared - &self.sum * &self.sum
     }
 
+    /// Exact variance numerator for the absolute samples, `N*S2-Sabs^2`.
     pub fn absolute_variance_numerator(&self) -> Rational {
         &Rational::from(self.sample_count) * &self.sum_squared - &self.sum_abs * &self.sum_abs
     }
 
+    /// Certified mean; empty sets and out-of-range reports return an error.
+    /// See the [crate example](crate).
     pub fn mean(&self) -> Result<f64> {
         self.require_samples(1)?;
         certified_round_f64(
@@ -192,6 +249,7 @@ impl ExactF64Moments {
         )
     }
 
+    /// Certified absolute mean, with the same reporting bounds as [`Self::mean`].
     pub fn mean_abs(&self) -> Result<f64> {
         self.require_samples(1)?;
         certified_round_f64(
@@ -200,6 +258,7 @@ impl ExactF64Moments {
         )
     }
 
+    /// Certified population variance, `(N*S2-S1^2)/N^2`; requires a sample.
     pub fn population_variance(&self) -> Result<f64> {
         self.require_samples(1)?;
         certified_round_f64(
@@ -214,6 +273,7 @@ impl ExactF64Moments {
         certified_sqrt_f64(&(self.variance_numerator() / Rational::from(self.sample_count).pow(3)))
     }
 
+    /// Population SEM of the absolute samples; requires at least two samples.
     pub fn population_absolute_sem(&self) -> Result<f64> {
         self.require_samples(2)?;
         certified_sqrt_f64(
@@ -240,6 +300,10 @@ impl ExactF64Moments {
     /// Parse directly from original JSON bytes: a preceding `serde_json::Value`
     /// conversion would erase duplicate-key evidence. The outer protocol must
     /// separately enforce its aggregate frame/object limits.
+    ///
+    /// # Errors
+    /// Rejects noncanonical, inconsistent, or over-budget data. See the
+    /// [crate example](crate) for the matching canonical serialization.
     pub fn from_json(bytes: &[u8]) -> Result<Self> {
         if bytes.len() > MAX_JSON_FRAME_BYTES {
             return Err(ExactMomentError::ResourceLimit("JSON frame"));
@@ -247,6 +311,8 @@ impl ExactF64Moments {
         serde_json::from_slice(bytes).map_err(|error| invalid(error.to_string()))
     }
 
+    /// Serialize the v1 canonical wire representation within its object limit.
+    /// See the [crate example](crate) for a checked round trip.
     pub fn to_canonical_json(&self) -> Result<Vec<u8>> {
         let bytes = serde_json::to_vec(self).map_err(|error| invalid(error.to_string()))?;
         if bytes.len() > MAX_CANONICAL_OBJECT_BYTES {
@@ -289,6 +355,13 @@ impl ExactF64Moments {
         if self.sum_squared > abs_square || abs_square > &n * &self.sum_squared {
             return Err(invalid("absolute-sum/second-moment inequalities violated"));
         }
+        // The positive and negative sample sums are (Sabs +/- S1)/2.
+        // Within each sign, the sum of squares cannot exceed its squared sum.
+        if Rational::from(2) * &self.sum_squared > &abs_square + &self.sum.pow(2) {
+            return Err(invalid(
+                "second moment exceeds the signed absolute-sum bound",
+            ));
+        }
         if self.sample_count == 1
             && (self.sum_abs != self.sum.abs() || self.sum_squared != self.sum.pow(2))
         {
@@ -310,8 +383,83 @@ impl ExactF64Moments {
             if self.sample_count == 1 && (*third != self.sum.pow(3) || *fourth != self.sum.pow(4)) {
                 return Err(invalid("one-sample higher moments are inconsistent"));
             }
+            if *fourth > self.sum_squared.pow(2) {
+                return Err(invalid("fourth moment exceeds squared second moment"));
+            }
+        }
+        if abs_square == &n * &self.sum_squared {
+            // Equality in Cauchy-Schwarz forces every absolute sample to be
+            // Sabs/N. Its represented value and signed multiplicities are fixed.
+            let magnitude = &self.sum_abs / &n;
+            Self::represented_sample(&magnitude)?;
+            if !magnitude.is_zero() {
+                let positive_count = (&n + &(&self.sum / &magnitude)) / Rational::from(2);
+                if !positive_count.denominator_ref().is_one()
+                    || positive_count.is_negative()
+                    || positive_count > n
+                {
+                    return Err(invalid(
+                        "constant-magnitude signed sample counts are not integers",
+                    ));
+                }
+            }
+            if let Some((third, fourth)) = &self.higher {
+                let square = magnitude.pow(2);
+                if *third != &square * &self.sum || *fourth != &square * &self.sum_squared {
+                    return Err(invalid(
+                        "constant-magnitude higher moments are inconsistent",
+                    ));
+                }
+            }
+        }
+        match self.sample_count {
+            1 => self.validate_represented_samples([&self.sum])?,
+            2 => {
+                // For two samples, 2*S2-S1^2 is exactly (x-y)^2. The root
+                // may exceed binary64 range even when both samples are finite.
+                let difference_squared = self.variance_numerator();
+                if difference_squared.is_negative() {
+                    return Err(invalid("negative two-sample variance"));
+                }
+                let difference = Rational::new(
+                    difference_squared.numerator_ref().root(2),
+                    difference_squared.denominator_ref().root(2),
+                );
+                if difference.pow(2) != difference_squared {
+                    return Err(invalid("two-sample variance is not a rational square"));
+                }
+                let left = (&self.sum + &difference) / Rational::from(2);
+                let right = (&self.sum - &difference) / Rational::from(2);
+                self.validate_represented_samples([&left, &right])?;
+            }
+            _ => {}
         }
         Ok(())
+    }
+
+    fn validate_represented_samples<'a>(
+        &self,
+        samples: impl IntoIterator<Item = &'a Rational>,
+    ) -> Result<()> {
+        let mut reconstructed = Self::empty(self.order());
+        for exact in samples {
+            reconstructed.push(Self::represented_sample(exact)?)?;
+        }
+        if reconstructed != *self {
+            return Err(invalid("moments do not match the represented samples"));
+        }
+        Ok(())
+    }
+
+    fn represented_sample(exact: &Rational) -> Result<f64> {
+        let sample = certified_round_f64(exact, ReportPolicy::Strict)
+            .map_err(|_| invalid("moment state requires a non-binary64 sample"))?;
+        let represented = Rational::try_from(sample)
+            .expect("certified reporting returns a finite binary64 value");
+        if represented != *exact {
+            return Err(invalid("moment state requires a non-binary64 sample"));
+        }
+        Ok(sample)
     }
 }
 
@@ -402,7 +550,7 @@ fn canonical_unsigned(value: &str) -> bool {
 
 fn present_rational<'de, D: Deserializer<'de>>(
     deserializer: D,
-) -> std::result::Result<Option<RationalWire>, D::Error> {
+) -> StdResult<Option<RationalWire>, D::Error> {
     // Unlike Option<T>'s default decoder, present null is invalid.
     RationalWire::deserialize(deserializer).map(Some)
 }
@@ -499,25 +647,25 @@ impl TryFrom<MomentsWire> for ExactF64Moments {
 }
 
 impl Serialize for ExactF64Moments {
-    fn serialize<S: Serializer>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error> {
+    fn serialize<S: Serializer>(&self, serializer: S) -> StdResult<S::Ok, S::Error> {
         MomentsWire::from(self).serialize(serializer)
     }
 }
 
 impl<'de> Deserialize<'de> for ExactF64Moments {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> std::result::Result<Self, D::Error> {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> StdResult<Self, D::Error> {
         MomentsWire::deserialize(deserializer)?
             .try_into()
-            .map_err(serde::de::Error::custom)
+            .map_err(DeserializeError::custom)
     }
 }
 
-impl schemars::JsonSchema for ExactF64Moments {
-    fn schema_name() -> std::borrow::Cow<'static, str> {
+impl JsonSchema for ExactF64Moments {
+    fn schema_name() -> Cow<'static, str> {
         "ExactF64MomentsV1".into()
     }
 
-    fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+    fn json_schema(_generator: &mut SchemaGenerator) -> Schema {
         // The checked decoder also enforces bounded reduced dyadics and moment
         // inequalities; schema validation never replaces that decoder.
         serde_json::from_str(include_str!("exact_moments.schema.json"))

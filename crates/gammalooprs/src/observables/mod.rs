@@ -1,3 +1,4 @@
+use self::exact_moments::ExactF64Moments;
 use crate::model::{Model, ParticleGammaLoopExt};
 use crate::momentum::FourMomentum;
 use crate::settings::RuntimeSettings;
@@ -8,6 +9,8 @@ use crate::utils::{F, FloatLike};
 use bincode_trait_derive::{Decode, Encode};
 use eyre::{Result, eyre};
 use schemars::JsonSchema;
+use serde::de::Error as DeserializeError;
+use serde::ser::Error as SerializeError;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use smallvec::{SmallVec, smallvec};
 use spenso::algebra::complex::Complex;
@@ -16,7 +19,9 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Write};
+use std::io::{Error as IoError, Result as IoResult};
 use std::path::Path;
+use std::result::Result as StdResult;
 
 pub mod clustering;
 pub mod events;
@@ -764,7 +769,7 @@ impl JsonSchema for SelectorSettings {
 }
 
 impl Serialize for SelectorSettings {
-    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    fn serialize<S>(&self, serializer: S) -> StdResult<S::Ok, S::Error>
     where
         S: Serializer,
     {
@@ -807,7 +812,7 @@ impl Serialize for SelectorSettings {
 }
 
 impl<'de> Deserialize<'de> for SelectorSettings {
-    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    fn deserialize<D>(deserializer: D) -> StdResult<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
@@ -1064,7 +1069,7 @@ impl JsonSchema for ObservableSettings {
 }
 
 impl Serialize for ObservableSettings {
-    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    fn serialize<S>(&self, serializer: S) -> StdResult<S::Ok, S::Error>
     where
         S: Serializer,
     {
@@ -1114,7 +1119,7 @@ impl Serialize for ObservableSettings {
 }
 
 impl<'de> Deserialize<'de> for ObservableSettings {
-    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    fn deserialize<D>(deserializer: D) -> StdResult<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
@@ -1129,7 +1134,7 @@ impl<'de> Deserialize<'de> for ObservableSettings {
         let histogram = match inferred_kind {
             HistogramKindSerde::Continuous => {
                 if raw.domain.is_some() || raw.ordering.is_some() || raw.labels.is_some() {
-                    return Err(serde::de::Error::custom(
+                    return Err(DeserializeError::custom(
                         "continuous observables cannot specify discrete histogram fields",
                     ));
                 }
@@ -1151,7 +1156,7 @@ impl<'de> Deserialize<'de> for ObservableSettings {
                     || raw.n_bins.is_some()
                     || raw.log_x_axis.is_some()
                 {
-                    return Err(serde::de::Error::custom(
+                    return Err(DeserializeError::custom(
                         "discrete observables cannot specify continuous histogram fields",
                     ));
                 }
@@ -1803,9 +1808,9 @@ fn centered_standard_error(value: f64, sample_count: usize) -> f64 {
 fn serialize_centered_moment<S: Serializer>(
     value: &Option<f64>,
     serializer: S,
-) -> std::result::Result<S::Ok, S::Error> {
+) -> StdResult<S::Ok, S::Error> {
     if value.is_some_and(|value| !value.is_finite() || value < 0.0) {
-        return Err(serde::ser::Error::custom(
+        return Err(SerializeError::custom(
             "centered histogram moment must be finite and nonnegative",
         ));
     }
@@ -1814,10 +1819,10 @@ fn serialize_centered_moment<S: Serializer>(
 
 fn deserialize_centered_moment<'de, D: Deserializer<'de>>(
     deserializer: D,
-) -> std::result::Result<Option<f64>, D::Error> {
+) -> StdResult<Option<f64>, D::Error> {
     let value = Option::<f64>::deserialize(deserializer)?;
     if value.is_some_and(|value| !value.is_finite() || value < 0.0) {
-        return Err(serde::de::Error::custom(
+        return Err(DeserializeError::custom(
             "centered histogram moment must be finite and nonnegative",
         ));
     }
@@ -2060,7 +2065,7 @@ pub struct HistogramBinSnapshot {
     /// Authoritative moments only in the explicitly selected exact mode. Legacy
     /// getters cannot establish that mode; use the checked exact owner methods.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub exact_moments: Option<exact_moments::ExactF64Moments>,
+    pub exact_moments: Option<ExactF64Moments>,
     pub mitigated_fill_count: usize,
 }
 
@@ -2264,16 +2269,30 @@ impl HistogramSnapshot {
         Ok(snapshot)
     }
 
-    fn write_hwu_block<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
+    fn validate_hwu_export(&self) -> IoResult<()> {
         if let Some(order) = self.first_exact_order() {
-            self.validate_exact(order).map_err(std::io::Error::other)?;
+            self.validate_exact(order).map_err(IoError::other)?;
             for bin in &self.bins {
                 bin.average_exact(self.sample_count as u64)
-                    .map_err(std::io::Error::other)?;
+                    .map_err(IoError::other)?;
                 bin.error_exact(self.sample_count as u64)
-                    .map_err(std::io::Error::other)?;
+                    .map_err(IoError::other)?;
             }
         }
+        if self.kind == HistogramSnapshotKind::Discrete {
+            for bin in &self.bins {
+                bin.bin_id.and_then(|id| id.checked_add(1)).ok_or_else(|| {
+                    IoError::other(
+                        "Discrete histogram upper edge exceeds isize range or bin id is missing",
+                    )
+                })?;
+            }
+        }
+        Ok(())
+    }
+
+    fn write_hwu_block<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
+        self.validate_hwu_export()?;
         let x_axis_mode = if self.log_x_axis { "LOG" } else { "LIN" };
         let y_axis_mode = if self.log_y_axis { "LOG" } else { "LIN" };
 
@@ -2296,7 +2315,8 @@ impl HistogramSnapshot {
                 ),
                 HistogramSnapshotKind::Discrete => {
                     let bin_id = bin.bin_id.expect("discrete histogram bin missing bin id");
-                    (bin_id as f64, (bin_id + 1) as f64)
+                    let upper = bin_id.checked_add(1).expect("validated HwU upper edge");
+                    (bin_id as f64, upper as f64)
                 }
             };
             writeln!(
@@ -2306,13 +2326,13 @@ impl HistogramSnapshot {
                 x_max,
                 if bin.exact_moments.is_some() {
                     bin.average_exact(self.sample_count as u64)
-                        .map_err(std::io::Error::other)?
+                        .map_err(IoError::other)?
                 } else {
                     bin.average(self.sample_count)
                 },
                 if bin.exact_moments.is_some() {
                     bin.error_exact(self.sample_count as u64)
-                        .map_err(std::io::Error::other)?
+                        .map_err(IoError::other)?
                 } else {
                     bin.error(self.sample_count)
                 },
@@ -3275,13 +3295,10 @@ impl ObservableSnapshotBundle {
             .find_map(HistogramSnapshot::first_exact_order)
         {
             self.validate_exact(order)?;
-            // Validate every report before opening/truncating the destination.
-            for histogram in self.histograms.values() {
-                for bin in &histogram.bins {
-                    bin.average_exact(histogram.sample_count as u64)?;
-                    bin.error_exact(histogram.sample_count as u64)?;
-                }
-            }
+        }
+        // Validate every report and coordinate before opening/truncating output.
+        for histogram in self.histograms.values() {
+            histogram.validate_hwu_export()?;
         }
         let mut writer = BufWriter::new(File::create(path.as_ref())?);
         for histogram in self.histograms.values() {
@@ -3314,13 +3331,18 @@ impl ObservableSnapshotBundle {
         {
             return self.merge_exact_in_place(other, order);
         }
-        for (name, other_histogram) in other.histograms.iter() {
-            let histogram = self
-                .histograms
-                .get_mut(name)
-                .ok_or_else(|| eyre!("Cannot merge unknown histogram snapshot '{}'", name))?;
-            histogram.merge_in_place(other_histogram)?;
-        }
+        let histograms = other
+            .histograms
+            .iter()
+            .map(|(name, other_histogram)| {
+                let histogram = self
+                    .histograms
+                    .get(name)
+                    .ok_or_else(|| eyre!("Cannot merge unknown histogram snapshot '{}'", name))?;
+                Ok((name.clone(), histogram.merge(other_histogram)?))
+            })
+            .collect::<Result<BTreeMap<_, _>>>()?;
+        self.histograms.extend(histograms);
         Ok(())
     }
 }
@@ -4821,8 +4843,8 @@ mod tests {
         DiscreteRangeSelectorSettings, EntrySelection, HistogramAccumulatorState,
         HistogramBinSnapshot, HistogramProcessInfo, HistogramSettings, HistogramSnapshot,
         HistogramSnapshotKind, HistogramStatisticsSnapshot, JetClusteringSettings, ObservablePhase,
-        ObservableSettings, ObservableValueTransform, QuantitySettings, SelectorDefinitionSettings,
-        SelectorSettings, resolve_graph_group_context,
+        ObservableSettings, ObservableSnapshotBundle, ObservableValueTransform, QuantitySettings,
+        SelectorDefinitionSettings, SelectorSettings, resolve_graph_group_context,
     };
     use schemars::schema_for;
     use serde_json::Value as JsonValue;
@@ -4931,6 +4953,21 @@ mod tests {
             (left - right).abs() <= 4.0 * f64::EPSILON * right.abs().max(1.0),
             "{left} != {right}"
         );
+    }
+
+    #[test]
+    fn centered_bundle_merge_failure_preserves_all_histograms() {
+        let good = centered_histogram(&[1.0, 2.0]);
+        let mut overflowing = good.clone();
+        overflowing.bins[0].sum_weights_squared = f64::MAX;
+        let mut bundle = ObservableSnapshotBundle {
+            histograms: [("a".to_owned(), good), ("z".to_owned(), overflowing)]
+                .into_iter()
+                .collect(),
+        };
+        let before = bundle.clone();
+        assert!(bundle.merge_in_place(&before).is_err());
+        assert_eq!(bundle, before);
     }
 
     #[test]

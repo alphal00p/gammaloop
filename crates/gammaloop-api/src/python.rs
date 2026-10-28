@@ -1,6 +1,8 @@
 use feynkit_cff::{CffError, CffOptions, CffResult, HedgeGraphCffExt, SurfaceCache};
 use feynkit_graph::expressions::evaluate_overall_factor;
 use gammaloop_tracing_filter::LogFormat;
+use gammalooprs::observables::exact_moments::ExactF64Moments;
+use gammalooprs::observables::HistogramBinSnapshot;
 use gammalooprs::{
     graph::{self, FeynmanGraph, Graph, LMBext},
     integrands::evaluation::{
@@ -9,9 +11,8 @@ use gammalooprs::{
     observables::{
         AdditionalWeightKey, DiscreteBinOrdering, Event, EventGroup, GenericAdditionalWeightInfo,
         GenericThresholdCountertermComponentWeight, GenericThresholdCountertermEventInfo,
-        HistogramAccumulatorState, HistogramBinSnapshot, HistogramSnapshot,
-        HistogramStatisticsSnapshot, ThresholdCountertermComponentOccurrence,
-        exact_moments::ExactF64Moments,
+        HistogramAccumulatorState, HistogramSnapshot, HistogramStatisticsSnapshot,
+        ThresholdCountertermComponentOccurrence,
     },
     processes::{
         DotExportSettings, ProcessCollection, ThresholdCountertermAssociationMetadata,
@@ -30,12 +31,12 @@ use linnet::half_edge::{
 };
 use linnet::parser::{set::DotGraphSet, DotGraph};
 use numpy::{PyReadonlyArray1, PyReadonlyArray2};
+use pyo3::exceptions::PyValueError;
 
 use crate::{
-    CLISettings, LoadedState, StateLoadOption,
     commands::{
-        Evaluate, evaluate_samples::EvaluateSamples, import::model::ImportModel,
-        integrate::Integrate,
+        evaluate_samples::EvaluateSamples, import::model::ImportModel, integrate::Integrate,
+        Evaluate,
     },
     integrand_info::{
         IntegrandActiveThresholdCutInfo, IntegrandCutInfo, IntegrandCutThresholdInfo,
@@ -44,9 +45,10 @@ use crate::{
         IntegrandThresholdEsurfaceInfo,
     },
     render_smart_toml,
-    session::{CliSession, CliSessionState, display_command},
+    session::{display_command, CliSession, CliSessionState},
     settings_tree::{json_type_name, serialize_settings_with_defaults, value_at_path},
     state::{GraphImportOptions, ProcessListExt, ProcessRef, RunHistory, State},
+    CLISettings, LoadedState, StateLoadOption,
 };
 use ahash::{HashMap, HashMapExt};
 use clap::ValueEnum;
@@ -72,13 +74,13 @@ use symbolica::{atom::AtomCore, parse, printer::PrintOptions};
 
 #[allow(unused)]
 use pyo3::{
-    FromPyObject, PyRef, Python, exceptions,
+    exceptions,
     prelude::*,
     pyclass,
     pyclass::CompareOp,
     pyfunction, pymethods, pymodule,
     types::{PyAny, PyComplex, PyComplexMethods, PyDict, PyList, PyModule, PyTuple, PyType},
-    wrap_pyfunction,
+    wrap_pyfunction, FromPyObject, PyRef, Python,
 };
 
 /// Evaluate a graph's symbolic overall factor and return its canonical form.
@@ -593,6 +595,8 @@ fn py_builtin_from_json_number<'py>(
 #[cfg(test)]
 mod settings_wrapper_tests {
     use super::*;
+    use gammalooprs::observables::exact_moments::MomentOrder;
+    use gammalooprs::observables::{ObservablePhase, ObservableValueTransform};
     use pyo3::types::PyAnyMethods;
 
     #[test]
@@ -615,16 +619,14 @@ mod settings_wrapper_tests {
 
     #[test]
     fn histogram_wrapper_preserves_exact_moments_in_every_bin() {
-        use gammalooprs::observables::exact_moments::MomentOrder;
-
         Python::initialize();
         let base = (1u64 << 27) as f64;
         let mut exact = ExactF64Moments::empty(MomentOrder::Second);
         let mut state = HistogramAccumulatorState::continuous(
             "exact-wrapper".to_string(),
             "AL".to_string(),
-            gammalooprs::observables::ObservablePhase::Real,
-            gammalooprs::observables::ObservableValueTransform::Identity,
+            ObservablePhase::Real,
+            ObservableValueTransform::Identity,
             0.0,
             1.0,
             false,
@@ -679,23 +681,19 @@ mod settings_wrapper_tests {
 
         Python::attach(|py| {
             let subtraction = wrapped.get(py, "subtraction").unwrap();
-            assert!(
-                subtraction
-                    .getattr("disable_threshold_subtraction")
-                    .unwrap()
-                    .extract::<bool>()
-                    .unwrap()
-            );
+            assert!(subtraction
+                .getattr("disable_threshold_subtraction")
+                .unwrap()
+                .extract::<bool>()
+                .unwrap());
 
             let settings_dict = wrapped.to_dict(py).unwrap();
             let general = settings_dict.get_item("general").unwrap();
-            assert!(
-                general
-                    .get_item("generate_events")
-                    .unwrap()
-                    .extract::<bool>()
-                    .unwrap()
-            );
+            assert!(general
+                .get_item("generate_events")
+                .unwrap()
+                .extract::<bool>()
+                .unwrap());
         });
     }
 
@@ -743,13 +741,11 @@ mod settings_wrapper_tests {
                 .unwrap();
         Python::attach(|py| {
             let sampling = wrapped.get(py, "sampling").unwrap();
-            assert!(
-                sampling
-                    .getattr("sampling_multichanneling")
-                    .unwrap()
-                    .extract::<bool>()
-                    .unwrap()
-            );
+            assert!(sampling
+                .getattr("sampling_multichanneling")
+                .unwrap()
+                .extract::<bool>()
+                .unwrap());
             assert_eq!(
                 sampling
                     .getattr("sampling_channel_weight")
@@ -1837,9 +1833,8 @@ impl PyHistogramBinSnapshot {
     fn average(&self, sample_count: usize) -> PyResult<f64> {
         let native = self.native_snapshot()?;
         if native.exact_moments.is_some() {
-            let count = u64::try_from(sample_count).map_err(|_| {
-                exceptions::PyValueError::new_err("sample_count exceeds the exact count range")
-            })?;
+            let count = u64::try_from(sample_count)
+                .map_err(|_| PyValueError::new_err("sample_count exceeds the exact count range"))?;
             native.average_exact(count).map_err(to_py_value_error)
         } else {
             Ok(native.average(sample_count))
@@ -1866,9 +1861,8 @@ impl PyHistogramBinSnapshot {
     fn error(&self, sample_count: usize) -> PyResult<f64> {
         let native = self.native_snapshot()?;
         if native.exact_moments.is_some() {
-            let count = u64::try_from(sample_count).map_err(|_| {
-                exceptions::PyValueError::new_err("sample_count exceeds the exact count range")
-            })?;
+            let count = u64::try_from(sample_count)
+                .map_err(|_| PyValueError::new_err("sample_count exceeds the exact count range"))?;
             native.error_exact(count).map_err(to_py_value_error)
         } else {
             Ok(native.error(sample_count))
@@ -1883,7 +1877,7 @@ impl PyHistogramBinSnapshot {
             .as_deref()
             .map(|json| {
                 ExactF64Moments::from_json(json.as_bytes())
-                    .map_err(|error| exceptions::PyValueError::new_err(error.to_string()))
+                    .map_err(|error| PyValueError::new_err(error.to_string()))
             })
             .transpose()?;
         Ok(HistogramBinSnapshot {
@@ -2685,9 +2679,8 @@ fn py_histogram_bin_from_snapshot(bin: HistogramBinSnapshot) -> PyResult<PyHisto
         .map(|moments| {
             let bytes = moments
                 .to_canonical_json()
-                .map_err(|error| exceptions::PyValueError::new_err(error.to_string()))?;
-            String::from_utf8(bytes)
-                .map_err(|error| exceptions::PyValueError::new_err(error.to_string()))
+                .map_err(|error| PyValueError::new_err(error.to_string()))?;
+            String::from_utf8(bytes).map_err(|error| PyValueError::new_err(error.to_string()))
         })
         .transpose()?;
     Ok(PyHistogramBinSnapshot {

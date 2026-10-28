@@ -6,27 +6,26 @@
 //! Dynamic observed-ID unions require a future explicit metadata/zero-extension
 //! contract. This restriction does not govern independent scalar projection bins.
 
+use super::exact_moments::{
+    ExactF64Moments, MAX_EXACT_OBJECTS, MAX_JSON_FRAME_BYTES, MomentOrder, ReportPolicy,
+    certified_round_f64,
+};
 use super::{
     HistogramBinSnapshot, HistogramSnapshot, HistogramSnapshotKind, ObservableSnapshotBundle,
     checked_histogram_count,
-    exact_moments::{
-        ExactF64Moments, MAX_EXACT_OBJECTS, MAX_JSON_FRAME_BYTES, MomentOrder, ReportPolicy,
-        certified_round_f64,
-    },
 };
 use eyre::{Result, eyre};
-use serde::{
-    Deserialize, Deserializer, Serialize,
-    de::{DeserializeSeed, MapAccess, SeqAccess, Visitor},
-};
-use std::{
-    cell::Cell,
-    collections::{BTreeMap, BTreeSet},
-    fmt,
-};
+use serde::de::{DeserializeSeed, Error as DeserializeError, MapAccess, SeqAccess, Visitor};
+use serde::{Deserialize, Deserializer, Serialize};
+use serde_json::Deserializer as JsonDeserializer;
+use std::cell::Cell;
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::{Formatter, Result as FmtResult};
+use std::result::Result as StdResult;
 use symbolica::domains::rational::Rational;
 
 impl HistogramBinSnapshot {
+    /// Check count, order, metadata, and agreement with the exact raw diagnostics.
     pub fn validate_exact(&self, sample_count: u64, order: MomentOrder) -> Result<()> {
         let exact = self
             .exact_moments
@@ -76,6 +75,7 @@ impl HistogramBinSnapshot {
         Ok(())
     }
 
+    /// Validate the bin and certify its mean; invalid or empty data returns an error.
     pub fn average_exact(&self, sample_count: u64) -> Result<f64> {
         let exact = self
             .exact_moments
@@ -85,6 +85,8 @@ impl HistogramBinSnapshot {
         Ok(exact.mean()?)
     }
 
+    /// Validate the bin and certify its sample-mean standard error.
+    /// Requires two samples and a representable final uncertainty.
     pub fn error_exact(&self, sample_count: u64) -> Result<f64> {
         let exact = self
             .exact_moments
@@ -134,6 +136,7 @@ impl HistogramSnapshot {
             .find_map(|bin| bin.exact_moments.as_ref().map(ExactF64Moments::order))
     }
 
+    /// Whether any bin has an exact payload; this alone does not validate capability.
     pub fn has_exact_moments(&self) -> bool {
         self.bins
             .iter()
@@ -148,6 +151,7 @@ impl HistogramSnapshot {
         Ok(())
     }
 
+    /// Validate every bin and its declared fixed layout at the requested moment order.
     pub fn validate_exact(&self, order: MomentOrder) -> Result<()> {
         let count = u64::try_from(self.sample_count)?;
         let object_count = self
@@ -219,6 +223,7 @@ impl HistogramSnapshot {
         Ok(())
     }
 
+    /// Merge independent sample batches, rejecting differing layouts or invalid data.
     pub fn merge_exact(&self, other: &Self, order: MomentOrder) -> Result<Self> {
         self.validate_exact(order)?;
         other.validate_exact(order)?;
@@ -257,6 +262,7 @@ impl HistogramSnapshot {
         Ok(merged)
     }
 
+    /// Validate and encode a tagged exact histogram within the frame limit.
     pub fn to_exact_json(&self, order: MomentOrder) -> Result<Vec<u8>> {
         self.validate_exact(order)?;
         bounded_json(&SnapshotEnvelope {
@@ -266,6 +272,7 @@ impl HistogramSnapshot {
         })
     }
 
+    /// Decode a matching tagged histogram, rejecting duplicates and resource excesses.
     pub fn from_exact_json(bytes: &[u8], order: MomentOrder) -> Result<Self> {
         preflight_exact_objects(bytes)?;
         let envelope: SnapshotEnvelope = serde_json::from_slice(bytes)?;
@@ -280,6 +287,7 @@ impl HistogramSnapshot {
 }
 
 impl ObservableSnapshotBundle {
+    /// Whether any histogram has exact data; use [`Self::validate_exact`] to check it.
     pub fn has_exact_moments(&self) -> bool {
         self.histograms
             .values()
@@ -293,6 +301,7 @@ impl ObservableSnapshotBundle {
         Ok(())
     }
 
+    /// Validate all exact histograms, their common count, and aggregate object bounds.
     pub fn validate_exact(&self, order: MomentOrder) -> Result<()> {
         let mut total_objects = 0usize;
         let mut common_count = None;
@@ -344,6 +353,23 @@ impl ObservableSnapshotBundle {
         Ok(())
     }
 
+    /// Validate and encode a tagged exact bundle within the frame limit.
+    ///
+    /// An empty bundle preserves the layout-free merge identity:
+    /// ```
+    /// use gammalooprs::observables::ObservableSnapshotBundle;
+    /// use gammalooprs::observables::exact_moments::MomentOrder;
+    ///
+    /// # fn main() -> eyre::Result<()> {
+    /// let bundle = ObservableSnapshotBundle::default();
+    /// let bytes = bundle.to_exact_json(MomentOrder::Second)?;
+    /// assert_eq!(
+    ///     ObservableSnapshotBundle::from_exact_json(&bytes, MomentOrder::Second)?,
+    ///     bundle,
+    /// );
+    /// # Ok(())
+    /// # }
+    /// ```
     pub fn to_exact_json(&self, order: MomentOrder) -> Result<Vec<u8>> {
         self.validate_exact(order)?;
         bounded_json(&BundleEnvelope {
@@ -353,6 +379,8 @@ impl ObservableSnapshotBundle {
         })
     }
 
+    /// Decode a matching bundle, rejecting duplicate keys before constructing rationals.
+    /// See [`Self::to_exact_json`] for a round trip.
     pub fn from_exact_json(bytes: &[u8], order: MomentOrder) -> Result<Self> {
         preflight_exact_objects(bytes)?;
         let envelope: BundleEnvelope = serde_json::from_slice(bytes)?;
@@ -387,7 +415,7 @@ fn preflight_exact_objects(bytes: &[u8]) -> Result<()> {
     // particular, a later duplicate payload must not erase a large first payload
     // from the resource count. Reject all duplicate map keys at this boundary.
     let count = Cell::new(0usize);
-    let mut decoder = serde_json::Deserializer::from_slice(bytes);
+    let mut decoder = JsonDeserializer::from_slice(bytes);
     ExactResourcePreflight(&count).deserialize(&mut decoder)?;
     decoder.end()?;
     Ok(())
@@ -397,49 +425,49 @@ fn preflight_exact_objects(bytes: &[u8]) -> Result<()> {
 struct ExactResourcePreflight<'a>(&'a Cell<usize>);
 impl<'de> DeserializeSeed<'de> for ExactResourcePreflight<'_> {
     type Value = ();
-    fn deserialize<D: Deserializer<'de>>(self, decoder: D) -> std::result::Result<(), D::Error> {
+    fn deserialize<D: Deserializer<'de>>(self, decoder: D) -> StdResult<(), D::Error> {
         decoder.deserialize_any(self)
     }
 }
 impl<'de> Visitor<'de> for ExactResourcePreflight<'_> {
     type Value = ();
-    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+    fn expecting(&self, formatter: &mut Formatter) -> FmtResult {
         formatter.write_str("bounded JSON without duplicate keys")
     }
-    fn visit_unit<E: serde::de::Error>(self) -> std::result::Result<(), E> {
+    fn visit_unit<E: DeserializeError>(self) -> StdResult<(), E> {
         Ok(())
     }
-    fn visit_bool<E: serde::de::Error>(self, _: bool) -> std::result::Result<(), E> {
+    fn visit_bool<E: DeserializeError>(self, _: bool) -> StdResult<(), E> {
         Ok(())
     }
-    fn visit_i64<E: serde::de::Error>(self, _: i64) -> std::result::Result<(), E> {
+    fn visit_i64<E: DeserializeError>(self, _: i64) -> StdResult<(), E> {
         Ok(())
     }
-    fn visit_u64<E: serde::de::Error>(self, _: u64) -> std::result::Result<(), E> {
+    fn visit_u64<E: DeserializeError>(self, _: u64) -> StdResult<(), E> {
         Ok(())
     }
-    fn visit_f64<E: serde::de::Error>(self, _: f64) -> std::result::Result<(), E> {
+    fn visit_f64<E: DeserializeError>(self, _: f64) -> StdResult<(), E> {
         Ok(())
     }
-    fn visit_str<E: serde::de::Error>(self, _: &str) -> std::result::Result<(), E> {
+    fn visit_str<E: DeserializeError>(self, _: &str) -> StdResult<(), E> {
         Ok(())
     }
-    fn visit_seq<A: SeqAccess<'de>>(self, mut sequence: A) -> std::result::Result<(), A::Error> {
+    fn visit_seq<A: SeqAccess<'de>>(self, mut sequence: A) -> StdResult<(), A::Error> {
         while sequence.next_element_seed(self)?.is_some() {}
         Ok(())
     }
-    fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> std::result::Result<(), A::Error> {
+    fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> StdResult<(), A::Error> {
         let mut keys = BTreeSet::new();
         while let Some(key) = map.next_key::<String>()? {
             if !keys.insert(key.clone()) {
-                return Err(serde::de::Error::custom(
+                return Err(DeserializeError::custom(
                     "duplicate JSON key in exact snapshot",
                 ));
             }
             if key == "exact_moments" {
                 let count = self.0.get() + 1;
                 if count > MAX_EXACT_OBJECTS {
-                    return Err(serde::de::Error::custom(
+                    return Err(DeserializeError::custom(
                         "exact object limit exceeded before rational decoding",
                     ));
                 }
@@ -475,26 +503,23 @@ struct BundleEnvelope {
 /// also rejects repeated histogram names, before BTreeMap can erase them.
 pub(super) fn deserialize_unique_histograms<'de, D: Deserializer<'de>>(
     deserializer: D,
-) -> std::result::Result<BTreeMap<String, HistogramSnapshot>, D::Error> {
+) -> StdResult<BTreeMap<String, HistogramSnapshot>, D::Error> {
     struct UniqueHistograms;
     impl<'de> Visitor<'de> for UniqueHistograms {
         type Value = BTreeMap<String, HistogramSnapshot>;
-        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        fn expecting(&self, formatter: &mut Formatter) -> FmtResult {
             formatter.write_str("a map of unique histogram names")
         }
-        fn visit_map<A: MapAccess<'de>>(
-            self,
-            mut map: A,
-        ) -> std::result::Result<Self::Value, A::Error> {
+        fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> StdResult<Self::Value, A::Error> {
             let mut histograms = BTreeMap::new();
             while let Some(name) = map.next_key::<String>()? {
                 if histograms.contains_key(&name) {
-                    return Err(serde::de::Error::custom("duplicate histogram name"));
+                    return Err(DeserializeError::custom("duplicate histogram name"));
                 }
                 let histogram = map.next_value()?;
                 histograms.insert(name, histogram);
                 if histograms.len() > MAX_EXACT_OBJECTS {
-                    return Err(serde::de::Error::custom(
+                    return Err(DeserializeError::custom(
                         "histogram map resource limit exceeded",
                     ));
                 }
@@ -508,8 +533,15 @@ pub(super) fn deserialize_unique_histograms<'de, D: Deserializer<'de>>(
 #[cfg(test)]
 mod tests {
     use super::super::exact_moments::MAX_SAMPLE_COUNT;
-    use super::super::{HistogramStatisticsSnapshot, tests::sample_histogram_snapshot};
+    use super::super::tests::sample_histogram_snapshot;
+    use super::super::{
+        EntrySelection, EventProcessingRuntime, GroupBinContribution, HistogramObservable,
+        HistogramStatisticsSnapshot, IntegralDefinition, ObservableDefinition, Observables,
+    };
     use super::*;
+    use std::env;
+    use std::fs;
+    use std::process;
 
     fn set_moments(bin: &mut HistogramBinSnapshot, exact: ExactF64Moments) {
         bin.sum_weights =
@@ -793,6 +825,35 @@ mod tests {
     }
 
     #[test]
+    fn exact_hwu_rejects_discrete_upper_edge_overflow_before_output() {
+        let order = MomentOrder::Second;
+        let mut state = snapshot(&[1.0, 2.0], order);
+        state.kind = HistogramSnapshotKind::Discrete;
+        for (index, bin) in state.bins.iter_mut().enumerate() {
+            bin.bin_id = Some(index as isize);
+        }
+        state.bins[0].bin_id = Some(isize::MAX);
+        state.validate_exact(order).unwrap();
+        let mut bytes = Vec::new();
+        assert!(state.write_hwu_block(&mut bytes).is_err());
+        assert!(bytes.is_empty());
+
+        let bundle = ObservableSnapshotBundle {
+            histograms: [("discrete".to_owned(), state)].into_iter().collect(),
+        };
+        let path = env::temp_dir().join(format!(
+            "gammaloop-exact-hwu-discrete-overflow-{}.hwu",
+            process::id()
+        ));
+        fs::write(&path, b"preserve existing output").unwrap();
+        let result = bundle.write_hwu_file(&path);
+        let contents = fs::read(&path).unwrap();
+        fs::remove_file(&path).unwrap();
+        assert!(result.is_err());
+        assert_eq!(contents, b"preserve existing output");
+    }
+
+    #[test]
     fn exact_hwu_uses_certified_mean_and_sem_and_rejects_missing_uncertainty() {
         let state = snapshot(&[134_217_728.0, 134_217_729.0], MomentOrder::Second);
         let mut bytes = Vec::new();
@@ -831,10 +892,6 @@ mod tests {
 
     #[test]
     fn mixed_exact_live_restore_rejects_before_mutating_earlier_legacy_histogram() {
-        use super::super::{
-            EntrySelection, EventProcessingRuntime, GroupBinContribution, HistogramObservable,
-            IntegralDefinition, ObservableDefinition, Observables,
-        };
         let mut runtime = EventProcessingRuntime::default();
         for name in ["a", "z"] {
             let observable = HistogramObservable {
