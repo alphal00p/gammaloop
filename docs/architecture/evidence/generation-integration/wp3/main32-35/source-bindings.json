@@ -1,0 +1,44 @@
+{
+  "code": "a3729fe5d880f0db5f09d9ce7d0ef592bfc4d161",
+  "derivations": [
+    {
+      "target": "cargo",
+      "derivation": "/nix/store/pbc604ci3bl9xq0gvf32xaii8h0zby8a-alphal00p-docs-cargo-0.1.0.drv",
+      "derivation_sha256": "dd545d9c43f305cee77d41d66a6b990c9c343fa634caadec24008ea352e67720",
+      "outputs": {
+        "out": {
+          "path": "xmcp8aas4z1zki59gqn9r2ns8hx7fz8r-alphal00p-docs-cargo-0.1.0"
+        }
+      },
+      "source": "/nix/store/sji8paz110zmyf1is01ysky9dl2ck6ac-source",
+      "source_nar_hash": "sha256-ang2JooqNAoUIPEEbdXtajvyMbYjstwVrzHU5HEfRrA=",
+      "source_files": 1345,
+      "source_manifest": "target/wp3-units32-35/cargo-source-manifest.json",
+      "git_commit": null,
+      "git_timestamp": null,
+      "cargo_profile": "ci-optim",
+      "build_commands_sha256": "9a546faf78e7c22b7f2603099bce8407638ed7d521da7c7f2811f0d36ae6a598",
+      "source_manifest_sha256": "cb0380137d156a516f09a7dc12eb8cff97742d211f401fb1a6ee003bca69eddd"
+    },
+    {
+      "target": "pages",
+      "derivation": "/nix/store/lv1zvzdj75mfyc17x3pplw718mwpz375-alphal00p-docs-pages-0.1.0.drv",
+      "derivation_sha256": "5ae21c6a7f36286802abce13e83792ed646783464320e17f7bf9fa03eb470716",
+      "outputs": {
+        "out": {
+          "path": "gcvim7hlma0234gng35ldm1b91vjndwf-alphal00p-docs-pages-0.1.0"
+        }
+      },
+      "source": "/nix/store/c5s12aqwg6i8gzszgj2z395bvl20qsij-source",
+      "source_nar_hash": "sha256-maBmCzKU5bx1bAA7mG7bBC9sK7Hl22Q80YcpZX0hfFA=",
+      "source_files": 2432,
+      "source_manifest": "target/wp3-units32-35/pages-source-manifest.json",
+      "git_commit": "a3729fe5d880f0db5f09d9ce7d0ef592bfc4d161",
+      "git_timestamp": "1793197279",
+      "cargo_profile": "ci-optim",
+      "build_commands_sha256": "708b0afc6401648cebaa31ac5206e68d36ab5f95b1ffd2a67dd7835148794a8e",
+      "source_manifest_sha256": "99ace1460cf4807fef1eae2ffc78df1d49018248a307f1c43d71e631a3beba9c"
+    }
+  ],
+  "qualification": "Actual build invocation license/INSTA environment differs from preliminary unlicensed evaluation; actual build derivations recorded, no secret environment values printed or archived. Every selected source bound byte-exactly to frozen Git commit, not later bookkeeping."
+}

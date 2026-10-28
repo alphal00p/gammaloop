@@ -1,0 +1,128 @@
+[
+  {
+    "name": "cache-note",
+    "format": "html",
+    "command": [
+      "/nix/store/vnjry04dnavpyvl41mz607ir21pjb2hp-typst-0.15.1-env/bin/typst",
+      "compile",
+      "--root",
+      ".",
+      "--font-path",
+      "/nix/store/5yr5di50bq9mwr2dh9m7i8y50lxh24ib-roboto-3.016/share/fonts/truetype",
+      "--features",
+      "html",
+      "--format",
+      "html",
+      "docs/architecture/nix-crane-cache-reuse.typ",
+      "target/wp3-units32-35/cache-note.html"
+    ],
+    "exit": 0,
+    "source_sha256": "2a90c8127210674be1f100b2bcc21c4da444a3deaba0f368b9b51c1cd134dc8a",
+    "output_sha256": "a3b6acb69c042a2dab5bd7671951a74079d12d50879932e8f10f5f56e9fb1696"
+  },
+  {
+    "name": "cache-note",
+    "format": "pdf",
+    "command": [
+      "/nix/store/vnjry04dnavpyvl41mz607ir21pjb2hp-typst-0.15.1-env/bin/typst",
+      "compile",
+      "--root",
+      ".",
+      "--font-path",
+      "/nix/store/5yr5di50bq9mwr2dh9m7i8y50lxh24ib-roboto-3.016/share/fonts/truetype",
+      "docs/architecture/nix-crane-cache-reuse.typ",
+      "target/wp3-units32-35/cache-note.pdf"
+    ],
+    "exit": 0,
+    "source_sha256": "2a90c8127210674be1f100b2bcc21c4da444a3deaba0f368b9b51c1cd134dc8a",
+    "output_sha256": "acb423e9e74a91441b3d748918c0d32557e4df993c2a3724f42320411f96b138"
+  },
+  {
+    "name": "provenance",
+    "format": "html",
+    "command": [
+      "/nix/store/vnjry04dnavpyvl41mz607ir21pjb2hp-typst-0.15.1-env/bin/typst",
+      "compile",
+      "--root",
+      ".",
+      "--font-path",
+      "/nix/store/5yr5di50bq9mwr2dh9m7i8y50lxh24ib-roboto-3.016/share/fonts/truetype",
+      "--features",
+      "html",
+      "--format",
+      "html",
+      "vendor/typst-packages/PROVENANCE.typ",
+      "target/wp3-units32-35/provenance.html"
+    ],
+    "exit": 0,
+    "source_sha256": "f7da0fda01647923950e2d2909f089fa21934847799eb1ce8ca228aba9418597",
+    "output_sha256": "7bc82fcdfdde406966fb612ba55dcf969a5f2b7d4df4eb103b248afb770707ed"
+  },
+  {
+    "name": "provenance",
+    "format": "pdf",
+    "command": [
+      "/nix/store/vnjry04dnavpyvl41mz607ir21pjb2hp-typst-0.15.1-env/bin/typst",
+      "compile",
+      "--root",
+      ".",
+      "--font-path",
+      "/nix/store/5yr5di50bq9mwr2dh9m7i8y50lxh24ib-roboto-3.016/share/fonts/truetype",
+      "vendor/typst-packages/PROVENANCE.typ",
+      "target/wp3-units32-35/provenance.pdf"
+    ],
+    "exit": 0,
+    "source_sha256": "f7da0fda01647923950e2d2909f089fa21934847799eb1ce8ca228aba9418597",
+    "output_sha256": "5591e89dc939f986d751a6a3a4c6869b1abd7a36e3f1471cccdc29162f672552"
+  },
+  {
+    "name": "plan",
+    "format": "html",
+    "command": [
+      "/nix/store/vnjry04dnavpyvl41mz607ir21pjb2hp-typst-0.15.1-env/bin/typst",
+      "compile",
+      "--root",
+      ".",
+      "--font-path",
+      "/nix/store/5yr5di50bq9mwr2dh9m7i8y50lxh24ib-roboto-3.016/share/fonts/truetype",
+      "--features",
+      "html",
+      "--format",
+      "html",
+      "docs/architecture/generation-integration-plan.typ",
+      "target/wp3-units32-35/plan.html"
+    ],
+    "exit": 0,
+    "source_sha256": "4419fef0e0e5e84593d0063df498ed70a2ce52fbf162e9d34c34cbec752d9a0e",
+    "output_sha256": "0baffbb04b283e0270fccaf1cac41585feda6afd067c39474a30661c81ff4caa"
+  },
+  {
+    "name": "plan",
+    "format": "pdf",
+    "command": [
+      "/nix/store/vnjry04dnavpyvl41mz607ir21pjb2hp-typst-0.15.1-env/bin/typst",
+      "compile",
+      "--root",
+      ".",
+      "--font-path",
+      "/nix/store/5yr5di50bq9mwr2dh9m7i8y50lxh24ib-roboto-3.016/share/fonts/truetype",
+      "docs/architecture/generation-integration-plan.typ",
+      "target/wp3-units32-35/plan.pdf"
+    ],
+    "exit": 0,
+    "source_sha256": "4419fef0e0e5e84593d0063df498ed70a2ce52fbf162e9d34c34cbec752d9a0e",
+    "output_sha256": "c484ff2460c2a1a616fefcf154844b717f293791898e0b599613e182a14aa262"
+  },
+  {
+    "check": "cache whole-file typstyle",
+    "source": "current",
+    "exit": 1,
+    "qualification": "Inherited formatting drift; not a global formatting pass."
+  },
+  {
+    "check": "cache whole-file typstyle",
+    "source": "approved31",
+    "exit": 1,
+    "qualification": "Inherited formatting drift; not a global formatting pass."
+  }
+]

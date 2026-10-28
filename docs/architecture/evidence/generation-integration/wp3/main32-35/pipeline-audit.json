@@ -1,0 +1,69 @@
+{
+  "selection": "Actual nix/documentation.nix alphal00pDocsValidationCommands and latest build",
+  "python_unittest_modules": [
+    {
+      "path": "crates/linnet-py/tests/test_algorithms.py",
+      "sha256": "9102135cc798a5ba19406c6097f341413791cf42f874a48f96907823a3d61a08",
+      "expansion_calls": []
+    },
+    {
+      "path": "crates/linnet-py/tests/test_basic.py",
+      "sha256": "da959e45e175019bb120db846450b2a71ef7b13eb249bd25179cde0f1169c6b6",
+      "expansion_calls": []
+    },
+    {
+      "path": "crates/linnet-py/tests/test_community_rendering.py",
+      "sha256": "75373a380035e60e8fff0389bbe960068e247dc33cf98c0fa703e2ab3aad6b04",
+      "expansion_calls": []
+    },
+    {
+      "path": "crates/linnet-py/tests/test_installed_data.py",
+      "sha256": "bb51544e71c421ccd40166ea0e8184930aef98b060aa048ecf2ed638cc530692",
+      "expansion_calls": []
+    },
+    {
+      "path": "crates/linnet-py/tests/test_native_rendering.py",
+      "sha256": "589e70b161a8fc57d1d43d5d5c3ed1074269d5c5d673248c0e06ae1c492e0743",
+      "expansion_calls": []
+    },
+    {
+      "path": "crates/linnet-py/tests/test_render_sources.py",
+      "sha256": "d86cdb662b396b8257a06df3668cf850a5dc442a0079f26f30b48fb270659e7a",
+      "expansion_calls": []
+    },
+    {
+      "path": "crates/linnet-py/tests/test_streaming.py",
+      "sha256": "029843c20fe1dd78fd62267566935cad6b17bb1a9d072dff44b5f3d3bfdaa989",
+      "expansion_calls": []
+    },
+    {
+      "path": "crates/linnet-py/tests/test_svg_browser.py",
+      "sha256": "f745e8c1a0f04c0371a5f00f4bb304faa623237eb2e5eb9c61c002fc8949bf2b",
+      "expansion_calls": []
+    },
+    {
+      "path": "crates/linnet-py/tests/test_svg_interaction.py",
+      "sha256": "fe25a6fb0703bd552feb7d71858bebd86fb4df809d74bb28d02e7bceb3e7b66a",
+      "expansion_calls": []
+    },
+    {
+      "path": "crates/linnet-py/tests/test_view_epochs.py",
+      "sha256": "f747df5cd56a2a2ac33a408e5f82cd85b6940d163851d3082280b6f09358030a",
+      "expansion_calls": []
+    },
+    {
+      "path": "crates/linnet-py/tests/test_wasm.py",
+      "sha256": "d9f1bd8ecb1ed6b7057693e8bab775de6710e696b03e54e0fae19d384ed0eaa3",
+      "expansion_calls": []
+    }
+  ],
+  "Rust_examples": "Catalog FeynKit examples compile-only; run allowlist is coordination/graph/small tensor APIs; authored Python examples compile syntax without product imports. No selected graph numerator expansion.",
+  "selected_scripts": [
+    "installed_tensor_selectors",
+    "installed_feyncalc_tensor",
+    "installed_import_smoke",
+    "installed_feyncalc_tree"
+  ],
+  "script_boundary": "Explicit finite tensor/spin-current identities; no graph-numerator expansion. Interop/cache compare factorized numerators without expanding them.",
+  "unselected": "18 other source35 scripts; four preexisting whole-graph-expanding parser parity helpers omitted, unchanged; no test filters rewritten."
+}

@@ -1,0 +1,16 @@
+[
+  {
+    "format": "html",
+    "exit": 0,
+    "source_sha256": "728e4328164d792883ed1af61666c6ea4b354e4bb15551ede2a0b9131f493582",
+    "output_sha256": "410134e32e6115da1786a064e83175a2c30faf724b641730d49bfc0a3c3886a4",
+    "frozen_docs_code": "a3729fe5d880f0db5f09d9ce7d0ef592bfc4d161"
+  },
+  {
+    "format": "pdf",
+    "exit": 0,
+    "source_sha256": "728e4328164d792883ed1af61666c6ea4b354e4bb15551ede2a0b9131f493582",
+    "output_sha256": "f2a2916362288bb2bc2daa85352df498be6493133be6f1fe76e3a43799d64a4d",
+    "frozen_docs_code": "a3729fe5d880f0db5f09d9ce7d0ef592bfc4d161"
+  }
+]

@@ -545,7 +545,7 @@
     "receipt": "wp3/source31-integration/source30-review.json"
   },
   "active_slice31": {
-    "status": "Round1 ScopeB APPROVE;ScopeA REQUEST_CHANGES. Narrow registry-comment correction implemented; NEW independent Astra re-review required before32. ECD canonical0/637 and latest1/threequeuedcalls stay historical source-bound results.",
+    "status": "APPROVED at191aaf7b77018e377a9e5e4e3b9c88357218aa48 by NEW independent Astra combined round2; earlier review-pending language superseded. ECD output qualification stays at ECD.",
     "source_order": 31,
     "original_source": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
     "base": "7587d0c768363f200e89250683e7836c867c9b81",
@@ -599,7 +599,15 @@
     "preparation_base": "cb585c98a474628ca9c55bb17cf1e680450b8ef9",
     "preparation_tip": "43ef486177335b295bfbbc5474d0da04a0c58c27",
     "receipt": "docs/architecture/evidence/generation-integration/wp3/main32-35/receipt.json",
-    "status": "Integrated approved cumulative32\u201335; current-source validation in progress; NEW independent Astra combined review required before36.",
-    "extra": "Approved direct native graph_interop builder repair and three staged Community rendering callers included. No aliases, no36."
-  }
+    "status": "Sources32\u201335 combined validation complete; STOP for NEW independent Astra integration review before36. WP3 incomplete.",
+    "extra": "Approved direct native graph_interop builder repair and three staged Community rendering callers included. No aliases, no36.",
+    "documentation_code": "a3729fe5d880f0db5f09d9ce7d0ef592bfc4d161",
+    "canonical_documentation_code": "a3729fe5d880f0db5f09d9ce7d0ef592bfc4d161",
+    "canonical_exit": 0,
+    "canonical_receipt": "docs/architecture/evidence/generation-integration/wp3/main32-35/canonical.json",
+    "focused_native_core_sha256": "d2d9fecf95824ae50d06bb7fe7208489794e47785acd8ff516da66561ea8e7aa",
+    "source_bound_native_input_count": 525
+  },
+  "current_implementation_code_commit": "2ea39fd3ec164516b8e68775554fa2021998975a",
+  "current_documentation_code_commit": "a3729fe5d880f0db5f09d9ce7d0ef592bfc4d161"
 }

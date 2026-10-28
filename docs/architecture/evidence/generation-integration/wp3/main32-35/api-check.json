@@ -1,0 +1,158 @@
+{
+  "installed_API": "Request.generate/DiagramSet.build/FeynmanDiagram.to_graph present in qualified current native owner",
+  "all_installed_scripts_parse": [
+    "crates/feynkit-py/tests/installed_amplitude.py",
+    "crates/feynkit-py/tests/installed_cff_marimo.py",
+    "crates/feynkit-py/tests/installed_charge_conjugation.py",
+    "crates/feynkit-py/tests/installed_collection_display.py",
+    "crates/feynkit-py/tests/installed_color_conjugation.py",
+    "crates/feynkit-py/tests/installed_color_fierz.py",
+    "crates/feynkit-py/tests/installed_color_scalar_conjugation.py",
+    "crates/feynkit-py/tests/installed_diagram_integral_families.py",
+    "crates/feynkit-py/tests/installed_dimensional_spin_sums.py",
+    "crates/feynkit-py/tests/installed_energy_documentation.py",
+    "crates/feynkit-py/tests/installed_energy_notation.py",
+    "crates/feynkit-py/tests/installed_energy_representations.py",
+    "crates/feynkit-py/tests/installed_energy_scoped_displays.py",
+    "crates/feynkit-py/tests/installed_expand_couplings.py",
+    "crates/feynkit-py/tests/installed_feyncalc_compton.py",
+    "crates/feynkit-py/tests/installed_feyncalc_diphoton.py",
+    "crates/feynkit-py/tests/installed_feyncalc_electron_self_energy.py",
+    "crates/feynkit-py/tests/installed_feyncalc_electron_two_loop.py",
+    "crates/feynkit-py/tests/installed_feyncalc_etac_topologies.py",
+    "crates/feynkit-py/tests/installed_feyncalc_generated_qed.py",
+    "crates/feynkit-py/tests/installed_feyncalc_gluon_scattering.py",
+    "crates/feynkit-py/tests/installed_feyncalc_gminus2.py",
+    "crates/feynkit-py/tests/installed_feyncalc_higgs_decay.py",
+    "crates/feynkit-py/tests/installed_feyncalc_higgs_gluons.py",
+    "crates/feynkit-py/tests/installed_feyncalc_ibp_bubble.py",
+    "crates/feynkit-py/tests/installed_feyncalc_ibp_phi4.py",
+    "crates/feynkit-py/tests/installed_feyncalc_identical_leptons.py",
+    "crates/feynkit-py/tests/installed_feyncalc_muon_decay.py",
+    "crates/feynkit-py/tests/installed_feyncalc_odd_photons.py",
+    "crates/feynkit-py/tests/installed_feyncalc_phi3.py",
+    "crates/feynkit-py/tests/installed_feyncalc_phi4_one_loop.py",
+    "crates/feynkit-py/tests/installed_feyncalc_photon_gluon.py",
+    "crates/feynkit-py/tests/installed_feyncalc_photon_radiation.py",
+    "crates/feynkit-py/tests/installed_feyncalc_photon_self_energy.py",
+    "crates/feynkit-py/tests/installed_feyncalc_photon_two_loop.py",
+    "crates/feynkit-py/tests/installed_feyncalc_polarized_qed.py",
+    "crates/feynkit-py/tests/installed_feyncalc_qcd_annihilation.py",
+    "crates/feynkit-py/tests/installed_feyncalc_qcd_ghost_vertex.py",
+    "crates/feynkit-py/tests/installed_feyncalc_qcd_ghosts.py",
+    "crates/feynkit-py/tests/installed_feyncalc_qcd_gluons.py",
+    "crates/feynkit-py/tests/installed_feyncalc_qcd_renormalization.py",
+    "crates/feynkit-py/tests/installed_feyncalc_qed_renormalization.py",
+    "crates/feynkit-py/tests/installed_feyncalc_quark_gluon_scattering.py",
+    "crates/feynkit-py/tests/installed_feyncalc_quark_scattering.py",
+    "crates/feynkit-py/tests/installed_feyncalc_sewn_diphoton.py",
+    "crates/feynkit-py/tests/installed_feyncalc_sewn_qed.py",
+    "crates/feynkit-py/tests/installed_feyncalc_soft_function.py",
+    "crates/feynkit-py/tests/installed_feyncalc_tensor.py",
+    "crates/feynkit-py/tests/installed_feyncalc_tree.py",
+    "crates/feynkit-py/tests/installed_feyncalc_weak_decays.py",
+    "crates/feynkit-py/tests/installed_feyncalc_ww.py",
+    "crates/feynkit-py/tests/installed_feyncalc_yukawa.py",
+    "crates/feynkit-py/tests/installed_feyncalc_z_decay.py",
+    "crates/feynkit-py/tests/installed_generalized_cff.py",
+    "crates/feynkit-py/tests/installed_graph_highlighting.py",
+    "crates/feynkit-py/tests/installed_graph_interop.py",
+    "crates/feynkit-py/tests/installed_import.py",
+    "crates/feynkit-py/tests/installed_import_smoke.py",
+    "crates/feynkit-py/tests/installed_integral_families.py",
+    "crates/feynkit-py/tests/installed_integral_mappings.py",
+    "crates/feynkit-py/tests/installed_lmb_expressions.py",
+    "crates/feynkit-py/tests/installed_loop_1pi.py",
+    "crates/feynkit-py/tests/installed_ltd_display.py",
+    "crates/feynkit-py/tests/installed_metric_factory.py",
+    "crates/feynkit-py/tests/installed_model_display.py",
+    "crates/feynkit-py/tests/installed_numerical_showcase.py",
+    "crates/feynkit-py/tests/installed_offline_rendering.py",
+    "crates/feynkit-py/tests/installed_parameter_formatters.py",
+    "crates/feynkit-py/tests/installed_parameter_labels.py",
+    "crates/feynkit-py/tests/installed_partial_fractions.py",
+    "crates/feynkit-py/tests/installed_polarized_spin_density.py",
+    "crates/feynkit-py/tests/installed_process.py",
+    "crates/feynkit-py/tests/installed_standard_model_metadata.py",
+    "crates/feynkit-py/tests/installed_subgraph_cache.py",
+    "crates/feynkit-py/tests/installed_subgraph_views.py",
+    "crates/feynkit-py/tests/installed_svg_interaction.py",
+    "crates/feynkit-py/tests/installed_symbolic_kinematics.py",
+    "crates/feynkit-py/tests/installed_tadpole_normalization.py",
+    "crates/feynkit-py/tests/installed_tensor_reduction.py",
+    "crates/feynkit-py/tests/installed_tensor_selectors.py",
+    "crates/feynkit-py/tests/installed_ufo_color_epsilon.py",
+    "crates/feynkit-py/tests/installed_ufo_ghost_crossing.py",
+    "crates/feynkit-py/tests/installed_ufo_parameter_formatters.py",
+    "crates/feynkit-py/tests/installed_ufo_symmetric_color.py",
+    "crates/feynkit-py/tests/installed_uv_expansion.py",
+    "crates/feynkit-py/tests/installed_wavefunctions.py"
+  ],
+  "canonical_scope_controls": [
+    {
+      "name": "valid",
+      "status": "valid"
+    },
+    {
+      "name": "outside",
+      "status": "valid"
+    },
+    {
+      "name": "inside",
+      "status": "stale-digest"
+    },
+    {
+      "name": "missing-start",
+      "status": "missing-or-ambiguous-anchor"
+    },
+    {
+      "name": "duplicate-start",
+      "status": "missing-or-ambiguous-anchor"
+    },
+    {
+      "name": "missing-end",
+      "status": "missing-or-ambiguous-end"
+    },
+    {
+      "name": "duplicate-end",
+      "status": "missing-or-ambiguous-end"
+    },
+    {
+      "name": "reversed",
+      "status": "invalid-range"
+    },
+    {
+      "name": "missing-source",
+      "status": "missing-source"
+    },
+    {
+      "name": "empty-start",
+      "status": "missing-or-ambiguous-anchor"
+    },
+    {
+      "name": "empty-end",
+      "status": "missing-or-ambiguous-end"
+    },
+    {
+      "name": "overlap",
+      "status": "invalid-range"
+    },
+    {
+      "name": "whole-valid",
+      "status": "valid"
+    },
+    {
+      "name": "whole-outside",
+      "status": "stale-digest"
+    },
+    {
+      "name": "whole-missing",
+      "status": "missing-or-ambiguous-anchor"
+    },
+    {
+      "name": "whole-duplicate",
+      "status": "missing-or-ambiguous-anchor"
+    }
+  ],
+  "gallery_sha256": "572b5e2ae613d6193f4eaa7ed5b01026ba21f06bbcb9f715042d87ca49e00990"
+}

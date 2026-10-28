@@ -1,0 +1,58 @@
+[
+  {
+    "name": "community-rendering",
+    "exit": 0,
+    "seconds": 1.820264748064801,
+    "log": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-units32-35/community-rendering.log",
+    "sha256": "b0b43fa1640f9c7b19e077662f74cdf3060c54947e4ae7bf2c2ec9f6bcc3af45"
+  },
+  {
+    "name": "installed_graph_interop",
+    "exit": 0,
+    "seconds": 1.3178270559292287,
+    "log": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-units32-35/installed_graph_interop.log",
+    "sha256": "34a6d6fef4981096a55380fab10fb13e7d4bd8f4869a6b1e91bb0bb153a59017"
+  },
+  {
+    "name": "installed_subgraph_cache",
+    "exit": 0,
+    "seconds": 1.2173535479232669,
+    "log": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-units32-35/installed_subgraph_cache.log",
+    "sha256": "9ba9b686f06982babbd0ed0d7a2ea67ece7e8b9e9d59f5a9dd5fc9054c720b86"
+  },
+  {
+    "name": "installed_tensor_selectors",
+    "exit": 0,
+    "seconds": 1.1169354610610753,
+    "log": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-units32-35/installed_tensor_selectors.log",
+    "sha256": "d7288e6ef51cf7a1a5cae135e7a3850b3daf3303a37cb83d0a75765842cfda90"
+  },
+  {
+    "name": "installed_feyncalc_tensor",
+    "exit": 0,
+    "seconds": 1.267617188161239,
+    "log": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-units32-35/installed_feyncalc_tensor.log",
+    "sha256": "d37bfa9637b387e276579cecf07c9984a3bc357012ae5bb0e68a29a4385f2342"
+  },
+  {
+    "name": "installed_import_smoke",
+    "exit": 0,
+    "seconds": 1.0670782220549881,
+    "log": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-units32-35/installed_import_smoke.log",
+    "sha256": "320e78a831e2f38588752507cc1b7f1f4f0e44dd93d9005b8982028abb11b1a8"
+  },
+  {
+    "name": "installed_feyncalc_tree",
+    "exit": 0,
+    "seconds": 1.9195091109722853,
+    "log": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-units32-35/installed_feyncalc_tree.log",
+    "sha256": "1f7a3f4030e18a560f78e419d6b861a7d30caf8f86deac69ef78adb994658a13"
+  },
+  {
+    "name": "graph-boundary",
+    "exit": 0,
+    "seconds": 1.919252409832552,
+    "log": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-units32-35/graph-boundary.log",
+    "sha256": "8fe5b1e654d637ef467a007b5dcdac10c1f4cdde26a238f8a10ada0f84b14539"
+  }
+]

@@ -1,0 +1,134 @@
+{
+  "schema": 1,
+  "status": "Sources32\u201335 combined validation complete; STOP for NEW independent Astra integration review before36. WP3 incomplete.",
+  "base": "191aaf7b77018e377a9e5e4e3b9c88357218aa48",
+  "implementation_code": "2ea39fd3ec164516b8e68775554fa2021998975a",
+  "documentation_code": "a3729fe5d880f0db5f09d9ce7d0ef592bfc4d161",
+  "author": "Lucien Huber <im@lcnbr.ch>",
+  "preparation": {
+    "base": "cb585c98a474628ca9c55bb17cf1e680450b8ef9",
+    "implementation": "c7ab0d1dd29dfbec194ee3fa24abe05bcfb6e794",
+    "tip": "43ef486177335b295bfbbc5474d0da04a0c58c27",
+    "historical_receipt": "../units32-35/receipt.json",
+    "qualification": "Whole cumulative approved delta, not final receipt only. Historical99-scope FAIL remains historical; current102-scope PASS is freshly checked. Source31 lifecycle/source30 source-selection prose preserved."
+  },
+  "source_to_new": [
+    {
+      "source_order": 32,
+      "source_commit": "351c85036778be709117a021fc5f1656bbd5a964",
+      "planned_unit": "port-32",
+      "integration_commit": "2ea39fd3ec164516b8e68775554fa2021998975a",
+      "disposition": "reconcile"
+    },
+    {
+      "source_order": 33,
+      "source_commit": "ce9072e44a3335fdba7d223b0c3ae885cc29dc20",
+      "planned_unit": "port-33",
+      "integration_commit": "2ea39fd3ec164516b8e68775554fa2021998975a",
+      "disposition": "reconcile"
+    },
+    {
+      "source_order": 34,
+      "source_commit": "7e93e726e253ebb2a1af0d4b38177f3628d4b34b",
+      "planned_unit": "port-34",
+      "integration_commit": "2ea39fd3ec164516b8e68775554fa2021998975a",
+      "disposition": "reconcile"
+    },
+    {
+      "source_order": 35,
+      "source_commit": "8c12968bde84643623ca2f5099e0175180a73dc6",
+      "planned_unit": "port-35",
+      "integration_commit": "2ea39fd3ec164516b8e68775554fa2021998975a",
+      "disposition": "reconcile"
+    }
+  ],
+  "atomic_grouping": "One coherent reviewed cumulative native display/Python boundary slice; four source intents and additional approved builder/caller repair map to same implementation commit. Metadata qualification/final evidence are separate changes.",
+  "extra_repair": {
+    "files": [
+      "crates/feynkit-py/src/graph_interop.rs",
+      "crates/linnet-py/tests/test_community_rendering.py"
+    ],
+    "approved_origin": "c7ab0d1dd29dfbec194ee3fa24abe05bcfb6e794; prep-a-review.json",
+    "behavior": "Existing cached whole-owner export now constructs current NodeSpec and source/sink HalfEdgeSpec/EdgeSpec via native graph.build. Three retained rendering callers use Request.generate/DiagramSet.build; all original assertions execute. No aliases or second cache."
+  },
+  "reconciliation": "28 implementation paths exact approved preparation bytes; cache note applies only native resource/vendor-consumer paragraph to current31, preserving new ten-input and patch-selection attestations. Historical preparation receipt exact. Current registry unchanged:102 valid scopes,64 titles,six products; no digest refresh.",
+  "fresh": {
+    "runtime": "runtime.json",
+    "graph_boundaries": "graph-boundary-results.json",
+    "browser": "browser.json",
+    "gallery": "gallery.json",
+    "API_and_scope_controls": "api-check.json",
+    "format": "Pinned stable rustfmt --edition2024 --check crates/feynkit-py/src/graph_interop.rs passed",
+    "Clippy": {
+      "command": [
+        "nix",
+        "develop",
+        "-c",
+        "bash",
+        "-c",
+        "cargo clippy --locked -p feynkit-py --no-default-features --features native,linnet-python,ufo --lib -- -D warnings"
+      ],
+      "exit": 0,
+      "log": "target/wp3-units32-35/clippy.log",
+      "dependency_warnings": "Clarabel: one unused import and one elided-lifetime warning; no feynkit-py warning.",
+      "environment": {
+        "CARGO_BUILD_JOBS": "2",
+        "INSTA_UPDATE": "no",
+        "license": "preserved or silently loaded; value never archived"
+      }
+    },
+    "kernel": {
+      "command": "nix develop -c just check-symbolica-feature-isolation",
+      "exit": 0
+    },
+    "focused_Typst": "docs-focused.json",
+    "final_plan_Typst": "plan-final-renders.json; replaces earlier plan render in docs-focused.json, not extra duplicate credit",
+    "canonical_counts": {
+      "Rust_unique": 93,
+      "references": 2,
+      "stubs": 5,
+      "Python": {
+        "run": 113,
+        "passed": 107,
+        "skipped": 6,
+        "errors": 0,
+        "failures": 0,
+        "qualification": "Standard skipped cases receive no pass credit. Three retained rendering cases execute; independent focused rendering3 and camera1 have0skips."
+      },
+      "shell_pages": 637,
+      "all_HTML_files": 4229
+    },
+    "commands": "Exact subprocess recipes/scripts and logs retained under target/wp3-units32-35; canonical.json contains actual ordered normal Nix commands.",
+    "canonical_skip_accounting": "107 installed-suite passes,6 standard skipped cases uncredited;3 retained rendering cases execute. Separate focused rendering3/camera1 have0skips."
+  },
+  "qualified_reuse": {
+    "wheel": "wheel-qualification.json",
+    "scope": "Exact525 compiled native inputs including graph_interop plus relevant manifests/locks match current implementation. Fresh runtime results use extracted wheel with per-process core SHA checks. This is not reuse of pre-port base binary.",
+    "manual": "SOURCE31 source-matched manual and seven table headers unchanged; no manual/WASM/source-asset regeneration or new provenance claim.",
+    "Astra_preparation": "Independent A/B approvals imported byte-exactly, not relabelled as fresh current runs."
+  },
+  "canonical": {
+    "status": "PASS at frozen a372 docs code; final evidence-tip source remains distinct/unbuilt",
+    "source": "source-bindings.json",
+    "input": "git+file:///shared/lcnbr/dev/gammaloop/main?rev=a3729fe5d880f0db5f09d9ce7d0ef592bfc4d161&shallow=1",
+    "attempt_history": "consumer-switch.json; initial2ea client canceled exit1, no pass credit. Same derivation request did not retain its in-flight progress; final producer restarted normally. Shared completed caches untouched.",
+    "pipeline_audit": "pipeline-audit.json",
+    "results": "canonical.json",
+    "producer": "producer.json",
+    "links": "links.json",
+    "snapshot": "No new snapshot fixture qualification; prior ECD snapshot remains ECD only.",
+    "native_sandbox_wheel": "Built offline/locked and actually installed/tested by canonical target; sandbox wheel/core not retained as release artifacts. Source/feature commands and derivation are recorded; no equality to local debug core claimed."
+  },
+  "limits": [
+    "18 of22 source35 scripts unrun; all395 assertions preserved, not all executed.",
+    "Graph boundary11 cases exercise all three orientations/self-loop/caches/error retry; nontrivial exported/native numbering permutation was not observed in that probe.",
+    "Cache-note whole-file Typstyle exits1 on approved31 and current; no global formatting pass.",
+    "No SOURCE36 or later port. No final native/Pyodide/Community repaired/compressed wheel/RECORD release qualification; Clarabel/NetworkX/Tiptoe notices retained.",
+    "Two SOURCE19 digests certified passing; three older frame failures/four omitted graph-expansion helpers/fullWP3/five_a_ddx/BRST/full physics/performance/memory/final WASM/PDF/distributions remain open."
+  ],
+  "retained": "target/wp3-units32-35: exact scripts/logs/Nix sources/manifests/browser results and task-owned installed wheel; all prior proofs/baseline workspaces/235 artifacts/reviews/caches retained unchanged.",
+  "publication": "No push/PR/upload/publication/CI enablement;NixCI=false;kernel1a1829b1 and locks/uv/host subset unchanged.",
+  "inventories": "frozen-inventories.json; final evidence inventory separately bound after freezing validation metadata",
+  "cleanup": "All own build/check/browser clients complete; task-owned logs/scripts/qualified payload and extracted producer ELFs retained for review. No shared cache override/seeding/deletion, no other-lane writes or source-ref mutation.",
+  "metadata_qualification": "All rendered inputs frozen at a372; subsequent tracker/result records are JSON metadata only. Their full source/NAR is separately evaluated and explicitly unbuilt; no self-referential receipt hash."
+}

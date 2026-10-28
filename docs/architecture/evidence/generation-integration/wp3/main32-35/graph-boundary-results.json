@@ -1,0 +1,221 @@
+{
+  "passed": true,
+  "cases": [
+    {
+      "case": "phi4 self-loop plus source/sink dangling edges",
+      "id": 194964966565034489099305788386787350470,
+      "vertices": 1,
+      "edges": 3,
+      "halfedge_export_to_native": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "orientations": [
+        "Orientation.Undirected",
+        "Orientation.Undirected",
+        "Orientation.Undirected"
+      ]
+    },
+    {
+      "case": "ghG -> g ghG",
+      "id": 333043073288023313514326055434143007672,
+      "vertices": 1,
+      "edges": 3,
+      "halfedge_export_to_native": [
+        0,
+        1,
+        2
+      ],
+      "orientations": [
+        "Orientation.Default",
+        "Orientation.Undirected",
+        "Orientation.Default"
+      ]
+    },
+    {
+      "case": "ghG~ -> g ghG~",
+      "id": 46744790688116222800504982093880623749,
+      "vertices": 1,
+      "edges": 3,
+      "halfedge_export_to_native": [
+        0,
+        1,
+        2
+      ],
+      "orientations": [
+        "Orientation.Reversed",
+        "Orientation.Undirected",
+        "Orientation.Reversed"
+      ]
+    },
+    {
+      "case": "electron exchange",
+      "id": 51526155222940300043923822661054297480,
+      "vertices": 2,
+      "edges": 5,
+      "halfedge_export_to_native": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "orientations": [
+        "Orientation.Default",
+        "Orientation.Reversed",
+        "Orientation.Undirected",
+        "Orientation.Undirected",
+        "Orientation.Default"
+      ]
+    },
+    {
+      "case": "electron exchange",
+      "id": 200113688365980402278576875645657556285,
+      "vertices": 2,
+      "edges": 5,
+      "halfedge_export_to_native": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "orientations": [
+        "Orientation.Default",
+        "Orientation.Reversed",
+        "Orientation.Undirected",
+        "Orientation.Undirected",
+        "Orientation.Default"
+      ]
+    },
+    {
+      "case": "finalized scalar triangle",
+      "id": 128036435053559639676798139358245925381,
+      "vertices": 3,
+      "edges": 6,
+      "halfedge_export_to_native": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "orientations": [
+        "Orientation.Undirected",
+        "Orientation.Undirected",
+        "Orientation.Undirected",
+        "Orientation.Undirected",
+        "Orientation.Undirected",
+        "Orientation.Undirected"
+      ]
+    },
+    {
+      "case": "retry after node error",
+      "id": 194964966565034489099305788386787350470,
+      "vertices": 1,
+      "edges": 3,
+      "halfedge_export_to_native": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "orientations": [
+        "Orientation.Undirected",
+        "Orientation.Undirected",
+        "Orientation.Undirected"
+      ]
+    },
+    {
+      "case": "retry after source error",
+      "id": 194964966565034489099305788386787350470,
+      "vertices": 1,
+      "edges": 3,
+      "halfedge_export_to_native": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "orientations": [
+        "Orientation.Undirected",
+        "Orientation.Undirected",
+        "Orientation.Undirected"
+      ]
+    },
+    {
+      "case": "retry after sink error",
+      "id": 194964966565034489099305788386787350470,
+      "vertices": 1,
+      "edges": 3,
+      "halfedge_export_to_native": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "orientations": [
+        "Orientation.Undirected",
+        "Orientation.Undirected",
+        "Orientation.Undirected"
+      ]
+    },
+    {
+      "case": "retry after edge error",
+      "id": 194964966565034489099305788386787350470,
+      "vertices": 1,
+      "edges": 3,
+      "halfedge_export_to_native": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "orientations": [
+        "Orientation.Undirected",
+        "Orientation.Undirected",
+        "Orientation.Undirected"
+      ]
+    },
+    {
+      "case": "retry after build error",
+      "id": 194964966565034489099305788386787350470,
+      "vertices": 1,
+      "edges": 3,
+      "halfedge_export_to_native": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "orientations": [
+        "Orientation.Undirected",
+        "Orientation.Undirected",
+        "Orientation.Undirected"
+      ]
+    }
+  ],
+  "orientation_branches": [
+    "Default",
+    "Reversed",
+    "Undirected"
+  ],
+  "self_loop": true,
+  "nontrivial_mapping": false,
+  "malformed_snapshot_rejected": true,
+  "error_factories": [
+    "node",
+    "source",
+    "sink",
+    "edge",
+    "build"
+  ]
+}

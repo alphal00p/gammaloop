@@ -1,0 +1,2676 @@
+{
+  "code": "2ea39fd3ec164516b8e68775554fa2021998975a",
+  "qualification": "Exact current525 local compiled inputs including new graph_interop equal independently verified approved native host producer; manifests/locks/build setup unchanged. Reuse approved preparation native owner output, not pre-port base binary. No cache seeding/target override or duplicate local cold build.",
+  "producer_receipt": "../generation-python-docs-ports/target/review-units32-35-astra-a-round1-20261028T091102Z/producer-qualification.json",
+  "producer_receipt_sha256": "7f3340551405ebc3b8259b696b59cc12dd43316d46352d0dfb67fdb5f162cd0a",
+  "producer_source": [
+    {
+      "path": "crates/feynkit-amplitude/src/color.rs",
+      "git_blob": "2611d0937580c4b52d1625cc2e4dfe13c028cae1",
+      "sha256": "f924fb78216c1087faa76cab9fc6be7465279e44e8f37ad55eb7d49572be2de7"
+    },
+    {
+      "path": "crates/feynkit-amplitude/src/lib.rs",
+      "git_blob": "4a126ef03891239ac50d05425e1071de0b7c4f45",
+      "sha256": "85188e606fb0ae13dbece8a8ee76a87d5261a437f908205b29cbe9406ef0eb19"
+    },
+    {
+      "path": "crates/feynkit-amplitude/src/spin.rs",
+      "git_blob": "12e94e0a8c67702cab0cb02dcc4009c09639d6dd",
+      "sha256": "751ad2e44580e84cc45edde99d1978bd6c67a5c0389bc2d1d1586c43b12e7f2c"
+    },
+    {
+      "path": "crates/feynkit-cff/src/algebra.rs",
+      "git_blob": "b7cbbd1d5c0f36f34250d09f529fb60b96ac3317",
+      "sha256": "336361a2006bb01c02874f002599821d331be8c2dd0cf7b13c63f53fdae1dd5f"
+    },
+    {
+      "path": "crates/feynkit-cff/src/error.rs",
+      "git_blob": "428626de6d02ae89322f3a640a3343717d8a4546",
+      "sha256": "b5eb5bc226debd3a9c03bc7162fb0a78e12d499e48793514327ec8bce8e3cf30"
+    },
+    {
+      "path": "crates/feynkit-cff/src/expression.rs",
+      "git_blob": "22fbe168db1fc1e94241cd87507cd182e76f39a4",
+      "sha256": "bcbe60458e43c725000ae4c76859224debfac679391d4f5756618eeaa30d9ac9"
+    },
+    {
+      "path": "crates/feynkit-cff/src/generation.rs",
+      "git_blob": "47ea515ff9c91e24d6f6b501da289996a06dfe9a",
+      "sha256": "d818bbb9f5cac0ef471335947a60b85f7bb275e813dc38f8f24223f9d57b1325"
+    },
+    {
+      "path": "crates/feynkit-cff/src/graph.rs",
+      "git_blob": "0027d635b34b8b72b6429b6bac9748a5ee549dae",
+      "sha256": "6cd20fad1ca1e45dd702e9c5a78bd55ce2eb1b5d99b7ecd250412a5c599f08cd"
+    },
+    {
+      "path": "crates/feynkit-cff/src/ids.rs",
+      "git_blob": "64fdfb125a15c81a234ec702a2e72b31271d93ab",
+      "sha256": "c565a89e042d67ca58972a71f04981f785d86aa96d7831f0cb74695be1edad24"
+    },
+    {
+      "path": "crates/feynkit-cff/src/lib.rs",
+      "git_blob": "29b6ce6fedf58a85eb260c323d2e78fd3bbbeb8d",
+      "sha256": "5127fbc0fcb058c424eb074b5d88f9d621753aea98eec5011464dfc08c756a69"
+    },
+    {
+      "path": "crates/feynkit-cff/src/orientation.rs",
+      "git_blob": "c384dcc36ff70f7686a0622f84deb2b4ccdf255f",
+      "sha256": "807d024ffed8b437ccef21a74911cd41f65d00b0903874a545c7fbdbbadcbacd"
+    },
+    {
+      "path": "crates/feynkit-cff/src/surface.rs",
+      "git_blob": "cf07dd60f15885153560f050d552600cfb19034a",
+      "sha256": "e6a8c6eada514aaeda5a9633e6c844931b175227fac0ce3a2ab9e8f4a3150273"
+    },
+    {
+      "path": "crates/feynkit-cff/src/symbols.rs",
+      "git_blob": "a45bee5ecfc9b1d6be5c7d82b1b49a57d7773cfe",
+      "sha256": "fd26df3458590e54846965315bd5e8c52ce6a2dd5acf5bbe119933471c8f9b32"
+    },
+    {
+      "path": "crates/feynkit-cff/src/tree.rs",
+      "git_blob": "651648adc6fe75181a4f63165edf921272c89e1a",
+      "sha256": "3a2e840354b284b2844c3d928c4ce1272f49318c2fd2f63eafe4252fdf2afca9"
+    },
+    {
+      "path": "crates/feynkit-generator/src/generation/enumeration.rs",
+      "git_blob": "b51b4119a216f7ca43a93016057b35bfb3d94de1",
+      "sha256": "3687e459c49bfb5ba1e7b3e88857331aca04245be6e28628694b4b476390405a"
+    },
+    {
+      "path": "crates/feynkit-generator/src/generation/graph.rs",
+      "git_blob": "a2bf8c96cc10ae53ab0ec41f3a427e051aa2559b",
+      "sha256": "bdb7ecf7666bd81a62fdd5178063b4af99955161ae713c76cfc03a43fb9f4b2d"
+    },
+    {
+      "path": "crates/feynkit-generator/src/generation/interaction_stars.rs",
+      "git_blob": "0e10b694b7b23fc914c9f59cbd295fa509108663",
+      "sha256": "dad8777bfcf76ae75f34052f68078a37db3dbc69f3a770d378353e0f43b6361a"
+    },
+    {
+      "path": "crates/feynkit-generator/src/generation/special_topologies.rs",
+      "git_blob": "2f74c9c289441633cfb39c4f97aefc21853631f9",
+      "sha256": "551f5e37c35266e595f7cc645aff4c3ac19da50bbe5f7cfdef72fb455b0ef9b1"
+    },
+    {
+      "path": "crates/feynkit-generator/src/generation/staged.rs",
+      "git_blob": "4c1ca2bb58010add5d33dd84657f74d99b00e6fc",
+      "sha256": "6c8ebb4abd42e875742bb1fdfdfa5c6fc0ecff4e9c0c4adff8f49306b4110b21"
+    },
+    {
+      "path": "crates/feynkit-generator/src/generation.rs",
+      "git_blob": "0495bd293c86f81e8b817913f3e25e1918b62779",
+      "sha256": "39ea049e2c62bb6c129182f791cb9a2a3a0e62202712795eb107782f074657a1"
+    },
+    {
+      "path": "crates/feynkit-generator/src/grouping.rs",
+      "git_blob": "66cc3fe8280694c72b213d71dee37fb40a1ad997",
+      "sha256": "ee0e666ae2c7b8d13c14741d03d49adc41de50ace966034561f9d39d20191c00"
+    },
+    {
+      "path": "crates/feynkit-generator/src/lib.rs",
+      "git_blob": "ed5825559775432cd514b9778c7810cd7f57d4a5",
+      "sha256": "94c2c10d04d2ab37c9d2adac2874e99861e23f2061d01b71167621f4fee46fae"
+    },
+    {
+      "path": "crates/feynkit-generator/src/options.rs",
+      "git_blob": "1cadc5d8118d9b46b5bcfc73339dc3a26327c01e",
+      "sha256": "198145c5d722cc588ac508d581415f1118762cca410126d03c5fa9c3454298a0"
+    },
+    {
+      "path": "crates/feynkit-generator/src/parser.rs",
+      "git_blob": "e221143c8fb1eb84594d2dae05506979899107c6",
+      "sha256": "e3ac969f9a6015e0ef9d933ccdda5f15f14a80f5dff8d4ac1f88eced3fb48434"
+    },
+    {
+      "path": "crates/feynkit-generator/src/process.rs",
+      "git_blob": "095c193032963bbe8cb1eeffa5112352bd4aeea1",
+      "sha256": "cdea148184ac08a8f05ba10d0735a757e27f7d67acfe270159a7c8f957ab7de4"
+    },
+    {
+      "path": "crates/feynkit-graph/src/canonical_form.rs",
+      "git_blob": "ddeabf96ce40b1c264270ae01045b468f0302933",
+      "sha256": "d410d22fbabd7d6f7edd6360d5670289e8e07ae55b052c534b86b205beadbc93"
+    },
+    {
+      "path": "crates/feynkit-graph/src/compact_dot.rs",
+      "git_blob": "60e5ae728e6dff307cd4db701d70c285bceb5cde",
+      "sha256": "def149fa48db4f9d065e9e94372a7f175c316da6e71b90c74d021d550e2912f3"
+    },
+    {
+      "path": "crates/feynkit-graph/src/display.rs",
+      "git_blob": "f20335ef475e5952f8ee2e7c03a8c86d5fa20692",
+      "sha256": "139d0df3dfbb4e48bfa8931ff986c1a542c1701ee16b77673a1881f0351cc53e"
+    },
+    {
+      "path": "crates/feynkit-graph/src/dot.rs",
+      "git_blob": "7d43a9e942cbff2f2b335ac24dfab72fcae034a0",
+      "sha256": "3797ee8e46655398aac49a1bb3a260a072b2e34281cddf5bcd0eabadf26029e4"
+    },
+    {
+      "path": "crates/feynkit-graph/src/expressions.rs",
+      "git_blob": "47c1ec33850315f7af52c4d1571c68ede4464bea",
+      "sha256": "6cac6b79f31f4090fc960eb18100cfc7759fb9171422a67532020dba3e8ab948"
+    },
+    {
+      "path": "crates/feynkit-graph/src/finalization.rs",
+      "git_blob": "281b9f47f32f9350e754e98c8f87b8cc80fc562d",
+      "sha256": "7f537b6608fd6f82402675fc28f2e0907d3916a0df5fae8c03412ad1273da221"
+    },
+    {
+      "path": "crates/feynkit-graph/src/integrals/diagram.rs",
+      "git_blob": "01d3b1beced4ad897809d08ae5fb75a30ee0f4fb",
+      "sha256": "927e0a899b3607b6cd11a9e0d4ef615c3bc4f202e7b2a1c0342cbcd6e5de7695"
+    },
+    {
+      "path": "crates/feynkit-graph/src/integrals/mapping.rs",
+      "git_blob": "beb7b952c963695e5ff3eb3db3543317b6e2745e",
+      "sha256": "b77c8d25a18847880c073df6c91a9f2905e0d7ce2cafdf6071d3c2e263f40a4a"
+    },
+    {
+      "path": "crates/feynkit-graph/src/integrals/parametric.rs",
+      "git_blob": "373604370a2089e186214bd8e66a49242b843685",
+      "sha256": "40a60ad2be73f794256022de073ccb8177bc7c7691d88e0e7fea3df47303030a"
+    },
+    {
+      "path": "crates/feynkit-graph/src/integrals/partial_fraction.rs",
+      "git_blob": "2a42beec579966af290890a7b9583dc5ccd1e457",
+      "sha256": "228f154bdfcdf8885f7dd139c6bd88122bc46087f53f3f9efc0f76f65207c5dc"
+    },
+    {
+      "path": "crates/feynkit-graph/src/integrals.rs",
+      "git_blob": "99a8baf597bd7d645d57f2176963adc46759e775",
+      "sha256": "9ff281c3d7cbfc058d78b0695a15c450230d07ed0399ca13d1553ac753a634b7"
+    },
+    {
+      "path": "crates/feynkit-graph/src/lib.rs",
+      "git_blob": "03fa811b133f5816415a2b445445ea5a2d87365d",
+      "sha256": "5cb3612abc2f45eb9e2317d476ad5b9c29469c8a6f6d30cef9b4578d99ce2848"
+    },
+    {
+      "path": "crates/feynkit-graph/src/numerator_interface.rs",
+      "git_blob": "d22ae10a44c352e0765d361b2ac2f430f6f94baa",
+      "sha256": "596a58fda9f2f182ba19a3da2457b3ed45e73b554d1dd67092cc42a4c2f68ed8"
+    },
+    {
+      "path": "crates/feynkit-graph/src/partition_check.rs",
+      "git_blob": "0e945dc0af6861e90c524f70dab3396f70351658",
+      "sha256": "4a4dcbd80218d88054f3adffeebbf5ba3929798856dfb9da221fc52fdb0f8bce"
+    },
+    {
+      "path": "crates/feynkit-graph/src/power_counting.rs",
+      "git_blob": "c6baf26ea38eb344941bf60c0f9cc234b633d371",
+      "sha256": "5099ab5d727cb91a18befdecc28748a5651124f930b2304a0d86889468a06108"
+    },
+    {
+      "path": "crates/feynkit-graph/src/routing/cache.rs",
+      "git_blob": "51459c57d7fe5520ee6084bc1c25fe5b0a2df691",
+      "sha256": "e577c5b0aa19ef47d89dfc86471802a74cb1b6041f28f1a87ba60435c35c31a7"
+    },
+    {
+      "path": "crates/feynkit-graph/src/routing.rs",
+      "git_blob": "d65330c5f585fa589a2ac9377c925898e53e6ca4",
+      "sha256": "159d3a7c43ab1e14107064096506b85cb2a3da163fff1a998d2d0d2c2daa2747"
+    },
+    {
+      "path": "crates/feynkit-graph/src/scene.rs",
+      "git_blob": "f2bd4f25e387b6289bbc72133acca69be5a834e5",
+      "sha256": "b19990dc77a33c092a870f1563461411766612c5bb60ba119fa0669ed00ebe85"
+    },
+    {
+      "path": "crates/feynkit-graph/src/subgraph.rs",
+      "git_blob": "8f42525d0e7fc7ed939c45d98b317945ed9fe39f",
+      "sha256": "dc1513497794c4d9f92d4722ede7cdfd4ed7ce75bad3d949269a139273565cdd"
+    },
+    {
+      "path": "crates/feynkit-graph/src/symbols.rs",
+      "git_blob": "05b04058807726561478c4eb7ca5c3d46059d68e",
+      "sha256": "b580b7c70db4f11bf79fd02f8109a715c01b74d63a560a54d49868b8e5c4aa9d"
+    },
+    {
+      "path": "crates/feynkit-graph/src/thresholds.rs",
+      "git_blob": "484208e3eca44a4115d4b8bf1fd4e04b09f3e1c5",
+      "sha256": "68418f30a0d7931c43e79dc09264c45ab87d3ed2d0f164a03ba2aeec872f94db"
+    },
+    {
+      "path": "crates/feynkit-graph/src/uv.rs",
+      "git_blob": "b9b6a16935a4c0136abd3d79b62fb8c6add09921",
+      "sha256": "decc0024c372193099eb7551b94aecf938df593d34a7363f096db1c96ff95be2"
+    },
+    {
+      "path": "crates/feynkit-kinematics/src/clustering.rs",
+      "git_blob": "16b459f3e9618ecefd31d1f3279beb87d0ab6aa5",
+      "sha256": "30ff115b900e7ac4f3c7396ec9872346ce4c53f63b3d3e8e16ce346d80a75599"
+    },
+    {
+      "path": "crates/feynkit-kinematics/src/flux.rs",
+      "git_blob": "2f72d8ea581c740999232e5d16727204ba507d00",
+      "sha256": "ef33a517ca284e9bda94a83505c075b97f7266a95c2a79fa443c2b67cc03bcbb"
+    },
+    {
+      "path": "crates/feynkit-kinematics/src/helicity.rs",
+      "git_blob": "b5d08eb737798fe01a97573209cb046fe9ce5da1",
+      "sha256": "9e8a960a11d70bc940bec8f6b622b520d4f27c4377deaa9a1f47786b2c84a34a"
+    },
+    {
+      "path": "crates/feynkit-kinematics/src/lib.rs",
+      "git_blob": "1431ab5084f9f1d16402033db0f8a6d634428ce2",
+      "sha256": "166eb5906a297cfa72495492f3bf03e18da7f808ddcdc652b5717816788d80ed"
+    },
+    {
+      "path": "crates/feynkit-kinematics/src/momentum.rs",
+      "git_blob": "1b3af69cc464ab08f246d3de79f9fe141b94ef79",
+      "sha256": "1033087d9fbede6df246697f8a356c024665c3c6b12f9b791ec478166fa924f7"
+    },
+    {
+      "path": "crates/feynkit-kinematics/src/signature.rs",
+      "git_blob": "b0b95cba3b57450943d637297cfd7c97c92a6f2f",
+      "sha256": "5a14eb734550af12ecedd89e0e92fed6e67089503739bcbf41fbd6f128e2f996"
+    },
+    {
+      "path": "crates/feynkit-kinematics/src/symbolic.rs",
+      "git_blob": "b8176e0e54c66bf945ef249ae557c68f7d6c072c",
+      "sha256": "beb9b3b181491b419df936d944e495a910391cda3d9159c2da7e14031680003d"
+    },
+    {
+      "path": "crates/feynkit-kinematics/src/transform.rs",
+      "git_blob": "ae74a15d9d1d9031b4c68a1afdc0a24047b1d11d",
+      "sha256": "e2acd12bcc8a591b5276f9f52840e8bc539180157b3f92362571004dde9baa59"
+    },
+    {
+      "path": "crates/feynkit-kinematics/src/wavefunction.rs",
+      "git_blob": "427d280f771a273f335a003d52650abfd1ff5064",
+      "sha256": "cd92290a59e3602730254cf489c588215931ba5f636174aabf8b1a01c51a2d1f"
+    },
+    {
+      "path": "crates/feynkit-kinematics/src/weyl.rs",
+      "git_blob": "6a79b92563cf8db0486eaa6ff9b2e8da37400e4d",
+      "sha256": "600e4d6277e7a151b05110a159c1feb7fcf44439e96f45c6e07834b3caa22325"
+    },
+    {
+      "path": "crates/feynkit-model/data/sm.json.zlib",
+      "git_blob": "9131805555630249f6fca7792fe1b6a6bde87881",
+      "sha256": "9d7ebbca20ad9414eec6a989ce71802111b6fe5b51dd7867b87347abcfffc7b8"
+    },
+    {
+      "path": "crates/feynkit-model/src/card.rs",
+      "git_blob": "02bcbad3d4a379ad6887459089657ccd27addf45",
+      "sha256": "46fc69625a68da3d78fb498c11fd8df767deeb30fddf7d6bd077f465e89f48e4"
+    },
+    {
+      "path": "crates/feynkit-model/src/error.rs",
+      "git_blob": "acfc4271693e961e53c929eab9847abaf21016e8",
+      "sha256": "b9b9eb041dbc9277127c3f2e208ecbc32058ad9ad069052bcd20167373c8d8bf"
+    },
+    {
+      "path": "crates/feynkit-model/src/evaluation.rs",
+      "git_blob": "04206aacf852c797abe5e427aeae4e097e504570",
+      "sha256": "05eeb34c5f34d375308e81257f3c32ca128abf9e89bd65ecc64e8f796ddd5fe9"
+    },
+    {
+      "path": "crates/feynkit-model/src/lib.rs",
+      "git_blob": "156537ac7b156a7c61332cd98322fb13f0e0bbab",
+      "sha256": "292f43e53bfe1e40fa6163d47ae4d8e5941b5dd582dbf99e7a75d367d59a7b0b"
+    },
+    {
+      "path": "crates/feynkit-model/src/model/builtins.rs",
+      "git_blob": "b1e395130558e8535bbfd2c4569ed86be19e3d0f",
+      "sha256": "b3271b9f16d25edf0112d7bd78de8c7bcc5d53ef4ce2c254c0be2e3e35a45ce9"
+    },
+    {
+      "path": "crates/feynkit-model/src/model/parameter_print.rs",
+      "git_blob": "50a0be97e0cfd53c6a79ce60e411acf275e97901",
+      "sha256": "91e1c5b8d2f96d78e555ea265a41ac6afe6a453e792fa66cb8fddb2dd82d71d6"
+    },
+    {
+      "path": "crates/feynkit-model/src/model/quantum_number.rs",
+      "git_blob": "253f4319ed74d0431bac244c9a272dea3e5e2a82",
+      "sha256": "7ab0699b6e2d6c1b87220a2e068b1bd7feca333e1c3c6aafc141647c1d16f6b9"
+    },
+    {
+      "path": "crates/feynkit-model/src/model.rs",
+      "git_blob": "b04029827b0ecb3c8f23289bf0937e1ea422e176",
+      "sha256": "4434c92cf4698f318a7b6ad360a6b6a48ff91b0e6cc329cc52b594430ade13f1"
+    },
+    {
+      "path": "crates/feynkit-model/src/scalar_bindings.rs",
+      "git_blob": "6befcc48bfcab9e814cfbea485846c436709c6b3",
+      "sha256": "bee1a2d671eafd1237beab1a5eaedd46fe7c97a9d27286bc2a04170de28f8db3"
+    },
+    {
+      "path": "crates/feynkit-py/src/amplitude.rs",
+      "git_blob": "1adc9f2dc590a9dc900a2ad6dfcc2bcca9860df3",
+      "sha256": "bbf32d23f2a6ada9d7a2ee4dfc0d78ab18f059ef0eb46fa825803fdaa6231710"
+    },
+    {
+      "path": "crates/feynkit-py/src/cff/display.css",
+      "git_blob": "3b5f37aa88fad1c9c357b78d417bcf09d836f4bc",
+      "sha256": "0e7557e3983d6c5af06cfedcbb29a612ce1a7fe38d28903429e741746c9e5658"
+    },
+    {
+      "path": "crates/feynkit-py/src/cff/display.html",
+      "git_blob": "d85e223ad2316a36dfc10fe5470718311d94966f",
+      "sha256": "b76c1f49c05ad210a4f7912e5e68f965ea8cb877b30e3481f2b3ad13b74e756f"
+    },
+    {
+      "path": "crates/feynkit-py/src/cff/display.js",
+      "git_blob": "f91ee0b05830968523d747f1ca6a890c3dea00e1",
+      "sha256": "aca8f5871d1ffe36219444ffc4d998b0e44e329849c78babc82ad759b960dbad"
+    },
+    {
+      "path": "crates/feynkit-py/src/cff/display.rs",
+      "git_blob": "ce2eadad0e35d73a4f42bc4d90c401cb9a5023b9",
+      "sha256": "2f02a14cc24bca39a59903be0ad7c4b4f588394e30682ef5b064a694246abaae"
+    },
+    {
+      "path": "crates/feynkit-py/src/cff/kernel.rs",
+      "git_blob": "4871a3476e2450871cef033878e3983c3563046d",
+      "sha256": "190cf243ba8e4ebb2699a9cbeb127cbd90ca69202c32ab6b4db46253fb1b98f4"
+    },
+    {
+      "path": "crates/feynkit-py/src/cff.rs",
+      "git_blob": "f8fb983d4518c7581272cacef1240d8fba02cc17",
+      "sha256": "eeae13e8eb22f2debc025afe47144ff1e2c041f212d1a6ae1fc1a68057723e66"
+    },
+    {
+      "path": "crates/feynkit-py/src/collection.css",
+      "git_blob": "be66f33450c86833ca4adf80c5d2f52f3f9221a3",
+      "sha256": "963d56da41f85e1487294b6406acad2c602f04bc78ab704551ba7a6d7a8deb68"
+    },
+    {
+      "path": "crates/feynkit-py/src/collection.js",
+      "git_blob": "223ae54c6f45447b86bc3176c6677277628bcddf",
+      "sha256": "51817bc8738884b0c7c08d83d28edca4a29f1a6820903d543b5515cffbacdd10"
+    },
+    {
+      "path": "crates/feynkit-py/src/display.rs",
+      "git_blob": "725939fc1b402e87a8f6229058562558ae5389ca",
+      "sha256": "cf43e8cd7591f04f9b7f93b0971dde620d6f9d3f550f54cba9360ff29667c41b"
+    },
+    {
+      "path": "crates/feynkit-py/src/energy/integration.rs",
+      "git_blob": "dc9a556244fb84457a6227fd8e08d67a7dc611d2",
+      "sha256": "9910e1024146ea422fd8f35d28a7247a53fb21855748021135dee0e962306c29"
+    },
+    {
+      "path": "crates/feynkit-py/src/energy.rs",
+      "git_blob": "0a68d5639f3abe5d0edc283247b201fef6ceb8c8",
+      "sha256": "98aaf0b7bfd5dd7a554959cc966ff1ed1d64ee9d9047808a7c0507c721c55c55"
+    },
+    {
+      "path": "crates/feynkit-py/src/error.rs",
+      "git_blob": "07256c2059fdea48ccd1e13e96f7726e3a854616",
+      "sha256": "0ee21116e3219626bf450832c2a85c96ff22405cc163c79e5788a3c458aa5096"
+    },
+    {
+      "path": "crates/feynkit-py/src/expression.css",
+      "git_blob": "fc5fca572d7356d8c684159583f37cc135f9cbd2",
+      "sha256": "eb12669c23917bae5d9744b00997f4e9f77a908215c05af18c7e3f5310ac5f1a"
+    },
+    {
+      "path": "crates/feynkit-py/src/expression.js",
+      "git_blob": "5e9485ce6b0ae0992db9215eddf5c88718f5ea31",
+      "sha256": "28d780cdd30b8c3ae0ff67f3d7ff2c384dedf50101310fab46d4ba49f08243f5"
+    },
+    {
+      "path": "crates/feynkit-py/src/generation/execution.rs",
+      "git_blob": "79b64c49bfccf9e1fc524328b6a1179bac208600",
+      "sha256": "ba1fd4f118e1083b2066f83d6221cb0a1560f0aceb217cef46d0b47ad3b5ac5d"
+    },
+    {
+      "path": "crates/feynkit-py/src/generation/groups.rs",
+      "git_blob": "a9c0097a9c5bec3fb11960fee523c94ad7640677",
+      "sha256": "aff9b88b3e75e60db379c2d70ab2cbe1127670034642d8ee7a78ecd8ed532caf"
+    },
+    {
+      "path": "crates/feynkit-py/src/generation/reports.rs",
+      "git_blob": "ca00eff41f5d70c2903610913a757f21e4492ec7",
+      "sha256": "372d72135f566dff4f7ca1025cff0b74b9cd6d7585dc0465d3c220e838a4aaf2"
+    },
+    {
+      "path": "crates/feynkit-py/src/generation/results.rs",
+      "git_blob": "b0e5a1e09c15e15eafad6b478c50ff1b30aad9f2",
+      "sha256": "324a64526d68ad47f787b02c7350560d617085003f5366adcd1fcad3044b47b5"
+    },
+    {
+      "path": "crates/feynkit-py/src/generation/specs.rs",
+      "git_blob": "8ccbeb50e4430a261fbd39c164859affa0a7e640",
+      "sha256": "acc6ed2b9d8b64f12c5168575462de78d9ffe61f7976a8de15e3908c53872301"
+    },
+    {
+      "path": "crates/feynkit-py/src/generation.rs",
+      "git_blob": "f766363b2f47f8aa035cd1c30364b676ffd2c399",
+      "sha256": "e37e1136653d87dfc084a611398c144ca68ac646eaa844d3e92cd3615fd2e23a"
+    },
+    {
+      "path": "crates/feynkit-py/src/graph.rs",
+      "git_blob": "664fc1f5ec385bf563d84d0de96757c4da280f92",
+      "sha256": "888a3e6539332a42c7e60df149b1b23ab6ea33454e920ba79f6678ec1d6853f5"
+    },
+    {
+      "path": "crates/feynkit-py/src/graph_interop.rs",
+      "git_blob": "09cf86d1cd5d94468ae1ef7b5d12ce3e93a5580f",
+      "sha256": "2fd6ef021437cbc3b9ad5db3b007c5e7447ea4f6fd115be44852c2f2c17c8659"
+    },
+    {
+      "path": "crates/feynkit-py/src/integrals.rs",
+      "git_blob": "07d9d59b230140ead972c9228b15173810f71aa4",
+      "sha256": "ec1896f19e68e368f78e4f7861bff82ec512e6be3095acd6a8a5919cb76a4047"
+    },
+    {
+      "path": "crates/feynkit-py/src/kinematics.rs",
+      "git_blob": "0e1c5d9fb52977e973831bac34dc512209cc21cb",
+      "sha256": "5d87679047c890cb53b55aae6a6dbaac5e97e589c9aaff48dbda5ed357cf5af7"
+    },
+    {
+      "path": "crates/feynkit-py/src/lib.rs",
+      "git_blob": "48c7914abd77b6186a1b6080864de49035ab2531",
+      "sha256": "3096bdba494088f1b531658ea21843252d4abc7c5fd80c2591d912d4004e0301"
+    },
+    {
+      "path": "crates/feynkit-py/src/ltd/display.css",
+      "git_blob": "eb499965a7939c780c94ee1ade2ee6e77e88b829",
+      "sha256": "4f2d269fe3c6f3508871c64313ddd014a46d0b4c1aa2b85b571a8d70b2002cab"
+    },
+    {
+      "path": "crates/feynkit-py/src/ltd/display.js",
+      "git_blob": "2b28b19806e590f2f39bcae4341592ff63a45884",
+      "sha256": "d1a905ee4fefa9bb42dc68dcca9a7380509c873402c6e8cba5e21f495a471441"
+    },
+    {
+      "path": "crates/feynkit-py/src/ltd/display.rs",
+      "git_blob": "03b7f6930fce7cf3b56d064b9f262cab51e9f404",
+      "sha256": "b573d7cbae03181683c3ce4b6ae30c2b8017774e6a2904770168458d294684c5"
+    },
+    {
+      "path": "crates/feynkit-py/src/ltd.rs",
+      "git_blob": "ba9a59f9cd16945fc1b5d8c725d1df8587874e6f",
+      "sha256": "9e06b137194c2869e5fa0220ec06822b19d803e03cf07f4209b41e1d03a4e9e2"
+    },
+    {
+      "path": "crates/feynkit-py/src/model.rs",
+      "git_blob": "fc4e3bbc4c6fe87cc49ed4b421d19cd0234346c1",
+      "sha256": "1ce4ffc692349d0adc11a850c06715a654675fed2cafa5109c794b25d1f9ce2d"
+    },
+    {
+      "path": "crates/feynkit-py/src/notebook.js",
+      "git_blob": "bed28a1aeb06144422ced6f380effecc0e545b3c",
+      "sha256": "239420452d1ffc562459d77c3fb3a69a23460e564a97f8492c9cf845e610ba79"
+    },
+    {
+      "path": "crates/feynkit-py/src/progress.rs",
+      "git_blob": "5d0d5604a6712c2189025ef9f8d8ff559e91b23a",
+      "sha256": "89d3e08c38cc13bd0bced88df0298c651986f4214b7ceed05066312f987c7189"
+    },
+    {
+      "path": "crates/feynkit-py/src/render_settings.rs",
+      "git_blob": "7b5991900c2a17a815660acb29e98eb880eb492b",
+      "sha256": "9ca1583137cbf73481e6cc785fde788871d20734300bee72a1fb523bd2cdba27"
+    },
+    {
+      "path": "crates/feynkit-py/src/sector_decomposition.rs",
+      "git_blob": "c3b6e65916623ca2449cf2a725a41e930b759082",
+      "sha256": "d7ed2575d6a97e2de4d92bdc4eedd37297d82c7df21d729a0739f6a4efd93d8d"
+    },
+    {
+      "path": "crates/feynkit-py/src/symbols.rs",
+      "git_blob": "cb5080ca18b2e23a1005bfd71cd4a62a87948d0a",
+      "sha256": "346b750476686adbd80511c6c8aaf9aa1d3693957320aef0c7c8bdc889fdd47c"
+    },
+    {
+      "path": "crates/feynkit-py/src/tensor.rs",
+      "git_blob": "5746c04f8f8e5e7fe6d042cb6bd70e1ac39226e0",
+      "sha256": "df0f7b88be614fc558525ee4d4f41cade7c32c540235579e5fb31a05ad08695e"
+    },
+    {
+      "path": "crates/feynkit-py/src/ufo.rs",
+      "git_blob": "2bc0d626e36bf95442369b8697252d06932d3060",
+      "sha256": "bca7f37100c057c65996849b4c460d91efaef5406c256d8285af41a18e7c1685"
+    },
+    {
+      "path": "crates/feynkit-py/src/wavefunction.rs",
+      "git_blob": "8f9f99124300336f3daf2f5364fccbd9e6089541",
+      "sha256": "a0a7b1abf050471111e7e32d106ad6ec7d38e8e3e463065142b550172a18a23b"
+    },
+    {
+      "path": "crates/feynkit-tensor/src/lib.rs",
+      "git_blob": "f424864aa88eaacddbfe2c220aacef0a3af2f98d",
+      "sha256": "a48634e31434cab8812da5f65adb3ab20b0c288fa5c2d447bd3dd312a35a3b05"
+    },
+    {
+      "path": "crates/feynkit-tensor/src/orbit_projector.rs",
+      "git_blob": "5575d6615361d090435c683bb1cef9d7532bda89",
+      "sha256": "7025a505f734aa79e74d477e3e2eedab052eecd489012d225f869b088ee1393b"
+    },
+    {
+      "path": "crates/feynkit-tensor/src/reduction/blocks.rs",
+      "git_blob": "048e5242b96e659d456f62d7646cc7dae11ed57f",
+      "sha256": "479433547d2e3a29591a8e60ae5eadef46ec1235de3251a260a0c3df8ddff9b2"
+    },
+    {
+      "path": "crates/feynkit-tensor/src/reduction/external.rs",
+      "git_blob": "e25bcdf4bb5633e3e2a75a4f8714b2418adb2992",
+      "sha256": "658b6d35d0f794fdf21bc68678de8e531ac2a853c3a9b9e57d935a021de23d41"
+    },
+    {
+      "path": "crates/feynkit-tensor/src/reduction.rs",
+      "git_blob": "a03cba470f86243b39c748935d8a0c156e55e2f2",
+      "sha256": "539195ac4f0331ea5ae293d07cb22bd687bbec9f03a495f5e66d050a2cd21f9e"
+    },
+    {
+      "path": "crates/feynkit-tensor/src/weingarten.rs",
+      "git_blob": "163e9ce6f4943ae44946ce5cc25145dd6d837494",
+      "sha256": "05848f6e8c0a8750f80ed7340c34a75100754029abe43562840dd65b90fae2a4"
+    },
+    {
+      "path": "crates/feynkit-ufo/src/lib.rs",
+      "git_blob": "3b0f26d30f2c0f50c505491aa81ff2536b747670",
+      "sha256": "2ddf20213cb416c91d8dbfe147db11e22e7509b369c8e3a2f6affe85b39b9c79"
+    },
+    {
+      "path": "crates/feynkit-ufo/src/model_metadata.py",
+      "git_blob": "6efec3532f94a27dcefc8f98440a4f2f25f9d097",
+      "sha256": "48512b635ff9fcc89474d82c1eb0471c183a8e18b84af9571ce55e4204bf6633"
+    },
+    {
+      "path": "crates/gammaloop-workspace-hack/build.rs",
+      "git_blob": "92518ef04cb3b9a0f5463a0c387e4f9a7ad39f93",
+      "sha256": "13f6c3ba6785b4fee0cf3bd6cdd57b9b4875475589613609b4b9c5e3d7838b26"
+    },
+    {
+      "path": "crates/gammaloop-workspace-hack/src/lib.rs",
+      "git_blob": "22489f632bdc1d52c2de57686c95b5081fce706b",
+      "sha256": "5eb10ab324a0e3b2a5ed5d5ad6f2900fb83dcd4831876923bf90cf9e7ac149ac"
+    },
+    {
+      "path": "crates/idenso/src/color/casimir.rs",
+      "git_blob": "7942ad7ef1f3be8164a45e63ee20ccb12ee55a91",
+      "sha256": "89fbbecd8ec1a54ab1955b21e1b3ddae2a9429beb358cc463ddea15f0911a927"
+    },
+    {
+      "path": "crates/idenso/src/color/conjugate.rs",
+      "git_blob": "0f9387f9bcd403d5faf928b4f919ec2dbc2c97be",
+      "sha256": "2c42dc4d24914e676f548552d324f6efdb442e4666ed0e6d39497b147b7f4336"
+    },
+    {
+      "path": "crates/idenso/src/color/macros.rs",
+      "git_blob": "58ad304767e94bff7232a83efe80a0a9cbd87cb0",
+      "sha256": "63a9560390a6e1fa951732574cfa053c041d304e07521b099a6eddf86b7b087a"
+    },
+    {
+      "path": "crates/idenso/src/color/mod.rs",
+      "git_blob": "b2700d26987c83595fdbf758e73ea4ff6a2cda2a",
+      "sha256": "83f05ef00909b73d4a69ade80f5954b5ecdf40f4f70418ff51d1c76ee0284e7d"
+    },
+    {
+      "path": "crates/idenso/src/color/simplify/states.rs",
+      "git_blob": "9be16983cc3f9c21b455af49a248c0ab3a3ce9c1",
+      "sha256": "5f829ddf0c70b209f530c7f500fc00384fb58af9a1fcd05e653ae2a27e4d03f5"
+    },
+    {
+      "path": "crates/idenso/src/color/simplify/trace.rs",
+      "git_blob": "bf5e48f6758c6dbc45d71e1dde465ee62d1d951b",
+      "sha256": "694846d87a080b78e03c4ea9a6e3a2224b036fce4e3dc276b140ec313438457b"
+    },
+    {
+      "path": "crates/idenso/src/color/simplify.rs",
+      "git_blob": "bb23f00b2ef8aa04b79c3dfd4eb7ca1af690c198",
+      "sha256": "a067914e69ca19b2c1b0db5e9f5e62bb45b16c040bdb9b47e5783786f47eed9b"
+    },
+    {
+      "path": "crates/idenso/src/cook.rs",
+      "git_blob": "b7327c174d55a96e27a015c5f74ddc0b4061b1b5",
+      "sha256": "6bf40b5bc5f015c1982967c3a610f0d70d67c8e0242ba1bd0628d18c8de16436"
+    },
+    {
+      "path": "crates/idenso/src/dirac/macros.rs",
+      "git_blob": "bffcf23d45caadfdfb4e522af4c40f6be41bfc53",
+      "sha256": "caa28b58186abded1d5ccd9c3334a722451b1bf278e1ac70ac7960e6d385d884"
+    },
+    {
+      "path": "crates/idenso/src/dirac/mod.rs",
+      "git_blob": "94cf7354735569e0923d58c7ba049778bbb91182",
+      "sha256": "a51041a6f3ad8f02ee2fc30052976fc9f0b4faeb2a7bcf36e65b5fe0e1885bb1"
+    },
+    {
+      "path": "crates/idenso/src/dirac/simplify/trace_kernel/collected.rs",
+      "git_blob": "cb136090797cde29307b676e5c0e33783bf581bb",
+      "sha256": "830a989ad37bd4ea1529528dbf6dd49d143eb180434f964ec6213dbd3c635608"
+    },
+    {
+      "path": "crates/idenso/src/dirac/simplify/trace_kernel/factored.rs",
+      "git_blob": "58589a93fa38b95fb264eaa14d9f54fe8fcef1a0",
+      "sha256": "22d6bf2a7c3812c99dcc72419c319d196bf8147c265cb8e5d773e3359610ca5e"
+    },
+    {
+      "path": "crates/idenso/src/dirac/simplify/trace_kernel.rs",
+      "git_blob": "a1e19389715fb567bb1d5377d678c2a69bbba738",
+      "sha256": "80d062ca067884c0d7f76a7c2ff79ade05c8e16f13275efac97b36179d63e97c"
+    },
+    {
+      "path": "crates/idenso/src/dirac/simplify.rs",
+      "git_blob": "55a4914dcd53096727475ce5e657df47f792ef44",
+      "sha256": "9815ceaf0ef921ef3b8e0664b838c8eadf6fb7e3df640a73b5ac07b994af7110"
+    },
+    {
+      "path": "crates/idenso/src/epsilon.rs",
+      "git_blob": "a0d0a6685624b96452cb9065069702b6b7e166f8",
+      "sha256": "436c3a76a418d6ba64fac157c3d47d66385219a8289d46aa6bad7c259c20f3a3"
+    },
+    {
+      "path": "crates/idenso/src/lib.rs",
+      "git_blob": "820fbf610c4bb06867a7013d0b8631e57704ff7d",
+      "sha256": "86972e9057461009dbb5c218ad5ace21d970325ee2aeb3c3a2afd672fef85a95"
+    },
+    {
+      "path": "crates/idenso/src/rep_symbols.rs",
+      "git_blob": "189dc67c5b855f499f48af9e90ef82df78568360",
+      "sha256": "3a1f1dfb42bd1f388f7625629a033bed9c85db8c31a79cb5ef8e2ae280fac217"
+    },
+    {
+      "path": "crates/idenso/src/representations.rs",
+      "git_blob": "08709ccab3fc16aefd7a2dde044d4ee4e1455b23",
+      "sha256": "cb3cdb5d88f0a259116e28aaec04069d11ddf01bdd4e07b9a31b00a96a2275fd"
+    },
+    {
+      "path": "crates/idenso/src/shorthands/bracket.rs",
+      "git_blob": "bc9d6067c045c6c2e72786efd8ab433cc213af61",
+      "sha256": "a29b90e9eb7d7f1c919a544a1107075d8d5a06ca6832bba5b5729de4ce733bb9"
+    },
+    {
+      "path": "crates/idenso/src/shorthands/chain.rs",
+      "git_blob": "ff148978d764a074d9c88c0266cca7f2244a101e",
+      "sha256": "b3416b3b55fe45f5e74610045720b345e51a94abdc91e10172ec6d1532bc4411"
+    },
+    {
+      "path": "crates/idenso/src/shorthands/metric.rs",
+      "git_blob": "834ba0c81059c7b1b4221ba2f89af4d651e7bedc",
+      "sha256": "d6d546b9305cf7dc6947443347832f6a597597aa8805c537f1cce06394c69c26"
+    },
+    {
+      "path": "crates/idenso/src/shorthands/mod.rs",
+      "git_blob": "12288dbc00822abd6d533cd3b66b74fbe4dcec0b",
+      "sha256": "874be9b023880b32bc4ab7107a6337e6a9293f0281c52cd5843ff622713e4f7b"
+    },
+    {
+      "path": "crates/idenso/src/shorthands/schoonschip/analysis.rs",
+      "git_blob": "b1e5eec4c9c7a2fbc9b0b291df4852792bd72b29",
+      "sha256": "1b06b0ff96812c40f895f1df116f1cfa9bcc995c72c097d89b9e27fa2df362ce"
+    },
+    {
+      "path": "crates/idenso/src/shorthands/schoonschip/mod.rs",
+      "git_blob": "6f766eb8d531c096f9bda025037fabb6c27d70e1",
+      "sha256": "ab1677c3662f0e45a66ccea9e00828489feafaa6d8464c52c83a86c7a091b90b"
+    },
+    {
+      "path": "crates/idenso/src/shorthands/schoonschip/normalize_dots.rs",
+      "git_blob": "9e6d66ca18f0854df46481ea7516808b604e4a8a",
+      "sha256": "8fcc21aa61257a9ec61ad3bfbe272e772e307381401ce91ee00604cee3d7f59f"
+    },
+    {
+      "path": "crates/idenso/src/shorthands/schoonschip/settings.rs",
+      "git_blob": "2e6d36f610dba22449e8b11fca0d07719da7f47c",
+      "sha256": "ae0293f06c3c2b3d047c202acd799caeef11535de525a00d827714901f7824ad"
+    },
+    {
+      "path": "crates/idenso/src/shorthands/schoonschip/slot_contraction/components/factorized.rs",
+      "git_blob": "305d640fbce97058b071c9de2a830190fcd1411c",
+      "sha256": "27ddd2dccf2e2876da0e8e6218459b90328fc4fec8b4306bb9447924c7742b3e"
+    },
+    {
+      "path": "crates/idenso/src/shorthands/schoonschip/slot_contraction/components.rs",
+      "git_blob": "c66d6d1c422f52526817edce3f07e3a8b461cf1f",
+      "sha256": "5ab3befa79c5b3f91b4a493cbb87591be294b83b2e6351e1e91bae94e2bb5dd8"
+    },
+    {
+      "path": "crates/idenso/src/shorthands/schoonschip/slot_contraction.rs",
+      "git_blob": "be165ba5cbdc8a1470fd511f24bc2273ee043bf3",
+      "sha256": "7128ee430f424919ddb5b9b8e9473575f0ccc41b7030e01c00095fbece4667ec"
+    },
+    {
+      "path": "crates/idenso/src/shorthands/schoonschip/with_settings.rs",
+      "git_blob": "8c912a000d5f96fb4c69d1e007d2090ed1a373d5",
+      "sha256": "74cbec3d7eef558321ea350087bf15a31b0d5befa61c4559a8768f073ee64eb8"
+    },
+    {
+      "path": "crates/idenso/src/tensor/canonicalize.rs",
+      "git_blob": "1c70072935591498d4f7f2753cec048e3abfd503",
+      "sha256": "3cfcf10a39f27357ca539d673b0353797e1b53150b303c1f7885d69ede0a282f"
+    },
+    {
+      "path": "crates/idenso/src/tensor/collection/collected.rs",
+      "git_blob": "ca8c5cb4f9dd9ee5152cbb94df6c8d919e098c35",
+      "sha256": "b5f3e6fe365923e461036460ae4bd639bf59e1639ecf41ce02e43e6f40e6146f"
+    },
+    {
+      "path": "crates/idenso/src/tensor/collection.rs",
+      "git_blob": "291e0ed07a3590e382421bb35f9b1dddf2bf1eea",
+      "sha256": "6eeb0ed9981e280541e74b6e43a9865ed59c5cf50d81dffc30058136db70d3de"
+    },
+    {
+      "path": "crates/idenso/src/tensor/composition/chain.rs",
+      "git_blob": "191183588a8d402ebe231cb2ae30d670600c7b5c",
+      "sha256": "74a398af17bdced51addca27413727fc4e04fa71c11fa7deeae209aaf97d5c99"
+    },
+    {
+      "path": "crates/idenso/src/tensor/composition/product.rs",
+      "git_blob": "e423514abe8eb2bdd47924c5d1af76b13e632dd7",
+      "sha256": "446af47385609650a55b87d85e37afed79fcfd9ff9021d4b1f24c2b294791dac"
+    },
+    {
+      "path": "crates/idenso/src/tensor/composition.rs",
+      "git_blob": "c07853ca7e70f8a90183f7c5132f91a2947596ee",
+      "sha256": "b81e984ae44962ce16da32b63dba41d1fbbe02ed0297446d6aee2555379951ad"
+    },
+    {
+      "path": "crates/idenso/src/tensor/contract.rs",
+      "git_blob": "442fe89c0ec2fc603e7eeb88b73e69ad9e1b7e60",
+      "sha256": "2a15e7fb3f0c946def2f3a925cb8ee0bb9abc90fcb59fb0bb2005c6719d0987a"
+    },
+    {
+      "path": "crates/idenso/src/tensor/indexed.rs",
+      "git_blob": "1c422d0bd5cff4d48c4e4078a3f4582e095fa152",
+      "sha256": "6aad034870beca4ec1012506cc4fef6280192bb08578a75cc0441a37ad0875d8"
+    },
+    {
+      "path": "crates/idenso/src/tensor/inference/observation.rs",
+      "git_blob": "4757c950d20f5986af373ecdcb43f9bf37c199a2",
+      "sha256": "89275a5a0f304c206328602c2653e6ee9154d8c33b7cd7b9829f8558ed21def8"
+    },
+    {
+      "path": "crates/idenso/src/tensor/inference.rs",
+      "git_blob": "1764439f5a72837581136b8ab5e6e5b8707bc5cb",
+      "sha256": "e8ee6b861580c65f116e462906980f2d3f0cf8781ea55fcc4dfefbdc9dfd730a"
+    },
+    {
+      "path": "crates/idenso/src/tensor/mod.rs",
+      "git_blob": "b95ee5f1852b22a03b1fe79bfe4342d3c42e831e",
+      "sha256": "b3d939b8adfc3a0134b2dbf5df5bc977d48b903d97ed0cafdb64172a701b32a6"
+    },
+    {
+      "path": "crates/idenso/src/tensor/network.rs",
+      "git_blob": "efa18cd7117b8f9742f77c4288949a01e1c96c0f",
+      "sha256": "7ee42dec38f5379b006376508d854f344d6e9688969ad04b8a90624cc62c2732"
+    },
+    {
+      "path": "crates/idenso/src/tensor/replacement.rs",
+      "git_blob": "2831f21b74d537e3db30acb248c273adb8932420",
+      "sha256": "2fe9941f7c74e1a54f3e6d59426f12c897b4bfc9044fd12362ca01805bbe23a0"
+    },
+    {
+      "path": "crates/idenso/src/tensor/simplification/observation.rs",
+      "git_blob": "93939c57f0d943d4f7cedb9e0dcabf1f6cce848c",
+      "sha256": "a5bf348675c9ec801790c5caa6d6b0483c8423f65b19272f06de011269a5abfe"
+    },
+    {
+      "path": "crates/idenso/src/tensor/simplification.rs",
+      "git_blob": "49ae6d4398bf4decc931f01d09ef49e69f64996f",
+      "sha256": "e78750998cff62ed35390d0dad3ec060153b0104bda77d9883d3af51a49173d8"
+    },
+    {
+      "path": "crates/kurvst/src/curve_api.rs",
+      "git_blob": "ad2545e0d08a47a3307efe538ad70be14ba6b8d5",
+      "sha256": "a583a53ea354e543a52239039903dceb7bc6f633d4b1ad715765e235a6a325a6"
+    },
+    {
+      "path": "crates/kurvst/src/lib.rs",
+      "git_blob": "b82c35e2b4530530d788d80376da6f47e72ef580",
+      "sha256": "f26f48ef9a3ba8e93c7c059e8c6b0a389faa43974ba2ba860cbdd8b5c5e067d8"
+    },
+    {
+      "path": "crates/kurvst/src/marks.rs",
+      "git_blob": "3ae339132d2022adda9f5ab22c60331739d3eb7f",
+      "sha256": "83342ab168d78376e71bc59fdbb0286aa2e5f29d3b2e96635f74a14266d95dae"
+    },
+    {
+      "path": "crates/linnest/src/api.rs",
+      "git_blob": "9a5a28925f86458986be53482a868f27bc2a2d6b",
+      "sha256": "bdd15dc8c656777fb0a3f722c7e04706a684ae8811d520749d94d17b724fbddb"
+    },
+    {
+      "path": "crates/linnest/src/ec_seed/coordinates.rs",
+      "git_blob": "c4d9d8421c99a003c99457ceb08c0278ccc4a6df",
+      "sha256": "73935f9714b99ac0bdeb158c87ba37a343e92be1e3000835431c8a052d54cfac"
+    },
+    {
+      "path": "crates/linnest/src/ec_seed/embedding.rs",
+      "git_blob": "7bc5842e36a890bd6f766e7c7714d783a8d585a6",
+      "sha256": "f200635c4b22ba80af99c981d81b8eee3d57fe49961c557263e26919e5be34cb"
+    },
+    {
+      "path": "crates/linnest/src/ec_seed/mod.rs",
+      "git_blob": "c7414253d930f3b29669f6034ed7918e0f5381a1",
+      "sha256": "efa3a8c33865908a9cfc148d6ed59630153a342c9c44562a34ec7ad1ab882d74"
+    },
+    {
+      "path": "crates/linnest/src/ec_seed/spqr.rs",
+      "git_blob": "e36ee7f372c02af28b9cdcb9ed6af1fdbfc562bd",
+      "sha256": "8125d963426c50f7ea6befd1dc247b1b3aa6ac6ab3c12f4a761f583ff58eef99"
+    },
+    {
+      "path": "crates/linnest/src/geom.rs",
+      "git_blob": "45a33f9e78b2e290c49123deed6e0c1f818e44cc",
+      "sha256": "b1faaa12e69038af2f1dfb6d6340e59c67a5a8420e15d8ad2b2445ac4eaa23db"
+    },
+    {
+      "path": "crates/linnest/src/graph_api.rs",
+      "git_blob": "98ec27cb582b9e20c109cf6012871ac53d0cb827",
+      "sha256": "e6f3c80b3efd928840b64efc5bd09e9c5ada587f6334cfdcc4e222eb9a55aadf"
+    },
+    {
+      "path": "crates/linnest/src/impred_projection.rs",
+      "git_blob": "c1c29238cb1217778cbf1cb87762dd10dcf56c7f",
+      "sha256": "13f156619c3b1b35ea6edb11330b22f5f7b3701fe3385beb0c61fe24cff137b8"
+    },
+    {
+      "path": "crates/linnest/src/label_placement.rs",
+      "git_blob": "01aed43d68618988d6586f08098b810c17a4f003",
+      "sha256": "3982b3b6da5f5217db2c898cd2a8f17aa7921ac396a506b6e5916235e9e16da6"
+    },
+    {
+      "path": "crates/linnest/src/lib.rs",
+      "git_blob": "af7851b135dc796d671a1422dd57e56fdf942bf3",
+      "sha256": "50de20796b38be7465045149f5ed5cb18f3698dc4e929b51701cface8d54eaf7"
+    },
+    {
+      "path": "crates/linnest/src/pin.rs",
+      "git_blob": "066034b69f76bda95df834f14ea26c7ade05260e",
+      "sha256": "107c2b16ee1134182243aa5e23bee1c813b3fec226058f65d58d0384bacff5db"
+    },
+    {
+      "path": "crates/linnest/src/streaming.rs",
+      "git_blob": "5b4e9818b39be8f4db2df7afda3c0916a9f5015d",
+      "sha256": "eb5cbae020c84fc1e4b87a26e8f707f81d04d4a39c8c0d5bf4351a530057d61c"
+    },
+    {
+      "path": "crates/linnest/src/svg/config.rs",
+      "git_blob": "a0cea7a39372517ce5d43a2d1c138d23d84d04ee",
+      "sha256": "219ec598b3a7b70e02415fb802d479603eabf152fcd684cac7ae812e5ca543f9"
+    },
+    {
+      "path": "crates/linnest/src/svg/curves.rs",
+      "git_blob": "dded0140c85604a622f61b4a3fe176be50eef4dc",
+      "sha256": "4ef9fb53d99c1e52c6b30598ec31e9533c45efd9b667c7d2a300b0e929985c28"
+    },
+    {
+      "path": "crates/linnest/src/svg/interactive.css",
+      "git_blob": "fe35e1388b31a859aaef284a5a1d709b85bc9017",
+      "sha256": "6ea0834f9524f70ff90d08dd325849453646fdcbd38e8f330d4f7b6a78e08f35"
+    },
+    {
+      "path": "crates/linnest/src/svg/interactive.js",
+      "git_blob": "d68b74300adc9ee91cddce65a6db8ae4bfaa6309",
+      "sha256": "625021bddc7f7f88e357f00a199e5617da3012433831a96d113dd1c5cafc29f2"
+    },
+    {
+      "path": "crates/linnest/src/svg/interactive.rs",
+      "git_blob": "b120f04561ce2c9ca3babd536c993e49ba84fc41",
+      "sha256": "b9263ed127e29db967fa3d0780d2c1f04e3c47ad513b9e19a30601d61243a775"
+    },
+    {
+      "path": "crates/linnest/src/svg/labels.rs",
+      "git_blob": "13a14a50a10120ee930dd40bc606108a459a764c",
+      "sha256": "2f49d62aedf71b6e20a0afa5fe0249ce865fe75b9ba1f7c17136554217e2b694"
+    },
+    {
+      "path": "crates/linnest/src/svg/marks.rs",
+      "git_blob": "9f0422265bf80c4df5b0d1d4d18dc0beaf20739c",
+      "sha256": "a606cff09508b0abc344ed93db07def9df879cb1b92fad8bba99c74c07bc1a81"
+    },
+    {
+      "path": "crates/linnest/src/svg/mod.rs",
+      "git_blob": "e3f4784411d173ad7ff56d7e6fe195449324773e",
+      "sha256": "a3aec874ac7b197058f230a62ec475831c46ac2ec87a379b1e90d8f232c6556e"
+    },
+    {
+      "path": "crates/linnest/src/svg/output.rs",
+      "git_blob": "9241278c2b9179282605544f57447c15bdc0488b",
+      "sha256": "dcbcaef7a41d35d0253ed607e61e464516db534b0a7b5d9b9abadfd79842ae06"
+    },
+    {
+      "path": "crates/linnet/src/drawing.rs",
+      "git_blob": "b2d1177f5d52739f7dbc412104197d660370845b",
+      "sha256": "58c3c65f5395ad71c4a299ac41d49f04b946513df3b84c00974ba199c4d5a0ad"
+    },
+    {
+      "path": "crates/linnet/src/half_edge/algorithms/mod.rs",
+      "git_blob": "ff0d9dba30e514c41d9dd0aa3c9648cd0cd6bf45",
+      "sha256": "f0d9ede27376e2fe7c80ed9ea7b778456baf7e6918ef5bd872e228234719692c"
+    },
+    {
+      "path": "crates/linnet/src/half_edge/algorithms/strongly_connected.rs",
+      "git_blob": "b3f31683643ac42a058e875bf815f2a5bab0898c",
+      "sha256": "a776dba00e39b362b7e1e3221007a055e42eb3c8e164c4a1f62b8c104c2a62d4"
+    },
+    {
+      "path": "crates/linnet/src/half_edge/algorithms/topological_order.rs",
+      "git_blob": "1be1bacb026fe4d0c3e1811ea1a6a42014cbb9fd",
+      "sha256": "5a492405f3c4eb5631bcc6da99e64cc8ab9ad05430b18cb4266a8de0e360d22b"
+    },
+    {
+      "path": "crates/linnet/src/half_edge/algorithms/trace_unfold.rs",
+      "git_blob": "4466c47244130e8d367395fe8db50c03555cdaab",
+      "sha256": "70e609974ffc42742c0c010e0d7f6bdaa56956fe251d02be4118e742ce0d1160"
+    },
+    {
+      "path": "crates/linnet/src/half_edge/algorithms/transitive_ops.rs",
+      "git_blob": "6e5a679f54b2b6a2483abcf266035f64e3d31327",
+      "sha256": "0b9655a58c3c6eb8cb86c5594158212091f2ea847bc28797362a6281cdbe6c32"
+    },
+    {
+      "path": "crates/linnet/src/half_edge/builder.rs",
+      "git_blob": "9757383b290e410fc4bb6e49ff63a2c0421bff32",
+      "sha256": "652f52e182b116862f5823f615b1c7290c1b2be58f9b32c61f08938deaa6d59c"
+    },
+    {
+      "path": "crates/linnet/src/half_edge/canon/flat.rs",
+      "git_blob": "01d7770ee7c264a5dbee59270ae5f6d2415987f5",
+      "sha256": "882deb196b8ae5d1f9ff36f503d429621a236e33bf2841efce924c57624a5e1c"
+    },
+    {
+      "path": "crates/linnet/src/half_edge/canon/search.rs",
+      "git_blob": "af058675823ab91fccb02103928b4188bd5e6b04",
+      "sha256": "cbf2c8683c5665689e41350010c12ac4205d51ecfb773777a7a0f9f2517b7868"
+    },
+    {
+      "path": "crates/linnet/src/half_edge/canon.rs",
+      "git_blob": "4e8050d7ff1de760673385003ea966265e8c5164",
+      "sha256": "9284f2adb6e3ed5d0d42a67263657dff754083b9b50ff6ee7c52d64933f4faac"
+    },
+    {
+      "path": "crates/linnet/src/half_edge/generate/batch.rs",
+      "git_blob": "ea41ae692c243f43f67ed868404d2dd07b36ef5f",
+      "sha256": "0b4942be2dd6a9076459dd6c7bc956380b403b0056002d61e17f5c5a99bada7b"
+    },
+    {
+      "path": "crates/linnet/src/half_edge/generate/budget.rs",
+      "git_blob": "66d491cb3b6a8b10caa81b38ab87b83ef4436112",
+      "sha256": "c4ca2c81009cba6996b2777bef840b2f982abf3d11aba7ddf0d076038b3cdb9e"
+    },
+    {
+      "path": "crates/linnet/src/half_edge/generate/decorate.rs",
+      "git_blob": "78723f92a932d20c6321ca0ab9cd4e68768746e5",
+      "sha256": "bc6c6cc3a448ef7c721d3f5f654f9dbea452ece99bc8e0a91fa26b5fef85ac88"
+    },
+    {
+      "path": "crates/linnet/src/half_edge/generate/incidence.rs",
+      "git_blob": "7a14d45505c131c0aaab5353207a7ad3720480a3",
+      "sha256": "d16cc6bf2a28218d23d180c1f7ea7c4342587e1a14521d71c1dec141f34b9387"
+    },
+    {
+      "path": "crates/linnet/src/half_edge/generate/model.rs",
+      "git_blob": "59253a0fad236c7fcedec724f86a4e51d83b7b2d",
+      "sha256": "e2d182cdf68d1f5e131da90c0423f872bed3d1c5446e41866dd4e1e7cabac070"
+    },
+    {
+      "path": "crates/linnet/src/half_edge/generate/output.rs",
+      "git_blob": "357bc936a2f17aa2a83d9fb6081e20b7b19836dd",
+      "sha256": "f6e3b5c82a2e8cd1283aee15a95edb5dae04a38ede37fcf821aa0fddc9594c46"
+    },
+    {
+      "path": "crates/linnet/src/half_edge/generate/query.rs",
+      "git_blob": "9328bb65c4ff6e191ed08df74fe189a0bda6f82a",
+      "sha256": "1fdaf82e0c32cff68c7a823dff8605cba534db3466acb518f300d2fb723072b3"
+    },
+    {
+      "path": "crates/linnet/src/half_edge/generate/suspend.rs",
+      "git_blob": "2739a6563679f0fb0e0d5456c8660c16ca1276df",
+      "sha256": "329d84b8a843150efc79c7e71f423b65364cb396aefb5f5125112cdef8183ec5"
+    },
+    {
+      "path": "crates/linnet/src/half_edge/generate/topology.rs",
+      "git_blob": "f20191e878bf8b467f7bfffe6dae60e6e7cd9a0d",
+      "sha256": "fced92e5d64cac7fb69f5f1f48368d63dac0ee908194ae58c4540077ee4fdcc7"
+    },
+    {
+      "path": "crates/linnet/src/half_edge/generate/view.rs",
+      "git_blob": "6aac1ab5f2acfa5d2b1d463a3ed9c24f78c5985f",
+      "sha256": "1714d164a54d2422a5f24ef5a061a648c23c8d3736ab936a1ab119fc43877281"
+    },
+    {
+      "path": "crates/linnet/src/half_edge/generate.rs",
+      "git_blob": "b783367cda08d1fd204cfc23d4046461fae50d54",
+      "sha256": "78970719c4fef849c5b8f03f930adcd5a6b48b70d26fe1ee735a118ab3c6b70e"
+    },
+    {
+      "path": "crates/linnet/src/half_edge/hedgevec.rs",
+      "git_blob": "06cf02b5688c3abd77d323d86011f65d888b6556",
+      "sha256": "a30c09940b8c96b7e84fcdb1bcacf0efe662ea4fab18f0dbaa43028f411028f5"
+    },
+    {
+      "path": "crates/linnet/src/half_edge/involution.rs",
+      "git_blob": "2a5162885ac2e05dc8a1ec79d5fec555a9f6ed36",
+      "sha256": "31a13433b312f0c25becda435126dd23ce641e013ce4deadb73576fdb0587fe9"
+    },
+    {
+      "path": "crates/linnet/src/half_edge/layout/force.rs",
+      "git_blob": "a14e367ac0271f1833761b4e57dbc64b1d8e1677",
+      "sha256": "3c54aefecbae78b36e3e8bb36ff85109fcff3ca3544fa152cef6198488469d40"
+    },
+    {
+      "path": "crates/linnet/src/half_edge/layout/impred/movement.rs",
+      "git_blob": "8b370123b52a5b3bfb5b6f7da7e8531fb4c8e554",
+      "sha256": "f6d58d2c737fb5403937212e65781a4ffe8a78e89d02974ffc77f51d18166edd"
+    },
+    {
+      "path": "crates/linnet/src/half_edge/layout/impred.rs",
+      "git_blob": "255f21c2fbdd5aeccecfb3af17ff56daa1bf377a",
+      "sha256": "9b62173e0938eb8471511929f1d6157a71803e4533810a4c512ef8020a62e68f"
+    },
+    {
+      "path": "crates/linnet/src/half_edge/layout/layered.rs",
+      "git_blob": "126922432ac81203938cc1428d186a1e7dd27f2e",
+      "sha256": "2cb425d16e0e142934d70bbfe9a7452667687f5e3a6aaecf4242eb05e908d1b3"
+    },
+    {
+      "path": "crates/linnet/src/half_edge/layout/simulatedanneale.rs",
+      "git_blob": "191af26fa1e40f14a7ee1a9a8925e67a2b27494b",
+      "sha256": "5304f0c452f09d3bf4ee7962e95318837dc7be3e78300a9cff03bd75b285d83b"
+    },
+    {
+      "path": "crates/linnet/src/half_edge/layout/spring.rs",
+      "git_blob": "ae0a1a13063bb56b342501c7d928252f07c3490b",
+      "sha256": "1a161e8c8db5a9a86825a9a270a5ef4085e6555413f8b47e1a24da65a0068277"
+    },
+    {
+      "path": "crates/linnet/src/half_edge/layout.rs",
+      "git_blob": "f1a5029eaee3b91447f5c223cf4a1e99fdbef107",
+      "sha256": "a088055dc3e06ea140f550b58f489544681aaa05323a120b9f4445c8184aa79a"
+    },
+    {
+      "path": "crates/linnet/src/half_edge/nodestore/node_forest.rs",
+      "git_blob": "a9b3b8025b54baf1a01319026f46316792dca2d8",
+      "sha256": "fce210b75a3bbb8415e305f00c345e47d519728796d66aea673ca9034a6006d1"
+    },
+    {
+      "path": "crates/linnet/src/half_edge/nodestore.rs",
+      "git_blob": "fb0be66c8a22c9e2a6ede1aaf6bf6388e79b3864",
+      "sha256": "b0d23222c11349703a0c0a0896ae81041cb85a736c1ad8d6209c48ec08de6635"
+    },
+    {
+      "path": "crates/linnet/src/half_edge/remap.rs",
+      "git_blob": "d52de62c34206130dcd7f83b7ba643aad60efe71",
+      "sha256": "108bb680bee031829c74be73bf2b528dd937cf803d0b8883357c05a528e8778e"
+    },
+    {
+      "path": "crates/linnet/src/half_edge/spanning_forests.rs",
+      "git_blob": "a2d6baf218f432c997e9d9b4f881d85451806851",
+      "sha256": "c91857102f7af47a233c70a427cf23c997992d434a3b74eac2dc80ab2f9aab8f"
+    },
+    {
+      "path": "crates/linnet/src/half_edge/subgraph/contracted.rs",
+      "git_blob": "a1e4b8ad506e7087a07cece38cbeb395cdb6e16f",
+      "sha256": "56de749c2a39cad2b56e6178c828534fa123605e219f72419e0def73c0224c38"
+    },
+    {
+      "path": "crates/linnet/src/half_edge/subgraph/cut.rs",
+      "git_blob": "ccd91190abebfe4809a0be2cc9bb60311c5295c6",
+      "sha256": "922e9b2d8898f3346b056c12acab47dbbdb2f78c52ba0b22d7185fbfc4ab4ad6"
+    },
+    {
+      "path": "crates/linnet/src/half_edge/subgraph/cycle.rs",
+      "git_blob": "64962857f3ddfe45813edc12216cd881a8fd4853",
+      "sha256": "160b41357789a12881f50fddf0bfaf45b2a470cdc5ed56a700e93466ea0a2e6a"
+    },
+    {
+      "path": "crates/linnet/src/half_edge/subgraph/empty.rs",
+      "git_blob": "9193046aa9df59e53d60f19e9e49baadb420dc6f",
+      "sha256": "d6f79cbbfa564e2964db283bd7f31cc6b18476ea371db79646f5c1a93c3dec52"
+    },
+    {
+      "path": "crates/linnet/src/half_edge/subgraph/full.rs",
+      "git_blob": "be3d50d19ba4751a2e53a392b1c251717ceeedeb",
+      "sha256": "ba321a12244067cb5b436f730d77f4c0766f5a80148b0084e40131fe2c26f7f5"
+    },
+    {
+      "path": "crates/linnet/src/half_edge/subgraph/internal.rs",
+      "git_blob": "f0c24d3762ea0cf01649bc813a12a06d85c02965",
+      "sha256": "d935eee24ecb17e14b5128b1dbae9d790352238f6c3f23954bc91eff807d1350"
+    },
+    {
+      "path": "crates/linnet/src/half_edge/subgraph/node.rs",
+      "git_blob": "3ae532cfbdc1884818747f71cc6e30c6e7c1cc63",
+      "sha256": "750b99087eacd74bfa50dd590a926789336bbb575407b94606d983d4d85817fe"
+    },
+    {
+      "path": "crates/linnet/src/half_edge/subgraph/subset.rs",
+      "git_blob": "d8ef11433f9711c193c41b3e0271223e81ae54c5",
+      "sha256": "14caa826e652597888eaa64bd9425d5ee106777a99c3252d3de47982d0d385f8"
+    },
+    {
+      "path": "crates/linnet/src/half_edge/subgraph.rs",
+      "git_blob": "929ee2f716f95ba3a0bf7a9afdb8f8bf2a458765",
+      "sha256": "6c73a4887a782cf659954e184fb07d09473038e041139052c906b12026783d65"
+    },
+    {
+      "path": "crates/linnet/src/half_edge/swap.rs",
+      "git_blob": "36cc3c36bffe5c323a77883a8cacf5710fe8799d",
+      "sha256": "7adc8c6c66a0e06c25220082f12168ec993fc0a4f51fa3d93a37f7434b201c50"
+    },
+    {
+      "path": "crates/linnet/src/half_edge/symbolica_interop.rs",
+      "git_blob": "345c5b4343897302c14ec98b7911c222eb8093c5",
+      "sha256": "5ae9a0f470db363a33f4eca8307b213e76168f1e4b1eeb22787c7c3bc832de95"
+    },
+    {
+      "path": "crates/linnet/src/half_edge/tree.rs",
+      "git_blob": "296c933f74832e222e779e5bc7a69ad66219dbfe",
+      "sha256": "40fb7874fba787c601c8f1c0010981786c754e2f90a573b7497bc491120b90da"
+    },
+    {
+      "path": "crates/linnet/src/half_edge/typed_vec.rs",
+      "git_blob": "ae008062ca34702efa1002c0a120842ed46d9b80",
+      "sha256": "8b4b4d8e6cec0831548b8593a2f3a61c78b2f80ff5b882088006b88984148b30"
+    },
+    {
+      "path": "crates/linnet/src/half_edge.rs",
+      "git_blob": "cf395f5b3af0a5aa69450792745aa7f568ccd2e3",
+      "sha256": "f06a578ae290b0fda63b1fbba2892bccc63f3f8455e65bbcf8bd08ef060cbd13"
+    },
+    {
+      "path": "crates/linnet/src/lib.rs",
+      "git_blob": "14d370a7ac39c141b12e70a808da5e59d0b9cf2c",
+      "sha256": "f784a2801efc29964d0976448cbc50a5e51b5e596f7aa8252308065515a9b3ce"
+    },
+    {
+      "path": "crates/linnet/src/num_traits.rs",
+      "git_blob": "a893d3b551290550c9974c2624724561ca031c09",
+      "sha256": "66999289c1862ae906a13c537653b4d1ceb856207df3d1953fb6eababed55b32"
+    },
+    {
+      "path": "crates/linnet/src/parser/archive.rs",
+      "git_blob": "9ebc102f821aaa8408185bed1209b5e9f68f6266",
+      "sha256": "5cb00469283f1cfb2d0890a8c86d373f169dd541263355a083c03f0ec0d84fd5"
+    },
+    {
+      "path": "crates/linnet/src/parser/edge.rs",
+      "git_blob": "bb17b2c255e75da9a2a94ece974df0161b9e61c9",
+      "sha256": "9f7361a3fda4cffd74416e12c6fc0d4571316d7cb11b430d00115dbf1d5fca7b"
+    },
+    {
+      "path": "crates/linnet/src/parser/error.rs",
+      "git_blob": "f3a5dafe29fd0d98e7486c4e8b5b36691f2a5b61",
+      "sha256": "2f6182c3aceab60d48d2d9a3a1ad058a543465b7f9c89afd418655e127f5e6be"
+    },
+    {
+      "path": "crates/linnet/src/parser/global.rs",
+      "git_blob": "6de9dc6ec9bae96d6aa2afce12e07bb3fb987b1c",
+      "sha256": "ba30f9d0d41d2f59f05913dc8c2721c0b02c8fb74e01d571196a539820c43a9b"
+    },
+    {
+      "path": "crates/linnet/src/parser/hedge.rs",
+      "git_blob": "98c6dbce94ff72e079d6aa12e2d53694f4689e9b",
+      "sha256": "3cac21596f94915164a54492e33c88767cd41e72cae7d814202abe880d1ffa0b"
+    },
+    {
+      "path": "crates/linnet/src/parser/mod.rs",
+      "git_blob": "6667c3527c7ae3fa85946116341b8ee78c0e87a8",
+      "sha256": "a5c9a9d474328da90cc309e03ee4ad01438979eb561691cae68024c751164a9f"
+    },
+    {
+      "path": "crates/linnet/src/parser/set.rs",
+      "git_blob": "9ef0c07122ab4fd1749f4d367a0b1991858ea655",
+      "sha256": "f07562237e30b8259c5bed8df3458c19afa07c5376f4b8859ebc16af44bbf51c"
+    },
+    {
+      "path": "crates/linnet/src/parser/syntax.rs",
+      "git_blob": "f9e4dcaaff82e64252083ddb029d806610d22e30",
+      "sha256": "f89913c360deda444f9b3f06c055327544cfdaa222a70a2c1a15b2ab6cac10f0"
+    },
+    {
+      "path": "crates/linnet/src/parser/vertex.rs",
+      "git_blob": "f57be68b7cf9a60738ec9995a73d84967416cfee",
+      "sha256": "9bc63d766feaac1ecb7e48899d8fd61415fd12977bbb1c455b822a73569f9ff0"
+    },
+    {
+      "path": "crates/linnet/src/permutation.rs",
+      "git_blob": "4987cc1c7a2254b713c1d57086c102b4d2bad945",
+      "sha256": "0af4fa9f235e78256b90c909605477d672566aea427a9eeff03338dd932cf5b4"
+    },
+    {
+      "path": "crates/linnet/src/tree/child_pointer.rs",
+      "git_blob": "f4d21d2dfcb5e172645bed0d112e54bdc6410a63",
+      "sha256": "0f687c14ed47e7f33461a47f676321d9ebd5c234ae67fd8ba6fb86bd1ebf9ce9"
+    },
+    {
+      "path": "crates/linnet/src/tree/child_vec.rs",
+      "git_blob": "766232a855169e5e5f9a781f68ed31358d701a24",
+      "sha256": "e61a9bd6a7440c2d5c768f0ef8de2b89714aa595b86cf4c8858d6c601d13707c"
+    },
+    {
+      "path": "crates/linnet/src/tree/iterato.rs",
+      "git_blob": "df18c4d6e66b5ec4f5d03ec1cd75ecfb1d0ead8e",
+      "sha256": "1cabef742491bcd6eb6bd1331b4d3800aa49f5103de30c24c3d3228b44e978d0"
+    },
+    {
+      "path": "crates/linnet/src/tree/mod.rs",
+      "git_blob": "96a69cf5556aba8761263813c8f4d720e1a31747",
+      "sha256": "a32a3503def8c2014d8fc0327a3cf023fee26cbb6b2e038bb1bf2853f49a8c01"
+    },
+    {
+      "path": "crates/linnet/src/tree/parent_pointer.rs",
+      "git_blob": "0cbfcdfd8fc225e25392627682e53eecab315629",
+      "sha256": "2f0811748b6ab108650a4568bdcc2ec573050675155e962c38d89e21e8959765"
+    },
+    {
+      "path": "crates/linnet/src/union_find/mod.rs",
+      "git_blob": "8aa1e372f16c6b4c5eefdb59c27ad5a11de98c1d",
+      "sha256": "072b2b9e725e33a765e1a1d0f5ad37aaed3b2315cc256b226f6a99a7777f20cd"
+    },
+    {
+      "path": "crates/linnet-py/src/dot.rs",
+      "git_blob": "8bb7cd8098fd4c586a7946c786184423d8ba3703",
+      "sha256": "f10e29afad195846b689847bd1bf864439bff8e491218c9d2e28f445812e5eba"
+    },
+    {
+      "path": "crates/linnet-py/src/graph/algorithms.rs",
+      "git_blob": "979973a4d939695c0d4ee60bfbd1444bbc105116",
+      "sha256": "437c432724c592984b3040d477e37c6d675d1c3215338b8a588f8ecb34965826"
+    },
+    {
+      "path": "crates/linnet-py/src/graph/generate/callbacks.rs",
+      "git_blob": "7489f05d0bcd99aa239200c292863ccf0190300a",
+      "sha256": "80aa8a008b6d454c0147cce166afaf07b383ca27e94a5fa7147bdb5ac3e4907e"
+    },
+    {
+      "path": "crates/linnet-py/src/graph/generate/reports.rs",
+      "git_blob": "15ad32e86a60c4523844aed9488d9067b43129a0",
+      "sha256": "c85c75481d0e114c067d4e8e6203d8e5d2f9102e0ebe5134be225c2fc62c1a2a"
+    },
+    {
+      "path": "crates/linnet-py/src/graph/generate/views.rs",
+      "git_blob": "edf415130ad01061c51895a8c283d5fc44c12edc",
+      "sha256": "bbbd6606197431e53e585c8d7cd72760c4637183d3a58aa90208d026558f3dbb"
+    },
+    {
+      "path": "crates/linnet-py/src/graph/generate.rs",
+      "git_blob": "20707ce7af683826daf15c826749985389cdf491",
+      "sha256": "c8f2ccbe085cff91c0a408c1d69e31bc95ebddfc57473aa6b51c3d9593a71c7b"
+    },
+    {
+      "path": "crates/linnet-py/src/graph/keys.rs",
+      "git_blob": "bd8cd4bdadff0557d8daa0d2c712bdb54c0e4a72",
+      "sha256": "aa21468a520e527cb6b9076c23246215767ee6c8b00cfaf7e64ee60db2f6b526"
+    },
+    {
+      "path": "crates/linnet-py/src/graph.rs",
+      "git_blob": "a6d0590f34ae6d3230f996ae4c1021a08e725512",
+      "sha256": "7f688289cb03e3fe2af2eb21cbbe6ea786145952eb68464ed21628d85980f7c0"
+    },
+    {
+      "path": "crates/linnet-py/src/lib.rs",
+      "git_blob": "e8f75abb1fd8e3328bdebfe8242b7667e4a6f5ef",
+      "sha256": "f55dd38032b864d74d6e8e6c8d9e0b2d69a116abd713257837b3504ee529438d"
+    },
+    {
+      "path": "crates/linnet-py/src/mutations.rs",
+      "git_blob": "6a7eed460b473bbb99818255321c0f9439859ff7",
+      "sha256": "d7588d9978b1ca76bfba892f1caf56652d037d16ca2e573945897418aac7eb09"
+    },
+    {
+      "path": "crates/linnet-py/src/native_graph.rs",
+      "git_blob": "175d86edeade0398a6a14598ebe52bc22337ce7e",
+      "sha256": "868696c69a90a1acd79e8a0113760be6cb5ef7ac7d81ec70550858e53f97156c"
+    },
+    {
+      "path": "crates/linnet-py/src/render.rs",
+      "git_blob": "d191fa2ea3f0bcf6206127a6caabb386532f5326",
+      "sha256": "dee4015cb4cd017f3a2d22121453767ffab44b7a9d1f3d773c58f939b3e11ab4"
+    },
+    {
+      "path": "crates/linnet-py/src/streaming.rs",
+      "git_blob": "bc008f0bc8130ba24b5ce98a285023c94396490b",
+      "sha256": "03a934d722bd0481f1752b5a948ad4a97f553d15928d5d79d81e38d14e023e65"
+    },
+    {
+      "path": "crates/linnet-py/src/topology.rs",
+      "git_blob": "4821cf262bdeadaeee238a892245f15af8692604",
+      "sha256": "3ab2d10a35268f7469861022162b7aed25b0c27beed3bca606a501bba10ee081"
+    },
+    {
+      "path": "crates/linnet-py/typst/subgraph.css",
+      "git_blob": "d8b3c571b8b511faa261c462660396725bafd089",
+      "sha256": "5a477a6c9d2024af2555695e994bdf46fbbbcd81e834410a89fc26239982dcb7"
+    },
+    {
+      "path": "crates/linnet-render-py/build.rs",
+      "git_blob": "7daa030e2451f72b03861b8b7e41e552c8d36db4",
+      "sha256": "ca2999c75f5a6f8b6a0a04061956ca887c372792b70b065833171f0b72efb7a9"
+    },
+    {
+      "path": "crates/linnet-render-py/data.json",
+      "git_blob": "b6c8740028faf37992ee8c827f8eca4c2c3c377f",
+      "sha256": "6d2de49a6ec13ffafeb6a53cd6818ca1bddce4aa3b56009bef935d3502d3c80c"
+    },
+    {
+      "path": "crates/linnet-render-py/fonts/STIX-Two-OFL.txt",
+      "git_blob": "36479bd6dbe04ba40ff9639d08518bec86ecdb27",
+      "sha256": "ccee2172d0b1deb40e216efb0b7adec41573a14e813f3b17c143063607e54ec6"
+    },
+    {
+      "path": "crates/linnet-render-py/fonts/STIXTwoMath-Regular.woff2",
+      "git_blob": "6b3fe262779968faad8e19f81548dd236e18e4ae",
+      "sha256": "e623fcdb808e9a8a27833781f77d5a5ed5c7d5f34830aaa8bcc9fcf8ec32b9c9"
+    },
+    {
+      "path": "crates/linnet-render-py/src/drawing.rs",
+      "git_blob": "f2dc4929e39505be221d04f3a0ab321ea2a1d80b",
+      "sha256": "eac06a3c49f87d18556e437dda1e10a9a0650c4739ebeab2756cc13067a3b39d"
+    },
+    {
+      "path": "crates/linnet-render-py/src/error.rs",
+      "git_blob": "d292eeed37f5eb86f33464afcd9c104df9ef3ea1",
+      "sha256": "4bd638ce922a8049940be739828454643e8fef563751dbe8f3a2aa00a83eb4d1"
+    },
+    {
+      "path": "crates/linnet-render-py/src/lib.rs",
+      "git_blob": "9f799177df5f77ce76ddb6983bfcf55dde06fa89",
+      "sha256": "2d603103f5a06f5735da3ad5853d424df06441bd422113d0186ab135584479d2"
+    },
+    {
+      "path": "crates/linnet-render-py/src/scene.rs",
+      "git_blob": "a75ac3345d1274dea91f08b781c813987d9e04b2",
+      "sha256": "dab81f84cc4ed268743da0340259e7142fb41c12c212024d140c1592255c980e"
+    },
+    {
+      "path": "crates/linnet-render-py/src/snapshot.rs",
+      "git_blob": "44d9efa4b946041c3e496dcf8804c1a0e0af834e",
+      "sha256": "54df0ed74dea9c9095a3345a1804b7b030f2ff3c8c248e18060c1bd55e658034"
+    },
+    {
+      "path": "crates/linnet-render-py/src/svg.rs",
+      "git_blob": "910b96314179b6263204440543c6abca2cdda016",
+      "sha256": "016882c231279ad1eded7b76a30c2624441ec308b965c8019f8e0e50d9f47ade"
+    },
+    {
+      "path": "crates/linnet-render-py/src/typst/native.rs",
+      "git_blob": "12fc9eb4b67c27eadaa40e8736023b8c50587ffb",
+      "sha256": "e4e1ba20505c0727b3918333eeaac3c10d4ce19ff3cf18558b5e5319818a8965"
+    },
+    {
+      "path": "crates/linnet-render-py/src/typst.rs",
+      "git_blob": "37c16b80239e69e93441f565cfc18e28f9c80381",
+      "sha256": "eb3c4dc2a6b0f21c4d2e30b796b63004818896b074f55c20b2cdc2b47b1912b6"
+    },
+    {
+      "path": "crates/linnet-render-py/src/typst_export.rs",
+      "git_blob": "bb3a2a6f216144b8345fc60798f6d0f845740bd2",
+      "sha256": "cfa09460b15424da602815d2b148f051bc288ca9f65be56d76a51276e46a0306"
+    },
+    {
+      "path": "crates/linnet-render-py/src/view.js",
+      "git_blob": "f4d0e231ad38db8e7422e57d4abd1e6ace8dad7a",
+      "sha256": "ffc537a45dc06cefed028a2e19dfe8a1b533237fd7e6cfc7ed72f86bcef2dc0b"
+    },
+    {
+      "path": "crates/linnet-render-py/src/view.py",
+      "git_blob": "399258d30a75e10981c81fcc4544a93a96b6d45b",
+      "sha256": "6d776eec01f2c4084505fa5fd6eb37f24d83b88443c5ee757fe2d82b11d99b56"
+    },
+    {
+      "path": "crates/linnet-render-py/src/view.rs",
+      "git_blob": "d734e84428900b4855a69194d48526d5e6644495",
+      "sha256": "230566a7098d97bcf4360cba32e8b574a5dc81b54cb6cea99b3fbf85103cd5e1"
+    },
+    {
+      "path": "crates/spenso/src/algebra/add.rs",
+      "git_blob": "8b137891791fe96927ad78e64b0aad7bded08bdc",
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "path": "crates/spenso/src/algebra/add_assign.rs",
+      "git_blob": "4c1d890030a6982bedb7d6de19f3c3084b33bc89",
+      "sha256": "c3fe70780bc5956e70d85e240cf23c3c7420994d89801110a897124ea0ac51b3"
+    },
+    {
+      "path": "crates/spenso/src/algebra/algebraic_traits.rs",
+      "git_blob": "c8d2f063728e590d784f2943c5462a39ffb347be",
+      "sha256": "d2b8192d7c1a8205b8f1c3f15877e9bf182bc247e8bc8b8040eb81abfa1feaff"
+    },
+    {
+      "path": "crates/spenso/src/algebra/complex/add.rs",
+      "git_blob": "b9e9b5a0b9569aded72e024a3fa7c6839e3f5d94",
+      "sha256": "3bcf1b39c781151257d7e10ff00a40a63d8c296df801dcd647250beb7078629f"
+    },
+    {
+      "path": "crates/spenso/src/algebra/complex/add_assign.rs",
+      "git_blob": "4dda3767a419a11e8f30ae465dc81aa1150b1e74",
+      "sha256": "40687c171d9af631ac77306f1259f444ea6aa6b3e8f14d1c3c7e0e8c4610ae56"
+    },
+    {
+      "path": "crates/spenso/src/algebra/complex/div.rs",
+      "git_blob": "84b13493c5fee4ee1d08e35ab146ab2b2ea3674b",
+      "sha256": "90776a675e508fbda28564ed5d676fa3e26269dec880d46e21d2d0f901720597"
+    },
+    {
+      "path": "crates/spenso/src/algebra/complex/div_assign.rs",
+      "git_blob": "55c0ed8f6d0238a005970b70c8827645a80b4d4a",
+      "sha256": "8ee9e1ae59cc4eb6100589748b759b8f311af95cc5b1339a078cfee2ea524771"
+    },
+    {
+      "path": "crates/spenso/src/algebra/complex/mul.rs",
+      "git_blob": "5e6212cb47b0a9cb0de997f62f267d6aabab85b1",
+      "sha256": "c80f536682cf03949cb1fd8a53916f1f8bf3ee22a1727cc57de16cb1a0b545ad"
+    },
+    {
+      "path": "crates/spenso/src/algebra/complex/mul_assign.rs",
+      "git_blob": "1e9de1ccbbccabb87966ea851a5e65f45f169df2",
+      "sha256": "2e6eb8e57d3d941a2bb9d4b35933e4a20da48cd48b048e77b5df581eb4a04d24"
+    },
+    {
+      "path": "crates/spenso/src/algebra/complex/neg.rs",
+      "git_blob": "d68e3776dfc461e9c0ce40dd797c3f1c8c52c10e",
+      "sha256": "040cad51c340e834dbcc562a9781eb87148da3cb26cfa4da02dbe0b336ec4c91"
+    },
+    {
+      "path": "crates/spenso/src/algebra/complex/sub.rs",
+      "git_blob": "c502e8aecd660234cdf2fda8b1d80e16e97f4b53",
+      "sha256": "f730800cf96dfcd21d7a89195f6e6f126520117e8c7c2a806d3b57f515b97fb8"
+    },
+    {
+      "path": "crates/spenso/src/algebra/complex/sub_assign.rs",
+      "git_blob": "f0bf8daf7910c7b68fb276514a21271a602502b9",
+      "sha256": "8351b09df35029519bfc48436e313abbd005c29baf00030ea4d031dc8e0205f3"
+    },
+    {
+      "path": "crates/spenso/src/algebra/complex/symbolica_traits.rs",
+      "git_blob": "b15b0660066639c11898d1da6dad3d19ff5eae53",
+      "sha256": "cca141a22d480f4889fe167693996ce2812b9e64ca41630e078defd26d7acb58"
+    },
+    {
+      "path": "crates/spenso/src/algebra/complex.rs",
+      "git_blob": "e7a2c8c0d16dd1069ac6ea5d300e8797d360cd30",
+      "sha256": "599776e7214a18c04d92c4e48fc4a68747a579907a356ef94137c18805a5bf99"
+    },
+    {
+      "path": "crates/spenso/src/algebra/fallible_add.rs",
+      "git_blob": "1cf68529fe7df7033f1bfabd489e14a84e0b550e",
+      "sha256": "171b76aced9460c9ea895e6b8da8aa8ad7f101bb91b0e59b8d3609777ab4d1bf"
+    },
+    {
+      "path": "crates/spenso/src/algebra/fallible_sub.rs",
+      "git_blob": "9c91be92b87144c6e375767c98eda78db22209bb",
+      "sha256": "0e364a42736082486fbe8d69939c0770b08b7d384f735ba5bf7c1456f83d2d08"
+    },
+    {
+      "path": "crates/spenso/src/algebra/neg.rs",
+      "git_blob": "03a194ea9c9b845425223e4c46e110c946f5605e",
+      "sha256": "d1e1d83f0eb7870f95a6629955c2986e74e365fd14d48e241f5a9c403d7da594"
+    },
+    {
+      "path": "crates/spenso/src/algebra/ref_zero.rs",
+      "git_blob": "c9fec870946a0c36977a0163ece8258077eb28d2",
+      "sha256": "f5bd4aa4fbb341926d9630a1d3bb09156b9cd94a01fc7531d2eac4f0885fe7e4"
+    },
+    {
+      "path": "crates/spenso/src/algebra/scalar_mul.rs",
+      "git_blob": "88ebe9b8ad58087e91375984564a70d5f35d96bc",
+      "sha256": "19c42a13681db117f56d0b2d81dcc10ccb836e0617b05c705a9f06a042c8c057"
+    },
+    {
+      "path": "crates/spenso/src/algebra/sub.rs",
+      "git_blob": "8b137891791fe96927ad78e64b0aad7bded08bdc",
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "path": "crates/spenso/src/algebra/sub_assign.rs",
+      "git_blob": "4c80a59b6e1bd2a7168cc3131562aad1589bc748",
+      "sha256": "de7fb2464ac8ce32baf84eb69abe8c9615118c67b275bf06e18bf88b214b5d38"
+    },
+    {
+      "path": "crates/spenso/src/algebra/upgrading_arithmetic.rs",
+      "git_blob": "3544cfb42035a6071a0fec87d73be1a4d6eed1f5",
+      "sha256": "5777655de236880be5444ffcbdb7018e842ce0d41bb984e255449d4ff20d6f97"
+    },
+    {
+      "path": "crates/spenso/src/algebra.rs",
+      "git_blob": "8cad6ade8756aad3a84356d28079429870d3989e",
+      "sha256": "d6a60634fac83c97cd0ad0ca686b2eb0cd5dc12cb0e6c568f49ceaff156cf3de"
+    },
+    {
+      "path": "crates/spenso/src/contraction/exteriorproduct.rs",
+      "git_blob": "5f8d71b542d94bf40cc2b26ba5662597fbdf4c9f",
+      "sha256": "213254da0e740157661e4286c7d3ad056897337681a93ddd6b89b1c8faf5fa18"
+    },
+    {
+      "path": "crates/spenso/src/contraction/multicontract.rs",
+      "git_blob": "bfe8426abfcad2a28a494403a82bc95108d37046",
+      "sha256": "f135fc365b27956e149d68d904a90c6d33a9eaacc1e8b452d193329c0ddcd8ee"
+    },
+    {
+      "path": "crates/spenso/src/contraction/singlecontract.rs",
+      "git_blob": "b78464a420c5902fa6318c84451204de39211b37",
+      "sha256": "14440f34b1506bcd43569827261ec108a4d22f58d20dd24d1b373f426db8c788"
+    },
+    {
+      "path": "crates/spenso/src/contraction/trace.rs",
+      "git_blob": "222d42b6cbf318d2ccb37ea6f5534f02b0c5116f",
+      "sha256": "94efd749b15cbfbdd46d6281d849545bcb17c309b4bcb62c2adfcddef265fef5"
+    },
+    {
+      "path": "crates/spenso/src/contraction.rs",
+      "git_blob": "1a6c276ef07e2ee5b1270f4b0302ba6540295894",
+      "sha256": "2151ac82454d9db83783004492ce8b5a96a22171293b0085e37d0062048efacc"
+    },
+    {
+      "path": "crates/spenso/src/iterators/core_iterators.rs",
+      "git_blob": "c61c73f46692baf999906c12335a80a575711cce",
+      "sha256": "11abf5626ff4be68065e9e0552f6d28d49b7b2581e081e69cd5a81a64cd2e685"
+    },
+    {
+      "path": "crates/spenso/src/iterators/fiber.rs",
+      "git_blob": "dd51b4978df5968b2be918938ae825b6301d3204",
+      "sha256": "a1b6e55419229c1ec4573628b6ed76debdb57b8e3283a7758cc209f924e1e4fc"
+    },
+    {
+      "path": "crates/spenso/src/iterators/fiber_iterators.rs",
+      "git_blob": "40ac923eb392af216b92b1137031630dc54b1def",
+      "sha256": "dcebfd2bd21355935986bdf92b83ed7bcad6d5eb96b19afe54545b73b4f83652"
+    },
+    {
+      "path": "crates/spenso/src/iterators/indices.rs",
+      "git_blob": "779c481aad00895be5748ce4e5c924e5184fddb0",
+      "sha256": "b067f840240a378c05c347e029f214ef69c50f2fc2802f9154617e4d6b03b62d"
+    },
+    {
+      "path": "crates/spenso/src/iterators/tensor_iterators.rs",
+      "git_blob": "fbf15465d2adeaa854e523071f938522e9a858ce",
+      "sha256": "838796fad0ace83ff6ab139b336184fd322e19741ec3729453f29c597df4e9b2"
+    },
+    {
+      "path": "crates/spenso/src/iterators/traits.rs",
+      "git_blob": "cf41def9294a358782d679de749f47e1e839ea31",
+      "sha256": "e5c2a29eae4187b1b7f6913c4a9575d80275746ce1603d6f0719eb38835e6ca8"
+    },
+    {
+      "path": "crates/spenso/src/iterators.rs",
+      "git_blob": "52eafd26aa55dc64974df8c57f036a7bfbc2b09d",
+      "sha256": "dcfeb980f512cba9adcb02189dd8405a2d608aa91e7f3eb33ac3dc9137228f63"
+    },
+    {
+      "path": "crates/spenso/src/network/contract.rs",
+      "git_blob": "3781e93553ca35ca3c7c8937b4ba762ae088c6f4",
+      "sha256": "7cde7ce01478b66022f5db32e22a51b72129c02f0b15da58c55019e9af932beb"
+    },
+    {
+      "path": "crates/spenso/src/network/graph.rs",
+      "git_blob": "fa772daf29532af2fa605bfbff2f4db703ef447b",
+      "sha256": "3246c44957a919ec1c8162196e02bbe26ba242cf72fabe7bef6554a77378d620"
+    },
+    {
+      "path": "crates/spenso/src/network/library/function_lib.rs",
+      "git_blob": "25b8bf58cdce2d9c8ee38cf899028dc80c802d0b",
+      "sha256": "dc818cde7fa7e77c3bb2c846e9b3c335089be990767490b1d654a398bdf8608f"
+    },
+    {
+      "path": "crates/spenso/src/network/library/panicing.rs",
+      "git_blob": "67f4e357d4d4ea7ade5a5cd89c4263337d4697d2",
+      "sha256": "80b3c065c74077a75928f7592d12faff84ee85733c2941e5db41f29c7fe234fd"
+    },
+    {
+      "path": "crates/spenso/src/network/library/symbolic.rs",
+      "git_blob": "7d6c92d929d5227885e9d31e7c0b2932b9f660d8",
+      "sha256": "70a8ddeb801547cf69a5d763946d4d4308566145e8a98b16294a615181a67535"
+    },
+    {
+      "path": "crates/spenso/src/network/library.rs",
+      "git_blob": "d994418c7d36145314e9c80e6c1ddd7fbe38d1f3",
+      "sha256": "583a899ed1449f91fe7f4bd3fb41de8b47c28b86c22c19359f22a26f9b4b5cd4"
+    },
+    {
+      "path": "crates/spenso/src/network/mod.rs",
+      "git_blob": "14f66a4d6e62a4fd878c2f52f0bc6ab336cf7f24",
+      "sha256": "e03e784c5310362545ba0ecd87ebbb0b6f938b98911237a73b2a87955c3d73f4"
+    },
+    {
+      "path": "crates/spenso/src/network/parsing/construction.rs",
+      "git_blob": "8e9b78ce888a37d8b4e65ff6d9e208f30ceeecd5",
+      "sha256": "bad14702f46d420f24501989575e91b27d59096aa989b4aa2bd9902d8121ac96"
+    },
+    {
+      "path": "crates/spenso/src/network/parsing/indices.rs",
+      "git_blob": "7409fc296bcbfb1bb030b31cd36f2eec8610cf1f",
+      "sha256": "b71f705a3b389b73310c48dd45d27727aa43c143e6ec5eac14296a6566a85db3"
+    },
+    {
+      "path": "crates/spenso/src/network/parsing/materialization.rs",
+      "git_blob": "8a28283f2e10c65bad8264cd33f5883a4bce1a90",
+      "sha256": "5561782b7448d4a7cb5a64b9410e2ce90c8119fe682655e814ea7b09714992e4"
+    },
+    {
+      "path": "crates/spenso/src/network/parsing/mod.rs",
+      "git_blob": "583f0514c0418a75d13870024bb02a8b42f3ba02",
+      "sha256": "cd1e384a05a1a37f3ba8a21cd1c3dec509bca501eaf0da122b8cdb8d7029063b"
+    },
+    {
+      "path": "crates/spenso/src/network/parsing/structure_inference.rs",
+      "git_blob": "76768b9de68f052275e49245f86cbe2689028cf8",
+      "sha256": "fa5a95c2a1046fe6b39e951a94748dbd7d14ff0892a6344a71ebc71d47cea857"
+    },
+    {
+      "path": "crates/spenso/src/network/parsing/tensor_from_expression.rs",
+      "git_blob": "249b2a07c3ad9cbddda1db72d145a18ee7085855",
+      "sha256": "a6bde268bfca595943375acb9d0b2b26bf2d5c284ebf940ee4a6999a0abe3bdb"
+    },
+    {
+      "path": "crates/spenso/src/network/profile.rs",
+      "git_blob": "f0d7edb0be80d46f563716e320cfbcd38f7fec01",
+      "sha256": "b0e1b45a5b1e12ba16d8e55c22e9c4d09173866734a555f0f627b547a6fd6e41"
+    },
+    {
+      "path": "crates/spenso/src/network/set.rs",
+      "git_blob": "0dea4eb28a4ed8d4c25f1ddd5e1c9f87808a994a",
+      "sha256": "3b00e3677fb735cb80d9a7f6d1024881ee01421aee6b4b1369494a3e40ece0ce"
+    },
+    {
+      "path": "crates/spenso/src/network/store.rs",
+      "git_blob": "fb084ec7b8ef178cfbeb99f085ba9db0d262e6ee",
+      "sha256": "844fb07fba398c3a419c9df195d5dab27d6633ad0e9d8a9e7614492765c0530d"
+    },
+    {
+      "path": "crates/spenso/src/network/symbolica_interop.rs",
+      "git_blob": "f27eba277bf6f9d184bd589a7cf4e922efde79b7",
+      "sha256": "418cec0b9f19fd9836f50652b4a3a3cc35114d9eff20951a5509261e69eb7716"
+    },
+    {
+      "path": "crates/spenso/src/network/tags/mathml.rs",
+      "git_blob": "5488effeb3222c0dfbbe66ef69cff06a6824a777",
+      "sha256": "9fe073942e528c93302a6fef05a90d51a753eccb4d229220f6ce6f958624b158"
+    },
+    {
+      "path": "crates/spenso/src/network/tags.rs",
+      "git_blob": "8a731db180ba328867f1553c48c7ec9d73e833f4",
+      "sha256": "c6dd2a9cc7f5e8536caf1bc27b840360ecadd160967bd21caffd72df9bb6e4ae"
+    },
+    {
+      "path": "crates/spenso/src/portable_payload/notation.rs",
+      "git_blob": "dbf7832b9b8753d5b6c7a07dd275b5f5c2a0339c",
+      "sha256": "e98321ca94e38c1a382c3db5312bd278f478f3c85b18f3b78d1280535cf01e0b"
+    },
+    {
+      "path": "crates/spenso/src/portable_payload.rs",
+      "git_blob": "8b384b6eb982e2d0a903b3a26c87ba64f2168084",
+      "sha256": "6615298e5a52b00992b137b8e966be4fece1b640d05b7f0c4a37cbcef5d30208"
+    },
+    {
+      "path": "crates/spenso/src/shadowing/atom_conversion.rs",
+      "git_blob": "26baf40e850706de77c81c3479664ea0cc877bb5",
+      "sha256": "bcedd9e1e1161b5bea4dcf99fdbd1ddac613eb06e88b12ea75c1db0a33e59dfd"
+    },
+    {
+      "path": "crates/spenso/src/shadowing/collect/tape.rs",
+      "git_blob": "27f502ef10490b16ad348a5ba5a0cb190805f028",
+      "sha256": "50a792c5151d0472ee6502bbe7e58eb1715878b09adbddad2a0af5b3b5e202df"
+    },
+    {
+      "path": "crates/spenso/src/shadowing/collect.rs",
+      "git_blob": "206dca7f475349421a74d15a114274cdb89b997c",
+      "sha256": "14f55c8a692c393220a7e90929658908d7af825d5feb56b7596f79e8f9e5c10e"
+    },
+    {
+      "path": "crates/spenso/src/shadowing/macros.rs",
+      "git_blob": "32c02f3af33d27084fe7035367fa5cda6c8b7a0f",
+      "sha256": "a0967109d0a3c687a70de62d4543507cf4dfdde4d46823a18b6a79408cb62ae6"
+    },
+    {
+      "path": "crates/spenso/src/shadowing/mod.rs",
+      "git_blob": "346f8b961ae5328877ec7f72b4c278c5c367f05b",
+      "sha256": "a4a4ce4cf85ff9d16f47193f36f33cab0c31121f81c0ae45928130ef2bc604bb"
+    },
+    {
+      "path": "crates/spenso/src/shadowing/projectors.rs",
+      "git_blob": "ac84e65b93cc69d03b1d3e6838a7160b284d8694",
+      "sha256": "0d08803bdebf4c8276f729a3f482b4c09753980220ee95157278bc383e77cd58"
+    },
+    {
+      "path": "crates/spenso/src/shadowing/static_symbols.rs",
+      "git_blob": "3a2894c4dbdf409a7457ca1c134983826ada1412",
+      "sha256": "db3c94c63429a264f0087593ed0d6739892c313c98c6ccdf7c18a4e080acf9dd"
+    },
+    {
+      "path": "crates/spenso/src/shadowing/symbolica_utils.rs",
+      "git_blob": "a0e8cdc87226fb3df19fb0076eb3e8f73ad3c613",
+      "sha256": "a50fe0e5ac180d9eef4fecf34f7189e281a2beb73c25d12ca1a39dad353bbf20"
+    },
+    {
+      "path": "crates/spenso/src/shadowing/trace.rs",
+      "git_blob": "22a672030d3bcb54744d8dca4b6f8dcc2f315dec",
+      "sha256": "9e0c89911bfb135a05c2fa9b4024a7c3e1f53b70404c9f3e0a55a9b653a01297"
+    },
+    {
+      "path": "crates/spenso/src/spenso.rs",
+      "git_blob": "7545197bd13a59c50312292be8fc99c2523e6e42",
+      "sha256": "b57299ad333bd9851ac42f7b478121d1a3158053811188e9f27b1dd9defb74a9"
+    },
+    {
+      "path": "crates/spenso/src/structure/abstract_index/scoped.rs",
+      "git_blob": "7039dac61820e41226f3a3ae229efef2a7c99572",
+      "sha256": "17980e918cb8145b89de272f14bea25370446b144f41104415cc49f6413e40a8"
+    },
+    {
+      "path": "crates/spenso/src/structure/abstract_index.rs",
+      "git_blob": "4c4a345e4372d3cab7cdb74c0cbd8b81c0d97c3e",
+      "sha256": "256543fae4fb6bfb9315b48acae5afe710fa4697157835f9f5ab20d0f55e3e4a"
+    },
+    {
+      "path": "crates/spenso/src/structure/concrete_index.rs",
+      "git_blob": "fcd5b928c51cab48ca861e2a760a4f947de60043",
+      "sha256": "76f7d0df7c2ccab714bf52056ab72532d29a06d3d5abebce67e19abdffd15b6b"
+    },
+    {
+      "path": "crates/spenso/src/structure/data_layout.rs",
+      "git_blob": "5e38ed2c83c4e01c505711adef2f05007ddf0fff",
+      "sha256": "aa8735c4b6251afe444a0a0830a5abd1406ec77f1d80ee169134580927a306e4"
+    },
+    {
+      "path": "crates/spenso/src/structure/dimension.rs",
+      "git_blob": "9628d7c0c315a140364b550711cee194e0672471",
+      "sha256": "164fc0cbb30ea428d2a4df763bd194f03a0dc2f830043cbe68c9077b35edb32f"
+    },
+    {
+      "path": "crates/spenso/src/structure/indexless.rs",
+      "git_blob": "16e2b0d01f0cdf21d66b08922807d9a4fcf05436",
+      "sha256": "4b94513cf5245f7e0e0b44787b5cc4d1c9fbb5e058dfab04ad025758c896fda1"
+    },
+    {
+      "path": "crates/spenso/src/structure/named.rs",
+      "git_blob": "c54dccfb3bb3a76f7cb91d5f035a0ce7aeb868dc",
+      "sha256": "aaf63398bd91ab1d9c25f37d079754cfe683fa6c4d1ba14f7fd5daf51916c22a"
+    },
+    {
+      "path": "crates/spenso/src/structure/ordered.rs",
+      "git_blob": "305160923fa5e628624ecaa16275805978f23ebb",
+      "sha256": "5b56b25e707f543cdced3fc959fd6bf47febec5a96ca9c46852c23f7cfae58cc"
+    },
+    {
+      "path": "crates/spenso/src/structure/partial.rs",
+      "git_blob": "ebb012589b0c64b39db068bb8cc2ab0e532c672f",
+      "sha256": "1ac7c89050b169502d9cba462c7e6e7cc1d2f4419003998457be24feb8ca11f7"
+    },
+    {
+      "path": "crates/spenso/src/structure/permuted.rs",
+      "git_blob": "ee15050446dbe2a098d8ed8b45d608d583a6e84c",
+      "sha256": "ab5e96b4513a4d184abe37e861aff165964fd2d0027296fc2c947b0b6202241c"
+    },
+    {
+      "path": "crates/spenso/src/structure/representation.rs",
+      "git_blob": "5fa8d9ac44a4d5708e4fa80694f2f0ecb953c3c0",
+      "sha256": "b9956351e802abb678bae979d8bf975c37b1ba7fad7a04bd6150caf63ba0b359"
+    },
+    {
+      "path": "crates/spenso/src/structure/slot.rs",
+      "git_blob": "8c98796859b71c3274a521209922cbe67aca2f93",
+      "sha256": "8a65215f61326c215dc2c0e2dccd5b551ddf2cc0390aba4fe8889704f1380fd7"
+    },
+    {
+      "path": "crates/spenso/src/structure/smart_shadow.rs",
+      "git_blob": "fa638894c0d8758f9c93e60d01e224ce4ce4e4c6",
+      "sha256": "f4033d15ec3df9db2190ae93b701ac5c09716af354156d54ecf6681d817caf31"
+    },
+    {
+      "path": "crates/spenso/src/structure.rs",
+      "git_blob": "811c525ab9896dcd834ad30f27e14b84e65ec08a",
+      "sha256": "141f671ca9a0395f0e5e7371540836a1c09e1db603ac5b6b4a995073b1641f17"
+    },
+    {
+      "path": "crates/spenso/src/symbolic_parallelism.rs",
+      "git_blob": "f52c9ac14265f983c86c9affc9713970e6b28561",
+      "sha256": "e09a3f35abbf52d1980726ca89e441b78e77402d98fb48a7ad441972d8e6c65b"
+    },
+    {
+      "path": "crates/spenso/src/symbolica_init.rs",
+      "git_blob": "db8f98f4f72a001e258f2a726a073428d301e79e",
+      "sha256": "7edd8a06dbcce6639a3f5269aeabd4c4665ce51d8a8673a2121c30b31a88f71d"
+    },
+    {
+      "path": "crates/spenso/src/tensors/complex.rs",
+      "git_blob": "7d88ed77a3c0507d632d1563bf76bb545f6bd928",
+      "sha256": "001fdb16ea37fcb10fa0e9a56982f387986c33845f247d64f57315d5065419d9"
+    },
+    {
+      "path": "crates/spenso/src/tensors/data/dense.rs",
+      "git_blob": "6df00946658685e3661eace20840d182e01a1494",
+      "sha256": "e7b04a0e76171b63fc5d43164e39ed73957abedc2fdc692083020c406aa03d93"
+    },
+    {
+      "path": "crates/spenso/src/tensors/data/sparse.rs",
+      "git_blob": "c51b208751155e1d41a5ef3532ec57a194b5c986",
+      "sha256": "e8b79298b91675f7d2021fac411f12ef7b4432a9f33e450b09a371006604f242"
+    },
+    {
+      "path": "crates/spenso/src/tensors/data.rs",
+      "git_blob": "f0e8de6af46e1464919245b04739bb6c8fb20eb2",
+      "sha256": "95fa593082f9946e5849aadbf5e5e9460f4dfadff8bd31ea11791cdb8032bcca"
+    },
+    {
+      "path": "crates/spenso/src/tensors/parametric/add_assign.rs",
+      "git_blob": "c59a9ddfe38c23e7a6cb7d4f2a275bb22b461124",
+      "sha256": "f618b81f22c17606dcd3a2a24361f1664d23213fa45a38f417595795dddc47aa"
+    },
+    {
+      "path": "crates/spenso/src/tensors/parametric/atomcore.rs",
+      "git_blob": "2bacd7f96af260c800f32e5bef3b1d1f889ee161",
+      "sha256": "3178cabd396ed1f1346371e14344409e6ad619ca36de1f79be8372843a871ee8"
+    },
+    {
+      "path": "crates/spenso/src/tensors/parametric/div.rs",
+      "git_blob": "d054c5f6251fa7ba339fe4f51fb324cda32cb09b",
+      "sha256": "26891ec9521613ad7730d8ecce8d49d61d2f35c3061320a12b666b7af5ad5448"
+    },
+    {
+      "path": "crates/spenso/src/tensors/parametric/mul_assign.rs",
+      "git_blob": "5cb698b507e888020f96ba6806ae816495e96ef7",
+      "sha256": "2c095e98bf4a209d7e51ef876ae643ebd684fa28914cf5be072ad20194aa81a7"
+    },
+    {
+      "path": "crates/spenso/src/tensors/parametric/neg.rs",
+      "git_blob": "150ed28b64188c9dd6b90ee11bb690049d616e34",
+      "sha256": "9c6b7820689f0c98d6d0eb1be6b9dc5045a537baaeb5fb66303fd43009b3a88e"
+    },
+    {
+      "path": "crates/spenso/src/tensors/parametric/scalar_mul.rs",
+      "git_blob": "82a3b385c3558497f8bd51da030c9fc851fc8228",
+      "sha256": "197f87cdbad9c54095df5224f5596bb73b915c63aa72176c359a7dadd90b37e8"
+    },
+    {
+      "path": "crates/spenso/src/tensors/parametric/to_param.rs",
+      "git_blob": "7f4a8d933464c1d32804a1e190ccf2655bc59e22",
+      "sha256": "3c20d5dca165cdd88cc67db97d25ac1b9e31bd064813b18a362cdefd7adfede3"
+    },
+    {
+      "path": "crates/spenso/src/tensors/parametric.rs",
+      "git_blob": "d1a725854e63d3ba7f4839ed2f53965d6cddef9c",
+      "sha256": "5d0b847a08a379a28db90367e28a72447e8347041f11b1a41c4b86c98e9edbcb"
+    },
+    {
+      "path": "crates/spenso/src/tensors/symbolic.rs",
+      "git_blob": "cdd9ae9b6da1f4cb1a79bce042cd127d5fd57d48",
+      "sha256": "0496fdbd3770cafb9602009ae28f161834679d04a2dbab55ee2f469d7e66f933"
+    },
+    {
+      "path": "crates/spenso/src/tensors.rs",
+      "git_blob": "eb02d2fc80b6df416ef2723416638a52bd515d52",
+      "sha256": "ae6e3045d1266a81ac4c7c7334692239ac6c3096cad6148a8345aca0a9ffeef7"
+    },
+    {
+      "path": "crates/spenso/src/utils.rs",
+      "git_blob": "57eacd9e293651bd1e6a1c0ebc08eaf1470f11ff",
+      "sha256": "78928604d45babe263930ea83698e294c2be9e1a8ac76501a79ed8c6fca52c26"
+    },
+    {
+      "path": "crates/spenso-hep-lib/src/lib.rs",
+      "git_blob": "ef770eee44e4a2866185a4dd46e41c5e1a6a5014",
+      "sha256": "706958d990065fc6b133255e001c639f859852e2a0ba93865183ce78fd37b837"
+    },
+    {
+      "path": "crates/spenso-macros/src/lib.rs",
+      "git_blob": "bf8e8224d1e5d54f69c43d6d384c320dca98e761",
+      "sha256": "3f38f0a2211994bd21873608e11907bc3f59ecdf34a10e4f8ac35902f775d879"
+    },
+    {
+      "path": "crates/spynso3/src/broadcast.rs",
+      "git_blob": "6d7ce74cf35233584cfc6ee75f2e21ecba2c5919",
+      "sha256": "4ed8926971219f185cc6dd76279b38f9f1b8bacca4d44a5cae3bb9883098d140"
+    },
+    {
+      "path": "crates/spynso3/src/citations.rs",
+      "git_blob": "bd60e93e842fbf6e024da9dd2ca62000231a07d6",
+      "sha256": "9f03d6ba5c22aa9273df4abb20aad74b630503ace123d71e1f43f855146ee3b5"
+    },
+    {
+      "path": "crates/spynso3/src/data.rs",
+      "git_blob": "3aea27a5079aad153db6a208b9edd3f2e4734d41",
+      "sha256": "273c881e38531609422a14ccc26a47bdc5bab61812f5a82af3a209a6a834244d"
+    },
+    {
+      "path": "crates/spynso3/src/display/explorer.rs",
+      "git_blob": "b374af9c636ab510d23d536a64d2509f31f1b593",
+      "sha256": "4402bc32457f8f15943bd4b9207423848211d9ba2c0ba2104a9d29f435ac47ab"
+    },
+    {
+      "path": "crates/spynso3/src/display/labels.rs",
+      "git_blob": "7bd2890405f1d6190fa276c92daf05b724cf264a",
+      "sha256": "22aadf7d7fd9a5b676b6e09586685c0c4fa7503fc4800ae41f665a5c848ff50e"
+    },
+    {
+      "path": "crates/spynso3/src/display/library.rs",
+      "git_blob": "d0075baf04c05e1e0583a5e9693ec15827dcc478",
+      "sha256": "b663a6274285ca5f9fb1c12964f1eeca7058b7daa30c79cf0fb87ccc7b691817"
+    },
+    {
+      "path": "crates/spynso3/src/display/metadata.rs",
+      "git_blob": "5235cb855a3f2161231611228fbe37029ef72b04",
+      "sha256": "3ebac67f962088684e5a2d94036aeca9154c118e011bc3e3d48231d5b609835b"
+    },
+    {
+      "path": "crates/spynso3/src/display/network.rs",
+      "git_blob": "6dafaac20d7f96ecddad505fad61d03e0d8c1185",
+      "sha256": "f9c46fbcd83bec42f3bf18ffb348d8c9cc43bc993a8087ebd9ad67dd32f693d6"
+    },
+    {
+      "path": "crates/spynso3/src/display/paging.rs",
+      "git_blob": "15a28b019f885dfcaaca82c508eae89356331acf",
+      "sha256": "455def4cc1edd3b219514161faaa77c1e8018cbe7d4e98e829ad0770ddfdeb7d"
+    },
+    {
+      "path": "crates/spynso3/src/display.rs",
+      "git_blob": "b92032001cd4e5614c65966695cdace178704baf",
+      "sha256": "1299d5af59695abe65cf752102499e19bdd24a6efa9a8a2cafc1d3489afad70a"
+    },
+    {
+      "path": "crates/spynso3/src/documentation.rs",
+      "git_blob": "819ee9e828011b62480bbb15d18a9486e00ef0f8",
+      "sha256": "9ce4f8a3922d621f72cbb9ff78cfce93534efc84fac291ed3834c5ad9530ed35"
+    },
+    {
+      "path": "crates/spynso3/src/evaluator.rs",
+      "git_blob": "f6a3bc5d88eef7836615ba8e44d4dab9ea031cee",
+      "sha256": "b3830eda14cf970b6e945972f01c1c8a3509a1c238b422948af6a22229b710f0"
+    },
+    {
+      "path": "crates/spynso3/src/expression.rs",
+      "git_blob": "99503691fcd0ac3508a98e1ec76b11637aceaa79",
+      "sha256": "ef961dd6a3aa2aa508e82e1333a092fb8becead07b76528f30cd71a30af748c3"
+    },
+    {
+      "path": "crates/spynso3/src/lib.rs",
+      "git_blob": "3f3366345eee9d87647df318be584d5128b6bbe0",
+      "sha256": "823ea4d52fd642521fc1134b3d2b4e77c78d40f55ebeb661bbe869bb0f3cd321"
+    },
+    {
+      "path": "crates/spynso3/src/library.rs",
+      "git_blob": "7fc7f160997886360f485fdd22126091ff5bc4b2",
+      "sha256": "7e50ebbaf4d28955416f185d01641691a415b25f64e78c86c412206fa5967d84"
+    },
+    {
+      "path": "crates/spynso3/src/metadata.rs",
+      "git_blob": "b8f66f18fbf69cc6769ec0aba722bb0ad9adec21",
+      "sha256": "b8da9982593bf2789f28c8c0ab335a895a69b33f6b072a80142bd8a66b64615d"
+    },
+    {
+      "path": "crates/spynso3/src/network/execution.rs",
+      "git_blob": "bd6fe23ef53704e221d9fa41dba22c4ed7440076",
+      "sha256": "abb75e03c6c94fd9939dac4f0979ccacf86136c6815469a2098ab3c9637de93b"
+    },
+    {
+      "path": "crates/spynso3/src/network.rs",
+      "git_blob": "4fbedefff02585e88e18014d72ead7bf2ea2657a",
+      "sha256": "f3a07c254cc30e8b81d69f182580539741ef2453f7966c26cb9883d6bf3a3860"
+    },
+    {
+      "path": "crates/spynso3/src/pattern.rs",
+      "git_blob": "83ddc1dc7cdc9bddea48b5465d1e50af3ebec1f2",
+      "sha256": "6aaa86ee1367f643f3bef0e162a25b4c9cbe0687956df6485d6b9d067e92ef09"
+    },
+    {
+      "path": "crates/spynso3/src/projectors.rs",
+      "git_blob": "0ba1c6006e1da6c359eb33f0b8e1dbd36b913cba",
+      "sha256": "24b9cb6bb43959d479c5409b9b52a9406ef81ce5716023d8567a32eaca8b9259"
+    },
+    {
+      "path": "crates/spynso3/src/simplification/pipeline.rs",
+      "git_blob": "79a348b7166e0bd7812ee4be1c8bed62afc893be",
+      "sha256": "5c35a81943c85ca338d7671e4f0f8c6e59f1b1919a717d7c0424b7f43d17efd7"
+    },
+    {
+      "path": "crates/spynso3/src/simplification/tooling.rs",
+      "git_blob": "d557e18ccff6e4510e1ee747b04b083b9b55ce7e",
+      "sha256": "b7007f9437b27a1081ff540d58e2086ef63bb5100c6af279cc965e2078a61f77"
+    },
+    {
+      "path": "crates/spynso3/src/simplification.rs",
+      "git_blob": "a29e9e505edf625eb5225c83145b32ed6910c372",
+      "sha256": "725b45f6127a7047f367312392e3ee85a9c6e12bd83771774b2202410bac7338"
+    },
+    {
+      "path": "crates/spynso3/src/structure.rs",
+      "git_blob": "c233c8a2b9ae4df0499c96c4b136bf11acfff6c1",
+      "sha256": "e0bf064075632620a2a96373d8337c1dabba1e1b2dae8c246945fcb695595408"
+    },
+    {
+      "path": "crates/spynso3/src/tensor_rule.rs",
+      "git_blob": "e9f2438bce076afaa1fe6c71e9e11284d06e7ec9",
+      "sha256": "f7045eb0cc70e626b0a66487d268800df17a57724a8cc578edbb43a4349f0e21"
+    },
+    {
+      "path": "crates/spynso3/typst/explorer-host.js",
+      "git_blob": "c244f9e2d8dc973d4bc4886ec1c748586849db9e",
+      "sha256": "524d730e0cec605e6d1651923e8b833b6a6142f9aff8dfc00bbe517e78c3b5da"
+    },
+    {
+      "path": "crates/spynso3/typst/explorer.css",
+      "git_blob": "f16e96522b7fcf075b10f8fc43ef3d5505662fc4",
+      "sha256": "ba7d3a2ebb43f0ddb6573ff2273186316e78d882108af52f501436c55590667d"
+    },
+    {
+      "path": "crates/spynso3/typst/explorer.js",
+      "git_blob": "82a53da3e679a0e4a61d8fa730e51664e5303657",
+      "sha256": "3691945a604c060426832ec669041bb2906d78e958f3a3420e03ba5b15f401c3"
+    },
+    {
+      "path": "crates/spynso3/typst/library-copy.js",
+      "git_blob": "62708c32ed6ff073f1121db6714874e0c3c33928",
+      "sha256": "09d0213c3e0c41a43126e09c5d0c4d76f87e62d165352390f8f58c65ce93f3e5"
+    },
+    {
+      "path": "crates/spynso3/typst/library.css",
+      "git_blob": "69ac2eec0a92a8788eec1c35f389b02784e05f3f",
+      "sha256": "c8a50b178174f23c1ae5ad052e43455a1a82f8b497e7dccb3adee2f6229b72d1"
+    },
+    {
+      "path": "crates/spynso3/typst/metadata.css",
+      "git_blob": "31ace016a07fe749a9658cf6a5dbb71a13af24a5",
+      "sha256": "1108054e3dc9482b4898f5c8a03aa00777e442e36369e32a58910cc8862f318d"
+    },
+    {
+      "path": "crates/spynso3/typst/notation.typ",
+      "git_blob": "c6c4d1b8406a9369c0fb6a976f5dde851fb9be7f",
+      "sha256": "81a549bcc604b4091a893e93ae9886c8c079b34851c9d6fed90c309259953a93"
+    },
+    {
+      "path": "crates/spynso3/typst/notebook-font.css",
+      "git_blob": "89537ad175d291739e24600f93c71157a34d53c5",
+      "sha256": "02727170e2a8045a73bd8d7de1410d176a4b2b1ea074691d68ce889b4a0ed75c"
+    },
+    {
+      "path": "crates/spynso3/typst/notebook.css",
+      "git_blob": "e6f67d0723f0e4719a015f2d382be47decb4ef62",
+      "sha256": "e645e4c4799cd95a3d15ca6b1da2dce2df1d8643210f32d305c50115c281b951"
+    },
+    {
+      "path": "crates/spynso3/typst/render.typ",
+      "git_blob": "b2dd18ad61dc9532943f9be348f74c9bc1783d9c",
+      "sha256": "b2688f79a45d852c19351e4df6aea708decfb7dc03a648f89a5617a6aacd89ff"
+    },
+    {
+      "path": "crates/symbolica-data/src/lib.rs",
+      "git_blob": "abb4e22749f940731c8b0f1ad7d92f04d6d6e809",
+      "sha256": "a03aabba58017eb99e936387cc69fe7d56189254c38e4224703072a40b4f5495"
+    },
+    {
+      "path": "crates/symbolica-data/src/python.rs",
+      "git_blob": "7f497d49fbc444121261cda09a22831eac6a7c27",
+      "sha256": "a26d382da9fbb4362204ff024f936e05ec853066ced0f3244624ad430053e819"
+    },
+    {
+      "path": "crates/symbolica-notation/src/index_display.rs",
+      "git_blob": "90b826911d206a09cc94f0d26b748f80c87439d7",
+      "sha256": "39750a722ce7166ef2a05039dec2b0315632171e7e08bc10d46c8624d90b2607"
+    },
+    {
+      "path": "crates/symbolica-notation/src/lib.rs",
+      "git_blob": "ffb1d4f2e5d92b9f7b396b9854c5003cff9a99cd",
+      "sha256": "980ac4be8af285734b921576a27bc7323d0f90798c4360b1bad6a0678747248f"
+    },
+    {
+      "path": "crates/symbolica-notation/src/mathml.rs",
+      "git_blob": "ce5f15bdeb3581d373fcacf2a4059f3bbbc0e7b5",
+      "sha256": "22f3a6f9be162b3737ec9c5bf7be020b02b9fe340ae15217e1eac99776611257"
+    },
+    {
+      "path": "crates/symbolica-notation/src/mathml_subset.rs",
+      "git_blob": "8f344ccb72e515ecb48cb42ccd4185bc17897927",
+      "sha256": "1f4fc93c02cbb04f4259dc57ba1351de6b4e7dc47b3806926a94e97da738cc75"
+    },
+    {
+      "path": "crates/symbolica-notation/src/registry.rs",
+      "git_blob": "309685ed7ca70f43704fb12d8922f69751cadd47",
+      "sha256": "47dec008c2e27bcf7efd83e082d6f21ea9db769455e4c2317c72dd2ab44b3b63"
+    },
+    {
+      "path": "crates/symbolica-utils/src/lib.rs",
+      "git_blob": "fe9aefab6f5e9ff7caa45f0a7524dd07a3acdb2c",
+      "sha256": "b4f99680e6fdf8ffbbf44b077e242a3c0285cf7e91fbcf60d94ca8749efa3d05"
+    },
+    {
+      "path": "crates/three-dimensional-reps/build.rs",
+      "git_blob": "fd824c9c804a81d2788f86de45121b27eb712e2d",
+      "sha256": "d23e3ac5c1c450ab72f1d284ff2bbae8355544b70975d5f71d9a757e972764dc"
+    },
+    {
+      "path": "crates/three-dimensional-reps/src/cff_recursion.rs",
+      "git_blob": "a3b1b70964de9e6be15eadabbcd1c3883d0ff62f",
+      "sha256": "27c7291fbbc9a74561dca213f385e9794edca44856935022ef4a5e177c178eff"
+    },
+    {
+      "path": "crates/three-dimensional-reps/src/cut_structure.rs",
+      "git_blob": "522a3ae15c7b00cf1162ef0aa289daa4940a1de5",
+      "sha256": "faf542a7265c176d75e2bc28124603af769dc38c75f7572edf70cc2a48b21a47"
+    },
+    {
+      "path": "crates/three-dimensional-reps/src/energy_bounds.rs",
+      "git_blob": "824c30560b6ccd328ba182574b823701ed5196a5",
+      "sha256": "7a8fe3ebbd32056fdc0d624c0403f474acb09c05214194de1b914e369c8501a7"
+    },
+    {
+      "path": "crates/three-dimensional-reps/src/expression/ltd.rs",
+      "git_blob": "840fc3778c1ee2192f6579f2f560e1c392a88b6d",
+      "sha256": "613f8eb08ebc89b0e8fbb78e371c533f7b3cea4f9cd8fc95f2103e07170e07cc"
+    },
+    {
+      "path": "crates/three-dimensional-reps/src/expression.rs",
+      "git_blob": "b84e27fb7279e13ccac05142fd19f782faa34ab4",
+      "sha256": "2880cd9a02e85343229fb35f35d055329614a12d7007c9e67da6f762da0f88b5"
+    },
+    {
+      "path": "crates/three-dimensional-reps/src/generation/ltd.rs",
+      "git_blob": "d2b2e96a7880cb97de73f6c20d5d0432e3167e41",
+      "sha256": "88bdfcb4b19a03ca6c96378a0fcb7bc9c12a68f4f9e74d05155657a4fde730df"
+    },
+    {
+      "path": "crates/three-dimensional-reps/src/generation.rs",
+      "git_blob": "e89620f21751d8e895444e9bfedd9f5d6036a2b1",
+      "sha256": "976369c9881a4eb3070397ac8250dda031ab3b6f852c2e86f494ce8a8c7d94e7"
+    },
+    {
+      "path": "crates/three-dimensional-reps/src/graph_io.rs",
+      "git_blob": "c5ae6a735190d1492232a11c9759573ef0965174",
+      "sha256": "b811c71545b5e184743a90e527ca2decf8c1c36f693e906ac3f8d64b7b79aa95"
+    },
+    {
+      "path": "crates/three-dimensional-reps/src/graph_signatures.rs",
+      "git_blob": "0f339ee4a8818a357187aabe1a3382ab55bbe21d",
+      "sha256": "843fa2a4d109e173b4c08a8c75c4e014d5b844a1649da3fb6d298ba47d8c0527"
+    },
+    {
+      "path": "crates/three-dimensional-reps/src/lib.rs",
+      "git_blob": "526c14bb188659b52dacd0add55ff1a91c712b30",
+      "sha256": "0d707e92dd08c0f95b21a8e32d16389ef347dfac782bffc8e13d5b0874288bec"
+    },
+    {
+      "path": "crates/three-dimensional-reps/src/surface.rs",
+      "git_blob": "4fb67fc5b87e759e54c08d8f20fd0a0d87d1d937",
+      "sha256": "a101b66d4a13c2799438eada9c70cdf8e9c39c4972f4375449d3fc69000afe11"
+    },
+    {
+      "path": "crates/three-dimensional-reps/src/symbols.rs",
+      "git_blob": "b4328c5bfd5a08481120e652a7be921f542b9ab6",
+      "sha256": "76176e514dd761fd85df3d7278950336559e47fd89670251edc811225d421317"
+    },
+    {
+      "path": "crates/three-dimensional-reps/src/thermal.rs",
+      "git_blob": "89308ac6dcebe6922bf2e21c76fdc14ffbca49e6",
+      "sha256": "44287b761a4b91184270c68afe5b7708e003dd7782efb605e3658ec2c0b59237"
+    },
+    {
+      "path": "crates/three-dimensional-reps/src/tree.rs",
+      "git_blob": "fe5467dc19330c6a347d445e7c4f3fee5cee0aee",
+      "sha256": "773c33cb18f1d69174daf592802fffc1999a4c6259d4fabb00f3bdb6eefa11af"
+    },
+    {
+      "path": "crates/three-dimensional-reps/src/utils.rs",
+      "git_blob": "bb4cace1f8764e72c0f26e5dcbc5d1a5b6234181",
+      "sha256": "19bd3d6384d9655f856bdcd47caef4ed3691187b448bc9de8b8bec2040d93be3"
+    },
+    {
+      "path": "crates/three-dimensional-reps/src/validator.rs",
+      "git_blob": "5d66481c4817c6d61dc7aac5c1baea5e2d5a52f3",
+      "sha256": "d73e9867500185a6c25e5a454ef4fa5dddbf22c15ef8f63bb0d88b442a44949c"
+    },
+    {
+      "path": "examples/notebooks/symbolica-host/src/lib.rs",
+      "git_blob": "c8c04fdccc61de62d3ee0fa94bb6ddc66dbc62e5",
+      "sha256": "be3382786dc4f46352cee7a276820ac182ff936afe2db87f2faaef582efb490f"
+    },
+    {
+      "path": "vendor/clarabel/build.rs",
+      "git_blob": "69985c344dded7d7d21f0cfaccb25606f653a924",
+      "sha256": "53a93c5a60a4eea517cf9c02a9a3e75978aab3fa91aa8796a45f51455b9a65cc"
+    },
+    {
+      "path": "vendor/clarabel/src/algebra/csc/block_concatenate.rs",
+      "git_blob": "55df3962b7c988445b743886f85233eb432fafc9",
+      "sha256": "169a25748a8ebe4264f1b53462c9f42d6481605ee38fbe7a4d0f8b4891a76f1a"
+    },
+    {
+      "path": "vendor/clarabel/src/algebra/csc/core.rs",
+      "git_blob": "cac9c1656865480dc784109785ae94e6fcbe71a1",
+      "sha256": "71452590bf777df560fa76662110d254bb0c62b2293a5daee9b2eb663e0756ed"
+    },
+    {
+      "path": "vendor/clarabel/src/algebra/csc/matrix_math.rs",
+      "git_blob": "7ea2ea1c27c3c2fb36abbee26c2f743f9adcef95",
+      "sha256": "45c2a60e4f5cbd8d8ebb7a39b44d7f4c50866db2b149b631a087d83bea22cafb"
+    },
+    {
+      "path": "vendor/clarabel/src/algebra/csc/mod.rs",
+      "git_blob": "f9eb4687afb1cde4d62e89a4678d16d2a121ad99",
+      "sha256": "a55c7f5ee38dcdf3c28bc8250509dfed0368b663d3adca7ebc1473e6b7593ca3"
+    },
+    {
+      "path": "vendor/clarabel/src/algebra/csc/utils.rs",
+      "git_blob": "d0fac442cd8af2f40ad60f772e52f6e0894aff60",
+      "sha256": "ecf7b60d371a8823db960b62ff5f94cea223024c1d40c02d1f42f2ce7eab13bd"
+    },
+    {
+      "path": "vendor/clarabel/src/algebra/dense/block_concatenate.rs",
+      "git_blob": "fea7293813029e4f66c59a4243e76ed784081933",
+      "sha256": "aada238ed18916097c15e655d1375fb0f470ded4d7bd2cf09cb771ece2c2efd9"
+    },
+    {
+      "path": "vendor/clarabel/src/algebra/dense/core.rs",
+      "git_blob": "ecf54c86a302ededd6766fc8bac87e86ff4f3710",
+      "sha256": "fbbc679f175b6262b27730459453b81a11f2ec74e762c5f505a7ca6404c74126"
+    },
+    {
+      "path": "vendor/clarabel/src/algebra/dense/fixed/dense3x3/cholesky.rs",
+      "git_blob": "a6978663d19a087ac34d20a58047b2efd09573d9",
+      "sha256": "59bbe12807de074716c34cac89014f716695861aaaa26ebb31e87cbd2ca4e9b4"
+    },
+    {
+      "path": "vendor/clarabel/src/algebra/dense/fixed/dense3x3/core.rs",
+      "git_blob": "75ed77d1ef56b5782c8ef3581459ca1ab3e42744",
+      "sha256": "311a0fb4e6d1284c393eb5d901a2ce8dc1fbfcf72716b3c2beb2676682f5209f"
+    },
+    {
+      "path": "vendor/clarabel/src/algebra/dense/fixed/dense3x3/mod.rs",
+      "git_blob": "2010538a258617a6da6c2545475934d552541002",
+      "sha256": "10ff4c429856e8461325290467b27726409476665dae92a9e115a97619132de3"
+    },
+    {
+      "path": "vendor/clarabel/src/algebra/dense/fixed/mod.rs",
+      "git_blob": "2fd68d5e73249ceb73b935f3c97775f4343270db",
+      "sha256": "7fb73dcca470a8fda040d551175774c3251db8a093be2e895bbe2096d618e57a"
+    },
+    {
+      "path": "vendor/clarabel/src/algebra/dense/fixed/types/mod.rs",
+      "git_blob": "01f9cc14a996723bb2ba69c4f80ea70f41dcb1f3",
+      "sha256": "2c99d51b235644e1d4a042cdfb811b1834604f22f9bba1c1eecadee73ca57eef"
+    },
+    {
+      "path": "vendor/clarabel/src/algebra/dense/fixed/types/square.rs",
+      "git_blob": "501cc07bbdd96bf6d4f1f8f344f03617b0aaf3ac",
+      "sha256": "1b15be6a8f2ce9cbe88201983edce6c878851624e8cb5a8bf232373bf8289b9f"
+    },
+    {
+      "path": "vendor/clarabel/src/algebra/dense/fixed/types/symmetric.rs",
+      "git_blob": "2193f32bf5a6f27d9205431a94fe41699b687dcc",
+      "sha256": "1c97a5a3591597dc021020fdb844bfc9f4389274081ec3db3f1cab080e733781"
+    },
+    {
+      "path": "vendor/clarabel/src/algebra/dense/mod.rs",
+      "git_blob": "98e3b747783eca5d35586c45d1b9788751bdf606",
+      "sha256": "3d53fa7e041e32f013a109da831eab602c8963e5e88ec439885b35a4674a34c2"
+    },
+    {
+      "path": "vendor/clarabel/src/algebra/dense/types.rs",
+      "git_blob": "a95bea049007fcdf23f8962af16407fbba519109",
+      "sha256": "97f07014826093613ced52c551b6857a2d30644a8193ea361cd3dd17ad62c265"
+    },
+    {
+      "path": "vendor/clarabel/src/algebra/error_types.rs",
+      "git_blob": "7000449ddd85317d5a7f13e59af16884d86b69b2",
+      "sha256": "d3a1b4952bc186827eae61ac249e7ad9ecaa24f2fe2bea96b2bb4ae599316859"
+    },
+    {
+      "path": "vendor/clarabel/src/algebra/floats.rs",
+      "git_blob": "c8501a015d93677293cd59091c21719926a6c89b",
+      "sha256": "9b86d58361cd4af39742f5300ada64fd875aef36b636cc72b4b3214d0aa54e9a"
+    },
+    {
+      "path": "vendor/clarabel/src/algebra/math_traits.rs",
+      "git_blob": "3f945c3b30f0600858e4ec2ba8aaa75ac5aed041",
+      "sha256": "8ad5fd4bc68bd575dda995c4d59a8af0ec2121a55d37fd4c1bf15d1aee559d36"
+    },
+    {
+      "path": "vendor/clarabel/src/algebra/matrix_traits.rs",
+      "git_blob": "8ebe18319123eb45f5c5e027e4a2afdf898cf7b7",
+      "sha256": "46637b72140098391603ae03130cfea1228a61e1ed95f026277eb7aeeb636720"
+    },
+    {
+      "path": "vendor/clarabel/src/algebra/matrix_types.rs",
+      "git_blob": "e81daef6b9f6f7eca8061718d04c49bc6781a23a",
+      "sha256": "e88f4ff23486db8e08ff55a9b7d62f46c814103a6368cdddc21db50e78d32654"
+    },
+    {
+      "path": "vendor/clarabel/src/algebra/mod.rs",
+      "git_blob": "30b568e8198e8da1eea79118fd7a0029cc86a4cb",
+      "sha256": "6a002a854c8d368a773d112f1b93578000dbd12c4b808a2168e3d46f2b898cec"
+    },
+    {
+      "path": "vendor/clarabel/src/algebra/scalarmath.rs",
+      "git_blob": "4a214c459c9b0a43d9b184807e2aec774ff81efb",
+      "sha256": "8545011fa8620183dd15b3361f7ee574f3736e59f9dce90257caae6daac79a9f"
+    },
+    {
+      "path": "vendor/clarabel/src/algebra/utils.rs",
+      "git_blob": "0a5c8f59355da8d4d49287f20db3e23a11366d08",
+      "sha256": "972f5bebc802b3a0c4b39e07aca5c026e5fe248c730750e5932f75535f9a545b"
+    },
+    {
+      "path": "vendor/clarabel/src/algebra/vecmath.rs",
+      "git_blob": "a59b6fb17ef4e7ea7459171a610ade0370068f46",
+      "sha256": "9e664fa5e33dda42c1a456f7d3247dd89040e109ed82e00e2f282a5d03db7ab8"
+    },
+    {
+      "path": "vendor/clarabel/src/io/mod.rs",
+      "git_blob": "0ebc9f9a136aa634e63ce105187d446fd4e0a1b1",
+      "sha256": "689247fd9595900f333888c8b9c3650a074b22c31a2d8ecc225efa41cad57e29"
+    },
+    {
+      "path": "vendor/clarabel/src/lib.rs",
+      "git_blob": "7d6cb5302e0def57b34f23afdf7780e876c093d1",
+      "sha256": "e380a67c1798f1bdb4671968809b707ce60860d8522f48a540d52c586017ead3"
+    },
+    {
+      "path": "vendor/clarabel/src/qdldl/mod.rs",
+      "git_blob": "ce0801237db50d828c7f35c3accdfa59a28fa8c6",
+      "sha256": "90c2fd8d31db3324c5aa2bebb46646d4597320d3ed258b3b8a320395c238c584"
+    },
+    {
+      "path": "vendor/clarabel/src/qdldl/qdldl.rs",
+      "git_blob": "b36b82e6e799bf616cf15e0453389461f3da7ea9",
+      "sha256": "e97722058104474bdb294844b27c0fe27a10cbe45bbe96acefa4436ecc144646"
+    },
+    {
+      "path": "vendor/clarabel/src/solver/core/callbacks.rs",
+      "git_blob": "c7ce82552d1e55e275d07e842ce39220ccadcaef",
+      "sha256": "6455fe243366446681f15bc7bf9b42bb0315de9fc681e7dfbdfc5b98a6c48a87"
+    },
+    {
+      "path": "vendor/clarabel/src/solver/core/cones/compositecone.rs",
+      "git_blob": "164c5bc5df9644dc6c51e16b347aa89ea290c85a",
+      "sha256": "b26dc8aaccb33dce31bf81da3b2acaeb7f8f79b45c104730a8a03c344d262102"
+    },
+    {
+      "path": "vendor/clarabel/src/solver/core/cones/expcone.rs",
+      "git_blob": "feb2402be09835d8ff2fe5f708c3f26ceb95b42d",
+      "sha256": "9b2d3d0209505eb22f9451f962c33115671f6ad76798ea772852ac12d73f944b"
+    },
+    {
+      "path": "vendor/clarabel/src/solver/core/cones/genpowcone.rs",
+      "git_blob": "41ffce4e5a8fb6779ff91099cb4f9e33944081ba",
+      "sha256": "0a4d6a4307fd7ca1b55dfefb633b0a85a44bbedf58febb3163036bc3fb24589f"
+    },
+    {
+      "path": "vendor/clarabel/src/solver/core/cones/mod.rs",
+      "git_blob": "24e3c48901de4fda32f6367fb647daf56170e477",
+      "sha256": "2e6c1b2802a9f994ebca148b13ceae6269f1e8b5aa09920657e34e2e4620eebf"
+    },
+    {
+      "path": "vendor/clarabel/src/solver/core/cones/nonnegativecone.rs",
+      "git_blob": "3e4b530dc8b247f2c1755fb07d51c9261ef8579b",
+      "sha256": "43e13b21bdd795c1aae98e21c3cff32a0ae1db55a24436b0b547432f62d18d9a"
+    },
+    {
+      "path": "vendor/clarabel/src/solver/core/cones/nonsymmetric_common.rs",
+      "git_blob": "a688a45fda94ceac5d7632d4c37599888b6dde47",
+      "sha256": "822fe257101b64b476315a40f5379253bd5302d235b072efbe632e8307c293d5"
+    },
+    {
+      "path": "vendor/clarabel/src/solver/core/cones/powcone.rs",
+      "git_blob": "9adbe68035417496d71c216d5008ee0b0bc5b326",
+      "sha256": "0645239c318280f42e524c92154585b88b8e18fda2b83799c49335b95e0fdf49"
+    },
+    {
+      "path": "vendor/clarabel/src/solver/core/cones/socone.rs",
+      "git_blob": "36b24f121d02becbb61ab04c5fb7b14d89695f6d",
+      "sha256": "987fc8784bfb86cd2adc4776694f2c3ded3f2cdbd830a638d312eac85c731d77"
+    },
+    {
+      "path": "vendor/clarabel/src/solver/core/cones/supportedcone.rs",
+      "git_blob": "2eaa02dfd190a9c4a1561b3ccebe8ac620f5c48d",
+      "sha256": "c17852cfdabd457c4545c5641cef25b144bbfa0096e5f0bbafc4d58f08b2b7c4"
+    },
+    {
+      "path": "vendor/clarabel/src/solver/core/cones/symmetric_common.rs",
+      "git_blob": "a17d83a71f535f2f043802deeed0cb6ee71751cb",
+      "sha256": "131b2950839da9513bb69cf853e22c390c0b5ec23409768acf124f7b6f35f9d2"
+    },
+    {
+      "path": "vendor/clarabel/src/solver/core/cones/zerocone.rs",
+      "git_blob": "35fcd875019a62fa1279b2f9c24ffcd76faa22d1",
+      "sha256": "b0ea629d8882a732335cae737bc30a4649b9ed456291eaa62df9ff37409d4485"
+    },
+    {
+      "path": "vendor/clarabel/src/solver/core/ffi/enums.rs",
+      "git_blob": "e37bff3035658e4887f3a61abaa8a9d36828bf7f",
+      "sha256": "149eb9cdb49c67b48f90586c08650218e80be67cd1911e6c0ff783f26aafb194"
+    },
+    {
+      "path": "vendor/clarabel/src/solver/core/ffi/mod.rs",
+      "git_blob": "0983b2fc9c921f56ef809eb134ceb174b10616fe",
+      "sha256": "461941f1e94bab506a80a9f6c9a1e2492d14165827b1d17a179fb6f76626b7fd"
+    },
+    {
+      "path": "vendor/clarabel/src/solver/core/ffi/traits.rs",
+      "git_blob": "5fc0eef3ac87d6f7802cfefbc6256811030b4123",
+      "sha256": "aab97ee9f688e66227cd7d8f23251c2fea6d4f1e58eb2e04ce9f786869f7040e"
+    },
+    {
+      "path": "vendor/clarabel/src/solver/core/kktsolvers/direct/mod.rs",
+      "git_blob": "9a5d9264703670da5be48a0f29cf7deac8527b9e",
+      "sha256": "6affd1ce69d790b7525f2e0b60d5b5a25dc14369b5410df5e1f89d8b310b9516"
+    },
+    {
+      "path": "vendor/clarabel/src/solver/core/kktsolvers/direct/quasidef/datamaps.rs",
+      "git_blob": "5d75c5b5069e0484078ea47fb3b1554e7e15ff3f",
+      "sha256": "3535c3900640e0a64a3294fc45479f7ef5bcd4accd31f0e33f4f46c6fae3fa06"
+    },
+    {
+      "path": "vendor/clarabel/src/solver/core/kktsolvers/direct/quasidef/directldlkktsolver.rs",
+      "git_blob": "bf44bc1cd787ac5a1eb2090d17fd1796a1857150",
+      "sha256": "518ac993266216224b65f60472830c4068dd47ebeb547c5737a53ca54f9e2431"
+    },
+    {
+      "path": "vendor/clarabel/src/solver/core/kktsolvers/direct/quasidef/kkt_assembly.rs",
+      "git_blob": "385b8b3ed55b1499fa08c11efae16c214155caa1",
+      "sha256": "19d9a18ce7a119a5e045de8ae3d25727adda1f6105f50aef73489cd2ff8c0ec1"
+    },
+    {
+      "path": "vendor/clarabel/src/solver/core/kktsolvers/direct/quasidef/ldlsolvers/auto.rs",
+      "git_blob": "d47a8cfc898d23dd6775602483a25ff8e32f9828",
+      "sha256": "2a0c6e0ed259faf62ad8c510650d3bf3648955dea2661cb90a1c210f44d6e727"
+    },
+    {
+      "path": "vendor/clarabel/src/solver/core/kktsolvers/direct/quasidef/ldlsolvers/config.rs",
+      "git_blob": "f5140416fd8cfce368ad807ea2d0747f166850b8",
+      "sha256": "f70a354ff7f4960fbc1409994713797666048406a418848da748f94395acb6b7"
+    },
+    {
+      "path": "vendor/clarabel/src/solver/core/kktsolvers/direct/quasidef/ldlsolvers/mod.rs",
+      "git_blob": "62f415a0636318f07e1ec6064af952d7dfd2153c",
+      "sha256": "c8e516c2e44a5b8a3dd19b4cefe61a2955ab1f9f224b482482e834c90a697cab"
+    },
+    {
+      "path": "vendor/clarabel/src/solver/core/kktsolvers/direct/quasidef/ldlsolvers/qdldl.rs",
+      "git_blob": "ee91a17175d72dfd3e6103e75569df5f6cfdffb2",
+      "sha256": "5aedc18f5096b1e5279ac03147022929c17964cdf6ed34a5be03ac03cd43cfbd"
+    },
+    {
+      "path": "vendor/clarabel/src/solver/core/kktsolvers/direct/quasidef/mod.rs",
+      "git_blob": "891c241870e20f09c6dfc5fb70f6f0c2562d9b23",
+      "sha256": "6c20eda6f78a50acd3193119eccb07dcaea5be257d24db35fbc093edb0243933"
+    },
+    {
+      "path": "vendor/clarabel/src/solver/core/kktsolvers/mod.rs",
+      "git_blob": "4e428615d1d71dd356ed5ae3efc4a9008ebc0ff3",
+      "sha256": "2d6b2dc6e08687944e6058b4e35c8bdc7e1acaf629cb39702e4d33e0cda495bf"
+    },
+    {
+      "path": "vendor/clarabel/src/solver/core/mod.rs",
+      "git_blob": "5a1db3b4dc6aaad3659e531d23395bdf10406040",
+      "sha256": "83bb11d25d6714cb5c2bddb38e8ef718042c43614addc3113bb1fad28b58f26d"
+    },
+    {
+      "path": "vendor/clarabel/src/solver/core/settings.rs",
+      "git_blob": "e2e1a1e82326da6df152355ca1a5294b96fbd7f3",
+      "sha256": "8b3a65921c66416d01d9d4629c2a26ebba9adc3eba3a75a3f818115175e8d9eb"
+    },
+    {
+      "path": "vendor/clarabel/src/solver/core/solver.rs",
+      "git_blob": "6af492c52ce2ea0533c20797c88aac9b6d560fdd",
+      "sha256": "cc5a49ee6f3ed0d97cdaf049c6377f09ca8bdf8097c3ec35a1d84c1b5e9dc460"
+    },
+    {
+      "path": "vendor/clarabel/src/solver/core/traits.rs",
+      "git_blob": "cc2453ed696e571b5bc63c01383800823a9cb789",
+      "sha256": "5241a0e1d19b791c2896251adbd51c0f9a69e96434f6fa1d0bca231f66001ccf"
+    },
+    {
+      "path": "vendor/clarabel/src/solver/implementations/default/data_updating.rs",
+      "git_blob": "95ed527df4e02b915a9e0c49df2b346c5b14ff87",
+      "sha256": "4633b3300c68a3b6171d8836277d0f4c462e4da59ad8e92e5c95d81f910690a0"
+    },
+    {
+      "path": "vendor/clarabel/src/solver/implementations/default/equilibration.rs",
+      "git_blob": "813dde0c11be8879e76ea83a3fe4c3a8b8149b77",
+      "sha256": "65b0ec6dfb4c0fff09fe9482b4c3050a884ae9000e02fbde404e345f32bfbe2b"
+    },
+    {
+      "path": "vendor/clarabel/src/solver/implementations/default/ffi/info.rs",
+      "git_blob": "833911e53b38640d42bf85e13c7b24eab17cbacc",
+      "sha256": "4621704006f31b183fd2128ef134fc4bbb404a142dbd0c439260eec71bd9f810"
+    },
+    {
+      "path": "vendor/clarabel/src/solver/implementations/default/ffi/mod.rs",
+      "git_blob": "6376d6e823fdbcf7ded4c84b670084caaf16d6b2",
+      "sha256": "81390b33a82bd09edf6f61e129f3414419cae69a2626c1de9a43cef61c31bb76"
+    },
+    {
+      "path": "vendor/clarabel/src/solver/implementations/default/ffi/settings.rs",
+      "git_blob": "0586fdee8762396fb8e99542f283dc232c9c7ed5",
+      "sha256": "428d9e31dfd6353db849bbdc4b971b1bd0d1cbf4e40d6427d90a8b57bb3ca8b9"
+    },
+    {
+      "path": "vendor/clarabel/src/solver/implementations/default/info.rs",
+      "git_blob": "0f777a546fd433f5a45d590a30c4666e510752c3",
+      "sha256": "1a138ed232e6a09274d339fca2dc81b9e3212c1d3f01128ee1ca342ec704943b"
+    },
+    {
+      "path": "vendor/clarabel/src/solver/implementations/default/info_print.rs",
+      "git_blob": "80faa719ef6fef8a343983cde7e673844bc726fe",
+      "sha256": "ab188522345b472d9bad6b30a4e01a6c2bc8e3fc5b131af294c8018de95a0f5a"
+    },
+    {
+      "path": "vendor/clarabel/src/solver/implementations/default/json.rs",
+      "git_blob": "86b8f1aee6f53a55efdb52d62fe5f0540381e58a",
+      "sha256": "58c5dc9c0fdf680134cd36ee4dd9252cae1949a3c61bb2745cc872a8912abfb0"
+    },
+    {
+      "path": "vendor/clarabel/src/solver/implementations/default/kktsystem.rs",
+      "git_blob": "586c3aedfc7501a84134360bbc5b6566cbbe40eb",
+      "sha256": "497989b8909ce6bfbd2a007199d6cab846b65434e386df68fe89b8d64953f52b"
+    },
+    {
+      "path": "vendor/clarabel/src/solver/implementations/default/mod.rs",
+      "git_blob": "c7b9bed6b8178b43d6ff091368051dc3abe9e8a2",
+      "sha256": "c2197b794905a0f579cebaeef31070f5d5d26c81efc0cdebc03dc7e319cfe248"
+    },
+    {
+      "path": "vendor/clarabel/src/solver/implementations/default/presolver.rs",
+      "git_blob": "1f6f86a0d2625d7330db398436b44edf8f219275",
+      "sha256": "cc1532ffbbee4239298066f3ec5dbc7fe0dd9cd83ca4cd20f28e959f806df77a"
+    },
+    {
+      "path": "vendor/clarabel/src/solver/implementations/default/problemdata.rs",
+      "git_blob": "568b68795b0ae427d70ac69846f73db0e18229ac",
+      "sha256": "bfe6ffec99f98e29dd790b9160e61e1f826e8008819310821d9e6376c8e93fe2"
+    },
+    {
+      "path": "vendor/clarabel/src/solver/implementations/default/residuals.rs",
+      "git_blob": "f93a3713b8ad256935799efa25a9bd4eddd008f1",
+      "sha256": "0a0c7c75db5bf488a07a60277107ed35613c8729f13ea304035bd72b8b5cb1d1"
+    },
+    {
+      "path": "vendor/clarabel/src/solver/implementations/default/settings.rs",
+      "git_blob": "c31f5e1460ca620997cee49a4261124002676650",
+      "sha256": "e7196efdde340078b1daffbdeb04d49f0a62e792dc02a62c55b435b1e8bd7345"
+    },
+    {
+      "path": "vendor/clarabel/src/solver/implementations/default/solution.rs",
+      "git_blob": "be032b1046e8509ff714fb575e5a916db1ad142a",
+      "sha256": "bcfdf29bd563639e5df7b651f81f92a79cd9941e14433cb2e1f526312347f0c9"
+    },
+    {
+      "path": "vendor/clarabel/src/solver/implementations/default/solver.rs",
+      "git_blob": "515141e75ac2cc44c0faa4c0461960cac27b0000",
+      "sha256": "2ef3ee2efcad7542499785fb7717c747e7149f0b7c0e93478a19ae90f4acd649"
+    },
+    {
+      "path": "vendor/clarabel/src/solver/implementations/default/variables.rs",
+      "git_blob": "49dda74976fa3977ab1ddc72ba3f3837ef572bcd",
+      "sha256": "af6c53b10d5229999fd41bcf828a80f03adf773d9114dc9a4679e09143c0c1ae"
+    },
+    {
+      "path": "vendor/clarabel/src/solver/implementations/mod.rs",
+      "git_blob": "f72ffffcc3b329af90c8a0e4a48febedb7697bd9",
+      "sha256": "e5231f8b9e49646309c324d9f47586ec64941b9b7270a1f381608d1cfacc8b06"
+    },
+    {
+      "path": "vendor/clarabel/src/solver/mod.rs",
+      "git_blob": "30a40e6488a08140be90010a662a4b28fb7650f5",
+      "sha256": "7a1812d4da26a231e989596700824a14f79966a230f74eb18cd0749a7e0dd996"
+    },
+    {
+      "path": "vendor/clarabel/src/timers/mod.rs",
+      "git_blob": "f47435aad9e077495f0ac4b095d33bca2163dda0",
+      "sha256": "41f7a7b586dcdce7a95cc677bcf099ba71d5dded4daf45fcaae183e2eb643e3d"
+    },
+    {
+      "path": "vendor/clarabel/src/timers/timers.rs",
+      "git_blob": "cf1c7dd1889ce9c94001805bd9d4de82a1fc7777",
+      "sha256": "c50d48193f429c6eec60074c9dc650f267beeba4c4a3e3c23fcf81f1683709a9"
+    },
+    {
+      "path": "vendor/clarabel/src/utils/atomic.rs",
+      "git_blob": "74defd40e16e23888946beaa1f615946b17ac89a",
+      "sha256": "59d2fd08d19f6d9f9f8f4c3fae97c02ba27cfb8bab90e9e3dace84e6d166288e"
+    },
+    {
+      "path": "vendor/clarabel/src/utils/infbounds.rs",
+      "git_blob": "10c4188de9a447fe2c567f3cd4436325a1263689",
+      "sha256": "cc278918bf6955d7864a28b5cc05bfb56be6c5380fdc606c9e3fe94690394329"
+    },
+    {
+      "path": "vendor/clarabel/src/utils/mod.rs",
+      "git_blob": "71be9edf56d0af7be2e97a16163a6580024eb669",
+      "sha256": "d9771ba92692b897190d472bed85d6aa58b8cf8390f93a785c84968fb27b09a3"
+    }
+  ],
+  "features": {
+    "alphal00p-notebook-host-3d42e036b8014ba9": "[\"default\", \"native\"]",
+    "feynkit-py-b7dd161baa307aab": "[\"linnet-python\", \"native\", \"ufo\"]",
+    "linnet-py-75b3584825a76c6d": "[\"native\"]",
+    "pyo3-build-config-b24c5f4fa1fd20f2": "[\"abi3\", \"abi3-py310\", \"abi3-py311\", \"abi3-py312\", \"abi3-py313\", \"abi3-py314\", \"default\", \"extension-module\", \"resolve-config\"]",
+    "pyo3-macros-backend-712706f5a9499700": "[]",
+    "pyo3-stub-gen-derive-a25949ce4efa53fe": "[]",
+    "pyo3-ffi-0d70701015ec9bed": "[\"abi3\", \"abi3-py310\", \"abi3-py311\", \"abi3-py312\", \"abi3-py313\", \"abi3-py314\", \"default\", \"extension-module\"]",
+    "pyo3-13a44b194deee8ca": "[\"abi3\", \"abi3-py310\", \"abi3-py311\", \"abi3-py312\", \"abi3-py313\", \"abi3-py314\", \"default\", \"extension-module\", \"eyre\", \"inventory\", \"macros\", \"multiple-pymethods\", \"num-complex\", \"py-clone\", \"pyo3-macros\"]",
+    "pyo3-macros-e33dcef14b15b331": "[\"multiple-pymethods\"]",
+    "symbolica-data-4ab33879c4c98bcc": "[]",
+    "symbolica-data-c8c874a51277a0db": "[\"python\"]",
+    "symbolica-notation-64ed37281958106e": "[]",
+    "symbolica-typst-plugin-7d04207722784946": "[\"native\"]",
+    "symbolica-773ab1436d7ce79f": "[\"bincode\", \"float-mpfr\", \"integer-gmp\", \"native_code_generation\", \"numpy\", \"pyo3\", \"pyo3-stub-gen-derive\", \"python_export\", \"serde\"]",
+    "symbolica-d4c3f950544bd849": "[\"bincode\", \"float-mpfr\", \"integer-gmp\", \"native_code_generation\", \"serde\"]",
+    "symbolica-utils-ad84f0448cb10ac4": "[\"native\"]",
+    "spynso3-52182fa2a9e3652f": "[\"native\"]"
+  },
+  "wheel": "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/generation-python-docs-ports/wheels/symbolica-3.0.1-cp310-abi3-manylinux_2_39_x86_64.whl",
+  "wheel_sha256": "73ee3c1668dca9318320127a1d6655963541bf7d991083044c1e20652790506d",
+  "entries": 20,
+  "record_verified": 19,
+  "installed": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-units32-35/installed",
+  "core_sha256": "d2d9fecf95824ae50d06bb7fe7208489794e47785acd8ff516da66561ea8e7aa",
+  "notices": [
+    {
+      "member": "symbolica-3.0.1.dist-info/licenses/licenses/clarabel-LICENSE",
+      "source": "examples/notebooks/symbolica-host/licenses/clarabel-LICENSE",
+      "sha256": "6e2f382771f8aab58e4868ddd0afe0c2fefe6b54f9681493a9c3d0f32906cfe1"
+    },
+    {
+      "member": "symbolica-3.0.1.dist-info/licenses/licenses/networkx-LICENSE",
+      "source": "examples/notebooks/symbolica-host/licenses/networkx-LICENSE",
+      "sha256": "6025f323ea29dc2f0ee0abd9523bf910186f55b0e148e6ebf646c55566278e2e"
+    },
+    {
+      "member": "symbolica-3.0.1.dist-info/licenses/licenses/tiptoe-LICENSE",
+      "source": "examples/notebooks/symbolica-host/licenses/tiptoe-LICENSE",
+      "sha256": "d66fa6047eae941af8c532d6361f73dc36423deb0c50b73094cebb63b36e5b4d"
+    }
+  ],
+  "limit": "Local installed host validation only; not release-native/Pyodide/Community repaired/compressed distribution certification. Canonical Nix latest producer/build is independent current-source validation."
+}

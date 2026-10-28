@@ -1,0 +1,13 @@
+{
+  "documentation_code": "a3729fe5d880f0db5f09d9ce7d0ef592bfc4d161",
+  "shell_pages": 637,
+  "local_links": 78335,
+  "repository_source_links": 1194,
+  "source_revisions": {
+    "a3729fe5d880f0db5f09d9ce7d0ef592bfc4d161": 1194
+  },
+  "missing": [],
+  "bad_fragments": [],
+  "source_errors": [],
+  "scope": "Local filesystem and frozen-source target checks only; no external website/network/publication."
+}

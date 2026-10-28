@@ -1,0 +1,70 @@
+{
+  "documentation_code": "a3729fe5d880f0db5f09d9ce7d0ef592bfc4d161",
+  "implementation_code": "2ea39fd3ec164516b8e68775554fa2021998975a",
+  "derivation": "/nix/store/pbc604ci3bl9xq0gvf32xaii8h0zby8a-alphal00p-docs-cargo-0.1.0.drv",
+  "output": "/nix/store/xmcp8aas4z1zki59gqn9r2ns8hx7fz8r-alphal00p-docs-cargo-0.1.0",
+  "store_info": {
+    "/nix/store/xmcp8aas4z1zki59gqn9r2ns8hx7fz8r-alphal00p-docs-cargo-0.1.0": {
+      "ca": null,
+      "deriver": "/nix/store/pbc604ci3bl9xq0gvf32xaii8h0zby8a-alphal00p-docs-cargo-0.1.0.drv",
+      "narHash": "sha256-epG5TF2UdSxrMCziePoCRROtFTg7Aa8MJYvkvD48eEA=",
+      "narSize": 862593288,
+      "references": [
+        "/nix/store/9619qg4vmdl3x44six7q3r6i56lxq99p-vendor-cargo-deps",
+        "/nix/store/n5s84kjf83iciyx1y5n3glnh3bbkd84f-gammaloop-crate-gammaloop-api-dependency-deps-0.1.0"
+      ],
+      "registrationTime": 1793199314,
+      "signatures": [],
+      "storeDir": "/nix/store",
+      "ultimate": true,
+      "version": 1
+    }
+  },
+  "producer_registered_deriver": "/nix/store/pbc604ci3bl9xq0gvf32xaii8h0zby8a-alphal00p-docs-cargo-0.1.0.drv",
+  "log": "target/wp3-units32-35/cargo-producer.log",
+  "log_sha256": "275d3819c6f2dee0d9d045b2209e1a99db961257986e1e10acdf7a1d05cca15e",
+  "secret_redactions": 0,
+  "binaries": [
+    {
+      "path": "target/wp3-units32-35/elf/ci-optim/alphal00p-docs-builder",
+      "sha256": "95aeb66a7554745878422712ea96300f74e60dd1d787f394450ac8006dac470b",
+      "ELF_class": 64,
+      "ELF_endian": "little",
+      "ELF_machine": "x86-64",
+      "ELF_type": 3
+    },
+    {
+      "path": "target/wp3-units32-35/elf/ci-optim/alphal00p-docs-catalogs",
+      "sha256": "45cb2504d5ee8f6b7d63efe04a44457c4ef8575113856964fa599dbe1f17ff95",
+      "ELF_class": 64,
+      "ELF_endian": "little",
+      "ELF_machine": "x86-64",
+      "ELF_type": 3
+    },
+    {
+      "path": "target/wp3-units32-35/elf/ci-optim/alphal00p-docs-gammaloop-reference",
+      "sha256": "22fd17489bd189ae6f932e9ddad83a98ec9dbca77c7bf4c5e7acb415a419fd52",
+      "ELF_class": 64,
+      "ELF_endian": "little",
+      "ELF_machine": "x86-64",
+      "ELF_type": 3
+    },
+    {
+      "path": "target/wp3-units32-35/elf/ci-optim/alphal00p-docs-vakint-reference",
+      "sha256": "b5b9fb45c6a76362ec211d55ba50c2568cea1bdc72428322e8f7a6d0394dca0c",
+      "ELF_class": 64,
+      "ELF_endian": "little",
+      "ELF_machine": "x86-64",
+      "ELF_type": 3
+    },
+    {
+      "path": "target/wp3-units32-35/elf/ci-optim/alphal00p-docs-python-exporter",
+      "sha256": "072324dab85127a3ff391125c613f7d868daf97b1ff331b55a16840af9cce54c",
+      "ELF_class": 64,
+      "ELF_endian": "little",
+      "ELF_machine": "x86-64",
+      "ELF_type": 3
+    }
+  ],
+  "qualification": "Completed producer output; five actual ELF byte identities extracted into task-owned diagnostic scratch only. Never seeded into Cargo cache/target. Compile-only producer work receives no runtime pass credit; consumer feature-context binary equality is not asserted."
+}

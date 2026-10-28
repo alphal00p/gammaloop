@@ -1,0 +1,12 @@
+{
+  "original_revision": "2ea39fd3ec164516b8e68775554fa2021998975a",
+  "qualified_docs_revision": "a3729fe5d880f0db5f09d9ce7d0ef592bfc4d161",
+  "same_Cargo_producer": "/nix/store/pbc604ci3bl9xq0gvf32xaii8h0zby8a-alphal00p-docs-cargo-0.1.0.drv",
+  "original_client_cancelled": true,
+  "reason": "Rendered canonical plan was finalized after initial code freeze; use final rendered inputs at explicit new frozen Git SHA. New consumer joined same producer before cancelling only own superseded client. No duplicate cold producer, old attempt receives no pass credit.",
+  "old_log": "pages-build.log",
+  "new_log": "pages-final-build.log",
+  "observed_outcome": "The new log named the same producer, but cancellation of the original client stopped its in-flight daemon job rather than retaining progress. The final Git-pinned request restarted that producer normally; no completed producer cache was deleted or manually seeded. Earlier intended progress reuse is NOT credited.",
+  "original_exit": 1,
+  "qualified_final_build_status": "completed exit0 at frozen docs codea372; see canonical.json"
+}

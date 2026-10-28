@@ -1,0 +1,27 @@
+{
+  "implementation_code": "2ea39fd3ec164516b8e68775554fa2021998975a",
+  "documentation_code": "a3729fe5d880f0db5f09d9ce7d0ef592bfc4d161",
+  "inventories": [
+    {
+      "path": "target/wp3-units32-35/slice-code-files.json",
+      "sha256": "d0734e517a699630a98aa647d55d837239e5c57a413b7623ff582008c04cd202",
+      "count": 30
+    },
+    {
+      "path": "target/wp3-units32-35/cumulative-code-files.json",
+      "sha256": "56b274a32ee3f2c447c370ff48944881587f6d3a989ba096c21e90d5e62e216d",
+      "count": 1676
+    },
+    {
+      "path": "target/wp3-units32-35/cargo-source-manifest.json",
+      "sha256": "cb0380137d156a516f09a7dc12eb8cff97742d211f401fb1a6ee003bca69eddd",
+      "count": 1345
+    },
+    {
+      "path": "target/wp3-units32-35/pages-source-manifest.json",
+      "sha256": "99ace1460cf4807fef1eae2ffc78df1d49018248a307f1c43d71e631a3beba9c",
+      "count": 2432
+    }
+  ],
+  "qualification": "Code cumulative inventory is frozen at implementation commit; source manifests bind actual a372 canonical producer/site inputs. Later evidence metadata is separately inventoried."
+}
