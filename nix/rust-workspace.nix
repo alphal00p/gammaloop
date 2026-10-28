@@ -15,7 +15,7 @@
   inherit (pkgs) lib;
 
   documentation = import ./documentation.nix {
-    inherit self pkgs docsPkgs craneLib workspaceRoot cargoSources localCargoPatchSources nonCargoBuildSources
+    inherit self pkgs docsPkgs craneLib workspaceRoot cargoSources localCargoPatchSources nonCargoBuildSources symbolicaRenderData
       ciArgs ciCargoProfile
       dummyCargoTarget normalizeWorkspaceHackBuildScriptTimestampScript
       workspacePackageSrcFor workspaceMissingCargoTargetsScript

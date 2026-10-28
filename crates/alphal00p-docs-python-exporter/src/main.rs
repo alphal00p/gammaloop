@@ -88,8 +88,15 @@ fn main() -> Result<(), Box<dyn Error>> {
     match component.as_str() {
         "feynkit-community" => outputs
             .push(root.join("crates/feynkit-py/python/symbolica/community/hepkit/__init__.pyi")),
-        "linnet-graph" => outputs
-            .push(root.join("crates/linnet-py/python/symbolica/community/graph/__init__.pyi")),
+        "linnet-graph" => outputs.extend([
+            root.join("crates/linnet-py/python/symbolica/community/graph/__init__.pyi"),
+            root.join(
+                "examples/notebooks/symbolica-host/python/symbolica/community/graph/__init__.pyi",
+            ),
+        ]),
+        "spynso3" => outputs.push(root.join(
+            "examples/notebooks/symbolica-host/python/symbolica/community/tensor/__init__.pyi",
+        )),
         _ => {}
     }
     outputs.sort();
