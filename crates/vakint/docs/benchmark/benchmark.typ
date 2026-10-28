@@ -1180,7 +1180,7 @@ Refresh and validation contract: #raw("maintenance.typ").]
     v(0.1em)
     text(8pt)[HEAVY SHA-256 #raw(heavy.artifact.sha256.slice(0, 20))…;
     LIGHT #raw(freeze.sha256.slice(0, 20))… . Exact lengths, complete digests and
-    local independently hosted HEAVY path remain in the raw receipts. The old
+    local HEAVY path for independent hosting remain in the raw receipts. The old
     96 GB snapshot is preserved separately; Native helper provenance is not a Vakint consumer build.]
   }
   if heldout != none {
