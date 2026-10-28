@@ -212,6 +212,33 @@ the explicit selection fields choose which runs are displayed. Review the new JS
 PDF before replacing the canonical trio together. Do not update canonical data
 while a measurement or source-freeze window is active.
 
+=== Single-observation engineering comparisons
+
+The physical adapter also accepts #raw("--engineering INDEX.json") instead of
+#raw("--campaign"). The #raw("vakint.q0-engineering-evidence-index.v1") index contains
+exactly #raw("before"), #raw("after_off") and #raw("after_on") observations. Each binds
+hashed benchmark, execution and verification JSON; the two new observations also
+bind their complete coefficient-proof JSON. The adapter checks successful actual
+waits, source/input/result/guard/cache identities, all scalar product proofs and
+raw stage samples without reading cache or symbolic payloads or running reductions.
+OFF/ON means cache-hit diagnostics disabled/enabled; both may use the same cache.
+
+This appends a separate #raw("engineering_optimization_runs") record and optional
+#raw("selected_engineering_optimization_run"). It never changes physical/final suite
+selections, acceptance scope, historical samples or performance medians. Retain
+raw receipts and source hashes with each observation. Ratios use matching public
+or prepared-input-through-serialization fields; supervised startup/exit wall
+time is distinct. Missing phases and pure IBP remain unmeasured, never zero.
+Different cohorts and background work qualify these as engineering observations,
+not final matched cache comparisons. For example:
+
+```sh
+python3 crates/vakint/docs/benchmark/merge_physical_capture_results.py \
+  --base crates/vakint/docs/benchmark/data/results.json \
+  --engineering crates/vakint/docs/benchmark/provenance/q0_engineering_evidence_index.json \
+  --output /path/to/workspace/new-results.json --select-current
+```
+
 === Display both cache tiers
 
 Use #raw("--select-tier heavy") for an authenticated cumulative native cache, or

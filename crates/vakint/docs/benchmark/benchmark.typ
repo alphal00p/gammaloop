@@ -816,3 +816,95 @@ set text(8.5pt, fill: luma(100))
 [Append accepted evidence with #raw("merge_physical_capture_results.py").
 Refresh and validation contract: #raw("maintenance.typ").]
 }
+
+#let engineering-id = report.at("selected_engineering_optimization_run", default: none)
+#if engineering-id != none {
+  let engineering = report.engineering_optimization_runs.at(engineering-id)
+  let before = engineering.observations.before
+  let after = engineering.observations.after_off
+  let diagnostic = engineering.observations.after_on
+  let old = before.records.benchmark.raw_receipt
+  let new = after.records.benchmark.raw_receipt
+  let observed = diagnostic.records.benchmark.raw_receipt
+  let verified = after.records.verification.raw_receipt
+  assert(engineering.schema == "vakint.q0-engineering-comparison.v1")
+  assert(not engineering.performance_eligible)
+  assert(not engineering.matched_serialized_repetitions)
+  assert(not engineering.cache_only_speedup_claim)
+  pagebreak()
+  set text(font: "Libertinus Serif", size: 10pt, fill: black)
+  align(center)[
+    #text(21pt, weight: "bold", fill: navy)[q0 coefficient assembly]
+    #v(0.2em)
+    #text(11pt, fill: luma(80))[Verified engineering observations · 28 October 2026]
+  ]
+  v(0.65em)
+  [Coefficient-local retained-result assembly replaces the two whole-expression
+  exact-combination passes in the earlier observation. All
+  #verified.full_scalar_coefficient_count master-product coefficients agree exactly
+  with the authenticated original native baseline across
+  #verified.master_identity_union_count distinct masters; all
+  #str(verified.guard_count) canonical public guards and the full family map agree.
+  Master values and numerical samples were never evaluated.]
+  v(0.55em)
+  table(columns: (1.7fr, 1fr, 1fr), inset: (x: 9pt, y: 9pt),
+    stroke: 0.4pt + luma(215),
+    fill: (x, y) => if y == 0 { navy } else { pale },
+    table.header(
+      text(fill: white, weight: "bold")[Observed seconds],
+      text(fill: white, weight: "bold")[Earlier · #old.source_commit.slice(0, 7)],
+      text(fill: white, weight: "bold")[New · #new.source_commit.slice(0, 7)\ Diagnostics OFF],
+    ),
+    [Complete public reduction],
+    [#timing(before.public_reduction_seconds) s], [#timing(after.public_reduction_seconds) s],
+    [Prepared input through result serialization],
+    [#timing(before.prepared_input_to_serialization_seconds) s],
+    [#timing(after.prepared_input_to_serialization_seconds) s],
+    [Supervised process wall time],
+    [#timing(before.supervised_wall_seconds) s], [#timing(after.supervised_wall_seconds) s],
+    [Retained exact combination\*],
+    [#timing(old.stages.retained_outer_exact_combination.sum() + old.stages.retained_catalogue_exact_combination.sum()) s],
+    [#timing(new.stages.retained_catalogue_exact_combination.sum()) s],
+    [Complete native saved call†],
+    [#timing(old.stages.saved_rule_application.sum()) s],
+    [#timing(new.stages.saved_rule_application.sum()) s],
+  )
+  v(0.35em)
+  [The matching prepared-input-to-serialization observations differ by
+  ×#multiplier(engineering.observed_before_over_after_off.prepared_input_to_serialization)
+  (about 5.5×). *This is a single engineering comparison:* source/cache cohorts,
+  instrumentation and concurrent background work differ. It supplies neither
+  final three-sample medians nor a cache-only speedup claim. Both runs reuse the
+  same prepared scalar input; original graph preparation is excluded.]
+  v(0.35em)
+  text(8.5pt)[\*Earlier: outer #timing(old.stages.retained_outer_exact_combination.sum()) s
+  plus catalogue #timing(old.stages.retained_catalogue_exact_combination.sum()) s.
+  New: coefficient-local catalogue #timing(new.stages.retained_catalogue_exact_combination.sum()) s;
+  the outer phase is absent, not a measured zero.
+  †The saved call includes native cache lookup/decode, transport, weighted exact
+  assembly and terminal substitution. Its observed duration increased. Pure IBP
+  and terminal-only durations remain unmeasured.]
+  v(0.55em)
+  [*Diagnostics ON confirms reuse.* The separate fresh instrumented process took
+  #timing(diagnostic.prepared_input_to_serialization_seconds) s through serialization,
+  #timing(diagnostic.supervised_wall_seconds) s supervised wall time, and
+  #timing(diagnostic.public_reduction_seconds) s for the public call. It returned
+  the identical #str(observed.result_bytes)-byte result and complete guards as OFF,
+  with #observed.saved_application_cache.persistent.route_hits Route hits,
+  #observed.saved_application_cache.persistent.misses misses,
+  #observed.saved_application_cache.native.rule_applications new rule applications
+  and #observed.saved_application_cache.persistent.captured_records captured records.
+  OFF/ON controls hit diagnostics; both attach a persistent cache.]
+  v(0.5em)
+  text(8.5pt)[New source #raw(new.compiled_cohort.main_revision.slice(0, 12)) ·
+  Native #raw(new.compiled_cohort.native_revision.slice(0, 12)) ·
+  kernel #raw(new.compiled_cohort.kernel_revision.slice(0, 12)) ·
+  #new.compiled_cohort.rustc · declared profile #new.compiled_cohort.profile.
+  Original compiled cohorts and verifier-host limits remain in the raw receipts;
+  these checks do not establish final Main-host acceptance.]
+  v(0.35em)
+  text(8pt, fill: luma(100))[Selected engineering record: #raw(engineering-id).
+  Hashed source index: #raw("provenance/q0_engineering_evidence_index.json").
+  Raw benchmark, execution, exact comparison and all product proofs are appended
+  in #raw("data/results.json"). Earlier selections and all four-loop records remain unchanged.]
+}

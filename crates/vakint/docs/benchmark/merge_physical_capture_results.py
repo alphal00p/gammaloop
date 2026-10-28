@@ -1,4 +1,4 @@
-"""Append completed physical capture/reuse evidence without qualifying performance.
+"""Append physical capture/reuse or engineering evidence without qualifying performance.
 
 This file-only adapter never opens cache chunks or executes a scientific kernel.
 The native producer and supervisor own cache authentication and acceptance.
@@ -523,17 +523,205 @@ def physical_capture(campaign, physical_scope=None):
     return result
 
 
+def engineering_comparison(index_path):
+    """Project accepted JSON receipts only; never reopen symbolic/cache payloads."""
+    index_path = Path(index_path).resolve()
+    index = read(index_path)
+    require(
+        index["schema"] == "vakint.q0-engineering-evidence-index.v1"
+        and set(index["observations"]) == {"before", "after_off", "after_on"},
+        "unknown engineering evidence index",
+    )
+    observations = {}
+    for name, references in index["observations"].items():
+        records = {
+            kind: {
+                "evidence": item,
+                "raw_receipt": read(reference(item, index_path.parent)),
+            }
+            for kind, item in references.items()
+        }
+        report = records["benchmark"]["raw_receipt"]
+        execution = records["execution"]["raw_receipt"]
+        verified = records["verification"]["raw_receipt"]
+        require(
+            report["schema"] == "vakint.qcd-ladder.benchmark.v1"
+            and execution["schema"]
+            == "vakint.final-instrumented-q0-replay-execution.v1"
+            and verified["schema"]
+            in {
+                "vakint.final-instrumented-q0-verification.v1",
+                "vakint.coefficient-local-q0-verification.v1",
+            }
+            and execution["status"] == verified["status"] == "PASS"
+            and execution["collector_exit_code"] == 0
+            and execution["collector_wait_is_authoritative"] is True
+            and not execution["errors"]
+            and not execution["signals_sent"]
+            and report["reduction_completed"] is True
+            and report["retained_result_available"] is True
+            and report["performance_claim"] is False
+            and report["projection"] == "zero-momentum-metric"
+            and report["input_mode"] == "prepared"
+            and report["fresh_native_preparation"] is False
+            and report["preparation_seconds"] is None
+            and report["source_commit"]
+            == report["compiled_cohort"]["main_revision"]
+            == execution["source_head"]
+            == verified["collector_source_head"],
+            "engineering observation lacks accepted completion/source binding",
+        )
+        require(
+            report["end_to_end_scope"]
+            == "verified prepared-input loading through cold result serialization; original preparation excluded",
+            "engineering end-to-end timer scope differs",
+        )
+        require(
+            verified["whole_ordered_guard_Atoms_equal"] is True
+            and verified["families_equal"] is True
+            and verified["cache_identity_unchanged"] is True
+            and verified["guard_count"] == report["guards"]["count"]
+            and verified["whole_canonical_input_sha256"] == report["input_sha256"]
+            and verified["whole_canonical_result_sha256"] == report["result_sha256"]
+            and verified["cache_identity"]
+            == report["cache_identity"]
+            == report["cache_identity_after"]
+            and verified["measured_public_reduction_seconds"]
+            == report["reduction_seconds"]
+            and verified["pure_ibp_seconds"] is None
+            and verified["HEAVY_file_performance_claim"] is False
+            and all(
+                verified[key] == 0
+                for key in (
+                    "numerical_evaluations",
+                    "master_values_evaluated",
+                    "IBP_runs_in_verifier",
+                )
+            )
+            and report["catalogue_closure"]["closed"] is True
+            and report["catalogue_closure"]["unknown_count"] == 0,
+            "engineering observation lacks complete exact result/guard checks",
+        )
+        displayed_phases = {
+            "saved_rule_application",
+            "retained_catalogue_exact_combination",
+        }
+        if name == "before":
+            displayed_phases.add("retained_outer_exact_combination")
+        require(
+            displayed_phases <= report["stages"].keys()
+            and report["stages"].keys() == verified["stages"].keys(),
+            "engineering observation lacks complete verified phase inventory",
+        )
+        for phase, samples in report["stages"].items():
+            require(
+                isinstance(samples, list)
+                and samples
+                and verified["stages"][phase]["samples"] == len(samples)
+                and verified["stages"][phase]["total_seconds"]
+                == sum(seconds(value) for value in samples),
+                "engineering phase differs from verified raw samples",
+            )
+        if name == "before":
+            require(
+                verified["whole_retained_Atom_equal"] is True
+                and verified["whole_native_baseline_equal"] is True
+                and verified["whole_raw_result_equal"] is True,
+                "historical engineering baseline is not exact",
+            )
+        else:
+            proof = records["coefficient_proof"]["raw_receipt"]
+            require(
+                verified["full58_proof"]["sha256"]
+                == records["coefficient_proof"]["evidence"]["sha256"]
+                and verified["full58_scalar_coefficient_parity"] is True
+                and verified["original_native_baseline_authenticated"] is True
+                and verified["Float_numeric_atoms_rejected"] is True
+                and proof["schema"] == "vakint.complete-master-product-parity.v1"
+                and proof["status"] == "PASS"
+                and type(proof["master_count"]) is int
+                and proof["master_count"] > 0
+                and proof["master_count"]
+                == verified["master_identity_union_count"]
+                == report["catalogue_closure"]["master_count"]
+                and proof["product_union_count"]
+                == verified["full_scalar_coefficient_count"]
+                == len(proof["full_scalar_proofs"])
+                and proof["product_union_count"] > 0
+                and len({row["product"] for row in proof["full_scalar_proofs"]})
+                == len(proof["full_scalar_proofs"])
+                and all(
+                    row["exact_difference_zero"] is True
+                    for row in proof["full_scalar_proofs"]
+                )
+                and proof["global_together_or_full_amplitude_difference"] is False
+                and proof["unit_mass_or_coupling_replacement"] is False
+                and proof["numerical_sampling"] is False
+                and report["cache_hit_diagnostic_enabled"] == (name == "after_on"),
+                "engineering coefficient proof or diagnostic mode differs",
+            )
+        observations[name] = {
+            "public_reduction_seconds": seconds(report["reduction_seconds"]),
+            "prepared_input_to_serialization_seconds": seconds(
+                report["end_to_end_seconds"]
+            ),
+            "supervised_wall_seconds": seconds(execution["elapsed_seconds"]),
+            "pure_ibp_seconds": None,
+            "records": records,
+        }
+    before, off, on = (
+        observations[name]["records"]["benchmark"]["raw_receipt"]
+        for name in ("before", "after_off", "after_on")
+    )
+    require(
+        before["input_sha256"] == off["input_sha256"] == on["input_sha256"]
+        and before["guards"] == off["guards"] == on["guards"]
+        and before["families"] == off["families"] == on["families"]
+        and off["compiled_cohort"] == on["compiled_cohort"]
+        and off["cache_identity"] == on["cache_identity"]
+        and off["result_sha256"] == on["result_sha256"]
+        and off["result_bytes"] == on["result_bytes"],
+        "engineering observations use different input/guards or OFF/ON results",
+    )
+    return {
+        "schema": "vakint.q0-engineering-comparison.v1",
+        "status": "verified-engineering-observations",
+        "performance_eligible": False,
+        "seen_not_heldout": True,
+        "matched_serialized_repetitions": False,
+        "cache_only_speedup_claim": False,
+        "observations": observations,
+        "observed_before_over_after_off": {
+            "public_reduction": before["reduction_seconds"] / off["reduction_seconds"],
+            "prepared_input_to_serialization": before["end_to_end_seconds"]
+            / off["end_to_end_seconds"],
+        },
+        "evidence": evidence(index_path),
+        "scope": "Single seen-input engineering observations with different source/cache cohorts and concurrent background work; not final three-sample medians or a cache-only comparison. Prepared-input loading through serialization excludes original graph preparation; supervised wall also includes process startup/exit. Pure IBP and terminal-only times remain unmeasured.",
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base", type=Path, required=True)
-    parser.add_argument("--campaign", type=Path, required=True)
+    source = parser.add_mutually_exclusive_group(required=True)
+    source.add_argument("--campaign", type=Path)
+    source.add_argument("--engineering", type=Path)
     parser.add_argument("--physical-scope", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--select-current", action="store_true")
     args = parser.parse_args()
     require(not args.output.exists(), "output must be a new path")
+    require(
+        not args.engineering or not args.physical_scope,
+        "engineering evidence cannot change physical completion scope",
+    )
     physical_scope, scope_authorization = load_physical_scope(args.physical_scope)
-    run = physical_capture(args.campaign, physical_scope)
+    run = (
+        engineering_comparison(args.engineering)
+        if args.engineering
+        else physical_capture(args.campaign, physical_scope)
+    )
     if scope_authorization is not None:
         run.update(
             physical_scope_authorization=scope_authorization,
@@ -544,14 +732,21 @@ def main():
     if scope_authorization is not None:
         identity = [identity, scope_authorization["evidence"]]
     run_id = (
-        "physical-capture-"
-        + hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()[:24]
+        "q0-engineering-" if args.engineering else "physical-capture-"
+    ) + hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()[:24]
+    namespace = (
+        "engineering_optimization_runs" if args.engineering else "physical_capture_runs"
     )
-    runs = merged.setdefault("physical_capture_runs", {})
+    runs = merged.setdefault(namespace, {})
     require(run_id not in runs, "this evidence is already appended")
     runs[run_id] = run
     if args.select_current:
-        merged["selected_physical_capture_run"] = run_id
+        selector = (
+            "selected_engineering_optimization_run"
+            if args.engineering
+            else "selected_physical_capture_run"
+        )
+        merged[selector] = run_id
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with args.output.open("x") as stream:
         json.dump(merged, stream, indent=2, allow_nan=False)

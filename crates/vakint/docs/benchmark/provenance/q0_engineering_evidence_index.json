@@ -1,0 +1,66 @@
+{
+  "schema": "vakint.q0-engineering-evidence-index.v1",
+  "observations": {
+    "before": {
+      "benchmark": {
+        "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/q0-final-instrumented-replay-20261027/replay/run/benchmark.json",
+        "sha256": "690e1735f0cbe31f90301388b91da21e0d70860220933c4194989179a31b24c4",
+        "bytes": 38608
+      },
+      "execution": {
+        "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/q0-final-instrumented-replay-20261027/replay/completion.json",
+        "sha256": "a6ab44c591197d7e1c7263c508b0e7e9b611ae25f8bf4df9b7b80d1b3b1a04f1",
+        "bytes": 6616
+      },
+      "verification": {
+        "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/q0-final-instrumented-replay-20261027/verify-dc7364-run1/verification.json",
+        "sha256": "57946a743acd745e0a9025ef1f0d2322a35aaf3e9591c72dbd243818b0268b73",
+        "bytes": 7703
+      }
+    },
+    "after_off": {
+      "benchmark": {
+        "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/q0-coefficient-local-usage-2d70-20261028/physical-off-run1/run/benchmark.json",
+        "sha256": "0b67ab6f51220b060564ee6306b2f8ca24eb131d43ce25e9b5bcd0316b6d86e2",
+        "bytes": 38729
+      },
+      "execution": {
+        "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/q0-coefficient-local-usage-2d70-20261028/physical-off-run1/completion.json",
+        "sha256": "ad799a43b5938858e4f3278460eb5737aa6c915f13ba7c3ee6f80ad53e9c0c12",
+        "bytes": 6512
+      },
+      "verification": {
+        "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/q0-coefficient-local-usage-2d70-20261028/physical-off-verify-run1/verification.json",
+        "sha256": "d11fb036865e9169563f2a6e88b909819c7cab54e0a9505a1e4dc092e223d834",
+        "bytes": 8381
+      },
+      "coefficient_proof": {
+        "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/q0-coefficient-local-usage-2d70-20261028/physical-off-verify-run1/full58-scalar-proof.json",
+        "sha256": "06d8872b7f65e91746ff30562aab871588d41c3eaf72da40fd1abfab9bc93d64",
+        "bytes": 26233
+      }
+    },
+    "after_on": {
+      "benchmark": {
+        "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/q0-coefficient-local-usage-2d70-20261028/physical-on-run1/run/benchmark.json",
+        "sha256": "6069c8c9c8cea2d656b25d0c4c64690977d29d847b02ab09bb55a3ac957fc33b",
+        "bytes": 39078
+      },
+      "execution": {
+        "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/q0-coefficient-local-usage-2d70-20261028/physical-on-run1/completion.json",
+        "sha256": "39e99428504cbf0ac90c0d122522cace6dd7c7555a7f87555105c9f86c473473",
+        "bytes": 6488
+      },
+      "verification": {
+        "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/q0-coefficient-local-usage-2d70-20261028/physical-on-verify-run1/verification.json",
+        "sha256": "10b8187c2f97a33e3c9b835ed12daa0c19c14ad28df311eb3e0c7affcff69766",
+        "bytes": 8369
+      },
+      "coefficient_proof": {
+        "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/q0-coefficient-local-usage-2d70-20261028/physical-on-verify-run1/full58-scalar-proof.json",
+        "sha256": "06d8872b7f65e91746ff30562aab871588d41c3eaf72da40fd1abfab9bc93d64",
+        "bytes": 26233
+      }
+    }
+  }
+}
