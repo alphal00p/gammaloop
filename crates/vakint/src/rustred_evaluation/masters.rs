@@ -86,19 +86,10 @@ pub(crate) type BareMasterDeclarations = BTreeMap<Atom, BareMasterDeclaration>;
 
 pub(crate) fn combine_exact(expression: Atom) -> Atom {
     let expression = expression.expand();
-    let mut has_float = false;
-    expression.visitor(&mut |part| {
-        if let AtomView::Num(number) = part
-            && matches!(number.get_coeff_view(), CoefficientView::Float(_, _))
-        {
-            has_float = true;
-        }
-        !has_float
-    });
     // Symbolica's rational canonicalization requires exact coefficients.
     // In particular, `together` currently corrupts powers in sums with
     // floating coefficients, so numerical expressions stay expanded.
-    if has_float {
+    if MasterCatalog::has_floating_coefficients(&expression) {
         expression
     } else {
         expression.together()
@@ -106,6 +97,19 @@ pub(crate) fn combine_exact(expression: Atom) -> Atom {
 }
 
 impl MasterCatalog {
+    fn has_floating_coefficients(expression: &Atom) -> bool {
+        let mut has_float = false;
+        expression.visitor(&mut |part| {
+            if let AtomView::Num(number) = part
+                && matches!(number.get_coeff_view(), CoefficientView::Float(_, _))
+            {
+                has_float = true;
+            }
+            !has_float
+        });
+        has_float
+    }
+
     #[cfg(test)]
     pub(crate) fn test_catalog(exact: Option<&str>, digits: u32) -> (Self, Atom) {
         tests::catalog(exact, digits)
@@ -512,6 +516,33 @@ impl MasterCatalog {
         result
     }
 
+    fn combine_master_coefficients(raw: Atom) -> Atom {
+        let raw = raw.expand();
+        // Keep the same whole-expression Float policy as combine_exact.
+        if Self::has_floating_coefficients(&raw) {
+            return raw;
+        }
+        let symbols: Vec<_> = Self::referenced_masters(&raw).into_iter().collect();
+        let terms = raw.coefficient_list::<i32>(&symbols);
+        // Collection leaves opaque functions and composite denominators in the
+        // coefficients. Master-dependent coefficients are not independent, so
+        // their cancellations still require general rational combination.
+        if terms
+            .iter()
+            .any(|(_, coefficient)| !Self::referenced_masters(coefficient).is_empty())
+        {
+            return combine_exact(raw);
+        }
+        // Terminal products are independent indeterminates. Combine their
+        // scalar coefficients before classifying any surviving unknowns,
+        // without rationalizing the whole polynomial in those terminals.
+        Atom::add_many(
+            terms
+                .into_iter()
+                .map(|(monomial, coefficient)| monomial * combine_exact(coefficient)),
+        )
+    }
+
     fn unresolved(
         &self,
         expression: &Atom,
@@ -564,7 +595,7 @@ impl MasterCatalog {
             "retained_catalogue_exact_combination",
             Some(raw.as_view()),
         );
-        let raw = combine_exact(raw);
+        let raw = Self::combine_master_coefficients(raw);
         log::debug!(target: "vakint::saved_application", "phase=retained_catalogue_exact_combination elapsed_seconds={:.6}", started.elapsed().as_secs_f64());
         let started = std::time::Instant::now();
         MonitorContext::native_phase(
@@ -1037,6 +1068,189 @@ mod tests {
             run_time_decimal_precision: digits,
             number_of_terms_in_epsilon_expansion: terms,
             ..Default::default()
+        }
+    }
+
+    #[test]
+    fn retained_products_combine_coefficients_before_unknown_classification() {
+        let (catalog, master) = catalog(Some("5/2"), 30);
+        let unknown = catalog.symbol("unannounced-product", &[2]);
+        let announced = catalog.symbol("announced-product", &[1, 1]);
+        let declarations = BTreeMap::from([(
+            announced.clone(),
+            BareMasterDeclaration {
+                application_path: "native/application.json".into(),
+            },
+        )]);
+        let product = master.pow(Atom::num(2)) * &announced;
+        let coefficient = vk_parse!("(1-ep)^-1-1-ep").unwrap();
+        let rational_zero =
+            &coefficient * vk_parse!("ep^-2").unwrap() - vk_parse!("(1-ep)^-1").unwrap();
+        let spectator = vk_parse!("mUV^-6*mursq^5*coupling^10*𝑒^(-5*𝛾*ep)*dot(p,p)").unwrap();
+        let raw = &product * &spectator * coefficient
+            + &product * &spectator * vk_parse!("1+ep").unwrap()
+            + rational_zero * unknown.pow(Atom::num(2)) * &master;
+        let retained = catalog.retain(raw, &declarations, None);
+        assert_eq!(
+            catalog.retain(retained.clone(), &declarations, None),
+            retained
+        );
+        let symbols = vec![master, announced];
+        let terms = retained.coefficient_list::<i32>(&symbols);
+        assert_eq!(terms.len(), 1);
+        assert_eq!(terms[0].0, product);
+        assert!(combine_exact(&terms[0].1 - spectator * vk_parse!("(1-ep)^-1").unwrap()).is_zero());
+        assert!(
+            catalog
+                .unresolved(&retained, false, &declarations)
+                .is_empty()
+        );
+        assert!(!catalog.masters.contains_key(&symbols[1]));
+    }
+
+    #[test]
+    fn retained_nonpolynomial_master_dependence_keeps_general_cancellation() {
+        let (catalog, master) = catalog(Some("5/2"), 30);
+        let unknown = catalog.symbol("nonpolynomial-unknown", &[2]);
+        let raw = &master
+            + (unknown.pow(Atom::num(2)) + Atom::num(2) * &unknown + Atom::num(1))
+                / (&unknown + Atom::num(1))
+            - (&unknown + Atom::num(1));
+        assert_eq!(catalog.retain(raw, &BTreeMap::new(), None), master);
+
+        let opaque = vk_symbol!("opaque_master_function").call(&unknown);
+        assert_eq!(
+            catalog.retain(&opaque + &master, &BTreeMap::new(), None),
+            combine_exact(opaque + master)
+        );
+    }
+
+    #[test]
+    fn retained_float_input_keeps_the_complete_expanded_representation() {
+        let (catalog, master) = catalog(Some("5/2"), 30);
+        let unknown = catalog.symbol("float-policy-unknown", &[2]);
+        let zero = vk_parse!("ep^-2*((1-ep)^-1-1-ep)-(1-ep)^-1").unwrap();
+        let raw = vk_parse!("(0.125+ep)/(1-ep)").unwrap() * master + zero * unknown;
+        let expected = raw.expand();
+        assert!(MasterCatalog::has_floating_coefficients(&expected));
+        let retained = catalog.retain(raw, &BTreeMap::new(), None);
+        assert_eq!(retained.as_view().get_data(), expected.as_view().get_data());
+        assert_eq!(
+            MasterCatalog::finite_precision(&retained),
+            MasterCatalog::finite_precision(&expected)
+        );
+    }
+
+    #[test]
+    fn retained_coefficients_preserve_snapshot_and_independent_source_identities() {
+        let (catalog, master) = catalog(Some("5/2"), 30);
+        let coefficient = catalog.coefficient_symbol(&master, 0);
+        let first = vk_parse!("NumericalSource(input_a,0,0,3/10,128)").unwrap();
+        let second = vk_parse!("NumericalSource(input_b,0,0,3/10,128)").unwrap();
+        let zero = vk_parse!("(1-ep)^-1-1-ep*(1-ep)^-1").unwrap();
+        let raw =
+            &master * (&coefficient + &first - &second) + master.pow(Atom::num(2)) * zero * &first;
+        let retained = catalog.retain(raw, &BTreeMap::new(), None);
+        let terms = retained.coefficient_list::<i32>(std::slice::from_ref(&master));
+        assert_eq!(terms.len(), 1);
+        assert_eq!(terms[0].0, master);
+        assert!(!terms[0].1.is_zero());
+        assert!(combine_exact(&terms[0].1 - coefficient - first + second).is_zero());
+        assert!(MasterCatalog::referenced_masters(&terms[0].1).is_empty());
+    }
+
+    #[test]
+    fn retained_scalar_and_zero_expressions_keep_exact_combination() {
+        let (catalog, _) = catalog(Some("5/2"), 30);
+        for expression in [
+            Atom::Zero,
+            vk_parse!("(1-ep)^-1-1-ep").unwrap(),
+            vk_parse!("ep^-2*((1-ep)^-1-1-ep)-(1-ep)^-1").unwrap(),
+        ] {
+            assert_eq!(
+                catalog.retain(expression.clone(), &BTreeMap::new(), None),
+                combine_exact(expression)
+            );
+        }
+    }
+
+    #[test]
+    #[ignore = "complete saved q0 exact-coefficient fixture; run explicitly without reductions"]
+    fn retained_saved_q0_preserves_every_complete_master_product_coefficient() {
+        crate::Vakint::initialize_vakint_symbols();
+        let provenance = include_bytes!("../../examples/data/five_loop_q0/provenance.json");
+        checked_bytes(
+            provenance,
+            "941d5a2e888557e8cabd8e8ab118935e95631be0a16110bd28a41e49436db36a",
+        )
+        .unwrap();
+        let provenance: serde_json::Value = serde_json::from_slice(provenance).unwrap();
+        let archive = include_bytes!("../../examples/data/five_loop_q0/q0-retained.atom");
+        let identity = &provenance["artifacts"]["q0-retained.atom"];
+        assert_eq!(archive.len() as u64, identity["bytes"].as_u64().unwrap());
+        checked_bytes(archive, identity["sha256"].as_str().unwrap()).unwrap();
+        // Expression.save wraps Atom::export in Brotli. The development-only
+        // decoded companion keeps this test independent of codec dependencies.
+        let raw_provenance =
+            include_bytes!("../../tests/resources/rustred/q0-retained.raw.provenance.json");
+        checked_bytes(
+            raw_provenance,
+            "c24527713afb4035f2223743aec4b7700b897fd17793dce00b5260bb259ed144",
+        )
+        .unwrap();
+        let raw_provenance: serde_json::Value = serde_json::from_slice(raw_provenance).unwrap();
+        assert_eq!(&raw_provenance["source_archive_identity"], identity);
+        assert_eq!(
+            raw_provenance["source_provenance_sha256"].as_str(),
+            Some("941d5a2e888557e8cabd8e8ab118935e95631be0a16110bd28a41e49436db36a")
+        );
+        let bytes = include_bytes!("../../tests/resources/rustred/q0-retained.raw.atom");
+        let raw_identity = &raw_provenance["output"];
+        assert_eq!(bytes.len() as u64, raw_identity["bytes"].as_u64().unwrap());
+        checked_bytes(bytes, raw_identity["sha256"].as_str().unwrap()).unwrap();
+        let mut stream = bytes.as_slice();
+        let original = Atom::import(&mut stream, None).unwrap();
+        assert!(stream.is_empty());
+        assert!(!MasterCatalog::has_floating_coefficients(&original));
+        let symbols: Vec<_> = MasterCatalog::referenced_masters(&original)
+            .into_iter()
+            .collect();
+        assert_eq!(symbols.len(), 55);
+        let before: BTreeMap<_, _> = original
+            .coefficient_list::<i32>(&symbols)
+            .into_iter()
+            .collect();
+        assert_eq!(before.len(), 58);
+        assert!(
+            before
+                .values()
+                .all(|coefficient| { MasterCatalog::referenced_masters(coefficient).is_empty() })
+        );
+        // This fixture is already globally combined. Do not run the previous
+        // whole-expression rationalization or infer pre-merge speed from it.
+        let combined = MasterCatalog::combine_master_coefficients(original);
+        assert_eq!(
+            MasterCatalog::referenced_masters(&combined),
+            symbols.iter().cloned().collect::<BTreeSet<_>>()
+        );
+        let after: BTreeMap<_, _> = combined
+            .coefficient_list::<i32>(&symbols)
+            .into_iter()
+            .collect();
+        assert!(
+            after
+                .values()
+                .all(|coefficient| { MasterCatalog::referenced_masters(coefficient).is_empty() })
+        );
+        let products: BTreeSet<_> = before.keys().chain(after.keys()).cloned().collect();
+        assert_eq!(products.len(), 58);
+        for product in products {
+            let before = before.get(&product).cloned().unwrap_or(Atom::Zero);
+            let after = after.get(&product).cloned().unwrap_or(Atom::Zero);
+            assert!(
+                combine_exact(before - after).is_zero(),
+                "complete scalar coefficient differs for {product}"
+            );
         }
     }
 

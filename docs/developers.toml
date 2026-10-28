@@ -632,7 +632,11 @@ anchor = "pub struct Vakint {"
 # Reviewed 2026-10-27: the public exports add the opaque borrowed job monitor
 # scope and its completed-work wrapper. This file changes only those exports;
 # evaluation, expression ownership, resource budgets and guards are unchanged.
-digest = "43a5e4af2339904bfbb2c1723cf7535630366598"
+# Reviewed 2026-10-27: ordinary Retain evaluation passes merged contributions
+# directly to the shared catalogue combination owner. Symbolic/Numerical modes
+# retain their precombination boundary; scalar spectators, mass/normalization,
+# source identities and existing resource budgets keep the same owners.
+digest = "558bd7b98932b410822cb447412fedad044b3827"
 
 [[section.note.scope]]
 path = "crates/vakint/src/lorentz.rs"
@@ -747,7 +751,15 @@ anchor = "pub(crate) struct MasterCatalog {"
 # Reviewed 2026-10-27 against 5749ba8a: retained exact combination and catalogue
 # classification expose separate timing spans and caller phases. Cancellation
 # still precedes residual classification; detachment changes diagnostics only.
-digest = "a127f24ea93531c37104cfe3a0369e9eaf85bddb"
+# Reviewed 2026-10-27: Retention combines complete scalar coefficients of
+# independent terminal products once, including unknowns, before classification.
+# Raw Float input keeps the expanded-only rule; master-dependent opaque or
+# denominator coefficients retain general exact combination. Symbolic/Numerical
+# finalization and snapshot/source ownership are unchanged.
+# Reviewed 2026-10-28: the exact saved fixture authenticates the original Brotli
+# archive and its mechanically decoded raw Atom companion. Decoding is a
+# development-only step; runtime tests import raw bytes without codec dependencies.
+digest = "cc38e4ba594979281ca7dac46b4d2cb2ee1166ec"
 
 [[section.note.scope]]
 path = "crates/vakint/src/precision.rs"
@@ -1302,7 +1314,11 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # Python helper package, and authenticated payloads are runtime-test inputs.
 # They follow the documented package-owned fixture boundary without changing
 # production sources or reusable compilation artifacts.
-digest = "53b221934b7181de663077d4391169c89e0c2d15"
+# Reviewed 2026-10-27: The retained native Atom and its authenticated provenance
+# are also compile-time inputs of the exact full-coefficient retention test.
+# Only those two existing fixture files enter the library test source closure;
+# production sources, dependency features and producer ownership are unchanged.
+digest = "7d0a6e9e623f06673a4fde97720b1dc3bf9a0de3"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"

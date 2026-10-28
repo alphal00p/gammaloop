@@ -52,7 +52,7 @@ impl StageLogger {
             "disjoint_evaluation_spans":[
                 "frontend_setup","frontend_canonicalization","frontend_tensor_prepass",
                 "scalar_input_split","frontend_admitted_witness_search","numerator_replacement",
-                "detailed_evaluation_total","caller_result_merge","retained_outer_exact_combination",
+                "detailed_evaluation_total","caller_result_merge",
                 "retained_finalization_total","public_result_packing"
             ],
             "nested_spans":{
@@ -1322,6 +1322,14 @@ mod cache_classification_tests {
             .iter()
             .map(|phase| phase.as_str().unwrap())
             .collect::<BTreeSet<_>>();
+        assert!(!disjoint.contains("retained_outer_exact_combination"));
+        assert_eq!(
+            accounting["nested_spans"]["retained_finalization_total"],
+            json!([
+                "retained_catalogue_exact_combination",
+                "retained_catalogue_classification"
+            ])
+        );
         assert_eq!(
             disjoint.len(),
             accounting["disjoint_evaluation_spans"]

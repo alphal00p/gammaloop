@@ -519,6 +519,8 @@
     spynso3 = ["crates/spynso3/tests/evaluator_horner.py"];
     vakint = [
       "crates/vakint/docs/benchmark/data/results.json"
+      "crates/vakint/examples/data/five_loop_q0/provenance.json"
+      "crates/vakint/examples/data/five_loop_q0/q0-retained.atom"
       "crates/vakint/tests/inputs"
       "crates/vakint/tests/resources"
       "crates/vakint/tests/fixtures"

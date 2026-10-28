@@ -715,7 +715,7 @@ fn current_canonical_degrees_are_not_maxima_or_physical_input_ranks() {
 fn phase_clock_and_resources_remain_live_while_native_panels_are_frozen() {
     let mut state = MonitorState::default();
     let mut event = snapshot(10, 7, 3, 1);
-    event.phase = "retained_outer_exact_combination".into();
+    event.phase = "retained_catalogue_exact_combination".into();
     event.native_work_active = false;
     event.phase_started_at = Duration::from_secs(10);
     state.observe(event, Duration::from_secs(20));
