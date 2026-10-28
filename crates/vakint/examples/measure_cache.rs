@@ -5,6 +5,9 @@ mod cache_file_args;
 mod cache_hit_capture;
 #[path = "build_cache/cache_identity.rs"]
 mod cache_identity;
+#[cfg(feature = "experimental-rustred")]
+#[path = "build_cache/cost_observation.rs"]
+mod cost_observation;
 #[path = "build_cache/owner_proof.rs"]
 #[cfg_attr(
     not(test),
@@ -194,6 +197,7 @@ struct Options {
     only_case: Option<String>,
     monitor: RustRedMonitorOptions,
     classify_cache_hits: bool,
+    observe_native_costs: bool,
 }
 
 impl Options {
@@ -321,6 +325,7 @@ impl Options {
         let mut only_case = None;
         let mut monitor = RustRedMonitorOptions::default();
         let mut classify_cache_hits = false;
+        let mut observe_native_costs = false;
         while let Some(arg) = args.next() {
             if matches!(arg.as_str(), "--help" | "-h") {
                 println!(
@@ -346,6 +351,10 @@ impl Options {
                      [--classify-cache-hits] records a lossless diagnostic for offline owner mapping.\n\
                      Requires experimental-rustred, --cache and --repetitions 1; runs only the cached variant.\n\
                      Forbids presentation, running capture and performance claims.\n\
+                     [--observe-native-costs] records advisory per-node costs for one direct tuning worker.\n\
+                     Requires experimental-rustred, --worker --variant cached --repetitions 1,\n\
+                     --cache, --running-cache and --running-cache-no-read-delta; forbids presentation,\n\
+                     cache-hit classification, diagnostic deadlines and held-out execution.\n\
                      Run with fixed affinity in a serialized measurement window."
                 );
                 return Ok(None);
@@ -372,6 +381,10 @@ impl Options {
             }
             if arg == "--classify-cache-hits" {
                 classify_cache_hits = true;
+                continue;
+            }
+            if arg == "--observe-native-costs" {
+                observe_native_costs = true;
                 continue;
             }
             let value = args
@@ -457,6 +470,23 @@ impl Options {
             "a classification worker must use the cached variant"
         );
         ensure!(
+            !observe_native_costs
+                || (cfg!(feature = "experimental-rustred")
+                    && worker
+                    && variant == "cached"
+                    && suite == "tuning"
+                    && repetitions == 1
+                    && cache.is_some()
+                    && running_cache.is_some()
+                    && running_cache_no_read_delta
+                    && !running_cache_capture_only
+                    && !classify_cache_hits
+                    && !monitor.enabled()
+                    && max_case_seconds.is_none()
+                    && worker_deadline.is_none()),
+            "native cost observation requires one direct cached tuning worker with a fresh NoReadDelta capture and no presentation, classification or deadline"
+        );
+        ensure!(
             worker_deadline.is_none_or(|deadline| deadline.is_finite()),
             "finite worker diagnostic deadline required"
         );
@@ -488,6 +518,7 @@ impl Options {
             only_case,
             monitor,
             classify_cache_hits,
+            observe_native_costs,
         }))
     }
 
@@ -573,6 +604,23 @@ impl Options {
                 "requires_offline_recursive_mapper":true,
                 "performance_claim_allowed":false,
             });
+        }
+        if self.observe_native_costs {
+            identity["native_cost_observation"] = json!({
+                "diagnostic_only":true,"advisory_ranking_only":true,
+                "interval_ns":0,"frontier_frames":0,"path_nodes":0,
+                "eligibility_source":"unchanged authenticated profiles; this run adds no eligibility cohort",
+                "performance_claim_allowed":false,
+            });
+            #[cfg(feature = "experimental-rustred")]
+            {
+                identity["collector_helper_sources_sha256"]["crates/vakint/examples/build_cache/cost_observation.rs"] =
+                    format!(
+                        "{:x}",
+                        Sha256::digest(include_bytes!("build_cache/cost_observation.rs"))
+                    )
+                    .into();
+            }
         }
         if let Some(path) = &self.running_cache {
             identity["running_cache"] = json!({
@@ -861,6 +909,8 @@ fn measure(options: &Options, root: &Root, identity: &Value, workload: &Workload
         .transpose()?;
     let running_cache_loading_seconds = running_cache_started.elapsed().as_secs_f64();
     let mut running_cache_receipt = None;
+    #[cfg(feature = "experimental-rustred")]
+    let mut cost_observation_document = None;
     let measured = (|| -> Result<()> {
         let running_cache_attached =
             running_cache.is_some() && engine.cache_statistics(5)?.attached;
@@ -895,8 +945,14 @@ fn measure(options: &Options, root: &Root, identity: &Value, workload: &Workload
         let owner_proof_seconds = proof_started.elapsed().as_secs_f64();
         let owners_before = engine.rustred_application_owner_preparation_statistics()?;
         *LOGGER.stages() = Stages::default();
+        #[cfg(feature = "experimental-rustred")]
+        let mut cost_observation = options
+            .observe_native_costs
+            .then(|| cost_observation::CostObservation::new(binding.clone()));
+        #[cfg(feature = "experimental-rustred")]
+        let mut cost_observer_status = rustred::solver::CandidateRoutedObserverStatus::Detached;
         let started = Instant::now();
-        let outcome = {
+        let evaluate = || {
             let _logging = ClassificationLogging::enter(options.classify_cache_hits);
             if options.monitor.enabled() || options.classify_cache_hits {
                 let mut monitor = options.monitor.clone();
@@ -910,6 +966,31 @@ fn measure(options: &Options, root: &Root, identity: &Value, workload: &Workload
                 engine.evaluate_rustred_symbolic(&settings, input.as_view())
             }
         };
+        #[cfg(feature = "experimental-rustred")]
+        let outcome = if let Some(collector) = &mut cost_observation {
+            let mut callback = |envelope: &rustred::solver::CandidateRoutedApplicationEnvelope<
+                '_,
+            >| { collector.observe(envelope) };
+            let mut observer = rustred::solver::CandidateRoutedApplicationObserver::new(
+                rustred::solver::CandidateRoutedObservationOptions {
+                    interval: Duration::ZERO,
+                    max_frontier_frames: 0,
+                    max_path_nodes: 0,
+                },
+                &mut callback,
+            );
+            let result = engine.evaluate_rustred_symbolic_with_observer(
+                &settings,
+                input.as_view(),
+                &mut observer,
+            );
+            cost_observer_status = observer.status();
+            result
+        } else {
+            evaluate()
+        };
+        #[cfg(not(feature = "experimental-rustred"))]
+        let outcome = evaluate();
         let evaluation_seconds = started.elapsed().as_secs_f64();
         // The native flush is the durability acknowledgement on success and ordinary
         // reduction errors. Killed workers rely on the native periodic checkpoints.
@@ -999,6 +1080,24 @@ fn measure(options: &Options, root: &Root, identity: &Value, workload: &Workload
             "reduction_error":outcome.as_ref().err().map(ToString::to_string),
         })
     });
+        #[cfg(feature = "experimental-rustred")]
+        {
+            cost_observation_document = cost_observation.map(|collector| {
+                let mut document = collector.finish(outcome.is_ok(), cost_observer_status);
+                document["identity"] = identity.clone();
+                document["case_id"] = root.id.clone().into();
+                document["input_sha256"] = format!(
+                    "{:x}",
+                    Sha256::digest(input.to_canonical_string().as_bytes())
+                )
+                .into();
+                document["reduction_settings"] = reduction_settings.clone();
+                document["strict_capture"] = running_cache_receipt.clone().into();
+                document["eligibility_source"] =
+                    "unchanged authenticated profiles; this run adds no eligibility cohort".into();
+                document
+            });
+        }
         let reduction_error_message = outcome.as_ref().err().map(ToString::to_string);
         let (outcome, mut reduction_error): (_, Option<eyre::Report>) = match outcome {
             Ok(result) => (Some(result), None),
@@ -1081,6 +1180,9 @@ fn measure(options: &Options, root: &Root, identity: &Value, workload: &Workload
             receipt["cache_hit_diagnostic"] = stages
                 .cache_hits
                 .save_hit_diagnostic(&options.work_dir, outcome.is_some());
+            receipt["performance_claim_allowed"] = false.into();
+        }
+        if options.observe_native_costs {
             receipt["performance_claim_allowed"] = false.into();
         }
         if let Some(proof) = &proof {
@@ -1235,12 +1337,39 @@ fn measure(options: &Options, root: &Root, identity: &Value, workload: &Workload
         closed.err()
     });
     let terminal_receipt = (|| -> Result<()> {
+        #[cfg(feature = "experimental-rustred")]
+        let cost_reference = if let Some(mut document) = cost_observation_document.take() {
+            let capture_complete = running_cache_receipt.as_ref().is_some_and(|receipt| {
+                receipt["terminal"] == true
+                    && receipt["flush_complete"] == true
+                    && receipt["close"]["error"].is_null()
+                    && receipt["snapshot_error"].is_null()
+            });
+            document["counter_observation_complete"] = document["complete"].clone();
+            document["strict_capture"] = running_cache_receipt.clone().into();
+            document["capture_complete"] = capture_complete.into();
+            document["public_worker_checks_passed"] = measured.is_ok().into();
+            document["complete"] =
+                (document["complete"] == true && capture_complete && measured.is_ok()).into();
+            let path = options.work_dir.join("native-cost-observation.json");
+            write_bytes(&path, &serde_json::to_vec(&document)?)?;
+            Some(json!({
+                "path":path,"sha256":digest(&path)?,"complete":document["complete"],
+                "diagnostic_only":true,"advisory_ranking_only":true,
+            }))
+        } else {
+            None
+        };
         if let Some(receipt) = &running_cache_receipt {
             write_json(&options.work_dir.join("running-cache.json"), receipt)?;
             let worker_path = options.work_dir.join("worker.json");
             if worker_path.exists() {
                 let mut worker: Value = serde_json::from_slice(&fs::read(&worker_path)?)?;
                 worker["running_cache"] = receipt.clone();
+                #[cfg(feature = "experimental-rustred")]
+                if let Some(reference) = &cost_reference {
+                    worker["native_cost_observation"] = reference.clone();
+                }
                 if let Some(error) = &close_error {
                     worker["success"] = false.into();
                     if worker["error"].is_null() {
@@ -1769,10 +1898,52 @@ mod tests {
         assert_eq!(options.case_deadline(100.0)?, None);
         assert_eq!(options.worker_allowance(100.0)?, None);
         assert!(!options.classify_cache_hits);
+        assert!(!options.observe_native_costs);
         assert!(!options.monitor.enabled());
         #[cfg(feature = "experimental-rustred")]
         assert!(!options.monitor.cache_hit_diagnostic);
         assert!(!options.deadline_exhausted(None, Duration::from_secs(u64::MAX), f64::MAX)?);
+        Ok(())
+    }
+
+    #[test]
+    fn native_cost_observation_requires_a_separate_single_tuning_capture() -> Result<()> {
+        let fixed = [
+            "--observe-native-costs",
+            "--worker",
+            "--variant",
+            "cached",
+            "--suite",
+            "tuning",
+            "--repetitions",
+            "1",
+            "--cache",
+            "light.gz",
+            "--running-cache",
+            "fresh-capture",
+            "--running-cache-no-read-delta",
+        ];
+        #[cfg(feature = "experimental-rustred")]
+        {
+            let options = parsed_options(&fixed)?;
+            assert!(options.observe_native_costs);
+            assert!(!options.classify_cache_hits);
+            assert!(!options.monitor.enabled());
+        }
+        #[cfg(not(feature = "experimental-rustred"))]
+        assert!(parsed_options(&fixed).is_err());
+        for extra in [
+            vec!["--classify-cache-hits"],
+            vec!["--suite", "held-out"],
+            vec!["--monitor"],
+            vec!["--progress-snapshot", "presentation.json"],
+            vec!["--max-case-seconds", "30", "--worker-deadline", "130"],
+        ] {
+            let mut args = fixed.to_vec();
+            args.extend(extra);
+            assert!(parsed_options(&args).is_err());
+        }
+        assert!(parsed_options(&["--observe-native-costs"]).is_err());
         Ok(())
     }
 
