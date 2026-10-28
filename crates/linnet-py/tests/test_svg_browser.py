@@ -5,7 +5,6 @@ import re
 import unittest
 
 from rendering_metrics import external_metrics_snapshot
-
 from symbolica.community import graph as lp
 
 
@@ -13,7 +12,7 @@ from symbolica.community import graph as lp
     importlib.util.find_spec("playwright"), "Playwright is not installed"
 )
 class SvgBrowserTests(unittest.TestCase):
-    def test_physical_scale_is_shared_and_fitted_drawings_are_not_cropped(self):
+    def test_readable_scale_and_fitted_drawings_are_not_cropped(self):
         from playwright.sync_api import sync_playwright
 
         sizes = [(120, 80), (360, 80), (120, 600), (900, 80)]
@@ -48,11 +47,11 @@ class SvgBrowserTests(unittest.TestCase):
                             owner = page.locator(f"#graph-{index}")
                             camera = owner.locator(".linnet-viewport")
                             scale = camera.evaluate("s => s.getScreenCTM().a")
-                            expected = min(4 / 3, 520 / width)
+                            expected = (7 / 3, 4 / 3, 4 / 3, 520 / 900)[index]
                             self.assertAlmostEqual(scale, expected, places=5)
                             self.assertEqual(
                                 owner.locator("output").inner_text(),
-                                f"{round(100 * expected / (4 / 3))}%",
+                                ("100%", "100%", "100%", "43%")[index],
                             )
                             x, y, w, h = map(
                                 float, camera.get_attribute("viewBox").split()
@@ -66,14 +65,14 @@ class SvgBrowserTests(unittest.TestCase):
                                     '[data-linnet-kind="node"]'
                                 ).bounding_box()
                             )
-                        # Identical authored text has identical displayed dimensions,
-                        # despite different drawing widths and a tall viewport.
+                        # The small preview enlarges labels for readability;
+                        # larger drawings preserve their physical dimensions.
                         for label in labels[1:3]:
                             self.assertAlmostEqual(
-                                label["height"], labels[0]["height"], places=3
+                                label["height"] * 1.75, labels[0]["height"], places=3
                             )
                             self.assertAlmostEqual(
-                                label["width"], labels[0]["width"], places=3
+                                label["width"] * 1.75, labels[0]["width"], places=3
                             )
                         self.assertGreater(
                             page.locator("#graph-2 > figure > svg").bounding_box()[
@@ -91,7 +90,7 @@ class SvgBrowserTests(unittest.TestCase):
                             "document.querySelector('#graph-0 svg').viewBox.baseVal.width === 300"
                         )
                         self.assertAlmostEqual(
-                            camera.evaluate("s => s.getScreenCTM().a"), 1.4, places=5
+                            camera.evaluate("s => s.getScreenCTM().a"), 2.45, places=5
                         )
                         self.assertEqual(first.locator("output").inner_text(), "105%")
                         page.keyboard.press("0")
@@ -260,8 +259,9 @@ class SvgBrowserTests(unittest.TestCase):
                         node.hover()
                         self.assertIn("Node 0", panel.inner_text())
                         self.assertGreater(
-                            panel.bounding_box()["x"],
-                            camera.bounding_box()["x"] + camera.bounding_box()["width"],
+                            panel.bounding_box()["y"],
+                            camera.bounding_box()["y"]
+                            + camera.bounding_box()["height"],
                         )
                         node.click()
                         other.hover()
