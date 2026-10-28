@@ -4,8 +4,12 @@
 //! measurement and candidate enumeration remain in Typst; this batches the
 //! per-candidate transforms, collision costs and search without changing positions,
 //! costs, or tie-breaking. Typst certifies every acceptance decision by the search.
-use serde::{de::Error, Deserialize, Deserializer, Serialize};
-use std::{cell::Cell, collections::BTreeMap};
+use ciborium::Value;
+use serde::de::Error;
+use serde::{Deserialize, Deserializer, Serialize};
+use std::cell::Cell;
+use std::cmp::Ordering;
+use std::collections::BTreeMap;
 
 #[derive(Deserialize)]
 struct Frame {
@@ -1088,12 +1092,12 @@ impl Score {
             || (self.contacts == other.contacts && self.cost.float() < other.cost.float() - 1e-12)
     }
 
-    fn order(&self, other: &Self) -> std::cmp::Ordering {
+    fn order(&self, other: &Self) -> Ordering {
         self.contacts.cmp(&other.contacts).then(
             self.cost
                 .float()
                 .partial_cmp(&other.cost.float())
-                .unwrap_or(std::cmp::Ordering::Equal),
+                .unwrap_or(Ordering::Equal),
         )
     }
 }
@@ -1642,7 +1646,7 @@ impl CollisionSpec {
                 costs.push(if relevant.is_empty() && fixed_arrows.is_empty() {
                     initial.value()
                 } else {
-                    ciborium::Value::Float(cost)
+                    Value::Float(cost)
                 });
                 // Painted lines arrive as loose pieces and count once; every
                 // obstacle box counts on its own.
@@ -2885,7 +2889,7 @@ mod tests {
                 Point(bounds.right, bounds.bottom),
             ]),
             bounds,
-            cost: ciborium::Value::Float(cost),
+            cost: Value::Float(cost),
             arrow_bounds: Vec::new(),
         };
         // The movable label may take a spot whose text meets something, or a
@@ -3001,7 +3005,7 @@ mod tests {
                     candidates: vec![CollisionCandidate {
                         corners: None,
                         bounds,
-                        cost: ciborium::Value::Integer(0.into()),
+                        cost: Value::Integer(0.into()),
                         arrow_bounds,
                     }],
                     edge: None,
