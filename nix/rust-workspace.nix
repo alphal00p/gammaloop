@@ -526,7 +526,10 @@
       "crates/linnet-render-py/tests/mathml_view_support.py"
       "crates/linnet-render-py/tests/mathml_view_collections.py"
     ];
-    linnet = ["crates/linnet/src/half_edge/layout/impred/fixtures"];
+    linnet = [
+      "crates/linnet/src/half_edge/layout/impred/fixtures"
+      "crates/linnet/tests/generation_reports"
+    ];
     linnest = [
       "crates/linnest/layout/native/fixtures"
       "crates/linnest/src/ec_seed/fixtures"
@@ -547,6 +550,7 @@
       "crates/feynkit-model/tests/fixtures"
       "crates/feynkit-py/python/symbolica/community/hepkit/__init__.py"
       "crates/feynkit-py/tests/fixtures"
+      "crates/feynkit-py/tests/request_decorator_contract.py"
       "crates/feynkit-py/tests/cff_display.py"
       "crates/feynkit-py/tests/browser_display_fixtures.py"
       "crates/feynkit-py/tests/installed_squared_amplitude_display.py"

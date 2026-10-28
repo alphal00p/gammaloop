@@ -13,6 +13,28 @@ title = "Implemented architecture"
 summary = "How the current runtime, physics layers, parsers, and symbolic engines are organized."
 
 [[section.note]]
+id = "generation-test-source-closure"
+title = "Compile-time generation test source closure"
+summary = "Source30 filtered-source ownership, exact copied-file boundaries and validation limits."
+source = "docs/architecture/generation-test-source-closure.typ"
+kind = "Implementation record"
+status = "Candidate; NEW independent Astra review required"
+lifecycle = "investigation"
+owner = "unassigned"
+reviewed_at = "2026-10-28"
+review_ref = "0a38ee4e3e7d16af3978f2c6ccde04dc176dfea9"
+products = ["gammaloop", "feynkit", "linnet"]
+topics = ["generation", "build", "validation"]
+review_triggers = ["nix/rust-workspace.nix", "crates/feynkit-py/tests/request_decorator_contract.py", "crates/linnet/tests/generation_reports/**"]
+
+[[section.note.scope]]
+path = "nix/rust-workspace.nix"
+symbol = "generation compile-time test source owners"
+anchor = "  workspacePackageExtraSourceRoots.compileTimeTest = {"
+end_anchor = "  workspacePackageExtraSourceRoots.runtimeTest = {"
+digest = "f28f7a0554d9a3373ebdb98d432c6529273537fb"
+
+[[section.note]]
 id = "generation-sampling-staged"
 title = "Staged signed sampling reconciliation"
 summary = "Approved sampling27–29 and graph-derived mixed two-loop controls on staged22–26; ordered combined integration awaits review."

@@ -1,0 +1,650 @@
+{
+  "source": {
+    "ordinal": 30,
+    "original": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+    "approved_base": "0a38ee4e3e7d16af3978f2c6ccde04dc176dfea9",
+    "implementation_commit": "4e13c40d6e30bff3390d06067fe81cfb8ac10a5f",
+    "implementation_change": "mzoxtptswzxlwuwvzqypwunpwtlwrkok",
+    "receipt_change": "wolumottlmytlqrrnztuwkuuonpyroro",
+    "candidate_bookmark": "generation-test-source-closure",
+    "initial_receipt_commit": "390993069213aa662ddfc0a7682c56020463d018",
+    "completion_receipt_change": "lorywpmqzqsnlqqlsksnkkqxvqlzossn",
+    "identity_method": "jj log --no-graph --no-pager -r REV -T commit_id / change_id; validated as exactly40 lowercase hex /32 lowercase letters"
+  },
+  "files": {
+    "implementation": [
+      "nix/rust-workspace.nix",
+      "docs/developers.toml",
+      "docs/architecture/generation-test-source-closure.typ"
+    ],
+    "receipt": [
+      "docs/architecture/evidence/generation-integration/wp3/source30.json"
+    ]
+  },
+  "reconciliation": {
+    "added": "existing compileTimeTest owner roots only: Python contract file and generation_reports subtree",
+    "obsolete_original": "Standalone linnet_py.pyi and its consumers absent on approved base; current community/docs stubs already owned. Original graph-list additions already present.",
+    "preserved": "Generator restriction card runtimeTest; sampled quotient fixture subtree compileTimeTest; browser/resource/font/license/WASM/native/static/vendored owners unchanged."
+  },
+  "fileset_checks": {
+    "feynkit": {
+      "before": "/nix/store/jxb38xhcxrl0ci795x3hkkpxxj2ilyv7-source",
+      "after": "/nix/store/g8csia6hs7v3hcn330nb02gghh3nzxs1-source",
+      "added": {
+        "crates/feynkit-py/tests/request_decorator_contract.py": "299fbc5e57884f8117c75e91c2b98bc2c1e2125cbdbf9be2ab9a5136ea86f061"
+      },
+      "removed": [],
+      "changed": [],
+      "changed_input_source": "/nix/store/874kqqnq4hhxbdcik5nqdv2p70gyb3by-source"
+    },
+    "linnet": {
+      "before": "/nix/store/hpfvckq3ywsya2cwd4sk1is4n2aksfd1-source",
+      "after": "/nix/store/dn76zz86lpis983m5yf8lvmkb7h2cn8w-source",
+      "added": {
+        "crates/linnet/tests/generation_reports/finite_vertex_bound.txt": "d7fb0f77d826f22c24ac857ae4c518b24325d4ea8a367da773000636f251cc6c",
+        "crates/linnet/tests/generation_reports/identical_legs.txt": "3eae138c006f2f244907e524a28ccf1c0c20dcfe21cdbb5e512f5a57224dd7b4",
+        "crates/linnet/tests/generation_reports/infeasible_order.txt": "22c25cb9815b4b8f62fde2f4c03a4b645f89873e5e73f09de17b79c31dbbbf2c",
+        "crates/linnet/tests/generation_reports/qed.txt": "7bebabf38b022dc5488c1fe86fb3e340bdd231ac75664719caee971d00402e2b",
+        "crates/linnet/tests/generation_reports/signed_vacuum.txt": "8d68bd097884c74a4dcd58498971cc4d28382ff3f3306d4c402cbc580a2b6333"
+      },
+      "removed": [],
+      "changed": [],
+      "changed_input_source": "/nix/store/yssw77bhvyk37iakqwlk9hq8wz99g981-source"
+    },
+    "unrelated_note": {
+      "feynkit-py": "/nix/store/g8csia6hs7v3hcn330nb02gghh3nzxs1-source",
+      "linnet": "/nix/store/dn76zz86lpis983m5yf8lvmkb7h2cn8w-source"
+    }
+  },
+  "input_audit": {
+    "feynkit-py": [
+      {
+        "consumer": "crates/feynkit-py/tests/cff_display.rs",
+        "input": "crates/feynkit-py/tests/fixtures/scalars_2p_3p.json"
+      },
+      {
+        "consumer": "crates/feynkit-py/tests/cff_display.rs",
+        "input": "crates/feynkit-py/tests/cff_display.py"
+      },
+      {
+        "consumer": "crates/feynkit-py/tests/combined_community.rs",
+        "input": "crates/feynkit-py/python/symbolica/community/hepkit/__init__.py"
+      },
+      {
+        "consumer": "crates/feynkit-py/tests/combined_community.rs",
+        "input": "crates/linnet-py/python/symbolica/community/graph/__init__.py"
+      },
+      {
+        "consumer": "crates/feynkit-py/tests/combined_community.rs",
+        "input": "crates/feynkit-py/tests/fixtures/scalars_2p_3p.json"
+      },
+      {
+        "consumer": "crates/feynkit-py/tests/combined_community.rs",
+        "input": "crates/feynkit-py/tests/installed_wavefunctions.py"
+      },
+      {
+        "consumer": "crates/feynkit-py/tests/combined_community.rs",
+        "input": "crates/feynkit-py/tests/browser_display_fixtures.py"
+      },
+      {
+        "consumer": "crates/feynkit-py/tests/combined_community.rs",
+        "input": "crates/feynkit-py/tests/installed_offline_rendering.py"
+      },
+      {
+        "consumer": "crates/feynkit-py/tests/combined_community.rs",
+        "input": "crates/spynso3/tests/installed_tensor_network_display.py"
+      },
+      {
+        "consumer": "crates/feynkit-py/tests/combined_community.rs",
+        "input": "crates/linnet-py/tests/rendering_metrics.py"
+      },
+      {
+        "consumer": "crates/feynkit-py/tests/combined_community.rs",
+        "input": "crates/linnet-py/tests/test_community_rendering.py"
+      },
+      {
+        "consumer": "crates/feynkit-py/tests/combined_community.rs",
+        "input": "crates/feynkit-py/tests/native_forwarding.py"
+      },
+      {
+        "consumer": "crates/feynkit-py/tests/cut_algebra.rs",
+        "input": "crates/feynkit-py/tests/fixtures/scalars_2p_3p.json"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/display.rs",
+        "input": "crates/feynkit-py/src/collection.css"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/display.rs",
+        "input": "crates/feynkit-py/src/collection.js"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/display.rs",
+        "input": "crates/feynkit-py/src/notebook.js"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/lib.rs",
+        "input": "crates/feynkit-py/tests/fixtures/scalars_2p_3p.json"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/lib.rs",
+        "input": "crates/feynkit-py/tests/native_forwarding.py"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/ufo.rs",
+        "input": "crates/feynkit-py/tests/fixtures/scalars_2p_3p.json"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/generation/tests.rs",
+        "input": "crates/feynkit-py/tests/fixtures/scalars_2p_3p.json"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/generation/tests.rs",
+        "input": "crates/feynkit-py/tests/fixtures/scalars_2p_3p.json"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/generation/tests.rs",
+        "input": "crates/feynkit-py/tests/fixtures/scalars_2p_3p.json"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/generation/tests.rs",
+        "input": "crates/feynkit-py/tests/fixtures/scalars_2p_3p.json"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/generation/tests.rs",
+        "input": "crates/feynkit-py/tests/fixtures/scalars_2p_3p.json"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/generation/tests.rs",
+        "input": "crates/feynkit-py/tests/fixtures/scalars_2p_3p.json"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/generation/tests.rs",
+        "input": "crates/feynkit-model/tests/fixtures/sm.json"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/generation/tests.rs",
+        "input": "crates/feynkit-py/tests/fixtures/scalars_2p_3p.json"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/generation/tests.rs",
+        "input": "crates/feynkit-py/tests/fixtures/scalars_2p_3p.json"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/generation/tests.rs",
+        "input": "crates/feynkit-model/tests/fixtures/sm.json"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/generation/tests.rs",
+        "input": "crates/feynkit-py/tests/fixtures/scalars_2p_3p.json"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/generation/tests.rs",
+        "input": "crates/feynkit-py/tests/fixtures/scalars_2p_3p.json"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/generation/tests.rs",
+        "input": "crates/feynkit-py/tests/request_decorator_contract.py"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/generation/tests.rs",
+        "input": "crates/feynkit-py/tests/fixtures/scalars_2p_3p.json"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/ltd/display.rs",
+        "input": "crates/feynkit-py/src/expression.css"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/ltd/display.rs",
+        "input": "crates/feynkit-py/src/ltd/display.css"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/ltd/display.rs",
+        "input": "crates/feynkit-py/src/expression.js"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/ltd/display.rs",
+        "input": "crates/feynkit-py/src/ltd/display.js"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/ltd/display.rs",
+        "input": "crates/feynkit-py/src/notebook.js"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/cff/kernel.rs",
+        "input": "crates/feynkit-py/tests/fixtures/scalars_2p_3p.json"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/cff/display.rs",
+        "input": "crates/feynkit-py/src/expression.css"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/cff/display.rs",
+        "input": "crates/feynkit-py/src/cff/display.css"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/cff/display.rs",
+        "input": "crates/feynkit-py/src/cff/display.html"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/cff/display.rs",
+        "input": "crates/feynkit-py/src/expression.js"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/cff/display.rs",
+        "input": "crates/feynkit-py/src/cff/display.js"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/cff/display.rs",
+        "input": "crates/feynkit-py/src/notebook.js"
+      }
+    ],
+    "linnet": [
+      {
+        "consumer": "crates/linnet/tests/generation_report.rs",
+        "input": "crates/linnet/tests/generation_reports/qed.txt"
+      },
+      {
+        "consumer": "crates/linnet/tests/generation_report.rs",
+        "input": "crates/linnet/tests/generation_reports/signed_vacuum.txt"
+      },
+      {
+        "consumer": "crates/linnet/tests/generation_report.rs",
+        "input": "crates/linnet/tests/generation_reports/identical_legs.txt"
+      },
+      {
+        "consumer": "crates/linnet/tests/generation_report.rs",
+        "input": "crates/linnet/tests/generation_reports/finite_vertex_bound.txt"
+      },
+      {
+        "consumer": "crates/linnet/tests/generation_report.rs",
+        "input": "crates/linnet/tests/generation_reports/infeasible_order.txt"
+      },
+      {
+        "consumer": "crates/linnet/src/half_edge/layout/impred.rs",
+        "input": "crates/linnet/src/half_edge/layout/impred/fixtures/higgs-sunset.json"
+      },
+      {
+        "consumer": "crates/linnet/src/half_edge/layout/impred.rs",
+        "input": "crates/linnet/src/half_edge/layout/impred/fixtures/xs-extra-higgs-scattering.json"
+      },
+      {
+        "consumer": "crates/linnet/src/half_edge/layout/impred.rs",
+        "input": "crates/linnet/src/half_edge/layout/impred/fixtures/multi-leg-eight-gluon-ladder.json"
+      },
+      {
+        "consumer": "crates/linnet/src/half_edge/layout/impred.rs",
+        "input": "crates/linnet/src/half_edge/layout/impred/fixtures/nonplanar-gluon-k5.json"
+      },
+      {
+        "consumer": "crates/linnet/src/half_edge/layout/impred/movement.rs",
+        "input": "crates/linnet/src/half_edge/layout/impred/fixtures/movement-regressions.json"
+      },
+      {
+        "consumer": "crates/linnet/tests/nauty/runs.rs",
+        "input": "crates/linnet/tests/nauty/utilities.rs"
+      },
+      {
+        "consumer": "crates/linnet/tests/nauty/runs.rs",
+        "input": "crates/linnet/tests/nauty/oracle.rs"
+      }
+    ],
+    "generator": {
+      "source": "/nix/store/yy5hrk5bpvrw05p5fsz48v2sq407pngy-source",
+      "fixture_subtree": "all bytes match",
+      "runtime_card_excluded": true
+    },
+    "canonical_owned_scope_checks": [
+      {
+        "path": "nix/rust-workspace.nix",
+        "symbol": "generation compile-time test source owners",
+        "anchor": "  workspacePackageExtraSourceRoots.compileTimeTest = {",
+        "end_anchor": "  workspacePackageExtraSourceRoots.runtimeTest = {",
+        "digest": "f28f7a0554d9a3373ebdb98d432c6529273537fb",
+        "status": "valid",
+        "actual": "f28f7a0554d9a3373ebdb98d432c6529273537fb"
+      }
+    ],
+    "literal_audit_limit": "Literal include_str/include_bytes paths checked in actual two affected producer sources; other staged producer and build-script/loader owners inspected manually. This is not a runtime or whole-workspace ownership proof."
+  },
+  "protected_file_sha256": {
+    "Cargo.lock": "def8dd7be5f208f4a290a4556081f7a63d10a5ae070c5df1808c1d350fa6161e",
+    "Cargo.toml": "8b2851dcbbcf020ea9690733a8c2b8b261916f4ada1c5d28a44ae7b16c5c4293",
+    "flake.lock": "e10c5893b513d4c7120d841b47fbfddffb3ac4f1f5cb46a18c0f7542cbde8534",
+    "uv.lock": "0ad8d1a18d9c520d298ff36ec20a746f9a63c7e0fdebe14e739a574cbb4fabf8",
+    "tydenso/Cargo.lock": "f1f0573d5f1c02d4ddb73d4491514cd291ae94ded7d84627342226917ca41dd0",
+    "examples/notebooks/symbolica-host/Cargo.lock": "03e18f00dbba096e08978063fd857d6558659f9f75e0ab09d73be3e543882c5a",
+    "nix-ci.nix": "e031749e51a33ee48bc5c653d13c2dc7e7d3a51bddea77fc3c67d01ac217c540",
+    "nix/ci.nix": "1504cf315f1b3878d16b7b08a1bbbfdc5446af6a71028a09c8b706eac5a02193",
+    "nix/ci-workspace-graph.json": "0654ccd013469a73316ac2e4441dc26297f33699acd4fd7ee28026d18ab74d1d"
+  },
+  "nix_ci_enabled": false,
+  "scopes": {
+    "method": "Reuse canonical check function in existing oracle-registry-audit.py: unique nonempty start/end, ordered range, Git blob hash. New note scope only; inherited broad cache-note digest is unchanged.",
+    "remaining_global_mismatches": [
+      {
+        "note": "gammaloop-architecture",
+        "path": "crates/gammaloop-api/src/state.rs",
+        "symbol": "gammaloop_api::state::State::load",
+        "status": "stale-digest",
+        "actual": "3598dbe299f9a32da1ed8d034706a82959d84abb"
+      },
+      {
+        "note": "gammaloop-architecture",
+        "path": "crates/gammaloop-api/src/commands/integrate.rs",
+        "symbol": "gammaloop_api::commands::integrate::Integrate::default_workspace_path",
+        "status": "stale-digest",
+        "actual": "bcce3d43713b42fe428e3b5d89784e18c8d47fa7"
+      },
+      {
+        "note": "gammaloop-architecture",
+        "path": "crates/gammalooprs/src/integrands/process/mod.rs",
+        "symbol": "gammalooprs::integrands::process::ProcessIntegrand::warm_up",
+        "status": "stale-digest",
+        "actual": "4e93e77570220de9a2247f6a363095d321511181"
+      },
+      {
+        "note": "gammaloop-architecture",
+        "path": "crates/gammalooprs/src/observables/mod.rs",
+        "symbol": "gammalooprs::observables::EventProcessingRuntime",
+        "status": "stale-digest",
+        "actual": "b672f52f6674d08d11b6cc68ef0621c399386926"
+      },
+      {
+        "note": "gammaloop-architecture",
+        "path": "crates/gammaloop-api/src/python.rs",
+        "symbol": "gammaloop_api::python::GammaLoopAPI",
+        "status": "stale-digest",
+        "actual": "872d2b855d14a4aded443e18df435f899c2bf42a"
+      },
+      {
+        "note": "gammaloop-architecture",
+        "path": "crates/feynkit-generator/src/generation.rs",
+        "symbol": "feynkit_generator::Generator::generate",
+        "status": "missing-or-ambiguous-anchor"
+      },
+      {
+        "note": "gammaloop-architecture",
+        "path": "crates/feynkit-model/src/model.rs",
+        "symbol": "feynkit_model::Model",
+        "status": "stale-digest",
+        "actual": "b04029827b0ecb3c8f23289bf0937e1ea422e176"
+      },
+      {
+        "note": "gammaloop-architecture",
+        "path": "crates/feynkit-graph/src/lib.rs",
+        "symbol": "feynkit_graph::FeynmanDiagram",
+        "status": "stale-digest",
+        "actual": "03fa811b133f5816415a2b445445ea5a2d87365d"
+      },
+      {
+        "note": "gammaloop-architecture",
+        "path": "crates/gammalooprs/src/graph/parse/mod.rs",
+        "symbol": "gammalooprs::graph::Graph DOT import boundary",
+        "status": "missing-or-ambiguous-anchor"
+      },
+      {
+        "note": "integration-dashboard",
+        "path": "crates/gammaloop-api/src/commands/integrate.rs",
+        "symbol": "gammaloop_api::commands::integrate::dashboard_event_loop",
+        "status": "stale-digest",
+        "actual": "bcce3d43713b42fe428e3b5d89784e18c8d47fa7"
+      },
+      {
+        "note": "integration-dashboard",
+        "path": "crates/gammalooprs/src/integrate/mod.rs",
+        "symbol": "gammalooprs::integrate",
+        "status": "stale-digest",
+        "actual": "2cbbafcb254b4b7ac042b6ca8dab6682f9a0ce21"
+      },
+      {
+        "note": "uv-renormalization",
+        "path": "crates/gammalooprs/src/uv/orchestrator.rs",
+        "symbol": "gammalooprs::uv::UVOrchestrator",
+        "status": "stale-digest",
+        "actual": "4acc87a62891dbff0b3ca2cef2e8ab505c1de6d5"
+      },
+      {
+        "note": "spenso-symbolica-syntax-and-rewrites",
+        "path": "crates/idenso/src/lib.rs",
+        "symbol": "idenso::IndexTooling",
+        "status": "stale-digest",
+        "actual": "820fbf610c4bb06867a7013d0b8631e57704ff7d"
+      },
+      {
+        "note": "spenso-architecture",
+        "path": "crates/spenso/src/network/mod.rs",
+        "symbol": "spenso::network::Network",
+        "status": "stale-digest",
+        "actual": "14f66a4d6e62a4fd878c2f52f0bc6ab336cf7f24"
+      },
+      {
+        "note": "idenso-architecture",
+        "path": "crates/idenso/src/lib.rs",
+        "symbol": "idenso::IndexTooling",
+        "status": "stale-digest",
+        "actual": "820fbf610c4bb06867a7013d0b8631e57704ff7d"
+      },
+      {
+        "note": "idenso-architecture",
+        "path": "crates/idenso/src/tensor/mod.rs",
+        "symbol": "idenso::tensor::SymbolicTensor",
+        "status": "stale-digest",
+        "actual": "b95ee5f1852b22a03b1fe79bfe4342d3c42e831e"
+      },
+      {
+        "note": "idenso-architecture",
+        "path": "crates/idenso/src/tensor/contract.rs",
+        "symbol": "idenso::tensor::ContractSettings",
+        "status": "stale-digest",
+        "actual": "442fe89c0ec2fc603e7eeb88b73e69ad9e1b7e60"
+      },
+      {
+        "note": "idenso-architecture",
+        "path": "crates/idenso/src/tensor/simplification.rs",
+        "symbol": "idenso::tensor::AlgebraSettings",
+        "status": "stale-digest",
+        "actual": "49ae6d4398bf4decc931f01d09ef49e69f64996f"
+      },
+      {
+        "note": "idenso-architecture",
+        "path": "crates/idenso/src/tensor/collection/collected.rs",
+        "symbol": "idenso::tensor::CollectedOutput",
+        "status": "stale-digest",
+        "actual": "ca8c5cb4f9dd9ee5152cbb94df6c8d919e098c35"
+      },
+      {
+        "note": "idenso-architecture",
+        "path": "crates/idenso/src/tensor/collection.rs",
+        "symbol": "idenso::tensor::SymbolicTensor::collect_with_map",
+        "status": "stale-digest",
+        "actual": "8f078f8c9d4f7fd1fea495180aa1185894b5cfa3"
+      },
+      {
+        "note": "linnet-architecture",
+        "path": "crates/linnet/src/half_edge.rs",
+        "symbol": "linnet::half_edge::HedgeGraph",
+        "status": "missing-or-ambiguous-anchor"
+      },
+      {
+        "note": "linnet-architecture",
+        "path": "crates/linnet/src/half_edge/involution.rs",
+        "symbol": "linnet::half_edge::involution::Involution",
+        "status": "stale-digest",
+        "actual": "2a5162885ac2e05dc8a1ec79d5fec555a9f6ed36"
+      },
+      {
+        "note": "linnet-architecture",
+        "path": "crates/linnet/src/half_edge/subgraph.rs",
+        "symbol": "linnet::half_edge::subgraph::SubGraphLike",
+        "status": "stale-digest",
+        "actual": "929ee2f716f95ba3a0bf7a9afdb8f8bf2a458765"
+      },
+      {
+        "note": "linnet-architecture",
+        "path": "crates/linnet/src/parser/mod.rs",
+        "symbol": "linnet::parser::DotGraph",
+        "status": "missing-or-ambiguous-anchor"
+      },
+      {
+        "note": "cff-surface-cache-ownership",
+        "path": "crates/feynkit-cff/src/generation.rs",
+        "symbol": "feynkit_cff::CffGenerator::generate_into",
+        "status": "stale-digest",
+        "actual": "47ea515ff9c91e24d6f6b501da289996a06dfe9a"
+      },
+      {
+        "note": "cff-surface-cache-ownership",
+        "path": "crates/feynkit-cff/src/surface.rs",
+        "symbol": "feynkit_cff::SurfaceCache",
+        "status": "stale-digest",
+        "actual": "cf07dd60f15885153560f050d552600cfb19034a"
+      },
+      {
+        "note": "feynkit-merge-readiness",
+        "path": "crates/feynkit-generator/src/grouping.rs",
+        "symbol": "group_diagrams",
+        "status": "stale-digest",
+        "actual": "66cc3fe8280694c72b213d71dee37fb40a1ad997"
+      },
+      {
+        "note": "nix-crane-cache-reuse",
+        "path": "nix/rust-workspace.nix",
+        "symbol": "workspace package source ownership",
+        "status": "stale-digest",
+        "actual": "53c4a5ee23a0c2c01732bc0e1bd42eeadeade5f5"
+      }
+    ],
+    "remaining_mismatches_inherited_at_approved_base": true,
+    "global_docs_pass": false
+  },
+  "checks": {
+    "nix_parse": [
+      "nix-instantiate --parse nix/rust-workspace.nix",
+      "nix-instantiate --parse nix/ci.nix",
+      "nix-instantiate --parse nix-ci.nix"
+    ],
+    "parse_result": "passed",
+    "evaluation_and_copy": "actual packages.x86_64-linux.crate-test-binaries-{feynkit-py,linnet}.artifact.src; recursive path/byte comparison; added file SHA256; no removed/changed paths",
+    "sensitivity": "one newline mutation per new owner input changes source; restoration restores identity; unrelated note mutation changes neither source; scratch mutations restored",
+    "typst": "typst compile docs/architecture/generation-test-source-closure.typ target/source30/note.pdf passed",
+    "producer_command": "SYMBOLICA_LICENSE preserved or silently loaded; nix build --impure --no-link --max-jobs 2 --cores 2 .#packages.x86_64-linux.crate-test-binaries-feynkit-py .#packages.x86_64-linux.crate-test-binaries-linnet",
+    "producer_result": "pending in inherited workspace dependency cache; no producer compile success claimed",
+    "runtime_tests": "not run",
+    "publication": "none",
+    "formatting": {
+      "pinned_nixfmt": "1.5.0; /nix/store/nsj69kqd45ij8fblnhspwwhhp3sk5cwf-nixfmt-1.5.0",
+      "changed_owner_lists": "pinned nixfmt --check target/source30/changed-owner-lists.nix passed",
+      "whole_file": "pinned nixfmt --check nix/rust-workspace.nix failed: inherited formatting drift; no whole-file formatting pass claimed",
+      "unrelated_early_checks": "system nixfmt1.4 and store nixfmt1.2 also rejected whole file; pinned1.5 used for final range check"
+    }
+  },
+  "derivations": {
+    "feynkit": "/nix/store/8zkx472ncjqca38jl8s70qa924lqxq58-gammaloop-crate-test-binaries-feynkit-py-5ebab9a37787b10e-deps-0.1.0.drv",
+    "linnet": "/nix/store/bvmr7za4q98dy2x3bjvvvgpzbncgz0fg-gammaloop-crate-test-binaries-linnet-9ddd49c3d058a560-deps-0.1.0.drv"
+  },
+  "limits": [
+    "Independent source30 preparation only; sources22\u201329 excluded. Ordered integration after29 and combined closure check required.",
+    "NEW independent Astra review required. No nested agents or integration.",
+    "No full CI/docs/heavy physics/benchmark runtime claim.",
+    "An initial nix develop invocation began realizing inherited linnest-wasm; interrupted before edits and replaced by direct Nix evaluation/build commands.",
+    "Production package source uses .src directly; attempted .artifact.src paths were rejected, then corrected."
+  ],
+  "retained_artifacts": [
+    "target/source30: review logs, derivation JSON, source paths, byte checks and rendered note; shared Nix outputs/caches preserved",
+    "feature workspace retained for review"
+  ],
+  "production_negative_checks": {
+    "feynkit": {
+      "source": "/nix/store/7iy9fbssm8gni395wqcf1hag9kxwkvzp-source",
+      "new_compile_time_input_absent": true
+    },
+    "linnet": {
+      "source": "/nix/store/bmmi645wj3x1a0k9ynx1m5y0d85v31ib-source",
+      "new_compile_time_input_absent": true
+    }
+  },
+  "producer_metadata": {
+    "feynkit": {
+      "drvPath": "/nix/store/8zkx472ncjqca38jl8s70qa924lqxq58-gammaloop-crate-test-binaries-feynkit-py-5ebab9a37787b10e-deps-0.1.0.drv",
+      "src": "/nix/store/g8csia6hs7v3hcn330nb02gghh3nzxs1-source",
+      "outputs": {
+        "incremental": {
+          "path": "s8ccc04p2pxb66hllxsg23qmxazy2jyd-gammaloop-crate-test-binaries-feynkit-py-5ebab9a37787b10e-deps-0.1.0-incremental"
+        },
+        "out": {
+          "path": "6pqw53djhif12i68k2slpi0jb96p099r-gammaloop-crate-test-binaries-feynkit-py-5ebab9a37787b10e-deps-0.1.0"
+        }
+      },
+      "buildPhase": "runHook preBuild\ncargo --version\ncargoWithProfile test --no-run --offline -p feynkit-py --features feynkit-py/python_stubgen,pyo3-stub-gen/infer_signature,pyo3-stub-gen/numpy,pyo3/anyhow,pyo3/auto-initialize,pyo3/eyre,pyo3/macros,pyo3/multiple-pymethods\nrunHook postBuild\n",
+      "doCheck": "",
+      "note": "Selected nonsecret derivation metadata only; environment omitted."
+    },
+    "linnet": {
+      "drvPath": "/nix/store/bvmr7za4q98dy2x3bjvvvgpzbncgz0fg-gammaloop-crate-test-binaries-linnet-9ddd49c3d058a560-deps-0.1.0.drv",
+      "src": "/nix/store/dn76zz86lpis983m5yf8lvmkb7h2cn8w-source",
+      "outputs": {
+        "incremental": {
+          "path": "yvsb274wc6bxhyldy1jml8mi9mjqb2cf-gammaloop-crate-test-binaries-linnet-9ddd49c3d058a560-deps-0.1.0-incremental"
+        },
+        "out": {
+          "path": "cavydq06slyc5rnbk73jhjkdw468gwhl-gammaloop-crate-test-binaries-linnet-9ddd49c3d058a560-deps-0.1.0"
+        }
+      },
+      "buildPhase": "runHook preBuild\ncargo --version\ncargoWithProfile test --no-run --offline -p linnet --features linnet/bincode,linnet/drawing,linnet/rayon,linnet/rkyv,linnet/serde,linnet/symbolica\nrunHook postBuild\n",
+      "doCheck": "",
+      "note": "Selected nonsecret derivation metadata only; environment omitted."
+    }
+  },
+  "commands": [
+    "nix eval --impure --raw .#packages.x86_64-linux.crate-test-binaries-feynkit-py.artifact.src",
+    "nix eval --impure --raw .#packages.x86_64-linux.crate-test-binaries-linnet.artifact.src",
+    "nix eval --impure --raw .#packages.x86_64-linux.crate-test-binaries-feynkit-generator.artifact.src",
+    "nix eval --impure --raw .#packages.x86_64-linux.crate-feynkit-py.src",
+    "nix eval --impure --raw .#packages.x86_64-linux.crate-linnet.src",
+    "nix eval --impure --raw .#packages.x86_64-linux.crate-test-binaries-feynkit-py.artifact.drvPath",
+    "nix eval --impure --raw .#packages.x86_64-linux.crate-test-binaries-linnet.artifact.drvPath"
+  ],
+  "before_derivations": {
+    "feynkit": "/nix/store/ndv7fyi7iysa6d03ahmy01rqjq9r0vym-gammaloop-crate-test-binaries-feynkit-py-5ebab9a37787b10e-deps-0.1.0.drv",
+    "linnet": "/nix/store/md5naqg7fnynn57jk1zjhg2vdiw1b7nn-gammaloop-crate-test-binaries-linnet-9ddd49c3d058a560-deps-0.1.0.drv"
+  },
+  "vendored_source_and_notices": {
+    "feynkit": {
+      "clarabel": {
+        "files": 221,
+        "all_bytes_equal": true
+      },
+      "dot-parser": {
+        "files": 0,
+        "all_bytes_equal": true
+      }
+    },
+    "linnet": {
+      "clarabel": {
+        "files": 221,
+        "all_bytes_equal": true
+      },
+      "dot-parser": {
+        "files": 0,
+        "all_bytes_equal": true
+      }
+    }
+  },
+  "implementation_file_sha256": {
+    "nix/rust-workspace.nix": "614725b0487edeea5f3bfd5b5bc6d5d9ffad456605a6cd68b09f41dbe37578a7",
+    "docs/developers.toml": "2a32b54ac89d3255c3c83e5bc638640aab06fe2c84a5c2337fde2ad15b60edb8",
+    "docs/architecture/generation-test-source-closure.typ": "b6ba3539e978f0baf0aca7dfb5e203123f3083c74d15c678e94a985292bf7098"
+  },
+  "retained_processes": {
+    "purpose": "Complete useful build-only affected Nix test producers; not cancelled or duplicated",
+    "nix_pids": [
+      1742457
+    ],
+    "exec_session": 88902,
+    "log": "target/source30/producer-build.log",
+    "completion_notification": "No external wake-up configured; resume exec session or inspect exact output paths.",
+    "started": "2026-10-28 approximately04:51 UTC",
+    "snapshot": "2026-10-28 approximately05:00 UTC"
+  }
+}
