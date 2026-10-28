@@ -3,6 +3,7 @@
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Mutex, OnceLock};
 
 use eyre::eyre;
 use linnet::half_edge::subgraph::{BaseSubgraph, ModifySubSet, SuBitGraph, SubSetLike};
@@ -27,7 +28,7 @@ use spenso::structure::slot::{
 };
 use spenso::symbol_set;
 use spenso::symbolica_init::in_symbolica_initializer;
-use symbolica::atom::{Atom, AtomCore, AtomView, Symbol, SymbolBuilder};
+use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol, SymbolBuilder};
 use symbolica::id::{AliasedAtom, Pattern, Replacement};
 use symbolica::printer::AtomPrinter;
 use symbolica::{function, initialize, wrap_symbol};
@@ -653,6 +654,41 @@ impl IndexTooling for AtomView<'_> {
             !matches!(value, AtomView::Num(_) | AtomView::Var(_))
                 && !InterfaceInference::has_structured_syntax(value)
         };
+        // Scalar aliases must also stay private from enclosing user normalizers.
+        // Keep their broadcast heads inert until every scalar payload is restored.
+        // Stable registrations preserve the canonicalizer's ordering across calls.
+        static BROADCAST_ALIASES: OnceLock<Mutex<BTreeMap<Symbol, Vec<Symbol>>>> = OnceLock::new();
+        static NEXT_BROADCAST_ALIAS: AtomicU64 = AtomicU64::new(0);
+        let mut broadcast_originals = BTreeMap::new();
+        let mut broadcast_alias = |original: Symbol| {
+            let mut aliases = BROADCAST_ALIASES
+                .get_or_init(|| Mutex::new(BTreeMap::new()))
+                .lock()
+                .expect("canonical broadcast registration lock");
+            let registered = aliases.entry(original).or_default();
+            // A previous internal head can be literal user metadata in a later
+            // input. Retain stable alternatives without capturing that head.
+            let alias = registered
+                .iter()
+                .copied()
+                .find(|alias| !self.contains_symbol(*alias))
+                .unwrap_or_else(|| {
+                    loop {
+                        let serial = NEXT_BROADCAST_ALIAS.fetch_add(1, Ordering::Relaxed);
+                        let builder = SymbolBuilder::new(wrap_symbol!(format!(
+                            "idenso::canonical_broadcast_{serial}"
+                        )))
+                        .with_attributes(original.get_attributes())
+                        .with_tags(original.get_tags());
+                        if let Ok(heads) = SymbolBuilder::build_group(vec![builder]) {
+                            registered.push(heads[0]);
+                            break heads[0];
+                        }
+                    }
+                });
+            broadcast_originals.insert(alias, original);
+            alias
+        };
         let state = ParseState::<Aind>::default();
         state.reserve_indices(*self);
         let nested_dummy = RefCell::new(&mut new_dummy as &mut dyn FnMut(usize) -> Aind);
@@ -710,6 +746,15 @@ impl IndexTooling for AtomView<'_> {
                     ))),
                 },
                 &mut |_, operation, children| {
+                    if let NetworkOp::Function(symbol) = operation
+                        && !InterfaceInference::intrinsic_normalization_head(*symbol)
+                    {
+                        return Ok(Some(
+                            FunctionBuilder::new(broadcast_alias(*symbol))
+                                .add_args(children)
+                                .finish(),
+                        ));
+                    }
                     let NetworkOp::Power(power) = operation else {
                         return Ok(None);
                     };
@@ -902,7 +947,16 @@ impl IndexTooling for AtomView<'_> {
         );
         let canonical = TensorSlotSymmetry::restore_canonical_view(&relabeled)
             .map_err(|reason| CanonicalizationError::Prepare { reason })?;
-        Ok(scalar_definitions.map_root(|_| canonical).into_inner())
+        let canonical = scalar_definitions.map_root(|_| canonical).into_inner();
+        Ok(canonical.replace_map_bottom_up(|value, _, output| {
+            if let AtomView::Fun(function) = value
+                && let Some(original) = broadcast_originals.get(&function.get_symbol())
+            {
+                **output = FunctionBuilder::new(*original)
+                    .add_args(function.iter())
+                    .finish();
+            }
+        }))
     }
     fn spenso_conj(&self) -> Atom {
         let conjugate = self

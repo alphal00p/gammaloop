@@ -11,7 +11,7 @@ use crate::test_support::test_initialize;
 use crate::{Cookable, IndexTooling};
 use spenso::network::tags::SPENSO_TAG;
 use spenso::structure::abstract_index::{AbstractIndex, AbstractIndexError};
-use spenso::structure::partial::PartialStructure;
+use spenso::structure::partial::{PartialStructure, PartialStructureExt};
 use spenso::structure::representation::{Minkowski, RepName};
 use spenso::structure::slot::{AbsInd, DummyAind, IsAbstractSlot, ParseableAind};
 use spenso::{antisym, bracket, broadcast_symbol, cyclic, dind, euc, lor, mink, sym, tensor};
@@ -485,6 +485,130 @@ fn scalar_leaf_aliases_do_not_expose_temporary_metadata_to_tensor_hooks() {
         assert_eq!(canonical, canonicalize(&canonical), "case {case}");
         assert_eq!(altered.load(Ordering::SeqCst), 0, "case {case}");
     }
+}
+
+#[test]
+fn scalar_leaf_aliases_do_not_reach_enclosing_broadcast_hooks() {
+    test_initialize();
+    let metadata = symbol!("scalar_broadcast_canon::metadata"; Scalar);
+    let altered = Arc::new(AtomicUsize::new(0));
+    let observed = Arc::clone(&altered);
+    let head = SymbolBuilder::new(wrap_symbol!("scalar_broadcast_canon::checked"))
+        .with_tags([&SPENSO_TAG.broadcast])
+        .with_normalization_function(move |value, output| {
+            if !value.contains_symbol(metadata) {
+                observed.fetch_add(1, Ordering::SeqCst);
+                output.to_num(0);
+            }
+        })
+        .build()
+        .unwrap();
+    let index = mink!(4, 711);
+    let payload = function!(
+        metadata,
+        tensor!(scalar_broadcast_private_a, &index) * tensor!(scalar_broadcast_private_b, &index)
+    );
+    let open = tensor!(scalar_broadcast_a, &index);
+    let closed = &open * tensor!(scalar_broadcast_b, &index);
+    for tensor in [open, closed] {
+        let source = function!(head, &payload * &tensor);
+        let expected = function!(head, &payload * canonicalize(&tensor));
+        for (source, expected) in [
+            (source.clone(), expected.clone()),
+            (function!(head, source), function!(head, expected)),
+        ] {
+            let canonical = canonicalize(&source);
+            assert_eq!(altered.load(Ordering::SeqCst), 0);
+            assert_eq!(canonical, expected);
+            assert!(canonical.contains(&payload));
+            assert_eq!(canonicalize(&canonical), canonical);
+        }
+    }
+    let observed = Arc::clone(&altered);
+    let outer_head = SymbolBuilder::new(wrap_symbol!("scalar_broadcast_canon::outer"))
+        .with_tags([&SPENSO_TAG.broadcast])
+        .with_normalization_function(move |value, output| {
+            if !value.contains_symbol(metadata) || !value.contains_symbol(head) {
+                observed.fetch_add(1, Ordering::SeqCst);
+                output.to_num(0);
+            }
+        })
+        .build()
+        .unwrap();
+    let nested = function!(
+        outer_head,
+        function!(head, &payload * tensor!(scalar_broadcast_a, &index))
+    ) * tensor!(scalar_broadcast_b, &index);
+    let source = SymbolicTensor::<PartialStructure>::infer(nested).unwrap();
+    let canonical = source.canonize().unwrap();
+    assert_eq!(canonical.rank(), 0);
+    assert!(!canonical.expression().is_zero());
+    assert!(canonical.expression().contains(&payload));
+    assert!(canonical.expression().contains_symbol(head));
+    assert!(canonical.expression().contains_symbol(outer_head));
+    assert_eq!(
+        SymbolicTensor::<PartialStructure>::infer(canonical.expression().clone())
+            .unwrap()
+            .structure()
+            .logical_slots(),
+        canonical.structure().logical_slots()
+    );
+    assert!(canonical.canonize().unwrap().same_value(&canonical));
+    assert_eq!(altered.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn canonical_broadcast_aliases_do_not_capture_literal_heads() {
+    const CHILD: &str = "IDENSO_CANONICAL_BROADCAST_FRESHNESS_CHILD";
+    if env::var_os(CHILD).is_none() {
+        let output = Command::new(env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "tensor::tests::canonicalization::canonical_broadcast_aliases_do_not_capture_literal_heads",
+                "--nocapture",
+            ])
+            .env(CHILD, "1")
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{output:?}");
+        return;
+    }
+    test_initialize();
+    let metadata = symbol!("broadcast_freshness_canon::metadata"; Scalar);
+    let head = SymbolBuilder::new(wrap_symbol!("broadcast_freshness_canon::checked"))
+        .with_tags([&SPENSO_TAG.broadcast])
+        .with_normalization_function(|_, _| {})
+        .build()
+        .unwrap();
+    let index = mink!(4, 712);
+    let tensor = tensor!(broadcast_freshness_a, &index);
+    let payload = function!(metadata, symbol!("broadcast_freshness_canon::x"));
+    let first = function!(head, &payload * &tensor);
+    assert_eq!(canonicalize(&first), first);
+    // The child starts the allocator at zero. A later input can legitimately
+    // contain that globally registered head, including inside opaque metadata.
+    let literal_head = Symbol::get_symbol(wrap_symbol!("idenso::canonical_broadcast_0")).unwrap();
+    let literal = function!(literal_head, &tensor);
+    let payload = function!(metadata, &literal);
+    let source = function!(head, &payload * &tensor);
+    let canonical = canonicalize(&source);
+    assert_eq!(canonical, source);
+    assert!(canonical.contains(&literal));
+    assert_eq!(canonicalize(&canonical), canonical);
+}
+
+#[test]
+fn opaque_scalar_payloads_keep_literal_slot_symmetry_views() {
+    test_initialize();
+    let metadata = symbol!("private_slot_view_canon::metadata"; Scalar);
+    let envelope = symbol!("spenso::slot_symmetry_envelope"; Linear);
+    let literal = function!(envelope, symbol!("private_slot_view_canon::x"));
+    let payload = function!(metadata, &literal);
+    let source = &payload * tensor!(private_slot_view_a, mink!(4, 713));
+    let canonical = canonicalize(&source);
+    assert_eq!(canonical, source);
+    assert!(canonical.contains(&literal));
+    assert_eq!(canonicalize(&canonical), canonical);
 }
 
 #[test]
