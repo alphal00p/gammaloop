@@ -7,11 +7,12 @@
 //! dummies `d_n` were created first, and on the order of the labels.
 
 use itertools::Itertools;
+use spenso::dind;
 use spenso::network::library::symbolic::ETS;
 use symbolica::id::Replacement;
 
 use super::*;
-use crate::tensor::AlgebraSettings;
+use crate::tensor::{AlgebraSettings, ContractSettings};
 
 /// SU(3) colour slots of the labels `scope::name`.
 struct Labels(String);
@@ -43,7 +44,7 @@ impl Labels {
     fn fundamental_chain(&self, start: &str, end: &str, generators: &[&str]) -> Atom {
         chain!(
             ColorFundamental {}.to_symbolic([Atom::num(3), self.label(start)]),
-            spenso::dind!(ColorFundamental {}.to_symbolic([Atom::num(3), self.label(end)]));
+            dind!(ColorFundamental {}.to_symbolic([Atom::num(3), self.label(end)]));
             generators.iter().map(|generator| color_t!(self.adjoint(generator)))
         )
     }
@@ -252,7 +253,7 @@ fn cases() -> Vec<Case> {
 fn canonical(expression: Atom) -> Atom {
     SymbolicTensor::infer(expression)
         .unwrap()
-        .contract(crate::tensor::ContractSettings {
+        .contract(ContractSettings {
             collect_chains: false,
             collect_traces: false,
             ..Default::default()

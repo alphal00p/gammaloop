@@ -3076,7 +3076,8 @@ impl<'a> ChainView<'a> {
         };
         let mut matcher = SlotMatcher::default();
         ports.iter().enumerate().any(|(position, &port)| {
-            ports[..position].contains(&port) && is_summed_loop_port(&mut matcher, port)
+            ports[..position].contains(&port)
+                && StructureView::is_summed_loop_port(&mut matcher, port)
         })
     }
 }
@@ -3103,6 +3104,13 @@ struct StructureView<'a> {
 }
 
 impl<'a> StructureView<'a> {
+    /// Whether a colour slot shared by two structure constants is a summed edge
+    /// of a loop. Equal fixed components are not summed edges; fixed uncontracted
+    /// spectator ports remain valid.
+    fn is_summed_loop_port(matcher: &mut SlotMatcher, port: AtomView<'_>) -> bool {
+        matches!(matcher.classify(port), SlotMatch::Explicit(slot) if !slot.is_concrete_index())
+    }
+
     fn contract_loop(&self, right: &Self) -> Option<Atom> {
         // Most pairs share fewer than two ports. Reject those on borrowed
         // indices before validating dimensions or constructing the Casimir.
@@ -3298,6 +3306,14 @@ impl<'a> ProductView<'a> {
         self.factors.len()
     }
 
+    fn component_root(component: &mut [usize], mut index: usize) -> usize {
+        while component[index] != index {
+            component[index] = component[component[index]];
+            index = component[index];
+        }
+        index
+    }
+
     /// The adjoint chains on a cycle of structure constants through other
     /// factors. Adjoint chains and structure constants are joined by each
     /// summed port that exactly two of them share; a port repeated within one
@@ -3323,7 +3339,7 @@ impl<'a> ProductView<'a> {
             };
             for &port in ports {
                 if ports.iter().filter(|&&other| other == port).count() == 1
-                    && is_summed_loop_port(&mut matcher, port)
+                    && StructureView::is_summed_loop_port(&mut matcher, port)
                 {
                     occurrences.push((port, index));
                 }
@@ -3341,13 +3357,6 @@ impl<'a> ProductView<'a> {
                 (second > first && partners.next().is_none()).then_some((*left, *right))
             })
             .collect::<Vec<_>>();
-        fn root(component: &mut [usize], mut index: usize) -> usize {
-            while component[index] != index {
-                component[index] = component[component[index]];
-                index = component[index];
-            }
-            index
-        }
         (0..self.len())
             .filter(|&chain| {
                 if chains[chain].is_none() {
@@ -3356,8 +3365,10 @@ impl<'a> ProductView<'a> {
                 let mut component = (0..self.len()).collect::<Vec<_>>();
                 for &(left, right) in &connections {
                     if left != chain && right != chain {
-                        let (left, right) =
-                            (root(&mut component, left), root(&mut component, right));
+                        let (left, right) = (
+                            Self::component_root(&mut component, left),
+                            Self::component_root(&mut component, right),
+                        );
                         component[left] = right;
                     }
                 }
@@ -3368,7 +3379,7 @@ impl<'a> ProductView<'a> {
                         (false, true) => left,
                         _ => return false,
                     };
-                    let other = root(&mut component, other);
+                    let other = Self::component_root(&mut component, other);
                     if reached.contains(&other) {
                         return true;
                     }
@@ -4533,19 +4544,12 @@ fn common_structure_positions<'a, A: AtomCore>(
         let right = right.iter().enumerate().position(|(right, right_arg)| {
             !right_used[right] && right_arg.as_atom_view() == left_arg.as_atom_view()
         })?;
-        if !is_summed_loop_port(&mut matcher, left_arg.as_atom_view()) {
+        if !StructureView::is_summed_loop_port(&mut matcher, left_arg.as_atom_view()) {
             return None;
         }
         right_used[right] = true;
         Some(CommonStructurePosition { left, right })
     })
-}
-
-/// Whether a colour slot shared by two structure constants is a summed edge
-/// of a loop. Equal fixed components are not summed edges; fixed uncontracted
-/// spectator ports remain valid.
-fn is_summed_loop_port(matcher: &mut SlotMatcher, port: AtomView<'_>) -> bool {
-    matches!(matcher.classify(port), SlotMatch::Explicit(slot) if !slot.is_concrete_index())
 }
 
 type ColourPorts = std::collections::HashSet<Slot<LibraryRep, AbstractIndex>>;
