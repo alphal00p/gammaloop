@@ -1,0 +1,5 @@
+{
+  "passed": 10,
+  "includes_start_uniqueness_without_end": true,
+  "canonical_checker": "docs/architecture/evidence/generation-integration/wp3/oracle-registry-audit.py"
+}

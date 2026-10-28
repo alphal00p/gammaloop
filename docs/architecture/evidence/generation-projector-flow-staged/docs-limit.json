@@ -15,5 +15,16 @@
   "digest_failures": 26,
   "anchor_failures": 1,
   "hashes_refreshed": false,
-  "reserved_for": "source31"
+  "reserved_for": "source31",
+  "integration_supersession": {
+    "scope": "Audit totals only; original commands/results remain historical at f2e32c44.",
+    "preparation_canonical_counts": {
+      "stale_digest": 23,
+      "anchor_failures": 4,
+      "inherited": 27
+    },
+    "current_report": "../generation-integration/wp3/units22-26/scope-audit.json",
+    "rule_owner": "../generation-integration/wp3/oracle-registry-audit.py",
+    "preparation_review": "../generation-integration/wp3/units22-26/staged22-26-preparation-review.json"
+  }
 }

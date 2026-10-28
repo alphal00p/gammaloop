@@ -1,0 +1,88 @@
+[
+  {
+    "source_order": 22,
+    "source_commit": "77dcd12272d0f86dc5309f8d74de94632a771b6e",
+    "old_prepared": "ac0f197cfc0b65cc0422110edec902adad5203ed",
+    "disposition": "physical bubble energy-flow selection; all targets, coordinates, precision and tolerances retained",
+    "files": [
+      "tests/tests/test_runs/test_integrated_uv_cts.rs"
+    ],
+    "approved_preparation_commits": [
+      "69e12298c3f438387246a868191af9cafc4d87cc",
+      "8ea3575d56ab88efd534aa5e16327450dddcf9fd"
+    ],
+    "new_commit": "2eb0d9db13caed01cb589f869089bc0753ab429b"
+  },
+  {
+    "source_order": 23,
+    "source_commit": "967abd74e1843016d34f5e6f701cd4b7828768b6",
+    "old_prepared": "0e57d421ffc0270aacfb4f2a044ae7c1cd4ca4a4",
+    "disposition": "exactly eight variance fixes; native model-one indices; retain staged17 metadata removal, nineteen graphs and all physical factors",
+    "files": [
+      "tests/resources/graphs/qqx_aaa_subtracted.dot",
+      "crates/gammalooprs/src/graph/parse/tests.rs"
+    ],
+    "proof": "fixture-reconciliation.json",
+    "approved_preparation_commits": [
+      "69e12298c3f438387246a868191af9cafc4d87cc"
+    ],
+    "new_commit": "2eb0d9db13caed01cb589f869089bc0753ab429b"
+  },
+  {
+    "source_order": 24,
+    "source_commit": "a18babd0f5adb028d4bd0722ce386be93464839d",
+    "old_prepared": "e344428a5a9bd2989e6390b969154606230c2850",
+    "disposition": "one-based CLI/model projector validation on staged Request/NumeratorOptions; separate explicit compact-zero translation; native local-zero codec unchanged",
+    "files": [
+      "crates/gammaloop-api/src/commands/generate.rs",
+      "crates/gammalooprs/src/numerator/aind.rs",
+      "crates/gammalooprs/src/graph/parse/tests.rs",
+      "benchmarks/performance/gg-hhh-topology.toml",
+      "assets/schemas/runhistory.json",
+      "docs/api/generated/gammaloop-reference.json"
+    ],
+    "approved_preparation_commits": [
+      "69e12298c3f438387246a868191af9cafc4d87cc",
+      "cf283f43c7dd1df70304934390d24fd5c0cb2ecf",
+      "74cb8506ab5b9ca7a4ceb86c21cfebb17e50ee01",
+      "67601ec14af85a6162ffbd488a6196555dadbd0b"
+    ],
+    "new_commit": "2eb0d9db13caed01cb589f869089bc0753ab429b"
+  },
+  {
+    "source_order": 25,
+    "source_commit": "15f2aa1a11380f33325ce283a404753a9836882f",
+    "approved_donor_code": "5e96b3f00a78c850236609527914dce1154f726c",
+    "disposition": "explicit legacy conversion guidance on shared compact admission, preserving native fingerprint/source-error precedence and direct compact rejection",
+    "files": [
+      "crates/feynkit-graph/src/compact_dot.rs",
+      "crates/feynkit-graph/src/dot.rs",
+      "crates/gammalooprs/src/graph/parse/tests.rs",
+      "docs/products/gammaloop/content/dot-input.typ",
+      "docs/products/gammaloop/content/changelog.typ"
+    ],
+    "excluded": "source36, resource diagnostics, entire cumulative donor branch",
+    "approved_preparation_commits": [
+      "69e12298c3f438387246a868191af9cafc4d87cc",
+      "cf283f43c7dd1df70304934390d24fd5c0cb2ecf"
+    ],
+    "new_commit": "2eb0d9db13caed01cb589f869089bc0753ab429b"
+  },
+  {
+    "source_order": 26,
+    "source_commit": "8cf71575a739976295edb42eae2052d6b5e455ee",
+    "disposition": "exact original fixture patch; pin seven signed native loop bases, including parallel-edge distinctions; full current model-rule/runtime/native round-trip control",
+    "files": [
+      "tests/resources/graphs/uv_tests/rqft_ghG_3l.dot",
+      "crates/gammalooprs/src/graph/parse/tests.rs"
+    ],
+    "proof": "rqft-bases.json",
+    "approved_preparation_commits": [
+      "62dbdffddefb342f345992cb8a867a1464c9c075",
+      "cf283f43c7dd1df70304934390d24fd5c0cb2ecf",
+      "de4b99d435a619e528f674946fddfe166e86daae",
+      "0d13655702c2986f2fc7923fd9121278c4439709"
+    ],
+    "new_commit": "2eb0d9db13caed01cb589f869089bc0753ab429b"
+  }
+]

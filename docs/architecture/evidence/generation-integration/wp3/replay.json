@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "status": "Two native numerator digests recertified from approved fixed-case proof; approved cumulative P2 plus owned Nix-budget reconciliation integrated. Combined ci_gammaloop15/15 passed under16-worker/two-slot policy. NEW combined Astra review required before22; not whole WP3.",
+  "status": "WP3 incomplete; ordered sources22\u201326 integrated, combined validation in progress; NEW independent Astra review before27",
   "fixed_target": {
     "commit": "3f0df2a870806076820786994d4883decec8e9e3",
     "tree": "3c91ba47525c627fbc02d79f5afa1d58aa7c5b66",
@@ -289,9 +289,9 @@
       "new_change": "kqqnukqvlntskupxpqookzuqxumluntq",
       "new_commit": "c5d0380c9c7f8e33c77e918f477708b525a61775",
       "reconciliation": [
-        "inference.rs and scalar_admission.rs byte-identical to approved872e84b2; no overlapping03–07 inference code delta required.",
+        "inference.rs and scalar_admission.rs byte-identical to approved872e84b2; no overlapping03\u201307 inference code delta required.",
         "Existing from_validated_parts and authoritative history/proof owner retained; fallback full admission, malformed tensor/index protection, normalization callbacks and declared ordering unchanged.",
-        "Reconcile current registry inference scope digest without discarding03–07 owner records; add reviewed lane note.",
+        "Reconcile current registry inference scope digest without discarding03\u201307 owner records; add reviewed lane note.",
         "Fixed-key hashing and lazy fresh-index allocation remain deferred. Only zero versus one interface discovery calls measured; no end-to-end speedup claim."
       ]
     },
@@ -331,7 +331,7 @@
       "new_commit": "f264028690d117b4b99c320b61b7f2d5d89222d0",
       "new_change": "zvnxkyswsytpvzqlsxrpnwuwknwmrtmo",
       "reconciliation": [
-        "Only actual source17 parent9e737a18 through resolved source18 is replayed. No serialized conflict container, intervening19–36 changes, frozen-source rebase or old-tree replacement.",
+        "Only actual source17 parent9e737a18 through resolved source18 is replayed. No serialized conflict container, intervening19\u201336 changes, frozen-source rebase or old-tree replacement.",
         "Current admitted numerator/template cache replaces obsolete compiled-interaction/template/frame path. Raw validation/admission precedes checked conservation rewrite; actual-owner dynamic admission, outside-guard publication and shared templates remain.",
         "Current NumeratorInterface owner retains declared/canonical inferred order, injective transport, hidden oriented index/zero history and reversed propagator interfaces. Spectator/scoped-partner,210 colour completion and approved scalar proof remain.",
         "Current native MathML/static/optional-widget owners retained. Staged lazy numerator Result accessors and Rust/Python/CLI callers migrated. Current graph DSL uses one native NodeForest owner, not an old storage compatibility enum.",
@@ -354,7 +354,7 @@
       "new_commit": "f264028690d117b4b99c320b61b7f2d5d89222d0",
       "new_change": "zvnxkyswsytpvzqlsxrpnwuwknwmrtmo",
       "reconciliation": [
-        "Only actual source17 parent9e737a18 through resolved source18 is replayed. No serialized conflict container, intervening19–36 changes, frozen-source rebase or old-tree replacement.",
+        "Only actual source17 parent9e737a18 through resolved source18 is replayed. No serialized conflict container, intervening19\u201336 changes, frozen-source rebase or old-tree replacement.",
         "Current admitted numerator/template cache replaces obsolete compiled-interaction/template/frame path. Raw validation/admission precedes checked conservation rewrite; actual-owner dynamic admission, outside-guard publication and shared templates remain.",
         "Current NumeratorInterface owner retains declared/canonical inferred order, injective transport, hidden oriented index/zero history and reversed propagator interfaces. Spectator/scoped-partner,210 colour completion and approved scalar proof remain.",
         "Current native MathML/static/optional-widget owners retained. Staged lazy numerator Result accessors and Rust/Python/CLI callers migrated. Current graph DSL uses one native NodeForest owner, not an old storage compatibility enum.",
@@ -436,7 +436,17 @@
       "planned_unit": "port-22",
       "planned_order": 18,
       "reason": "Retain energy-flow scalar bubble orientation selection and its physical assertions.",
-      "status": "pending"
+      "status": "integrated; combined review pending",
+      "new_commit": "2eb0d9db13caed01cb589f869089bc0753ab429b",
+      "approved_preparation": {
+        "candidate": "f2e32c44c986058ede1d7e585b9e2e4fefe1110c",
+        "code": "0d13655702c2986f2fc7923fd9121278c4439709",
+        "base": "d48f9d1aedc766eea5cb185ab6029d1f04462043",
+        "review": "wp3/units22-26/staged22-26-preparation-review.json",
+        "review_scope": "APPROVED preparation only; combined integration review pending"
+      },
+      "receipt": "wp3/units22-26/receipt.json",
+      "reconciliation": "physical bubble energy-flow selection; all targets, coordinates, precision and tolerances retained"
     },
     {
       "commit": "967abd74e1843016d34f5e6f701cd4b7828768b6",
@@ -446,7 +456,17 @@
       "planned_unit": "port-23",
       "planned_order": 19,
       "reason": "Retain corrected qqx_aaa colour-projector variance; preserve exact fixture physics.",
-      "status": "pending"
+      "status": "integrated; combined review pending",
+      "new_commit": "2eb0d9db13caed01cb589f869089bc0753ab429b",
+      "approved_preparation": {
+        "candidate": "f2e32c44c986058ede1d7e585b9e2e4fefe1110c",
+        "code": "0d13655702c2986f2fc7923fd9121278c4439709",
+        "base": "d48f9d1aedc766eea5cb185ab6029d1f04462043",
+        "review": "wp3/units22-26/staged22-26-preparation-review.json",
+        "review_scope": "APPROVED preparation only; combined integration review pending"
+      },
+      "receipt": "wp3/units22-26/receipt.json",
+      "reconciliation": "exactly eight variance fixes; native model-one indices; retain staged17 metadata removal, nineteen graphs and all physical factors"
     },
     {
       "commit": "a18babd0f5adb028d4bd0722ce386be93464839d",
@@ -456,7 +476,17 @@
       "planned_unit": "port-24",
       "planned_order": 20,
       "reason": "Preserve projector half-edge slots starting at one; adapt generation command and native index serialization to #209 local-zero convention.",
-      "status": "pending"
+      "status": "integrated; combined review pending",
+      "new_commit": "2eb0d9db13caed01cb589f869089bc0753ab429b",
+      "approved_preparation": {
+        "candidate": "f2e32c44c986058ede1d7e585b9e2e4fefe1110c",
+        "code": "0d13655702c2986f2fc7923fd9121278c4439709",
+        "base": "d48f9d1aedc766eea5cb185ab6029d1f04462043",
+        "review": "wp3/units22-26/staged22-26-preparation-review.json",
+        "review_scope": "APPROVED preparation only; combined integration review pending"
+      },
+      "receipt": "wp3/units22-26/receipt.json",
+      "reconciliation": "one-based CLI/model projector validation on staged Request/NumeratorOptions; separate explicit compact-zero translation; native local-zero codec unchanged"
     },
     {
       "commit": "15f2aa1a11380f33325ce283a404753a9836882f",
@@ -466,7 +496,17 @@
       "planned_unit": "port-25",
       "planned_order": 21,
       "reason": "Retain explicit legacy DOT conversion naming on current parser; no fallback restoring ambiguous legacy import.",
-      "status": "pending"
+      "status": "integrated; combined review pending",
+      "new_commit": "2eb0d9db13caed01cb589f869089bc0753ab429b",
+      "approved_preparation": {
+        "candidate": "f2e32c44c986058ede1d7e585b9e2e4fefe1110c",
+        "code": "0d13655702c2986f2fc7923fd9121278c4439709",
+        "base": "d48f9d1aedc766eea5cb185ab6029d1f04462043",
+        "review": "wp3/units22-26/staged22-26-preparation-review.json",
+        "review_scope": "APPROVED preparation only; combined integration review pending"
+      },
+      "receipt": "wp3/units22-26/receipt.json",
+      "reconciliation": "explicit legacy conversion guidance on shared compact admission, preserving native fingerprint/source-error precedence and direct compact rejection"
     },
     {
       "commit": "8cf71575a739976295edb42eae2052d6b5e455ee",
@@ -476,7 +516,17 @@
       "planned_unit": "port-26",
       "planned_order": 22,
       "reason": "Keep explicit RQFT ghost loop bases; no snapshot/count change is authorized by this disposition.",
-      "status": "pending"
+      "status": "integrated; combined review pending",
+      "new_commit": "2eb0d9db13caed01cb589f869089bc0753ab429b",
+      "approved_preparation": {
+        "candidate": "f2e32c44c986058ede1d7e585b9e2e4fefe1110c",
+        "code": "0d13655702c2986f2fc7923fd9121278c4439709",
+        "base": "d48f9d1aedc766eea5cb185ab6029d1f04462043",
+        "review": "wp3/units22-26/staged22-26-preparation-review.json",
+        "review_scope": "APPROVED preparation only; combined integration review pending"
+      },
+      "receipt": "wp3/units22-26/receipt.json",
+      "reconciliation": "exact original fixture patch; pin seven signed native loop bases, including parallel-edge distinctions; full current model-rule/runtime/native round-trip control"
     },
     {
       "commit": "d17f3548821f76250e49056e6b684257e49d92ec",
@@ -590,7 +640,7 @@
       "new_commit": "f264028690d117b4b99c320b61b7f2d5d89222d0",
       "new_change": "zvnxkyswsytpvzqlsxrpnwuwknwmrtmo",
       "reconciliation": [
-        "Only actual source17 parent9e737a18 through resolved source18 is replayed. No serialized conflict container, intervening19–36 changes, frozen-source rebase or old-tree replacement.",
+        "Only actual source17 parent9e737a18 through resolved source18 is replayed. No serialized conflict container, intervening19\u201336 changes, frozen-source rebase or old-tree replacement.",
         "Current admitted numerator/template cache replaces obsolete compiled-interaction/template/frame path. Raw validation/admission precedes checked conservation rewrite; actual-owner dynamic admission, outside-guard publication and shared templates remain.",
         "Current NumeratorInterface owner retains declared/canonical inferred order, injective transport, hidden oriented index/zero history and reversed propagator interfaces. Spectator/scoped-partner,210 colour completion and approved scalar proof remain.",
         "Current native MathML/static/optional-widget owners retained. Staged lazy numerator Result accessors and Rust/Python/CLI callers migrated. Current graph DSL uses one native NodeForest owner, not an old storage compatibility enum.",
@@ -889,7 +939,7 @@
     ],
     "source": "Coordinator brief; retained target/review-wp3-prefix-round1 evidence",
     "fix_receipt": "prefix-fix-round1.json",
-    "next_gate": "NEW independent Astra source03–07 slice review before further implementation/integration",
+    "next_gate": "NEW independent Astra source03\u201307 slice review before further implementation/integration",
     "fix_status": "APPROVED by Astra at 74cebf6c; P1/P3 closed, no remaining findings",
     "corrected_approval": {
       "commit": "74cebf6c8f673f5849b26afe55fa98035d5eba1d",
@@ -974,7 +1024,7 @@
     "receipt": "target/astra-slice03-07-round1/review.json",
     "receipt_sha256": "a48f3a2335eb81bbdeeba00ddfa4a157cb04aded4b01466d63cdb59ff46247ac",
     "correction": "Two macro calls now use module-scope tensor_symbol import; definitions/arguments/assertions unchanged",
-    "next_gate": "Source03–07 approved integration base; NEW independent Astra review of prerequisite integration candidate required",
+    "next_gate": "Source03\u201307 approved integration base; NEW independent Astra review of prerequisite integration candidate required",
     "fix_receipt": "units03-07-policy-fix.json",
     "round2": {
       "reviewer": "Astra coordinator (independent of Sol implementer)",
@@ -994,23 +1044,38 @@
     "limitation": "Seven inherited registry digests remain stale; carried explicitly for source31/final reconciliation."
   },
   "current_slice": {
-    "status": "Two native numerator digests recertified from approved fixed-case proof; approved cumulative P2 plus owned Nix-budget reconciliation integrated. Combined ci_gammaloop15/15 passed under16-worker/two-slot policy. NEW combined Astra review required before22; not whole WP3.",
-    "base": "d48f9d1aedc766eea5cb185ab6029d1f04462043",
-    "code_commit": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
-    "evidence_change": "smlmnzlztwqwyqyvqsoqvwzvunsspooy",
-    "receipt": "wp3/units19-21.json",
-    "inventory": "wp3/units19-21-files.json",
-    "candidate_bookmark": "generation-integration-units19-21",
-    "accounted_source_rows": 22,
-    "accounted_planned_units": 17,
+    "status": "Integrated sources22\u201326; combined validation in progress, NEW independent Astra review required before27",
     "source_orders": [
-      19,
-      20,
-      21
+      22,
+      23,
+      24,
+      25,
+      26
     ],
-    "parallel22_26": "Prepared staged22–26 f2e32c44/code0d136557 independently APPROVED; no import in this correction slice. Await current combined recertification/P2 review before ordered replay. Later inherited-audit P3 remains for integration.",
-    "next_gate": "NEW combined Astra review before22",
-    "recertification_receipt": "row-recertification.json"
+    "base": "0a38ee4e3e7d16af3978f2c6ccde04dc176dfea9",
+    "code_commit": "2eb0d9db13caed01cb589f869089bc0753ab429b",
+    "code_change": "mrmyosxmmrrpwmomtvtnurwsuvsmxzpu",
+    "evidence_change": "vorstolp",
+    "receipt": "wp3/units22-26/receipt.json",
+    "mapping": "wp3/units22-26/source-mapping.json",
+    "candidate_bookmark": "generation-integration-units22-26",
+    "accounted_source_rows": 27,
+    "accounted_planned_units": 22,
+    "preparation": {
+      "candidate": "f2e32c44c986058ede1d7e585b9e2e4fefe1110c",
+      "code": "0d13655702c2986f2fc7923fd9121278c4439709",
+      "base": "d48f9d1aedc766eea5cb185ab6029d1f04462043",
+      "review": "wp3/units22-26/staged22-26-preparation-review.json",
+      "review_scope": "APPROVED preparation only; combined integration review pending"
+    },
+    "scope_P3": "Closed implementation through reused canonical checker: preparation23stale+4anchor, current24stale+4anchor; origin preparation7preexisting+20later, current7preexisting+21later relative438; no blind refresh. Seven newly owned scopes valid.",
+    "later_lanes": {
+      "27-29": "Separate staged sampling preparation; NOT integrated",
+      "30": "Separate generation-test-source-closure preparation after29; NOT duplicated",
+      "36": "Resource diagnostics later; source25 portion only integrated here",
+      "46": "Approved standalone color-cycles; later after45"
+    },
+    "limits": "No fullWP3/physics/performance/distribution approval. Three older frame failures, source30/31, fivea_ddx/BRST/epem/CoolQM/fulltip/finalartifacts/benchmarks remain."
   },
   "staged_round1_review": {
     "verdict": "REQUEST_CHANGES",
@@ -1038,8 +1103,8 @@
     "candidate_bookmark": "generation-integration-corrected-staged",
     "candidate_change": "pmnstxxwwwkzvyuxyzmsmswtutnkzkmy"
   },
-  "implementation_change": "xrkpqnsqlplywkoortzrmwwvqtszzwyu",
-  "implementation_code_commit": "35b444d09d739bd5532deac21ec013ed7422d35b",
+  "implementation_change": "vorstolp",
+  "implementation_code_commit": "2eb0d9db13caed01cb589f869089bc0753ab429b",
   "combined_staged_integration_review": {
     "candidate": "d48f9d1aedc766eea5cb185ab6029d1f04462043",
     "verdict": "APPROVE both independent assigned scopes",
@@ -1058,7 +1123,7 @@
     "source19_gate": "Coordinator released19-21 only; NEW Astra review required before22"
   },
   "active_slice19_21": {
-    "status": "Two native numerator digests recertified from approved fixed-case proof; approved cumulative P2 plus owned Nix-budget reconciliation integrated. Combined ci_gammaloop15/15 passed under16-worker/two-slot policy. NEW combined Astra review required before22; not whole WP3.",
+    "status": "APPROVED independently; source22 boundary released, not wholeWP3",
     "base": "d48f9d1aedc766eea5cb185ab6029d1f04462043",
     "code_commit": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
     "evidence_change": "smlmnzlztwqwyqyvqsoqvwzvunsspooy",
@@ -1072,7 +1137,7 @@
       20,
       21
     ],
-    "parallel22_26": "Prepared staged22–26 f2e32c44/code0d136557 independently APPROVED; no import in this correction slice. Await current combined recertification/P2 review before ordered replay. Later inherited-audit P3 remains for integration.",
+    "parallel22_26": "Prepared staged22\u201326 f2e32c44/code0d136557 independently APPROVED; no import in this correction slice. Await current combined recertification/P2 review before ordered replay. Later inherited-audit P3 remains for integration.",
     "next_gate": "STOP for NEW independent Astra review before22; no WP4+ or benchmark work.",
     "recertification": {
       "status": "Two native numerator digests recertified from approved fixed-case proof; approved cumulative P2 plus owned Nix-budget reconciliation integrated. Combined ci_gammaloop15/15 passed under16-worker/two-slot policy. NEW combined Astra review required before22; not whole WP3.",
@@ -1110,6 +1175,14 @@
       },
       "evidence_change": "xrkpqnsqlplywkoortzrmwwvqtszzwyu",
       "candidate_bookmark": "generation-integration-units19-21-recertified"
+    },
+    "combined_review": {
+      "status": "APPROVED independently; source22 boundary released, not wholeWP3",
+      "candidate": "0a38ee4e3e7d16af3978f2c6ccde04dc176dfea9",
+      "code": "35b444d09d739bd5532deac21ec013ed7422d35b",
+      "reviewer": "Astra independent combined19\u201321 reviewer",
+      "receipt": "wp3/units22-26/combined19-21-review.json",
+      "source_receipt": "target/astra-combined19-21-review-ZX4duVm5/review.json"
     }
   },
   "previous_slice_drawing_staged": {
@@ -1137,7 +1210,7 @@
     }
   },
   "row_recertification": {
-    "status": "Two native numerator digests recertified from approved fixed-case proof; approved cumulative P2 plus owned Nix-budget reconciliation integrated. Combined ci_gammaloop15/15 passed under16-worker/two-slot policy. NEW combined Astra review required before22; not whole WP3.",
+    "status": "APPROVED independently; source22 boundary released, not wholeWP3",
     "base": "df55185059f31bea548a5de27c95828656fbdc52",
     "code_commit": "35b444d09d739bd5532deac21ec013ed7422d35b",
     "receipt": "wp3/row-recertification.json",
@@ -1171,6 +1244,56 @@
       "parent_child_mode": "Default parents; child-mode variable not set by invocation or Nix owner. Post-run environment preflight is labelled as such; attempted late live snapshot receives no credit."
     },
     "evidence_change": "xrkpqnsqlplywkoortzrmwwvqtszzwyu",
-    "candidate_bookmark": "generation-integration-units19-21-recertified"
+    "candidate_bookmark": "generation-integration-units19-21-recertified",
+    "combined_review": {
+      "status": "APPROVED independently; source22 boundary released, not wholeWP3",
+      "candidate": "0a38ee4e3e7d16af3978f2c6ccde04dc176dfea9",
+      "code": "35b444d09d739bd5532deac21ec013ed7422d35b",
+      "reviewer": "Astra independent combined19\u201321 reviewer",
+      "receipt": "wp3/units22-26/combined19-21-review.json",
+      "source_receipt": "target/astra-combined19-21-review-ZX4duVm5/review.json"
+    }
+  },
+  "combined19_21_gate_review": {
+    "status": "APPROVED independently; source22 boundary released, not wholeWP3",
+    "candidate": "0a38ee4e3e7d16af3978f2c6ccde04dc176dfea9",
+    "code": "35b444d09d739bd5532deac21ec013ed7422d35b",
+    "reviewer": "Astra independent combined19\u201321 reviewer",
+    "receipt": "wp3/units22-26/combined19-21-review.json",
+    "source_receipt": "target/astra-combined19-21-review-ZX4duVm5/review.json"
+  },
+  "active_slice22_26": {
+    "status": "Integrated sources22\u201326; combined validation in progress, NEW independent Astra review required before27",
+    "source_orders": [
+      22,
+      23,
+      24,
+      25,
+      26
+    ],
+    "base": "0a38ee4e3e7d16af3978f2c6ccde04dc176dfea9",
+    "code_commit": "2eb0d9db13caed01cb589f869089bc0753ab429b",
+    "code_change": "mrmyosxmmrrpwmomtvtnurwsuvsmxzpu",
+    "evidence_change": "vorstolp",
+    "receipt": "wp3/units22-26/receipt.json",
+    "mapping": "wp3/units22-26/source-mapping.json",
+    "candidate_bookmark": "generation-integration-units22-26",
+    "accounted_source_rows": 27,
+    "accounted_planned_units": 22,
+    "preparation": {
+      "candidate": "f2e32c44c986058ede1d7e585b9e2e4fefe1110c",
+      "code": "0d13655702c2986f2fc7923fd9121278c4439709",
+      "base": "d48f9d1aedc766eea5cb185ab6029d1f04462043",
+      "review": "wp3/units22-26/staged22-26-preparation-review.json",
+      "review_scope": "APPROVED preparation only; combined integration review pending"
+    },
+    "scope_P3": "Closed implementation through reused canonical checker: preparation23stale+4anchor, current24stale+4anchor; origin preparation7preexisting+20later, current7preexisting+21later relative438; no blind refresh. Seven newly owned scopes valid.",
+    "later_lanes": {
+      "27-29": "Separate staged sampling preparation; NOT integrated",
+      "30": "Separate generation-test-source-closure preparation after29; NOT duplicated",
+      "36": "Resource diagnostics later; source25 portion only integrated here",
+      "46": "Approved standalone color-cycles; later after45"
+    },
+    "limits": "No fullWP3/physics/performance/distribution approval. Three older frame failures, source30/31, fivea_ddx/BRST/epem/CoolQM/fulltip/finalartifacts/benchmarks remain."
   }
 }

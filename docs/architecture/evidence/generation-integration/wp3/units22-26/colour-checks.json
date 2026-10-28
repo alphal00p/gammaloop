@@ -1,0 +1,12 @@
+{
+  "source_commit": "2eb0d9db13caed01cb589f869089bc0753ab429b",
+  "graphs": 19,
+  "explicit_colour_projectors": 8,
+  "remaining_graphs": 11,
+  "script_sha256": "06288b9b1186a3d3ea5921bf11d63a7e70ef3506b539df0a24f3aedf9cd19689",
+  "fixture_sha256": "eaf807e0a016e3b3c3904084c15465126278b12929f2962d1827813b77f68edf",
+  "positive_exit": 0,
+  "negative_exit": 255,
+  "negative_diagnostic": "qqx_aaa_pentagon hedge_1 does not have exactly one fundamental and one dual",
+  "temporary_fixture_removed": true
+}

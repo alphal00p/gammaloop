@@ -1,0 +1,492 @@
+{
+  "reviewer": "NEW independent Astra combined source19\u201321 gate reviewer",
+  "scoped_verdict": "APPROVE",
+  "candidate": "0a38ee4e3e7d16af3978f2c6ccde04dc176dfea9",
+  "code": "35b444d09d739bd5532deac21ec013ed7422d35b",
+  "change": "xrkpqnsqlplywkoortzrmwwvqtszzwyu",
+  "bookmarks": [
+    "generation-integration",
+    "generation-integration-units19-21-recertified"
+  ],
+  "frozen_parent": "df55185059f31bea548a5de27c95828656fbdc52",
+  "certified_production": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-integration-plan",
+  "review_directory": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-combined19-21-review-ZX4duVm5",
+  "completed_utc": "2026-10-28T04:43:33.982936+00:00",
+  "findings": [],
+  "source22_gate": "CLEARED. This combined source19\u201321 candidate may proceed to source22 under the normal ordered reconciliation and independent review workflow. Prepared22\u201326 is not imported or approved as integrated by this receipt.",
+  "scope": "Two authorized native numerator-hash migrations, cumulative approved P2 correction, and the new owned resource-group policy; aggregate the unchanged previously approved algebra, oracle, provenance and exact-interface boundaries. No whole-WP3 gate claim.",
+  "closed_issues": [
+    {
+      "id": "YM retained numerator hash P1",
+      "resolution": "Both approved frozen-source mathematical/provenance certificates are byte-exact and all235 original artifacts verified. Native current capture independently hashes to0xae5ed16f90c02201; old native capture to0x1c149c8e666851cd. Only this expected numerator literal changes. Fresh ordinary row passes full1/8/32 class/naming/physical comparisons."
+    },
+    {
+      "id": "Canonical retained numerator hash P1",
+      "resolution": "Approval relies on complete fixed-case physical and admitted-interface certificates, not legacy spelling/interface omission. Independent current digest0x82a821cc454caa0c and old0xe112f4cc670092f9. All native interface fields retained. Only this expected numerator literal changes; fresh ordinary row passes full1/8/32 comparisons."
+    },
+    {
+      "id": "ORACLE-P2-REGISTRY",
+      "resolution": "Unique production multiline end anchor, exact nonoverlapping ordered range and Git blob hash verified against canonical owner. Four owned scopes and two titles valid. Canonical counts independently reproduced56/7/22 ->57/7/21 ->58/7/21. Original false owned-audit retained and explicitly superseded; current Clarabel warning wording corrected."
+    },
+    {
+      "id": "ORACLE-P2-TEST-BUDGET and combined Nix policy",
+      "resolution": "Approved P2 main plus exactly2 literals is byte-exact. All12 default cells retain a fresh generation,1 reference and actual cell, complete graph/numerator/local-factor/interface/group/ratio comparison, real preregistration and nonzero Run-pool assertions. Negative child failure preserved. New selector assigns exactly15 owned tests to existing memory-intensive(max2), with global16 and ci_gammaloop240s intact. Unrelated config and Nix policy are unchanged; current default discovery/effective groups and normal execution verified."
+    }
+  ],
+  "independent_checks": {
+    "normal_run": {
+      "status": "PASS",
+      "exit_code": 0,
+      "run_id": "c3a6cc7b-9acd-47c8-8b16-20ddf5570fbc",
+      "profile": "ci_gammaloop",
+      "seconds": 197.777,
+      "selected": 6,
+      "passed": 6,
+      "selected_ignored": 0,
+      "timeouts": 0,
+      "global_workers": 16,
+      "effective_group": "memory-intensive",
+      "group_max": 2,
+      "per_test_timeout_seconds": 240,
+      "FEYNKIT_ORACLE_THREADS": "1,8,32",
+      "parent_child_mode": null,
+      "CARGO_BUILD_JOBS": 2,
+      "RAYON_NUM_THREADS": 2,
+      "per_test": [
+        {
+          "name": "index_registration_child_failure_propagates",
+          "classname": "feynkit-generator::generation_oracle",
+          "timestamp": "2026-10-28T04:38:01.847+00:00",
+          "time": "0.015"
+        },
+        {
+          "name": "outputs_do_not_depend_on_index_registration_order_decreasing_8",
+          "classname": "feynkit-generator::generation_oracle",
+          "timestamp": "2026-10-28T04:38:01.847+00:00",
+          "time": "56.066"
+        },
+        {
+          "name": "outputs_do_not_depend_on_index_registration_order_increasing_1",
+          "classname": "feynkit-generator::generation_oracle",
+          "timestamp": "2026-10-28T04:38:01.862+00:00",
+          "time": "72.000"
+        },
+        {
+          "name": "xs_qcdqed_addx_canonical_scalar_lr_L3",
+          "classname": "feynkit-generator::generation_oracle",
+          "timestamp": "2026-10-28T04:39:13.863+00:00",
+          "time": "11.356"
+        },
+        {
+          "name": "outputs_do_not_depend_on_index_registration_order_shuffled_32",
+          "classname": "feynkit-generator::generation_oracle",
+          "timestamp": "2026-10-28T04:38:57.913+00:00",
+          "time": "57.631"
+        },
+        {
+          "name": "ym_ggg_zero_color_L3",
+          "classname": "feynkit-generator::generation_oracle",
+          "timestamp": "2026-10-28T04:39:25.219+00:00",
+          "time": "114.402"
+        }
+      ],
+      "command": "License preserved or silently loaded; nix develop -c bash target/astra-combined19-21-review-ZX4duVm5/run-independent.sh",
+      "log": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-combined19-21-review-ZX4duVm5/independent-normal.log",
+      "junit": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-combined19-21-review-ZX4duVm5/independent-junit.xml",
+      "counting": "Two ordinary rows, three matrix cells (six fresh full-workload children), one failure control (one expected-failing child); children not double-counted."
+    },
+    "binary_identity": {
+      "path": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/generation_oracle-513b63cbc76b9164",
+      "sha256": "5d22a60d79b0a7b479d388862f4cc33113b19749c0d903fc6c99600f00340e29",
+      "candidate": "0a38ee4e3e7d16af3978f2c6ccde04dc176dfea9",
+      "code": "35b444d09d739bd5532deac21ec013ed7422d35b",
+      "all15_default_discovered": [
+        "outputs_do_not_depend_on_index_registration_order_generation_1",
+        "outputs_do_not_depend_on_index_registration_order_generation_8",
+        "outputs_do_not_depend_on_index_registration_order_generation_32",
+        "outputs_do_not_depend_on_index_registration_order_increasing_1",
+        "outputs_do_not_depend_on_index_registration_order_increasing_8",
+        "outputs_do_not_depend_on_index_registration_order_increasing_32",
+        "outputs_do_not_depend_on_index_registration_order_decreasing_1",
+        "outputs_do_not_depend_on_index_registration_order_decreasing_8",
+        "outputs_do_not_depend_on_index_registration_order_decreasing_32",
+        "outputs_do_not_depend_on_index_registration_order_shuffled_1",
+        "outputs_do_not_depend_on_index_registration_order_shuffled_8",
+        "outputs_do_not_depend_on_index_registration_order_shuffled_32",
+        "index_registration_child_failure_propagates",
+        "ym_ggg_zero_color_L3",
+        "xs_qcdqed_addx_canonical_scalar_lr_L3"
+      ]
+    },
+    "native_digest_derivation": [
+      {
+        "case": "ym_ggg_zero_color_L3",
+        "baseline": {
+          "hex": "0x1c149c8e666851cd",
+          "integer": 2023414268013597133,
+          "diagrams": 1217,
+          "native_interface_fields_hashed": 0
+        },
+        "current": {
+          "hex": "0xae5ed16f90c02201",
+          "integer": 12564710287510348289,
+          "diagrams": 1217,
+          "native_interface_fields_hashed": 5235
+        }
+      },
+      {
+        "case": "xs_qcdqed_addx_canonical_scalar_lr_L3",
+        "baseline": {
+          "hex": "0xe112f4cc670092f9",
+          "integer": 16218294366853174009,
+          "diagrams": 82,
+          "native_interface_fields_hashed": 0
+        },
+        "current": {
+          "hex": "0x82a821cc454caa0c",
+          "integer": 9414812182237719052,
+          "diagrams": 82,
+          "native_interface_fields_hashed": 934
+        }
+      }
+    ],
+    "integer_precision": "Python arbitrary-precision JSON integers, explicit u64 modular FNV and little-endian encoding; no JavaScript Number/float path, transport, parameter substitution or interface removal.",
+    "integrity": {
+      "candidate": "0a38ee4e3e7d16af3978f2c6ccde04dc176dfea9",
+      "code": "35b444d09d739bd5532deac21ec013ed7422d35b",
+      "frozen_parent": "df55185059f31bea548a5de27c95828656fbdc52",
+      "production": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+      "tracked_files_equal_candidate": 3403,
+      "exact_slice_inventory": [
+        ".config/nextest.toml",
+        "crates/feynkit-generator/tests/generation_oracle/main.rs",
+        "docs/architecture/evidence/generation-integration/execution.json",
+        "docs/architecture/evidence/generation-integration/wp3/oracle-p2-corrections.json",
+        "docs/architecture/evidence/generation-integration/wp3/oracle-registry-audit.py",
+        "docs/architecture/evidence/generation-integration/wp3/replay.json",
+        "docs/architecture/evidence/generation-integration/wp3/row-recertification/archive-index.json",
+        "docs/architecture/evidence/generation-integration/wp3/row-recertification/axis-proof-summary.json",
+        "docs/architecture/evidence/generation-integration/wp3/row-recertification/compare-stages.py",
+        "docs/architecture/evidence/generation-integration/wp3/row-recertification/derivation.json",
+        "docs/architecture/evidence/generation-integration/wp3/row-recertification/derive-and-edit.py",
+        "docs/architecture/evidence/generation-integration/wp3/row-recertification/diagnosis.json",
+        "docs/architecture/evidence/generation-integration/wp3/row-recertification/final-axis-proof.py",
+        "docs/architecture/evidence/generation-integration/wp3/row-recertification/finalize-diagnosis.py",
+        "docs/architecture/evidence/generation-integration/wp3/row-recertification/first-YM-local-witness.json",
+        "docs/architecture/evidence/generation-integration/wp3/row-recertification/graph-proof.rs",
+        "docs/architecture/evidence/generation-integration/wp3/row-recertification/local-proof.rs",
+        "docs/architecture/evidence/generation-integration/wp3/row-recertification/math-review.json",
+        "docs/architecture/evidence/generation-integration/wp3/row-recertification/metadata-bijection.py",
+        "docs/architecture/evidence/generation-integration/wp3/row-recertification/nix-runtime-owner-v2.nix",
+        "docs/architecture/evidence/generation-integration/wp3/row-recertification/p2-review.json",
+        "docs/architecture/evidence/generation-integration/wp3/row-recertification/prepare-local-proof.py",
+        "docs/architecture/evidence/generation-integration/wp3/row-recertification/producer-row-reproduction.json",
+        "docs/architecture/evidence/generation-integration/wp3/row-recertification/provenance-review.json",
+        "docs/architecture/evidence/generation-integration/wp3/row-recertification/run-combined.sh",
+        "docs/architecture/evidence/generation-integration/wp3/row-recertification-files.json",
+        "docs/architecture/evidence/generation-integration/wp3/row-recertification.json",
+        "docs/architecture/evidence/generation-integration/wp3/units19-21.json",
+        "docs/architecture/generation-integration-plan.typ",
+        "docs/architecture/generation-integration-wp3-grouping.typ",
+        "docs/developers.toml"
+      ],
+      "non_documentation_delta_from_certified_production": [
+        ".config/nextest.toml",
+        "crates/feynkit-generator/tests/generation_oracle/main.rs"
+      ],
+      "approved_p2_main_plus_exactly_two_tokens": true,
+      "current_code_bindings": 3,
+      "current_artifact_bindings": 46,
+      "certificate_artifact_bindings": 235,
+      "certificate_producers": 8,
+      "certificate_source_bindings": 22,
+      "byte_exact_archives": 18,
+      "prior_artifact_bindings": 86,
+      "prior_producer_bindings": 8,
+      "refs": {
+        "generation-integration-source-v4": "e0a779808174c64057fecfd062c948b8de8e5c1f",
+        "generation-integration-source-stage1": "f25961e21689ed1a33365430b4566a9a2e9c319a",
+        "generation-integration-source-transplant": "4e00851731541be7de4626b7d1e5274d79b9eea8",
+        "generation-integration-source-upstream": "588148851e3e989ecbb7478279db7d46727e23a8",
+        "generation-integration-source-v2": "d9ff71a6826166e57bf3bba56ffcf8a57ffaf9db",
+        "generation-integration-source-pre-v2": "75b6c7a88fb099f142bcec9227ee614b6fc56376",
+        "generation-integration-source-v3": "dfe6387606e44a96f110c1ce03f52d92824dbdb1",
+        "generation-integration-source-v3-original": "6d207cfce36ab2bb128d92d67cc3da182afb0bb1",
+        "generation-integration-source-m1-source": "9540f5bbf7a96609e69af6983d2bf7325530126d",
+        "generation-integration-plan": "4374f72027b75df9ff95c5c7a725ee75beac27a8",
+        "generation-integration-pre-rebuild": "5226894ee1af61797e6b819d7e801a22bf17bace",
+        "generation-integration-pre-staged": "438b61500da4b32841c64211103e5da6fc4c4a72",
+        "generation-integration-staged-code": "f264028690d117b4b99c320b61b7f2d5d89222d0",
+        "generation-integration-drawing15-16": "8430e701d858b07e40203a25bfc3b1fa61b15f4a",
+        "generation-integration-staged17-18-37": "817b5886a50276efea05ab860d22016e1fb0c203",
+        "generation-staged-evidence-fixes": "edabf052c5780be6460a9043cb9704e1583a2e4c",
+        "generation-integration-corrected-staged": "d48f9d1aedc766eea5cb185ab6029d1f04462043",
+        "generation-integration-source19-code": "4aa4d3d88394fd39be75f460b3ace4bc72a48894",
+        "generation-integration-source20-code": "c75ab826e6eb69c711130803bd54223664c9879a",
+        "generation-integration-source21-code": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+        "generation-integration-units19-21": "df55185059f31bea548a5de27c95828656fbdc52",
+        "generation-integration": "0a38ee4e3e7d16af3978f2c6ccde04dc176dfea9",
+        "generation-integration-units19-21-recertified": "0a38ee4e3e7d16af3978f2c6ccde04dc176dfea9"
+      },
+      "baseline_tracked_files_equal_source19": 3551
+    },
+    "policy_and_evidence": {
+      "exact_config_delta": {
+        "filter": "package(feynkit-generator) and binary(=generation_oracle) and (test(outputs_do_not_depend_on_index_registration_order_) or test(=index_registration_child_failure_propagates) or test(=ym_ggg_zero_color_L3) or test(=xs_qcdqed_addx_canonical_scalar_lr_L3))",
+        "test-group": "memory-intensive"
+      },
+      "global_workers": 16,
+      "effective_owned_group_limit": 2,
+      "timeout_seconds": 240,
+      "all15_selected": [
+        "index_registration_child_failure_propagates",
+        "outputs_do_not_depend_on_index_registration_order_decreasing_1",
+        "outputs_do_not_depend_on_index_registration_order_decreasing_32",
+        "outputs_do_not_depend_on_index_registration_order_decreasing_8",
+        "outputs_do_not_depend_on_index_registration_order_generation_1",
+        "outputs_do_not_depend_on_index_registration_order_generation_32",
+        "outputs_do_not_depend_on_index_registration_order_generation_8",
+        "outputs_do_not_depend_on_index_registration_order_increasing_1",
+        "outputs_do_not_depend_on_index_registration_order_increasing_32",
+        "outputs_do_not_depend_on_index_registration_order_increasing_8",
+        "outputs_do_not_depend_on_index_registration_order_shuffled_1",
+        "outputs_do_not_depend_on_index_registration_order_shuffled_32",
+        "outputs_do_not_depend_on_index_registration_order_shuffled_8",
+        "xs_qcdqed_addx_canonical_scalar_lr_L3",
+        "ym_ggg_zero_color_L3"
+      ],
+      "other_config_unchanged": true,
+      "canonical_scope_origin_counts": {
+        "df55185059f31bea548a5de27c95828656fbdc52": {
+          "additional": 22,
+          "valid": 56,
+          "inherited": 7
+        },
+        "ea0e78bcc246cd070cb2f7b26c82b45f9a65ed81": {
+          "valid": 57,
+          "additional": 21,
+          "inherited": 7
+        },
+        "0a38ee4e3e7d16af3978f2c6ccde04dc176dfea9": {
+          "valid": 58,
+          "additional": 21,
+          "inherited": 7
+        }
+      },
+      "historical_receipts_unchanged_except_supersessions": true,
+      "prior_full_run": {
+        "run_id": "c18e0610-341d-4060-a1f7-f687b16b4158",
+        "selected": 15,
+        "passed": 15,
+        "seconds": 494.041,
+        "maximum_test_seconds": 92.593,
+        "source_binary_sha256": "5d22a60d79b0a7b479d388862f4cc33113b19749c0d903fc6c99600f00340e29"
+      },
+      "normal_before_only_numerator_digests_differ": true,
+      "nix_owner": {
+        "generatorExtraFeatures": [],
+        "name": "feynkit",
+        "packages": [
+          "feynkit",
+          "feynkit-amplitude",
+          "feynkit-cff",
+          "feynkit-generator",
+          "feynkit-graph",
+          "feynkit-kinematics",
+          "feynkit-model",
+          "feynkit-py",
+          "feynkit-tensor",
+          "feynkit-ufo"
+        ],
+        "runFilter": null
+      }
+    },
+    "registry": "Independent canonical uniqueness/range/digest and title checks. Source31 retains24 stale digests and4 missing/ambiguous anchors;7 inherited+21 additional describes origin, not failure kind.",
+    "final_immutability": {
+      "tracked_files_equal_candidate": 3403,
+      "protected_refs_unchanged": 23,
+      "binary_pre_post_equal": true,
+      "candidate_working_copy_unchanged": true
+    }
+  },
+  "reused_checks": [
+    {
+      "scope": "Frozen source19\u201321 algebra",
+      "receipt": "target/astra-units19-21-algebra-review-20261028-5mGx1q/review.json",
+      "sha256": "954a5e7fc995b264b216e6cd73d566e46976e26327776afecec296c67fa46471",
+      "result": "81 previously independently passed tests; no new production defect. Source and logs verified; not rerun. Current #210 preparation, completed quotient normalization/original factor-2 witness, every nonfinite sample/mode shortcut, admission and actual-pool safeguards remain byte-identical."
+    },
+    {
+      "scope": "Closed original oracle/census/sparse/Nix provenance boundaries",
+      "receipt": "target/astra-oracle-review-df551850-8LxefqSc/review.json",
+      "sha256": "056a74b2c54e82a1f949078a7edebcb13bb2d21fa3811e254677c4396b49824a",
+      "result": "Previously scoped REQUEST_CHANGES had exactly2 retained P1 row classifications and2 new P2 findings, closed above. Remaining reviewed boundaries and exact-source controls reused with log/artifact hashes checked. No old timeout counted as pass."
+    },
+    {
+      "scope": "Exact fixed-case mathematical and typed-interface certificate",
+      "receipt": "docs/architecture/evidence/generation-integration/wp3/row-recertification/math-review.json",
+      "sha256": "940cfc19b4d665bcf2c354dade2b6ee22248b980ed0b1e5958fe7d083ce55ed7",
+      "result": "280 nonliteral pairs and1537 full already-factorized graph pairs under both kernels;29451 factors/97412 axes/8170 interfaces, native admission and1120 mutations rejected per kernel. Existing proof reused; neither kernel rebuilt or proofs rerun."
+    },
+    {
+      "scope": "Independent full provenance and original row reproduction",
+      "receipt": "docs/architecture/evidence/generation-integration/wp3/row-recertification/provenance-review.json",
+      "sha256": "2894eb537002e38061594c4040df0438fa372d70d1c17f83a469bf4b6e813492",
+      "result": "All235 artifacts and22 source bindings/8 producer hashes reverified here. Reuse actual old2pass/current2fail and56 fresh bindings, complete full-key/source/group/weight coverage including55 parameter-dependent ratios."
+    },
+    {
+      "scope": "Approved P2",
+      "receipt": "docs/architecture/evidence/generation-integration/wp3/row-recertification/p2-review.json",
+      "sha256": "535050df3758914a23811185e9f0e1cb0f6ed93671a90d016539dad59bb83b77",
+      "result": "Cumulative integration exact; prior normal13-cell outcome and owner-boundary regression remain historical. New16-worker policy independently validated here."
+    },
+    {
+      "scope": "Combined implementation full15 run",
+      "result": {
+        "run_id": "c18e0610-341d-4060-a1f7-f687b16b4158",
+        "selected": 15,
+        "passed": 15,
+        "seconds": 494.041,
+        "maximum_test_seconds": 92.593,
+        "source_binary_sha256": "5d22a60d79b0a7b479d388862f4cc33113b19749c0d903fc6c99600f00340e29"
+      },
+      "validation": "All15 exact names, JUnit UUID/timing/no failure/no skipped children and source binary hash verified; fresh representative6 sufficient. Full matrix not repeated."
+    },
+    {
+      "scope": "Focused Clippy, fmt and two Typst notes",
+      "result": "PASS receipts bound to current code/evidence; all relevant logs/output hashes checked among46 current artifacts. Reused, not independently rerun."
+    }
+  ],
+  "limits": [
+    "Fixed two-case value/interface equivalence only; no private proof-cache/history identity or all-physics theorem.",
+    "Three older frame-hash assertions and four omitted whole-graph-expanding parser helpers remain unchanged and open.",
+    "Source30 non-Rust input closure and source31 unrelated registry reconciliation remain ordered future work.",
+    "Full rebuilt-tip WP3, five fresh a_ddx, complete BRST/epem/CoolQM physics, benchmark/memory/performance remain open.",
+    "Final WASM/PDF and sdist/native/Pyodide/Community distribution/install certification remain open.",
+    "Actual Nix-derived worker policy and normal profile were exercised from nix develop; no full Nix archive extraction/runtime derivation or whole-suite completion claimed.",
+    "No credit for the implementation late live-snapshot attempt. This review records the allowlisted environment in the same shell immediately before its actual Nextest invocations; it does not call a post-run preflight live evidence."
+  ],
+  "setup_notes": [
+    "First audit-helper attempt compared Git and Jujutsu file order directly; corrected to compare sorted exact inventories, then all assertions passed. No test/source change or pass credit from that attempt.",
+    "Normal nix develop realized its development-shell dependencies with default cache policy. Tests reused the exact warm matching shared-cache binary; no cache override or manual seeding."
+  ],
+  "cleanup": {
+    "tracked_edits": false,
+    "ref_moves": false,
+    "expectation_rewrites": false,
+    "nested_agents": false,
+    "integration_or_publication": false,
+    "license_output": false,
+    "processes_retained": [],
+    "retained": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-combined19-21-review-ZX4duVm5",
+    "reason": "Review receipt, reproducible independent checks, inventories, identity guards and logs retained for parent adjudication and ordered continuation. All original proof evidence, baseline workspace and shared caches preserved."
+  },
+  "artifacts": [
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-combined19-21-review-ZX4duVm5/all-effective-groups.log",
+      "bytes": 1861,
+      "sha256": "e545db273fbb591eeee0e4747b9157d468168ab569d0967b83fda8e5996ec4c3"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-combined19-21-review-ZX4duVm5/audit.log",
+      "bytes": 884,
+      "sha256": "ea24b9dd737aa38313a89b52895beaecc19fe0ec53531b08af6b3335f1c21cb5"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-combined19-21-review-ZX4duVm5/audit.py",
+      "bytes": 9546,
+      "sha256": "d04ef0e5647f5ef551f3d161a03c68ef36ace6ca3df5bbbf8c5f0a61bf87b410"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-combined19-21-review-ZX4duVm5/binary-identity.json",
+      "bytes": 1300,
+      "sha256": "d03ce4009db9dfc550bb29aeafbc61e886fd3e20e99e099d91d91bf9dbbf57a3"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-combined19-21-review-ZX4duVm5/default-inventory.json",
+      "bytes": 18827,
+      "sha256": "50cfb18760842d977daf8a6474813bff8bebc41b375ad4b400598978523707ce"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-combined19-21-review-ZX4duVm5/default-inventory.log",
+      "bytes": 63,
+      "sha256": "cd3f5d72072d695829a116d6df26fe58c46460a163f4b24c3668e8258dc28262"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-combined19-21-review-ZX4duVm5/evidence-policy.json",
+      "bytes": 2601,
+      "sha256": "fe26dc5672b5b03c53a1614b5578c9360d68c537a762b3313d033eed449c2010"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-combined19-21-review-ZX4duVm5/evidence-policy.log",
+      "bytes": 137,
+      "sha256": "b75408d1381f4c338f07685fee565dfa7fe40abadc1ff05ca65302565dcd56d4"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-combined19-21-review-ZX4duVm5/evidence-policy.py",
+      "bytes": 6445,
+      "sha256": "c56c9d3a3e7be29b31ded550cca9994a9b2441307db6f01b40557164bf422f9f"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-combined19-21-review-ZX4duVm5/finalize.py",
+      "bytes": 12037,
+      "sha256": "264607713b470ecd1b1ba75a9e5de77ad3637572c9176c4d2873fe68b5729c24"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-combined19-21-review-ZX4duVm5/independent-junit.xml",
+      "bytes": 1438,
+      "sha256": "4efb8640bbb614ec782d0b9578def993233f4d7dabde07dee9b29a9cf871a600"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-combined19-21-review-ZX4duVm5/independent-normal.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-combined19-21-review-ZX4duVm5/independent-normal.log",
+      "bytes": 18409,
+      "sha256": "7c7001ab9677527070774dc9efcc9ed91bd103bcd214d7453764b7d3be57550b"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-combined19-21-review-ZX4duVm5/integrity.json",
+      "bytes": 5588,
+      "sha256": "774acc7ccdfecb65462b5e1b3cffce6c9395bc6b07cf3931b7ed2eb1be56d325"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-combined19-21-review-ZX4duVm5/invocation-environment.json",
+      "bytes": 527,
+      "sha256": "684017eb7cb74ba83ba31b261a94a676d8bc6766a40f2e54a08db890aeff913f"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-combined19-21-review-ZX4duVm5/native-hash-derivation.json",
+      "bytes": 765,
+      "sha256": "6bb2654117e290082f283992a3af68ce51fdbf20a162fbae41aa29b334016462"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-combined19-21-review-ZX4duVm5/nix-owner.json",
+      "bytes": 238,
+      "sha256": "816a3b6a355fb3e6a4ffec81fbb205025ca2b670c78c925c3aff09e07d64c00d"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-combined19-21-review-ZX4duVm5/nix-preflight.log",
+      "bytes": 802,
+      "sha256": "3470f7d5ede13c9858c3dbfdb1df8059cf631895b4c76dc36f34858b6101a977"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-combined19-21-review-ZX4duVm5/registry.json",
+      "bytes": 37440,
+      "sha256": "1ba6830ff0e721f42f346e3c3d4dae97c0c5fbd73c6f85647b02be1eed4abfd0"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-combined19-21-review-ZX4duVm5/run-independent.sh",
+      "bytes": 3400,
+      "sha256": "8b3674a6df3bdc7e827e2c350e7e4f23c5eaf709de28b947403b9addfa82c5b4"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-combined19-21-review-ZX4duVm5/runner.log",
+      "bytes": 245,
+      "sha256": "9464a53e4daf37cd0daaaeb42f50edc10a5da3ffac6c4f240981125db29d14e8"
+    }
+  ]
+}

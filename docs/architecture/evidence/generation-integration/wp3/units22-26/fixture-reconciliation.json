@@ -1,0 +1,11 @@
+{
+  "staged_base": "d48f9d1aedc766eea5cb185ab6029d1f04462043",
+  "old_approved": "735d599a665acbce1577b2c40d149c152f01543d",
+  "graphs": 19,
+  "exact_variance_corrections": 8,
+  "staged17_delta": "only already-removed source/sink ufo_order metadata; never restored",
+  "factor_routing_weight_master_preservation": "inverse encoding exact byte equality against staged base after eight flips and master-key spelling",
+  "old_preparation_equivalence": "exact byte equality after removing obsolete source/sink ufo_order metadata",
+  "before_sha256": "57cd52f18666978f7e2ce7b4b359f9c8219eedfd810e9e2d382d51e7f8059eb4",
+  "after_sha256": "eaf807e0a016e3b3c3904084c15465126278b12929f2962d1827813b77f68edf"
+}

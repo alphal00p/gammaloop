@@ -1,0 +1,11 @@
+{
+  "functions_unchanged": [
+    "old",
+    "scopes",
+    "check"
+  ],
+  "former_top_level_cli_body_ast_identical_to_main": true,
+  "old_revision": "0a38ee4e3e7d16af3978f2c6ccde04dc176dfea9",
+  "path": "docs/architecture/evidence/generation-integration/wp3/oracle-registry-audit.py",
+  "current_sha256": "d9f923d8806f559adacef0e633b1b4bd65d55a1cef991e90686a59ec63825641"
+}

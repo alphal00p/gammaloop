@@ -1,0 +1,90 @@
+{
+  "scripts": [
+    {
+      "script": "docs/architecture/evidence/generation-projector-flow-staged/fixture-audit.py",
+      "sha256": "3120d5e6c2c6d5bfa175ce42d36cfb6788b45717335a9f8854f0e8b3c5e279fb",
+      "scratch_output_root_only": "target/wp3-units22-26/fixture-audit.py",
+      "exit": 0
+    },
+    {
+      "script": "docs/architecture/evidence/generation-projector-flow-staged/rqft-audit.py",
+      "sha256": "e3d5d05589d8d57d3f49654504123329251439a7b152f45a783526cbbaf0907c",
+      "scratch_output_root_only": "target/wp3-units22-26/rqft-audit.py",
+      "exit": 0
+    },
+    {
+      "script": "docs/architecture/evidence/generation-projector-flow-staged/generated-audit.py",
+      "sha256": "d566e361a25ce8d01d963de30a18b50846fa25f559684927dcd3b7f405de3f92",
+      "scratch_output_root_only": "target/wp3-units22-26/generated-audit.py",
+      "exit": 0
+    }
+  ],
+  "protected": [
+    {
+      "path": "Cargo.lock",
+      "sha256": "def8dd7be5f208f4a290a4556081f7a63d10a5ae070c5df1808c1d350fa6161e",
+      "byte_identical_to": "0a38ee4e3e7d16af3978f2c6ccde04dc176dfea9"
+    },
+    {
+      "path": "uv.lock",
+      "sha256": "0ad8d1a18d9c520d298ff36ec20a746f9a63c7e0fdebe14e739a574cbb4fabf8",
+      "byte_identical_to": "0a38ee4e3e7d16af3978f2c6ccde04dc176dfea9"
+    },
+    {
+      "path": ".config/nextest.toml",
+      "sha256": "03e166fbe150d150450df98ebfa00e3b823b487cab5f6f9ff3d4cfb4bff4b09f",
+      "byte_identical_to": "0a38ee4e3e7d16af3978f2c6ccde04dc176dfea9"
+    },
+    {
+      "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+      "sha256": "cdf70ce91b2512ff7aa47fb232910abffa770f16b31834c831b5785961868c53",
+      "byte_identical_to": "0a38ee4e3e7d16af3978f2c6ccde04dc176dfea9"
+    },
+    {
+      "path": "crates/feynkit-generator/src/grouping.rs",
+      "sha256": "ee0e666ae2c7b8d13c14741d03d49adc41de50ace966034561f9d39d20191c00",
+      "byte_identical_to": "0a38ee4e3e7d16af3978f2c6ccde04dc176dfea9"
+    },
+    {
+      "path": "crates/feynkit-graph/src/finalization.rs",
+      "sha256": "7f537b6608fd6f82402675fc28f2e0907d3916a0df5fae8c03412ad1273da221",
+      "byte_identical_to": "0a38ee4e3e7d16af3978f2c6ccde04dc176dfea9"
+    },
+    {
+      "path": "crates/feynkit-graph/src/numerator_interface.rs",
+      "sha256": "596a58fda9f2f182ba19a3da2457b3ed45e73b554d1dd67092cc42a4c2f68ed8",
+      "byte_identical_to": "0a38ee4e3e7d16af3978f2c6ccde04dc176dfea9"
+    },
+    {
+      "path": "crates/gammalooprs/src/graph/parse/from_dot.rs",
+      "sha256": "e1f6220b809ffc60ed7662d03ecaac4ebb3d7fc27817dde1795623217b45065b",
+      "byte_identical_to": "0a38ee4e3e7d16af3978f2c6ccde04dc176dfea9"
+    },
+    {
+      "path": "tydenso/Cargo.lock",
+      "sha256": "f1f0573d5f1c02d4ddb73d4491514cd291ae94ded7d84627342226917ca41dd0",
+      "byte_identical_to": "0a38ee4e3e7d16af3978f2c6ccde04dc176dfea9"
+    },
+    {
+      "path": "examples/reproducers/symbolica-expansion/Cargo.lock",
+      "sha256": "ee6691611b3e268a0650b9c355cd1aa8c4ffe8e86044cd14d695887b2123ac7c",
+      "byte_identical_to": "0a38ee4e3e7d16af3978f2c6ccde04dc176dfea9"
+    },
+    {
+      "path": "examples/reproducers/symbolica-aliases/Cargo.lock",
+      "sha256": "ec2fd376d03a54ae954224344ab4b012b093014dd34f3914dc9bfbd50f683c0f",
+      "byte_identical_to": "0a38ee4e3e7d16af3978f2c6ccde04dc176dfea9"
+    },
+    {
+      "path": "examples/reproducers/symbolica-atom-access/Cargo.lock",
+      "sha256": "ab733c71fb1811f2735a6bd9d1645fce683742a165f95272d35f542a588c583e",
+      "byte_identical_to": "0a38ee4e3e7d16af3978f2c6ccde04dc176dfea9"
+    },
+    {
+      "path": "examples/notebooks/symbolica-host/Cargo.lock",
+      "sha256": "03e18f00dbba096e08978063fd857d6558659f9f75e0ab09d73be3e543882c5a",
+      "byte_identical_to": "0a38ee4e3e7d16af3978f2c6ccde04dc176dfea9"
+    }
+  ],
+  "nixci": false
+}

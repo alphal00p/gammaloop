@@ -1,0 +1,196 @@
+{
+  "review": "NEW independent Astra read-only staged reconciliation review, sources 22–26",
+  "verdict": "APPROVE",
+  "scope": "Preparation only on approved d48; no ordered integration or whole-candidate approval",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-projector-flow",
+  "base": "d48f9d1aedc766eea5cb185ab6029d1f04462043",
+  "code_tip": "0d13655702c2986f2fc7923fd9121278c4439709",
+  "code_change": "lyormyxnpkzloxsmvotozykpmsprqtmo",
+  "evidence_tip": "f2e32c44c986058ede1d7e585b9e2e4fefe1110c",
+  "evidence_change": "kmqykxvrzvuynxzsmzumvkxzxlkrtvqt",
+  "bookmark": "generation-projector-flow-staged",
+  "old_approved_bookmark": "735d599a665acbce1577b2c40d149c152f01543d",
+  "blocking_findings": [],
+  "nonblocking_findings": [
+    {
+      "severity": "P3",
+      "file": "docs/architecture/evidence/generation-projector-flow-staged/scope-audit.py",
+      "line": 18,
+      "title": "Mirror mandatory start-anchor validation and correct the inherited-failure breakdown",
+      "detail": "The audit checks the start anchor only when end_anchor exists; the real docs builder always checks it and validates endpoint ordering. Thus the supplied audit classifies three missing start anchors as digest drift. docs-limit.json:15–16 reports 26 digest/1 anchor, while receipt.json:650 says 7 digest/20 anchor. Independently applying the builder semantics produces 23 stale-digest scope entries and 4 missing/ambiguous-anchor entries (27 total). All 27 are inherited unchanged from d48. These are scope-entry counts, not counts of distinct files or notes.",
+      "requested_correction": "Use the builder anchor/range rules in the audit and regenerate the evidence breakdown without refreshing registry digests. Retain the full docs-check failure as an inherited limitation.",
+      "nonblocking_reason": "The independent complete audit proves all failures inherited and no new scope drift. This is a reporting/checker issue, not a source22–26 runtime regression."
+    }
+  ],
+  "assignment_closure": [
+    {
+      "source": 22,
+      "original": "77dcd12272d0f86dc5309f8d74de94632a771b6e",
+      "locations": [
+        "tests/tests/test_runs/test_integrated_uv_cts.rs:33",
+        "tests/tests/test_runs/test_integrated_uv_cts.rs:111"
+      ],
+      "result": "Actual incoming vertex, stored paired edge direction and physical orientation choose the unique visible flow. The approved old file from INSPECT_POINT onward is byte-identical after retaining exactly the two d48 staged CLI commands; analytic literals, native precision, coordinates, scales and tolerances are unchanged. Physical scalar-bubble and stored-edge reversal controls freshly pass."
+    },
+    {
+      "source": 23,
+      "original": "967abd74e1843016d34f5e6f701cd4b7828768b6",
+      "locations": [
+        "tests/resources/graphs/qqx_aaa_subtracted.dot:1",
+        "crates/gammalooprs/src/graph/parse/tests.rs:1463"
+      ],
+      "result": "Independently derived full-file transforms establish exactly eight variance flips plus native slot spelling and master-key spelling relative to d48, and exact equality to735 after only removal of the staged17 obsolete source/sink metadata. This preserves every other authored local factor, edge, routing, weight and graph. Fresh native composition closes all19 graph interfaces and retains effective first master. The old imported snapshot/count check is reused only as supplemental evidence."
+    },
+    {
+      "source": 24,
+      "original": "a18babd0f5adb028d4bd0722ce386be93464839d",
+      "locations": [
+        "crates/gammaloop-api/src/commands/generate.rs:1193",
+        "crates/gammalooprs/src/numerator/aind.rs:50",
+        "crates/gammalooprs/src/numerator/aind.rs:96",
+        "crates/gammalooprs/src/graph/parse/tests.rs:1527"
+      ],
+      "result": "Actual staged Request/NumeratorOptions owner retains one-based user model projectors with typed AindError source. Native codec local zero remains unchanged; explicit compact conversion is separate and checked for overflow. Positive maximum, short/explicit zero, dual colour zero, non-half-edge zero, actual complete topology card, generated numerator and port closure controls pass. Sewn test preserves exact indexed expression, named canonical slots with dimension/variance, routing, numerator and composed same_value including residual logical order. It makes no claim that value equality certifies hidden history; independent A1/B3 controls do that within their scopes. No GenerationOptions restoration, blanket offset, duplicate offset or fallback."
+    },
+    {
+      "source": 25,
+      "original": "15f2aa1a11380f33325ce283a404753a9836882f",
+      "donor_code": "5e96b3f00a78c850236609527914dce1154f726c",
+      "locations": [
+        "crates/feynkit-graph/src/compact_dot.rs:33",
+        "crates/feynkit-graph/src/dot.rs:74",
+        "crates/gammalooprs/src/graph/parse/tests.rs:2199"
+      ],
+      "result": "Compared original source25 and approved donor changes. Guidance now lives in shared explicit compact admission, so ordinary and direct compact frontdoors reject legacy particle_id. Annotated detection and fingerprint precedence remain ahead of compact import. Fresh legacy conversion, fingerprint, native vertex metadata, source error and tensor admission tests pass. Public exports, staged runtime admission and source36 symbolica-data owner are byte-identical to d48; no obsolete converter alias or source36 import."
+    },
+    {
+      "source": 26,
+      "original": "8cf71575a739976295edb42eae2052d6b5e455ee",
+      "locations": [
+        "tests/resources/graphs/uv_tests/rqft_ghG_3l.dot:1",
+        "crates/gammalooprs/src/graph/parse/tests.rs:2071"
+      ],
+      "result": "Entire fixture is independently byte-identical to original source26; removing only21 attributes and new comments exactly restores d48. Seven graph bases are tied to authored endpoint names, particle and lmb_id, including tagged parallel member, not statement ordinals. Selected directed rows are positive units with zero external coefficients. Fresh test compares every runtime routing row to the native routing and the complete native DOT round trip, preserving factors and graph incidence. The initial failed statement-order oracle and correction are retained and correctly limited; physics expectations/snapshots were not changed."
+    }
+  ],
+  "staged_invariants": {
+    "A1_finalization_owner_byte_unchanged": true,
+    "B3_identity_history_predicate_byte_unchanged": true,
+    "B3_runtime_admission_owner_byte_unchanged": true,
+    "hidden_history_identity_ranked_zero_callback_and_source_errors_freshly_checked": true
+  },
+  "generated_metadata": {
+    "SpecArgs_unchanged_except_projector_documentation": true,
+    "fresh_schema_byte_match": {
+      "runhistory_exact_byte_match": true,
+      "sha256": "bb6d27af0a4cf162138925c3700fd267d9d05496640e97a9208526db8591b9df",
+      "exit_code": 0,
+      "log": "target/astra-staged22-26-r1-20261028/schema.log"
+    },
+    "fresh_reference_check": {
+      "exit_code": 0,
+      "log": "target/astra-staged22-26-r1-20261028/reference.log"
+    },
+    "scope": "Other schema deltas reflect pre-existing d48 field types/help/removals; no19–21 code imported."
+  },
+  "independent_checks": {
+    "rust_tests_passed": 31,
+    "tests": "focused-tests.json",
+    "static_identity_and_fixture_audit": "identity-check.json",
+    "protected_sources_and_generated_output": "final-audit.json",
+    "kernel_gate": {
+      "exit_code": 0,
+      "log": "target/astra-staged22-26-r1-20261028/kernel.log"
+    },
+    "real_docs_scope_reproduction": {
+      "digest": 23,
+      "anchor": 4
+    },
+    "all_scope_failures_inherited": true
+  },
+  "reused_checks": {
+    "rust_tests": 107,
+    "doctests": 1,
+    "deduplicated_inventory_verified": true,
+    "log_hashes_verified": 33,
+    "linked_certificate_hashes_verified": 22,
+    "fresh31_overlap_reused107_do_not_sum": true,
+    "index_suite_reuse": "Earlier5-test index suite is source-unchanged at final tip; independently reran both new boundary controls on final runtime producer.",
+    "other_checks": "Verified existing relevant-package Clippy -D warnings, fmt, Typst/title and static evidence logs; no redundant rebuild.",
+    "zero_test_legacy_attempt_no_credit": true,
+    "failed_compile_and_superseded_controls_no_credit": true
+  },
+  "producer_identity": {
+    "record": "identity-check.json",
+    "feature_record": "producer-features.json",
+    "features": {
+      "runtime": "[\"default\"]",
+      "native": "[\"default\", \"native\"]",
+      "api": "[\"cli\", \"default\"]",
+      "flow": "[\"default\"]"
+    },
+    "current_binaries_match_sha256": true,
+    "reviewed_source_files_match_receipt_and_tip": true,
+    "all41_changed_files_match_tip": true,
+    "json_integers": "Python integer JSON parsing/writing; no JavaScript Number roundtrip of Cargo u64 fingerprint fields."
+  },
+  "environment": {
+    "nix_shell": "/nix/store/wsj4jaj03ijdd3rkq85dkz9rq44k9rqg-nix-shell-env.drv",
+    "explicit_workspace_cwd": true,
+    "license": "existing export preserved, otherwise silently loaded from XDG/current-user config",
+    "build_jobs": 2,
+    "test_threads": 2,
+    "rayon_threads": 2,
+    "cargo_target_override": false,
+    "cache_copy_or_seeding": false,
+    "cold_rebuild": false,
+    "snapshot_recording": false
+  },
+  "protection": {
+    "kernel": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+    "nixci_enabled": false,
+    "protected_paths": [
+      "Cargo.lock",
+      "crates/linnest/layout/uv.lock",
+      "examples/layout/embedding_constraints/uv.lock",
+      "examples/notebooks/symbolica-host/Cargo.lock",
+      "examples/reproducers/symbolica-aliases/Cargo.lock",
+      "examples/reproducers/symbolica-atom-access/Cargo.lock",
+      "examples/reproducers/symbolica-expansion/Cargo.lock",
+      "flake.lock",
+      "nix/ufo-runtime/uv.lock",
+      "tydenso/Cargo.lock",
+      "uv.lock",
+      "nix-ci.nix",
+      "crates/symbolica-data/src/lib.rs",
+      "crates/feynkit-graph/src/finalization.rs",
+      "crates/feynkit-graph/src/numerator_interface.rs",
+      "crates/feynkit-graph/src/lib.rs",
+      "crates/gammalooprs/src/graph/parse/from_dot.rs",
+      "docs/architecture/evidence/generation-integration/execution.json"
+    ],
+    "old_approval_hashes_unchanged": true,
+    "source19_21_commits_absent": true,
+    "tracked_edits": false,
+    "ref_changes": false,
+    "nested_agents": false,
+    "publication_or_integration": false
+  },
+  "mandatory_future_integration_requirements": [
+    "Obtain the independent source19–21 gate results and replay19–21 before22–26. This d48 preparation omits19–21 and approves no main replay.",
+    "After ordered reconciliation, rerun combined grouping/oracle controls and physical-flow, model-projector/card, compact/native DOT, hidden-history/admission, all19 factor/routing/weight preservation and seven signed-RQFT-basis controls against the actual combined head. Verify current source, feature and producer identities.",
+    "Regenerate schema/reference with the actual combined owners and preserve the exact protected kernel/lock/uv/notebook-host contract unless separately authorized.",
+    "Correct the evidence-audit classification before relying on it as a docs gate; source31 still owns inherited documentation-scope/anchor repair. Full documentation and normal publication readiness gates remain outstanding."
+  ],
+  "limits": [
+    "No full WP3, source19/P1 diagnosis, whole physics suite, slow ghost-forest equivalence/timing, performance, distribution or publication approval.",
+    "Numerators remained factorized; no expansion-based graph parity helper, expectation recording or numerical-point/count/hash-only physics proof was used.",
+    "Exact fixture/provenance and boundary comparisons support this preparation, not a new general proof of the full subtraction amplitude or basis-independent full physics."
+  ],
+  "cleanup": {
+    "generated_schema_scratch_removed_after_exact_comparison": true,
+    "review_scripts_receipts_logs_retained_for_parent_review": "target/astra-staged22-26-r1-20261028",
+    "task_processes_remaining": false,
+    "other_workspaces_caches_frozen_refs_untouched": true
+  }
+}

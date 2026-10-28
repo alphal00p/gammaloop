@@ -1,0 +1,11 @@
+{
+  "note": "docs/architecture/generation-projector-flow-staged.typ",
+  "title": "Staged projector flow and DOT boundaries",
+  "one_level_one_title": true,
+  "registry_matches": true,
+  "rendered_leading_heading_matches": true,
+  "source_sha256": "09836702d2346fdd236d519afb476d68d4444db69a688fdc4626c16bfd663d7a",
+  "html_sha256": "1cf8950e42472447a04ecba222419c5bd58b3a8daf433cb05678a31bcaa1d061",
+  "plan_source_sha256": "bde27a1cba7a3ec24ada3b45d6608412daaeeb9c6827059af95fbfa257d5bfa4",
+  "plan_html_sha256": "20e4f32e737c0088ce0093dedca01e2b1e3f27358384a099a8b5cb9d80732bf6"
+}

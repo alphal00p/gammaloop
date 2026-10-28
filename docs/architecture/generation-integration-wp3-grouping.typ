@@ -170,12 +170,13 @@ is relaxed. The normal command is retained as
 Nix-derived worker budget without a two-thread CLI override and runs all15
 selected default tests with FEYNKIT_ORACLE_THREADS=1,8,32.
 
-Both approved input corrections, the exact native expected migration and the
-additional resource reconciliation require NEW combined Astra review. Earlier
+At that checkpoint, the input corrections, exact native expected migration and
+resource reconciliation required NEW combined Astra review. The independent review
+subsequently APPROVES `0a38ee4e` / code `35b444d0`. Earlier
 frame failures and full WP3, source30/31, physics, performance and distribution
 gates remain; no22–26 preparation is imported here.
 
-== Combined normal-run result awaiting review
+== Combined normal-run result at reviewed 0a38ee4e
 
 On candidate code `35b444d0`, normal `ci_gammaloop` run
 `c18e0610-341d-4060-a1f7-f687b16b4158` passes all15 selected tests in494.041s.
@@ -193,5 +194,8 @@ breakdown is not a claim that all mismatches are anchor failures or digests.
 No full documentation or Nix runtime derivation pass is claimed. Source30 and
 all remaining WP3 physics/distribution/performance gates stay pending.
 
-The fixed-case certificates and P2 input approvals do not approve this new
-expected-migration/resource candidate. Stop for NEW combined Astra review before22.
+The NEW independent combined review APPROVES `0a38ee4e` within the source19–21
+scope and releases source22. Its exact receipt is archived at
+`evidence/generation-integration/wp3/units22-26/combined19-21-review.json`.
+The source22–26 integration is a separate candidate requiring NEW independent
+Astra review before27; this approval does not close whole-WP3 gates.

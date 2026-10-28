@@ -1,0 +1,18 @@
+{
+  "historical_revision": "f2e32c44c986058ede1d7e585b9e2e4fefe1110c",
+  "historical_script_sha256": "e474724f38bcf29b7c427f002bc0087b4155776489a24bfea4701d4b9042dbe3",
+  "canonical_owner": "docs/architecture/evidence/generation-integration/wp3/oracle-registry-audit.py",
+  "canonical_owner_sha256": "d9f923d8806f559adacef0e633b1b4bd65d55a1cef991e90686a59ec63825641",
+  "controls": [
+    {
+      "source": "body without anchor",
+      "old_false_pass": true,
+      "new_status": "missing-or-ambiguous-anchor"
+    },
+    {
+      "source": "START START duplicate",
+      "old_false_pass": true,
+      "new_status": "missing-or-ambiguous-anchor"
+    }
+  ]
+}

@@ -217,5 +217,16 @@
       "base_actual": "3ff919fd9caa2b1f07fab2a89580722e8c5861bf",
       "inherited": true
     }
-  ]
+  ],
+  "integration_supersession": {
+    "scope": "Audit totals only; original commands/results remain historical at f2e32c44.",
+    "preparation_canonical_counts": {
+      "stale_digest": 23,
+      "anchor_failures": 4,
+      "inherited": 27
+    },
+    "current_report": "../generation-integration/wp3/units22-26/scope-audit.json",
+    "rule_owner": "../generation-integration/wp3/oracle-registry-audit.py",
+    "preparation_review": "../generation-integration/wp3/units22-26/staged22-26-preparation-review.json"
+  }
 }

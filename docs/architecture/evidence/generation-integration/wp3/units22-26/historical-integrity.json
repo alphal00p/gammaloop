@@ -1,0 +1,161 @@
+{
+  "original_manifest": "docs/architecture/evidence/generation-projector-flow-staged/integrity.json",
+  "explicit_frozen_revision": "f2e32c44c986058ede1d7e585b9e2e4fefe1110c",
+  "rows": [
+    {
+      "path": "docs/architecture/evidence/generation-projector-flow-staged/binary-identities.json",
+      "expected": "b37e7a319df8c13f07ad4f78e0ee41927ed47e8ec7c6582780821253cee54c65",
+      "actual_at_f2": "b37e7a319df8c13f07ad4f78e0ee41927ed47e8ec7c6582780821253cee54c65",
+      "matches_frozen": true,
+      "matches_current": true
+    },
+    {
+      "path": "docs/architecture/evidence/generation-projector-flow-staged/bubble-preservation.json",
+      "expected": "d3d6701b9a8a154f1e047c1e6cf91d25221867b44921c0d2295a772951239df8",
+      "actual_at_f2": "d3d6701b9a8a154f1e047c1e6cf91d25221867b44921c0d2295a772951239df8",
+      "matches_frozen": true,
+      "matches_current": true
+    },
+    {
+      "path": "docs/architecture/evidence/generation-projector-flow-staged/colour-negative.json",
+      "expected": "e65f54b60575faf05c9a7db1ebbb7ffe2b47b4079c5d66cf1c65f3a5c752699e",
+      "actual_at_f2": "e65f54b60575faf05c9a7db1ebbb7ffe2b47b4079c5d66cf1c65f3a5c752699e",
+      "matches_frozen": true,
+      "matches_current": true
+    },
+    {
+      "path": "docs/architecture/evidence/generation-projector-flow-staged/colour-ports.json",
+      "expected": "9247f58c70a7b57beb2868aaae935546b19dd7b55712a1bc58183e059b740903",
+      "actual_at_f2": "9247f58c70a7b57beb2868aaae935546b19dd7b55712a1bc58183e059b740903",
+      "matches_frozen": true,
+      "matches_current": true
+    },
+    {
+      "path": "docs/architecture/evidence/generation-projector-flow-staged/colour-ports.pl",
+      "expected": "06288b9b1186a3d3ea5921bf11d63a7e70ef3506b539df0a24f3aedf9cd19689",
+      "actual_at_f2": "06288b9b1186a3d3ea5921bf11d63a7e70ef3506b539df0a24f3aedf9cd19689",
+      "matches_frozen": true,
+      "matches_current": true
+    },
+    {
+      "path": "docs/architecture/evidence/generation-projector-flow-staged/docs-limit.json",
+      "expected": "d415d5f2e556ecf0b428173249187adc20bda02bfd93fc90fab03ab6fe9498ee",
+      "actual_at_f2": "d415d5f2e556ecf0b428173249187adc20bda02bfd93fc90fab03ab6fe9498ee",
+      "matches_frozen": true,
+      "matches_current": false
+    },
+    {
+      "path": "docs/architecture/evidence/generation-projector-flow-staged/first-runtime-producer.json",
+      "expected": "f13461b486d56c907c689a2a29a5fa0b97519fa94cad60ad1a10919844f80993",
+      "actual_at_f2": "f13461b486d56c907c689a2a29a5fa0b97519fa94cad60ad1a10919844f80993",
+      "matches_frozen": true,
+      "matches_current": true
+    },
+    {
+      "path": "docs/architecture/evidence/generation-projector-flow-staged/fixture-audit.py",
+      "expected": "3120d5e6c2c6d5bfa175ce42d36cfb6788b45717335a9f8854f0e8b3c5e279fb",
+      "actual_at_f2": "3120d5e6c2c6d5bfa175ce42d36cfb6788b45717335a9f8854f0e8b3c5e279fb",
+      "matches_frozen": true,
+      "matches_current": true
+    },
+    {
+      "path": "docs/architecture/evidence/generation-projector-flow-staged/fixture-reconciliation.json",
+      "expected": "24cdb92546e921774d6c1e9af96bfcefd67d45a0723354d247dd606ec150e188",
+      "actual_at_f2": "24cdb92546e921774d6c1e9af96bfcefd67d45a0723354d247dd606ec150e188",
+      "matches_frozen": true,
+      "matches_current": true
+    },
+    {
+      "path": "docs/architecture/evidence/generation-projector-flow-staged/generated-audit.py",
+      "expected": "d566e361a25ce8d01d963de30a18b50846fa25f559684927dcd3b7f405de3f92",
+      "actual_at_f2": "d566e361a25ce8d01d963de30a18b50846fa25f559684927dcd3b7f405de3f92",
+      "matches_frozen": true,
+      "matches_current": true
+    },
+    {
+      "path": "docs/architecture/evidence/generation-projector-flow-staged/generated-metadata.json",
+      "expected": "4d4c466006e7faea9a36f7537140c70b04a83a054c735479acd4126d6c33ba27",
+      "actual_at_f2": "4d4c466006e7faea9a36f7537140c70b04a83a054c735479acd4126d6c33ba27",
+      "matches_frozen": true,
+      "matches_current": true
+    },
+    {
+      "path": "docs/architecture/evidence/generation-projector-flow-staged/inherited-scopes.json",
+      "expected": "9b911b1e1a049ccb06f3748062412f63c4d6c73b0a43536566e09e737f56182b",
+      "actual_at_f2": "9b911b1e1a049ccb06f3748062412f63c4d6c73b0a43536566e09e737f56182b",
+      "matches_frozen": true,
+      "matches_current": false
+    },
+    {
+      "path": "docs/architecture/evidence/generation-projector-flow-staged/initial-api-producer.json",
+      "expected": "6551782739fceacc0805a3c0a1800c94d6b73fb304f145531756e37b8d34e7d8",
+      "actual_at_f2": "6551782739fceacc0805a3c0a1800c94d6b73fb304f145531756e37b8d34e7d8",
+      "matches_frozen": true,
+      "matches_current": true
+    },
+    {
+      "path": "docs/architecture/evidence/generation-projector-flow-staged/input-approvals.json",
+      "expected": "afb8b4e2c94878a1145f875ed55b35d7b6f62a6bef960032271d5795b4fc16e4",
+      "actual_at_f2": "afb8b4e2c94878a1145f875ed55b35d7b6f62a6bef960032271d5795b4fc16e4",
+      "matches_frozen": true,
+      "matches_current": true
+    },
+    {
+      "path": "docs/architecture/evidence/generation-projector-flow-staged/protected.json",
+      "expected": "f8eb209e6c710fbc43adbff7a9099237a4ca51b441ffa7fac0100b009a9ca2cf",
+      "actual_at_f2": "f8eb209e6c710fbc43adbff7a9099237a4ca51b441ffa7fac0100b009a9ca2cf",
+      "matches_frozen": true,
+      "matches_current": true
+    },
+    {
+      "path": "docs/architecture/evidence/generation-projector-flow-staged/rqft-audit.py",
+      "expected": "e3d5d05589d8d57d3f49654504123329251439a7b152f45a783526cbbaf0907c",
+      "actual_at_f2": "e3d5d05589d8d57d3f49654504123329251439a7b152f45a783526cbbaf0907c",
+      "matches_frozen": true,
+      "matches_current": true
+    },
+    {
+      "path": "docs/architecture/evidence/generation-projector-flow-staged/rqft-bases.json",
+      "expected": "554b0483b9ce92e0aa3424b8dcb110e7dcb406f3be01e4375a2b46d6bec488d3",
+      "actual_at_f2": "554b0483b9ce92e0aa3424b8dcb110e7dcb406f3be01e4375a2b46d6bec488d3",
+      "matches_frozen": true,
+      "matches_current": true
+    },
+    {
+      "path": "docs/architecture/evidence/generation-projector-flow-staged/rqft-chart-triage.json",
+      "expected": "0488c1cefa4a8c4dced29a953e11ef470fb29be2c2c394bf268292daa3eb5360",
+      "actual_at_f2": "0488c1cefa4a8c4dced29a953e11ef470fb29be2c2c394bf268292daa3eb5360",
+      "matches_frozen": true,
+      "matches_current": true
+    },
+    {
+      "path": "docs/architecture/evidence/generation-projector-flow-staged/scope-audit.py",
+      "expected": "e474724f38bcf29b7c427f002bc0087b4155776489a24bfea4701d4b9042dbe3",
+      "actual_at_f2": "e474724f38bcf29b7c427f002bc0087b4155776489a24bfea4701d4b9042dbe3",
+      "matches_frozen": true,
+      "matches_current": false
+    },
+    {
+      "path": "docs/architecture/evidence/generation-projector-flow-staged/test-inventory.json",
+      "expected": "712cdd2d61485c36a1da2907cfe5e8a48720897e0d551089db0d2841e25adbb7",
+      "actual_at_f2": "712cdd2d61485c36a1da2907cfe5e8a48720897e0d551089db0d2841e25adbb7",
+      "matches_frozen": true,
+      "matches_current": true
+    },
+    {
+      "path": "docs/architecture/evidence/generation-projector-flow-staged/title.json",
+      "expected": "0a925f086124f834107df0ea0f5410d0675161a533e661f7cdc0149dfd921ffd",
+      "actual_at_f2": "0a925f086124f834107df0ea0f5410d0675161a533e661f7cdc0149dfd921ffd",
+      "matches_frozen": true,
+      "matches_current": true
+    },
+    {
+      "path": "docs/architecture/evidence/generation-projector-flow-staged/unchanged-index-control.json",
+      "expected": "6898fe95a4f76398bb83288e73ae763455b50761f778afe0eb4b88ccc962283b",
+      "actual_at_f2": "6898fe95a4f76398bb83288e73ae763455b50761f778afe0eb4b88ccc962283b",
+      "matches_frozen": true,
+      "matches_current": true
+    }
+  ],
+  "semantics": "Imported integrity.json remains historical at f2, not a current working-tree hash claim. docs-limit/inherited-scopes now carry explicit supersession; scope-audit is the reviewed canonical correction. No historical manifest hashes rewritten."
+}

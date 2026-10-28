@@ -18,12 +18,59 @@ title = "Staged projector flow and DOT boundaries"
 summary = "Sources 22–26 reconciled onto the approved staged base, with factor-preserving projector and explicit DOT/LMB boundary controls."
 source = "docs/architecture/generation-projector-flow-staged.typ"
 kind = "Implementation receipt"
-status = "NEW independent Astra review required before ordered replay"
+status = "Ordered integration candidate; NEW independent Astra review required before27"
 lifecycle = "investigation"
 owner = "unassigned"
 products = ["gammaloop", "feynkit"]
 topics = ["generation", "parsing", "validation"]
 review_triggers = ["crates/gammaloop-api/src/commands/generate.rs", "crates/gammalooprs/src/numerator/aind.rs", "crates/gammalooprs/src/graph/parse/**", "crates/feynkit-graph/src/compact_dot.rs", "crates/feynkit-graph/src/dot.rs", "tests/resources/graphs/qqx_aaa_subtracted.dot", "tests/resources/graphs/uv_tests/rqft_ghG_3l.dot", "tests/tests/test_runs/test_integrated_uv_cts.rs"]
+
+[[section.note.scope]]
+path = "crates/feynkit-graph/src/compact_dot.rs"
+symbol = "from_compact_dot"
+anchor = "    pub fn from_compact_dot("
+end_anchor = "        let attributes = &parsed.global_data.statements;"
+digest = "26ba8e5f2daf3a874648e3b3fcf1004768aad4c9"
+
+[[section.note.scope]]
+path = "crates/gammalooprs/src/numerator/aind.rs"
+symbol = "Aind model and compact chart boundaries"
+anchor = "impl Aind {"
+end_anchor = "impl AbsInd for Aind {}"
+digest = "ccec241e109087f9cc811c8383e408b29b0d1654"
+
+[[section.note.scope]]
+path = "crates/gammaloop-api/src/commands/generate.rs"
+symbol = "parse_spec_with_model"
+anchor = "pub fn parse_spec_with_model("
+end_anchor = "fn build_grouping_option(args: &SpecArgs)"
+digest = "fc0db7043824aa9891ebe63120eaafc6780f7ab4"
+
+[[section.note.scope]]
+path = "tests/tests/test_runs/test_integrated_uv_cts.rs"
+symbol = "BubbleFlow"
+anchor = "enum BubbleFlow {"
+end_anchor = "fn bubble_local_inspect_target<T>"
+digest = "258dabf85c220b309bc208975dd0c9fa04062111"
+
+[[section.note.scope]]
+path = "crates/gammalooprs/src/graph/parse/tests.rs"
+symbol = "rqft_ghost_explicit_bases_preserve_signed_native_routing"
+anchor = "fn rqft_ghost_explicit_bases_preserve_signed_native_routing() {"
+end_anchor = "fn legacy_dot_names_the_explicit_conversion() {"
+digest = "c76aede2cef891292162665f8a9bebb1b31d18a0"
+
+[[section.note.scope]]
+path = "tests/resources/graphs/qqx_aaa_subtracted.dot"
+symbol = "nineteen variance-corrected graphs"
+anchor = "digraph qqx_aaa_pentagon {"
+digest = "f26103ab3a89d5992e4fe866b0538ab618136b97"
+
+[[section.note.scope]]
+path = "tests/resources/graphs/uv_tests/rqft_ghG_3l.dot"
+symbol = "seven explicit directed ghost bases"
+anchor = "digraph d1 {"
+digest = "61aacc598cee73c26bfecff47c17908ad9ff6484"
 
 [[section.note]]
 id = "generation-integration-wp3-grouping"
@@ -31,7 +78,7 @@ title = "Generation integration deterministic grouping"
 summary = "Source19-21 colour/oracle reconciliation, completed quotient and nonfinite policy, physical witnesses and exact validation limits."
 source = "docs/architecture/generation-integration-wp3-grouping.typ"
 kind = "Implementation record"
-status = "Candidate; NEW independent Astra review required before22"
+status = "Source19–21 scoped Astra approval at0a38; fullWP3 pending"
 lifecycle = "investigation"
 owner = "unassigned"
 reviewed_at = "2026-10-28"

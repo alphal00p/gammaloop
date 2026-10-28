@@ -1,0 +1,18 @@
+{
+  "old_approved": "735d599a665acbce1577b2c40d149c152f01543d",
+  "path": "tests/tests/test_runs/test_integrated_uv_cts.rs",
+  "scope": "entire file from INSPECT_POINT through final test",
+  "numeric_formulas_coordinates_precision_tolerances_assertions_byte_identical": true,
+  "only_staged_delta": "two existing d48 generation commands with explicit filters/grouping; imports use current staged organization",
+  "staged_commands": [
+    {
+      "old": "\"generate amp scalar_1 > scalar_1 [{1}] --allowed-vertex-interactions V_3_SCALAR_122 -p bubble -i scalar_bubble_below_thres\",",
+      "staged": "\"generate amp scalar_1 > scalar_1 [{1}] --allowed-vertex-interactions V_3_SCALAR_122 -p bubble -i scalar_bubble_below_thres --filter-selfenergies true --filter-snails true --filter-tadpoles true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling\","
+    },
+    {
+      "old": "\"generate amp scalar_1 > scalar_1 [{1}] --allowed-vertex-interactions V_3_SCALAR_122 -p bubble_no_integrated_UV -i scalar_bubble_below_thres\",",
+      "staged": "\"generate amp scalar_1 > scalar_1 [{1}] --allowed-vertex-interactions V_3_SCALAR_122 -p bubble_no_integrated_UV -i scalar_bubble_below_thres --filter-selfenergies true --filter-snails true --filter-tadpoles true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling\","
+    }
+  ],
+  "actual_sha256": "115f9d9e335a41190976155db60ecc30e1c1e1b7a5acffd0f32af7401b5379cb"
+}

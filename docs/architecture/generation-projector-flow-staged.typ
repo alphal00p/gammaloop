@@ -1,12 +1,15 @@
 = Staged projector flow and DOT boundaries
 
-This is independent preparation of manifest sources 22–26 on the approved combined
-staged base `d48f9d1aedc766eea5cb185ab6029d1f04462043`. It supersedes neither the
-historical preparation at `735d599a665acbce1577b2c40d149c152f01543d` nor its scoped
-Astra approval. The old bookmark, review, and raw evidence remain preserved.
-A NEW independent Astra review is required before ordered main replay. Sources
-19–21 must precede this lane; this preparation does not replay them or update the
-main replay tracker. Source 36 is excluded.
+The cumulative preparation `f2e32c44c986058ede1d7e585b9e2e4fefe1110c`
+(code `0d136557`) received independent Astra approval on the staged base `d48f9d1a`.
+It is now integrated in manifest order after approved source19–21 candidate
+`0a38ee4e`, in code `2eb0d9db13caed01cb589f869089bc0753ab429b`.
+A NEW independent Astra integration review is required before source27.
+The preparation receipts below retain their original producer identities and
+historical status; combined checks and source mappings are recorded in
+#link("evidence/generation-integration/wp3/units22-26/receipt.json")[the integration receipt].
+Neither the old `735d599a` preparation nor any frozen source reference is rewritten.
+Source36 and later sampling ports are excluded.
 
 == Physical factors and orientation
 
@@ -77,4 +80,16 @@ configured Cargo/shared cache and two jobs, without a target-directory override.
 NixCI stays disabled; the kernel, lockfiles, uv and notebook-host subset remain
 unchanged. Full heavy physics and benchmarks are outside this preparation. Existing
 staged documentation drift remains source31's work; no blind scope-hash refresh
-is part of this lane. There is no main integration, push, publication or PR.
+is part of this lane. There is no push, publication or PR. Ordered integration remains a review candidate.
+
+== Canonical scope audit correction
+
+The preparation's presence-only checker did not require a unique start anchor
+when no end was supplied. The corrected checker imports the existing oracle
+registry owner, requiring unique nonblank anchors, ordered ranges and exact Git
+blob hashes. At frozen preparation `f2e32c44`, there are 23 stale digest entries
+and four anchor failures, all inherited from `d48f9d1a`. Earlier numeric breakdowns
+in the preparation JSON are historical and superseded by the canonical report.
+The combined base `0a38ee4e` adds one inherited stale digest: current counts and
+origins, including the valid scopes owned by this note, are recorded separately.
+This is a scoped audit, not a full documentation pass or a source31 hash refresh.

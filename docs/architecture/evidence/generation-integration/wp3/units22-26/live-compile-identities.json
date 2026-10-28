@@ -1,0 +1,28 @@
+{
+  "captured_utc": "2026-10-28T05:11:16.524782+00:00",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-integration-plan",
+  "compiler_processes": [
+    {
+      "pid": 1937047,
+      "crate": "gammalooprs",
+      "cfg": [
+        "feature=\"default\""
+      ],
+      "test": true,
+      "argv_sha256": "f3e0f465dc1fc493ab73facddd18113fcb98ac3487378b4ee2ef156ac816f316",
+      "source_commit": "2eb0d9db13caed01cb589f869089bc0753ab429b"
+    },
+    {
+      "pid": 2183382,
+      "crate": "gammaloop_api",
+      "cfg": [
+        "feature=\"cli\"",
+        "feature=\"default\""
+      ],
+      "test": false,
+      "argv_sha256": "11aeb3e7af9ff2d8685154288f266dd8ec0f3d4cf16419e75561def8719897fc",
+      "source_commit": "2eb0d9db13caed01cb589f869089bc0753ab429b"
+    }
+  ],
+  "semantics": "Live compile-feature evidence; no completion or test-pass claim. No environment/license data retained."
+}

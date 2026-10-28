@@ -1,0 +1,510 @@
+{
+  "source_commit": "2eb0d9db13caed01cb589f869089bc0753ab429b",
+  "run_id": "390d54a3-7254-4168-b321-8861b552a883",
+  "profile": "ci_gammaloop",
+  "passed": 121,
+  "skipped_no_credit": 2134,
+  "exit_code": 0,
+  "seconds": 0.649,
+  "cases": [
+    {
+      "binary": "feynkit-graph",
+      "name": "numerator_interface::tests::identity_transport_preserves_open_ports_and_ranked_zero"
+    },
+    {
+      "binary": "feynkit-graph",
+      "name": "numerator_interface::tests::anonymous_owner_transport_rejects_ambiguous_factor_reordering"
+    },
+    {
+      "binary": "feynkit-graph",
+      "name": "numerator_interface::tests::canonical_inferred_layout_retains_zero_collision_history"
+    },
+    {
+      "binary": "feynkit-graph",
+      "name": "finalization::tests::generated_thresholds_project_fixed_and_loop_carrying_crossings"
+    },
+    {
+      "binary": "feynkit-graph",
+      "name": "compact_dot::tests::compact_dot_source_map_records_sewing_and_loop_ownership"
+    },
+    {
+      "binary": "feynkit-graph",
+      "name": "compact_dot::tests::compact_final_state_alternatives_preserve_the_union_of_physical_cuts"
+    },
+    {
+      "binary": "feynkit-graph",
+      "name": "finalization::tests::finalization_transports_hidden_scalar_history_in_every_tensor_destination"
+    },
+    {
+      "binary": "feynkit-graph",
+      "name": "finalization::tests::final_frame_matches_the_frame_resolved_on_the_graph"
+    },
+    {
+      "binary": "feynkit-graph",
+      "name": "finalization::tests::canonical_order_excludes_dummy_edges"
+    },
+    {
+      "binary": "feynkit-graph",
+      "name": "numerator_interface::tests::inferred_ports_are_independent_of_symbol_registration_order"
+    },
+    {
+      "binary": "feynkit-graph",
+      "name": "numerator_interface::tests::native_and_encoded_indices_cannot_capture_each_other"
+    },
+    {
+      "binary": "feynkit-graph",
+      "name": "numerator_interface::tests::native_transport_keeps_anonymous_and_interface_only_ports"
+    },
+    {
+      "binary": "feynkit-graph",
+      "name": "numerator_interface::tests::native_label_permutations_retain_zero_ports_and_reject_collisions"
+    },
+    {
+      "binary": "feynkit-graph",
+      "name": "numerator_interface::tests::native_transport_keeps_internal_contractions_and_rejects_capture"
+    },
+    {
+      "binary": "feynkit-graph",
+      "name": "numerator_interface::tests::native_transport_checks_callback_port_loss_without_replaying_normalization"
+    },
+    {
+      "binary": "feynkit-graph",
+      "name": "numerator_interface::tests::native_owner_transport_preserves_scopes_and_declared_logical_order"
+    },
+    {
+      "binary": "feynkit-graph",
+      "name": "numerator_interface::tests::reversible_labels_remain_supported_and_can_transport_to_native_indices"
+    },
+    {
+      "binary": "feynkit-graph",
+      "name": "numerator_interface::tests::scoped_encoded_labels_transport_their_inner_owner_and_zero_ports"
+    },
+    {
+      "binary": "feynkit-graph",
+      "name": "numerator_interface::tests::transport_preserves_canonical_declarations_and_inferred_axis_mapping"
+    },
+    {
+      "binary": "feynkit-graph",
+      "name": "numerator_interface::tests::source_codec_preserves_anonymous_axes_and_ranked_zero"
+    },
+    {
+      "binary": "feynkit-graph",
+      "name": "finalization::tests::generated_graphs_equal_their_import_reconstruction"
+    },
+    {
+      "binary": "feynkit-graph",
+      "name": "finalization::tests::threshold_candidates_without_cuts_reach_the_final_frame"
+    },
+    {
+      "binary": "feynkit-graph",
+      "name": "finalization::tests::explicit_loop_basis_skips_canonical_order_collection"
+    },
+    {
+      "binary": "feynkit-graph",
+      "name": "finalization::tests::final_frame_relabels_edges_and_moves_cut_half_edges_only_when_needed"
+    },
+    {
+      "binary": "feynkit-graph",
+      "name": "numerator_interface::tests::zero_transport_checks_hidden_indices_before_certifying_identity"
+    },
+    {
+      "binary": "feynkit-graph",
+      "name": "finalization::tests::finalization_translates_fragments_in_the_final_frame"
+    },
+    {
+      "binary": "feynkit-graph",
+      "name": "finalization::tests::generated_diagrams_reject_other_dangling_edges_legs_and_restored_frames"
+    },
+    {
+      "binary": "feynkit-graph",
+      "name": "finalization::tests::generated_build_rejects_unknown_model_references_without_demanding_id"
+    },
+    {
+      "binary": "gammaloop-api",
+      "name": "commands::generate::tests::all_cli_requests_require_loops_and_reject_the_wrong_domain"
+    },
+    {
+      "binary": "gammaloop-api",
+      "name": "commands::generate::tests::amplitude_left_right_shorthand_respects_explicit_side_options"
+    },
+    {
+      "binary": "gammaloop-api",
+      "name": "commands::generate::tests::allowed_vertex_interactions_are_added_to_generation_filters"
+    },
+    {
+      "binary": "gammaloop-api",
+      "name": "commands::generate::tests::explicit_empty_allow_lists_and_veto_qualifiers_are_preserved"
+    },
+    {
+      "binary": "gammaloop-api",
+      "name": "commands::generate::tests::fermion_loop_filter_is_added_in_both_generation_modes"
+    },
+    {
+      "binary": "gammaloop-api",
+      "name": "commands::generate::tests::cp_symmetrization_option_defaults_false_and_roundtrips"
+    },
+    {
+      "binary": "gammaloop-api",
+      "name": "commands::generate::tests::parse_generate_keep_sources_after_subcommand"
+    },
+    {
+      "binary": "gammaloop-api",
+      "name": "commands::generate::tests::generation_summary_includes_separator_and_total_row"
+    },
+    {
+      "binary": "gammaloop-api",
+      "name": "commands::generate::tests::missing_arrow_detected"
+    },
+    {
+      "binary": "gammaloop-api",
+      "name": "commands::generate::tests::remove_compiled_cpp_sources_only_removes_sources_with_matching_libraries"
+    },
+    {
+      "binary": "gammaloop-api",
+      "name": "commands::generate::tests::rejects_malformed_tokens"
+    },
+    {
+      "binary": "gammaloop-api",
+      "name": "commands::generate::tests::amp_order_constraints"
+    },
+    {
+      "binary": "gammaloop-api",
+      "name": "commands::generate::tests::final_sets_and_orders_and_loops_cross_section"
+    },
+    {
+      "binary": "gammaloop-api",
+      "name": "commands::generate::tests::cross_sections_default_to_unsymmetrized_external_states"
+    },
+    {
+      "binary": "gammaloop-api",
+      "name": "commands::generate::tests::amplitude_generation_type_is_set"
+    },
+    {
+      "binary": "gammaloop-api",
+      "name": "commands::generate::tests::basic_process_list_to"
+    },
+    {
+      "binary": "gammaloop-api",
+      "name": "commands::generate::tests::perturbative_block_all_forms"
+    },
+    {
+      "binary": "gammaloop-api",
+      "name": "commands::generate::tests::particle_veto_resolution_cross_section"
+    },
+    {
+      "binary": "gammaloop-api",
+      "name": "commands::generate::tests::particle_inclusion_resolution_cross_section"
+    },
+    {
+      "binary": "gammaloop-api",
+      "name": "commands::generate::tests::amplitude_case_insensitive_and_anti_in_veto"
+    },
+    {
+      "binary": "gammaloop-api",
+      "name": "commands::generate::tests::amplitude_with_powered_xs_constraints_and_only"
+    },
+    {
+      "binary": "gammaloop-api",
+      "name": "commands::generate::tests::empty_sets_allowed"
+    },
+    {
+      "binary": "gammaloop-api",
+      "name": "commands::generate::tests::perturbative_block_shorthand"
+    },
+    {
+      "binary": "gammaloop-api",
+      "name": "commands::generate::tests::alternatives_in_final_states"
+    },
+    {
+      "binary": "gammaloop-api",
+      "name": "commands::generate::tests::basic_process_list_arrow"
+    },
+    {
+      "binary": "gammaloop-api",
+      "name": "commands::generate::tests::zero_color_filter_is_independent_of_grouping_and_forwarded_in_both_modes"
+    },
+    {
+      "binary": "gammaloop-api",
+      "name": "commands::generate::tests::thermal_xs_generation_is_rejected_before_changing_processes"
+    },
+    {
+      "binary": "gammaloop-api",
+      "name": "commands::generate::tests::repr_str_with_both_loop_counts_and_sorted_orders"
+    },
+    {
+      "binary": "gammaloop-api",
+      "name": "commands::generate::tests::topology_card_projector_crosses_the_current_cli_boundary"
+    },
+    {
+      "binary": "gammaloop-api",
+      "name": "commands::generate::tests::repr_str_canonical_with_amp_xs_veto_loops_orders"
+    },
+    {
+      "binary": "gammaloop-api",
+      "name": "commands::generate::tests::xs_order_constraints_powered"
+    },
+    {
+      "binary": "gammaloop-api",
+      "name": "commands::generate::tests::vacuum_defaults_and_filters_xs"
+    },
+    {
+      "binary": "gammaloop-api",
+      "name": "commands::generate::tests::shell_name_long_with_sets_veto_orders_pert_and_xs"
+    },
+    {
+      "binary": "gammaloop-api",
+      "name": "commands::generate::tests::veto_and_only"
+    },
+    {
+      "binary": "gammaloop-api",
+      "name": "commands::generate::tests::shell_name_short_canonical_and_sanitization"
+    },
+    {
+      "binary": "gammaloop-api",
+      "name": "commands::generate::tests::supplied_projector_keeps_model_hedge_slots_and_rejects_index_zero"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::string_utils::tests::dot_values_escape_quoted_string_content"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::string_utils::tests::literal_multiline_dot_string_is_preserved"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::string_utils::tests::dot_statement_value_survives_dot_round_trip"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::string_utils::tests::dot_statements_preserve_unicode_and_embedded_language_escapes"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::serialization::tests::full_numerator_is_a_spenso_aware_typst_fragment"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::from_dot::tests::native_vertex_fields_need_the_model_fingerprint"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::from_dot::tests::amplitude_external_momenta_follow_the_dangling_half_edges"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::from_dot::tests::cross_section_external_momenta_follow_the_cut_tags"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::serialization::tests::generated_threshold_counterterms_are_exported_only_when_requested"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::serialization::tests::explicit_threshold_counterterms_round_trip_embedded_strings"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::tests::compact_model_import_preserves_metadata_in_the_finalized_frame"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::tests::equal_external_momenta_without_explicit_markers_remain_distinct_legs"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::tests::explicitly_marked_split_forward_endpoints_are_one_connection"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::tests::edge_mass_attribute_drives_evaluated_edge_mass"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::tests::dod_rescales_only_internal_edge_qs"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::tests::compact_qcd_import_instantiates_rules_and_retains_explicit_fragments"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::tests::compact_sewn_projector_uses_the_source_half_edge_chart"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::from_dot::tests::amplitudes_may_leave_only_external_colour_open"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::from_dot::tests::plain_dot_takes_numerators_and_projector_from_the_model"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::tests::compact_gamma_loop_indices_bind_to_native_rule_ports"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::tests::legacy_internal_order_key_recovers_pre_normalized_fermion_flow"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::tests::full_numerator_requires_one_q3_structure_argument"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::tests::gammaloop_attributes_round_trip_through_dot_export"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::tests::graph_set_import_enforces_the_q3_convention_without_tensor_closure"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::tests::global_tensor_json_and_dot_roundtrips_preserve_zero_ports_and_logical_order"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::tests::initial_state_cut_permutation_preserves_specified_loop_edges"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::tests::hedge_payload_does_not_require_dod"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::tests::missing_vertex_dod_is_autogenerated"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::tests::legacy_dot_names_the_explicit_conversion"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::tests::numerator_interface_source_roundtrip_keeps_two_identical_open_axes"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::tests::native_subgraph_routing_matches_runtime_for_empty_and_disconnected_selections"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::tests::native_runtime_conversion_preserves_dangling_dummy_product_acceptance"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::tests::multiple_undirected_forward_connections_survive_split_round_trip"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::tests::finalized_reference::finalized_graph_matches_gammaloop_reference"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::tests::native_runtime_conversion_rejects_changed_frame_before_cut_indexing"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::tests::parse_and_build_edgevec"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::tests::open_fundamental_color_requires_an_explicit_projector"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::tests::parse_triangle_lmb"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::tests::native_self_energy_tensor_ports_match_runtime_component_interfaces"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::tests::runtime_interface_validation_preserves_native_source_errors"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::tests::runtime_graph_rejects_anonymous_ports_without_assigning_indices"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::tests::test_group_parsing_1"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::tests::runtime_and_canonical_dot_preserve_ranked_zero_fragments"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::tests::test_group_parsing_3"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::tests::test_group_parsing_2"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::tests::test_loop_momentum_basis"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::tests::vacuum_loop_edges_must_leave_a_spanning_forest"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::tests::test_group_parsing_4"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::tests::test_group_parsing_5"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "numerator::aind::tests::compact_slot_transport_is_distinct_from_model_projector_validation"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::tests::native_qqx_aaa_projectors_close_actual_runtime_ports"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "numerator::aind::tests::parses_indexed_gammaloop_tensors_without_compact_rewrite"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "numerator::aind::tests::projector_boundary_preserves_native_zero_serialization"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "numerator::aind::tests::test_structure_parsing"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::tests::vacuum_tadpoles_keep_all_loop_generators_without_external_legs"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "numerator::aind::tests::parses_gammaloop_owned_aind_symbols"
+    },
+    {
+      "binary": "gammalooprs",
+      "name": "graph::parse::tests::rqft_ghost_explicit_bases_preserve_signed_native_routing"
+    }
+  ],
+  "required_controls": {
+    "native_qqx_aaa_projectors_close_actual_runtime_ports": true,
+    "compact_sewn_projector_uses_the_source_half_edge_chart": true,
+    "rqft_ghost_explicit_bases_preserve_signed_native_routing": true,
+    "legacy_dot_names_the_explicit_conversion": true,
+    "finalized_graph_matches_gammaloop_reference": true,
+    "finalization_transports_hidden_scalar_history_in_every_tensor_destination": true,
+    "zero_transport_checks_hidden_indices_before_certifying_identity": true,
+    "projector_boundary_preserves_native_zero_serialization": true,
+    "topology_card_projector_crosses_the_current_cli_boundary": true
+  },
+  "junit": "target/wp3-units22-26/combined-owner-junit.xml",
+  "junit_sha256": "afda8aa488dc0aab71825693c33580fb7aa13718905166c4fb146c6e68085dae",
+  "log": "target/wp3-units22-26/combined-owner-tests.log",
+  "log_sha256": "c6b646b6e860dece40a582c86ea802b68bada19252c3c6389cf93ac82414d7f7"
+}

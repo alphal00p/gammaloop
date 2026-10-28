@@ -256,12 +256,23 @@ own workspace. Bounded: one regression, one bisect, one written verdict.
   Cumulative P2 input `ea0e78bc` / code `fa33dec7` is also APPROVED and integrated.
   Candidate code `35b444d0` adds a bounded use of the existing two-slot resource
   group for the actual Nix16-worker/240-second policy. Combined normal15-test
-  execution passes under the Nix-derived16-worker/two-slot policy; NEW independent
-  Astra review is required before22. No whole
+  execution passes under the Nix-derived16-worker/two-slot policy. Independent Astra
+  review APPROVES `0a38ee4e` / code `35b444d0`, releasing the source22 boundary. No whole
   WP3/physics/performance/distribution approval is claimed. The three older
   frame expectations and source30/31 remain untouched. Prepared22–26 `f2e32c44`
-  is independently approved but separate; later integration must correct its
-  inherited audit classification with canonical scope rules.
+  is independently approved and now integrated as a bounded candidate. The canonical
+  scope checker corrects its inherited audit classification without refreshing digests.
+
+- #strong[Ordered source22–26 candidate 2026-10-28:]
+  cumulative staged preparation `f2e32c44` is reconciled after approved `0a38ee4e`.
+  Physical bubble energy flows, eight colour-variance corrections, literal one-based
+  model projectors, explicit native/legacy DOT admission and seven signed ghost
+  loop bases retain their reviewed owners and assertions. Code `2eb0d9db` leaves
+  the approved grouping/oracle/resource and A1/B3 transport owners byte-identical.
+  Combined validation is recorded in
+  `evidence/generation-integration/wp3/units22-26/receipt.json`.
+  NEW independent Astra review is required before27. Source30 closure, source31
+  global scope reconciliation, full rebuilt-tip physics and distribution gates remain open.
 
 - `jj duplicate` the v4 chain (`kursouxx::kpslpwqz`) onto the WP2 base; do not
   rebase in place, so the 19 live workspaces on older lines stay valid.

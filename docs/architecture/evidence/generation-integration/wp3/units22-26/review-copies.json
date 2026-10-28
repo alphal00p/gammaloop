@@ -1,0 +1,12 @@
+[
+  {
+    "path": "docs/architecture/evidence/generation-integration/wp3/units22-26/combined19-21-review.json",
+    "source": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-combined19-21-review-ZX4duVm5/review.json",
+    "sha256": "fca374e06b3950f5876c6d39181cc137c4f14681f7f68e47491c59d9473e89ef"
+  },
+  {
+    "path": "docs/architecture/evidence/generation-integration/wp3/units22-26/staged22-26-preparation-review.json",
+    "source": "/shared/lcnbr/dev/gammaloop/generation-projector-flow/target/astra-staged22-26-r1-20261028/review.json",
+    "sha256": "1a99162b17aeeb5c5d64870cd879db91b1031f25f4e3c5ce180704f584cb89b2"
+  }
+]
