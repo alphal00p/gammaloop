@@ -49,8 +49,13 @@
 
   # Cargo path patches are dependencies, not workspace members. Preserve their
   # manifests and implementation in every filtered dependency/build context.
-  localCargoPatchDirs = lib.filter (name: builtins.pathExists (workspaceRoot + "/vendor/${name}"))
-    ["clarabel" "dot-parser"];
+  workspaceCargoPatches =
+    (builtins.fromTOML (builtins.readFile (workspaceRoot + "/Cargo.toml"))).patch.crates-io or { };
+  localCargoPatchDirs = lib.filter (
+    name:
+    (workspaceCargoPatches.${name}.path or null) == "vendor/${name}"
+    && builtins.pathExists (workspaceRoot + "/vendor/${name}")
+  ) (builtins.attrNames workspaceCargoPatches);
   localCargoPatchSources = lib.fileset.unions (
     map (name: workspaceRoot + "/vendor/${name}") localCargoPatchDirs
   );
