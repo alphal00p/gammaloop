@@ -692,7 +692,10 @@ anchor = "pub struct VakintWrapper {"
 # Reviewed 2026-10-27: save_cache keeps its existing flat Python keyword
 # signature; the same narrow argument-count annotation used by neighboring
 # wrappers changes no dispatch, resource or persistence behavior.
-digest = "9527c453ea94e223843e852622461aae87f9f077"
+# Reviewed 2026-10-28: load_cache accepts an optional native CacheFileIdentity.
+# Direct forwarding preserves existing transport grants, defaults and official
+# loader authentication; existing callers retain their original behavior.
+digest = "d4076aa37d9fb94882754e83417353773e315744"
 
 [[section.note.scope]]
 path = "crates/vakint/src/symbolica_community_module/numerical.rs"
