@@ -301,14 +301,7 @@ impl CostObservation {
             }
             Event::NodeCompleted(source) => {
                 let work = event.current.ok_or("completion omitted current work")?;
-                self.complete(
-                    dispatch_id,
-                    work,
-                    source,
-                    event.sequence,
-                    now,
-                    counters,
-                )?;
+                self.complete(dispatch_id, work, source, event.sequence, now, counters)?;
             }
             Event::CoreFinished => self.end_dispatch(dispatch_id, event, now, counters)?,
             _ => {}
