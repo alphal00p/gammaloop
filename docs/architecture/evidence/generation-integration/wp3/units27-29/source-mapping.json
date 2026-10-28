@@ -1,0 +1,34 @@
+[
+  {
+    "order": 27,
+    "source": "d17f3548821f76250e49056e6b684257e49d92ec",
+    "disposition": "cumulative approved production and controls retained; native staged graph/parser fixtures",
+    "new_commit": "c2cce079a92c66fd1435a2ad42d86c17e16353be",
+    "new_change": "kpuovnvyssoystyzvultvlkqsmxxwomt",
+    "prepared_commit": "a205202b17b1c915190e17aa615cb4fe76391102"
+  },
+  {
+    "order": 28,
+    "source": "2ec30ce37196011fbeb21af2822d655146b45a0f",
+    "disposition": "exact numeric-domain zero affine filtering; small nonzero precision control retained",
+    "new_commit": "c2cce079a92c66fd1435a2ad42d86c17e16353be",
+    "new_change": "kpuovnvyssoystyzvultvlkqsmxxwomt",
+    "prepared_commit": "a205202b17b1c915190e17aa615cb4fe76391102"
+  },
+  {
+    "order": 29,
+    "source": "dd3640cb8171fbdc455888e3b8fcf2de92514a32",
+    "disposition": "specifically approved fixed-seed CoolQM 3-sigma gate retained",
+    "new_commit": "c2cce079a92c66fd1435a2ad42d86c17e16353be",
+    "new_change": "kpuovnvyssoystyzvultvlkqsmxxwomt",
+    "prepared_commit": "a205202b17b1c915190e17aa615cb4fe76391102"
+  },
+  {
+    "source": "c82916079b5cc643151e0213499ca9875739a4e3",
+    "disposition": "additive P3 graph-derived mixed two-loop regression retained",
+    "new_commit": "c2cce079a92c66fd1435a2ad42d86c17e16353be",
+    "new_change": "kpuovnvyssoystyzvultvlkqsmxxwomt",
+    "prepared_commit": "a205202b17b1c915190e17aa615cb4fe76391102",
+    "role": "Additive P3 regression; not an additional row among the46 source inputs"
+  }
+]

@@ -1,0 +1,1166 @@
+{
+  "code_commit": "c2cce079a92c66fd1435a2ad42d86c17e16353be",
+  "unique_Rust_tests_passed": 279,
+  "runs": [
+    {
+      "name": "sampling",
+      "cases": [
+        {
+          "binary": "gammalooprs",
+          "name": "cff::generation::tests::two_loop_cff_matches_signed_theta_contour"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "cff::generation::tests::direct_cff_matches_signed_bubble_and_contracted_unit_contours"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "cff::tests::exact_two_loop_source_matches_the_signed_theta_contour"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "cff::tests::exact_child_signed_maps_keep_owner_invariant_production_hosts"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "cff::tests::ordinary_terminal_sources_match_signed_contours"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::context::tests::canonical_lu_host_materializes_directly_without_new_root_history"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::context::tests::classified_sampling_surface_preserves_normalized_fallback_and_validates_margins"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::evaluator::tests::compiled_active_columns_share_a_finite_scalar_program"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "graph::parse::tests::rqft_ghost_explicit_bases_preserve_signed_native_routing"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::evaluator::tests::derivative_request_is_rejected_for_eager_only_evaluator"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::evaluator::tests::dual_evaluation_returns_symbolica_partials"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::evaluator::tests::eager_evaluation_returns_all_outputs"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::evaluator::tests::fixed256_sampling_eager_and_duals_share_warmed_rational_programs"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::evaluator::tests::native_dual_seeds_resolve_sub_f64_changes"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::evaluator::tests::native_eager_duals_and_determinants_preserve_values_outside_f64"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::evaluator::tests::real_jacobian_holds_prepared_parameters_fixed_in_native_precision"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::evaluator::tests::real_jacobian_keeps_singular_prepared_subexpressions_out_of_active_columns"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::evaluator::tests::real_jacobian_rejects_nonsquare_maps_and_complex_outputs"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::evaluator::tests::sampling_lu_h_profile_rejects_unsupported_physical_and_proposal_settings"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::evaluator::tests::real_jacobian_uses_symbolica_duals_and_signed_determinant"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::joint::tests::joint_sampling_certificate_encloses_unequal_mass_nonorthogonal_geometry"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::joint::tests::joint_sampling_certificate_refines_before_changing_the_native_radius"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::joint::tests::joint_sampling_active_program_matches_full_dual_at_arb_precision"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::joint::tests::joint_sampling_declined_domain_reuses_normalized_ordinary_map"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::joint::tests::joint_sampling_exact_normal_origin_is_an_error_not_outside_support"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::joint::tests::joint_sampling_full_circle_eager_jacobian_matches_cartesian_difference"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::joint::tests::joint_sampling_native_bindings_keep_sub_double_geometry_and_worker_buffers"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::joint::tests::joint_sampling_prepared_certificate_reuses_only_fixed_geometry"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::joint::tests::joint_sampling_support_refines_separated_native_bits_without_moving_the_boundary"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::absent_surface_fallback_has_full_radial_support"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::joint::tests::joint_sampling_policy_rejects_another_valid_radius_and_ordinary_branch"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::affine_map_preserves_small_nonzero_coefficients_at_active_precision"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::affine_map_rejects_malformed_and_singular_matrices"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::affine_map_round_trips_with_translation_and_exact_determinant"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::compositions_report_empty_and_dimension_errors"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::conditional_affine_embedding_distinguishes_numeric_and_structural_context_failure"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::conditional_affine_embedding_uses_native_prerequisites_and_supplied_inverse_point"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::context_center_surface_is_full_support_after_full_then_block"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::embedded_product_permutates_master_frame_without_changing_jacobian"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::generic_acceptance_harness_checks_embedded_partial_surface_map"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::generic_acceptance_harness_checks_normalized_surface_map"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::implicit_fiber_prepares_once_and_preserves_certified_fallbacks"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::embedded_worker_clone_owns_nested_eager_buffers"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::implicit_surface_inverse_preserves_resolvable_tail_and_angular_coordinates"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::implicit_surface_map_accepts_conditional_complement_context"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::implicit_surface_map_has_normalized_absent_fibre_fallback"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::implicit_surface_map_rejects_invalid_context_center"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::implicit_surface_map_reports_unbracketed_root_instead_of_absent_fibre"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::implicit_surface_map_resolves_context_dependent_center_and_root"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::implicit_surface_map_tracks_directional_root_and_exact_contract"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::implicit_surface_solver_certifies_residual_after_iteration_or_bracket_stop"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::inverse_density_rejects_composed_jacobian_range_failures"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::inverse_rounded_endpoints_are_retryable_but_original_endpoints_are_not"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::lu_h_proposal_radius_stops_at_declared_accuracy_without_changing_density"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::lu_h_radial_profile_has_native_exact_density_and_inverse"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::lu_h_radial_profile_jacobian_matches_full_finite_difference"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::lu_h_radial_profile_rejects_incompatible_derivative_columns"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::lu_h_radial_profile_uses_root_independent_broad_and_absent_laws"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::native_composition_rejects_combined_overflow_and_recovers"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::ordinary_kernel_preserves_finite_tails_at_native_rescue_precision"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::ordinary_kernel_reports_dimension_and_support_errors"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::ordinary_kernel_round_trips_spherical_coordinates"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::ordinary_kernel_supports_cartesian_shell_and_rejects_non_bijective_map"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::parses_host_and_block_descriptors_with_symbolica"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::ordinary_sampling_map_pushes_forward_a_normalized_gaussian"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::preserves_parent_lmb_order_but_canonicalizes_edge_sets"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::parses_nested_definition_and_round_trips"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::product_composition_multiplies_block_jacobians_and_round_trips"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::radial_profiles_include_the_outer_branch_interval_in_the_jacobian"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::rejects_bad_arities_and_duplicate_edges"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::radial_sampling_map_pushes_forward_a_normalized_gaussian"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::sampling_maps_reject_unrepresentable_tails_without_clipping"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::rejects_unknown_root_and_invalid_nested_map"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::surface_radial_map_rejects_invalid_geometry"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::surface_radial_map_round_trips_on_both_sides_of_regular_surface"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::surface_radial_map_uses_correct_sphere_measure_in_two_and_three_dimensions"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::surface_radial_profiles_focus_both_signed_normal_limits"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::surface_radial_profiles_preserve_gaussian_normalization_and_second_moment"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::surface_radial_profiles_preserve_tiny_native_coordinates"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::surface_radial_profiles_reject_rounded_threshold_seams"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::surface_radial_profiles_match_eager_branch_derivatives"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::then_composition_accepts_outer_context_for_forward_and_inverse"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::then_composition_passes_previous_outputs_as_context"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::maps::tests::then_composition_routes_complement_context_into_implicit_surface_map"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::partition::tests::all_zero_support_is_rejected"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::partition::tests::borrowed_partition_validates_structure_before_evaluating_scores"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::partition::tests::log_sum_exp_requires_native_precision_for_supported_tiny_weights"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::partition::tests::map_density_weights_are_positive_and_sum_to_one"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::partition::tests::cloned_symbolica_scores_have_independent_worker_buffers"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::partition::tests::non_positive_scores_are_rejected"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::partition::tests::native_symbolica_proxy_recovers_underflow_without_dropping_support"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::partition::tests::proxy_mode_is_explicit_and_does_not_fallback"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::partition::tests::symbolica_positive_proxy_is_compiled_once_and_partitioned"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::partition::tests::symbolica_positive_proxy_rejects_non_positive_values"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::partition::tests::unsupported_channels_are_allowed_if_another_channel_has_support"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::reference::tests::centered_gaussian_is_normalized_at_the_origin"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::reference::tests::gaussian_rejects_wrong_loop_dimension"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::reference::tests::native_reference_moments_reject_loss_at_reporting_boundary"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::reference::tests::reference_channel_moments_are_scaled_and_summed_before_statistical_squaring"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::reference::tests::reference_descriptor_validates_serde_and_normalizes_native_moment_before_reporting"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::reference::tests::reference_report_averages_weighted_draws_once_and_keeps_failed_draws"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::reference::tests::reference_report_records_gaussian_target_moment"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::additive_resolver_keeps_default_and_graph_entries"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::bridge_acceptance_report_integrates_absent_surface_and_lmb_catalogue"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::bridge_acceptance_report_integrates_every_canonical_channel"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::bridge_certifies_selected_inverse_density_in_both_partition_modes"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::bridge_acceptance_report_supports_a_single_canonical_channel"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::bridge_pushes_selected_channel_and_partitions_the_raw_frame"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::bridge_rejects_partial_or_mismatched_channels"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::catalogue_accepts_prepared_exact_implicit_surface_map"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::canonical_lmb_bridge_integrates_normalized_gaussian_with_map_partition"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::catalogue_compiles_lmb_and_surface_with_master_embedding"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::catalogue_compiles_then_with_context_surface_and_bridges_full_composition"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::catalogue_embeds_partial_surface_with_complement_lmb"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::catalogue_expands_presets_and_keeps_named_diagnostics"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::catalogue_keeps_one_id_axis_when_named_channel_precedes_lmb"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::catalogue_rejects_non_parent_lmb_until_affine_routing_is_compiled"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::catalogue_wraps_non_parent_lmb_in_supplied_affine_frame"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::composite_map_with_overlapping_blocks_is_rejected_with_context_diagnostic"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::default_is_used_when_graph_has_no_override"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::distinct_physical_surfaces_share_one_active_subspace_without_overwrite"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::explicit_lmb_catalogue_preserves_mixed_order_and_deduplication"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::explicit_lmb_catalogue_requires_one_exact_ordered_match"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::conditional_joint_bridge_uses_foreign_context_and_affine_inverse_support"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::explicit_lmb_channels_preserve_generated_dispatch_precision_and_partition"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::fixed_quad_source_classifies_complete_catalogue_without_names"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::geometry_registry_keeps_distinct_prerequisite_layouts_and_foreign_inverses"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::explicit_lmb_selectors_parse_and_round_trip_ordered_symbolica_expressions"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::graph_entry_replaces_default_and_deduplicates_entries"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::implicit_default_preserves_empty_and_named_graph_selections"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::inspection_reports_resolved_selectors_and_canonical_rows"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::joint_catalogue_programs_and_registry_preserve_qualified_pair_identity"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::joint_density_partition_bounds_inverse_radius_from_either_channel"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::joint_targets_resolve_as_one_ordered_three_dimensional_block"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::lmb_channels_sample_parallel_bundles_in_one_direction"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::missing_named_definition_reports_graph_and_available_names"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::named_channel_requires_explicit_parent_lmb"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::named_non_parent_lmb_uses_edge_keyed_affine_frame"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::named_proxy_is_eagerly_compiled_and_uses_complete_frame_coordinates"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::named_surface_requires_explicit_active_subspace"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::native_bridge_preserves_composed_points_and_foreign_inverse_densities"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::native_lu_host_reuses_exact_sources_without_replacing_selected_authority"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::native_lu_profile_binding_preserves_retryable_error_through_catalogue"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::optimized_and_surface_presets_retain_full_domain_and_elementary_soft_coverage"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::optimized_preset_falls_back_to_one_full_domain_lmb_when_heuristic_is_empty"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::ordinary_lmb_rejects_cut_metadata_and_meaningless_host_qualifiers"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::ose_override_mixes_with_surface_density_and_preserves_units_and_normalization"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::ose_partition_matches_energy_products_with_affine_shifts_and_alpha"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::phase_space_channel_requires_registered_physical_host"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::product_rejects_overlapping_child_blocks_with_parent_diagnostic"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::product_surface_and_complement_compile_as_one_master_frame_channel"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::replacement_variant_ignores_defaults"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::resolved_host_blocks_preserve_exact_prerequisite_order_and_reject_wrapped_nesting"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::runtime_context_partition_uses_each_canonical_channel_context"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::selected_sampling_factor_rejects_underflow_before_physical_cancellation"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::singular_primitives_fail_with_actionable_exact_density_diagnostics"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::singularity_proxy_mode_rejects_missing_channel_metadata"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::singularity_proxy_reports_symbolica_parse_and_positivity_errors"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::standalone_cut_charts_share_the_canonical_partition_without_side_context"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::surface_compilation_requires_prepared_geometry"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::surface_preset_appends_master_frame_surface_candidates"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::surface_preset_has_optimized_lmb_fallback"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::unknown_auto_preset_is_rejected"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::tests::absolute_channel_instability_cannot_hide_behind_signed_cancellation"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::tests::canonical_lmb_density_partition_matches_inverse_jacobians"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::tests::graph_derived_two_loop_reflections_preserve_local_odd_numerator_and_partition"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::tests::lmb_sampling_detects_only_oppositely_stored_parallel_edges"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrate::render_ratatui::tests::absolute_overview_switches_history_and_hides_signed_targets"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "numerator::symbolica_ext::scalar_pole_tests::exact_coefficients_preserve_signed_powers_and_family_arguments"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "numerator::symbolica_ext::tests::compact_factors_keep_signed_integer_and_fractional_power_domains_distinct"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "numerator::symbolica_ext::tests::exact_scalar_sum_keys_preserve_signed_powers_and_closed_dummy_scopes"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "processes::cross_section::tests::iterated_threshold_helpers_match_signed_nonlinear_pole_distributions"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "subtraction::tests::uv_smooth_sliver_helper_preserves_signed_radial_principal_value"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "utils::tests::canonical_scalar_relative_budget_is_directed_and_signed"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "uv::approx::direct_3d::kernel::soft_tests::nested_cff_toy_retains_four_signed_forest_families"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "uv::approx::local_4d::tests::canonical_uv_classes_certify_signed_aliases_and_preserve_raw_sectors"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "uv::approx::local_4d::tests::canonical_uv_signed_multiloop_carriers_preserve_factorized_numerators"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "uv::overlap_numerators::tests::signed_integer_power_leaves_share_an_owner_without_expanding"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "integrands::process::sampling::selection::tests::joint_bridge_requires_full_coverage_and_gates_actual_inverse_support"
+        }
+      ]
+    },
+    {
+      "name": "numeric",
+      "cases": [
+        {
+          "binary": "gammalooprs",
+          "name": "graph::parse::string_utils::tests::dot_statements_preserve_unicode_and_embedded_language_escapes"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "graph::parse::string_utils::tests::dot_statement_value_survives_dot_round_trip"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "graph::parse::string_utils::tests::literal_multiline_dot_string_is_preserved"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "graph::parse::string_utils::tests::dot_values_escape_quoted_string_content"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "utils::hyperdual_utils::tests::dualize_dual_t_to_dual_r_t_keeps_constant_inputs_constant"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "utils::hyperdual_utils::tests::dualize_dual_t_to_dual_r_t_uses_requested_target_variable"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "momentum::tests::rotations"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "utils::hyperdual_utils::tests::extract_coefficient_t_duals_factorizes_iterated_mixed_dual"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "utils::hyperdual_utils::tests::extract_coefficient_t_duals_factorizes_single_threshold_mixed_dual"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "utils::hyperdual_utils::tests::mixed_derivative_shape_preserves_four_axis_polynomial_coefficients"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "utils::hyperdual_utils::tests::mixed_derivative_shape_supports_constant_axes"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "utils::hyperdual_utils::tests::shape_from_cut_cff_index_preserves_canonical_t_left_right_order"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "utils::hyperdual_utils::tests::variable_indices_from_cut_cff_index_tracks_active_axes_without_reordering"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "utils::serde_utils::tests::test_file_vs_parse_errors"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "utils::serde_utils::tests::test_from_file_backward_compatibility"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "utils::tests::canonical_arb_materialization_preserves_native_bits_and_checks_range"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "utils::serde_utils::tests::test_to_file_creates_missing_parent_directories"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "utils::tests::canonical_native_embedding_requires_finite_singleton_enclosures"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "utils::tests::canonical_scalar_relative_budget_is_directed_and_signed"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "utils::tests::complex_compares_to_real_by_imaginary_magnitude"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "utils::tests::complex_comparison_rejects_invalid_and_overflowing_norms"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "utils::tests::complex_phase_residual_preserves_arb_precision"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "utils::tests::complex_phase_residual_preserves_f64_precision"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "utils::tests::complex_phase_residual_preserves_quad_precision"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "utils::tests::complex_phase_residual_preserves_sampling_precision"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "utils::tests::complex_real_comparison_preserves_directed_normalization"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "utils::tests::complex_phases_compare_across_zero"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "utils::tests::debug_tags_macro_supports_tags_and_regular_fields"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "utils::tests::fixed256_source_scalar_embeds_exactly_without_binary64_range_limits"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "utils::tests::fixed_mpfr_rational_coefficients_are_rounded_once"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "utils::tests::fixed_mpfr_symbolica_inputs_use_declared_precision_for_later_arithmetic"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "utils::tests::native_hypot_preserves_finite_range"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "utils::tests::native_mpfr_enclosures_preserve_separated_limbs_and_signs"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "utils::tests::normalized_h_functions_integrate_to_one"
+        }
+      ]
+    },
+    {
+      "name": "acceptance",
+      "cases": [
+        {
+          "binary": "gammaloop-integration-tests::test_nlo_acceptance",
+          "name": "cool_qm_eos::cool_qm_eos_nlo_matches_example_target"
+        },
+        {
+          "binary": "gammaloop-integration-tests::test_nlo_acceptance",
+          "name": "epem_a_ddx::epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes"
+        }
+      ]
+    },
+    {
+      "name": "grouping-admission",
+      "cases": [
+        {
+          "binary": "feynkit-generator",
+          "name": "generation::tests::callback_rules_are_constructed_in_the_actual_owner_frame"
+        },
+        {
+          "binary": "feynkit-generator",
+          "name": "generation::tests::bundled_rule_ports_preserve_actual_owner_rejection"
+        },
+        {
+          "binary": "feynkit-generator",
+          "name": "generation::tests::cancelled_alias_templates_keep_hidden_dummy_labels_and_cached_metadata"
+        },
+        {
+          "binary": "feynkit-generator",
+          "name": "generation::tests::compact_rule_powers_allocate_independent_dummies_for_each_owner"
+        },
+        {
+          "binary": "feynkit-generator",
+          "name": "generation::tests::interaction_momentum_reduction_public_api_retains_zero_interface"
+        },
+        {
+          "binary": "feynkit-generator",
+          "name": "generation::tests::interaction_momentum_reduction_rejects_erased_invalid_indices"
+        },
+        {
+          "binary": "feynkit-generator",
+          "name": "generation::tests::interaction_momentum_reduction_rejects_heterogeneous_summands"
+        },
+        {
+          "binary": "feynkit-generator",
+          "name": "generation::tests::interaction_momentum_reduction_retains_complete_cancellation_metadata"
+        },
+        {
+          "binary": "feynkit-generator",
+          "name": "generation::tests::interaction_template_cache_retains_dummy_metadata_across_owners"
+        },
+        {
+          "binary": "feynkit-generator",
+          "name": "generation::tests::interaction_templates_preserve_rank_when_incident_momenta_cancel"
+        },
+        {
+          "binary": "feynkit-generator",
+          "name": "generation::tests::interaction_templates_reuse_admission_and_localize_shifted_bound_indices"
+        },
+        {
+          "binary": "feynkit-generator",
+          "name": "generation::tests::interaction_templates_use_canonical_named_interfaces_and_actual_owner_values"
+        },
+        {
+          "binary": "feynkit-generator",
+          "name": "generation::tests::opaque_scalar_metadata_with_nonindex_slot_payload_keeps_checked_construction"
+        },
+        {
+          "binary": "feynkit-generator",
+          "name": "generation::tests::propagator_templates_reuse_reversed_spin_and_color_interfaces"
+        },
+        {
+          "binary": "feynkit-generator",
+          "name": "generation::tests::propagator_templates_use_canonical_named_interfaces_and_actual_owner_values"
+        },
+        {
+          "binary": "feynkit-generator",
+          "name": "generation::tests::template_eligibility_rejects_scoped_and_encoded_open_indices"
+        },
+        {
+          "binary": "feynkit-generator",
+          "name": "generation::tests::template_transport_retains_declared_order_scoped_labels_and_zero_ports"
+        },
+        {
+          "binary": "feynkit-generator",
+          "name": "generation::tests::zero_template_and_direct_transport_retain_hidden_index_history"
+        },
+        {
+          "binary": "feynkit-generator",
+          "name": "grouping::tests::completed_samples_can_certify_a_factorized_scalar_zero"
+        },
+        {
+          "binary": "feynkit-generator",
+          "name": "grouping::tests::completed_samples_contract_closed_color_metric_coefficients"
+        },
+        {
+          "binary": "feynkit-generator",
+          "name": "grouping::tests::sampled_quotient_checks_nonfinite_operands_in_every_sample"
+        },
+        {
+          "binary": "feynkit-generator",
+          "name": "grouping::tests::sampled_quotient_does_not_group_nonfinite_operands"
+        },
+        {
+          "binary": "feynkit-generator",
+          "name": "grouping::tests::sampled_quotient_rejects_undefined_ratios"
+        },
+        {
+          "binary": "feynkit-generator",
+          "name": "grouping::tests::sampled_quotient_requires_scalar_interfaces_and_all_samples"
+        },
+        {
+          "binary": "feynkit-generator",
+          "name": "grouping::tests::sampled_quotient_groups_physical_local_factors"
+        }
+      ]
+    },
+    {
+      "name": "transport",
+      "cases": [
+        {
+          "binary": "feynkit-graph",
+          "name": "finalization::tests::canonical_order_excludes_dummy_edges"
+        },
+        {
+          "binary": "feynkit-graph",
+          "name": "finalization::tests::explicit_loop_basis_skips_canonical_order_collection"
+        },
+        {
+          "binary": "feynkit-graph",
+          "name": "finalization::tests::final_frame_matches_the_frame_resolved_on_the_graph"
+        },
+        {
+          "binary": "feynkit-graph",
+          "name": "finalization::tests::final_frame_relabels_edges_and_moves_cut_half_edges_only_when_needed"
+        },
+        {
+          "binary": "feynkit-graph",
+          "name": "finalization::tests::finalization_translates_fragments_in_the_final_frame"
+        },
+        {
+          "binary": "feynkit-graph",
+          "name": "finalization::tests::finalization_transports_hidden_scalar_history_in_every_tensor_destination"
+        },
+        {
+          "binary": "feynkit-graph",
+          "name": "finalization::tests::generated_diagrams_reject_other_dangling_edges_legs_and_restored_frames"
+        },
+        {
+          "binary": "feynkit-graph",
+          "name": "finalization::tests::generated_build_rejects_unknown_model_references_without_demanding_id"
+        },
+        {
+          "binary": "feynkit-graph",
+          "name": "finalization::tests::generated_thresholds_project_fixed_and_loop_carrying_crossings"
+        },
+        {
+          "binary": "feynkit-graph",
+          "name": "finalization::tests::generated_graphs_equal_their_import_reconstruction"
+        },
+        {
+          "binary": "feynkit-graph",
+          "name": "numerator_interface::tests::anonymous_owner_transport_rejects_ambiguous_factor_reordering"
+        },
+        {
+          "binary": "feynkit-graph",
+          "name": "numerator_interface::tests::canonical_inferred_layout_retains_zero_collision_history"
+        },
+        {
+          "binary": "feynkit-graph",
+          "name": "finalization::tests::threshold_candidates_without_cuts_reach_the_final_frame"
+        },
+        {
+          "binary": "feynkit-graph",
+          "name": "numerator_interface::tests::identity_transport_preserves_open_ports_and_ranked_zero"
+        },
+        {
+          "binary": "feynkit-graph",
+          "name": "numerator_interface::tests::inferred_ports_are_independent_of_symbol_registration_order"
+        },
+        {
+          "binary": "feynkit-graph",
+          "name": "numerator_interface::tests::native_and_encoded_indices_cannot_capture_each_other"
+        },
+        {
+          "binary": "feynkit-graph",
+          "name": "numerator_interface::tests::native_label_permutations_retain_zero_ports_and_reject_collisions"
+        },
+        {
+          "binary": "feynkit-graph",
+          "name": "numerator_interface::tests::native_owner_transport_preserves_scopes_and_declared_logical_order"
+        },
+        {
+          "binary": "feynkit-graph",
+          "name": "numerator_interface::tests::native_transport_checks_callback_port_loss_without_replaying_normalization"
+        },
+        {
+          "binary": "feynkit-graph",
+          "name": "numerator_interface::tests::native_transport_keeps_internal_contractions_and_rejects_capture"
+        },
+        {
+          "binary": "feynkit-graph",
+          "name": "numerator_interface::tests::native_transport_keeps_anonymous_and_interface_only_ports"
+        },
+        {
+          "binary": "feynkit-graph",
+          "name": "numerator_interface::tests::scoped_encoded_labels_transport_their_inner_owner_and_zero_ports"
+        },
+        {
+          "binary": "feynkit-graph",
+          "name": "numerator_interface::tests::reversible_labels_remain_supported_and_can_transport_to_native_indices"
+        },
+        {
+          "binary": "feynkit-graph",
+          "name": "numerator_interface::tests::source_codec_preserves_anonymous_axes_and_ranked_zero"
+        },
+        {
+          "binary": "feynkit-graph",
+          "name": "numerator_interface::tests::transport_preserves_canonical_declarations_and_inferred_axis_mapping"
+        },
+        {
+          "binary": "feynkit-graph",
+          "name": "numerator_interface::tests::zero_transport_checks_hidden_indices_before_certifying_identity"
+        }
+      ]
+    },
+    {
+      "name": "staged-runtime",
+      "cases": [
+        {
+          "binary": "gammalooprs",
+          "name": "graph::parse::tests::compact_sewn_projector_uses_the_source_half_edge_chart"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "graph::parse::tests::legacy_dot_names_the_explicit_conversion"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "graph::parse::tests::finalized_reference::finalized_graph_matches_gammaloop_reference"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "graph::parse::tests::native_runtime_conversion_preserves_dangling_dummy_product_acceptance"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "graph::parse::tests::native_runtime_conversion_rejects_changed_frame_before_cut_indexing"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "graph::parse::tests::native_qqx_aaa_projectors_close_actual_runtime_ports"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "numerator::aind::tests::compact_slot_transport_is_distinct_from_model_projector_validation"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "numerator::aind::tests::parses_gammaloop_owned_aind_symbols"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "numerator::aind::tests::parses_indexed_gammaloop_tensors_without_compact_rewrite"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "numerator::aind::tests::projector_boundary_preserves_native_zero_serialization"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "graph::parse::tests::rqft_ghost_explicit_bases_preserve_signed_native_routing"
+        },
+        {
+          "binary": "gammalooprs",
+          "name": "numerator::aind::tests::test_structure_parsing"
+        }
+      ]
+    },
+    {
+      "name": "bubble",
+      "cases": [
+        {
+          "binary": "gammaloop-integration-tests::test_runs",
+          "name": "test_integrated_uv_cts::bubble_energy_source_is_invariant_under_stored_edge_reversal"
+        },
+        {
+          "binary": "gammaloop-integration-tests::test_runs",
+          "name": "test_integrated_uv_cts::important::scalar_bubble_inspect"
+        }
+      ]
+    }
+  ],
+  "original_pair_B2_optin": true,
+  "sampling_numeric_overlap": 1,
+  "sampling_runtime_overlap": 1,
+  "overlap_not_double_counted": true,
+  "skips_and_argument_error_no_credit": true
+}

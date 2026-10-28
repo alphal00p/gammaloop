@@ -1,0 +1,12 @@
+[
+  {
+    "path": "docs/architecture/evidence/generation-integration/wp3/units27-29/integration22-26-review.json",
+    "source": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-integration22-26-review-XmShwW3I/review.json",
+    "sha256": "2767a908450b0d76c0fa9adcbcdd9af97425ff2fe3aa836d7973316a2c6a71a6"
+  },
+  {
+    "path": "docs/architecture/evidence/generation-integration/wp3/units27-29/sampling-preparation-review.json",
+    "source": "/shared/lcnbr/dev/gammaloop/generation-sampling-fixes/target/astra-staged27-review-xdkg_f61/review.json",
+    "sha256": "2228a5b31c2f73fa328d3aca93bd6cebc2d7cc844bf621b56ed02aec349c2dee"
+  }
+]

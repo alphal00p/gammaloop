@@ -271,8 +271,18 @@ own workspace. Bounded: one regression, one bisect, one written verdict.
   the approved grouping/oracle/resource and A1/B3 transport owners byte-identical.
   Combined validation is recorded in
   `evidence/generation-integration/wp3/units22-26/receipt.json`.
-  NEW independent Astra review is required before27. Source30 closure, source31
+  Independent Astra APPROVES `a517ca56` and releases source27. Source30 closure, source31
   global scope reconciliation, full rebuilt-tip physics and distribution gates remain open.
+
+- #strong[Source27–29 combined candidate 2026-10-28:]
+  reviewed staged preparation `2d679436` / code `a205202b` is reconciled onto
+  approved `a517ca56`. Code `c2cce079` carries signed `A R k + b` sampling,
+  exact-zero affine filtering, the accepted fixed-seed CoolQM three-sigma gate
+  and the graph-derived P3 partition/locality controls. The latter certify
+  partition unity, not independent full-evaluator multiplicity. Fresh combined
+  checks are recorded in `evidence/generation-integration/wp3/units27-29/receipt.json`.
+  NEW independent Astra review is required before30. No source30/31, full-WP3,
+  benchmark or final distribution gate is closed by this candidate.
 
 - `jj duplicate` the v4 chain (`kursouxx::kpslpwqz`) onto the WP2 base; do not
   rebase in place, so the 19 live workspaces on older lines stay valid.

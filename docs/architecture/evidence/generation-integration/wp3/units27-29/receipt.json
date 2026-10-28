@@ -1,0 +1,59 @@
+{
+  "schema": 1,
+  "status": "Combined sources27\u201329 integrated; validation in progress; NEW independent Astra review required before30",
+  "base": "a517ca563d78d161cff17fe60e661f80529c9a83",
+  "code_commit": "c2cce079a92c66fd1435a2ad42d86c17e16353be",
+  "code_change": "kpuovnvyssoystyzvultvlkqsmxxwomt",
+  "evidence_change": "musszptlrzptpvqpszskysyuvqvyoulr",
+  "candidate_bookmark": "generation-integration-units27-29",
+  "source_mapping": "source-mapping.json",
+  "code_inventory": "code-inventory.json",
+  "sampling_numeric_inventory": "sampling-numeric-inventory.json",
+  "preparation": {
+    "tip": "2d679436ba300c339cf12fa8d647abaa97e6eda9",
+    "code": "a205202b17b1c915190e17aa615cb4fe76391102",
+    "base": "f2e32c44c986058ede1d7e585b9e2e4fefe1110c",
+    "review": "sampling-preparation-review.json",
+    "scope": "APPROVED preparation only. Its179sampling+34numeric+2acceptance,214unique are historical, not fresh main credit."
+  },
+  "prerequisite_review": "integration22-26-review.json",
+  "approved_cumulative_intent": "All eight cumulative file deltas evaluated; seven non-registry frozen files byte-identical to approved preparation. Current19\u201326 registry entries preserved. Three source units map to one coherent code snapshot to retain reviewed cumulative owner behavior and avoid obsolete intermediate fixtures; additiveP3 does not add a46-input row.",
+  "physical_contract": {
+    "sampling": "Signed A*R*k+b; external shifts fixed, absoluteJacobian/inverse-density/OSE in same frame; signed master momenta feed physical edge-local factors. No denominator-evenness numerator sign inference.",
+    "precision": "Exact numeric-domain zero coefficients only; active-precision small-nonzero f64/Quad control. No new threshold or binary64 conversion of generic constants.",
+    "P3": "36 graph-derived generating and108 inverse cases; weighted numerator sum is partition unity, not independent evaluator multiplicity; catalogue/dedup tests supply channel coverage.",
+    "CoolQM": {
+      "seed": 1337,
+      "samples": 750000,
+      "target": -0.0610772376129,
+      "pull_limit": 3,
+      "relative_error_limit": "1.5 *0.009980780719103282"
+    },
+    "epem": "Original route/representation/scale/normalization/source assertions and seed/sample counts unchanged from a517."
+  },
+  "scope_audit": "scopes.json",
+  "reference_reuse": "reference-reuse.json",
+  "oracle_matrix": "Approved0a38 normal15 matrix with global16/existinggroup2/240s retained. Generator, grouping, census, physical fixtures, two certified digest literals and config byte-identical to a517. These generated workloads do not traverse the changed GammaLoop runtime sampler; no redundant matrix or fresh full-oracle claim. Relevant grouping/nonfinite/admission/B2 controls are selected fresh.",
+  "current_P3": "Old SOURCE22-blocked/P1 strings explicitly superseded by approved0a38 and a517 gates. Both source19 rows are certified/passing; frozen original receipts remain untouched.",
+  "setup_error": {
+    "initial_validation": "target/wp3-units27-29/validation-initial.json",
+    "log": "target/wp3-units27-29/acceptance.log",
+    "exit_code": 2,
+    "kind": "CLI argument validation; duplicate test-threads flags, zero tests selected, no physics result/pass credit",
+    "correction": "Resume only unexecuted checks with one intended acceptance thread flag; sample budgets/gates/production unchanged. Original179/34 passes retained; no reseeding."
+  },
+  "four_expanding_parity_helpers": "Existing native amplitude/cross-section/compton/explicit-loop-order runtime-enrichment helpers remain unchanged and excluded from fresh selections; no pass credit.",
+  "pending": [
+    "NEW independent Astra combined27\u201329 review before30",
+    "Source30 active standalone producer/receipt cleanup; NOT integrated/certified",
+    "Source31 independent global docs rescope/reconciliation after30; no blind28-failure refresh",
+    "Three older historical frame failures",
+    "Final rebuilt-tip fivea_ddx/BRST/epem/CoolQM/fullWP3 matrix",
+    "M-rebuild/performance/benchmarks",
+    "Final LinnestWASM/PDF/manual/sdist/native/Pyodide/Community distribution gates"
+  ],
+  "nixci": false,
+  "kernel": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+  "dependencies": "No Cargo/feature/lock/uv/hostsubset changes; no relock/Hakari regeneration needed; isolation check scheduled.",
+  "hash_semantics": "Code/import hashes bind frozen c2cce079. Current registry/notes/receipt/execution are later metadata, excluded from code hashes; explicit frozen metadata snapshot will bind registry/note hashes. No recursive receipt hashes."
+}

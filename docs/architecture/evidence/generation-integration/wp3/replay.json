@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "status": "Sources22\u201326 combined candidate validated; STOP for NEW independent Astra review before27. WP3 remains incomplete.",
+  "status": "Source27\u201329 combined code integrated; fresh validation in progress; NEW independent Astra review before30",
   "fixed_target": {
     "commit": "3f0df2a870806076820786994d4883decec8e9e3",
     "tree": "3c91ba47525c627fbc02d79f5afa1d58aa7c5b66",
@@ -536,7 +536,10 @@
       "planned_unit": "port-27",
       "planned_order": 23,
       "reason": "Keep co-oriented parallel-bundle LMB sampling with signed routing correctness tests.",
-      "status": "pending"
+      "status": "Integrated; combined validation and NEW Astra review pending",
+      "new_commit": "c2cce079a92c66fd1435a2ad42d86c17e16353be",
+      "receipt": "wp3/units27-29/receipt.json",
+      "approved_preparation": "2d679436ba300c339cf12fa8d647abaa97e6eda9"
     },
     {
       "commit": "2ec30ce37196011fbeb21af2822d655146b45a0f",
@@ -546,7 +549,10 @@
       "planned_unit": "port-28",
       "planned_order": 24,
       "reason": "Keep zero-coefficient omission in affine sampling frames; preserve nonzero contributions.",
-      "status": "pending"
+      "status": "Integrated; combined validation and NEW Astra review pending",
+      "new_commit": "c2cce079a92c66fd1435a2ad42d86c17e16353be",
+      "receipt": "wp3/units27-29/receipt.json",
+      "approved_preparation": "2d679436ba300c339cf12fa8d647abaa97e6eda9"
     },
     {
       "commit": "dd3640cb8171fbdc455888e3b8fcf2de92514a32",
@@ -556,7 +562,10 @@
       "planned_unit": "port-29",
       "planned_order": 25,
       "reason": "Retain already accepted CoolQM three-sigma gate and original fixed seed; no reseeding or broader tolerance.",
-      "status": "pending"
+      "status": "Integrated; combined validation and NEW Astra review pending",
+      "new_commit": "c2cce079a92c66fd1435a2ad42d86c17e16353be",
+      "receipt": "wp3/units27-29/receipt.json",
+      "approved_preparation": "2d679436ba300c339cf12fa8d647abaa97e6eda9"
     },
     {
       "commit": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
@@ -973,14 +982,15 @@
       "receipt": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/target/astra-coordinator-drawing-r3/review.json"
     },
     "sampling27-28-29": {
-      "status": "Approved cumulative input available for LATER integration; not replayed in this slice",
+      "status": "Cumulative staged preparation2d679436 independently APPROVED and integrated into current27\u201329 candidate; NEW combined review required before30",
       "commit": "c82916079b5cc643151e0213499ca9875739a4e3",
       "production_parent": "21274d1442f57a33ca7c48629d9644f7fa8d228b",
       "reviewer": "Astra",
       "receipt": "/shared/lcnbr/dev/gammaloop/generation-sampling-fixes/target/astra-p3-review-c8291607/review.json",
       "validation": "178 independent structural tests;36 generating/108 inverse cases; Clippy/fmt/hash/registry passed",
       "limits": "Weighted numerator sum certifies partition unity, not independent full-evaluator contribution multiplicity; expected scores use returned IDs with catalogue/dedup coverage. Combined sign/numeric08/09/CoolQM/epem/BRST still required.",
-      "staged_preparation": "Separate generation-sampling-fixes-staged reconciliation; NOT integrated or granted a new approval here."
+      "staged_preparation": "Separate generation-sampling-fixes-staged reconciliation; NOT integrated or granted a new approval here.",
+      "ordered_integration": "wp3/units27-29/receipt.json"
     },
     "benchmark-preparation": {
       "status": "separate preparation; M-rebuild not claimed"
@@ -1024,11 +1034,18 @@
       }
     },
     "test-source-closure30": {
-      "status": "Independent Sol preparation assigned by coordinator; NOT integrated or approved here",
+      "status": "Independent preparation active; producer build pending and receipt identity cleanup requested; NOT integrated or approved here",
       "workspace": "/shared/lcnbr/dev/gammaloop/generation-test-source-closure",
       "base": "0a38ee4e3e7d16af3978f2c6ccde04dc176dfea9",
       "scope": "Nix compileTimeTest request_decorator_contract.py, Linnet generation_reports/*.txt and affected test-input audit; preserve source21 runtime-card/browser owners",
-      "gate": "Astra review and ordered integration after29; no duplication in22\u201326."
+      "gate": "Astra review and ordered integration after29; no duplication in22\u201326.",
+      "initial_code": "4e13c40d",
+      "initial_receipt": "39099306"
+    },
+    "documentation31": {
+      "status": "Independent preparation assigned on approveda517; NOT integrated; final reconciliation required after30 because27\u201329 absent from lane base",
+      "base": "a517ca563d78d161cff17fe60e661f80529c9a83",
+      "scope": "Source31 global documentation reconciliation; no duplicate global rescope in27\u201329"
     }
   },
   "slice_review": {
@@ -1062,40 +1079,26 @@
     "limitation": "Seven inherited registry digests remain stale; carried explicitly for source31/final reconciliation."
   },
   "current_slice": {
-    "status": "Sources22\u201326 combined candidate validated; STOP for NEW independent Astra review before27. WP3 remains incomplete.",
+    "status": "Source27\u201329 combined code integrated; fresh validation in progress; NEW independent Astra review before30",
     "source_orders": [
-      22,
-      23,
-      24,
-      25,
-      26
+      27,
+      28,
+      29
     ],
-    "base": "0a38ee4e3e7d16af3978f2c6ccde04dc176dfea9",
-    "code_commit": "2eb0d9db13caed01cb589f869089bc0753ab429b",
-    "code_change": "mrmyosxmmrrpwmomtvtnurwsuvsmxzpu",
-    "evidence_change": "klkryukzvmvtslrzupurkqyzuplvltny",
-    "receipt": "wp3/units22-26/receipt.json",
-    "mapping": "wp3/units22-26/source-mapping.json",
-    "candidate_bookmark": "generation-integration-units22-26",
-    "accounted_source_rows": 27,
-    "accounted_planned_units": 22,
-    "preparation": {
-      "candidate": "f2e32c44c986058ede1d7e585b9e2e4fefe1110c",
-      "code": "0d13655702c2986f2fc7923fd9121278c4439709",
-      "base": "d48f9d1aedc766eea5cb185ab6029d1f04462043",
-      "review": "wp3/units22-26/staged22-26-preparation-review.json",
-      "review_scope": "APPROVED preparation only; combined integration review pending"
-    },
-    "scope_P3": "Closed implementation through reused canonical checker: preparation23stale+4anchor, current24stale+4anchor; origin preparation7preexisting+20later, current7preexisting+21later relative438; no blind refresh. Seven newly owned scopes valid.",
-    "later_lanes": {
-      "27-29": "Separate staged sampling preparation; NOT integrated",
-      "30": "Separate generation-test-source-closure preparation after29; NOT duplicated",
-      "36": "Resource diagnostics later; source25 portion only integrated here",
-      "46": "Approved standalone color-cycles; later after45"
-    },
-    "limits": "No fullWP3/physics/performance/distribution approval. Three older frame failures, source30/31, fivea_ddx/BRST/epem/CoolQM/fulltip/finalartifacts/benchmarks remain.",
-    "metadata_snapshot_commit": "19907c61153d1a16c6b9f2805ad6b4b79a91f2fa",
-    "validation_receipt": "wp3/units22-26/validation.json"
+    "base": "a517ca563d78d161cff17fe60e661f80529c9a83",
+    "code_commit": "c2cce079a92c66fd1435a2ad42d86c17e16353be",
+    "code_change": "kpuovnvyssoystyzvultvlkqsmxxwomt",
+    "evidence_change": "musszptlrzptpvqpszskysyuvqvyoulr",
+    "candidate_bookmark": "generation-integration-units27-29",
+    "receipt": "wp3/units27-29/receipt.json",
+    "mapping": "wp3/units27-29/source-mapping.json",
+    "accounted_source_rows": 30,
+    "accounted_planned_units": 25,
+    "prepared_tip": "2d679436ba300c339cf12fa8d647abaa97e6eda9",
+    "prepared_code": "a205202b17b1c915190e17aa615cb4fe76391102",
+    "prepared_base": "f2e32c44c986058ede1d7e585b9e2e4fefe1110c",
+    "preparation_review": "wp3/units27-29/sampling-preparation-review.json",
+    "limits": "Preparation214unique checks are not fresh main credit. P3weighted sum is partition unity, not independent evaluator multiplicity. No source30/31/fullWP3/benchmark/distribution closure."
   },
   "staged_round1_review": {
     "verdict": "REQUEST_CHANGES",
@@ -1123,8 +1126,8 @@
     "candidate_bookmark": "generation-integration-corrected-staged",
     "candidate_change": "pmnstxxwwwkzvyuxyzmsmswtutnkzkmy"
   },
-  "implementation_change": "klkryukzvmvtslrzupurkqyzuplvltny",
-  "implementation_code_commit": "2eb0d9db13caed01cb589f869089bc0753ab429b",
+  "implementation_change": "musszptlrzptpvqpszskysyuvqvyoulr",
+  "implementation_code_commit": "c2cce079a92c66fd1435a2ad42d86c17e16353be",
   "combined_staged_integration_review": {
     "candidate": "d48f9d1aedc766eea5cb185ab6029d1f04462043",
     "verdict": "APPROVE both independent assigned scopes",
@@ -1240,9 +1243,9 @@
       "provenance": "wp3/row-recertification/provenance-review.json",
       "p2": "wp3/row-recertification/p2-review.json"
     },
-    "P1": "Both independent fixed-case certificates APPROVED; authorized ONLY two native numerator-digest literals. Actual migration awaits NEW combined review.",
+    "P1": "Historical P1 superseded: both authorized native digest migrations and the combined P2 correction APPROVED at0a38; both rows are CERTIFIED/PASSING, not active P1 blockers.",
     "P2": "Cumulative df551..ea0e78bc/codefa33 integrated. Additional existing two-slot resource-group assignment is owned reconciliation for actual up-to16 Nix worker budget; global240s unchanged.",
-    "source22": "BLOCKED until combined recertification/P2 review. Prepared22-26 f2e32c44 remains separate.",
+    "source22": "Historical BLOCKED wording superseded by approved0a38 source19\u201321 gate and approveda517 source22\u201326 gate. Source27 authorized; source30 awaits NEW27\u201329 combined review.",
     "normal_run": {
       "run_id": "c18e0610-341d-4060-a1f7-f687b16b4158",
       "source": "35b444d09d739bd5532deac21ec013ed7422d35b",
@@ -1283,7 +1286,7 @@
     "source_receipt": "target/astra-combined19-21-review-ZX4duVm5/review.json"
   },
   "active_slice22_26": {
-    "status": "Sources22\u201326 combined candidate validated; STOP for NEW independent Astra review before27. WP3 remains incomplete.",
+    "status": "APPROVED at a517; gate to27 cleared. Historical checks retain original2eb/M199 identities.",
     "source_orders": [
       22,
       23,
@@ -1317,5 +1320,32 @@
     "limits": "No fullWP3/physics/performance/distribution approval. Three older frame failures, source30/31, fivea_ddx/BRST/epem/CoolQM/fulltip/finalartifacts/benchmarks remain.",
     "metadata_snapshot_commit": "19907c61153d1a16c6b9f2805ad6b4b79a91f2fa",
     "validation_receipt": "wp3/units22-26/validation.json"
+  },
+  "integration22_26_review": {
+    "status": "APPROVED independently; source27 gate released, not wholeWP3",
+    "candidate": "a517ca563d78d161cff17fe60e661f80529c9a83",
+    "review": "wp3/units27-29/integration22-26-review.json"
+  },
+  "active_slice27_29": {
+    "status": "Source27\u201329 combined code integrated; fresh validation in progress; NEW independent Astra review before30",
+    "source_orders": [
+      27,
+      28,
+      29
+    ],
+    "base": "a517ca563d78d161cff17fe60e661f80529c9a83",
+    "code_commit": "c2cce079a92c66fd1435a2ad42d86c17e16353be",
+    "code_change": "kpuovnvyssoystyzvultvlkqsmxxwomt",
+    "evidence_change": "musszptlrzptpvqpszskysyuvqvyoulr",
+    "candidate_bookmark": "generation-integration-units27-29",
+    "receipt": "wp3/units27-29/receipt.json",
+    "mapping": "wp3/units27-29/source-mapping.json",
+    "accounted_source_rows": 30,
+    "accounted_planned_units": 25,
+    "prepared_tip": "2d679436ba300c339cf12fa8d647abaa97e6eda9",
+    "prepared_code": "a205202b17b1c915190e17aa615cb4fe76391102",
+    "prepared_base": "f2e32c44c986058ede1d7e585b9e2e4fefe1110c",
+    "preparation_review": "wp3/units27-29/sampling-preparation-review.json",
+    "limits": "Preparation214unique checks are not fresh main credit. P3weighted sum is partition unity, not independent evaluator multiplicity. No source30/31/fullWP3/benchmark/distribution closure."
   }
 }

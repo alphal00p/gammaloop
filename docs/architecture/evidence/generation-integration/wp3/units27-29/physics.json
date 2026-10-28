@@ -1,0 +1,27 @@
+{
+  "code_commit": "c2cce079a92c66fd1435a2ad42d86c17e16353be",
+  "profile": "ci_gammaloop",
+  "acceptance_threads": 1,
+  "CoolQM": {
+    "passed": true,
+    "seconds": 76.925,
+    "seed": 1337,
+    "samples": 750000,
+    "target": -0.0610772376129,
+    "pull_limit": 3,
+    "displayed_pull_sigma": 2.077,
+    "displayed_relative_error_percent": 0.984,
+    "relative_error_limit": "1.5 *0.009980780719103282",
+    "result": "-6.235(61)e-2"
+  },
+  "epem": {
+    "passed": true,
+    "seconds": 94.369,
+    "original_route_scale_representation_normalization_assertions_retained": true,
+    "source_byte_equal_to": "a517ca563d78d161cff17fe60e661f80529c9a83"
+  },
+  "total_runtime_seconds": 171.301,
+  "source27_P3": "36 generating/108 inverse graph cases retained; partition unity, not independent full-evaluator multiplicity",
+  "log": "target/wp3-units27-29/acceptance-main.log",
+  "log_sha256": "d52fba7a8c259e363c19a7fedc4f0a47d6feb4366508effe3aaaa84e640b285b"
+}

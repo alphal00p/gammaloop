@@ -1,0 +1,29 @@
+{
+  "reviewed_candidate": "a517ca563d78d161cff17fe60e661f80529c9a83",
+  "original_code": "2eb0d9db13caed01cb589f869089bc0753ab429b",
+  "actual_prior_check": {
+    "name": "api-reference",
+    "command": [
+      "cargo",
+      "run",
+      "--locked",
+      "--profile",
+      "ci-optim",
+      "-p",
+      "alphal00p-docs-catalogs",
+      "--features",
+      "gammaloop-reference",
+      "--bin",
+      "alphal00p-docs-gammaloop-reference",
+      "--",
+      "--check"
+    ],
+    "source_commit": "2eb0d9db13caed01cb589f869089bc0753ab429b",
+    "exit_code": 0,
+    "seconds": 224.40633630752563,
+    "log": "target/wp3-units22-26/api-reference.log",
+    "log_sha256": "dc494f97c4882827fd0d311cf7cdff43df57938937d6729db6887b61a1080207"
+  },
+  "current_owner_closure": "code-inventory.json protected_files",
+  "reason": "OneShot/CLI metadata, runtime settings and serialization/default/schema/catalogue owners and generated outputs byte-identical to a517. SamplingCompileContext is not a serialized metadata export owner; method-body changes introduce no struct layout changes in exported configuration. No fresh exporter build/check credit."
+}

@@ -1,0 +1,79 @@
+{
+  "source_commit": "c2cce079a92c66fd1435a2ad42d86c17e16353be",
+  "cargo_profile": "ci-optim",
+  "nix_shell": "/nix/store/xrn91gkp7giwchhflr8pbl4hd1a6ycc6-nix-shell-env.drv",
+  "cargo_jobs": 2,
+  "native_test_threads": 2,
+  "acceptance_test_threads": 1,
+  "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\n",
+  "binaries": [
+    {
+      "role": "sampling",
+      "binary_id": "gammalooprs",
+      "path": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/gammalooprs-d550f986c4ae73f4",
+      "sha256": "91aae0cfc394545f1dad9516aceb970e7104488ae00ab1f1d8a71472354aee31",
+      "bytes": 204090296,
+      "features": [
+        "default"
+      ],
+      "fingerprint": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/.fingerprint/gammalooprs-d550f986c4ae73f4/test-lib-gammalooprs.json",
+      "fingerprint_sha256": "a953a8f7d819ead059c6e40569027ca3401b257a0050f17e8e93c17f121c9a1a",
+      "code_commit": "c2cce079a92c66fd1435a2ad42d86c17e16353be"
+    },
+    {
+      "role": "acceptance",
+      "binary_id": "gammaloop-integration-tests::test_nlo_acceptance",
+      "path": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/test_nlo_acceptance-883a3c811201036d",
+      "sha256": "5d5e38fe3e75dc9946e933f0e922e6ce80fc78f4c7a8a98bd376ac140ac84180",
+      "bytes": 194857240,
+      "features": [
+        "default"
+      ],
+      "fingerprint": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/.fingerprint/gammaloop-integration-tests-883a3c811201036d/test-integration-test-test_nlo_acceptance.json",
+      "fingerprint_sha256": "42f9cc60585a8a6911c64c3600169581189cd4efcd29314ae771493b32133d92",
+      "code_commit": "c2cce079a92c66fd1435a2ad42d86c17e16353be"
+    },
+    {
+      "role": "generator",
+      "binary_id": "feynkit-generator",
+      "path": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/feynkit_generator-820ca450194b8779",
+      "sha256": "76c8c4c78e87a7ce7820572e8fe78f82d2983ee635405f821f8a9250227fa313",
+      "bytes": 71430048,
+      "features": [
+        "default",
+        "native"
+      ],
+      "fingerprint": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/.fingerprint/feynkit-generator-820ca450194b8779/test-lib-feynkit_generator.json",
+      "fingerprint_sha256": "475a9da979f04946ff072dc4185b255dc431ceca2fa5c88cb9d9018365df5d27",
+      "code_commit": "c2cce079a92c66fd1435a2ad42d86c17e16353be"
+    },
+    {
+      "role": "transport",
+      "binary_id": "feynkit-graph",
+      "path": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/feynkit_graph-d372e25a36c0835e",
+      "sha256": "a74a6ff69111a557c20af0df72b4754f97b8deb1642d6dd03d88780c7575f4cc",
+      "bytes": 49128424,
+      "features": [
+        "default",
+        "native"
+      ],
+      "fingerprint": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/.fingerprint/feynkit-graph-d372e25a36c0835e/test-lib-feynkit_graph.json",
+      "fingerprint_sha256": "c7e7968a6ca8cacf870bdb81bb9d56a2a0078115e280938323f3d3c0f2ac9094",
+      "code_commit": "c2cce079a92c66fd1435a2ad42d86c17e16353be"
+    },
+    {
+      "role": "bubble",
+      "binary_id": "gammaloop-integration-tests::test_runs",
+      "path": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/test_runs-f5b39d5c90af685a",
+      "sha256": "bcfa74f9a5088e6cb7d015ee8a90de48fb0b549c22316655710c1cab3fb245a1",
+      "bytes": 213428120,
+      "features": [
+        "default"
+      ],
+      "fingerprint": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/.fingerprint/gammaloop-integration-tests-f5b39d5c90af685a/test-integration-test-test_runs.json",
+      "fingerprint_sha256": "485498b22fffd03ee4c191dd6a68adcc8eb1e504268274ab42a9b50875204e35",
+      "code_commit": "c2cce079a92c66fd1435a2ad42d86c17e16353be"
+    }
+  ],
+  "semantics": "Fresh actual combined-source test executables and compiler feature fingerprints. No old preparation executable relabelled as current. Hashes captured after completed tests; native cases/invocations matched independently to JUnit and logs."
+}

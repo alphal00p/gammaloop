@@ -1,0 +1,434 @@
+{
+  "verdict": "APPROVE",
+  "scope": "STAGED sources27–29 PREPARATION ONLY on f2 staged22–26; no main integration/release/publication approval",
+  "reviewed_at_utc": "2026-10-28T06:24:04.967543+00:00",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-sampling-fixes",
+  "base": "f2e32c44c986058ede1d7e585b9e2e4fefe1110c",
+  "implementation_commit": "a205202b17b1c915190e17aa615cb4fe76391102",
+  "implementation_change": "ouunvrvzqqkvvysouponpwqxqtptswtq",
+  "evidence_commit": "2d679436ba300c339cf12fa8d647abaa97e6eda9",
+  "evidence_change": "oomruyulutzmqyzqsxknxnxmmpowklkq",
+  "bookmark": "generation-sampling-fixes-staged",
+  "findings": [],
+  "independent_checks": [
+    {
+      "name": "sampling",
+      "command": [
+        "cargo",
+        "nextest",
+        "run",
+        "--cargo-metadata",
+        "target/sampling-staged/cargo-metadata.json",
+        "--binaries-metadata",
+        "target/sampling-staged/sampling-binaries.json",
+        "-E",
+        "test(integrands::process::sampling) or test(lmb_sampling_detects) or test(canonical_lmb_density) or test(lmb_frame) or test(signed) or test(graph_derived_two_loop_reflections)",
+        "--test-threads",
+        "2",
+        "--status-level",
+        "pass",
+        "--final-status-level",
+        "fail",
+        "--retries",
+        "0"
+      ],
+      "exit_code": 0,
+      "seconds": 19.367704995907843,
+      "log": "target/astra-staged27-review-xdkg_f61/sampling.log"
+    },
+    {
+      "name": "numeric",
+      "command": [
+        "cargo",
+        "nextest",
+        "run",
+        "--cargo-metadata",
+        "target/sampling-staged/cargo-metadata.json",
+        "--binaries-metadata",
+        "target/sampling-staged/sampling-binaries.json",
+        "-E",
+        "test(utils::tests::) or test(momentum::tests::rotations)",
+        "--test-threads",
+        "2",
+        "--status-level",
+        "pass",
+        "--final-status-level",
+        "fail",
+        "--retries",
+        "0"
+      ],
+      "exit_code": 0,
+      "seconds": 0.6163621312007308,
+      "log": "target/astra-staged27-review-xdkg_f61/numeric.log"
+    },
+    {
+      "name": "acceptance",
+      "command": [
+        "cargo",
+        "nextest",
+        "run",
+        "--cargo-metadata",
+        "target/sampling-staged/cargo-metadata.json",
+        "--binaries-metadata",
+        "target/sampling-staged/acceptance-binaries.json",
+        "-E",
+        "test(cool_qm_eos_nlo_matches_example_target) or test(epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes)",
+        "--test-threads",
+        "1",
+        "--status-level",
+        "pass",
+        "--final-status-level",
+        "fail",
+        "--retries",
+        "0",
+        "--success-output",
+        "immediate"
+      ],
+      "exit_code": 0,
+      "seconds": 138.5285524930805,
+      "log": "target/astra-staged27-review-xdkg_f61/acceptance.log"
+    },
+    {
+      "name": "fmt",
+      "command": [
+        "just",
+        "fmt",
+        "--check"
+      ],
+      "exit_code": 0,
+      "seconds": 11.957255293149501,
+      "log": "target/astra-staged27-review-xdkg_f61/fmt.log"
+    },
+    {
+      "name": "kernel",
+      "command": [
+        "just",
+        "check-symbolica-feature-isolation"
+      ],
+      "exit_code": 0,
+      "seconds": 0.7659645499661565,
+      "log": "target/astra-staged27-review-xdkg_f61/kernel.log"
+    },
+    {
+      "name": "typst",
+      "command": [
+        "typst",
+        "compile",
+        "--features",
+        "html",
+        "--format",
+        "html",
+        "--root",
+        ".",
+        "docs/architecture/generation-sampling-staged.typ",
+        "target/astra-staged27-review-xdkg_f61/note.html"
+      ],
+      "exit_code": 0,
+      "seconds": 0.16506358422338963,
+      "log": "target/astra-staged27-review-xdkg_f61/typst.log"
+    },
+    {
+      "name": "docs",
+      "command": [
+        "target/dev-optim/alphal00p-docs-builder",
+        "check"
+      ],
+      "exit_code": 1,
+      "seconds": 0.11451418092474341,
+      "log": "target/astra-staged27-review-xdkg_f61/docs.log"
+    }
+  ],
+  "unique_test_inventory": {
+    "sampling": 179,
+    "numeric": 34,
+    "overlap": [
+      "gammalooprs utils::tests::canonical_scalar_relative_budget_is_directed_and_signed"
+    ],
+    "acceptance": 2,
+    "total_unique": 214,
+    "old_inventory": 178,
+    "missing_old": [],
+    "new_to_inventory": [
+      "gammalooprs graph::parse::tests::rqft_ghost_explicit_bases_preserve_signed_native_routing"
+    ],
+    "runs": {
+      "sampling": {
+        "run_id": "1888a84f-0df2-4545-819f-b4e3e9d91cff",
+        "summary": "Summary [  19.101s] 179 tests run: 179 passed, 1359 skipped"
+      },
+      "numeric": {
+        "run_id": "240b5453-7eba-4969-b2a1-a2dc801813df",
+        "summary": "Summary [   0.420s] 34 tests run: 34 passed, 1504 skipped"
+      },
+      "acceptance": {
+        "run_id": "610fbaae-ca52-412a-ba45-f5d8806371f6",
+        "summary": "Summary [ 138.295s] 2 tests run: 2 passed, 3 skipped"
+      }
+    }
+  },
+  "binary_identity": [
+    {
+      "path": "/common/build-cache/lcnbr/46/585a60ab753d72/dev-optim/deps/gammalooprs-a941761db6d1e7be",
+      "sha256": "0359ddcc819d7955892a9a0cf11379322e993ec643fc7d361c525acb7898ff98",
+      "bytes": 2289190608,
+      "features": {
+        "test-lib-gammalooprs.json": "[\"default\"]"
+      },
+      "sha256_after": "0359ddcc819d7955892a9a0cf11379322e993ec643fc7d361c525acb7898ff98"
+    },
+    {
+      "path": "/common/build-cache/lcnbr/46/585a60ab753d72/dev-optim/deps/test_nlo_acceptance-231c6758786127e5",
+      "sha256": "425648be76457c27a193a792f2ec3e637d66872975504aea9174dfb6220ed91c",
+      "bytes": 2323017976,
+      "features": {},
+      "sha256_after": "425648be76457c27a193a792f2ec3e637d66872975504aea9174dfb6220ed91c"
+    }
+  ],
+  "producer_features": [
+    {
+      "package": "gammalooprs",
+      "features": {
+        "test-lib-gammalooprs.json": "[\"default\"]"
+      },
+      "fingerprint_json_matches": true
+    },
+    {
+      "package": "gammaloop-integration-tests",
+      "features": {
+        "test-integration-test-test_nlo_acceptance.json": "[\"default\"]"
+      },
+      "fingerprint_json_matches": true
+    }
+  ],
+  "source_audit": {
+    "checks": {
+      "all_tracked_files_match_tip": true,
+      "eight_file_inventory": true,
+      "evidence_only_after_code": true,
+      "protected_paths_unchanged": true,
+      "nixci_disabled": true,
+      "old_bookmark_preserved": true,
+      "staged_bookmark_preserved": true,
+      "maps_patch_byte_exact": true,
+      "selection_added_removed_lines_exact": true,
+      "graph_regressions_only_native_parser_migration": true,
+      "coorientation_owner_exact": true,
+      "CoolQM_approved_body_except_staged_labels": true,
+      "epem_unchanged_from_staged_base": true,
+      "numeric_source08_09_unchanged": true,
+      "unique_ids_and_title": true,
+      "six_canonical_scope_digests": true,
+      "reference_source_output_closure_unchanged": true,
+      "reference_base_log_hash": true,
+      "current_docs_builder_hash": true,
+      "features_gammalooprs": true,
+      "dep_inputs_exist_gammalooprs": true,
+      "build_after_source_inputs_gammalooprs": true,
+      "features_gammaloop-integration-tests": true,
+      "dep_inputs_exist_gammaloop-integration-tests": true,
+      "build_after_source_inputs_gammaloop-integration-tests": true
+    },
+    "tracked_blob_count": 3399,
+    "tracked_mismatches": [],
+    "scopes": [
+      {
+        "path": "crates/gammalooprs/src/integrands/process/mod.rs",
+        "symbol": "bundle incidence",
+        "digest": "fa84abc99317adbeae2c80083e8a6eeffce546ab",
+        "matches": true
+      },
+      {
+        "path": "crates/gammalooprs/src/integrands/process/sampling/maps.rs",
+        "symbol": "signed affine input blocks",
+        "digest": "c914fffdc29bc975430dc87ee68bda2e11c2fc5c",
+        "matches": true
+      },
+      {
+        "path": "crates/gammalooprs/src/integrands/process/sampling/maps.rs",
+        "symbol": "exact zero affine coefficients",
+        "digest": "08c5ff1dc2daf0f7e601b640de95ccd36a3a8b15",
+        "matches": true
+      },
+      {
+        "path": "crates/gammalooprs/src/integrands/process/sampling/selection.rs",
+        "symbol": "shared signed LMB frame",
+        "digest": "cb0a19bd463a7c4f03905dff4e66f8c37e38b69b",
+        "matches": true
+      },
+      {
+        "path": "crates/gammalooprs/src/integrands/process/mod.rs",
+        "symbol": "graph-derived reflection controls",
+        "digest": "a07a79ea2a2ab2ba9e0544357f113fd7ceaf2a60",
+        "matches": true
+      },
+      {
+        "path": "tests/tests/test_nlo_acceptance/cool_qm_eos.rs",
+        "symbol": "fixed seed CoolQM gate",
+        "digest": "fd8f5ff00a6b7b7cf3b3b5299f61624dcd7cbc79",
+        "matches": true
+      }
+    ],
+    "producer_features": [
+      {
+        "package": "gammalooprs",
+        "features": {
+          "test-lib-gammalooprs.json": "[\"default\"]"
+        },
+        "fingerprint_json_matches": true
+      },
+      {
+        "package": "gammaloop-integration-tests",
+        "features": {
+          "test-integration-test-test_nlo_acceptance.json": "[\"default\"]"
+        },
+        "fingerprint_json_matches": true
+      }
+    ],
+    "notes": [
+      "Reference export reads CLISettings, OneShot, RuntimeSettings and ShowDefaultsGuard; no Process graph serialization is exported. process/mod.rs changes only runtime methods and tests; neither encoded struct layout nor metadata owner changes.",
+      "Additional staged parser control is inherited from f2 and new to the 179-case selected inventory; it is not a newly authored test in this patch."
+    ]
+  },
+  "physics": {
+    "CoolQM": {
+      "passed": true,
+      "seed": 1337,
+      "samples": 750000,
+      "target": -0.0610772376129,
+      "pull_limit": 3,
+      "relative_error_limit": "1.5 * 0.009980780719103282",
+      "displayed_result": "-6.235(61)e-2",
+      "displayed_pull_sigma": 2.077,
+      "displayed_relative_error_percent": 0.984,
+      "seconds": 66.424,
+      "master_labels": [
+        "GL0",
+        "GL1",
+        "GL3",
+        "GL4",
+        "GL5"
+      ],
+      "master_validation": "Unchanged staged example/model and graph-finalization owners generate five masters. Acceptance checks exact staged master set and that every master contributes samples. No old label restoration or graph filter added by this patch."
+    },
+    "epem": {
+      "passed": true,
+      "nlo_seed": 220311038,
+      "nlo_samples_per_slot": 60000,
+      "seconds": 71.865,
+      "displayed_nominal_result": "+8.04(61)e-3",
+      "displayed_nominal_relative_error_percent": 7.54,
+      "routes": [
+        "integrated",
+        "local-only",
+        "local-only-no-threshold"
+      ],
+      "representations": [
+        "direct3D",
+        "explicit3D",
+        "projected4D-to-CFF"
+      ],
+      "scale_controls": [
+        "m_uv",
+        "mu_r",
+        "localization scale"
+      ],
+      "source_contract": "Byte-identical to f2; real/imaginary gates, published LO/NLO normalization, graphwise Arb comparison, scale-law/error gates and seeds/sample budgets retained. Earlier changes vs old c829 belong to approved staged base, including explicit runtime policy and native GL2/GL0 identities."
+    }
+  },
+  "semantic_review": [
+    "Co-orientation is derived from current physical NodeForest edge endpoints. It changes sampling coordinates only; graph incidence, numerator owners and factorization remain untouched.",
+    "Selected-basis column blocks are reflected before A: A*R*k+b, including identity parent reflection. Fixed external b is unchanged. Determinants are absolute; inverse and inverse-density paths use the same reflected frame. OSE inverts that frame before taking basis-edge energy norms.",
+    "Production converts the signed bridge raw coordinates directly to MomentumSample before evaluating the whole graph group; denominator evenness does not supply numerator signs.",
+    "P3 graph-derived routing exercises three parent bases, three channels, two cube points, and two partition modes:36 generating cases/108 inverse checks. It verifies nonzero shifts, mixed loop routing, parent reflection, physical conservation and a nonzero odd edge-local factor without expanding graph numerators.",
+    "P3 weighted numerator sum certifies partition unity only. It is not an independent full-evaluator multiplicity certificate; returned channel IDs rely additionally on existing catalogue/order/dedup controls.",
+    "Only exact numeric-domain IsZero/SingleFloat zero coefficients are omitted; no f64 threshold is introduced. The small-nonzero regression covers f64 and QuadFloat. Existing finite matrix/input/output checks and the numeric source08/09 comparison and underflow policies are unchanged; selected nonfinite/underflow controls passed.",
+    "All original178 test identities remain selected and passed. The extra signed-RQFT parser test is inherited from staged base and new to this inventory; it validates actual physical loop-slot, incidence, native/runtime and export/import boundaries."
+  ],
+  "static_reuse": {
+    "scoped_clippy": {
+      "status": "REUSED audited candidate transcript; not independently rerun",
+      "command": "cargo clippy -p gammalooprs -p gammaloop-integration-tests --all-targets --locked --profile dev-optim -- --deny warnings",
+      "exit_code": 0,
+      "log": "target/sampling-staged/clippy.log",
+      "sha256": "26c2d3284cbe9467a901981f67850d24ef2ba18a0c6f262a9245116287bd0666",
+      "notes": "Source/feature identity and successful final transcript verified; two inherited Clarabel dependency warnings."
+    },
+    "reference": {
+      "status": "REUSED reviewed f2 canonical --check; no new reference build credited",
+      "source_output_closure_unchanged": true,
+      "log": "/shared/lcnbr/dev/gammaloop/generation-projector-flow/target/generation-projector-flow-staged/reference-check.log",
+      "log_sha256": "9f8bc0f32178bdb435ae5789055b08ec67a39856fe466f09c3411a2a4702c157",
+      "closure_reason": "Exporter reads OneShot command metadata, CLISettings/RuntimeSettings schema/defaults and ShowDefaultsGuard. Their owners and generated reference output are unchanged. process/mod.rs changes no struct layout/serialization or exported metadata owner."
+    }
+  },
+  "docs": {
+    "fresh_fmt": true,
+    "fresh_typst_compile": true,
+    "fresh_kernel_isolation": true,
+    "six_scopes_canonical_hashes_pass": true,
+    "current_workspace_canonical_check": "FAIL at inherited gammaloop-architecture state.rs digest after owned note/scopes have been checked",
+    "full_docs_pass": false,
+    "limitations": "Inherited whole-file process/mod.rs scope was already stale and is further changed here. No assertion that all old scope payloads are byte-identical; source31 scope/anchor repair and staged22 evidence-classification correction remain pending."
+  },
+  "mandatory_postintegration_checks": [
+    "This tree omits19–21. Reconcile accepted19–21, then22–26, then27–29 in order; independent review of main candidate a517ca56 elsewhere is not credited by this review.",
+    "On the actual combined head, freshly verify source/features/binaries and rerun grouping/oracle and physical-LMB/projector/admission controls, all sampling/sign/P3 controls, source08/09 numeric controls, fixed CoolQM seed1337/750000-sample 3-sigma gate and epem route/scale/target acceptance.",
+    "Rerun required scoped Clippy, fmt, kernel isolation and canonical docs/reference checks against the combined owners; resolve inherited docs scope failures and staged22 audit correction in their assigned integration lane.",
+    "Complete planned BRST/fullWP3 and normal publication readiness gates before claiming whole-main acceptance or release."
+  ],
+  "limits": [
+    "No source19–21, BRST, fullWP3, full physics suite, benchmark, distribution study, or general full-evaluator multiplicity approval.",
+    "Old approvals provide history/patch provenance only; fresh independent test counts are not doubled with implementer or historical runs.",
+    "Skipped/filtered tests are not passes;179 sampling,34 numeric with one overlap plus2 acceptance gives214 unique tests."
+  ],
+  "environment": {
+    "nix_shell": "/nix/store/cjcdfaz0mfh9svpk13gd48l3j5zmdms2-nix-shell-env.drv",
+    "license": "preserved existing export or silently loaded current-user config; value not logged",
+    "cargo_build_jobs": 2,
+    "nextest_threads": 2,
+    "acceptance_test_threads": 1,
+    "acceptance_internal_workers": "unaltered fixed test settings",
+    "retries": 0,
+    "manual_cache_seeding": false,
+    "target_override": false,
+    "test_binary_rebuild": false
+  },
+  "policy_departures": [],
+  "protection": {
+    "tracked_edits": false,
+    "ref_moves": false,
+    "nested_agents": false,
+    "integration": false,
+    "publication": false,
+    "other_workspace_writes": false,
+    "old_tip_and_bookmark_preserved": true,
+    "all3399_tracked_blobs_match_reviewed_tip": true,
+    "source_kernel_locks_and_nixci_false_preserved": true
+  },
+  "cleanup": {
+    "task_processes_remaining": false,
+    "test_generated_state": "Both acceptance tests ran normal clean_test cleanup on success.",
+    "retained": "target/astra-staged27-review-xdkg_f61",
+    "reason": "Independent review scripts, logs, structured audit, producer hashes, and Typst output retained for parent review and continuation; shared cache and implementer evidence untouched."
+  },
+  "artifact_sha256": {
+    "target/astra-staged27-review-xdkg_f61/kernel.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "target/astra-staged27-review-xdkg_f61/docs.log": "5fed05bd1e11a60cfd0b0d55f43ab06598e6931e59891248f015b45e3b829c16",
+    "target/astra-staged27-review-xdkg_f61/audit.py": "ce632e561c41c9fd9739653277e40d994b57e172b06d01190805b94634c3910b",
+    "target/astra-staged27-review-xdkg_f61/sampling.log": "928f72e2acf80a77c108073510fc274c6fd38f8fa02e386a75052f6adf59b2d2",
+    "target/astra-staged27-review-xdkg_f61/identity-after.json": "0719c0abd19298c4c62f916febfd425a101fef2b23f872faefae0e0462d47448",
+    "target/astra-staged27-review-xdkg_f61/fmt.log": "1dadf1b63f3fc19e19b1e9fb9a6c3f7772d8ba250861dcced4346f892ae2fca3",
+    "target/astra-staged27-review-xdkg_f61/finalize.py": "7c6ceab6a71a22909c1c9885eadf42668d7b119e30139d8c3b04ad157d4ef51d",
+    "target/astra-staged27-review-xdkg_f61/numeric.log": "67424a8781b59f970d33e54339dcb98274d96152e45fe24c36192a4103245e2b",
+    "target/astra-staged27-review-xdkg_f61/checks.json": "846363283c3c64ad2560a29767315d5cd57e616e88834539a9e903f992b5f445",
+    "target/astra-staged27-review-xdkg_f61/audit.json": "4a7ce58d40b4439aba5666928619fb548382022d68131ec726810438e292ccef",
+    "target/astra-staged27-review-xdkg_f61/test-inventory.json": "e0f34c866ae2811f4d46a18cdc66311e2ee2532ee7828c40f3b82340b19a676d",
+    "target/astra-staged27-review-xdkg_f61/acceptance.log": "8354256bd16bf9aba9b4f96d409f23363fb93b60491b169e4b7998e09782e58c",
+    "target/astra-staged27-review-xdkg_f61/audit.log": "4a7ce58d40b4439aba5666928619fb548382022d68131ec726810438e292ccef",
+    "target/astra-staged27-review-xdkg_f61/driver.log": "0852a383e9945e88820ad5313d91ea7529d48645077e7cb5bb2f2adb90908ac5",
+    "target/astra-staged27-review-xdkg_f61/note.html": "367165877bad79d6fb7efc939d96713c5e9ec65f6e41a5f57f2831de10fae7de",
+    "target/astra-staged27-review-xdkg_f61/typst.log": "d103175d5ac5ba1d2d4afae2e801958a1e0dafae1b43ffe6f1f44f3783a2f3ce",
+    "target/astra-staged27-review-xdkg_f61/identity-before.json": "f7074e856a1aadfda39db5956311b763a065aea7216aa2cbec68570479a0aee0",
+    "target/astra-staged27-review-xdkg_f61/run-checks.py": "828aac39ce61faa921177cedcb28b637b3668d5d8acdaa4c9f456ed9dd9e4423"
+  }
+}

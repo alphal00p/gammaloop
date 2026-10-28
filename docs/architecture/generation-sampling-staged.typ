@@ -1,11 +1,14 @@
 = Staged signed sampling reconciliation
 
-This preparation ports the cumulative approved sampling production and regressions
-at `c82916079b5cc643151e0213499ca9875739a4e3` onto reviewed staged sources 22–26 at
-`f2e32c44c986058ede1d7e585b9e2e4fefe1110c`. The original sampling bookmark and
-independent production and P3 reviews remain preserved. This branch omits sources
-19–21. Ordered main replay must apply 19–21, then 22–26, then 27–29 and rerun
-combined acceptance. A NEW independent Astra review is required before that replay.
+Approved cumulative staged preparation `2d679436` (code `a205202b`, base `f2e32c44`)
+is integrated after independently approved main sources22–26 at
+`a517ca563d78d161cff17fe60e661f80529c9a83`. The combined tree includes the reviewed
+19–21 grouping/finite guards, recertified native digests and normal oracle budget.
+Runtime implementation `c2cce079a92c66fd1435a2ad42d86c17e16353be` preserves the
+approved preparation's seven non-registry files byte-for-byte. Registry insertion
+retains current 19–26 ownership records. Original sampling/preparation references
+and reviews remain unchanged; their checks retain their original identities.
+A NEW independent Astra integration review is required before source30.
 
 == Sampling and physical ownership
 
@@ -57,6 +60,24 @@ source31 documentation scope failures are retained; this lane does not refresh
 unrelated digests or duplicate the staged22 audit correction.
 
 BRST, full WP3, historical multi-seed studies and full unrelated heavy physics are
-outside this preparation. Stage19 grouping is absent and final combined acceptance
-is mandatory. No main integration, publication, upload, push or PR is authorized
-by this result.
+outside this preparation. Combined acceptance on the actual main integration source is recorded separately;
+preparation results are not credited as fresh combined passes. No publication,
+upload, push or PR is part of this step.
+
+== Ordered integration evidence
+
+#link("evidence/generation-integration/wp3/units27-29/receipt.json")[The combined receipt]
+records source mappings, fresh sampling/numeric/grouping/history controls and both
+unchanged fixed-physics gates. Code hashes bind the frozen runtime source; mutable
+receipts and registry metadata are recorded separately. The old15-test oracle
+matrix is not repeated: its generator, census, two certified digest literals,
+source fixtures and resource policy are unchanged, and its generated workloads do
+not traverse the runtime sampling owner changed here. Full rebuilt-tip validation
+remains required later.
+
+Both source19 rows are certified and passing after independent review of `0a38`.
+Source22 was released there, and source27 was released by the independent `a517`
+review. Earlier blocked/P1 wording in current trackers is explicitly superseded;
+original frozen receipts and failures remain historical. Source30 closure is still
+in its separate preparation lane; source31 global scope reconciliation, three
+older frame assertions, full WP3 physics, benchmarks and distribution gates remain.

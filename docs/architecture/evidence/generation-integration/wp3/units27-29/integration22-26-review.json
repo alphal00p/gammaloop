@@ -1,0 +1,319 @@
+{
+  "reviewer": "NEW independent Astra integration reviewer; no nested agents",
+  "verdict": "APPROVE",
+  "scope": "Cumulative ordered sources22–26 integration on approved0a38 only; gate for orderedSOURCE27. No wholeWP3, full physics, performance or distribution approval.",
+  "candidate": "a517ca563d78d161cff17fe60e661f80529c9a83",
+  "change": "klkryukzvmvtslrzupurkqyzuplvltny",
+  "code": "2eb0d9db13caed01cb589f869089bc0753ab429b",
+  "frozen_metadata_snapshot": "19907c61153d1a16c6b9f2805ad6b4b79a91f2fa",
+  "approved_parent": "0a38ee4e3e7d16af3978f2c6ccde04dc176dfea9",
+  "approved_preparation": "f2e32c44c986058ede1d7e585b9e2e4fefe1110c",
+  "bookmarks": [
+    "generation-integration",
+    "generation-integration-units22-26"
+  ],
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-integration-plan",
+  "review_directory": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-integration22-26-review-XmShwW3I",
+  "blocking_findings": [],
+  "nonblocking_findings": [
+    {
+      "severity": "P3",
+      "title": "Mark obsolete source19–21 child gate strings as superseded in current summaries",
+      "locations": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/wp3/replay.json",
+          "line": 1243
+        },
+        {
+          "path": "docs/architecture/evidence/generation-integration/execution.json",
+          "line": 348
+        }
+      ],
+      "detail": "The mutable row_recertification summaries now say APPROVED independently, but their P1 field still says the migration awaits combined review and source22 still says BLOCKED. The active_slice19_21 nested copies retain equivalent pre-review next_gate/recertification strings. The surrounding combined_review and0a38 archived receipt correctly record approval. These stale strings can mislead a consumer reading a child field in isolation.",
+      "requested_followup": "At the next bookkeeping update, make current gate fields reflect approved0a38 and label the old text historical/superseded. Preserve frozen original receipts and provenance.",
+      "nonblocking_reason": "Exact production, both certified literals, current approval and normal15/15 evidence are verified. This is a summary inconsistency, not a live P1 or a reason to blockSOURCE27."
+    }
+  ],
+  "source27_gate": {
+    "may_proceed": true,
+    "instruction": "Ordered SOURCE27 may proceed after this scoped22–26 integration gate, under the accepted implementation/independent-review workflow. This review does not implement or approve27–29."
+  },
+  "cumulative_reconciliation": {
+    "inventory_files": 74,
+    "tracked_files_equal_frozen_candidate": 3456,
+    "only_preparation_parent_overlap": [
+      "docs/developers.toml"
+    ],
+    "all_runtime_inputs_byte_identical_to_approved_preparation": true,
+    "prior_runtime_oracle_quotient_census_registration_resource_policy_unchanged": true,
+    "prior_modified_files": [
+      "docs/architecture/evidence/generation-integration/execution.json",
+      "docs/architecture/evidence/generation-integration/wp3/oracle-registry-audit.py",
+      "docs/architecture/evidence/generation-integration/wp3/replay.json",
+      "docs/architecture/generation-integration-plan.typ",
+      "docs/architecture/generation-integration-wp3-grouping.typ",
+      "docs/developers.toml"
+    ],
+    "preparation_exceptions_only_documentation_and_canonical_scope_correction": [
+      "docs/architecture/architecture-current.typ",
+      "docs/architecture/evidence/generation-projector-flow-staged/docs-limit.json",
+      "docs/architecture/evidence/generation-projector-flow-staged/inherited-scopes.json",
+      "docs/architecture/evidence/generation-projector-flow-staged/receipt.json",
+      "docs/architecture/evidence/generation-projector-flow-staged/scope-audit.py",
+      "docs/architecture/generation-projector-flow-staged.typ",
+      "docs/developers.toml"
+    ],
+    "all_six_changed_Rust_deltas_manually_reviewed": true,
+    "no_generation_options_compatibility_or_source36_or27plus_import": true,
+    "Rust_policy": "Existing owners reused, typed AindError propagated through ParseError source, explicit chart conversion and validation kept separate; no new undocumented departure found."
+  },
+  "source_intents": [
+    {
+      "source": 22,
+      "result": "BubbleFlow selects unique visible orientation from actual incoming external vertex and stored physical energy direction. Native f64/quad/arbitrary-precision analytic assertions, coordinates, scales and tolerances retained. Fresh scalar_bubble_inspect and stored-edge reversal pass; exact approved tail and the two staged CLI command adaptations verified."
+    },
+    {
+      "source": 23,
+      "result": "Independent inverse-encoding equality against approved0a38 proves exactly8 variance changes and native slot/master-key spelling, preserving every other byte of19 authored graphs/factors/routing/weights. Old735 differs only by already-approved staged17 metadata removal. Fresh native runtime composition closes all19 interfaces and preserves effective first master; exact8 authored colour incidences pass and a deliberately reversed pair fails."
+    },
+    {
+      "source": 24,
+      "result": "Actual CLI SpecArgs -> staged Request/NumeratorOptions retains literal one-based model projector. Typed source-bearing AindError rejects represented local zero; native local-zero codec unchanged. Fresh complete topology card, generated numerator/port closure, native short/explicit-zero, non-half-edge zero, positive/max and compact overflow controls pass. Sewn comparison retains exact indexed expression, canonical named ports/dimensions/variance, routing, factorized numerator and complete composed same_value including residual logical order. Independent A1/B3 controls retain hidden-history guarantees."
+    },
+    {
+      "source": 25,
+      "result": "Legacy particle_id rejection moved into shared compact admission, covering both normal and direct compact frontdoors. Explicit conversion guidance retains native fingerprint precedence, typed source errors and native metadata. Fresh legacy-conversion, fingerprint, source-error and admission controls pass; public exports/native runtime owner and source36 owner unchanged."
+    },
+    {
+      "source": 26,
+      "result": "Entire RQFT fixture byte-equal to originalsource26; removing only21 lmb_id attributes and new comments exactly restores approvedparent. Seven endpoint/particle/slot bases preserve tagged parallel-edge identity. Fresh model-rule/runtime/native-roundtrip test validates positive-unit selected directions, zero external coefficients and every routing row/factor/graph incidence. No statement-ordinal assumption or physics expectation update."
+    }
+  ],
+  "scope_P3_correction": {
+    "closed": true,
+    "existing_canonical_owner_reused": true,
+    "old_scopes_check_and_CLI_body_AST_unchanged": true,
+    "builder_rules_independently_checked": "Unique nonblank start always, unique nonblank end when present, nonoverlapping ordered ranges, exact Git-blob hashing; independent git hash-object checks include Unicode.",
+    "fresh_controls": 16,
+    "source_matched_frozen_false_passes_rejected": 2,
+    "preparation": {
+      "revision": "f2e32c44c986058ede1d7e585b9e2e4fefe1110c",
+      "base": "d48f9d1aedc766eea5cb185ab6029d1f04462043",
+      "valid": 55,
+      "stale_digest": 23,
+      "anchor": 4,
+      "all27_inherited_exact": true,
+      "origin_at438": {
+        "inherited": 7,
+        "later": 20
+      }
+    },
+    "integration": {
+      "revision": "19907c61153d1a16c6b9f2805ad6b4b79a91f2fa",
+      "base": "0a38ee4e3e7d16af3978f2c6ccde04dc176dfea9",
+      "valid": 65,
+      "stale_digest": 24,
+      "anchor": 4,
+      "all28_inherited_exact": true,
+      "origin_at438": {
+        "inherited": 7,
+        "later": 21
+      }
+    },
+    "newly_owned_scopes_valid": 7,
+    "historical_fields_preserved_append_only_supersession": true,
+    "unrelated_digests_refreshed": false,
+    "global_documentation_pass": false
+  },
+  "fresh_checks": {
+    "Rust_tests": 37,
+    "results": "fresh-results.json",
+    "tests_run_on_verified_candidate_binaries": true,
+    "selection": "8 native finalization/history/interface;3 current API/projector;13 runtime/parser/Aind;2 bubble;5 generator template/admission;5 quotient;1 explicit ignored original-pairB2.",
+    "schema": "Fresh current CLI producer with GAMMALOOP_SCHEMA_PATH redirected into review scratch; runhistory byte-equal to frozen code and approved preparation; scratch removed.",
+    "reference": "Fresh compiled reference producer --check passed on current workspace.",
+    "kernel": "Fresh just check-symbolica-feature-isolation passed.",
+    "scope_and_fixture_controls": [
+      "scopes.json",
+      "fixture-checks.json"
+    ],
+    "runner_control": "Exact current validation loop executed with false then unreachable true; exit1, one recorded failure, later command absent. No production rerun/pass credit."
+  },
+  "reuse": {
+    "current_integration_Rust_receipts": 147,
+    "current_integration_doctests": 1,
+    "deduplicated_actual_JUnit_and_libtest_passes_verified": true,
+    "source_and_feature_bound_producers": 7,
+    "actual_binary_and_fingerprint_hashes_verified": true,
+    "completed_artifacts_verified": 61,
+    "fresh37_overlap147_do_not_sum": true,
+    "Clippy": "Current2eb relevant4-package --all-targets -D warnings pass and raw hash verified; not redundantly rerun.",
+    "fmt_and_Typst": "fmt and all3 metadata-snapshot Typst note/plan/grouping receipts and logs verified; reused.",
+    "source19_21": "Approved0a38 normal15/15 ci_gammaloop global16/memory-intensive2/240s plus independent representative6 retained. Production/oracle/harness/fixtures/resource-policy bytes unchanged and import paths do not alter these generated oracle workloads; no redundant full matrix run.",
+    "source19_current_rows": "Both current numerator-digest rows remain certified and passing:0xae5ed16f90c02201 and0x82a821cc454caa0c. They are not active P1 blockers.",
+    "old_df551_proof": "All235 original artifact hashes reverified; archived mathematical/provenance/P2 review copies and21 prior combined-review artifacts verified. Frozen originals untouched.",
+    "preparation": "Historical107Rust+1doctest and31 independent checks retain old identities; no fresh integration pass credit."
+  },
+  "protection": {
+    "protected_paths_count": 67,
+    "protected_refs_count": 22,
+    "all_protected_paths_and_refs_unchanged": true,
+    "nixci_enabled": false,
+    "kernel": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+    "three_pins_uv_notebook_host_subset_locks_manifests_source_plan_frozen_refs_preserved": true,
+    "no_tracked_edits": true,
+    "no_ref_changes": true,
+    "no_nested_agents": true,
+    "no_integration_or_publication": true
+  },
+  "limits": [
+    "Sources27–29 sampling preparation/integration and their reviews remain pending; this result clears only orderedSOURCE27 to start.",
+    "SOURCE30 compile-time-input closure andSOURCE31 global documentation-scope/anchor repair remain open.",
+    "Three older historical frame assertion failures remain outside this gate; the two recertifiedSOURCE19 rows are certified/passing.",
+    "Four whole-graph-expanding parser parity helpers were omitted and receive no pass credit.",
+    "FullWP3, five fresha_ddx, BRST, epem, CoolQM, full rebuilt-tip physics and slow ghost-forest equivalence remain open.",
+    "M-rebuild/performance/benchmarks and final LinnestWASM, PDF/manual, sdist, native/Pyodide/Community wheels and installed-distribution gates remain open.",
+    "No graph numerator expansion, count-only physics proof, blind expectations/digest updates, final distribution or publication claim."
+  ],
+  "environment": {
+    "Nix_shell_drv": "/nix/store/xrn91gkp7giwchhflr8pbl4hd1a6ycc6-nix-shell-env.drv",
+    "cwd": "/shared/lcnbr/dev/gammaloop/generation-integration-plan",
+    "license": "Preserved export or silently loaded current-user XDG config; no license output.",
+    "build_jobs": 2,
+    "test_threads": 2,
+    "rayon_threads": 2,
+    "CARGO_TARGET_DIR_override": false,
+    "cache_seeding_or_deletion": false,
+    "initial_shell_attempt": "Default nix develop began unrelated shell/WASM realization; own client cancelled and completed. Subsequent checks use exact recorded realized Nix shell and verified binaries. No final WASM result claimed."
+  },
+  "cleanup": {
+    "schema_and_negative_fixture_removed": true,
+    "retained_review_scripts_receipts_logs": "target/astra-integration22-26-review-XmShwW3I",
+    "retention_reason": "Durable evidence for parent handoff and future review; all under ignored target.",
+    "background_processes_retained": false,
+    "other_workspaces_and_shared_cache_untouched": true
+  },
+  "completed_utc": "2026-10-28T06:16:51.060886+00:00",
+  "artifacts": [
+    {
+      "path": "target/astra-integration22-26-review-XmShwW3I/colour-positive.json",
+      "bytes": 9079,
+      "sha256": "9247f58c70a7b57beb2868aaae935546b19dd7b55712a1bc58183e059b740903"
+    },
+    {
+      "path": "target/astra-integration22-26-review-XmShwW3I/final-audit.json",
+      "bytes": 618,
+      "sha256": "b4c846344072f46dda95e8c7710e5537f7bffc060cd929105871942f6c673134"
+    },
+    {
+      "path": "target/astra-integration22-26-review-XmShwW3I/final-audit.py",
+      "bytes": 3932,
+      "sha256": "438ecae4dcf1126546b04f28556ea8850248e6c9cf94f257965362ba84887e07"
+    },
+    {
+      "path": "target/astra-integration22-26-review-XmShwW3I/fixture-checks.json",
+      "bytes": 2047,
+      "sha256": "f2e8e8b8403bf6e77e252a4db57fe472e9d9e40daeafaa025087fb707c1a6d38"
+    },
+    {
+      "path": "target/astra-integration22-26-review-XmShwW3I/fresh-b2.log",
+      "bytes": 181,
+      "sha256": "9140dc52266a498e6f823d5e6f2433532d2e15260ffddb1c09b1dd578c592d37"
+    },
+    {
+      "path": "target/astra-integration22-26-review-XmShwW3I/fresh-feynkit-graph.log",
+      "bytes": 916,
+      "sha256": "0d65b58928ce6a6481f31a5cf1408c9b286c44c2378eab175cb7e0932613b8c1"
+    },
+    {
+      "path": "target/astra-integration22-26-review-XmShwW3I/fresh-flow.log",
+      "bytes": 13557,
+      "sha256": "fe30e93f00ff2784e7ca76d64312e54e9ce12b0dc08b036da3a5e4d1ae356b04"
+    },
+    {
+      "path": "target/astra-integration22-26-review-XmShwW3I/fresh-gammaloop-api.log",
+      "bytes": 428,
+      "sha256": "7ba70685124261f6a7a22d06270a3d270f6f0128eb5543780912dc12121a2dc7"
+    },
+    {
+      "path": "target/astra-integration22-26-review-XmShwW3I/fresh-gammalooprs.log",
+      "bytes": 1314,
+      "sha256": "a8578b44cfb17b22883deee8bf1f9b3a3e0cfea9dc964d058a653923b923e766"
+    },
+    {
+      "path": "target/astra-integration22-26-review-XmShwW3I/fresh-generator.log",
+      "bytes": 3988,
+      "sha256": "fbfd9e4c941dabdba18fb079353cfcfafe4c324971e38915a90d90d50944919d"
+    },
+    {
+      "path": "target/astra-integration22-26-review-XmShwW3I/fresh-results.json",
+      "bytes": 7162,
+      "sha256": "b3b99d9450449a75c98e2aaf793fc292bbf8dffe24169034c1e4183eaaa49363"
+    },
+    {
+      "path": "target/astra-integration22-26-review-XmShwW3I/identity.json",
+      "bytes": 9842,
+      "sha256": "65aa949852802d614bd0bef0703e0902bb0c89fcf488548f7c61014030dd204c"
+    },
+    {
+      "path": "target/astra-integration22-26-review-XmShwW3I/identity.py",
+      "bytes": 4697,
+      "sha256": "c4fb23032ccbb72311bd849f64749d50deddc46e8d946a05304e4ce4dc8d45fe"
+    },
+    {
+      "path": "target/astra-integration22-26-review-XmShwW3I/kernel.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "target/astra-integration22-26-review-XmShwW3I/producer-identity.json",
+      "bytes": 14160,
+      "sha256": "9e359516919add44790bb8c14404ba23b2e7fd1a3a6490379e029571c2d50389"
+    },
+    {
+      "path": "target/astra-integration22-26-review-XmShwW3I/producers.py",
+      "bytes": 7434,
+      "sha256": "da52177e4008d1dec9e66f46a613a0e94a4c1f612060da283486a8e613b1f394"
+    },
+    {
+      "path": "target/astra-integration22-26-review-XmShwW3I/reference.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "target/astra-integration22-26-review-XmShwW3I/run-nix.sh",
+      "bytes": 459,
+      "sha256": "581794dfcd010ac2e31f1473d33c8e4034a0c59dbbf05773a83c404ed12287e6"
+    },
+    {
+      "path": "target/astra-integration22-26-review-XmShwW3I/runner-control/failure.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "target/astra-integration22-26-review-XmShwW3I/runner-control/validation.json",
+      "bytes": 368,
+      "sha256": "216bafb524c176bdd0382f4e59e8629b6ab6dd74457ad73e987dcb8645635194"
+    },
+    {
+      "path": "target/astra-integration22-26-review-XmShwW3I/schema-comparison.json",
+      "bytes": 122,
+      "sha256": "243a7ef4bfe095e07b99bb5bd1400a69381bb8626d501c47b74b8a007b30aeff"
+    },
+    {
+      "path": "target/astra-integration22-26-review-XmShwW3I/schema.log",
+      "bytes": 86,
+      "sha256": "d5979c8ce1dc94c64d4790c6254df8107cdea09045c287b465cda4da0aac1e47"
+    },
+    {
+      "path": "target/astra-integration22-26-review-XmShwW3I/scope-fixtures.py",
+      "bytes": 8928,
+      "sha256": "c8a7ebd81f5c948e931aa9ce7cc43b0beec138fa30329e68ca0b131dd3b4e0d8"
+    },
+    {
+      "path": "target/astra-integration22-26-review-XmShwW3I/scopes.json",
+      "bytes": 108212,
+      "sha256": "d52d79669221db20147f7391129d7221629c031ee19bf527044656a25fe76724"
+    }
+  ]
+}
