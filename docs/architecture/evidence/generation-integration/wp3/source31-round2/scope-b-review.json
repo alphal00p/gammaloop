@@ -1,0 +1,188 @@
+{
+  "verdict": "APPROVE",
+  "scope": "B only: MAIN31 canonical Git-pinned documentation pipeline, source/producer/test evidence; complementary scope A approval still required before32.",
+  "reviewer": "NEW independent Astra review; no nested agents; read-only tracked workspace and refs",
+  "reviewed_at_utc": "2026-10-28T13:28:01.526667+00:00",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-integration-plan",
+  "review_directory": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-source31/astra-scope-b-20261028-edSHj9",
+  "candidate": "3a90bc05e1e50fc85b0f7541ef82086a0e2db873",
+  "change": "vtznspxkuxrwrklxlsytutkkwnntxzzs",
+  "bookmarks": [
+    "generation-integration",
+    "generation-integration-source31"
+  ],
+  "approved_parent": "7587d0c768363f200e89250683e7836c867c9b81",
+  "integration_commits": [
+    "cde7b7e2e0a68feb5615829755da054d8b8e0c8d",
+    "ecd901151e9c6a4b30df75198c7613f1532416b1"
+  ],
+  "runtime_build_code": "ecd901151e9c6a4b30df75198c7613f1532416b1",
+  "frozen_metadata": "d7568e9e91df26aa771bdd5cecbfd67887b9b6ad",
+  "blocking_findings": [],
+  "nonblocking_findings": [],
+  "conclusion": "The claimed canonical snapshot is the real completed Git-backed ECD Nix output, with exact source, derivation, producer, NAR and daemon-log bindings. Fresh semantic HTML/accessibility and link checks pass. The final 18-JSON metadata delta is complete and correctly separated from the unbuilt final source/derivation. Latest pages remain a real, explicitly limited failure at exactly the three queued obsolete callers; no full-site pass is inferred.",
+  "semantic_contract_assessment": [
+    {
+      "file": "nix/documentation.nix",
+      "line": 25,
+      "assessment": "Revision derives from the actual flake Git revision; fresh full-SHA Git evaluations reproduce all three ECD derivations. Snapshot env, six snapshot.json/.note records, footers and 1210 repository source links bind ECD. No sha256/path-flake masquerading, 635-page composite, metadata-only or skip-Typst output."
+    },
+    {
+      "file": "nix/documentation.nix",
+      "line": 86,
+      "assessment": "documentationSrc includes the entire docs tree. All 2402 included ECD blobs match Git; all 1345 Cargo producer blobs match Git. Source NARs recomputed. Current local path-patch selection, source owners and unmodified deterministic postPatch native anchor manifest contexts were inspected."
+    },
+    {
+      "file": "nix/documentation.nix",
+      "line": 146,
+      "assessment": "Reusable Cargo source excludes prose/evidence; producer deliberately dummies documentation-example inputs and only compiles tests with --no-run. Consumer uses the full real documentation source and executes 88 distinct generated/documented Rust tests plus3 GammaLoop exporter tests plus2 Linnet exporter tests. No producer compile is credited as a runtime pass."
+    },
+    {
+      "file": "nix/documentation.nix",
+      "line": 376,
+      "assessment": "Actual pages daemon log runs2 locked ci-optim catalog reference checks and5 separate feature-selected stub checks, then2 exporter test contexts, then builds/installs the same-source Community wheel. Count is93 unique Rust test names;7 child-process repetitions and zero-test doctests excluded."
+    },
+    {
+      "file": "nix/documentation.nix",
+      "line": 460,
+      "assessment": "Snapshot fixture independently renders six products and developer pages, validates links in the Rust builder, runs unchanged Python HTML checker, retains/cleans channel sentinels and finishes install/fixup successfully. This fixture deliberately does not execute the entire latest validation sequence."
+    },
+    {
+      "file": "crates/alphal00p-docs-builder/src/lib.rs",
+      "line": 676,
+      "assessment": "Renderer reads explicit registry, portal/talk/publication and API catalog inputs. Later18 evidence JSON files are neither Typst json/read inputs nor runtime/example/stub inputs. Evidence links are rewritten to ECD repository URLs; their later payloads are not rendered. Final Git revision/timestamp environment would alter generated metadata/source links, so no final-output byte identity or final NAR build success is asserted."
+    },
+    {
+      "file": "docs/architecture/evidence/generation-integration/wp3/source31-integration/metadata-source-binding.json",
+      "line": 2,
+      "assessment": "This tracked record binds frozen d756 metadata (14 files), while retained final-tip-source-binding.json binds final3a90 (18 files). Both exact source deltas and all selected Git blobs were independently recomputed; both documentation outputs remain unbuilt, and both reuse the identical completed Cargo derivation."
+    },
+    {
+      "file": "crates/linnet-py/tests/test_community_rendering.py",
+      "line": 20,
+      "assessment": "Three AttributeErrors at20/66/121 account for the entire113-run result:104pass,3error,6skip. Caller bytes are identical to MAIN30; approved queued43ef replaces all3 in the new staged API. This is a queued32\u201335 dependency, not a SOURCE31 regression; downstream builder-check/SVG/latest render/publication stages did not run."
+    }
+  ],
+  "fresh_checks": [
+    "Frozen3530 tracked entries/modes/symlink bytes match candidate before and after; all local bookmarks unchanged;27 protected refs and exact46-file/1659 cumulative inventories verified.",
+    "Fresh offline Git-pinned evaluation of ECD,d756,and3a90 reproduces source/derivation identities; source and completed output NAR hashes independently recomputed; daemon logs match retained hashes.",
+    "All1345 Cargo and2402 documentation source files matched exact ECD Git blobs; d756/final documentation source files matched their own exact Git revisions with14/18 JSON-only deltas.",
+    "Unchanged scripts/check-docs-html.py independently passes637 actual Nix-output shell pages. Additional independent parser checks77752 local links/anchors and1210 repository source links with0 errors; six v0.3.4 product manifests match full ECD.",
+    "All4223 retained HTML hashes match immutable output. All5 extracted ELF sizes/hashes matched the actual producer target.tar.zst stream, including hard-link archive owners; no consumer ELF-equivalence inference.",
+    "All93 unique test names independently reconstructed by command/feature/test binary from daemon log; 88+3+2 groups disjoint;7 child repetitions and0-test doctest excluded. Both references/five stubs and full Python failure accounting independently verified.",
+    "All35 changed JSON files parsed with arbitrary-precision Python integers;31 frozen code hashes,20 metadata hashes,99 retained artifact hashes,3 original review-copy hashes/bytes and18 source/output render bindings verified.",
+    "origin.json independently reproduces24 stale digests+4 anchor failures already present at a517 and exactly2 post-preparation changed owners; semantic102-scope approval remains scope A.",
+    "Production Rust/manifests/locks/uv/WASM/licenses/all nonmanual assets and prior proof records unchanged from MAIN30. Three kernels remain1a1829b1; notebook host dependencies are a root-lock package subset (excluding its own notebook root package); NixCI=false. Only active_slice30.status and new MAIN30/SOURCE31 metadata change in execution/replay; prior certificate/two-digest data preserved."
+  ],
+  "reused_checks": [
+    "Successful ECD canonical snapshot execution and retained Nix build logs, after fresh full source/derivation/output binding; not rerun and not final-tip build credit.",
+    "93 Rust tests,2 references,5 stubs and113-test Python execution from actual ECD latest-pages derivation; no fresh Rust/Python product execution.",
+    "18 focused Typst render outputs and approved Kurvst manual reused after exact source/output/compiler/timestamp bindings and complete retained Kurvst Typst input-tree equality to approved preparation; no fresh manual render or visual review."
+  ],
+  "failed_checks": [
+    "Canonical latest pages ECD derivation exits1 at exactly the3 known Process.generate_diagrams callers. No other observed test failures; remaining downstream stages were unrun.",
+    "Review dev-shell entry unexpectedly began ancillary linnest-wasm/clinnet-deps realization; own Nix client was interrupted immediately on detection (exit1). Checker was then run successfully using the existing Nix Python store runtime. No regenerated WASM was copied or accepted, no cold documentation build was attempted, and this aborted entry has no pass credit."
+  ],
+  "unrun_and_limits": [
+    "No new full Nix snapshot/pages or final-metadata source build; no cold documentation builds, manual Cargo artifact seeding or CARGO_TARGET_DIR override.",
+    "Final metadata source/derivation remains distinct and unbuilt. Approval qualifies frozen ECD rendered/runtime inputs plus audited metadata, not a final3a90 source-NAR output.",
+    "Full current semantic102-scope/prose reconciliation belongs to peer A; both scope approvals are required before32. No32\u201335 or36 preparation integrated here.",
+    "No graph-numerator expansion; four prohibited expansion parity helpers and three older frame assertions remain open. No full WP3/fivea_ddx/BRST/physics/performance/distribution/browser/publication claims.",
+    "Historical preparation client exit remains UNKNOWN; prior635 composite/path-flake failure has no canonical pass credit. SOURCE38 manual and Linnest WASM provenance remain later."
+  ],
+  "canonical_identity": [
+    {
+      "target": "alphal00p-docs-cargo-artifacts",
+      "derivation": "/nix/store/7kvm9zxk0vnn4g3szh4grdfq1db85gqm-alphal00p-docs-cargo-0.1.0.drv",
+      "output": "/nix/store/vsvphx6dliq1bxp1b1xlv9jbq00mqfs9-alphal00p-docs-cargo-0.1.0",
+      "source": "/nix/store/0fckr83mxbamrrcqikzk7svicrql0701-source",
+      "registered": true,
+      "nar_hash": "sha256-4YKLcQT1evLu7/H+H0PeUJawJqKmDbG1pQnLHYCFXHk=",
+      "runtime_commit": null
+    },
+    {
+      "target": "alphal00p-docs-snapshot-fixture",
+      "derivation": "/nix/store/hp7q7rc6dr8q37242y368i0cnw9l3iyq-alphal00p-docs-snapshot-fixture-0.1.0.drv",
+      "output": "/nix/store/acw4y7n3snw84fj4whf49qx0rwii46k2-alphal00p-docs-snapshot-fixture-0.1.0",
+      "source": "/nix/store/8kjyjwgcd85d248gawl910055al379xq-source",
+      "registered": true,
+      "nar_hash": "sha256-3NZc8aVuYabvzFUlobwlgxmBay6guTwiXeTfYq4y8ps=",
+      "runtime_commit": "ecd901151e9c6a4b30df75198c7613f1532416b1"
+    },
+    {
+      "target": "alphal00p-docs-pages",
+      "derivation": "/nix/store/4jcvpmvdj5m6pkkfpwhcjiynjh9dv4hc-alphal00p-docs-pages-0.1.0.drv",
+      "output": "/nix/store/xwnapvgxk3lnmsfns5mbr7iw8ahyj1z9-alphal00p-docs-pages-0.1.0",
+      "source": "/nix/store/8kjyjwgcd85d248gawl910055al379xq-source",
+      "registered": false,
+      "nar_hash": null,
+      "runtime_commit": "ecd901151e9c6a4b30df75198c7613f1532416b1"
+    }
+  ],
+  "source_identities": [
+    {
+      "target": "alphal00p-docs-cargo-artifacts",
+      "files": 1345,
+      "source": "/nix/store/0fckr83mxbamrrcqikzk7svicrql0701-source",
+      "nar_hash": "sha256-8k8K7Rt3q6+DyR4uDquHNaqrlqqb5jPKFJDdq8u/d60="
+    },
+    {
+      "target": "alphal00p-docs-snapshot-fixture",
+      "files": 2402,
+      "source": "/nix/store/8kjyjwgcd85d248gawl910055al379xq-source",
+      "nar_hash": "sha256-32eHbpqnq5KwtSEEpKn+HWBoby4aDPv7ZbhpqID0L40="
+    }
+  ],
+  "metadata_evaluations": [
+    {
+      "revision": "ecd901151e9c6a4b30df75198c7613f1532416b1",
+      "cargo": "/nix/store/7kvm9zxk0vnn4g3szh4grdfq1db85gqm-alphal00p-docs-cargo-0.1.0.drv",
+      "pages": "/nix/store/4jcvpmvdj5m6pkkfpwhcjiynjh9dv4hc-alphal00p-docs-pages-0.1.0.drv",
+      "snapshot": "/nix/store/hp7q7rc6dr8q37242y368i0cnw9l3iyq-alphal00p-docs-snapshot-fixture-0.1.0.drv"
+    },
+    {
+      "revision": "d7568e9e91df26aa771bdd5cecbfd67887b9b6ad",
+      "cargo": "/nix/store/7kvm9zxk0vnn4g3szh4grdfq1db85gqm-alphal00p-docs-cargo-0.1.0.drv",
+      "pages": "/nix/store/qfk2abavak88lrd4agn7r4ls8lxshl9y-alphal00p-docs-pages-0.1.0.drv",
+      "snapshot": "/nix/store/axpjs9x00ipvy58gdri7dkddwdqb779z-alphal00p-docs-snapshot-fixture-0.1.0.drv",
+      "delta_files": 14,
+      "source": "/nix/store/79yvgh0v2l3kb40yddbjlsacxciww899-source"
+    },
+    {
+      "revision": "3a90bc05e1e50fc85b0f7541ef82086a0e2db873",
+      "cargo": "/nix/store/7kvm9zxk0vnn4g3szh4grdfq1db85gqm-alphal00p-docs-cargo-0.1.0.drv",
+      "pages": "/nix/store/zh488mxyk0bajgmxjvzq0jh1g79kkrn6-alphal00p-docs-pages-0.1.0.drv",
+      "snapshot": "/nix/store/5sr74nrxqnvx6dvb5q4b5wcn82mwwv16-alphal00p-docs-snapshot-fixture-0.1.0.drv",
+      "delta_files": 18,
+      "source": "/nix/store/80rq92zma96kb553n8mlc141y99gam2x-source"
+    }
+  ],
+  "environment": {
+    "runtime": "/nix/store/hwxyyva16ymysk5i1jwpx307gdlimiqm-python3-3.13.14/bin/python3",
+    "cwd": "/shared/lcnbr/dev/gammaloop/generation-integration-plan",
+    "license": "Preserved exported license or silently loaded user config; never printed.",
+    "review_dir_ignored": true
+  },
+  "review_harness_notes": [
+    "Ignored-directory Python checks were corrected for jj local-versus-@git refs, Git tree path ordering, Nix derivation JSON v4 inputs schema, and tar hard-linked executables. These were review harness issues, not candidate failures; final scripts pass."
+  ],
+  "cleanup": {
+    "tracked_or_ref_changes": false,
+    "nested_agents": false,
+    "own_processes_retained": [],
+    "artifacts_retained": "Unique ignored review directory retained for review/continuation; scripts, audit JSON, current daemon logs, aborted-entry log and final guards are useful evidence. Shared caches, other reviewers and contributor files preserved."
+  },
+  "evidence_files": [
+    "identity-results.json",
+    "identity-audit.log",
+    "content-audit.log",
+    "test-audit.json",
+    "producer-archive-check.json",
+    "link-audit.json",
+    "snapshot-metadata.json",
+    "html-check.log",
+    "initial-guards.json",
+    "final-guards.json",
+    "dev-shell-attempt.log"
+  ]
+}

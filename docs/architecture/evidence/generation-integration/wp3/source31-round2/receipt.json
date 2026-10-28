@@ -1,0 +1,36 @@
+{
+  "round1": "3a90bc05e1e50fc85b0f7541ef82086a0e2db873",
+  "round1_ref": "generation-integration-source31-round1",
+  "scope": "MAIN31 A-F1 P2/A-F2 P3 nonrendered registry attestation correction only; no32+.",
+  "status": "Corrected;NEW independent Astra re-review required before32. ScopeB round1 approval remains source-bound toECD.",
+  "author": "Lucien Huber <im@lcnbr.ch>",
+  "findings": {
+    "A-F1": "Resolved in active registry comment: compilation sets stored-bundle antiparallel flags for A R k + b input-block reflection, fixed external shifts, unchanged physical edge-local numerator owners. Partition unity is not an independent evaluator multiplicity proof.",
+    "A-F2": "Resolved in active registry comment: bounded post30 source/input/producer review complete at7587; no full NixCI/physics/distribution inference."
+  },
+  "decisions": "decisions.json",
+  "checks": "checks.json",
+  "reviews": {
+    "scope-a-review.json": "ef12d14fde7cf5f1629f46753c50fd40fa362bb4e2e7bd9b61d5c6d6dc68319a",
+    "scope-b-review.json": "1ed8607aa773a096d4e4cc15e35801a49fb7ab53778ea41276ea5c1f918c0236"
+  },
+  "historical": {
+    "preparation_records": "docs/architecture/evidence/generation-integration/source31 remains byte-frozen; two obsolete preparation statements explicitly superseded by new current decisions.",
+    "round1_receipts": "All source31-integration/* remain unchanged, including original31-file/ECD and46-file/3a inventories, hashes, actual pass/failure logs and source/NAR bindings. These are historical qualified versions, not current-tip hashes."
+  },
+  "consumer": "Comments are discarded by Serde TOML; parsed registry exactly equal. No Typst/runtime/example/stub input changed. Rendered scope fields/digests unchanged. New commit/source-link timestamps would change metadata; new full source/NAR remains distinct/unbuilt.",
+  "reused": {
+    "code": "ecd901151e9c6a4b30df75198c7613f1532416b1",
+    "snapshot": "Actual637page canonical ECD pass and B independent77752local/1210pinned links. Not relabelled current candidate.",
+    "runtime": "B-verified93Rust/2reference/5stub checks and actual latestEXIT1:104pass/3obsoletecalls/6skip,113run. No rerun or skipped credit.",
+    "renders": "All18 prior focused Typst outputs/manual after exact unchanged source bindings; A independently fresh6 outputs. No new Typst source, so no redundant render."
+  },
+  "new_checks": "102scopes/16controls/64titles, exact parsed-registry/rendered-input equality,2actual immutableHTMLscope records, source/prose/history hashes and adjacent-wording audit.",
+  "limits": [
+    "SOURCE32\u201335 obsolete caller fixes remain queued and unimported.",
+    "TwoSource19digests certified passing;three older frame assertions/four omitted expansion helpers/fullWP3/physics/performance/finalWASM/distributions remain open.",
+    "No production Rust/manifest/kernel/lock/uv change;no graph numerator expansion;NixCI=false;no Clippy/physics/fullruntime/fullNix rebuild warranted."
+  ],
+  "retained": "target/wp3-source31-round2 plus all original logs/proof/workspaces/caches; no shared-cache override/seeding/deletion, no external action.",
+  "files": "files.json"
+}

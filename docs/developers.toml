@@ -427,7 +427,13 @@ anchor = "pub fn warm_up(&mut self, model"
 # weighted precise profiles alongside canonical FeynKit models.
 # Reviewed 2026-10-16: Authored warm-up fixtures declare a physical loop basis and only real endpoint rule slots. Production warm-up ownership is unchanged.
 # SOURCE31 semantic attestation (candidate, not independent approval):
-# Current compilation no longer sets antiparallel_edges from a parallel-edge bundle heuristic. The existing process/sampling description does not promise that removed inference. No source27–29 sampling acceptance is certified; recheck this complete scope after ordered main refresh.
+# Ordered post30 owner review: LmbMultiChannelingSetup sets antiparallel_edges
+# from stored bundle endpoint directions during channel compilation. The selected
+# input three-momentum blocks are reflected in A R k + b; b stays fixed and
+# physical edge-local numerator ownership is unchanged. The graph-derived weighted
+# sum certifies partition unity, not independent full-evaluator multiplicity.
+# Source27–29 acceptance remains bound to its approved cb585c98 receipt; this
+# annotation adds no physics or performance certification.
 digest = "b1711442cd184b4e9776b84d92c313d85f70b7b0"
 
 [[section.note.scope]]
@@ -2404,7 +2410,12 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # Drawing integration: approved ec-layout input removal; common notices and source-filter ownership retained.
 # Integration attestation 2026-10-27: this filter adds the source17 Tiptoe notice to required inputs; producer/runtime and per-crate cache ownership are unchanged. Nix WASM/bundle byte checks passed.
 # SOURCE31 semantic attestation (candidate, not independent approval):
-# Resource source lists follow current native rendering owners and separate production/test inputs. No producer closure result asserted; source30 owns missing compile-time source inputs and this scope must refresh after ordered integration.
+# Ordered post30 owner review complete: six FeynKit/Linnet inputs and four
+# Clinnet literal Typst fixtures enter their compile-time-test owners only;
+# the restriction card stays runtime-only. Declared Cargo vendor patches, not
+# incidental directories, select local patch sources (covered by the paired scope).
+# Source30 approval at 7587d0c7 certifies bounded input sensitivity and exact
+# producer identities. It does not certify full NixCI, physics or distributions.
 digest = "8450390593797e6fc5c8399df468e4f0025dfe4e"
 
 [[section.note.scope]]

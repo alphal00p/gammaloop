@@ -1,0 +1,38 @@
+{
+  "round1": "3a90bc05e1e50fc85b0f7541ef82086a0e2db873",
+  "decisions": [
+    {
+      "finding": "A-F1",
+      "severity": "P2",
+      "resolution": "Replace the false removed-inference statement with actual compile-time stored-bundle input-block reflection. Selection reflects matrix columns; translation remains fixed. This is channel-coordinate compilation, not reassignment of physical numerator edge owners. No new physics proof; partition test is bounded partition-unity/locality coverage.",
+      "owners": [
+        "crates/gammalooprs/src/integrands/process/mod.rs",
+        "crates/gammalooprs/src/integrands/process/sampling/selection.rs",
+        "crates/gammalooprs/src/integrands/process/sampling/maps.rs"
+      ],
+      "prose": "docs/architecture/architecture-current.typ",
+      "existing_current_decision": "docs/architecture/evidence/generation-integration/wp3/source31-integration/current-owner-decisions.json:decisions[0]",
+      "owner_sha256": {
+        "crates/gammalooprs/src/integrands/process/mod.rs": "8d22c67f564cc9cf51dc1bd6ba2223ee9e852a8ad45496dcac569c25a6bd64a6",
+        "crates/gammalooprs/src/integrands/process/sampling/selection.rs": "893de80db39b8cd04834b6d364e2bac54d742d2a9273d6b733a0bf2d02c59c8a",
+        "crates/gammalooprs/src/integrands/process/sampling/maps.rs": "d89d63d90297439f5727e01974f5d7ea343166889b445e9388279712e11f7570"
+      },
+      "prose_sha256": "e77d42dd7715223e8a88188d1c23afb2c81ad3b68a1604fcc7a7f8bc105936df"
+    },
+    {
+      "finding": "A-F2",
+      "severity": "P3",
+      "resolution": "Replace stale future-refresh language with completed bounded SOURCE30 input-owner decision, exact approval7587d0c7 and limits. No source digest or production change.",
+      "owners": [
+        "nix/rust-workspace.nix"
+      ],
+      "prose": "docs/architecture/nix-crane-cache-reuse.typ",
+      "existing_current_decision": "docs/architecture/evidence/generation-integration/wp3/source31-integration/current-owner-decisions.json:decisions[1]",
+      "owner_sha256": {
+        "nix/rust-workspace.nix": "5b60b87af71a0fead5b28977676878d4ee3ac10a8d7e4fc9ffd023310776ff20"
+      },
+      "prose_sha256": "9a7d0213229a4cbd04b46aa2060dec9a468da6fe5f061d9c43076aab92747abb"
+    }
+  ],
+  "historical_supersession": "Original source31/semantic-attestations.json entries at209/2536 and approved preparation receipts remain byte-frozen history. Their preparation statements are superseded for current owners by current-owner-decisions.json and these corrected active registry annotations. No historical evidence rewritten."
+}

@@ -1,0 +1,111 @@
+{
+  "verdict": "REQUEST_CHANGES",
+  "scope": "A only: semantic documentation/registry integration for MAIN31. PeerB owns deep Nix pipeline/runtime evidence.",
+  "reviewer": "NEW independent Astra; read-only; no nested agents",
+  "at": "2026-10-28T13:24:17.266634+00:00",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-integration-plan",
+  "candidate": "3a90bc05e1e50fc85b0f7541ef82086a0e2db873",
+  "change": "vtznspxkuxrwrklxlsytutkkwnntxzzs",
+  "bookmarks": [
+    "generation-integration",
+    "generation-integration-source31"
+  ],
+  "base": "7587d0c768363f200e89250683e7836c867c9b81",
+  "approved_preparation": "eb2a02f5dcee0171a728c6143ff28d7f16f40f40",
+  "integration_commits": [
+    "cde7b7e2e0a68feb5615829755da054d8b8e0c8d",
+    "ecd901151e9c6a4b30df75198c7613f1532416b1"
+  ],
+  "frozen_built_code": "ecd901151e9c6a4b30df75198c7613f1532416b1",
+  "metadata_snapshot": "d7568e9e91df26aa771bdd5cecbfd67887b9b6ad",
+  "findings": [
+    {
+      "id": "A-F1",
+      "severity": "P2",
+      "blocking": true,
+      "path": "docs/developers.toml",
+      "line": 430,
+      "title": "Replace the stale sampling attestation beside the refreshed current digest",
+      "description": "This newly imported SOURCE31 comment says current compilation no longer sets antiparallel_edges from the parallel-edge bundle inference and leaves27-29 acceptance/refresh pending. The digest on line431 now binds the post27-30 owner, whose compile path explicitly executes context.antiparallel_edges = self.antiparallel_edges() at process/mod.rs:2604 and derives those edges from bundle incidence at2611-2625. Current architecture prose and current-owner-decisions.json:19 correctly say this. Keeping the opposite behavior next to the updated hash makes the registry semantic attestation false on the exact reviewed candidate.",
+      "requested_change": "Reconcile the registry comment to the actual post27-30 owner and its bounded partition/locality qualification, or clearly label the old statement as historical preparation and append the current decision. Keep the current full-file scope, valid digest, production code and old immutable evidence intact.",
+      "related_paths": [
+        "crates/gammalooprs/src/integrands/process/mod.rs:2604",
+        "docs/architecture/architecture-current.typ:1182",
+        "docs/architecture/evidence/generation-integration/wp3/source31-integration/current-owner-decisions.json:19"
+      ]
+    },
+    {
+      "id": "A-F2",
+      "severity": "P3",
+      "blocking": false,
+      "path": "docs/developers.toml",
+      "line": 2407,
+      "title": "Record the completed post30 Nix owner decision in the registry",
+      "description": "The newly imported candidate attestation still says this scope must refresh after ordered integration, immediately before the already refreshed post30 digest. The current-owner decision and Nix note already describe the ten added compile-time inputs and declared-patch selection. This is stale preparation-gate wording in the active registry rather than in an immutable historical receipt.",
+      "requested_change": "Make the comment explicitly historical or replace it with the current bounded source-owner decision and provenance. Do not infer broad NixCI/physics success from the focused closure result.",
+      "related_paths": [
+        "docs/architecture/evidence/generation-integration/wp3/source31-integration/current-owner-decisions.json:38",
+        "docs/architecture/nix-crane-cache-reuse.typ:1906"
+      ]
+    }
+  ],
+  "blocking_findings": [
+    "A-F1"
+  ],
+  "semantic_review": "semantic-review.json",
+  "fresh_checks": {
+    "tracked_files": 3530,
+    "main30_scope_results": {
+      "valid": 73,
+      "stale_digest": 24,
+      "invalid_anchor": 4
+    },
+    "candidate_valid_scopes": 102,
+    "negative_controls": 16,
+    "registered_titles_product_lifecycle_checks": 64,
+    "products": 6,
+    "original_scopes_retained": 93,
+    "prepared_scopes": 94,
+    "new_MAIN27_30_scopes_unchanged": 8,
+    "protected_refs": 27,
+    "owned_file_inventory": 46,
+    "final_evidence_only_delta": 18,
+    "Typst_outputs": 6,
+    "table_source_inversions": 7,
+    "HTML_header_cells": 21,
+    "scope_and_metadata": "scope-audit.json / negative-controls.json / metadata.json",
+    "retention": "coverage-retention.json",
+    "artifact_review": "artifact-review.json"
+  },
+  "reused_checks": [
+    "12 other focused Typst outputs after actual source/output hashes; six fresh outputs also equal recorded results.",
+    "Approved source-matched Kurvst manual PDF bytes and recorded complete Typst input closure; previous independent reproduction/visual check reused.",
+    "Prepared semantic decisions only after owner/prose identity or explicit fresh current-prose delta examination; F1-F3 freshly rechecked."
+  ],
+  "reported_not_fresh": [
+    "ECD Git-pinned snapshot: actual snapshot-current.exit0; retained builder log states637 semantic/no-JS shell pages. Earlier snapshot-final.exit1 belongs to CDE and remains historical/superseded.",
+    "ECD latest pages: pages-current.exit1; retained log has113run/3errors/6skip (104pass), exactly Process.generate_diagrams at test_community_rendering.py:20,66,121.",
+    "93 unique Rust tests,2 reference checks,5 stub checks are implementation/peerB evidence; no runtime execution or deep producer certification by scopeA."
+  ],
+  "unrun": [
+    "No Rust/Python runtime suite or cold Nix build repeated.",
+    "No full latest-site/publication/browser/wheel/distribution gate, full WP3/fivea_ddx/BRST/physics/performance or WASM provenance qualification."
+  ],
+  "limits": [
+    "Request changes is confined to active registry semantic wording. No scope loss, invalid digest, cumulative-preparation loss, table-data change, hidden production/expectation/lock edit or unsupported final-tip NAR equivalence was found.",
+    "No32+ import or integration/publication/ref changes performed. Both reviewers must approve before32; this report does not supply that release.",
+    "Three older frame assertions and four existing expansion parity helpers remain open/omitted. No graph numerator expansion, even diagnostic, was performed.",
+    "Historical original full Nix client exit remains unknown;635-page reconstructed preparation is not credited as canonical. Source38/manual follow-up and Linnest WASM data/name provenance remain pending.",
+    "Current owner attribution/review-age/evidence-revision maintenance warnings are inherited; mechanical metadata checks do not imply blanket documentation freshness."
+  ],
+  "preservation": "Exact tracked before/after guard, production-only inventory exclusion, source19/235 certificates, kernel1a1829b1/locks/uv/hostsubset/NixCIfalse and27 protected refs preserved. No shared-cache override/seeding/deletion.",
+  "guard": "guard-final.json",
+  "evidence_root": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-source31/astra-scope-a-20261028-aGHD6c",
+  "retained_reason": "Independent source/artifact bindings, semantic findings, fresh render logs/outputs and final guards needed for a scoped Sol correction and new independent review.",
+  "cleanup": {
+    "unused_own_scratch": [],
+    "own_background_processes": [],
+    "tracked_or_ref_mutations": false,
+    "nested_agents": false
+  }
+}

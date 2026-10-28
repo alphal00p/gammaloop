@@ -1394,7 +1394,7 @@
     "receipt": "wp3/source31-integration/source30-review.json"
   },
   "active_slice31": {
-    "status": "SOURCE31 ordered refresh qualified at frozen codeECD; canonical snapshot exit0/637pages. Latest validation exit1 at three known32\u201335 callers; NEW independent Astra combined review required before32.",
+    "status": "Round1 ScopeB APPROVE;ScopeA REQUEST_CHANGES. Narrow registry-comment correction implemented; NEW independent Astra re-review required before32. ECD canonical0/637 and latest1/threequeuedcalls stay historical source-bound results.",
     "source_order": 31,
     "original_source": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
     "base": "7587d0c768363f200e89250683e7836c867c9b81",
@@ -1423,6 +1423,16 @@
       "skipped": 6
     },
     "code_vs_receipts": "Canonical artifact is codeECD; later evidence JSON is included by documentationSrc and is an explicitly distinct unbuilt source/NAR, not silently relabelled current artifact.",
-    "metadata_snapshot_commit": "d7568e9e91df26aa771bdd5cecbfd67887b9b6ad"
+    "metadata_snapshot_commit": "d7568e9e91df26aa771bdd5cecbfd67887b9b6ad",
+    "round2_receipt": "wp3/source31-round2/receipt.json"
+  },
+  "source31_round1_reviews": {
+    "candidate": "3a90bc05e1e50fc85b0f7541ef82086a0e2db873",
+    "ScopeA": "REQUEST_CHANGES: A-F1 P2 and A-F2 P3 registry comments",
+    "ScopeB": "APPROVE canonical ECD pipeline/evidence only",
+    "receipts": [
+      "wp3/source31-round2/scope-a-review.json",
+      "wp3/source31-round2/scope-b-review.json"
+    ]
   }
 }
