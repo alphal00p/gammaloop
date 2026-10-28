@@ -2803,6 +2803,22 @@ impl InterfaceInference {
     /// Since this observes an expression rather than an established carrier,
     /// an exact zero has a scalar interface; retain a typed zero's original
     /// interface separately when checking a transformation.
+    ///
+    /// # Errors
+    /// Rejects invalid tensor syntax, malformed structural ports, incompatible
+    /// summand interfaces, and excessive explicit-index occurrences.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use idenso::tensor::inference::{InterfaceInference, TensorInferenceError};
+    /// use spenso::structure::partial::PartialStructureExt;
+    /// use symbolica::atom::{Atom, AtomCore};
+    /// let expression = Atom::num(7);
+    /// let interface = InterfaceInference::replacement_interface(expression.as_view())?;
+    /// assert!(interface.logical_slots().is_empty());
+    /// # Ok::<(), TensorInferenceError>(())
+    /// ```
     pub fn replacement_interface(atom: AtomView<'_>) -> InferenceResult<PartialStructure> {
         Self::replacement_observation(atom, &mut SlotMatcher::default())
             .map(|(interface, _)| interface)

@@ -1,27 +1,21 @@
 //! Public replacement observation is syntax-preserving, not materialization.
 
-use std::sync::{
-    Arc,
-    atomic::{AtomicUsize, Ordering},
-};
-
-use spenso::structure::{
-    TensorStructure,
-    abstract_index::AbstractIndex,
-    partial::{PartialIndex, PartialStructureExt},
-    representation::{LibraryRep, Minkowski, RepName},
-    slot::{DualSlotTo, IsAbstractSlot},
-};
-use symbolica::{
-    atom::{Atom, AtomCore, FunctionBuilder},
-    function, symbol,
-};
-
-use super::super::InterfaceInference;
+use crate::tensor::inference::InterfaceInference;
+use crate::test_support;
+use spenso::structure::TensorStructure;
+use spenso::structure::abstract_index::AbstractIndex;
+use spenso::structure::partial::{PartialIndex, PartialStructureExt};
+use spenso::structure::representation::{LibraryRep, Minkowski, RepName};
+use spenso::structure::slot::{DualSlotTo, IsAbstractSlot};
+use spenso::{tensor_symbol, vector_symbol};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use symbolica::atom::{Atom, AtomCore, FunctionBuilder};
+use symbolica::{function, symbol};
 
 #[test]
 fn replacement_observer_does_not_replay_scalar_metadata_or_tensor_callbacks() {
-    crate::test_support::test_initialize();
+    test_support::test_initialize();
     let metadata_calls = Arc::new(AtomicUsize::new(0));
     let tensor_calls = Arc::new(AtomicUsize::new(0));
     let seen = Arc::clone(&metadata_calls);
@@ -32,7 +26,7 @@ fn replacement_observer_does_not_replay_scalar_metadata_or_tensor_callbacks() {
         }
     );
     let seen = Arc::clone(&tensor_calls);
-    let head = spenso::tensor_symbol!(
+    let head = tensor_symbol!(
         "replacement_observer::observed_tensor",
         norm = move |_, _| {
             seen.fetch_add(1, Ordering::Relaxed);
@@ -42,7 +36,7 @@ fn replacement_observer_does_not_replay_scalar_metadata_or_tensor_callbacks() {
     let external = rep.slot::<AbstractIndex, _>(AbstractIndex::Normal(991001));
     let hidden = rep.slot::<AbstractIndex, _>(AbstractIndex::Normal(991002));
     let private_body = function!(
-        spenso::tensor_symbol!("replacement_observer::private_body"),
+        tensor_symbol!("replacement_observer::private_body"),
         hidden.to_atom()
     )
     .pow(2);
@@ -65,7 +59,7 @@ fn replacement_observer_does_not_replay_scalar_metadata_or_tensor_callbacks() {
 
 #[test]
 fn replacement_observer_retains_encoded_open_owners_and_axis_order() {
-    crate::test_support::test_initialize();
+    test_support::test_initialize();
     let rep = LibraryRep::from(Minkowski {}).new_rep(4);
     let first = rep.slot::<AbstractIndex, _>(AbstractIndex::Open {
         owner: 991011,
@@ -76,7 +70,7 @@ fn replacement_observer_retains_encoded_open_owners_and_axis_order() {
         axis: 3,
     });
     let expression = function!(
-        spenso::tensor_symbol!("replacement_observer::encoded_axes"),
+        tensor_symbol!("replacement_observer::encoded_axes"),
         first.to_atom(),
         second.to_atom()
     );
@@ -93,18 +87,15 @@ fn replacement_observer_retains_encoded_open_owners_and_axis_order() {
 
 #[test]
 fn replacement_observer_distinguishes_direct_dual_and_closed_ports() {
-    crate::test_support::test_initialize();
+    test_support::test_initialize();
     let rep = LibraryRep::new_dual("replacement_observer::R")
         .unwrap()
         .new_rep(3);
     let slot = rep.slot::<AbstractIndex, _>(AbstractIndex::Normal(991021));
     let dual = slot.dual();
-    let left = function!(
-        spenso::tensor_symbol!("replacement_observer::left"),
-        slot.to_atom()
-    );
+    let left = function!(tensor_symbol!("replacement_observer::left"), slot.to_atom());
     let right = function!(
-        spenso::tensor_symbol!("replacement_observer::right"),
+        tensor_symbol!("replacement_observer::right"),
         dual.to_atom()
     );
     assert_eq!(
@@ -130,10 +121,10 @@ fn replacement_observer_distinguishes_direct_dual_and_closed_ports() {
 
 #[test]
 fn replacement_observer_observes_compact_ports_without_materialization() {
-    crate::test_support::test_initialize();
+    test_support::test_initialize();
     let calls = Arc::new(AtomicUsize::new(0));
     let seen = Arc::clone(&calls);
-    let head = spenso::vector_symbol!(
+    let head = vector_symbol!(
         "replacement_observer::compact_vector",
         norm = move |_, _| {
             seen.fetch_add(1, Ordering::Relaxed);
@@ -156,7 +147,7 @@ fn replacement_observer_observes_compact_ports_without_materialization() {
 
 #[test]
 fn replacement_observer_accepts_ordinary_scalars_without_a_carried_zero_rank() {
-    crate::test_support::test_initialize();
+    test_support::test_initialize();
     for expression in [
         Atom::Zero,
         Atom::one(),
@@ -173,10 +164,10 @@ fn replacement_observer_accepts_ordinary_scalars_without_a_carried_zero_rank() {
 
 #[test]
 fn replacement_observer_reports_malformed_syntax_separately_from_valid_open_ports() {
-    crate::test_support::test_initialize();
+    test_support::test_initialize();
     let rep = LibraryRep::from(Minkowski {}).new_rep(4);
     let slot = rep.slot::<AbstractIndex, _>(AbstractIndex::Normal(991031));
-    let head = spenso::tensor_symbol!("replacement_observer::malformed");
+    let head = tensor_symbol!("replacement_observer::malformed");
     let open = function!(head, slot.to_atom());
     assert_eq!(
         InterfaceInference::replacement_interface(open.as_view())
@@ -186,11 +177,11 @@ fn replacement_observer_reports_malformed_syntax_separately_from_valid_open_port
         1
     );
     let other = function!(
-        spenso::tensor_symbol!("replacement_observer::other"),
+        tensor_symbol!("replacement_observer::other"),
         slot.to_atom()
     );
     let third = function!(
-        spenso::tensor_symbol!("replacement_observer::third"),
+        tensor_symbol!("replacement_observer::third"),
         slot.to_atom()
     );
     // Generic tensor functions may have rank zero. Unlike a bare tensor
@@ -200,7 +191,7 @@ fn replacement_observer_reports_malformed_syntax_separately_from_valid_open_port
     assert!(closed.logical_slots().is_empty());
 
     // Rank-one heads have the stronger native one-final-port contract.
-    let missing_rank_one_port = function!(spenso::vector_symbol!(
+    let missing_rank_one_port = function!(vector_symbol!(
         "replacement_observer::rank_one_missing_port"
     ));
     for (label, malformed) in [
