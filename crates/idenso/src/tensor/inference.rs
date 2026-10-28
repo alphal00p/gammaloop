@@ -21,6 +21,7 @@ use spenso::network::library::function_lib::INBUILTS;
 use spenso::network::library::symbolic::{ETS, ExplicitKey};
 use spenso::network::parsing::{AtomStructureExt, ParseState, StrictTensorFilter};
 use spenso::network::tags::SPENSO_TAG;
+use spenso::network::tensor_symmetry::TensorSlotSymmetry;
 use spenso::shadowing;
 use spenso::shadowing::{ANTISYM, CYCLIC, SYM};
 #[cfg(debug_assertions)]
@@ -2943,6 +2944,7 @@ impl InterfaceInference {
         &mut self,
         function: symbolica::atom::representation::FunView<'_>,
     ) -> InferenceResult<()> {
+        TensorSlotSymmetry::validate_function(function).map_err(TensorInferenceError::invalid)?;
         let symbol = function.get_symbol();
         for argument in function.iter() {
             if self

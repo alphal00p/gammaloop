@@ -29,7 +29,7 @@ use crate::network::tags::{SPENSO_TAG, mathml};
 #[cfg(feature = "shadowing")]
 use crate::shadowing::symbolica_utils::{SpensoPrintBackend, SpensoPrintSettings};
 #[cfg(feature = "shadowing")]
-use crate::structure::slot::ParseableAind;
+use crate::structure::slot::{ParseableAind, SlotMatcher};
 use crate::utils::{to_subscript, to_superscript};
 #[cfg(feature = "shadowing")]
 use symbolica_utils::SerializableSymbol;
@@ -643,18 +643,12 @@ impl AbstractIndex {
         scope: Symbol,
         mut select: impl FnMut(&super::representation::LibrarySlot<Self>) -> bool,
     ) -> Atom {
-        use super::{representation::LibrarySlot, slot::IsAbstractSlot};
-        expression.replace_map(|value, _, output| {
-            if value.get_symbol().is_some_and(|symbol| symbol.is_scalar()) {
-                **output = value.to_owned();
-            } else if let Ok(mut slot) = LibrarySlot::<Self>::try_from(value) {
-                if matches!(slot.aind, Self::Open { .. }) || !select(&slot) {
-                    // AUTO markers identify unresolved axes, not explicit names.
-                    **output = value.to_owned();
-                    return;
-                }
-                slot.aind = slot.aind.scoped(scope);
-                **output = slot.to_atom();
+        SlotMatcher::default().map_expression_indices(expression, |slot| {
+            // AUTO markers identify unresolved axes, not explicit names.
+            if matches!(slot.aind, Self::Open { .. }) || !select(slot) {
+                None
+            } else {
+                Some(slot.aind.scoped(scope))
             }
         })
     }
