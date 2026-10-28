@@ -460,6 +460,8 @@ $
   [Canonical index organization and explicit wrappers.],
   [`to-dots`],
   [Render compact metric products as dots; call `contract` first for explicit indices.],
+  [`undo-dots`],
+  [Open dots into symbolic indexed contractions without expanding the numerator.],
 )
 
 The mathematical conventions and supported identities track
@@ -527,7 +529,10 @@ as in $A(; rho)$. Commas are on by default in this mode and can be disabled
 with `commas: false`.
 
 The most common layout switches live directly on `notation`: `tensor-layout`,
-`with-dim`, `parens`, `commas`, `symbol-scripts`, `index-gap`, and `factor-gap`.
+`with-dim`, `parens`, `commas`, `symbol-scripts`, `component-style`, `index-gap`,
+and `factor-gap`. Concrete components use $A(x,7)^(0,1)$ by default;
+`component-style: "array"` selects $A(x,7)[0,1]$. Ordinary parameters stay
+in parentheses in both styles, independently of abstract-index layout.
 `print-settings` configures the separate compact string returned by
 `to-string`.
 
@@ -651,7 +656,7 @@ surface as a dictionary bound to a selected plugin module.
     title: [Metric and index transformations],
     names: (
       "cook-function", "cook-indices", "list-dangling", "contract",
-      "to-dots", "wrap-dummies", "wrap-indices",
+      "to-dots", "undo-dots", "wrap-dummies", "wrap-indices",
     ),
   ),
   (
