@@ -1859,10 +1859,6 @@ mod tests {
         let mut command = Command::new("unlaunched-collector");
         command.args(args).args([
             "--worker",
-            "--sample",
-            "0",
-            "--case-id",
-            "frozen-tuning-case",
             "--case-id",
             "case",
             "--variant",
@@ -1917,6 +1913,10 @@ mod tests {
         let fixed = [
             "--observe-native-costs",
             "--worker",
+            "--sample",
+            "0",
+            "--case-id",
+            "frozen-tuning-case",
             "--variant",
             "cached",
             "--suite",
