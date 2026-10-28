@@ -520,7 +520,7 @@
     "receipt": "wp3/source30-integration/main27-29-review.json"
   },
   "active_slice30": {
-    "status": "Source30 combined closure/actual producers and five focused runtime consumers validated; STOP for NEW independent Astra review before31. WP3 incomplete.",
+    "status": "APPROVED independently at7587d0c768363f200e89250683e7836c867c9b81; SOURCE31 predecessor gate cleared. Historical producer/check identities unchanged.",
     "base": "cb585c98a474628ca9c55bb17cf1e680450b8ef9",
     "source_order": 30,
     "original_source": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
@@ -538,5 +538,23 @@
     "completion": "wp3/source30-integration/completion.json",
     "evidence_change": "rsnwxksqkumlppzknlkkqvkrvpyrrzrt",
     "metadata_snapshot_commit": "2990045ccc658413f2eb2c07fe21e9d811ac4da8"
+  },
+  "main_source30_review": {
+    "candidate": "7587d0c768363f200e89250683e7836c867c9b81",
+    "status": "APPROVED; not wholeWP3",
+    "receipt": "wp3/source31-integration/source30-review.json"
+  },
+  "active_slice31": {
+    "status": "Ordered SOURCE31 refresh; combined validation and NEW independent Astra review required before32.",
+    "source_order": 31,
+    "original_source": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+    "base": "7587d0c768363f200e89250683e7836c867c9b81",
+    "approved_preparation": "eb2a02f5dcee0171a728c6143ff28d7f16f40f40",
+    "preparation_base": "a517ca563d78d161cff17fe60e661f80529c9a83",
+    "candidate_bookmark": "generation-integration-source31",
+    "receipt": "wp3/source31-integration/receipt.json",
+    "accounted_source_rows": 32,
+    "accounted_planned_units": 27,
+    "limits": "No source32+ imports; three known obsolete Python rendering callers remain separately queued. Full WP3/physics/performance/distribution remain open."
   }
 }

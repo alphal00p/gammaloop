@@ -1,0 +1,265 @@
+{
+  "base": "a517ca563d78d161cff17fe60e661f80529c9a83",
+  "original_source31": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+  "implementation_commit": "7e3eb9f69e37cbdf7aae0040742352e329d790f5",
+  "implementation_change": "tptwmwrwxwryunqzzyrtquvpvutlqnxq",
+  "implementation_bookmark": "generation-documentation-reconcile-code",
+  "candidate_bookmark": "generation-documentation-reconcile",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-documentation-reconcile",
+  "author": "Lucien Huber <im@lcnbr.ch>",
+  "source_map": {
+    "31": {
+      "original": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "reconciled": "7e3eb9f69e37cbdf7aae0040742352e329d790f5",
+      "method": "semantic reconciliation; original patch read but not blindly replayed"
+    }
+  },
+  "code_changed_files": [
+    {
+      "path": "crates/kurvst/typst/docs/manual.pdf",
+      "code_revision_sha256": "db25c8b6bd9ef4fe93891e3d82271568abe880b8dec9dd91f3c01d525b65cfaf",
+      "category": "generated source-matched manual PDF"
+    },
+    {
+      "path": "docs/architecture/architecture-current.typ",
+      "code_revision_sha256": "74b6ba11c4f0efdacf8b810f50607d7f5c5273a469b604a83a9a544feac564d7",
+      "category": "documentation prose/registry/evidence"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/source31/inventory-before.json",
+      "code_revision_sha256": "435c911450bb6d14350c2bd9fa2e973d8f964ffe049b979d8b5c2864d500ad27",
+      "category": "documentation prose/registry/evidence"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/source31/manual.json",
+      "code_revision_sha256": "5963428ffaa6e68586bef585ff727d5883a98193d9b329ce906c1ed3b74202c9",
+      "category": "documentation prose/registry/evidence"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/source31/protected-inputs.json",
+      "code_revision_sha256": "6bb445637278fb561959ae016b1e45e28516d1c6e58e139738353d7ddffc5d72",
+      "category": "documentation prose/registry/evidence"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/source31/registry-metadata.json",
+      "code_revision_sha256": "9143bd5bc990d16273e13799df585c277f3320c60e1476b4501afc385f2b3b3d",
+      "category": "documentation prose/registry/evidence"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/source31/scope-audit-after.json",
+      "code_revision_sha256": "6e84fb16c546d7dfc58ff2bf89d56133292ed6f86f0aa5e0cd44ed0b96d984f6",
+      "category": "documentation prose/registry/evidence"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/source31/semantic-attestations.json",
+      "code_revision_sha256": "feeaeaa732384629ec38098c3ef7f3f82994a24603b104249f54045ac4b55eea",
+      "category": "documentation prose/registry/evidence"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/source31/validation.json",
+      "code_revision_sha256": "5c26eabb048f53f07b1dd4907eb4bfe2862829e60fea0359cf4952b2e4b99541",
+      "category": "documentation prose/registry/evidence"
+    },
+    {
+      "path": "docs/architecture/feynkit-merge-readiness.typ",
+      "code_revision_sha256": "f41dcb2c70a88b4d9845eb830a90796e920b85fb7a8196e6ab26e5b9b3114e40",
+      "category": "documentation prose/registry/evidence"
+    },
+    {
+      "path": "docs/architecture/generation-documentation-reconcile.typ",
+      "code_revision_sha256": "f69b6758a96cd2799d98444b7774ce3f99ed6ee6d606bee6eec7a44379483ddd",
+      "category": "documentation prose/registry/evidence"
+    },
+    {
+      "path": "docs/architecture/idenso-architecture.typ",
+      "code_revision_sha256": "e00b282ec054df67b01fa35b259791acbc4d4ef363138d8f0502d521757391fc",
+      "category": "documentation prose/registry/evidence"
+    },
+    {
+      "path": "docs/architecture/kurvst-arrowhead-engine.typ",
+      "code_revision_sha256": "8b6d9764d4a42cc871e5ef256fdbb0985533155a3b6ef45f9f471f335442b788",
+      "category": "documentation prose/registry/evidence"
+    },
+    {
+      "path": "docs/architecture/nix-crane-cache-reuse.typ",
+      "code_revision_sha256": "94c11519015505761c5d799fc530ecb3c720e2ad60f0d32d1b8cbff5b65b20b1",
+      "category": "documentation prose/registry/evidence"
+    },
+    {
+      "path": "docs/architecture/ratatui-integration-dashboard.typ",
+      "code_revision_sha256": "b124d94ee6f6c6c5c4578245798ef93248dd1c28effbb1a2307e42e59912b5a3",
+      "category": "documentation prose/registry/evidence"
+    },
+    {
+      "path": "docs/developers.toml",
+      "code_revision_sha256": "4e2baef8e79eb25ff7212c1393f2653bf4b2b24f4a96edcb4fd3dd8d46351122",
+      "category": "documentation prose/registry/evidence"
+    }
+  ],
+  "code_changed_file_count": 16,
+  "scope_counts": {
+    "before": {
+      "stale_digest": 24,
+      "missing_or_ambiguous_anchor": 4,
+      "invalid": 28,
+      "valid": 65,
+      "total": 93
+    },
+    "after": {
+      "invalid": 0,
+      "valid": 94,
+      "total": 94
+    },
+    "additional": "Explicit staged.rs scope, while retaining the original full generation coordination scope."
+  },
+  "evidence": {
+    "inventory": "inventory-before.json",
+    "semantic_attestations": "semantic-attestations.json",
+    "scope_audit": "scope-audit-after.json",
+    "registry_metadata": "registry-metadata.json",
+    "manual": "manual.json",
+    "protected_inputs": "protected-inputs.json",
+    "validation": "validation.json"
+  },
+  "review": {
+    "state": "STOP for NEW independent Astra review",
+    "not_approved": true,
+    "required_refresh": "Refresh against ordered main after sources27–30, then obtain renewed independent approval before integration.",
+    "recheck": [
+      "process/mod.rs and sampling owners",
+      "state and workspace preparation",
+      "grouping",
+      "Nix package-source scopes and producer closure",
+      "future source32–35 examples/browser/wheel cross-dependencies"
+    ]
+  },
+  "limits": [
+    "No production algorithm/API/physics/fixture changes.",
+    "No main integration, source-ref mutation, CI enablement, upload, push or publication.",
+    "No full physics/performance or future API certification.",
+    "Source38 remains unlanded; later geometry/notices require another manual refresh.",
+    "Known code-identical Linnest WASM data/name byte differences remain unresolved."
+  ],
+  "retained_artifacts": {
+    "root": "target/source31/",
+    "purpose": "Original review, failed pipeline logs, source patches, validation renders and manual reproduction retained for independent review; no task monitor or pipeline remains running.",
+    "processes": []
+  },
+  "receipt_identity": "The final evidence change descends from implementation_commit. It is reported externally; this file does not hash or name its own mutable revision.",
+  "correction": {
+    "parent_candidate": "068da800fa4e71eb057d8ae5b3ecf73d847861e0",
+    "parent_bookmark": "generation-documentation-reconcile-source31-frozen",
+    "review": "target/source31/astra-review-20261028-hsSDi7/review.json",
+    "findings_addressed": [
+      "F1",
+      "F2",
+      "F3"
+    ],
+    "file_sha256": {
+      "docs/architecture/architecture-current.typ": "c1c0eef75d7d9ee02588a18f62158683d4fc20d21910bb8c95f3e547183175ee",
+      "docs/developers.toml": "20f494df07cc8f27d615f252543c34a02f56932fdc3a64ef3ba17417685e55df",
+      "docs/architecture/evidence/generation-integration/source31/semantic-attestations.json": "07fe6433eb47c1e983ef38bb52a6aa4de50d7d0a2e342dd1a24d492aff6d5b90",
+      "docs/architecture/evidence/generation-integration/source31/scope-audit-after.json": "3c8c7d4e7ae25a8432ed7ce95c14c3e28336dd78603e00e4a472f636bde9953e",
+      "docs/architecture/evidence/generation-integration/source31/validation.json": "5b891e74d24b115429f56c25799b020099d3a30af41ff843158347dfc9276241"
+    },
+    "pipeline_freeze": "target/source31/completion-logs/frozen-outcomes.json",
+    "pending": "NEW independent Astra review; ordered main post30 refresh"
+  },
+  "header_repair": {
+    "approved_parent": "87dfd362891cc264de49f56adb9bb47df7cc4b3d",
+    "approved_parent_reference": "generation-documentation-reconcile-source31-approved",
+    "approved_review": "target/source31/astra-round2-20261028-ChUVvk/review.json",
+    "approved_review_sha256": "47e588dc816298291f16a613b9c960fd404750551565831820d202a21f3587b7",
+    "purpose": "Add semantic header cells to the seven inherited data tables blocking the canonical snapshot accessibility check; preserve each data value, historical claim and archived raw payload.",
+    "source_html_identity": [
+      {
+        "path": "docs/architecture/generation-integration-plan.typ",
+        "source_before_sha256": "bde27a1cba7a3ec24ada3b45d6608412daaeeb9c6827059af95fbfa257d5bfa4",
+        "source_after_sha256": "4c9936bf521fbab1fa5029f56011f78e60305c63a3e0829fc74214fd00eda189",
+        "old_snapshot_html_sha256": "8ca91ca77c70ccacef2b0083eed93bf540c882279947aee923a31d6d241fa222",
+        "new_direct_html_sha256": "782c1606acb895c3490b9e7ef66c2810ff3692b97bfced662d96d61af0771789",
+        "new_pdf_sha256": "0eed530774cd800392a296569a2f6a7cb7fd80273a639fcf82b1d98ad1939738",
+        "table_count": 3,
+        "cell_text": "all identical old/new",
+        "old_headers": 0,
+        "new_header_cells": 8
+      },
+      {
+        "path": "docs/architecture/generation-integration-wp1.typ",
+        "source_before_sha256": "cb099fded47419a958c9b518639e982dc199288f25678fd65762f60defca9936",
+        "source_after_sha256": "9af88ac35be9bc861271a501382d2931e3d89d8aeb34015b257efb7b21a28272",
+        "old_snapshot_html_sha256": "664d650cbdd1b929a6392e821947a6fac1996788be73abe876226da9a422bf38",
+        "new_direct_html_sha256": "b19adb99bc19c6da5304b71c1352d477cf988a669582db6bfcdb56e23a0da5ed",
+        "new_pdf_sha256": "9ac120828a30b93f88b5703091c20d8112f0dc9e8fcb03e612813217c3ffdf87",
+        "table_count": 1,
+        "cell_text": "all identical old/new",
+        "old_headers": 0,
+        "new_header_cells": 4
+      },
+      {
+        "path": "docs/architecture/kurvst-arrowhead-engine.typ",
+        "source_before_sha256": "8b6d9764d4a42cc871e5ef256fdbb0985533155a3b6ef45f9f471f335442b788",
+        "source_after_sha256": "ef2e8dcee369496e897c3bb0aa1ab3d7255bf6214bb891687208420f460deacc",
+        "old_snapshot_html_sha256": "ee5d52cf2d9f8243b166599824d5ae880ebc1b7694e43cab693726a5130c3d32",
+        "new_direct_html_sha256": "a270dd1fa04ac9a39a43b4b0ca51d3d66c97d62d5009a0031ebb15201c4f5f3c",
+        "new_pdf_sha256": "6a7d47eaed7a12caed41d39d00a89ddc079d82f4b2b5c51a2ba99ad4617f76c2",
+        "table_count": 3,
+        "cell_text": "all identical old/new",
+        "old_headers": 0,
+        "new_header_cells": 9
+      }
+    ],
+    "frozen_before": {
+      "snapshot_derivation": "/nix/store/mkylk94xx4p8faf5jims8n14fwysfyai-alphal00p-docs-snapshot-fixture-0.1.0.drv",
+      "diagnostic": "three plan, one WP1 and three Kurvst tables lack header cells",
+      "log": "target/source31/completion-logs/full-docs-final.log",
+      "log_sha256": "4b057859a42d9f3cf01629cebe0948a718c28238740cbd01c29c0f2c065cc2cc"
+    },
+    "focused_checks": {
+      "pinned_typst_pdf_html": "all three affected notes compiled at creation timestamp zero; seven rendered tables contain semantic th cells and all old/new table cell text matches",
+      "preflight": "target/source31/header-repair-preflight.json",
+      "preflight_sha256": "9abe85d22fd711f553bb2d4015aa4f12a7b6599bf163b3b33caaa19619612c8e",
+      "canonical_scope_owner": "94/94 valid; docs/developers.toml and all scope digests unchanged",
+      "composite_accessibility": {
+        "status": "passed",
+        "pages": 635,
+        "command": "pinned Nix Python scripts/check-docs-html.py target/source31/header-composite-site",
+        "log": "target/source31/header-composite-html-check.log",
+        "log_sha256": "1100a11f35199e7735e5109282fabd0f0c087b4eb0a7e78a9bfa9fea593f0289",
+        "site_manifest": "target/source31/header-composite-site.json",
+        "site_manifest_sha256": "5aed0d5c5600714b300672c453a0410ce45a5e6cf607257cb0237df6ba88aeb8",
+        "qualification": "Prior Nix full-site shell with only seven real pinned Typst table HTML fragments replaced; not a completed Nix snapshot derivation."
+      }
+    },
+    "nix_snapshot_attempt": {
+      "status": "failed",
+      "exit": 1,
+      "derivation": "/nix/store/75y70c7mc85nyqfmc9r4jrc70qq7smgp-alphal00p-docs-snapshot-fixture-0.1.0.drv",
+      "cargo_derivation": "/nix/store/icd3qmpp0187q4b0mn2akf9rmdhqmp8n-alphal00p-docs-cargo-0.1.0.drv",
+      "cargo_output": "/nix/store/lg875fjrva9mbjy77vl97gqr6rnfp7id-alphal00p-docs-cargo-0.1.0",
+      "first_new_blocker": "Nix path-flake narHash contains a slash; generated repository links parse the sha256 source revision at that slash and fail source-revision equality before the fixture accessibility script runs.",
+      "log": "target/source31/header-snapshot-nix.log",
+      "log_sha256": "001ed6af8f15ce3a480276ea0afc758c05a105f9d546bf8acdc1dc54d5c6080f",
+      "git_flake_dry_run": "A Git-backed shallow input resolves the candidate but requires another docs Cargo derivation; no duplicate cold build launched."
+    },
+    "limits": [
+      "No canonical Nix snapshot success or full docs/site/browser pass claimed.",
+      "Three inherited Linnet Process.generate_diagrams tests remain source32–35 work.",
+      "The old full-docs client exit remains unknown; its frozen snapshot derivation failure is unchanged.",
+      "Only the three Typst table sources and this receipt change; no production, kernel, lock, CI toggle or protected source changes."
+    ],
+    "review": "STOP for NEW independent Astra review before combining with the approved Source31 preparation; post30 main refresh and combined review remain mandatory.",
+    "retained": [
+      "target/source31/header-repair-preflight.json",
+      "target/source31/header-composite-site.json",
+      "target/source31/header-composite-site/",
+      "target/source31/header-composite-html-check.log",
+      "target/source31/header-snapshot-nix.log",
+      "target/source31/header-local-build.log",
+      "target/source31/header-local-pinned.log",
+      "target/source31/header-*.html",
+      "target/source31/header-*.pdf"
+    ],
+    "own_background_processes": []
+  }
+}

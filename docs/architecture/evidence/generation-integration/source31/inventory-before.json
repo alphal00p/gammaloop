@@ -1,0 +1,937 @@
+{
+  "base": "a517ca563d78d161cff17fe60e661f80529c9a83",
+  "original_source": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+  "counts": {
+    "stale-digest": 24,
+    "missing-or-ambiguous-anchor": 4
+  },
+  "invalid_scopes": [
+    {
+      "note": "gammaloop-architecture",
+      "prose": "docs/architecture/architecture-current.typ",
+      "lifecycle": "current",
+      "status": "Implemented",
+      "base_scope": {
+        "path": "crates/gammaloop-api/src/state.rs",
+        "symbol": "gammaloop_api::state::State::load",
+        "anchor": "load_state_manifest(&save_path)?",
+        "digest": "5113940a12e8bac5ec042c59db01bd0ecfb05ef0"
+      },
+      "base_check": {
+        "status": "stale-digest",
+        "actual": "3598dbe299f9a32da1ed8d034706a82959d84abb"
+      },
+      "base_file_blob": "3598dbe299f9a32da1ed8d034706a82959d84abb",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "59e43bd40a797b9ee5974eb11e6c1a0fdd747966",
+      "old_context_scope_check": {
+        "status": "stale-digest",
+        "actual": "59e43bd40a797b9ee5974eb11e6c1a0fdd747966"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "crates/gammaloop-api/src/state.rs",
+          "symbol": "gammaloop_api::state::State::load",
+          "anchor": "load_state_manifest(&save_path)?",
+          "digest": "59e43bd40a797b9ee5974eb11e6c1a0fdd747966"
+        }
+      ],
+      "start_line": 3356,
+      "end_line": null
+    },
+    {
+      "note": "gammaloop-architecture",
+      "prose": "docs/architecture/architecture-current.typ",
+      "lifecycle": "current",
+      "status": "Implemented",
+      "base_scope": {
+        "path": "crates/gammaloop-api/src/commands/integrate.rs",
+        "symbol": "gammaloop_api::commands::integrate::Integrate::default_workspace_path",
+        "anchor": "fn default_workspace_path(&self",
+        "digest": "0f0ae2c8e593ca91f12be4b4c4e456f8817d7f9b"
+      },
+      "base_check": {
+        "status": "stale-digest",
+        "actual": "bcce3d43713b42fe428e3b5d89784e18c8d47fa7"
+      },
+      "base_file_blob": "bcce3d43713b42fe428e3b5d89784e18c8d47fa7",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "e62fbde4bf68a2fa629a50661e7e2af7276c0a23",
+      "old_context_scope_check": {
+        "status": "stale-digest",
+        "actual": "e62fbde4bf68a2fa629a50661e7e2af7276c0a23"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "crates/gammaloop-api/src/commands/integrate.rs",
+          "symbol": "gammaloop_api::commands::integrate::Integrate::default_workspace_path",
+          "anchor": "fn default_workspace_path(&self",
+          "digest": "e62fbde4bf68a2fa629a50661e7e2af7276c0a23"
+        }
+      ],
+      "start_line": 1033,
+      "end_line": null
+    },
+    {
+      "note": "gammaloop-architecture",
+      "prose": "docs/architecture/architecture-current.typ",
+      "lifecycle": "current",
+      "status": "Implemented",
+      "base_scope": {
+        "path": "crates/gammalooprs/src/integrands/process/mod.rs",
+        "symbol": "gammalooprs::integrands::process::ProcessIntegrand::warm_up",
+        "anchor": "pub fn warm_up(&mut self, model",
+        "digest": "c795c1a404f9a6118501d7b5ee2d5e580e44886c"
+      },
+      "base_check": {
+        "status": "stale-digest",
+        "actual": "4e93e77570220de9a2247f6a363095d321511181"
+      },
+      "base_file_blob": "4e93e77570220de9a2247f6a363095d321511181",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "dd9546a1b9330b94c630b9358da9ad62e12b78d8",
+      "old_context_scope_check": {
+        "status": "stale-digest",
+        "actual": "dd9546a1b9330b94c630b9358da9ad62e12b78d8"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "crates/gammalooprs/src/integrands/process/mod.rs",
+          "symbol": "gammalooprs::integrands::process::ProcessIntegrand::warm_up",
+          "anchor": "pub fn warm_up(&mut self, model",
+          "digest": "7b1d69265393f78cf69a3bdfb6d8872da59bf32d"
+        }
+      ],
+      "start_line": 380,
+      "end_line": null
+    },
+    {
+      "note": "gammaloop-architecture",
+      "prose": "docs/architecture/architecture-current.typ",
+      "lifecycle": "current",
+      "status": "Implemented",
+      "base_scope": {
+        "path": "crates/gammalooprs/src/observables/mod.rs",
+        "symbol": "gammalooprs::observables::EventProcessingRuntime",
+        "anchor": "pub struct EventProcessingRuntime {",
+        "digest": "e0a87225a5073e48c6d82a4d8f39cddac43d1684"
+      },
+      "base_check": {
+        "status": "stale-digest",
+        "actual": "b672f52f6674d08d11b6cc68ef0621c399386926"
+      },
+      "base_file_blob": "b672f52f6674d08d11b6cc68ef0621c399386926",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "b672f52f6674d08d11b6cc68ef0621c399386926",
+      "old_context_scope_check": {
+        "status": "stale-digest",
+        "actual": "b672f52f6674d08d11b6cc68ef0621c399386926"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "crates/gammalooprs/src/observables/mod.rs",
+          "symbol": "gammalooprs::observables::EventProcessingRuntime",
+          "anchor": "pub struct EventProcessingRuntime {",
+          "digest": "b672f52f6674d08d11b6cc68ef0621c399386926"
+        }
+      ],
+      "start_line": 3091,
+      "end_line": null
+    },
+    {
+      "note": "gammaloop-architecture",
+      "prose": "docs/architecture/architecture-current.typ",
+      "lifecycle": "current",
+      "status": "Implemented",
+      "base_scope": {
+        "path": "crates/gammaloop-api/src/python.rs",
+        "symbol": "gammaloop_api::python::GammaLoopAPI",
+        "anchor": "struct GammaLoopAPI {",
+        "digest": "adc6974f20de538c6acfb2913aa5c9b16b590617"
+      },
+      "base_check": {
+        "status": "stale-digest",
+        "actual": "872d2b855d14a4aded443e18df435f899c2bf42a"
+      },
+      "base_file_blob": "872d2b855d14a4aded443e18df435f899c2bf42a",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "0712af0b0aae581f36332eb5a25ffc7eaca2ff1f",
+      "old_context_scope_check": {
+        "status": "stale-digest",
+        "actual": "0712af0b0aae581f36332eb5a25ffc7eaca2ff1f"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "crates/gammaloop-api/src/python.rs",
+          "symbol": "gammaloop_api::python::GammaLoopAPI",
+          "anchor": "struct GammaLoopAPI {",
+          "digest": "0712af0b0aae581f36332eb5a25ffc7eaca2ff1f"
+        }
+      ],
+      "start_line": 3274,
+      "end_line": null
+    },
+    {
+      "note": "gammaloop-architecture",
+      "prose": "docs/architecture/architecture-current.typ",
+      "lifecycle": "current",
+      "status": "Implemented",
+      "base_scope": {
+        "path": "crates/feynkit-generator/src/generation.rs",
+        "symbol": "feynkit_generator::Generator::generate",
+        "anchor": "pub fn generate(",
+        "digest": "b723525194b3a59789d47b1a1a10e2df95c0d83c"
+      },
+      "base_check": {
+        "status": "missing-or-ambiguous-anchor"
+      },
+      "base_file_blob": "0495bd293c86f81e8b817913f3e25e1918b62779",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "ca3f59e3b28395ae09dd01699bdf96306bf316bd",
+      "old_context_scope_check": {
+        "status": "missing-or-ambiguous-anchor"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [],
+      "start_line": null,
+      "end_line": null
+    },
+    {
+      "note": "gammaloop-architecture",
+      "prose": "docs/architecture/architecture-current.typ",
+      "lifecycle": "current",
+      "status": "Implemented",
+      "base_scope": {
+        "path": "crates/feynkit-model/src/model.rs",
+        "symbol": "feynkit_model::Model",
+        "anchor": "pub struct Model {",
+        "digest": "3887f65c1c670de301495664dd4d4929dd76f60d"
+      },
+      "base_check": {
+        "status": "stale-digest",
+        "actual": "b04029827b0ecb3c8f23289bf0937e1ea422e176"
+      },
+      "base_file_blob": "b04029827b0ecb3c8f23289bf0937e1ea422e176",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "a1a71bd88d8cad81254ecb52cf639ea6a79d1ed7",
+      "old_context_scope_check": {
+        "status": "stale-digest",
+        "actual": "a1a71bd88d8cad81254ecb52cf639ea6a79d1ed7"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "crates/feynkit-model/src/model.rs",
+          "symbol": "feynkit_model::Model",
+          "anchor": "pub struct Model {",
+          "digest": "cb8f2a1984eed34b25039d60e66f196ce3dcdf35"
+        }
+      ],
+      "start_line": 728,
+      "end_line": null
+    },
+    {
+      "note": "gammaloop-architecture",
+      "prose": "docs/architecture/architecture-current.typ",
+      "lifecycle": "current",
+      "status": "Implemented",
+      "base_scope": {
+        "path": "crates/feynkit-graph/src/lib.rs",
+        "symbol": "feynkit_graph::FeynmanDiagram",
+        "anchor": "pub struct FeynmanDiagram {",
+        "digest": "2d8a36f8ae16bf33adf8ba933a7f58f25f02ba0a"
+      },
+      "base_check": {
+        "status": "stale-digest",
+        "actual": "03fa811b133f5816415a2b445445ea5a2d87365d"
+      },
+      "base_file_blob": "03fa811b133f5816415a2b445445ea5a2d87365d",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "b263a109c4c16bca7011787b238d9de105243c2a",
+      "old_context_scope_check": {
+        "status": "stale-digest",
+        "actual": "b263a109c4c16bca7011787b238d9de105243c2a"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "crates/feynkit-graph/src/lib.rs",
+          "symbol": "feynkit_graph::FeynmanDiagram",
+          "anchor": "pub struct FeynmanDiagram {",
+          "digest": "a51bbc13986d5c5a7b2060dea09469d3791fc91d"
+        }
+      ],
+      "start_line": 650,
+      "end_line": null
+    },
+    {
+      "note": "gammaloop-architecture",
+      "prose": "docs/architecture/architecture-current.typ",
+      "lifecycle": "current",
+      "status": "Implemented",
+      "base_scope": {
+        "path": "crates/gammalooprs/src/graph/parse/mod.rs",
+        "symbol": "gammalooprs::graph::Graph DOT import boundary",
+        "anchor": "    pub fn import_dot(input: &str, model: &Model) -> Result<Vec<Self>> {",
+        "end_anchor": "    pub fn dot_serialize(&self, settings: &DotExportSettings) -> String {",
+        "digest": "fc058e64317d80978ebfc2ede480a29fd852a8a3"
+      },
+      "base_check": {
+        "status": "missing-or-ambiguous-anchor"
+      },
+      "base_file_blob": "90b7d939a3506ab267db6c3f0e84af3fb8f69a71",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "809580b48571f0ea1cabc5c972d991ec8bd2a14f",
+      "old_context_scope_check": {
+        "status": "missing-or-ambiguous-anchor"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "crates/gammalooprs/src/graph/parse/from_dot.rs",
+          "symbol": "gammalooprs::graph::Graph DOT import boundary",
+          "anchor": "    pub fn from_dot(input: &str, model: &Model) -> Result<Vec<Self>> {",
+          "end_anchor": "/// Build GammaLoop graphs from DOT text, as in tests and inline fixtures.",
+          "digest": "84cf616ac16299494bae8470eb4b298c0b798325"
+        }
+      ],
+      "start_line": null,
+      "end_line": 153
+    },
+    {
+      "note": "integration-dashboard",
+      "prose": "docs/architecture/ratatui-integration-dashboard.typ",
+      "lifecycle": "current",
+      "status": "Implemented",
+      "base_scope": {
+        "path": "crates/gammaloop-api/src/commands/integrate.rs",
+        "symbol": "gammaloop_api::commands::integrate::dashboard_event_loop",
+        "anchor": "fn dashboard_event_loop(receiver",
+        "digest": "0f0ae2c8e593ca91f12be4b4c4e456f8817d7f9b"
+      },
+      "base_check": {
+        "status": "stale-digest",
+        "actual": "bcce3d43713b42fe428e3b5d89784e18c8d47fa7"
+      },
+      "base_file_blob": "bcce3d43713b42fe428e3b5d89784e18c8d47fa7",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "e62fbde4bf68a2fa629a50661e7e2af7276c0a23",
+      "old_context_scope_check": {
+        "status": "stale-digest",
+        "actual": "e62fbde4bf68a2fa629a50661e7e2af7276c0a23"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "crates/gammaloop-api/src/commands/integrate.rs",
+          "symbol": "gammaloop_api::commands::integrate::dashboard_event_loop",
+          "anchor": "fn dashboard_event_loop(receiver",
+          "digest": "e62fbde4bf68a2fa629a50661e7e2af7276c0a23"
+        }
+      ],
+      "start_line": 789,
+      "end_line": null
+    },
+    {
+      "note": "integration-dashboard",
+      "prose": "docs/architecture/ratatui-integration-dashboard.typ",
+      "lifecycle": "current",
+      "status": "Implemented",
+      "base_scope": {
+        "path": "crates/gammalooprs/src/integrate/mod.rs",
+        "symbol": "gammalooprs::integrate",
+        "anchor": "mod render_ratatui;",
+        "digest": "d131b0f6a513af1310b647474fac787105610a1b"
+      },
+      "base_check": {
+        "status": "stale-digest",
+        "actual": "2cbbafcb254b4b7ac042b6ca8dab6682f9a0ce21"
+      },
+      "base_file_blob": "2cbbafcb254b4b7ac042b6ca8dab6682f9a0ce21",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "81515c2e8f393898c7b9a7957fb9f1fb9cde83fb",
+      "old_context_scope_check": {
+        "status": "stale-digest",
+        "actual": "81515c2e8f393898c7b9a7957fb9f1fb9cde83fb"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "crates/gammalooprs/src/integrate/mod.rs",
+          "symbol": "gammalooprs::integrate",
+          "anchor": "mod render_ratatui;",
+          "digest": "81515c2e8f393898c7b9a7957fb9f1fb9cde83fb"
+        }
+      ],
+      "start_line": 9,
+      "end_line": null
+    },
+    {
+      "note": "uv-renormalization",
+      "prose": "docs/architecture/uv-renormalization.typ",
+      "lifecycle": "current",
+      "status": "Implemented",
+      "base_scope": {
+        "path": "crates/gammalooprs/src/uv/orchestrator.rs",
+        "symbol": "gammalooprs::uv::UVOrchestrator",
+        "anchor": "impl UVOrchestrator {",
+        "digest": "19e0c07de61017d01b36bfda24f60e48d4b17bfc"
+      },
+      "base_check": {
+        "status": "stale-digest",
+        "actual": "4acc87a62891dbff0b3ca2cef2e8ab505c1de6d5"
+      },
+      "base_file_blob": "4acc87a62891dbff0b3ca2cef2e8ab505c1de6d5",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "5b372bf91cc685c72271d4e8927bb62ce3c9311f",
+      "old_context_scope_check": {
+        "status": "stale-digest",
+        "actual": "5b372bf91cc685c72271d4e8927bb62ce3c9311f"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "crates/gammalooprs/src/uv/orchestrator.rs",
+          "symbol": "gammalooprs::uv::UVOrchestrator",
+          "anchor": "impl UVOrchestrator {",
+          "digest": "5b372bf91cc685c72271d4e8927bb62ce3c9311f"
+        }
+      ],
+      "start_line": 26,
+      "end_line": null
+    },
+    {
+      "note": "spenso-symbolica-syntax-and-rewrites",
+      "prose": "docs/architecture/spenso-symbolica-syntax-and-rewrites.typ",
+      "lifecycle": "current",
+      "status": "Implemented reference \u00b7 reviewed 2026-10-05",
+      "base_scope": {
+        "path": "crates/idenso/src/lib.rs",
+        "symbol": "idenso::IndexTooling",
+        "anchor": "pub trait IndexTooling {",
+        "digest": "b6b8af1e73031ce2c7dc97185cc31f4a90c63d64"
+      },
+      "base_check": {
+        "status": "stale-digest",
+        "actual": "820fbf610c4bb06867a7013d0b8631e57704ff7d"
+      },
+      "base_file_blob": "820fbf610c4bb06867a7013d0b8631e57704ff7d",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "e8a84816478a3d8dbc437d10df37f7b05bf1f9f8",
+      "old_context_scope_check": {
+        "status": "stale-digest",
+        "actual": "e8a84816478a3d8dbc437d10df37f7b05bf1f9f8"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "crates/idenso/src/lib.rs",
+          "symbol": "idenso::IndexTooling",
+          "anchor": "pub trait IndexTooling {",
+          "digest": "e8a84816478a3d8dbc437d10df37f7b05bf1f9f8"
+        }
+      ],
+      "start_line": 194,
+      "end_line": null
+    },
+    {
+      "note": "spenso-architecture",
+      "prose": "docs/architecture/spenso-architecture.typ",
+      "lifecycle": "current",
+      "status": "Implemented \u00b7 reviewed 2026-10-01",
+      "base_scope": {
+        "path": "crates/spenso/src/network/mod.rs",
+        "symbol": "spenso::network::Network",
+        "anchor": "pub struct Network<S, LibKey, FunKey, Aind = AbstractIndex> {",
+        "digest": "410491ec4a23db5061510dc830fe9a880b6b6a0a"
+      },
+      "base_check": {
+        "status": "stale-digest",
+        "actual": "14f66a4d6e62a4fd878c2f52f0bc6ab336cf7f24"
+      },
+      "base_file_blob": "14f66a4d6e62a4fd878c2f52f0bc6ab336cf7f24",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "41e84dfde4fcb4660917cbc98708d1a9c9db9469",
+      "old_context_scope_check": {
+        "status": "stale-digest",
+        "actual": "41e84dfde4fcb4660917cbc98708d1a9c9db9469"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "crates/spenso/src/network/mod.rs",
+          "symbol": "spenso::network::Network",
+          "anchor": "pub struct Network<S, LibKey, FunKey, Aind = AbstractIndex> {",
+          "digest": "41e84dfde4fcb4660917cbc98708d1a9c9db9469"
+        }
+      ],
+      "start_line": 1766,
+      "end_line": null
+    },
+    {
+      "note": "idenso-architecture",
+      "prose": "docs/architecture/idenso-architecture.typ",
+      "lifecycle": "current",
+      "status": "Implemented \u00b7 reviewed 2026-10-05",
+      "base_scope": {
+        "path": "crates/idenso/src/lib.rs",
+        "symbol": "idenso::IndexTooling",
+        "anchor": "pub trait IndexTooling {",
+        "digest": "b6b8af1e73031ce2c7dc97185cc31f4a90c63d64"
+      },
+      "base_check": {
+        "status": "stale-digest",
+        "actual": "820fbf610c4bb06867a7013d0b8631e57704ff7d"
+      },
+      "base_file_blob": "820fbf610c4bb06867a7013d0b8631e57704ff7d",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "e8a84816478a3d8dbc437d10df37f7b05bf1f9f8",
+      "old_context_scope_check": {
+        "status": "stale-digest",
+        "actual": "e8a84816478a3d8dbc437d10df37f7b05bf1f9f8"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "crates/idenso/src/lib.rs",
+          "symbol": "idenso::IndexTooling",
+          "anchor": "pub trait IndexTooling {",
+          "digest": "e8a84816478a3d8dbc437d10df37f7b05bf1f9f8"
+        }
+      ],
+      "start_line": 194,
+      "end_line": null
+    },
+    {
+      "note": "idenso-architecture",
+      "prose": "docs/architecture/idenso-architecture.typ",
+      "lifecycle": "current",
+      "status": "Implemented \u00b7 reviewed 2026-10-05",
+      "base_scope": {
+        "path": "crates/idenso/src/tensor/mod.rs",
+        "symbol": "idenso::tensor::SymbolicTensor",
+        "anchor": "pub struct SymbolicTensor<S = OrderedStructure<LibraryRep, AbstractIndex>, E = Atom> {",
+        "digest": "73043dc6e75efb7d9961f007520c75f29d45d5a8"
+      },
+      "base_check": {
+        "status": "stale-digest",
+        "actual": "b95ee5f1852b22a03b1fe79bfe4342d3c42e831e"
+      },
+      "base_file_blob": "b95ee5f1852b22a03b1fe79bfe4342d3c42e831e",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "f6aa7542185c7f83f9438d272e9ca1b5b289fe21",
+      "old_context_scope_check": {
+        "status": "stale-digest",
+        "actual": "f6aa7542185c7f83f9438d272e9ca1b5b289fe21"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "crates/idenso/src/tensor/mod.rs",
+          "symbol": "idenso::tensor::SymbolicTensor",
+          "anchor": "pub struct SymbolicTensor<S = OrderedStructure<LibraryRep, AbstractIndex>, E = Atom> {",
+          "digest": "f6aa7542185c7f83f9438d272e9ca1b5b289fe21"
+        }
+      ],
+      "start_line": 262,
+      "end_line": null
+    },
+    {
+      "note": "idenso-architecture",
+      "prose": "docs/architecture/idenso-architecture.typ",
+      "lifecycle": "current",
+      "status": "Implemented \u00b7 reviewed 2026-10-05",
+      "base_scope": {
+        "path": "crates/idenso/src/tensor/contract.rs",
+        "symbol": "idenso::tensor::ContractSettings",
+        "anchor": "pub struct ContractSettings<'a> {",
+        "digest": "94e9d8b2efc414ab4457e7f33d9e8ee4a41b439c"
+      },
+      "base_check": {
+        "status": "stale-digest",
+        "actual": "442fe89c0ec2fc603e7eeb88b73e69ad9e1b7e60"
+      },
+      "base_file_blob": "442fe89c0ec2fc603e7eeb88b73e69ad9e1b7e60",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "80401bae3bb93c4cde4721ae682d6f7f2091a596",
+      "old_context_scope_check": {
+        "status": "stale-digest",
+        "actual": "80401bae3bb93c4cde4721ae682d6f7f2091a596"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "crates/idenso/src/tensor/contract.rs",
+          "symbol": "idenso::tensor::ContractSettings",
+          "anchor": "pub struct ContractSettings<'a> {",
+          "digest": "80401bae3bb93c4cde4721ae682d6f7f2091a596"
+        }
+      ],
+      "start_line": 29,
+      "end_line": null
+    },
+    {
+      "note": "idenso-architecture",
+      "prose": "docs/architecture/idenso-architecture.typ",
+      "lifecycle": "current",
+      "status": "Implemented \u00b7 reviewed 2026-10-05",
+      "base_scope": {
+        "path": "crates/idenso/src/tensor/simplification.rs",
+        "symbol": "idenso::tensor::AlgebraSettings",
+        "anchor": "pub struct AlgebraSettings {",
+        "digest": "3a0628ea619e65a4c7e10e270e7a4aa29fd4e07b"
+      },
+      "base_check": {
+        "status": "stale-digest",
+        "actual": "49ae6d4398bf4decc931f01d09ef49e69f64996f"
+      },
+      "base_file_blob": "49ae6d4398bf4decc931f01d09ef49e69f64996f",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "a778416283ff9e9838a64a6c03ed24d2ec102ba5",
+      "old_context_scope_check": {
+        "status": "stale-digest",
+        "actual": "a778416283ff9e9838a64a6c03ed24d2ec102ba5"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "crates/idenso/src/tensor/simplification.rs",
+          "symbol": "idenso::tensor::AlgebraSettings",
+          "anchor": "pub struct AlgebraSettings {",
+          "digest": "4969892c1c56ffb37acd8c45bc58165f39b1c12c"
+        }
+      ],
+      "start_line": 51,
+      "end_line": null
+    },
+    {
+      "note": "idenso-architecture",
+      "prose": "docs/architecture/idenso-architecture.typ",
+      "lifecycle": "current",
+      "status": "Implemented \u00b7 reviewed 2026-10-05",
+      "base_scope": {
+        "path": "crates/idenso/src/tensor/collection/collected.rs",
+        "symbol": "idenso::tensor::CollectedOutput",
+        "anchor": "pub(crate) struct CollectedOutput",
+        "digest": "de3aeb2b35712816908c6f6490d548e46cb864ba"
+      },
+      "base_check": {
+        "status": "stale-digest",
+        "actual": "ca8c5cb4f9dd9ee5152cbb94df6c8d919e098c35"
+      },
+      "base_file_blob": "ca8c5cb4f9dd9ee5152cbb94df6c8d919e098c35",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": null,
+      "old_context_scope_check": {
+        "status": "missing-source"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [],
+      "start_line": 38,
+      "end_line": null
+    },
+    {
+      "note": "idenso-architecture",
+      "prose": "docs/architecture/idenso-architecture.typ",
+      "lifecycle": "current",
+      "status": "Implemented \u00b7 reviewed 2026-10-05",
+      "base_scope": {
+        "path": "crates/idenso/src/tensor/collection.rs",
+        "symbol": "idenso::tensor::SymbolicTensor::collect_with_map",
+        "anchor": "    pub(crate) fn collect_with_map(",
+        "end_anchor": "    fn collection_observations(",
+        "digest": "fea694882a4b5be3160175636d9ecaeaa1b6ecfe"
+      },
+      "base_check": {
+        "status": "stale-digest",
+        "actual": "8f078f8c9d4f7fd1fea495180aa1185894b5cfa3"
+      },
+      "base_file_blob": "291e0ed07a3590e382421bb35f9b1dddf2bf1eea",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "1ad022076861d32aeb26716ceca465f381072d7d",
+      "old_context_scope_check": {
+        "status": "valid",
+        "actual": "fea694882a4b5be3160175636d9ecaeaa1b6ecfe"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [],
+      "start_line": 959,
+      "end_line": 1315
+    },
+    {
+      "note": "linnet-architecture",
+      "prose": "docs/architecture/linnet-architecture.typ",
+      "lifecycle": "current",
+      "status": "Implemented \u00b7 reviewed 2026-08-18",
+      "base_scope": {
+        "path": "crates/linnet/src/half_edge.rs",
+        "symbol": "linnet::half_edge::HedgeGraph",
+        "anchor": "pub struct HedgeGraph<E, V, H = NoData, S: NodeStorage<NodeData = V> = DefaultNodeStore<V>> {",
+        "digest": "ab9af84a52f5a11adfd57083fb87d524b28bdd55"
+      },
+      "base_check": {
+        "status": "missing-or-ambiguous-anchor"
+      },
+      "base_file_blob": "cf395f5b3af0a5aa69450792745aa7f568ccd2e3",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "863720b19d8df9505ae9744cec947c9f13b5ae25",
+      "old_context_scope_check": {
+        "status": "missing-or-ambiguous-anchor"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "crates/linnet/src/half_edge.rs",
+          "symbol": "linnet::half_edge::HedgeGraph",
+          "anchor": "pub struct HedgeGraph<E, V, H = NoData, N: Topology = NodeForest> {",
+          "digest": "863720b19d8df9505ae9744cec947c9f13b5ae25"
+        }
+      ],
+      "start_line": null,
+      "end_line": null
+    },
+    {
+      "note": "linnet-architecture",
+      "prose": "docs/architecture/linnet-architecture.typ",
+      "lifecycle": "current",
+      "status": "Implemented \u00b7 reviewed 2026-08-18",
+      "base_scope": {
+        "path": "crates/linnet/src/half_edge/involution.rs",
+        "symbol": "linnet::half_edge::involution::Involution",
+        "anchor": "pub struct Involution<E = EdgeIndex> {",
+        "digest": "cb55dd1e057261356f1f2fdce9808b2252fc55ae"
+      },
+      "base_check": {
+        "status": "stale-digest",
+        "actual": "2a5162885ac2e05dc8a1ec79d5fec555a9f6ed36"
+      },
+      "base_file_blob": "2a5162885ac2e05dc8a1ec79d5fec555a9f6ed36",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "c88ce8d1e530579cbc241417348932be1066712b",
+      "old_context_scope_check": {
+        "status": "stale-digest",
+        "actual": "c88ce8d1e530579cbc241417348932be1066712b"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "crates/linnet/src/half_edge/involution.rs",
+          "symbol": "linnet::half_edge::involution::Involution",
+          "anchor": "pub struct Involution<E = EdgeIndex> {",
+          "digest": "c88ce8d1e530579cbc241417348932be1066712b"
+        }
+      ],
+      "start_line": 1504,
+      "end_line": null
+    },
+    {
+      "note": "linnet-architecture",
+      "prose": "docs/architecture/linnet-architecture.typ",
+      "lifecycle": "current",
+      "status": "Implemented \u00b7 reviewed 2026-08-18",
+      "base_scope": {
+        "path": "crates/linnet/src/half_edge/subgraph.rs",
+        "symbol": "linnet::half_edge::subgraph::SubGraphLike",
+        "anchor": "pub trait SubGraphLike: SubSetLike<Hedge> + Inclusion<HedgePair> {",
+        "digest": "61c2d5f958487a63d422201ad7d71a77840f90a7"
+      },
+      "base_check": {
+        "status": "stale-digest",
+        "actual": "929ee2f716f95ba3a0bf7a9afdb8f8bf2a458765"
+      },
+      "base_file_blob": "929ee2f716f95ba3a0bf7a9afdb8f8bf2a458765",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "4af5c3576c8627693125162108c9c7f209c45c0b",
+      "old_context_scope_check": {
+        "status": "stale-digest",
+        "actual": "4af5c3576c8627693125162108c9c7f209c45c0b"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "crates/linnet/src/half_edge/subgraph.rs",
+          "symbol": "linnet::half_edge::subgraph::SubGraphLike",
+          "anchor": "pub trait SubGraphLike: SubSetLike<Hedge> + Inclusion<HedgePair> {",
+          "digest": "4af5c3576c8627693125162108c9c7f209c45c0b"
+        }
+      ],
+      "start_line": 228,
+      "end_line": null
+    },
+    {
+      "note": "linnet-architecture",
+      "prose": "docs/architecture/linnet-architecture.typ",
+      "lifecycle": "current",
+      "status": "Implemented \u00b7 reviewed 2026-08-18",
+      "base_scope": {
+        "path": "crates/linnet/src/parser/mod.rs",
+        "symbol": "linnet::parser::DotGraph",
+        "anchor": "pub struct DotGraph<N: NodeStorage<NodeData = DotVertexData> = DefaultNodeStore<DotVertexData>> {",
+        "digest": "075b13acb171934ea04a1ef527db0bd6a9e40025"
+      },
+      "base_check": {
+        "status": "missing-or-ambiguous-anchor"
+      },
+      "base_file_blob": "6667c3527c7ae3fa85946116341b8ee78c0e87a8",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "d92bbc5354811ac7dc2d5be5e0956a9f5919d8db",
+      "old_context_scope_check": {
+        "status": "missing-or-ambiguous-anchor"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "crates/linnet/src/parser/mod.rs",
+          "symbol": "linnet::parser::DotGraph",
+          "anchor": "pub struct DotGraph<N: Topology = NodeForest> {",
+          "digest": "d92bbc5354811ac7dc2d5be5e0956a9f5919d8db"
+        }
+      ],
+      "start_line": null,
+      "end_line": null
+    },
+    {
+      "note": "cff-surface-cache-ownership",
+      "prose": "docs/architecture/cff-surface-cache-ownership.typ",
+      "lifecycle": "current",
+      "status": "Implemented",
+      "base_scope": {
+        "path": "crates/feynkit-cff/src/generation.rs",
+        "symbol": "feynkit_cff::CffGenerator::generate_into",
+        "anchor": "pub fn generate_into(",
+        "digest": "89000ab1668f83dfb3b32351e6dbed65e0d5c91e"
+      },
+      "base_check": {
+        "status": "stale-digest",
+        "actual": "47ea515ff9c91e24d6f6b501da289996a06dfe9a"
+      },
+      "base_file_blob": "47ea515ff9c91e24d6f6b501da289996a06dfe9a",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "c969c39fa2b53c96dca20da8666891953d0638ed",
+      "old_context_scope_check": {
+        "status": "stale-digest",
+        "actual": "c969c39fa2b53c96dca20da8666891953d0638ed"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "crates/feynkit-cff/src/generation.rs",
+          "symbol": "feynkit_cff::CffGenerator::generate_into",
+          "anchor": "pub fn generate_into(",
+          "digest": "c969c39fa2b53c96dca20da8666891953d0638ed"
+        }
+      ],
+      "start_line": 541,
+      "end_line": null
+    },
+    {
+      "note": "cff-surface-cache-ownership",
+      "prose": "docs/architecture/cff-surface-cache-ownership.typ",
+      "lifecycle": "current",
+      "status": "Implemented",
+      "base_scope": {
+        "path": "crates/feynkit-cff/src/surface.rs",
+        "symbol": "feynkit_cff::SurfaceCache",
+        "anchor": "pub struct SurfaceCache {",
+        "digest": "e35249fe2ae3d1ed12cd9c5059e7a9f42f56eb51"
+      },
+      "base_check": {
+        "status": "stale-digest",
+        "actual": "cf07dd60f15885153560f050d552600cfb19034a"
+      },
+      "base_file_blob": "cf07dd60f15885153560f050d552600cfb19034a",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "d051c576cbaefe711ce1a5ece5c31f061b1ed8b8",
+      "old_context_scope_check": {
+        "status": "stale-digest",
+        "actual": "d051c576cbaefe711ce1a5ece5c31f061b1ed8b8"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "crates/feynkit-cff/src/surface.rs",
+          "symbol": "feynkit_cff::SurfaceCache",
+          "anchor": "pub struct SurfaceCache {",
+          "digest": "d051c576cbaefe711ce1a5ece5c31f061b1ed8b8"
+        }
+      ],
+      "start_line": 430,
+      "end_line": null
+    },
+    {
+      "note": "feynkit-merge-readiness",
+      "prose": "docs/architecture/feynkit-merge-readiness.typ",
+      "lifecycle": "current",
+      "status": "Repairs in progress",
+      "base_scope": {
+        "path": "crates/feynkit-generator/src/grouping.rs",
+        "symbol": "group_diagrams",
+        "anchor": "pub(crate) fn group_diagrams(",
+        "digest": "7c402dd069754864108f236abdf155e9a1ab4f6e"
+      },
+      "base_check": {
+        "status": "stale-digest",
+        "actual": "66cc3fe8280694c72b213d71dee37fb40a1ad997"
+      },
+      "base_file_blob": "66cc3fe8280694c72b213d71dee37fb40a1ad997",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "89b064bfca6be559a6f76907d824ebe97637fb85",
+      "old_context_scope_check": {
+        "status": "stale-digest",
+        "actual": "89b064bfca6be559a6f76907d824ebe97637fb85"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "crates/feynkit-generator/src/grouping.rs",
+          "symbol": "group_diagrams",
+          "anchor": "pub(crate) fn group_diagrams(",
+          "digest": "1b2a3e095bc60cb41038c11a2e2c1f857341c36a"
+        }
+      ],
+      "start_line": 451,
+      "end_line": null
+    },
+    {
+      "note": "nix-crane-cache-reuse",
+      "prose": "docs/architecture/nix-crane-cache-reuse.typ",
+      "lifecycle": "current",
+      "status": "Living engineering record",
+      "base_scope": {
+        "path": "nix/rust-workspace.nix",
+        "symbol": "workspace package source ownership",
+        "anchor": "documentationCatalogAnnotatedItemSourcePaths =",
+        "end_anchor": "workspacePackageExtraSourceRootsForSourcePackages =",
+        "digest": "40c9f9e222f79069e9fef94da1288be3aacab0ac"
+      },
+      "base_check": {
+        "status": "stale-digest",
+        "actual": "2ecd200b0d9bf0434fc9c15f9ebcb076d777dd70"
+      },
+      "base_file_blob": "e4d7497245a2a0d6d26940a24d274a533c4c6e3c",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "d3296490d29349aa2e6eb775dc8ab33880294532",
+      "old_context_scope_check": {
+        "status": "stale-digest",
+        "actual": "04b33bff7b682eefd612b2790c6e8d65e6e94794"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "nix/rust-workspace.nix",
+          "symbol": "workspace package source ownership",
+          "anchor": "documentationCatalogAnnotatedItemSourcePaths =",
+          "end_anchor": "workspacePackageExtraSourceRootsForSourcePackages =",
+          "digest": "a23dfe3171472ff6174689bb7b48970715894718"
+        }
+      ],
+      "start_line": 416,
+      "end_line": 692
+    }
+  ]
+}

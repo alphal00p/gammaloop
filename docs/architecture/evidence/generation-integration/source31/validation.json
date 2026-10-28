@@ -1,0 +1,176 @@
+{
+  "recorded_at": "2026-10-28T07:02:14.958964+00:00",
+  "implementation_commit": "7e3eb9f69e37cbdf7aae0040742352e329d790f5",
+  "base": "a517ca563d78d161cff17fe60e661f80529c9a83",
+  "scope_audit": {
+    "command": "direnv exec .. <pinned Nix python3> target/source31/audit.py",
+    "valid": 94,
+    "invalid": 0,
+    "controls_passed": 16,
+    "owner": "docs/architecture/evidence/generation-integration/wp3/oracle-registry-audit.py",
+    "owner_unchanged": true,
+    "proof": "scope-audit-after.json"
+  },
+  "finished_checks": [
+    {
+      "name": "architecture-current",
+      "exit": 0,
+      "log": "target/source31/frozen-owned-validation/architecture-current.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "feynkit-merge-readiness",
+      "exit": 0,
+      "log": "target/source31/frozen-owned-validation/feynkit-merge-readiness.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "generation-documentation-reconcile",
+      "exit": 0,
+      "log": "target/source31/frozen-owned-validation/generation-documentation-reconcile.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "generation-integration-wp1",
+      "exit": 0,
+      "log": "target/source31/frozen-owned-validation/generation-integration-wp1.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "idenso-architecture",
+      "exit": 0,
+      "log": "target/source31/frozen-owned-validation/idenso-architecture.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "nix-crane-cache-reuse",
+      "exit": 0,
+      "log": "target/source31/frozen-owned-validation/nix-crane-cache-reuse.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "ratatui-integration-dashboard",
+      "exit": 0,
+      "log": "target/source31/frozen-owned-validation/ratatui-integration-dashboard.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "kurvst-arrowhead-engine",
+      "exit": 0,
+      "log": "target/source31/frozen-owned-validation/kurvst-arrowhead-engine.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "kurvst-first",
+      "exit": 0,
+      "log": "target/source31/frozen-owned-validation/kurvst-first.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "kurvst-second",
+      "exit": 0,
+      "log": "target/source31/frozen-owned-validation/kurvst-second.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "kurvst-reproducibility",
+      "exit": 0,
+      "log": "target/source31/frozen-owned-validation/kurvst-reproducibility.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "canonical-boundary-controls",
+      "exit": 0,
+      "log": "target/source31/frozen-owned-validation/canonical-boundary-controls.log",
+      "log_sha256": "667ea9e3df326ea2e266986812a3649d19eb431d9d5abe58420b7a71c5b49efe"
+    }
+  ],
+  "canonical_rust": {
+    "registry_phase": "Current registry structure, classification and all scopes advanced through the actual Rust validator to catalog exporter launch.",
+    "complete_check": "Passed; see target/source31/canonical-check.exit and canonical-check.log; this does not certify full docs.",
+    "initial_failure": "generation-scalar-admission reviewed_at missing paired review_ref; fixed using existing approved isolated patch872e84b2.",
+    "next_failure": "Two unclassified architecture files: generation-integration-wp1.typ and kurvst-arrowhead-engine.typ; fixed by historical investigation classification.",
+    "direct_binary_probe_limit": "After those fixes, a direct binary invocation outside the Nix shell reached catalog export but could not launch Cargo. This is not a source30 failure and not a successful full check.",
+    "range_test": "Pinned-shell canonical boundary and range tests passed; see target/source31/negative-controls.exit and log."
+  },
+  "full_pipeline_runs": [
+    {
+      "name": "docs-check",
+      "status": "failed",
+      "exit": 1,
+      "log": "target/source31/completion-logs/docs-check-final.log",
+      "log_sha256": "567352fabd78ad26fbf11a546d5c0fc313baf831a931d7fe0fd06fd6b1b506e1",
+      "first_actual_failure": "Three Linnet community rendering tests call removed Process.generate_diagrams; 113 run, 3 errors, 6 skipped. Inherited Python API port outside Source31."
+    },
+    {
+      "name": "full-docs",
+      "status": "client exit unknown; snapshot derivation failure verified",
+      "exit": null,
+      "log": "target/source31/completion-logs/full-docs-final.log",
+      "log_sha256": "4b057859a42d9f3cf01629cebe0948a718c28238740cbd01c29c0f2c065cc2cc",
+      "verified_failure": "alphal00p-docs-snapshot-fixture derivation builder exit 1: seven data tables without header cells in inherited plan/WP1/Kurvst pages. Source31 edited no table. Wrapper terminated before writing full-docs.exit."
+    }
+  ],
+  "source30": {
+    "state": "independent lane pending review/integration",
+    "observed_missing_compile_input_failure": null,
+    "claim": "No source30 missing-input failure observed in the completed local docs-check or verified Nix snapshot derivation failure."
+  },
+  "product_registry": {
+    "products": [
+      "gammaloop",
+      "linnet",
+      "spenso",
+      "idenso",
+      "vakint",
+      "feynkit"
+    ],
+    "note_count": 62
+  },
+  "browser": {
+    "status": "not run",
+    "required_workflow": "Pinned offline Nix Chromium/Playwright and bundled fonts as documented in docs/architecture/ci.typ; no external publishing.",
+    "reason": "Complete product rendering/catalog validation has not completed; browser/wheel/example ports belong to source32–35."
+  },
+  "manual": "manual.json",
+  "qualification": "94 scope fingerprints and focused documentation checks; local docs-check failed on inherited Linnet Python tests, and full Nix snapshot derivation failed on inherited table accessibility. No full site/browser pass.",
+  "continuation": "F1–F3 correction prepared for NEW independent Astra review; ordered main post30 refresh and renewed review required before integration. Frozen failed-pipeline logs retained.",
+  "completed_pipeline_stages": [
+    {
+      "command": "cargo run --locked -p alphal00p-docs-python-exporter --features feynkit -- feynkit-community docs/api/python/feynkit-community.pyi --check",
+      "status": "passed",
+      "evidence": "target/source31/frozen-owned-validation/feynkit-python-surface.log",
+      "log_sha256": "aeaf0a17b4d81861f02f487a77102250fe146b2657f79eda0fb07d9b529d8248",
+      "witness": "just docs-check completed this command and started the following GammaLoop reference command"
+    }
+  ],
+  "state": "corrected preparation; NEW independent Astra review required",
+  "updated_at": "2026-10-28T08:30:39.510680+00:00",
+  "completed_broad_checks": [
+    {
+      "name": "canonical-check",
+      "exit": 0,
+      "log": "target/source31/canonical-check.log",
+      "log_sha256": "ab66014abeeb177730ba7ecc1f36cd17442bd5139faeb485aa5048779311b054"
+    },
+    {
+      "name": "negative-controls",
+      "exit": 0,
+      "log": "target/source31/negative-controls.log",
+      "log_sha256": "d4c007dcba87afb8fcdc4ab7a5587b48c61db98d21065a8c0a33d6e9570343fa"
+    }
+  ],
+  "correction_checks": {
+    "scope_owner": "94/94 valid",
+    "attestations": "28/28 exact parsed current scopes and checked prose section hashes",
+    "titles_and_products": "62 notes across six products; original registry metadata unchanged except F2 scope label",
+    "typst": {
+      "path": "docs/architecture/architecture-current.typ",
+      "exit": 0,
+      "pdf_sha256": "06a9a6ab9aaf7d3167082f04f576542242ceaaf208ca1361ffb1ed201716160d",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "record": "target/source31/correction-checks.json",
+    "runtime": "unchanged; no physics rerun"
+  }
+}

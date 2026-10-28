@@ -1,0 +1,42 @@
+{
+  "base": "a517ca563d78d161cff17fe60e661f80529c9a83",
+  "changes": [
+    {
+      "note": "generation-scalar-admission",
+      "before": {
+        "reviewed_at": "2026-10-27",
+        "review_ref": null,
+        "evidence_revision": "74cebf6c8f673f5849b26afe55fa98035d5eba1d"
+      },
+      "after": {
+        "review_ref": "872e84b2b5bb875264c9eb476c5af47154f66b18"
+      },
+      "evidence": [
+        "docs/architecture/generation-scalar-admission.typ",
+        "docs/architecture/evidence/generation-integration/execution.json"
+      ],
+      "reason": "Pair required by canonical schema; existing independent approval identifies the isolated patch, not SOURCE31."
+    },
+    {
+      "note": "generation-integration-wp1",
+      "before": "unclassified architecture source",
+      "after": "investigation",
+      "evidence_revision": "a517ca563d78d161cff17fe60e661f80529c9a83",
+      "reason": "Preserve bounded original-pair certificate and old sample/weight observations as dated investigation."
+    },
+    {
+      "note": "kurvst-arrowhead-engine",
+      "before": "unclassified architecture source",
+      "after": "investigation",
+      "evidence_revision": "a517ca563d78d161cff17fe60e661f80529c9a83",
+      "reason": "Historical accepted plan, staged implementation and old reported timings; current APIs and source38 remain explicitly distinguished."
+    },
+    {
+      "note": "generation-documentation-reconcile",
+      "before": null,
+      "after": "investigation / implementation candidate",
+      "evidence_revision": "a517ca563d78d161cff17fe60e661f80529c9a83",
+      "review": "NEW independent Astra review pending"
+    }
+  ]
+}

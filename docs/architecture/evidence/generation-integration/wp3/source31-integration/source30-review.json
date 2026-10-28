@@ -1,0 +1,328 @@
+{
+  "verdict": "APPROVE",
+  "reviewer": "NEW independent Astra review; read-only, no nested agents",
+  "reviewed_at_utc": "2026-10-28T10:12:38.306325+00:00",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-integration-plan",
+  "review_directory": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-main-source30-review-61WwSfAy",
+  "candidate": "7587d0c768363f200e89250683e7836c867c9b81",
+  "change": "rsnwxksqkumlppzknlkkqvkrvpyrrzrt",
+  "bookmarks": {
+    "generation-integration": "7587d0c768363f200e89250683e7836c867c9b81",
+    "generation-integration-source30": "7587d0c768363f200e89250683e7836c867c9b81"
+  },
+  "approved_parent": "cb585c98a474628ca9c55bb17cf1e680450b8ef9",
+  "runtime_build_code": "f99fe4bf25db77df58ce4619e2ff176268499a58",
+  "frozen_metadata": "2990045ccc658413f2eb2c07fe21e9d811ac4da8",
+  "blocking_findings": [],
+  "nonblocking_findings": [],
+  "scope": "Combined MAIN SOURCE30 only: approved six compile-time inputs, four Clinnet fixtures, and declared local Cargo patch selection repair.",
+  "semantic_audit": [
+    {
+      "path": "nix/rust-workspace.nix",
+      "line": 52,
+      "conclusion": "Root Cargo patch.crates-io defaults to empty; only existing exact vendor/<patch-name> local path declarations enter the common source/copy owner. Current Clarabel retained; remote kernel patches excluded from local copying. Actual pinned baseline has no patch table and evaluates successfully. No general path/alias discovery abstraction is claimed."
+    },
+    {
+      "path": "nix/rust-workspace.nix",
+      "line": 531,
+      "conclusion": "Linnet adds exactly five unchanged generation-report files. All report strings are embedded in the actual generation_report test ELF and consumed by the fresh passing test."
+    },
+    {
+      "path": "nix/rust-workspace.nix",
+      "line": 555,
+      "conclusion": "FeynKit adds exactly the unchanged Python request-decorator contract; its actual unit-test ELF embeds the complete file. Current graph compact_dot.rs/dot.rs differ from preparation, so the new combined-source producer is required and verified."
+    },
+    {
+      "path": "nix/rust-workspace.nix",
+      "line": 577,
+      "conclusion": "Four existing Clinnet literal fixtures are added only to that consumer compileTimeTest list; complete bytes, depfiles, and three fresh focused Typst consumers verified."
+    },
+    {
+      "path": "nix/rust-workspace.nix",
+      "line": 2147,
+      "conclusion": "50 actual source derivations across the three current producer closures copy only declared Clarabel from the matching filtered dependency source. Original failed script attempted an absent dot-parser subtree: the live inactive tree has only empty directories. Scratch probes cover both populated undeclared-source leakage and the empty-directory copy mismatch."
+    }
+  ],
+  "independent_checks": [
+    "Fresh actual candidate flake source/package/producer identities equal f99 build completion and final metadata evaluations.",
+    "All selected paths are candidate-tracked; exact ten additions, no removals or preexisting selected-byte changes; production sources unchanged;97 literal includes audited.",
+    "Source/package/producer NARs and registered derivers independently rechecked;15 real Cargo test ELFs(5FeynKit+6Linnet+4Clinnet) verified in exact archives, not dependency-cache claims.",
+    "Affected ELF complete embedded bytes and exact test depfiles independently checked against current source; reused extracted runtime binaries/libraries verified byte-for-byte from archives.",
+    "Five focused tests freshly discovered and executed with --exact;one passed each,zero ignored;Typst0.15.1 explicitly required,no skipped-pass credit.",
+    "13 fresh snapshot mutation/negative controls:ten owner inputs,unrelated note,runtime restriction card,and populated undeclared vendor directory. Matching producer sensitivity and unchanged production sources checked with exact restoration.",
+    "Old directory-presence selector regression probed;actual current and pinned incremental baseline manifest shapes plus absent/empty/nonpath/nonmatching/missing-local controls evaluated using the exact Nix binding.",
+    "All3496 tracked files and26 protected refs plus2 candidate bookmarks checked unchanged;exact26-file slice/cumulative inventory,commit ancestry,Lucien Huber author,and code/metadata boundaries verified.",
+    "Three archived review/completion copies and64 retained implementation artifacts hash-verified;approved source30 Nix patch and frozen preparation receipt imported exactly.",
+    "Two owned scopes pass canonical start/end uniqueness and order checks with Git blob hashes;full101-scope audit exits1 with the same inherited24 stale digests+4 anchor failures.",
+    "Pinned nixfmt1.5.0 four changed blocks pass;three Nix files parse;kernel feature isolation passes;two Typst sources render and match registered single titles.",
+    "Mutable nested SOURCE22/P1 fields explicitly historical/superseded;immutable failure receipts unchanged. Runtime card,three quotient fixtures,current Community/native/resource/license/WASM owners preserved."
+  ],
+  "fresh_runtime": [
+    {
+      "owner": "clinnet",
+      "test": "public_mark_constructors_and_batch_geometry_behave",
+      "command": [
+        "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-source30/elf/clinnet/kurvst_marks-0cb2d1d9c0fc5cc0",
+        "public_mark_constructors_and_batch_geometry_behave",
+        "--exact",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "binary_sha256": "c9772cf3a6fb6860de5dedea3e0f9571227f661181d40ba8c1bdb342bd9c5e71",
+      "exit_code": 0,
+      "seconds": 1.2351911067962646,
+      "passed": 1,
+      "ignored": 0,
+      "typst_executable": "/nix/store/vnjry04dnavpyvl41mz607ir21pjb2hp-typst-0.15.1-env/bin/typst",
+      "typst_version": "typst 0.15.1 (9dfd3a08)",
+      "log_prefix": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-main-source30-review-61WwSfAy/runtime-0"
+    },
+    {
+      "owner": "clinnet",
+      "test": "public_linnest_identity_targets_and_collision_lines_behave",
+      "command": [
+        "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-source30/elf/clinnet/public_typst_behavior-5cd3cbadce751f84",
+        "public_linnest_identity_targets_and_collision_lines_behave",
+        "--exact",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "binary_sha256": "8f98db9b9ddfaa8633ad797a09e046e2f6cdc34011039b475221daa48badf97f",
+      "exit_code": 0,
+      "seconds": 0.2908060550689697,
+      "passed": 1,
+      "ignored": 0,
+      "typst_executable": "/nix/store/vnjry04dnavpyvl41mz607ir21pjb2hp-typst-0.15.1-env/bin/typst",
+      "typst_version": "typst 0.15.1 (9dfd3a08)",
+      "log_prefix": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-main-source30-review-61WwSfAy/runtime-1"
+    },
+    {
+      "owner": "clinnet",
+      "test": "public_native_curve_splits_layers_and_route_points_behave",
+      "command": [
+        "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-source30/elf/clinnet/public_typst_behavior-5cd3cbadce751f84",
+        "public_native_curve_splits_layers_and_route_points_behave",
+        "--exact",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "binary_sha256": "8f98db9b9ddfaa8633ad797a09e046e2f6cdc34011039b475221daa48badf97f",
+      "exit_code": 0,
+      "seconds": 1.2511301040649414,
+      "passed": 1,
+      "ignored": 0,
+      "typst_executable": "/nix/store/vnjry04dnavpyvl41mz607ir21pjb2hp-typst-0.15.1-env/bin/typst",
+      "typst_version": "typst 0.15.1 (9dfd3a08)",
+      "log_prefix": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-main-source30-review-61WwSfAy/runtime-2"
+    },
+    {
+      "owner": "linnet",
+      "test": "explanations_snapshot_the_lowered_request_and_infeasibility",
+      "command": [
+        "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-source30/elf/linnet/generation_report-6bcbc157bd9f464f",
+        "explanations_snapshot_the_lowered_request_and_infeasibility",
+        "--exact",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "binary_sha256": "e9764e7201f43fd59ed38948ae043f0bdb1787491ea31389097ce5372d70aca6",
+      "exit_code": 0,
+      "seconds": 0.003857135772705078,
+      "passed": 1,
+      "ignored": 0,
+      "typst_executable": "/nix/store/vnjry04dnavpyvl41mz607ir21pjb2hp-typst-0.15.1-env/bin/typst",
+      "typst_version": "typst 0.15.1 (9dfd3a08)",
+      "log_prefix": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-main-source30-review-61WwSfAy/runtime-3"
+    },
+    {
+      "owner": "feynkit",
+      "test": "generation::tests::request_decorators_preserve_dispatch_gc_and_heredity_contracts",
+      "command": [
+        "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-source30/elf/feynkit/feynkit_py-b048a14e60533ee1",
+        "generation::tests::request_decorators_preserve_dispatch_gc_and_heredity_contracts",
+        "--exact",
+        "--nocapture",
+        "--test-threads=1"
+      ],
+      "binary_sha256": "4bab4ced580b758bb6edf1fc8278ef8d998f2a339af1cce7e7c39cc3bd992316",
+      "exit_code": 0,
+      "seconds": 0.519033670425415,
+      "passed": 1,
+      "ignored": 0,
+      "typst_executable": "/nix/store/vnjry04dnavpyvl41mz607ir21pjb2hp-typst-0.15.1-env/bin/typst",
+      "typst_version": "typst 0.15.1 (9dfd3a08)",
+      "log_prefix": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-main-source30-review-61WwSfAy/runtime-4"
+    }
+  ],
+  "current_producers": {
+    "clinnet": {
+      "identity": {
+        "packageDrv": "/nix/store/n25c6ypc3g5yr9avywr4679w896j7w06-nix-ci-artifact-barrier-crate-test-binaries-clinnet.drv",
+        "packageOut": "/nix/store/v55s7n8d96d40pgh276v7m0dx8yzyndv-nix-ci-artifact-barrier-crate-test-binaries-clinnet",
+        "producerDrv": "/nix/store/mynmwafrkaln2lw5fym83kmg17y3b5a5-gammaloop-crate-test-binaries-clinnet-ae6d6c18c3317af1-deps-0.1.0.drv",
+        "producerOut": "/nix/store/vbsi8ba92kdc0cvrjc12zr5d14v6iqh7-gammaloop-crate-test-binaries-clinnet-ae6d6c18c3317af1-deps-0.1.0",
+        "productionSource": "/nix/store/s1ql5wccqg2r4nld4mypymx0l5bqm23p-source",
+        "source": "/nix/store/9zkqnnyrdjz13s1akf70mzja6cqmhyxg-source"
+      },
+      "profile_features_command": "runHook preBuild\ncargo --version\ncargoWithProfile test --no-run --offline -p clinnet\nrunHook postBuild\n",
+      "real_test_targets": 4,
+      "producer_nar_hash": "sha256-uxFe1xEKD0mCRMIM2t3xDQPKiB+Ekfqn/oIur6kA+S4="
+    },
+    "linnet": {
+      "identity": {
+        "packageDrv": "/nix/store/l7vvaz9q3jgr8mq8i9g7yc093cya1s5q-nix-ci-artifact-barrier-crate-test-binaries-linnet.drv",
+        "packageOut": "/nix/store/0clcs1w68lx88dkpz38l36lz40sbc533-nix-ci-artifact-barrier-crate-test-binaries-linnet",
+        "producerDrv": "/nix/store/bvmr7za4q98dy2x3bjvvvgpzbncgz0fg-gammaloop-crate-test-binaries-linnet-9ddd49c3d058a560-deps-0.1.0.drv",
+        "producerOut": "/nix/store/cavydq06slyc5rnbk73jhjkdw468gwhl-gammaloop-crate-test-binaries-linnet-9ddd49c3d058a560-deps-0.1.0",
+        "productionSource": "/nix/store/bmmi645wj3x1a0k9ynx1m5y0d85v31ib-source",
+        "source": "/nix/store/dn76zz86lpis983m5yf8lvmkb7h2cn8w-source"
+      },
+      "profile_features_command": "runHook preBuild\ncargo --version\ncargoWithProfile test --no-run --offline -p linnet --features linnet/bincode,linnet/drawing,linnet/rayon,linnet/rkyv,linnet/serde,linnet/symbolica\nrunHook postBuild\n",
+      "real_test_targets": 6,
+      "producer_nar_hash": "sha256-OMH8hto/BjmyV7Os+A2X5oDEfWPSmjnHnL0sE3NqdbU="
+    },
+    "feynkit": {
+      "identity": {
+        "packageDrv": "/nix/store/8r0xcd37m0h1kjbhc5xyqkxixi8dljsh-nix-ci-artifact-barrier-crate-test-binaries-feynkit-py.drv",
+        "packageOut": "/nix/store/2hg95fq6xlg346gimc614dhglrzxiwx9-nix-ci-artifact-barrier-crate-test-binaries-feynkit-py",
+        "producerDrv": "/nix/store/9pdyis7c6cdacw97cd5pq901rca9lbpp-gammaloop-crate-test-binaries-feynkit-py-5ebab9a37787b10e-deps-0.1.0.drv",
+        "producerOut": "/nix/store/f5haybcq73gyxpbk8fa77ic1ilyk61m1-gammaloop-crate-test-binaries-feynkit-py-5ebab9a37787b10e-deps-0.1.0",
+        "productionSource": "/nix/store/ixag4ni62z7n5y0s69fnry5az9ln9psc-source",
+        "source": "/nix/store/vrcn5qbrb2q691sks6hq6w8gwn3savpk-source"
+      },
+      "profile_features_command": "runHook preBuild\ncargo --version\ncargoWithProfile test --no-run --offline -p feynkit-py --features feynkit-py/python_stubgen,pyo3-stub-gen/infer_signature,pyo3-stub-gen/numpy,pyo3/anyhow,pyo3/auto-initialize,pyo3/eyre,pyo3/macros,pyo3/multiple-pymethods\nrunHook postBuild\n",
+      "real_test_targets": 5,
+      "producer_nar_hash": "sha256-EXHPkocRWS32jvNq2dBSCRW0nByALO1fRysC0lbIBV0="
+    }
+  },
+  "reused_checks": [
+    {
+      "check": "Three completed Nix test-producer builds",
+      "source": "docs/architecture/evidence/generation-integration/wp3/source30-integration/completion.json",
+      "recorded_session": 61608,
+      "recorded_exit_code": 0,
+      "qualification": "No duplicate cold producer build. Current derivations,registered outputs,logs,NARs,actual ELF archives and tests independently verified."
+    },
+    {
+      "check": "Linnet preparation producer",
+      "qualification": "Exact current source/package/producer identities match preparation;6 actual test targets. FeynKit preparation is explicitly not current proof because two selected graph source files differ. Clinnet and FeynKit use new combined-source producers already built by Sol."
+    },
+    {
+      "check": "Source19 row certificates and parent27\u201329 scoped Rust/physics results",
+      "qualification": "Historical approved identities retained,not freshly executed or relabelled as current full-tip coverage. No Rust,Cargo manifests,locks,features or physics expectations changed in SOURCE30."
+    }
+  ],
+  "limits": [
+    "APPROVE clears the SOURCE31 predecessor gate only. Ordered SOURCE31 refresh against this combined source and a NEW independent review remain required;the later prepared eb2a02f5 is not imported or approved by this review.",
+    "Full canonical documentation pipeline remains future;28 inherited failing scopes and inherited whole-file Nix formatting drift remain explicit.",
+    "The two SOURCE19 rows remain certified passing. Three older frame failures and four omitted graph-numerator expansion helpers remain open;none of those helpers was run.",
+    "No full NixCI,WP3 physics,performance/benchmark,wheel,installed-distribution,Community/Pyodide/native package,publication or integration approval.",
+    "No fresh Rust Clippy run warranted by this Nix/documentation-only delta;prior scoped result remains bound to its approved parent."
+  ],
+  "next_gate": {
+    "SOURCE31_predecessor_cleared": true,
+    "SOURCE31_itself_approved": false,
+    "requires": "Ordered refresh followed by new independent review"
+  },
+  "environment": {
+    "NixCI": false,
+    "kernel": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+    "license": "Existing export preserved or silently loaded;no value output or stored",
+    "cache": "Normal shared Cargo/Nix caches;no target/cache overrides,manual artifact injection,deletion,uploads or publication",
+    "development_shell": "Nix development environment preparation realized its required tool/WASM/Clinnet outputs;no additional test-producer build claimed"
+  },
+  "review_harness_notes": [
+    "Nix derivation JSON version2 wrapper and cargoWithProfile spelling were accommodated before final successful archive inspection;initial local harness-only diagnostics removed.",
+    "Ambient dev-shell nixfmt was1.4.0;explicit pinned1.5.0 checks supersede it for formatting credit.",
+    "The isolated manifest harness was corrected to pass a Nix path value to lib.fileset;this does not affect the implementation,which already receives a path-typed workspaceRoot.",
+    "Populated undeclared-directory regression changes old filtered sources;the actual failed build had an empty directory tree. Both cases independently qualified without touching the real inactive directory."
+  ],
+  "cleanup": {
+    "scratch_snapshots_removed": true,
+    "real_inactive_vendor_untouched": true,
+    "prior_proofs_refs_logs_preserved": true,
+    "own_unused_removed": [
+      "artifacts.log",
+      "artifacts-rerun.log",
+      "__pycache__"
+    ],
+    "processes_retained": [],
+    "retained": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-main-source30-review-61WwSfAy",
+    "reason": "Read-only review receipt,exact commands,identities,inventories,negative controls and runtime logs for audit/continuation"
+  },
+  "entry_commands": [
+    [
+      "nix",
+      "eval",
+      "--impure",
+      "--no-write-lock-file",
+      "--json",
+      "--file",
+      "target/wp3-source30/eval.nix"
+    ],
+    [
+      "bash",
+      "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-main-source30-review-61WwSfAy/dev.sh",
+      "python3",
+      "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-main-source30-review-61WwSfAy/audit.py"
+    ],
+    [
+      "bash",
+      "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-main-source30-review-61WwSfAy/dev.sh",
+      "python3",
+      "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-main-source30-review-61WwSfAy/artifacts.py"
+    ],
+    [
+      "bash",
+      "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-main-source30-review-61WwSfAy/dev.sh",
+      "python3",
+      "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-main-source30-review-61WwSfAy/sensitivity.py"
+    ],
+    [
+      "bash",
+      "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-main-source30-review-61WwSfAy/dev.sh",
+      "python3",
+      "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-main-source30-review-61WwSfAy/docs.py"
+    ],
+    [
+      "/nix/store/xarzifw3nq4jwzan0ynllhp2nz067sa7-python3-3.13.14-env/bin/python3",
+      "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-main-source30-review-61WwSfAy/patch_derivations.py"
+    ],
+    [
+      "/nix/store/xarzifw3nq4jwzan0ynllhp2nz067sa7-python3-3.13.14-env/bin/python3",
+      "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-main-source30-review-61WwSfAy/evidence.py"
+    ],
+    [
+      "/nix/store/xarzifw3nq4jwzan0ynllhp2nz067sa7-python3-3.13.14-env/bin/python3",
+      "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-main-source30-review-61WwSfAy/finish_sensitivity.py"
+    ],
+    [
+      "/nix/store/xarzifw3nq4jwzan0ynllhp2nz067sa7-python3-3.13.14-env/bin/python3",
+      "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-main-source30-review-61WwSfAy/manifest_probes.py"
+    ],
+    [
+      "/nix/store/xarzifw3nq4jwzan0ynllhp2nz067sa7-python3-3.13.14-env/bin/python3",
+      "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-main-source30-review-61WwSfAy/finalize_review.py"
+    ]
+  ],
+  "evidence_files": [
+    "commands.jsonl",
+    "provenance.json",
+    "closure.json",
+    "artifacts.json",
+    "runtime.json",
+    "sensitivity.json",
+    "patch-selection.json",
+    "patch-derivation-agreement.json",
+    "directory-presence-regression.json",
+    "nonempty-directory-regression.json",
+    "scopes.json",
+    "static-checks.json",
+    "pinned-format.json",
+    "evidence-integrity.json",
+    "nested-statuses.json",
+    "final-integrity.json",
+    "tracked-start.json",
+    "tracked-end.json"
+  ]
+}

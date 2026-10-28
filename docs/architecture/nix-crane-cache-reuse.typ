@@ -16,6 +16,14 @@ investigation history behind those designs; the maintained CI guide now
 separates the final Rust CI contract from this experiment log.
 ]
 
+SOURCE31 observes the source lists at
+`a517ca563d78d161cff17fe60e661f80529c9a83`: embedded native rendering resources
+belong to `linnet-render-py`; compile-time test roots and production resources
+remain distinct inputs of their owning packages. This observation is not a
+producer-closure success. SOURCE30 separately reconciles missing compile inputs
+and must be integrated before final documentation qualification. Historical
+cache timings below remain tied to their original experiment.
+
 This note records the cache-reuse audit for the NixCI Rust build graph.
 
 == Sources checked
@@ -1882,8 +1890,9 @@ the terminal consumer. The explicit documentation input list drops
 `crates/linnet-py/pyproject.toml` and its `uv.lock`; Cargo manifests and
 shared stubs remain inputs through their owning source sets. Both the dependency manifest source
 set and the documentation Cargo source set include `localCargoPatchSources`,
-so a local Cargo patch is available in an isolated build and changes its
-own dependency input identity.
+so a declared local Cargo patch is available in an isolated build and changes its
+own dependency input identity. Selection follows root Cargo path-patch declarations;
+an undeclared vendor directory does not enter source or producer identity.
 
 The package source map retains separate production, compile-time test,
 and runtime owners. Production inputs now include interactive SVG and
@@ -1894,6 +1903,10 @@ own compile-time test slice, including the Community graph stub used by
 the exporter regression. Nauty driver and answer files enter Linnet's
 runtime slice. These declarations follow the actual include/read owner;
 they do not turn a crate's test fixtures into unrelated production inputs.
+SOURCE30 explicitly includes the request-decorator Python contract, five Linnet
+generation-report snapshots and four Clinnet literal Typst fixtures. Current
+combined producers and input sensitivity were independently approved at `7587d0c7`;
+that focused closure proof does not imply full NixCI or runtime-physics coverage.
 
 == Remaining caveats
 <remaining-caveats-1>

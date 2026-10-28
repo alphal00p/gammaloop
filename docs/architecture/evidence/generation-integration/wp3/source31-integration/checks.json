@@ -1,0 +1,707 @@
+{
+  "scope_negative_controls": [
+    {
+      "name": "valid",
+      "status": "valid"
+    },
+    {
+      "name": "outside",
+      "status": "valid"
+    },
+    {
+      "name": "inside",
+      "status": "stale-digest"
+    },
+    {
+      "name": "missing-start",
+      "status": "missing-or-ambiguous-anchor"
+    },
+    {
+      "name": "duplicate-start",
+      "status": "missing-or-ambiguous-anchor"
+    },
+    {
+      "name": "missing-end",
+      "status": "missing-or-ambiguous-end"
+    },
+    {
+      "name": "duplicate-end",
+      "status": "missing-or-ambiguous-end"
+    },
+    {
+      "name": "reversed",
+      "status": "invalid-range"
+    },
+    {
+      "name": "missing-source",
+      "status": "missing-source"
+    },
+    {
+      "name": "empty-start",
+      "status": "missing-or-ambiguous-anchor"
+    },
+    {
+      "name": "empty-end",
+      "status": "missing-or-ambiguous-end"
+    },
+    {
+      "name": "overlap",
+      "status": "invalid-range"
+    },
+    {
+      "name": "whole-valid",
+      "status": "valid"
+    },
+    {
+      "name": "whole-outside",
+      "status": "stale-digest"
+    },
+    {
+      "name": "whole-missing",
+      "status": "missing-or-ambiguous-anchor"
+    },
+    {
+      "name": "whole-duplicate",
+      "status": "missing-or-ambiguous-anchor"
+    }
+  ],
+  "titles": [
+    {
+      "id": "generation-test-source-closure",
+      "source": "docs/architecture/generation-test-source-closure.typ",
+      "title": "Compile-time generation test source closure"
+    },
+    {
+      "id": "generation-sampling-staged",
+      "source": "docs/architecture/generation-sampling-staged.typ",
+      "title": "Staged signed sampling reconciliation"
+    },
+    {
+      "id": "generation-projector-flow-staged",
+      "source": "docs/architecture/generation-projector-flow-staged.typ",
+      "title": "Staged projector flow and DOT boundaries"
+    },
+    {
+      "id": "generation-integration-wp3-grouping",
+      "source": "docs/architecture/generation-integration-wp3-grouping.typ",
+      "title": "Generation integration deterministic grouping"
+    },
+    {
+      "id": "generation-staged-python-fixes",
+      "source": "docs/architecture/generation-staged-python-fixes.typ",
+      "title": "Staged Python graph and exporter corrections"
+    },
+    {
+      "id": "generation-runtime-admission",
+      "source": "docs/architecture/generation-runtime-admission.typ",
+      "title": "Generation runtime tensor admission"
+    },
+    {
+      "id": "generation-staged-transport-fix",
+      "source": "docs/architecture/generation-staged-transport-fix.typ",
+      "title": "Generation staged scalar transport fix"
+    },
+    {
+      "id": "generation-drawing-ports",
+      "source": "docs/architecture/generation-drawing-ports.typ",
+      "title": "Generation drawing ports"
+    },
+    {
+      "id": "generation-drawing-notices",
+      "source": "docs/architecture/generation-drawing-notices.typ",
+      "title": "Generation drawing notice delivery"
+    },
+    {
+      "id": "generation-integration-wp3-staged",
+      "source": "docs/architecture/generation-integration-wp3-staged.typ",
+      "title": "Generation integration staged foundation"
+    },
+    {
+      "id": "gammaloop-architecture",
+      "source": "docs/architecture/architecture-current.typ",
+      "title": "GammaLoop architecture"
+    },
+    {
+      "id": "generation-integration-wp1",
+      "source": "docs/architecture/generation-integration-wp1.typ",
+      "title": "Vacuum grouping B2 diagnosis"
+    },
+    {
+      "id": "kurvst-arrowhead-engine",
+      "source": "docs/architecture/kurvst-arrowhead-engine.typ",
+      "title": "Kurvst Arrowhead Engine"
+    },
+    {
+      "id": "generation-documentation-reconcile",
+      "source": "docs/architecture/generation-documentation-reconcile.typ",
+      "title": "SOURCE31 documentation reconciliation"
+    },
+    {
+      "id": "integration-dashboard",
+      "source": "docs/architecture/ratatui-integration-dashboard.typ",
+      "title": "Integration dashboard architecture"
+    },
+    {
+      "id": "uv-renormalization",
+      "source": "docs/architecture/uv-renormalization.typ",
+      "title": "UV renormalization architecture"
+    },
+    {
+      "id": "spenso-parsing-flow",
+      "source": "docs/architecture/parsing-flow.typ",
+      "title": "Spenso parsing flow"
+    },
+    {
+      "id": "schoonschip-network",
+      "source": "docs/architecture/schoonschip-net-parsing.typ",
+      "title": "Schoonschip network architecture"
+    },
+    {
+      "id": "gammaloop-draw-style-migration",
+      "source": "docs/architecture/gammaloop-draw-style-migration-example.typ",
+      "title": "GammaLoop drawing style migration record"
+    },
+    {
+      "id": "gammaloop-drawing-architecture",
+      "source": "docs/architecture/gammaloop-drawing-architecture.typ",
+      "title": "GammaLoop Drawing Architecture"
+    },
+    {
+      "id": "spenso-symbolica-syntax-and-rewrites",
+      "source": "docs/architecture/spenso-symbolica-syntax-and-rewrites.typ",
+      "title": "Spenso Symbolica Syntax And Rewrite Idioms"
+    },
+    {
+      "id": "spenso-architecture",
+      "source": "docs/architecture/spenso-architecture.typ",
+      "title": "Spenso implementation architecture"
+    },
+    {
+      "id": "idenso-architecture",
+      "source": "docs/architecture/idenso-architecture.typ",
+      "title": "Idenso implementation architecture"
+    },
+    {
+      "id": "idenso-form-color-dirac-source-map",
+      "source": "docs/architecture/idenso-form-color-dirac-source-map.typ",
+      "title": "Idenso FORM color and Dirac source map"
+    },
+    {
+      "id": "linnet-architecture",
+      "source": "docs/architecture/linnet-architecture.typ",
+      "title": "Linnet implementation architecture"
+    },
+    {
+      "id": "vakint-architecture",
+      "source": "docs/architecture/vakint-architecture.typ",
+      "title": "Vakint implementation architecture"
+    },
+    {
+      "id": "cff-surface-cache-ownership",
+      "source": "docs/architecture/cff-surface-cache-ownership.typ",
+      "title": "CFF surface-cache ownership"
+    },
+    {
+      "id": "gammaloop-roadmap",
+      "source": "docs/architecture/architecture-ideas.typ",
+      "title": "GammaLoop architecture roadmap"
+    },
+    {
+      "id": "tensor-engine-consolidation-plan",
+      "source": "docs/architecture/tensor-engine-consolidation-plan.typ",
+      "title": "Tensor engine consolidation plan"
+    },
+    {
+      "id": "generation-integration-plan",
+      "source": "docs/architecture/generation-integration-plan.typ",
+      "title": "Combined generation integration plan"
+    },
+    {
+      "id": "generation-integration-wp0",
+      "source": "docs/architecture/generation-integration-wp0.typ",
+      "title": "Combined generation integration WP0 execution record"
+    },
+    {
+      "id": "generation-integration-wp2",
+      "source": "docs/architecture/generation-integration-wp2.typ",
+      "title": "Generation integration base and dependency manifest"
+    },
+    {
+      "id": "generation-numeric-comparisons",
+      "source": "docs/architecture/generation-numeric-comparisons.typ",
+      "title": "Generation integration numeric comparison slice"
+    },
+    {
+      "id": "generation-scalar-admission",
+      "source": "docs/architecture/generation-scalar-admission.typ",
+      "title": "Generation scalar admission shortcut"
+    },
+    {
+      "id": "symbolica-evaluation-domain-fix",
+      "source": "docs/architecture/symbolica-evaluation-domain-fix.typ",
+      "title": "Symbolica evaluation-domain bug and fix"
+    },
+    {
+      "id": "tensor-engine-checkpoint",
+      "source": "docs/architecture/tensor-engine-checkpoint.typ",
+      "title": "Tensor engine correctness checkpoint"
+    },
+    {
+      "id": "hep-symbols-tensor-primitives",
+      "source": "docs/architecture/hep-symbols-tensor-primitives.typ",
+      "title": "HEP symbols and tensor primitives"
+    },
+    {
+      "id": "tensor-engine-expansion-inventory",
+      "source": "docs/architecture/tensor-engine-expansion-inventory.typ",
+      "title": "Tensor engine expansion inventory"
+    },
+    {
+      "id": "gammaloop-drawing-evaluated-fields-history",
+      "source": "docs/architecture/gammaloop-drawing-evaluated-fields-history.typ",
+      "title": "GammaLoop Evaluated-Field Proposal"
+    },
+    {
+      "id": "bnl-benchmark-investigation",
+      "source": "docs/architecture/bnl-benchmark-investigation.typ",
+      "title": "BNL Benchmark Investigation"
+    },
+    {
+      "id": "bnl-contraction-order-performance",
+      "source": "docs/architecture/bnl-contraction-order-performance.typ",
+      "title": "BNL Contraction Order Performance Notes"
+    },
+    {
+      "id": "bnl-scalar-alias-capture",
+      "source": "docs/architecture/bnl-scalar-alias-capture.typ",
+      "title": "BNL Scalar Alias Capture"
+    },
+    {
+      "id": "aa-aa-three-loop-performance-smoke",
+      "source": "docs/architecture/aa-aa-three-loop-performance-smoke.typ",
+      "title": "Three-Loop aa to aa Performance Smoke"
+    },
+    {
+      "id": "unified-tensor-reduction",
+      "source": "docs/architecture/unified-tensor-reduction.typ",
+      "title": "Unified tensor reduction"
+    },
+    {
+      "id": "network-simplification",
+      "source": "docs/architecture/network-simplification-status.typ",
+      "title": "Historical network simplification investigation"
+    },
+    {
+      "id": "spenso-large-expressions",
+      "source": "docs/architecture/spenso-large-expression-pathology.typ",
+      "title": "Spenso large-expression pathology record"
+    },
+    {
+      "id": "spenso-improvement-effects",
+      "source": "docs/architecture/spenso-large-input-improvement-effects.typ",
+      "title": "Spenso large-input improvement effects"
+    },
+    {
+      "id": "spenso-test-baseline",
+      "source": "docs/architecture/spenso-network-execution-test-baseline.typ",
+      "title": "Spenso network execution test baseline"
+    },
+    {
+      "id": "bnl-evaluator-atom-capture",
+      "source": "docs/architecture/bnl-evaluator-atom-capture.typ",
+      "title": "BNL evaluator-atom capture"
+    },
+    {
+      "id": "uv-scalar-profile-benchmark",
+      "source": "docs/architecture/uv-scalar-profile-benchmark.typ",
+      "title": "UV scalar profile benchmark notes"
+    },
+    {
+      "id": "ci-test-failure-summary-2026-03-25",
+      "source": "docs/architecture/ci-test-failure-summary-2026-03-25.typ",
+      "title": "CI test failure summary"
+    },
+    {
+      "id": "network-execution-rebase-record",
+      "source": "docs/architecture/network-execution-rebase-record.typ",
+      "title": "Network execution rebase record"
+    },
+    {
+      "id": "ratatui-integration-dashboard-history",
+      "source": "docs/architecture/ratatui-integration-dashboard-history.typ",
+      "title": "Ratatui integration dashboard implementation history"
+    },
+    {
+      "id": "raised-energy-cff-restoration-validation",
+      "source": "docs/architecture/raised-energy-cff-restoration-validation.typ",
+      "title": "Factorized numerator restoration validation"
+    },
+    {
+      "id": "ci",
+      "source": "docs/architecture/ci.typ",
+      "title": "CI maintenance and measurements"
+    },
+    {
+      "id": "feynkit-merge-readiness",
+      "source": "docs/architecture/feynkit-merge-readiness.typ",
+      "title": "FeynKit merge readiness and performance"
+    },
+    {
+      "id": "nix-crane-cache-reuse",
+      "source": "docs/architecture/nix-crane-cache-reuse.typ",
+      "title": "Nix and Crane artifact reuse"
+    },
+    {
+      "id": "architecture-notes",
+      "source": "docs/architecture/architecture.typ",
+      "title": "Architecture notes"
+    },
+    {
+      "id": "documentation-improvement-plan",
+      "source": "docs/architecture/documentation-improvement-plan.typ",
+      "title": "Documentation quality review and improvement plan"
+    },
+    {
+      "id": "manual-content-debt-register",
+      "source": "docs/architecture/manual-content-debt-register.typ",
+      "title": "Manual content debt register"
+    },
+    {
+      "id": "api-documentation-debt-register",
+      "source": "docs/architecture/api-documentation-debt-register.typ",
+      "title": "API documentation debt register"
+    },
+    {
+      "id": "exact-powered-denominator-cff-lifting",
+      "source": "docs/architecture/exact-powered-denominator-cff-lifting.typ",
+      "title": "Exact powered-denominator lifting and factorized EMR assignment"
+    },
+    {
+      "id": "phase-conventions",
+      "source": "docs/architecture/phase-conventions.typ",
+      "title": "Phase conventions and forward-cut conjugation"
+    },
+    {
+      "id": "sm-conventions-audit",
+      "source": "docs/architecture/sm-conventions-audit.typ",
+      "title": "Standard Model conventions audit"
+    }
+  ],
+  "scopes_retained": 101,
+  "scopes_current": 102,
+  "additional_scopes": [
+    [
+      "gammaloop-architecture",
+      "crates/feynkit-generator/src/generation/staged.rs"
+    ],
+    [
+      "gammaloop-architecture",
+      "crates/gammalooprs/src/graph/parse/from_dot.rs"
+    ]
+  ],
+  "production_and_fixture_byte_preservation": true,
+  "manual_reuse": {
+    "source_sha256": "a74c44ef14671bb2b8520a94bf0162c0443bfd9d201bc70f25bad412d779ca5b",
+    "pdf_sha256": "db25c8b6bd9ef4fe93891e3d82271568abe880b8dec9dd91f3c01d525b65cfaf",
+    "qualification": "Reviewed source-matched reproduction reused; exact complete Typst input tree unchanged. No WASM provenance claim.",
+    "closure": [
+      {
+        "path": "crates/kurvst/typst/LICENSE",
+        "sha256": "397f68dfabb4c82acba023b23a640974a8444f8fca6a6655475ea3c3f902f22a"
+      },
+      {
+        "path": "crates/kurvst/typst/LICENSE.tiptoe",
+        "sha256": "d66fa6047eae941af8c532d6361f73dc36423deb0c50b73094cebb63b36e5b4d"
+      },
+      {
+        "path": "crates/kurvst/typst/README.md",
+        "sha256": "ad4d0359592d24078e0b7d8c208290b51ecc64a38ba7c49aa253badee0b88906"
+      },
+      {
+        "path": "crates/kurvst/typst/benches/README.md",
+        "sha256": "b5ac2dd667a49e62000f409d7ba51046d30790c591089e083020d115d078cf83"
+      },
+      {
+        "path": "crates/kurvst/typst/benches/cetz-coil.typ",
+        "sha256": "8bd6fdfca71875626382cba2a8006dd8c124aa43bc2c32b28a2c1cd764f0cc37"
+      },
+      {
+        "path": "crates/kurvst/typst/benches/common.typ",
+        "sha256": "685335cfb1403ae496fff1621f5d4927b7bb1285ae1fa46fd069273d5f9d3360"
+      },
+      {
+        "path": "crates/kurvst/typst/benches/kurvst-coil.typ",
+        "sha256": "1538c38640e85a171bbca712da255068a41f785061b2e47f3dfedd061380452e"
+      },
+      {
+        "path": "crates/kurvst/typst/benches/run.sh",
+        "sha256": "8b8e6eee1ecf250046dfeaa54bbcab846a9c030c0f87756e8feb66cf17f44774"
+      },
+      {
+        "path": "crates/kurvst/typst/docs/manual.typ",
+        "sha256": "a74c44ef14671bb2b8520a94bf0162c0443bfd9d201bc70f25bad412d779ca5b"
+      },
+      {
+        "path": "crates/kurvst/typst/examples/knot-logo.pdf",
+        "sha256": "a3126868029b38ce39be2d1248c091c78c5291d7c59743d5adb57e77e9484633"
+      },
+      {
+        "path": "crates/kurvst/typst/examples/knot-logo.typ",
+        "sha256": "b2f5cc31fcaafd0f7086e226a2fd4d359d5862cc0bc6b2626ca8cc59b02e11e1"
+      },
+      {
+        "path": "crates/kurvst/typst/examples/outline-logo.pdf",
+        "sha256": "f200f7abdf51c9677d555003341056be594f5a531338cb1bd2cfbc4449d47daf"
+      },
+      {
+        "path": "crates/kurvst/typst/examples/outline-logo.typ",
+        "sha256": "00ef4b2f9153367ff81757436539c6cfc05b818921bc9c4d3e795d25693f9a72"
+      },
+      {
+        "path": "crates/kurvst/typst/examples/parallel.typ",
+        "sha256": "5c761c2dd71403cdbfad2ec8facf52c2f4fb64318c015a228858653c432f1ab2"
+      },
+      {
+        "path": "crates/kurvst/typst/examples/patterns.typ",
+        "sha256": "6f7c2717d9c6504186b5bf0e60fe920397b2b6d836574b80de1ec36694198550"
+      },
+      {
+        "path": "crates/kurvst/typst/kurvst.wasm",
+        "sha256": "6da2f870339592b6c7fedbad62e07921342e083f3e5eaf1c861a6e7dd292149e"
+      },
+      {
+        "path": "crates/kurvst/typst/src/impl.typ",
+        "sha256": "f806baf392faba6276b52b35ebfe131e00d4e6ca2f3137a50cfb227cf6d6605f"
+      },
+      {
+        "path": "crates/kurvst/typst/src/lib.typ",
+        "sha256": "282a812920ff335731696ac5b92240bcc148ae9ab073408f10e2c3b2018e14f1"
+      },
+      {
+        "path": "crates/kurvst/typst/src/mark.typ",
+        "sha256": "5b3ccc758a90a88ac25c16913fb13270ed7435d9e7000d6b75938f965c9e4fe2"
+      },
+      {
+        "path": "crates/kurvst/typst/tests/layer-offset.typ",
+        "sha256": "397289a52da6d2f69241b09b3f75704f0b0df97f0d66830784a79f5d291bffe7"
+      },
+      {
+        "path": "crates/kurvst/typst/tests/mark-contract.typ",
+        "sha256": "afa7a99d34f782d9a63fb750ddc6503ff8912cc8f0c968525887bcd4e5bcda02"
+      },
+      {
+        "path": "crates/kurvst/typst/tests/mark-geometry.typ",
+        "sha256": "c081b80658d34edcd3d1836eeedd5cd125b58f46d6a248b8490684c30aa25ed8"
+      },
+      {
+        "path": "crates/kurvst/typst/tests/path-packets.typ",
+        "sha256": "2f5059da35387eb8ef1c1fe42f4779c8ec588f98621a90ccec5789fa58bd71c5"
+      },
+      {
+        "path": "crates/kurvst/typst/tests/pattern-split.typ",
+        "sha256": "617f5d2c525028a1f6ac85c7739e35318f4458222af9c4a7bdbafee4f0dfc900"
+      },
+      {
+        "path": "crates/kurvst/typst/typst.toml",
+        "sha256": "0d7eec512c399c0beeee8402393b32e489856fbdeb30945feff0ed298dd8bbbd"
+      },
+      {
+        "path": "crates/linnest/typst/LICENSE",
+        "sha256": "397f68dfabb4c82acba023b23a640974a8444f8fca6a6655475ea3c3f902f22a"
+      },
+      {
+        "path": "crates/linnest/typst/LICENSE.clarabel",
+        "sha256": "6e2f382771f8aab58e4868ddd0afe0c2fefe6b54f9681493a9c3d0f32906cfe1"
+      },
+      {
+        "path": "crates/linnest/typst/LICENSE.networkx",
+        "sha256": "6025f323ea29dc2f0ee0abd9523bf910186f55b0e148e6ebf646c55566278e2e"
+      },
+      {
+        "path": "crates/linnest/typst/README.md",
+        "sha256": "ee7e527418c5ef3c8b1974f27b71fe2d6d1bb7a922cabad3fe6e5324f78f7d44"
+      },
+      {
+        "path": "crates/linnest/typst/docs/cut-views.typ",
+        "sha256": "c71ecde0a992984b0a5362c176adfcac65f8d3174a61dc3f38bc6ba22ccbe643"
+      },
+      {
+        "path": "crates/linnest/typst/docs/manual.typ",
+        "sha256": "a9abdece2c1e72fd78859597f265feb734e918c1a698ed5e33483f81988c3c26"
+      },
+      {
+        "path": "crates/linnest/typst/examples/basketball-force-sweep.pdf",
+        "sha256": "5815d1667ad68537d204e09b790d7f61c1ec7eb3658acba8c7878cfc301ef3f2"
+      },
+      {
+        "path": "crates/linnest/typst/examples/basketball-force-sweep.typ",
+        "sha256": "c2a7b2bb35a7794a7607eefad1c62604a5cdcd300920b8fe4bac741f403d9c95"
+      },
+      {
+        "path": "crates/linnest/typst/examples/basketball-force.pdf",
+        "sha256": "9ecad84ae4c15de0ea6439dc10deb3c836f8bc6c2b4865fcdc83b3611ba99515"
+      },
+      {
+        "path": "crates/linnest/typst/examples/basketball-force.typ",
+        "sha256": "34a3fbbb25f92da28ec2fd77e40b369c42d2a08ce2fd3e58f1c260a6a6a2e0ce"
+      },
+      {
+        "path": "crates/linnest/typst/examples/build.typ",
+        "sha256": "b6d1c47f2947cc1662c84f1bbb11a1a0cd05104e3c5842a1ae46931fc41a31ca"
+      },
+      {
+        "path": "crates/linnest/typst/examples/draw-raw-dot.typ",
+        "sha256": "4daef00f4c46819c2a184986fc4e0b25dfbcfee79254440bb3dbc99f4d2de256"
+      },
+      {
+        "path": "crates/linnest/typst/examples/map-style.typ",
+        "sha256": "8c5e7520811a6e07d83a3bbd1d110f385122569f3c128e3bf693dbd86c56fcf4"
+      },
+      {
+        "path": "crates/linnest/typst/examples/parallel-edges.pdf",
+        "sha256": "e66cea9828928ecd32606444570cbc5c19dfefad71d8a1e25cea7ee2d5be084b"
+      },
+      {
+        "path": "crates/linnest/typst/examples/parallel-edges.typ",
+        "sha256": "50dd44f324613b315cb33ad7c91aa6ca0525229b010a6f2258ea0940cdb5648e"
+      },
+      {
+        "path": "crates/linnest/typst/examples/play.pdf",
+        "sha256": "0fd9523a1ee9a1f7aa2e04e17a6e6c35b0af1e3c0cd1a9d04572002dec28cf33"
+      },
+      {
+        "path": "crates/linnest/typst/examples/play.svg",
+        "sha256": "fec4ad41d48eed240476e60ba444eb4d4de4406ba3972a9ac3731825a3083ead"
+      },
+      {
+        "path": "crates/linnest/typst/examples/play.typ",
+        "sha256": "c1e4f7bb76247531e37d97416c39d4161b8873d24ea8878896a377d9dcecc2a1"
+      },
+      {
+        "path": "crates/linnest/typst/examples/soft-triangle.pdf",
+        "sha256": "70d218dcf1c461498021bc0a8f20dba64e651d622cd738de8aa0dc4fbb082986"
+      },
+      {
+        "path": "crates/linnest/typst/examples/soft-triangle.typ",
+        "sha256": "e81d3133d7dda9b9079bbb44481580b70ce4f991bb596216b9e926d015f34d26"
+      },
+      {
+        "path": "crates/linnest/typst/examples/thrown-out.pdf",
+        "sha256": "e31ed43315f41f3d6a90df7519818e84bb256bf889f6bff83669c097705d1d14"
+      },
+      {
+        "path": "crates/linnest/typst/examples/thrown-out.typ",
+        "sha256": "bfadbcf5ff55893b066f97ca7eedb37646efe0bd4dab7e83ef88e6a31864bc3d"
+      },
+      {
+        "path": "crates/linnest/typst/examples/tree-auto-root.pdf",
+        "sha256": "2ec49e12da99f3dc53152a8e8a326c9b0369d2128dd9cbb99d3475f8fe5ecb32"
+      },
+      {
+        "path": "crates/linnest/typst/examples/tree-auto-root.typ",
+        "sha256": "06d392ac5499baaf93d43eea18fc137941052db15bf07b81e48b952f19f25e50"
+      },
+      {
+        "path": "crates/linnest/typst/examples/tree-stable-layered.pdf",
+        "sha256": "e435c49e27efd93117cde491ea446f22a0374acb2fe074c3ede6032211c37545"
+      },
+      {
+        "path": "crates/linnest/typst/examples/tree-stable-layered.typ",
+        "sha256": "1a6542d8204cde13f0151dc81056148a5a18d2e37c1a0d28b586261b71af7780"
+      },
+      {
+        "path": "crates/linnest/typst/examples/tree.pdf",
+        "sha256": "2fa4808bb5ecd6e107795e152d91b917182a7074bd244a75630d94a3de1efbbf"
+      },
+      {
+        "path": "crates/linnest/typst/examples/tree.typ",
+        "sha256": "96dc065c225fbc36508de394f37f3e6a18fb4fa1d7727264fabcc3add9062543"
+      },
+      {
+        "path": "crates/linnest/typst/examples/xbox-common.typ",
+        "sha256": "8e86c668335c0be74a814f4a2987ab414e52e61f4a3af91003e89ff6ed94f834"
+      },
+      {
+        "path": "crates/linnest/typst/examples/xbox-sum.pdf",
+        "sha256": "12f02b9796db5972082aecee706bac25daa370a241df3a60a202d495ee2d2f8a"
+      },
+      {
+        "path": "crates/linnest/typst/examples/xbox-sum.typ",
+        "sha256": "b62495fa4f7b0ea361b0f74bdb05e0444583f71918e4fad8d9b3b545886e82a7"
+      },
+      {
+        "path": "crates/linnest/typst/linnest.wasm",
+        "sha256": "c921635e81cf38e34232782f39f3aef65eaac188f57584ff37ee942bbeb72e9d"
+      },
+      {
+        "path": "crates/linnest/typst/src/curve.typ",
+        "sha256": "4350dfbe4a8e825396e4f476731b9862935d87fb6630c24425350f4071b9e590"
+      },
+      {
+        "path": "crates/linnest/typst/src/draw.typ",
+        "sha256": "f610e3db09f6f168e5e8f5ada9a2cd717570569c26cbf699a69c950357efde2a"
+      },
+      {
+        "path": "crates/linnest/typst/src/graph.typ",
+        "sha256": "65576d7f31cd8d192eb9486f51a6e4c25513f9dab0cee21ff8930450e0f8918c"
+      },
+      {
+        "path": "crates/linnest/typst/src/impl/draw.typ",
+        "sha256": "f593888872327627b84b0d05812d60cd0e16d7c318acc83f2e9e17129b3b5bd0"
+      },
+      {
+        "path": "crates/linnest/typst/src/impl/graph.typ",
+        "sha256": "196e000f9a624555ed757cf2ad5a2a2ce31b3ea78b9a025472efde41a49f6026"
+      },
+      {
+        "path": "crates/linnest/typst/src/impl/identity-targets.typ",
+        "sha256": "47cd66a101f5b50c9a3c93347cec8e1069dd7009faa4bcd100d054e8c496f174"
+      },
+      {
+        "path": "crates/linnest/typst/src/impl/subgraph.typ",
+        "sha256": "f0895d110356e7a419d62d9abcc89fd30662c97d2bfa27c9a9c404d0156cf292"
+      },
+      {
+        "path": "crates/linnest/typst/src/layout.typ",
+        "sha256": "3556d544142368c37cf9faf1d719356335e6b5afb35bf2b62348851ff26be885"
+      },
+      {
+        "path": "crates/linnest/typst/src/lib.typ",
+        "sha256": "5247fce31a688f7685bc63ce4706fab324def42ebcb46e4046d750b03e2ed4ed"
+      },
+      {
+        "path": "crates/linnest/typst/src/render/figure.typ",
+        "sha256": "67ec68df077830ca82eedbca3379f6b0d6b20dd0c42e4f1960d1e0a926620673"
+      },
+      {
+        "path": "crates/linnest/typst/src/render/layout.typ",
+        "sha256": "50611fc11df558fa8a398cddcb0d75435446f1aef8830ebba4de7a064fa18103"
+      },
+      {
+        "path": "crates/linnest/typst/src/render/network.typ",
+        "sha256": "78e9b21e10aa6729552763a246bb62fd9f73810ea8226a38ef6d906c4df79cfb"
+      },
+      {
+        "path": "crates/linnest/typst/src/subgraph.typ",
+        "sha256": "9ed319aecae410ebc32c66c64869aa12a1a1459b4c98df02f908f35dd879e389"
+      },
+      {
+        "path": "crates/linnest/typst/tests/collision-lines.typ",
+        "sha256": "9e21d7730622b00d017db36078a3ceadb3f350529f55bef0e89c92c9797a3766"
+      },
+      {
+        "path": "crates/linnest/typst/tests/identity-targets.typ",
+        "sha256": "aed9e5921bf1bb9ecd157b78b6da3dfb9f3378e4ff50908d6506aa79e6f23637"
+      },
+      {
+        "path": "crates/linnest/typst/typst.toml",
+        "sha256": "1d168d083b81937145b85076274a5fb2dce8e94e704c01d90324f3bd5f4ee398"
+      }
+    ]
+  },
+  "coverage_transport": {
+    "previous": "gammalooprs/src/graph/parse/mod.rs scope",
+    "current": "crates/gammalooprs/src/graph/parse/from_dot.rs",
+    "reason": "Approved preparation moves native DOT import responsibility to actual from_dot owner; no scope narrowing. Generation coordination stays whole-file; staged.rs explicit scope added."
+  }
+}

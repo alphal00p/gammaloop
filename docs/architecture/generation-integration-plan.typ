@@ -53,7 +53,7 @@ package, re-read the refs it depends on instead of trusting the figures below.
 
 #table(
   columns: 3,
-  [*Item*], [*Value*], [*Basis*],
+  table.header([*Item*], [*Value*], [*Basis*]),
   [Upstream FeynKit], [`3f0df2a8`, including merged \#209 and \#210], [current accepted base, observed 2026-10-27],
   [\#210], [merged colour-only coefficient completion; supersedes \#177], [observed commit; HANDOFF §9],
   [Combined v4], [`kpslpwqz e0a77980`, 46 changes on `58814885`, unpushed, Codex repo], [Git objects imported read-only and pinned in WP0; historical tests not rerun],
@@ -292,9 +292,20 @@ own workspace. Bounded: one regression, one bisect, one written verdict.
   without touching that directory or changing Cargo declarations. Exact new
   sources/derivations and final producer/runtime evidence are recorded under
   `evidence/generation-integration/wp3/source30-integration/receipt.json`.
-  NEW independent Astra review is required before31. Prepared31 `87dfd362` is
-  separate, with ordered refresh/headerless-table fixes pending;32–35 owns the
-  obsolete Python rendering callers. Full WP3 and final distribution remain open.
+  Independent Astra approves SOURCE30 at `7587d0c7` and releases SOURCE31.
+  Its exact producer and runtime identities remain historical evidence;32–35 owns
+  the obsolete Python rendering callers. Full WP3 and final distribution remain open.
+
+- #strong[Source31 ordered documentation refresh 2026-10-28:]
+  cumulative independently approved preparation `a517ca56..eb2a02f5` is reconciled
+  onto approved SOURCE30 `7587d0c7`, preserving sources27–30 and their receipts.
+  All 101 preceding registry scopes are retained; the explicit staged owner adds
+  one scope. Current process/sampling and Nix source/declared-patch decisions
+  precede their digest updates. Seven semantic table headers preserve all data.
+  Exact current checks and Git-pinned canonical documentation outcomes are recorded
+  in `evidence/generation-integration/wp3/source31-integration/receipt.json`.
+  NEW independent Astra review is required before32. No full WP3, physics,
+  performance, final WASM or distribution approval is implied.
 
 - `jj duplicate` the v4 chain (`kursouxx::kpslpwqz`) onto the WP2 base; do not
   rebase in place, so the 19 live workspaces on older lines stay valid.
@@ -467,7 +478,7 @@ R = rebuild (WP3), N/Ro/C = names, route, Classes stages, F = final (WP13).
 
 #table(
   columns: 3,
-  [*Check*], [*When*], [*Pass condition*],
+  table.header([*Check*], [*When*], [*Pass condition*]),
   [fmt, CI clippy `--deny warnings`, no jj conflicts], [every commit], [clean],
   [Fast lane], [R N Ro C F], [green; failures classified per WP9],
   [Oracle fast tier, 1/8/32 threads], [R N Ro C F], [all rows; headroom to 240 s noted (m8)],
@@ -528,7 +539,7 @@ lanes that edit the same files of the generator at the same time.
 
 #table(
   columns: 2,
-  [*Item*], [*Where*],
+  table.header([*Item*], [*Where*]),
   [B1 v4 not publishable (conflicts, base, first \#177)], [WP2, WP3],
   [B2 sample-dependent vacuum ratio], [WP1, WP3, matrix],
   [M1 full-mode time], [WP7, WP10],

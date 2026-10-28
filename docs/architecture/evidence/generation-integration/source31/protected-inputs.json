@@ -1,0 +1,48 @@
+{
+  "base": "a517ca563d78d161cff17fe60e661f80529c9a83",
+  "files": [
+    {
+      "path": "nix-ci.nix",
+      "sha256": "e031749e51a33ee48bc5c653d13c2dc7e7d3a51bddea77fc3c67d01ac217c540",
+      "unchanged_from_base": true
+    },
+    {
+      "path": "Cargo.lock",
+      "sha256": "def8dd7be5f208f4a290a4556081f7a63d10a5ae070c5df1808c1d350fa6161e",
+      "unchanged_from_base": true
+    },
+    {
+      "path": "tydenso/Cargo.lock",
+      "sha256": "f1f0573d5f1c02d4ddb73d4491514cd291ae94ded7d84627342226917ca41dd0",
+      "unchanged_from_base": true
+    },
+    {
+      "path": "examples/notebooks/symbolica-host/Cargo.lock",
+      "sha256": "03e18f00dbba096e08978063fd857d6558659f9f75e0ab09d73be3e543882c5a",
+      "unchanged_from_base": true
+    },
+    {
+      "path": "uv.lock",
+      "sha256": "0ad8d1a18d9c520d298ff36ec20a746f9a63c7e0fdebe14e739a574cbb4fabf8",
+      "unchanged_from_base": true
+    },
+    {
+      "path": "flake.lock",
+      "sha256": "e10c5893b513d4c7120d841b47fbfddffb3ac4f1f5cb46a18c0f7542cbde8534",
+      "unchanged_from_base": true
+    },
+    {
+      "path": "crates/kurvst/typst/kurvst.wasm",
+      "sha256": "6da2f870339592b6c7fedbad62e07921342e083f3e5eaf1c861a6e7dd292149e",
+      "unchanged_from_base": true
+    },
+    {
+      "path": "crates/linnest/typst/linnest.wasm",
+      "sha256": "c921635e81cf38e34232782f39f3aef65eaac188f57584ff37ee942bbeb72e9d",
+      "unchanged_from_base": true
+    }
+  ],
+  "nix_ci_enabled": false,
+  "kernel_pin_policy": "unchanged 1a1829b1 root/Tydenso/notebook-host; no uv or lock edits",
+  "cache": "normal configured shared cache; no override, manual seeding or deletion"
+}

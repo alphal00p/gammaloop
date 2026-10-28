@@ -370,7 +370,9 @@ anchor = "load_state_manifest(&save_path)?"
 # Reviewed 2026-10-17: The architecture records state version 19 for retained tensor payloads, checked symbol-remapped loading, and unchanged standalone scalar evaluator versions.
 # Reviewed 2026-10-17: Full state version 20 retains global numerator/projector interfaces in addition to version19 runtime tensors; standalone evaluator formats remain unchanged.
 # Reviewed 2026-10-18: Full state 21 stores explicit indexed tensor slots and rejects unresolved runtime ports; architecture-current records regeneration of earlier full states and unchanged standalone formats.
-digest = "5113940a12e8bac5ec042c59db01bd0ecfb05ef0"
+# SOURCE31 semantic attestation (candidate, not independent approval):
+# State manifest22 and exact version rejection remain implemented; delta since original source context is import regrouping. architecture-current already records Request, u128 and beam weights.
+digest = "3598dbe299f9a32da1ed8d034706a82959d84abb"
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/commands/integrate.rs"
@@ -386,7 +388,9 @@ anchor = "fn default_workspace_path(&self"
 # access and fixture formatting preserve workspace and dashboard ownership.
 # Reviewed 2026-10-15: The dashboard note covers retained main behavior: streamed panic
 # recovery shuts down the renderer; non-streamed runs preserve unwinding.
-digest = "0f0ae2c8e593ca91f12be4b4c4e456f8817d7f9b"
+# SOURCE31 semantic attestation (candidate, not independent approval):
+# Import regrouping preserves private preparation, selected warmed fingerprints, terminal cleanup and streamed panic behavior. Correct both notes to workspace version4, matching IntegrationWorkspaceManifest::CURRENT_VERSION.
+digest = "bcce3d43713b42fe428e3b5d89784e18c8d47fa7"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/integrands/evaluation.rs"
@@ -422,7 +426,9 @@ anchor = "pub fn warm_up(&mut self, model"
 # Reviewed 2026-10-15: The current architecture covers Fermi-surface evaluation and
 # weighted precise profiles alongside canonical FeynKit models.
 # Reviewed 2026-10-16: Authored warm-up fixtures declare a physical loop basis and only real endpoint rule slots. Production warm-up ownership is unchanged.
-digest = "c795c1a404f9a6118501d7b5ee2d5e580e44886c"
+# SOURCE31 semantic attestation (candidate, not independent approval):
+# Current compilation no longer sets antiparallel_edges from a parallel-edge bundle heuristic. The existing process/sampling description does not promise that removed inference. No source27–29 sampling acceptance is certified; recheck this complete scope after ordered main refresh.
+digest = "b1711442cd184b4e9776b84d92c313d85f70b7b0"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/observables/events.rs"
@@ -449,7 +455,9 @@ anchor = "pub struct EventProcessingRuntime {"
 # Reviewed 2026-10-15: Canonical model lookups preserve graph-group event ownership
 # and per-sample accumulation. Retained main observable and cut metadata behavior
 # stays in the runtime owner.
-digest = "e0a87225a5073e48c6d82a4d8f39cddac43d1684"
+# SOURCE31 semantic attestation (candidate, not independent approval):
+# Labelled discrete histogram round-trip coverage does not change graph-group event retention, per-sample sparse statistics or raw snapshot ownership.
+digest = "b672f52f6674d08d11b6cc68ef0621c399386926"
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/python.rs"
@@ -470,7 +478,9 @@ anchor = "struct GammaLoopAPI {"
 # Reviewed 2026-10-15: Python delegates imports and symbolic operations to canonical
 # graph and typed tensor owners. Session/state ownership and the f64 boundary remain
 # unchanged; compact import now has a dedicated documented scope.
-digest = "adc6974f20de538c6acfb2913aa5c9b16b590617"
+# SOURCE31 semantic attestation (candidate, not independent approval):
+# Graph import delegates to from_dot/from_dot_path; current delta since original source context is imports. Session ownership and f64-only Python endpoints are unchanged.
+digest = "872d2b855d14a4aded443e18df435f899c2bf42a"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/lib.rs"
@@ -484,8 +494,8 @@ digest = "41d3e5da3e5b11fbfb34c30432192c7d3ed53e16"
 # warn and reject the candidate instead of panicking; generation ownership and
 # the documented filtering pipeline are unchanged.
 path = "crates/feynkit-generator/src/generation.rs"
-symbol = "feynkit_generator::Generator::generate"
-anchor = "pub fn generate("
+symbol = "feynkit_generator::generation::coordination"
+anchor = "pub enum GenerationError {"
 # Reviewed 2026-09-14: Symbolica's graph/canonicalization API migration
 # preserves generation, filtering, and persistence ownership.
 # Reviewed 2026-09-16: the complete generation pipeline moved to FeynKit;
@@ -530,7 +540,9 @@ anchor = "pub fn generate("
 # Dynamic rules retain one actual-owner admission and compact materialization.
 # Integration review intent: preserve authoritative metadata and the current owner;
 # scoped source reconciliation and regression results are recorded in WP3 units03-07.
-digest = "b723525194b3a59789d47b1a1a10e2df95c0d83c"
+# SOURCE31 semantic attestation (candidate, not independent approval):
+# Removed free generate function is replaced by staged Request methods. Keep this full generation coordination owner with unique GenerationError anchor and add explicit staged.rs ownership. Request->DiagramSet->BuiltDiagramSet, Run caller execution, class pairing and template admission remain the described current API.
+digest = "0495bd293c86f81e8b817913f3e25e1918b62779"
 
 [[section.note.scope]]
 path = "crates/feynkit-model/src/model.rs"
@@ -560,7 +572,9 @@ anchor = "pub struct Model {"
 # admitted interaction owner; literal model data and metadata transport remain authoritative.
 # Integration review intent: preserve authoritative metadata and the current owner;
 # scoped source reconciliation and regression results are recorded in WP3 units03-07.
-digest = "3887f65c1c670de301495664dd4d4929dd76f60d"
+# SOURCE31 semantic attestation (candidate, not independent approval):
+# Construction declares UFO coupling symbols in model order. Preserve literal model Lorentz structures, shortest momentum-conserving rule reduction and canonical fingerprint semantics; later changes are import regrouping and a model reduction doctest.
+digest = "b04029827b0ecb3c8f23289bf0937e1ea422e176"
 
 [[section.note.scope]]
 path = "crates/feynkit-graph/src/lib.rs"
@@ -600,7 +614,9 @@ anchor = "pub struct FeynmanDiagram {"
 # No-impact attestation 2026-10-23: boxed tensor error sources preserve graph ownership and error semantics.
 # Integration review intent: preserve authoritative metadata and the current owner;
 # scoped source reconciliation and regression results are recorded in WP3 units03-07.
-digest = "2d8a36f8ae16bf33adf8ba933a7f58f25f02ba0a"
+# SOURCE31 semantic attestation (candidate, not independent approval):
+# Lazy id and numerator accessors return Result; aggregate composition now uses multiply_many and fallible canonical_ports. Retained fragments, port order, hidden index history and original source identities remain authoritative; no eager Atom reconstruction or new routing stage.
+digest = "03fa811b133f5816415a2b445445ea5a2d87365d"
 
 [[section.note.scope]]
 path = "crates/feynkit-tensor/src/lib.rs"
@@ -612,10 +628,10 @@ anchor = "mod orbit_projector;"
 digest = "f424864aa88eaacddbfe2c220aacef0a3af2f98d"
 
 [[section.note.scope]]
-path = "crates/gammalooprs/src/graph/parse/mod.rs"
+path = "crates/gammalooprs/src/graph/parse/from_dot.rs"
 symbol = "gammalooprs::graph::Graph DOT import boundary"
-anchor = "    pub fn import_dot(input: &str, model: &Model) -> Result<Vec<Self>> {"
-end_anchor = "    pub fn dot_serialize(&self, settings: &DotExportSettings) -> String {"
+anchor = "    pub fn from_dot(input: &str, model: &Model) -> Result<Vec<Self>> {"
+end_anchor = "/// Build GammaLoop graphs from DOT text, as in tests and inline fixtures."
 # Reviewed 2026-10-15: Compact import owns dialect dispatch, native rules, explicit
 # fragments, represented half-edge index conversion and source-map metadata.
 # Canonical/finalized literals bypass compact conversion.
@@ -629,7 +645,56 @@ end_anchor = "    pub fn dot_serialize(&self, settings: &DotExportSettings) -> S
 # Reviewed 2026-10-17: Compact annotations validate source graph-edge momentum
 # owners before native admission; graph-wide Q3-first validation borrows retained
 # tensor and scalar-factor payloads. The architecture records this boundary.
-digest = "fc058e64317d80978ebfc2ede480a29fd852a8a3"
+# SOURCE31 semantic attestation (candidate, not independent approval):
+# Removed import_dot/artifact route replaced by Graph::from_dot in from_dot.rs. Read fragment explicitness/aggregate contraction checks, momentum diagnostic, apply_dot_attributes and source remap. Native hedge(h,k) model slots are one-based; explicit legacy conversion stays separate.
+digest = "2f016e5378c09ffe996a4f74870845364df7d09c"
+
+[[section.note.scope]]
+path = "crates/feynkit-generator/src/generation/staged.rs"
+symbol = "Request / DiagramSet / BuiltDiagramSet staged ownership"
+anchor = "impl Request {"
+# SOURCE31: checked discovery/count/build/select/group and squared-order pairing ownership.
+digest = "4c1ca2bb58010add5d33dd84657f74d99b00e6fc"
+
+[[section.note]]
+id = "generation-integration-wp1"
+title = "Vacuum grouping B2 diagnosis"
+summary = "Historical bounded GL028/GL034 certificate and original-pair investigation; not full integration or physics qualification."
+source = "docs/architecture/generation-integration-wp1.typ"
+kind = "Historical implementation investigation"
+status = "Historical evidence snapshot; SOURCE31 classification pending independent review"
+lifecycle = "investigation"
+owner = "unassigned"
+evidence_revision = "a517ca563d78d161cff17fe60e661f80529c9a83"
+products = ["gammaloop", "feynkit"]
+topics = ["generation", "validation"]
+
+[[section.note]]
+id = "kurvst-arrowhead-engine"
+title = "Kurvst Arrowhead Engine"
+summary = "Accepted mark-engine design and historical staged implementation record; current source38 geometry and notice changes remain separate."
+source = "docs/architecture/kurvst-arrowhead-engine.typ"
+kind = "Historical implementation investigation"
+status = "Historical evidence snapshot; SOURCE31 classification pending independent review"
+lifecycle = "investigation"
+owner = "unassigned"
+evidence_revision = "a517ca563d78d161cff17fe60e661f80529c9a83"
+products = ["linnet", "feynkit"]
+topics = ["drawing", "design", "performance"]
+
+[[section.note]]
+id = "generation-documentation-reconcile"
+title = "SOURCE31 documentation reconciliation"
+summary = "Semantic scope reconciliation on integrated22–26, with frozen provenance and explicit post30 refresh and validation limits."
+source = "docs/architecture/generation-documentation-reconcile.typ"
+kind = "Implementation candidate"
+status = "NEW independent Astra review pending; ordered main post30 refresh required"
+lifecycle = "investigation"
+owner = "unassigned"
+evidence_revision = "a517ca563d78d161cff17fe60e661f80529c9a83"
+products = ["gammaloop", "feynkit", "linnet", "spenso", "idenso"]
+topics = ["documentation", "generation", "validation"]
+review_triggers = ["docs/developers.toml", "docs/architecture/**", "crates/feynkit-generator/src/**", "crates/gammalooprs/src/integrands/process/**", "nix/rust-workspace.nix"]
 
 [[section.note]]
 id = "integration-dashboard"
@@ -660,7 +725,9 @@ anchor = "fn dashboard_event_loop(receiver"
 # access and fixture formatting preserve workspace and dashboard ownership.
 # Reviewed 2026-10-15: The dashboard note covers retained main behavior: streamed panic
 # recovery shuts down the renderer; non-streamed runs preserve unwinding.
-digest = "0f0ae2c8e593ca91f12be4b4c4e456f8817d7f9b"
+# SOURCE31 semantic attestation (candidate, not independent approval):
+# Import regrouping preserves private preparation, selected warmed fingerprints, terminal cleanup and streamed panic behavior. Correct both notes to workspace version4, matching IntegrationWorkspaceManifest::CURRENT_VERSION.
+digest = "bcce3d43713b42fe428e3b5d89784e18c8d47fa7"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/integrate/render_ratatui.rs"
@@ -684,7 +751,9 @@ anchor = "mod render_ratatui;"
 # Retained main behavior preserves renderer ownership.
 # Reviewed 2026-10-15: Model access follows canonical FeynKit ownership; checkpoint,
 # worker and renderer contracts remain unchanged.
-digest = "d131b0f6a513af1310b647474fac787105610a1b"
+# SOURCE31 semantic attestation (candidate, not independent approval):
+# Current workspace manifest version4 combines reference/absolute convention and selected integrand fingerprints; current delta since original context is imports. Completed-iteration authority, raw observable checkpoints and worker/renderer separation remain.
+digest = "2cbbafcb254b4b7ac042b6ca8dab6682f9a0ce21"
 
 [[section.note]]
 id = "uv-renormalization"
@@ -720,7 +789,9 @@ anchor = "impl UVOrchestrator {"
 # generation settings for medium-dependent forest selection.
 # Reviewed 2026-10-16: Only comparison fixtures changed: shared normalization contracts dummy charts; exact equivalence and retained scalar factors remain asserted. UV ownership is unchanged.
 # Reviewed 2026-10-18: UV owners retain IndexedStructure and strictly admit explicit public ports; the UV note preserves logical axes, ranked zeros, formal dimensions and existing Taylor/Vakint boundaries without changing forest or routing algorithms.
-digest = "19e0c07de61017d01b36bfda24f60e48d4b17bfc"
+# SOURCE31 semantic attestation (candidate, not independent approval):
+# Original transplant changes test import helpers; subsequent import regrouping preserves forest orchestration. Indexed tensor admission, scalar backend boundaries and factorized cograph rules are already documented.
+digest = "4acc87a62891dbff0b3ca2cef2e8ab505c1de6d5"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/uv/approx/integrated.rs"
@@ -1017,7 +1088,9 @@ anchor = "pub trait IndexTooling {"
 # callback replacements; typed history is not recovered from normalized text.
 # No-impact attestation 2026-10-23: the native-adjoint test fixture uses canonical
 # local-zero spelling; its logical-axis and component assertions are unchanged.
-digest = "b6b8af1e73031ce2c7dc97185cc31f4a90c63d64"
+# SOURCE31 semantic attestation (candidate, not independent approval):
+# dirac_adjoint now requests explicit_index_occurrences, preserving conservative history before materialization. Native labels remain native. Existing syntax and Idenso notes already specify literal labels, reserved channels, anonymous-axis materialization and retained logical interfaces.
+digest = "820fbf610c4bb06867a7013d0b8631e57704ff7d"
 
 [[section.note]]
 id = "spenso-architecture"
@@ -1098,7 +1171,9 @@ anchor = "pub struct Network<S, LibKey, FunKey, Aind = AbstractIndex> {"
 # profile controls remain as described.
 # Reviewed 2026-10-16: eager opaque realization uses result_tensor to resolve lazy
 # scaled leaves; its library bound now uses the existing WithIndices contract.
-digest = "410491ec4a23db5061510dc830fe9a880b6b6a0a"
+# SOURCE31 semantic attestation (candidate, not independent approval):
+# Import regrouping and profile n_live count replace former node counting. Network store/library/execution ownership and scalar/open tensor boundaries stay as documented.
+digest = "14f66a4d6e62a4fd878c2f52f0bc6ab336cf7f24"
 
 [[section.note.scope]]
 path = "crates/spenso/src/network/parsing/mod.rs"
@@ -1181,7 +1256,9 @@ anchor = "pub trait IndexTooling {"
 # These boundaries agree with the Idenso note's authoritative typed-metadata model.
 # No-impact attestation 2026-10-23: the native-adjoint test fixture uses canonical
 # local-zero spelling; its logical-axis and component assertions are unchanged.
-digest = "b6b8af1e73031ce2c7dc97185cc31f4a90c63d64"
+# SOURCE31 semantic attestation (candidate, not independent approval):
+# dirac_adjoint now requests explicit_index_occurrences, preserving conservative history before materialization. Native labels remain native. Existing syntax and Idenso notes already specify literal labels, reserved channels, anonymous-axis materialization and retained logical interfaces.
+digest = "820fbf610c4bb06867a7013d0b8631e57704ff7d"
 
 [[section.note.scope]]
 path = "crates/idenso/src/cook.rs"
@@ -1234,7 +1311,9 @@ anchor = "pub struct SymbolicTensor<S = OrderedStructure<LibraryRep, AbstractInd
 # Reviewed 2026-10-23: Certified construction stays crate-private; metadata sharing and borrowed composition preserve authoritative interfaces. Public API examples document the existing algebra contracts.
 # Reviewed 2026-10-24: normalization contract checks, explicit producer trust, scalar scope handling and value/history documentation are described in the Idenso note; existing release validators remain intact.
 # Reviewed 2026-10-25: shared exact collector exports remain crate-private; merged tensor metadata and normalization contracts are unchanged.
-digest = "73043dc6e75efb7d9961f007520c75f29d45d5a8"
+# SOURCE31 semantic attestation (candidate, not independent approval):
+# Metadata-authoritative carriers retain Arc-backed occurrence facts across trusted algebra, raw/declaration boundaries validate, and Wrap preserves applicable proof state. Existing Idenso prose covers hidden zeros, dummy multiplicity, scoped axes, serialization and checked callback output; no re-inference from normalized payload.
+digest = "b95ee5f1852b22a03b1fe79bfe4342d3c42e831e"
 
 [[section.note.scope]]
 path = "crates/idenso/src/tensor/indexed.rs"
@@ -1289,7 +1368,9 @@ anchor = "pub struct ContractSettings<'a> {"
 # the shared graph/tape owner.
 # Reviewed 2026-10-19: only deferred-frontier test inputs change in this file; all completion assertions remain. The Idenso/readiness notes explain the newly supported vector-sum partner contraction and unchanged unsupported generic-tensor policy.
 # Reviewed 2026-10-24: the produced-parts constructor is renamed explicitly; contractor algorithms and existing release-time callback validation are unchanged.
-digest = "94e9d8b2efc414ab4457e7f33d9e8ee4a41b439c"
+# SOURCE31 semantic attestation (candidate, not independent approval):
+# Regional contraction retains enclosing conservative occurrence history via Arc rather than readmitting a shortened payload. Existing metadata/history and regional-contractor prose remains true, including bounded frontier and callback checks.
+digest = "442fe89c0ec2fc603e7eeb88b73e69ad9e1b7e60"
 
 [[section.note.scope]]
 path = "crates/idenso/src/tensor/simplification.rs"
@@ -1316,7 +1397,9 @@ anchor = "pub struct AlgebraSettings {"
 # Reviewed 2026-10-23: unchanged here; the shared color seed policy no longer
 # recurses through arithmetic, and disabled components are color algebra again.
 # Reviewed 2026-10-23: The planner threads coefficient-collection permission into both color and Dirac kernels.
-digest = "3a0628ea619e65a4c7e10e270e7a4aa29fd4e07b"
+# SOURCE31 semantic attestation (candidate, not independent approval):
+# Planner requires explicit occurrence history and colour selects actual identity seeds. Existing colour policy/completion prose covers enabled families, terminal rows, disabled traces, coefficients, foreign spectators and revocation; no claim of all-physics completion.
+digest = "49ae6d4398bf4decc931f01d09ef49e69f64996f"
 
 [[section.note.scope]]
 path = "crates/idenso/src/tensor/simplification/observation.rs"
@@ -1392,7 +1475,9 @@ anchor = "pub(crate) struct CollectedOutput"
 # Reviewed 2026-10-23: Documented the scoped doc-hidden temporary-variable
 # exception; Dirac regressions pin shared exact complex collection and typed-zero
 # cancellation. The shared owner and architecture description remain unchanged.
-digest = "de3aeb2b35712816908c6f6490d548e46cb864ba"
+# SOURCE31 semantic attestation (candidate, not independent approval):
+# Exact rational collector uses opaque source sums, preserved colour decompositions, imaginary-unit temporary variables, polynomial coefficient normalization and fallback for unsupported domains/degrees. Existing detailed completion prose matches this owner; link CollectedOutput explicitly without changing its claims.
+digest = "ca8c5cb4f9dd9ee5152cbb94df6c8d919e098c35"
 
 [[section.note.scope]]
 path = "crates/idenso/src/tensor/collection.rs"
@@ -1402,7 +1487,9 @@ end_anchor = "    fn collection_observations("
 # Reviewed 2026-10-23: the two-argument finalizer combines completed rows;
 # source-origin bookkeeping is removed with the bespoke color arithmetic.
 # Callback timing, immutable spectators and frontier gates remain unchanged.
-digest = "fea694882a4b5be3160175636d9ecaeaa1b6ecfe"
+# SOURCE31 semantic attestation (candidate, not independent approval):
+# Selected tape factors and powers transport exact interface and occurrence history; dummy renaming separates scopes and terminal outputs use shared collector. Existing Idenso collection, source-attached algebra and colour completion sections describe these invariants.
+digest = "8f078f8c9d4f7fd1fea495180aa1185894b5cfa3"
 
 [[section.note]]
 id = "idenso-form-color-dirac-source-map"
@@ -1443,14 +1530,16 @@ review_triggers = ["crates/linnet/src/lib.rs", "crates/linnet/src/half_edge.rs",
 # bounded cycle/tadpole enumeration.
 path = "crates/linnet/src/half_edge.rs"
 symbol = "linnet::half_edge::HedgeGraph"
-anchor = "pub struct HedgeGraph<E, V, H = NoData, S: NodeStorage<NodeData = V> = DefaultNodeStore<V>> {"
+anchor = "pub struct HedgeGraph<E, V, H = NoData, N: Topology = NodeForest> {"
 # No architecture impact: the 2026-08-21 APIDOC-002 review corrected the
 # public graph-invariant and DOT parsing documentation without changing behavior.
 # Reviewed 2026-09-17: Documented dense edge join ownership and preserved node/slot/flow invariants.
 # Reviewed 2026-10-12: The default nodestore documentation now states the
 # existing Vec/forest feature selection; graph storage and algorithms are
 # unchanged.
-digest = "ab9af84a52f5a11adfd57083fb87d524b28bdd55"
+# SOURCE31 semantic attestation (candidate, not independent approval):
+# Current HedgeGraph<E,V,H,N:Topology=NodeForest> owns three synchronized stores. Existing prose already documents NodeForest live/bound counts, stable absorbed slots, remaps and tail-fill contracts; do not restore NodeStorage compatibility.
+digest = "cf395f5b3af0a5aa69450792745aa7f568ccd2e3"
 
 [[section.note.scope]]
 path = "crates/linnet/src/half_edge/involution.rs"
@@ -1462,7 +1551,9 @@ anchor = "pub struct Involution<E = EdgeIndex> {"
 # graph invariants.
 # Reviewed 2026-09-29: documented exact-size and fused iterator guarantees;
 # delegated vector traversal, half-edge order, and graph invariants are unchanged.
-digest = "cb55dd1e057261356f1f2fdce9808b2252fc55ae"
+# SOURCE31 semantic attestation (candidate, not independent approval):
+# Import regrouping preserves pairing/fixed points, flow/orientation and exact fused iterator order. Existing kernel and iterator prose remains true.
+digest = "2a5162885ac2e05dc8a1ec79d5fec555a9f6ed36"
 
 [[section.note.scope]]
 path = "crates/linnet/src/half_edge/subgraph.rs"
@@ -1473,7 +1564,9 @@ anchor = "pub trait SubGraphLike: SubSetLike<Hedge> + Inclusion<HedgePair> {"
 # Reviewed 2026-10-16: Callback registration is serialized with a second
 # lookup; existing labels and the printer body are unchanged. Errors propagate
 # after releasing the lock.
-digest = "61c2d5f958487a63d422201ad7d71a77840f90a7"
+# SOURCE31 semantic attestation (candidate, not independent approval):
+# Topology imports, subset iterator re-export and DotIndent presentation preserve subset membership, split crossing edges and inclusion; existing subgraph prose remains true.
+digest = "929ee2f716f95ba3a0bf7a9afdb8f8bf2a458765"
 
 [[section.note.scope]]
 # Documentation-impact attestation 2026-08-21: malformed DOT endpoint,
@@ -1483,7 +1576,7 @@ digest = "61c2d5f958487a63d422201ad7d71a77840f90a7"
 # a semantics-preserving Clippy rewrite of empty graph-name formatting.
 path = "crates/linnet/src/parser/mod.rs"
 symbol = "linnet::parser::DotGraph"
-anchor = "pub struct DotGraph<N: NodeStorage<NodeData = DotVertexData> = DefaultNodeStore<DotVertexData>> {"
+anchor = "pub struct DotGraph<N: Topology = NodeForest> {"
 # No architecture impact: the 2026-08-21 APIDOC-002 review corrected the
 # documented DOT parser path, added a round trip, and qualified its macro link.
 # The 2026-08-26 serializer cleanup only omits empty attribute lists.
@@ -1493,7 +1586,9 @@ anchor = "pub struct DotGraph<N: NodeStorage<NodeData = DotVertexData> = Default
 # deprecated iterator in label decoding; the even-length guard and parsing
 # behavior are unchanged.
 # Reviewed 2026-09-23: DOT interchange documents preserved literal whitespace inside multiline global attributes.
-digest = "075b13acb171934ea04a1ef527db0bd6a9e40025"
+# SOURCE31 semantic attestation (candidate, not independent approval):
+# DotGraph<N:Topology=NodeForest> uses current native topology; parser pipeline and multiline literal whitespace/quoting remain documented. No generic NodeStorage owner is restored.
+digest = "6667c3527c7ae3fa85946116341b8ee78c0e87a8"
 
 [[section.note]]
 id = "vakint-architecture"
@@ -1624,7 +1719,9 @@ path = "crates/feynkit-cff/src/generation.rs"
 symbol = "feynkit_cff::CffGenerator::generate_into"
 anchor = "pub fn generate_into("
 # Reviewed 2026-09-23: Updated the note for the shared generalized recursion and distinct standalone/runtime surface representations.
-digest = "89000ab1668f83dfb3b32351e6dbed65e0d5c91e"
+# SOURCE31 semantic attestation (candidate, not independent approval):
+# Only import regrouping since original source context; shared generalized recursion and caller-owned standalone SurfaceCache semantics remain unchanged.
+digest = "47ea515ff9c91e24d6f6b501da289996a06dfe9a"
 
 [[section.note.scope]]
 path = "crates/feynkit-cff/src/expression.rs"
@@ -1636,7 +1733,9 @@ digest = "22fbe168db1fc1e94241cd87507cd182e76f39a4"
 path = "crates/feynkit-cff/src/surface.rs"
 symbol = "feynkit_cff::SurfaceCache"
 anchor = "pub struct SurfaceCache {"
-digest = "e35249fe2ae3d1ed12cd9c5059e7a9f42f56eb51"
+# SOURCE31 semantic attestation (candidate, not independent approval):
+# Only import regrouping since original source context; append-only arena IDs and explicit SurfaceIdMap merge/remap remain unchanged.
+digest = "cf07dd60f15885153560f050d552600cfb19034a"
 
 [[section]]
 id = "proposals"
@@ -1745,6 +1844,8 @@ status = "Astra round 1 approved; cumulative integration awaiting review"
 lifecycle = "investigation"
 owner = "unassigned"
 reviewed_at = "2026-10-27"
+review_ref = "872e84b2b5bb875264c9eb476c5af47154f66b18"
+# Historical lane base; review_ref above identifies the approved isolated patch.
 evidence_revision = "74cebf6c8f673f5849b26afe55fa98035d5eba1d"
 products = ["idenso"]
 topics = ["generation", "inference", "testing"]
@@ -2121,7 +2222,9 @@ anchor = "pub(crate) fn group_diagrams("
 # the direct simplify_algebra call and canonical GroupingIndex serialization.
 # Integration review intent: preserve authoritative metadata and the current owner;
 # scoped source reconciliation and regression results are recorded in WP3 units03-07.
-digest = "7c402dd069754864108f236abdf155e9a1ab4f6e"
+# SOURCE31 semantic attestation (candidate, not independent approval):
+# Historical readiness results retain their named revisions. Current staged grouping uses finite quotient comparison, deterministic source indices and exact scalar normalization; current contract belongs to architecture-current and source19–21 rather than old timing claims.
+digest = "66cc3fe8280694c72b213d71dee37fb40a1ad997"
 
 [[section.note]]
 id = "nix-crane-cache-reuse"
@@ -2300,7 +2403,9 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # separate nextest group reuses per-crate producers; ci.typ records this added coverage.
 # Drawing integration: approved ec-layout input removal; common notices and source-filter ownership retained.
 # Integration attestation 2026-10-27: this filter adds the source17 Tiptoe notice to required inputs; producer/runtime and per-crate cache ownership are unchanged. Nix WASM/bundle byte checks passed.
-digest = "40c9f9e222f79069e9fef94da1288be3aacab0ac"
+# SOURCE31 semantic attestation (candidate, not independent approval):
+# Resource source lists follow current native rendering owners and separate production/test inputs. No producer closure result asserted; source30 owns missing compile-time source inputs and this scope must refresh after ordered integration.
+digest = "8450390593797e6fc5c8399df468e4f0025dfe4e"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"

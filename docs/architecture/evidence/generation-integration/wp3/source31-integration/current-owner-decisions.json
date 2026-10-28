@@ -1,0 +1,42 @@
+{
+  "base": "7587d0c768363f200e89250683e7836c867c9b81",
+  "preparation": "eb2a02f5dcee0171a728c6143ff28d7f16f40f40",
+  "decisions": [
+    {
+      "note": "gammaloop-architecture",
+      "previous_scope": {
+        "path": "crates/gammalooprs/src/integrands/process/mod.rs",
+        "symbol": "gammalooprs::integrands::process::ProcessIntegrand::warm_up",
+        "anchor": "pub fn warm_up(&mut self, model",
+        "digest": "4e93e77570220de9a2247f6a363095d321511181"
+      },
+      "current_scope": {
+        "path": "crates/gammalooprs/src/integrands/process/mod.rs",
+        "symbol": "gammalooprs::integrands::process::ProcessIntegrand::warm_up",
+        "anchor": "pub fn warm_up(&mut self, model",
+        "digest": "b1711442cd184b4e9776b84d92c313d85f70b7b0"
+      },
+      "decision": "Retain whole-file ProcessIntegrand warm-up scope. Current LmbMultiChannelingSetup records antiparallel physical edge directions in the existing compile context; fixed external affine shifts and physical edge-local numerator transport remain unchanged. Graph-derived weighted sum is a partition-unity test, not independent full evaluator multiplicity proof.",
+      "source_sha256": "8d22c67f564cc9cf51dc1bd6ba2223ee9e852a8ad45496dcac569c25a6bd64a6"
+    },
+    {
+      "note": "nix-crane-cache-reuse",
+      "previous_scope": {
+        "path": "nix/rust-workspace.nix",
+        "symbol": "workspace package source ownership",
+        "anchor": "documentationCatalogAnnotatedItemSourcePaths =",
+        "end_anchor": "workspacePackageExtraSourceRootsForSourcePackages =",
+        "digest": "2ecd200b0d9bf0434fc9c15f9ebcb076d777dd70"
+      },
+      "current_scope": {
+        "path": "nix/rust-workspace.nix",
+        "symbol": "workspace package source ownership",
+        "anchor": "documentationCatalogAnnotatedItemSourcePaths =",
+        "end_anchor": "workspacePackageExtraSourceRootsForSourcePackages =",
+        "digest": "8450390593797e6fc5c8399df468e4f0025dfe4e"
+      },
+      "decision": "Retain entire package-source ownership range. Source30 adds six FeynKit/Linnet inputs and four literal Clinnet fixtures only to compile-time-test owners; runtime restriction card remains runtime-only. Declared Cargo vendor patches, not incidental directory presence, select local patch sources; independent source30 sensitivity and producer identities certify that boundary.",
+      "source_sha256": "5b60b87af71a0fead5b28977676878d4ee3ac10a8d7e4fc9ffd023310776ff20"
+    }
+  ]
+}

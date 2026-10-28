@@ -1,5 +1,14 @@
 = Kurvst Arrowhead Engine
 
+SOURCE31 classifies this as a historical design and implementation investigation,
+preserved from frozen `a517ca563d78d161cff17fe60e661f80529c9a83`. Status,
+“today” and migration statements below describe their original staged context,
+not a fresh certification of every API example. Current native graph construction
+uses Node/Edge/HalfEdge Spec values and `symbolica.community.graph`; current
+rendering owns native SVG and static fallbacks. Source38 geometry and notice
+changes are not included. Reported measurements retain their stated old baseline.
+The current Kurvst manual and registered drawing architecture own usage guidance.
+
 #quote(block: true)[
 *Status: Accepted design, recorded 2026-10-04; P0–P7 implemented.*
 Linnest draws with stock CeTZ 0.5.2 and the shared Kurvst mark engine; no CeTZ
@@ -35,7 +44,7 @@ length and stroke-relative length.
 
 #table(
   columns: (auto, 1fr, 1fr),
-  [*Mark*], [*Accepted size / shape defaults*], [*Placement / prior use*],
+  table.header([*Mark*], [*Accepted size / shape defaults*], [*Placement / prior use*]),
   [`triangle`], [Stealth geometry with inset 0%], [Native flow today],
   [`straight`], [Length 3pt + 450%], [Native momentum today],
   [`stealth`], [Length 3pt + 450%, inset 40%], [CeTZ today],
@@ -75,7 +84,7 @@ while keeping Python and Typst geometry identical.
 
 #table(
   columns: (auto, 1fr),
-  [*Fit*], [*Accepted rule*],
+  table.header([*Fit*], [*Accepted rule*]),
   [`chord` (default)],
   [Put tip and back on the original carrier; trim the shaft at the back without
    changing the carrier. This preserves the current arrow behavior.],
@@ -162,7 +171,7 @@ for this documentation change. Context: 24 drawing-corpus diagrams, Typst
 
 #table(
   columns: (1fr, auto, auto, auto),
-  [*Renderer*], [*Total*], [*Momentum*], [*Plain*],
+  table.header([*Renderer*], [*Total*], [*Momentum*], [*Plain*]),
   [Vendored CeTZ], [26.7s], [~1.3s], [~1.0s],
   [Vendored, three Linnest batched calls replaced], [42.3s], [~2.4s], [~1.2s],
   [Stock CeTZ 0.5.1], [70.0s], [~5.5s], [~1.5s],
@@ -196,8 +205,8 @@ outline agreement and correct link targets and hit areas. Record provenance
 Regenerate this baseline only after consolidation.
 
 The P0 harness, immutable input corpus, and reference images are recorded in
-`tests/drawing-bench/`. The captured three-round baseline is 15.010 s on M4 Pro
-/ Typst 0.15.1, with 24/24 reference PNGs byte-identical to the supplied
+`tests/drawing-bench/`. The captured three-round baseline is 15.010 s on M4 Pro with
+Typst 0.15.1, with 24/24 reference PNGs byte-identical to the supplied
 snapshot at 150 ppi; the consolidated sources reproduce all 24 PNGs
 byte-for-byte on Linux. Source, package, host, and raw timing identities
 accompany the images. Numerical tolerances for future arrow/label changes

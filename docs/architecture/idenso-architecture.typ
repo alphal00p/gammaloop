@@ -543,7 +543,8 @@ Regression tests vary index-registration order, label order, contraction mode
 and spectators, and check completion, exact disabled-trace results,
 factorization and retained logical interfaces.
 
-Color and Dirac completion share the exact polynomial collector in tensor
+Color and Dirac completion share `CollectedOutput` in
+`crates/idenso/src/tensor/collection/collected.rs`, reached through tensor
 collection. With coefficient collection enabled, completed color rows register
 their terminal results after output contraction. The single-product path finishes
 its row through this same owner before reattaching scalar spectators. Factored

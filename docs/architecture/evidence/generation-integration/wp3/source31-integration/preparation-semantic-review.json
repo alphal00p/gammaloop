@@ -1,0 +1,190 @@
+{
+  "verdict": "APPROVE",
+  "scope": "SOURCE31 corrected semantic documentation preparation only",
+  "review_round": 2,
+  "reviewer": "new independent Astra reviewer",
+  "at": "2026-10-28T08:41:16.860794+00:00",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-documentation-reconcile",
+  "candidate": "87dfd362891cc264de49f56adb9bb47df7cc4b3d",
+  "change": "pwsnzsrtltnzwxqoplxyykwpovpkonzz",
+  "bookmark": "generation-documentation-reconcile",
+  "parent": "068da800fa4e71eb057d8ae5b3ecf73d847861e0",
+  "parent_bookmark": "generation-documentation-reconcile-source31-frozen",
+  "implementation": "7e3eb9f69e37cbdf7aae0040742352e329d790f5",
+  "base": "a517ca563d78d161cff17fe60e661f80529c9a83",
+  "author": "Lucien Huber <im@lcnbr.ch>",
+  "blocking_findings": [],
+  "prior_findings": [
+    {
+      "id": "F1",
+      "prior_severity": "P2",
+      "status": "resolved",
+      "path": "docs/architecture/architecture-current.typ",
+      "line": 434,
+      "reason": "F1 fixed: interaction_numerator and edge_numerator canonicalize named interfaces after dynamic actual-owner admission or admitted-template instantiation. NumeratorInterface::translate maps established logical slots in their existing order, retaining checked callbacks, zero ports and hidden index history. The inference boundary alone canonicalizes; leaf tensor argument meaning is unchanged. F2 coordination label accurately describes retained whole-file responsibility and staged.rs remains a separate scope."
+    },
+    {
+      "id": "F2",
+      "prior_severity": "P3",
+      "status": "resolved",
+      "path": "docs/developers.toml",
+      "line": 413,
+      "reason": "Current coordination-owner label; full generation.rs scope retained with unique presence anchor and no end anchor, plus explicit staged.rs scope."
+    },
+    {
+      "id": "F3",
+      "prior_severity": "P3",
+      "status": "resolved",
+      "path": "docs/architecture/evidence/generation-integration/source31/semantic-attestations.json",
+      "line": 2365,
+      "reason": "All 28 current_scope objects exactly equal parsed registry scopes; SurfaceCache has no unrelated section field."
+    }
+  ],
+  "coverage": "semantic-review.json",
+  "checks": {
+    "at": "2026-10-28T08:35:56.168872+00:00",
+    "candidate": "87dfd362891cc264de49f56adb9bb47df7cc4b3d",
+    "implementation": "7e3eb9f69e37cbdf7aae0040742352e329d790f5",
+    "base": "a517ca563d78d161cff17fe60e661f80529c9a83",
+    "tracked_blobs_matched": 3465,
+    "before": {
+      "valid": 65,
+      "stale-digest": 24,
+      "missing-or-ambiguous-anchor": 4
+    },
+    "after": {
+      "valid": 94
+    },
+    "retained_original_scopes": 93,
+    "attestations_verified": 28,
+    "negative_controls": 16,
+    "notes": 62,
+    "products": [
+      "feynkit",
+      "gammaloop",
+      "idenso",
+      "linnet",
+      "spenso",
+      "vakint"
+    ],
+    "scope_oracle_sha256": "d9f923d8806f559adacef0e633b1b4bd65d55a1cef991e90686a59ec63825641",
+    "claim": "Independent identity, evidence integrity, canonical scope rules and metadata/title checks; semantic verdict is recorded separately; not a full site result."
+  },
+  "independent_checks": [
+    "Read both actual raw-rule constructor branches, native canonicalization owner, declared-order transport and relevant regression test bodies; corrected prose/attestation agree.",
+    "Executed canonical importable scope oracle on base/candidate and 16 negative controls; exact full 93-scope retention, one staged.rs addition, exact 28 parsed scope objects and per-scope source/prose hashes.",
+    "Checked schema3, all62 registered titles, six actual products, review metadata, lifecycle and supersession; no narrowing or archival of current coverage.",
+    "Verified all3465 tracked blobs, exact six-file correction, cumulative16 implementation files plus receipt, ancestry, author, protected inputs, original/correction SHA256 identities and whitespace.",
+    "Fresh timestamp0 affected architecture-current Typst compilation with html feature/pinned compiler/font; output matches correction hash.",
+    "Verified immutable Nix source and derivation identities, exact inherited seven table bodies and unchanged obsolete Python test calls against base/parent/candidate; verified frozen failure logs."
+  ],
+  "reused_checks": [
+    "Seven unchanged note renders and Kurvst manual reproduction/visual pages1/2/10 from independent round1, after full tracked-source/artifact hashes and compiler/font/features binding; original source-matched PDF bytes unchanged.",
+    "Prior per-scope semantic decisions revalidated for source/prose/attestation identity; fresh review covers F1 and the cumulative correction.",
+    "Source-bound implementer canonical Rust/stub-check results retained as reports, not fresh runtime executions."
+  ],
+  "receipt_hash_interpretation": "code_revision_sha256 values correctly bind the16 files at original implementation7e3e; correction.file_sha256 binds the five non-self correction files at87df. The receipt itself and full final tree are externally bound in candidate-files.json. No stale hashes are claimed as final correction hashes.",
+  "limits": [
+    "Approval is SOURCE31 documentation preparation only at the exact candidate on base a517ca563d78d161cff17fe60e661f80529c9a83, approved through sources22–26 and excluding27–30.",
+    "Local docs-check exit 1: three inherited Linnet community tests call removed Process.generate_diagrams (113 run, 3 errors, 6 skipped). These remain required example/test API ports, not exempted failures.",
+    "Full Nix client exit remains unknown. Frozen snapshot derivation builder exit 1 is verified; seven exact inherited table bodies lack headers (plan three, WP1 one, Kurvst three). Fix/accessibility-qualify these at the integration/final docs gates; do not infer a full pass.",
+    "Canonical Rust check and two developer_scope tests, plus the FeynKit stub-check stage, are retained implementer results with verified logs and source/command/feature binding. No independent round2 Rust execution or executable/physics qualification.",
+    "Seven historical evidence_revision entries remain unavailable in the local Git object store. They are unchanged inherited limitations, not new evidence. Canonical metadata warnings about unassigned owners, missing historical revision fields and stale review ages remain; no blanket metadata/publication certification.",
+    "No full six-product HTML/PDF/latest/snapshot/publication, browser, wheel/distribution, performance, full physics, main31 or full WP3 approval.",
+    "Native NodeForest/Spec, Symbolica Community, MathML, static fallbacks and optional widgets remain unchanged. WP4 names/pins, WP5 public route()/RoutedSet and WP6 Classes gates remain future work.",
+    "Source32–35 examples/browser/wheel ports remain separate. Source38 is unlanded; shared mark engine Tiptoe and retained Clarabel/NetworkX obligations remain. No standalone packaging claim or regenerated WASM. Known Linnest WASM data/name provenance remains unresolved.",
+    "No production/API/fixture/lock edits, no graph numerator normalization or expansion, no main integration, reference moves, child agents, uploads, push or publication. NixCI=false, all protected files/kernel pin/uv and host subset preserved; normal shared caches untouched.",
+    "Checks used explicit workspace cwd and existing pinned Nix Python/Typst tools; no cold development-shell, Rust or broad docs rebuild was needed for this prose correction. License was preserved or silently loaded for the Typst command; no license output."
+  ],
+  "required_next_gates": [
+    "After ordered sources27–30 integrate, refresh against exact main and re-audit process/sampling, state, workspace preparation, grouping and Nix source/producer owners.",
+    "Obtain a NEW independent combined review of that refreshed SOURCE31 candidate before SOURCE31 integration.",
+    "Carry the obsolete Python calls and table accessibility failures into explicit integration/final-documentation fixes and completed checks. No final complete documentation claim until applicable full six-product/site/browser/publication gates pass.",
+    "Keep later source32–35 and Source38 qualification separate, with renewed source binding after changes."
+  ],
+  "guard": {
+    "at": "2026-10-28T08:41:16.856737+00:00",
+    "candidate": "87dfd362891cc264de49f56adb9bb47df7cc4b3d",
+    "tracked_entries": 3465,
+    "mismatches": [],
+    "protected_generation_and_main_refs_unchanged": true,
+    "other_concurrent_ref_differences": {
+      "removed": [
+        "pr-201-partial-prerequisites-20261028 4cff4c6c762e0e11d0a6877a9434d3e1196350a6",
+        "pr-218-rebased-20261028 2c1e5f1a886bd8597307eab19aff47190c9bfb0b"
+      ],
+      "added": [
+        "pr-178-discovery-rebased-20261028 56f755ce72c5c36c75a1089708633555574ce6ab",
+        "pr-195-discovery-rebased-20261028 b4e5c9bf0dd3df94e095d6c787a662e2072a121f",
+        "pr-201-partial-prerequisites-20261028 c6e9885654171b54de645880a3a5797a082bb89c",
+        "pr-201-prerequisites-20261028 51f140d59b0ec71f8c96077c0e9319650545cd68",
+        "pr-201-rebased-20261028 901f6cd03a60d6fbcfff21a854b447b02636ec3e",
+        "pr-207-baseline-audit-20261028 844e3d6210df1df749401eb33c9cb566ad414299",
+        "pr-218-rebased-20261028 f8c573d39674130eb901e0642030392ee9927222"
+      ]
+    },
+    "ref_qualification": "Read-only jj/Git calls only. Other lanes changed shared bookmarks concurrently; no reviewer reference moves.",
+    "own_background_processes": [],
+    "ignored_evidence": true
+  },
+  "evidence": {
+    "root": "target/source31/astra-round2-20261028-ChUVvk",
+    "retain_reason": "Independent review, hash/source binding, final guards and affected render required for post30 refresh and combined review.",
+    "cleaned_own_duplicate_patches": [
+      "09-context.patch",
+      "16-registered-digest.patch",
+      "06-registered-digest.patch",
+      "21-context.patch",
+      "22-registered-digest.patch",
+      "26-registered-digest.patch",
+      "18-context.patch",
+      "02-registered-digest.patch",
+      "12-registered-digest.patch",
+      "24-context.patch",
+      "03-context.patch",
+      "17-context.patch",
+      "12-context.patch",
+      "06-context.patch",
+      "19-registered-digest.patch",
+      "10-context.patch",
+      "04-context.patch",
+      "01-context.patch",
+      "15-context.patch",
+      "21-registered-digest.patch",
+      "05-registered-digest.patch",
+      "15-registered-digest.patch",
+      "26-context.patch",
+      "11-registered-digest.patch",
+      "01-registered-digest.patch",
+      "23-context.patch",
+      "25-registered-digest.patch",
+      "22-context.patch",
+      "27-context.patch",
+      "07-registered-digest.patch",
+      "28-context.patch",
+      "23-registered-digest.patch",
+      "17-registered-digest.patch",
+      "14-context.patch",
+      "13-registered-digest.patch",
+      "27-registered-digest.patch",
+      "11-context.patch",
+      "03-registered-digest.patch",
+      "05-context.patch",
+      "14-registered-digest.patch",
+      "13-context.patch",
+      "07-context.patch",
+      "04-registered-digest.patch",
+      "24-registered-digest.patch",
+      "02-context.patch",
+      "10-registered-digest.patch",
+      "16-context.patch",
+      "18-registered-digest.patch",
+      "25-context.patch",
+      "08-registered-digest.patch",
+      "08-context.patch",
+      "20-context.patch"
+    ],
+    "prior_evidence_preserved": true,
+    "own_background_processes": []
+  }
+}

@@ -227,7 +227,9 @@ GammaLoop runtime details.
 
 The canonical model retains exact rational electric charges and optional
 left- and right-handed hypercharges. Model-supplied parameter labels are
-registered before parsing their expressions. Propagator lookup, including
+registered before parsing their expressions. Model construction also declares
+the `UFO::` coupling symbols in model order, making symbol creation independent
+of which worker first instantiates a vertex. Propagator lookup, including
 antiparticle orientation, belongs to the model and is reused by generation.
 The model lazily caches the fingerprint of its canonical definition, including qualified
 symbol names and function attributes. Model edits invalidate that cache; interchange
@@ -294,7 +296,9 @@ orders and left/right exchange. These distinctions only split Linnet's structura
 The adapter indexes rules by their surviving Theory position, preserving sparse original
 model rule IDs. Class labels are request-local equality values, not model identities.
 
-Diagram names are optional; structural IDs and aggregate numerators are computed on demand.
+Diagram names are optional; structural IDs and aggregate numerators are computed on demand. Both Rust
+accessors return `Result`: failed identity or tensor composition is propagated
+rather than cached as a successful value.
 The ID hashes Linnet's structural canonical form, including model particle/rule names,
 with BLAKE3; numerical model parameters, numerator expressions and display names do not
 enter it. Canonical forms remain comparable only within one Linnet version. Vertex IDs resolve
@@ -334,13 +338,17 @@ and external-state metadata as annotated input even when the graph fingerprint
 is missing. That input must pass native model-fingerprint validation; ordinary
 compact labels and `num` expressions retain the compact-input boundary.
 
-GammaLoop's DOT importer selects one explicit source boundary: a canonical
-FeynKit diagram, a finalized GammaLoop runtime artifact, or compact model DOT.
-It validates that dialect without retrying malformed artifacts through another
-parser. Compact model input instantiates missing model rules and the default
-external-state projector while retaining explicitly supplied local factors,
-including literal zero or one. Native topology parsing alone does not apply
-Feynman rules; rule construction belongs to the generator's explicit extension.
+GammaLoop imports DOT through `Graph::from_dot` in
+`crates/gammalooprs/src/graph/parse/from_dot.rs`; `from_dot_path` reads a file
+or the `.dot` files of a directory in file-name order. FeynKit's `DotDiagram`
+selects annotated or compact model DOT without retrying malformed input through
+another dialect. Annotated input requires the canonical model fingerprint;
+ambiguous legacy model-index input requires explicit conversion. There is no
+separate finalized GammaLoop artifact dialect.
+`DotDiagram::apply_feynman_rules` retains explicit local factors and projectors,
+including literal zero or one, and fills omitted fragments from the model.
+Native topology parsing alone does not apply Feynman rules; rule construction
+belongs to the generator's explicit extension.
 Rule construction first localizes and admits the unreduced interaction, checking
 all indices and additive tensor interfaces. Only then does vertex momentum
 conservation shorten its Lorentz structures
@@ -353,12 +361,17 @@ existing shared transport owner. Dynamic rules keep one unreduced actual-owner
 admission, preserving callback execution and fresh compact-index allocation;
 shortening is restricted to intrinsic templates.
 Reduction cannot hide malformed summands or invalid leg indices.
-Compact and runtime source annotations pass graph-specific momentum checks
-before tensor admission. Graph-wide validation borrows the retained tensor
-payload and scalar overall factor, checking all `Q3` structures before `Q`
-edge bounds without rebuilding a raw numerator.
+GammaLoop requires explicitly indexed fragment interfaces, then checks that the
+aggregate numerator, prefactor and projector contract every index except the
+model's external colour ports. Runtime momentum validation borrows the retained
+tensor payload and scalar factor, checking `Q3` before `Q` edge bounds. If
+FeynKit import fails, source-expression momentum diagnosis reports malformed
+`Q` or `Q3` directly. GammaLoop applies its own group, parameter, degree, mass
+and threshold-counterterm attributes after native rule application; threshold
+edge references follow the finalization source map.
 Compact cross sections pair incoming/outgoing dangling legs using `is_cut` tags.
-Imported edge mass overrides are installed before the parameter and energy map
+An edge mass override changes its propagator denominator, while a numerator
+filled from the model keeps the model mass. Overrides are installed before the parameter and energy map
 is built; overridden mass evaluators use that completed parameter layout.
 A compact cross section's `final_state` attribute lists comma-separated particles, with `|` between
 allowed alternatives; physical cuts are the deduplicated union, while topology
@@ -372,17 +385,16 @@ conversion checks every routing signature before export. No rule generation or
 cut enumeration occurs at this boundary. Native import also restores runtime
 metadata such as names, mass overrides and threshold directives.
 
-Compact GammaLoop expressions enter the native index frame before finalization.
-Only represented half-edge local index labels change from zero-based to
-one-based; momentum owners and other literal tags keep their meaning. The exact
-source map from finalization transports those fragments and their metadata into
-the runtime graph. Canonical and finalized artifact expressions already have
-their declared frame and do not receive that compact-input conversion. Runtime
-graph operations resolve particle and rule identifiers through the supplied
+DOT expressions use the native model frame: `hedge(h,k)` names local slot `k`
+of half-edge `h`, with model slots counted from one. Native local zero is valid
+and serializes as `hedge(h)`; it is not model slot one. Ordinary import performs
+no automatic zero-based conversion. Explicit legacy chart conversion is a
+separate source operation. The finalization source map transports fragments and
+attributes. Runtime operations resolve particle and rule identifiers through the
 canonical model rather than retaining a second model representation.
-Process-level projector owners are external-leg labels. The generator resolves
-them to each topology's edge and attached half-edge before finalization, while
-the GammaLoop CLI applies the same local-slot conversion used by compact input.
+Process-level projector owners are external-leg labels. Both the generator and
+the current model-aware CLI retain the native slot spelling; the generator
+resolves each external label to its topology edge and attached half-edge.
 They must not be interpreted as provisional internal-edge identifiers.
 
 GammaLoop converts each finalized diagram once into its
@@ -419,10 +431,13 @@ between typed generation stages.
 The generator's model-bound numerator cache retains admitted templates for rules
 whose explicit index identities can be localized injectively. Instantiation
 transports their logical ports and scoped index history, including identities
-absent from a normalized zero, and restores the raw rule's occurrence-based
-logical axis order. `NumeratorInterface::translate` owns this transport for
-both templates and existing graph factors, retaining checked callback boundaries
-and using Idenso's metadata-preserving index renaming. Rules with unresolved ports, callback-sensitive notation or
+absent from a normalized zero. Raw rules declare no axis order: interaction and
+edge constructors canonicalize named interfaces after template transport or
+actual-owner admission. `NumeratorInterface::translate` separately preserves an
+established declared logical port order, including zero and hidden-history ports,
+when transporting templates and existing graph factors. It retains checked
+callback boundaries and uses Idenso's metadata-preserving index renaming.
+Rules with unresolved ports, callback-sensitive notation or
 ambiguous scoped aliases remain source expressions until localized at their
 actual graph owner, where they undergo checked admission. The same cache retains
 the resulting localized vertex and propagator factors.
@@ -1164,7 +1179,10 @@ this same catalogue; display never implements a second enumeration algorithm. Pr
 ==== Estimator and statistics
 
 Both amplitudes and cross sections map each selected cube point into the graph-group master's
-raw frame. Group members reuse that point. The bridge evaluates the partition in that same
+raw frame. Group members reuse that point. Antiparallel stored bundle edges are reflected through the
+existing signed affine map; external shifts stay fixed and numerator factors remain on
+their physical edges. The graph-derived weighted-sum regression certifies partition unity,
+not independent full-evaluator contribution multiplicity. The bridge evaluates the partition in that same
 frame, including foreign inverse densities. For channel c the body receives `J_c * w_c`,
 where `w_c = rho_c / sum_b rho_b`; adaptive cube/discrete-grid corrections remain with the
 integrator. This static-score partition is not a full adaptive balance heuristic. One channel's
@@ -1571,12 +1589,12 @@ mode. Authoritative completed-iteration state lives in
 snapshots live under `state/observables/<process>@<integrand>/`.
 User-facing `integration_result.json` and observable files are derived
 snapshots, not the resume authority.
-Workspace manifest version 3 also retains the resolved Gaussian-reference request
+Since version 3, workspace manifests retain the resolved Gaussian-reference request
 and the convention for physical absolute contributions at distinct channel points.
 Earlier checkpoints require a fresh run; resume verifies the reference request
 before restoring settings or completed-iteration state.
 
-Workspace version 2 fingerprints the exact selected integrand collection after warm-up and
+Workspace version 4 fingerprints the exact selected integrand collection after warm-up and
 before observable checkpoints are restored. Preparation restores saved non-model settings on
 private clones while preserving current model overrides, selects graph groups, and warms only
 that selection. Excluded groups do not enter the resume fingerprint. Settings and workspace
@@ -1691,4 +1709,6 @@ Differential coverage is currently split into:
 
 The ordered sources 22–26 integration candidate is recorded in
 #link("generation-projector-flow-staged.typ")[Staged projector flow and DOT boundaries];
-its preparation is independently approved; combined controls and receipts require a new independent review before source27.
+combined integration was independently approved at `a517ca56`. Sources27–29 were
+subsequently approved at `cb585c98`, and SOURCE30 source-closure integration at `7587d0c7`.
+Those approvals do not certify full WP3 physics, distributions or performance.

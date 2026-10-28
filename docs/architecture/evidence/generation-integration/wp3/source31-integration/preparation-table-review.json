@@ -1,0 +1,102 @@
+{
+  "verdict": "APPROVE",
+  "scope": "SOURCE31 seven-table semantic accessibility correction only; preparation on base approved through sources22–26, excluding27–30.",
+  "reviewer": "NEW independent Astra review; read-only, no nested agents",
+  "at": "2026-10-28T09:36:23.165733+00:00",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-documentation-reconcile",
+  "candidate": "eb2a02f5dcee0171a728c6143ff28d7f16f40f40",
+  "change": "nlsprpwkqznpunpxonuzzytvrxrxxxwu",
+  "bookmark": "generation-documentation-reconcile",
+  "approved_parent": "87dfd362891cc264de49f56adb9bb47df7cc4b3d",
+  "approved_parent_bookmark": "generation-documentation-reconcile-source31-approved",
+  "frozen_predecessor": "068da800fa4e71eb057d8ae5b3ecf73d847861e0",
+  "frozen_bookmark": "generation-documentation-reconcile-source31-frozen",
+  "base": "a517ca563d78d161cff17fe60e661f80529c9a83",
+  "author": "Lucien Huber <im@lcnbr.ch>",
+  "findings": [],
+  "blocking_findings": [],
+  "code_assessment": [
+    {
+      "file": "docs/architecture/generation-integration-plan.typ",
+      "lines": [
+        56,
+        448,
+        509
+      ],
+      "tables": 3,
+      "headers": 8
+    },
+    {
+      "file": "docs/architecture/generation-integration-wp1.typ",
+      "lines": [
+        49
+      ],
+      "tables": 1,
+      "headers": 4
+    },
+    {
+      "file": "docs/architecture/kurvst-arrowhead-engine.typ",
+      "lines": [
+        47,
+        87,
+        174
+      ],
+      "tables": 3,
+      "headers": 9
+    }
+  ],
+  "conclusion": "Exactly four changed files: seven table.header wrappers in the three notes, plus a receipt addition. Inverse source transformation restores the parent byte-for-byte. Generated HTML has one first-row thead with th cells per table, with rectangular column coverage, no hidden/presentation-role bypass, and all data-cell inner markup, values, formulas, row order, prose, physics assertions and historical qualifications preserved. The receipt retains explicitly historical implementation/correction identities and adds new current-source/output hashes; no blind scope-digest updates or archived payload edits.",
+  "fresh_checks": [
+    "All 3465 tracked entries matched the pinned candidate before/after review, including symlink targets; exact parent and four-file delta, whitespace, author, protected files and refs verified.",
+    "Canonical importable scope owner: 94/94 valid; all 28 attestation scope objects, source blobs and prose identities equal the approved parent; all62 note titles verified; registry/product/lifecycle metadata unchanged.",
+    "Independently compiled all three candidate notes to HTML and PDF using Nix-packaged Typst0.15.1, html feature and timestamp0; all six bytes match receipt hashes. Verified exact snapshot-owned Roboto3.015 font path gives the same outputs as retained Roboto3.016 renders.",
+    "Independently compiled the three parent notes to HTML; every old table exactly equals the original frozen Nix-site fragment, and normalized candidate markup exactly restores it. Header labels were inspected against column data.",
+    "Compared all7422 readable implementer-site content files against7428 frozen entries. Exactly three pages differ, only at seven table fragments; six omitted files are unreadable zero-byte Rustdoc .lock metadata, confirmed by stat. Independent reconstruction retains them. All632 other shell pages and all remaining content match.",
+    "Ran unchanged scripts/check-docs-html.py with pinned Nix Python on original and independent composite: original exit1 for precisely seven missing headers; reconstruction exit0 for all635 shell pages.",
+    "Verified receipt/preflight/composite/log hashes, frozen Nix source, current attempted source, full failed builder log, completed Cargo derivation, build-phase ordering and Git dry-run revision. No new full Nix build or source fix attempted."
+  ],
+  "reused_checks": [
+    "Approved87df independent semantic decisions, 93-original-scope retention proof, 16 negative controls and F1–F3 closures, after source/prose/registry/attestation identity binding. No new broad semantic or physics audit claimed.",
+    "Six unchanged note renders and the source-matched Kurvst manual reproduction and sampled pages1/2/10 visual review, after artifact/source/compiler/feature binding. Changed WP1 and Kurvst note renders are fresh.",
+    "Original source-bound runtime/stub evidence remains retained as prior reported execution; no fresh Rust/Python/browser/wheel runtime execution."
+  ],
+  "evidence_qualifications": [
+    {
+      "file": "docs/architecture/evidence/generation-integration/source31/receipt.json",
+      "line": 231,
+      "detail": "The635-page result is a reconstructed older Nix shell with only seven table fragments replaced, not a canonical final-candidate site. It also retains older prose outside the repaired fragments."
+    },
+    {
+      "file": "docs/architecture/evidence/generation-integration/source31/receipt.json",
+      "line": 240,
+      "detail": "Path-source snapshot exits1 at repository revision-link validation before accessibility. Source and producer binding verified; no snapshot success inferred."
+    },
+    {
+      "file": "docs/architecture/evidence/generation-integration/source31/receipt.json",
+      "line": 243,
+      "detail": "Git dry-run resolves c9bbdebb21df1752dd5699fff0576d55d30fb698, differing from finaleb2a only in receipt.json; it is a pre-receipt source qualification, not a final candidate build."
+    }
+  ],
+  "validation_limits": [
+    "Full Nix snapshot remains unqualified. The old full-docs client exit remains unknown; its frozen snapshot builder failure is retained as historical evidence.",
+    "Local docs-check remains exit1 for three inherited Linnet Process.generate_diagrams calls (113 run,3 errors,6 skipped). Source32–35 ports belong to the separate frozen Sol lane, followed by their own new review and actual gate completion.",
+    "Frozen documentation source matches2350 included068 files; its only different included file is pre-final validation.json, and the receipt is filtered/absent there. The three old note sources and all seven rendered table bodies exactly match068 and87df. Full-site metadata is not claimed to be an exact final-candidate artifact.",
+    "No approval for main31 integration, fullWP3, futureWP4 names/pins, WP5 public route()/RoutedSet, WP6 Classes, physics, performance, browser, publication, or wheel/distribution.",
+    "Source38 remains separate; Tiptoe/Clarabel/NetworkX obligations and known Linnest WASM data/name provenance limits remain unchanged."
+  ],
+  "required_next_gates": [
+    "After ordered27–30 integration, refresh against exact main and re-audit process/sampling, state, workspace preparation, grouping and Nix source/producer ownership.",
+    "Use a real Git-source revision pinned to the refreshed full commit SHA for canonical Nix qualification, verify the evaluated documented revision and filtered producer inputs, and complete snapshot/accessibility and applicable full documentation gates. Do not spoof a SHA onto a path-source build or weaken validation.",
+    "Obtain a NEW independent combined review of the refreshed SOURCE31 candidate before integration. This narrow approval does not authorize main integration.",
+    "Complete the separate32–35 Python API ports and remaining full-site/browser/publication/distribution gates before making their corresponding success claims."
+  ],
+  "guard": "guard-final.json",
+  "nix_qualification": "nix-qualification.json",
+  "independent_accessibility": "accessibility-review.json",
+  "source_integrity": "source-integrity.json",
+  "reused_evidence": "reuse-bindings.json",
+  "evidence_root": "target/source31/astra-header-review-20261028-QlMzmd",
+  "retained_reason": "Review receipt, exact source/artifact identities, fresh renders, original/reconstructed checker logs, sparse reproducible composition and Nix failure qualification are needed for post30 refresh and new combined review.",
+  "own_background_processes": [],
+  "tracked_or_ref_changes": false
+}

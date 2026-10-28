@@ -1,0 +1,32 @@
+{
+  "base": "7587d0c768363f200e89250683e7836c867c9b81",
+  "source_order": 31,
+  "original_source": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+  "approved_preparation_base": "a517ca563d78d161cff17fe60e661f80529c9a83",
+  "approved_cumulative_preparation": "eb2a02f5dcee0171a728c6143ff28d7f16f40f40",
+  "method": "Cumulative approved semantic and seven-table preparation applied to current ordered head. Text patches reconcile current registry/plan rather than overwrite. Binary manual copied exactly from approved source-matched output. Current process/sampling and Nix owner decisions precede two required post-preparation digest updates.",
+  "status": "Implementation frozen for combined canonical qualification; NEW independent Astra review required before32.",
+  "review_copies": {
+    "source30-review.json": "e16887de4682a30491b9ff28f41d06db67198d31a99d03fd55e1f62faea73492",
+    "preparation-semantic-review.json": "47e588dc816298291f16a613b9c960fd404750551565831820d202a21f3587b7",
+    "preparation-table-review.json": "b14859ec69c2a65df05a4b85be4977cf3a08f95b6980e78059f0472f14651991"
+  },
+  "scope_before": {
+    "valid": 73,
+    "stale-digest": 24,
+    "missing-or-ambiguous-anchor": 4
+  },
+  "scope_after": {
+    "valid": 102,
+    "invalid": 0
+  },
+  "fresh_focused_checks": "Nine affected notes PDF+HTML;64titles;16 canonical scope negative controls. All original scope coverage retained with native DOT owner relocation and one staged.rs addition.",
+  "historical_preparation_receipts": "../source31/*.json remain imported historical preparation records at their explicit original identities; not fresh main checks.",
+  "validation": "validation.json",
+  "limits": [
+    "No SOURCE32+ import; known three Process.generate_diagrams render callers remain queued.",
+    "No full WP3 physics/performance/distribution; three older frame failures and four expansion-based helpers remain open.",
+    "Full Nix client exit in original preparation remains unknown; composite635-page accessibility is historical, not canonical pass.",
+    "Known Linnest WASM provenance and source38 manual refresh remain later."
+  ]
+}

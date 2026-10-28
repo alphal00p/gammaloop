@@ -1,5 +1,12 @@
 = FeynKit merge readiness and performance
 
+The SOURCE31 reconciliation at `a517ca563d78d161cff17fe60e661f80529c9a83`
+checks the current grouping owner against this dated investigation. The staged
+`Grouping`/`Run` API and finite quotient policy are maintained in the current
+architecture and SOURCE19–21 record. Timings and qualification statements below
+remain bound to their explicitly named historical revisions; they do not qualify
+the SOURCE31 candidate or later ordered integration.
+
 == Fully indexed GammaLoop continuation
 
 === NinjaRS integration review, 19 October 2026

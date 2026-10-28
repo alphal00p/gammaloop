@@ -1,0 +1,31 @@
+{
+  "base": "a517ca563d78d161cff17fe60e661f80529c9a83",
+  "source": "crates/kurvst/typst/docs/manual.typ",
+  "source_sha256": "a74c44ef14671bb2b8520a94bf0162c0443bfd9d201bc70f25bad412d779ca5b",
+  "pdf": "crates/kurvst/typst/docs/manual.pdf",
+  "old_pdf_sha256": "67379fe2b543e5617e49626a5715bb7d98a79679021d1fc65ea418d9fe72ebd1",
+  "new_pdf_sha256": "db25c8b6bd9ef4fe93891e3d82271568abe880b8dec9dd91f3c01d525b65cfaf",
+  "command": "typst compile --features html --root . --creation-timestamp 0 crates/kurvst/typst/docs/manual.typ OUTPUT",
+  "compiler": "/nix/store/vnjry04dnavpyvl41mz607ir21pjb2hp-typst-0.15.1-env/bin/typst",
+  "font_path": "/nix/store/5yr5di50bq9mwr2dh9m7i8y50lxh24ib-roboto-3.016/share/fonts/truetype",
+  "timestamp": 0,
+  "repeated_renders_equal": true,
+  "pages": 32,
+  "visual_inspection": {
+    "pages": [
+      1,
+      2,
+      3,
+      10
+    ],
+    "observations": "Mark specifications and Tiptoe attribution present; inspected text/reference layout is readable, with no visible clipping or missing glyphs.",
+    "renders": "target/source31/kurvst-page-*.png"
+  },
+  "source_unchanged": true,
+  "wasm_assets_unchanged": true,
+  "limits": [
+    "Sampled visual inspection, not a complete pixel or geometry equivalence proof.",
+    "No final Linnest WASM byte provenance claim; known code-identical data/name differences remain unresolved.",
+    "SOURCE38 later geometry/notice changes require another source-matched manual refresh."
+  ]
+}

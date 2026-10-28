@@ -46,7 +46,7 @@ are distinguished from the newly observed outputs.
 
 #table(
   columns: 4,
-  [*Route / mode*], [*Samples / seed*], [*Groups*], [*Cancelled weight sum*],
+  table.header([*Route / mode*], [*Samples / seed*], [*Groups*], [*Cancelled weight sum*]),
   [Upstream production], [5 / 3], [176], [1157/168],
   [v4 production], [5 / 3], [176], [1607/168],
   [v4 production, varied coordinates], [5 / 7 and 11], [176 each], [1607/168 each],

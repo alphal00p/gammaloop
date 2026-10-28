@@ -1,0 +1,2600 @@
+{
+  "base": "a517ca563d78d161cff17fe60e661f80529c9a83",
+  "original_source": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+  "attestations": [
+    {
+      "note": "gammaloop-architecture",
+      "prose": "docs/architecture/architecture-current.typ",
+      "lifecycle": "current",
+      "status": "Implemented",
+      "base_scope": {
+        "path": "crates/gammaloop-api/src/state.rs",
+        "symbol": "gammaloop_api::state::State::load",
+        "anchor": "load_state_manifest(&save_path)?",
+        "digest": "5113940a12e8bac5ec042c59db01bd0ecfb05ef0"
+      },
+      "base_check": {
+        "status": "stale-digest",
+        "actual": "3598dbe299f9a32da1ed8d034706a82959d84abb"
+      },
+      "base_file_blob": "3598dbe299f9a32da1ed8d034706a82959d84abb",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "59e43bd40a797b9ee5974eb11e6c1a0fdd747966",
+      "old_context_scope_check": {
+        "status": "stale-digest",
+        "actual": "59e43bd40a797b9ee5974eb11e6c1a0fdd747966"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "crates/gammaloop-api/src/state.rs",
+          "symbol": "gammaloop_api::state::State::load",
+          "anchor": "load_state_manifest(&save_path)?",
+          "digest": "59e43bd40a797b9ee5974eb11e6c1a0fdd747966"
+        }
+      ],
+      "start_line": 3356,
+      "end_line": null,
+      "action": "prose retained",
+      "attestation": "State manifest22 and exact version rejection remain implemented; delta since original source context is import regrouping. architecture-current already records Request, u128 and beam weights.",
+      "current_scope": {
+        "path": "crates/gammaloop-api/src/state.rs",
+        "symbol": "gammaloop_api::state::State::load",
+        "anchor": "load_state_manifest(&save_path)?",
+        "digest": "3598dbe299f9a32da1ed8d034706a82959d84abb"
+      },
+      "current_check": {
+        "status": "valid",
+        "actual": "3598dbe299f9a32da1ed8d034706a82959d84abb"
+      },
+      "current_file_blob": "3598dbe299f9a32da1ed8d034706a82959d84abb",
+      "current_start_line": 3356,
+      "current_end_line": null,
+      "prose_evidence": "docs/architecture/architecture-current.typ",
+      "review_state": "implementation attestation; NEW independent Astra review pending",
+      "affected_registered_prose": {
+        "path": "docs/architecture/architecture-current.typ",
+        "base_ref": "a517ca563d78d161cff17fe60e661f80529c9a83",
+        "base_full_blob": "14f95d2ddab6c4c10450400b243e89d700dd2c3f",
+        "candidate_full_blob": "7aeda3564599e6cc37bd302b70514c33fb8bb7f5",
+        "base_sections": [
+          {
+            "anchor": "=== Persistence Compatibility Contract",
+            "start_line": 1512,
+            "end_line_exclusive": 1558,
+            "git_blob": "dda620a0fcf7fc7bf9f4ed990968b31521a9b2d0"
+          }
+        ],
+        "candidate_sections": [
+          {
+            "anchor": "=== Persistence Compatibility Contract",
+            "start_line": 1527,
+            "end_line_exclusive": 1573,
+            "git_blob": "dda620a0fcf7fc7bf9f4ed990968b31521a9b2d0"
+          }
+        ]
+      },
+      "original_source_file_blobs": [
+        {
+          "path": "crates/gammaloop-api/src/state.rs",
+          "full_blob": "59e43bd40a797b9ee5974eb11e6c1a0fdd747966"
+        }
+      ],
+      "scope_extent": "entire file; anchor is a unique presence witness",
+      "inherited_origin": {
+        "parent_audit_revision": "current registry snapshot bound by registry_sha256; runtime2eb0d9db",
+        "classification": "inherited_exact",
+        "relative_to_438": "after_438_staged_or_later"
+      }
+    },
+    {
+      "note": "gammaloop-architecture",
+      "prose": "docs/architecture/architecture-current.typ",
+      "lifecycle": "current",
+      "status": "Implemented",
+      "base_scope": {
+        "path": "crates/gammaloop-api/src/commands/integrate.rs",
+        "symbol": "gammaloop_api::commands::integrate::Integrate::default_workspace_path",
+        "anchor": "fn default_workspace_path(&self",
+        "digest": "0f0ae2c8e593ca91f12be4b4c4e456f8817d7f9b"
+      },
+      "base_check": {
+        "status": "stale-digest",
+        "actual": "bcce3d43713b42fe428e3b5d89784e18c8d47fa7"
+      },
+      "base_file_blob": "bcce3d43713b42fe428e3b5d89784e18c8d47fa7",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "e62fbde4bf68a2fa629a50661e7e2af7276c0a23",
+      "old_context_scope_check": {
+        "status": "stale-digest",
+        "actual": "e62fbde4bf68a2fa629a50661e7e2af7276c0a23"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "crates/gammaloop-api/src/commands/integrate.rs",
+          "symbol": "gammaloop_api::commands::integrate::Integrate::default_workspace_path",
+          "anchor": "fn default_workspace_path(&self",
+          "digest": "e62fbde4bf68a2fa629a50661e7e2af7276c0a23"
+        }
+      ],
+      "start_line": 1033,
+      "end_line": null,
+      "action": "prose corrected",
+      "attestation": "Import regrouping preserves private preparation, selected warmed fingerprints, terminal cleanup and streamed panic behavior. Correct both notes to workspace version4, matching IntegrationWorkspaceManifest::CURRENT_VERSION.",
+      "current_scope": {
+        "path": "crates/gammaloop-api/src/commands/integrate.rs",
+        "symbol": "gammaloop_api::commands::integrate::Integrate::default_workspace_path",
+        "anchor": "fn default_workspace_path(&self",
+        "digest": "bcce3d43713b42fe428e3b5d89784e18c8d47fa7"
+      },
+      "current_check": {
+        "status": "valid",
+        "actual": "bcce3d43713b42fe428e3b5d89784e18c8d47fa7"
+      },
+      "current_file_blob": "bcce3d43713b42fe428e3b5d89784e18c8d47fa7",
+      "current_start_line": 1033,
+      "current_end_line": null,
+      "prose_evidence": "docs/architecture/architecture-current.typ",
+      "review_state": "implementation attestation; NEW independent Astra review pending",
+      "affected_registered_prose": {
+        "path": "docs/architecture/architecture-current.typ",
+        "base_ref": "a517ca563d78d161cff17fe60e661f80529c9a83",
+        "base_full_blob": "14f95d2ddab6c4c10450400b243e89d700dd2c3f",
+        "candidate_full_blob": "7aeda3564599e6cc37bd302b70514c33fb8bb7f5",
+        "base_sections": [
+          {
+            "anchor": "=== Integration workspaces",
+            "start_line": 1558,
+            "end_line_exclusive": 1586,
+            "git_blob": "dab893734181d1c901f8124ac341f0eaf7d764f9"
+          }
+        ],
+        "candidate_sections": [
+          {
+            "anchor": "=== Integration workspaces",
+            "start_line": 1573,
+            "end_line_exclusive": 1601,
+            "git_blob": "21350638ffd91c4ae97055c1f322cb634a17bb3e"
+          }
+        ]
+      },
+      "original_source_file_blobs": [
+        {
+          "path": "crates/gammaloop-api/src/commands/integrate.rs",
+          "full_blob": "e62fbde4bf68a2fa629a50661e7e2af7276c0a23"
+        }
+      ],
+      "scope_extent": "entire file; anchor is a unique presence witness",
+      "inherited_origin": {
+        "parent_audit_revision": "current registry snapshot bound by registry_sha256; runtime2eb0d9db",
+        "classification": "inherited_exact",
+        "relative_to_438": "after_438_staged_or_later"
+      }
+    },
+    {
+      "note": "gammaloop-architecture",
+      "prose": "docs/architecture/architecture-current.typ",
+      "lifecycle": "current",
+      "status": "Implemented",
+      "base_scope": {
+        "path": "crates/gammalooprs/src/integrands/process/mod.rs",
+        "symbol": "gammalooprs::integrands::process::ProcessIntegrand::warm_up",
+        "anchor": "pub fn warm_up(&mut self, model",
+        "digest": "c795c1a404f9a6118501d7b5ee2d5e580e44886c"
+      },
+      "base_check": {
+        "status": "stale-digest",
+        "actual": "4e93e77570220de9a2247f6a363095d321511181"
+      },
+      "base_file_blob": "4e93e77570220de9a2247f6a363095d321511181",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "dd9546a1b9330b94c630b9358da9ad62e12b78d8",
+      "old_context_scope_check": {
+        "status": "stale-digest",
+        "actual": "dd9546a1b9330b94c630b9358da9ad62e12b78d8"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "crates/gammalooprs/src/integrands/process/mod.rs",
+          "symbol": "gammalooprs::integrands::process::ProcessIntegrand::warm_up",
+          "anchor": "pub fn warm_up(&mut self, model",
+          "digest": "7b1d69265393f78cf69a3bdfb6d8872da59bf32d"
+        }
+      ],
+      "start_line": 380,
+      "end_line": null,
+      "action": "prose retained; later recheck required",
+      "attestation": "Current compilation no longer sets antiparallel_edges from a parallel-edge bundle heuristic. The existing process/sampling description does not promise that removed inference. No source27–29 sampling acceptance is certified; recheck this complete scope after ordered main refresh.",
+      "current_scope": {
+        "path": "crates/gammalooprs/src/integrands/process/mod.rs",
+        "symbol": "gammalooprs::integrands::process::ProcessIntegrand::warm_up",
+        "anchor": "pub fn warm_up(&mut self, model",
+        "digest": "4e93e77570220de9a2247f6a363095d321511181"
+      },
+      "current_check": {
+        "status": "valid",
+        "actual": "4e93e77570220de9a2247f6a363095d321511181"
+      },
+      "current_file_blob": "4e93e77570220de9a2247f6a363095d321511181",
+      "current_start_line": 380,
+      "current_end_line": null,
+      "prose_evidence": "docs/architecture/architecture-current.typ",
+      "review_state": "implementation attestation; NEW independent Astra review pending",
+      "affected_registered_prose": {
+        "path": "docs/architecture/architecture-current.typ",
+        "base_ref": "a517ca563d78d161cff17fe60e661f80529c9a83",
+        "base_full_blob": "14f95d2ddab6c4c10450400b243e89d700dd2c3f",
+        "candidate_full_blob": "7aeda3564599e6cc37bd302b70514c33fb8bb7f5",
+        "base_sections": [
+          {
+            "anchor": "=== Canonical sampling channels",
+            "start_line": 1141,
+            "end_line_exclusive": 1304,
+            "git_blob": "8853af9b90183e37c99c1285967f8a868ef2f9b1"
+          },
+          {
+            "anchor": "=== 3. Evaluation and Integration Flow",
+            "start_line": 1033,
+            "end_line_exclusive": 1111,
+            "git_blob": "873fbe5a94ff43db15f7188a8dcf67d11716b901"
+          }
+        ],
+        "candidate_sections": [
+          {
+            "anchor": "=== Canonical sampling channels",
+            "start_line": 1156,
+            "end_line_exclusive": 1319,
+            "git_blob": "8853af9b90183e37c99c1285967f8a868ef2f9b1"
+          },
+          {
+            "anchor": "=== 3. Evaluation and Integration Flow",
+            "start_line": 1048,
+            "end_line_exclusive": 1126,
+            "git_blob": "873fbe5a94ff43db15f7188a8dcf67d11716b901"
+          }
+        ]
+      },
+      "original_source_file_blobs": [
+        {
+          "path": "crates/gammalooprs/src/integrands/process/mod.rs",
+          "full_blob": "dd9546a1b9330b94c630b9358da9ad62e12b78d8"
+        }
+      ],
+      "scope_extent": "entire file; anchor is a unique presence witness",
+      "inherited_origin": {
+        "parent_audit_revision": "current registry snapshot bound by registry_sha256; runtime2eb0d9db",
+        "classification": "inherited_exact",
+        "relative_to_438": "after_438_staged_or_later"
+      }
+    },
+    {
+      "note": "gammaloop-architecture",
+      "prose": "docs/architecture/architecture-current.typ",
+      "lifecycle": "current",
+      "status": "Implemented",
+      "base_scope": {
+        "path": "crates/gammalooprs/src/observables/mod.rs",
+        "symbol": "gammalooprs::observables::EventProcessingRuntime",
+        "anchor": "pub struct EventProcessingRuntime {",
+        "digest": "e0a87225a5073e48c6d82a4d8f39cddac43d1684"
+      },
+      "base_check": {
+        "status": "stale-digest",
+        "actual": "b672f52f6674d08d11b6cc68ef0621c399386926"
+      },
+      "base_file_blob": "b672f52f6674d08d11b6cc68ef0621c399386926",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "b672f52f6674d08d11b6cc68ef0621c399386926",
+      "old_context_scope_check": {
+        "status": "stale-digest",
+        "actual": "b672f52f6674d08d11b6cc68ef0621c399386926"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "crates/gammalooprs/src/observables/mod.rs",
+          "symbol": "gammalooprs::observables::EventProcessingRuntime",
+          "anchor": "pub struct EventProcessingRuntime {",
+          "digest": "b672f52f6674d08d11b6cc68ef0621c399386926"
+        }
+      ],
+      "start_line": 3091,
+      "end_line": null,
+      "action": "prose retained",
+      "attestation": "Labelled discrete histogram round-trip coverage does not change graph-group event retention, per-sample sparse statistics or raw snapshot ownership.",
+      "current_scope": {
+        "path": "crates/gammalooprs/src/observables/mod.rs",
+        "symbol": "gammalooprs::observables::EventProcessingRuntime",
+        "anchor": "pub struct EventProcessingRuntime {",
+        "digest": "b672f52f6674d08d11b6cc68ef0621c399386926"
+      },
+      "current_check": {
+        "status": "valid",
+        "actual": "b672f52f6674d08d11b6cc68ef0621c399386926"
+      },
+      "current_file_blob": "b672f52f6674d08d11b6cc68ef0621c399386926",
+      "current_start_line": 3091,
+      "current_end_line": null,
+      "prose_evidence": "docs/architecture/architecture-current.typ",
+      "review_state": "implementation attestation; NEW independent Astra review pending",
+      "affected_registered_prose": {
+        "path": "docs/architecture/architecture-current.typ",
+        "base_ref": "a517ca563d78d161cff17fe60e661f80529c9a83",
+        "base_full_blob": "14f95d2ddab6c4c10450400b243e89d700dd2c3f",
+        "candidate_full_blob": "7aeda3564599e6cc37bd302b70514c33fb8bb7f5",
+        "base_sections": [
+          {
+            "anchor": "=== 3.2 Differential event model",
+            "start_line": 1304,
+            "end_line_exclusive": 1361,
+            "git_blob": "02b005db40d0c3739e00311134e90812a3c512bb"
+          },
+          {
+            "anchor": "=== 3.4 Observable architecture",
+            "start_line": 1405,
+            "end_line_exclusive": 1477,
+            "git_blob": "b19e5bce19616b8ac67f25611ce7497f06551351"
+          }
+        ],
+        "candidate_sections": [
+          {
+            "anchor": "=== 3.2 Differential event model",
+            "start_line": 1319,
+            "end_line_exclusive": 1376,
+            "git_blob": "02b005db40d0c3739e00311134e90812a3c512bb"
+          },
+          {
+            "anchor": "=== 3.4 Observable architecture",
+            "start_line": 1420,
+            "end_line_exclusive": 1492,
+            "git_blob": "b19e5bce19616b8ac67f25611ce7497f06551351"
+          }
+        ]
+      },
+      "original_source_file_blobs": [
+        {
+          "path": "crates/gammalooprs/src/observables/mod.rs",
+          "full_blob": "b672f52f6674d08d11b6cc68ef0621c399386926"
+        }
+      ],
+      "scope_extent": "entire file; anchor is a unique presence witness",
+      "inherited_origin": {
+        "parent_audit_revision": "current registry snapshot bound by registry_sha256; runtime2eb0d9db",
+        "classification": "inherited_exact",
+        "relative_to_438": "after_438_staged_or_later"
+      }
+    },
+    {
+      "note": "gammaloop-architecture",
+      "prose": "docs/architecture/architecture-current.typ",
+      "lifecycle": "current",
+      "status": "Implemented",
+      "base_scope": {
+        "path": "crates/gammaloop-api/src/python.rs",
+        "symbol": "gammaloop_api::python::GammaLoopAPI",
+        "anchor": "struct GammaLoopAPI {",
+        "digest": "adc6974f20de538c6acfb2913aa5c9b16b590617"
+      },
+      "base_check": {
+        "status": "stale-digest",
+        "actual": "872d2b855d14a4aded443e18df435f899c2bf42a"
+      },
+      "base_file_blob": "872d2b855d14a4aded443e18df435f899c2bf42a",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "0712af0b0aae581f36332eb5a25ffc7eaca2ff1f",
+      "old_context_scope_check": {
+        "status": "stale-digest",
+        "actual": "0712af0b0aae581f36332eb5a25ffc7eaca2ff1f"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "crates/gammaloop-api/src/python.rs",
+          "symbol": "gammaloop_api::python::GammaLoopAPI",
+          "anchor": "struct GammaLoopAPI {",
+          "digest": "0712af0b0aae581f36332eb5a25ffc7eaca2ff1f"
+        }
+      ],
+      "start_line": 3274,
+      "end_line": null,
+      "action": "prose corrected in shared architecture",
+      "attestation": "Graph import delegates to from_dot/from_dot_path; current delta since original source context is imports. Session ownership and f64-only Python endpoints are unchanged.",
+      "current_scope": {
+        "path": "crates/gammaloop-api/src/python.rs",
+        "symbol": "gammaloop_api::python::GammaLoopAPI",
+        "anchor": "struct GammaLoopAPI {",
+        "digest": "872d2b855d14a4aded443e18df435f899c2bf42a"
+      },
+      "current_check": {
+        "status": "valid",
+        "actual": "872d2b855d14a4aded443e18df435f899c2bf42a"
+      },
+      "current_file_blob": "872d2b855d14a4aded443e18df435f899c2bf42a",
+      "current_start_line": 3274,
+      "current_end_line": null,
+      "prose_evidence": "docs/architecture/architecture-current.typ",
+      "review_state": "implementation attestation; NEW independent Astra review pending",
+      "affected_registered_prose": {
+        "path": "docs/architecture/architecture-current.typ",
+        "base_ref": "a517ca563d78d161cff17fe60e661f80529c9a83",
+        "base_full_blob": "14f95d2ddab6c4c10450400b243e89d700dd2c3f",
+        "candidate_full_blob": "7aeda3564599e6cc37bd302b70514c33fb8bb7f5",
+        "base_sections": [
+          {
+            "anchor": "=== 1.2 Python session architecture",
+            "start_line": 92,
+            "end_line_exclusive": 113,
+            "git_blob": "a7fd9b5af97ebbd7d5dc7294963a2018d0817c79"
+          },
+          {
+            "anchor": "=== Standalone Physics Toolkit (FeynKit)",
+            "start_line": 131,
+            "end_line_exclusive": 477,
+            "git_blob": "1fd503a458e6ebe2ac753de52e32f37e9cb31422"
+          }
+        ],
+        "candidate_sections": [
+          {
+            "anchor": "=== 1.2 Python session architecture",
+            "start_line": 92,
+            "end_line_exclusive": 113,
+            "git_blob": "a7fd9b5af97ebbd7d5dc7294963a2018d0817c79"
+          },
+          {
+            "anchor": "=== Standalone Physics Toolkit (FeynKit)",
+            "start_line": 131,
+            "end_line_exclusive": 492,
+            "git_blob": "7fd4eebcfce71cbdbe6caf5d4cded7846a804ea5"
+          }
+        ]
+      },
+      "original_source_file_blobs": [
+        {
+          "path": "crates/gammaloop-api/src/python.rs",
+          "full_blob": "0712af0b0aae581f36332eb5a25ffc7eaca2ff1f"
+        }
+      ],
+      "scope_extent": "entire file; anchor is a unique presence witness",
+      "inherited_origin": {
+        "parent_audit_revision": "current registry snapshot bound by registry_sha256; runtime2eb0d9db",
+        "classification": "inherited_exact",
+        "relative_to_438": "after_438_staged_or_later"
+      }
+    },
+    {
+      "note": "gammaloop-architecture",
+      "prose": "docs/architecture/architecture-current.typ",
+      "lifecycle": "current",
+      "status": "Implemented",
+      "base_scope": {
+        "path": "crates/feynkit-generator/src/generation.rs",
+        "symbol": "feynkit_generator::Generator::generate",
+        "anchor": "pub fn generate(",
+        "digest": "b723525194b3a59789d47b1a1a10e2df95c0d83c"
+      },
+      "base_check": {
+        "status": "missing-or-ambiguous-anchor"
+      },
+      "base_file_blob": "0495bd293c86f81e8b817913f3e25e1918b62779",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "ca3f59e3b28395ae09dd01699bdf96306bf316bd",
+      "old_context_scope_check": {
+        "status": "missing-or-ambiguous-anchor"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [],
+      "start_line": null,
+      "end_line": null,
+      "action": "owner and prose corrected",
+      "attestation": "Removed free generate function is replaced by staged Request methods. The whole generation.rs coordination scope retains its GenerationError anchor and staged.rs has separate ownership. Request->DiagramSet->BuiltDiagramSet, Run caller execution and class pairing remain current. Raw-rule interaction and edge constructors canonicalize named interfaces after transport or actual-owner admission; NumeratorInterface::translate retains established declared order, including zero and hidden-history ports.",
+      "current_scope": {
+        "path": "crates/feynkit-generator/src/generation.rs",
+        "symbol": "feynkit_generator::generation::coordination",
+        "anchor": "pub enum GenerationError {",
+        "digest": "0495bd293c86f81e8b817913f3e25e1918b62779"
+      },
+      "current_check": {
+        "status": "valid",
+        "actual": "0495bd293c86f81e8b817913f3e25e1918b62779"
+      },
+      "current_file_blob": "0495bd293c86f81e8b817913f3e25e1918b62779",
+      "current_start_line": 97,
+      "current_end_line": null,
+      "prose_evidence": "docs/architecture/architecture-current.typ",
+      "review_state": "implementation attestation; NEW independent Astra review pending",
+      "affected_registered_prose": {
+        "path": "docs/architecture/architecture-current.typ",
+        "base_ref": "a517ca563d78d161cff17fe60e661f80529c9a83",
+        "base_full_blob": "14f95d2ddab6c4c10450400b243e89d700dd2c3f",
+        "candidate_full_blob": "7aeda3564599e6cc37bd302b70514c33fb8bb7f5",
+        "base_sections": [
+          {
+            "anchor": "=== Standalone Physics Toolkit (FeynKit)",
+            "start_line": 131,
+            "end_line_exclusive": 477,
+            "git_blob": "1fd503a458e6ebe2ac753de52e32f37e9cb31422"
+          }
+        ],
+        "candidate_sections": [
+          {
+            "anchor": "=== Standalone Physics Toolkit (FeynKit)",
+            "start_line": 131,
+            "end_line_exclusive": 492,
+            "git_blob": "7fd4eebcfce71cbdbe6caf5d4cded7846a804ea5"
+          }
+        ]
+      },
+      "original_source_file_blobs": [],
+      "scope_extent": "entire file; anchor is a unique presence witness",
+      "inherited_origin": {
+        "parent_audit_revision": "current registry snapshot bound by registry_sha256; runtime2eb0d9db",
+        "classification": "inherited_exact",
+        "relative_to_438": "after_438_staged_or_later"
+      }
+    },
+    {
+      "note": "gammaloop-architecture",
+      "prose": "docs/architecture/architecture-current.typ",
+      "lifecycle": "current",
+      "status": "Implemented",
+      "base_scope": {
+        "path": "crates/feynkit-model/src/model.rs",
+        "symbol": "feynkit_model::Model",
+        "anchor": "pub struct Model {",
+        "digest": "3887f65c1c670de301495664dd4d4929dd76f60d"
+      },
+      "base_check": {
+        "status": "stale-digest",
+        "actual": "b04029827b0ecb3c8f23289bf0937e1ea422e176"
+      },
+      "base_file_blob": "b04029827b0ecb3c8f23289bf0937e1ea422e176",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "a1a71bd88d8cad81254ecb52cf639ea6a79d1ed7",
+      "old_context_scope_check": {
+        "status": "stale-digest",
+        "actual": "a1a71bd88d8cad81254ecb52cf639ea6a79d1ed7"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "crates/feynkit-model/src/model.rs",
+          "symbol": "feynkit_model::Model",
+          "anchor": "pub struct Model {",
+          "digest": "cb8f2a1984eed34b25039d60e66f196ce3dcdf35"
+        }
+      ],
+      "start_line": 728,
+      "end_line": null,
+      "action": "prose corrected",
+      "attestation": "Construction declares UFO coupling symbols in model order. Preserve literal model Lorentz structures, shortest momentum-conserving rule reduction and canonical fingerprint semantics; later changes are import regrouping and a model reduction doctest.",
+      "current_scope": {
+        "path": "crates/feynkit-model/src/model.rs",
+        "symbol": "feynkit_model::Model",
+        "anchor": "pub struct Model {",
+        "digest": "b04029827b0ecb3c8f23289bf0937e1ea422e176"
+      },
+      "current_check": {
+        "status": "valid",
+        "actual": "b04029827b0ecb3c8f23289bf0937e1ea422e176"
+      },
+      "current_file_blob": "b04029827b0ecb3c8f23289bf0937e1ea422e176",
+      "current_start_line": 728,
+      "current_end_line": null,
+      "prose_evidence": "docs/architecture/architecture-current.typ",
+      "review_state": "implementation attestation; NEW independent Astra review pending",
+      "affected_registered_prose": {
+        "path": "docs/architecture/architecture-current.typ",
+        "base_ref": "a517ca563d78d161cff17fe60e661f80529c9a83",
+        "base_full_blob": "14f95d2ddab6c4c10450400b243e89d700dd2c3f",
+        "candidate_full_blob": "7aeda3564599e6cc37bd302b70514c33fb8bb7f5",
+        "base_sections": [
+          {
+            "anchor": "=== Standalone Physics Toolkit (FeynKit)",
+            "start_line": 131,
+            "end_line_exclusive": 477,
+            "git_blob": "1fd503a458e6ebe2ac753de52e32f37e9cb31422"
+          }
+        ],
+        "candidate_sections": [
+          {
+            "anchor": "=== Standalone Physics Toolkit (FeynKit)",
+            "start_line": 131,
+            "end_line_exclusive": 492,
+            "git_blob": "7fd4eebcfce71cbdbe6caf5d4cded7846a804ea5"
+          }
+        ]
+      },
+      "original_source_file_blobs": [
+        {
+          "path": "crates/feynkit-model/src/model.rs",
+          "full_blob": "a1a71bd88d8cad81254ecb52cf639ea6a79d1ed7"
+        }
+      ],
+      "scope_extent": "entire file; anchor is a unique presence witness",
+      "inherited_origin": {
+        "parent_audit_revision": "current registry snapshot bound by registry_sha256; runtime2eb0d9db",
+        "classification": "inherited_exact",
+        "relative_to_438": "after_438_staged_or_later"
+      }
+    },
+    {
+      "note": "gammaloop-architecture",
+      "prose": "docs/architecture/architecture-current.typ",
+      "lifecycle": "current",
+      "status": "Implemented",
+      "base_scope": {
+        "path": "crates/feynkit-graph/src/lib.rs",
+        "symbol": "feynkit_graph::FeynmanDiagram",
+        "anchor": "pub struct FeynmanDiagram {",
+        "digest": "2d8a36f8ae16bf33adf8ba933a7f58f25f02ba0a"
+      },
+      "base_check": {
+        "status": "stale-digest",
+        "actual": "03fa811b133f5816415a2b445445ea5a2d87365d"
+      },
+      "base_file_blob": "03fa811b133f5816415a2b445445ea5a2d87365d",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "b263a109c4c16bca7011787b238d9de105243c2a",
+      "old_context_scope_check": {
+        "status": "stale-digest",
+        "actual": "b263a109c4c16bca7011787b238d9de105243c2a"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "crates/feynkit-graph/src/lib.rs",
+          "symbol": "feynkit_graph::FeynmanDiagram",
+          "anchor": "pub struct FeynmanDiagram {",
+          "digest": "a51bbc13986d5c5a7b2060dea09469d3791fc91d"
+        }
+      ],
+      "start_line": 650,
+      "end_line": null,
+      "action": "prose corrected",
+      "attestation": "Lazy id and numerator accessors return Result; aggregate composition now uses multiply_many and fallible canonical_ports. Retained fragments, port order, hidden index history and original source identities remain authoritative; no eager Atom reconstruction or new routing stage.",
+      "current_scope": {
+        "path": "crates/feynkit-graph/src/lib.rs",
+        "symbol": "feynkit_graph::FeynmanDiagram",
+        "anchor": "pub struct FeynmanDiagram {",
+        "digest": "03fa811b133f5816415a2b445445ea5a2d87365d"
+      },
+      "current_check": {
+        "status": "valid",
+        "actual": "03fa811b133f5816415a2b445445ea5a2d87365d"
+      },
+      "current_file_blob": "03fa811b133f5816415a2b445445ea5a2d87365d",
+      "current_start_line": 650,
+      "current_end_line": null,
+      "prose_evidence": "docs/architecture/architecture-current.typ",
+      "review_state": "implementation attestation; NEW independent Astra review pending",
+      "affected_registered_prose": {
+        "path": "docs/architecture/architecture-current.typ",
+        "base_ref": "a517ca563d78d161cff17fe60e661f80529c9a83",
+        "base_full_blob": "14f95d2ddab6c4c10450400b243e89d700dd2c3f",
+        "candidate_full_blob": "7aeda3564599e6cc37bd302b70514c33fb8bb7f5",
+        "base_sections": [
+          {
+            "anchor": "=== Standalone Physics Toolkit (FeynKit)",
+            "start_line": 131,
+            "end_line_exclusive": 477,
+            "git_blob": "1fd503a458e6ebe2ac753de52e32f37e9cb31422"
+          }
+        ],
+        "candidate_sections": [
+          {
+            "anchor": "=== Standalone Physics Toolkit (FeynKit)",
+            "start_line": 131,
+            "end_line_exclusive": 492,
+            "git_blob": "7fd4eebcfce71cbdbe6caf5d4cded7846a804ea5"
+          }
+        ]
+      },
+      "original_source_file_blobs": [
+        {
+          "path": "crates/feynkit-graph/src/lib.rs",
+          "full_blob": "b263a109c4c16bca7011787b238d9de105243c2a"
+        }
+      ],
+      "scope_extent": "entire file; anchor is a unique presence witness",
+      "inherited_origin": {
+        "parent_audit_revision": "current registry snapshot bound by registry_sha256; runtime2eb0d9db",
+        "classification": "inherited_exact",
+        "relative_to_438": "after_438_staged_or_later"
+      }
+    },
+    {
+      "note": "gammaloop-architecture",
+      "prose": "docs/architecture/architecture-current.typ",
+      "lifecycle": "current",
+      "status": "Implemented",
+      "base_scope": {
+        "path": "crates/gammalooprs/src/graph/parse/mod.rs",
+        "symbol": "gammalooprs::graph::Graph DOT import boundary",
+        "anchor": "    pub fn import_dot(input: &str, model: &Model) -> Result<Vec<Self>> {",
+        "end_anchor": "    pub fn dot_serialize(&self, settings: &DotExportSettings) -> String {",
+        "digest": "fc058e64317d80978ebfc2ede480a29fd852a8a3"
+      },
+      "base_check": {
+        "status": "missing-or-ambiguous-anchor"
+      },
+      "base_file_blob": "90b7d939a3506ab267db6c3f0e84af3fb8f69a71",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "809580b48571f0ea1cabc5c972d991ec8bd2a14f",
+      "old_context_scope_check": {
+        "status": "missing-or-ambiguous-anchor"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "crates/gammalooprs/src/graph/parse/from_dot.rs",
+          "symbol": "gammalooprs::graph::Graph DOT import boundary",
+          "anchor": "    pub fn from_dot(input: &str, model: &Model) -> Result<Vec<Self>> {",
+          "end_anchor": "/// Build GammaLoop graphs from DOT text, as in tests and inline fixtures.",
+          "digest": "84cf616ac16299494bae8470eb4b298c0b798325"
+        }
+      ],
+      "start_line": null,
+      "end_line": 153,
+      "action": "owner and prose corrected",
+      "attestation": "Removed import_dot/artifact route replaced by Graph::from_dot in from_dot.rs. Read fragment explicitness/aggregate contraction checks, momentum diagnostic, apply_dot_attributes and source remap. Native hedge(h,k) model slots are one-based; explicit legacy conversion stays separate.",
+      "current_scope": {
+        "path": "crates/gammalooprs/src/graph/parse/from_dot.rs",
+        "symbol": "gammalooprs::graph::Graph DOT import boundary",
+        "anchor": "    pub fn from_dot(input: &str, model: &Model) -> Result<Vec<Self>> {",
+        "end_anchor": "/// Build GammaLoop graphs from DOT text, as in tests and inline fixtures.",
+        "digest": "2f016e5378c09ffe996a4f74870845364df7d09c"
+      },
+      "current_check": {
+        "status": "valid",
+        "actual": "2f016e5378c09ffe996a4f74870845364df7d09c"
+      },
+      "current_file_blob": "a8ae5907aaf92087546b5bdea15086fabacfb554",
+      "current_start_line": 44,
+      "current_end_line": 275,
+      "prose_evidence": "docs/architecture/architecture-current.typ",
+      "review_state": "implementation attestation; NEW independent Astra review pending",
+      "affected_registered_prose": {
+        "path": "docs/architecture/architecture-current.typ",
+        "base_ref": "a517ca563d78d161cff17fe60e661f80529c9a83",
+        "base_full_blob": "14f95d2ddab6c4c10450400b243e89d700dd2c3f",
+        "candidate_full_blob": "7aeda3564599e6cc37bd302b70514c33fb8bb7f5",
+        "base_sections": [
+          {
+            "anchor": "=== Standalone Physics Toolkit (FeynKit)",
+            "start_line": 131,
+            "end_line_exclusive": 477,
+            "git_blob": "1fd503a458e6ebe2ac753de52e32f37e9cb31422"
+          }
+        ],
+        "candidate_sections": [
+          {
+            "anchor": "=== Standalone Physics Toolkit (FeynKit)",
+            "start_line": 131,
+            "end_line_exclusive": 492,
+            "git_blob": "7fd4eebcfce71cbdbe6caf5d4cded7846a804ea5"
+          }
+        ]
+      },
+      "original_source_file_blobs": [
+        {
+          "path": "crates/gammalooprs/src/graph/parse/from_dot.rs",
+          "full_blob": "713b968b3d94d6a72868fe778503562d4866492a"
+        }
+      ],
+      "scope_extent": "half-open UTF-8 anchor range",
+      "inherited_origin": {
+        "parent_audit_revision": "current registry snapshot bound by registry_sha256; runtime2eb0d9db",
+        "classification": "inherited_exact",
+        "relative_to_438": "after_438_staged_or_later"
+      }
+    },
+    {
+      "note": "integration-dashboard",
+      "prose": "docs/architecture/ratatui-integration-dashboard.typ",
+      "lifecycle": "current",
+      "status": "Implemented",
+      "base_scope": {
+        "path": "crates/gammaloop-api/src/commands/integrate.rs",
+        "symbol": "gammaloop_api::commands::integrate::dashboard_event_loop",
+        "anchor": "fn dashboard_event_loop(receiver",
+        "digest": "0f0ae2c8e593ca91f12be4b4c4e456f8817d7f9b"
+      },
+      "base_check": {
+        "status": "stale-digest",
+        "actual": "bcce3d43713b42fe428e3b5d89784e18c8d47fa7"
+      },
+      "base_file_blob": "bcce3d43713b42fe428e3b5d89784e18c8d47fa7",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "e62fbde4bf68a2fa629a50661e7e2af7276c0a23",
+      "old_context_scope_check": {
+        "status": "stale-digest",
+        "actual": "e62fbde4bf68a2fa629a50661e7e2af7276c0a23"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "crates/gammaloop-api/src/commands/integrate.rs",
+          "symbol": "gammaloop_api::commands::integrate::dashboard_event_loop",
+          "anchor": "fn dashboard_event_loop(receiver",
+          "digest": "e62fbde4bf68a2fa629a50661e7e2af7276c0a23"
+        }
+      ],
+      "start_line": 789,
+      "end_line": null,
+      "action": "prose corrected",
+      "attestation": "Import regrouping preserves private preparation, selected warmed fingerprints, terminal cleanup and streamed panic behavior. Correct both notes to workspace version4, matching IntegrationWorkspaceManifest::CURRENT_VERSION.",
+      "current_scope": {
+        "path": "crates/gammaloop-api/src/commands/integrate.rs",
+        "symbol": "gammaloop_api::commands::integrate::dashboard_event_loop",
+        "anchor": "fn dashboard_event_loop(receiver",
+        "digest": "bcce3d43713b42fe428e3b5d89784e18c8d47fa7"
+      },
+      "current_check": {
+        "status": "valid",
+        "actual": "bcce3d43713b42fe428e3b5d89784e18c8d47fa7"
+      },
+      "current_file_blob": "bcce3d43713b42fe428e3b5d89784e18c8d47fa7",
+      "current_start_line": 789,
+      "current_end_line": null,
+      "prose_evidence": "docs/architecture/ratatui-integration-dashboard.typ",
+      "review_state": "implementation attestation; NEW independent Astra review pending",
+      "affected_registered_prose": {
+        "path": "docs/architecture/ratatui-integration-dashboard.typ",
+        "base_ref": "a517ca563d78d161cff17fe60e661f80529c9a83",
+        "base_full_blob": "bf553b0370faddb2627cda78273da79e46c9841c",
+        "candidate_full_blob": "14fc356ba6f86eb927df692563d59a8997d376e2",
+        "base_sections": [
+          {
+            "anchor": "#import \"../products/shared.typ\": source-link",
+            "start_line": 1,
+            "end_line_exclusive": 3,
+            "git_blob": "84afea79249267f00a11a58377b8cdfc49c553f8"
+          }
+        ],
+        "candidate_sections": [
+          {
+            "anchor": "#import \"../products/shared.typ\": source-link",
+            "start_line": 1,
+            "end_line_exclusive": 3,
+            "git_blob": "84afea79249267f00a11a58377b8cdfc49c553f8"
+          }
+        ]
+      },
+      "original_source_file_blobs": [
+        {
+          "path": "crates/gammaloop-api/src/commands/integrate.rs",
+          "full_blob": "e62fbde4bf68a2fa629a50661e7e2af7276c0a23"
+        }
+      ],
+      "scope_extent": "entire file; anchor is a unique presence witness",
+      "inherited_origin": {
+        "parent_audit_revision": "current registry snapshot bound by registry_sha256; runtime2eb0d9db",
+        "classification": "inherited_exact",
+        "relative_to_438": "after_438_staged_or_later"
+      }
+    },
+    {
+      "note": "integration-dashboard",
+      "prose": "docs/architecture/ratatui-integration-dashboard.typ",
+      "lifecycle": "current",
+      "status": "Implemented",
+      "base_scope": {
+        "path": "crates/gammalooprs/src/integrate/mod.rs",
+        "symbol": "gammalooprs::integrate",
+        "anchor": "mod render_ratatui;",
+        "digest": "d131b0f6a513af1310b647474fac787105610a1b"
+      },
+      "base_check": {
+        "status": "stale-digest",
+        "actual": "2cbbafcb254b4b7ac042b6ca8dab6682f9a0ce21"
+      },
+      "base_file_blob": "2cbbafcb254b4b7ac042b6ca8dab6682f9a0ce21",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "81515c2e8f393898c7b9a7957fb9f1fb9cde83fb",
+      "old_context_scope_check": {
+        "status": "stale-digest",
+        "actual": "81515c2e8f393898c7b9a7957fb9f1fb9cde83fb"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "crates/gammalooprs/src/integrate/mod.rs",
+          "symbol": "gammalooprs::integrate",
+          "anchor": "mod render_ratatui;",
+          "digest": "81515c2e8f393898c7b9a7957fb9f1fb9cde83fb"
+        }
+      ],
+      "start_line": 9,
+      "end_line": null,
+      "action": "prose corrected",
+      "attestation": "Current workspace manifest version4 combines reference/absolute convention and selected integrand fingerprints; current delta since original context is imports. Completed-iteration authority, raw observable checkpoints and worker/renderer separation remain.",
+      "current_scope": {
+        "path": "crates/gammalooprs/src/integrate/mod.rs",
+        "symbol": "gammalooprs::integrate",
+        "anchor": "mod render_ratatui;",
+        "digest": "2cbbafcb254b4b7ac042b6ca8dab6682f9a0ce21"
+      },
+      "current_check": {
+        "status": "valid",
+        "actual": "2cbbafcb254b4b7ac042b6ca8dab6682f9a0ce21"
+      },
+      "current_file_blob": "2cbbafcb254b4b7ac042b6ca8dab6682f9a0ce21",
+      "current_start_line": 9,
+      "current_end_line": null,
+      "prose_evidence": "docs/architecture/ratatui-integration-dashboard.typ",
+      "review_state": "implementation attestation; NEW independent Astra review pending",
+      "affected_registered_prose": {
+        "path": "docs/architecture/ratatui-integration-dashboard.typ",
+        "base_ref": "a517ca563d78d161cff17fe60e661f80529c9a83",
+        "base_full_blob": "bf553b0370faddb2627cda78273da79e46c9841c",
+        "candidate_full_blob": "14fc356ba6f86eb927df692563d59a8997d376e2",
+        "base_sections": [
+          {
+            "anchor": "#import \"../products/shared.typ\": source-link",
+            "start_line": 1,
+            "end_line_exclusive": 3,
+            "git_blob": "84afea79249267f00a11a58377b8cdfc49c553f8"
+          }
+        ],
+        "candidate_sections": [
+          {
+            "anchor": "#import \"../products/shared.typ\": source-link",
+            "start_line": 1,
+            "end_line_exclusive": 3,
+            "git_blob": "84afea79249267f00a11a58377b8cdfc49c553f8"
+          }
+        ]
+      },
+      "original_source_file_blobs": [
+        {
+          "path": "crates/gammalooprs/src/integrate/mod.rs",
+          "full_blob": "81515c2e8f393898c7b9a7957fb9f1fb9cde83fb"
+        }
+      ],
+      "scope_extent": "entire file; anchor is a unique presence witness",
+      "inherited_origin": {
+        "parent_audit_revision": "current registry snapshot bound by registry_sha256; runtime2eb0d9db",
+        "classification": "inherited_exact",
+        "relative_to_438": "after_438_staged_or_later"
+      }
+    },
+    {
+      "note": "uv-renormalization",
+      "prose": "docs/architecture/uv-renormalization.typ",
+      "lifecycle": "current",
+      "status": "Implemented",
+      "base_scope": {
+        "path": "crates/gammalooprs/src/uv/orchestrator.rs",
+        "symbol": "gammalooprs::uv::UVOrchestrator",
+        "anchor": "impl UVOrchestrator {",
+        "digest": "19e0c07de61017d01b36bfda24f60e48d4b17bfc"
+      },
+      "base_check": {
+        "status": "stale-digest",
+        "actual": "4acc87a62891dbff0b3ca2cef2e8ab505c1de6d5"
+      },
+      "base_file_blob": "4acc87a62891dbff0b3ca2cef2e8ab505c1de6d5",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "5b372bf91cc685c72271d4e8927bb62ce3c9311f",
+      "old_context_scope_check": {
+        "status": "stale-digest",
+        "actual": "5b372bf91cc685c72271d4e8927bb62ce3c9311f"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "crates/gammalooprs/src/uv/orchestrator.rs",
+          "symbol": "gammalooprs::uv::UVOrchestrator",
+          "anchor": "impl UVOrchestrator {",
+          "digest": "5b372bf91cc685c72271d4e8927bb62ce3c9311f"
+        }
+      ],
+      "start_line": 26,
+      "end_line": null,
+      "action": "prose retained",
+      "attestation": "Original transplant changes test import helpers; subsequent import regrouping preserves forest orchestration. Indexed tensor admission, scalar backend boundaries and factorized cograph rules are already documented.",
+      "current_scope": {
+        "path": "crates/gammalooprs/src/uv/orchestrator.rs",
+        "symbol": "gammalooprs::uv::UVOrchestrator",
+        "anchor": "impl UVOrchestrator {",
+        "digest": "4acc87a62891dbff0b3ca2cef2e8ab505c1de6d5"
+      },
+      "current_check": {
+        "status": "valid",
+        "actual": "4acc87a62891dbff0b3ca2cef2e8ab505c1de6d5"
+      },
+      "current_file_blob": "4acc87a62891dbff0b3ca2cef2e8ab505c1de6d5",
+      "current_start_line": 26,
+      "current_end_line": null,
+      "prose_evidence": "docs/architecture/uv-renormalization.typ",
+      "review_state": "implementation attestation; NEW independent Astra review pending",
+      "affected_registered_prose": {
+        "path": "docs/architecture/uv-renormalization.typ",
+        "base_ref": "a517ca563d78d161cff17fe60e661f80529c9a83",
+        "base_full_blob": "ecb6d639d77af09474f55cb7229ca2390c582ed8",
+        "candidate_full_blob": "ecb6d639d77af09474f55cb7229ca2390c582ed8",
+        "base_sections": [
+          {
+            "anchor": "= UV renormalization architecture",
+            "start_line": 1,
+            "end_line_exclusive": 11,
+            "git_blob": "81abf9ae36caa754f6ec2930d34f96c807acff4f"
+          }
+        ],
+        "candidate_sections": [
+          {
+            "anchor": "= UV renormalization architecture",
+            "start_line": 1,
+            "end_line_exclusive": 11,
+            "git_blob": "81abf9ae36caa754f6ec2930d34f96c807acff4f"
+          }
+        ]
+      },
+      "original_source_file_blobs": [
+        {
+          "path": "crates/gammalooprs/src/uv/orchestrator.rs",
+          "full_blob": "5b372bf91cc685c72271d4e8927bb62ce3c9311f"
+        }
+      ],
+      "scope_extent": "entire file; anchor is a unique presence witness",
+      "inherited_origin": {
+        "parent_audit_revision": "current registry snapshot bound by registry_sha256; runtime2eb0d9db",
+        "classification": "inherited_exact",
+        "relative_to_438": "after_438_staged_or_later"
+      }
+    },
+    {
+      "note": "spenso-symbolica-syntax-and-rewrites",
+      "prose": "docs/architecture/spenso-symbolica-syntax-and-rewrites.typ",
+      "lifecycle": "current",
+      "status": "Implemented reference · reviewed 2026-10-05",
+      "base_scope": {
+        "path": "crates/idenso/src/lib.rs",
+        "symbol": "idenso::IndexTooling",
+        "anchor": "pub trait IndexTooling {",
+        "digest": "b6b8af1e73031ce2c7dc97185cc31f4a90c63d64"
+      },
+      "base_check": {
+        "status": "stale-digest",
+        "actual": "820fbf610c4bb06867a7013d0b8631e57704ff7d"
+      },
+      "base_file_blob": "820fbf610c4bb06867a7013d0b8631e57704ff7d",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "e8a84816478a3d8dbc437d10df37f7b05bf1f9f8",
+      "old_context_scope_check": {
+        "status": "stale-digest",
+        "actual": "e8a84816478a3d8dbc437d10df37f7b05bf1f9f8"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "crates/idenso/src/lib.rs",
+          "symbol": "idenso::IndexTooling",
+          "anchor": "pub trait IndexTooling {",
+          "digest": "e8a84816478a3d8dbc437d10df37f7b05bf1f9f8"
+        }
+      ],
+      "start_line": 194,
+      "end_line": null,
+      "action": "prose retained",
+      "attestation": "dirac_adjoint now requests explicit_index_occurrences, preserving conservative history before materialization. Native labels remain native. Existing syntax and Idenso notes already specify literal labels, reserved channels, anonymous-axis materialization and retained logical interfaces.",
+      "current_scope": {
+        "path": "crates/idenso/src/lib.rs",
+        "symbol": "idenso::IndexTooling",
+        "anchor": "pub trait IndexTooling {",
+        "digest": "820fbf610c4bb06867a7013d0b8631e57704ff7d"
+      },
+      "current_check": {
+        "status": "valid",
+        "actual": "820fbf610c4bb06867a7013d0b8631e57704ff7d"
+      },
+      "current_file_blob": "820fbf610c4bb06867a7013d0b8631e57704ff7d",
+      "current_start_line": 194,
+      "current_end_line": null,
+      "prose_evidence": "docs/architecture/spenso-symbolica-syntax-and-rewrites.typ",
+      "review_state": "implementation attestation; NEW independent Astra review pending",
+      "affected_registered_prose": {
+        "path": "docs/architecture/spenso-symbolica-syntax-and-rewrites.typ",
+        "base_ref": "a517ca563d78d161cff17fe60e661f80529c9a83",
+        "base_full_blob": "056079d3a1f38a3ed6580a59d1b1467cea6df4bc",
+        "candidate_full_blob": "056079d3a1f38a3ed6580a59d1b1467cea6df4bc",
+        "base_sections": [
+          {
+            "anchor": "== Retained interfaces and source notation",
+            "start_line": 89,
+            "end_line_exclusive": 145,
+            "git_blob": "ede9bd43b172420866941bb054d10e6c604c1eb6"
+          },
+          {
+            "anchor": "== Factorization during index canonicalization",
+            "start_line": 598,
+            "end_line_exclusive": 628,
+            "git_blob": "80f273dd64136ddf37abd6319cbf3999cf9aed0d"
+          }
+        ],
+        "candidate_sections": [
+          {
+            "anchor": "== Retained interfaces and source notation",
+            "start_line": 89,
+            "end_line_exclusive": 145,
+            "git_blob": "ede9bd43b172420866941bb054d10e6c604c1eb6"
+          },
+          {
+            "anchor": "== Factorization during index canonicalization",
+            "start_line": 598,
+            "end_line_exclusive": 628,
+            "git_blob": "80f273dd64136ddf37abd6319cbf3999cf9aed0d"
+          }
+        ]
+      },
+      "original_source_file_blobs": [
+        {
+          "path": "crates/idenso/src/lib.rs",
+          "full_blob": "e8a84816478a3d8dbc437d10df37f7b05bf1f9f8"
+        }
+      ],
+      "scope_extent": "entire file; anchor is a unique presence witness",
+      "inherited_origin": {
+        "parent_audit_revision": "current registry snapshot bound by registry_sha256; runtime2eb0d9db",
+        "classification": "inherited_exact",
+        "relative_to_438": "inherited_failure_at_438"
+      }
+    },
+    {
+      "note": "spenso-architecture",
+      "prose": "docs/architecture/spenso-architecture.typ",
+      "lifecycle": "current",
+      "status": "Implemented · reviewed 2026-10-01",
+      "base_scope": {
+        "path": "crates/spenso/src/network/mod.rs",
+        "symbol": "spenso::network::Network",
+        "anchor": "pub struct Network<S, LibKey, FunKey, Aind = AbstractIndex> {",
+        "digest": "410491ec4a23db5061510dc830fe9a880b6b6a0a"
+      },
+      "base_check": {
+        "status": "stale-digest",
+        "actual": "14f66a4d6e62a4fd878c2f52f0bc6ab336cf7f24"
+      },
+      "base_file_blob": "14f66a4d6e62a4fd878c2f52f0bc6ab336cf7f24",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "41e84dfde4fcb4660917cbc98708d1a9c9db9469",
+      "old_context_scope_check": {
+        "status": "stale-digest",
+        "actual": "41e84dfde4fcb4660917cbc98708d1a9c9db9469"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "crates/spenso/src/network/mod.rs",
+          "symbol": "spenso::network::Network",
+          "anchor": "pub struct Network<S, LibKey, FunKey, Aind = AbstractIndex> {",
+          "digest": "41e84dfde4fcb4660917cbc98708d1a9c9db9469"
+        }
+      ],
+      "start_line": 1766,
+      "end_line": null,
+      "action": "prose retained",
+      "attestation": "Import regrouping and profile n_live count replace former node counting. Network store/library/execution ownership and scalar/open tensor boundaries stay as documented.",
+      "current_scope": {
+        "path": "crates/spenso/src/network/mod.rs",
+        "symbol": "spenso::network::Network",
+        "anchor": "pub struct Network<S, LibKey, FunKey, Aind = AbstractIndex> {",
+        "digest": "14f66a4d6e62a4fd878c2f52f0bc6ab336cf7f24"
+      },
+      "current_check": {
+        "status": "valid",
+        "actual": "14f66a4d6e62a4fd878c2f52f0bc6ab336cf7f24"
+      },
+      "current_file_blob": "14f66a4d6e62a4fd878c2f52f0bc6ab336cf7f24",
+      "current_start_line": 1766,
+      "current_end_line": null,
+      "prose_evidence": "docs/architecture/spenso-architecture.typ",
+      "review_state": "implementation attestation; NEW independent Astra review pending",
+      "affected_registered_prose": {
+        "path": "docs/architecture/spenso-architecture.typ",
+        "base_ref": "a517ca563d78d161cff17fe60e661f80529c9a83",
+        "base_full_blob": "8bbb72ef88430e7bfe7b0a5becdcb705af6ac166",
+        "candidate_full_blob": "8bbb72ef88430e7bfe7b0a5becdcb705af6ac166",
+        "base_sections": [
+          {
+            "anchor": "== Network representation and execution",
+            "start_line": 115,
+            "end_line_exclusive": 164,
+            "git_blob": "2ce6eb4642a9a4f4d3a37c52f613fceaddbcfcf3"
+          }
+        ],
+        "candidate_sections": [
+          {
+            "anchor": "== Network representation and execution",
+            "start_line": 115,
+            "end_line_exclusive": 164,
+            "git_blob": "2ce6eb4642a9a4f4d3a37c52f613fceaddbcfcf3"
+          }
+        ]
+      },
+      "original_source_file_blobs": [
+        {
+          "path": "crates/spenso/src/network/mod.rs",
+          "full_blob": "41e84dfde4fcb4660917cbc98708d1a9c9db9469"
+        }
+      ],
+      "scope_extent": "entire file; anchor is a unique presence witness",
+      "inherited_origin": {
+        "parent_audit_revision": "current registry snapshot bound by registry_sha256; runtime2eb0d9db",
+        "classification": "inherited_exact",
+        "relative_to_438": "after_438_staged_or_later"
+      }
+    },
+    {
+      "note": "idenso-architecture",
+      "prose": "docs/architecture/idenso-architecture.typ",
+      "lifecycle": "current",
+      "status": "Implemented · reviewed 2026-10-05",
+      "base_scope": {
+        "path": "crates/idenso/src/lib.rs",
+        "symbol": "idenso::IndexTooling",
+        "anchor": "pub trait IndexTooling {",
+        "digest": "b6b8af1e73031ce2c7dc97185cc31f4a90c63d64"
+      },
+      "base_check": {
+        "status": "stale-digest",
+        "actual": "820fbf610c4bb06867a7013d0b8631e57704ff7d"
+      },
+      "base_file_blob": "820fbf610c4bb06867a7013d0b8631e57704ff7d",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "e8a84816478a3d8dbc437d10df37f7b05bf1f9f8",
+      "old_context_scope_check": {
+        "status": "stale-digest",
+        "actual": "e8a84816478a3d8dbc437d10df37f7b05bf1f9f8"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "crates/idenso/src/lib.rs",
+          "symbol": "idenso::IndexTooling",
+          "anchor": "pub trait IndexTooling {",
+          "digest": "e8a84816478a3d8dbc437d10df37f7b05bf1f9f8"
+        }
+      ],
+      "start_line": 194,
+      "end_line": null,
+      "action": "prose retained",
+      "attestation": "dirac_adjoint now requests explicit_index_occurrences, preserving conservative history before materialization. Native labels remain native. Existing syntax and Idenso notes already specify literal labels, reserved channels, anonymous-axis materialization and retained logical interfaces.",
+      "current_scope": {
+        "path": "crates/idenso/src/lib.rs",
+        "symbol": "idenso::IndexTooling",
+        "anchor": "pub trait IndexTooling {",
+        "digest": "820fbf610c4bb06867a7013d0b8631e57704ff7d"
+      },
+      "current_check": {
+        "status": "valid",
+        "actual": "820fbf610c4bb06867a7013d0b8631e57704ff7d"
+      },
+      "current_file_blob": "820fbf610c4bb06867a7013d0b8631e57704ff7d",
+      "current_start_line": 194,
+      "current_end_line": null,
+      "prose_evidence": "docs/architecture/idenso-architecture.typ",
+      "review_state": "implementation attestation; NEW independent Astra review pending",
+      "affected_registered_prose": {
+        "path": "docs/architecture/idenso-architecture.typ",
+        "base_ref": "a517ca563d78d161cff17fe60e661f80529c9a83",
+        "base_full_blob": "445bd44e5a082bb4b10efc526592be02f31817cb",
+        "candidate_full_blob": "fbc1cbdcd706407c866491631f679c4405c007d5",
+        "base_sections": [
+          {
+            "anchor": "== Core symbolic representation",
+            "start_line": 50,
+            "end_line_exclusive": 487,
+            "git_blob": "ff01a43a97b15088b62d19aba0817bd9e01392b5"
+          },
+          {
+            "anchor": "== Rewrite families and execution flow",
+            "start_line": 487,
+            "end_line_exclusive": 677,
+            "git_blob": "4fa776e7a0352674b5aeed79fb302f1aa4cd78d7"
+          },
+          {
+            "anchor": "== One symbolic contraction path",
+            "start_line": 677,
+            "end_line_exclusive": 752,
+            "git_blob": "066a9c9ebb1e0c6d4ea4d1963ec84199f5cb3468"
+          }
+        ],
+        "candidate_sections": [
+          {
+            "anchor": "== Core symbolic representation",
+            "start_line": 50,
+            "end_line_exclusive": 487,
+            "git_blob": "ff01a43a97b15088b62d19aba0817bd9e01392b5"
+          },
+          {
+            "anchor": "== Rewrite families and execution flow",
+            "start_line": 487,
+            "end_line_exclusive": 678,
+            "git_blob": "1aa44196e6d2f6e14f2a05ef898ef533af630253"
+          },
+          {
+            "anchor": "== One symbolic contraction path",
+            "start_line": 678,
+            "end_line_exclusive": 753,
+            "git_blob": "066a9c9ebb1e0c6d4ea4d1963ec84199f5cb3468"
+          }
+        ]
+      },
+      "original_source_file_blobs": [
+        {
+          "path": "crates/idenso/src/lib.rs",
+          "full_blob": "e8a84816478a3d8dbc437d10df37f7b05bf1f9f8"
+        }
+      ],
+      "scope_extent": "entire file; anchor is a unique presence witness",
+      "inherited_origin": {
+        "parent_audit_revision": "current registry snapshot bound by registry_sha256; runtime2eb0d9db",
+        "classification": "inherited_exact",
+        "relative_to_438": "inherited_failure_at_438"
+      }
+    },
+    {
+      "note": "idenso-architecture",
+      "prose": "docs/architecture/idenso-architecture.typ",
+      "lifecycle": "current",
+      "status": "Implemented · reviewed 2026-10-05",
+      "base_scope": {
+        "path": "crates/idenso/src/tensor/mod.rs",
+        "symbol": "idenso::tensor::SymbolicTensor",
+        "anchor": "pub struct SymbolicTensor<S = OrderedStructure<LibraryRep, AbstractIndex>, E = Atom> {",
+        "digest": "73043dc6e75efb7d9961f007520c75f29d45d5a8"
+      },
+      "base_check": {
+        "status": "stale-digest",
+        "actual": "b95ee5f1852b22a03b1fe79bfe4342d3c42e831e"
+      },
+      "base_file_blob": "b95ee5f1852b22a03b1fe79bfe4342d3c42e831e",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "f6aa7542185c7f83f9438d272e9ca1b5b289fe21",
+      "old_context_scope_check": {
+        "status": "stale-digest",
+        "actual": "f6aa7542185c7f83f9438d272e9ca1b5b289fe21"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "crates/idenso/src/tensor/mod.rs",
+          "symbol": "idenso::tensor::SymbolicTensor",
+          "anchor": "pub struct SymbolicTensor<S = OrderedStructure<LibraryRep, AbstractIndex>, E = Atom> {",
+          "digest": "f6aa7542185c7f83f9438d272e9ca1b5b289fe21"
+        }
+      ],
+      "start_line": 262,
+      "end_line": null,
+      "action": "prose retained",
+      "attestation": "Metadata-authoritative carriers retain Arc-backed occurrence facts across trusted algebra, raw/declaration boundaries validate, and Wrap preserves applicable proof state. Existing Idenso prose covers hidden zeros, dummy multiplicity, scoped axes, serialization and checked callback output; no re-inference from normalized payload.",
+      "current_scope": {
+        "path": "crates/idenso/src/tensor/mod.rs",
+        "symbol": "idenso::tensor::SymbolicTensor",
+        "anchor": "pub struct SymbolicTensor<S = OrderedStructure<LibraryRep, AbstractIndex>, E = Atom> {",
+        "digest": "b95ee5f1852b22a03b1fe79bfe4342d3c42e831e"
+      },
+      "current_check": {
+        "status": "valid",
+        "actual": "b95ee5f1852b22a03b1fe79bfe4342d3c42e831e"
+      },
+      "current_file_blob": "b95ee5f1852b22a03b1fe79bfe4342d3c42e831e",
+      "current_start_line": 262,
+      "current_end_line": null,
+      "prose_evidence": "docs/architecture/idenso-architecture.typ",
+      "review_state": "implementation attestation; NEW independent Astra review pending",
+      "affected_registered_prose": {
+        "path": "docs/architecture/idenso-architecture.typ",
+        "base_ref": "a517ca563d78d161cff17fe60e661f80529c9a83",
+        "base_full_blob": "445bd44e5a082bb4b10efc526592be02f31817cb",
+        "candidate_full_blob": "fbc1cbdcd706407c866491631f679c4405c007d5",
+        "base_sections": [
+          {
+            "anchor": "== Core symbolic representation",
+            "start_line": 50,
+            "end_line_exclusive": 487,
+            "git_blob": "ff01a43a97b15088b62d19aba0817bd9e01392b5"
+          },
+          {
+            "anchor": "== Rewrite families and execution flow",
+            "start_line": 487,
+            "end_line_exclusive": 677,
+            "git_blob": "4fa776e7a0352674b5aeed79fb302f1aa4cd78d7"
+          },
+          {
+            "anchor": "== One symbolic contraction path",
+            "start_line": 677,
+            "end_line_exclusive": 752,
+            "git_blob": "066a9c9ebb1e0c6d4ea4d1963ec84199f5cb3468"
+          }
+        ],
+        "candidate_sections": [
+          {
+            "anchor": "== Core symbolic representation",
+            "start_line": 50,
+            "end_line_exclusive": 487,
+            "git_blob": "ff01a43a97b15088b62d19aba0817bd9e01392b5"
+          },
+          {
+            "anchor": "== Rewrite families and execution flow",
+            "start_line": 487,
+            "end_line_exclusive": 678,
+            "git_blob": "1aa44196e6d2f6e14f2a05ef898ef533af630253"
+          },
+          {
+            "anchor": "== One symbolic contraction path",
+            "start_line": 678,
+            "end_line_exclusive": 753,
+            "git_blob": "066a9c9ebb1e0c6d4ea4d1963ec84199f5cb3468"
+          }
+        ]
+      },
+      "original_source_file_blobs": [
+        {
+          "path": "crates/idenso/src/tensor/mod.rs",
+          "full_blob": "f6aa7542185c7f83f9438d272e9ca1b5b289fe21"
+        }
+      ],
+      "scope_extent": "entire file; anchor is a unique presence witness",
+      "inherited_origin": {
+        "parent_audit_revision": "current registry snapshot bound by registry_sha256; runtime2eb0d9db",
+        "classification": "inherited_exact",
+        "relative_to_438": "inherited_failure_at_438"
+      }
+    },
+    {
+      "note": "idenso-architecture",
+      "prose": "docs/architecture/idenso-architecture.typ",
+      "lifecycle": "current",
+      "status": "Implemented · reviewed 2026-10-05",
+      "base_scope": {
+        "path": "crates/idenso/src/tensor/contract.rs",
+        "symbol": "idenso::tensor::ContractSettings",
+        "anchor": "pub struct ContractSettings<'a> {",
+        "digest": "94e9d8b2efc414ab4457e7f33d9e8ee4a41b439c"
+      },
+      "base_check": {
+        "status": "stale-digest",
+        "actual": "442fe89c0ec2fc603e7eeb88b73e69ad9e1b7e60"
+      },
+      "base_file_blob": "442fe89c0ec2fc603e7eeb88b73e69ad9e1b7e60",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "80401bae3bb93c4cde4721ae682d6f7f2091a596",
+      "old_context_scope_check": {
+        "status": "stale-digest",
+        "actual": "80401bae3bb93c4cde4721ae682d6f7f2091a596"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "crates/idenso/src/tensor/contract.rs",
+          "symbol": "idenso::tensor::ContractSettings",
+          "anchor": "pub struct ContractSettings<'a> {",
+          "digest": "80401bae3bb93c4cde4721ae682d6f7f2091a596"
+        }
+      ],
+      "start_line": 29,
+      "end_line": null,
+      "action": "prose retained",
+      "attestation": "Regional contraction retains enclosing conservative occurrence history via Arc rather than readmitting a shortened payload. Existing metadata/history and regional-contractor prose remains true, including bounded frontier and callback checks.",
+      "current_scope": {
+        "path": "crates/idenso/src/tensor/contract.rs",
+        "symbol": "idenso::tensor::ContractSettings",
+        "anchor": "pub struct ContractSettings<'a> {",
+        "digest": "442fe89c0ec2fc603e7eeb88b73e69ad9e1b7e60"
+      },
+      "current_check": {
+        "status": "valid",
+        "actual": "442fe89c0ec2fc603e7eeb88b73e69ad9e1b7e60"
+      },
+      "current_file_blob": "442fe89c0ec2fc603e7eeb88b73e69ad9e1b7e60",
+      "current_start_line": 29,
+      "current_end_line": null,
+      "prose_evidence": "docs/architecture/idenso-architecture.typ",
+      "review_state": "implementation attestation; NEW independent Astra review pending",
+      "affected_registered_prose": {
+        "path": "docs/architecture/idenso-architecture.typ",
+        "base_ref": "a517ca563d78d161cff17fe60e661f80529c9a83",
+        "base_full_blob": "445bd44e5a082bb4b10efc526592be02f31817cb",
+        "candidate_full_blob": "fbc1cbdcd706407c866491631f679c4405c007d5",
+        "base_sections": [
+          {
+            "anchor": "== Core symbolic representation",
+            "start_line": 50,
+            "end_line_exclusive": 487,
+            "git_blob": "ff01a43a97b15088b62d19aba0817bd9e01392b5"
+          },
+          {
+            "anchor": "== Rewrite families and execution flow",
+            "start_line": 487,
+            "end_line_exclusive": 677,
+            "git_blob": "4fa776e7a0352674b5aeed79fb302f1aa4cd78d7"
+          },
+          {
+            "anchor": "== One symbolic contraction path",
+            "start_line": 677,
+            "end_line_exclusive": 752,
+            "git_blob": "066a9c9ebb1e0c6d4ea4d1963ec84199f5cb3468"
+          }
+        ],
+        "candidate_sections": [
+          {
+            "anchor": "== Core symbolic representation",
+            "start_line": 50,
+            "end_line_exclusive": 487,
+            "git_blob": "ff01a43a97b15088b62d19aba0817bd9e01392b5"
+          },
+          {
+            "anchor": "== Rewrite families and execution flow",
+            "start_line": 487,
+            "end_line_exclusive": 678,
+            "git_blob": "1aa44196e6d2f6e14f2a05ef898ef533af630253"
+          },
+          {
+            "anchor": "== One symbolic contraction path",
+            "start_line": 678,
+            "end_line_exclusive": 753,
+            "git_blob": "066a9c9ebb1e0c6d4ea4d1963ec84199f5cb3468"
+          }
+        ]
+      },
+      "original_source_file_blobs": [
+        {
+          "path": "crates/idenso/src/tensor/contract.rs",
+          "full_blob": "80401bae3bb93c4cde4721ae682d6f7f2091a596"
+        }
+      ],
+      "scope_extent": "entire file; anchor is a unique presence witness",
+      "inherited_origin": {
+        "parent_audit_revision": "current registry snapshot bound by registry_sha256; runtime2eb0d9db",
+        "classification": "inherited_exact",
+        "relative_to_438": "inherited_failure_at_438"
+      }
+    },
+    {
+      "note": "idenso-architecture",
+      "prose": "docs/architecture/idenso-architecture.typ",
+      "lifecycle": "current",
+      "status": "Implemented · reviewed 2026-10-05",
+      "base_scope": {
+        "path": "crates/idenso/src/tensor/simplification.rs",
+        "symbol": "idenso::tensor::AlgebraSettings",
+        "anchor": "pub struct AlgebraSettings {",
+        "digest": "3a0628ea619e65a4c7e10e270e7a4aa29fd4e07b"
+      },
+      "base_check": {
+        "status": "stale-digest",
+        "actual": "49ae6d4398bf4decc931f01d09ef49e69f64996f"
+      },
+      "base_file_blob": "49ae6d4398bf4decc931f01d09ef49e69f64996f",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "a778416283ff9e9838a64a6c03ed24d2ec102ba5",
+      "old_context_scope_check": {
+        "status": "stale-digest",
+        "actual": "a778416283ff9e9838a64a6c03ed24d2ec102ba5"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "crates/idenso/src/tensor/simplification.rs",
+          "symbol": "idenso::tensor::AlgebraSettings",
+          "anchor": "pub struct AlgebraSettings {",
+          "digest": "4969892c1c56ffb37acd8c45bc58165f39b1c12c"
+        }
+      ],
+      "start_line": 51,
+      "end_line": null,
+      "action": "prose retained",
+      "attestation": "Planner requires explicit occurrence history and colour selects actual identity seeds. Existing colour policy/completion prose covers enabled families, terminal rows, disabled traces, coefficients, foreign spectators and revocation; no claim of all-physics completion.",
+      "current_scope": {
+        "path": "crates/idenso/src/tensor/simplification.rs",
+        "symbol": "idenso::tensor::AlgebraSettings",
+        "anchor": "pub struct AlgebraSettings {",
+        "digest": "49ae6d4398bf4decc931f01d09ef49e69f64996f"
+      },
+      "current_check": {
+        "status": "valid",
+        "actual": "49ae6d4398bf4decc931f01d09ef49e69f64996f"
+      },
+      "current_file_blob": "49ae6d4398bf4decc931f01d09ef49e69f64996f",
+      "current_start_line": 51,
+      "current_end_line": null,
+      "prose_evidence": "docs/architecture/idenso-architecture.typ",
+      "review_state": "implementation attestation; NEW independent Astra review pending",
+      "affected_registered_prose": {
+        "path": "docs/architecture/idenso-architecture.typ",
+        "base_ref": "a517ca563d78d161cff17fe60e661f80529c9a83",
+        "base_full_blob": "445bd44e5a082bb4b10efc526592be02f31817cb",
+        "candidate_full_blob": "fbc1cbdcd706407c866491631f679c4405c007d5",
+        "base_sections": [
+          {
+            "anchor": "== Core symbolic representation",
+            "start_line": 50,
+            "end_line_exclusive": 487,
+            "git_blob": "ff01a43a97b15088b62d19aba0817bd9e01392b5"
+          },
+          {
+            "anchor": "== Rewrite families and execution flow",
+            "start_line": 487,
+            "end_line_exclusive": 677,
+            "git_blob": "4fa776e7a0352674b5aeed79fb302f1aa4cd78d7"
+          },
+          {
+            "anchor": "== One symbolic contraction path",
+            "start_line": 677,
+            "end_line_exclusive": 752,
+            "git_blob": "066a9c9ebb1e0c6d4ea4d1963ec84199f5cb3468"
+          }
+        ],
+        "candidate_sections": [
+          {
+            "anchor": "== Core symbolic representation",
+            "start_line": 50,
+            "end_line_exclusive": 487,
+            "git_blob": "ff01a43a97b15088b62d19aba0817bd9e01392b5"
+          },
+          {
+            "anchor": "== Rewrite families and execution flow",
+            "start_line": 487,
+            "end_line_exclusive": 678,
+            "git_blob": "1aa44196e6d2f6e14f2a05ef898ef533af630253"
+          },
+          {
+            "anchor": "== One symbolic contraction path",
+            "start_line": 678,
+            "end_line_exclusive": 753,
+            "git_blob": "066a9c9ebb1e0c6d4ea4d1963ec84199f5cb3468"
+          }
+        ]
+      },
+      "original_source_file_blobs": [
+        {
+          "path": "crates/idenso/src/tensor/simplification.rs",
+          "full_blob": "a778416283ff9e9838a64a6c03ed24d2ec102ba5"
+        }
+      ],
+      "scope_extent": "entire file; anchor is a unique presence witness",
+      "inherited_origin": {
+        "parent_audit_revision": "current registry snapshot bound by registry_sha256; runtime2eb0d9db",
+        "classification": "inherited_exact",
+        "relative_to_438": "inherited_failure_at_438"
+      }
+    },
+    {
+      "note": "idenso-architecture",
+      "prose": "docs/architecture/idenso-architecture.typ",
+      "lifecycle": "current",
+      "status": "Implemented · reviewed 2026-10-05",
+      "base_scope": {
+        "path": "crates/idenso/src/tensor/collection/collected.rs",
+        "symbol": "idenso::tensor::CollectedOutput",
+        "anchor": "pub(crate) struct CollectedOutput",
+        "digest": "de3aeb2b35712816908c6f6490d548e46cb864ba"
+      },
+      "base_check": {
+        "status": "stale-digest",
+        "actual": "ca8c5cb4f9dd9ee5152cbb94df6c8d919e098c35"
+      },
+      "base_file_blob": "ca8c5cb4f9dd9ee5152cbb94df6c8d919e098c35",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": null,
+      "old_context_scope_check": {
+        "status": "missing-source"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [],
+      "start_line": 38,
+      "end_line": null,
+      "action": "owner link corrected",
+      "attestation": "Exact rational collector uses opaque source sums, preserved colour decompositions, imaginary-unit temporary variables, polynomial coefficient normalization and fallback for unsupported domains/degrees. Existing detailed completion prose matches this owner; link CollectedOutput explicitly without changing its claims.",
+      "current_scope": {
+        "path": "crates/idenso/src/tensor/collection/collected.rs",
+        "symbol": "idenso::tensor::CollectedOutput",
+        "anchor": "pub(crate) struct CollectedOutput",
+        "digest": "ca8c5cb4f9dd9ee5152cbb94df6c8d919e098c35"
+      },
+      "current_check": {
+        "status": "valid",
+        "actual": "ca8c5cb4f9dd9ee5152cbb94df6c8d919e098c35"
+      },
+      "current_file_blob": "ca8c5cb4f9dd9ee5152cbb94df6c8d919e098c35",
+      "current_start_line": 38,
+      "current_end_line": null,
+      "prose_evidence": "docs/architecture/idenso-architecture.typ",
+      "review_state": "implementation attestation; NEW independent Astra review pending",
+      "affected_registered_prose": {
+        "path": "docs/architecture/idenso-architecture.typ",
+        "base_ref": "a517ca563d78d161cff17fe60e661f80529c9a83",
+        "base_full_blob": "445bd44e5a082bb4b10efc526592be02f31817cb",
+        "candidate_full_blob": "fbc1cbdcd706407c866491631f679c4405c007d5",
+        "base_sections": [
+          {
+            "anchor": "== Core symbolic representation",
+            "start_line": 50,
+            "end_line_exclusive": 487,
+            "git_blob": "ff01a43a97b15088b62d19aba0817bd9e01392b5"
+          },
+          {
+            "anchor": "== Rewrite families and execution flow",
+            "start_line": 487,
+            "end_line_exclusive": 677,
+            "git_blob": "4fa776e7a0352674b5aeed79fb302f1aa4cd78d7"
+          },
+          {
+            "anchor": "== One symbolic contraction path",
+            "start_line": 677,
+            "end_line_exclusive": 752,
+            "git_blob": "066a9c9ebb1e0c6d4ea4d1963ec84199f5cb3468"
+          }
+        ],
+        "candidate_sections": [
+          {
+            "anchor": "== Core symbolic representation",
+            "start_line": 50,
+            "end_line_exclusive": 487,
+            "git_blob": "ff01a43a97b15088b62d19aba0817bd9e01392b5"
+          },
+          {
+            "anchor": "== Rewrite families and execution flow",
+            "start_line": 487,
+            "end_line_exclusive": 678,
+            "git_blob": "1aa44196e6d2f6e14f2a05ef898ef533af630253"
+          },
+          {
+            "anchor": "== One symbolic contraction path",
+            "start_line": 678,
+            "end_line_exclusive": 753,
+            "git_blob": "066a9c9ebb1e0c6d4ea4d1963ec84199f5cb3468"
+          }
+        ]
+      },
+      "original_source_file_blobs": [],
+      "scope_extent": "entire file; anchor is a unique presence witness",
+      "inherited_origin": {
+        "parent_audit_revision": "current registry snapshot bound by registry_sha256; runtime2eb0d9db",
+        "classification": "inherited_exact",
+        "relative_to_438": "inherited_failure_at_438"
+      }
+    },
+    {
+      "note": "idenso-architecture",
+      "prose": "docs/architecture/idenso-architecture.typ",
+      "lifecycle": "current",
+      "status": "Implemented · reviewed 2026-10-05",
+      "base_scope": {
+        "path": "crates/idenso/src/tensor/collection.rs",
+        "symbol": "idenso::tensor::SymbolicTensor::collect_with_map",
+        "anchor": "    pub(crate) fn collect_with_map(",
+        "end_anchor": "    fn collection_observations(",
+        "digest": "fea694882a4b5be3160175636d9ecaeaa1b6ecfe"
+      },
+      "base_check": {
+        "status": "stale-digest",
+        "actual": "8f078f8c9d4f7fd1fea495180aa1185894b5cfa3"
+      },
+      "base_file_blob": "291e0ed07a3590e382421bb35f9b1dddf2bf1eea",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "1ad022076861d32aeb26716ceca465f381072d7d",
+      "old_context_scope_check": {
+        "status": "valid",
+        "actual": "fea694882a4b5be3160175636d9ecaeaa1b6ecfe"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [],
+      "start_line": 959,
+      "end_line": 1315,
+      "action": "prose retained",
+      "attestation": "Selected tape factors and powers transport exact interface and occurrence history; dummy renaming separates scopes and terminal outputs use shared collector. Existing Idenso collection, source-attached algebra and colour completion sections describe these invariants.",
+      "current_scope": {
+        "path": "crates/idenso/src/tensor/collection.rs",
+        "symbol": "idenso::tensor::SymbolicTensor::collect_with_map",
+        "anchor": "    pub(crate) fn collect_with_map(",
+        "end_anchor": "    fn collection_observations(",
+        "digest": "8f078f8c9d4f7fd1fea495180aa1185894b5cfa3"
+      },
+      "current_check": {
+        "status": "valid",
+        "actual": "8f078f8c9d4f7fd1fea495180aa1185894b5cfa3"
+      },
+      "current_file_blob": "291e0ed07a3590e382421bb35f9b1dddf2bf1eea",
+      "current_start_line": 959,
+      "current_end_line": 1315,
+      "prose_evidence": "docs/architecture/idenso-architecture.typ",
+      "review_state": "implementation attestation; NEW independent Astra review pending",
+      "affected_registered_prose": {
+        "path": "docs/architecture/idenso-architecture.typ",
+        "base_ref": "a517ca563d78d161cff17fe60e661f80529c9a83",
+        "base_full_blob": "445bd44e5a082bb4b10efc526592be02f31817cb",
+        "candidate_full_blob": "fbc1cbdcd706407c866491631f679c4405c007d5",
+        "base_sections": [
+          {
+            "anchor": "== Core symbolic representation",
+            "start_line": 50,
+            "end_line_exclusive": 487,
+            "git_blob": "ff01a43a97b15088b62d19aba0817bd9e01392b5"
+          },
+          {
+            "anchor": "== Rewrite families and execution flow",
+            "start_line": 487,
+            "end_line_exclusive": 677,
+            "git_blob": "4fa776e7a0352674b5aeed79fb302f1aa4cd78d7"
+          },
+          {
+            "anchor": "== One symbolic contraction path",
+            "start_line": 677,
+            "end_line_exclusive": 752,
+            "git_blob": "066a9c9ebb1e0c6d4ea4d1963ec84199f5cb3468"
+          }
+        ],
+        "candidate_sections": [
+          {
+            "anchor": "== Core symbolic representation",
+            "start_line": 50,
+            "end_line_exclusive": 487,
+            "git_blob": "ff01a43a97b15088b62d19aba0817bd9e01392b5"
+          },
+          {
+            "anchor": "== Rewrite families and execution flow",
+            "start_line": 487,
+            "end_line_exclusive": 678,
+            "git_blob": "1aa44196e6d2f6e14f2a05ef898ef533af630253"
+          },
+          {
+            "anchor": "== One symbolic contraction path",
+            "start_line": 678,
+            "end_line_exclusive": 753,
+            "git_blob": "066a9c9ebb1e0c6d4ea4d1963ec84199f5cb3468"
+          }
+        ]
+      },
+      "original_source_file_blobs": [],
+      "scope_extent": "half-open UTF-8 anchor range",
+      "inherited_origin": {
+        "parent_audit_revision": "current registry snapshot bound by registry_sha256; runtime2eb0d9db",
+        "classification": "inherited_exact",
+        "relative_to_438": "inherited_failure_at_438"
+      }
+    },
+    {
+      "note": "linnet-architecture",
+      "prose": "docs/architecture/linnet-architecture.typ",
+      "lifecycle": "current",
+      "status": "Implemented · reviewed 2026-08-18",
+      "base_scope": {
+        "path": "crates/linnet/src/half_edge.rs",
+        "symbol": "linnet::half_edge::HedgeGraph",
+        "anchor": "pub struct HedgeGraph<E, V, H = NoData, S: NodeStorage<NodeData = V> = DefaultNodeStore<V>> {",
+        "digest": "ab9af84a52f5a11adfd57083fb87d524b28bdd55"
+      },
+      "base_check": {
+        "status": "missing-or-ambiguous-anchor"
+      },
+      "base_file_blob": "cf395f5b3af0a5aa69450792745aa7f568ccd2e3",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "863720b19d8df9505ae9744cec947c9f13b5ae25",
+      "old_context_scope_check": {
+        "status": "missing-or-ambiguous-anchor"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "crates/linnet/src/half_edge.rs",
+          "symbol": "linnet::half_edge::HedgeGraph",
+          "anchor": "pub struct HedgeGraph<E, V, H = NoData, N: Topology = NodeForest> {",
+          "digest": "863720b19d8df9505ae9744cec947c9f13b5ae25"
+        }
+      ],
+      "start_line": null,
+      "end_line": null,
+      "action": "anchor corrected; prose retained",
+      "attestation": "Current HedgeGraph<E,V,H,N:Topology=NodeForest> owns three synchronized stores. Existing prose already documents NodeForest live/bound counts, stable absorbed slots, remaps and tail-fill contracts; do not restore NodeStorage compatibility.",
+      "current_scope": {
+        "path": "crates/linnet/src/half_edge.rs",
+        "symbol": "linnet::half_edge::HedgeGraph",
+        "anchor": "pub struct HedgeGraph<E, V, H = NoData, N: Topology = NodeForest> {",
+        "digest": "cf395f5b3af0a5aa69450792745aa7f568ccd2e3"
+      },
+      "current_check": {
+        "status": "valid",
+        "actual": "cf395f5b3af0a5aa69450792745aa7f568ccd2e3"
+      },
+      "current_file_blob": "cf395f5b3af0a5aa69450792745aa7f568ccd2e3",
+      "current_start_line": 269,
+      "current_end_line": null,
+      "prose_evidence": "docs/architecture/linnet-architecture.typ",
+      "review_state": "implementation attestation; NEW independent Astra review pending",
+      "affected_registered_prose": {
+        "path": "docs/architecture/linnet-architecture.typ",
+        "base_ref": "a517ca563d78d161cff17fe60e661f80529c9a83",
+        "base_full_blob": "e32e6945ff3d32dec068998e958352859a722e24",
+        "candidate_full_blob": "e32e6945ff3d32dec068998e958352859a722e24",
+        "base_sections": [
+          {
+            "anchor": "== Core representation",
+            "start_line": 32,
+            "end_line_exclusive": 83,
+            "git_blob": "7bf4f68daea9dc4cea7f84dc329e6cfd07904cf4"
+          },
+          {
+            "anchor": "== Construction and data flow",
+            "start_line": 83,
+            "end_line_exclusive": 181,
+            "git_blob": "8f03fa7f63420e8fcfea01c0942c1b949068f8c9"
+          }
+        ],
+        "candidate_sections": [
+          {
+            "anchor": "== Core representation",
+            "start_line": 32,
+            "end_line_exclusive": 83,
+            "git_blob": "7bf4f68daea9dc4cea7f84dc329e6cfd07904cf4"
+          },
+          {
+            "anchor": "== Construction and data flow",
+            "start_line": 83,
+            "end_line_exclusive": 181,
+            "git_blob": "8f03fa7f63420e8fcfea01c0942c1b949068f8c9"
+          }
+        ]
+      },
+      "original_source_file_blobs": [
+        {
+          "path": "crates/linnet/src/half_edge.rs",
+          "full_blob": "863720b19d8df9505ae9744cec947c9f13b5ae25"
+        }
+      ],
+      "scope_extent": "entire file; anchor is a unique presence witness",
+      "inherited_origin": {
+        "parent_audit_revision": "current registry snapshot bound by registry_sha256; runtime2eb0d9db",
+        "classification": "inherited_exact",
+        "relative_to_438": "after_438_staged_or_later"
+      }
+    },
+    {
+      "note": "linnet-architecture",
+      "prose": "docs/architecture/linnet-architecture.typ",
+      "lifecycle": "current",
+      "status": "Implemented · reviewed 2026-08-18",
+      "base_scope": {
+        "path": "crates/linnet/src/half_edge/involution.rs",
+        "symbol": "linnet::half_edge::involution::Involution",
+        "anchor": "pub struct Involution<E = EdgeIndex> {",
+        "digest": "cb55dd1e057261356f1f2fdce9808b2252fc55ae"
+      },
+      "base_check": {
+        "status": "stale-digest",
+        "actual": "2a5162885ac2e05dc8a1ec79d5fec555a9f6ed36"
+      },
+      "base_file_blob": "2a5162885ac2e05dc8a1ec79d5fec555a9f6ed36",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "c88ce8d1e530579cbc241417348932be1066712b",
+      "old_context_scope_check": {
+        "status": "stale-digest",
+        "actual": "c88ce8d1e530579cbc241417348932be1066712b"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "crates/linnet/src/half_edge/involution.rs",
+          "symbol": "linnet::half_edge::involution::Involution",
+          "anchor": "pub struct Involution<E = EdgeIndex> {",
+          "digest": "c88ce8d1e530579cbc241417348932be1066712b"
+        }
+      ],
+      "start_line": 1504,
+      "end_line": null,
+      "action": "prose retained",
+      "attestation": "Import regrouping preserves pairing/fixed points, flow/orientation and exact fused iterator order. Existing kernel and iterator prose remains true.",
+      "current_scope": {
+        "path": "crates/linnet/src/half_edge/involution.rs",
+        "symbol": "linnet::half_edge::involution::Involution",
+        "anchor": "pub struct Involution<E = EdgeIndex> {",
+        "digest": "2a5162885ac2e05dc8a1ec79d5fec555a9f6ed36"
+      },
+      "current_check": {
+        "status": "valid",
+        "actual": "2a5162885ac2e05dc8a1ec79d5fec555a9f6ed36"
+      },
+      "current_file_blob": "2a5162885ac2e05dc8a1ec79d5fec555a9f6ed36",
+      "current_start_line": 1504,
+      "current_end_line": null,
+      "prose_evidence": "docs/architecture/linnet-architecture.typ",
+      "review_state": "implementation attestation; NEW independent Astra review pending",
+      "affected_registered_prose": {
+        "path": "docs/architecture/linnet-architecture.typ",
+        "base_ref": "a517ca563d78d161cff17fe60e661f80529c9a83",
+        "base_full_blob": "e32e6945ff3d32dec068998e958352859a722e24",
+        "candidate_full_blob": "e32e6945ff3d32dec068998e958352859a722e24",
+        "base_sections": [
+          {
+            "anchor": "== Core representation",
+            "start_line": 32,
+            "end_line_exclusive": 83,
+            "git_blob": "7bf4f68daea9dc4cea7f84dc329e6cfd07904cf4"
+          },
+          {
+            "anchor": "== Construction and data flow",
+            "start_line": 83,
+            "end_line_exclusive": 181,
+            "git_blob": "8f03fa7f63420e8fcfea01c0942c1b949068f8c9"
+          }
+        ],
+        "candidate_sections": [
+          {
+            "anchor": "== Core representation",
+            "start_line": 32,
+            "end_line_exclusive": 83,
+            "git_blob": "7bf4f68daea9dc4cea7f84dc329e6cfd07904cf4"
+          },
+          {
+            "anchor": "== Construction and data flow",
+            "start_line": 83,
+            "end_line_exclusive": 181,
+            "git_blob": "8f03fa7f63420e8fcfea01c0942c1b949068f8c9"
+          }
+        ]
+      },
+      "original_source_file_blobs": [
+        {
+          "path": "crates/linnet/src/half_edge/involution.rs",
+          "full_blob": "c88ce8d1e530579cbc241417348932be1066712b"
+        }
+      ],
+      "scope_extent": "entire file; anchor is a unique presence witness",
+      "inherited_origin": {
+        "parent_audit_revision": "current registry snapshot bound by registry_sha256; runtime2eb0d9db",
+        "classification": "inherited_exact",
+        "relative_to_438": "after_438_staged_or_later"
+      }
+    },
+    {
+      "note": "linnet-architecture",
+      "prose": "docs/architecture/linnet-architecture.typ",
+      "lifecycle": "current",
+      "status": "Implemented · reviewed 2026-08-18",
+      "base_scope": {
+        "path": "crates/linnet/src/half_edge/subgraph.rs",
+        "symbol": "linnet::half_edge::subgraph::SubGraphLike",
+        "anchor": "pub trait SubGraphLike: SubSetLike<Hedge> + Inclusion<HedgePair> {",
+        "digest": "61c2d5f958487a63d422201ad7d71a77840f90a7"
+      },
+      "base_check": {
+        "status": "stale-digest",
+        "actual": "929ee2f716f95ba3a0bf7a9afdb8f8bf2a458765"
+      },
+      "base_file_blob": "929ee2f716f95ba3a0bf7a9afdb8f8bf2a458765",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "4af5c3576c8627693125162108c9c7f209c45c0b",
+      "old_context_scope_check": {
+        "status": "stale-digest",
+        "actual": "4af5c3576c8627693125162108c9c7f209c45c0b"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "crates/linnet/src/half_edge/subgraph.rs",
+          "symbol": "linnet::half_edge::subgraph::SubGraphLike",
+          "anchor": "pub trait SubGraphLike: SubSetLike<Hedge> + Inclusion<HedgePair> {",
+          "digest": "4af5c3576c8627693125162108c9c7f209c45c0b"
+        }
+      ],
+      "start_line": 228,
+      "end_line": null,
+      "action": "prose retained",
+      "attestation": "Topology imports, subset iterator re-export and DotIndent presentation preserve subset membership, split crossing edges and inclusion; existing subgraph prose remains true.",
+      "current_scope": {
+        "path": "crates/linnet/src/half_edge/subgraph.rs",
+        "symbol": "linnet::half_edge::subgraph::SubGraphLike",
+        "anchor": "pub trait SubGraphLike: SubSetLike<Hedge> + Inclusion<HedgePair> {",
+        "digest": "929ee2f716f95ba3a0bf7a9afdb8f8bf2a458765"
+      },
+      "current_check": {
+        "status": "valid",
+        "actual": "929ee2f716f95ba3a0bf7a9afdb8f8bf2a458765"
+      },
+      "current_file_blob": "929ee2f716f95ba3a0bf7a9afdb8f8bf2a458765",
+      "current_start_line": 228,
+      "current_end_line": null,
+      "prose_evidence": "docs/architecture/linnet-architecture.typ",
+      "review_state": "implementation attestation; NEW independent Astra review pending",
+      "affected_registered_prose": {
+        "path": "docs/architecture/linnet-architecture.typ",
+        "base_ref": "a517ca563d78d161cff17fe60e661f80529c9a83",
+        "base_full_blob": "e32e6945ff3d32dec068998e958352859a722e24",
+        "candidate_full_blob": "e32e6945ff3d32dec068998e958352859a722e24",
+        "base_sections": [
+          {
+            "anchor": "== Core representation",
+            "start_line": 32,
+            "end_line_exclusive": 83,
+            "git_blob": "7bf4f68daea9dc4cea7f84dc329e6cfd07904cf4"
+          },
+          {
+            "anchor": "== Construction and data flow",
+            "start_line": 83,
+            "end_line_exclusive": 181,
+            "git_blob": "8f03fa7f63420e8fcfea01c0942c1b949068f8c9"
+          }
+        ],
+        "candidate_sections": [
+          {
+            "anchor": "== Core representation",
+            "start_line": 32,
+            "end_line_exclusive": 83,
+            "git_blob": "7bf4f68daea9dc4cea7f84dc329e6cfd07904cf4"
+          },
+          {
+            "anchor": "== Construction and data flow",
+            "start_line": 83,
+            "end_line_exclusive": 181,
+            "git_blob": "8f03fa7f63420e8fcfea01c0942c1b949068f8c9"
+          }
+        ]
+      },
+      "original_source_file_blobs": [
+        {
+          "path": "crates/linnet/src/half_edge/subgraph.rs",
+          "full_blob": "4af5c3576c8627693125162108c9c7f209c45c0b"
+        }
+      ],
+      "scope_extent": "entire file; anchor is a unique presence witness",
+      "inherited_origin": {
+        "parent_audit_revision": "current registry snapshot bound by registry_sha256; runtime2eb0d9db",
+        "classification": "inherited_exact",
+        "relative_to_438": "after_438_staged_or_later"
+      }
+    },
+    {
+      "note": "linnet-architecture",
+      "prose": "docs/architecture/linnet-architecture.typ",
+      "lifecycle": "current",
+      "status": "Implemented · reviewed 2026-08-18",
+      "base_scope": {
+        "path": "crates/linnet/src/parser/mod.rs",
+        "symbol": "linnet::parser::DotGraph",
+        "anchor": "pub struct DotGraph<N: NodeStorage<NodeData = DotVertexData> = DefaultNodeStore<DotVertexData>> {",
+        "digest": "075b13acb171934ea04a1ef527db0bd6a9e40025"
+      },
+      "base_check": {
+        "status": "missing-or-ambiguous-anchor"
+      },
+      "base_file_blob": "6667c3527c7ae3fa85946116341b8ee78c0e87a8",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "d92bbc5354811ac7dc2d5be5e0956a9f5919d8db",
+      "old_context_scope_check": {
+        "status": "missing-or-ambiguous-anchor"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "crates/linnet/src/parser/mod.rs",
+          "symbol": "linnet::parser::DotGraph",
+          "anchor": "pub struct DotGraph<N: Topology = NodeForest> {",
+          "digest": "d92bbc5354811ac7dc2d5be5e0956a9f5919d8db"
+        }
+      ],
+      "start_line": null,
+      "end_line": null,
+      "action": "anchor corrected; prose retained",
+      "attestation": "DotGraph<N:Topology=NodeForest> uses current native topology; parser pipeline and multiline literal whitespace/quoting remain documented. No generic NodeStorage owner is restored.",
+      "current_scope": {
+        "path": "crates/linnet/src/parser/mod.rs",
+        "symbol": "linnet::parser::DotGraph",
+        "anchor": "pub struct DotGraph<N: Topology = NodeForest> {",
+        "digest": "6667c3527c7ae3fa85946116341b8ee78c0e87a8"
+      },
+      "current_check": {
+        "status": "valid",
+        "actual": "6667c3527c7ae3fa85946116341b8ee78c0e87a8"
+      },
+      "current_file_blob": "6667c3527c7ae3fa85946116341b8ee78c0e87a8",
+      "current_start_line": 212,
+      "current_end_line": null,
+      "prose_evidence": "docs/architecture/linnet-architecture.typ",
+      "review_state": "implementation attestation; NEW independent Astra review pending",
+      "affected_registered_prose": {
+        "path": "docs/architecture/linnet-architecture.typ",
+        "base_ref": "a517ca563d78d161cff17fe60e661f80529c9a83",
+        "base_full_blob": "e32e6945ff3d32dec068998e958352859a722e24",
+        "candidate_full_blob": "e32e6945ff3d32dec068998e958352859a722e24",
+        "base_sections": [
+          {
+            "anchor": "== Core representation",
+            "start_line": 32,
+            "end_line_exclusive": 83,
+            "git_blob": "7bf4f68daea9dc4cea7f84dc329e6cfd07904cf4"
+          },
+          {
+            "anchor": "== Construction and data flow",
+            "start_line": 83,
+            "end_line_exclusive": 181,
+            "git_blob": "8f03fa7f63420e8fcfea01c0942c1b949068f8c9"
+          }
+        ],
+        "candidate_sections": [
+          {
+            "anchor": "== Core representation",
+            "start_line": 32,
+            "end_line_exclusive": 83,
+            "git_blob": "7bf4f68daea9dc4cea7f84dc329e6cfd07904cf4"
+          },
+          {
+            "anchor": "== Construction and data flow",
+            "start_line": 83,
+            "end_line_exclusive": 181,
+            "git_blob": "8f03fa7f63420e8fcfea01c0942c1b949068f8c9"
+          }
+        ]
+      },
+      "original_source_file_blobs": [
+        {
+          "path": "crates/linnet/src/parser/mod.rs",
+          "full_blob": "d92bbc5354811ac7dc2d5be5e0956a9f5919d8db"
+        }
+      ],
+      "scope_extent": "entire file; anchor is a unique presence witness",
+      "inherited_origin": {
+        "parent_audit_revision": "current registry snapshot bound by registry_sha256; runtime2eb0d9db",
+        "classification": "inherited_exact",
+        "relative_to_438": "after_438_staged_or_later"
+      }
+    },
+    {
+      "note": "cff-surface-cache-ownership",
+      "prose": "docs/architecture/cff-surface-cache-ownership.typ",
+      "lifecycle": "current",
+      "status": "Implemented",
+      "base_scope": {
+        "path": "crates/feynkit-cff/src/generation.rs",
+        "symbol": "feynkit_cff::CffGenerator::generate_into",
+        "anchor": "pub fn generate_into(",
+        "digest": "89000ab1668f83dfb3b32351e6dbed65e0d5c91e"
+      },
+      "base_check": {
+        "status": "stale-digest",
+        "actual": "47ea515ff9c91e24d6f6b501da289996a06dfe9a"
+      },
+      "base_file_blob": "47ea515ff9c91e24d6f6b501da289996a06dfe9a",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "c969c39fa2b53c96dca20da8666891953d0638ed",
+      "old_context_scope_check": {
+        "status": "stale-digest",
+        "actual": "c969c39fa2b53c96dca20da8666891953d0638ed"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "crates/feynkit-cff/src/generation.rs",
+          "symbol": "feynkit_cff::CffGenerator::generate_into",
+          "anchor": "pub fn generate_into(",
+          "digest": "c969c39fa2b53c96dca20da8666891953d0638ed"
+        }
+      ],
+      "start_line": 541,
+      "end_line": null,
+      "action": "prose retained",
+      "attestation": "Only import regrouping since original source context; shared generalized recursion and caller-owned standalone SurfaceCache semantics remain unchanged.",
+      "current_scope": {
+        "path": "crates/feynkit-cff/src/generation.rs",
+        "symbol": "feynkit_cff::CffGenerator::generate_into",
+        "anchor": "pub fn generate_into(",
+        "digest": "47ea515ff9c91e24d6f6b501da289996a06dfe9a"
+      },
+      "current_check": {
+        "status": "valid",
+        "actual": "47ea515ff9c91e24d6f6b501da289996a06dfe9a"
+      },
+      "current_file_blob": "47ea515ff9c91e24d6f6b501da289996a06dfe9a",
+      "current_start_line": 541,
+      "current_end_line": null,
+      "prose_evidence": "docs/architecture/cff-surface-cache-ownership.typ",
+      "review_state": "implementation attestation; NEW independent Astra review pending",
+      "affected_registered_prose": {
+        "path": "docs/architecture/cff-surface-cache-ownership.typ",
+        "base_ref": "a517ca563d78d161cff17fe60e661f80529c9a83",
+        "base_full_blob": "2a3ce172eb6799412f445cc1f24e1953682dc617",
+        "candidate_full_blob": "2a3ce172eb6799412f445cc1f24e1953682dc617",
+        "base_sections": [
+          {
+            "anchor": "= CFF surface-cache ownership",
+            "start_line": 1,
+            "end_line_exclusive": 3,
+            "git_blob": "51078ec08cfc6bb75300887684a1799fb15e527c"
+          }
+        ],
+        "candidate_sections": [
+          {
+            "anchor": "= CFF surface-cache ownership",
+            "start_line": 1,
+            "end_line_exclusive": 3,
+            "git_blob": "51078ec08cfc6bb75300887684a1799fb15e527c"
+          }
+        ]
+      },
+      "original_source_file_blobs": [
+        {
+          "path": "crates/feynkit-cff/src/generation.rs",
+          "full_blob": "c969c39fa2b53c96dca20da8666891953d0638ed"
+        }
+      ],
+      "scope_extent": "entire file; anchor is a unique presence witness",
+      "inherited_origin": {
+        "parent_audit_revision": "current registry snapshot bound by registry_sha256; runtime2eb0d9db",
+        "classification": "inherited_exact",
+        "relative_to_438": "after_438_staged_or_later"
+      }
+    },
+    {
+      "note": "cff-surface-cache-ownership",
+      "prose": "docs/architecture/cff-surface-cache-ownership.typ",
+      "lifecycle": "current",
+      "status": "Implemented",
+      "base_scope": {
+        "path": "crates/feynkit-cff/src/surface.rs",
+        "symbol": "feynkit_cff::SurfaceCache",
+        "anchor": "pub struct SurfaceCache {",
+        "digest": "e35249fe2ae3d1ed12cd9c5059e7a9f42f56eb51"
+      },
+      "base_check": {
+        "status": "stale-digest",
+        "actual": "cf07dd60f15885153560f050d552600cfb19034a"
+      },
+      "base_file_blob": "cf07dd60f15885153560f050d552600cfb19034a",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "d051c576cbaefe711ce1a5ece5c31f061b1ed8b8",
+      "old_context_scope_check": {
+        "status": "stale-digest",
+        "actual": "d051c576cbaefe711ce1a5ece5c31f061b1ed8b8"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "crates/feynkit-cff/src/surface.rs",
+          "symbol": "feynkit_cff::SurfaceCache",
+          "anchor": "pub struct SurfaceCache {",
+          "digest": "d051c576cbaefe711ce1a5ece5c31f061b1ed8b8"
+        }
+      ],
+      "start_line": 430,
+      "end_line": null,
+      "action": "prose retained",
+      "attestation": "Only import regrouping since original source context; append-only arena IDs and explicit SurfaceIdMap merge/remap remain unchanged.",
+      "current_scope": {
+        "path": "crates/feynkit-cff/src/surface.rs",
+        "symbol": "feynkit_cff::SurfaceCache",
+        "anchor": "pub struct SurfaceCache {",
+        "digest": "cf07dd60f15885153560f050d552600cfb19034a"
+      },
+      "current_check": {
+        "status": "valid",
+        "actual": "cf07dd60f15885153560f050d552600cfb19034a"
+      },
+      "current_file_blob": "cf07dd60f15885153560f050d552600cfb19034a",
+      "current_start_line": 430,
+      "current_end_line": null,
+      "prose_evidence": "docs/architecture/cff-surface-cache-ownership.typ",
+      "review_state": "implementation attestation; NEW independent Astra review pending",
+      "affected_registered_prose": {
+        "path": "docs/architecture/cff-surface-cache-ownership.typ",
+        "base_ref": "a517ca563d78d161cff17fe60e661f80529c9a83",
+        "base_full_blob": "2a3ce172eb6799412f445cc1f24e1953682dc617",
+        "candidate_full_blob": "2a3ce172eb6799412f445cc1f24e1953682dc617",
+        "base_sections": [
+          {
+            "anchor": "= CFF surface-cache ownership",
+            "start_line": 1,
+            "end_line_exclusive": 3,
+            "git_blob": "51078ec08cfc6bb75300887684a1799fb15e527c"
+          }
+        ],
+        "candidate_sections": [
+          {
+            "anchor": "= CFF surface-cache ownership",
+            "start_line": 1,
+            "end_line_exclusive": 3,
+            "git_blob": "51078ec08cfc6bb75300887684a1799fb15e527c"
+          }
+        ]
+      },
+      "original_source_file_blobs": [
+        {
+          "path": "crates/feynkit-cff/src/surface.rs",
+          "full_blob": "d051c576cbaefe711ce1a5ece5c31f061b1ed8b8"
+        }
+      ],
+      "scope_extent": "entire file; anchor is a unique presence witness",
+      "inherited_origin": {
+        "parent_audit_revision": "current registry snapshot bound by registry_sha256; runtime2eb0d9db",
+        "classification": "inherited_exact",
+        "relative_to_438": "after_438_staged_or_later"
+      }
+    },
+    {
+      "note": "feynkit-merge-readiness",
+      "prose": "docs/architecture/feynkit-merge-readiness.typ",
+      "lifecycle": "current",
+      "status": "Repairs in progress",
+      "base_scope": {
+        "path": "crates/feynkit-generator/src/grouping.rs",
+        "symbol": "group_diagrams",
+        "anchor": "pub(crate) fn group_diagrams(",
+        "digest": "7c402dd069754864108f236abdf155e9a1ab4f6e"
+      },
+      "base_check": {
+        "status": "stale-digest",
+        "actual": "66cc3fe8280694c72b213d71dee37fb40a1ad997"
+      },
+      "base_file_blob": "66cc3fe8280694c72b213d71dee37fb40a1ad997",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "89b064bfca6be559a6f76907d824ebe97637fb85",
+      "old_context_scope_check": {
+        "status": "stale-digest",
+        "actual": "89b064bfca6be559a6f76907d824ebe97637fb85"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "crates/feynkit-generator/src/grouping.rs",
+          "symbol": "group_diagrams",
+          "anchor": "pub(crate) fn group_diagrams(",
+          "digest": "1b2a3e095bc60cb41038c11a2e2c1f857341c36a"
+        }
+      ],
+      "start_line": 451,
+      "end_line": null,
+      "action": "historical provenance clarified",
+      "attestation": "Historical readiness results retain their named revisions. Current staged grouping uses finite quotient comparison, deterministic source indices and exact scalar normalization; current contract belongs to architecture-current and source19–21 rather than old timing claims.",
+      "current_scope": {
+        "path": "crates/feynkit-generator/src/grouping.rs",
+        "symbol": "group_diagrams",
+        "anchor": "pub(crate) fn group_diagrams(",
+        "digest": "66cc3fe8280694c72b213d71dee37fb40a1ad997"
+      },
+      "current_check": {
+        "status": "valid",
+        "actual": "66cc3fe8280694c72b213d71dee37fb40a1ad997"
+      },
+      "current_file_blob": "66cc3fe8280694c72b213d71dee37fb40a1ad997",
+      "current_start_line": 451,
+      "current_end_line": null,
+      "prose_evidence": "docs/architecture/feynkit-merge-readiness.typ",
+      "review_state": "implementation attestation; NEW independent Astra review pending",
+      "affected_registered_prose": {
+        "path": "docs/architecture/feynkit-merge-readiness.typ",
+        "base_ref": "a517ca563d78d161cff17fe60e661f80529c9a83",
+        "base_full_blob": "3f5ce222e01ca091a84e1a4ea87253a0b236db2e",
+        "candidate_full_blob": "0ca9551d9387024ab4acefb9e4d2d0ccac0370b6",
+        "base_sections": [
+          {
+            "anchor": "= FeynKit merge readiness and performance",
+            "start_line": 1,
+            "end_line_exclusive": 3,
+            "git_blob": "fe45a2a00d4f24b379df3e49839b9ce64a5aedd6"
+          }
+        ],
+        "candidate_sections": [
+          {
+            "anchor": "= FeynKit merge readiness and performance",
+            "start_line": 1,
+            "end_line_exclusive": 10,
+            "git_blob": "00e50ffc87c95f2f332b8139b871b2d5508751ba"
+          }
+        ]
+      },
+      "original_source_file_blobs": [
+        {
+          "path": "crates/feynkit-generator/src/grouping.rs",
+          "full_blob": "89b064bfca6be559a6f76907d824ebe97637fb85"
+        }
+      ],
+      "scope_extent": "entire file; anchor is a unique presence witness",
+      "inherited_origin": {
+        "parent_audit_revision": "current registry snapshot bound by registry_sha256; runtime2eb0d9db",
+        "classification": "inherited_exact",
+        "relative_to_438": "after_438_staged_or_later"
+      }
+    },
+    {
+      "note": "nix-crane-cache-reuse",
+      "prose": "docs/architecture/nix-crane-cache-reuse.typ",
+      "lifecycle": "current",
+      "status": "Living engineering record",
+      "base_scope": {
+        "path": "nix/rust-workspace.nix",
+        "symbol": "workspace package source ownership",
+        "anchor": "documentationCatalogAnnotatedItemSourcePaths =",
+        "end_anchor": "workspacePackageExtraSourceRootsForSourcePackages =",
+        "digest": "40c9f9e222f79069e9fef94da1288be3aacab0ac"
+      },
+      "base_check": {
+        "status": "stale-digest",
+        "actual": "2ecd200b0d9bf0434fc9c15f9ebcb076d777dd70"
+      },
+      "base_file_blob": "e4d7497245a2a0d6d26940a24d274a533c4c6e3c",
+      "old_context_ref": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+      "old_context_blob": "d3296490d29349aa2e6eb775dc8ab33880294532",
+      "old_context_scope_check": {
+        "status": "stale-digest",
+        "actual": "04b33bff7b682eefd612b2790c6e8d65e6e94794"
+      },
+      "original_source_ref": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+      "original_scopes": [
+        {
+          "path": "nix/rust-workspace.nix",
+          "symbol": "workspace package source ownership",
+          "anchor": "documentationCatalogAnnotatedItemSourcePaths =",
+          "end_anchor": "workspacePackageExtraSourceRootsForSourcePackages =",
+          "digest": "a23dfe3171472ff6174689bb7b48970715894718"
+        }
+      ],
+      "start_line": 416,
+      "end_line": 692,
+      "action": "historical/current boundary clarified; later recheck required",
+      "attestation": "Resource source lists follow current native rendering owners and separate production/test inputs. No producer closure result asserted; source30 owns missing compile-time source inputs and this scope must refresh after ordered integration.",
+      "current_scope": {
+        "path": "nix/rust-workspace.nix",
+        "symbol": "workspace package source ownership",
+        "anchor": "documentationCatalogAnnotatedItemSourcePaths =",
+        "end_anchor": "workspacePackageExtraSourceRootsForSourcePackages =",
+        "digest": "2ecd200b0d9bf0434fc9c15f9ebcb076d777dd70"
+      },
+      "current_check": {
+        "status": "valid",
+        "actual": "2ecd200b0d9bf0434fc9c15f9ebcb076d777dd70"
+      },
+      "current_file_blob": "e4d7497245a2a0d6d26940a24d274a533c4c6e3c",
+      "current_start_line": 416,
+      "current_end_line": 692,
+      "prose_evidence": "docs/architecture/nix-crane-cache-reuse.typ",
+      "review_state": "implementation attestation; NEW independent Astra review pending",
+      "affected_registered_prose": {
+        "path": "docs/architecture/nix-crane-cache-reuse.typ",
+        "base_ref": "a517ca563d78d161cff17fe60e661f80529c9a83",
+        "base_full_blob": "84f473dbb56003f5a2c8d7bfa7cb8dba83999848",
+        "candidate_full_blob": "8ed23a178504ae9483e9d0e739a16e3668e9fdd2",
+        "base_sections": [
+          {
+            "anchor": "= Nix and Crane artifact reuse",
+            "start_line": 1,
+            "end_line_exclusive": 21,
+            "git_blob": "5d845a7532d27306ab342ac3fd065396b3b3024c"
+          }
+        ],
+        "candidate_sections": [
+          {
+            "anchor": "= Nix and Crane artifact reuse",
+            "start_line": 1,
+            "end_line_exclusive": 29,
+            "git_blob": "8be1c3dcb528f502a2d2883c7cd03bee55741950"
+          }
+        ]
+      },
+      "original_source_file_blobs": [
+        {
+          "path": "nix/rust-workspace.nix",
+          "full_blob": "d3296490d29349aa2e6eb775dc8ab33880294532"
+        }
+      ],
+      "scope_extent": "half-open UTF-8 anchor range",
+      "inherited_origin": {
+        "parent_audit_revision": "current registry snapshot bound by registry_sha256; runtime2eb0d9db",
+        "classification": "inherited_exact",
+        "relative_to_438": "after_438_staged_or_later"
+      }
+    }
+  ],
+  "limits": [
+    "Refresh against ordered main after sources27–30 before final approval/integration.",
+    "No performance, full physics, wheel/browser or five-product publication certification.",
+    "Preserve accepted decisions57/8 including 2!*3!, measure memory first, retained Clarabel; source38 not landed."
+  ],
+  "additional_scope": {
+    "path": "crates/feynkit-generator/src/generation/staged.rs",
+    "anchor": "impl Request {",
+    "extent": "entire file",
+    "reason": "Retain generation.rs owner and explicitly cover moved Request and DiagramSet/BuiltDiagramSet implementation; no scope narrowed to obtain a pass."
+  }
+}
