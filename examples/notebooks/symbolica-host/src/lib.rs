@@ -37,6 +37,19 @@ fn core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(pyo3::wrap_pyfunction!(get_citations, m)?)?;
     register_module!(m, feynkit_py::FeynkitModule);
     register_module!(m, spynso3::SpensoModule);
+    #[cfg(feature = "native")]
+    {
+        register_module!(m, vakint::symbolica_community_module::VakintWrapper);
+        vakint::symbolica_community_module::VakintWrapper::initialize(m.py())?;
+        let vakint = m.getattr("hepkit_vakint_native")?;
+        m.py()
+            .import("sys")?
+            .getattr("modules")?
+            .set_item("symbolica.community.hepkit.vakint", &vakint)?;
+        m.getattr("feynkit_native")?
+            .cast::<PyModule>()?
+            .add("vakint", &vakint)?;
+    }
     Ok(())
 }
 
@@ -61,5 +74,7 @@ fn get_citations() -> Vec<Citation> {
     }];
     citations.extend(feynkit_py::FeynkitModule::get_citations());
     citations.extend(spynso3::SpensoModule::get_citations());
+    #[cfg(feature = "native")]
+    citations.extend(vakint::symbolica_community_module::VakintWrapper::get_citations());
     citations
 }

@@ -14,13 +14,14 @@ crate-type = ["cdylib"]
 linnet-py = { path = "../../../crates/linnet-py", default-features = false }
 feynkit-py = { path = "../../../crates/feynkit-py", default-features = false, features = ["ufo", "linnet-python"] }
 spynso3 = { path = "../../../crates/spynso3", default-features = false }
+vakint = { path = "../../../crates/vakint", default-features = false, optional = true, features = ["feynkit-ingress", "experimental-rustred", "symbolica_community_module", "progress-tui"] }
 symbolica = { version = "=3.0.1", default-features = false, features = ["python_export"] }
 pyo3 = { version = "0.28", features = ["abi3-py310", "extension-module"] }
 pyo3-log = "=0.13.4"
 
 [features]
 default = ["native"]
-native = ["linnet-py/native", "feynkit-py/native", "spynso3/native"]
+native = ["linnet-py/native", "feynkit-py/native", "spynso3/native", "dep:vakint"]
 wasm = ["linnet-py/wasm", "feynkit-py/wasm", "spynso3/wasm"]
 
 [patch.crates-io]
