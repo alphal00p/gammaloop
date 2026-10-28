@@ -1,23 +1,18 @@
-use std::sync::{
-    Arc,
-    atomic::{AtomicUsize, Ordering},
-};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use super::{CollectionMode, SELECTED_OPENS, SymbolicTensor};
-use spenso::{
-    algebra::ScalarMul,
-    network::{library::function_lib::INBUILTS, tags::SPENSO_TAG},
-    structure::{
-        abstract_index::AbstractIndex,
-        partial::{PartialStructure, PartialStructureExt},
-        representation::{LibraryRep, Minkowski, RepName},
-        slot::IsAbstractSlot,
-    },
-};
-use symbolica::{
-    atom::{Atom, AtomCore, FunctionBuilder, Symbol},
-    function, symbol,
-};
+use crate::test_support;
+use spenso::algebra::ScalarMul;
+use spenso::network::library::function_lib::INBUILTS;
+use spenso::network::tags::SPENSO_TAG;
+use spenso::structure::abstract_index::AbstractIndex;
+use spenso::structure::partial::{PartialStructure, PartialStructureExt};
+use spenso::structure::representation::{LibraryRep, Minkowski, RepName};
+use spenso::structure::slot::IsAbstractSlot;
+use spenso::{broadcast_symbol, tensor_symbol};
+use symbolica::atom::{Atom, AtomCore, FunctionBuilder, Symbol};
+use symbolica::{function, symbol};
 
 type Tensor = SymbolicTensor<PartialStructure>;
 
@@ -61,7 +56,7 @@ fn same(actual: &Tensor, expected: &Tensor) {
 
 #[test]
 fn closed_conjugation_powers_match_independently_scoped_copies() {
-    crate::test_support::test_initialize();
+    test_support::test_initialize();
     let two = Tensor::infer(Atom::num(2)).unwrap();
     for dual in [false, true] {
         let value = closed_conjugation("norm", 99131, dual, &Atom::one());
@@ -80,7 +75,7 @@ fn closed_conjugation_powers_match_independently_scoped_copies() {
 
 #[test]
 fn closed_conjugation_power_keeps_complex_coefficients_and_external_ports() {
-    crate::test_support::test_initialize();
+    test_support::test_initialize();
     let complex = Atom::var(symbol!("conjugated_power::complex"; Scalar));
     let value = closed_conjugation("weighted", 99137, false, &complex);
     let port = Minkowski {}
@@ -119,10 +114,10 @@ fn closed_conjugation_power_keeps_complex_coefficients_and_external_ports() {
 
 #[test]
 fn conjugated_power_opening_keeps_unknown_functions_metadata_and_words_opaque() {
-    crate::test_support::test_initialize();
+    test_support::test_initialize();
     let value = closed_conjugation("opaque", 99143, false, &Atom::one());
     let metadata = symbol!("conjugated_power::metadata"; Scalar);
-    let broadcast = spenso::broadcast_symbol!("conjugated_power::unknown_broadcast");
+    let broadcast = broadcast_symbol!("conjugated_power::unknown_broadcast");
     let word_head = symbol!("conjugated_power::word"; Flat, Linear, Antisymmetric;
         tag = &SPENSO_TAG.tensor_word);
     let operands = ["conjugated_power::a", "conjugated_power::b"].map(|name| {
@@ -147,17 +142,23 @@ fn conjugated_power_opening_keeps_unknown_functions_metadata_and_words_opaque() 
                 |value, _, _| Ok(value),
             )
             .unwrap();
-        assert!(result.same_value(&source));
+        assert!(
+            result.same_value(&source),
+            "source: {}\nresult: {}\nselected opens: {}",
+            source.expression(),
+            result.expression(),
+            SELECTED_OPENS.with(|count| count.get()),
+        );
         assert_eq!(SELECTED_OPENS.with(|count| count.get()), 0);
     }
 }
 
 #[test]
 fn closed_conjugation_power_does_not_replay_sensitive_normalizers() {
-    crate::test_support::test_initialize();
+    test_support::test_initialize();
     let calls = Arc::new(AtomicUsize::new(0));
     let observed = Arc::clone(&calls);
-    let head = spenso::tensor_symbol!(
+    let head = tensor_symbol!(
         "conjugated_power::callback",
         norm = move |_, _| {
             observed.fetch_add(1, Ordering::Relaxed);

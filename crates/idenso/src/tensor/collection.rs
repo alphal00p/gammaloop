@@ -372,7 +372,17 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
             return Ok(None);
         }
         if let NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) = &network.graph.graph[node] {
-            let expression = network.store.tensors[*index].expression.as_atom_view();
+            let tensor = &network.store.tensors[*index];
+            let expression = tensor.expression.as_atom_view();
+            // Shallow storage does not expose a closed broadcast's arguments.
+            // Retained internal pairs are not permission to rename that payload.
+            if tensor.structure.order() == 0
+                && matches!(expression, AtomView::Fun(function)
+                    if function.get_symbol().has_tag(&SPENSO_TAG.broadcast)
+                        && function.get_symbol() != INBUILTS.conj)
+            {
+                return Ok(None);
+            }
             if matches!(expression, AtomView::Add(_) | AtomView::Mul(_)) {
                 // Expose the selected arithmetic before assigning this copy's
                 // internal labels; an opaque leaf has only its public ports.
@@ -690,6 +700,16 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
                         return Err(TensorInferenceError::invalid(
                             "selected power has multiple bases",
                         ));
+                    }
+                    // An unknown closed broadcast owns its argument scopes.
+                    // Native conjugation is the explicitly supported exception;
+                    // copying another function must not rename its closed payload.
+                    if interfaces[&base].canonical().is_scalar()
+                        && matches!(&network.graph.graph[base], NetworkNode::Op(NetworkOp::Function(symbol))
+                            if *symbol != INBUILTS.conj)
+                    {
+                        refused = true;
+                        return Ok(None);
                     }
                     if matches!(network.graph.graph[base], NetworkNode::Leaf(_)) {
                         let base_value = self.emit(network, tree, base)?;
