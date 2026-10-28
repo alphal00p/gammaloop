@@ -184,6 +184,7 @@ struct Options {
     running_cache: Option<PathBuf>,
     running_cache_capture_only: bool,
     running_cache_no_read_delta: bool,
+    held_out_quarantine: bool,
     work_dir: PathBuf,
     suite: String,
     repetitions: usize,
@@ -312,6 +313,7 @@ impl Options {
         let mut running_cache = None;
         let mut running_cache_capture_only = false;
         let mut running_cache_no_read_delta = false;
+        let mut held_out_quarantine = false;
         let mut work_dir = None;
         let mut suite = "tuning".to_owned();
         let mut repetitions = 3;
@@ -337,8 +339,12 @@ impl Options {
                      [--running-cache PATH] [--running-cache-capture-only] persist completed native records.\n\
                      PATH is a capture root; each case/sample/variant owns a separate native delta.\n\
                      Capture-only disables persistent reads and cannot be combined with --cache.\n\
-                     Held-out measurements forbid --running-cache and read --cache without modifying it.\n\
+                     Held-out measurements read an immutable --cache; capture requires --held-out-quarantine.\n\
                      [--running-cache-no-read-delta] reads immutable bases only; requires --running-cache.\n\
+                     [--held-out-quarantine] preserves fresh held-out deltas without LIGHT selection authority.\n\
+                     Requires --running-cache, --running-cache-no-read-delta and authenticated held-out inputs.\n\
+                     Uncached quarantine requires capture-only without --cache; cached quarantine uses a direct\n\
+                     cached worker or one classifier diagnostic. Later HEAVY union reuse is seen-input reuse.\n\
                      [--provisional] permits legacy functional pilots without native key authentication.\n\
                      [--only-case ID] selects one frozen case and requires --provisional.\n\
                      Every case/sample/variant runs in a fresh process. Default: three samples, no deadline.\n\
@@ -350,7 +356,7 @@ impl Options {
                      Monitored timings include diagnostic observation overhead.\n\
                      [--classify-cache-hits] records a lossless diagnostic for offline owner mapping.\n\
                      Requires experimental-rustred, --cache and --repetitions 1; runs only the cached variant.\n\
-                     Forbids presentation, running capture and performance claims.\n\
+                     Forbids presentation and performance claims; capture requires held-out quarantine.\n\
                      [--observe-native-costs] records advisory per-node costs for one direct tuning worker.\n\
                      Requires experimental-rustred, --worker --variant cached --repetitions 1,\n\
                      --cache, --running-cache and --running-cache-no-read-delta; forbids presentation,\n\
@@ -373,6 +379,10 @@ impl Options {
             }
             if arg == "--running-cache-no-read-delta" {
                 running_cache_no_read_delta = true;
+                continue;
+            }
+            if arg == "--held-out-quarantine" {
+                held_out_quarantine = true;
                 continue;
             }
             if arg == "--monitor" {
@@ -433,8 +443,8 @@ impl Options {
             "cached worker needs --cache"
         );
         ensure!(
-            suite != "held-out" || running_cache.is_none(),
-            "held-out measurements require a read-only --cache and forbid --running-cache"
+            suite != "held-out" || running_cache.is_none() || held_out_quarantine,
+            "held-out running capture requires explicit --held-out-quarantine"
         );
         ensure!(
             !running_cache_capture_only || (running_cache.is_some() && cache.is_none()),
@@ -443,6 +453,24 @@ impl Options {
         ensure!(
             !running_cache_no_read_delta || running_cache.is_some(),
             "--running-cache-no-read-delta requires --running-cache"
+        );
+        ensure!(
+            !held_out_quarantine
+                || (suite == "held-out"
+                    && running_cache.is_some()
+                    && running_cache_no_read_delta
+                    && !provisional),
+            "--held-out-quarantine requires authenticated held-out inputs, --running-cache and --running-cache-no-read-delta"
+        );
+        ensure!(
+            !held_out_quarantine
+                || if cache.is_none() {
+                    running_cache_capture_only
+                } else {
+                    !running_cache_capture_only
+                        && ((worker && variant == "cached") || classify_cache_hits)
+                },
+            "uncached quarantine requires capture-only without --cache; cached quarantine requires a direct cached worker or classifier, not a paired supervisor"
         );
         ensure!(
             only_case.is_none() || provisional,
@@ -462,8 +490,10 @@ impl Options {
         );
         ensure!(
             !classify_cache_hits
-                || (cache.is_some() && repetitions == 1 && running_cache.is_none()),
-            "classification requires one cached diagnostic and forbids running capture"
+                || (cache.is_some()
+                    && repetitions == 1
+                    && (running_cache.is_none() || held_out_quarantine)),
+            "classification requires one cached diagnostic; running capture requires held-out quarantine"
         );
         ensure!(
             !classify_cache_hits || !worker || variant == "cached",
@@ -508,6 +538,7 @@ impl Options {
             running_cache,
             running_cache_capture_only,
             running_cache_no_read_delta,
+            held_out_quarantine,
             suite,
             repetitions,
             max_case_seconds,
@@ -547,6 +578,44 @@ impl Options {
         if let Some(directory) = options.decoded_directory {
             command.arg("--cache-decoded-directory").arg(directory);
         }
+    }
+
+    fn quarantine_provenance(&self) -> Option<Value> {
+        self.held_out_quarantine.then(|| {
+            json!({
+                "suite":"held-out","light_selection_allowed":false,"light_eligibility_allowed":false,
+                "authority":"This run's observations and usage never authorize LIGHT selection; prior eligible keys are unchanged",
+                "heavy_union_allowed":true,
+                "qualification_scope":"Named immutable cache identity before qualification; later HEAVY union replay is seen-input reuse",
+            })
+        })
+    }
+
+    fn running_cache_path(&self, case_id: &str) -> Result<Option<PathBuf>> {
+        self.running_cache
+            .as_ref()
+            .map(|root| {
+                if self.held_out_quarantine {
+                    ensure!(
+                        fs::symlink_metadata(root)?.is_dir(),
+                        "quarantine capture parent must be an existing directory, not a symlink"
+                    );
+                }
+                let sample = self
+                    .sample
+                    .ok_or_else(|| eyre::eyre!("running-cache worker requires a sample number"))?;
+                let path = root.join(format!(
+                    "case-{:x}-sample-{sample}-{}",
+                    Sha256::digest(case_id.as_bytes()),
+                    self.variant
+                ));
+                ensure!(
+                    !path.is_symlink() && !path.try_exists()?,
+                    "preserve the existing worker running cache; choose a fresh --running-cache root"
+                );
+                Ok(path)
+            })
+            .transpose()
     }
 
     fn identity(&self) -> Result<Value> {
@@ -631,6 +700,9 @@ impl Options {
                 "read_delta":!self.running_cache_no_read_delta,
                 "delta_scope":"one native delta per case, sample and variant",
             });
+        }
+        if let Some(provenance) = self.quarantine_provenance() {
+            identity["held_out_quarantine"] = provenance;
         }
         Ok(identity)
     }
@@ -873,29 +945,12 @@ fn measure(options: &Options, root: &Root, identity: &Value, workload: &Workload
         engine.clear_cache(5)?;
     }
     let cache_loading_seconds = cache_started.elapsed().as_secs_f64();
-    let running_cache_path = options
-        .running_cache
-        .as_ref()
-        .map(|root_path| {
-            let sample = options
-                .sample
-                .ok_or_else(|| eyre::eyre!("running-cache worker requires a sample number"))?;
-            Ok::<_, eyre::Report>(root_path.join(format!(
-                "case-{:x}-sample-{sample}-{}",
-                Sha256::digest(root.id.as_bytes()),
-                options.variant
-            )))
-        })
-        .transpose()?;
+    let running_cache_path = options.running_cache_path(&root.id)?;
     let running_read_backing = running_cache_path.is_some() && !options.running_cache_capture_only;
     let running_cache_started = Instant::now();
     let running_cache = running_cache_path
         .as_ref()
         .map(|path| {
-            ensure!(
-                !path.exists(),
-                "preserve the existing worker running cache; choose a fresh --running-cache root"
-            );
             engine
                 .attach_running_cache(
                     5,
@@ -1336,6 +1391,9 @@ fn measure(options: &Options, root: &Root, identity: &Value, workload: &Workload
         receipt["close"] = json!({"seconds":started.elapsed().as_secs_f64(),
             "report":document,"error":closed.as_ref().err().map(ToString::to_string)});
         receipt["terminal"] = true.into();
+        if let Some(provenance) = options.quarantine_provenance() {
+            receipt["held_out_quarantine"] = provenance;
+        }
         closed.err()
     });
     let terminal_receipt = (|| -> Result<()> {
@@ -1774,7 +1832,7 @@ fn main() -> Result<()> {
         && identity["cpu_affinity"].is_string();
     write_json(
         &options.work_dir.join("summary.json"),
-        &json!({"schema":"vakint.five-loop-cache-suite.v1","identity":identity,"complete":complete,"cases":cases,"measurements":measurements,"geometric_mean_uncached_over_cached_ratio":geometric_mean,"provisional":options.provisional,"diagnostic_only":options.classify_cache_hits,"native_keys_authenticated":authenticated,"execution_provenance_complete":provenance_complete,"final_held_out_comparison":!options.classify_cache_hits && authenticated && provenance_complete && options.suite=="held-out" && options.cache.is_some() && options.repetitions>=3,"selection_allowed":!options.classify_cache_hits && authenticated && provenance_complete && options.suite=="tuning" && options.cache.is_some() && options.repetitions>=3}),
+        &json!({"schema":"vakint.five-loop-cache-suite.v1","identity":identity,"complete":complete,"cases":cases,"measurements":measurements,"geometric_mean_uncached_over_cached_ratio":geometric_mean,"provisional":options.provisional,"diagnostic_only":options.classify_cache_hits,"native_keys_authenticated":authenticated,"execution_provenance_complete":provenance_complete,"final_held_out_comparison":!options.classify_cache_hits && authenticated && provenance_complete && options.suite=="held-out" && options.cache.is_some() && options.repetitions>=3,"selection_allowed":!options.held_out_quarantine && !options.classify_cache_hits && authenticated && provenance_complete && options.suite=="tuning" && options.cache.is_some() && options.repetitions>=3}),
     )?;
     ensure!(
         complete,
@@ -1901,10 +1959,234 @@ mod tests {
         assert_eq!(options.worker_allowance(100.0)?, None);
         assert!(!options.classify_cache_hits);
         assert!(!options.observe_native_costs);
+        assert!(!options.held_out_quarantine);
+        assert!(options.quarantine_provenance().is_none());
         assert!(!options.monitor.enabled());
         #[cfg(feature = "experimental-rustred")]
         assert!(!options.monitor.cache_hit_diagnostic);
         assert!(!options.deadline_exhausted(None, Duration::from_secs(u64::MAX), f64::MAX)?);
+        Ok(())
+    }
+
+    #[test]
+    fn held_out_quarantine_requires_explicit_no_read_delta_capture() -> Result<()> {
+        let fixed = [
+            "--suite",
+            "held-out",
+            "--held-out-quarantine",
+            "--running-cache",
+            "quarantine",
+            "--running-cache-no-read-delta",
+            "--running-cache-capture-only",
+        ];
+        let options = parsed_options(&fixed)?;
+        assert!(options.held_out_quarantine);
+        assert!(options.cache.is_none());
+        assert!(options.running_cache_capture_only);
+        for extra in [vec!["--suite", "tuning"], vec!["--provisional"]] {
+            let mut args = fixed.to_vec();
+            args.extend(extra);
+            assert!(parsed_options(&args).is_err());
+        }
+        for args in [
+            vec!["--held-out-quarantine"],
+            vec![
+                "--suite",
+                "held-out",
+                "--running-cache",
+                "quarantine",
+                "--running-cache-no-read-delta",
+                "--running-cache-capture-only",
+            ],
+            vec![
+                "--suite",
+                "held-out",
+                "--held-out-quarantine",
+                "--running-cache",
+                "quarantine",
+                "--running-cache-capture-only",
+            ],
+            vec![
+                "--suite",
+                "held-out",
+                "--held-out-quarantine",
+                "--running-cache",
+                "quarantine",
+                "--running-cache-no-read-delta",
+            ],
+        ] {
+            assert!(parsed_options(&args).is_err(), "accepted {args:?}");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn cached_quarantine_requires_a_direct_cached_worker() -> Result<()> {
+        let fixed = [
+            "--suite",
+            "held-out",
+            "--held-out-quarantine",
+            "--running-cache",
+            "quarantine",
+            "--running-cache-no-read-delta",
+            "--cache",
+            "frozen-heavy.gz",
+        ];
+        assert!(parsed_options(&fixed).is_err());
+        let mut worker = fixed.to_vec();
+        worker.extend([
+            "--worker",
+            "--variant",
+            "cached",
+            "--case-id",
+            "case",
+            "--sample",
+            "0",
+        ]);
+        let options = parsed_options(&worker)?;
+        assert!(!options.running_cache_capture_only);
+        assert!(options.running_cache_no_read_delta);
+        worker.extend(["--variant", "uncached"]);
+        assert!(parsed_options(&worker).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn quarantine_identity_propagates_without_light_selection_authority() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let fixed = [
+            "--suite",
+            "held-out",
+            "--held-out-quarantine",
+            "--running-cache",
+            "quarantine",
+            "--running-cache-no-read-delta",
+            "--running-cache-capture-only",
+        ];
+        let mut parent = parsed_options(&fixed)?;
+        let mut worker_args = fixed.to_vec();
+        worker_args.extend([
+            "--worker",
+            "--case-id",
+            "case",
+            "--variant",
+            "uncached",
+            "--sample",
+            "0",
+        ]);
+        let mut worker = parsed_options(&worker_args)?;
+        let artifacts = directory.path().join("data");
+        fs::create_dir(&artifacts)?;
+        write_json(&artifacts.join("manifest.json"), &json!({}))?;
+        let workload = directory.path().join("workload.json");
+        write_json(
+            &workload,
+            &json!({
+                "schema":"vakint.five-loop-cache-workload.v1",
+                "data_manifest_sha256":"a".repeat(64),"source_census_sha256":"b".repeat(64),
+                "training":[],"tuning":[],"held_out":[],
+            }),
+        )?;
+        let census = directory.path().join("census.json");
+        write_json(&census, &json!({}))?;
+        for options in [&mut parent, &mut worker] {
+            options.artifacts = artifacts.clone();
+            options.workload = workload.clone();
+            options.source_census = census.clone();
+        }
+        let identity = parent.identity()?;
+        assert_eq!(identity, worker.identity()?);
+        assert_eq!(
+            identity["held_out_quarantine"]["light_selection_allowed"],
+            false
+        );
+        assert_eq!(
+            identity["held_out_quarantine"]["light_eligibility_allowed"],
+            false
+        );
+        assert_eq!(identity["held_out_quarantine"]["heavy_union_allowed"], true);
+        assert_eq!(identity["running_cache"]["read_backing"], false);
+        assert_eq!(identity["running_cache"]["read_delta"], false);
+        let receipt = json!({"identity":identity,"case_id":"case","variant":"uncached","sample":0});
+        validate_receipt(&receipt, &identity, "case", "uncached", 0)?;
+        let mut changed = identity.clone();
+        changed["held_out_quarantine"]["light_selection_allowed"] = true.into();
+        assert!(validate_receipt(&receipt, &changed, "case", "uncached", 0).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn quarantine_delta_paths_are_fresh_and_isolated() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let parent = directory.path().join("quarantine");
+        fs::create_dir(&parent)?;
+        let mut options = parsed_options(&[
+            "--suite",
+            "held-out",
+            "--held-out-quarantine",
+            "--running-cache",
+            "quarantine",
+            "--running-cache-no-read-delta",
+            "--running-cache-capture-only",
+            "--worker",
+            "--case-id",
+            "case",
+            "--sample",
+            "0",
+        ])?;
+        options.running_cache = Some(parent.clone());
+        let first = options.running_cache_path("case")?.unwrap();
+        assert_ne!(first, options.running_cache_path("other-case")?.unwrap());
+        options.sample = Some(1);
+        assert_ne!(first, options.running_cache_path("case")?.unwrap());
+        options.sample = Some(0);
+        options.variant = "cached".into();
+        assert_ne!(first, options.running_cache_path("case")?.unwrap());
+        options.variant = "uncached".into();
+        fs::create_dir(&first)?;
+        assert!(options.running_cache_path("case").is_err());
+        options.running_cache = Some(directory.path().join("missing-parent"));
+        assert!(options.running_cache_path("case").is_err());
+        #[cfg(unix)]
+        {
+            let alias = directory.path().join("parent-symlink");
+            std::os::unix::fs::symlink(&parent, &alias)?;
+            options.running_cache = Some(alias);
+            assert!(options.running_cache_path("case").is_err());
+        }
+        Ok(())
+    }
+
+    #[cfg(feature = "experimental-rustred")]
+    #[test]
+    fn classification_capture_exception_requires_held_out_quarantine() -> Result<()> {
+        let fixed = [
+            "--classify-cache-hits",
+            "--cache",
+            "frozen-heavy.gz",
+            "--repetitions",
+            "1",
+            "--suite",
+            "held-out",
+            "--held-out-quarantine",
+            "--running-cache",
+            "quarantine",
+            "--running-cache-no-read-delta",
+        ];
+        let options = parsed_options(&fixed)?;
+        assert!(options.classify_cache_hits && options.held_out_quarantine);
+        assert!(options.monitor.cache_hit_diagnostic);
+        assert!(!options.monitor.enabled());
+        for extra in [
+            vec!["--suite", "tuning"],
+            vec!["--repetitions", "3"],
+            vec!["--progress-snapshot", "presentation.json"],
+            vec!["--observe-native-costs"],
+        ] {
+            let mut args = fixed.to_vec();
+            args.extend(extra);
+            assert!(parsed_options(&args).is_err());
+        }
         Ok(())
     }
 
