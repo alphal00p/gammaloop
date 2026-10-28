@@ -1,6 +1,10 @@
 #![allow(uncommon_codepoints)]
 
-use std::collections::{BTreeMap, BTreeSet};
+use crate::tensor::{CollectionMode, SymbolicTensor};
+use spenso::network::tags::SPENSO_TAG;
+use spenso::structure::representation::LibraryRep;
+use spenso::structure::slot::{SlotMatch, SlotMatcher};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use linnet::{
     half_edge::subgraph::{BaseSubgraph, ModifySubSet, SuBitGraph, SubSetLike},
@@ -360,9 +364,6 @@ impl tensor::SymbolicTensor<PartialStructure> {
     fn prepare_canonical_powers<Aind: DummyAind + ParseableAind + AbsInd>(
         source: AtomView<'_>,
     ) -> Result<Atom, CanonicalizationError> {
-        use spenso::structure::{representation::LibraryRep, slot::SlotMatcher};
-        use std::collections::{HashMap, HashSet};
-
         let state = ParseState::<Aind>::default();
         state.reserve_indices(source);
         let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
@@ -394,7 +395,7 @@ impl tensor::SymbolicTensor<PartialStructure> {
                 let tensor = Self::infer(cooked.clone()).map_err(|error| error.to_string())?;
                 let prepared = tensor
                     .collect_with_map(
-                        tensor::CollectionMode::Factored,
+                        CollectionMode::Factored,
                         None,
                         |_| true,
                         |value, _, _| Ok(value),
@@ -642,7 +643,7 @@ impl IndexTooling for AtomView<'_> {
                 reason: error.to_string(),
             })?;
 
-        let prepared = tensor::SymbolicTensor::prepare_canonical_powers::<Aind>(*self)?;
+        let prepared = SymbolicTensor::prepare_canonical_powers::<Aind>(*self)?;
         if prepared.as_view() != *self {
             net = prepared
                 .parse_to_symbolic_net::<Aind>(&ParseSettings::default())
@@ -669,25 +670,24 @@ impl IndexTooling for AtomView<'_> {
         // A variadic tensor word exposes only its free ports to the outer
         // network. Give Symbolica its internal slot inventory as well; its
         // canonicalizer owns deciding which of these slots are contracted.
-        let mut slots = spenso::structure::slot::SlotMatcher::default();
+        let mut slots = SlotMatcher::default();
         prepared.visitor(&mut |value| {
             let AtomView::Fun(function) = value else {
                 return true;
             };
-            if function
-                .get_symbol()
-                .has_tag(&spenso::network::tags::SPENSO_TAG.tensor_word)
-            {
+            if function.get_symbol().has_tag(&SPENSO_TAG.tensor_word) {
                 value.visitor(&mut |part| {
-                    if let Ok(slot) =
-                        slots.parse::<spenso::structure::representation::LibraryRep, Aind>(part)
+                    if let SlotMatch::Explicit(literal) = slots.classify(part)
+                        && let Ok(slot) = slots.parse::<LibraryRep, Aind>(part)
                     {
-                        let slot = if slot.rep_name().is_dual() {
-                            slot.dual()
-                        } else {
-                            slot
-                        };
-                        dummies.insert(slot.to_atom(), slot.rep());
+                        // Codecs can shorten equivalent index spellings, such as
+                        // owner(1, 0) to owner(1). Symbolica's inventory matches
+                        // literal slots, so retain the written payloads here.
+                        let index = slot
+                            .rep_name()
+                            .base()
+                            .to_symbolic([literal.dimension(), literal.index()]);
+                        dummies.insert(index, slot.rep().base());
                         return false;
                     }
                     !matches!(part, AtomView::Fun(function) if function.get_symbol().is_scalar())
@@ -894,7 +894,13 @@ impl IndexTooling for AtomView<'_> {
 
 #[cfg(test)]
 pub mod test {
+    use crate::tensor::SymbolicTensor;
+    use crate::tensor::inference::InterfaceInference;
     use insta::assert_snapshot;
+    use spenso::mink;
+    use spenso::network::library::function_lib::INBUILTS;
+    use spenso::structure::representation::{LibraryRep, RepName};
+    use spenso::structure::slot::IsAbstractSlot;
     use spenso::{
         network::tags::SPENSO_TAG,
         p, slot,
@@ -918,15 +924,13 @@ pub mod test {
         test_initialize();
         let a = SPENSO_TAG.tensor_symbol("canonical_power::a");
         let b = SPENSO_TAG.tensor_symbol("canonical_power::b");
-        let index = spenso::mink!(4, 701);
-        let norm =
-            crate::tensor::SymbolicTensor::infer(function!(a, &index) * function!(b, &index))
-                .unwrap();
+        let index = mink!(4, 701);
+        let norm = SymbolicTensor::infer(function!(a, &index) * function!(b, &index)).unwrap();
         for power in [2, 3] {
             let powered = norm
-                .pow(&crate::tensor::SymbolicTensor::infer(Atom::num(power)).unwrap())
+                .pow(&SymbolicTensor::infer(Atom::num(power)).unwrap())
                 .unwrap();
-            let mut explicit = crate::tensor::SymbolicTensor::infer(Atom::one()).unwrap();
+            let mut explicit = SymbolicTensor::infer(Atom::one()).unwrap();
             for copy in 0..power {
                 explicit = explicit
                     .multiply(
@@ -959,11 +963,6 @@ pub mod test {
 
     #[test]
     fn canonicalization_of_complex_norm_power_in_scalar_density() {
-        use crate::tensor::SymbolicTensor;
-        use spenso::structure::{
-            representation::{LibraryRep, RepName},
-            slot::IsAbstractSlot,
-        };
         test_initialize();
         let h = SPENSO_TAG.tensor_symbol("canonical_complex_power::h");
         let rep = LibraryRep::new_dual("canonical_complex_power::weak")
@@ -972,7 +971,7 @@ pub mod test {
         let scope = symbol!("canonical_complex_power::scope");
         let index = AbstractIndex::Normal(901).scoped(scope);
         let norm = SymbolicTensor::infer(
-            spenso::network::library::function_lib::INBUILTS.conj(function!(
+            INBUILTS.conj(function!(
                 h,
                 rep.dual().slot::<AbstractIndex, _>(index).to_atom()
             )) * function!(h, rep.slot::<AbstractIndex, _>(index).to_atom()),
@@ -1005,13 +1004,10 @@ pub mod test {
             .try_add(&norm)
             .unwrap();
         let callback = symbol!("canonical_complex_power::callback", norm = |_, _| {});
-        let wrapped_callback = spenso::network::library::function_lib::INBUILTS
-            .conj(function!(callback, &index.to_atom()));
-        assert!(
-            !crate::tensor::inference::InterfaceInference::normalization_is_intrinsic(
-                wrapped_callback.as_view()
-            )
-        );
+        let wrapped_callback = INBUILTS.conj(function!(callback, &index.to_atom()));
+        assert!(!InterfaceInference::normalization_is_intrinsic(
+            wrapped_callback.as_view()
+        ));
         assert_eq!(
             density.canonize().unwrap().expression(),
             expected.canonize().unwrap().expression()
@@ -1029,7 +1025,6 @@ pub mod test {
 
     #[test]
     fn canonicalization_of_word_internal_dummies_keeps_external_names_and_signs() {
-        use crate::tensor::SymbolicTensor;
         test_initialize();
         let head = symbol!("canonical_word::exterior"; Flat, Linear, Antisymmetric;
             tag = &SPENSO_TAG.tensor_word);
@@ -1039,11 +1034,9 @@ pub mod test {
         let density = |scope: usize, external: usize, reverse: bool| {
             let internal = function!(index, scope, 0);
             let left =
-                SymbolicTensor::infer(function!(a, crate::bis!(4, 71), crate::cof!(3, &internal)))
-                    .unwrap();
+                SymbolicTensor::infer(function!(a, bis!(4, 71), cof!(3, &internal))).unwrap();
             let right =
-                SymbolicTensor::infer(function!(b, crate::bis!(4, 72), crate::coaf!(3, &internal)))
-                    .unwrap();
+                SymbolicTensor::infer(function!(b, bis!(4, 72), coaf!(3, &internal))).unwrap();
             let operands = if reverse {
                 [right, left]
             } else {
@@ -1051,12 +1044,8 @@ pub mod test {
             };
             let word = SymbolicTensor::word(head, &operands).unwrap();
             word.multiply(
-                &SymbolicTensor::infer(gamma!(
-                    crate::bis!(4, 71),
-                    crate::bis!(4, 72),
-                    spenso::mink!(4, external as u64)
-                ))
-                .unwrap(),
+                &SymbolicTensor::infer(gamma!(bis!(4, 71), bis!(4, 72), mink!(4, external as u64)))
+                    .unwrap(),
             )
             .unwrap()
         };
@@ -1086,9 +1075,8 @@ pub mod test {
 
     #[test]
     fn canonicalization_of_powered_sums_keeps_factorization_and_outer_ports() {
-        use crate::tensor::SymbolicTensor;
         test_initialize();
-        let index = spenso::mink!(4, 801);
+        let index = mink!(4, 801);
         let pair = |left, right| {
             SymbolicTensor::infer(
                 function!(SPENSO_TAG.tensor_symbol(left), &index)
@@ -1110,7 +1098,7 @@ pub mod test {
                     .unwrap(),
             )
             .unwrap();
-        let free = spenso::mink!(4, AbstractIndex::Dummy(0).to_atom());
+        let free = mink!(4, AbstractIndex::Dummy(0).to_atom());
         let spectator = (Atom::var(symbol!("canonical_sum_power::x"; Scalar))
             + Atom::var(symbol!("canonical_sum_power::y"; Scalar)))
         .pow(7);
