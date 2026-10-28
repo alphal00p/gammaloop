@@ -685,13 +685,13 @@ topics = ["drawing", "design", "performance"]
 [[section.note]]
 id = "generation-documentation-reconcile"
 title = "SOURCE31 documentation reconciliation"
-summary = "Semantic scope reconciliation on integrated22–26, with frozen provenance and explicit post30 refresh and validation limits."
+summary = "Ordered semantic scope refresh through approved sources27–30, with exact preparation provenance and canonical validation limits."
 source = "docs/architecture/generation-documentation-reconcile.typ"
 kind = "Implementation candidate"
-status = "NEW independent Astra review pending; ordered main post30 refresh required"
+status = "Ordered post30 refresh implemented; NEW independent Astra combined review pending"
 lifecycle = "investigation"
 owner = "unassigned"
-evidence_revision = "a517ca563d78d161cff17fe60e661f80529c9a83"
+evidence_revision = "7587d0c768363f200e89250683e7836c867c9b81"
 products = ["gammaloop", "feynkit", "linnet", "spenso", "idenso"]
 topics = ["documentation", "generation", "validation"]
 review_triggers = ["docs/developers.toml", "docs/architecture/**", "crates/feynkit-generator/src/**", "crates/gammalooprs/src/integrands/process/**", "nix/rust-workspace.nix"]

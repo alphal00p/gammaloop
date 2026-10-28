@@ -1,0 +1,374 @@
+{
+  "preparation": "eb2a02f5dcee0171a728c6143ff28d7f16f40f40",
+  "code": "cde7b7e2e0a68feb5615829755da054d8b8e0c8d",
+  "attestations": [
+    {
+      "note": "gammaloop-architecture",
+      "scope": {
+        "path": "crates/gammaloop-api/src/state.rs",
+        "symbol": "gammaloop_api::state::State::load",
+        "anchor": "load_state_manifest(&save_path)?",
+        "digest": "3598dbe299f9a32da1ed8d034706a82959d84abb"
+      },
+      "source_sha256": "b7a39b0ddc7b746ca4ef15ebacde5b1f82645a0976a30e29266e321bb65a20d1",
+      "prose_sha256": "e77d42dd7715223e8a88188d1c23afb2c81ad3b68a1604fcc7a7f8bc105936df",
+      "prepared_source_unchanged": true,
+      "decision": "Reuse independently approved preparation semantic decision with identical owner bytes; current full prose and registry newly checked."
+    },
+    {
+      "note": "gammaloop-architecture",
+      "scope": {
+        "path": "crates/gammaloop-api/src/commands/integrate.rs",
+        "symbol": "gammaloop_api::commands::integrate::Integrate::default_workspace_path",
+        "anchor": "fn default_workspace_path(&self",
+        "digest": "bcce3d43713b42fe428e3b5d89784e18c8d47fa7"
+      },
+      "source_sha256": "6d094fc25be9a3c238e0a4bd63d1eb49d616c968f9f416c170ba797bb942fabe",
+      "prose_sha256": "e77d42dd7715223e8a88188d1c23afb2c81ad3b68a1604fcc7a7f8bc105936df",
+      "prepared_source_unchanged": true,
+      "decision": "Reuse independently approved preparation semantic decision with identical owner bytes; current full prose and registry newly checked."
+    },
+    {
+      "note": "gammaloop-architecture",
+      "scope": {
+        "path": "crates/gammalooprs/src/integrands/process/mod.rs",
+        "symbol": "gammalooprs::integrands::process::ProcessIntegrand::warm_up",
+        "anchor": "pub fn warm_up(&mut self, model",
+        "digest": "b1711442cd184b4e9776b84d92c313d85f70b7b0"
+      },
+      "source_sha256": "8d22c67f564cc9cf51dc1bd6ba2223ee9e852a8ad45496dcac569c25a6bd64a6",
+      "prose_sha256": "e77d42dd7715223e8a88188d1c23afb2c81ad3b68a1604fcc7a7f8bc105936df",
+      "prepared_source_unchanged": false,
+      "decision": "Current owner changed only by reviewed27\u201330 integration; see current-owner-decisions.json for signed sampling/source30 reconciliation."
+    },
+    {
+      "note": "gammaloop-architecture",
+      "scope": {
+        "path": "crates/gammalooprs/src/observables/mod.rs",
+        "symbol": "gammalooprs::observables::EventProcessingRuntime",
+        "anchor": "pub struct EventProcessingRuntime {",
+        "digest": "b672f52f6674d08d11b6cc68ef0621c399386926"
+      },
+      "source_sha256": "ad355b42380bb6cc6dcfd9c648a180ebd024a2f604d8c1e69cad4c0492537417",
+      "prose_sha256": "e77d42dd7715223e8a88188d1c23afb2c81ad3b68a1604fcc7a7f8bc105936df",
+      "prepared_source_unchanged": true,
+      "decision": "Reuse independently approved preparation semantic decision with identical owner bytes; current full prose and registry newly checked."
+    },
+    {
+      "note": "gammaloop-architecture",
+      "scope": {
+        "path": "crates/gammaloop-api/src/python.rs",
+        "symbol": "gammaloop_api::python::GammaLoopAPI",
+        "anchor": "struct GammaLoopAPI {",
+        "digest": "872d2b855d14a4aded443e18df435f899c2bf42a"
+      },
+      "source_sha256": "ed3684989501059bbc617c659f772e1ca683938881a0936baa1629bfcd64a6bf",
+      "prose_sha256": "e77d42dd7715223e8a88188d1c23afb2c81ad3b68a1604fcc7a7f8bc105936df",
+      "prepared_source_unchanged": true,
+      "decision": "Reuse independently approved preparation semantic decision with identical owner bytes; current full prose and registry newly checked."
+    },
+    {
+      "note": "gammaloop-architecture",
+      "scope": {
+        "path": "crates/feynkit-generator/src/generation.rs",
+        "symbol": "feynkit_generator::generation::coordination",
+        "anchor": "pub enum GenerationError {",
+        "digest": "0495bd293c86f81e8b817913f3e25e1918b62779"
+      },
+      "source_sha256": "39ea049e2c62bb6c129182f791cb9a2a3a0e62202712795eb107782f074657a1",
+      "prose_sha256": "e77d42dd7715223e8a88188d1c23afb2c81ad3b68a1604fcc7a7f8bc105936df",
+      "prepared_source_unchanged": true,
+      "decision": "Reuse independently approved preparation semantic decision with identical owner bytes; current full prose and registry newly checked."
+    },
+    {
+      "note": "gammaloop-architecture",
+      "scope": {
+        "path": "crates/feynkit-model/src/model.rs",
+        "symbol": "feynkit_model::Model",
+        "anchor": "pub struct Model {",
+        "digest": "b04029827b0ecb3c8f23289bf0937e1ea422e176"
+      },
+      "source_sha256": "4434c92cf4698f318a7b6ad360a6b6a48ff91b0e6cc329cc52b594430ade13f1",
+      "prose_sha256": "e77d42dd7715223e8a88188d1c23afb2c81ad3b68a1604fcc7a7f8bc105936df",
+      "prepared_source_unchanged": true,
+      "decision": "Reuse independently approved preparation semantic decision with identical owner bytes; current full prose and registry newly checked."
+    },
+    {
+      "note": "gammaloop-architecture",
+      "scope": {
+        "path": "crates/feynkit-graph/src/lib.rs",
+        "symbol": "feynkit_graph::FeynmanDiagram",
+        "anchor": "pub struct FeynmanDiagram {",
+        "digest": "03fa811b133f5816415a2b445445ea5a2d87365d"
+      },
+      "source_sha256": "5cb3612abc2f45eb9e2317d476ad5b9c29469c8a6f6d30cef9b4578d99ce2848",
+      "prose_sha256": "e77d42dd7715223e8a88188d1c23afb2c81ad3b68a1604fcc7a7f8bc105936df",
+      "prepared_source_unchanged": true,
+      "decision": "Reuse independently approved preparation semantic decision with identical owner bytes; current full prose and registry newly checked."
+    },
+    {
+      "note": "gammaloop-architecture",
+      "scope": {
+        "path": "crates/gammalooprs/src/graph/parse/from_dot.rs",
+        "symbol": "gammalooprs::graph::Graph DOT import boundary",
+        "anchor": "    pub fn from_dot(input: &str, model: &Model) -> Result<Vec<Self>> {",
+        "end_anchor": "/// Build GammaLoop graphs from DOT text, as in tests and inline fixtures.",
+        "digest": "2f016e5378c09ffe996a4f74870845364df7d09c"
+      },
+      "source_sha256": "e1f6220b809ffc60ed7662d03ecaac4ebb3d7fc27817dde1795623217b45065b",
+      "prose_sha256": "e77d42dd7715223e8a88188d1c23afb2c81ad3b68a1604fcc7a7f8bc105936df",
+      "prepared_source_unchanged": true,
+      "decision": "Reuse independently approved preparation semantic decision with identical owner bytes; current full prose and registry newly checked."
+    },
+    {
+      "note": "integration-dashboard",
+      "scope": {
+        "path": "crates/gammaloop-api/src/commands/integrate.rs",
+        "symbol": "gammaloop_api::commands::integrate::dashboard_event_loop",
+        "anchor": "fn dashboard_event_loop(receiver",
+        "digest": "bcce3d43713b42fe428e3b5d89784e18c8d47fa7"
+      },
+      "source_sha256": "6d094fc25be9a3c238e0a4bd63d1eb49d616c968f9f416c170ba797bb942fabe",
+      "prose_sha256": "b124d94ee6f6c6c5c4578245798ef93248dd1c28effbb1a2307e42e59912b5a3",
+      "prepared_source_unchanged": true,
+      "decision": "Reuse independently approved preparation semantic decision with identical owner bytes; current full prose and registry newly checked."
+    },
+    {
+      "note": "integration-dashboard",
+      "scope": {
+        "path": "crates/gammalooprs/src/integrate/mod.rs",
+        "symbol": "gammalooprs::integrate",
+        "anchor": "mod render_ratatui;",
+        "digest": "2cbbafcb254b4b7ac042b6ca8dab6682f9a0ce21"
+      },
+      "source_sha256": "425a2b07ec3b66b885be34e3d34caea312b1fdd0964dc65a50abfdd2f69d1737",
+      "prose_sha256": "b124d94ee6f6c6c5c4578245798ef93248dd1c28effbb1a2307e42e59912b5a3",
+      "prepared_source_unchanged": true,
+      "decision": "Reuse independently approved preparation semantic decision with identical owner bytes; current full prose and registry newly checked."
+    },
+    {
+      "note": "uv-renormalization",
+      "scope": {
+        "path": "crates/gammalooprs/src/uv/orchestrator.rs",
+        "symbol": "gammalooprs::uv::UVOrchestrator",
+        "anchor": "impl UVOrchestrator {",
+        "digest": "4acc87a62891dbff0b3ca2cef2e8ab505c1de6d5"
+      },
+      "source_sha256": "d233b990042e5df532038a543a95ae33138de0f6d2eb08aebd57b8efbd8e4d48",
+      "prose_sha256": "9fb4e1fcf0adea88eb4cfa1ce798485eb6f9fc0ee607cc9184ba83fd771b96b8",
+      "prepared_source_unchanged": true,
+      "decision": "Reuse independently approved preparation semantic decision with identical owner bytes; current full prose and registry newly checked."
+    },
+    {
+      "note": "spenso-symbolica-syntax-and-rewrites",
+      "scope": {
+        "path": "crates/idenso/src/lib.rs",
+        "symbol": "idenso::IndexTooling",
+        "anchor": "pub trait IndexTooling {",
+        "digest": "820fbf610c4bb06867a7013d0b8631e57704ff7d"
+      },
+      "source_sha256": "86972e9057461009dbb5c218ad5ace21d970325ee2aeb3c3a2afd672fef85a95",
+      "prose_sha256": "c49164d28d95ec7584bae1e95bd3fba14084d18f939fd39175569212331a300c",
+      "prepared_source_unchanged": true,
+      "decision": "Reuse independently approved preparation semantic decision with identical owner bytes; current full prose and registry newly checked."
+    },
+    {
+      "note": "spenso-architecture",
+      "scope": {
+        "path": "crates/spenso/src/network/mod.rs",
+        "symbol": "spenso::network::Network",
+        "anchor": "pub struct Network<S, LibKey, FunKey, Aind = AbstractIndex> {",
+        "digest": "14f66a4d6e62a4fd878c2f52f0bc6ab336cf7f24"
+      },
+      "source_sha256": "e03e784c5310362545ba0ecd87ebbb0b6f938b98911237a73b2a87955c3d73f4",
+      "prose_sha256": "b4540fd3cf253a32b57d7f9ecdf050253b12285256099cba6ecff061c49381ac",
+      "prepared_source_unchanged": true,
+      "decision": "Reuse independently approved preparation semantic decision with identical owner bytes; current full prose and registry newly checked."
+    },
+    {
+      "note": "idenso-architecture",
+      "scope": {
+        "path": "crates/idenso/src/lib.rs",
+        "symbol": "idenso::IndexTooling",
+        "anchor": "pub trait IndexTooling {",
+        "digest": "820fbf610c4bb06867a7013d0b8631e57704ff7d"
+      },
+      "source_sha256": "86972e9057461009dbb5c218ad5ace21d970325ee2aeb3c3a2afd672fef85a95",
+      "prose_sha256": "e00b282ec054df67b01fa35b259791acbc4d4ef363138d8f0502d521757391fc",
+      "prepared_source_unchanged": true,
+      "decision": "Reuse independently approved preparation semantic decision with identical owner bytes; current full prose and registry newly checked."
+    },
+    {
+      "note": "idenso-architecture",
+      "scope": {
+        "path": "crates/idenso/src/tensor/mod.rs",
+        "symbol": "idenso::tensor::SymbolicTensor",
+        "anchor": "pub struct SymbolicTensor<S = OrderedStructure<LibraryRep, AbstractIndex>, E = Atom> {",
+        "digest": "b95ee5f1852b22a03b1fe79bfe4342d3c42e831e"
+      },
+      "source_sha256": "b3d939b8adfc3a0134b2dbf5df5bc977d48b903d97ed0cafdb64172a701b32a6",
+      "prose_sha256": "e00b282ec054df67b01fa35b259791acbc4d4ef363138d8f0502d521757391fc",
+      "prepared_source_unchanged": true,
+      "decision": "Reuse independently approved preparation semantic decision with identical owner bytes; current full prose and registry newly checked."
+    },
+    {
+      "note": "idenso-architecture",
+      "scope": {
+        "path": "crates/idenso/src/tensor/contract.rs",
+        "symbol": "idenso::tensor::ContractSettings",
+        "anchor": "pub struct ContractSettings<'a> {",
+        "digest": "442fe89c0ec2fc603e7eeb88b73e69ad9e1b7e60"
+      },
+      "source_sha256": "2a15e7fb3f0c946def2f3a925cb8ee0bb9abc90fcb59fb0bb2005c6719d0987a",
+      "prose_sha256": "e00b282ec054df67b01fa35b259791acbc4d4ef363138d8f0502d521757391fc",
+      "prepared_source_unchanged": true,
+      "decision": "Reuse independently approved preparation semantic decision with identical owner bytes; current full prose and registry newly checked."
+    },
+    {
+      "note": "idenso-architecture",
+      "scope": {
+        "path": "crates/idenso/src/tensor/simplification.rs",
+        "symbol": "idenso::tensor::AlgebraSettings",
+        "anchor": "pub struct AlgebraSettings {",
+        "digest": "49ae6d4398bf4decc931f01d09ef49e69f64996f"
+      },
+      "source_sha256": "e78750998cff62ed35390d0dad3ec060153b0104bda77d9883d3af51a49173d8",
+      "prose_sha256": "e00b282ec054df67b01fa35b259791acbc4d4ef363138d8f0502d521757391fc",
+      "prepared_source_unchanged": true,
+      "decision": "Reuse independently approved preparation semantic decision with identical owner bytes; current full prose and registry newly checked."
+    },
+    {
+      "note": "idenso-architecture",
+      "scope": {
+        "path": "crates/idenso/src/tensor/collection/collected.rs",
+        "symbol": "idenso::tensor::CollectedOutput",
+        "anchor": "pub(crate) struct CollectedOutput",
+        "digest": "ca8c5cb4f9dd9ee5152cbb94df6c8d919e098c35"
+      },
+      "source_sha256": "b5f3e6fe365923e461036460ae4bd639bf59e1639ecf41ce02e43e6f40e6146f",
+      "prose_sha256": "e00b282ec054df67b01fa35b259791acbc4d4ef363138d8f0502d521757391fc",
+      "prepared_source_unchanged": true,
+      "decision": "Reuse independently approved preparation semantic decision with identical owner bytes; current full prose and registry newly checked."
+    },
+    {
+      "note": "idenso-architecture",
+      "scope": {
+        "path": "crates/idenso/src/tensor/collection.rs",
+        "symbol": "idenso::tensor::SymbolicTensor::collect_with_map",
+        "anchor": "    pub(crate) fn collect_with_map(",
+        "end_anchor": "    fn collection_observations(",
+        "digest": "8f078f8c9d4f7fd1fea495180aa1185894b5cfa3"
+      },
+      "source_sha256": "6eeb0ed9981e280541e74b6e43a9865ed59c5cf50d81dffc30058136db70d3de",
+      "prose_sha256": "e00b282ec054df67b01fa35b259791acbc4d4ef363138d8f0502d521757391fc",
+      "prepared_source_unchanged": true,
+      "decision": "Reuse independently approved preparation semantic decision with identical owner bytes; current full prose and registry newly checked."
+    },
+    {
+      "note": "linnet-architecture",
+      "scope": {
+        "path": "crates/linnet/src/half_edge.rs",
+        "symbol": "linnet::half_edge::HedgeGraph",
+        "anchor": "pub struct HedgeGraph<E, V, H = NoData, N: Topology = NodeForest> {",
+        "digest": "cf395f5b3af0a5aa69450792745aa7f568ccd2e3"
+      },
+      "source_sha256": "f06a578ae290b0fda63b1fbba2892bccc63f3f8455e65bbcf8bd08ef060cbd13",
+      "prose_sha256": "7f01c92818755b392e0ead851dd349cc5332e80e8f7c30a9d228a9ede8067721",
+      "prepared_source_unchanged": true,
+      "decision": "Reuse independently approved preparation semantic decision with identical owner bytes; current full prose and registry newly checked."
+    },
+    {
+      "note": "linnet-architecture",
+      "scope": {
+        "path": "crates/linnet/src/half_edge/involution.rs",
+        "symbol": "linnet::half_edge::involution::Involution",
+        "anchor": "pub struct Involution<E = EdgeIndex> {",
+        "digest": "2a5162885ac2e05dc8a1ec79d5fec555a9f6ed36"
+      },
+      "source_sha256": "31a13433b312f0c25becda435126dd23ce641e013ce4deadb73576fdb0587fe9",
+      "prose_sha256": "7f01c92818755b392e0ead851dd349cc5332e80e8f7c30a9d228a9ede8067721",
+      "prepared_source_unchanged": true,
+      "decision": "Reuse independently approved preparation semantic decision with identical owner bytes; current full prose and registry newly checked."
+    },
+    {
+      "note": "linnet-architecture",
+      "scope": {
+        "path": "crates/linnet/src/half_edge/subgraph.rs",
+        "symbol": "linnet::half_edge::subgraph::SubGraphLike",
+        "anchor": "pub trait SubGraphLike: SubSetLike<Hedge> + Inclusion<HedgePair> {",
+        "digest": "929ee2f716f95ba3a0bf7a9afdb8f8bf2a458765"
+      },
+      "source_sha256": "6c73a4887a782cf659954e184fb07d09473038e041139052c906b12026783d65",
+      "prose_sha256": "7f01c92818755b392e0ead851dd349cc5332e80e8f7c30a9d228a9ede8067721",
+      "prepared_source_unchanged": true,
+      "decision": "Reuse independently approved preparation semantic decision with identical owner bytes; current full prose and registry newly checked."
+    },
+    {
+      "note": "linnet-architecture",
+      "scope": {
+        "path": "crates/linnet/src/parser/mod.rs",
+        "symbol": "linnet::parser::DotGraph",
+        "anchor": "pub struct DotGraph<N: Topology = NodeForest> {",
+        "digest": "6667c3527c7ae3fa85946116341b8ee78c0e87a8"
+      },
+      "source_sha256": "a5c9a9d474328da90cc309e03ee4ad01438979eb561691cae68024c751164a9f",
+      "prose_sha256": "7f01c92818755b392e0ead851dd349cc5332e80e8f7c30a9d228a9ede8067721",
+      "prepared_source_unchanged": true,
+      "decision": "Reuse independently approved preparation semantic decision with identical owner bytes; current full prose and registry newly checked."
+    },
+    {
+      "note": "cff-surface-cache-ownership",
+      "scope": {
+        "path": "crates/feynkit-cff/src/generation.rs",
+        "symbol": "feynkit_cff::CffGenerator::generate_into",
+        "anchor": "pub fn generate_into(",
+        "digest": "47ea515ff9c91e24d6f6b501da289996a06dfe9a"
+      },
+      "source_sha256": "d818bbb9f5cac0ef471335947a60b85f7bb275e813dc38f8f24223f9d57b1325",
+      "prose_sha256": "842deea23baf7ba22c516b1443cbd953f348ecde9f081f8db7bf1fdc1b695084",
+      "prepared_source_unchanged": true,
+      "decision": "Reuse independently approved preparation semantic decision with identical owner bytes; current full prose and registry newly checked."
+    },
+    {
+      "note": "cff-surface-cache-ownership",
+      "scope": {
+        "path": "crates/feynkit-cff/src/surface.rs",
+        "symbol": "feynkit_cff::SurfaceCache",
+        "anchor": "pub struct SurfaceCache {",
+        "digest": "cf07dd60f15885153560f050d552600cfb19034a"
+      },
+      "source_sha256": "e6a8c6eada514aaeda5a9633e6c844931b175227fac0ce3a2ab9e8f4a3150273",
+      "prose_sha256": "842deea23baf7ba22c516b1443cbd953f348ecde9f081f8db7bf1fdc1b695084",
+      "prepared_source_unchanged": true,
+      "decision": "Reuse independently approved preparation semantic decision with identical owner bytes; current full prose and registry newly checked."
+    },
+    {
+      "note": "feynkit-merge-readiness",
+      "scope": {
+        "path": "crates/feynkit-generator/src/grouping.rs",
+        "symbol": "group_diagrams",
+        "anchor": "pub(crate) fn group_diagrams(",
+        "digest": "66cc3fe8280694c72b213d71dee37fb40a1ad997"
+      },
+      "source_sha256": "ee0e666ae2c7b8d13c14741d03d49adc41de50ace966034561f9d39d20191c00",
+      "prose_sha256": "f41dcb2c70a88b4d9845eb830a90796e920b85fb7a8196e6ab26e5b9b3114e40",
+      "prepared_source_unchanged": true,
+      "decision": "Reuse independently approved preparation semantic decision with identical owner bytes; current full prose and registry newly checked."
+    },
+    {
+      "note": "nix-crane-cache-reuse",
+      "scope": {
+        "path": "nix/rust-workspace.nix",
+        "symbol": "workspace package source ownership",
+        "anchor": "documentationCatalogAnnotatedItemSourcePaths =",
+        "end_anchor": "workspacePackageExtraSourceRootsForSourcePackages =",
+        "digest": "8450390593797e6fc5c8399df468e4f0025dfe4e"
+      },
+      "source_sha256": "5b60b87af71a0fead5b28977676878d4ee3ac10a8d7e4fc9ffd023310776ff20",
+      "prose_sha256": "9a7d0213229a4cbd04b46aa2060dec9a468da6fe5f061d9c43076aab92747abb",
+      "prepared_source_unchanged": false,
+      "decision": "Current owner changed only by reviewed27\u201330 integration; see current-owner-decisions.json for signed sampling/source30 reconciliation."
+    }
+  ],
+  "limits": "Historical preparation source/prose hashes remain historical. These current bindings certify owner/prose provenance, not new physics."
+}
