@@ -67,6 +67,21 @@ def main():
             )
             if producer.wait(timeout=15) != 0:
                 raise RuntimeError("native browser producer rejected the round trip")
+            subprocess.run(
+                [
+                    sys.executable,
+                    "crates/linnet-render-py/tests/iframe_display_browser.py",
+                    "--html",
+                    str(output / "chromium-350-a.html"),
+                    "--html",
+                    str(output / "chromium-350-b.html"),
+                    "--output",
+                    str(output / "iframe"),
+                ],
+                check=True,
+                timeout=120,
+                env=environment,
+            )
         finally:
             if producer.poll() is None:
                 producer.terminate()

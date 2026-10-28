@@ -24,7 +24,6 @@ use symbolica::domains::SelfRing;
 use symbolica::printer::{PrintMode, PrintOptions, PrintState, PrintUserData};
 use symbolica_notation::{MathMl, Notation};
 
-pub(crate) const DEFAULT_PAGE_SIZE: usize = 25;
 const MAX_LEAF_NODES: usize = 256;
 const MAX_LEAF_BYTES: usize = 4096;
 const MAX_ALIASES: usize = 4096;
@@ -441,7 +440,7 @@ pub(crate) fn viewer(
     value: Arc<SymbolicTensor<PartialStructure>>,
     settings: DisplaySettings,
     notation: Option<String>,
-    size: usize,
+    page_size: Option<usize>,
 ) -> PyResult<Py<PyAny>> {
     if notation.is_some() {
         return Err(PyValueError::new_err(
@@ -460,7 +459,7 @@ pub(crate) fn viewer(
         aliases,
         cache: VecDeque::new(),
     };
-    MathMLViewer::expression(
+    let viewer = MathMLViewer::expression(
         expression,
         PrintOptions::new()
             .multiplication_operator('·')
@@ -468,8 +467,11 @@ pub(crate) fn viewer(
         Some(Box::new(move |_py, atom, _options, state| {
             Ok(leaves.render(&value, atom, state))
         })),
-    )
-    .page_size(size)
+    );
+    match page_size {
+        Some(size) => viewer.page_size(size),
+        None => viewer.automatic_product_preview(),
+    }
     .into_python(py)
 }
 
@@ -480,7 +482,7 @@ pub(crate) fn static_html(
     settings: DisplaySettings,
     notation: Option<String>,
 ) -> PyResult<String> {
-    viewer(py, expression, value, settings, notation, DEFAULT_PAGE_SIZE)?
+    viewer(py, expression, value, settings, notation, None)?
         .call_method0(py, "_repr_html_")?
         .extract(py)
 }

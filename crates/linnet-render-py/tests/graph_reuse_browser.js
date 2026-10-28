@@ -44,7 +44,8 @@ class Audit {
           if (node.nodeType !== 1) continue;
           const frames = node.localName === 'iframe' ? [node] : node.querySelectorAll('iframe');
           for (const frame of frames) {
-            const entry = {frame, document: doc, probe: frame.style.visibility === 'hidden', rows: []};
+            const entry = {frame, document: doc,
+              probe: frame.style.position === 'fixed' && frame.style.left === '-100000px', rows: []};
             this.frames.push(entry);
           }
         }
@@ -404,10 +405,12 @@ export async function run({name, request, wrapper, engine, width}) {
         record.publish('rendered', {id: input.id, html: notebook});
         await waitFor(() => record.events.length === 1, 'native view never emitted rendered');
         const doc = record.events[0].document;
+        await waitFor(() => doc.querySelector('style[data-linnet-font]'),
+          'background font stylesheet never reached the initialized snapshot');
         const beforeFonts = audit.fontLoads.length;
         const geometry = await inspect(doc, input);
-        assert(audit.fontLoads.slice(0, beforeFonts).some(call => call.document === doc && call.loaded),
-          'rendered event preceded actual STIX font readiness in child document');
+        assert(audit.fontLoads.slice(beforeFonts).some(call => call.document === doc && call.loaded),
+          'exact geometry inspection did not load STIX in the child document');
         const urls = [...doc.querySelectorAll('link[href],style')].map(node => node.href || node.textContent).join('\n');
         assert(urls.includes('blob:') && !urls.includes('data:font/woff2;base64,'), 'mounted child did not use compact shared Blob CSS');
         const svg = await (await fetch(`/saved/${job}`)).text();
@@ -429,6 +432,8 @@ export async function run({name, request, wrapper, engine, width}) {
         await probeDelta(0, () => record.mount(other), 'completed remount must not probe');
         await waitFor(() => record.events.length === 1, 'completed remount never rendered');
         equal(record.count('measure'), measures, 'completed remount remeasured');
+        await waitFor(() => record.events[0].document.querySelector('style[data-linnet-font]'),
+          'background font stylesheet never reached the remounted snapshot');
         await inspect(record.events[0].document, input);
       }
       result = {captures, completion_order: captures.map(capture => capture.job)};

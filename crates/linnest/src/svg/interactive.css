@@ -61,10 +61,16 @@ svg[data-linnet-interactive] .linnet-toolbar {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 6px;
-  height: 32px;
+  gap: 4px;
+  width: max-content;
+  height: 26px;
+  margin-left: auto;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--linnet-panel-bg) 90%, transparent);
   color: var(--linnet-panel-ink);
   font: 12px/1.4 system-ui, sans-serif;
+  pointer-events: auto;
 }
 svg[data-linnet-interactive] .linnet-toolbar output {
   min-width: 4ch;
@@ -72,6 +78,7 @@ svg[data-linnet-interactive] .linnet-toolbar output {
 }
 svg[data-linnet-interactive] foreignObject:has(.linnet-toolbar) {
   overflow: visible;
+  pointer-events: none;
 }
 svg[data-linnet-interactive] .linnet-navigation-help {
   display: inline-flex;
@@ -99,10 +106,10 @@ svg[data-linnet-interactive] .linnet-navigation-hint {
   display: none;
   position: absolute;
   top: 100%;
-  left: 0;
+  right: 0;
   box-sizing: border-box;
   width: max-content;
-  max-width: 100%;
+  max-width: var(--linnet-hint-width);
   padding: 6px 8px;
   border: 1px solid color-mix(in srgb, var(--linnet-panel-ink) 20%, transparent);
   border-radius: 4px;

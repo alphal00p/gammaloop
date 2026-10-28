@@ -126,6 +126,7 @@
     (workspaceRoot + "/crates/linnet-render-py/fonts")
     (workspaceRoot + "/crates/linnet-render-py/src/view.py")
     (workspaceRoot + "/crates/linnet-render-py/src/view.js")
+    (workspaceRoot + "/crates/linnet-render-py/src/iframe.js")
     (workspaceRoot + "/crates/vakint/form_src")
     (workspaceRoot + "/crates/vakint/templates")
   ];
@@ -491,6 +492,7 @@
       "crates/linnet-render-py/data.json"
       "crates/linnet-render-py/src/view.py"
       "crates/linnet-render-py/src/view.js"
+      "crates/linnet-render-py/src/iframe.js"
     ];
     vakint = [
       "crates/vakint/form_src"
@@ -3081,6 +3083,8 @@
           ${nextestBinarySetForTarget target}/${nextestArchiveNameFor target "linnet-render-py"} || status=$?
         cp -R .local/graph-mathml-labels/browser "$out/browser"
       fi
+      python3 crates/linnet-render-py/tests/browser_widget_mount.py \
+        --chromium "$LINNET_TEST_CHROMIUM" || status=$?
     '' + ''
       exit "$status"
     '');

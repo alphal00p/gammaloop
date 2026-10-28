@@ -341,7 +341,7 @@ export default {
         el.replaceChildren(status);
       }
     };
-    const update = async () => {
+    const update = () => {
       const result = model.get('rendered');
       if (disposed || !result || result.id !== request.id) return;
       if (result.error) {
@@ -352,14 +352,6 @@ export default {
       shown = result.html;
       const current = ++revision;
       try {
-        // A missing/timed-out comm resource must not hide the initial snapshot.
-        // The browser's fallback font keeps it visible while exact measurement
-        // remains pending; saved static exports still carry the bundled font.
-        let resolved = null;
-        if (needsFont) {
-          try { resolved = await resource(); } catch (_) { /* Keep static output. */ }
-        }
-        if (disposed || current !== revision) return;
         resize?.disconnect();
         controls?.disconnect();
         mountAbort?.abort();
@@ -370,16 +362,13 @@ export default {
         const signal = mountAbort.signal;
         frame = mounted;
         mounted.title = 'Graph diagram';
-        Object.assign(mounted.style, { width: '100%', height: '120px', border: '0', display: 'block' });
-        mounted.addEventListener('load', async () => {
+        Object.assign(mounted.style, {
+          width: '100%', height: '120px', border: '0', display: 'block', visibility: 'hidden',
+        });
+        mounted.addEventListener('load', () => {
           try {
-            if (disposed || frame !== mounted || !mounted.contentDocument) return;
+            if (disposed || current !== revision || frame !== mounted || !mounted.contentDocument) return;
             const doc = mounted.contentDocument;
-            if (resolved) {
-              try { await fontReady(doc, owner, signal); } catch (_) { /* Keep static output. */ }
-            }
-            else await doc.fonts.ready;
-            if (disposed || frame !== mounted || mounted.contentDocument !== doc) return;
             // The sandbox blocks all document scripts, including imported markup.
             // Controls come from Rust templates before label substitution. Run
             // only exact trusted sources in the parent, also for lazy children.
@@ -401,21 +390,45 @@ export default {
             fit();
             resize = new owner.win.ResizeObserver(fit);
             resize.observe(doc.body);
+            // Snapshot controls and fallback-font layout are ready now. Exact
+            // measurement still waits for STIX separately; displaying a graph
+            // must never wait for an unanswered font comm or fonts.ready.
+            if (needsFont) {
+              void Promise.resolve().then(() => {
+                if (disposed || signal.aborted || current !== revision || frame !== mounted) return;
+                return resource();
+              }).then(resolved => {
+                if (!resolved || disposed || signal.aborted || current !== revision
+                    || frame !== mounted || mounted.contentDocument !== doc) return;
+                const style = doc.createElement('style');
+                style.setAttribute('data-linnet-font', '');
+                style.textContent = resolved.css;
+                doc.head.append(style);
+                // Saved exports use block while exact measurement loads STIX.
+                // A live snapshot must keep fallback labels painted meanwhile.
+                for (const face of doc.fonts) {
+                  if (face.family.replace(/["']/g, '') === 'Linnet Offline Math') face.display = 'swap';
+                }
+                // The existing ResizeObserver fits any changed font metrics.
+                // Keep this document and its selection/camera state intact.
+              }).catch(() => { /* Keep the visible fallback-font snapshot. */ });
+            }
+            mounted.style.removeProperty('visibility');
             const detail = { id: request.id, document: doc };
             doc.body.dispatchEvent(new mounted.contentWindow.CustomEvent('linnet:rendered', { bubbles: true, detail }));
             el.dispatchEvent(new owner.win.CustomEvent('linnet:rendered', { bubbles: true, detail }));
           } catch (error) {
             if (frame === mounted) {
               resize?.disconnect();
+              controls?.disconnect();
+              mountAbort?.abort();
               mounted.remove();
               frame = null;
               fail(error);
             }
           }
-        }, { once: true });
-        // The host-owned Blob font CSS precedes content; scripts stay inert.
-        const css = resolved ? `<style data-linnet-font>${resolved.css.replace(/<\/style/gi, '<\\/style')}</style>` : '';
-        mounted.srcdoc = `<!doctype html><html><head><meta charset="utf-8">${css}<style>html{overflow:hidden}body{margin:0;display:flow-root}</style></head><body data-linnet-frame-owner>${result.html}</body></html>`;
+        }, { once: true, signal });
+        mounted.srcdoc = `<!doctype html><html><head><meta charset="utf-8"><style>html{overflow:hidden}body{margin:0;display:flow-root}</style></head><body data-linnet-frame-owner>${result.html}</body></html>`;
         el.replaceChildren(mounted);
       } catch (error) { fail(error); }
     };

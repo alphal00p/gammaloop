@@ -423,7 +423,7 @@ class DiagramView:
         """
     def _display_(self) -> typing.Any:
         r"""
-        Marimo adapter: retained widget when available, otherwise static HTML.
+        Marimo adapter: retained widget when available, otherwise isolated HTML.
         See [`Self::widget`] for explicit widget construction.
 
         # Errors

@@ -96,9 +96,9 @@ pub(crate) fn themed_svg(svg: String) -> String {
 
 pub(crate) fn render_diagram_html(diagram: &FeynmanDiagram, svg: &str) -> String {
     format!(
-        "<figure class=\"feynkit-diagram\" style=\"max-width:100%;margin:.5rem 0\">\
+        "<figure class=\"feynkit-diagram\" style=\"max-width:100%;margin:0\">\
          <div style=\"max-width:100%;overflow-x:auto\">{svg}</div>\
-         <figcaption style=\"font-size:.85em;opacity:.75;text-align:center\">Feynman diagram {} \
+         <figcaption style=\"font-size:.85em;opacity:.75;text-align:center;margin-top:.2rem\">Feynman diagram {} \
          ({} loop{})</figcaption></figure>",
         escape_html(diagram.name()),
         diagram.loop_count(),

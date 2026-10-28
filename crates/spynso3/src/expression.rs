@@ -4207,9 +4207,10 @@ impl TensorExpression {
     ///
     /// Parameters
     /// ----------
-    /// page_size : int, default 25
-    ///     Maximum entries shown on a page, between 1 and 500. Rendering may
-    ///     show fewer entries when an individual expression is large.
+    /// page_size : int, optional
+    ///     None uses automatic previews: compact products may be shown completely,
+    ///     with 25 entries per page otherwise. An explicit size sets the maximum
+    ///     entries per page, between 1 and 500. Rendering budgets may show fewer.
     /// settings : DisplaySettings, optional
     ///     Tensor notation, index labels, and other presentation preferences.
     /// notation_source : str, optional
@@ -4231,12 +4232,12 @@ impl TensorExpression {
     /// Examples
     /// --------
     /// >>> from symbolica.community.tensor import TensorExpression
-    /// >>> viewer = TensorExpression(1).paged(page_size=25)
-    #[pyo3(signature = (page_size=25, *, settings=None, notation_source=None))]
+    /// >>> viewer = TensorExpression(1).paged()
+    #[pyo3(signature = (page_size=None, *, settings=None, notation_source=None))]
     fn paged(
         self_: PyRef<'_, Self>,
         py: Python<'_>,
-        page_size: usize,
+        page_size: Option<usize>,
         settings: Option<PyRef<'_, DisplaySettings>>,
         notation_source: Option<String>,
     ) -> PyResult<Py<PyAny>> {

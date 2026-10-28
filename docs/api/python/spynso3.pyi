@@ -6233,7 +6233,7 @@ class TensorExpression(Expression):
         >>> A = TensorName("M")(space, space)
         >>> output = A.formatted()
         """
-    def paged(self, page_size: builtins.int = 25, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> typing.Any:
+    def paged(self, page_size: typing.Optional[builtins.int] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> typing.Any:
         r"""
         Create a bounded, interactive MathML viewer in marimo or Jupyter.
 
@@ -6243,9 +6243,10 @@ class TensorExpression(Expression):
 
         Parameters
         ----------
-        page_size : int, default 25
-            Maximum entries shown on a page, between 1 and 500. Rendering may
-            show fewer entries when an individual expression is large.
+        page_size : int, optional
+            None uses automatic previews: compact products may be shown completely,
+            with 25 entries per page otherwise. An explicit size sets the maximum
+            entries per page, between 1 and 500. Rendering budgets may show fewer.
         settings : DisplaySettings, optional
             Tensor notation, index labels, and other presentation preferences.
         notation_source : str, optional
@@ -6267,7 +6268,7 @@ class TensorExpression(Expression):
         Examples
         --------
         >>> from symbolica.community.tensor import TensorExpression
-        >>> viewer = TensorExpression(1).paged(page_size=25)
+        >>> viewer = TensorExpression(1).paged()
         """
     def _display_(self) -> typing.Any:
         r"""

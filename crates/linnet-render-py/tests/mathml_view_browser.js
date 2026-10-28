@@ -17,6 +17,13 @@ const box = element => {
 };
 
 export async function inspect(doc = document, request = null) {
+  // Rendered means controls and fallback layout are ready. Exact geometry
+  // checks additionally need the separately delivered font stylesheet.
+  const deadline = performance.now() + 5000;
+  while (!doc.querySelector('style[data-linnet-font]')) {
+    assert(performance.now() < deadline, 'background font stylesheet did not arrive');
+    await new Promise(resolve => setTimeout(resolve, 5));
+  }
   const faces = await doc.fonts.load('9px "Linnet Offline Math"');
   await settle(doc);
   assert(faces.length > 0 && faces.every(face => face.status === 'loaded'),

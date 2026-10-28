@@ -10419,7 +10419,7 @@ class SquaredAmplitude:
 
         >>> print(squared)
         """
-    def paged(self, page_size: builtins.int = 25, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> typing.Any:
+    def paged(self, page_size: typing.Optional[builtins.int] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> typing.Any:
         r"""
         Explore the current tensor expression with the interactive notebook pager.
 
@@ -10427,13 +10427,15 @@ class SquaredAmplitude:
         --------
         Using the setup in the ``SquaredAmplitude`` class example:
 
-        >>> viewer = squared.paged(page_size=25)
+        >>> viewer = squared.paged()
         >>> first_page = viewer.page()
 
         Parameters
         ----------
-        page_size : int, default 25
-            Maximum entries on a page, between 1 and 500.
+        page_size : int, optional
+            None uses automatic previews: compact products may be shown completely,
+            with 25 entries per page otherwise. An explicit size sets the maximum
+            entries per page, between 1 and 500. Rendering budgets may show fewer.
         settings : DisplaySettings, optional
             Tensor notation, index labels, and presentation preferences.
         notation_source : str, optional

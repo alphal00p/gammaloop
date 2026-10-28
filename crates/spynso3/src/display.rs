@@ -1377,7 +1377,7 @@ pub(crate) fn format_structured_output_rich(
             Arc::clone(&notebook_value),
             notebook_settings.clone(),
             notebook_notation.clone(),
-            paging::DEFAULT_PAGE_SIZE,
+            None,
         )
     })
 }
