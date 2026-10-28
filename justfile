@@ -113,7 +113,7 @@ check-symbolica-feature-isolation:
       echo "the root lock must select one Symbolica revision from the official community branch" >&2
       exit 1
     fi
-    for lock in "$root/Cargo.lock" "$root/tydenso/Cargo.lock"; do
+    for lock in "$root/Cargo.lock" "$root/tydenso/Cargo.lock" "$root/examples/notebooks/symbolica-host/Cargo.lock"; do
       for package in symbolica numerica graphica; do
         source="$symbolica_source"
         version="3.0.1"
@@ -125,6 +125,30 @@ check-symbolica-feature-isolation:
         fi
       done
     done
+
+    for manifest in tydenso/Cargo.toml examples/notebooks/symbolica-host/Cargo.toml; do
+      if ! cargo metadata --locked --offline --format-version 1 --manifest-path "$root/$manifest" > /dev/null; then
+        echo "${manifest%Cargo.toml}Cargo.lock is stale or cannot resolve offline; refresh it with cargo metadata --offline --manifest-path $manifest" >&2
+        exit 1
+      fi
+    done
+    python3 - "$root" <<'PYTHON'
+    import pathlib
+    import sys
+    import tomllib
+
+    root = pathlib.Path(sys.argv[1])
+    def packages(path):
+        with path.open("rb") as lock:
+            return {(p["name"], p["version"], p.get("source")) for p in tomllib.load(lock)["package"]}
+
+    # The standalone host itself is not a dependency vendored from the root lock.
+    host = packages(root / "examples/notebooks/symbolica-host/Cargo.lock")
+    host.remove(("alphal00p-notebook-host", "0.1.0", None))
+    missing = host - packages(root / "Cargo.lock")
+    if missing:
+        sys.exit("examples/notebooks/symbolica-host/Cargo.lock contains packages absent from Cargo.lock: " + repr(sorted(missing)))
+    PYTHON
 
 # Keep Pyodide's portable arithmetic isolated from native code generation and Hakari.
 check-spynso-wasm:
@@ -198,14 +222,22 @@ docs-site PRODUCT="all" CHANNEL="latest" SNAPSHOT_TAG="" OUTPUT="target/alphal00
     cargo run --locked -p alphal00p-docs-builder -- "${args[@]}"
 
 # Add executable cells to a product in a previously built documentation site.
-docs-notebooks WHEEL PRODUCT="linnet" OUTPUT="target/alphal00p-docs":
-    uv run --no-project --with marimo==0.24.0 python \
-        crates/linnet-py/examples/export_wasm.py --docs {{ quote(PRODUCT) }} \
+docs-notebooks WHEEL PRODUCT="linnet" OUTPUT="docs/generated/notebooks" DEPENDENCY_WHEEL="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    args=()
+    dependency_wheel={{ quote(DEPENDENCY_WHEEL) }}
+    if [ -n "$dependency_wheel" ]; then
+        args+=(--dependency-wheel "$dependency_wheel")
+    fi
+    uv run --no-project --with marimo==0.24.0 python crates/linnet-py/examples/export_wasm.py --docs {{ quote(PRODUCT) }} \
         --wheel {{ quote(WHEEL) }} \
-        --output {{ quote(OUTPUT + "/products/" + PRODUCT + "/latest/assets/notebooks") }}
+        --output {{ quote(OUTPUT + "/products/" + PRODUCT + "/latest/assets/notebooks") }} \
+        "${args[@]}"
 
 # Validate the five-product documentation registry and generated inputs.
 docs-check:
+    python3 examples/notebooks/symbolica-host/sync-stubs.py --check
     cargo run --locked -p alphal00p-docs-python-exporter --features feynkit -- feynkit-community docs/api/python/feynkit-community.pyi --check
     cargo run --locked -p alphal00p-docs-catalogs --features gammaloop-reference --bin alphal00p-docs-gammaloop-reference -- --check
     cargo run --locked -p alphal00p-docs-catalogs --features vakint-reference --bin alphal00p-docs-vakint-reference -- --check
@@ -225,79 +257,28 @@ docs-check:
 showcase-video *ARGS:
     node scripts/render-showcase-video.mjs {{ ARGS }}
 
-# Install the compiled Community graph module and run its native Python suites.
+# Build Linnet's extension and compare its real import surface with the checked-in stub.
 docs-linnet-graph-check:
     #!/usr/bin/env bash
     set -euo pipefail
-    root="{{ justfile_directory() }}"
-    scratch=$(mktemp -d)
-    trap 'rm -rf -- "$scratch"' EXIT
-    cd "$scratch"
-    mkdir -p src python/symbolica/community
-    cp -R "$root/crates/linnet-py/python/symbolica/community/graph" python/symbolica/community/
-    touch python/symbolica/community/__init__.py
-    echo 'from .core import *' >python/symbolica/__init__.py
-    cat >pyproject.toml <<'TOML'
-    [build-system]
-    requires = ["maturin>=1,<2"]
-    build-backend = "maturin"
-    [project]
-    name = "symbolica"
-    version = "3.0.1"
-    [tool.maturin]
-    module-name = "symbolica.core"
-    python-source = "python"
-    TOML
-    cp "$root/Cargo.lock" Cargo.lock
-    python3 - "$root" <<'PYTHON'
-    import json, pathlib, sys, tomllib
-    root = pathlib.Path(sys.argv[1])
-    workspace = tomllib.loads((root / "Cargo.toml").read_text())
-    with open("Cargo.toml", "w") as fp:
-        fp.write('[workspace]\n[package]\nname="linnet-graph-host"\nversion="0.1.0"\nedition="2024"\n[lib]\nname="core"\ncrate-type=["cdylib"]\n[dependencies]\n')
-        fp.write('linnet-py = {path=' + json.dumps(str(root / "crates/linnet-py")) + '}\n')
-        fp.write('pyo3 = {version="0.28",features=["abi3-py310","extension-module"]}\nsymbolica = {version="=3.0.1",default-features=false,features=["python_export","integer-gmp","float-mpfr"]}\n')
-        fp.write('[patch.crates-io]\n')
-        for name, props in workspace.get('patch', {}).get('crates-io', {}).items():
-            props = dict(props)
-            if 'path' in props:
-                props['path'] = str(root / props['path'])
-            fp.write(name + ' = {' + ', '.join(k + '=' + json.dumps(v) for k, v in props.items()) + '}\n')
-    PYTHON
-    cat >src/lib.rs <<'RUST'
-    use pyo3::{prelude::*, wrap_pyfunction};
-    use pyo3::types::PyModule;
-    use symbolica::api::python::{create_symbolica_module, SymbolicaCommunityModule};
-    #[pyfunction]
-    fn initialize_module(py: Python) -> PyResult<()> { linnet_py::GraphModule::initialize(py) }
-    #[pymodule]
-    fn core(module: &Bound<'_, PyModule>) -> PyResult<()> {
-        create_symbolica_module(module)?;
-        let graph = PyModule::new(module.py(), "graph_native")?;
-        graph.add_function(wrap_pyfunction!(initialize_module, &graph)?)?;
-        linnet_py::GraphModule::register_module(&graph)?;
-        module.add_submodule(&graph)?;
-        module.py().import("sys")?.getattr("modules")?.set_item("symbolica.community.graph_native", graph)?;
-        Ok(())
+
+    temp_base=${TMPDIR:-/tmp}
+    test_root=$(mktemp -d "$temp_base/alphal00p-docs-linnet-graph.XXXXXX")
+    cleanup() {
+        case "$test_root" in
+            "$temp_base"/alphal00p-docs-linnet-graph.*)
+                rm -rf -- "$test_root"
+                ;;
+        esac
     }
-    RUST
-    cargo metadata --format-version 1 > /dev/null
-    python3 - "$root/Cargo.lock" <<'PYTHON'
-    import pathlib, sys, tomllib
-    def packages(file):
-        return {(p["name"], p["version"], p["source"]) for p in tomllib.loads(pathlib.Path(file).read_text())["package"] if "source" in p}
-    extra = packages("Cargo.lock") - packages(sys.argv[1])
-    if extra:
-        raise SystemExit(f"test host resolved dependencies outside the workspace lock: {sorted(extra)}")
-    PYTHON
-    uv venv venv --python "${PYTHON_BIN_PATH:-python3}"
-    maturin build --locked --out wheels
-    uv pip install --python venv/bin/python --no-deps wheels/*.whl
-    python_check="$scratch/venv/bin/python"
-    cd "$root"
-    for suite in test_basic.py test_wasm.py test_streaming.py; do
-        "$python_check" -m unittest discover -s crates/linnet-py/tests -p "$suite"
-    done
+    trap cleanup EXIT
+
+    python_bin=${PYTHON_BIN_PATH:-python3}
+    uv venv "$test_root/venv" --python "$python_bin"
+    maturin build --locked --manifest-path examples/notebooks/symbolica-host/Cargo.toml --out "$test_root/wheels"
+    uv pip install --python "$test_root/venv/bin/python" --no-deps "$test_root"/wheels/*.whl
+    uv pip install --python "$test_root/venv/bin/python" symbolica-fonts
+    "$test_root/venv/bin/python" -m unittest discover -s crates/linnet-py/tests -p 'test_*.py'
 
 # Regenerate source-backed CLI/settings and topology/dependency snapshots.
 docs-generated:

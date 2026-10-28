@@ -102,6 +102,15 @@
         workspaceRoot = ./.;
         incrementalBaselineRoot = /. + builtins.unsafeDiscardStringContext self.inputs.ci-cache-base.outPath;
       };
+      notebookWasmToolchain = fenix.packages.${system}.combine [
+        ciToolchain
+        fenix.packages.${system}.targets.wasm32-unknown-emscripten.stable.rust-std
+      ];
+      notebookWasm = import ./nix/notebook-wasm.nix {
+        inherit pkgs docsPkgs craneLib workspace;
+        toolchain = notebookWasmToolchain;
+        workspaceRoot = ./.;
+      };
       inherit
         (workspace)
         docsTypst
@@ -249,6 +258,9 @@
           "alphal00p-docs-svg-assets" = workspace.docsSvgAssets;
           "alphal00p-docs-pages" = alphal00pDocsPages;
           "alphal00p-docs-snapshot-fixture" = alphal00pDocsSnapshotFixture;
+          "notebook-wasm-toolchain" = notebookWasmToolchain;
+          "notebook-wasm-deps" = notebookWasm.notebookWasmDeps;
+          "notebook-wasm-wheel" = notebookWasm.notebookWasmWheel;
           "ci-workspace-graph-json" = guppyWorkspaceGraphJson;
           "nix-ci-config" = nixCiConfiguration;
           inherit linnest-wasm;
