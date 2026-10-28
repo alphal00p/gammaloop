@@ -656,7 +656,8 @@ impl SymbolicTensor<PartialStructure> {
     ) -> Self {
         let is_metric =
             matches!(expression.as_view(), AtomView::Fun(fun) if fun.get_symbol() == ETS.metric);
-        let is_composite = !matches!(expression.as_view(), AtomView::Fun(_));
+        let is_composite = !matches!(expression.as_view(), AtomView::Fun(function)
+            if !function.get_symbol().has_tag(&SPENSO_TAG.tensor_word));
         let structure = if structure.has_unresolved_ports() {
             structure.canonicalize_open_ports()
         } else {
@@ -1062,7 +1063,8 @@ impl SymbolicTensor<PartialStructure> {
             proofs.normalized_product = Default::default();
             self.expression = expression;
             self.is_metric = matches!(self.expression.as_view(), AtomView::Fun(fun) if fun.get_symbol() == ETS.metric);
-            self.is_composite = !matches!(self.expression.as_view(), AtomView::Fun(_));
+            self.is_composite = !matches!(self.expression.as_view(), AtomView::Fun(function)
+                if !function.get_symbol().has_tag(&SPENSO_TAG.tensor_word));
             self.proofs = proofs;
         }
         // The construction owner already established this interface. Finishing

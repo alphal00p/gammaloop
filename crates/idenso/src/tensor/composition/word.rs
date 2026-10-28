@@ -1,5 +1,11 @@
-use super::*;
-use crate::tensor::inference::TensorInferenceError;
+use crate::tensor::SymbolicTensor;
+use crate::tensor::composition;
+use crate::tensor::composition::ExplicitIndexOccurrences;
+use crate::tensor::inference::{InterfaceInference, TensorInferenceError, TensorInterface};
+use spenso::network::tags::SPENSO_TAG;
+use spenso::structure::partial::{PartialStructure, PartialStructureExt};
+use std::sync::Arc;
+use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol};
 
 impl SymbolicTensor<PartialStructure> {
     /// Build a variadic tensor word without discarding its operand interfaces.
@@ -24,6 +30,27 @@ impl SymbolicTensor<PartialStructure> {
     /// order before constructing the result.
     /// Symbolic networks retain the word; component-shadow realization requires
     /// an explicit policy and is unsupported by the named component parser.
+    ///
+    /// # Errors
+    /// Rejects invalid word heads, unpublished operands, unsupported operand
+    /// grammar, excessive explicit index occurrences, and normalization that
+    /// changes the planned tensor interface.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use idenso::tensor::SymbolicTensor;
+    /// use idenso::tensor::inference::TensorInferenceError;
+    /// use spenso::network::tags::SPENSO_TAG;
+    /// use spenso::{mink, tensor_symbol};
+    /// use symbolica::{function, symbol};
+    /// let head = symbol!("word_example::exterior"; Flat, Linear, Antisymmetric;
+    ///     tag = &SPENSO_TAG.tensor_word);
+    /// let a = SymbolicTensor::infer(function!(tensor_symbol!("word_example::a"), mink!(4, 1)))?;
+    /// let zero = SymbolicTensor::word(head, &[a.clone(), a])?;
+    /// assert!(zero.is_zero());
+    /// # Ok::<(), TensorInferenceError>(())
+    /// ```
     pub fn word(head: Symbol, operands: &[Self]) -> Result<Self, TensorInferenceError> {
         if !head.has_tag(&SPENSO_TAG.tensor_word)
             || head.is_scalar()
@@ -40,7 +67,7 @@ impl SymbolicTensor<PartialStructure> {
             return Self::infer(Atom::one());
         }
         for operand in operands {
-            operand.ensure_validated()?;
+            operand.explicit_index_occurrences()?;
             if !Self::is_word_operand(head, operand.expression.as_view()) {
                 return Err(TensorInferenceError::invalid(
                     "word operands must be individual generators or same-head words with scalar coefficients; keep commuting tensor coefficients outside the word",
@@ -60,12 +87,15 @@ impl SymbolicTensor<PartialStructure> {
                 operand.reindex_interface_ports(&replacements)
             })
             .collect::<Result<Vec<_>, _>>()?;
+        let occurrences =
+            ExplicitIndexOccurrences::product(&materialized.iter().collect::<Vec<_>>())?;
         let interface = InterfaceInference::merge_explicit_interface_sequence(
             &materialized
                 .iter()
                 .map(|operand| operand.structure.clone())
                 .collect::<Vec<_>>(),
-        )?;
+        )?
+        .into_algebra_result();
         let expression = FunctionBuilder::new(head)
             .add_args(
                 materialized
@@ -73,7 +103,8 @@ impl SymbolicTensor<PartialStructure> {
                     .map(|operand| operand.expression.as_view()),
             )
             .finish();
-        Self::from_declared_parts(expression, interface)
+        Self::validate_interface(&expression, &interface)?;
+        Self::from_validated_parts(expression, interface, Arc::new(occurrences)).finish_parts()
     }
 
     /// Check the operand grammar without rewriting or assigning field statistics.
@@ -88,7 +119,7 @@ impl SymbolicTensor<PartialStructure> {
             AtomView::Var(_) => true,
             AtomView::Fun(function) => {
                 function.get_symbol() == head
-                    || (!is_composite_head(function.get_symbol(), &SPENSO_TAG)
+                    || (!composition::is_composite_head(function.get_symbol(), &SPENSO_TAG)
                         && !function.get_symbol().has_tag(&SPENSO_TAG.tensor_word))
             }
             AtomView::Add(sum) => sum.iter().all(|term| Self::is_word_operand(head, term)),
@@ -107,12 +138,21 @@ impl SymbolicTensor<PartialStructure> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::AdjointError;
     use crate::tensor::{SymbolicNetExt, SymbolicNetParse};
-    use spenso::structure::{dimension::Dimension, representation::Minkowski};
+    use crate::test_support;
+    use spenso::network::library::symbolic::ETS;
+    use spenso::structure::abstract_index::AbstractIndex;
+    use spenso::structure::dimension::Dimension;
+    use spenso::structure::partial::PartialIndex;
+    use spenso::structure::representation::{LibraryRep, Minkowski, RepName};
+    use spenso::structure::slot::IsAbstractSlot;
+    use std::collections::HashMap;
+    use std::slice;
     use symbolica::{function, symbol};
 
     fn head() -> Symbol {
-        crate::test_support::test_initialize();
+        test_support::test_initialize();
         symbol!("tensor_word_tests::exterior"; Flat, Linear, Antisymmetric;
             tag = &SPENSO_TAG.tensor_word)
     }
@@ -262,7 +302,7 @@ mod tests {
         let word = SymbolicTensor::word(head, &[a, b]).unwrap();
         assert!(matches!(
             word.dirac_adjoint(true),
-            Err(crate::AdjointError::ImplicitTensorWordAdjoint)
+            Err(AdjointError::ImplicitTensorWordAdjoint)
         ));
     }
 
@@ -276,7 +316,10 @@ mod tests {
             ),
             PartialStructure::from_logical_slots([]),
         );
-        assert!(SymbolicTensor::word(head, &[illegal]).is_err());
+        assert!(illegal.is_err());
+        let mut invalidated = component("tensor_word_tests::invalidated", 70);
+        invalidated.invalidate_proofs();
+        assert!(SymbolicTensor::word(head, &[invalidated]).is_err());
         let a = component("tensor_word_tests::mapped_zero", 71);
         let zero = a.with_algebra_result(Atom::Zero).unwrap();
         let word = SymbolicTensor::word(head, &[zero]).unwrap();
@@ -390,7 +433,7 @@ mod tests {
                 **output = Atom::one();
             }
         );
-        assert!(SymbolicTensor::word(erased, std::slice::from_ref(&a)).is_err());
+        assert!(SymbolicTensor::word(erased, slice::from_ref(&a)).is_err());
         let annihilated = symbol!(
             "tensor_word_tests::annihilated",
             tag = &SPENSO_TAG.tensor_word,
@@ -398,7 +441,7 @@ mod tests {
                 **output = Atom::Zero;
             }
         );
-        let zero = SymbolicTensor::word(annihilated, std::slice::from_ref(&a)).unwrap();
+        let zero = SymbolicTensor::word(annihilated, slice::from_ref(&a)).unwrap();
         assert!(zero.is_zero());
         assert_eq!(zero.rank(), 1);
         let conflicting = symbol!("tensor_word_tests::conflicting"; Scalar;
@@ -411,5 +454,15 @@ mod tests {
                 .expression
                 .is_one()
         );
+    }
+
+    #[test]
+    fn tensor_word_retains_hidden_index_occurrences_after_native_zero() {
+        let head = head();
+        let a = component("tensor_word_tests::history_a", 121);
+        let zero = SymbolicTensor::word(head, &[a.clone(), a.clone()]).unwrap();
+        assert!(zero.is_zero());
+        assert!(zero.multiply(&a).is_err());
+        assert!(SymbolicTensor::word(head, &[zero, a]).is_err());
     }
 }
