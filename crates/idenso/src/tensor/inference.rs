@@ -6197,12 +6197,16 @@ pub(crate) mod tests {
                 mink.slot(PartialIndex::Explicit(mu)),
                 spin.slot(PartialIndex::open(0)),
             ]),
-        ).unwrap();
+        )
+        .unwrap();
         let scaled = anonymous
             .with_rewritten_expression(Atom::num(2) * &anonymous.expression)
             .unwrap();
         assert_eq!(scaled.expression, Atom::num(2) * &anonymous.expression);
-        assert_eq!(scaled.structure.logical_slots(), anonymous.structure.logical_slots());
+        assert_eq!(
+            scaled.structure.logical_slots(),
+            anonymous.structure.logical_slots()
+        );
     }
 
     #[test]

@@ -2906,6 +2906,25 @@ impl SymbolicTensor<PartialStructure> {
     /// order: exact rematerialization rejects an inverse which would erase an
     /// axis permutation. Custom normalizers require a separate proof policy.
     /// Checked admission also requires explicit ports inside odd generators.
+    ///
+    /// # Errors
+    /// Rejects invalid positions, custom normalizers, incompatible anonymous
+    /// occurrence order, and inverses which coalesce distinct ports.
+    ///
+    /// # Example
+    /// ```
+    /// use std::collections::HashMap;
+    /// use idenso::tensor::SymbolicTensor;
+    /// use idenso::tensor::composition::TensorCompositionError;
+    /// use spenso::structure::abstract_index::AbstractIndex;
+    /// use spenso::{mink, tensor_symbol};
+    /// use symbolica::function;
+    /// let source = SymbolicTensor::infer(function!(tensor_symbol!("dematerialize_example::a"), mink!(4, 1)))?;
+    /// let restored = source.dematerialize_interface_ports(&[0])?;
+    /// let round_trip = restored.reindex_interface_ports(&HashMap::from([(0, AbstractIndex::Normal(1))]))?;
+    /// assert!(round_trip.same_value(&source));
+    /// # Ok::<(), TensorCompositionError>(())
+    /// ```
     pub fn dematerialize_interface_ports(
         &self,
         positions: &[usize],
@@ -2934,6 +2953,20 @@ impl SymbolicTensor<PartialStructure> {
             expression,
             PartialStructure::from_logical_slots(logical),
         )?;
+        let mut occurrences = self.explicit_index_occurrences()?.clone();
+        for &position in replacements.keys() {
+            let slot = original[position];
+            if let PartialIndex::Explicit(index) = slot.aind {
+                occurrences.remove(slot.rep().slot(index))?;
+            }
+        }
+        occurrences.branch_max(restored.explicit_index_occurrences()?);
+        occurrences.validate()?;
+        let restored = Self::from_validated_parts(
+            restored.expression,
+            restored.structure,
+            Arc::new(occurrences),
+        );
         let allocator = OnceCell::new();
         let reference_indices = original
             .iter()
@@ -4897,8 +4930,65 @@ mod tests {
     }
 
     #[test]
+    fn dematerialize_retains_hidden_contractions_while_removing_selected_named_ports() {
+        test_support::test_initialize();
+        let hidden = AbstractIndex::Normal(990);
+        let port = AbstractIndex::Normal(991);
+        let a = vector(
+            "dematerialize_history_a",
+            rep().slot(PartialIndex::Explicit(hidden)),
+        );
+        let closed = a
+            .multiply(&vector(
+                "dematerialize_history_b",
+                rep().slot(PartialIndex::Explicit(hidden)),
+            ))
+            .unwrap();
+        let free = vector(
+            "dematerialize_history_free",
+            rep().slot(PartialIndex::Explicit(port)),
+        );
+        let source = closed
+            .multiply(&free)
+            .unwrap()
+            .with_algebra_result(Atom::Zero)
+            .unwrap();
+        let restored = source.dematerialize_interface_ports(&[0, 0]).unwrap();
+        assert_eq!(
+            restored
+                .explicit_index_occurrences()
+                .unwrap()
+                .count(rep().slot(hidden)),
+            2
+        );
+        assert_eq!(
+            restored
+                .explicit_index_occurrences()
+                .unwrap()
+                .count(rep().slot(port)),
+            0
+        );
+        let probe = vector(
+            "dematerialize_history_probe",
+            rep().slot(PartialIndex::Explicit(hidden)),
+        );
+        assert!(matches!(
+            restored.multiply(&probe),
+            Err(TensorCompositionError::InvalidExplicitMultiplicity { occurrences: 3, .. })
+        ));
+        let round_trip = restored
+            .reindex_interface_ports(&HashMap::from([(0, port)]))
+            .unwrap();
+        assert!(round_trip.same_value(&source));
+        assert!(matches!(
+            round_trip.multiply(&probe),
+            Err(TensorCompositionError::InvalidExplicitMultiplicity { occurrences: 3, .. })
+        ));
+    }
+
+    #[test]
     fn dematerialize_preserves_logical_ports_sums_variance_and_zero() {
-        crate::test_support::test_initialize();
+        test_support::test_initialize();
         let slots = [901, 902, 903]
             .map(|index| rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(index))));
         let matrix = partial_tensor(
@@ -4914,8 +5004,7 @@ mod tests {
         let sum = matrix.try_add(&other).unwrap();
         let zero =
             SymbolicTensor::from_declared_parts(Atom::Zero, matrix.structure.clone()).unwrap();
-        let fundamental: Representation<LibraryRep> =
-            crate::test_support::test_initialize().cof_nc.cast();
+        let fundamental: Representation<LibraryRep> = test_support::test_initialize().cof_nc.cast();
         let dual = partial_tensor(
             SPENSO_TAG.tensor_symbol("dematerialize_dual"),
             &[
@@ -5000,15 +5089,12 @@ mod tests {
             Atom::one(),
             PartialStructure::from_logical_slots([slots[0]]),
         );
-        assert!(matches!(
-            missing.dematerialize_interface_ports(&[0]),
-            Err(TensorCompositionError::InvalidResultInterface(_))
-        ));
+        assert!(matches!(missing, Err(TensorInferenceError::Invalid(_))));
     }
 
     #[test]
     fn dematerialize_refuses_erased_anonymous_occurrence_order() {
-        crate::test_support::test_initialize();
+        test_support::test_initialize();
         let slots = [901, 902, 903]
             .map(|index| rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(index))));
         let matrix = partial_tensor(
@@ -5021,7 +5107,18 @@ mod tests {
             &slots,
             &[slots[2], slots[0], slots[1]],
         );
-        for source in [matrix.clone(), matrix.try_add(&other).unwrap()] {
+        // Named addition publishes canonical ports. Restore the deliberate
+        // logical permutation so the sum exercises the same rejected inverse.
+        let sum = matrix
+            .try_add(&other)
+            .unwrap()
+            .permuted(&[2, 0, 1])
+            .unwrap();
+        for source in [matrix, sum] {
+            assert_eq!(
+                source.structure.logical_slots(),
+                [slots[2], slots[0], slots[1]]
+            );
             let error = source.dematerialize_interface_ports(&[0, 2]).unwrap_err();
             assert!(
                 error
@@ -5033,7 +5130,7 @@ mod tests {
 
     #[test]
     fn dematerialize_independent_factors_retain_order_across_sums() {
-        crate::test_support::test_initialize();
+        test_support::test_initialize();
         let slots = [931, 932, 933]
             .map(|index| rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(index))));
         let logical = PartialStructure::from_logical_slots([slots[2], slots[0], slots[1]]);
@@ -5042,7 +5139,7 @@ mod tests {
         let explicit = vector("dematerialize_factor_c", slots[2]);
         let atom = &first.expression * &second.expression * &explicit.expression;
         let source = SymbolicTensor::from_declared_parts(atom.clone(), logical.clone()).unwrap();
-        let weight = Atom::var(symbolica::symbol!("dematerialize_factor_weight"));
+        let weight = Atom::var(symbol!("dematerialize_factor_weight"));
         let sum = SymbolicTensor::from_declared_parts(&atom + weight * &atom, logical).unwrap();
         for source in [source, sum] {
             let restored = source.dematerialize_interface_ports(&[1, 2]).unwrap();
@@ -5061,14 +5158,10 @@ mod tests {
 
     #[test]
     fn dematerialize_refuses_custom_normalizers_without_replaying_them() {
-        use std::sync::{
-            Arc,
-            atomic::{AtomicUsize, Ordering},
-        };
-        crate::test_support::test_initialize();
+        test_support::test_initialize();
         let calls = Arc::new(AtomicUsize::new(0));
         let observed = Arc::clone(&calls);
-        let head = spenso::vector_symbol!(
+        let head = vector_symbol!(
             "dematerialize_callback_vector",
             norm = move |_, _| {
                 observed.fetch_add(1, Ordering::Relaxed);
@@ -5091,7 +5184,7 @@ mod tests {
 
     #[test]
     fn dematerialize_refuses_anonymous_occurrence_coalescence() {
-        crate::test_support::test_initialize();
+        test_support::test_initialize();
         let first = rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(945)));
         let second = rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(946)));
         let head = SPENSO_TAG.rank_one_tensor_symbol("dematerialize_repeated_factor");
@@ -5109,7 +5202,7 @@ mod tests {
 
     #[test]
     fn declared_interfaces_permit_explicit_interleaving_without_anonymous_permutation() {
-        crate::test_support::test_initialize();
+        test_support::test_initialize();
         let representations = [
             rep(),
             ExtendibleReps::MINKOWSKI.new_rep(Dimension::Concrete(4)),
@@ -5163,8 +5256,7 @@ mod tests {
 
     #[test]
     fn dematerialize_builtin_gamma_coefficients_retains_the_actual_derivative_interface() {
-        use crate::dirac::AGS;
-        crate::test_support::test_initialize();
+        test_support::test_initialize();
         let gamma = SymbolicTensor::<PartialStructure>::from_signature(
             &AGS.gamma_strct::<AbstractIndex>(4),
         )
@@ -5178,7 +5270,7 @@ mod tests {
             .unwrap();
         let derivative = vector(
             "dematerialize_derivative",
-            crate::test_support::test_initialize()
+            test_support::test_initialize()
                 .mink4
                 .cast::<LibraryRep>()
                 .slot(PartialIndex::Explicit(AbstractIndex::Normal(914))),
@@ -5215,8 +5307,8 @@ mod tests {
 
     #[test]
     fn dematerialize_keeps_odd_generators_explicit_and_allows_coefficient_ports() {
-        crate::test_support::test_initialize();
-        let head = symbolica::symbol!("dematerialize_exterior"; Flat, Linear, Antisymmetric; tag = &SPENSO_TAG.tensor_word);
+        test_support::test_initialize();
+        let head = symbol!("dematerialize_exterior"; Flat, Linear, Antisymmetric; tag = &SPENSO_TAG.tensor_word);
         let odd = vector(
             "dematerialize_odd",
             rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(921))),
