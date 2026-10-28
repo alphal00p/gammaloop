@@ -1040,12 +1040,19 @@ impl CookFunctionName {
 #[cfg(test)]
 mod tests {
     use super::{CookMode, CookSettings, CookingError};
+    use crate::tensor::SymbolicTensor;
     use crate::test_support::test_initialize;
     use crate::{Cookable, coad, test_support};
     use spenso::network::tags::SPENSO_TAG;
     use spenso::structure::abstract_index::{AIND_SYMBOLS, AbstractIndex};
+    use spenso::structure::partial::PartialStructure;
+    use spenso::structure::representation::{Minkowski, RepName};
+    use spenso::structure::slot::IsAbstractSlot;
     use spenso::structure::slot::ParseableAind;
+    use spenso::tensor_symbol;
     use spenso::{index_symbol, mink};
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use symbolica::atom::{
         Atom, AtomCore, AtomView, FunctionBuilder, NamespacedSymbol, Symbol, SymbolBuilder,
         UserData,
@@ -1626,38 +1633,24 @@ mod tests {
 
     #[test]
     fn representation_payload_cooking_keeps_scalar_metadata_and_callback_input() {
-        use crate::{CookMode, tensor::SymbolicTensor};
-        use spenso::structure::{
-            abstract_index::AbstractIndex,
-            partial::PartialStructure,
-            representation::{Minkowski, RepName},
-            slot::IsAbstractSlot,
-        };
-        use std::sync::{
-            Arc,
-            atomic::{AtomicUsize, Ordering},
-        };
-        use symbolica::function;
-
         test_initialize();
         let scope = symbol!("cook_scalar_metadata_scope");
         let inner = Minkowski {}
             .new_rep(4)
-            .slot::<AbstractIndex, _>(AbstractIndex::Normal(1701).scoped(scope))
-            .to_atom();
+            .to_symbolic([function!(symbol!("cook_scalar_private_label"), 1701)]);
         let outer = Minkowski {}
             .new_rep(4)
             .slot::<AbstractIndex, _>(AbstractIndex::Normal(1702).scoped(scope))
             .to_atom();
         let metadata = function!(
             symbol!("cook_scalar_private_metadata"; Scalar),
-            function!(spenso::tensor_symbol!("cook_scalar_private_a"), &inner)
-                * function!(spenso::tensor_symbol!("cook_scalar_private_b"), &inner)
+            function!(tensor_symbol!("cook_scalar_private_a"), &inner)
+                * function!(tensor_symbol!("cook_scalar_private_b"), &inner)
         );
         let bad_calls = Arc::new(AtomicUsize::new(0));
-        let observed = bad_calls.clone();
+        let observed = Arc::clone(&bad_calls);
         let expected = metadata.clone();
-        let tensor = spenso::tensor_symbol!(
+        let tensor = tensor_symbol!(
             "cook_scalar_metadata_tensor",
             norm = move |value, output| {
                 if !matches!(value, AtomView::Fun(function)
@@ -1677,9 +1670,10 @@ mod tests {
         assert_eq!(bad_calls.load(Ordering::Relaxed), 0);
         for mode in [CookMode::FlattenedSymbol, CookMode::ReversibleEncoding] {
             let settings = CookSettings::indices().with_mode(mode);
+            assert_ne!(settings.try_cook(inner.as_view()).unwrap(), inner);
             let cooked = settings.try_cook(source.expression().as_view()).unwrap();
             assert!(!cooked.is_zero());
-            assert_ne!(&cooked, source.expression());
+            assert_eq!(&cooked, source.expression());
             assert_eq!(bad_calls.load(Ordering::Relaxed), 0);
             assert_eq!(settings.cook(cooked.as_view()), cooked);
             if mode == CookMode::ReversibleEncoding {
@@ -1691,14 +1685,10 @@ mod tests {
 
     #[test]
     fn representation_payload_uncooking_preserves_literal_encoded_scalar_metadata() {
-        use crate::CookMode;
-        use spenso::structure::representation::{Minkowski, RepName};
-        use symbolica::function;
-
         test_initialize();
         let label = function!(symbol!("cook_scalar_explicit_label"; Scalar), 5);
         let original = function!(
-            spenso::tensor_symbol!("cook_scalar_literal_tensor"),
+            tensor_symbol!("cook_scalar_literal_tensor"),
             Minkowski {}.new_rep(4).to_symbolic([label])
         );
         let settings = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
@@ -1719,12 +1709,12 @@ mod tests {
             dimension
         );
         let source = function!(
-            spenso::tensor_symbol!("cook_scalar_literal_spectator"),
+            tensor_symbol!("cook_scalar_literal_spectator"),
             &metadata,
             &dimension_source
         );
         let expected_cooked = function!(
-            spenso::tensor_symbol!("cook_scalar_literal_spectator"),
+            tensor_symbol!("cook_scalar_literal_spectator"),
             metadata,
             encoded_dimension
         );
@@ -1734,8 +1724,6 @@ mod tests {
 
     #[test]
     fn any_function_cooking_and_uncooking_still_enters_scalar_functions() {
-        use symbolica::function;
-
         let head = symbol!("cook_scalar_any_function"; Scalar);
         let payload = parse_lit!(cook_scalar_any_payload(7));
         let settings = CookSettings::reversible();
