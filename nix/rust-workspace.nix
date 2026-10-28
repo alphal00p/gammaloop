@@ -3186,6 +3186,11 @@ in {
   inherit (documentation) docsSvgAssets docsTypst docsFontPath linnetPython alphal00pDocsCargoArtifacts
     alphal00pDocsPages alphal00pDocsSnapshotFixture;
   inherit
+    workspaceDependencyClosureFor
+    workspaceDependencyNamesFor
+    workspacePackageSrcForSourcePackages
+    workspaceMissingCargoTargetsScript
+    symbolicaRenderData
     workspaceDependencySrc
     craneTestDependencyArtifacts
     craneTestBinaryArtifactFor

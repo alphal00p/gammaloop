@@ -6,6 +6,29 @@ import sys
 import unittest
 
 
+class InstalledTypingTests(unittest.TestCase):
+    def test_community_modules_ship_their_public_types(self):
+        from ast import ClassDef, parse
+        from importlib import import_module
+        from importlib.resources import files
+
+        for package, class_name in (
+            ("graph", "Graph"),
+            ("hepkit", "Model"),
+            ("tensor", "Tensor"),
+        ):
+            with self.subTest(package=package):
+                module = import_module(f"symbolica.community.{package}")
+                resources = files(module)
+                self.assertTrue(resources.joinpath("py.typed").is_file())
+                stub = parse(resources.joinpath("__init__.pyi").read_text())
+                self.assertIn(
+                    class_name,
+                    [item.name for item in stub.body if isinstance(item, ClassDef)],
+                )
+                self.assertIsInstance(getattr(module, class_name), type)
+
+
 @unittest.skipIf(sys.platform == "emscripten", "native installed-wheel discovery")
 class InstalledDataTests(unittest.TestCase):
     def test_font_discovery(self):

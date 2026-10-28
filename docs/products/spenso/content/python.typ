@@ -191,7 +191,23 @@ The generated #link("reference/python/spynso3/Representation/")[`Representation`
 versioned contracts. Do not infer index compatibility from two equal dimensions: names,
 representations, and duality remain part of the value.
 
-== Notebook displays
+== Executable API tour and displays
+
+#source-link("examples/notebooks/spenso_api_tour.py", label: "The complete Python API tour")
+is a marimo notebook with one executed example for every declared type. Each entry shows its
+construction, live display, Python representation, and declared members. Run it in a native
+community-module environment with marimo and a C++ compiler on `PATH`:
+
+// docs-example: syntax
+```sh
+python -m marimo edit examples/notebooks/spenso_api_tour.py
+```
+
+#source-link("examples/notebooks/spenso_notation.py", label: "The tensor notation showcase")
+explains vectors and their family labels, free indices, unresolved and supplied ports,
+scalar products, Dirac slashes, ordered chains, scoped copies, scalar invariants, and
+component coordinates. It compares display settings and checks that compact contractions
+preserve every component.
 
 Mathematical objects expose notebook HTML and LaTeX displays. `TensorNetwork` draws its
 current executable graph in notebooks, using Linnest's operator and typed-leaf styles.

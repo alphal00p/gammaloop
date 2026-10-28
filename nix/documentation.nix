@@ -183,10 +183,8 @@ let
         (workspaceRoot + "/pyproject.toml")
         (workspaceRoot + "/crates/linnet-py/python/symbolica/community/graph")
         (workspaceRoot + "/crates/linnet-py/tests")
-        (workspaceRoot + "/justfile")
-        (workspaceRoot + "/just")
-        (workspaceRoot + "/crates/linnet/Justfile")
-        (workspaceRoot + "/tydenso/Justfile")
+        (workspaceRoot + "/examples/notebooks")
+        (workspaceRoot + "/crates/linnet-py/examples/export_wasm.py")
         (workspaceRoot + "/crates/feynkit-py/python/symbolica/community/hepkit")
         (workspaceRoot + "/crates/linnet-py/examples/physics_render_settings.py")
         (workspaceRoot + "/crates/linnet-py/examples/layout_stream.py")
@@ -438,6 +436,7 @@ let
     if timestamp == "" then toString self.lastModified else timestamp;
 
   alphal00pDocsValidationCommands = ''
+    python3 examples/notebooks/symbolica-host/sync-stubs.py --check
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-catalogs --features ${lib.escapeShellArg documentationCatalogFeatures} --bin alphal00p-docs-gammaloop-reference -- --check
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-catalogs --features ${lib.escapeShellArg documentationCatalogFeatures} --bin alphal00p-docs-vakint-reference -- --check
     cargo test --locked --profile ${docsCargoProfile} -p alphal00p-docs-examples
@@ -448,9 +447,38 @@ let
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features feynkit -- feynkit-community docs/api/python/feynkit-community.pyi --check
     cargo test --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features gammaloop
     cargo test --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features linnet
+    linnet_python="$TMPDIR/alphal00p-docs-linnet-graph"
+    export UV_CACHE_DIR="$TMPDIR/alphal00p-docs-uv-cache"
     export UV_OFFLINE=true
-    # The graph check's native renderer reads host-owned fonts through symbolica-data.
-    SYMBOLICA_DATA_DIRECTORY="${symbolicaRenderData}" PYTHON_BIN_PATH="${linnetPython}/bin/python3" ${pkgs.just}/bin/just docs-linnet-graph-check
+    uv venv "$linnet_python" --python "${linnetPython}/bin/python3" --system-site-packages
+    linnet_wheels="$TMPDIR/alphal00p-docs-linnet-wheels"
+    maturin build \
+      --offline \
+      --locked \
+      --profile ${docsCargoProfile} \
+      --interpreter "$linnet_python/bin/python" \
+      --out "$linnet_wheels" \
+      --manifest-path examples/notebooks/symbolica-host/Cargo.toml
+    # The complete Community wheel embeds its graph renderer.
+    uv pip install --offline --no-deps --python "$linnet_python/bin/python" \
+      "$linnet_wheels"/*.whl
+    # Exercise installed-wheel discovery offline with the pinned resource bytes
+    # in the same package layout used by symbolica-fonts on PyPI.
+    "$linnet_python/bin/python" - <<'PY'
+    import os
+    import shutil
+    import stat
+    from pathlib import Path
+    from symbolica import data
+    fonts = Path(data.__file__).parent / "_data/fonts"
+    shutil.copytree("${symbolicaRenderData}", fonts)
+    # copytree preserves immutable store directory modes; the private runtime
+    # must be able to remove its copies, while leaving resource bytes untouched.
+    for directory, _, _ in os.walk(fonts):
+        path = Path(directory)
+        path.chmod(path.stat().st_mode | stat.S_IWUSR)
+    PY
+    "$linnet_python/bin/python" -m unittest discover -s crates/linnet-py/tests -p 'test_*.py'
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-builder -- check
   '';
 

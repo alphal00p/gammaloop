@@ -1,0 +1,1 @@
+../../../../../../../docs/api/python/spynso3.pyi
