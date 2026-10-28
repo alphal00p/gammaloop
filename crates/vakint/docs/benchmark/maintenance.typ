@@ -239,6 +239,24 @@ python3 crates/vakint/docs/benchmark/merge_physical_capture_results.py \
   --output /path/to/workspace/new-results.json --select-current
 ```
 
+The additional #raw("--file-engineering INDEX.json") mode imports completed
+#raw("vakint.cache-file-engineering-evidence-index.v1") metadata: a full cold FILE
+handoff, LIGHT utility report, and accepted Route/Apply export-budget receipts.
+It resolves only bounded hashed JSON records, including native count/reimport
+proofs and the original tuning baseline; it never hashes or opens referenced
+cache/result payloads. The separate #raw("selected_cache_file_engineering_run")
+displays this supplement without replacing the prior engineering or final-suite
+selection. Raw receipts, stage arrays, closed captures and source cohorts remain
+under #raw("engineering_optimization_runs").
+
+Keep FILE loading/authentication, collector whole-file SHA scans and controller
+startup/close boundaries explicit. A shorter public call can accompany slower
+cold end-to-end behavior, and lower rule counts need not produce lower runtime.
+Concurrent engineering observations do not establish a causal format advantage,
+a three-run median or a LIGHT utility winner. The 95,000,000-byte LIGHT cap and
+complete native export/reimport checks remain required; neither export counts nor
+typed exporter identities establish typed application attachment or performance.
+
 === Display both cache tiers
 
 Use #raw("--select-tier heavy") for an authenticated cumulative native cache, or

@@ -908,3 +908,105 @@ Refresh and validation contract: #raw("maintenance.typ").]
   Raw benchmark, execution, exact comparison and all product proofs are appended
   in #raw("data/results.json"). Earlier selections and all four-loop records remain unchanged.]
 }
+
+#let files-id = report.at("selected_cache_file_engineering_run", default: none)
+#if files-id != none {
+  let study = report.engineering_optimization_runs.at(files-id)
+  let heavy = study.records.heavy.raw_receipt
+  let new = heavy.full_actual_benchmark_metadata
+  let old = report.engineering_optimization_runs.at(study.baseline_engineering_run)
+    .observations.after_off.records.benchmark.raw_receipt
+  let light = study.records.light.raw_receipt
+  let a = light.pilots.at(0)
+  let b = light.pilots.at(1)
+  let export-a = study.records.candidate_a.raw_receipt
+  let export-b = study.records.candidate_b.raw_receipt
+  assert(study.schema == "vakint.cache-file-engineering-comparison.v1")
+  assert(not study.performance_eligible and not study.final_light_selection)
+  pagebreak()
+  set text(font: "Libertinus Serif", size: 9pt, fill: black)
+  set par(leading: 0.45em)
+  align(center)[#text(19pt, weight: "bold", fill: navy)[Cache file engineering observations]]
+  v(0.35em)
+  [*HEAVY · one complete cold q0 process.* Same executable, source
+  #raw(new.source_commit.slice(0, 7)), Native #raw(new.compiled_cohort.native_revision.slice(0, 7))
+  and kernel #raw(new.compiled_cohort.kernel_revision.slice(0, 7)) as the earlier INDEX run.
+  All 58 coefficients, 55 masters, 146678 canonical public guards and the full
+  result agree. Capture was enabled with delta reads disabled:
+  #heavy.Native_work.persistent.route_hits Route hits, #heavy.Native_work.persistent.misses misses,
+  #heavy.Native_work.native.rule_applications new rules and
+  #heavy.Native_work.captured_records captured records.]
+  v(0.3em)
+  table(columns: (1.9fr, 1fr, 1fr), inset: (x: 7pt, y: 5pt), stroke: 0.4pt + luma(215),
+    fill: (x, y) => if y == 0 { navy } else { pale },
+    table.header(text(fill: white)[Observed seconds], text(fill: white)[Earlier INDEX · OFF], text(fill: white)[HEAVY single FILE]),
+    [Data / native cache loading],
+    [#timing(old.data_loading_seconds) / #timing(old.cache_loading_seconds)],
+    [#timing(new.data_loading_seconds) / #timing(new.cache_loading_seconds)],
+    [Complete public call], [#timing(old.reduction_seconds)], [#timing(new.reduction_seconds)],
+    [Collector end to end], [#timing(old.end_to_end_seconds)], [#timing(new.end_to_end_seconds)],
+    [Inclusive controller elapsed],
+    [#timing(report.engineering_optimization_runs.at(study.baseline_engineering_run).observations.after_off.supervised_wall_seconds)],
+    [#timing(heavy.clock_summary_seconds.inclusive_controller_elapsed_after_preflight)],
+    [Native saved call / final coefficient combination],
+    [#timing(old.stages.saved_rule_application.sum()) / #timing(old.stages.retained_catalogue_exact_combination.sum())],
+    [#timing(new.stages.saved_rule_application.sum()) / #timing(new.stages.retained_catalogue_exact_combination.sum())],
+  )
+  v(0.3em)
+  [Public call #multiplier(-study.heavy_observed_change_percent.public_call)% lower;
+  cold collector end to end #multiplier(study.heavy_observed_change_percent.collector_E2E)% higher.
+  The lower native and CAS observations cannot isolate a cache-format benefit:
+  concurrent work and capture policy differ. No causal format advantage, overall
+  cold speedup, warm result or serialized three-run median is established.]
+  v(0.25em)
+  text(8pt)[Native FILE loading covers authentication, decode and indexing. The collector
+  made two admitted SHA scans of the 96 GB file: its end-to-end timer includes the first
+  scan and flush/snapshot, excludes close and final SHA; the controller includes both
+  scans and cleanup. Their difference is not pure SHA time. SHA-only, decoder-only
+  and pure IBP times are unmeasured. This legacy CLI used #raw("file_identity=None")
+  with Native framing/binding checks and before/after SHA, distinct from typed R3 acceptance.]
+  v(0.5em)
+  [*LIGHT · one frozen tuning case, two utility pilots.* A contains 54 Route records;
+  B adds 2048 Apply records. Both fully match the original INDEX canonical result,
+  guards and five families (68 masters, zero unknowns). Neither used held-out inputs.]
+  v(0.3em)
+  table(columns: (1.9fr, 1fr, 1fr), inset: (x: 7pt, y: 5pt), stroke: 0.4pt + luma(215),
+    fill: (x, y) => if y == 0 { navy } else { pale },
+    table.header(text(fill: white)[Observed utility], text(fill: white)[A · 54 Route], text(fill: white)[B · 54 Route + 2048 Apply]),
+    [Compressed bytes / native records],
+    [#str(a.cache_file.bytes) / #export-a.native_counts.selected_records],
+    [#str(b.cache_file.bytes) / #export-b.native_counts.selected_records],
+    [Public / saved call (seconds)],
+    [#timing(a.timing.evaluation_seconds) / #timing(a.timing.saved_application_including_owner_seconds)],
+    [#timing(b.timing.evaluation_seconds) / #timing(b.timing.saved_application_including_owner_seconds)],
+    [Data / cache loading (seconds)],
+    [#timing(a.timing.data_loading_seconds) / #timing(a.timing.cache_loading_seconds)],
+    [#timing(b.timing.data_loading_seconds) / #timing(b.timing.cache_loading_seconds)],
+    [New rules / Route hits / Apply hits],
+    [#a.actual_cache_statistics.native.rule_applications / #a.actual_cache_statistics.persistent.route_hits / #a.actual_cache_statistics.persistent.apply_hits],
+    [#b.actual_cache_statistics.native.rule_applications / #b.actual_cache_statistics.persistent.route_hits / #b.actual_cache_statistics.persistent.apply_hits],
+    [Closed capture records / directory bytes],
+    [#a.closed_running_capture.report.committed_records / #str(a.closed_running_capture.closed_directory_bytes)],
+    [#b.closed_running_capture.report.committed_records / #str(b.closed_running_capture.closed_directory_bytes)],
+  )
+  v(0.3em)
+  [B used fewer rules but took longer. The earlier full INDEX observation for this
+  same case took #timing(light.baseline.evaluation_seconds) s and
+  #light.baseline.new_native_rules new rules (receipt #raw(light.prior_measurement.sha256.slice(0, 12))).
+  These fresh pilots ran alongside unrelated physical work; they do not establish
+  a performance winner or final LIGHT selection. All new completed capture nodes
+  remain preserved; neither run read its delta. Public timings include capture overhead.]
+  v(0.25em)
+  text(8pt)[Both native exports passed full reimport/count/ordered-guard checks within
+  95000000 compressed bytes. Their separate export helper measured encode+write
+  #timing(export-a.phase_seconds.encode_selected_completed_cache + export-a.phase_seconds.write_selected_cache) /
+  #timing(export-b.phase_seconds.encode_selected_completed_cache + export-b.phase_seconds.write_selected_cache) s,
+  reimport #timing(export-a.phase_seconds.reimport_selected_cache) /
+  #timing(export-b.phase_seconds.reimport_selected_cache) s and exact visitor comparison
+  #timing(export-a.phase_seconds.compare_selected_native_visitor) /
+  #timing(export-b.phase_seconds.compare_selected_native_visitor) s (A/B). Exporter identity
+  receipts do not imply that the application supplied a typed Native file identity.
+  Complete source cohorts, closed captures, raw phases and timer scopes remain in
+  #raw("data/results.json"). Source hashes in
+  #raw("provenance/cache_file_engineering_evidence_index.json").]
+}

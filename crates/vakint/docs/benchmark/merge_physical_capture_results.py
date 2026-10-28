@@ -701,48 +701,359 @@ def engineering_comparison(index_path):
     }
 
 
+def cache_file_engineering(index_path, base):
+    """Append completed FILE/utility metadata; never hash a referenced cache payload."""
+    index_path = Path(index_path).resolve()
+    index = read(index_path)
+    require(
+        index["schema"] == "vakint.cache-file-engineering-evidence-index.v1"
+        and set(index["records"])
+        == {"heavy", "light", "route_budget", "additions_budget"},
+        "unknown cache-file engineering index",
+    )
+
+    def json_record(item):
+        path = Path(item["path"])
+        path = path if path.is_absolute() else index_path.parent / path
+        require(
+            path.suffix == ".json"
+            and type(item["bytes"]) is int
+            and 0 < item["bytes"] == path.stat().st_size <= 1_000_000,
+            "engineering evidence must be bounded JSON metadata",
+        )
+        return {
+            "evidence": item,
+            "raw_receipt": read(reference(item, index_path.parent)),
+        }
+
+    records = {name: json_record(item) for name, item in index["records"].items()}
+    prior = base["engineering_optimization_runs"][index["baseline_engineering_run"]]
+    require(
+        prior["schema"] == "vakint.q0-engineering-comparison.v1"
+        and prior["performance_eligible"] is False,
+        "unknown engineering baseline",
+    )
+    old = prior["observations"]["after_off"]["records"]["benchmark"]["raw_receipt"]
+    heavy = records["heavy"]["raw_receipt"]
+    report = heavy["full_actual_benchmark_metadata"]
+    verified = heavy["full_actual_scientific_verification_metadata"]
+    execution = heavy["full_actual_physical_completion_metadata"]
+    require(
+        heavy["schema"] == "vakint.full-q0-shared-file-engineering-final-handoff.v1"
+        and heavy["status"]
+        == "PASS_SINGLE_COLD_FULL_Q0_ENGINEERING_AND_FULL_SCIENTIFIC_VERIFICATION"
+        and heavy["performance_claim"] is False
+        and execution["status"] == verified["status"] == "PASS"
+        and execution["collector_exit_code"] == 0
+        and execution["collector_wait_is_authoritative"] is True
+        and not execution["errors"]
+        and not execution["signals_sent"]
+        and report["schema"] == "vakint.qcd-ladder.benchmark.v1"
+        and report["reduction_completed"] is True
+        and report["performance_claim"] is False
+        and report["warm_requested"] is False
+        and all(
+            report[key] == old[key]
+            for key in (
+                "compiled_cohort",
+                "executable_sha256",
+                "input_sha256",
+                "projection",
+                "input_mode",
+                "fresh_native_preparation",
+                "end_to_end_scope",
+                "guards",
+                "result_sha256",
+                "result_bytes",
+                "families",
+                "catalogue_closure",
+            )
+        )
+        and verified["collector_source_head"]
+        == execution["source_head"]
+        == report["source_commit"]
+        and verified["full58_scalar_coefficient_parity"] is True
+        and verified["whole_ordered_guard_Atoms_equal"] is True
+        and verified["families_equal"] is True
+        and verified["whole_canonical_result_sha256"] == report["result_sha256"]
+        and verified["guard_count"] == report["guards"]["count"]
+        and verified["master_identity_union_count"]
+        == old["catalogue_closure"]["master_count"]
+        and verified["full_scalar_coefficient_count"]
+        == prior["observations"]["after_off"]["records"]["coefficient_proof"][
+            "raw_receipt"
+        ]["product_union_count"]
+        and verified["running_capture_durably_closed"] is True
+        and report["running_cache_read_delta"] is False
+        and heavy["Native_work"]["native"]
+        == report["saved_application_cache"]["native"]
+        and heavy["Native_work"]["persistent"]
+        == report["saved_application_cache"]["persistent"]
+        and verified["full58_proof"]["sha256"]
+        == prior["observations"]["after_off"]["records"]["coefficient_proof"][
+            "evidence"
+        ]["sha256"]
+        and verified["pure_ibp_seconds"] is None,
+        "FILE observation lacks completed full-parity baseline binding",
+    )
+    require(
+        report["stages"].keys() == verified["stages"].keys()
+        and {"saved_rule_application", "retained_catalogue_exact_combination"}
+        <= report["stages"].keys(),
+        "FILE observation lacks verified phase inventory",
+    )
+    for phase, samples in report["stages"].items():
+        require(
+            samples
+            and verified["stages"][phase]["samples"] == len(samples)
+            and sum(seconds(value) for value in samples)
+            == verified["stages"][phase]["total_seconds"],
+            "FILE phase differs from verified samples",
+        )
+    clocks = heavy["clock_summary_seconds"]
+    require(
+        all(
+            clocks[summary] == seconds(source[field])
+            for summary, source, field in (
+                ("public_call", report, "reduction_seconds"),
+                ("collector_E2E", report, "end_to_end_seconds"),
+                ("data_loading", report, "data_loading_seconds"),
+                (
+                    "Native_FILE_loading_auth_decode_index",
+                    report,
+                    "cache_loading_seconds",
+                ),
+                (
+                    "inclusive_controller_elapsed_after_preflight",
+                    execution,
+                    "elapsed_seconds",
+                ),
+            )
+        )
+        and clocks["decoder_only"] is None
+        and clocks["pure_IBP"] is None,
+        "FILE clock summaries differ from measured timer scopes",
+    )
+    legacy = heavy["legacy_FILE_contract"]
+    boundaries = heavy["clock_boundaries"]
+    require(
+        legacy["externally_supplied_typed_FileIdentity"] is False
+        and legacy["Native_framing_and_semantic_binding_checked_on_load"] is True
+        and legacy["actual_before"]
+        == legacy["actual_after"]
+        == report["cache_identity"]
+        == report["cache_identity_after"]
+        and boundaries["wholeFILE_SHA_scan_count"] == 2
+        and boundaries["SHA_durations_independently_measured"] is False
+        and boundaries["controller_minus_collector_E2E_is_not_pure_SHA"] is True,
+        "FILE identity or SHA timer contract differs",
+    )
+
+    light = records["light"]["raw_receipt"]
+    budget = records["route_budget"]["raw_receipt"]
+    additions = records["additions_budget"]["raw_receipt"]
+    require(
+        light["schema"] == "vakint.light-utility-engineering-pilots.v1"
+        and light["status"] == "PASS"
+        and light["single_math_worker"] is True
+        and light["A_B_full_canonical_result_and_all_guards_equal"] is True
+        and [pilot["label"] for pilot in light["pilots"]] == ["A", "B"]
+        and budget["schema"] == "vakint.physical-route-budget-pilot-completion.v1"
+        and additions["schema"]
+        == "vakint.physical-route-budget-additions-pilot-completion.v1"
+        and additions["final_performance_selection"] is False
+        and all(item["final_held_out_used"] is False for item in (budget, additions)),
+        "LIGHT evidence is not completed engineering-only selection",
+    )
+    candidate_a = json_record(budget["accepted_result"])
+    records["light_baseline"] = json_record(light["prior_measurement"])
+    light_baseline = records["light_baseline"]["raw_receipt"]
+    require(
+        light_baseline["success"] is True
+        and light_baseline["case_id"] == light["case_id"]
+        and light_baseline["identity"]["executable_sha256"]
+        == light["compiled_executable_sha256"]
+        and light_baseline["cache_statistics"]["native"]["rule_applications"]
+        == light["baseline"]["new_native_rules"]
+        and all(
+            light_baseline[key] == light["baseline"][key]
+            for key in (
+                "evaluation_seconds",
+                "saved_application_including_owner_seconds",
+                "stages",
+            )
+        ),
+        "LIGHT historical baseline binding differs",
+    )
+    candidate_b = next(
+        item
+        for item in additions["accepted_candidates"]
+        if item["cache"] == light["pilots"][1]["cache_file"]
+    )
+    records["candidate_a"] = candidate_a
+    records["candidate_b"] = json_record(candidate_b["result"])
+    candidates = [candidate_a["raw_receipt"], records["candidate_b"]["raw_receipt"]]
+    for pilot, candidate in zip(light["pilots"], candidates):
+        schema, additional = {
+            "A": (
+                "vakint.physical-route-budget-candidate-result.v1",
+                "additional_keys",
+            ),
+            "B": (
+                "vakint.physical-route-budget-additions-candidate-result.v1",
+                "additional_apply_keys",
+            ),
+        }[pilot["label"]]
+        count = candidate["physical_route_limit"] + candidate[additional]
+        require(
+            candidate["schema"] == schema
+            and candidate["native_export_accepted"] is True
+            and candidate["exact_record_and_ordered_guard_equality"] is True
+            and candidate["final_held_out_used"] is False
+            and candidate["cache"] == pilot["cache_file"]
+            and 0
+            < candidate["actual_compressed_bytes"]
+            == pilot["cache_file"]["bytes"]
+            <= 95_000_000
+            and all(
+                candidate["native_counts"][key] == count
+                for key in (
+                    "selected_records",
+                    "reimported_records",
+                    "complete_records",
+                )
+            )
+            and candidate["native_counts"]["missing_keys"]
+            == candidate["native_counts"]["partial_records"]
+            == 0,
+            "LIGHT native count/byte/reimport contract differs",
+        )
+        parity = pilot["parity"]
+        capture = pilot["closed_running_capture"]
+        require(
+            all(
+                parity[key] is True
+                for key in (
+                    "full_canonical_value_bytes_equal",
+                    "all_guards_bytes_equal",
+                    "canonical_master_families_equal",
+                    "catalogue_closed",
+                    "frozen_input_owner_roots_equal",
+                    "fixed_reduction_settings_equal",
+                )
+            )
+            and parity["unknown_count"] == 0
+            and capture["report"]["closed"] is True
+            and capture["report"]["pending_records"]
+            == capture["report"]["pending_bytes"]
+            == 0
+            and capture["report"]["writer_error"] is None
+            and capture["report"]["committed_records"]
+            == capture["report"]["accepted_records"]
+            == pilot["actual_cache_statistics"]["persistent"]["captured_records"]
+            and capture["all_new_completed_nodes_preserved"] is True
+            and capture["read_delta"] is False,
+            "LIGHT result/guard parity or durable capture differs",
+        )
+        timing = pilot["timing"]
+        require(
+            timing["saved_application_including_owner_seconds"]
+            == sum(
+                seconds(value) for value in timing["stages"]["saved_rule_application"]
+            )
+            and timing["native_timing_scope"]["pure_ibp_seconds"] is None,
+            "LIGHT saved-call samples or timing scope differ",
+        )
+        for metric in (
+            "evaluation_seconds",
+            "data_loading_seconds",
+            "cache_loading_seconds",
+        ):
+            seconds(timing[metric])
+        for value in candidate["phase_seconds"].values():
+            seconds(value)
+        require(
+            {
+                "load_saved_application",
+                "encode_selected_completed_cache",
+                "write_selected_cache",
+                "reimport_selected_cache",
+                "compare_selected_native_visitor",
+            }
+            <= candidate["phase_seconds"].keys(),
+            "LIGHT export lacks measured phase inventory",
+        )
+    return {
+        "schema": "vakint.cache-file-engineering-comparison.v1",
+        "status": "verified-engineering-observations",
+        "performance_eligible": False,
+        "matched_serialized_repetitions": False,
+        "final_light_selection": False,
+        "baseline_engineering_run": index["baseline_engineering_run"],
+        "heavy_observed_change_percent": {
+            "public_call": 100
+            * (report["reduction_seconds"] / old["reduction_seconds"] - 1),
+            "collector_E2E": 100
+            * (report["end_to_end_seconds"] / old["end_to_end_seconds"] - 1),
+        },
+        "records": records,
+        "evidence": evidence(index_path),
+        "scope": "Single completed cold FILE and tuning utility observations, with concurrent physical work and different cache/capture policies. No causal format advantage, serialized median, held-out selection or final utility winner. Existing timer boundaries, raw stages, null pure-IBP/decoder phases and original cohorts remain authoritative.",
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base", type=Path, required=True)
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--campaign", type=Path)
     source.add_argument("--engineering", type=Path)
+    source.add_argument("--file-engineering", type=Path)
     parser.add_argument("--physical-scope", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--select-current", action="store_true")
     args = parser.parse_args()
     require(not args.output.exists(), "output must be a new path")
     require(
-        not args.engineering or not args.physical_scope,
+        not (args.engineering or args.file_engineering) or not args.physical_scope,
         "engineering evidence cannot change physical completion scope",
     )
     physical_scope, scope_authorization = load_physical_scope(args.physical_scope)
-    run = (
-        engineering_comparison(args.engineering)
-        if args.engineering
-        else physical_capture(args.campaign, physical_scope)
-    )
+    merged = copy.deepcopy(read(args.base))
+    if args.file_engineering:
+        run = cache_file_engineering(args.file_engineering, merged)
+    elif args.engineering:
+        run = engineering_comparison(args.engineering)
+    else:
+        run = physical_capture(args.campaign, physical_scope)
     if scope_authorization is not None:
         run.update(
             physical_scope_authorization=scope_authorization,
             notes=[physical_scope_note(scope_authorization)],
         )
-    merged = copy.deepcopy(read(args.base))
     identity = run["evidence"]
     if scope_authorization is not None:
         identity = [identity, scope_authorization["evidence"]]
     run_id = (
-        "q0-engineering-" if args.engineering else "physical-capture-"
+        "cache-file-engineering-"
+        if args.file_engineering
+        else "q0-engineering-"
+        if args.engineering
+        else "physical-capture-"
     ) + hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()[:24]
     namespace = (
-        "engineering_optimization_runs" if args.engineering else "physical_capture_runs"
+        "engineering_optimization_runs"
+        if args.engineering or args.file_engineering
+        else "physical_capture_runs"
     )
     runs = merged.setdefault(namespace, {})
     require(run_id not in runs, "this evidence is already appended")
     runs[run_id] = run
     if args.select_current:
         selector = (
-            "selected_engineering_optimization_run"
+            "selected_cache_file_engineering_run"
+            if args.file_engineering
+            else "selected_engineering_optimization_run"
             if args.engineering
             else "selected_physical_capture_run"
         )

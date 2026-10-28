@@ -1,0 +1,26 @@
+{
+  "schema": "vakint.cache-file-engineering-evidence-index.v1",
+  "baseline_engineering_run": "q0-engineering-5327526dec8cda942773dc57",
+  "records": {
+    "heavy": {
+      "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/q0-shared-file-physical-engineering-20261028/final-engineering-handoff.json",
+      "bytes": 135561,
+      "sha256": "e59f598781c7fe7fb3b24f44e3178e4ae84523e595e562dd2d6121df4b529f77"
+    },
+    "light": {
+      "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/q0-coefficient-local-usage-2d70-20261028/light-utility-engineering-pilots-report.json",
+      "bytes": 38878,
+      "sha256": "a96bf7fb8e2a12c0559429c9865d77ad1b5982e28d74f92c1e9b24962dbb66c0"
+    },
+    "route_budget": {
+      "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/light-cache-selection-next-actions-20261028/physical-route-budget-pilot-run1/pilot-completion.json",
+      "bytes": 3871,
+      "sha256": "10e4757f17b77819167af9d2e87847008bd0ea7c5a906c24f6d79c89c1f8af0b"
+    },
+    "additions_budget": {
+      "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/light-cache-selection-next-actions-20261028/physical-route-budget-additions-pilot-run1/pilot-completion.json",
+      "bytes": 6707,
+      "sha256": "9fdc5aae3b1b53607bb3db4e5982e712eb2adfd3b6cd7f7a1332d86da48e7ec4"
+    }
+  }
+}
