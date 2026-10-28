@@ -2,13 +2,16 @@
 //!
 //! These are four-dimensional external vectors and chiral-basis spinors. The
 //! dimension of internal Lorentz/Dirac algebra is a separate caller choice.
-use std::{fmt, str::FromStr};
+use std::fmt;
+use std::str::FromStr;
 
 use numerica::domains::float::Complex;
 use thiserror::Error;
 
 use crate::{FourMomentum, Helicity, KinematicScalar, Sign};
 
+#[cfg(test)]
+mod chart_tests;
 #[cfg(test)]
 mod tests;
 
@@ -88,6 +91,10 @@ pub enum WavefunctionError {
     },
     #[error("external momentum or wavefunction components are not finite")]
     NonFinite,
+    /// A nonzero norm or chart component was lost at the working precision.
+    /// See [`FourMomentum::helicity_spinor`] for the checked construction API.
+    #[error("external-state chart needs more than {bits} working bits: {reason}")]
+    InsufficientPrecision { bits: u32, reason: &'static str },
     #[error("{0} does not admit the requested helicity")]
     Helicity(WavefunctionKind),
     #[error(
@@ -158,10 +165,35 @@ impl<T: KinematicScalar> FourMomentum<T> {
     ///
     /// The beam-axis branches and phases are inherited from its HELAS/MadGraph
     /// implementation. This basis also fixes the convention at zero momentum.
-    pub fn transverse_basis(&self) -> [[T; 4]; 2] {
-        let pt = self.pt();
-        let p = self.spatial.norm();
+    /// A nonzero direction lost by arithmetic is an error, never an axis choice.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WavefunctionError::NonFinite`] for nonfinite spatial data or a
+    /// nonfinite norm, and [`WavefunctionError::InsufficientPrecision`] if a
+    /// mathematically nonzero basis component cannot be represented.
+    ///
+    /// ```
+    /// use feynkit_kinematics::{FourMomentum, WavefunctionError};
+    /// let p = FourMomentum::from_args(5.0_f64, 3.0, 4.0, 0.0);
+    /// let [a, b] = p.transverse_basis()?;
+    /// assert_eq!(a[3], -1.0);
+    /// assert_eq!(b[0], 0.0);
+    /// # Ok::<(), WavefunctionError>(())
+    /// ```
+    pub fn transverse_basis(&self) -> Result<[[T; 4]; 2], WavefunctionError> {
+        let pt = self.spatial.px.hypot(&self.spatial.py);
+        let p = pt.hypot(&self.spatial.pz);
+        if !pt.is_finite() || !p.is_finite() {
+            return Err(WavefunctionError::NonFinite);
+        }
         let zero = pt.zero();
+        if pt == zero && (self.spatial.px != zero || self.spatial.py != zero) {
+            return Err(WavefunctionError::InsufficientPrecision {
+                bits: self.temporal.value.get_precision(),
+                reason: "nonzero transverse momentum lost its norm",
+            });
+        }
         let (a, b) = if pt == zero {
             (
                 [zero.clone(), pt.one(), zero.clone(), zero.clone()],
@@ -180,61 +212,131 @@ impl<T: KinematicScalar> FourMomentum<T> {
             (
                 [
                     zero.clone(),
-                    self.spatial.px.clone() * self.spatial.pz.clone() / (pt.clone() * p.clone()),
-                    self.spatial.py.clone() * self.spatial.pz.clone() / (pt.clone() * p.clone()),
+                    (self.spatial.px.clone() / pt.clone()) * (self.spatial.pz.clone() / p.clone()),
+                    (self.spatial.py.clone() / pt.clone()) * (self.spatial.pz.clone() / p.clone()),
                     -(pt.clone() / p),
                 ],
                 [
                     zero.clone(),
                     -(self.spatial.py.clone() / pt.clone()),
-                    self.spatial.px.clone() / pt,
+                    self.spatial.px.clone() / pt.clone(),
                     zero,
                 ],
             )
         };
-        [a, b]
+        if a.iter().chain(&b).any(|component| !component.is_finite()) {
+            return Err(WavefunctionError::NonFinite);
+        }
+        if pt != pt.zero()
+            && ((self.spatial.px != pt.zero() && self.spatial.pz != pt.zero() && a[1] == pt.zero())
+                || (self.spatial.py != pt.zero()
+                    && self.spatial.pz != pt.zero()
+                    && a[2] == pt.zero())
+                || a[3] == pt.zero()
+                || (self.spatial.py != pt.zero() && b[1] == pt.zero())
+                || (self.spatial.px != pt.zero() && b[2] == pt.zero()))
+        {
+            return Err(WavefunctionError::InsufficientPrecision {
+                bits: self.temporal.value.get_precision(),
+                reason: "nonzero transverse chart component underflowed",
+            });
+        }
+        Ok([a, b])
     }
 
     /// The two-component helicity spinor used by both `u` and `v`.
-    pub fn helicity_spinor(&self, helicity: Sign) -> [Complex<T>; 2] {
-        let p = self.spatial.norm();
+    ///
+    /// The southern chart rationalizes `|p| + pz`, retaining off-axis components
+    /// even when the norm rounds to `-pz`. Only an exact axis uses its fixed phase.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`WavefunctionError::NonFinite`] for nonfinite spatial data or a
+    /// nonfinite norm, and [`WavefunctionError::InsufficientPrecision`] if a
+    /// mathematically nonzero chart component cannot be represented.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use feynkit_kinematics::{FourMomentum, Sign, WavefunctionError};
+    /// let p = FourMomentum::from_args(2.0_f64, 1.0, 0.0, -1.0);
+    /// let xi = p.helicity_spinor(Sign::Positive)?;
+    /// assert!(xi[0].re > 0.0);
+    /// # Ok::<(), WavefunctionError>(())
+    /// ```
+    pub fn helicity_spinor(&self, helicity: Sign) -> Result<[Complex<T>; 2], WavefunctionError> {
+        let pt = self.spatial.px.hypot(&self.spatial.py);
+        let p = pt.hypot(&self.spatial.pz);
+        if !pt.is_finite() || !p.is_finite() {
+            return Err(WavefunctionError::NonFinite);
+        }
         let zero = self.temporal.value.zero();
         if self.spatial.pz <= zero && self.spatial.py == zero && self.spatial.px == zero {
             let z = Complex::new(zero.clone(), zero);
             let one = z.one();
-            return match helicity {
+            return Ok(match helicity {
                 Sign::Positive => [z, -one],
                 Sign::Negative => [one, z],
-            };
+            });
         }
-        let (upper, factor) = if self.spatial.pz < zero {
-            // Rationalize p+pz = pt^2/(p-pz), retaining the off-axis azimuthal phase.
-            let pt = self.pt();
-            let p_minus_pz = p.clone() - &self.spatial.pz;
-            let lower = (p_minus_pz.clone() / (p.from_usize(2) * &p)).sqrt();
-            (pt.clone() / p_minus_pz * &lower, lower / pt)
+        if p <= zero || (pt == zero && (self.spatial.px != zero || self.spatial.py != zero)) {
+            return Err(WavefunctionError::InsufficientPrecision {
+                bits: self.temporal.value.get_precision(),
+                reason: "nonzero spatial momentum lost its norm",
+            });
+        }
+        // Dimensionless ratios retain the published northern/southern charts
+        // without squaring a uniformly tiny or huge momentum. In the south,
+        // rationalize p+pz = pt^2/(p-pz) and retain the azimuthal phase.
+        let (upper, real, imag) = if self.spatial.pz < zero {
+            let minus = p.one() - self.spatial.pz.clone() / p.clone();
+            let lower = (minus.clone() / p.from_usize(2)).sqrt();
+            (
+                (pt.clone() / p.clone()) / minus * &lower,
+                (self.spatial.px.clone() / pt.clone()) * &lower,
+                (self.spatial.py.clone() / pt) * lower,
+            )
         } else {
-            let p_plus_pz = p.clone() + &self.spatial.pz;
-            let factor = (p.from_usize(2) * p * &p_plus_pz).sqrt().inv();
-            (factor.clone() * p_plus_pz, factor)
+            let plus = p.one() + self.spatial.pz.clone() / p.clone();
+            let factor = (p.from_usize(2) * plus.clone()).sqrt().inv();
+            (
+                factor.clone() * plus,
+                (self.spatial.px.clone() / p.clone()) * &factor,
+                (self.spatial.py.clone() / p) * factor,
+            )
         };
-        let mut xi = [
-            Complex::new(upper, zero),
-            Complex::new(
-                self.spatial.px.clone() * &factor,
-                self.spatial.py.clone() * factor,
-            ),
-        ];
+        let mut xi = [Complex::new(upper, zero), Complex::new(real, imag)];
+        if xi
+            .iter()
+            .any(|component| !component.re.is_finite() || !component.im.is_finite())
+        {
+            return Err(WavefunctionError::NonFinite);
+        }
+        if xi[0].re == self.temporal.value.zero()
+            || (self.spatial.px != self.temporal.value.zero()
+                && xi[1].re == self.temporal.value.zero())
+            || (self.spatial.py != self.temporal.value.zero()
+                && xi[1].im == self.temporal.value.zero())
+        {
+            return Err(WavefunctionError::InsufficientPrecision {
+                bits: self.temporal.value.get_precision(),
+                reason: "nonzero helicity chart component underflowed",
+            });
+        }
         if helicity == Sign::Negative {
             xi.swap(0, 1);
             xi[0].re = -xi[0].re.clone();
         }
-        xi
+        Ok(xi)
     }
 
     /// GammaLoop's principal square root of `E ± |p|`.
     pub fn spinor_energy_factor(&self, sign: Sign) -> Complex<T> {
-        let p = self.spatial.norm();
+        let p = self
+            .spatial
+            .px
+            .hypot(&self.spatial.py)
+            .hypot(&self.spatial.pz);
         let value = self.temporal.value.clone() + if sign == Sign::Positive { p } else { -p };
         if value > value.zero() {
             Complex::new(value.sqrt(), value.zero())
@@ -299,7 +401,7 @@ impl<T: KinematicScalar> FourMomentum<T> {
                 .collect()
             }
             WavefunctionKind::Epsilon => {
-                let [a, b] = self.transverse_basis();
+                let [a, b] = self.transverse_basis()?;
                 let scale = self.temporal.value.from_usize(2).sqrt().inv();
                 a.into_iter()
                     .zip(b)
@@ -323,7 +425,7 @@ impl<T: KinematicScalar> FourMomentum<T> {
                     sign
                 } else {
                     -sign
-                });
+                })?;
                 let (lower, upper) = if kind == WavefunctionKind::U {
                     (
                         self.spinor_energy_factor(-sign),
@@ -371,7 +473,7 @@ mod helicity_spinor_tests {
                         offset.clone() * one.from_i64(y),
                         -one.clone(),
                     );
-                    let xi = p.helicity_spinor(helicity);
+                    let xi = p.helicity_spinor(helicity).unwrap();
                     let norm = xi[0].norm_squared() + xi[1].norm_squared();
                     assert!((norm - &one).pow(2) < tolerance_squared, "{p:?}: {xi:?}");
 
@@ -445,10 +547,10 @@ mod helicity_spinor_tests {
     fn helicity_spinor_phases_are_continuous_between_hemispheres() {
         let equator = FourMomentum::from_args(6., 3., 4., 0.);
         for helicity in [Sign::Positive, Sign::Negative] {
-            let target = equator.helicity_spinor(helicity);
+            let target = equator.helicity_spinor(helicity).unwrap();
             for pz in [-1e-12, 1e-12] {
                 let p = FourMomentum::from_args(6., 3., 4., pz);
-                for (a, b) in p.helicity_spinor(helicity).into_iter().zip(target) {
+                for (a, b) in p.helicity_spinor(helicity).unwrap().into_iter().zip(target) {
                     assert!((a - b).norm_squared() < 1e-24);
                 }
             }
@@ -469,8 +571,8 @@ mod helicity_spinor_tests {
             let p = FourMomentum::from_args(4., 0., 0., pz);
             let zero = Complex::new(0., 0.);
             let one = Complex::new(1., 0.);
-            assert_eq!(p.helicity_spinor(Sign::Positive), [zero, -one]);
-            assert_eq!(p.helicity_spinor(Sign::Negative), [one, zero]);
+            assert_eq!(p.helicity_spinor(Sign::Positive).unwrap(), [zero, -one]);
+            assert_eq!(p.helicity_spinor(Sign::Negative).unwrap(), [one, zero]);
         }
     }
 }
