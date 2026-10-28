@@ -756,7 +756,10 @@ anchor = "pub(crate) struct MasterCatalog {"
 # Raw Float input keeps the expanded-only rule; master-dependent opaque or
 # denominator coefficients retain general exact combination. Symbolic/Numerical
 # finalization and snapshot/source ownership are unchanged.
-digest = "2e9cf220ff5c7e80b833b70276d29cf878c818ca"
+# Reviewed 2026-10-28: the exact saved fixture authenticates the original Brotli
+# archive and its mechanically decoded raw Atom companion. Decoding is a
+# development-only step; runtime tests import raw bytes without codec dependencies.
+digest = "cc38e4ba594979281ca7dac46b4d2cb2ee1166ec"
 
 [[section.note.scope]]
 path = "crates/vakint/src/precision.rs"

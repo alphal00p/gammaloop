@@ -1185,10 +1185,29 @@ mod tests {
         )
         .unwrap();
         let provenance: serde_json::Value = serde_json::from_slice(provenance).unwrap();
-        let bytes = include_bytes!("../../examples/data/five_loop_q0/q0-retained.atom");
+        let archive = include_bytes!("../../examples/data/five_loop_q0/q0-retained.atom");
         let identity = &provenance["artifacts"]["q0-retained.atom"];
-        assert_eq!(bytes.len() as u64, identity["bytes"].as_u64().unwrap());
-        checked_bytes(bytes, identity["sha256"].as_str().unwrap()).unwrap();
+        assert_eq!(archive.len() as u64, identity["bytes"].as_u64().unwrap());
+        checked_bytes(archive, identity["sha256"].as_str().unwrap()).unwrap();
+        // Expression.save wraps Atom::export in Brotli. The development-only
+        // decoded companion keeps this test independent of codec dependencies.
+        let raw_provenance =
+            include_bytes!("../../tests/resources/rustred/q0-retained.raw.provenance.json");
+        checked_bytes(
+            raw_provenance,
+            "c24527713afb4035f2223743aec4b7700b897fd17793dce00b5260bb259ed144",
+        )
+        .unwrap();
+        let raw_provenance: serde_json::Value = serde_json::from_slice(raw_provenance).unwrap();
+        assert_eq!(&raw_provenance["source_archive_identity"], identity);
+        assert_eq!(
+            raw_provenance["source_provenance_sha256"].as_str(),
+            Some("941d5a2e888557e8cabd8e8ab118935e95631be0a16110bd28a41e49436db36a")
+        );
+        let bytes = include_bytes!("../../tests/resources/rustred/q0-retained.raw.atom");
+        let raw_identity = &raw_provenance["output"];
+        assert_eq!(bytes.len() as u64, raw_identity["bytes"].as_u64().unwrap());
+        checked_bytes(bytes, raw_identity["sha256"].as_str().unwrap()).unwrap();
         let mut stream = bytes.as_slice();
         let original = Atom::import(&mut stream, None).unwrap();
         assert!(stream.is_empty());

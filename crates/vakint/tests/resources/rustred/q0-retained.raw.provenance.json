@@ -1,0 +1,27 @@
+{
+  "schema": "vakint.q0-raw-atom-fixture-provenance.v1",
+  "source_archive": "examples/data/five_loop_q0/q0-retained.atom",
+  "source_archive_identity": {
+    "bytes": 1321201,
+    "sha256": "2a29e8c1169ea709aa406ba355f6dca88139f8f2ed2069821f0e898f6d368be4"
+  },
+  "source_provenance_sha256": "941d5a2e888557e8cabd8e8ab118935e95631be0a16110bd28a41e49436db36a",
+  "decoding": "Brotli decompression only; raw Atom::export bytes, no parse/algebra/master/numerical evaluation",
+  "decoder": {
+    "name": "brotli",
+    "version": "brotli 1.2.0",
+    "executable_sha256": "5ebd31bd94fa85f85a3cf0aad86da8246822c0dc4e9d27a54ffd34871811789f"
+  },
+  "command": [
+    "brotli",
+    "--decompress",
+    "--stdout",
+    "crates/vakint/examples/data/five_loop_q0/q0-retained.atom"
+  ],
+  "output": {
+    "file": "q0-retained.raw.atom",
+    "bytes": 2664520,
+    "sha256": "aae69cade10d5f4d807975cf9cd05ea7be62066f9209438135dba64d10ce5926"
+  },
+  "original_archive_unchanged": true
+}
