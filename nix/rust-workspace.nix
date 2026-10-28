@@ -638,6 +638,7 @@
       "docs/assets/typst/portal-graphs/edge-style.typ"
       "docs/assets/typst/theme.typ"
     ];
+    "feynkit-generator" = ["assets/models/json/sm/restrict_default.json"];
     "gammaloop-api" = [
       "benchmarks/performance/gg-hhh-gl15.dot"
       "tests/resources/graphs/scalar_box.dot"

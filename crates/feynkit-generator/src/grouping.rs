@@ -1714,17 +1714,28 @@ fn compare(
     options: &GraphGroupingOptions,
     scalar_names: &BTreeSet<String>,
 ) -> Result<Option<Atom>, TensorInferenceError> {
+    // All provided completed samples belong to the certificate, including when
+    // canonical equality would otherwise return before inspecting them.
+    if candidate
+        .samples
+        .iter()
+        .chain(&master.samples)
+        .any(|value| !value.expression().is_finite())
+    {
+        return Ok(None);
+    }
     if options.check_canonical_numerator
         && let Some(ratio) = compare_atoms(&candidate.exact, &master.exact, mode, scalar_names)?
     {
         // A contracted representation dimension can survive as a scalar
         // coefficient. Its decoded Nc becomes visible only at this quotient
         // boundary, so apply the requested concrete-color choice here too.
-        return Ok(Some(if options.fully_numerical_substitution {
+        let ratio = if options.fully_numerical_substitution {
             ratio.replace(CS.nc).with(3)
         } else {
             ratio
-        }));
+        };
+        return Ok(ratio.is_finite().then_some(ratio));
     }
     let mut first: Option<Atom> = None;
     for (candidate, master) in candidate.samples.iter().zip(&master.samples) {
@@ -1778,6 +1789,11 @@ fn compare_atoms(
     scalar_names: &BTreeSet<String>,
 ) -> Result<Option<Atom>, TensorInferenceError> {
     if !InterfaceInference::additive_interfaces_match(candidate.structure(), master.structure()) {
+        return Ok(None);
+    }
+    // Reject both operands before equality or division can conceal undefined
+    // values (equal infinities or a finite value divided by infinity).
+    if !candidate.expression().is_finite() || !master.expression().is_finite() {
         return Ok(None);
     }
     if expressions_equal(candidate, master)? {
@@ -1996,12 +2012,14 @@ fn topology_key_variant(
 mod tests {
     use crate::FeynmanDiagramRulesExt;
     use crate::Process;
+    use crate::{GenerationControl, Stage};
     use feynkit_graph as graph_api;
     use feynkit_graph::NumeratorInterface;
     use feynkit_model::ParameterCard;
     use idenso::CookSourceFilter;
     use idenso::IndexTooling;
     use serde::Deserialize;
+    use serde_json::Value;
     use spenso::iterators::IteratableTensor;
     use spenso::network::library::symbolic::ETS;
     use spenso::structure::TensorDataLayout;
@@ -2011,6 +2029,7 @@ mod tests {
     use std::process::Command;
     use std::sync::Arc;
     use std::sync::atomic::AtomicBool;
+    use std::thread;
 
     use feynkit_graph::{
         DiagramCut, DiagramCutSide, DiagramEdge, DiagramEndpoint, DiagramHalfEdge, DiagramVertex,
@@ -3721,16 +3740,41 @@ mod tests {
                 check_canonical_numerator: false,
                 ..Default::default()
             };
-            let grouped = group_diagrams(
-                diagrams.into_iter().map(DiagramPair::Shared).collect(),
-                &model,
-                &Grouping::UpToScalar(options),
-                true,
-                &Run::default().threads(threads),
-                false,
-                DiagramLabels::default(),
-            )
-            .unwrap();
+            let observed = Arc::new(AtomicUsize::new(0));
+            let sink = Arc::clone(&observed);
+            let caller = thread::current().id();
+            let run = Run::default().threads(threads).progress(move |progress| {
+                if progress.stage == Stage::GroupingPreparation
+                    && progress.completed > 0usize.into()
+                {
+                    if threads == 1 {
+                        assert_eq!(thread::current().id(), caller);
+                        assert!(rayon::current_thread_index().is_none());
+                    } else {
+                        assert_eq!(rayon::current_num_threads(), threads);
+                    }
+                    sink.fetch_add(1, Ordering::Relaxed);
+                }
+                GenerationControl::Continue
+            });
+            let grouped = run
+                .in_pool(|| {
+                    group_diagrams(
+                        diagrams.into_iter().map(DiagramPair::Shared).collect(),
+                        &model,
+                        &Grouping::UpToScalar(options),
+                        true,
+                        &run,
+                        false,
+                        DiagramLabels::default(),
+                    )
+                })
+                .unwrap()
+                .unwrap();
+            assert!(
+                observed.load(Ordering::Relaxed) > 0,
+                "physical witness did not observe its actual preparation pool"
+            );
             assert_eq!(grouped.groups.len(), 1, "threads={threads}");
             assert_eq!(grouped.groups[0].members.len(), 2);
             assert_eq!(grouped.groups[0].members[0].ratio, Atom::one());
@@ -3740,8 +3784,26 @@ mod tests {
                 Atom::one()
             );
             assert_eq!(grouped.diagrams[0].numerator().unwrap(), &master_numerator);
+            let members = grouped.groups[0]
+                .members
+                .iter()
+                .map(|member| {
+                    (
+                        member.source_diagram,
+                        member.ratio.to_canonical_string(),
+                        member.overall_factor.to_canonical_string(),
+                    )
+                })
+                .collect::<Vec<_>>();
+            let graph: Value =
+                serde_json::from_str(&grouped.diagrams[0].to_json().unwrap()).unwrap();
+            println!(
+                "FEYNKIT_QUOTIENT_RESULT {}",
+                serde_json::to_string(&(graph, members)).unwrap()
+            );
             return;
         }
+        let mut reference = None;
         for order in ["forward", "reverse"] {
             for threads in [1, 8, 32] {
                 let case = format!("{order}:{threads}");
@@ -3763,6 +3825,18 @@ mod tests {
                     String::from_utf8_lossy(&output.stdout),
                     String::from_utf8_lossy(&output.stderr),
                 );
+                let text = String::from_utf8(output.stdout).unwrap();
+                let snapshot = text
+                    .lines()
+                    .find(|line| line.starts_with("FEYNKIT_QUOTIENT_RESULT "))
+                    .expect(
+                        "fresh child did not export its physical graph and exact group members",
+                    );
+                if let Some(reference) = &reference {
+                    assert_eq!(snapshot, reference, "{case}: complete graph/group payload");
+                } else {
+                    reference = Some(snapshot.to_owned());
+                }
             }
         }
     }
@@ -3897,6 +3971,202 @@ mod tests {
                     .unwrap()
                     .is_none()
             );
+        }
+    }
+
+    #[test]
+    fn sampled_quotient_does_not_group_nonfinite_operands() {
+        let model = Arc::new(model());
+        for canonical in [false, true] {
+            let options = GraphGroupingOptions {
+                check_canonical_numerator: canonical,
+                ..Default::default()
+            };
+            for nonfinite in [Atom::one() / Atom::Zero, Atom::Zero / Atom::Zero] {
+                for (master, candidate) in [
+                    (nonfinite.clone(), nonfinite.clone()),
+                    (nonfinite.clone(), Atom::one()),
+                    (Atom::one(), nonfinite.clone()),
+                ] {
+                    for grouping in [
+                        Grouping::Identical(options.clone()),
+                        Grouping::UpToSign(options.clone()),
+                        Grouping::UpToScalar(options.clone()),
+                    ] {
+                        let diagrams = [master.clone(), candidate.clone()]
+                            .into_iter()
+                            .enumerate()
+                            .map(|(index, value)| {
+                                DiagramPair::Shared(diagram_with_atoms(
+                                    &model,
+                                    &format!("nonfinite-{index}"),
+                                    value,
+                                    Atom::one(),
+                                    25,
+                                    25,
+                                ))
+                            })
+                            .collect();
+                        let grouped = group_diagrams(
+                            diagrams,
+                            &model,
+                            &grouping,
+                            false,
+                            &Run::default(),
+                            false,
+                            DiagramLabels::default(),
+                        )
+                        .unwrap();
+                        assert_eq!(grouped.zero_numerator_count, 0);
+                        assert_eq!(grouped.groups.len(), 2, "{candidate}/{nonfinite}");
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn sampled_quotient_checks_nonfinite_operands_in_every_sample() {
+        for canonical in [false, true] {
+            let options = GraphGroupingOptions {
+                check_canonical_numerator: canonical,
+                ..Default::default()
+            };
+            let scalars = scalar_names(&model());
+            let prepared = |expression: Atom| {
+                let value = NumeratorInterface::admit(expression, None).unwrap();
+                PreparedNumerator {
+                    exact: value.clone(),
+                    sample_source: value.clone(),
+                    samples: vec![value; options.number_of_numerical_samples],
+                }
+            };
+            for mode in [
+                ComparisonMode::Identical,
+                ComparisonMode::UpToSign,
+                ComparisonMode::UpToScalar,
+            ] {
+                // Finite equality, including zero/zero, remains a valid certificate.
+                for finite in [Atom::one(), Atom::Zero] {
+                    assert_eq!(
+                        compare(
+                            &prepared(finite.clone()),
+                            &prepared(finite),
+                            mode,
+                            &options,
+                            &scalars,
+                        )
+                        .unwrap(),
+                        Some(Atom::one())
+                    );
+                }
+                for nonfinite in [Atom::one() / Atom::Zero, Atom::Zero / Atom::Zero] {
+                    for (candidate, master) in [
+                        (nonfinite.clone(), nonfinite.clone()),
+                        (Atom::one(), nonfinite.clone()),
+                        (nonfinite, Atom::one()),
+                    ] {
+                        for sample in 0..options.number_of_numerical_samples {
+                            let mut candidate_samples = prepared(Atom::one());
+                            let mut master_samples = prepared(Atom::one());
+                            candidate_samples.samples[sample] =
+                                NumeratorInterface::admit(candidate.clone(), None).unwrap();
+                            master_samples.samples[sample] =
+                                NumeratorInterface::admit(master.clone(), None).unwrap();
+                            assert!(
+                                compare(
+                                    &candidate_samples,
+                                    &master_samples,
+                                    mode,
+                                    &options,
+                                    &scalars,
+                                )
+                                .unwrap()
+                                .is_none(),
+                                "sample {sample}: {candidate}/{master}"
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn canonical_quotient_rejects_nonfinite_operands_before_equality() {
+        let scalars = scalar_names(&model());
+        for mode in [
+            ComparisonMode::Identical,
+            ComparisonMode::UpToSign,
+            ComparisonMode::UpToScalar,
+        ] {
+            for finite in [Atom::Zero, Atom::one()] {
+                assert_eq!(
+                    compare_atoms(&finite, &finite, mode, &scalars).unwrap(),
+                    Some(Atom::one())
+                );
+            }
+            for nonfinite in [Atom::one() / Atom::Zero, Atom::Zero / Atom::Zero] {
+                for (candidate, master) in [
+                    (nonfinite.clone(), nonfinite.clone()),
+                    (Atom::one(), nonfinite.clone()),
+                    (nonfinite, Atom::one()),
+                ] {
+                    assert!(
+                        compare_atoms(&candidate, &master, mode, &scalars)
+                            .unwrap()
+                            .is_none()
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn canonical_quotient_rejects_nonfinite_concrete_dimensions() {
+        let nc = Atom::var(CS.nc);
+        let dimension = &nc - 3;
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let representation = cooking
+            .try_cook(ColorAdjoint {}.to_symbolic([dimension.clone()]).as_view())
+            .unwrap();
+        let encoded = representation
+            .as_fun_view()
+            .unwrap()
+            .iter()
+            .next()
+            .unwrap()
+            .to_owned();
+        assert_ne!(encoded, dimension);
+        let prepared = |expression| PreparedNumerator {
+            exact: NumeratorInterface::admit(expression, None).unwrap(),
+            sample_source: NumeratorInterface::admit(Atom::one(), None).unwrap(),
+            samples: Vec::new(),
+        };
+        let candidate = prepared(Atom::one() / encoded);
+        let master = prepared(Atom::one());
+        let scalars = scalar_names(&model());
+        for concrete in [false, true] {
+            let ratio = compare(
+                &candidate,
+                &master,
+                ComparisonMode::UpToScalar,
+                &GraphGroupingOptions {
+                    check_canonical_numerator: true,
+                    fully_numerical_substitution: concrete,
+                    number_of_numerical_samples: 0,
+                    ..Default::default()
+                },
+                &scalars,
+            )
+            .unwrap();
+            if concrete {
+                assert!(ratio.is_none());
+            } else {
+                assert_eq!(ratio, Some(Atom::one() / &dimension));
+            }
         }
     }
 

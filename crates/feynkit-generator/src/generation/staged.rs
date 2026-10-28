@@ -616,7 +616,10 @@ impl Run {
     }
 
     /// Run `work` in a pool of the requested threads, or on the caller for a single thread.
-    fn in_pool<T: Send>(&self, work: impl FnOnce() -> T + Send) -> Result<T, GenerationError> {
+    pub(crate) fn in_pool<T: Send>(
+        &self,
+        work: impl FnOnce() -> T + Send,
+    ) -> Result<T, GenerationError> {
         if self.threads == Some(0) {
             return Err(GenerationError::InvalidThreadCount(0));
         }
