@@ -180,8 +180,10 @@ maintained in
   GL_DISPLAY_FILTER=off \
   GL_LOGFILE_FILTER='[{#uv,#integrated,#vakint,#trace}]=debug' \
   GL_TEST_LOG_DIR=/tmp/gammaloop-test-logs \
-  cargo test -p gammalooprs --test test_renormalization --profile dev-optim \
-    finite_part_ghost_3loop_renormalization_sum_origin_mwe -- --ignored --nocapture
+  direnv exec .. nix develop -c just test -p gammalooprs \
+    --test test_renormalization \
+    -E 'test(=finite_part_ghost_3loop_renormalization_sum_origin_mwe)' \
+    -- --ignored --nocapture
   ```
 - Use `GL_ALL_LOG_FILTER` only when display and logfile should receive the same
   filter. Otherwise prefer `GL_DISPLAY_FILTER` and `GL_LOGFILE_FILTER` so large
@@ -561,8 +563,8 @@ validation performed and any checks that could not be completed.
 
 ==== Clippy And Validation
 
-- Run checks appropriate to the affected code. Use `cargo check` for quick
-  feedback when useful; it is not a prerequisite for every build or test run.
+- Run checks appropriate to the affected code. Use `just dev check -p PACKAGE`
+  for quick feedback when useful; it is not a prerequisite for every build or test run.
 - Follow Clippy diligently. Run the repository's Clippy checks for relevant
   Rust changes with the pinned toolchain and configured lint set. Address
   warnings in new and substantially modified code before finishing. Report
@@ -593,7 +595,8 @@ validation performed and any checks that could not be completed.
   `cargo nextest self update`.
 - Rust integration tests live in `tests/` with shared fixtures in
   `tests/resources/`.
-- Use `cargo nextest` via `just test TEST_NAME` for targeted integration runs.
+- Use the Nix-backed `just test -p PACKAGE -E 'test(NAME)'` from the first
+  development test. A name-only selection retains workspace coverage.
 - Pass emulated libtest arguments after `--`, for example
   `just test_gammaloop -- --skip TEST_NAME`.
 - Put targeted unit tests next to the implementation they exercise.
@@ -682,7 +685,7 @@ from the rendered PDF.
 
 == Common Commands
 
-- Build Rust CLI in dev-optim:
+- Build the packaged Rust CLI with the shared Nix ci-optim context:
   ```bash
   just build-cli
   ```
@@ -690,7 +693,7 @@ from the rendered PDF.
   ```bash
   just build-cli-abi
   ```
-- Build Python API bindings:
+- Build the Python module for Nix's pinned interpreter and print its result path:
   ```bash
   just build-api
   ```
@@ -711,6 +714,70 @@ from the rendered PDF.
 The root `justfile` keeps build and lint commands. Test, NixCI and drawing recipes
 are imported from `just/tests.just`, `just/ci.just` and `just/drawing.just`; run all
 commands from the repository as before. Use `just --list` to see them.
+
+=== Development Artifacts
+<development-cache>
+
+From a feature workspace, run licensed development commands with
+`direnv exec .. nix develop -c just COMMAND`. Ordinary `test`, `build-cli`,
+`build-api`, `build-all`, `check`, and `clippy` commands use Nix producers during
+development, including the first check after an edit. `just dev` exposes the
+same selected operations directly:
+
+```bash
+direnv exec .. nix develop -c just test -p feynkit-tensor -E 'test(reduction)'
+direnv exec .. nix develop -c just dev check -p feynkit-tensor
+direnv exec .. nix develop -c just dev clippy -p feynkit-tensor
+direnv exec .. nix develop -c just test-python-api
+```
+
+The frontend captures current Git or Jujutsu working files, including nonignored
+new source and deletions, without committing or modifying the Git index. Ignored
+build trees and version-control metadata stay outside the source snapshot. Nix
+then applies the existing package source filters and feature contexts. Select
+packages with `-p` to limit compilation; a test-name filter alone keeps all
+ordinary workspace groups. Select `--group python-api` explicitly for the
+extension-module runtime and `--group browser` for the complete browser fixture
+and probe suite. Narrow browser selections execute the selected Rust tests;
+downstream browser probes require an unfiltered complete group run. Filters continue to respect the chosen Nextest
+profile's exclusions and ignored-test policy. An empty overall selection fails.
+
+The `ci-optim` compilation context matches CI. A runtime test filter or profile
+change reuses its compiled archive. A source edit can restore compatible
+incremental state recorded by an earlier development build. Compatibility covers
+compiler, dependencies, features, target and profile; a changed context starts a
+separate cache entry. Successful results retain Nix GC roots for compiled
+artifacts and query state, with bounded generations under the user's XDG cache.
+`GAMMALOOP_DEV_CACHE` selects a provisioned shared registry when available.
+Concurrent commands coordinate registry updates without holding its lock during
+compilation. Bare Cargo artifacts and the Nix store have separate lifecycles.
+
+Before final CI preparation, `just ci-promote-development-state` validates
+successful rooted development descriptors against the current CI producers,
+publishes their declared producer and query-state closures, then writes the
+reviewable `nix/development-seeds.json` manifest. Review and commit this input
+before running the ordinary final-code checks and upload. Normal test commands
+never write that source file or upload automatically. An unchanged source keeps
+its exact producer identity; only a relevant edit advances the incremental seed.
+Promotion currently supports test producers and the Python extension. Narrow
+native build, check and Clippy contexts have no identical selected CI consumer;
+the command reports and omits them.
+
+Printed build paths point directly to the requested package products. `build-api`
+produces the Nix Python module under `lib/python3.13/site-packages` within its
+printed path; it does not install into an active virtualenv. Use Nix's matching
+interpreter for that module. The Python test group supplies both interpreter and
+extension itself.
+Focused tracing logs and runtime watchdog reports are retained with the test
+result, including failed tests; the command still reports the test failure.
+
+Release, stable-ABI, WASM, wheel-distribution and Cargo inventory recipes retain
+their explicit compilation contexts. `test_LU_scalar_xs` also retains its guarded
+Cargo pipeline because its memory cap covers compilation and test execution.
+These commands do not populate Nix CI artifacts. Use them when the task requires
+that specific context, and record the reason when handing off agent work.
+Formatting and dependency-graph inspection do not compile Rust and may continue
+using their existing Cargo tools.
 
 == CI Readiness
 <ci-readiness>
@@ -829,7 +896,9 @@ On Clan-managed hosts, use the configured `NIXCI_NETRC`; a fresh login may be
 needed after upload access is enabled. Keep tokens and license values outside
 Git. See #link("https://nix-ci.com/documentation/nix-ci-cache")[the NixCI cache documentation].
 Uploads run as your user and need no additional Nix privileges. Entering the dev
-shell enables no upload hook. Bare Cargo builds do not populate this cache.
+shell enables no upload hook. Nix-backed development commands retain their
+selected producers locally; `ci-checks-and-upload` publishes the final selected
+CI closures. Bare Cargo builds do not populate this cache.
 An untrusted daemon may warn that it ignores `netrc-file`; the upload client
 still uses that file to authenticate with the destination cache.
 
@@ -1106,10 +1175,10 @@ preferences; they protect behavior that has been easy to regress.
   have more overhead than version-specific builds.
 - The Rust API has precise endpoints `evaluate_sample_precise` and
   `evaluate_samples_precise`; the Python API intentionally stays `f64`-only.
-- Python API end-to-end tests are subprocess-based and assume the contributor
-  already built/installed the Python extension in the active environment
-  (`maturin develop` or `just build-api`). Do not try to embed Python into the
-  Rust test binary for these tests.
+- Python API end-to-end tests are subprocess-based. `just test-python-api`
+  supplies the packaged extension and interpreter through Nix; no active venv
+  installation is needed. Direct Cargo execution requires a separately installed
+  matching extension. Do not embed Python into the Rust test binary for these tests.
 - The top-level `.venv` in the repo is a reasonable default development
   environment for running the Python API examples/tests after building the
   extension there.

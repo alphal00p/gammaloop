@@ -575,6 +575,7 @@
   fail-on-dangling-dependencies = true;
   onlyBuild = [
     "checks.x86_64-linux.gammaloop-clippy"
+    "checks.x86_64-linux.gammaloop-development-tools"
     "checks.x86_64-linux.gammaloop-fmt"
     "checks.x86_64-linux.gammaloop-guppy-workspace-graph"
     "checks.x86_64-linux.gammaloop-nextest-binaries-browser"
