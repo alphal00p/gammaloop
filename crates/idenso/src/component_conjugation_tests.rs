@@ -1,22 +1,18 @@
-use std::sync::{
-    Arc,
-    atomic::{AtomicUsize, Ordering},
-};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
-use crate::{IndexTooling, tensor::SymbolicTensor};
-use spenso::{
-    network::{library::function_lib::INBUILTS, tags::SPENSO_TAG},
-    structure::{
-        abstract_index::AbstractIndex,
-        partial::{PartialStructure, PartialStructureExt},
-        representation::{LibraryRep, RepName},
-        slot::IsAbstractSlot,
-    },
-};
-use symbolica::{
-    atom::{Atom, AtomCore, FunctionBuilder},
-    function, symbol,
-};
+use crate::IndexTooling;
+use crate::tensor::SymbolicTensor;
+use crate::test_support::test_initialize;
+use spenso::broadcast_symbol;
+use spenso::network::library::function_lib::INBUILTS;
+use spenso::network::tags::SPENSO_TAG;
+use spenso::structure::abstract_index::AbstractIndex;
+use spenso::structure::partial::{PartialStructure, PartialStructureExt};
+use spenso::structure::representation::{LibraryRep, RepName};
+use spenso::structure::slot::IsAbstractSlot;
+use symbolica::atom::{Atom, AtomCore, FunctionBuilder, SymbolAttribute, SymbolBuilder};
+use symbolica::{function, symbol, wrap_symbol};
 
 type Tensor = SymbolicTensor<PartialStructure>;
 
@@ -39,7 +35,14 @@ fn same(actual: &Tensor, expected: &Tensor) {
         expected.structure().logical_slots()
     );
     let canonical = actual.canonize().unwrap();
-    assert!(canonical.same_value(&expected.canonize().unwrap()));
+    let expected_canonical = expected.canonize().unwrap();
+    assert!(
+        canonical.same_value(&expected_canonical),
+        "input={}\nactual={}\nexpected={}",
+        actual.expression(),
+        canonical.expression(),
+        expected_canonical.expression()
+    );
     assert!(canonical.canonize().unwrap().same_value(&canonical));
     assert_eq!(
         Tensor::infer(canonical.expression().clone())
@@ -52,7 +55,7 @@ fn same(actual: &Tensor, expected: &Tensor) {
 
 #[test]
 fn closed_broadcast_conjugation_preserves_component_orientation_and_complex_weights() {
-    crate::test_support::test_initialize();
+    test_initialize();
     let z = Atom::var(symbol!("component_conjugation::z"; Scalar));
     for dual in [false, true] {
         let (direct, opposite) = components("weighted", dual, 99203);
@@ -78,7 +81,7 @@ fn closed_broadcast_conjugation_preserves_component_orientation_and_complex_weig
 
 #[test]
 fn conjugated_norm_powers_match_independently_fresh_norms_and_sums() {
-    crate::test_support::test_initialize();
+    test_initialize();
     let (h, h_dual) = components("h", false, 99209);
     let (k, k_dual) = components("k", false, 99211);
     let p = Tensor::infer(&h * INBUILTS.conj(&h_dual)).unwrap();
@@ -109,7 +112,7 @@ fn conjugated_norm_powers_match_independently_fresh_norms_and_sums() {
 
 #[test]
 fn real_scalar_metadata_with_hidden_universal_conjugation_remains_opaque() {
-    crate::test_support::test_initialize();
+    test_initialize();
     let (h, h_dual) = components("metadata_norm", false, 99217);
     let (private, _) = components("private_payload", false, 99221);
     let calls = Arc::new(AtomicUsize::new(0));
@@ -120,6 +123,7 @@ fn real_scalar_metadata_with_hidden_universal_conjugation_remains_opaque() {
     for metadata_head in [
         symbol!("component_conjugation::real_metadata"; Scalar, Real),
         metadata_hook,
+        symbol!("component_conjugation::untagged_real_metadata"; Real),
     ] {
         let metadata = function!(metadata_head, &hidden);
         // Constructing this comparison fixture can itself invoke the hook.
@@ -147,8 +151,37 @@ fn real_scalar_metadata_with_hidden_universal_conjugation_remains_opaque() {
 }
 
 #[test]
+fn real_tensor_metadata_keeps_private_universal_conjugation() {
+    test_initialize();
+    let rep = LibraryRep::new_dual("component_conjugation::real_tensor_rep")
+        .unwrap()
+        .new_rep(3);
+    let index = AbstractIndex::Normal(99225);
+    let head = SymbolBuilder::new(wrap_symbol!("component_conjugation::real_tensor"))
+        .with_attributes(vec![SymbolAttribute::Real])
+        .with_tags([&SPENSO_TAG.tensor])
+        .build()
+        .unwrap();
+    let scalar = Atom::var(symbol!("component_conjugation::private_scalar"));
+    let hidden = scalar.conj();
+    let port = rep.slot::<AbstractIndex, _>(index).to_atom();
+    let real = function!(head, &hidden, &port);
+    let forbidden = function!(head, INBUILTS.conj(&scalar), &port);
+    let opposite = function!(
+        SPENSO_TAG.tensor_symbol("component_conjugation::real_tensor_partner"),
+        rep.dual().slot::<AbstractIndex, _>(index).to_atom()
+    );
+    let source = Tensor::infer(INBUILTS.conj(&real * &opposite)).unwrap();
+    let expected = Tensor::infer(&real * INBUILTS.conj(&opposite)).unwrap();
+    same(&source, &expected);
+    let canonical = source.canonize().unwrap();
+    assert!(canonical.expression().contains(&hidden));
+    assert!(!canonical.expression().contains(&forbidden));
+}
+
+#[test]
 fn component_normalization_keeps_open_broadcasts_words_and_unknown_functions_opaque() {
-    crate::test_support::test_initialize();
+    test_initialize();
     let (direct, opposite) = components("open", false, 99227);
     let source = Tensor::infer(INBUILTS.conj(&direct)).unwrap();
     assert_eq!(source.rank(), 1);
@@ -166,7 +199,7 @@ fn component_normalization_keeps_open_broadcasts_words_and_unknown_functions_opa
     let wrapped = Tensor::infer(INBUILTS.conj(word.expression())).unwrap();
     assert!(wrapped.canonize().unwrap().same_value(&wrapped));
 
-    let broadcast = spenso::broadcast_symbol!("component_conjugation::unknown");
+    let broadcast = broadcast_symbol!("component_conjugation::unknown");
     let atom = function!(
         broadcast,
         Atom::var(symbol!("component_conjugation::x"; Scalar))

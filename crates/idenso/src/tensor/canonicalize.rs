@@ -29,6 +29,9 @@ use symbolica::graph::{Graph, HiddenData};
 impl SymbolicTensor<PartialStructure> {
     /// Canonically label internal indices while retaining the ordered external interface.
     ///
+    /// Closed intrinsic component conjugations may normalize without dualizing
+    /// representations; physical conjugation retains ownership of that duality.
+    ///
     /// The shared network canonicalizer owns signed zeros and dummy labels. The
     /// tensor finisher preserves typed zeros. Debug builds check the user-normalizer
     /// free-index preservation contract.

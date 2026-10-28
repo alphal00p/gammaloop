@@ -356,14 +356,33 @@ pub enum AdjointError {
     TooManyDanglingBispinors { count: usize },
 }
 
-impl tensor::SymbolicTensor<PartialStructure> {
+impl SymbolicTensor<PartialStructure> {
     /// Component conjugation only; representation duality belongs to the
     /// physical conjugation owner that calls this expression boundary.
     fn component_conjugate_expression(value: AtomView<'_>) -> Atom {
-        value
-            .conj()
-            .replace(Atom::var(RS.a__).conj())
-            .with(INBUILTS.conj(RS.a__))
+        value.conj().replace_map(|part, _, output| {
+            let AtomView::Fun(function) = part else {
+                return;
+            };
+            if function.get_symbol() == Symbol::CONJ && function.get_nargs() == 1 {
+                let argument = function
+                    .iter()
+                    .next()
+                    .expect("a unary conjugation has one argument");
+                if InterfaceInference::has_structured_syntax(argument) {
+                    **output = INBUILTS.conj(argument);
+                    return;
+                }
+            }
+            // Scalar conjugation belongs to Symbolica. Tensor leaves are
+            // atomic here: Real heads can expose unchanged private metadata
+            // when Symbolica removes their outer conjugation.
+            if function.get_symbol().has_tag(&SPENSO_TAG.tensor)
+                || !InterfaceInference::has_structured_syntax(part)
+            {
+                output.set_from_view(&part);
+            }
+        })
     }
 
     /// Prepare one admitted positive-power scope through the collection owner.
@@ -494,9 +513,7 @@ impl tensor::SymbolicTensor<PartialStructure> {
                 if function.get_symbol().is_scalar() {
                     return false;
                 }
-                tensor_word |= function
-                    .get_symbol()
-                    .has_tag(&spenso::network::tags::SPENSO_TAG.tensor_word);
+                tensor_word |= function.get_symbol().has_tag(&SPENSO_TAG.tensor_word);
             }
             !tensor_word
         });
@@ -730,14 +747,13 @@ impl IndexTooling for AtomView<'_> {
             && !self
                 .get_all_symbols(true)
                 .iter()
-                .any(|symbol| symbol.has_tag(&spenso::network::tags::SPENSO_TAG.tensor_word));
+                .any(|symbol| symbol.has_tag(&SPENSO_TAG.tensor_word));
         if allow_component_conjugation {
             self.visitor(&mut |part| {
                 if let AtomView::Fun(function) = part {
                     let symbol = function.get_symbol();
                     allow_component_conjugation &= !symbol.is_scalar()
-                        && (!symbol.has_tag(&spenso::network::tags::SPENSO_TAG.broadcast)
-                            || symbol == INBUILTS.conj);
+                        && (!symbol.has_tag(&SPENSO_TAG.broadcast) || symbol == INBUILTS.conj);
                 }
                 allow_component_conjugation
             });
@@ -797,7 +813,7 @@ impl IndexTooling for AtomView<'_> {
                             .list_dangling::<Aind>()
                             .is_ok_and(|dangling| dangling.is_empty())
                         {
-                            let conjugate = tensor::SymbolicTensor::<PartialStructure>::component_conjugate_expression(argument.as_view());
+                            let conjugate = SymbolicTensor::<PartialStructure>::component_conjugate_expression(argument.as_view());
                             if !conjugate.list_dangling::<Aind>().map_err(|error| {
                                 native_error(CanonicalizationError::Prepare {
                                     reason: error.to_string(),
@@ -1014,8 +1030,7 @@ impl IndexTooling for AtomView<'_> {
         }))
     }
     fn spenso_conj(&self) -> Atom {
-        let conjugate =
-            tensor::SymbolicTensor::<PartialStructure>::component_conjugate_expression(*self);
+        let conjugate = SymbolicTensor::<PartialStructure>::component_conjugate_expression(*self);
         color_conj_impl(conjugate.as_view())
     }
 
