@@ -18,7 +18,7 @@ title = "Compile-time generation test source closure"
 summary = "Source30 filtered-source ownership, exact copied-file boundaries and validation limits."
 source = "docs/architecture/generation-test-source-closure.typ"
 kind = "Implementation record"
-status = "Candidate; NEW independent Astra review required"
+status = "Source30 combined candidate; NEW independent Astra review before31"
 lifecycle = "investigation"
 owner = "unassigned"
 reviewed_at = "2026-10-28"
@@ -32,7 +32,15 @@ path = "nix/rust-workspace.nix"
 symbol = "generation compile-time test source owners"
 anchor = "  workspacePackageExtraSourceRoots.compileTimeTest = {"
 end_anchor = "  workspacePackageExtraSourceRoots.runtimeTest = {"
-digest = "f28f7a0554d9a3373ebdb98d432c6529273537fb"
+digest = "51720341de64b4bd1a32becfcb74389754dbbfef"
+
+
+[[section.note.scope]]
+path = "nix/rust-workspace.nix"
+symbol = "declared local Cargo patch source ownership"
+anchor = "  workspaceCargoPatches ="
+end_anchor = "  localCargoPatchSources ="
+digest = "b8ef6794d3fb70d911b1e39e8ee3b4a98d03f227"
 
 [[section.note]]
 id = "generation-sampling-staged"

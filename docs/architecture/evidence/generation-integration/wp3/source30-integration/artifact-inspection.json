@@ -1,0 +1,249 @@
+{
+  "clinnet": {
+    "identity": {
+      "packageDrv": "/nix/store/n25c6ypc3g5yr9avywr4679w896j7w06-nix-ci-artifact-barrier-crate-test-binaries-clinnet.drv",
+      "packageOut": "/nix/store/v55s7n8d96d40pgh276v7m0dx8yzyndv-nix-ci-artifact-barrier-crate-test-binaries-clinnet",
+      "producerDrv": "/nix/store/mynmwafrkaln2lw5fym83kmg17y3b5a5-gammaloop-crate-test-binaries-clinnet-ae6d6c18c3317af1-deps-0.1.0.drv",
+      "producerOut": "/nix/store/vbsi8ba92kdc0cvrjc12zr5d14v6iqh7-gammaloop-crate-test-binaries-clinnet-ae6d6c18c3317af1-deps-0.1.0",
+      "productionSource": "/nix/store/s1ql5wccqg2r4nld4mypymx0l5bqm23p-source",
+      "source": "/nix/store/9zkqnnyrdjz13s1akf70mzja6cqmhyxg-source"
+    },
+    "package_symlink_matches": true,
+    "affected_ELFs": [
+      {
+        "archive": "/nix/store/vbsi8ba92kdc0cvrjc12zr5d14v6iqh7-gammaloop-crate-test-binaries-clinnet-ae6d6c18c3317af1-deps-0.1.0/target.tar.zst",
+        "archive_path": "./ci-optim/deps/kurvst_marks-0cb2d1d9c0fc5cc0",
+        "extracted": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-source30/elf/clinnet/kurvst_marks-0cb2d1d9c0fc5cc0",
+        "bytes": 8573736,
+        "sha256": "c9772cf3a6fb6860de5dedea3e0f9571227f661181d40ba8c1bdb342bd9c5e71",
+        "ELF": true,
+        "embedded_complete_inputs": {
+          "crates/kurvst/typst/tests/mark-contract.typ": true,
+          "crates/kurvst/typst/tests/mark-geometry.typ": true
+        }
+      },
+      {
+        "archive": "/nix/store/vbsi8ba92kdc0cvrjc12zr5d14v6iqh7-gammaloop-crate-test-binaries-clinnet-ae6d6c18c3317af1-deps-0.1.0/target.tar.zst",
+        "archive_path": "./ci-optim/deps/public_typst_behavior-5cd3cbadce751f84",
+        "extracted": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-source30/elf/clinnet/public_typst_behavior-5cd3cbadce751f84",
+        "bytes": 8613920,
+        "sha256": "8f98db9b9ddfaa8633ad797a09e046e2f6cdc34011039b475221daa48badf97f",
+        "ELF": true,
+        "embedded_complete_inputs": {
+          "crates/kurvst/typst/tests/mark-contract.typ": true,
+          "crates/kurvst/typst/tests/mark-geometry.typ": true,
+          "crates/linnest/typst/tests/collision-lines.typ": true,
+          "crates/linnest/typst/tests/identity-targets.typ": true
+        }
+      }
+    ],
+    "matched_depfiles": [
+      {
+        "path": "./ci-optim/deps/public_typst_behavior-5cd3cbadce751f84.d",
+        "sha256": "0c115526e4ba8309f37ab0730f4930c7d82fa2aac88f7702872cb67bb46d471b",
+        "input_refs": {
+          "crates/kurvst/typst/tests/mark-contract.typ": true,
+          "crates/kurvst/typst/tests/mark-geometry.typ": true,
+          "crates/linnest/typst/tests/collision-lines.typ": true,
+          "crates/linnest/typst/tests/identity-targets.typ": true
+        }
+      },
+      {
+        "path": "./ci-optim/deps/kurvst_marks-0cb2d1d9c0fc5cc0.d",
+        "sha256": "981efa792bdd4c9f88a76add602e5d323bf2b282b3426ea4c032be687e9149e1",
+        "input_refs": {
+          "crates/kurvst/typst/tests/mark-contract.typ": true,
+          "crates/kurvst/typst/tests/mark-geometry.typ": true
+        }
+      }
+    ],
+    "runtime_libraries": [],
+    "actual_compiled_test_targets": [
+      {
+        "cargo_target": "unittests src/lib.rs",
+        "cargo_path": "target/ci-optim/deps/clinnet-cbe57918bb1440cf"
+      },
+      {
+        "cargo_target": "unittests src/main.rs",
+        "cargo_path": "target/ci-optim/deps/linnet-e3ef0aec0e1b0c55"
+      },
+      {
+        "cargo_target": "tests/kurvst_marks.rs",
+        "cargo_path": "target/ci-optim/deps/kurvst_marks-0cb2d1d9c0fc5cc0"
+      },
+      {
+        "cargo_target": "tests/public_typst_behavior.rs",
+        "cargo_path": "target/ci-optim/deps/public_typst_behavior-5cd3cbadce751f84"
+      }
+    ],
+    "producer_log": "target/wp3-source30/clinnet-producer.log",
+    "producer_log_sha256": "d91c38a311c44fcacfa32efb1525bdc1d17424e27402bbb6bd32d81dc04e43e1",
+    "reused_exact_preparation_artifact": false,
+    "not_a_dependency_cache_only": true
+  },
+  "linnet": {
+    "identity": {
+      "packageDrv": "/nix/store/l7vvaz9q3jgr8mq8i9g7yc093cya1s5q-nix-ci-artifact-barrier-crate-test-binaries-linnet.drv",
+      "packageOut": "/nix/store/0clcs1w68lx88dkpz38l36lz40sbc533-nix-ci-artifact-barrier-crate-test-binaries-linnet",
+      "producerDrv": "/nix/store/bvmr7za4q98dy2x3bjvvvgpzbncgz0fg-gammaloop-crate-test-binaries-linnet-9ddd49c3d058a560-deps-0.1.0.drv",
+      "producerOut": "/nix/store/cavydq06slyc5rnbk73jhjkdw468gwhl-gammaloop-crate-test-binaries-linnet-9ddd49c3d058a560-deps-0.1.0",
+      "productionSource": "/nix/store/bmmi645wj3x1a0k9ynx1m5y0d85v31ib-source",
+      "source": "/nix/store/dn76zz86lpis983m5yf8lvmkb7h2cn8w-source"
+    },
+    "package_symlink_matches": true,
+    "affected_ELFs": [
+      {
+        "archive": "/nix/store/cavydq06slyc5rnbk73jhjkdw468gwhl-gammaloop-crate-test-binaries-linnet-9ddd49c3d058a560-deps-0.1.0/target.tar.zst",
+        "archive_path": "./ci-optim/deps/generation_report-6bcbc157bd9f464f",
+        "extracted": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-source30/elf/linnet/generation_report-6bcbc157bd9f464f",
+        "bytes": 29775704,
+        "sha256": "e9764e7201f43fd59ed38948ae043f0bdb1787491ea31389097ce5372d70aca6",
+        "ELF": true,
+        "embedded_complete_inputs": {
+          "crates/linnet/tests/generation_reports/finite_vertex_bound.txt": true,
+          "crates/linnet/tests/generation_reports/identical_legs.txt": true,
+          "crates/linnet/tests/generation_reports/infeasible_order.txt": true,
+          "crates/linnet/tests/generation_reports/qed.txt": true,
+          "crates/linnet/tests/generation_reports/signed_vacuum.txt": true
+        }
+      }
+    ],
+    "matched_depfiles": [
+      {
+        "path": "./ci-optim/deps/generation_report-6bcbc157bd9f464f.d",
+        "sha256": "25c75ef13598badcaad5a84e898f89389dd049275afee28d083560b9a3b36574",
+        "input_refs": {
+          "crates/linnet/tests/generation_reports/finite_vertex_bound.txt": true,
+          "crates/linnet/tests/generation_reports/identical_legs.txt": true,
+          "crates/linnet/tests/generation_reports/infeasible_order.txt": true,
+          "crates/linnet/tests/generation_reports/qed.txt": true,
+          "crates/linnet/tests/generation_reports/signed_vacuum.txt": true
+        }
+      }
+    ],
+    "runtime_libraries": [
+      {
+        "archive": "/nix/store/cavydq06slyc5rnbk73jhjkdw468gwhl-gammaloop-crate-test-binaries-linnet-9ddd49c3d058a560-deps-0.1.0/target.tar.zst",
+        "archive_path": "./ci-optim/deps/libclarabel.so",
+        "extracted": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-source30/elf/linnet/libclarabel.so",
+        "bytes": 18840,
+        "sha256": "e88f9ec245b5ba4be9ad3aef45db677a453c247b855735060e24840b81467774",
+        "ELF": true
+      }
+    ],
+    "actual_compiled_test_targets": [
+      {
+        "cargo_target": "unittests src/lib.rs",
+        "cargo_path": "target/ci-optim/deps/linnet-62a6fd4e653a87c0"
+      },
+      {
+        "cargo_target": "tests/builder_retention.rs",
+        "cargo_path": "target/ci-optim/deps/builder_retention-841b97860f55d111"
+      },
+      {
+        "cargo_target": "tests/dot_corpus.rs",
+        "cargo_path": "target/ci-optim/deps/dot_corpus-873b5a7bfd6ca9ec"
+      },
+      {
+        "cargo_target": "tests/generation_plan.rs",
+        "cargo_path": "target/ci-optim/deps/generation_plan-83579aac0fcb8ac0"
+      },
+      {
+        "cargo_target": "tests/generation_report.rs",
+        "cargo_path": "target/ci-optim/deps/generation_report-6bcbc157bd9f464f"
+      },
+      {
+        "cargo_target": "tests/nauty/main.rs",
+        "cargo_path": "target/ci-optim/deps/nauty-039cdce044be2f50"
+      }
+    ],
+    "producer_log": "target/wp3-source30/linnet-producer.log",
+    "producer_log_sha256": "f6acdaf6277b29f55e16331c20647277d76f53dc679f5a499dc02c6d2bf4feeb",
+    "reused_exact_preparation_artifact": true,
+    "not_a_dependency_cache_only": true
+  },
+  "feynkit": {
+    "identity": {
+      "packageDrv": "/nix/store/8r0xcd37m0h1kjbhc5xyqkxixi8dljsh-nix-ci-artifact-barrier-crate-test-binaries-feynkit-py.drv",
+      "packageOut": "/nix/store/2hg95fq6xlg346gimc614dhglrzxiwx9-nix-ci-artifact-barrier-crate-test-binaries-feynkit-py",
+      "producerDrv": "/nix/store/9pdyis7c6cdacw97cd5pq901rca9lbpp-gammaloop-crate-test-binaries-feynkit-py-5ebab9a37787b10e-deps-0.1.0.drv",
+      "producerOut": "/nix/store/f5haybcq73gyxpbk8fa77ic1ilyk61m1-gammaloop-crate-test-binaries-feynkit-py-5ebab9a37787b10e-deps-0.1.0",
+      "productionSource": "/nix/store/ixag4ni62z7n5y0s69fnry5az9ln9psc-source",
+      "source": "/nix/store/vrcn5qbrb2q691sks6hq6w8gwn3savpk-source"
+    },
+    "package_symlink_matches": true,
+    "affected_ELFs": [
+      {
+        "archive": "/nix/store/f5haybcq73gyxpbk8fa77ic1ilyk61m1-gammaloop-crate-test-binaries-feynkit-py-5ebab9a37787b10e-deps-0.1.0/target.tar.zst",
+        "archive_path": "./ci-optim/deps/feynkit_py-b048a14e60533ee1",
+        "extracted": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-source30/elf/feynkit/feynkit_py-b048a14e60533ee1",
+        "bytes": 140249728,
+        "sha256": "4bab4ced580b758bb6edf1fc8278ef8d998f2a339af1cce7e7c39cc3bd992316",
+        "ELF": true,
+        "embedded_complete_inputs": {
+          "crates/feynkit-py/tests/request_decorator_contract.py": true
+        }
+      }
+    ],
+    "matched_depfiles": [
+      {
+        "path": "./ci-optim/deps/feynkit_py-86f2158437380d0d.d",
+        "sha256": "79f4440c1e676925d37331d69dd8a0744dbabf7e9f09bb3490ee74ffab51afcc",
+        "input_refs": {
+          "crates/feynkit-py/tests/request_decorator_contract.py": false
+        }
+      },
+      {
+        "path": "./ci-optim/deps/feynkit_py-b048a14e60533ee1.d",
+        "sha256": "fce835c85f5d35a7e00e7ef21c7c8d1cf19688ecff70298c15ac5b566807875d",
+        "input_refs": {
+          "crates/feynkit-py/tests/request_decorator_contract.py": true
+        }
+      }
+    ],
+    "runtime_libraries": [
+      {
+        "archive": "/nix/store/f5haybcq73gyxpbk8fa77ic1ilyk61m1-gammaloop-crate-test-binaries-feynkit-py-5ebab9a37787b10e-deps-0.1.0/target.tar.zst",
+        "archive_path": "./ci-optim/deps/libclarabel.so",
+        "extracted": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-source30/elf/feynkit/libclarabel.so",
+        "bytes": 18840,
+        "sha256": "e88f9ec245b5ba4be9ad3aef45db677a453c247b855735060e24840b81467774",
+        "ELF": true
+      },
+      {
+        "archive": "/nix/store/f5haybcq73gyxpbk8fa77ic1ilyk61m1-gammaloop-crate-test-binaries-feynkit-py-5ebab9a37787b10e-deps-0.1.0/target.tar.zst",
+        "archive_path": "./ci-optim/deps/liblinnest.so",
+        "extracted": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-source30/elf/feynkit/liblinnest.so",
+        "bytes": 54059712,
+        "sha256": "db5cc3c2d7b5b6929c436e53709a82678c5e3127e4c8928833f7f3cbb44df579",
+        "ELF": true
+      }
+    ],
+    "actual_compiled_test_targets": [
+      {
+        "cargo_target": "unittests src/lib.rs",
+        "cargo_path": "target/ci-optim/deps/feynkit_py-b048a14e60533ee1"
+      },
+      {
+        "cargo_target": "unittests src/bin/stubgen.rs",
+        "cargo_path": "target/ci-optim/deps/feynkit_stubgen-1372ebf7fc539e34"
+      },
+      {
+        "cargo_target": "tests/cff_display.rs",
+        "cargo_path": "target/ci-optim/deps/cff_display-1f6c482c11832596"
+      },
+      {
+        "cargo_target": "tests/combined_community.rs",
+        "cargo_path": "target/ci-optim/deps/combined_community-4814ece84ae524ff"
+      },
+      {
+        "cargo_target": "tests/cut_algebra.rs",
+        "cargo_path": "target/ci-optim/deps/cut_algebra-86eab3f5874228bf"
+      }
+    ],
+    "producer_log": "target/wp3-source30/feynkit-producer.log",
+    "producer_log_sha256": "67aabf9dc1adcebcf752a76d6b94d8cdcdd9e4ca21bd9ff87951621d01456fba",
+    "reused_exact_preparation_artifact": false,
+    "not_a_dependency_cache_only": true
+  }
+}

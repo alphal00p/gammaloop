@@ -1,0 +1,92 @@
+[
+  {
+    "owner": "clinnet",
+    "test": "public_mark_constructors_and_batch_geometry_behave",
+    "command": [
+      "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-source30/elf/clinnet/kurvst_marks-0cb2d1d9c0fc5cc0",
+      "public_mark_constructors_and_batch_geometry_behave",
+      "--exact",
+      "--nocapture",
+      "--test-threads=1"
+    ],
+    "binary_sha256": "c9772cf3a6fb6860de5dedea3e0f9571227f661181d40ba8c1bdb342bd9c5e71",
+    "exit_code": 0,
+    "seconds": 1.2112510204315186,
+    "log": "target/wp3-source30/clinnet-public_mark_constructors_and_batch_geometry_behave.log",
+    "log_sha256": "c26b6a48789f748282aad7f6ebc7db22cdd244bbc13a30e61637fbfb67799e88",
+    "typst_required": "/nix/store/5f1a3n27fy3y8pf6snxr2sbzwhk9brr2-typst-0.15.1-env/bin/typst",
+    "pass": true
+  },
+  {
+    "owner": "clinnet",
+    "test": "public_linnest_identity_targets_and_collision_lines_behave",
+    "command": [
+      "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-source30/elf/clinnet/public_typst_behavior-5cd3cbadce751f84",
+      "public_linnest_identity_targets_and_collision_lines_behave",
+      "--exact",
+      "--nocapture",
+      "--test-threads=1"
+    ],
+    "binary_sha256": "8f98db9b9ddfaa8633ad797a09e046e2f6cdc34011039b475221daa48badf97f",
+    "exit_code": 0,
+    "seconds": 0.3024623394012451,
+    "log": "target/wp3-source30/clinnet-public_linnest_identity_targets_and_collision_lines_behave.log",
+    "log_sha256": "ab599646bfd1d3ecd882ee68df5815f4cd40235fb3325793aae0a13a0260057b",
+    "typst_required": "/nix/store/5f1a3n27fy3y8pf6snxr2sbzwhk9brr2-typst-0.15.1-env/bin/typst",
+    "pass": true
+  },
+  {
+    "owner": "clinnet",
+    "test": "public_native_curve_splits_layers_and_route_points_behave",
+    "command": [
+      "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-source30/elf/clinnet/public_typst_behavior-5cd3cbadce751f84",
+      "public_native_curve_splits_layers_and_route_points_behave",
+      "--exact",
+      "--nocapture",
+      "--test-threads=1"
+    ],
+    "binary_sha256": "8f98db9b9ddfaa8633ad797a09e046e2f6cdc34011039b475221daa48badf97f",
+    "exit_code": 0,
+    "seconds": 1.145756721496582,
+    "log": "target/wp3-source30/clinnet-public_native_curve_splits_layers_and_route_points_behave.log",
+    "log_sha256": "23f3469916fc19bd3d508108f71c94127856173412304be326a8923d1498e8fb",
+    "typst_required": "/nix/store/5f1a3n27fy3y8pf6snxr2sbzwhk9brr2-typst-0.15.1-env/bin/typst",
+    "pass": true
+  },
+  {
+    "owner": "linnet",
+    "test": "explanations_snapshot_the_lowered_request_and_infeasibility",
+    "command": [
+      "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-source30/elf/linnet/generation_report-6bcbc157bd9f464f",
+      "explanations_snapshot_the_lowered_request_and_infeasibility",
+      "--exact",
+      "--nocapture",
+      "--test-threads=1"
+    ],
+    "binary_sha256": "e9764e7201f43fd59ed38948ae043f0bdb1787491ea31389097ce5372d70aca6",
+    "exit_code": 0,
+    "seconds": 0.11846756935119629,
+    "log": "target/wp3-source30/linnet-explanations_snapshot_the_lowered_request_and_infeasibility.log",
+    "log_sha256": "5d613b644ead1c1dea3a44544f3881413d3de6d13f5e2f32f605bc69c497275e",
+    "typst_required": "/nix/store/5f1a3n27fy3y8pf6snxr2sbzwhk9brr2-typst-0.15.1-env/bin/typst",
+    "pass": true
+  },
+  {
+    "owner": "feynkit",
+    "test": "generation::tests::request_decorators_preserve_dispatch_gc_and_heredity_contracts",
+    "command": [
+      "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-source30/elf/feynkit/feynkit_py-b048a14e60533ee1",
+      "generation::tests::request_decorators_preserve_dispatch_gc_and_heredity_contracts",
+      "--exact",
+      "--nocapture",
+      "--test-threads=1"
+    ],
+    "binary_sha256": "4bab4ced580b758bb6edf1fc8278ef8d998f2a339af1cce7e7c39cc3bd992316",
+    "exit_code": 0,
+    "seconds": 0.32153987884521484,
+    "log": "target/wp3-source30/feynkit-request_decorators_preserve_dispatch_gc_and_heredity_contracts.log",
+    "log_sha256": "679f83c4a661c8ca15a730f0e07a99d40e414e6c85affe018aa90e0b48dd76d3",
+    "typst_required": "/nix/store/5f1a3n27fy3y8pf6snxr2sbzwhk9brr2-typst-0.15.1-env/bin/typst",
+    "pass": true
+  }
+]

@@ -1,0 +1,64 @@
+{
+  "code": "f99fe4bf25db77df58ce4619e2ff176268499a58",
+  "build_command": [
+    "nix",
+    "build",
+    "--impure",
+    "--no-link",
+    "--max-jobs",
+    "2",
+    "--cores",
+    "2",
+    ".#packages.x86_64-linux.crate-test-binaries-feynkit-py",
+    ".#packages.x86_64-linux.crate-test-binaries-linnet",
+    ".#packages.x86_64-linux.crate-test-binaries-clinnet"
+  ],
+  "session": 61608,
+  "observed_exit_code": 0,
+  "log": "target/wp3-source30/build-final.log",
+  "log_sha256": "9c5cb777fa0af4e34fe4606d881f6bf9ac9316421b6d4a034cf531c5f4324459",
+  "identities": {
+    "clinnet": {
+      "packageDrv": "/nix/store/n25c6ypc3g5yr9avywr4679w896j7w06-nix-ci-artifact-barrier-crate-test-binaries-clinnet.drv",
+      "packageOut": "/nix/store/v55s7n8d96d40pgh276v7m0dx8yzyndv-nix-ci-artifact-barrier-crate-test-binaries-clinnet",
+      "producerDrv": "/nix/store/mynmwafrkaln2lw5fym83kmg17y3b5a5-gammaloop-crate-test-binaries-clinnet-ae6d6c18c3317af1-deps-0.1.0.drv",
+      "producerOut": "/nix/store/vbsi8ba92kdc0cvrjc12zr5d14v6iqh7-gammaloop-crate-test-binaries-clinnet-ae6d6c18c3317af1-deps-0.1.0",
+      "productionSource": "/nix/store/s1ql5wccqg2r4nld4mypymx0l5bqm23p-source",
+      "source": "/nix/store/9zkqnnyrdjz13s1akf70mzja6cqmhyxg-source"
+    },
+    "feynkit": {
+      "packageDrv": "/nix/store/8r0xcd37m0h1kjbhc5xyqkxixi8dljsh-nix-ci-artifact-barrier-crate-test-binaries-feynkit-py.drv",
+      "packageOut": "/nix/store/2hg95fq6xlg346gimc614dhglrzxiwx9-nix-ci-artifact-barrier-crate-test-binaries-feynkit-py",
+      "producerDrv": "/nix/store/9pdyis7c6cdacw97cd5pq901rca9lbpp-gammaloop-crate-test-binaries-feynkit-py-5ebab9a37787b10e-deps-0.1.0.drv",
+      "producerOut": "/nix/store/f5haybcq73gyxpbk8fa77ic1ilyk61m1-gammaloop-crate-test-binaries-feynkit-py-5ebab9a37787b10e-deps-0.1.0",
+      "productionSource": "/nix/store/ixag4ni62z7n5y0s69fnry5az9ln9psc-source",
+      "source": "/nix/store/vrcn5qbrb2q691sks6hq6w8gwn3savpk-source"
+    },
+    "generatorSource": "/nix/store/ch65r3xyal0xgzpvfxc1y4m37ncrgsc9-source",
+    "linnet": {
+      "packageDrv": "/nix/store/l7vvaz9q3jgr8mq8i9g7yc093cya1s5q-nix-ci-artifact-barrier-crate-test-binaries-linnet.drv",
+      "packageOut": "/nix/store/0clcs1w68lx88dkpz38l36lz40sbc533-nix-ci-artifact-barrier-crate-test-binaries-linnet",
+      "producerDrv": "/nix/store/bvmr7za4q98dy2x3bjvvvgpzbncgz0fg-gammaloop-crate-test-binaries-linnet-9ddd49c3d058a560-deps-0.1.0.drv",
+      "producerOut": "/nix/store/cavydq06slyc5rnbk73jhjkdw468gwhl-gammaloop-crate-test-binaries-linnet-9ddd49c3d058a560-deps-0.1.0",
+      "productionSource": "/nix/store/bmmi645wj3x1a0k9ynx1m5y0d85v31ib-source",
+      "source": "/nix/store/dn76zz86lpis983m5yf8lvmkb7h2cn8w-source"
+    }
+  },
+  "test_executable_counts": {
+    "clinnet": 4,
+    "linnet": 6,
+    "feynkit": 5
+  },
+  "exact_reuse": [
+    "linnet"
+  ],
+  "new_current_source_producers": [
+    "feynkit",
+    "clinnet"
+  ],
+  "registered_outputs_and_derivers_verified": true,
+  "not_dependency_cache_only": true,
+  "runtime_passes": 5,
+  "runtime": "runtime.json",
+  "not_full_NixCI_or_physics": true
+}

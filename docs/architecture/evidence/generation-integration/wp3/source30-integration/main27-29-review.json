@@ -1,0 +1,518 @@
+{
+  "verdict": "APPROVE",
+  "scope": "Combined ordered MAIN27–29 integration on approved a517 only; SOURCE30 predecessor gate. No whole-WP3/full-physics/benchmark/distribution approval.",
+  "reviewer": "NEW independent Astra review; read-only; no nested agents",
+  "reviewed_at_utc": "2026-10-28T07:35:16.118406+00:00",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-integration-plan",
+  "review_directory": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-main27-29-review-eQKDEq0G",
+  "candidate": "cb585c98a474628ca9c55bb17cf1e680450b8ef9",
+  "change": "uspzstwlmnqqsloyxqlkoumqqknnlyws",
+  "runtime_code": "c2cce079a92c66fd1435a2ad42d86c17e16353be",
+  "frozen_metadata": "130b857ef74218cbb8e3b68409dca5a4641b367c",
+  "approved_parent": "a517ca563d78d161cff17fe60e661f80529c9a83",
+  "bookmarks": [
+    "generation-integration",
+    "generation-integration-units27-29"
+  ],
+  "blocking_findings": [],
+  "nonblocking_findings": [
+    {
+      "severity": "P3",
+      "title": "Mark the remaining nested SOURCE22/P1 gate fields as superseded",
+      "locations": [
+        {
+          "path": "docs/architecture/evidence/generation-integration/execution.json",
+          "line": 337
+        },
+        {
+          "path": "docs/architecture/evidence/generation-integration/wp3/replay.json",
+          "line": 1181
+        }
+      ],
+      "detail": "The top-level row_recertification summaries were corrected, but active_slice19_21.next_gate, .recertification.status, .recertification.P1 and .recertification.source22 still demand pre22 review or say SOURCE22 is BLOCKED. Its parallel22_26 field also retains the earlier pending wording. These mutable nested copies are not explicitly labelled historical. The prior review expressly included these nested copies, so that bookkeeping request is only partially closed. The surrounding approved0a38/a517 records and both certified source19 rows are correct.",
+      "requested_followup": "In the next bookkeeping update, mark these nested fields historical/superseded or reflect the approved0a38/a517 gates. Preserve the frozen original receipts.",
+      "nonblocking_reason": "No production, proof, test or live prerequisite defect; does not block SOURCE30."
+    }
+  ],
+  "next_gate": {
+    "SOURCE30_may_proceed": true,
+    "condition": "Only after SOURCE30 own prepared-patch independent review and producer/build readiness. This review neither imports nor certifies SOURCE30. SOURCE31 remains a separate semantic/global documentation reconciliation after30."
+  },
+  "provenance": {
+    "imported_files": 8,
+    "nonregistry_exact_preparation_deltas": 7,
+    "four_Rust_files_exact": true,
+    "preparation": "2d679436ba300c339cf12fa8d647abaa97e6eda9",
+    "preparation_code": "a205202b17b1c915190e17aa615cb4fe76391102",
+    "preparation_base": "f2e32c44c986058ede1d7e585b9e2e4fefe1110c",
+    "overlap": "All affected existing non-registry source files at a517 are byte-identical to preparation base. Seven non-registry Git patches are byte-identical across bases. Registry alone requires reconciliation; all existing notes/scopes preserved apart from intended22–26 approved status.",
+    "tracked_candidate_files_initial_final": 3475,
+    "tracked_mismatches": [],
+    "protected_files": 87,
+    "protected_refs": 24,
+    "raw_artifacts_hash_verified_unchanged": 46,
+    "json_parsing": "All20 changed JSON files parsed with Python exact integers and rejection of nonfinite JSON constants; no binary64 integer round-trip."
+  },
+  "semantic_audit": [
+    {
+      "source": 27,
+      "result": "Physical master-graph HedgePair endpoint incidence selects opposite stored parallel edges. Reversal is precomposed on selected three-momentum columns, A*R*k+b, with unchanged external translation; reflected parent receives identity*R. New helper uses exact generic zero/one, never an f64 intermediate. Absolute determinant, inverse and inverse-density use the same affine map. OSE inverts that frame for edge energies; physical signed master momentum continues into existing evaluator and edge-local numerator owners. No denominator-evenness numerator-sign inference, chart/phase conflation or copied-source factor substitution."
+    },
+    {
+      "source": 28,
+      "result": "Only numeric-domain is_zero coefficients are omitted after finite/dimension validation. Tiny nonzero coefficients retained in f64 and Quad tests, generic/native precision and finite/underflow controls rerun. Existing utils08/09 and all validation/finiteness owners unchanged; no new cutoff or f64 shortcut."
+    },
+    {
+      "source": 29,
+      "result": "Only the specifically approved CoolQM3sigma gate differs from a517. Seed1337,750000 samples,target -0.0610772376129,relative-error gate and master graph coverage unchanged. Epem source byte-identical to a517, including all direct3D/explicit3D/projected4D/local-only/threshold/Arb/normalization/graphwise scale-law assertions, seeds7331/220311038 and original sample settings."
+    },
+    {
+      "source": "27 additive P3",
+      "result": "Graph-derived3bases x3selected x2weight modes x2points =36 generation cases,108 inverse checks. Graph incidence, fixed external shifts, literal edge-local factor ownership and odd sign checked without graph numerator expansion. Weighted odd sum proves partition unity only; no independent full-evaluator multiplicity claim. Catalogue/dedup coverage remains separate."
+    },
+    {
+      "source": "19–26 preservation",
+      "result": "Finite scalar quotient/nonfinite guards, generation/oracle/census/two certified digests, normal15 global16/group2/240s policy, A1/B3 history/admission/typed-source errors, flow/variance/model-one/native-zero/native-legacy/signedLMB owners unchanged. Full-payload prior normal15 proof reused only for unchanged generator workload; fresh grouping/nonfinite, original-pair B2, native transport, staged runtime and bubble precision/reversal controls rerun."
+    }
+  ],
+  "independent_checks": [
+    {
+      "name": "sampling",
+      "command": [
+        "cargo",
+        "nextest",
+        "run",
+        "--cargo-metadata",
+        "target/astra-main27-29-review-eQKDEq0G/cargo-metadata.json",
+        "--binaries-metadata",
+        "target/astra-main27-29-review-eQKDEq0G/sampling-binaries.json",
+        "--config-file",
+        "target/astra-main27-29-review-eQKDEq0G/nextest.toml",
+        "--profile",
+        "ci_gammaloop",
+        "--test-threads",
+        "2",
+        "--status-level",
+        "pass",
+        "--final-status-level",
+        "fail",
+        "--retries",
+        "0",
+        "-E",
+        "test(integrands::process::sampling) or test(lmb_sampling_detects) or test(canonical_lmb_density) or test(lmb_frame) or test(signed) or test(graph_derived_two_loop_reflections)"
+      ],
+      "exit_code": 0,
+      "seconds": 23.864123654086143,
+      "log": "target/astra-main27-29-review-eQKDEq0G/sampling.log",
+      "log_sha256": "dbc7f1d307063b1741962e5c70e942e35886c6c47b845a92b9b6909fa4bc7c43",
+      "tests_passed": 179,
+      "run_id": "082a2691-a5b0-45e8-a7e0-6efcbb38e80a",
+      "junit": "target/astra-main27-29-review-eQKDEq0G/sampling-junit.xml",
+      "junit_sha256": "9f23ec801ebf4beb22b3bac8318c1ea3b180e7217d5debc08b8ec0003f7bfa89"
+    },
+    {
+      "name": "numeric",
+      "command": [
+        "cargo",
+        "nextest",
+        "run",
+        "--cargo-metadata",
+        "target/astra-main27-29-review-eQKDEq0G/cargo-metadata.json",
+        "--binaries-metadata",
+        "target/astra-main27-29-review-eQKDEq0G/sampling-binaries.json",
+        "--config-file",
+        "target/astra-main27-29-review-eQKDEq0G/nextest.toml",
+        "--profile",
+        "ci_gammaloop",
+        "--test-threads",
+        "2",
+        "--status-level",
+        "pass",
+        "--final-status-level",
+        "fail",
+        "--retries",
+        "0",
+        "-E",
+        "test(utils::tests::) or test(momentum::tests::rotations)"
+      ],
+      "exit_code": 0,
+      "seconds": 0.7216029269620776,
+      "log": "target/astra-main27-29-review-eQKDEq0G/numeric.log",
+      "log_sha256": "3dff7ef775d56dbfbe8123be7faec17d0008b0326537d5daf90432b79189bbb1",
+      "tests_passed": 34,
+      "run_id": "b3bb011f-f846-4646-b3d9-537c72b81949",
+      "junit": "target/astra-main27-29-review-eQKDEq0G/numeric-junit.xml",
+      "junit_sha256": "feaeeea0d8e2ead968f9f1d375d14070c450647fcb05c34acc7cff4a5b448b1d"
+    },
+    {
+      "name": "acceptance",
+      "command": [
+        "cargo",
+        "nextest",
+        "run",
+        "--cargo-metadata",
+        "target/astra-main27-29-review-eQKDEq0G/cargo-metadata.json",
+        "--binaries-metadata",
+        "target/astra-main27-29-review-eQKDEq0G/acceptance-binaries.json",
+        "--config-file",
+        "target/astra-main27-29-review-eQKDEq0G/nextest.toml",
+        "--profile",
+        "ci_gammaloop",
+        "--test-threads",
+        "1",
+        "--status-level",
+        "pass",
+        "--final-status-level",
+        "fail",
+        "--retries",
+        "0",
+        "-E",
+        "test(cool_qm_eos_nlo_matches_example_target) or test(epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes)",
+        "--success-output",
+        "immediate"
+      ],
+      "exit_code": 0,
+      "seconds": 156.68001410388388,
+      "log": "target/astra-main27-29-review-eQKDEq0G/acceptance.log",
+      "log_sha256": "7369db9a88e2a7bc940dd7522f913054356308509f668128dee2224accce89b2",
+      "tests_passed": 2,
+      "run_id": "16cacae8-9b0f-4cf8-8d24-a32828f87c48",
+      "junit": "target/astra-main27-29-review-eQKDEq0G/acceptance-junit.xml",
+      "junit_sha256": "56720496d5b97f723e7045efdd40a3065b7f5b47ef42981d429d2ada15c5bf17"
+    },
+    {
+      "name": "grouping-admission",
+      "command": [
+        "cargo",
+        "nextest",
+        "run",
+        "--cargo-metadata",
+        "target/astra-main27-29-review-eQKDEq0G/cargo-metadata.json",
+        "--binaries-metadata",
+        "target/astra-main27-29-review-eQKDEq0G/generator-binaries.json",
+        "--config-file",
+        "target/astra-main27-29-review-eQKDEq0G/nextest.toml",
+        "--profile",
+        "ci_gammaloop",
+        "--test-threads",
+        "2",
+        "--status-level",
+        "pass",
+        "--final-status-level",
+        "fail",
+        "--retries",
+        "0",
+        "-E",
+        "test(/sampled_quotient|completed_samples_contract_closed_color_metric_coefficients|completed_samples_can_certify_a_factorized_scalar_zero|interaction_momentum_reduction_|templates?_|callback_rules_are_constructed|bundled_rule_ports_preserve|cancelled_alias_templates_keep|compact_rule_powers_allocate|opaque_scalar_metadata/)"
+      ],
+      "exit_code": 0,
+      "seconds": 1.1952264530118555,
+      "log": "target/astra-main27-29-review-eQKDEq0G/grouping-admission.log",
+      "log_sha256": "b5040966355f2f74bdbc13b741273cad95279b8fc67c22805b8fe73aa979a7f5",
+      "tests_passed": 25,
+      "run_id": "2bd94878-a70e-4443-9165-e66bbb9adf4c",
+      "junit": "target/astra-main27-29-review-eQKDEq0G/grouping-admission-junit.xml",
+      "junit_sha256": "c6535e8f8bced71983441a2047548d3b47bc3e967644358391b72fa4046967d9"
+    },
+    {
+      "name": "original-pair-B2",
+      "command": [
+        "cargo",
+        "nextest",
+        "run",
+        "--cargo-metadata",
+        "target/astra-main27-29-review-eQKDEq0G/cargo-metadata.json",
+        "--binaries-metadata",
+        "target/astra-main27-29-review-eQKDEq0G/generator-binaries.json",
+        "--config-file",
+        "target/astra-main27-29-review-eQKDEq0G/nextest.toml",
+        "--profile",
+        "ci_gammaloop",
+        "--test-threads",
+        "2",
+        "--status-level",
+        "pass",
+        "--final-status-level",
+        "fail",
+        "--retries",
+        "0",
+        "--run-ignored",
+        "only",
+        "-E",
+        "test(=grouping::tests::vacuum_group28_original_pair_identity)"
+      ],
+      "exit_code": 0,
+      "seconds": 3.9477312199305743,
+      "log": "target/astra-main27-29-review-eQKDEq0G/original-pair-B2.log",
+      "log_sha256": "5620658b265ec8627632aa6d593b4769e9efd285def0e465bfe5989500c52e1f",
+      "tests_passed": 1,
+      "run_id": "951444e9-3b70-4c01-8aa8-abc396696013",
+      "junit": "target/astra-main27-29-review-eQKDEq0G/original-pair-B2-junit.xml",
+      "junit_sha256": "928c4a2e00d75ed8840f9349c5de582895b91c59d844d650904d0e76c481b2e2"
+    },
+    {
+      "name": "transport",
+      "command": [
+        "cargo",
+        "nextest",
+        "run",
+        "--cargo-metadata",
+        "target/astra-main27-29-review-eQKDEq0G/cargo-metadata.json",
+        "--binaries-metadata",
+        "target/astra-main27-29-review-eQKDEq0G/transport-binaries.json",
+        "--config-file",
+        "target/astra-main27-29-review-eQKDEq0G/nextest.toml",
+        "--profile",
+        "ci_gammaloop",
+        "--test-threads",
+        "2",
+        "--status-level",
+        "pass",
+        "--final-status-level",
+        "fail",
+        "--retries",
+        "0",
+        "-E",
+        "test(finalization::tests::) or test(numerator_interface::tests::)"
+      ],
+      "exit_code": 0,
+      "seconds": 0.5202044220641255,
+      "log": "target/astra-main27-29-review-eQKDEq0G/transport.log",
+      "log_sha256": "56947d185b9fda33172601ef8bcfe67aeb556121ce67aeb5702c30d596aa3251",
+      "tests_passed": 26,
+      "run_id": "79b0a7f1-5fd2-4a82-9e75-cf4601e0d794",
+      "junit": "target/astra-main27-29-review-eQKDEq0G/transport-junit.xml",
+      "junit_sha256": "dfaa20c4ff162c7ca0e67cd568ee46ba30435e640bdf4ea173c55b86edfca02f"
+    },
+    {
+      "name": "staged-runtime",
+      "command": [
+        "cargo",
+        "nextest",
+        "run",
+        "--cargo-metadata",
+        "target/astra-main27-29-review-eQKDEq0G/cargo-metadata.json",
+        "--binaries-metadata",
+        "target/astra-main27-29-review-eQKDEq0G/sampling-binaries.json",
+        "--config-file",
+        "target/astra-main27-29-review-eQKDEq0G/nextest.toml",
+        "--profile",
+        "ci_gammaloop",
+        "--test-threads",
+        "2",
+        "--status-level",
+        "pass",
+        "--final-status-level",
+        "fail",
+        "--retries",
+        "0",
+        "-E",
+        "test(numerator::aind::) or test(/native_qqx_aaa_projectors_close|compact_sewn_projector_uses|rqft_ghost_explicit_bases|finalized_graph_matches_gammaloop_reference|native_runtime_conversion_|legacy_dot_names/)"
+      ],
+      "exit_code": 0,
+      "seconds": 0.7691321559250355,
+      "log": "target/astra-main27-29-review-eQKDEq0G/staged-runtime.log",
+      "log_sha256": "b20fe2e01579fdaf3bdf7c9c28405ed98a0b7dc1d1fe89735045ff5fc85ec885",
+      "tests_passed": 12,
+      "run_id": "f31e1ca0-0e2a-4f53-b7af-f6a93320f56d",
+      "junit": "target/astra-main27-29-review-eQKDEq0G/staged-runtime-junit.xml",
+      "junit_sha256": "d2987a00121bf4bb62735b9d95050ddeac20b02361475c5e69b06ce5974a9f82"
+    },
+    {
+      "name": "bubble",
+      "command": [
+        "cargo",
+        "nextest",
+        "run",
+        "--cargo-metadata",
+        "target/astra-main27-29-review-eQKDEq0G/cargo-metadata.json",
+        "--binaries-metadata",
+        "target/astra-main27-29-review-eQKDEq0G/bubble-binaries.json",
+        "--config-file",
+        "target/astra-main27-29-review-eQKDEq0G/nextest.toml",
+        "--profile",
+        "ci_gammaloop",
+        "--test-threads",
+        "2",
+        "--status-level",
+        "pass",
+        "--final-status-level",
+        "fail",
+        "--retries",
+        "0",
+        "-E",
+        "test(scalar_bubble_inspect) or test(bubble_energy_source_is_invariant_under_stored_edge_reversal)"
+      ],
+      "exit_code": 0,
+      "seconds": 0.8887463579885662,
+      "log": "target/astra-main27-29-review-eQKDEq0G/bubble.log",
+      "log_sha256": "54ac2eee7a54dd4ccc7f504d21bb7a711bfe20e2bd0293aa11820fbf2a0fa7d7",
+      "tests_passed": 2,
+      "run_id": "e93891d0-82dc-4d4f-b421-9fe5724f1d6a",
+      "junit": "target/astra-main27-29-review-eQKDEq0G/bubble-junit.xml",
+      "junit_sha256": "bc57568a8f1b093c507595057a8b96659deaa2cefafe2500816683ee59cc16b4"
+    }
+  ],
+  "independent_static_checks": [
+    {
+      "name": "kernel",
+      "command": [
+        "just",
+        "check-symbolica-feature-isolation"
+      ],
+      "exit_code": 0,
+      "seconds": 0.8090545439627022,
+      "log": "target/astra-main27-29-review-eQKDEq0G/kernel.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "fmt",
+      "command": [
+        "just",
+        "fmt",
+        "--check"
+      ],
+      "exit_code": 0,
+      "seconds": 12.902047694893554,
+      "log": "target/astra-main27-29-review-eQKDEq0G/fmt.log",
+      "log_sha256": "1dadf1b63f3fc19e19b1e9fb9a6c3f7772d8ba250861dcced4346f892ae2fca3"
+    },
+    {
+      "name": "typst-note",
+      "command": [
+        "typst",
+        "compile",
+        "--features",
+        "html",
+        "--format",
+        "html",
+        "--root",
+        ".",
+        "docs/architecture/generation-sampling-staged.typ",
+        "target/astra-main27-29-review-eQKDEq0G/note.html"
+      ],
+      "exit_code": 0,
+      "seconds": 0.018718416104093194,
+      "log": "target/astra-main27-29-review-eQKDEq0G/typst-note.log",
+      "log_sha256": "d103175d5ac5ba1d2d4afae2e801958a1e0dafae1b43ffe6f1f44f3783a2f3ce"
+    },
+    {
+      "name": "typst-plan",
+      "command": [
+        "typst",
+        "compile",
+        "--features",
+        "html",
+        "--format",
+        "html",
+        "--root",
+        ".",
+        "docs/architecture/generation-integration-plan.typ",
+        "target/astra-main27-29-review-eQKDEq0G/plan.html"
+      ],
+      "exit_code": 0,
+      "seconds": 0.023018522886559367,
+      "log": "target/astra-main27-29-review-eQKDEq0G/typst-plan.log",
+      "log_sha256": "d103175d5ac5ba1d2d4afae2e801958a1e0dafae1b43ffe6f1f44f3783a2f3ce"
+    }
+  ],
+  "test_inventory": {
+    "sampling": 179,
+    "numeric": 34,
+    "fixed_physics": 2,
+    "grouping_admission": 25,
+    "original_B2_ignored_exact": 1,
+    "transport": 26,
+    "staged_runtime": 12,
+    "bubble": 2,
+    "sampling_numeric_overlap": 1,
+    "sampling_runtime_overlap": 1,
+    "total_executions": 281,
+    "unique_passed": 279,
+    "failed": 0,
+    "all_original178_present": true,
+    "unselected_or_ignored_cases_receive_no_credit": true,
+    "omitted_expanding_helpers": [
+      "native_amplitude_runtime_enrichment_preserves_every_graph_coordinate",
+      "native_cross_section_runtime_enrichment_preserves_cuts_and_positive_external_flow",
+      "native_compton_runtime_enrichment_preserves_sewn_fermions",
+      "native_runtime_enrichment_preserves_explicit_loop_order"
+    ]
+  },
+  "physics": {
+    "CoolQM": {
+      "passed": true,
+      "seed": 1337,
+      "samples": 750000,
+      "pull_limit": 3,
+      "displayed_pull_sigma": 2.077,
+      "displayed_relative_error_percent": 0.984,
+      "seconds": 72.553
+    },
+    "epem": {
+      "passed": true,
+      "all_original_assertions_executed": true,
+      "seconds": 83.883
+    }
+  },
+  "reused_checks": {
+    "binary_builds": "All five already-built ci-optim executables reused only after matching source tree, SHA256, compiler feature fingerprint and depfile. Rehashed after runs. Test executions are fresh; no new Cargo compilation or Nix producer-closure credit.",
+    "clippy": "Source-bound successful all-target -D warnings record/log audited and hash verified; not independently rerun. Only inherited Clarabel dependency warnings.",
+    "normal_oracle": "Approved0a38 normal15/15 matrix reused for exact unchanged generator/oracle/census/digests/fixtures/resource policy; not rerun and not credited as279 fresh.",
+    "api_reference": "Prior2eb check and log revalidated; exact owner/output closure preserved at a517/candidate. No fresh exporter build or general Nix closure claim.",
+    "preparation": "Staged214unique and earlier178 evidence remain at original source identities; no fresh combined credit."
+  },
+  "scope_audit": {
+    "by_type": {
+      "valid": 71,
+      "stale-digest": 24,
+      "missing-or-ambiguous-anchor": 4
+    },
+    "by_origin": {
+      "valid": 71,
+      "inherited_exact": 27,
+      "preexisting_failure_changed_source": 1
+    },
+    "owned_valid": 6,
+    "existing_notes_changed": [
+      [
+        "generation-projector-flow-staged",
+        [
+          "status"
+        ]
+      ]
+    ],
+    "global_docs_pass": false
+  },
+  "limits": [
+    "SOURCE30 producer build/readiness and its own independent preparation review pending.",
+    "SOURCE31 global docs reconciliation remains separate:24 stale digests+4 anchor failures; six owned scopes valid.",
+    "Three older historical frame failures and four omitted graph-expanding parity helpers remain open.",
+    "Full rebuilt-tip five_a_ddx/BRST/full-WP3 physics, slow ghost-forest equivalence, M-rebuild/performance/benchmarks remain open.",
+    "Final LinnestWASM/PDF/manual/sdist/native/Pyodide/Community installed-distribution gates remain open.",
+    "Both fixed physics acceptances passing here is combined27–29 evidence only, not final full-tip/distribution closure."
+  ],
+  "environment": {
+    "nix_shell_drv": "/nix/store/xrn91gkp7giwchhflr8pbl4hd1a6ycc6-nix-shell-env.drv",
+    "cwd": "/shared/lcnbr/dev/gammaloop/generation-integration-plan",
+    "license": "Preserved export or silently loaded XDG/current-user file; no values logged.",
+    "cargo_jobs": 2,
+    "test_workers": 2,
+    "acceptance_workers": 1,
+    "per_test_timeout_seconds": 240,
+    "cache_override_or_seeding_or_deletion": false,
+    "NixCI": false,
+    "kernel": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+    "initial_shell_attempt": "Default nix develop began unrelated shell/WASM realization; own client cancelled and completed with interrupted status. All checks then used exact previously recorded realized Nix shell; no WASM result or closure claimed."
+  },
+  "cleanup": {
+    "tracked_edits": false,
+    "ref_moves": false,
+    "integration_or_publication": false,
+    "nested_agents": false,
+    "retained_review_artifacts": "target/astra-main27-29-review-eQKDEq0G",
+    "retention_reason": "Unique ignored source/feature/hash audit, executable reuse metadata, independent logs/JUnit, reproduction scripts and review receipt required for coordinator review. No unused scratch remains.",
+    "review_test_build_processes_retained": [],
+    "all_original_proofs_logs_refs_caches_preserved": true
+  }
+}

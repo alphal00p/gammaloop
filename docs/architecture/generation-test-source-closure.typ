@@ -1,13 +1,15 @@
 = Compile-time generation test source closure
 
-== Source30 candidate
+== Ordered source30 candidate
 
-This independent preparation starts at approved source19–21 base
-`0a38ee4e3e7d16af3978f2c6ccde04dc176dfea9`. It reconciles original source30
-`a50f20f1ef485315f381d97b00a69c3b5461b07c` through the existing package
-`compileTimeTest` source owner. NEW independent Astra review is required.
-Ordered integration after source29 and a final combined closure check remain
-necessary; this preparation does not close WP3 or runtime validation.
+Approved preparation `0af5dccd` (implementation `4e13c40d`, base `0a38ee4e`)
+is integrated after independently approved sources27–29 at `cb585c98`.
+Original source30 `a50f20f1ef485315f381d97b00a69c3b5461b07c` maps to
+`26d43900`. Its six-file intent and old corrected receipt remain historical.
+The current FeynKit filtered source differs from preparation in two graph Rust
+files, so its old producer does not certify this tree. Linnet is reused only
+after exact final source/package/producer identity comparison. A NEW independent
+Astra integration review is required before source31.
 
 FeynKit Python unit tests embed `request_decorator_contract.py`. Linnet's
 `generation_report` integration test embeds five text reports. The narrow
@@ -34,7 +36,11 @@ nauty loader is runtime-only and outside the staged generation change; it is
 not reclassified as compile-time data. Renderer scripts, fonts, licenses, WASM,
 vendored sources and native/static display retain their existing owners.
 
-Actual flake test-producer sources gain exactly the six missing files. Mutating
+The approved delta adds six files. The separately identified Clinnet correction
+`29cc026d` adds four missing literal Typst fixtures to that consumer's
+`compileTimeTest` list: Kurvst mark-contract/mark-geometry and Linnest
+collision-lines/identity-targets. No production source is broadened.
+Final flake test-producer sources gain exactly ten missing files. Mutating
 one new input per owner changes its Nix source identity; restoring the bytes
 restores that identity. An unrelated note mutation changes neither source.
 Production and compile-time sources exclude the runtime restriction card.
@@ -47,3 +53,28 @@ scope drift remains for source31; no global documentation check is claimed.
 The inherited whole-file Nix formatting drift is not rewritten. The new list
 uses the surrounding multiline list style. NixCI stays disabled. No kernel,
 lockfile, upstream, publication or physics change is included.
+
+== Declared local patch ownership
+
+The first actual build exposed an inherited working-tree sensitivity: an
+untracked inactive `vendor/dot-parser` directory entered `extraDummyScript`,
+although Cargo did not declare that patch and the filtered dependency source
+correctly omitted it. The build failed at the resulting copy before test
+compilation. The directory belongs to earlier work and is left untouched.
+The bounded source-owner correction selects existing vendor paths only from
+the root Cargo patch declarations; a valid manifest without a patch table has
+an empty set. Clarabel remains selected, and kernel/manifest choices are unchanged.
+An isolated inactive-directory negative control checks both sources and producer
+identities. The corrected dependency script again exactly matches the prepared
+Linnet producer, permitting genuine artifact reuse.
+
+The current evidence is
+#link("evidence/generation-integration/wp3/source30-integration/receipt.json")[the integration receipt].
+Preparation exit0 and its five FeynKit/six Linnet compile targets are archived
+without runtime-pass credit. Final selected-source NARs, derivations, added-byte
+inventories, sensitivity/restoration, literal include audits and actual producer
+ELF/depfile/discovery/runtime results are recorded separately. No entire NixCI,
+full physics, benchmark, wheel or installed-distribution result is implied.
+Source31 preparation is separately approved at `87dfd362`, but its ordered refresh
+and headerless-table corrections require later review; three Python rendering
+callers belong to the separate32–35 lane. Neither is imported here.

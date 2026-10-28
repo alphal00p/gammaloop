@@ -1,0 +1,17 @@
+{
+  "status": "Source30 combined closure code integrated; actual producer qualification in progress; NEW Astra review required before31",
+  "base": "cb585c98a474628ca9c55bb17cf1e680450b8ef9",
+  "source_order": 30,
+  "original_source": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+  "approved_preparation": "0af5dccd1985789401ad1efc2450399d0f36c0bc",
+  "approved_implementation": "4e13c40d6e30bff3390d06067fe81cfb8ac10a5f",
+  "import_commit": "26d439003bb52bd19299e77e542198cf7c50d90f",
+  "Clinnet_literal_extension": "29cc026df9c9ca4f31be9b0e851ad6f076c475c7",
+  "declared_patch_owner_correction": "f99fe4bf25db77df58ce4619e2ff176268499a58",
+  "code_commit": "f99fe4bf25db77df58ce4619e2ff176268499a58",
+  "code_change": "onwlqwnvtknrympmkyszltlzmsvysoqr",
+  "receipt": "wp3/source30-integration/receipt.json",
+  "candidate_bookmark": "generation-integration-source30",
+  "accounted_source_rows": 31,
+  "accounted_planned_units": 26
+}

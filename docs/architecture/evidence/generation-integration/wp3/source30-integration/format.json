@@ -1,0 +1,26 @@
+{
+  "changed_blocks": [
+    {
+      "name": "declared-patches",
+      "exit_code": 0,
+      "output": ""
+    },
+    {
+      "name": "linnet",
+      "exit_code": 0,
+      "output": ""
+    },
+    {
+      "name": "clinnet",
+      "exit_code": 0,
+      "output": ""
+    },
+    {
+      "name": "\"feynkit-py\"",
+      "exit_code": 0,
+      "output": ""
+    }
+  ],
+  "three_Nix_owners_parse": true,
+  "whole_file_format": "Inherited base drift; unchanged portions not reformatted."
+}

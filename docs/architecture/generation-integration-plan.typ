@@ -284,6 +284,18 @@ own workspace. Bounded: one regression, one bisect, one written verdict.
   NEW independent Astra review is required before30. No source30/31, full-WP3,
   benchmark or final distribution gate is closed by this candidate.
 
+- #strong[Source30 combined closure candidate 2026-10-28:]
+  Astra approves source27–29 at `cb585c98` and source30 preparation at `0af5dccd`.
+  The ordered patch adds the six original missing inputs; a separate bounded
+  correction supplies four literal Clinnet Typst fixtures. Actual producer
+  qualification also fixes selection of an inactive untracked Cargo patch path,
+  without touching that directory or changing Cargo declarations. Exact new
+  sources/derivations and final producer/runtime evidence are recorded under
+  `evidence/generation-integration/wp3/source30-integration/receipt.json`.
+  NEW independent Astra review is required before31. Prepared31 `87dfd362` is
+  separate, with ordered refresh/headerless-table fixes pending;32–35 owns the
+  obsolete Python rendering callers. Full WP3 and final distribution remain open.
+
 - `jj duplicate` the v4 chain (`kursouxx::kpslpwqz`) onto the WP2 base; do not
   rebase in place, so the 19 live workspaces on older lines stay valid.
 - Drop the empty \#175/\#176 copies and the first \#177 (`nxmztorq`); adapt

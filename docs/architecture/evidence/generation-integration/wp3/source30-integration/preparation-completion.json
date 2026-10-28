@@ -1,0 +1,403 @@
+{
+  "schema": 1,
+  "status": "passed: original requested producer build and realized package/test-artifact verification",
+  "completion_observed_at_utc": "2026-10-28T08:04:55.096806+00:00",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-test-source-closure",
+  "source_identities": {
+    "implementation_commit": "4e13c40d6e30bff3390d06067fe81cfb8ac10a5f",
+    "implementation_change": "mzoxtptswzxlwuwvzqypwunpwtlwrkok",
+    "frozen_metadata_commit": "0af5dccd1985789401ad1efc2450399d0f36c0bc",
+    "frozen_metadata_change": "lorywpmqzqsnlqqlsksnkkqxvqlzossn",
+    "original_source_commit": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+    "approved_base": "0a38ee4e3e7d16af3978f2c6ccde04dc176dfea9"
+  },
+  "original_build": {
+    "pid": 1742457,
+    "exec_session": 88902,
+    "final_exec_result": {
+      "chunk_id": "bf5c75",
+      "wall_time_seconds": 1.049e-05,
+      "exit_code": 0,
+      "original_token_count": 0,
+      "output": ""
+    },
+    "command": "SYMBOLICA_LICENSE preserved or silently loaded; nix build --impure --no-link --max-jobs 2 --cores 2 .#packages.x86_64-linux.crate-test-binaries-feynkit-py .#packages.x86_64-linux.crate-test-binaries-linnet",
+    "cwd": "/shared/lcnbr/dev/gammaloop/generation-test-source-closure",
+    "duplicate_producer_launched": false,
+    "original_log": "target/source30/producer-build.log",
+    "original_log_sha256": "8775280f01c544ef7928dfd7b7385546fc6849a5fc7b722b38368191cc677f34"
+  },
+  "verification": {
+    "feynkit": {
+      "requested": {
+        "packageDrv": "/nix/store/2h14sph1a6xsg5gp82r508zj00chcjrz-nix-ci-artifact-barrier-crate-test-binaries-feynkit-py.drv",
+        "packageOut": "/nix/store/vmfhw5z0wxinw6zcw0m6rckphhwd7w0f-nix-ci-artifact-barrier-crate-test-binaries-feynkit-py",
+        "producerDrv": "/nix/store/8zkx472ncjqca38jl8s70qa924lqxq58-gammaloop-crate-test-binaries-feynkit-py-5ebab9a37787b10e-deps-0.1.0.drv",
+        "producerOut": "/nix/store/6pqw53djhif12i68k2slpi0jb96p099r-gammaloop-crate-test-binaries-feynkit-py-5ebab9a37787b10e-deps-0.1.0",
+        "source": "/nix/store/g8csia6hs7v3hcn330nb02gghh3nzxs1-source"
+      },
+      "package_link_matches_producer": true,
+      "artifact_archives": [
+        "/nix/store/6pqw53djhif12i68k2slpi0jb96p099r-gammaloop-crate-test-binaries-feynkit-py-5ebab9a37787b10e-deps-0.1.0/target.tar.zst"
+      ],
+      "affected_test_executables": [
+        {
+          "archive": "/nix/store/6pqw53djhif12i68k2slpi0jb96p099r-gammaloop-crate-test-binaries-feynkit-py-5ebab9a37787b10e-deps-0.1.0/target.tar.zst",
+          "path": "./ci-optim/deps/feynkit_py-b048a14e60533ee1",
+          "size": 140248464,
+          "sha256": "a9a75471612f0507622364cca66eaec293c77759ba917121cf85d51dafb272ce",
+          "elf": true,
+          "embedded_new_inputs": {
+            "crates/feynkit-py/tests/request_decorator_contract.py": true
+          }
+        }
+      ],
+      "affected_depfiles": [
+        {
+          "archive": "/nix/store/6pqw53djhif12i68k2slpi0jb96p099r-gammaloop-crate-test-binaries-feynkit-py-5ebab9a37787b10e-deps-0.1.0/target.tar.zst",
+          "path": "./ci-optim/deps/feynkit_py-b048a14e60533ee1.d",
+          "sha256": "fce835c85f5d35a7e00e7ef21c7c8d1cf19688ecff70298c15ac5b566807875d",
+          "new_inputs_present": {
+            "crates/feynkit-py/tests/request_decorator_contract.py": true
+          },
+          "depfile_path_normalization": "posixpath.normpath handles include_str relative components",
+          "store_source_path_literal_present": false
+        },
+        {
+          "archive": "/nix/store/6pqw53djhif12i68k2slpi0jb96p099r-gammaloop-crate-test-binaries-feynkit-py-5ebab9a37787b10e-deps-0.1.0/target.tar.zst",
+          "path": "./ci-optim/deps/feynkit_py-86f2158437380d0d.d",
+          "sha256": "79f4440c1e676925d37331d69dd8a0744dbabf7e9f09bb3490ee74ffab51afcc",
+          "new_inputs_present": {
+            "crates/feynkit-py/tests/request_decorator_contract.py": false
+          },
+          "depfile_path_normalization": "posixpath.normpath handles include_str relative components",
+          "store_source_path_literal_present": false
+        }
+      ],
+      "all_archive_executables": [
+        {
+          "archive": "/nix/store/6pqw53djhif12i68k2slpi0jb96p099r-gammaloop-crate-test-binaries-feynkit-py-5ebab9a37787b10e-deps-0.1.0/target.tar.zst",
+          "path": "./ci-optim/deps/combined_community-4814ece84ae524ff",
+          "size": 139783520
+        },
+        {
+          "archive": "/nix/store/6pqw53djhif12i68k2slpi0jb96p099r-gammaloop-crate-test-binaries-feynkit-py-5ebab9a37787b10e-deps-0.1.0/target.tar.zst",
+          "path": "./ci-optim/deps/cut_algebra-86eab3f5874228bf",
+          "size": 139153056
+        },
+        {
+          "archive": "/nix/store/6pqw53djhif12i68k2slpi0jb96p099r-gammaloop-crate-test-binaries-feynkit-py-5ebab9a37787b10e-deps-0.1.0/target.tar.zst",
+          "path": "./ci-optim/deps/feynkit_py-b048a14e60533ee1",
+          "size": 140248464
+        },
+        {
+          "archive": "/nix/store/6pqw53djhif12i68k2slpi0jb96p099r-gammaloop-crate-test-binaries-feynkit-py-5ebab9a37787b10e-deps-0.1.0/target.tar.zst",
+          "path": "./ci-optim/deps/feynkit_stubgen-1372ebf7fc539e34",
+          "size": 138819368
+        },
+        {
+          "archive": "/nix/store/6pqw53djhif12i68k2slpi0jb96p099r-gammaloop-crate-test-binaries-feynkit-py-5ebab9a37787b10e-deps-0.1.0/target.tar.zst",
+          "path": "./ci-optim/deps/cff_display-1f6c482c11832596",
+          "size": 139287624
+        },
+        {
+          "archive": "/nix/store/6pqw53djhif12i68k2slpi0jb96p099r-gammaloop-crate-test-binaries-feynkit-py-5ebab9a37787b10e-deps-0.1.0/target.tar.zst",
+          "path": "./ci-optim/deps/feynkit_stubgen-db0a1edbab095a2b",
+          "size": 138889736
+        },
+        {
+          "archive": "/nix/store/6pqw53djhif12i68k2slpi0jb96p099r-gammaloop-crate-test-binaries-feynkit-py-5ebab9a37787b10e-deps-0.1.0/target.tar.zst",
+          "path": "./ci-optim/deps/libclarabel.so",
+          "size": 18840
+        },
+        {
+          "archive": "/nix/store/6pqw53djhif12i68k2slpi0jb96p099r-gammaloop-crate-test-binaries-feynkit-py-5ebab9a37787b10e-deps-0.1.0/target.tar.zst",
+          "path": "./ci-optim/deps/liblinnest.so",
+          "size": 54059712
+        }
+      ],
+      "new_input_sha256": {
+        "crates/feynkit-py/tests/request_decorator_contract.py": "299fbc5e57884f8117c75e91c2b98bc2c1e2125cbdbf9be2ab9a5136ea86f061"
+      },
+      "runtime_execution": "none; archive metadata and ELF bytes inspected without executing test binaries",
+      "compiled_test_executables": [
+        {
+          "cargo_target": "unittests src/lib.rs",
+          "cargo_path": "target/ci-optim/deps/feynkit_py-b048a14e60533ee1",
+          "archive": "/nix/store/6pqw53djhif12i68k2slpi0jb96p099r-gammaloop-crate-test-binaries-feynkit-py-5ebab9a37787b10e-deps-0.1.0/target.tar.zst",
+          "path": "./ci-optim/deps/feynkit_py-b048a14e60533ee1",
+          "size": 140248464
+        },
+        {
+          "cargo_target": "unittests src/bin/stubgen.rs",
+          "cargo_path": "target/ci-optim/deps/feynkit_stubgen-1372ebf7fc539e34",
+          "archive": "/nix/store/6pqw53djhif12i68k2slpi0jb96p099r-gammaloop-crate-test-binaries-feynkit-py-5ebab9a37787b10e-deps-0.1.0/target.tar.zst",
+          "path": "./ci-optim/deps/feynkit_stubgen-1372ebf7fc539e34",
+          "size": 138819368
+        },
+        {
+          "cargo_target": "tests/cff_display.rs",
+          "cargo_path": "target/ci-optim/deps/cff_display-1f6c482c11832596",
+          "archive": "/nix/store/6pqw53djhif12i68k2slpi0jb96p099r-gammaloop-crate-test-binaries-feynkit-py-5ebab9a37787b10e-deps-0.1.0/target.tar.zst",
+          "path": "./ci-optim/deps/cff_display-1f6c482c11832596",
+          "size": 139287624
+        },
+        {
+          "cargo_target": "tests/combined_community.rs",
+          "cargo_path": "target/ci-optim/deps/combined_community-4814ece84ae524ff",
+          "archive": "/nix/store/6pqw53djhif12i68k2slpi0jb96p099r-gammaloop-crate-test-binaries-feynkit-py-5ebab9a37787b10e-deps-0.1.0/target.tar.zst",
+          "path": "./ci-optim/deps/combined_community-4814ece84ae524ff",
+          "size": 139783520
+        },
+        {
+          "cargo_target": "tests/cut_algebra.rs",
+          "cargo_path": "target/ci-optim/deps/cut_algebra-86eab3f5874228bf",
+          "archive": "/nix/store/6pqw53djhif12i68k2slpi0jb96p099r-gammaloop-crate-test-binaries-feynkit-py-5ebab9a37787b10e-deps-0.1.0/target.tar.zst",
+          "path": "./ci-optim/deps/cut_algebra-86eab3f5874228bf",
+          "size": 139153056
+        }
+      ],
+      "cargo_command": "cargo test --profile ci-optim --no-run --offline -p feynkit-py --features feynkit-py/python_stubgen,pyo3-stub-gen/infer_signature,pyo3-stub-gen/numpy,pyo3/anyhow,pyo3/auto-initialize,pyo3/eyre,pyo3/macros,pyo3/multiple-pymethods",
+      "cargo_finished": "Finished `ci-optim` profile [optimized] target(s) in 10m 44s",
+      "source_nar_hash": "sha256-iGcsOe5foxvFWMLd7krz90ibOTMOptKC2JJ6xmYT40g=",
+      "package_store_metadata": {
+        "ca": null,
+        "deriver": "2h14sph1a6xsg5gp82r508zj00chcjrz-nix-ci-artifact-barrier-crate-test-binaries-feynkit-py.drv",
+        "narHash": "sha256-EYasK3zhc+h+eWccIN6eSLBecSiDQ7ztwhGuK1Ht2DQ=",
+        "narSize": 224,
+        "references": [
+          "6pqw53djhif12i68k2slpi0jb96p099r-gammaloop-crate-test-binaries-feynkit-py-5ebab9a37787b10e-deps-0.1.0"
+        ],
+        "registrationTime": 1793174364,
+        "signatures": [],
+        "storeDir": "/nix/store",
+        "ultimate": true,
+        "version": 2
+      },
+      "producer_store_metadata": {
+        "ca": null,
+        "deriver": "8zkx472ncjqca38jl8s70qa924lqxq58-gammaloop-crate-test-binaries-feynkit-py-5ebab9a37787b10e-deps-0.1.0.drv",
+        "narHash": "sha256-P9r/xD3h4zaZN8g5pGd87tca3AyQHt25znTWGmvf7gQ=",
+        "narSize": 342673920,
+        "references": [
+          "askd8f5ab0kqim87javk20v8kkkrh7ak-gammaloop-crate-test-dependencies-5ebab9a37787b10e-deps-0.1.0"
+        ],
+        "registrationTime": 1793174362,
+        "signatures": [],
+        "storeDir": "/nix/store",
+        "ultimate": true,
+        "version": 2
+      },
+      "source_binding": "Producer drv/src identity, unpack-source log, normalized depfile inputs and exact complete embedded input bytes agree. Store source paths need not appear literally in remapped Cargo depfiles."
+    },
+    "linnet": {
+      "requested": {
+        "packageDrv": "/nix/store/l7vvaz9q3jgr8mq8i9g7yc093cya1s5q-nix-ci-artifact-barrier-crate-test-binaries-linnet.drv",
+        "packageOut": "/nix/store/0clcs1w68lx88dkpz38l36lz40sbc533-nix-ci-artifact-barrier-crate-test-binaries-linnet",
+        "producerDrv": "/nix/store/bvmr7za4q98dy2x3bjvvvgpzbncgz0fg-gammaloop-crate-test-binaries-linnet-9ddd49c3d058a560-deps-0.1.0.drv",
+        "producerOut": "/nix/store/cavydq06slyc5rnbk73jhjkdw468gwhl-gammaloop-crate-test-binaries-linnet-9ddd49c3d058a560-deps-0.1.0",
+        "source": "/nix/store/dn76zz86lpis983m5yf8lvmkb7h2cn8w-source"
+      },
+      "package_link_matches_producer": true,
+      "artifact_archives": [
+        "/nix/store/cavydq06slyc5rnbk73jhjkdw468gwhl-gammaloop-crate-test-binaries-linnet-9ddd49c3d058a560-deps-0.1.0/target.tar.zst"
+      ],
+      "affected_test_executables": [
+        {
+          "archive": "/nix/store/cavydq06slyc5rnbk73jhjkdw468gwhl-gammaloop-crate-test-binaries-linnet-9ddd49c3d058a560-deps-0.1.0/target.tar.zst",
+          "path": "./ci-optim/deps/generation_report-6bcbc157bd9f464f",
+          "size": 29775704,
+          "sha256": "e9764e7201f43fd59ed38948ae043f0bdb1787491ea31389097ce5372d70aca6",
+          "elf": true,
+          "embedded_new_inputs": {
+            "crates/linnet/tests/generation_reports/finite_vertex_bound.txt": true,
+            "crates/linnet/tests/generation_reports/identical_legs.txt": true,
+            "crates/linnet/tests/generation_reports/infeasible_order.txt": true,
+            "crates/linnet/tests/generation_reports/qed.txt": true,
+            "crates/linnet/tests/generation_reports/signed_vacuum.txt": true
+          }
+        }
+      ],
+      "affected_depfiles": [
+        {
+          "archive": "/nix/store/cavydq06slyc5rnbk73jhjkdw468gwhl-gammaloop-crate-test-binaries-linnet-9ddd49c3d058a560-deps-0.1.0/target.tar.zst",
+          "path": "./ci-optim/deps/generation_report-6bcbc157bd9f464f.d",
+          "sha256": "25c75ef13598badcaad5a84e898f89389dd049275afee28d083560b9a3b36574",
+          "new_inputs_present": {
+            "crates/linnet/tests/generation_reports/finite_vertex_bound.txt": true,
+            "crates/linnet/tests/generation_reports/identical_legs.txt": true,
+            "crates/linnet/tests/generation_reports/infeasible_order.txt": true,
+            "crates/linnet/tests/generation_reports/qed.txt": true,
+            "crates/linnet/tests/generation_reports/signed_vacuum.txt": true
+          },
+          "depfile_path_normalization": "posixpath.normpath handles include_str relative components",
+          "store_source_path_literal_present": false
+        }
+      ],
+      "all_archive_executables": [
+        {
+          "archive": "/nix/store/cavydq06slyc5rnbk73jhjkdw468gwhl-gammaloop-crate-test-binaries-linnet-9ddd49c3d058a560-deps-0.1.0/target.tar.zst",
+          "path": "./ci-optim/deps/generation_report-6bcbc157bd9f464f",
+          "size": 29775704
+        },
+        {
+          "archive": "/nix/store/cavydq06slyc5rnbk73jhjkdw468gwhl-gammaloop-crate-test-binaries-linnet-9ddd49c3d058a560-deps-0.1.0/target.tar.zst",
+          "path": "./ci-optim/deps/dot_corpus-873b5a7bfd6ca9ec",
+          "size": 31004288
+        },
+        {
+          "archive": "/nix/store/cavydq06slyc5rnbk73jhjkdw468gwhl-gammaloop-crate-test-binaries-linnet-9ddd49c3d058a560-deps-0.1.0/target.tar.zst",
+          "path": "./ci-optim/deps/builder_retention-841b97860f55d111",
+          "size": 29323304
+        },
+        {
+          "archive": "/nix/store/cavydq06slyc5rnbk73jhjkdw468gwhl-gammaloop-crate-test-binaries-linnet-9ddd49c3d058a560-deps-0.1.0/target.tar.zst",
+          "path": "./ci-optim/deps/generation_plan-83579aac0fcb8ac0",
+          "size": 31055832
+        },
+        {
+          "archive": "/nix/store/cavydq06slyc5rnbk73jhjkdw468gwhl-gammaloop-crate-test-binaries-linnet-9ddd49c3d058a560-deps-0.1.0/target.tar.zst",
+          "path": "./ci-optim/deps/libclarabel.so",
+          "size": 18840
+        },
+        {
+          "archive": "/nix/store/cavydq06slyc5rnbk73jhjkdw468gwhl-gammaloop-crate-test-binaries-linnet-9ddd49c3d058a560-deps-0.1.0/target.tar.zst",
+          "path": "./ci-optim/deps/linnet-62a6fd4e653a87c0",
+          "size": 45155336
+        },
+        {
+          "archive": "/nix/store/cavydq06slyc5rnbk73jhjkdw468gwhl-gammaloop-crate-test-binaries-linnet-9ddd49c3d058a560-deps-0.1.0/target.tar.zst",
+          "path": "./ci-optim/deps/nauty-039cdce044be2f50",
+          "size": 31095488
+        }
+      ],
+      "new_input_sha256": {
+        "crates/linnet/tests/generation_reports/finite_vertex_bound.txt": "d7fb0f77d826f22c24ac857ae4c518b24325d4ea8a367da773000636f251cc6c",
+        "crates/linnet/tests/generation_reports/identical_legs.txt": "3eae138c006f2f244907e524a28ccf1c0c20dcfe21cdbb5e512f5a57224dd7b4",
+        "crates/linnet/tests/generation_reports/infeasible_order.txt": "22c25cb9815b4b8f62fde2f4c03a4b645f89873e5e73f09de17b79c31dbbbf2c",
+        "crates/linnet/tests/generation_reports/qed.txt": "7bebabf38b022dc5488c1fe86fb3e340bdd231ac75664719caee971d00402e2b",
+        "crates/linnet/tests/generation_reports/signed_vacuum.txt": "8d68bd097884c74a4dcd58498971cc4d28382ff3f3306d4c402cbc580a2b6333"
+      },
+      "runtime_execution": "none; archive metadata and ELF bytes inspected without executing test binaries",
+      "compiled_test_executables": [
+        {
+          "cargo_target": "unittests src/lib.rs",
+          "cargo_path": "target/ci-optim/deps/linnet-62a6fd4e653a87c0",
+          "archive": "/nix/store/cavydq06slyc5rnbk73jhjkdw468gwhl-gammaloop-crate-test-binaries-linnet-9ddd49c3d058a560-deps-0.1.0/target.tar.zst",
+          "path": "./ci-optim/deps/linnet-62a6fd4e653a87c0",
+          "size": 45155336
+        },
+        {
+          "cargo_target": "tests/builder_retention.rs",
+          "cargo_path": "target/ci-optim/deps/builder_retention-841b97860f55d111",
+          "archive": "/nix/store/cavydq06slyc5rnbk73jhjkdw468gwhl-gammaloop-crate-test-binaries-linnet-9ddd49c3d058a560-deps-0.1.0/target.tar.zst",
+          "path": "./ci-optim/deps/builder_retention-841b97860f55d111",
+          "size": 29323304
+        },
+        {
+          "cargo_target": "tests/dot_corpus.rs",
+          "cargo_path": "target/ci-optim/deps/dot_corpus-873b5a7bfd6ca9ec",
+          "archive": "/nix/store/cavydq06slyc5rnbk73jhjkdw468gwhl-gammaloop-crate-test-binaries-linnet-9ddd49c3d058a560-deps-0.1.0/target.tar.zst",
+          "path": "./ci-optim/deps/dot_corpus-873b5a7bfd6ca9ec",
+          "size": 31004288
+        },
+        {
+          "cargo_target": "tests/generation_plan.rs",
+          "cargo_path": "target/ci-optim/deps/generation_plan-83579aac0fcb8ac0",
+          "archive": "/nix/store/cavydq06slyc5rnbk73jhjkdw468gwhl-gammaloop-crate-test-binaries-linnet-9ddd49c3d058a560-deps-0.1.0/target.tar.zst",
+          "path": "./ci-optim/deps/generation_plan-83579aac0fcb8ac0",
+          "size": 31055832
+        },
+        {
+          "cargo_target": "tests/generation_report.rs",
+          "cargo_path": "target/ci-optim/deps/generation_report-6bcbc157bd9f464f",
+          "archive": "/nix/store/cavydq06slyc5rnbk73jhjkdw468gwhl-gammaloop-crate-test-binaries-linnet-9ddd49c3d058a560-deps-0.1.0/target.tar.zst",
+          "path": "./ci-optim/deps/generation_report-6bcbc157bd9f464f",
+          "size": 29775704
+        },
+        {
+          "cargo_target": "tests/nauty/main.rs",
+          "cargo_path": "target/ci-optim/deps/nauty-039cdce044be2f50",
+          "archive": "/nix/store/cavydq06slyc5rnbk73jhjkdw468gwhl-gammaloop-crate-test-binaries-linnet-9ddd49c3d058a560-deps-0.1.0/target.tar.zst",
+          "path": "./ci-optim/deps/nauty-039cdce044be2f50",
+          "size": 31095488
+        }
+      ],
+      "cargo_command": "cargo test --profile ci-optim --no-run --offline -p linnet --features linnet/bincode,linnet/drawing,linnet/rayon,linnet/rkyv,linnet/serde,linnet/symbolica",
+      "cargo_finished": "Finished `ci-optim` profile [optimized] target(s) in 2m 26s",
+      "source_nar_hash": "sha256-y1rl4nYI73j0z+ktGqqIK/gCaZ55c99Oh4vsrgHCDv4=",
+      "package_store_metadata": {
+        "ca": null,
+        "deriver": "l7vvaz9q3jgr8mq8i9g7yc093cya1s5q-nix-ci-artifact-barrier-crate-test-binaries-linnet.drv",
+        "narHash": "sha256-eH3PKRst1EX81wli7qtnjCv+P9T8B/TiUPFmf+U6Uuc=",
+        "narSize": 224,
+        "references": [
+          "cavydq06slyc5rnbk73jhjkdw468gwhl-gammaloop-crate-test-binaries-linnet-9ddd49c3d058a560-deps-0.1.0"
+        ],
+        "registrationTime": 1793172609,
+        "signatures": [],
+        "storeDir": "/nix/store",
+        "ultimate": true,
+        "version": 2
+      },
+      "producer_store_metadata": {
+        "ca": null,
+        "deriver": "bvmr7za4q98dy2x3bjvvvgpzbncgz0fg-gammaloop-crate-test-binaries-linnet-9ddd49c3d058a560-deps-0.1.0.drv",
+        "narHash": "sha256-OMH8hto/BjmyV7Os+A2X5oDEfWPSmjnHnL0sE3NqdbU=",
+        "narSize": 68900800,
+        "references": [
+          "5lzrg8sh3lh9q5bd2jly86xwr3m307sy-gammaloop-crate-test-dependencies-9ddd49c3d058a560-deps-0.1.0",
+          "604gsr59rj7dzd0nrhp143rpvf7gyiaz-gcc-15.3.0-lib",
+          "lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84"
+        ],
+        "registrationTime": 1793169329,
+        "signatures": [],
+        "storeDir": "/nix/store",
+        "ultimate": true,
+        "version": 2
+      },
+      "source_binding": "Producer drv/src identity, unpack-source log, normalized depfile inputs and exact complete embedded input bytes agree. Store source paths need not appear literally in remapped Cargo depfiles."
+    }
+  },
+  "tracked_freeze": {
+    "frozen_commit": "0af5dccd1985789401ad1efc2450399d0f36c0bc",
+    "all_four_tracked_files_byte_equal_to_frozen_commit": true,
+    "file_sha256": {
+      "nix/rust-workspace.nix": "614725b0487edeea5f3bfd5b5bc6d5d9ffad456605a6cd68b09f41dbe37578a7",
+      "docs/developers.toml": "2a32b54ac89d3255c3c83e5bc638640aab06fe2c84a5c2337fde2ad15b60edb8",
+      "docs/architecture/generation-test-source-closure.typ": "b6ba3539e978f0baf0aca7dfb5e203123f3083c74d15c678e94a985292bf7098",
+      "docs/architecture/evidence/generation-integration/wp3/source30.json": "110cf0c3185674106d516f677d3cf3298e5fe69398c528653e25daa9650face5"
+    },
+    "protected_files_match_prior_receipt": true,
+    "tracked_files_modified_since_review_freeze": [],
+    "refs_modified_since_review_freeze": [],
+    "read_only_jj_method": "jj --ignore-working-copy log --no-graph -T commit_id/change_id and file show; no snapshot, describe, bookmark update or new change during review"
+  },
+  "nix_ci_enabled": false,
+  "certifies": [
+    "Both exact requested crate-test-binaries package outputs are realized and link to their nominated real producers. Store derivers and NAR identities match.",
+    "Actual Nix sandbox cargo test --no-run compiled and retained5 FeynKit Python and6 Linnet test executables.",
+    "The affected FeynKit unit ELF captures the complete Python contract; the generation-report ELF captures all5 text reports. Normalized compiler depfiles capture these6 inputs."
+  ],
+  "does_not_certify": [
+    "No test binary was executed; there is no runtime test pass.",
+    "No full CI, documentation, browser, benchmark, heavy physics or combined-source WP3 validation is claimed.",
+    "This build uses approved base0a plus source30 preparation; ordered integration after29 still needs its combined closure check."
+  ],
+  "review_state": {
+    "frozen_source30_astra_review": "in progress as reported by parent; tracked receipt deliberately unchanged",
+    "predecessor_27_29_gate": "Astra approved, as reported by parent",
+    "pending_gates": [
+      "NEW independent source30 Astra review outcome",
+      "Parent-controlled ordered source30 integration after29",
+      "Final combined closure and separately required runtime validation"
+    ]
+  },
+  "retained_task_processes": [],
+  "retained_artifacts": [
+    "Ignored target/source30/completion.json and completion-logs with exact build/tool result, realized output metadata, source-matched ELF/depfile verification and original session logs",
+    "All original receipts, logs, source hash records and useful Nix outputs/shared caches preserved",
+    "Task workspace retained for independent review and parent integration"
+  ],
+  "publication": "none; no push, upload or integration"
+}

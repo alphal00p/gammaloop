@@ -1,0 +1,17 @@
+[
+  {
+    "path": "docs/architecture/evidence/generation-integration/wp3/source30-integration/main27-29-review.json",
+    "original": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-main27-29-review-eQKDEq0G/review.json",
+    "sha256": "6f04f0d2a689f2dea25f01bcb916ded8e5577273a02627782b37b465bb31ad07"
+  },
+  {
+    "path": "docs/architecture/evidence/generation-integration/wp3/source30-integration/preparation-review.json",
+    "original": "/shared/lcnbr/dev/gammaloop/generation-test-source-closure/target/astra-source30-review/review.json",
+    "sha256": "2b35b3ca2bfb2ea0d1f3b71a0b1b72ce12e27de469de7bed5dcfd4c77c6a2d16"
+  },
+  {
+    "path": "docs/architecture/evidence/generation-integration/wp3/source30-integration/preparation-completion.json",
+    "original": "/shared/lcnbr/dev/gammaloop/generation-test-source-closure/target/source30/completion.json",
+    "sha256": "656a88ce9cb566cf8c1cc90366f0ffe15e3cf2832d58a7a528433a55c2a9441d"
+  }
+]

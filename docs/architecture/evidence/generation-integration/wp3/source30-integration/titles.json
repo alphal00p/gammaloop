@@ -1,0 +1,8 @@
+{
+  "title": "Compile-time generation test source closure",
+  "single_title_registry_render_match": true,
+  "note_source_sha256": "217c249f96235611f2530cdc1dd90b3d04d438c126b4d9a260a77d19269ce335",
+  "note_html_sha256": "cf9e9ede9c9e4022d116281679dfca259dc230810f544d81d3a599e2a28fc233",
+  "plan_source_sha256": "8687fa0f171fd6768a6baaf10644b7ebbf0db59ad86fda378ac21212c8a91dc8",
+  "plan_html_sha256": "758dc13cfbbb9a8b7ad59ffaf5decd0ec8679f35dbdeb5b46ebb61cf8f53aa74"
+}

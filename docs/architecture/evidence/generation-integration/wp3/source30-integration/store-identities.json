@@ -1,0 +1,190 @@
+{
+  "clinnet": {
+    "source": {
+      "path": "/nix/store/9zkqnnyrdjz13s1akf70mzja6cqmhyxg-source",
+      "narHash": "sha256-lvY6Rvg5YrwhLiwtmK6LegyUJYsuEBc3QgXdJ4uMNU0=",
+      "path_info_raw": {
+        "/nix/store/9zkqnnyrdjz13s1akf70mzja6cqmhyxg-source": {
+          "ca": "fixed:r:sha256:0k9mij5jgp8588vif41ficjr833sifp9hb9c5qhvqqirz133mxln",
+          "deriver": null,
+          "narHash": "sha256-lvY6Rvg5YrwhLiwtmK6LegyUJYsuEBc3QgXdJ4uMNU0=",
+          "narSize": 8790712,
+          "references": [],
+          "registrationTime": 1793176228,
+          "signatures": [],
+          "storeDir": "/nix/store",
+          "ultimate": false,
+          "version": 1
+        }
+      }
+    },
+    "packageOut": {
+      "path": "/nix/store/v55s7n8d96d40pgh276v7m0dx8yzyndv-nix-ci-artifact-barrier-crate-test-binaries-clinnet",
+      "narHash": "sha256-LpcoCW3qCJrFWMRRZRWcuvqNTs1Jjq1c/97uNSbkemo=",
+      "path_info_raw": {
+        "/nix/store/v55s7n8d96d40pgh276v7m0dx8yzyndv-nix-ci-artifact-barrier-crate-test-binaries-clinnet": {
+          "ca": null,
+          "deriver": "/nix/store/n25c6ypc3g5yr9avywr4679w896j7w06-nix-ci-artifact-barrier-crate-test-binaries-clinnet.drv",
+          "narHash": "sha256-LpcoCW3qCJrFWMRRZRWcuvqNTs1Jjq1c/97uNSbkemo=",
+          "narSize": 224,
+          "references": [
+            "/nix/store/vbsi8ba92kdc0cvrjc12zr5d14v6iqh7-gammaloop-crate-test-binaries-clinnet-ae6d6c18c3317af1-deps-0.1.0"
+          ],
+          "registrationTime": 1793177837,
+          "signatures": [],
+          "storeDir": "/nix/store",
+          "ultimate": true,
+          "version": 1
+        }
+      },
+      "deriver": "/nix/store/n25c6ypc3g5yr9avywr4679w896j7w06-nix-ci-artifact-barrier-crate-test-binaries-clinnet.drv"
+    },
+    "producerOut": {
+      "path": "/nix/store/vbsi8ba92kdc0cvrjc12zr5d14v6iqh7-gammaloop-crate-test-binaries-clinnet-ae6d6c18c3317af1-deps-0.1.0",
+      "narHash": "sha256-uxFe1xEKD0mCRMIM2t3xDQPKiB+Ekfqn/oIur6kA+S4=",
+      "path_info_raw": {
+        "/nix/store/vbsi8ba92kdc0cvrjc12zr5d14v6iqh7-gammaloop-crate-test-binaries-clinnet-ae6d6c18c3317af1-deps-0.1.0": {
+          "ca": null,
+          "deriver": "/nix/store/mynmwafrkaln2lw5fym83kmg17y3b5a5-gammaloop-crate-test-binaries-clinnet-ae6d6c18c3317af1-deps-0.1.0.drv",
+          "narHash": "sha256-uxFe1xEKD0mCRMIM2t3xDQPKiB+Ekfqn/oIur6kA+S4=",
+          "narSize": 10070888,
+          "references": [
+            "/nix/store/4rx44hhndkfyrpi3pw77q4q49gbxdfpw-gammaloop-crate-test-dependencies-ae6d6c18c3317af1-deps-0.1.0"
+          ],
+          "registrationTime": 1793177747,
+          "signatures": [],
+          "storeDir": "/nix/store",
+          "ultimate": true,
+          "version": 1
+        }
+      },
+      "deriver": "/nix/store/mynmwafrkaln2lw5fym83kmg17y3b5a5-gammaloop-crate-test-binaries-clinnet-ae6d6c18c3317af1-deps-0.1.0.drv"
+    }
+  },
+  "feynkit": {
+    "source": {
+      "path": "/nix/store/vrcn5qbrb2q691sks6hq6w8gwn3savpk-source",
+      "narHash": "sha256-QvIJ/Oz1AIfrFUa5re/KYu2siGlDRDV/7l462zh3Qo0=",
+      "path_info_raw": {
+        "/nix/store/vrcn5qbrb2q691sks6hq6w8gwn3savpk-source": {
+          "ca": "fixed:r:sha256:13a2fwwdnfjyxrzkai23d64arvb2rbpsvfa62pmqf07mxky0kwj2",
+          "deriver": null,
+          "narHash": "sha256-QvIJ/Oz1AIfrFUa5re/KYu2siGlDRDV/7l462zh3Qo0=",
+          "narSize": 18920120,
+          "references": [],
+          "registrationTime": 1793176131,
+          "signatures": [],
+          "storeDir": "/nix/store",
+          "ultimate": false,
+          "version": 1
+        }
+      }
+    },
+    "packageOut": {
+      "path": "/nix/store/2hg95fq6xlg346gimc614dhglrzxiwx9-nix-ci-artifact-barrier-crate-test-binaries-feynkit-py",
+      "narHash": "sha256-A4L5FpGzmhCjFcdrPFM8cZi5qqFFxlrTH2Ld0MYsMNA=",
+      "path_info_raw": {
+        "/nix/store/2hg95fq6xlg346gimc614dhglrzxiwx9-nix-ci-artifact-barrier-crate-test-binaries-feynkit-py": {
+          "ca": null,
+          "deriver": "/nix/store/8r0xcd37m0h1kjbhc5xyqkxixi8dljsh-nix-ci-artifact-barrier-crate-test-binaries-feynkit-py.drv",
+          "narHash": "sha256-A4L5FpGzmhCjFcdrPFM8cZi5qqFFxlrTH2Ld0MYsMNA=",
+          "narSize": 224,
+          "references": [
+            "/nix/store/f5haybcq73gyxpbk8fa77ic1ilyk61m1-gammaloop-crate-test-binaries-feynkit-py-5ebab9a37787b10e-deps-0.1.0"
+          ],
+          "registrationTime": 1793179797,
+          "signatures": [],
+          "storeDir": "/nix/store",
+          "ultimate": true,
+          "version": 1
+        }
+      },
+      "deriver": "/nix/store/8r0xcd37m0h1kjbhc5xyqkxixi8dljsh-nix-ci-artifact-barrier-crate-test-binaries-feynkit-py.drv"
+    },
+    "producerOut": {
+      "path": "/nix/store/f5haybcq73gyxpbk8fa77ic1ilyk61m1-gammaloop-crate-test-binaries-feynkit-py-5ebab9a37787b10e-deps-0.1.0",
+      "narHash": "sha256-EXHPkocRWS32jvNq2dBSCRW0nByALO1fRysC0lbIBV0=",
+      "path_info_raw": {
+        "/nix/store/f5haybcq73gyxpbk8fa77ic1ilyk61m1-gammaloop-crate-test-binaries-feynkit-py-5ebab9a37787b10e-deps-0.1.0": {
+          "ca": null,
+          "deriver": "/nix/store/9pdyis7c6cdacw97cd5pq901rca9lbpp-gammaloop-crate-test-binaries-feynkit-py-5ebab9a37787b10e-deps-0.1.0.drv",
+          "narHash": "sha256-EXHPkocRWS32jvNq2dBSCRW0nByALO1fRysC0lbIBV0=",
+          "narSize": 342594936,
+          "references": [
+            "/nix/store/3ckldkriyimyrk0mpv7776bbz7r38vnd-gammaloop-crate-test-dependencies-5ebab9a37787b10e-deps-0.1.0"
+          ],
+          "registrationTime": 1793179796,
+          "signatures": [],
+          "storeDir": "/nix/store",
+          "ultimate": true,
+          "version": 1
+        }
+      },
+      "deriver": "/nix/store/9pdyis7c6cdacw97cd5pq901rca9lbpp-gammaloop-crate-test-binaries-feynkit-py-5ebab9a37787b10e-deps-0.1.0.drv"
+    }
+  },
+  "linnet": {
+    "source": {
+      "path": "/nix/store/dn76zz86lpis983m5yf8lvmkb7h2cn8w-source",
+      "narHash": "sha256-y1rl4nYI73j0z+ktGqqIK/gCaZ55c99Oh4vsrgHCDv4=",
+      "path_info_raw": {
+        "/nix/store/dn76zz86lpis983m5yf8lvmkb7h2cn8w-source": {
+          "ca": "fixed:r:sha256:1zhfq80sxv4bhx7dywvrkrlh5y1bi2m1lbg9rzs7ivq8fvifannb",
+          "deriver": null,
+          "narHash": "sha256-y1rl4nYI73j0z+ktGqqIK/gCaZ55c99Oh4vsrgHCDv4=",
+          "narSize": 4797872,
+          "references": [],
+          "registrationTime": 1793163115,
+          "signatures": [],
+          "storeDir": "/nix/store",
+          "ultimate": false,
+          "version": 1
+        }
+      }
+    },
+    "packageOut": {
+      "path": "/nix/store/0clcs1w68lx88dkpz38l36lz40sbc533-nix-ci-artifact-barrier-crate-test-binaries-linnet",
+      "narHash": "sha256-eH3PKRst1EX81wli7qtnjCv+P9T8B/TiUPFmf+U6Uuc=",
+      "path_info_raw": {
+        "/nix/store/0clcs1w68lx88dkpz38l36lz40sbc533-nix-ci-artifact-barrier-crate-test-binaries-linnet": {
+          "ca": null,
+          "deriver": "/nix/store/l7vvaz9q3jgr8mq8i9g7yc093cya1s5q-nix-ci-artifact-barrier-crate-test-binaries-linnet.drv",
+          "narHash": "sha256-eH3PKRst1EX81wli7qtnjCv+P9T8B/TiUPFmf+U6Uuc=",
+          "narSize": 224,
+          "references": [
+            "/nix/store/cavydq06slyc5rnbk73jhjkdw468gwhl-gammaloop-crate-test-binaries-linnet-9ddd49c3d058a560-deps-0.1.0"
+          ],
+          "registrationTime": 1793172609,
+          "signatures": [],
+          "storeDir": "/nix/store",
+          "ultimate": true,
+          "version": 1
+        }
+      },
+      "deriver": "/nix/store/l7vvaz9q3jgr8mq8i9g7yc093cya1s5q-nix-ci-artifact-barrier-crate-test-binaries-linnet.drv"
+    },
+    "producerOut": {
+      "path": "/nix/store/cavydq06slyc5rnbk73jhjkdw468gwhl-gammaloop-crate-test-binaries-linnet-9ddd49c3d058a560-deps-0.1.0",
+      "narHash": "sha256-OMH8hto/BjmyV7Os+A2X5oDEfWPSmjnHnL0sE3NqdbU=",
+      "path_info_raw": {
+        "/nix/store/cavydq06slyc5rnbk73jhjkdw468gwhl-gammaloop-crate-test-binaries-linnet-9ddd49c3d058a560-deps-0.1.0": {
+          "ca": null,
+          "deriver": "/nix/store/bvmr7za4q98dy2x3bjvvvgpzbncgz0fg-gammaloop-crate-test-binaries-linnet-9ddd49c3d058a560-deps-0.1.0.drv",
+          "narHash": "sha256-OMH8hto/BjmyV7Os+A2X5oDEfWPSmjnHnL0sE3NqdbU=",
+          "narSize": 68900800,
+          "references": [
+            "/nix/store/5lzrg8sh3lh9q5bd2jly86xwr3m307sy-gammaloop-crate-test-dependencies-9ddd49c3d058a560-deps-0.1.0",
+            "/nix/store/604gsr59rj7dzd0nrhp143rpvf7gyiaz-gcc-15.3.0-lib",
+            "/nix/store/lm3pknxi0ipypy3lxh1wmm8wvvavdwrn-glibc-2.42-84"
+          ],
+          "registrationTime": 1793169329,
+          "signatures": [],
+          "storeDir": "/nix/store",
+          "ultimate": true,
+          "version": 1
+        }
+      },
+      "deriver": "/nix/store/bvmr7za4q98dy2x3bjvvvgpzbncgz0fg-gammaloop-crate-test-binaries-linnet-9ddd49c3d058a560-deps-0.1.0.drv"
+    }
+  }
+}

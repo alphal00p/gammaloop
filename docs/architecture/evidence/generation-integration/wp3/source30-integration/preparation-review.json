@@ -1,0 +1,53 @@
+{
+  "review": "NEW independent Astra SOURCE30 preparation review",
+  "verdict": "APPROVE",
+  "scope": "Code and compile-time source closure on approved preparation base only",
+  "candidate": "0af5dccd1985789401ad1efc2450399d0f36c0bc",
+  "implementation_commit": "4e13c40d6e30bff3390d06067fe81cfb8ac10a5f",
+  "base": "0a38ee4e3e7d16af3978f2c6ccde04dc176dfea9",
+  "timestamp_utc": "2026-10-28T08:04:49.252183+00:00",
+  "tracked_candidate_unchanged": true,
+  "four_file_inventory": true,
+  "raw_source_identities_verified": true,
+  "producer_status": "done: both selected exact package and artifact outputs registered and affected test ELF/depfiles inspected",
+  "producer_command_exit_status": "Not collected from owner session; successful registered outputs and final producer logs independently verified. No duplicate build.",
+  "runtime_tests": "not executed",
+  "integration_status": "not approved; ordered refresh and final combined source/derivation qualification remain necessary",
+  "main_after29": "cb585c98a474628ca9c55bb17cf1e680450b8ef9",
+  "changed_selected_inputs_on_main": {
+    "feynkit": [
+      "crates/feynkit-graph/src/compact_dot.rs",
+      "crates/feynkit-graph/src/dot.rs"
+    ],
+    "linnet": []
+  },
+  "checks": [
+    "Nix parse of rust-workspace.nix, ci.nix and nix-ci.nix",
+    "Independent actual flake package/producer source and derivation eval before/after",
+    "Copied-source exact six added paths and byte hashes, no removals/changes/untracked leaks",
+    "Scratch-only full Git snapshot sensitivity/restoration; unrelated note and runtime card negative controls; production source identities unchanged",
+    "129 literal include sites in nine generation/renderer/exporter owners and generated build-script assets checked",
+    "Source21 runtime restriction ownership, three existing quotient fixtures, obsolete standalone stub/current Community and docs stub reconciliation",
+    "Protected locks/manifests/kernel configuration, Nix CI disabled, author Lucien Huber",
+    "Unique registered title/anchors and canonical Git blob scope digest",
+    "Pinned nixfmt 1.5 changed owner lists and Typst 0.15.1 render",
+    "Exact producer package links, path-info derivers, cargo test --no-run build phases, real ELF bytes and matched test depfiles",
+    "All 3405 tracked files and recorded task refs unchanged at end"
+  ],
+  "limits": [
+    "Preparation excludes sources22\u201329; final post29 FeynKit selected source already differs in two graph Rust files, so current artifacts are not final integration proof",
+    "28 existing failing documentation scopes remain for source31; no global docs pass",
+    "Pinned whole-file Nix formatting fails at base and candidate; changed lists pass",
+    "Inherited Clinnet test producer lacks four literal Typst fixtures; unchanged source identity 70dg301wina2x7jgllfh4mlzr6d75bh5-source, outside selected producers; no full NixCI claim",
+    "No runtime physics, performance, publication, integration or upload claim"
+  ],
+  "inherited_clinnet_omissions": [
+    "crates/kurvst/typst/tests/mark-contract.typ",
+    "crates/kurvst/typst/tests/mark-geometry.typ",
+    "crates/linnest/typst/tests/collision-lines.typ",
+    "crates/linnest/typst/tests/identity-targets.typ"
+  ],
+  "frozen_receipt_semantics": "0af5 corrects only the source identity section of initial receipt; pending producer status is a historical frozen snapshot, not a current success claim. Current producer success evidence is recorded only under ignored review target.",
+  "bookmark": "generation-test-source-closure remains at 390993069213aa662ddfc0a7682c56020463d018; @ remains frozen 0af5",
+  "retained": "Review scripts/results and rendered note retained under ignored target/astra-source30-review for parent audit; sensitivity snapshot removed; no review process remains running; Sol artifacts and shared caches untouched"
+}

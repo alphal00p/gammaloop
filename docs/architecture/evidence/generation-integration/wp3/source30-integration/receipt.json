@@ -1,0 +1,85 @@
+{
+  "schema": 1,
+  "status": "Source30 combined producers and five focused runtime consumers pass; NEW independent Astra integration review required before31",
+  "base": "cb585c98a474628ca9c55bb17cf1e680450b8ef9",
+  "source_order": 30,
+  "original_source": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
+  "approved_preparation": "0af5dccd1985789401ad1efc2450399d0f36c0bc",
+  "approved_implementation": "4e13c40d6e30bff3390d06067fe81cfb8ac10a5f",
+  "import_commit": "26d439003bb52bd19299e77e542198cf7c50d90f",
+  "Clinnet_extension_commit": "29cc026df9c9ca4f31be9b0e851ad6f076c475c7",
+  "declared_patch_correction_commit": "f99fe4bf25db77df58ce4619e2ff176268499a58",
+  "code_commit": "f99fe4bf25db77df58ce4619e2ff176268499a58",
+  "evidence_change": "wvkyzoookuptpykmxzyssmtulmzuxxvz",
+  "candidate_bookmark": "generation-integration-source30",
+  "closure": "closure.json",
+  "sensitivity": "sensitivity.json",
+  "format": "format.json",
+  "artifact_inspection": "artifact-inspection.json",
+  "runtime": "runtime.json",
+  "review_copies": "review-copies.json",
+  "source_mapping": "source-mapping.json",
+  "scopes": "scopes.json",
+  "code_inventory": "code-inventory.json",
+  "preparation_semantics": "Original exit0 session88902 and5FeynKit/6Linnet test targets are archived at original identities. FeynKit preparation has two selected graph Rust differences vs current source and is not current proof. Linnet reuse is qualified only by exact current src/package/producer identity agreement. Frozen source30.json in prior code ancestry remains historical, including its pending snapshot.",
+  "bounded_extensions": [
+    "Four literal Clinnet Typst fixtures added through its compileTimeTest consumer list; exact added bytes, production negatives and actual ELF/depfiles checked.",
+    "Inherited inactive vendor/dot-parser working-tree path caused extraDummyScript to copy a nonselected/nondeclared path. Owner now selects only declared local Cargo vendor patches; valid optional absence of patch table selects none. Real unrelated directory left untouched; isolated negative proves identities invariant."
+  ],
+  "failed_attempts": [
+    {
+      "log": "target/wp3-source30/build.log",
+      "exit_code": 1,
+      "boundary": "Before test compilation, copy of inactive untracked vendor/dot-parser absent from filtered dependency source; corrected through actual declared-patch owner."
+    },
+    {
+      "log": "target/wp3-source30/final-declared.log",
+      "exit_code": 1,
+      "boundary": "Initial owner draft assumed root patch table also in incremental baseline; corrected optional table and folded into final unreviewed code commit."
+    }
+  ],
+  "normal_build_command": [
+    "nix",
+    "build",
+    "--impure",
+    "--no-link",
+    "--max-jobs",
+    "2",
+    "--cores",
+    "2",
+    ".#packages.x86_64-linux.crate-test-binaries-feynkit-py",
+    ".#packages.x86_64-linux.crate-test-binaries-linnet",
+    ".#packages.x86_64-linux.crate-test-binaries-clinnet"
+  ],
+  "build_log": "target/wp3-source30/build-final.log",
+  "nixci": false,
+  "kernel": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+  "source21": "Runtime restriction card ownership unchanged; compile-time producer sources exclude card. All3 quotient fixtures retained. Current Community/native/resource/license/WASM owners and Cargo declarations preserved; no obsolete standalone stub restored.",
+  "P3": "Mutable active_slice19_21.next_gate/parallel22_26 and nested recertification.status/P1/source22 explicitly marked historical/superseded by certified0a38 and approveda517/cb585. Two source19 rows remain certified passing; frozen failure receipts untouched.",
+  "limits": [
+    "No full NixCI, physics, benchmark, wheel or installed-distribution claim.",
+    "Four expansion-based parity helpers unchanged/omitted; no graph numerator expansion.",
+    "Three older frame assertions, full WP3 physics/performance/distribution remain open.",
+    "Source31 preparation87dfd362 approved only for preparation; post30 refresh/headerless-table fixes/new review remain necessary.32\u201335 owns three obsolete Python rendering callers. No later source imported.",
+    "Inherited28 documentation failures remain; no unrelated scope hashes refreshed."
+  ],
+  "hash_semantics": "Code hashes bind frozenf99; registry/notes/current receipts are later metadata. Explicit frozen metadata snapshot will bind note/registry hashes; mutable current receipt/replay/execution are not code_files or self-hashes.",
+  "completion": "completion.json",
+  "runtime_passes": 5,
+  "selected_real_test_executables": 15,
+  "producer_identities": "store-identities.json",
+  "producer_status": "All3 exact final package/producer outputs registered; actual5 FeynKit+6 Linnet+4 Clinnet cargo test targets, affected ELF complete-input bytes and compiler depfiles verified; Linnet reused only at exact identity.",
+  "format_and_kernel": {
+    "four_changed_Nix_blocks_pinned_format": true,
+    "three_Nix_owners_parse": true,
+    "kernel_isolation": true,
+    "whole_file_format": "Inherited baseline drift; not rewritten",
+    "Rust_clippy": "No Rust/manifests/feature changes; reviewed cb585 scoped Clippy result retained at its source identity, not relabelled as a fresh run."
+  },
+  "cleanup": {
+    "sensitivity_snapshot_removed": true,
+    "real_inactive_vendor_directory_untouched": true,
+    "shared_cache_deleted_or_overridden": false,
+    "retained": "Exact Nix outputs and ignored target/wp3-source30 source/ELF/depfile/discovery/runtime/build artifacts for review; previous proof/baseline/reviews intact."
+  }
+}

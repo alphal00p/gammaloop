@@ -1,0 +1,500 @@
+{
+  "feynkit": {
+    "before": {
+      "packageDrv": "/nix/store/xkfgj42l1vpah6nr6qmj2gp9g9rxj7jp-nix-ci-artifact-barrier-crate-test-binaries-feynkit-py.drv",
+      "packageOut": "/nix/store/shm8w8n06sc8fpd8npfnvpwqj8i99rfq-nix-ci-artifact-barrier-crate-test-binaries-feynkit-py",
+      "producerDrv": "/nix/store/2m1nn98z0c8qhl4r9sqw1fqwad7xp34v-gammaloop-crate-test-binaries-feynkit-py-5ebab9a37787b10e-deps-0.1.0.drv",
+      "producerOut": "/nix/store/ccjg1xfn07892kx3j0cz9mk8gyy2kflj-gammaloop-crate-test-binaries-feynkit-py-5ebab9a37787b10e-deps-0.1.0",
+      "productionSource": "/nix/store/ixag4ni62z7n5y0s69fnry5az9ln9psc-source",
+      "source": "/nix/store/a8g75bf0gzq02m8gqfadb6f70ag9ivsx-source"
+    },
+    "final": {
+      "packageDrv": "/nix/store/8r0xcd37m0h1kjbhc5xyqkxixi8dljsh-nix-ci-artifact-barrier-crate-test-binaries-feynkit-py.drv",
+      "packageOut": "/nix/store/2hg95fq6xlg346gimc614dhglrzxiwx9-nix-ci-artifact-barrier-crate-test-binaries-feynkit-py",
+      "producerDrv": "/nix/store/9pdyis7c6cdacw97cd5pq901rca9lbpp-gammaloop-crate-test-binaries-feynkit-py-5ebab9a37787b10e-deps-0.1.0.drv",
+      "producerOut": "/nix/store/f5haybcq73gyxpbk8fa77ic1ilyk61m1-gammaloop-crate-test-binaries-feynkit-py-5ebab9a37787b10e-deps-0.1.0",
+      "productionSource": "/nix/store/ixag4ni62z7n5y0s69fnry5az9ln9psc-source",
+      "source": "/nix/store/vrcn5qbrb2q691sks6hq6w8gwn3savpk-source"
+    },
+    "added": {
+      "crates/feynkit-py/tests/request_decorator_contract.py": "299fbc5e57884f8117c75e91c2b98bc2c1e2125cbdbf9be2ab9a5136ea86f061"
+    },
+    "removed": [],
+    "changed": [],
+    "selected_files": 765,
+    "production_unchanged": true,
+    "production_excludes_test_inputs": true,
+    "source_nar_hash": "sha256-QvIJ/Oz1AIfrFUa5re/KYu2siGlDRDV/7l462zh3Qo0=",
+    "vs_preparation_changed_selected_files": [
+      "crates/feynkit-graph/src/compact_dot.rs",
+      "crates/feynkit-graph/src/dot.rs"
+    ],
+    "exact_preparation_producer_identity": false,
+    "literal_inputs": [
+      {
+        "consumer": "crates/feynkit-py/tests/cff_display.rs",
+        "input": "crates/feynkit-py/tests/fixtures/scalars_2p_3p.json"
+      },
+      {
+        "consumer": "crates/feynkit-py/tests/cff_display.rs",
+        "input": "crates/feynkit-py/tests/cff_display.py"
+      },
+      {
+        "consumer": "crates/feynkit-py/tests/cut_algebra.rs",
+        "input": "crates/feynkit-py/tests/fixtures/scalars_2p_3p.json"
+      },
+      {
+        "consumer": "crates/feynkit-py/tests/combined_community.rs",
+        "input": "crates/feynkit-py/python/symbolica/community/hepkit/__init__.py"
+      },
+      {
+        "consumer": "crates/feynkit-py/tests/combined_community.rs",
+        "input": "crates/linnet-py/python/symbolica/community/graph/__init__.py"
+      },
+      {
+        "consumer": "crates/feynkit-py/tests/combined_community.rs",
+        "input": "crates/feynkit-py/tests/fixtures/scalars_2p_3p.json"
+      },
+      {
+        "consumer": "crates/feynkit-py/tests/combined_community.rs",
+        "input": "crates/feynkit-py/tests/installed_wavefunctions.py"
+      },
+      {
+        "consumer": "crates/feynkit-py/tests/combined_community.rs",
+        "input": "crates/feynkit-py/tests/browser_display_fixtures.py"
+      },
+      {
+        "consumer": "crates/feynkit-py/tests/combined_community.rs",
+        "input": "crates/feynkit-py/tests/installed_offline_rendering.py"
+      },
+      {
+        "consumer": "crates/feynkit-py/tests/combined_community.rs",
+        "input": "crates/spynso3/tests/installed_tensor_network_display.py"
+      },
+      {
+        "consumer": "crates/feynkit-py/tests/combined_community.rs",
+        "input": "crates/linnet-py/tests/rendering_metrics.py"
+      },
+      {
+        "consumer": "crates/feynkit-py/tests/combined_community.rs",
+        "input": "crates/linnet-py/tests/test_community_rendering.py"
+      },
+      {
+        "consumer": "crates/feynkit-py/tests/combined_community.rs",
+        "input": "crates/feynkit-py/tests/native_forwarding.py"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/ufo.rs",
+        "input": "crates/feynkit-py/tests/fixtures/scalars_2p_3p.json"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/display.rs",
+        "input": "crates/feynkit-py/src/collection.css"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/display.rs",
+        "input": "crates/feynkit-py/src/collection.js"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/display.rs",
+        "input": "crates/feynkit-py/src/notebook.js"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/lib.rs",
+        "input": "crates/feynkit-py/tests/fixtures/scalars_2p_3p.json"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/lib.rs",
+        "input": "crates/feynkit-py/tests/native_forwarding.py"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/cff/display.rs",
+        "input": "crates/feynkit-py/src/expression.css"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/cff/display.rs",
+        "input": "crates/feynkit-py/src/cff/display.css"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/cff/display.rs",
+        "input": "crates/feynkit-py/src/cff/display.html"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/cff/display.rs",
+        "input": "crates/feynkit-py/src/expression.js"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/cff/display.rs",
+        "input": "crates/feynkit-py/src/cff/display.js"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/cff/display.rs",
+        "input": "crates/feynkit-py/src/notebook.js"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/cff/kernel.rs",
+        "input": "crates/feynkit-py/tests/fixtures/scalars_2p_3p.json"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/generation/tests.rs",
+        "input": "crates/feynkit-py/tests/fixtures/scalars_2p_3p.json"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/generation/tests.rs",
+        "input": "crates/feynkit-py/tests/fixtures/scalars_2p_3p.json"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/generation/tests.rs",
+        "input": "crates/feynkit-py/tests/fixtures/scalars_2p_3p.json"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/generation/tests.rs",
+        "input": "crates/feynkit-py/tests/fixtures/scalars_2p_3p.json"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/generation/tests.rs",
+        "input": "crates/feynkit-py/tests/fixtures/scalars_2p_3p.json"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/generation/tests.rs",
+        "input": "crates/feynkit-py/tests/fixtures/scalars_2p_3p.json"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/generation/tests.rs",
+        "input": "crates/feynkit-model/tests/fixtures/sm.json"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/generation/tests.rs",
+        "input": "crates/feynkit-py/tests/fixtures/scalars_2p_3p.json"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/generation/tests.rs",
+        "input": "crates/feynkit-py/tests/fixtures/scalars_2p_3p.json"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/generation/tests.rs",
+        "input": "crates/feynkit-model/tests/fixtures/sm.json"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/generation/tests.rs",
+        "input": "crates/feynkit-py/tests/fixtures/scalars_2p_3p.json"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/generation/tests.rs",
+        "input": "crates/feynkit-py/tests/fixtures/scalars_2p_3p.json"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/generation/tests.rs",
+        "input": "crates/feynkit-py/tests/request_decorator_contract.py"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/generation/tests.rs",
+        "input": "crates/feynkit-py/tests/fixtures/scalars_2p_3p.json"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/ltd/display.rs",
+        "input": "crates/feynkit-py/src/expression.css"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/ltd/display.rs",
+        "input": "crates/feynkit-py/src/ltd/display.css"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/ltd/display.rs",
+        "input": "crates/feynkit-py/src/expression.js"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/ltd/display.rs",
+        "input": "crates/feynkit-py/src/ltd/display.js"
+      },
+      {
+        "consumer": "crates/feynkit-py/src/ltd/display.rs",
+        "input": "crates/feynkit-py/src/notebook.js"
+      }
+    ]
+  },
+  "linnet": {
+    "before": {
+      "packageDrv": "/nix/store/bfg3wrzl20s8k3v9ikv0ds6m9zsywjl3-nix-ci-artifact-barrier-crate-test-binaries-linnet.drv",
+      "packageOut": "/nix/store/3hf8mmpca9ifi3rwadwd3w3h7x2z8i63-nix-ci-artifact-barrier-crate-test-binaries-linnet",
+      "producerDrv": "/nix/store/lr5dlil08qvsczbk0sxsxv8x47b3m0zx-gammaloop-crate-test-binaries-linnet-9ddd49c3d058a560-deps-0.1.0.drv",
+      "producerOut": "/nix/store/9q4p314yigwx0jlvzd3pcvb2900m8gb0-gammaloop-crate-test-binaries-linnet-9ddd49c3d058a560-deps-0.1.0",
+      "productionSource": "/nix/store/bmmi645wj3x1a0k9ynx1m5y0d85v31ib-source",
+      "source": "/nix/store/hpfvckq3ywsya2cwd4sk1is4n2aksfd1-source"
+    },
+    "final": {
+      "packageDrv": "/nix/store/l7vvaz9q3jgr8mq8i9g7yc093cya1s5q-nix-ci-artifact-barrier-crate-test-binaries-linnet.drv",
+      "packageOut": "/nix/store/0clcs1w68lx88dkpz38l36lz40sbc533-nix-ci-artifact-barrier-crate-test-binaries-linnet",
+      "producerDrv": "/nix/store/bvmr7za4q98dy2x3bjvvvgpzbncgz0fg-gammaloop-crate-test-binaries-linnet-9ddd49c3d058a560-deps-0.1.0.drv",
+      "producerOut": "/nix/store/cavydq06slyc5rnbk73jhjkdw468gwhl-gammaloop-crate-test-binaries-linnet-9ddd49c3d058a560-deps-0.1.0",
+      "productionSource": "/nix/store/bmmi645wj3x1a0k9ynx1m5y0d85v31ib-source",
+      "source": "/nix/store/dn76zz86lpis983m5yf8lvmkb7h2cn8w-source"
+    },
+    "added": {
+      "crates/linnet/tests/generation_reports/qed.txt": "7bebabf38b022dc5488c1fe86fb3e340bdd231ac75664719caee971d00402e2b",
+      "crates/linnet/tests/generation_reports/signed_vacuum.txt": "8d68bd097884c74a4dcd58498971cc4d28382ff3f3306d4c402cbc580a2b6333",
+      "crates/linnet/tests/generation_reports/identical_legs.txt": "3eae138c006f2f244907e524a28ccf1c0c20dcfe21cdbb5e512f5a57224dd7b4",
+      "crates/linnet/tests/generation_reports/finite_vertex_bound.txt": "d7fb0f77d826f22c24ac857ae4c518b24325d4ea8a367da773000636f251cc6c",
+      "crates/linnet/tests/generation_reports/infeasible_order.txt": "22c25cb9815b4b8f62fde2f4c03a4b645f89873e5e73f09de17b79c31dbbbf2c"
+    },
+    "removed": [],
+    "changed": [],
+    "selected_files": 363,
+    "production_unchanged": true,
+    "production_excludes_test_inputs": true,
+    "source_nar_hash": "sha256-y1rl4nYI73j0z+ktGqqIK/gCaZ55c99Oh4vsrgHCDv4=",
+    "vs_preparation_changed_selected_files": [],
+    "exact_preparation_producer_identity": true,
+    "literal_inputs": [
+      {
+        "consumer": "crates/linnet/tests/generation_report.rs",
+        "input": "crates/linnet/tests/generation_reports/qed.txt"
+      },
+      {
+        "consumer": "crates/linnet/tests/generation_report.rs",
+        "input": "crates/linnet/tests/generation_reports/signed_vacuum.txt"
+      },
+      {
+        "consumer": "crates/linnet/tests/generation_report.rs",
+        "input": "crates/linnet/tests/generation_reports/identical_legs.txt"
+      },
+      {
+        "consumer": "crates/linnet/tests/generation_report.rs",
+        "input": "crates/linnet/tests/generation_reports/finite_vertex_bound.txt"
+      },
+      {
+        "consumer": "crates/linnet/tests/generation_report.rs",
+        "input": "crates/linnet/tests/generation_reports/infeasible_order.txt"
+      },
+      {
+        "consumer": "crates/linnet/src/half_edge/layout/impred.rs",
+        "input": "crates/linnet/src/half_edge/layout/impred/fixtures/higgs-sunset.json"
+      },
+      {
+        "consumer": "crates/linnet/src/half_edge/layout/impred.rs",
+        "input": "crates/linnet/src/half_edge/layout/impred/fixtures/xs-extra-higgs-scattering.json"
+      },
+      {
+        "consumer": "crates/linnet/src/half_edge/layout/impred.rs",
+        "input": "crates/linnet/src/half_edge/layout/impred/fixtures/multi-leg-eight-gluon-ladder.json"
+      },
+      {
+        "consumer": "crates/linnet/src/half_edge/layout/impred.rs",
+        "input": "crates/linnet/src/half_edge/layout/impred/fixtures/nonplanar-gluon-k5.json"
+      },
+      {
+        "consumer": "crates/linnet/src/half_edge/layout/impred/movement.rs",
+        "input": "crates/linnet/src/half_edge/layout/impred/fixtures/movement-regressions.json"
+      },
+      {
+        "consumer": "crates/linnet/tests/nauty/runs.rs",
+        "input": "crates/linnet/tests/nauty/utilities.rs"
+      },
+      {
+        "consumer": "crates/linnet/tests/nauty/runs.rs",
+        "input": "crates/linnet/tests/nauty/oracle.rs"
+      }
+    ]
+  },
+  "clinnet": {
+    "before": {
+      "packageDrv": "/nix/store/n0crcf47d4bgj25zwyl9hvhbx2nd6j0x-nix-ci-artifact-barrier-crate-test-binaries-clinnet.drv",
+      "packageOut": "/nix/store/0vp514nvkadq26filizw4941z1vxfd0b-nix-ci-artifact-barrier-crate-test-binaries-clinnet",
+      "producerDrv": "/nix/store/0gmp05qjxygms6qdh5m01i9y1yaw8idj-gammaloop-crate-test-binaries-clinnet-ae6d6c18c3317af1-deps-0.1.0.drv",
+      "producerOut": "/nix/store/ak4fr7grhgwf05gpxk8rbsz0fnjicj9h-gammaloop-crate-test-binaries-clinnet-ae6d6c18c3317af1-deps-0.1.0",
+      "productionSource": "/nix/store/s1ql5wccqg2r4nld4mypymx0l5bqm23p-source",
+      "source": "/nix/store/70dg301wina2x7jgllfh4mlzr6d75bh5-source"
+    },
+    "final": {
+      "packageDrv": "/nix/store/n25c6ypc3g5yr9avywr4679w896j7w06-nix-ci-artifact-barrier-crate-test-binaries-clinnet.drv",
+      "packageOut": "/nix/store/v55s7n8d96d40pgh276v7m0dx8yzyndv-nix-ci-artifact-barrier-crate-test-binaries-clinnet",
+      "producerDrv": "/nix/store/mynmwafrkaln2lw5fym83kmg17y3b5a5-gammaloop-crate-test-binaries-clinnet-ae6d6c18c3317af1-deps-0.1.0.drv",
+      "producerOut": "/nix/store/vbsi8ba92kdc0cvrjc12zr5d14v6iqh7-gammaloop-crate-test-binaries-clinnet-ae6d6c18c3317af1-deps-0.1.0",
+      "productionSource": "/nix/store/s1ql5wccqg2r4nld4mypymx0l5bqm23p-source",
+      "source": "/nix/store/9zkqnnyrdjz13s1akf70mzja6cqmhyxg-source"
+    },
+    "added": {
+      "crates/kurvst/typst/tests/mark-geometry.typ": "c081b80658d34edcd3d1836eeedd5cd125b58f46d6a248b8490684c30aa25ed8",
+      "crates/kurvst/typst/tests/mark-contract.typ": "afa7a99d34f782d9a63fb750ddc6503ff8912cc8f0c968525887bcd4e5bcda02",
+      "crates/linnest/typst/tests/identity-targets.typ": "aed9e5921bf1bb9ecd157b78b6da3dfb9f3378e4ff50908d6506aa79e6f23637",
+      "crates/linnest/typst/tests/collision-lines.typ": "9e21d7730622b00d017db36078a3ceadb3f350529f55bef0e89c92c9797a3766"
+    },
+    "removed": [],
+    "changed": [],
+    "selected_files": 332,
+    "production_unchanged": true,
+    "production_excludes_test_inputs": true,
+    "source_nar_hash": "sha256-lvY6Rvg5YrwhLiwtmK6LegyUJYsuEBc3QgXdJ4uMNU0=",
+    "literal_inputs": [
+      {
+        "consumer": "crates/clinnet/tests/public_typst_behavior.rs",
+        "input": "crates/linnest/typst/examples/map-style.typ"
+      },
+      {
+        "consumer": "crates/clinnet/tests/public_typst_behavior.rs",
+        "input": "assets/embedded/drawing/templates/physics-edge-style.typ"
+      },
+      {
+        "consumer": "crates/clinnet/tests/public_typst_behavior.rs",
+        "input": "assets/embedded/drawing/templates/impl/physics-edge-style.typ"
+      },
+      {
+        "consumer": "crates/clinnet/tests/public_typst_behavior.rs",
+        "input": "assets/embedded/drawing/templates/layout-core.typ"
+      },
+      {
+        "consumer": "crates/clinnet/tests/public_typst_behavior.rs",
+        "input": "crates/clinnet/tests/resources/pattern-endpoints-behavior.typ"
+      },
+      {
+        "consumer": "crates/clinnet/tests/public_typst_behavior.rs",
+        "input": "crates/clinnet/tests/resources/linnest-public-behavior.typ"
+      },
+      {
+        "consumer": "crates/clinnet/tests/public_typst_behavior.rs",
+        "input": "crates/clinnet/tests/resources/curved-arrow-behavior.typ"
+      },
+      {
+        "consumer": "crates/clinnet/tests/public_typst_behavior.rs",
+        "input": "crates/clinnet/tests/resources/weighted-cut-behavior.typ"
+      },
+      {
+        "consumer": "crates/clinnet/tests/public_typst_behavior.rs",
+        "input": "crates/clinnet/tests/resources/named-map-behavior.typ"
+      },
+      {
+        "consumer": "crates/clinnet/tests/public_typst_behavior.rs",
+        "input": "crates/clinnet/tests/resources/identity-target-behavior.typ"
+      },
+      {
+        "consumer": "crates/clinnet/tests/public_typst_behavior.rs",
+        "input": "crates/clinnet/tests/resources/cetz-bounds-behavior.typ"
+      },
+      {
+        "consumer": "crates/clinnet/tests/public_typst_behavior.rs",
+        "input": "crates/clinnet/tests/resources/marker-geometry-behavior.typ"
+      },
+      {
+        "consumer": "crates/clinnet/tests/public_typst_behavior.rs",
+        "input": "crates/clinnet/tests/resources/annotation-placement-behavior.typ"
+      },
+      {
+        "consumer": "crates/clinnet/tests/public_typst_behavior.rs",
+        "input": "crates/clinnet/tests/resources/style-defaults-behavior.typ"
+      },
+      {
+        "consumer": "crates/clinnet/tests/public_typst_behavior.rs",
+        "input": "crates/clinnet/tests/resources/gamma-momentum-behavior.typ"
+      },
+      {
+        "consumer": "crates/clinnet/tests/public_typst_behavior.rs",
+        "input": "tests/resources/graphs/epemttbar.dot"
+      },
+      {
+        "consumer": "crates/clinnet/tests/public_typst_behavior.rs",
+        "input": "crates/clinnet/tests/resources/gamma-cross-section-behavior.typ"
+      },
+      {
+        "consumer": "crates/clinnet/tests/public_typst_behavior.rs",
+        "input": "crates/clinnet/tests/resources/gamma-debug-behavior.typ"
+      },
+      {
+        "consumer": "crates/clinnet/tests/public_typst_behavior.rs",
+        "input": "crates/clinnet/tests/resources/map-style-behavior.typ"
+      },
+      {
+        "consumer": "crates/clinnet/tests/public_typst_behavior.rs",
+        "input": "crates/kurvst/typst/tests/layer-offset.typ"
+      },
+      {
+        "consumer": "crates/clinnet/tests/public_typst_behavior.rs",
+        "input": "crates/kurvst/typst/tests/pattern-split.typ"
+      },
+      {
+        "consumer": "crates/clinnet/tests/public_typst_behavior.rs",
+        "input": "crates/clinnet/tests/resources/kurvst-public-contract.typ"
+      },
+      {
+        "consumer": "crates/clinnet/tests/public_typst_behavior.rs",
+        "input": "crates/clinnet/tests/resources/cetz-bounds-behavior.typ"
+      },
+      {
+        "consumer": "crates/clinnet/tests/public_typst_behavior.rs",
+        "input": "crates/clinnet/tests/resources/kurvst-mark-drawing-behavior.typ"
+      },
+      {
+        "consumer": "crates/clinnet/tests/public_typst_behavior.rs",
+        "input": "crates/linnest/typst/tests/identity-targets.typ"
+      },
+      {
+        "consumer": "crates/clinnet/tests/public_typst_behavior.rs",
+        "input": "crates/linnest/typst/tests/collision-lines.typ"
+      },
+      {
+        "consumer": "crates/clinnet/tests/public_typst_behavior.rs",
+        "input": "crates/clinnet/tests/resources/gamma-momentum-side-behavior.typ"
+      },
+      {
+        "consumer": "crates/clinnet/tests/public_typst_behavior.rs",
+        "input": "crates/clinnet/tests/resources/gamma-external-order-behavior.typ"
+      },
+      {
+        "consumer": "crates/clinnet/tests/public_typst_behavior.rs",
+        "input": "crates/kurvst/typst/tests/pattern-split.typ"
+      },
+      {
+        "consumer": "crates/clinnet/tests/public_typst_behavior.rs",
+        "input": "crates/kurvst/typst/tests/layer-offset.typ"
+      },
+      {
+        "consumer": "crates/clinnet/tests/public_typst_behavior.rs",
+        "input": "crates/kurvst/typst/tests/mark-contract.typ"
+      },
+      {
+        "consumer": "crates/clinnet/tests/public_typst_behavior.rs",
+        "input": "crates/kurvst/typst/tests/mark-geometry.typ"
+      },
+      {
+        "consumer": "crates/clinnet/tests/public_typst_behavior.rs",
+        "input": "crates/clinnet/tests/resources/route-points-behavior.typ"
+      },
+      {
+        "consumer": "crates/clinnet/tests/kurvst_marks.rs",
+        "input": "crates/kurvst/typst/tests/mark-contract.typ"
+      },
+      {
+        "consumer": "crates/clinnet/tests/kurvst_marks.rs",
+        "input": "crates/kurvst/typst/tests/mark-geometry.typ"
+      },
+      {
+        "consumer": "crates/clinnet/src/lib.rs",
+        "input": "crates/linnest/typst/LICENSE.clarabel"
+      },
+      {
+        "consumer": "crates/clinnet/src/lib.rs",
+        "input": "crates/linnest/typst/LICENSE.networkx"
+      },
+      {
+        "consumer": "crates/clinnet/src/lib.rs",
+        "input": "crates/linnest/typst/LICENSE"
+      },
+      {
+        "consumer": "crates/clinnet/src/lib.rs",
+        "input": "crates/kurvst/typst/LICENSE"
+      },
+      {
+        "consumer": "crates/clinnet/src/lib.rs",
+        "input": "crates/kurvst/typst/LICENSE.tiptoe"
+      }
+    ]
+  },
+  "generator": {
+    "source": "/nix/store/ch65r3xyal0xgzpvfxc1y4m37ncrgsc9-source",
+    "sampled_quotients_preserved": [
+      "crates/feynkit-generator/tests/fixtures/sampled_quotient/GL68.dot",
+      "crates/feynkit-generator/tests/fixtures/sampled_quotient/GL29.dot",
+      "crates/feynkit-generator/tests/fixtures/sampled_quotient/prepared_samples.json"
+    ],
+    "runtime_card_not_compile_time_input": true
+  }
+}
