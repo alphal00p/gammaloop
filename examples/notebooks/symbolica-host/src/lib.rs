@@ -29,6 +29,9 @@ macro_rules! register_module {
 
 #[pymodule]
 fn core(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    // Match Symbolica's standalone host and preserve a logger already installed
+    // by the embedding application. Python configures handlers and verbosity.
+    let _ = pyo3_log::try_init();
     create_symbolica_module(m)?;
     register_module!(m, linnet_py::GraphModule);
     m.add_function(pyo3::wrap_pyfunction!(get_citations, m)?)?;

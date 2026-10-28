@@ -1186,7 +1186,9 @@ impl VakintWrapper {
     /// layout, while `extra_dots` and `numerator_rank` select a workload.
     /// `monitor` selects optional per-call native diagnostics; detaching its TUI
     /// never requests cancellation. `progress_snapshot` writes latest native JSON.
-    #[pyo3(signature = (n_loops, output_path, *, ram_bytes=None, disk_bytes=None, cache_policy="evict-lru", cache_terms=None, cache_integrals=None, max_rule_applications=None, time_limit_seconds=None, checkpoint_interval_seconds=None, max_roots=None, batch_records=None, extra_dots=None, numerator_rank=None, workload=None, checkpoint_path=None, resume=true, progress=None, cancel=None, progress_interval_seconds=1.0, monitor="off", progress_snapshot=None))]
+    /// `cache_hit_diagnostic` explicitly emits lossless native cache events through
+    /// the host logger; it cannot be combined with a display or snapshot.
+    #[pyo3(signature = (n_loops, output_path, *, ram_bytes=None, disk_bytes=None, cache_policy="evict-lru", cache_terms=None, cache_integrals=None, max_rule_applications=None, time_limit_seconds=None, checkpoint_interval_seconds=None, max_roots=None, batch_records=None, extra_dots=None, numerator_rank=None, workload=None, checkpoint_path=None, resume=true, progress=None, cancel=None, progress_interval_seconds=1.0, monitor="off", progress_snapshot=None, cache_hit_diagnostic=false))]
     #[allow(clippy::too_many_arguments, clippy::type_complexity)]
     pub fn prepare_cache(
         &self,
@@ -1213,11 +1215,16 @@ impl VakintWrapper {
         progress_interval_seconds: f64,
         monitor: &str,
         progress_snapshot: Option<PathBuf>,
+        cache_hit_diagnostic: bool,
     ) -> PyResult<Py<PyDict>> {
         resources::run_committing(self.settings.rustred_resources, || {
             cache::check_loops(n_loops)?;
-            let monitor =
-                cache::monitor_options(monitor, progress_snapshot, progress_interval_seconds)?;
+            let monitor = cache::monitor_options(
+                monitor,
+                progress_snapshot,
+                progress_interval_seconds,
+                cache_hit_diagnostic,
+            )?;
             let mut options = crate::RustRedCachePreparationOptions::default();
             options.storage.ram_bytes = ram_bytes;
             options.storage.disk_bytes = disk_bytes;
@@ -1639,7 +1646,10 @@ impl VakintWrapper {
     /// before scalar application, with the same settings as `evaluate`.
     /// Optional `monitor` diagnostics are local to this call. A snapshot path
     /// enables JSON output independently of the terminal display.
-    #[pyo3(signature = (integral_expression, *, monitor="off", progress_snapshot=None, progress_interval_seconds=1.0))]
+    /// `cache_hit_diagnostic=True` emits lossless cache events through the host
+    /// logger, with presentation and snapshots off. Configure the corresponding
+    /// Python loggers at DEBUG before the first call.
+    #[pyo3(signature = (integral_expression, *, monitor="off", progress_snapshot=None, progress_interval_seconds=1.0, cache_hit_diagnostic=false))]
     #[allow(clippy::type_complexity)]
     pub fn evaluate_rustred_symbolic(
         &self,
@@ -1648,15 +1658,20 @@ impl VakintWrapper {
         monitor: &str,
         progress_snapshot: Option<PathBuf>,
         progress_interval_seconds: f64,
+        cache_hit_diagnostic: bool,
     ) -> PyResult<(
         PythonExpression,
         Vec<PythonExpression>,
         Vec<(PythonExpression, String)>,
     )> {
         resources::run(self.settings.rustred_resources, || {
-            let monitor =
-                cache::monitor_options(monitor, progress_snapshot, progress_interval_seconds)?;
-            let result = if monitor.enabled() {
+            let monitor = cache::monitor_options(
+                monitor,
+                progress_snapshot,
+                progress_interval_seconds,
+                cache_hit_diagnostic,
+            )?;
+            let result = if cache::monitor_requested(&monitor) {
                 let engine = self.vakint.clone();
                 let settings = self.settings.clone();
                 let input = integral_expression.expr.clone();
@@ -1985,7 +2000,7 @@ impl VakintWrapper {
         })
     }
 
-    #[pyo3(signature = (integral_expression, *, monitor="off", progress_snapshot=None, progress_interval_seconds=1.0))]
+    #[pyo3(signature = (integral_expression, *, monitor="off", progress_snapshot=None, progress_interval_seconds=1.0, cache_hit_diagnostic=false))]
     /// Perform the complete parametric evaluation of the Vakint integral represented by the Symbolica expression given in input.
     /// Note that the tensor reduction will be automatically performed on the input given.
     ///
@@ -2015,6 +2030,8 @@ impl VakintWrapper {
     ///   A Symbolica expression representing a vakint integral.
     /// Optional native diagnostics use `monitor="tui"` or `monitor="json"`.
     /// A `progress_snapshot` path also enables JSON with terminal monitoring off.
+    /// `cache_hit_diagnostic=True` emits lossless native cache events through the
+    /// host logger, separately from presentation and snapshots.
     pub fn evaluate(
         &self,
         py: Python<'_>,
@@ -2022,11 +2039,16 @@ impl VakintWrapper {
         monitor: &str,
         progress_snapshot: Option<PathBuf>,
         progress_interval_seconds: f64,
+        cache_hit_diagnostic: bool,
     ) -> PyResult<PythonExpression> {
         resources::run(self.settings.rustred_resources, || {
-            let monitor =
-                cache::monitor_options(monitor, progress_snapshot, progress_interval_seconds)?;
-            let result = if monitor.enabled() {
+            let monitor = cache::monitor_options(
+                monitor,
+                progress_snapshot,
+                progress_interval_seconds,
+                cache_hit_diagnostic,
+            )?;
+            let result = if cache::monitor_requested(&monitor) {
                 let engine = self.vakint.clone();
                 let settings = self.settings.clone();
                 let input = integral_expression.expr.clone();

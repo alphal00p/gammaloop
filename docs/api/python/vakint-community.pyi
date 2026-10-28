@@ -515,7 +515,7 @@ class Vakint:
         Clear saved-rule and lower-factor memoization without changing the
         admitted scope. Cumulative work/eviction counters are not reset.
         """
-    def prepare_cache(self, n_loops: builtins.int, output_path: builtins.str, *, ram_bytes: typing.Optional[builtins.int] = None, disk_bytes: typing.Optional[builtins.int] = None, cache_policy: builtins.str = 'evict-lru', cache_terms: typing.Optional[builtins.int] = None, cache_integrals: typing.Optional[builtins.int] = None, max_rule_applications: typing.Optional[builtins.int] = None, time_limit_seconds: typing.Optional[builtins.int] = None, checkpoint_interval_seconds: typing.Optional[builtins.int] = None, max_roots: typing.Optional[builtins.int] = None, batch_records: typing.Optional[builtins.int] = None, extra_dots: typing.Optional[builtins.int] = None, numerator_rank: typing.Optional[builtins.int] = None, workload: typing.Optional[typing.Sequence[tuple[builtins.int, typing.Sequence[builtins.int]]]] = None, checkpoint_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, resume: builtins.bool = True, progress: typing.Optional[typing.Any] = None, cancel: typing.Optional[typing.Any] = None, progress_interval_seconds: builtins.float = 1.0, monitor: builtins.str = 'off', progress_snapshot: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None) -> dict:
+    def prepare_cache(self, n_loops: builtins.int, output_path: builtins.str, *, ram_bytes: typing.Optional[builtins.int] = None, disk_bytes: typing.Optional[builtins.int] = None, cache_policy: builtins.str = 'evict-lru', cache_terms: typing.Optional[builtins.int] = None, cache_integrals: typing.Optional[builtins.int] = None, max_rule_applications: typing.Optional[builtins.int] = None, time_limit_seconds: typing.Optional[builtins.int] = None, checkpoint_interval_seconds: typing.Optional[builtins.int] = None, max_roots: typing.Optional[builtins.int] = None, batch_records: typing.Optional[builtins.int] = None, extra_dots: typing.Optional[builtins.int] = None, numerator_rank: typing.Optional[builtins.int] = None, workload: typing.Optional[typing.Sequence[tuple[builtins.int, typing.Sequence[builtins.int]]]] = None, checkpoint_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, resume: builtins.bool = True, progress: typing.Optional[typing.Any] = None, cancel: typing.Optional[typing.Any] = None, progress_interval_seconds: builtins.float = 1.0, monitor: builtins.str = 'off', progress_snapshot: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, cache_hit_diagnostic: builtins.bool = False) -> dict:
         r"""
         Explicitly prepare a finite native cache for one through five loops.
         No cache attaches automatically and no numerical masters are computed.
@@ -537,6 +537,8 @@ class Vakint:
         layout, while `extra_dots` and `numerator_rank` select a workload.
         `monitor` selects optional per-call native diagnostics; detaching its TUI
         never requests cancellation. `progress_snapshot` writes latest native JSON.
+        `cache_hit_diagnostic` explicitly emits lossless native cache events through
+        the host logger; it cannot be combined with a display or snapshot.
         """
     def load_cache(self, n_loops: builtins.int, path: builtins.str, *, ram_bytes: typing.Optional[builtins.int] = None, disk_bytes: typing.Optional[builtins.int] = None, cache_policy: typing.Optional[builtins.str] = None, lookup_budget_policy: typing.Optional[builtins.str] = None, cache_terms: typing.Optional[builtins.int] = None, cache_integrals: typing.Optional[builtins.int] = None, max_rule_applications: typing.Optional[builtins.int] = None, file_options: typing.Optional[CacheFileOptions] = None, file_identity: typing.Optional[CacheFileIdentity] = None) -> None:
         r"""
@@ -609,7 +611,7 @@ class Vakint:
         Return aggregate and exact-namespace cache telemetry. Coefficient payload
         and I/O buffers are separate; neither is a measurement of process RSS.
         """
-    def evaluate_rustred_symbolic(self, integral_expression: Expression, *, monitor: builtins.str = 'off', progress_snapshot: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, progress_interval_seconds: builtins.float = 1.0) -> tuple[Expression, builtins.list[Expression], builtins.list[tuple[Expression, builtins.str]]]:
+    def evaluate_rustred_symbolic(self, integral_expression: Expression, *, monitor: builtins.str = 'off', progress_snapshot: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, progress_interval_seconds: builtins.float = 1.0, cache_hit_diagnostic: builtins.bool = False) -> tuple[Expression, builtins.list[Expression], builtins.list[tuple[Expression, builtins.str]]]:
         r"""
         Apply the selected five-loop package and retain its symbolic conditions.
 
@@ -620,6 +622,9 @@ class Vakint:
         before scalar application, with the same settings as `evaluate`.
         Optional `monitor` diagnostics are local to this call. A snapshot path
         enables JSON output independently of the terminal display.
+        `cache_hit_diagnostic=True` emits lossless cache events through the host
+        logger, with presentation and snapshots off. Configure the corresponding
+        Python loggers at DEBUG before the first call.
         """
     def get_constant(self, symbol: ConstantSymbol, prec: builtins.int = 16) -> VakintConstant:
         r"""
@@ -795,7 +800,7 @@ class Vakint:
         integral_expression : Expression
           A Symbolica expression representing a vakint integral.
         """
-    def evaluate(self, integral_expression: Expression, *, monitor: builtins.str = 'off', progress_snapshot: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, progress_interval_seconds: builtins.float = 1.0) -> Expression:
+    def evaluate(self, integral_expression: Expression, *, monitor: builtins.str = 'off', progress_snapshot: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, progress_interval_seconds: builtins.float = 1.0, cache_hit_diagnostic: builtins.bool = False) -> Expression:
         r"""
         Perform the complete parametric evaluation of the Vakint integral represented by the Symbolica expression given in input.
         Note that the tensor reduction will be automatically performed on the input given.
@@ -826,6 +831,8 @@ class Vakint:
           A Symbolica expression representing a vakint integral.
         Optional native diagnostics use `monitor="tui"` or `monitor="json"`.
         A `progress_snapshot` path also enables JSON with terminal monitoring off.
+        `cache_hit_diagnostic=True` emits lossless native cache events through the
+        host logger, separately from presentation and snapshots.
         """
 
 @typing.final

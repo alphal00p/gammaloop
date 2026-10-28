@@ -8,6 +8,7 @@ All cache outputs belong to this test's temporary directory.
 
 import hashlib
 import json
+import logging
 import os
 import sys
 import tempfile
@@ -108,7 +109,70 @@ class RunningCacheSmoke(unittest.TestCase):
                 self.assertEqual(
                     self.obj.cache_statistics(5)["saved_application"]["file"], before
                 )
-        cached = self.obj.evaluate_rustred_symbolic(self.input)
+        messages = []
+
+        class Capture(logging.Handler):
+            def emit(self, record):
+                if record.name in {
+                    "vakint.cache_workload",
+                    "vakint.benchmark_cache_hits",
+                }:
+                    messages.append((record.name, json.loads(record.getMessage())))
+
+        handler = Capture()
+        logger = logging.getLogger("vakint")
+        logger.addHandler(handler)
+        try:
+            snapshot = self.directory / "incompatible-diagnostic-snapshot.json"
+            with self.assertRaisesRegex(ValueError, "cannot be combined"):
+                self.obj.evaluate_rustred_symbolic(
+                    self.input, cache_hit_diagnostic=True, progress_snapshot=snapshot
+                )
+            self.assertFalse(snapshot.exists())
+            default = self.obj.evaluate_rustred_symbolic(self.input)
+            self.assert_complete_native_result(default, reference)
+            self.assertFalse(
+                any(name == "vakint.benchmark_cache_hits" for name, _ in messages)
+            )
+            self.obj.clear_cache(5)
+            messages.clear()
+            cached = self.obj.evaluate_rustred_symbolic(
+                self.input, cache_hit_diagnostic=True
+            )
+        finally:
+            logger.removeHandler(handler)
+        events = [
+            body for name, body in messages if name == "vakint.benchmark_cache_hits"
+        ]
+        self.assertTrue(events, "canonical host did not deliver native DEBUG events")
+        self.assertTrue(
+            all(event["schema"] == "vakint.cache-hit-events.v1" for event in events)
+        )
+        self.assertEqual(events[-1]["event"], "observer_finish")
+        self.assertEqual(events[-1]["observer_status"], "Active")
+        self.assertIs(events[-1]["operation_succeeded"], True)
+        self.assertEqual(events[-1]["interval_ns"], 0)
+        sequences = [event["sequence"] for event in events[:-1]]
+        self.assertEqual(sequences, sorted(set(sequences)))
+        seeds = [
+            event["rootwork"] for event in events if event["event"] == "root_collected"
+        ]
+        hits = [event["work"] for event in events if event["event"] == "backing_hit"]
+        self.assertTrue(seeds)
+        self.assertTrue(
+            all(
+                seed["stage"] == "route"
+                and seed["owner_sector"] is None
+                and seed in hits
+                for seed in seeds
+            )
+        )
+        self.assertTrue(
+            any(
+                name == "vakint.cache_workload" and body["phase"] == "input_roots"
+                for name, body in messages
+            )
+        )
         self.assert_complete_native_result(cached, reference)
         after = self.assert_backing_hit()["saved_application"]["file"]
         self.assertEqual(after["state_imports"], 1)
@@ -122,6 +186,13 @@ class RunningCacheSmoke(unittest.TestCase):
             raise RuntimeError(
                 "running-cache tests need normal Python and a licensed host"
             )
+        # Configure before the first native record: pyo3-log caches logger
+        # enablement. The host owns its one Rust logger; Python owns handlers.
+        core.use_custom_logger()
+        cls.logger = logging.getLogger("vakint")
+        old_level = cls.logger.level
+        cls.logger.setLevel(logging.DEBUG)
+        cls.addClassCleanup(cls.logger.setLevel, old_level)
         data = Path(os.environ["VAKINT_TEST_EXTERNAL_DATA"])
         cls.scratch = tempfile.TemporaryDirectory(prefix="vakint-running-python-")
         cls.addClassCleanup(cls.scratch.cleanup)

@@ -16,6 +16,7 @@ feynkit-py = { path = "../../../crates/feynkit-py", default-features = false, fe
 spynso3 = { path = "../../../crates/spynso3", default-features = false }
 symbolica = { version = "=3.0.1", default-features = false, features = ["python_export"] }
 pyo3 = { version = "0.28", features = ["abi3-py310", "extension-module"] }
+pyo3-log = "=0.13.4"
 
 [features]
 default = ["native"]
