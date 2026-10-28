@@ -1,6 +1,6 @@
+use crate::integrands::process::sampling::maps::SamplingEvaluationError;
 use crate::integrands::process::{
     GenericEvaluatorFloat, LmbMultiChannelingSetup, SamplingChannelBridge,
-    sampling::maps::SamplingEvaluationError,
 };
 use crate::model::Model;
 use crate::momentum::sample::{
@@ -24,7 +24,7 @@ use linnet::half_edge::involution::EdgeIndex;
 
 use rand::Rng;
 use ref_ops::{RefAdd, RefDiv, RefMul, RefNeg, RefRem, RefSub};
-use rug::float::{Constant, ParseFloatError, Round};
+use rug::float::{Constant, ParseFloatError, Round, Special};
 use rug::ops::{CompleteRound, Pow};
 use rug::{Assign, Float};
 use schemars::JsonSchema;
@@ -46,18 +46,18 @@ use spenso::tensors::data::StorageTensor;
 use spenso::tensors::parametric::ParamTensor;
 use spenso::tensors::parametric::to_param::ToAtom;
 use spenso_hep_lib::hep_lib_atom;
-use symbolica::{
-    domains::{
-        dual::HyperDual,
-        float::{FixedPrecision, Float as SymbolicaFloat, FloatLike as SymFloatLike},
-    },
-    prelude::*,
+use symbolica::domains::dual::HyperDual;
+use symbolica::domains::float::{
+    FixedPrecision, Float as SymbolicaFloat, FloatLike as SymFloatLike,
 };
+use symbolica::evaluate::ComplexEvaluationDomain;
+use symbolica::prelude::*;
 
 use std::cell::RefCell;
 use std::cmp::{Ord, Ordering};
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
+use std::num::FpCategory;
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, Sub, SubAssign};
 use std::str::FromStr;
 use std::sync::{LazyLock, OnceLock, RwLock};
@@ -307,12 +307,17 @@ pub mod tracing;
 
 #[cfg(test)]
 mod tests {
+    use super::{
+        ArbPrec, F, FloatLike, QuadFloat, SamplingFloat, SymFloatLike, SymbolicaFloat, VarFloat,
+    };
+    use rug::Float;
+    use rug::ops::CompleteRound;
+    use spenso::algebra::complex::Complex;
+    use std::cmp::Ordering;
+    use std::num::FpCategory;
+    use symbolica::domains::float::{DoubleFloat, Real};
     #[test]
     fn numeric_wrappers_forward_scalar_capabilities() {
-        use super::{ArbPrec, F, FloatLike, QuadFloat, SamplingFloat, SymFloatLike};
-        use std::{cmp::Ordering, num::FpCategory};
-        use symbolica::domains::float::Real;
-
         fn check<T: FloatLike>() {
             let zero = F(T::from_f64_exact_binary(0.));
             let one = zero.one();
@@ -339,11 +344,6 @@ mod tests {
 
     #[test]
     fn numeric_wrappers_preserve_signed_zero_and_small_log_increments() {
-        use super::{ArbPrec, F, QuadFloat, SymFloatLike, SymbolicaFloat};
-        use rug::{Float, ops::CompleteRound};
-        use std::cmp::Ordering;
-        use symbolica::domains::float::{DoubleFloat, Real};
-
         assert_eq!(
             F(0.0_f64).copy_sign(&F(-0.)).0.to_bits(),
             (-0.0f64).to_bits()
@@ -385,15 +385,9 @@ mod tests {
 
     #[test]
     fn mpfr_wrapper_math_preserves_lane_precision_and_range() {
-        use super::{F, SymFloatLike, VarFloat};
-        use rug::Float;
-        use spenso::algebra::complex::Complex;
-        use std::{cmp::Ordering, num::FpCategory};
-        use symbolica::domains::float::Real;
-
         fn check<const N: u32>()
         where
-            VarFloat<N>: super::FloatLike,
+            VarFloat<N>: FloatLike,
         {
             let one = F(VarFloat::<N>::from(Float::with_val(N, 1)));
             let tiny = F(VarFloat::<N>::from(Float::with_val(N, 1) >> (2 * N)));
@@ -427,8 +421,6 @@ mod tests {
 
     #[test]
     fn quad_power_forwards_full_width_provider_contract() {
-        use super::{F, QuadFloat, SymFloatLike};
-
         let negative_one = F(QuadFloat::from_f64_exact_binary(-1.));
         assert_eq!(negative_one.pow(u64::MAX), negative_one);
         let negative_zero = F(QuadFloat::from_f64_exact_binary(-0.));
@@ -1291,7 +1283,7 @@ impl<const N: u32> SymFloatLike for VarFloat<N> {
         self.float.partial_cmp(&other.float)
     }
 
-    fn real_classify(&self) -> Option<std::num::FpCategory> {
+    fn real_classify(&self) -> Option<FpCategory> {
         Some(self.float.classify())
     }
 
@@ -1301,7 +1293,7 @@ impl<const N: u32> SymFloatLike for VarFloat<N> {
 
     fn nan(&self) -> Option<Self> {
         Some(Self {
-            float: Float::with_val(self.float.prec(), rug::float::Special::Nan),
+            float: Float::with_val(self.float.prec(), Special::Nan),
         })
     }
 
@@ -1550,7 +1542,7 @@ impl SymFloatLike for QuadFloat {
         self.0.real_cmp(&other.0)
     }
 
-    fn real_classify(&self) -> Option<std::num::FpCategory> {
+    fn real_classify(&self) -> Option<FpCategory> {
         self.0.real_classify()
     }
 
@@ -2594,7 +2586,7 @@ impl<T: FloatLike + EvaluationDomain> EvaluationDomain for F<T> {
     }
 }
 
-impl<T: FloatLike + EvaluationDomain> symbolica::evaluate::ComplexEvaluationDomain for F<T> {}
+impl<T: FloatLike + EvaluationDomain> ComplexEvaluationDomain for F<T> {}
 
 impl<T: TensorLibraryData + FloatLike> TensorLibraryData for F<T> {
     fn one() -> Self {
@@ -2806,7 +2798,7 @@ impl<T: FloatLike> SymFloatLike for F<T> {
         self.0.real_cmp(&other.0)
     }
 
-    fn real_classify(&self) -> Option<std::num::FpCategory> {
+    fn real_classify(&self) -> Option<FpCategory> {
         self.0.real_classify()
     }
 

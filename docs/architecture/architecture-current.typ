@@ -529,8 +529,10 @@ Retained scalar definitions share this owner. Their bodies contain arithmetic in
 formal arguments; physical energies, masses, and momenta remain explicit in the
 arguments of each call, including calls in generic bodies and row carriers.
 
-Multiplication forms Cartesian rows within one additive term, while adding
-forests concatenates independent terms and counts scalar addbacks once. Identical
+Multiplication freshens each factor's coefficient scope in both its generic
+numerator and scalar carriers, then forms Cartesian rows within one additive
+term. Diagnostic materialization applies each exact coefficient binding to both
+pieces. Adding forests concatenates independent terms and counts scalar addbacks once. Identical
 full numerator definitions share a term without detaching a row's carrier from
 its provenance. Scalar maps attach prefactors to carriers; numerator maps transform
 each shared body. The CFF/from3D Taylor path keeps its existing flat family calls

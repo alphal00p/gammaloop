@@ -11,26 +11,24 @@
 
 #![allow(dead_code)]
 
-use std::{
-    collections::{BTreeMap, BTreeSet, HashSet},
-    fs,
-    io::Cursor,
-    ops::Neg,
-    path::{Path, PathBuf},
-};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::fs;
+use std::io::Cursor;
+use std::ops::Neg;
+use std::path::{Path, PathBuf};
+use std::{env, process, slice};
 
 use crate::integrands::process::standalone;
+use bincode::config;
 use bincode_trait_derive::{Decode, Encode};
 use eyre::{Context, Result, eyre};
 use serde::{Deserialize, Serialize};
-use symbolica::{
-    evaluate::{
-        FunctionRegistrationOptions, InliningPolicy, JITCompiledEvaluator, ParameterRowEvaluator,
-        ParameterRowPlan, ParameterRowWorkspace, ParameterRows,
-    },
-    prelude::*,
-    state::StateMap,
+use symbolica::evaluate::{
+    FunctionRegistrationOptions, InliningPolicy, JITCompiledEvaluator, ParameterRowEvaluator,
+    ParameterRowPlan, ParameterRowWorkspace, ParameterRows,
 };
+use symbolica::prelude::*;
+use symbolica::state::StateMap;
 
 const STANDALONE_EVALUATORS_VERSION: u32 = 18;
 const ARB_PRECISION_BITS: u32 = 1000;
@@ -792,7 +790,7 @@ where
     let mut evaluator = if iterate && payload.dual_shape.is_none() {
         let mut tree: Option<ExpressionEvaluator<Complex<Rational>>> = None;
         for expr in &exprs {
-            let next = build(std::slice::from_ref(expr))?;
+            let next = build(slice::from_ref(expr))?;
             tree = Some(if let Some(mut merged) = tree {
                 merged
                     .merge(next, cpe_iterations)
@@ -1839,16 +1837,16 @@ fn print_usage(program: &str) {
 
 fn parse_cli_options() -> Result<StandaloneCliOptions> {
     let mut options = StandaloneCliOptions::default();
-    let mut args = std::env::args().skip(1);
+    let mut args = env::args().skip(1);
 
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--help" | "-h" => {
-                let program = std::env::args()
+                let program = env::args()
                     .next()
                     .unwrap_or_else(|| "standalone_evaluators_rust.rs".to_string());
                 print_usage(&program);
-                std::process::exit(0);
+                process::exit(0);
             }
             "--backend" => {
                 options.backend = StandaloneBackend::parse(
@@ -1965,7 +1963,7 @@ fn load_custom_input(path: impl AsRef<Path>) -> Result<Vec<StandaloneComplexInpu
 fn load_bin(path: impl AsRef<Path>) -> Result<(StandaloneEvaluatorArchive, StateMap)> {
     let binary =
         fs::read(&path).with_context(|| format!("Cannot read {}", path.as_ref().display()))?;
-    let (version, _): (u32, _) = bincode::decode_from_slice(&binary, bincode::config::standard())?;
+    let (version, _): (u32, _) = bincode::decode_from_slice(&binary, config::standard())?;
     if version != STANDALONE_EVALUATORS_VERSION {
         return Err(eyre!(
             "Unsupported version {version} (expected {}); regenerate the standalone archive",
@@ -1973,7 +1971,7 @@ fn load_bin(path: impl AsRef<Path>) -> Result<(StandaloneEvaluatorArchive, State
         ));
     }
     let (archive, _): (StandaloneEvaluatorArchive, _) =
-        bincode::decode_from_slice(&binary, bincode::config::standard())?;
+        bincode::decode_from_slice(&binary, config::standard())?;
     archive.validate()?;
     let state_map = State::import(&mut Cursor::new(&archive.symbolica_state), None)
         .map_err(|error| eyre!(error))?;
@@ -2422,6 +2420,7 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use symbolica::printer::PrintOptions;
 
     #[test]
     fn standalone_exact_row_payload_restores_sum_and_retained_derivatives() -> Result<()> {
@@ -2433,10 +2432,7 @@ mod tests {
         let u = parse_lit!(standalone_exact_rows::u);
         let v = parse_lit!(standalone_exact_rows::v);
         let numerator = symbol!("standalone_exact_rows::numerator");
-        let print = |atom: &Atom| {
-            atom.printer(symbolica::printer::PrintOptions::file())
-                .to_string()
-        };
+        let print = |atom: &Atom| atom.printer(PrintOptions::file()).to_string();
         let root = Symbol::IF.call_args([
             coefficient.clone(),
             &coefficient * numerator.call_args(params.clone()),
@@ -2470,9 +2466,9 @@ mod tests {
             };
             let json: StandaloneGenericEvaluatorArchive<String> =
                 serde_json::from_slice(&serde_json::to_vec(&payload)?)?;
-            let bytes = bincode::encode_to_vec(&payload, bincode::config::standard())?;
+            let bytes = bincode::encode_to_vec(&payload, config::standard())?;
             let (binary, consumed): (StandaloneGenericEvaluatorArchive<String>, _) =
-                bincode::decode_from_slice(&bytes, bincode::config::standard())?;
+                bincode::decode_from_slice(&bytes, config::standard())?;
             assert_eq!(consumed, bytes.len());
             for restored in [json, binary] {
                 assert_eq!(restored.parameter_rows.as_ref(), Some(&rows));
@@ -2529,12 +2525,12 @@ mod tests {
 
     #[test]
     fn standalone_template_cpp_complex_constants_match_eager_and_assembly() -> Result<()> {
-        let root = std::env::temp_dir().join(format!(
+        let root = env::temp_dir().join(format!(
             "gammaloop_standalone_template_complex_export_{}",
-            std::process::id()
+            process::id()
         ));
-        let x = symbolica::parse!("standalone_template_complex_export::x");
-        let q = symbolica::parse!("standalone_template_complex_export::q");
+        let x = parse!("standalone_template_complex_export::x");
+        let q = parse!("standalone_template_complex_export::q");
         for imaginary in [true, false] {
             for retained in [false, true] {
                 let coefficient = Atom::num(Rational::new(1, 8))
@@ -2571,7 +2567,7 @@ mod tests {
                 ];
                 let mut trees = expressions.iter().map(|expression| {
                     expression
-                        .evaluator(std::slice::from_ref(&x))
+                        .evaluator(slice::from_ref(&x))
                         .function_map(functions.clone())
                         .optimization_settings(OptimizationSettings::new().cores(1))
                         .build()
@@ -2648,9 +2644,9 @@ mod tests {
             )];
             let json = serde_json::to_vec(&entries)?;
             let parsed: Vec<SerializedFnMapEntry<String>> = serde_json::from_slice(&json)?;
-            let bytes = bincode::encode_to_vec(&parsed, bincode::config::standard())?;
+            let bytes = bincode::encode_to_vec(&parsed, config::standard())?;
             let (restored, consumed): (Vec<SerializedFnMapEntry<String>>, _) =
-                bincode::decode_from_slice(&bytes, bincode::config::standard())?;
+                bincode::decode_from_slice(&bytes, config::standard())?;
             assert_eq!(consumed, bytes.len());
             assert_eq!(restored, entries);
             let parsed = parse_fn_map_entries(&restored, &StateMap::default())?;
@@ -2658,7 +2654,7 @@ mod tests {
             let parameter = parse_lit!(standalone_wide::x);
             let root = symbol!(function).call_args((0..arity).map(|i| &parameter + i));
             let mut evaluator = root
-                .evaluator(std::slice::from_ref(&parameter))
+                .evaluator(slice::from_ref(&parameter))
                 .function_map(fn_map)
                 .build()
                 .map_err(|error| eyre!(error))?
@@ -2687,9 +2683,9 @@ mod tests {
             let json = serde_json::to_vec(&compiled)?;
             let mut restored_json: JITCompiledEvaluator<Complex<f64>> =
                 serde_json::from_slice(&json)?;
-            let saved = bincode::encode_to_vec(&compiled, bincode::config::standard())?;
+            let saved = bincode::encode_to_vec(&compiled, config::standard())?;
             let (mut restored, consumed): (JITCompiledEvaluator<Complex<f64>>, _) =
-                bincode::decode_from_slice(&saved, bincode::config::standard())?;
+                bincode::decode_from_slice(&saved, config::standard())?;
             assert_eq!(consumed, saved.len());
             let input = [Complex::new(2.0, 1.0)];
             let mut output = [Complex::new(0.0, 0.0)];
@@ -2709,14 +2705,11 @@ mod tests {
     #[test]
     fn standalone_function_policy_roundtrip_preserves_shared_bodies_and_alias_scope() -> Result<()>
     {
-        let x = symbolica::parse!("standalone_policy::x");
-        let global = symbolica::parse!("standalone_policy::global");
-        let alias = symbolica::parse!("standalone_policy::alias(0)");
+        let x = parse!("standalone_policy::x");
+        let global = parse!("standalone_policy::global");
+        let alias = parse!("standalone_policy::alias(0)");
         let function = symbol!("standalone_policy::function");
-        let print = |atom: &Atom| {
-            atom.printer(symbolica::printer::PrintOptions::file())
-                .to_string()
-        };
+        let print = |atom: &Atom| atom.printer(PrintOptions::file()).to_string();
         for tags in [Vec::new(), vec![Atom::num(7)]] {
             let call = |argument: Atom| {
                 FunctionBuilder::new(function)
@@ -2745,9 +2738,9 @@ mod tests {
                 ];
                 let json = serde_json::to_vec(&entries)?;
                 let parsed: Vec<SerializedFnMapEntry<String>> = serde_json::from_slice(&json)?;
-                let bytes = bincode::encode_to_vec(&parsed, bincode::config::standard())?;
+                let bytes = bincode::encode_to_vec(&parsed, config::standard())?;
                 let (restored, consumed): (Vec<SerializedFnMapEntry<String>>, _) =
-                    bincode::decode_from_slice(&bytes, bincode::config::standard())?;
+                    bincode::decode_from_slice(&bytes, config::standard())?;
                 assert_eq!(consumed, bytes.len());
                 assert_eq!(restored, entries);
                 let mut parsed = parse_fn_map_entries(&restored, &StateMap::default())?;
@@ -2876,9 +2869,9 @@ mod tests {
                 5 => stack.single_parametric.dual_shape = Some(Vec::new()),
                 _ => unreachable!(),
             }
-            let bytes = bincode::encode_to_vec(&malformed, bincode::config::standard())?;
+            let bytes = bincode::encode_to_vec(&malformed, config::standard())?;
             let (binary, _): (StandaloneEvaluatorArchive<(), String>, _) =
-                bincode::decode_from_slice(&bytes, bincode::config::standard())?;
+                bincode::decode_from_slice(&bytes, config::standard())?;
             let json: StandaloneEvaluatorArchive<(), String> =
                 serde_json::from_slice(&serde_json::to_vec(&malformed)?)?;
             for restored in [binary, json] {
@@ -2891,9 +2884,9 @@ mod tests {
                 );
             }
         }
-        let artifact_dir = std::env::temp_dir().join(format!(
+        let artifact_dir = env::temp_dir().join(format!(
             "gammaloop-standalone-artifact-dispatch-{}",
-            std::process::id()
+            process::id()
         ));
         let state_map = current_state_map()?;
         for (representation, coefficient) in [("cff", 3.0), ("ltd", 7.0)] {
@@ -3077,10 +3070,7 @@ mod tests {
     fn standalone_template_arb_external_constants_use_declared_precision() -> Result<()> {
         let x = parse_lit!(standalone_arb_constants::x);
         let coefficient = parse_lit!(standalone_arb_constants::c);
-        let print = |atom: &Atom| {
-            atom.printer(symbolica::printer::PrintOptions::file())
-                .to_string()
-        };
+        let print = |atom: &Atom| atom.printer(PrintOptions::file()).to_string();
         let rows = ParameterRows::new(
             vec![coefficient.clone()],
             vec![vec![1.into()], vec![2.into()]],
@@ -3107,7 +3097,7 @@ mod tests {
             };
             let ((mut evaluator, output_len), mut shared) = build_evaluator::<Float, _>(
                 &payload,
-                std::slice::from_ref(&x),
+                slice::from_ref(&x),
                 Vec::new(),
                 &state,
                 false,
@@ -3154,7 +3144,7 @@ mod tests {
         let mut runtime = StandaloneRuntimeEvaluator::build(
             &mut evaluator,
             StandaloneBackend::Symjit,
-            &std::env::temp_dir(),
+            &env::temp_dir(),
             "independent_guards",
         )?;
         for guards in [[0.0, 0.0], [0.0, 1.0], [1.0, 0.0], [1.0, 1.0]] {
@@ -3212,14 +3202,11 @@ mod tests {
             symbolica_state,
             graph_terms: Vec::new(),
         };
-        let path = std::env::temp_dir().join(format!(
+        let path = env::temp_dir().join(format!(
             "gammaloop-amplitude-template-symbol-map-{}.bin",
-            std::process::id()
+            process::id()
         ));
-        fs::write(
-            &path,
-            bincode::encode_to_vec(&archive, bincode::config::standard())?,
-        )?;
+        fs::write(&path, bincode::encode_to_vec(&archive, config::standard())?)?;
         let (loaded, state_map) = load_bin(&path)?;
         assert_eq!(loaded.three_d_representations, ["cff", "ltd"]);
         assert_eq!(encoded_atom.import_with_map(&state_map)?, atom);

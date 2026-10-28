@@ -515,6 +515,7 @@
       "crates/gammalooprs/src/numerator/spensotests.rs"
       "crates/gammalooprs/src/numerator/tests.rs"
       "crates/gammalooprs/src/utils/test_utils.rs"
+      "crates/gammalooprs/src/uv/parametric_binding_tests.rs"
       "crates/gammalooprs/src/uv/tests.rs"
     ];
     idenso = [

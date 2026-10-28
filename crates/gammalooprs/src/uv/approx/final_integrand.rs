@@ -1,41 +1,36 @@
-use std::{collections::BTreeMap, sync::Arc};
+use std::collections::BTreeMap;
+use std::sync::Arc;
 
-#[cfg(test)]
 use crate::cff::CutCFFIndex;
-use crate::{
-    debug_tags,
-    graph::Graph,
-    integrands::process::param_builder::FnMapEntry,
-    numerator::{aind::Aind, symbolica_ext::NumeratorAtomExt},
-    utils::{GS, W_},
-    uv::{
-        Integrands, ParametricIntegrandRow, ParametricIntegrandTerm, UVgenerationSettings,
-        UltravioletGraph,
-        approx::{
-            ForestNodeLike,
-            direct_3d::{Direct3dCts, DirectResidueBranches},
-            integrated::IntegratedCts,
-            local_3d::{LOCAL_3D_MASS_SCOPE, Localizer},
-            projected_4d::Projected4dCts,
-        },
-        marker::UvMarker,
-    },
+use crate::debug_tags;
+use crate::graph::Graph;
+use crate::integrands::process::param_builder::FnMapEntry;
+use crate::numerator::aind::Aind;
+use crate::numerator::symbolica_ext::NumeratorAtomExt;
+use crate::utils::{GS, W_};
+use crate::uv::approx::ForestNodeLike;
+use crate::uv::approx::direct_3d::{Direct3dCts, DirectResidueBranches};
+use crate::uv::approx::integrated::IntegratedCts;
+use crate::uv::approx::local_3d::{LOCAL_3D_MASS_SCOPE, Localizer};
+use crate::uv::approx::projected_4d::Projected4dCts;
+use crate::uv::marker::UvMarker;
+use crate::uv::{
+    Integrands, ParametricIntegrandRow, ParametricIntegrandTerm, UVgenerationSettings,
+    UltravioletGraph,
 };
 use color_eyre::Result;
+use eyre::{ensure, eyre};
 use gammaloop_tracing_filter::{LogMessage, debug_instrument};
-use idenso::{
-    IndexTooling,
-    color::{ColorSimplifier, ColorSimplifySettings},
-    shorthands::metric::MetricSimplifier,
-};
+use idenso::IndexTooling;
+use idenso::color::{ColorSimplifier, ColorSimplifySettings};
+use idenso::shorthands::metric::MetricSimplifier;
 use linnet::half_edge::subgraph::{Inclusion, SuBitGraph, SubSetLike, SubSetOps};
-use symbolica::{
-    atom::{Atom, AtomCore, AtomView, Indeterminate},
-    domains::rational::Rational,
-    function,
-    id::Replacement,
-    symbol,
-};
+use std::iter;
+use std::result::Result as StdResult;
+use symbolica::atom::{Atom, AtomCore, AtomView, Indeterminate};
+use symbolica::domains::rational::Rational;
+use symbolica::id::Replacement;
+use symbolica::{function, symbol};
 use three_dimensional_reps::{CffGenerationContext, RepresentationMode};
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct FinalIntegrands {
@@ -73,7 +68,7 @@ impl FinalIntegrands {
             let others = others
                 .into_iter()
                 .map(|other| {
-                    eyre::ensure!(
+                    ensure!(
                         other.representation == representation,
                         "cannot sum final integrands from different representations"
                     );
@@ -95,8 +90,8 @@ impl FinalIntegrands {
         let mut numerators = Vec::new();
         let mut scalars = Vec::new();
         let mut parametric_terms = Vec::new();
-        for source in std::iter::once(self).chain(others) {
-            eyre::ensure!(
+        for source in iter::once(self).chain(others) {
+            ensure!(
                 source.representation == representation,
                 "cannot sum final integrands from different representations"
             );
@@ -111,12 +106,12 @@ impl FinalIntegrands {
                     index.right_threshold_order,
                     index.lu_cut_order,
                 ];
-                eyre::ensure!(
+                ensure!(
                     orders.iter().flatten().all(|order| *order > 0),
                     "invalid zero residue order in {index:?}"
                 );
                 let selected_axes = orders.map(|order| order.is_some());
-                eyre::ensure!(
+                ensure!(
                     *axes.get_or_insert(selected_axes) == selected_axes,
                     "cannot sum different selected residue axes at {index:?}"
                 );
@@ -271,7 +266,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
         integrated: &IntegratedCts,
     ) -> Result<FinalIntegrands> {
         if current.subgraph().is_empty() {
-            return Err(eyre::eyre!(
+            return Err(eyre!(
                 "the empty forest must own the complete production CFF, not projected local-4D coefficients"
             ));
         }
@@ -310,9 +305,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
         // only the selected raw routing proposal into physical surfaces.
         let active_sectors = local_terms.sectors();
         if active_sectors.is_empty() {
-            return Err(eyre::eyre!(
-                "factorized local term has no active UV sectors"
-            ));
+            return Err(eyre!("factorized local term has no active UV sectors"));
         }
         // Restore the production-tree denominators after the outer CFF
         // contracts its loop-energy dependence.  The exact DDx GL0 UV ray
@@ -354,13 +347,13 @@ impl<'a> FinalIntegrandBuilder<'a> {
             let family = symbol!("gammalooprs::uv::numerator_family");
             let coefficient = symbol!("gammalooprs::uv::numerator_coefficient"; Scalar);
             if sector.coefficient.numerators().is_empty() {
-                return Err(eyre::eyre!(
+                return Err(eyre!(
                     "nonzero projected coefficient has no shared numerator family"
                 ));
             }
             for term in sector
                 .coefficient
-                .parametric_terms(&crate::cff::CutCFFIndex::new_all_none())
+                .parametric_terms(&CutCFFIndex::new_all_none())
             {
                 let entry = &term.numerator;
                 let weight_scope = DirectResidueBranches::numerator_scope().1;
@@ -436,16 +429,15 @@ impl<'a> FinalIntegrandBuilder<'a> {
                     .chain(outer_parameters.iter().cloned())
                     .collect::<Vec<_>>();
                 let prepared = Arc::new(FnMapEntry {
-                    lhs: family.call_args(
-                        std::iter::once(scope.1.clone()).chain(parameters.iter().cloned()),
-                    ),
+                    lhs: family
+                        .call_args(iter::once(scope.1.clone()).chain(parameters.iter().cloned())),
                     rhs,
                     args: parameters
                         .iter()
                         .cloned()
                         .map(Indeterminate::try_from)
-                        .collect::<std::result::Result<Vec<_>, _>>()
-                        .map_err(|error| eyre::eyre!(error))?,
+                        .collect::<StdResult<Vec<_>, _>>()
+                        .map_err(|error| eyre!(error))?,
                     tags: vec![scope.1],
                     inlining: entry.inlining,
                     is_alias: entry.is_alias,
@@ -458,7 +450,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
                     .coefficient_list::<u8>(&weights)
                     .into_iter()
                     .collect::<BTreeMap<_, _>>();
-                eyre::ensure!(
+                ensure!(
                     coefficients
                         .values()
                         .all(|value| !value.contains(&weight_scope)),
@@ -468,7 +460,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
                     .iter()
                     .map(|weight| coefficients.remove(weight).unwrap_or(Atom::Zero))
                     .collect::<Vec<_>>();
-                eyre::ensure!(
+                ensure!(
                     coefficients.is_empty(),
                     "routed child carrier is not homogeneous and linear in its private row weights"
                 );
@@ -479,7 +471,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
                 for ((key, integrands), (row_key, outer_arguments)) in
                     localized.iter_keys().zip(rows)
                 {
-                    eyre::ensure!(*key == row_key, "prepared outer residue order changed");
+                    ensure!(*key == row_key, "prepared outer residue order changed");
                     let mapped_carriers = child_carriers
                         .iter()
                         .map(|carrier| key.map_numerator(localizer.orientation, graph, carrier))
@@ -487,8 +479,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
                     let outer_coefficients = outer_arguments
                         .iter()
                         .map(|argument| {
-                            Rational::try_from(argument.as_view())
-                                .map_err(|error| eyre::eyre!(error))
+                            Rational::try_from(argument.as_view()).map_err(|error| eyre!(error))
                         })
                         .collect::<Result<Vec<_>>>()?;
                     let mut mapped_terms = Vec::new();
@@ -558,9 +549,8 @@ impl<'a> FinalIntegrandBuilder<'a> {
                     .push(integrands.clone());
             }
         }
-        let selector_free = selector_free.ok_or_else(|| {
-            eyre::eyre!("final 3D UV integrand contains no production energy maps")
-        })?;
+        let selector_free = selector_free
+            .ok_or_else(|| eyre!("final 3D UV integrand contains no production energy maps"))?;
         let representation = localizer.orientation.cff_options()?.representation;
         let summed = FinalIntegrands {
             integrands: allowed_zero,
@@ -668,32 +658,43 @@ impl<'a> FinalIntegrandBuilder<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        cff::{esurface::RaisedEsurfaceGroup, expression::OrientationID},
-        dot,
-        graph::{cuts::CutSet, parse::IntoGraph},
-        initialisation::test_initialise,
-        settings::global::OrientationPattern,
-        uv::{
-            ApproximationType, Spinney,
-            approx::{
-                OrientationProjection, Rooted, UVCtx,
-                local_4d::{Full4dCts, Local4dCts, uv_limit},
-                projected_4d::{Projected4dApproximation, Projected4dSector},
-            },
-            hedge_poset::OwnedForestNode,
-        },
+    use crate::cff::esurface::RaisedEsurfaceGroup;
+    use crate::cff::expression::OrientationID;
+    use crate::dot;
+    use crate::graph::cuts::CutSet;
+    use crate::graph::parse::IntoGraph;
+    use crate::initialisation;
+    use crate::integrands::evaluation::EvaluationMetaData;
+    use crate::integrands::process::evaluators::{
+        EvaluatorStack, InputParams, SingleOrAllOrientations, SliceMut,
     };
-    use linnet::half_edge::{involution::EdgeIndex, subgraph::InternalSubGraph};
-    use spenso::{
-        network::tags::SPENSO_TAG,
-        structure::representation::{Minkowski, RepName},
-    };
-    use symbolica::{atom::AtomView, parse, symbol};
+    use crate::integrands::process::param_builder::{ParamBuilder, ParamValuePairs};
+    use crate::processes::EvaluatorSettings;
+    use crate::settings::RuntimeSettings;
+    use crate::settings::global::OrientationPattern;
+    use crate::settings::global::{CompilationOptimizationLevel, CompilationOptionsSnapshot};
+    use crate::utils::F;
+    use crate::utils::hyperdual_utils::DualOrNot;
+    use crate::uv::approx::direct_3d::DirectResidueKey;
+    use crate::uv::approx::local_4d;
+    use crate::uv::approx::local_4d::{Full4dCts, Local4dCts};
+    use crate::uv::approx::projected_4d::{Projected4dApproximation, Projected4dSector};
+    use crate::uv::approx::{OrientationProjection, Rooted, UVCtx};
+    use crate::uv::hedge_poset::OwnedForestNode;
+    use crate::uv::{ApproximationType, Spinney};
+    use linnet::half_edge::involution::EdgeIndex;
+    use linnet::half_edge::involution::{EdgeVec, Orientation};
+    use linnet::half_edge::subgraph::InternalSubGraph;
+    use spenso::algebra::complex::Complex;
+    use spenso::network::tags::SPENSO_TAG;
+    use spenso::structure::representation::{Minkowski, RepName};
+    use symbolica::atom::AtomView;
+    use symbolica::parse_lit;
+    use symbolica::{parse, symbol};
 
     #[test]
     fn final_energy_copy_coalesces_owners_and_even_powers_after_taylor() -> Result<()> {
-        test_initialise()?;
+        initialisation::test_initialise()?;
         let graph: Graph = dot!(digraph final_energy {
             edge [num=1 mass=1];
             node [num=1];
@@ -731,7 +732,7 @@ mod tests {
 
     #[test]
     fn final_integrand_collects_tensor_factors_without_merging_denominators() -> Result<()> {
-        test_initialise()?;
+        initialisation::test_initialise()?;
         let graph: Graph = dot!(digraph factorized_final {
             edge [num=1 mass=1];
             node [num=1];
@@ -879,25 +880,7 @@ mod tests {
 
     #[test]
     fn final_factor_collection_preserves_inactive_singular_branches() -> Result<()> {
-        use crate::{
-            cff::expression::OrientationID,
-            integrands::evaluation::EvaluationMetaData,
-            integrands::process::{
-                evaluators::{EvaluatorStack, InputParams, SingleOrAllOrientations, SliceMut},
-                param_builder::{ParamBuilder, ParamValuePairs},
-            },
-            processes::EvaluatorSettings,
-            settings::{
-                RuntimeSettings,
-                global::{CompilationOptimizationLevel, CompilationOptionsSnapshot},
-            },
-            utils::F,
-            utils::hyperdual_utils::DualOrNot,
-        };
-        use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
-        use spenso::algebra::complex::Complex;
-
-        test_initialise()?;
+        initialisation::test_initialise()?;
         let x = Atom::var(symbol!("final_factor_test::guarded_x"));
         let wrapper = symbol!("final_factor_test::guarded_wrapper");
         let argument = symbol!("final_factor_test::guarded_argument");
@@ -910,7 +893,7 @@ mod tests {
         builder.pairs.additional_params = [x.clone()].into_iter().collect();
         builder
             .add_function(wrapper, vec![argument], Atom::var(argument))
-            .map_err(|error| eyre::eyre!(error))?;
+            .map_err(|error| eyre!(error))?;
         let parameter_count = builder.pairs.update_ranges();
         builder.values = vec![vec![Complex::new_re(F(0.0)); parameter_count]];
 
@@ -1030,26 +1013,7 @@ mod tests {
 
     #[test]
     fn final_factor_collection_preserves_closed_tensor_pairs() -> Result<()> {
-        use crate::{
-            cff::expression::OrientationID,
-            integrands::evaluation::EvaluationMetaData,
-            integrands::process::{
-                evaluators::{EvaluatorStack, InputParams, SingleOrAllOrientations, SliceMut},
-                param_builder::{ParamBuilder, ParamValuePairs},
-            },
-            processes::EvaluatorSettings,
-            settings::{
-                RuntimeSettings,
-                global::{CompilationOptimizationLevel, CompilationOptionsSnapshot},
-            },
-            utils::F,
-            utils::hyperdual_utils::DualOrNot,
-        };
-        use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
-        use spenso::algebra::complex::Complex;
-        use symbolica::parse_lit;
-
-        test_initialise()?;
+        initialisation::test_initialise()?;
         let index = parse_lit!(spenso::mink(4, 1));
         let temporal = GS.energy_delta(index.as_view());
         let v1 = GS.emr_vec(EdgeIndex(1), index.as_view()) + GS.ose(EdgeIndex(1)) * &temporal;
@@ -1077,7 +1041,7 @@ mod tests {
         let mut builder = ParamBuilder::new_empty();
         builder.pairs.residue_map_id = ParamValuePairs::default_from_symbol(GS.residue_map_id);
         builder.pairs.orientations = [GS.sign(EdgeIndex(0))].into_iter().collect();
-        builder.pairs.additional_params = std::iter::once(d)
+        builder.pairs.additional_params = iter::once(d)
             .chain((1..=2).flat_map(|edge| {
                 (1..=3).map(move |component| GS.emr_mom(EdgeIndex(edge), GS.cind(component)))
             }))
@@ -1185,7 +1149,7 @@ mod tests {
 
     #[test]
     fn projected_zero_sectors_preserve_cut_orders_without_energy_maps() -> Result<()> {
-        test_initialise()?;
+        initialisation::test_initialise()?;
         let mut graph: Graph = dot!(digraph projected_zero {
             edge [num=1 mass=1];
             node [num=1];
@@ -1249,7 +1213,7 @@ mod tests {
             spinney: Spinney::empty(&graph),
             topo_order: 0,
         };
-        let zero_local = uv_limit(
+        let zero_local = local_4d::uv_limit(
             &zero_prefix,
             &UVCtx::new(&graph, &settings),
             &current,
@@ -1300,7 +1264,7 @@ mod tests {
 
     #[test]
     fn ltd_final_addition_preserves_sparse_orders_and_numerator_rows() -> Result<()> {
-        test_initialise()?;
+        initialisation::test_initialise()?;
         let family = symbol!("gammalooprs::uv::numerator_family");
         let parameter = symbol!("ltd_final_addition_test::parameter");
         let (x, y, z) = symbol!(
@@ -1386,11 +1350,9 @@ mod tests {
                             vec![ParametricIntegrandRow {
                                 coefficients: vec![Rational::from(value)],
                                 carrier: Atom::one(),
-                                source_keys: vec![
-                                    crate::uv::approx::direct_3d::DirectResidueKey::production(
-                                        OrientationID(value as usize),
-                                    ),
-                                ],
+                                source_keys: vec![DirectResidueKey::production(OrientationID(
+                                    value as usize,
+                                ))],
                             }],
                         )?,
                     )],
@@ -1451,7 +1413,7 @@ mod tests {
 
     #[test]
     fn final_addition_rejects_incompatible_residue_support() -> Result<()> {
-        test_initialise()?;
+        initialisation::test_initialise()?;
         let first = CutCFFIndex {
             left_threshold_order: None,
             right_threshold_order: Some(1),
@@ -1527,7 +1489,7 @@ mod tests {
     fn frozen_localization_uses_actual_source_orders_and_strict_products() -> Result<()> {
         use crate::uv::approx::local_3d::{FrozenActiveCt, OrientationIntegrands};
 
-        test_initialise()?;
+        initialisation::test_initialise()?;
         let mut parent = CutSet::empty(0).residue_selector;
         parent.lu = Some(crate::graph::cuts::LuCutSelection {
             raised_group: RaisedEsurfaceGroup {
@@ -1578,7 +1540,7 @@ mod tests {
 
     #[test]
     fn final_factor_collection_handles_many_distinct_denominators() -> Result<()> {
-        test_initialise()?;
+        initialisation::test_initialise()?;
         let (a, b, denominator) = symbol!(
             "final_sparse_factor_test::a",
             "final_sparse_factor_test::b",
@@ -1616,7 +1578,7 @@ mod tests {
 
     #[test]
     fn branch_normalization_preserves_selectors_and_cut_support() -> Result<()> {
-        test_initialise()?;
+        initialisation::test_initialise()?;
         let graph: Graph = dot!(digraph normalization {
             edge [num=1 mass=1];
             node [num=1];
@@ -1678,7 +1640,7 @@ mod tests {
 
     #[test]
     fn termwise_tensor_normalization_matches_the_unfactored_pipeline() -> Result<()> {
-        test_initialise()?;
+        initialisation::test_initialise()?;
         let color = parse!("id(dind(cof(3,0)),cof(3,1))*id(dind(cof(3,1)),cof(3,0))/Nc");
         let minkowski = Minkowski {}.new_rep(4).to_symbolic([]);
         let q0 = GS.emr_vec(EdgeIndex::from(0), minkowski.clone());

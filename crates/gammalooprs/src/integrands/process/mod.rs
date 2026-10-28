@@ -5952,6 +5952,7 @@ pub(crate) mod tests {
         validate_process_runtime_settings,
     };
     use crate::cff::expression::OrientationID;
+    use crate::observables::AdditionalWeightKey;
     use crate::{
         dot,
         graph::{
@@ -8380,7 +8381,7 @@ pub(crate) mod tests {
             .additional_weights
             .weights
             .insert(
-                crate::observables::AdditionalWeightKey::Original,
+                AdditionalWeightKey::Original,
                 Complex::new_re(small.clone()),
             );
         assert!(
@@ -8388,7 +8389,7 @@ pub(crate) mod tests {
                 .contains("additional_weights[Original].re")
         );
 
-        let full_factor_key = crate::observables::AdditionalWeightKey::FullMultiplicativeFactor;
+        let full_factor_key = AdditionalWeightKey::FullMultiplicativeFactor;
         auxiliary.event_groups[0][0]
             .additional_weights
             .weights
@@ -8396,7 +8397,7 @@ pub(crate) mod tests {
         assert_eq!(
             auxiliary.clone().try_into_f64().unwrap().event_groups[0][0]
                 .additional_weights
-                .weights[&crate::observables::AdditionalWeightKey::Original],
+                .weights[&AdditionalWeightKey::Original],
             Complex::new_zero(),
         );
         // An unknown component of a complex multiplier cannot certify a tail,
@@ -8453,7 +8454,7 @@ pub(crate) mod tests {
             let mut mixing = result.clone();
             let weights = &mut mixing.event_groups[0][0].additional_weights.weights;
             weights.insert(full_factor_key, full_factor);
-            weights.insert(crate::observables::AdditionalWeightKey::Original, raw);
+            weights.insert(AdditionalWeightKey::Original, raw);
             assert!(
                 format!("{:#}", mixing.try_into_f64().unwrap_err())
                     .contains("additional_weights[Original]")
@@ -8471,11 +8472,11 @@ pub(crate) mod tests {
         let mut mixing = result.clone();
         let weights = &mut mixing.event_groups[0][0].additional_weights.weights;
         weights.insert(full_factor_key, full_factor);
-        weights.insert(crate::observables::AdditionalWeightKey::Original, raw);
+        weights.insert(AdditionalWeightKey::Original, raw);
         assert_eq!(
             mixing.try_into_f64().unwrap().event_groups[0][0]
                 .additional_weights
-                .weights[&crate::observables::AdditionalWeightKey::Original],
+                .weights[&AdditionalWeightKey::Original],
             Complex::new_zero()
         );
 

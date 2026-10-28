@@ -203,7 +203,9 @@ anchor = "pub fn warm_up(&mut self, model"
 # inputs. Cross-section export and ProcessIntegrand::warm_up are unchanged.
 # Runtime/model parameter refresh remains owned by ParamBuilder; export uses
 # a private builder and does not warm or mutate the integrand's runtime caches.
-digest = "58c1df696aaf45875740ed4453e6cdf509cc06d5"
+# No-impact attestation 2026-10-28: import normalization preserves the
+# documented ownership, data layout and evaluation contracts.
+digest = "32fb4541e075f31e68ff984c4018c71e7defdd8a"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/observables/events.rs"
@@ -263,7 +265,9 @@ anchor = "struct GammaLoopAPI {"
 # payloads, source-frame signs and JIT compilation snapshots; old states reject.
 # Reviewed 2026-10-15: Native thermal-weight records and one source frame preserve
 # exact detached residue maps; state16 rejects prior incompatible medium/representation layouts.
-digest = "9fa9db226aa882e2810ddf263a7472a852e6e01b"
+# No-impact attestation 2026-10-28: import normalization preserves the
+# documented ownership, data layout and evaluation contracts.
+digest = "abd8e9d73090658cc0102ae91e1b1e7596b849be"
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/python/residue_map.rs"
@@ -352,7 +356,10 @@ anchor = "pub(crate) struct ParametricResidueRows {"
 # Symbolica owns exact specialization, native dependency analysis, coefficient
 # writes, gathers and reduction. The note distinguishes ordinary summed programs
 # from SP staging at the caller and documents standalone rebuilding from source.
-digest = "3783a397b65d916fdddfc0686378cfa6e26bedb7"
+# No-impact attestation 2026-10-28: import normalization and equivalent
+# imported names preserve parameter-row construction, exact coefficients,
+# provenance, factorization and evaluation behavior.
+digest = "bad69743ef45b60a7e51a05b33a18c116881a0f1"
 
 [[section.note]]
 id = "integration-dashboard"
@@ -474,7 +481,13 @@ anchor = "pub struct Integrands {"
 # Reviewed 2026-10-10: Integrands owns retained scalar definitions together with
 # factorized numerator products and exact rows; algebra and resolution preserve both
 # stores.
-digest = "c0aed99dd60aa55df56a63ce478c1c8613906651"
+# No-impact attestation 2026-10-28: import normalization and equivalent
+# imported names preserve parameter-row construction, exact coefficients,
+# provenance, factorization and evaluation behavior.
+# Reviewed 2026-10-28: Cartesian products rebind coefficient captures in scalar
+# carriers together with numerator bodies. Exact diagnostic materialization binds
+# both pieces, preserving independent factor scopes and the documented row semantics.
+digest = "90ab0496195d34f9f6b2582ed2a594684b693239"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/uv/approx/projected_4d.rs"
@@ -491,7 +504,10 @@ anchor = "pub(crate) struct Local4dProjectionContext {"
 # full mode options, and each compute call reports only its shared-time delta.
 # Reviewed 2026-10-15: Borrowed projection options are cloned at the existing
 # ownership boundary; exact reconstruction and dispatch are unchanged.
-digest = "9183d692e8325791c41c69ff455b66f2c7ca46f4"
+# No-impact attestation 2026-10-28: import normalization and equivalent
+# imported names preserve parameter-row construction, exact coefficients,
+# provenance, factorization and evaluation behavior.
+digest = "a6ea81e4fef7d42d353c6078fb8b785aa6f5ec1b"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/uv/approx/final_integrand.rs"
@@ -512,7 +528,10 @@ anchor = "pub(crate) struct FinalIntegrandBuilder<'a> {"
 # production final composition is unchanged.
 # Reviewed 2026-10-15: Test compilation settings use the complete snapshot;
 # final-integrand composition and numerator factorization are unchanged.
-digest = "ecc1e1251658e77364df65668f452451c030b309"
+# No-impact attestation 2026-10-28: import normalization and equivalent
+# imported names preserve parameter-row construction, exact coefficients,
+# provenance, factorization and evaluation behavior.
+digest = "0722ebab5d9c6b84874bd4fb0e3a1eafd8609cd6"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/uv/approx/direct_3d/branches.rs"
@@ -524,7 +543,10 @@ anchor = "    pub(crate) fn series_preserving_numerators("
 # Reviewed 2026-10-10: Direct-3D branches retain main's soft provenance, compact
 # energy handling and conditional local-4D preparation; representation-independent
 # scalar stores survive composition.
-digest = "eaee8086271357e77599f7a26e8c93aa8af9db86"
+# No-impact attestation 2026-10-28: import normalization and equivalent
+# imported names preserve parameter-row construction, exact coefficients,
+# provenance, factorization and evaluation behavior.
+digest = "60deb201c6e6824943347a582064d78a4f97f4ec"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/numerator/symbolica_ext.rs"
@@ -536,7 +558,10 @@ anchor = "pub trait NumeratorAtomExt {"
 # Reviewed 2026-10-10: Numerator functions retain main's explicit inlining and
 # caller-alias metadata; joint preprocessing shares bodies before the final evaluator
 # policy applies.
-digest = "6dd402570aecc7fabc521e5c2f1bb8837c41171a"
+# No-impact attestation 2026-10-28: import normalization and equivalent
+# imported names preserve parameter-row construction, exact coefficients,
+# provenance, factorization and evaluation behavior.
+digest = "4cd936ae6d9f04552aefbfb3235c74e5dfe27ff1"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/uv/approx/local_3d/integrated_localizer.rs"
@@ -545,7 +570,10 @@ anchor = "    pub(crate) fn localize<S: ForestNodeLike>("
 # Reviewed 2026-09-28: Final local-4D addbacks retain the analytic finite
 # coefficient together with the supplied cograph/global numerator in exact rows.
 # Direct CFF3D localization remains Taylor-visible and attaches its cograph later.
-digest = "f4c589fe5a6a5fd06fa5e8ec6314b7aa029d7e3b"
+# No-impact attestation 2026-10-28: import normalization and equivalent
+# imported names preserve parameter-row construction, exact coefficients,
+# provenance, factorization and evaluation behavior.
+digest = "00ac458a4f8f6d47433e9e13aa727b446fcedd3f"
 
 [[section.note]]
 id = "spenso-parsing-flow"
@@ -1402,7 +1430,10 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # Reviewed 2026-10-12: Package source ownership now includes the shared
 # Linnest asset builder used by GammaLoop and Clinnet; the existing per-
 # package filtering boundary is retained.
-digest = "4b54f528d1200ddef5c742c27c80c825bb042022"
+# Reviewed 2026-10-28: the coefficient-carrier binding regression belongs to
+# GammaLoop's own test inputs. Production-only builds exclude that test module;
+# aggregate and package test source closures retain it through the existing owner.
+digest = "d922aeda0d9dc03257b00774e8f2e793c6e8fea1"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"

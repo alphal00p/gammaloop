@@ -1,19 +1,26 @@
 use color_eyre::{Result, eyre::eyre};
 use std::fs;
 
-use gammaloop_api::state::SyncSettings;
+use gammaloop_api::state::{State, SyncSettings};
 use gammalooprs::feyngen::diagram_generator::evaluate_overall_factor;
 use gammalooprs::feyngen::diagram_generator::evaluate_sign_origin;
-use gammalooprs::integrands::process::amplitude::load::StandaloneEvaluatorArchive;
+use gammalooprs::integrands::process::amplitude::load::{
+    StandaloneBackend, StandaloneEvaluationRequest, StandaloneEvaluatorArchive, StandaloneMethod,
+};
 use gammalooprs::integrands::process::cross_section::load::StandaloneCrossSectionArchive;
+use gammalooprs::model::UFOSymbol;
 use gammalooprs::processes::{
     CycleSignature, GraphGroupSelectionSpec, GraphSelectionSignatureInventory, ProcessCollection,
     RaisedCutSignatureInventory, RaisedPropagatorScope, RaisedPropagatorSignature,
     SelectionPolarity, StandaloneDataFormat, StandaloneExportMode, StandaloneExportSettings,
     VertexSignature,
 };
+use gammalooprs::utils::GS;
 
-use gammaloop_integration_tests::{CLIState, get_test_cli, get_tests_workspace_path, run_commands};
+use gammaloop_integration_tests::{
+    CLIState, SERIAL_TEST_LOCK, get_test_cli, get_tests_workspace_path, run_commands,
+};
+use serde_json::Value;
 use symbolica::{
     atom::{Atom, AtomCore},
     domains::float::Complex,
@@ -752,13 +759,7 @@ fn scalar_lu_generation_with_e2e_hack_compiles() -> Result<()> {
 
 #[test]
 fn amplitude_standalone_export_reloads_and_evaluates() -> Result<()> {
-    use gammaloop_api::state::State;
-    use gammalooprs::integrands::process::amplitude::load::{
-        StandaloneBackend, StandaloneEvaluationRequest, StandaloneMethod,
-    };
-    use gammalooprs::{model::UFOSymbol, utils::GS};
-
-    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
+    let _serial_guard = SERIAL_TEST_LOCK.lock();
     let workspace = get_tests_workspace_path().join("amplitude_standalone_export");
     let output_dir = workspace.with_extension("standalone");
     if workspace.exists() {
@@ -798,7 +799,7 @@ fn amplitude_standalone_export_reloads_and_evaluates() -> Result<()> {
 
         let archive_path = exported_base.join("standalone_evaluators.json");
         assert!(exported_base.join("standalone_evaluators_rust.rs").exists());
-        let archive_json: serde_json::Value = serde_json::from_slice(&fs::read(archive_path)?)?;
+        let archive_json: Value = serde_json::from_slice(&fs::read(archive_path)?)?;
         let archive: StandaloneEvaluatorArchive<(), String> =
             serde_json::from_value(archive_json.clone())?;
         let mut loaded = archive.load()?;

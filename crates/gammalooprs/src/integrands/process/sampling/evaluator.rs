@@ -9,11 +9,9 @@
 use color_eyre::Result;
 use eyre::eyre;
 use spenso::algebra::complex::Complex;
-use symbolica::{
-    atom::{Atom, AtomView},
-    domains::float::Complex as SymComplex,
-    prelude::*,
-};
+use symbolica::atom::{Atom, AtomView};
+use symbolica::domains::float::Complex as SymComplex;
+use symbolica::prelude::*;
 
 use crate::{
     integrands::process::{GenericEvaluator, GenericEvaluatorFloat},

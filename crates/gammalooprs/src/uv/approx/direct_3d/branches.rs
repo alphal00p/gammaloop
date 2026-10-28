@@ -20,20 +20,15 @@ use symbolica::{
     symbol,
 };
 
-use crate::{
-    cff::{
-        expression::{OrientationID, energy_map_replacements_gs},
-        surface::LinearEnergyExpr,
-    },
-    graph::Graph,
-    integrands::process::param_builder::FnMapEntry,
-    numerator::symbolica_ext::NumeratorAtomExt,
-    utils::{GS, external_energy_atom_from_index, ose_atom_from_index},
-    uv::{
-        Integrands, ParametricIntegrandRow, ParametricIntegrandTerm,
-        approx::{OrientationProjection, local_3d::OrientationIntegrands},
-    },
-};
+use crate::cff::expression::{OrientationID, energy_map_replacements_gs};
+use crate::cff::surface::LinearEnergyExpr;
+use crate::graph::Graph;
+use crate::integrands::process::param_builder::FnMapEntry;
+use crate::numerator::symbolica_ext::NumeratorAtomExt;
+use crate::utils::{GS, external_energy_atom_from_index, ose_atom_from_index};
+use crate::uv::approx::OrientationProjection;
+use crate::uv::approx::local_3d::OrientationIntegrands;
+use crate::uv::{Integrands, ParametricIntegrandRow, ParametricIntegrandTerm};
 
 use super::coefficients::ScalarCoefficients;
 
@@ -1208,28 +1203,27 @@ impl Neg for DirectResidueBranches {
 
 #[cfg(test)]
 mod tests {
+    use crate::initialisation;
     use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
     use spenso::structure::representation::{LibraryRep, Minkowski, RepName};
-    use symbolica::{domains::rational::Rational, function, id::Replacement};
+    use symbolica::domains::rational::Rational;
+    use symbolica::function;
+    use symbolica::id::Replacement;
     use typed_index_collections::TiVec;
 
-    use crate::{
-        cff::{
-            CutCFFIndex,
-            expression::{OrientationData, OrientationExpression},
-        },
-        dot,
-        graph::{Graph, parse::IntoGraph},
-        initialisation::test_initialise,
-        settings::global::OrientationPattern,
-        utils::GS,
-    };
+    use crate::cff::CutCFFIndex;
+    use crate::cff::expression::{OrientationData, OrientationExpression};
+    use crate::dot;
+    use crate::graph::Graph;
+    use crate::graph::parse::IntoGraph;
+    use crate::settings::global::OrientationPattern;
+    use crate::utils::GS;
 
     use super::*;
 
     #[test]
     fn scalar_resolution_shares_bindings_and_numerator_bodies_across_residue_rows() -> Result<()> {
-        test_initialise()?;
+        initialisation::test_initialise()?;
         let scalar = Integrands::scalar_symbol();
         let family = symbol!("gammalooprs::uv::numerator_family");
         let parameter = symbol!("shared_scalar_resolution_test::p");
@@ -1313,7 +1307,7 @@ mod tests {
 
     #[test]
     fn shared_numerator_series_normalizes_known_multilinear_owners() -> Result<()> {
-        test_initialise()?;
+        initialisation::test_initialise()?;
         let variable = symbol!("shared_multilinear_test::t"; Scalar);
         let s = symbol!("shared_multilinear_test::s"; Scalar);
         let z = symbol!("shared_multilinear_test::z"; Scalar);
@@ -1458,7 +1452,7 @@ mod tests {
 
     #[test]
     fn shared_numerator_series_does_not_capture_multilinear_scope_names() -> Result<()> {
-        test_initialise()?;
+        initialisation::test_initialise()?;
         let tag = DirectResidueBranches::numerator_scope().1;
         let series_scope = DirectResidueBranches::numerator_scope().1;
         let next = NUMERATOR_SCOPE.load(Ordering::Relaxed);
@@ -1525,7 +1519,7 @@ mod tests {
 
     #[test]
     fn shared_numerator_series_preserves_independent_tensor_factors() -> Result<()> {
-        test_initialise()?;
+        initialisation::test_initialise()?;
         let variable = symbol!("shared_series_factor_test::t");
         let [a, b, c, d] = ["a", "b", "c", "d"].map(|name| {
             Atom::var(symbol!(
@@ -1620,7 +1614,7 @@ mod tests {
 
     #[test]
     fn shared_numerator_series_matches_specialized_laurent_products() -> Result<()> {
-        test_initialise()?;
+        initialisation::test_initialise()?;
         let variable = symbol!("direct_series_test::t");
         let parameters = ["sigma", "node", "tau", "other_node"]
             .map(|name| Atom::var(symbol!(format!("direct_series_test::{name}").as_str())));
@@ -1753,7 +1747,7 @@ mod tests {
 
     #[test]
     fn shared_numerator_series_differentiates_scalar_denominators_once() -> Result<()> {
-        test_initialise()?;
+        initialisation::test_initialise()?;
         static DERIVATIVES: AtomicUsize = AtomicUsize::new(0);
         let variable = symbol!("direct_probe_reuse_test::t");
         let t = Atom::var(variable);
@@ -1811,7 +1805,7 @@ mod tests {
 
     #[test]
     fn shared_numerator_series_handles_finite_zero_probes_and_cancellation() -> Result<()> {
-        test_initialise()?;
+        initialisation::test_initialise()?;
         let variable = symbol!("direct_zero_series_test::t");
         let t = Atom::var(variable);
         let a = Atom::var(symbol!("direct_zero_series_test::a"));
@@ -1864,7 +1858,7 @@ mod tests {
 
     #[test]
     fn shared_numerator_exact_series_keeps_tiny_inverse_differences() -> Result<()> {
-        test_initialise()?;
+        initialisation::test_initialise()?;
         let variable = symbol!("shared_exact_inverse_test::t");
         let t = Atom::var(variable);
         let x = Atom::var(symbol!("shared_exact_inverse_test::x"));
@@ -1924,7 +1918,7 @@ mod tests {
 
     #[test]
     fn shared_numerator_exact_negative_endpoint_lifts_bodies_and_keeps_empty_roots() -> Result<()> {
-        test_initialise()?;
+        initialisation::test_initialise()?;
         let variable = symbol!("shared_exact_endpoint_test::t");
         let t = Atom::var(variable);
         let a = Atom::var(symbol!("shared_exact_endpoint_test::a"));
@@ -1974,7 +1968,7 @@ mod tests {
 
     #[test]
     fn shared_numerator_series_rejects_singular_specialization_and_hidden_calls() -> Result<()> {
-        test_initialise()?;
+        initialisation::test_initialise()?;
         let variable = symbol!("direct_invalid_series_test::t");
         let parameter = symbol!("direct_invalid_series_test::z");
         let t = Atom::var(variable);
@@ -2022,7 +2016,7 @@ mod tests {
 
     #[test]
     fn shared_numerator_series_rejects_projected_parametric_rows() -> Result<()> {
-        test_initialise()?;
+        initialisation::test_initialise()?;
         let variable = symbol!("direct_parametric_series_test::t");
         let parameter = symbol!("direct_parametric_series_test::z");
         let tag = DirectResidueBranches::numerator_scope().1;
@@ -2062,7 +2056,7 @@ mod tests {
 
     #[test]
     fn prepared_numerator_keeps_full_affine_rows_and_independent_sampling_nodes() -> Result<()> {
-        test_initialise()?;
+        initialisation::test_initialise()?;
         let graph: Graph = dot!(
             digraph G {
                 edge [particle="scalar_1"];
@@ -2202,7 +2196,7 @@ mod tests {
 
     #[test]
     fn prepared_numerator_reuses_vector_loop_and_external_mapping_rules() -> Result<()> {
-        test_initialise()?;
+        initialisation::test_initialise()?;
         let graph: Graph = dot!(digraph G {
             edge [num=1 mass=0]
             node [num=1]
@@ -2266,7 +2260,7 @@ mod tests {
 
     #[test]
     fn one_source_residue_map_is_a_homomorphism_for_all_factorized_factors() -> Result<()> {
-        test_initialise()?;
+        initialisation::test_initialise()?;
         let graph: Graph = dot!(
             digraph G {
                 edge [particle="scalar_1"];
@@ -2441,7 +2435,7 @@ mod tests {
     fn captured_gl1_numerator_shares_one_body_across_all_residue_rows() -> Result<()> {
         use crate::cff::orientations::GraphOrientation;
 
-        test_initialise()?;
+        initialisation::test_initialise()?;
         // Replay the historical source140 Taylor-entry tensor without distributing
         // its vertex sums. This tests mapping and selector support, not a fresh
         // physical generation or the subsequent Taylor operation.

@@ -597,6 +597,7 @@ fn py_builtin_from_json_number<'py>(
 #[cfg(test)]
 mod settings_wrapper_tests {
     use super::*;
+    use gammalooprs::settings::runtime::OverlapCenterObjective;
     use pyo3::types::PyAnyMethods;
 
     #[test]
@@ -718,7 +719,6 @@ local_uv_cts_from_expanded_4d_integrands = true
 
     #[test]
     fn runtime_settings_snapshot_exposes_overlap_objectives() {
-        use gammalooprs::settings::runtime::OverlapCenterObjective;
         Python::initialize();
         let settings: RuntimeSettings = toml::from_str(
             "[subtraction.overlap_settings]\nobjective='min_sum'\nenable_heuristics=false",

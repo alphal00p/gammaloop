@@ -15,31 +15,27 @@ use symbolica::{
     state::State,
 };
 
-use crate::{
-    cff::CutCFFIndex,
-    integrands::process::{
-        GenericEvaluator, GenericEvaluatorFloat, ProcessIntegrandImpl,
-        amplitude::{
-            AmplitudeIntegrand,
-            load::{
-                STANDALONE_EVALUATORS_VERSION, StandaloneAmplitudeThresholdVariant,
-                StandaloneComplexInput, StandaloneCutCFFIndex, StandaloneEvaluatorArchive,
-                StandaloneEvaluatorStackArchive, StandaloneGenericEvaluatorArchive,
-                StandaloneGraphTermArchive, StandaloneIndexedEvaluatorStackArchive,
-            },
-        },
-        cross_section::export::export_threshold_multiplier_collection,
-        validate_process_runtime_settings,
-    },
-    model::Model,
-    momentum::ThreeMomentum,
-    momentum::sample::{LoopMomenta, MomentumSample},
-    processes::{
-        StandaloneDataFormat, StandaloneExportMode, StandaloneExportSettings,
-        StandaloneNumericTarget, ThresholdCountertermOrigin,
-    },
-    utils::{ArbPrec, F, FloatLike, f128},
+use crate::cff::CutCFFIndex;
+use crate::integrands::process::amplitude::AmplitudeIntegrand;
+use crate::integrands::process::amplitude::load::{
+    STANDALONE_EVALUATORS_VERSION, StandaloneAmplitudeThresholdVariant, StandaloneComplexInput,
+    StandaloneCutCFFIndex, StandaloneEvaluatorArchive, StandaloneEvaluatorStackArchive,
+    StandaloneGenericEvaluatorArchive, StandaloneGraphTermArchive,
+    StandaloneIndexedEvaluatorStackArchive,
 };
+use crate::integrands::process::cross_section::export::export_threshold_multiplier_collection;
+use crate::integrands::process::{
+    GenericEvaluator, GenericEvaluatorFloat, ProcessIntegrandImpl,
+    validate_process_runtime_settings,
+};
+use crate::model::Model;
+use crate::momentum::ThreeMomentum;
+use crate::momentum::sample::{LoopMomenta, MomentumSample};
+use crate::processes::{
+    StandaloneDataFormat, StandaloneExportMode, StandaloneExportSettings, StandaloneNumericTarget,
+    ThresholdCountertermOrigin,
+};
+use crate::utils::{ArbPrec, F, FloatLike, f128};
 
 const STANDALONE_DATA_FILE: &str = "standalone_evaluators";
 const STANDALONE_RUST_SCRIPT_FILE: &str = "standalone_evaluators_rust.rs";
@@ -601,22 +597,24 @@ mod standalone_template_tests;
 #[cfg(test)]
 mod tests {
     use super::{STANDALONE_EVALUATORS_VERSION, standalone_rust_script};
+    use crate::initialisation;
+    use crate::integrands::process::amplitude::export;
+    use crate::integrands::process::evaluators::GenericEvaluator;
+    use crate::processes::EvaluatorSettings;
+    use eyre::{Result, eyre};
+    use symbolica::evaluate::ParameterRows;
+    use symbolica::prelude::*;
 
     #[test]
-    fn exact_row_export_still_requires_stored_source_atoms() -> eyre::Result<()> {
-        use crate::{
-            integrands::process::evaluators::GenericEvaluator, processes::EvaluatorSettings,
-        };
-        use symbolica::{evaluate::ParameterRows, prelude::*};
-
-        crate::initialisation::test_initialise()?;
+    fn exact_row_export_still_requires_stored_source_atoms() -> Result<()> {
+        initialisation::test_initialise()?;
         let x = parse_lit!(standalone_source_rows::x);
         let row_parameter = parse_lit!(standalone_source_rows::c);
         let rows = ParameterRows::new(
             vec![row_parameter.clone()],
             vec![vec![1.into()], vec![2.into()]],
         )
-        .map_err(|error| eyre::eyre!(error))?;
+        .map_err(|error| eyre!(error))?;
         let evaluator = GenericEvaluator::new_from_raw_params(
             [x.clone() * row_parameter],
             &[x],
@@ -631,7 +629,7 @@ mod tests {
             },
             Some(rows),
         )?;
-        let error = super::export_generic_evaluator::<String>(&evaluator)
+        let error = export::export_generic_evaluator::<String>(&evaluator)
             .err()
             .expect("exact bindings cannot replace a missing source expression");
         assert!(error.to_string().contains("store_atom=true"), "{error}");

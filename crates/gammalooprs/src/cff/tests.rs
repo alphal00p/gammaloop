@@ -1,47 +1,41 @@
-use std::{collections::BTreeSet, fmt::Write};
+use std::collections::BTreeSet;
+use std::fmt::Write;
 
 use super::expression::{CutCffResidueAxis, ThreeDExpression};
 use super::*;
-use crate::{
-    dot,
-    graph::{LMBext, parse::IntoGraph},
-    initialisation::test_initialise,
-    integrands::{
-        evaluation::EvaluationMetaData,
-        process::{
-            GenericEvaluatorFloat,
-            evaluators::{EvaluatorStack, SingleOrAllOrientations},
-        },
-    },
-    momentum::{
-        ThreeMomentum,
-        sample::{BareMomentumSample, ExternalFourMomenta, LoopMomenta, MomentumSample},
-    },
-    processes::EvaluatorSettings,
-    settings::RuntimeSettings,
-    utils::{ArbPrec, F, FloatLike, W_, cut_energy},
-    uv::{
-        UltravioletGraph,
-        approx::{OrientationProjection, local_3d::Localizer, local_4d::Full4dCts},
-    },
+use crate::dot;
+use crate::graph::LMBext;
+use crate::graph::parse::IntoGraph;
+use crate::initialisation::test_initialise;
+use crate::integrands::evaluation::EvaluationMetaData;
+use crate::integrands::process::GenericEvaluatorFloat;
+use crate::integrands::process::evaluators::{EvaluatorStack, SingleOrAllOrientations};
+use crate::momentum::ThreeMomentum;
+use crate::momentum::sample::{
+    BareMomentumSample, ExternalFourMomenta, LoopMomenta, MomentumSample,
 };
+use crate::processes::EvaluatorSettings;
+use crate::settings::RuntimeSettings;
+use crate::utils::{ArbPrec, F, FloatLike, W_, cut_energy};
+use crate::uv::UltravioletGraph;
+use crate::uv::approx::OrientationProjection;
+use crate::uv::approx::local_3d::Localizer;
+use crate::uv::approx::local_4d::Full4dCts;
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
+use linnet::half_edge::subgraph::subset::SubSet;
 use linnet::half_edge::subgraph::{
-    InternalSubGraph, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps, subset::SubSet,
+    InternalSubGraph, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps,
 };
-use spenso::algebra::{algebraic_traits::IsZero, complex::Complex};
-use symbolica::{
-    atom::FunctionBuilder,
-    domains::{
-        float::{Complex as SymComplex, Real},
-        integer::IntegerRing,
-        rational::{Fraction, Rational},
-    },
-    evaluate::ExpressionEvaluator,
-    function,
-    id::Replacement,
-};
+use spenso::algebra::algebraic_traits::IsZero;
+use spenso::algebra::complex::Complex;
+use symbolica::atom::FunctionBuilder;
+use symbolica::domains::float::{Complex as SymComplex, Real};
+use symbolica::domains::integer::IntegerRing;
+use symbolica::domains::rational::{Fraction, Rational};
+use symbolica::evaluate::ExpressionEvaluator;
+use symbolica::function;
+use symbolica::id::Replacement;
 use three_dimensional_reps::{OrientationData, OrientationID, ThreeDGraphSource, repeated_groups};
 use typed_index_collections::TiVec;
 

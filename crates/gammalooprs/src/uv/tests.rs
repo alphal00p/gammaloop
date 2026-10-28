@@ -1,7 +1,11 @@
 #![allow(dead_code, unused_variables, non_snake_case)]
 
 use std::collections::BTreeSet;
+use std::io::Cursor;
+use std::sync::Arc;
 
+use crate::GammaLoopContextContainer;
+use crate::cff::CutCFFIndex;
 use crate::cff::expression::OrientationID;
 
 use crate::graph::cuts::CutSet;
@@ -14,12 +18,14 @@ use crate::graph::vertex::ParseVertex;
 use crate::graph::{LMBext, LoopMomentumBasis};
 use crate::initialisation::test_initialise;
 use crate::integrands::process::OrientationProfileMode;
+use crate::integrands::process::param_builder::FnMapEntry;
 use crate::model::Model;
 use crate::momentum::sample::LoopIndex;
 use crate::processes::{Amplitude, AmplitudeGraph};
 use crate::settings::GlobalSettings;
 use crate::settings::global::OrientationPattern;
 use crate::utils::{GS, W_};
+use crate::uv::approx::direct_3d::{DirectResidueBranches, DirectResidueKey};
 use crate::uv::approx::{CutStructure, OrientationProjection};
 use crate::uv::profile::{ProfileSettings, UVProfileable};
 use crate::uv::wood::CutWoods;
@@ -28,13 +34,19 @@ use crate::uv::{
     UVOrchestrator, UVgenerationSettings, UltravioletGraph,
     marker::{UvMarker, UvOperation},
 };
+use crate::uv::{Integrands, ParametricIntegrandRow, ParametricIntegrandTerm};
 
 use linnet::half_edge::involution::{EdgeIndex, Hedge};
 
 use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike, SubSetOps};
 use linnet::half_edge::{builder::HedgeGraphBuilder, involution::Flow};
 
+use bincode::config;
+use eyre::Report;
 use symbolica::atom::Symbol;
+use symbolica::domains::rational::Rational;
+use symbolica::evaluate::InliningPolicy;
+use symbolica::state::State;
 use symbolica::symbol;
 
 use crate::{
@@ -179,7 +191,8 @@ fn integrands_bulk_add_checks_every_complete_cut_shape() -> Result<(), eyre::Rep
 #[test]
 fn integrands_retain_flat_numerator_definitions_through_arithmetic_and_persistence()
 -> Result<(), eyre::Report> {
-    use std::{io::Cursor, sync::Arc};
+    use std::io::Cursor;
+    use std::sync::Arc;
     use symbolica::state::State;
 
     use crate::{
@@ -272,25 +285,14 @@ fn integrands_retain_flat_numerator_definitions_through_arithmetic_and_persisten
 
 #[test]
 fn parametric_integrands_preserve_cartesian_products_and_additive_source_identity()
--> Result<(), eyre::Report> {
-    use crate::{
-        GammaLoopContextContainer,
-        cff::CutCFFIndex,
-        integrands::process::param_builder::FnMapEntry,
-        uv::{
-            Integrands, ParametricIntegrandRow, ParametricIntegrandTerm,
-            approx::direct_3d::{DirectResidueBranches, DirectResidueKey},
-        },
-    };
-    use std::{io::Cursor, sync::Arc};
-    use symbolica::{domains::rational::Rational, state::State};
+-> Result<(), Report> {
     test_initialise()?;
     let cut = CutCFFIndex::new_all_none();
     let x = Atom::var(symbol!("parametric_integrands_test::x"));
     let parameter = symbol!("parametric_integrands_test::coefficient");
     // Reusing the same formal key in independent factors must not identify
     // their row values when the product introduces a Cartesian row table.
-    let make = |samples: &[i64], offset: i64| -> color_eyre::Result<Integrands> {
+    let make = |samples: &[i64], offset: i64| -> Result<Integrands, Report> {
         let (_, tag) = DirectResidueBranches::numerator_scope();
         let entry = Arc::new(FnMapEntry {
             is_alias: false,
@@ -393,14 +395,14 @@ fn parametric_integrands_preserve_cartesian_products_and_additive_source_identit
     assert!(product.zero_like().is_zero());
     assert!(product.zero_like().parametric_terms(&cut).is_empty());
     assert!(product.checked_zip(&product, |_, a, b| Ok(a + b)).is_err());
-    let encoded = bincode::encode_to_vec(&product, bincode::config::standard())?;
+    let encoded = bincode::encode_to_vec(&product, config::standard())?;
     let mut state = Vec::new();
     State::export(&mut state)?;
     let state_map = State::import(&mut Cursor::new(state), None)?;
     let model = Model::default();
     let (decoded, consumed): (Integrands, _) = bincode::decode_from_slice_with_context(
         &encoded,
-        bincode::config::standard(),
+        config::standard(),
         GammaLoopContextContainer {
             state_map: &state_map,
             model: &model,
@@ -520,7 +522,8 @@ fn integrands_reject_formal_bindings_that_capture_tags_or_each_other() -> Result
 #[test]
 fn integrands_retain_parametric_scalar_definitions_through_arithmetic_and_persistence()
 -> Result<(), eyre::Report> {
-    use std::{io::Cursor, sync::Arc};
+    use std::io::Cursor;
+    use std::sync::Arc;
     use symbolica::state::State;
 
     use crate::{
@@ -3201,15 +3204,7 @@ mod failing {
 }
 
 #[test]
-fn retained_scalar_definitions_follow_parametric_products_and_sums() -> Result<(), eyre::Report> {
-    use crate::{
-        cff::CutCFFIndex,
-        integrands::process::param_builder::FnMapEntry,
-        uv::{Integrands, ParametricIntegrandRow, ParametricIntegrandTerm},
-    };
-    use std::sync::Arc;
-    use symbolica::domains::rational::Rational;
-
+fn retained_scalar_definitions_follow_parametric_products_and_sums() -> Result<(), Report> {
     test_initialise()?;
     let parameter = symbol!("uv_scalar_rows_test::parameter");
     let p = Atom::var(parameter);
@@ -3221,7 +3216,7 @@ fn retained_scalar_definitions_follow_parametric_products_and_sums() -> Result<(
         rhs: &p + 1,
         args: vec![parameter.into()],
         tags: vec![tag.clone()],
-        inlining: symbolica::evaluate::InliningPolicy::Always,
+        inlining: InliningPolicy::Always,
         is_alias: false,
     });
     let numerator = Arc::new(FnMapEntry {
@@ -3230,7 +3225,7 @@ fn retained_scalar_definitions_follow_parametric_products_and_sums() -> Result<(
         ..scalar.as_ref().clone()
     });
     let cut = CutCFFIndex::new_all_none();
-    let source = |constant, values: &[i64]| -> Result<Integrands, eyre::Report> {
+    let source = |constant, values: &[i64]| -> Result<Integrands, Report> {
         Integrands::from_iter([(cut, Atom::num(constant))])
             .with_parametric_terms([(
                 cut,

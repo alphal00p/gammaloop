@@ -1,25 +1,18 @@
-use std::{
-    collections::{HashMap, HashSet},
-    ops::Deref,
-    sync::Arc,
-};
+use std::collections::{HashMap, HashSet};
+use std::ops::Deref;
+use std::sync::Arc;
 
 use color_eyre::eyre::{bail, ensure};
 use idenso::{
     color::{CS, ColorSimplifier},
     representations::{ColorAdjoint, ColorFundamental},
 };
-use spenso::{
-    network::parsing::{
-        AtomStructureExt, ParseSettings, SchoonschipExpansionMode, ShorthandParsing,
-        StrictTensorFilter,
-    },
-    shadowing::{ANTISYM, CYCLIC, SYM},
-    structure::{
-        representation::{LibraryRep, Minkowski, RepName},
-        slot::{IsAbstractSlot, Slot},
-    },
+use spenso::network::parsing::{
+    AtomStructureExt, ParseSettings, SchoonschipExpansionMode, ShorthandParsing, StrictTensorFilter,
 };
+use spenso::shadowing::{ANTISYM, CYCLIC, SYM};
+use spenso::structure::representation::{LibraryRep, Minkowski, RepName};
+use spenso::structure::slot::{IsAbstractSlot, Slot};
 
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomType, AtomView, Symbol},
@@ -35,7 +28,8 @@ use crate::{
     utils::{GS, TENSORLIB, W_},
 };
 
-use super::{ParsingNet, aind::Aind};
+use super::ParsingNet;
+use super::aind::Aind;
 pub type ParsingNetError = spenso::network::TensorNetworkError<
     spenso::structure::IndexlessNamedStructure<
         Symbol,

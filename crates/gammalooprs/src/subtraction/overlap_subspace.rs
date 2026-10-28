@@ -25,8 +25,11 @@ use ahash::HashMapExt;
 use ahash::HashSet;
 use bincode_trait_derive::Decode;
 use bincode_trait_derive::Encode;
-use clarabel::algebra::*;
-use clarabel::solver::*;
+use clarabel::algebra::CscMatrix;
+use clarabel::solver::SupportedConeT::{NonnegativeConeT, SecondOrderConeT};
+use clarabel::solver::{
+    DefaultSettings, DefaultSettingsBuilder, DefaultSolver, IPSolver, SolverStatus, SupportedConeT,
+};
 use eyre::{Result, eyre};
 use itertools::Itertools;
 use linnet::half_edge::involution::EdgeVec;

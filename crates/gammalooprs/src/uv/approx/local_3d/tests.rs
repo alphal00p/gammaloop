@@ -1,28 +1,22 @@
 use super::{OrientationIntegrandBranch, OrientationIntegrands};
-use crate::{
-    cff::{
-        CutCFFIndex,
-        expression::{
-            GammaLoopOrientationExpression, OrientationData, OrientationExpression, OrientationID,
-        },
-        orientations::GraphOrientation,
-        surface::LinearEnergyExpr,
-    },
-    dot,
-    graph::{FeynmanGraph, FourDDenominator, Graph, LMBext, cuts::CutSet, parse::IntoGraph},
-    initialisation::test_initialise,
-    settings::global::OrientationPattern,
-    utils::GS,
-    uv::{
-        ApproximationType, Spinney, UltravioletGraph,
-        approx::{
-            ForestNodeLike, OrientationProjection,
-            direct_3d::{Direct3dCts, DirectResidueBranches},
-            local_3d::Localizer,
-        },
-        hedge_poset::OwnedForestNode,
-    },
+use crate::cff::CutCFFIndex;
+use crate::cff::expression::{
+    GammaLoopOrientationExpression, OrientationData, OrientationExpression, OrientationID,
 };
+use crate::cff::orientations::GraphOrientation;
+use crate::cff::surface::LinearEnergyExpr;
+use crate::dot;
+use crate::graph::cuts::CutSet;
+use crate::graph::parse::IntoGraph;
+use crate::graph::{FeynmanGraph, FourDDenominator, Graph, LMBext};
+use crate::initialisation::test_initialise;
+use crate::settings::global::OrientationPattern;
+use crate::utils::GS;
+use crate::uv::approx::direct_3d::{Direct3dCts, DirectResidueBranches};
+use crate::uv::approx::local_3d::Localizer;
+use crate::uv::approx::{ForestNodeLike, OrientationProjection};
+use crate::uv::hedge_poset::OwnedForestNode;
+use crate::uv::{ApproximationType, Spinney, UltravioletGraph};
 use color_eyre::Result;
 use eyre::eyre;
 use linnet::half_edge::{

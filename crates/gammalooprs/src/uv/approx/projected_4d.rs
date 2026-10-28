@@ -1,38 +1,31 @@
-use std::{
-    collections::BTreeMap,
-    ops::Neg,
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::collections::BTreeMap;
+use std::ops::Neg;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 
+use crate::cff::expression::OrientationID;
 use color_eyre::Result;
 use eyre::eyre;
 use linnet::half_edge::subgraph::SubSetLike;
-use symbolica::{
-    atom::{Atom, AtomCore, Indeterminate},
-    domains::rational::Rational,
-    symbol,
-};
+use std::mem;
+use symbolica::atom::{Atom, AtomCore, Indeterminate};
+use symbolica::domains::rational::Rational;
+use symbolica::symbol;
 use three_dimensional_reps::CffGenerationContext;
 
-use crate::{
-    cff::{
-        CutCFFIndex,
-        generation::{PreparationKey, PreparationValue},
-    },
-    debug_tags,
-    graph::{ExactUvSubLmbFrame, Graph, cuts::CutSet},
-    integrands::process::param_builder::FnMapEntry,
-    numerator::energy_degree::{EnergyPowerAnalyzer, EnergyPowerCapMap},
-    utils::GS,
-    uv::{
-        Integrands, ParametricIntegrandRow, ParametricIntegrandTerm, UVgenerationSettings,
-        approx::{
-            direct_3d::{DirectResidueBranches, DirectResidueKey},
-            local_3d::Localizer,
-            local_4d::{CanonicalUvSector, FourDSector, Local4dCts},
-        },
-    },
+use crate::cff::CutCFFIndex;
+use crate::cff::generation::{PreparationKey, PreparationValue};
+use crate::debug_tags;
+use crate::graph::cuts::CutSet;
+use crate::graph::{ExactUvSubLmbFrame, Graph};
+use crate::integrands::process::param_builder::FnMapEntry;
+use crate::numerator::energy_degree::{EnergyPowerAnalyzer, EnergyPowerCapMap};
+use crate::utils::GS;
+use crate::uv::approx::direct_3d::{DirectResidueBranches, DirectResidueKey};
+use crate::uv::approx::local_3d::Localizer;
+use crate::uv::approx::local_4d::{CanonicalUvSector, FourDSector, Local4dCts};
+use crate::uv::{
+    Integrands, ParametricIntegrandRow, ParametricIntegrandTerm, UVgenerationSettings,
 };
 
 /// Projected local-4D Taylor coefficients. They omit the untouched outer CFF,
@@ -374,7 +367,7 @@ impl Localizer<'_> {
                     })?;
                 let composition_started = Instant::now();
                 let mut next_rows = Vec::new();
-                for (carrier, arguments, keys) in std::mem::take(rows) {
+                for (carrier, arguments, keys) in mem::take(rows) {
                     for (row_index, (orientation, incoming)) in
                         cff_term.orientations.iter().zip(&argument_rows).enumerate()
                     {
@@ -391,7 +384,7 @@ impl Localizer<'_> {
                         source_keys.push(DirectResidueKey::source(
                             orientation
                                 .production_orientation_id
-                                .unwrap_or(crate::cff::expression::OrientationID(row_index)),
+                                .unwrap_or(OrientationID(row_index)),
                             orientation.orientation.edge_energy_map.clone(),
                         ));
                         next_rows.push((weight, arguments, source_keys));
@@ -654,27 +647,24 @@ impl Projected4dApproximation<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::dot;
+    use crate::graph::LMBext;
+    use crate::graph::parse::IntoGraph;
+    use crate::initialisation;
+    use crate::settings::global::OrientationPattern;
+    use crate::utils::W_;
+    use crate::uv::approx::OrientationProjection;
     use crate::uv::approx::local_4d::FourDSector;
-    use crate::{
-        dot,
-        graph::{LMBext, parse::IntoGraph},
-        initialisation::test_initialise,
-        settings::global::OrientationPattern,
-        utils::W_,
-        uv::{Spinney, UltravioletGraph, approx::OrientationProjection},
-    };
-    use linnet::half_edge::{
-        involution::EdgeIndex,
-        subgraph::{InternalSubGraph, SubSetOps},
-    };
-    use symbolica::{
-        atom::{AtomCore, FunctionBuilder},
-        id::Replacement,
-    };
+    use crate::uv::{Spinney, UltravioletGraph};
+    use linnet::half_edge::involution::EdgeIndex;
+    use linnet::half_edge::subgraph::{InternalSubGraph, SubSetOps};
+    use symbolica::atom::{AtomCore, FunctionBuilder};
+    use symbolica::function;
+    use symbolica::id::Replacement;
 
     #[test]
     fn ordinary_ltd_taylor_projection_does_not_request_degree_reports() -> Result<()> {
-        test_initialise()?;
+        initialisation::test_initialise()?;
         let mut graph: Graph = dot!(digraph ordinary_ltd_taylor {
             edge [num=1 mass=1]
             node [num=1]
@@ -736,7 +726,7 @@ mod tests {
 
     #[test]
     fn projected_rows_retain_one_ordinary_numerator_and_scalar_arguments() -> Result<()> {
-        test_initialise()?;
+        initialisation::test_initialise()?;
         let mut graph: Graph = dot!(digraph projected_parametric_numerator {
             edge [num=1 mass=1]
             node [num=1]
@@ -815,7 +805,7 @@ mod tests {
                         Replacement::new(parameter.to_pattern(), Atom::num(value.clone()))
                     },
                 ));
-            &row.carrier * symbolica::function!(opaque_numerator, body.collect_factors())
+            &row.carrier * function!(opaque_numerator, body.collect_factors())
         }));
         assert!(
             terms[0].rows.len() > 1,
@@ -844,7 +834,7 @@ mod tests {
             for term in cff.terms.values() {
                 for orientation in &term.orientations {
                     expected += (&orientation.expression * &prefactor).replace_multiple(&on_shell)
-                        * symbolica::function!(
+                        * function!(
                             opaque_numerator,
                             term.map_exact_source_numerator(&orientation.orientation, None)?
                                 .replace_multiple(&on_shell)
@@ -898,7 +888,7 @@ mod tests {
 
     #[test]
     fn canonical_source_and_template_preparation_share_retention_invariant_budget() -> Result<()> {
-        test_initialise()?;
+        initialisation::test_initialise()?;
         let mut graph: Graph = dot!(digraph preparation_retention {
             edge [num=1 mass=1]
             node [num=1]
@@ -978,7 +968,7 @@ mod tests {
 
     #[test]
     fn nested_banana_quotient_powered_component_has_the_analytic_one_energy_sign() -> Result<()> {
-        test_initialise()?;
+        initialisation::test_initialise()?;
         let mut graph: Graph = dot!(digraph nested_banana_quotient_sign {
             edge [num=1 mass=1]
             node [num=1]
@@ -1200,7 +1190,7 @@ mod tests {
 
     #[test]
     fn typed_taylor_wave_batches_genuine_owner_relabelled_terms() -> Result<()> {
-        test_initialise()?;
+        initialisation::test_initialise()?;
         let mut graph: Graph = dot!(
             digraph G {
                 edge [particle="scalar_1"];
@@ -1340,7 +1330,7 @@ mod tests {
 
     #[test]
     fn typed_taylor_next_component_reuses_one_topology_for_prior_residue_states() -> Result<()> {
-        test_initialise()?;
+        initialisation::test_initialise()?;
         let mut graph: Graph = dot!(digraph typed_taylor_component_waves {
             edge [particle="scalar_1"];
             node [num=1];

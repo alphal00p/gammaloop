@@ -4,16 +4,14 @@ use linnet::half_edge::subgraph::{SubSetLike, SubSetOps};
 use symbolica::atom::Atom;
 use three_dimensional_reps::CffGenerationContext;
 
-use crate::{
-    debug_tags,
-    graph::Graph,
-    numerator::{aind::Aind, symbolica_ext::NumeratorAtomExt},
-    utils::GS,
-    uv::{
-        UltravioletGraph,
-        approx::{ForestNodeLike, direct_3d::DirectResidueBranches},
-    },
-};
+use crate::debug_tags;
+use crate::graph::Graph;
+use crate::numerator::aind::Aind;
+use crate::numerator::symbolica_ext::NumeratorAtomExt;
+use crate::utils::GS;
+use crate::uv::UltravioletGraph;
+use crate::uv::approx::ForestNodeLike;
+use crate::uv::approx::direct_3d::DirectResidueBranches;
 
 use super::{FrozenActiveCt, Localizer, OrientationIntegrandBranch, OrientationIntegrands};
 

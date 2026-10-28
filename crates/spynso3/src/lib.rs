@@ -16,6 +16,7 @@ use pyo3::{
     prelude::*,
     types::{PyComplex, PyFloat, PySlice, PyTuple, PyType},
 };
+use pyo3::{PyResult, Python};
 
 #[cfg(feature = "python-stubs")]
 use pyo3_stub_gen::{

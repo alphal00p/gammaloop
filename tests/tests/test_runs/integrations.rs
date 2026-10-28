@@ -1,7 +1,14 @@
-use super::utils::*;
+use super::utils::{
+    default_integrate_for, load_integration_result, scalar_topology_integrate_command,
+    single_slot_integral,
+};
 use super::*;
 use gammaloop_api::commands::integrate::{IntegrationOutput, RendererOption};
+use gammaloop_integration_tests::SERIAL_TEST_LOCK;
+use gammalooprs::integrands::process::ProcessIntegrand;
 use gammalooprs::integrate::workspace_result_archive_path;
+use gammalooprs::settings::runtime::OverlapCenterObjective;
+use std::fs;
 
 /// Integrate the run card's 100k samples in 5k-sample iterations and load the
 /// estimate archived after its first 20k samples.
@@ -411,11 +418,7 @@ seed = 20260929
 
 #[test]
 fn overlap_center_objectives_preserve_the_integrated_amplitude() -> Result<()> {
-    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
-    use gammalooprs::{
-        integrands::process::ProcessIntegrand, settings::runtime::OverlapCenterObjective,
-    };
-
+    let _serial_guard = SERIAL_TEST_LOCK.lock();
     let test_name = "overlap_center_objectives";
     let root = get_tests_workspace_path().join(test_name);
     let mut cli = get_test_cli(None, &root, Some(test_name.to_owned()), true)?;
@@ -424,7 +427,7 @@ fn overlap_center_objectives_preserve_the_integrated_amplitude() -> Result<()> {
     // Its off-shell external legs also avoid massless soft/collinear divergences.
     // Unequal routing norms distinguish energy depth from geometric clearance;
     // massless focal segments leave a genuine optimal face for the signed sum.
-    std::fs::write(
+    fs::write(
         &graph_path,
         r#"digraph triangle_box {
             num=1; overall_factor=1;

@@ -1,4 +1,5 @@
 use crate::GammaLoopContext;
+use crate::cff::esurface;
 use crate::cff::esurface::EsurfaceCollection;
 use crate::cff::esurface::EsurfaceID;
 use crate::cff::esurface::ExistingEsurfaceId;
@@ -6,7 +7,7 @@ use crate::cff::esurface::ExistingEsurfaces;
 use crate::cff::esurface::GroupEsurfaceId;
 use crate::cff::esurface::RaisedEsurfaceData;
 use crate::cff::esurface::RaisedEsurfaceId;
-use crate::cff::esurface::{esurface_value_is_strictly_inside, get_representative};
+use crate::debug_tags;
 use crate::graph::GraphGroupPosition;
 use crate::graph::LoopMomentumBasis;
 use crate::integrands::process::GenericEvaluator;
@@ -17,17 +18,20 @@ use crate::momentum::signature::LoopExtSignature;
 use crate::processes::EvaluatorSettings;
 use crate::settings::RuntimeSettings;
 use crate::settings::runtime::OverlapCenterObjective;
+use crate::utils;
 use crate::utils::F;
 use crate::utils::GS;
-use crate::utils::compute_shift_part;
-use crate::utils::hyperdual_utils::simple_n_deriv_shape;
+use crate::utils::hyperdual_utils;
 use ahash::HashMap;
 use ahash::HashMapExt;
 use ahash::HashSet;
 use bincode_trait_derive::Decode;
 use bincode_trait_derive::Encode;
-use clarabel::algebra::*;
-use clarabel::solver::*;
+use clarabel::algebra::CscMatrix;
+use clarabel::solver::SupportedConeT::{NonnegativeConeT, SecondOrderConeT};
+use clarabel::solver::{
+    DefaultSettings, DefaultSettingsBuilder, DefaultSolver, IPSolver, SolverStatus, SupportedConeT,
+};
 use eyre::{Result, eyre};
 use itertools::Itertools;
 use linnet::half_edge::involution::EdgeVec;
@@ -39,6 +43,7 @@ use symbolica::atom::AtomCore;
 use symbolica::evaluate::FunctionMap;
 use symbolica::evaluate::OptimizationSettings;
 use symbolica::function;
+use tracing::error;
 use typed_index_collections::TiVec;
 
 #[derive(Debug, Clone, Encode, Decode)]
@@ -153,7 +158,7 @@ impl OverlapStructure {
                         vec![],
                         optimization_settings.clone(),
                         (order_index > 0)
-                            .then(|| simple_n_deriv_shape(order_index))
+                            .then(|| hyperdual_utils::simple_n_deriv_shape(order_index))
                             .map(|shape| (shape, Vec::new())),
                         &EvaluatorSettings::default(),
                         None,
@@ -274,7 +279,7 @@ impl OverlapCenterObjective {
             return;
         }
         let Some(mut clearance) = certify(center) else {
-            tracing::error!("optional overlap refinement received an uncertified witness");
+            error!("optional overlap refinement received an uncertified witness");
             return;
         };
         let mut minimum_radius = 0.0;
@@ -283,7 +288,7 @@ impl OverlapCenterObjective {
             let mut solver = match construct(objective, minimum_radius) {
                 Ok(solver) => solver,
                 Err(error) => {
-                    crate::debug_tags!(#subtraction, #threshold, #overlap, #socp;
+                    debug_tags!(#subtraction, #threshold, #overlap, #socp;
                         stage = "final_overlap_center_refinement",
                         objective = ?objective,
                         accepted = false,
@@ -298,7 +303,7 @@ impl OverlapCenterObjective {
             let candidate_clearance = certify(&candidate);
             let accepted = solver.solution.status == SolverStatus::Solved
                 && candidate_clearance.is_some_and(|radius| radius >= required_clearance);
-            crate::debug_tags!(#subtraction, #threshold, #overlap, #socp;
+            debug_tags!(#subtraction, #threshold, #overlap, #socp;
                 stage = "final_overlap_center_refinement",
                 objective = ?objective,
                 status = ?solver.solution.status,
@@ -526,7 +531,7 @@ fn construct_solver(
         vertical_offset += 1;
 
         let spatial_shift =
-            compute_shift_part(&propagator_constraint.signature.external, external_momenta);
+            utils::compute_shift_part(&propagator_constraint.signature.external, external_momenta);
 
         b_vector[vertical_offset] = spatial_shift.spatial.px.0;
         b_vector[vertical_offset + 1] = spatial_shift.spatial.py.0;
@@ -597,7 +602,7 @@ pub(crate) fn find_center(
 
     solver.solve();
 
-    crate::debug_tags!(#subtraction, #threshold, #overlap, #socp;
+    debug_tags!(#subtraction, #threshold, #overlap, #socp;
         stage = "threshold_socp_result",
         surfaces = ?esurfaces_to_consider,
         status = ?solver.solution.status,
@@ -764,7 +769,10 @@ impl OverlapInput<'_> {
                     center,
                     external_momenta,
                 );
-                if !esurface_value_is_strictly_inside(&value, &F(self.settings.kinematics.e_cm)) {
+                if !esurface::esurface_value_is_strictly_inside(
+                    &value,
+                    &F(self.settings.kinematics.e_cm),
+                ) {
                     return None;
                 }
                 let lipschitz = self.surface_lipschitz(graph_group_pos, raised_esurface_id);
@@ -932,7 +940,7 @@ pub(crate) fn find_maximal_overlap(
             )?
             .ok_or_else(|| {
                 let (graph_group_pos, raised_esurface_id) =
-                    get_representative(&overlap_input.group_esurface_map[esurface_id])
+                    esurface::get_representative(&overlap_input.group_esurface_map[esurface_id])
                         .expect("overlap corrupted");
                 let esurface_id = representative_local_esurface_id(
                     &overlap_input.graph_data[graph_group_pos],
@@ -1145,27 +1153,23 @@ impl EsurfacePairs {
 #[allow(dead_code, unused_variables)]
 mod tests {
     use super::*;
+    use crate::momentum::sample::{ExternalIndex, LoopIndex};
     use itertools::Itertools;
-    use linnet::half_edge::{
-        involution::EdgeIndex,
-        subgraph::{SuBitGraph, SubSetLike},
-    };
+    use linnet::half_edge::involution::EdgeIndex;
+    use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
+    use std::cell::Cell;
     use typed_index_collections::ti_vec;
 
-    use crate::{
-        cff::{
-            VertexSet,
-            esurface::{
-                Esurface, EsurfaceExistence, EsurfaceID, RaisedEsurfaceData, RaisedEsurfaceGroup,
-                RaisedEsurfaceId,
-            },
-        },
-        graph::LoopMomentumBasis,
-        momentum::FourMomentum,
-        momentum::signature::LoopExtSignature,
-        settings::RuntimeSettings,
-        utils::test_utils::dummy_hedge_graph,
+    use crate::cff::VertexSet;
+    use crate::cff::esurface::{
+        Esurface, EsurfaceExistence, EsurfaceID, RaisedEsurfaceData, RaisedEsurfaceGroup,
+        RaisedEsurfaceId,
     };
+    use crate::graph::LoopMomentumBasis;
+    use crate::momentum::FourMomentum;
+    use crate::momentum::signature::LoopExtSignature;
+    use crate::settings::RuntimeSettings;
+    use crate::utils::test_utils::dummy_hedge_graph;
 
     #[test]
     fn overlap_structure_localizes_to_graph_existing_surfaces() {
@@ -1679,7 +1683,7 @@ mod tests {
             .unwrap();
             assert_eq!(result.overlap_groups.len(), 1);
             let center = &result.overlap_groups[0].center;
-            let x = center[crate::momentum::sample::LoopIndex(1)].px.0;
+            let x = center[LoopIndex(1)].px.0;
             assert!(
                 x.abs() < 5.0e-4,
                 "duplicated graph must not weight one physical surface: {x}"
@@ -1699,7 +1703,6 @@ mod tests {
 
     #[test]
     fn overlap_refinement_keeps_certified_witness_on_every_optional_failure() {
-        use std::cell::Cell;
         let original: LoopMomenta<_> = [ThreeMomentum::new(F(2.0), F(0.0), F(0.0))]
             .into_iter()
             .collect();
@@ -1709,7 +1712,7 @@ mod tests {
                 .collect()
         };
         let certify = |center: &LoopMomenta<F<f64>>| {
-            let x = center[crate::momentum::sample::LoopIndex(0)].px.0;
+            let x = center[LoopIndex(0)].px.0;
             (x.is_finite() && x < 3.0).then_some(3.0 - x)
         };
         for failure in 0..5 {
@@ -1763,7 +1766,7 @@ mod tests {
                 assert_eq!(calls.get(), 1);
             } else {
                 assert!(
-                    (center[crate::momentum::sample::LoopIndex(0)].px.0 - 1.0).abs() < 1.0e-7,
+                    (center[LoopIndex(0)].px.0 - 1.0).abs() < 1.0e-7,
                     "phase-II failure keeps phase-I's certified improvement"
                 );
                 assert_eq!(calls.get(), 2);
@@ -1899,8 +1902,7 @@ mod tests {
                 assert_eq!(result.overlap_groups.len(), 1);
                 let center = &result.overlap_groups[0].center;
                 assert!(
-                    (center[crate::momentum::sample::LoopIndex(0)].px.0 / scale - expected).abs()
-                        < 2.0e-6,
+                    (center[LoopIndex(0)].px.0 / scale - expected).abs() < 2.0e-6,
                     "{objective:?}: {center}"
                 );
                 assert!(check_global_center(
@@ -1914,11 +1916,7 @@ mod tests {
                 let reordered =
                     find_maximal_overlap(&input, &reversed, &fixture.external_momenta).unwrap();
                 assert!(
-                    (reordered.overlap_groups[0].center[crate::momentum::sample::LoopIndex(0)]
-                        .px
-                        .0
-                        / scale
-                        - expected)
+                    (reordered.overlap_groups[0].center[LoopIndex(0)].px.0 / scale - expected)
                         .abs()
                         < 2.0e-6
                 );
@@ -1926,10 +1924,8 @@ mod tests {
         }
         // A valid heuristic keeps its exact old result for every objective. Disabling
         // the master gate forces a solve without changing the individual heuristic options.
-        fixture.external_momenta[crate::momentum::sample::ExternalIndex(0)]
-            .temporal
-            .value = F(5.0);
-        fixture.external_momenta[crate::momentum::sample::ExternalIndex(1)] =
+        fixture.external_momenta[ExternalIndex(0)].temporal.value = F(5.0);
+        fixture.external_momenta[ExternalIndex(1)] =
             FourMomentum::from_args(F(8.0), F(-3.0), F(0.0), F(0.0));
         for objective in [
             OverlapCenterObjective::MaxMinDepth,
@@ -1962,9 +1958,7 @@ mod tests {
                     &fixture.external_momenta,
                 )
                 .unwrap();
-                let x = result.overlap_groups[0].center[crate::momentum::sample::LoopIndex(0)]
-                    .px
-                    .0;
+                let x = result.overlap_groups[0].center[LoopIndex(0)].px.0;
                 if enabled {
                     assert_eq!(x, 0.0);
                 } else if forced {
@@ -2032,15 +2026,13 @@ mod tests {
                 &fixture.external_momenta
             ));
             assert!(
-                center[crate::momentum::sample::LoopIndex(0)].px.0 < 0.65,
+                center[LoopIndex(0)].px.0 < 0.65,
                 "mass-1 epigraph must not replace mass-2 energy"
             );
         }
         fixture.edge_masses[EdgeIndex(5)] = F(1.0);
         fixture.esurfaces[EsurfaceID(0)].energies = vec![EdgeIndex(4), EdgeIndex(5)];
-        fixture.external_momenta[crate::momentum::sample::ExternalIndex(0)]
-            .temporal
-            .value = F(1.5);
+        fixture.external_momenta[ExternalIndex(0)].temporal.value = F(1.5);
         let input = OverlapInput {
             graph_data: ti_vec![SingleGraphOverlapData {
                 lmb: &fixture.lmb,

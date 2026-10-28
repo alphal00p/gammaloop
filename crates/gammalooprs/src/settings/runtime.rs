@@ -6,6 +6,8 @@ use std::{
 use bincode_trait_derive::{Decode, Encode};
 use eyre::Result;
 use linnet::half_edge::involution::EdgeVec;
+#[cfg(feature = "python")]
+use pyo3::pyclass;
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use spenso::algebra::{algebraic_traits::IsZero, complex::Complex};
@@ -2606,7 +2608,7 @@ impl Default for IntegratedCounterTermRange {
     }
 }
 
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python", pyclass(from_py_object))]
 #[derive(
     Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq, Encode, Decode, JsonSchema,
 )]

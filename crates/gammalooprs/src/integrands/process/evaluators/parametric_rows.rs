@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use eyre::eyre;
@@ -5,7 +7,8 @@ use symbolica::prelude::{
     AliasedAtom, Atom, AtomCore, Rational, Replacement, Symbol, function, symbol,
 };
 
-use crate::{GammaLoopContext, uv::ParametricIntegrandTerm};
+use crate::GammaLoopContext;
+use crate::uv::ParametricIntegrandTerm;
 
 use super::EvaluatorStack;
 #[cfg(test)]
@@ -52,7 +55,7 @@ impl ParametricResidueRows {
         let term_rows = terms
             .iter()
             .map(|term| {
-                let mut grouped = std::collections::BTreeMap::<Vec<Rational>, Vec<&Atom>>::new();
+                let mut grouped = BTreeMap::<Vec<Rational>, Vec<&Atom>>::new();
                 for row in &term.rows {
                     if row.coefficients.len() != term.numerator.args.len() {
                         return Err(eyre!(
@@ -121,7 +124,7 @@ impl ParametricResidueRows {
             .flatten()
             .filter(|column| column.iter().any(|value| value != &column[0]))
             .map(|column| (column.clone(), 0))
-            .collect::<std::collections::BTreeMap<_, _>>();
+            .collect::<BTreeMap<_, _>>();
         for (index, port) in columns.values_mut().enumerate() {
             *port = index;
         }
@@ -205,7 +208,7 @@ impl ParametricResidueRows {
         // Guard the complete scalar product only after its tensors contracted.
         // Sources with the same activity guard execute together. Keep their
         // scalar sum in one lazy branch so evaluator CSE can share its factors.
-        let mut groups = std::collections::BTreeMap::<&Atom, Vec<&Atom>>::new();
+        let mut groups = BTreeMap::<&Atom, Vec<&Atom>>::new();
         for (atom, guard) in atoms.iter().zip(guards) {
             groups.entry(guard).or_default().push(atom.get_root());
         }
@@ -248,21 +251,21 @@ impl ParametricResidueRows {
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
+    use std::{iter, slice};
 
-    use symbolica::{
-        evaluate::{FunctionMap, InliningPolicy},
-        prelude::Indeterminate,
-    };
+    use symbolica::evaluate::{FunctionMap, InliningPolicy};
+    use symbolica::prelude::Indeterminate;
 
-    use crate::{
-        integrands::process::param_builder::FnMapEntry, utils::GS, uv::ParametricIntegrandRow,
-    };
+    use crate::initialisation;
+    use crate::integrands::process::param_builder::FnMapEntry;
+    use crate::utils::GS;
+    use crate::uv::ParametricIntegrandRow;
 
     use super::*;
 
     #[test]
     fn native_row_plan_respects_aliases_rows_and_lexical_boundaries() {
-        crate::initialisation::test_initialise().unwrap();
+        initialisation::test_initialise().unwrap();
         let x = function!(symbol!("parametric_row_test::physical_input"), 0);
         let q = Atom::var(symbol!("parametric_row_test::physical_row"));
         let head = symbol!("parametric_row_test::physical_function");
@@ -389,7 +392,7 @@ mod tests {
 
     #[test]
     fn physical_alias_outputs_keep_only_reachable_owner_dags() {
-        crate::initialisation::test_initialise().unwrap();
+        initialisation::test_initialise().unwrap();
         let x = Atom::var(symbol!("parametric_row_test::large_dag_x"));
         let y = Atom::var(symbol!("parametric_row_test::large_dag_y"));
         let q = Atom::var(symbol!("parametric_row_test::large_dag_row"));
@@ -489,7 +492,7 @@ mod tests {
 
     #[test]
     fn selector_factors_preserve_sparse_rows_and_branch_local_poles() {
-        crate::initialisation::test_initialise().unwrap();
+        initialisation::test_initialise().unwrap();
         let x = Atom::var(symbol!("parametric_row_test::selector_factor_x"));
         let low = Atom::var(symbol!("parametric_row_test::selector_factor_low"));
         let high = Atom::var(symbol!("parametric_row_test::selector_factor_high"));
@@ -523,7 +526,7 @@ mod tests {
         // that branch, even though rational collection could cancel it there.
         let local_pole = ParametricResidueRows::select(
             &[(0, x.pow(-1)), (1, Atom::one())],
-            std::slice::from_ref(&low),
+            slice::from_ref(&low),
         );
         assert_eq!(
             local_pole,
@@ -572,7 +575,7 @@ mod tests {
                 .map(|row| (0..3).map(|bit| Rational::from((row >> bit) & 1)).collect())
                 .collect(),
         };
-        let inputs = std::iter::once(x)
+        let inputs = iter::once(x)
             .chain(rows.parameters.iter().cloned())
             .collect::<Vec<_>>();
         let mut functions = FunctionMap::new();
@@ -619,7 +622,7 @@ mod tests {
 
     #[test]
     fn coefficient_rows_keep_exact_inputs_and_drop_only_cancelled_carriers() {
-        crate::initialisation::test_initialise().unwrap();
+        initialisation::test_initialise().unwrap();
         let q = Atom::var(symbol!("parametric_row_test::exact_coefficient"));
         let family = symbol!("parametric_row_test::exact_family");
         let precise = Rational::new(9_007_199_254_740_993i64, 9_007_199_254_740_992i64);
@@ -700,7 +703,7 @@ mod tests {
 
     #[test]
     fn ordinal_rows_share_exact_columns_without_changing_formal_bindings() {
-        crate::initialisation::test_initialise().unwrap();
+        initialisation::test_initialise().unwrap();
         let q = Atom::var(symbol!("parametric_row_test::ordinal_q"));
         let r = Atom::var(symbol!("parametric_row_test::ordinal_r"));
         let family = symbol!("parametric_row_test::ordinal_family");
@@ -727,8 +730,7 @@ mod tests {
         .map(
             |(tag, (args, rhs, rows, carrier))| ParametricIntegrandTerm {
                 numerator: Arc::new(FnMapEntry {
-                    lhs: family
-                        .call_args(std::iter::once(Atom::num(tag)).chain(args.iter().cloned())),
+                    lhs: family.call_args(iter::once(Atom::num(tag)).chain(args.iter().cloned())),
                     rhs,
                     tags: vec![Atom::num(tag)],
                     args: args
@@ -804,7 +806,7 @@ mod tests {
 
     #[test]
     fn row_specialization_visits_only_reachable_aliases() {
-        crate::initialisation::test_initialise().unwrap();
+        initialisation::test_initialise().unwrap();
         let coefficient = Atom::var(symbol!("parametric_row_test::coefficient"));
         let selector = Atom::var(symbol!("parametric_row_test::selector"));
         let x = Atom::var(symbol!("parametric_row_test::x"));

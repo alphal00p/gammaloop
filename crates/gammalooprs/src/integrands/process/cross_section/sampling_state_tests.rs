@@ -11,27 +11,43 @@
 //! The caller authenticates the state/build/input hashes before and after this
 //! test. This gate neither saves the state nor regenerates a failed draw.
 
-use super::{EsurfaceRay, SamplingCatalogueEntry};
-use crate::{
-    GammaLoopContextContainer,
-    graph::FeynmanGraph,
-    initialisation::initialise,
-    integrands::{
-        evaluation::EvaluationMetaData,
-        process::{
-            EvaluationSource, EvaluationTarget, GraphTerm, ProcessIntegrand, ProcessIntegrandImpl,
-            evaluate_all_rotations, evaluate_single,
-        },
-    },
-    model::{InputParamCard, Model},
-    momentum::{Rotation, RotationMethod, sample::Subspace},
-    processes::ProcessList,
-    utils::{ArbPrec, F, f128, newton_solver::RadialRootIdentity},
-};
+use std::collections::{BTreeMap, BTreeSet};
+use std::env;
+use std::fs;
+use std::fs::File;
+use std::path::Path;
+use std::ptr;
+
 use color_eyre::eyre::{Result, WrapErr, ensure, eyre};
+use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
 use serde_json::{Value, json};
-use std::{fs, path::Path};
-use symbolica::{domains::float::SingleFloat, numerical_integration::Sample};
+use symbolica::domains::float::SingleFloat;
+use symbolica::evaluate::Instruction;
+use symbolica::numerical_integration::Sample;
+use symbolica::state::State;
+
+use crate::GammaLoopContextContainer;
+use crate::graph::FeynmanGraph;
+use crate::initialisation::initialise;
+use crate::integrands::evaluation::EvaluationMetaData;
+use crate::integrands::process::evaluators::{
+    ActiveF64Backend, EvaluatorBackendPolicy, EvaluatorStack, GenericEvaluator,
+};
+use crate::integrands::process::{
+    EvaluationSource, EvaluationTarget, GraphTerm, ProcessIntegrand, ProcessIntegrandImpl,
+    evaluate_all_rotations, evaluate_single,
+};
+use crate::model::{InputParamCard, Model, UFOSymbol};
+use crate::momentum::sample::Subspace;
+use crate::momentum::{Rotation, RotationMethod};
+use crate::processes::ProcessList;
+use crate::settings::global::{
+    CompilationOptimizationLevel, CompilationOptionsSnapshot, FrozenCompilationMode,
+};
+use crate::utils::newton_solver::RadialRootIdentity;
+use crate::utils::{ArbPrec, F, f128};
+
+use super::{EsurfaceRay, SamplingCatalogueEntry};
 
 // Complete estimators and cut totals use their own component magnitudes. Only
 // their decomposition may use the sum of absolute contributions, separately
@@ -90,7 +106,7 @@ fn saved_state_component_comparison_rejects_perturbations() -> Result<()> {
 #[ignore = "requires an explicitly authenticated generated state and bounded Sample deck"]
 fn native_sampling_saved_state_boundary() -> Result<()> {
     let request: Value =
-        serde_json::from_reader(fs::File::open(std::env::var("GL_SAMPLING_STATE_REQUEST")?)?)?;
+        serde_json::from_reader(File::open(env::var("GL_SAMPLING_STATE_REQUEST")?)?)?;
     let text = |key: &str| {
         request[key]
             .as_str()
@@ -113,7 +129,7 @@ fn native_sampling_saved_state_boundary() -> Result<()> {
             .starts_with(state.canonicalize()?),
         "the report must be outside the saved state"
     );
-    let samples: Vec<Sample<F<f64>>> = serde_json::from_reader(fs::File::open(text("samples")?)?)?;
+    let samples: Vec<Sample<F<f64>>> = serde_json::from_reader(File::open(text("samples")?)?)?;
     ensure!(
         (1..=32).contains(&samples.len()),
         "request 1..=32 complete samples"
@@ -149,10 +165,7 @@ fn native_sampling_saved_state_boundary() -> Result<()> {
     model.apply_param_card(&InputParamCard::from_file(
         state.join("model_parameters.json"),
     )?)?;
-    let state_map = symbolica::state::State::import(
-        &mut fs::File::open(state.join("symbolica_state.bin"))?,
-        None,
-    )?;
+    let state_map = State::import(&mut File::open(state.join("symbolica_state.bin"))?, None)?;
     let mut processes = ProcessList::load(
         state,
         GammaLoopContextContainer {
@@ -167,7 +180,7 @@ fn native_sampling_saved_state_boundary() -> Result<()> {
         .position(|process| process.definition.folder_name == text("process").unwrap())
         .ok_or_else(|| eyre!("requested process is absent"))?;
     let integrand = processes.get_integrand_mut(process_id, text("integrand")?)?;
-    *integrand.get_mut_settings() = serde_json::from_reader(fs::File::open(text("settings")?)?)?;
+    *integrand.get_mut_settings() = serde_json::from_reader(File::open(text("settings")?)?)?;
     ensure!(
         integrand.get_settings().general.generate_events
             && integrand
@@ -581,25 +594,16 @@ fn native_sampling_saved_state_boundary() -> Result<()> {
 #[test]
 #[ignore = "requires authenticated generated states for four fixtures and both evaluator methods"]
 fn parametric_rows_saved_state_symjit_inventory() -> Result<()> {
-    use crate::integrands::process::evaluators::{
-        ActiveF64Backend, EvaluatorBackendPolicy, EvaluatorStack, GenericEvaluator,
-    };
-    use crate::settings::global::{CompilationOptimizationLevel, FrozenCompilationMode};
-    use linnet::half_edge::subgraph::SubSetLike;
-    use std::{collections::BTreeMap, ptr};
-    use symbolica::evaluate::Instruction;
-
-    let request: Value = serde_json::from_reader(fs::File::open(std::env::var(
-        "GL_PARAMETRIC_BACKEND_REQUEST",
-    )?)?)?;
+    let request: Value =
+        serde_json::from_reader(File::open(env::var("GL_PARAMETRIC_BACKEND_REQUEST")?)?)?;
     let states = request["states"]
         .as_array()
         .ok_or_else(|| eyre!("missing states array"))?;
     let combinations = states
         .iter()
         .map(|entry| (entry["fixture"].as_str(), entry["method"].as_str()))
-        .collect::<std::collections::BTreeSet<_>>();
-    let expected: std::collections::BTreeSet<_> = ["gl638", "gl04", "dotted", "iterated"]
+        .collect::<BTreeSet<_>>();
+    let expected: BTreeSet<_> = ["gl638", "gl04", "dotted", "iterated"]
         .into_iter()
         .flat_map(|fixture| {
             ["SingleParametric", "SummedFunctionMap"]
@@ -646,25 +650,20 @@ fn parametric_rows_saved_state_symjit_inventory() -> Result<()> {
             .into_iter()
             .flatten()
         {
-            let _ = crate::model::UFOSymbol::from(name.as_str().unwrap());
+            let _ = UFOSymbol::from(name.as_str().unwrap());
         }
         for label in manifest["linnet_subgraph_print_labels"]
             .as_array()
             .into_iter()
             .flatten()
         {
-            let _ = linnet::half_edge::subgraph::SuBitGraph::symbol_from_label(
-                label.as_str().unwrap().to_owned(),
-            );
+            let _ = SuBitGraph::symbol_from_label(label.as_str().unwrap().to_owned());
         }
         let mut model = Model::from_file(state.join("model.json"))?;
         model.apply_param_card(&InputParamCard::from_file(
             state.join("model_parameters.json"),
         )?)?;
-        let state_map = symbolica::state::State::import(
-            &mut fs::File::open(state.join("symbolica_state.bin"))?,
-            None,
-        )?;
+        let state_map = State::import(&mut File::open(state.join("symbolica_state.bin"))?, None)?;
         let mut processes = ProcessList::load(
             state,
             GammaLoopContextContainer {
@@ -704,6 +703,35 @@ fn parametric_rows_saved_state_symjit_inventory() -> Result<()> {
                         "malformed coefficient rows"
                     );
                 }
+                let staged = match (&stack.parametric_rows, &stack.single_parametric_shared) {
+                    (Some(rows), Some((plan, shared))) => {
+                        let width = stack
+                            .single_parametric
+                            .dual_shape
+                            .as_ref()
+                            .map_or(1, Vec::len);
+                        ensure!(
+                            rows.rows.as_slice() == plan.rows(),
+                            "source rows disagree with their plan"
+                        );
+                        plan.validate_programs(
+                            &shared.f64_eager,
+                            &stack.single_parametric.f64_eager,
+                        )?;
+                        ensure!(
+                            plan.get_input_len() == physical_ports * width,
+                            "physical/dual layout disagrees in {location}/SingleParametric"
+                        );
+                        layout.insert(ptr::from_ref(shared), json!({
+                            "location": location, "method": "SingleParametricSharedPrelude",
+                            "physical_ports": physical_ports, "coefficient_ports": coefficient_ports,
+                            "row_count": row_count, "dual_width": width,
+                        }));
+                        true
+                    }
+                    (None, None) => false,
+                    _ => return Err(eyre!("source rows are missing their staged programs")),
+                };
                 for (method, evaluator) in [
                     ("SingleParametric", Some(&stack.single_parametric)),
                     (
@@ -720,10 +748,15 @@ fn parametric_rows_saved_state_symjit_inventory() -> Result<()> {
                         } else {
                             0
                         };
-                        ensure!(
-                            evaluator.f64_eager.get_input_len() == (physical_ports + ports) * width,
-                            "physical/coefficient/dual layout disagrees in {location}/{method}"
-                        );
+                        // Native staged bodies also consume shared gathers. Their
+                        // full interface is certified with the prelude by the plan.
+                        if method != "SingleParametric" || !staged {
+                            ensure!(
+                                evaluator.f64_eager.get_input_len()
+                                    == (physical_ports + ports) * width,
+                                "physical/coefficient/dual layout disagrees in {location}/{method}"
+                            );
+                        }
                         layout.insert(ptr::from_ref(evaluator), json!({
                             "location": location, "method": method, "physical_ports": physical_ports,
                             "coefficient_ports": ports, "row_count": row_count, "dual_width": width,
@@ -794,11 +827,10 @@ fn parametric_rows_saved_state_symjit_inventory() -> Result<()> {
             })?;
         }
         ensure!(!programs.is_empty(), "no generated evaluator programs");
-        integrand.data.compilation =
-            FrozenCompilationMode::Symjit(crate::settings::global::CompilationOptionsSnapshot {
-                optimization_level: CompilationOptimizationLevel::O3,
-                ..Default::default()
-            });
+        integrand.data.compilation = FrozenCompilationMode::Symjit(CompilationOptionsSnapshot {
+            optimization_level: CompilationOptimizationLevel::O3,
+            ..Default::default()
+        });
         let mut record = json!({"request": entry, "state_manifest_version": manifest["version"].as_integer(),
             "programs": programs, "activation": "pending"});
         report["states"]

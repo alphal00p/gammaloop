@@ -1,8 +1,11 @@
 use color_eyre::Result;
 use spenso::algebra::complex::Complex;
 use symbolica::atom::AtomCore;
-use three_dimensional_reps::{ThermalDistributionCall, thermal::OCCUPATION_FORM};
+use three_dimensional_reps::thermal::OCCUPATION_FORM;
+use three_dimensional_reps::{RepresentationMode, ThermalDistributionCall};
 
+use crate::cff::CutCFFIndex;
+use crate::utils;
 use crate::{
     dot,
     graph::{Graph, parse::IntoGraph},
@@ -54,15 +57,14 @@ fn fermi_sectors_retain_vacuum_subtraction_and_both_uv_contributions() -> Result
         settings.uv.softct = false;
         let mut amplitude = original.clone();
         let mut stats = amplitude.generate_cff(&settings)?;
-        amplitude.build_integrands(&settings, crate::utils::vakint()?, &mut stats)?;
+        amplitude.build_integrands(&settings, utils::vakint()?, &mut stats)?;
 
         // Exercise the actual evaluator input before resolving any retained
         // numerator definitions. Sector collection keeps those bodies opaque.
-        let source = &amplitude.derived_data.representations
-            [&three_dimensional_reps::RepresentationMode::Cff];
+        let source = &amplitude.derived_data.representations[&RepresentationMode::Cff];
         let expression = source
             .all_mighty_integrand
-            .atom(&crate::cff::CutCFFIndex::new_all_none())
+            .atom(&CutCFFIndex::new_all_none())
             .unwrap();
         let (bulk, sectors) = FermiSurfaceSector::extract(&amplitude.graph, expression)?;
         assert!(

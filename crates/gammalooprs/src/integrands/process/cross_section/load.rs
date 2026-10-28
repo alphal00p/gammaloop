@@ -11,15 +11,14 @@
 
 #![allow(dead_code)]
 
-use std::{
-    collections::{BTreeMap, BTreeSet, HashSet},
-    fs,
-    io::Cursor,
-    path::{Path, PathBuf},
-    time::Instant,
-};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::fs;
+use std::io::Cursor;
+use std::path::{Path, PathBuf};
+use std::time::Instant;
 
 use crate::integrands::process::standalone;
+use bincode::config;
 use bincode_trait_derive::{Decode, Encode};
 use eyre::{Context, Result, eyre};
 use serde::{Deserialize, Serialize};
@@ -27,7 +26,8 @@ use symbolica::evaluate::{
     FunctionRegistrationOptions, InliningPolicy, ParameterRowEvaluator, ParameterRowPlan,
     ParameterRowWorkspace, ParameterRows,
 };
-use symbolica::{prelude::*, state::StateMap};
+use symbolica::prelude::*;
+use symbolica::state::StateMap;
 
 // Exact evaluator parameter rows are separate from physical runtime inputs.
 // Reject older payloads before importing symbols or rebuilding native functions.
@@ -1676,7 +1676,7 @@ impl<S, A: ImportWithMap + Clone + PartialEq> StandaloneCrossSectionArchive<S, A
 fn load_bin(path: impl AsRef<Path>) -> Result<LoadedStandaloneCrossSection> {
     let binary =
         fs::read(&path).with_context(|| format!("Cannot read {}", path.as_ref().display()))?;
-    let (version, _): (u32, _) = bincode::decode_from_slice(&binary, bincode::config::standard())?;
+    let (version, _): (u32, _) = bincode::decode_from_slice(&binary, config::standard())?;
     if version != STANDALONE_EVALUATORS_VERSION {
         return Err(eyre!(
             "Unsupported version {version} (expected {}); regenerate the standalone archive",
@@ -1684,7 +1684,7 @@ fn load_bin(path: impl AsRef<Path>) -> Result<LoadedStandaloneCrossSection> {
         ));
     }
     let (archive, _): (StandaloneCrossSectionArchive, _) =
-        bincode::decode_from_slice(&binary, bincode::config::standard())?;
+        bincode::decode_from_slice(&binary, config::standard())?;
     archive.load()
 }
 
@@ -1708,6 +1708,8 @@ fn default_input_path() -> PathBuf {
 #[allow(clippy::items_after_test_module)]
 mod threshold_multiplier_tests {
     use super::*;
+    use serde_json::json;
+    use symbolica::printer::PrintOptions;
 
     #[test]
     fn standalone_exact_row_payload_restores_sum_and_retained_derivatives() -> Result<()> {
@@ -1719,10 +1721,7 @@ mod threshold_multiplier_tests {
         let u = parse_lit!(standalone_exact_rows::u);
         let v = parse_lit!(standalone_exact_rows::v);
         let numerator = symbol!("standalone_exact_rows::numerator");
-        let print = |atom: &Atom| {
-            atom.printer(symbolica::printer::PrintOptions::file())
-                .to_string()
-        };
+        let print = |atom: &Atom| atom.printer(PrintOptions::file()).to_string();
         let root = Symbol::IF.call_args([
             coefficient.clone(),
             &coefficient * numerator.call_args(params.clone()),
@@ -1756,9 +1755,9 @@ mod threshold_multiplier_tests {
             };
             let json: StandaloneGenericEvaluatorArchive<String> =
                 serde_json::from_slice(&serde_json::to_vec(&payload)?)?;
-            let bytes = bincode::encode_to_vec(&payload, bincode::config::standard())?;
+            let bytes = bincode::encode_to_vec(&payload, config::standard())?;
             let (binary, consumed): (StandaloneGenericEvaluatorArchive<String>, _) =
-                bincode::decode_from_slice(&bytes, bincode::config::standard())?;
+                bincode::decode_from_slice(&bytes, config::standard())?;
             assert_eq!(consumed, bytes.len());
             for restored in [json, binary] {
                 assert_eq!(restored.parameter_rows.as_ref(), Some(&rows));
@@ -1833,8 +1832,8 @@ mod threshold_multiplier_tests {
             serde_json::from_slice(&serde_json::to_vec(&payload)?)?;
         let (binary, _): (StandaloneGenericEvaluatorArchive<String>, _) =
             bincode::decode_from_slice(
-                &bincode::encode_to_vec(&payload, bincode::config::standard())?,
-                bincode::config::standard(),
+                &bincode::encode_to_vec(&payload, config::standard())?,
+                config::standard(),
             )?;
         for payload in [json, binary] {
             for iterate in [false, true] {
@@ -1887,8 +1886,8 @@ mod threshold_multiplier_tests {
             &serde_json::to_vec(&stack)?,
         )?;
         let (binary, _): (StandaloneEvaluatorStackArchive<String>, _) = bincode::decode_from_slice(
-            &bincode::encode_to_vec(&stack, bincode::config::standard())?,
-            bincode::config::standard(),
+            &bincode::encode_to_vec(&stack, config::standard())?,
+            config::standard(),
         )?;
         for stack in [json, binary] {
             for corrupt_shape in [false, true] {
@@ -1937,7 +1936,7 @@ mod threshold_multiplier_tests {
                 let mut malformed = stack.clone();
                 let mut rows = serde_json::to_value(malformed.parametric_rows.as_ref().unwrap())?;
                 if empty_rows {
-                    rows["rows"] = serde_json::json!([]);
+                    rows["rows"] = json!([]);
                 } else {
                     rows["rows"][0].as_array_mut().unwrap().pop();
                 }
@@ -2000,11 +1999,7 @@ mod threshold_multiplier_tests {
         // would otherwise hide the version error behind an unexpected-end error.
         fs::write(
             &path,
-            bincode::encode_to_vec(
-                STANDALONE_EVALUATORS_VERSION - 1,
-                bincode::config::standard(),
-            )
-            .unwrap(),
+            bincode::encode_to_vec(STANDALONE_EVALUATORS_VERSION - 1, config::standard()).unwrap(),
         )
         .unwrap();
         let error = load_bin(&path).err().unwrap();
@@ -2158,9 +2153,9 @@ mod threshold_multiplier_tests {
         let archive = valid_archive();
         let expected_inputs = archive.layout.inputs.clone();
         let expected_additional_parameters = archive.layout.additional_parameters.clone();
-        let encoded = bincode::encode_to_vec(&archive, bincode::config::standard()).unwrap();
+        let encoded = bincode::encode_to_vec(&archive, config::standard()).unwrap();
         let (decoded, _): (StandaloneThresholdMultiplierCollectionArchive<String>, _) =
-            bincode::decode_from_slice(&encoded, bincode::config::standard()).unwrap();
+            bincode::decode_from_slice(&encoded, config::standard()).unwrap();
         let mut state_bytes = Vec::new();
         State::export(&mut state_bytes).unwrap();
         let state_map = State::import(&mut Cursor::new(state_bytes), None).unwrap();
@@ -2238,9 +2233,9 @@ mod threshold_multiplier_tests {
             Some(registry.clone())
         );
 
-        let binary = bincode::encode_to_vec(&archive, bincode::config::standard()).unwrap();
+        let binary = bincode::encode_to_vec(&archive, config::standard()).unwrap();
         let (decoded_binary, _): (StandaloneCrossSectionArchive<(), String>, _) =
-            bincode::decode_from_slice(&binary, bincode::config::standard()).unwrap();
+            bincode::decode_from_slice(&binary, config::standard()).unwrap();
         assert_eq!(
             decoded_binary.graph_terms[0].threshold_counterterm_metadata,
             Some(registry)
@@ -2363,6 +2358,7 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use symbolica::printer::PrintOptions;
 
     #[test]
     fn standalone_function_policy_roundtrip_preserves_shared_bodies_and_alias_scope() -> Result<()>
@@ -2371,10 +2367,7 @@ mod tests {
         let global = symbolica::parse!("standalone_policy::global");
         let alias = symbolica::parse!("standalone_policy::alias(0)");
         let function = symbol!("standalone_policy::function");
-        let print = |atom: &Atom| {
-            atom.printer(symbolica::printer::PrintOptions::file())
-                .to_string()
-        };
+        let print = |atom: &Atom| atom.printer(PrintOptions::file()).to_string();
         for tags in [Vec::new(), vec![Atom::num(7)]] {
             let call = |argument: Atom| {
                 FunctionBuilder::new(function)
@@ -2403,9 +2396,9 @@ mod tests {
                 ];
                 let json = serde_json::to_vec(&entries)?;
                 let parsed: Vec<SerializedFnMapEntry<String>> = serde_json::from_slice(&json)?;
-                let bytes = bincode::encode_to_vec(&parsed, bincode::config::standard())?;
+                let bytes = bincode::encode_to_vec(&parsed, config::standard())?;
                 let (restored, consumed): (Vec<SerializedFnMapEntry<String>>, _) =
-                    bincode::decode_from_slice(&bytes, bincode::config::standard())?;
+                    bincode::decode_from_slice(&bytes, config::standard())?;
                 assert_eq!(consumed, bytes.len());
                 assert_eq!(restored, entries);
                 let mut parsed = parse_fn_map_entries(&restored, &StateMap::default())?;

@@ -1,37 +1,32 @@
-use std::{
-    collections::BTreeMap,
-    hash::Hash,
-    ops::{Mul, Neg},
-    sync::Arc,
-};
+use std::collections::BTreeMap;
+use std::hash::Hash;
+use std::iter;
+use std::mem;
+use std::ops::{Mul, Neg};
+use std::result::Result as StdResult;
+use std::sync::Arc;
 
-use crate::{
-    GammaLoopContext,
-    cff::CutCFFIndex,
-    integrands::process::param_builder::FnMapEntry,
-    numerator::{aind::Aind, symbolica_ext::NumeratorAtomExt},
-    utils::GS,
-    uv::approx::Rooted,
-};
+use crate::GammaLoopContext;
+use crate::cff::CutCFFIndex;
+use crate::integrands::process::param_builder::FnMapEntry;
+use crate::numerator::aind::Aind;
+use crate::numerator::symbolica_ext::NumeratorAtomExt;
+use crate::utils::GS;
+use crate::uv::approx::Rooted;
+use crate::uv::approx::direct_3d::{DirectResidueBranches, DirectResidueKey};
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
-use eyre::eyre;
+use eyre::{ensure, eyre};
 use idenso::IndexTooling;
 use itertools::{EitherOrBoth, Itertools};
-use spenso::{
-    network::parsing::ShadowedStructure,
-    structure::{
-        NamedStructure, ToSymbolic,
-        dimension::Dimension,
-        representation::{Minkowski, RepName},
-    },
-};
-use symbolica::{
-    atom::{Atom, AtomCore, AtomView, Indeterminate, Symbol},
-    domains::rational::Rational,
-    id::Replacement,
-    symbol,
-};
+use spenso::network::parsing::ShadowedStructure;
+use spenso::structure::dimension::Dimension;
+use spenso::structure::representation::{Minkowski, RepName};
+use spenso::structure::{NamedStructure, ToSymbolic};
+use symbolica::atom::{Atom, AtomCore, AtomView, Indeterminate, Symbol};
+use symbolica::domains::rational::Rational;
+use symbolica::id::Replacement;
+use symbolica::symbol;
 
 use linnet::half_edge::involution::HedgePair;
 
@@ -57,7 +52,7 @@ pub(crate) fn spenso_lor_atom(tag: i32, ind: impl Into<Aind>, dim: impl Into<Dim
 pub(crate) struct ParametricIntegrandRow {
     pub(crate) coefficients: Vec<Rational>,
     pub(crate) carrier: Atom,
-    pub(crate) source_keys: Vec<approx::direct_3d::DirectResidueKey>,
+    pub(crate) source_keys: Vec<DirectResidueKey>,
 }
 
 /// One additive numerator product and its Cartesian residue rows. UV operators
@@ -74,7 +69,7 @@ impl ParametricIntegrandTerm {
         numerator: Arc<FnMapEntry>,
         rows: Vec<ParametricIntegrandRow>,
     ) -> Result<Self> {
-        eyre::ensure!(
+        ensure!(
             rows.iter()
                 .all(|row| row.coefficients.len() == numerator.args.len()),
             "parametric numerator row does not match its formal coefficients"
@@ -83,66 +78,85 @@ impl ParametricIntegrandTerm {
     }
 
     fn product(&self, other: &Self) -> Result<Self> {
-        let (scope, tag) = approx::direct_3d::DirectResidueBranches::numerator_scope();
+        let (scope, tag) = DirectResidueBranches::numerator_scope();
         let parameters = (0..self.numerator.args.len() + other.numerator.args.len())
             .map(|index| {
                 symbol!("gammalooprs::uv::numerator_coefficient"; Scalar)
                     .call_args([Atom::num(scope), Atom::num(index)])
             })
             .collect::<Vec<_>>();
-        let bind = |entry: &FnMapEntry, parameters: &[Atom]| -> Result<Atom> {
+        let replacements = |entry: &FnMapEntry, parameters: &[Atom]| {
+            entry
+                .args
+                .iter()
+                .cloned()
+                .map(Atom::from)
+                .zip(parameters)
+                .map(|(formal, parameter)| Replacement::new(formal.to_pattern(), parameter.clone()))
+                .collect::<Vec<_>>()
+        };
+        let split = self.numerator.args.len();
+        let left_bindings = replacements(&self.numerator, &parameters[..split]);
+        let right_bindings = replacements(&other.numerator, &parameters[split..]);
+        let bind = |entry: &FnMapEntry, replacements: &[Replacement]| -> Result<Atom> {
             let interface = entry.rhs.list_dangling::<Aind>()?.into_iter().collect();
             // Each independent factor owns its private contractions. Only its
             // free tensor slots may join the other factor in the product.
-            let body = entry.rhs.freshen_private_indices(&interface, || {
-                approx::direct_3d::DirectResidueBranches::numerator_scope().1
-            });
-            Ok(body.replace_multiple(
-                entry
-                    .args
-                    .iter()
-                    .cloned()
-                    .map(Atom::from)
-                    .zip(parameters)
-                    .map(|(formal, parameter)| {
-                        Replacement::new(formal.to_pattern(), parameter.clone())
-                    }),
-            ))
+            let body = entry
+                .rhs
+                .freshen_private_indices(&interface, || DirectResidueBranches::numerator_scope().1);
+            Ok(body.replace_multiple(replacements))
         };
-        let split = self.numerator.args.len();
         let numerator = Arc::new(FnMapEntry {
             is_alias: false,
             lhs: symbol!("gammalooprs::uv::numerator_family")
-                .call_args(std::iter::once(tag.clone()).chain(parameters.iter().cloned())),
-            rhs: bind(&self.numerator, &parameters[..split])?
-                * bind(&other.numerator, &parameters[split..])?,
+                .call_args(iter::once(tag.clone()).chain(parameters.iter().cloned())),
+            rhs: bind(&self.numerator, &left_bindings)? * bind(&other.numerator, &right_bindings)?,
             args: parameters
                 .into_iter()
                 .map(Indeterminate::try_from)
-                .collect::<std::result::Result<_, _>>()
+                .collect::<StdResult<_, _>>()
                 .map_err(|error| eyre!(error))?,
             tags: vec![tag],
             inlining: Default::default(),
         });
+        // Scalar carriers may capture the same coefficient formals as the
+        // numerator. Rebind each source before the Cartesian product so equal
+        // original formal names in independent factors keep distinct values.
+        let left_carriers = self
+            .rows
+            .iter()
+            .map(|row| row.carrier.replace_multiple(&left_bindings))
+            .collect::<Vec<_>>();
+        let right_carriers = other
+            .rows
+            .iter()
+            .map(|row| row.carrier.replace_multiple(&right_bindings))
+            .collect::<Vec<_>>();
         let rows = self
             .rows
             .iter()
-            .flat_map(|left| {
-                other.rows.iter().map(move |right| ParametricIntegrandRow {
-                    coefficients: left
-                        .coefficients
-                        .iter()
-                        .chain(&right.coefficients)
-                        .cloned()
-                        .collect(),
-                    carrier: &left.carrier * &right.carrier,
-                    source_keys: left
-                        .source_keys
-                        .iter()
-                        .chain(&right.source_keys)
-                        .cloned()
-                        .collect(),
-                })
+            .zip(&left_carriers)
+            .flat_map(|(left, left_carrier)| {
+                other
+                    .rows
+                    .iter()
+                    .zip(&right_carriers)
+                    .map(move |(right, right_carrier)| ParametricIntegrandRow {
+                        coefficients: left
+                            .coefficients
+                            .iter()
+                            .chain(&right.coefficients)
+                            .cloned()
+                            .collect(),
+                        carrier: left_carrier * right_carrier,
+                        source_keys: left
+                            .source_keys
+                            .iter()
+                            .chain(&right.source_keys)
+                            .cloned()
+                            .collect(),
+                    })
             })
             .collect();
         Self::new(numerator, rows)
@@ -251,7 +265,7 @@ impl Integrands {
         terms: impl IntoIterator<Item = (CutCFFIndex, ParametricIntegrandTerm)>,
     ) -> Result<Self> {
         for (index, term) in terms {
-            eyre::ensure!(
+            ensure!(
                 term.rows
                     .iter()
                     .all(|row| row.coefficients.len() == term.numerator.args.len()),
@@ -492,7 +506,7 @@ impl Integrands {
         }
         for terms in self.parametric_terms.values_mut() {
             let mut families = BTreeMap::<Vec<Atom>, ParametricIntegrandTerm>::new();
-            for term in std::mem::take(terms) {
+            for term in mem::take(terms) {
                 if let Some(existing) = families.get_mut(&term.numerator.tags) {
                     existing.rows.extend(term.rows);
                 } else {
@@ -545,15 +559,16 @@ impl Integrands {
                     .map(Atom::from)
                     .collect::<Vec<_>>();
                 for row in &term.rows {
-                    let body = term.numerator.rhs.replace_multiple(
-                        parameters
-                            .iter()
-                            .zip(&row.coefficients)
-                            .map(|(parameter, value)| {
-                                Replacement::new(parameter.to_pattern(), Atom::num(value.clone()))
-                            }),
-                    );
-                    *root += body * &row.carrier;
+                    let bindings = parameters
+                        .iter()
+                        .zip(&row.coefficients)
+                        .map(|(parameter, value)| {
+                            Replacement::new(parameter.to_pattern(), Atom::num(value.clone()))
+                        })
+                        .collect::<Vec<_>>();
+                    let body = term.numerator.rhs.replace_multiple(&bindings);
+                    let carrier = row.carrier.replace_multiple(&bindings);
+                    *root += body * carrier;
                 }
             }
         }
@@ -592,7 +607,7 @@ impl Integrands {
         other: &Integrands,
         mut map: impl FnMut(&CutCFFIndex, &Atom, &Atom) -> Result<Atom>,
     ) -> Result<Integrands> {
-        eyre::ensure!(
+        ensure!(
             self.parametric_terms.is_empty() && other.parametric_terms.is_empty(),
             "arbitrary scalar zip cannot discard parametric residue rows"
         );
@@ -801,3 +816,6 @@ pub use profile::{UVProfile, UVProfileAnalysis, UVProfilePassFail};
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod parametric_binding_tests;

@@ -6,6 +6,7 @@ use std::{
 };
 
 use bincode::{Decode, Encode};
+use bincode_trait_derive::{Decode as ContextDecode, Encode as ContextEncode};
 
 use color_eyre::Result;
 use idenso::color::CS;
@@ -30,25 +31,21 @@ use three_dimensional_reps::{MediumMode, ThermalDistributionCall};
 use tracing::debug;
 use tracing::warn;
 
-use crate::{
-    GammaLoopContext,
-    graph::{Graph, LoopMomentumBasis},
-    integrands::process::{
-        amplitude::export::ExportAtomTo,
-        evaluators::{InputParams, SliceMut},
-    },
-    model::Model,
-    momentum::sample::{ExternalFourMomenta, MomentumSample},
-    momentum::{Helicity, PolType},
-    numerator::ParsingNet,
-    settings::runtime::GeneralSettings,
-    utils::{
-        F, FloatLike, GS, PrecisionUpgradable, TENSORLIB, VarFloat, f128,
-        hyperdual_utils::DualOrNot, symbolica_ext::LOGPRINTOPTS, tracing::StatusRenderable,
-    },
-};
+use crate::GammaLoopContext;
+use crate::graph::{Graph, LoopMomentumBasis};
+use crate::integrands::process::amplitude::export::ExportAtomTo;
+use crate::integrands::process::evaluators::{InputParams, SliceMut};
+use crate::model::Model;
+use crate::momentum::sample::{ExternalFourMomenta, MomentumSample};
+use crate::momentum::{Helicity, PolType};
+use crate::numerator::ParsingNet;
+use crate::settings::runtime::GeneralSettings;
+use crate::utils::hyperdual_utils::DualOrNot;
+use crate::utils::symbolica_ext::LOGPRINTOPTS;
+use crate::utils::tracing::StatusRenderable;
+use crate::utils::{F, FloatLike, GS, PrecisionUpgradable, TENSORLIB, VarFloat, f128};
 
-#[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
+#[derive(Clone, ContextEncode, ContextDecode)]
 #[trait_decode(trait = GammaLoopContext)]
 #[derive(Default)]
 pub struct ParamValuePairs {
@@ -713,7 +710,7 @@ impl<C, T: FloatLike + Decode<C>> Decode<C> for ParamCache<T> {
     }
 }
 
-#[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
+#[derive(Clone, ContextEncode, ContextDecode)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct ParamBuilder<T: FloatLike = f64> {
     pub(crate) medium_mode: MediumMode,
@@ -727,9 +724,7 @@ pub struct ParamBuilder<T: FloatLike = f64> {
     pub fn_map: FunctionMap,
 }
 
-#[derive(
-    Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode, Debug, PartialEq, Eq, Hash,
-)]
+#[derive(Clone, ContextEncode, ContextDecode, Debug, PartialEq, Eq, Hash)]
 #[trait_decode(trait = GammaLoopContext)]
 pub struct FnMapEntry {
     pub lhs: Atom,
@@ -1890,14 +1885,12 @@ impl<T: FloatLike> Display for ParamBuilder<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        dot,
-        graph::parse::from_dot::IntoGraph,
-        initialisation::test_initialise,
-        momentum::sample::{BareMomentumSample, LoopMomenta},
-        utils::{ArbPrec, SamplingFloat, load_generic_model},
-        uv::uv_graph::UVE,
-    };
+    use crate::dot;
+    use crate::graph::parse::from_dot::IntoGraph;
+    use crate::initialisation;
+    use crate::momentum::sample::{BareMomentumSample, LoopMomenta};
+    use crate::utils::{ArbPrec, SamplingFloat, load_generic_model};
+    use crate::uv::uv_graph::UVE;
 
     #[test]
     fn polarization_cache_keeps_the_latest_64_absolute_keys() {
@@ -1961,7 +1954,7 @@ mod tests {
 
     #[test]
     fn model_refresh_preserves_persisted_parameter_order_and_dual_seeds() {
-        test_initialise().unwrap();
+        initialisation::test_initialise().unwrap();
         let model = Model::from_str(
             include_str!("../../../../../assets/models/json/scalars/scalars_2p_3p.json").into(),
             "json",
@@ -2001,7 +1994,7 @@ mod tests {
             UFOSymbol,
         };
 
-        test_initialise().unwrap();
+        initialisation::test_initialise().unwrap();
         let mass = UFOSymbol::from("slot_order_mass");
         let coupling = UFOSymbol::from("slot_order_coupling");
         let zero = UFOSymbol::zero();
@@ -2192,7 +2185,7 @@ mod tests {
 
     #[test]
     fn model_parameter_refresh_fails_without_changing_slots() {
-        test_initialise().unwrap();
+        initialisation::test_initialise().unwrap();
         let mut model = load_generic_model("sm");
         let mut builder = ParamBuilder::<f64>::new_empty();
         builder.pairs.model_parameters = ParamValuePairs {
@@ -2237,7 +2230,7 @@ mod tests {
     fn thermal_function_registration_follows_the_selected_medium() {
         // A call must also work before GammaLoop's Symbolica initializer has run.
         let _ = ThermalDistributionCall::atom(0, 0, 1, 1, 1);
-        test_initialise().unwrap();
+        initialisation::test_initialise().unwrap();
         let mut graph: Graph = dot!(digraph thermal {
             node [num=1]; edge [num=1 particle="d"];
             A -> B; B -> A [particle="g"];
@@ -2308,7 +2301,7 @@ mod tests {
 
     #[test]
     fn thermal_function_map_uses_explicit_orientation_for_all_derivatives() {
-        test_initialise().unwrap();
+        initialisation::test_initialise().unwrap();
         let model = load_generic_model("sm");
         for particle in ["d", "G+", "g"] {
             let mut graph: Graph = format!(
@@ -2399,7 +2392,7 @@ mod tests {
 
     #[test]
     fn thermal_weight_wrapper_survives_partial_vacuum_limits_and_evaluates() {
-        test_initialise().unwrap();
+        initialisation::test_initialise().unwrap();
         let graph: Graph = dot!(digraph G {
             edge [particle="scalar_1"]; node [num=1];
             v1 -> v2; v1 -> v2;
@@ -2478,7 +2471,7 @@ mod tests {
             utils::f128,
         };
 
-        test_initialise().unwrap();
+        initialisation::test_initialise().unwrap();
         let mut graph: Graph = dot!(digraph thermal_sunrise {
             node [num=1]
             edge [num=1]
@@ -2660,7 +2653,7 @@ mod tests {
 
     #[test]
     fn arb_parameter_baseline_uses_decimal_promotion() {
-        test_initialise().unwrap();
+        initialisation::test_initialise().unwrap();
         fn check<T: FloatLike>()
         where
             ParamBuilder<f64>: UpdateAndGetParams<T>,

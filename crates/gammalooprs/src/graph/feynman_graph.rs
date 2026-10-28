@@ -26,19 +26,19 @@ use symbolica::{
 use three_dimensional_reps::{MediumMode, ThermalDistributionCall, ThermalDistributionFactor};
 use typed_index_collections::TiVec;
 
-use crate::{
-    cff::{generation::ShiftRewrite, surface::HsurfaceID},
-    integrands::process::param_builder::{
-        FnMapEntry, ParamBuilder, ParamBuilderGraph, SplitPolarizations,
-    },
-    model::{ArcParticle, Model, UFOSymbol},
-    momentum::sample::{ExternalFourMomenta, ExternalIndex, LoopMomenta},
-    momentum::signature::{ExternalSignature, SignatureLike},
-    momentum::{PolDef, SignOrZero},
-    numerator::{graph::ReversibleEdge, ufo::UFO},
-    utils::{F, FloatLike, GS, external_energy_atom_from_index, ose_atom_from_index},
-    uv::uv_graph::UVE,
+use crate::cff::generation::ShiftRewrite;
+use crate::cff::surface::HsurfaceID;
+use crate::integrands::process::param_builder::{
+    FnMapEntry, ParamBuilder, ParamBuilderGraph, SplitPolarizations,
 };
+use crate::model::{ArcParticle, Model, UFOSymbol};
+use crate::momentum::sample::{ExternalFourMomenta, ExternalIndex, LoopMomenta};
+use crate::momentum::signature::{ExternalSignature, SignatureLike};
+use crate::momentum::{PolDef, SignOrZero};
+use crate::numerator::graph::ReversibleEdge;
+use crate::numerator::ufo::UFO;
+use crate::utils::{F, FloatLike, GS, external_energy_atom_from_index, ose_atom_from_index};
+use crate::uv::uv_graph::UVE;
 
 use super::{
     Edge, Graph, HedgeData, LoopMomentumBasis, Vertex, edge::PossibleParticle,
@@ -1213,21 +1213,19 @@ impl FeynmanGraph for Graph {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        dot,
-        graph::parse::from_dot::IntoGraph,
-        initialisation::test_initialise,
-        utils::{ArbPrec, load_generic_model},
-    };
-    use symbolica::{
-        evaluate::{CompileOptions, ExportSettings, FunctionMap, OptimizationSettings},
-        symbol,
-    };
+    use crate::dot;
+    use crate::graph::parse::from_dot::IntoGraph;
+    use crate::initialisation;
+    use crate::utils;
+    use crate::utils::ArbPrec;
+    use eyre::Result;
+    use symbolica::evaluate::{CompileOptions, ExportSettings, FunctionMap, OptimizationSettings};
+    use symbolica::symbol;
 
     #[test]
-    fn thermal_parameter_validation_tracks_modes_and_runtime_values() -> eyre::Result<()> {
-        test_initialise()?;
-        let mut model = load_generic_model("sm");
+    fn thermal_parameter_validation_tracks_modes_and_runtime_values() -> Result<()> {
+        initialisation::test_initialise()?;
+        let mut model = utils::load_generic_model("sm");
         let mut graph: Graph = r#"
             digraph thermal_domain {
                 node [num=1]; edge [num=1];
@@ -1271,9 +1269,9 @@ mod tests {
     }
 
     #[test]
-    fn thermal_parameter_validation_uses_supplied_runtime_values() -> eyre::Result<()> {
-        test_initialise()?;
-        let mut model = load_generic_model("sm");
+    fn thermal_parameter_validation_uses_supplied_runtime_values() -> Result<()> {
+        initialisation::test_initialise()?;
+        let mut model = utils::load_generic_model("sm");
         model.get_parameter_mut("muG")?.value = Some(Complex::new_re(F(0.0)));
         model.get_parameter_mut("minus_muG")?.value = Some(Complex::new_re(F(0.0)));
         let mut graph: Graph = r#"
@@ -1303,10 +1301,9 @@ mod tests {
     }
 
     #[test]
-    fn thermal_boson_validation_uses_mass_overrides_and_rejects_complex_parameters()
-    -> eyre::Result<()> {
-        test_initialise()?;
-        let mut model = load_generic_model("sm");
+    fn thermal_boson_validation_uses_mass_overrides_and_rejects_complex_parameters() -> Result<()> {
+        initialisation::test_initialise()?;
+        let mut model = utils::load_generic_model("sm");
         let mass_parameter = Atom::var(model.get_parameter("MT").name.0).to_canonical_string();
         let mut graph: Graph = format!(
             r#"digraph thermal_mass {{
@@ -1341,9 +1338,9 @@ mod tests {
     }
 
     #[test]
-    fn thermal_chemical_potentials_validate_conjugation_at_runtime() -> eyre::Result<()> {
-        test_initialise()?;
-        let serialized = serde_json::to_value(load_generic_model("sm").to_serializable())?;
+    fn thermal_chemical_potentials_validate_conjugation_at_runtime() -> Result<()> {
+        initialisation::test_initialise()?;
+        let serialized = serde_json::to_value(utils::load_generic_model("sm").to_serializable())?;
         for anti_parameter in [Some("muB"), Some("muQ"), None, Some("ZERO")] {
             let mut input = serialized.clone();
             for particle in input["particles"].as_array_mut().unwrap() {
@@ -1367,7 +1364,7 @@ mod tests {
                     .into_graph(&model)
                 })
                 .into_iter()
-                .collect::<eyre::Result<Vec<Graph>>>()?;
+                .collect::<Result<Vec<Graph>>>()?;
             for (mu, other) in [
                 (0.0, 0.0),
                 (1.0, -1.0),
@@ -1426,9 +1423,9 @@ mod tests {
     }
 
     #[test]
-    fn thermal_self_conjugate_particles_require_zero_chemical_potential() -> eyre::Result<()> {
-        test_initialise()?;
-        let serialized = serde_json::to_value(load_generic_model("sm").to_serializable())?;
+    fn thermal_self_conjugate_particles_require_zero_chemical_potential() -> Result<()> {
+        initialisation::test_initialise()?;
+        let serialized = serde_json::to_value(utils::load_generic_model("sm").to_serializable())?;
         for parameter in [None, Some("ZERO"), Some("muQ")] {
             let mut input = serialized.clone();
             let particle = input["particles"]
@@ -1477,15 +1474,15 @@ mod tests {
     }
 
     #[test]
-    fn thermal_denominators_reject_poles_that_coincide_at_runtime() -> eyre::Result<()> {
+    fn thermal_denominators_reject_poles_that_coincide_at_runtime() -> Result<()> {
         use crate::cff::surface::HybridSurfaceID;
         use crate::momentum::FourMomentum;
 
-        test_initialise()?;
-        let mut model = load_generic_model("sm");
+        initialisation::test_initialise()?;
+        let mut model = utils::load_generic_model("sm");
         let [top, w] = ["MT", "MW"]
             .map(|name| Atom::var(model.get_parameter(name).name.0).to_canonical_string());
-        let thermal_denominators = |graph: &mut Graph| -> eyre::Result<Vec<HsurfaceID>> {
+        let thermal_denominators = |graph: &mut Graph| -> Result<Vec<HsurfaceID>> {
             let mut options = graph.denominator_only_cff_3d_expression_options();
             options.medium_mode = MediumMode::ThermodynamicEquilibrium;
             let generated =
@@ -1511,7 +1508,7 @@ mod tests {
             }
             graph.param_builder.update_model_values(model)
         };
-        let degenerate = |result: eyre::Result<()>| {
+        let degenerate = |result: Result<()>| {
             result
                 .unwrap_err()
                 .to_string()
@@ -1573,9 +1570,9 @@ mod tests {
     }
 
     #[test]
-    fn thermal_fermion_distributions_require_real_masses() -> eyre::Result<()> {
-        test_initialise()?;
-        let mut model = load_generic_model("sm");
+    fn thermal_fermion_distributions_require_real_masses() -> Result<()> {
+        initialisation::test_initialise()?;
+        let mut model = utils::load_generic_model("sm");
         let mass_parameter = Atom::var(model.get_parameter("MT").name.0).to_canonical_string();
         let mut graph: Graph = format!(
             r#"digraph thermal_fermion {{
@@ -1633,9 +1630,9 @@ mod tests {
     }
 
     #[test]
-    fn cross_section_real_masses_accept_zero_real_and_width_metadata() -> eyre::Result<()> {
-        test_initialise()?;
-        let model = load_generic_model("sm");
+    fn cross_section_real_masses_accept_zero_real_and_width_metadata() -> Result<()> {
+        initialisation::test_initialise()?;
+        let model = utils::load_generic_model("sm");
         assert!(!model.get_parameter("WT").value.unwrap().re.is_zero());
         let graph: Graph = r#"
             digraph real_masses {
@@ -1651,9 +1648,9 @@ mod tests {
     }
 
     #[test]
-    fn cross_section_standard_denominators_accept_wrapping_and_factorization() -> eyre::Result<()> {
-        test_initialise()?;
-        let mut model = load_generic_model("sm");
+    fn cross_section_standard_denominators_accept_wrapping_and_factorization() -> Result<()> {
+        initialisation::test_initialise()?;
+        let mut model = utils::load_generic_model("sm");
         for name in ["g", "t"] {
             let position = model
                 .propagators
@@ -1682,9 +1679,9 @@ mod tests {
     }
 
     #[test]
-    fn cross_section_custom_denominators_reject_used_lines_only() -> eyre::Result<()> {
-        test_initialise()?;
-        let mut model = load_generic_model("sm");
+    fn cross_section_custom_denominators_reject_used_lines_only() -> Result<()> {
+        initialisation::test_initialise()?;
+        let mut model = utils::load_generic_model("sm");
         let position = model
             .propagators
             .iter()
@@ -1720,9 +1717,9 @@ mod tests {
     }
 
     #[test]
-    fn cross_section_denominator_validation_uses_the_current_model() -> eyre::Result<()> {
-        test_initialise()?;
-        let mut model = load_generic_model("sm");
+    fn cross_section_denominator_validation_uses_the_current_model() -> Result<()> {
+        initialisation::test_initialise()?;
+        let mut model = utils::load_generic_model("sm");
         let mass = Atom::var(model.get_parameter("MT").name.0).to_canonical_string();
         let graph: Graph = format!(
             r#"digraph updated_denominator {{
@@ -1747,9 +1744,9 @@ mod tests {
     }
 
     #[test]
-    fn cross_section_complex_mass_is_rejected_at_generation() -> eyre::Result<()> {
-        test_initialise()?;
-        let model = load_generic_model("sm");
+    fn cross_section_complex_mass_is_rejected_at_generation() -> Result<()> {
+        initialisation::test_initialise()?;
+        let model = utils::load_generic_model("sm");
         let graph: Graph = r#"
             digraph complex_mass {
                 node [num=1];
@@ -1768,10 +1765,10 @@ mod tests {
     }
 
     #[test]
-    fn cross_section_mass_validation_refreshes_runtime_model_values() -> eyre::Result<()> {
-        test_initialise()?;
+    fn cross_section_mass_validation_refreshes_runtime_model_values() -> Result<()> {
+        initialisation::test_initialise()?;
         for offset in ["", "+1"] {
-            let mut model = load_generic_model("sm");
+            let mut model = utils::load_generic_model("sm");
             let mass = Atom::var(model.get_parameter("MT").name.0).to_canonical_string();
             let graph: Graph = format!(
                 r#"digraph runtime_mass {{
@@ -1799,7 +1796,7 @@ mod tests {
 
     #[test]
     fn zero_temperature_treats_literal_zero_chemical_potential_as_absent() {
-        test_initialise().unwrap();
+        initialisation::test_initialise().unwrap();
         let mut graph: Graph = dot!(digraph thermal {
             node [num=1]; edge [num=1 particle="d"];
             A -> B; B -> A;
@@ -1862,7 +1859,7 @@ mod tests {
 
     #[test]
     fn symmetric_thermal_distributions_keep_the_chemical_potential_orientation() {
-        test_initialise().unwrap();
+        initialisation::test_initialise().unwrap();
         let graph: Graph = dot!(digraph symmetric_thermal {
             node [num=1]
             edge [num=1]
@@ -1923,7 +1920,7 @@ mod tests {
 
     #[test]
     fn thermal_distribution_bodies_are_energy_derivatives() {
-        test_initialise().unwrap();
+        initialisation::test_initialise().unwrap();
         let graph: Graph = dot!(digraph thermal {
             node [num=1]
             edge [num=1]
@@ -1974,7 +1971,7 @@ mod tests {
 
     #[test]
     fn native_thermal_distributions() {
-        test_initialise().unwrap();
+        initialisation::test_initialise().unwrap();
         let graph: Graph = dot!(digraph thermal {
             node [num=1]
             edge [num=1]
@@ -2150,7 +2147,7 @@ mod tests {
     fn zero_temperature_steps_are_exact_outside_the_fermi_sea() {
         use symbolica::domains::float::Complex as SymComplex;
 
-        test_initialise().unwrap();
+        initialisation::test_initialise().unwrap();
         let mut graph: Graph = dot!(digraph zero_temperature_step {
             node [num=1]
             edge [num=1]

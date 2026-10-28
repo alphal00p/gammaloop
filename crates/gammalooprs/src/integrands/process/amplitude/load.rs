@@ -11,27 +11,25 @@
 //! ```
 
 #![allow(dead_code)]
-use std::{
-    collections::{BTreeMap, BTreeSet, HashSet},
-    fs,
-    io::Cursor,
-    ops::Neg,
-    path::{Path, PathBuf},
-    time::{Duration, Instant},
-};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::fs;
+use std::io::Cursor;
+use std::ops::Neg;
+use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
+use std::{env, process, slice};
 
+use bincode::config;
 use bincode_trait_derive::{Decode, Encode};
 use eyre::{Context, Result, eyre};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
-use symbolica::{
-    evaluate::{
-        FunctionRegistrationOptions, InliningPolicy, JITCompiledEvaluator, ParameterRowEvaluator,
-        ParameterRowPlan, ParameterRowWorkspace, ParameterRows,
-    },
-    prelude::*,
-    state::StateMap,
+use symbolica::evaluate::{
+    FunctionRegistrationOptions, InliningPolicy, JITCompiledEvaluator, ParameterRowEvaluator,
+    ParameterRowPlan, ParameterRowWorkspace, ParameterRows,
 };
+use symbolica::prelude::*;
+use symbolica::state::StateMap;
 
 use crate::integrands::process::cross_section::load::{
     LoadedStandaloneThresholdMultiplierCollection, StandaloneThresholdMultiplierCollectionArchive,
@@ -1314,7 +1312,7 @@ fn build_evaluator<A: ImportWithMap>(
     let mut evaluator = if iterate && payload.dual_shape.is_none() {
         let mut tree: Option<ExpressionEvaluator<Complex<Rational>>> = None;
         for expr in &exprs {
-            let next = build(std::slice::from_ref(expr))?;
+            let next = build(slice::from_ref(expr))?;
             tree = Some(if let Some(mut merged) = tree {
                 merged
                     .merge(next, cpe_iterations)
@@ -1545,16 +1543,16 @@ fn print_usage(program: &str) {
 
 fn parse_cli_options() -> Result<StandaloneCliOptions> {
     let mut options = StandaloneCliOptions::default();
-    let mut args = std::env::args().skip(1);
+    let mut args = env::args().skip(1);
 
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--help" | "-h" => {
-                let program = std::env::args()
+                let program = env::args()
                     .next()
                     .unwrap_or_else(|| "standalone_evaluators_rust.rs".to_string());
                 print_usage(&program);
-                std::process::exit(0);
+                process::exit(0);
             }
             "--backend" => {
                 options.backend = StandaloneBackend::parse(
@@ -2034,7 +2032,7 @@ impl LoadedStandaloneEvaluatorStack {
 fn load_bin(path: impl AsRef<Path>) -> Result<LoadedStandaloneEvaluators> {
     let binary =
         fs::read(&path).with_context(|| format!("Cannot read {}", path.as_ref().display()))?;
-    let (version, _): (u32, _) = bincode::decode_from_slice(&binary, bincode::config::standard())?;
+    let (version, _): (u32, _) = bincode::decode_from_slice(&binary, config::standard())?;
     if version != STANDALONE_EVALUATORS_VERSION {
         return Err(eyre!(
             "Unsupported version {version} (expected {}); regenerate the standalone archive",
@@ -2042,7 +2040,7 @@ fn load_bin(path: impl AsRef<Path>) -> Result<LoadedStandaloneEvaluators> {
         ));
     }
     let (archive, _): (StandaloneEvaluatorArchive, _) =
-        bincode::decode_from_slice(&binary, bincode::config::standard())?;
+        bincode::decode_from_slice(&binary, config::standard())?;
 
     archive.load()
 }
@@ -2226,27 +2224,20 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod threshold_variant_archive_tests {
     use super::*;
-    use crate::{
-        initialisation::test_initialise,
-        integrands::process::{
-            cross_section::{
-                export::export_threshold_multiplier_collection,
-                load::{
-                    StandaloneGenericEvaluatorArchive as CrossSectionGenericEvaluatorArchive,
-                    StandaloneThresholdMultiplierLayoutArchive,
-                    StandaloneThresholdMultiplierVariantReference,
-                },
-            },
-            threshold_multiplier::{
-                ThresholdMultiplierEvaluatorCollection, ThresholdMultiplierLayout,
-            },
-        },
-        processes::{
-            EvaluatorSettings, ThresholdCountertermAssociationMetadata,
-            ThresholdCountertermComponentMetadata, ThresholdCountertermEvaluatorMetadata,
-            ThresholdCountertermMultiplierMetadata, ThresholdCountertermVariantId,
-            ThresholdCountertermVariantMetadata,
-        },
+    use crate::initialisation;
+    use crate::integrands::process::cross_section::export::export_threshold_multiplier_collection;
+    use crate::integrands::process::cross_section::load::{
+        StandaloneGenericEvaluatorArchive as CrossSectionGenericEvaluatorArchive,
+        StandaloneThresholdMultiplierLayoutArchive, StandaloneThresholdMultiplierVariantReference,
+    };
+    use crate::integrands::process::threshold_multiplier::{
+        ThresholdMultiplierEvaluatorCollection, ThresholdMultiplierLayout,
+    };
+    use crate::processes::{
+        EvaluatorSettings, ThresholdCountertermAssociationMetadata,
+        ThresholdCountertermComponentMetadata, ThresholdCountertermEvaluatorMetadata,
+        ThresholdCountertermMultiplierMetadata, ThresholdCountertermVariantId,
+        ThresholdCountertermVariantMetadata,
     };
     use symbolica::state::State;
 
@@ -2655,7 +2646,7 @@ mod threshold_variant_archive_tests {
 
     #[test]
     fn standalone_roundtrip_preserves_multiplier_evaluator_and_layout() {
-        test_initialise().unwrap();
+        initialisation::test_initialise().unwrap();
         let additional_parameters = [
             Atom::var(symbol!("archive_weight_b")),
             Atom::var(symbol!("archive_weight_a")),
@@ -2729,9 +2720,9 @@ mod threshold_variant_archive_tests {
 
         let expected_inputs = archive.layout.inputs.clone();
         let expected_additional_parameters = archive.layout.additional_parameters.clone();
-        let encoded = bincode::encode_to_vec(&archive, bincode::config::standard()).unwrap();
+        let encoded = bincode::encode_to_vec(&archive, config::standard()).unwrap();
         let (decoded, _): (StandaloneThresholdMultiplierCollectionArchive<String>, _) =
-            bincode::decode_from_slice(&encoded, bincode::config::standard()).unwrap();
+            bincode::decode_from_slice(&encoded, config::standard()).unwrap();
         assert_eq!(
             decoded.layout.additional_parameters,
             expected_additional_parameters,
@@ -2776,8 +2767,39 @@ mod threshold_variant_archive_tests {
 
 #[cfg(test)]
 mod tests {
+    use crate::cff::expression::OrientationID;
+    use crate::initialisation;
+    use crate::integrands::evaluation::EvaluationMetaData;
+    use crate::integrands::process::ParamBuilder;
+    use crate::integrands::process::amplitude::export as amplitude_export;
+    use crate::integrands::process::amplitude::export::ExportAtomTo;
+    use crate::integrands::process::cross_section::export as cross_export;
+    use crate::integrands::process::cross_section::load::{
+        STANDALONE_EVALUATORS_VERSION as CROSS_STANDALONE_EVALUATORS_VERSION,
+        StandaloneCountertermArchive, StandaloneCountertermIntegrandsArchive,
+        StandaloneCrossSectionArchive, StandaloneCrossSectionGraphTermArchive,
+        StandaloneCutCFFIndex as CrossStandaloneCutCFFIndex,
+        StandaloneIndexedEvaluatorStackArchive as CrossStandaloneIndexedEvaluatorStackArchive,
+        StandaloneIteratedCollectionArchive,
+    };
+    use crate::integrands::process::evaluators::{
+        EvaluatorMethod, EvaluatorStack, InputParams, SingleOrAllOrientations, SliceMut,
+    };
+    use crate::integrands::process::param_builder::FnMapEntry;
+    use crate::processes::EvaluatorSettings;
+    use crate::settings::RuntimeSettings;
+    use crate::utils::F;
+    use crate::utils::hyperdual_utils::DualOrNot;
+    use crate::uv::{ParametricIntegrandRow, ParametricIntegrandTerm};
     use linnet::half_edge::involution::EdgeIndex;
+    use linnet::half_edge::involution::{EdgeVec, Orientation};
+    use linnet::half_edge::subgraph::SubSetLike;
+    use linnet::half_edge::subgraph::subset::SubSet;
+    use serde_json::json;
+    use spenso::algebra::complex::Complex as NativeComplex;
+    use std::sync::Arc;
     use symbolica::printer::PrintOptions;
+    use typed_index_collections::TiVec;
 
     use crate::utils::GS;
 
@@ -2793,10 +2815,7 @@ mod tests {
         let u = parse_lit!(standalone_exact_rows::u);
         let v = parse_lit!(standalone_exact_rows::v);
         let numerator = symbol!("standalone_exact_rows::numerator");
-        let print = |atom: &Atom| {
-            atom.printer(symbolica::printer::PrintOptions::file())
-                .to_string()
-        };
+        let print = |atom: &Atom| atom.printer(PrintOptions::file()).to_string();
         let root = Symbol::IF.call_args([
             coefficient.clone(),
             &coefficient * numerator.call_args(params.clone()),
@@ -2830,9 +2849,9 @@ mod tests {
             };
             let json: StandaloneGenericEvaluatorArchive<String> =
                 serde_json::from_slice(&serde_json::to_vec(&payload)?)?;
-            let bytes = bincode::encode_to_vec(&payload, bincode::config::standard())?;
+            let bytes = bincode::encode_to_vec(&payload, config::standard())?;
             let (binary, consumed): (StandaloneGenericEvaluatorArchive<String>, _) =
-                bincode::decode_from_slice(&bytes, bincode::config::standard())?;
+                bincode::decode_from_slice(&bytes, config::standard())?;
             assert_eq!(consumed, bytes.len());
             for restored in [json, binary] {
                 assert_eq!(restored.parameter_rows.as_ref(), Some(&rows));
@@ -2888,12 +2907,12 @@ mod tests {
 
     #[test]
     fn standalone_loader_cpp_complex_constants_match_eager_and_assembly() -> Result<()> {
-        let root = std::env::temp_dir().join(format!(
+        let root = env::temp_dir().join(format!(
             "gammaloop_standalone_loader_complex_export_{}",
-            std::process::id()
+            process::id()
         ));
-        let x = symbolica::parse!("standalone_loader_complex_export::x");
-        let q = symbolica::parse!("standalone_loader_complex_export::q");
+        let x = parse!("standalone_loader_complex_export::x");
+        let q = parse!("standalone_loader_complex_export::q");
         for imaginary in [true, false] {
             for retained in [false, true] {
                 let coefficient = Atom::num(Rational::new(1, 8))
@@ -2930,7 +2949,7 @@ mod tests {
                 ];
                 let mut trees = expressions.iter().map(|expression| {
                     expression
-                        .evaluator(std::slice::from_ref(&x))
+                        .evaluator(slice::from_ref(&x))
                         .function_map(functions.clone())
                         .optimization_settings(OptimizationSettings::new().cores(1))
                         .build()
@@ -3007,9 +3026,9 @@ mod tests {
             )];
             let json = serde_json::to_vec(&entries)?;
             let parsed: Vec<SerializedFnMapEntry<String>> = serde_json::from_slice(&json)?;
-            let bytes = bincode::encode_to_vec(&parsed, bincode::config::standard())?;
+            let bytes = bincode::encode_to_vec(&parsed, config::standard())?;
             let (restored, consumed): (Vec<SerializedFnMapEntry<String>>, _) =
-                bincode::decode_from_slice(&bytes, bincode::config::standard())?;
+                bincode::decode_from_slice(&bytes, config::standard())?;
             assert_eq!(consumed, bytes.len());
             assert_eq!(restored, entries);
             let parsed = parse_fn_map_entries(&restored, &StateMap::default())?;
@@ -3017,7 +3036,7 @@ mod tests {
             let parameter = parse_lit!(standalone_wide::x);
             let root = symbol!(function).call_args((0..arity).map(|i| &parameter + i));
             let mut evaluator = root
-                .evaluator(std::slice::from_ref(&parameter))
+                .evaluator(slice::from_ref(&parameter))
                 .function_map(fn_map)
                 .build()
                 .map_err(|error| eyre!(error))?
@@ -3046,9 +3065,9 @@ mod tests {
             let json = serde_json::to_vec(&compiled)?;
             let mut restored_json: JITCompiledEvaluator<Complex<f64>> =
                 serde_json::from_slice(&json)?;
-            let saved = bincode::encode_to_vec(&compiled, bincode::config::standard())?;
+            let saved = bincode::encode_to_vec(&compiled, config::standard())?;
             let (mut restored, consumed): (JITCompiledEvaluator<Complex<f64>>, _) =
-                bincode::decode_from_slice(&saved, bincode::config::standard())?;
+                bincode::decode_from_slice(&saved, config::standard())?;
             assert_eq!(consumed, saved.len());
             let input = [Complex::new(2.0, 1.0)];
             let mut output = [Complex::new(0.0, 0.0)];
@@ -3068,14 +3087,11 @@ mod tests {
     #[test]
     fn standalone_function_policy_roundtrip_preserves_shared_bodies_and_alias_scope() -> Result<()>
     {
-        let x = symbolica::parse!("standalone_policy::x");
-        let global = symbolica::parse!("standalone_policy::global");
-        let alias = symbolica::parse!("standalone_policy::alias(0)");
+        let x = parse!("standalone_policy::x");
+        let global = parse!("standalone_policy::global");
+        let alias = parse!("standalone_policy::alias(0)");
         let function = symbol!("standalone_policy::function");
-        let print = |atom: &Atom| {
-            atom.printer(symbolica::printer::PrintOptions::file())
-                .to_string()
-        };
+        let print = |atom: &Atom| atom.printer(PrintOptions::file()).to_string();
         for tags in [Vec::new(), vec![Atom::num(7)]] {
             let call = |argument: Atom| {
                 FunctionBuilder::new(function)
@@ -3104,9 +3120,9 @@ mod tests {
                 ];
                 let json = serde_json::to_vec(&entries)?;
                 let parsed: Vec<SerializedFnMapEntry<String>> = serde_json::from_slice(&json)?;
-                let bytes = bincode::encode_to_vec(&parsed, bincode::config::standard())?;
+                let bytes = bincode::encode_to_vec(&parsed, config::standard())?;
                 let (restored, consumed): (Vec<SerializedFnMapEntry<String>>, _) =
-                    bincode::decode_from_slice(&bytes, bincode::config::standard())?;
+                    bincode::decode_from_slice(&bytes, config::standard())?;
                 assert_eq!(consumed, bytes.len());
                 assert_eq!(restored, entries);
                 let mut parsed = parse_fn_map_entries(&restored, &StateMap::default())?;
@@ -3229,36 +3245,7 @@ mod tests {
 
     #[test]
     fn exported_threshold_inputs_preserve_native_rows_and_nonzero_jets() -> Result<()> {
-        use crate::{
-            cff::expression::OrientationID,
-            initialisation::test_initialise,
-            integrands::{
-                evaluation::EvaluationMetaData,
-                process::{
-                    ParamBuilder,
-                    amplitude::export::{ExportAtomTo, export_evaluator_stack},
-                    cross_section::{export as cross_export, load as cross},
-                    evaluators::{
-                        EvaluatorMethod, EvaluatorStack, InputParams, SingleOrAllOrientations,
-                        SliceMut,
-                    },
-                    param_builder::FnMapEntry,
-                },
-            },
-            processes::EvaluatorSettings,
-            settings::RuntimeSettings,
-            utils::{F, hyperdual_utils::DualOrNot},
-            uv::{ParametricIntegrandRow, ParametricIntegrandTerm},
-        };
-        use linnet::half_edge::{
-            involution::{EdgeVec, Orientation},
-            subgraph::{SubSetLike, subset::SubSet},
-        };
-        use spenso::algebra::complex::Complex as NativeComplex;
-        use std::sync::Arc;
-        use typed_index_collections::TiVec;
-
-        test_initialise()?;
+        initialisation::test_initialise()?;
         let x = Atom::var(symbol!("standalone_export_test::x"));
         let y = Atom::var(symbol!("standalone_export_test::y"));
         let q = Atom::var(symbol!("standalone_export_test::q"));
@@ -3327,7 +3314,7 @@ mod tests {
                     .compute_out_size()
                     > 0
             );
-            let exported = export_evaluator_stack::<String>(
+            let exported = amplitude_export::export_evaluator_stack::<String>(
                 &native,
                 0,
                 0,
@@ -3354,19 +3341,19 @@ mod tests {
             let cross_stack = cross_export::export_evaluator_stack::<String>(&native, 0, 0)?;
             assert_eq!(cross_stack.mult_offset, width);
             assert!(cross_stack.representative_input.is_empty());
-            let indexed = cross::StandaloneIndexedEvaluatorStackArchive {
-                cut_cff_index: cross::StandaloneCutCFFIndex {
+            let indexed = CrossStandaloneIndexedEvaluatorStackArchive {
+                cut_cff_index: CrossStandaloneCutCFFIndex {
                     left_threshold_order: None,
                     right_threshold_order: None,
                     lu_cut_order: Some(width),
                 },
                 evaluator_stack: cross_stack,
             };
-            let cross_archive = cross::StandaloneCrossSectionArchive {
-                version: cross::STANDALONE_EVALUATORS_VERSION,
+            let cross_archive = StandaloneCrossSectionArchive {
+                version: CROSS_STANDALONE_EVALUATORS_VERSION,
                 three_d_representations: vec!["cff".into(), "ltd".into()],
                 symbolica_state: (),
-                graph_terms: vec![cross::StandaloneCrossSectionGraphTermArchive {
+                graph_terms: vec![StandaloneCrossSectionGraphTermArchive {
                     graph_name: "threshold_jets".into(),
                     orientations: vec![],
                     param_builder_params: vec![
@@ -3377,24 +3364,23 @@ mod tests {
                     cut_group_integrands: BTreeMap::from(
                         ["cff", "ltd"].map(|rep| (rep.into(), vec![vec![indexed.clone()]])),
                     ),
-                    counterterms: vec![cross::StandaloneCountertermArchive {
+                    counterterms: vec![StandaloneCountertermArchive {
                         integrands: BTreeMap::from(["cff", "ltd"].map(|rep| {
                             (
                                 rep.into(),
-                                cross::StandaloneCountertermIntegrandsArchive {
+                                StandaloneCountertermIntegrandsArchive {
                                     left_thresholds_evaluator: vec![vec![indexed.clone()]],
                                     right_thresholds_evaluator: vec![vec![indexed.clone()]],
-                                    iterated_evaluator:
-                                        cross::StandaloneIteratedCollectionArchive {
-                                            data: vec![vec![indexed.clone()]],
-                                            num_right_thresholds: 1,
-                                        },
+                                    iterated_evaluator: StandaloneIteratedCollectionArchive {
+                                        data: vec![vec![indexed.clone()]],
+                                        num_right_thresholds: 1,
+                                    },
                                 },
                             )
                         })),
                         left_threshold_helpers: vec![vec![]],
                         right_threshold_helpers: vec![vec![]],
-                        iterated_helpers: cross::StandaloneIteratedCollectionArchive {
+                        iterated_helpers: StandaloneIteratedCollectionArchive {
                             data: vec![vec![]],
                             num_right_thresholds: 1,
                         },
@@ -3404,12 +3390,12 @@ mod tests {
                     threshold_counterterm_metadata: None,
                 }],
             };
-            let cross_json: cross::StandaloneCrossSectionArchive<(), String> =
+            let cross_json: StandaloneCrossSectionArchive<(), String> =
                 serde_json::from_slice(&serde_json::to_vec(&cross_archive)?)?;
-            let (cross_binary, _): (cross::StandaloneCrossSectionArchive<(), String>, _) =
+            let (cross_binary, _): (StandaloneCrossSectionArchive<(), String>, _) =
                 bincode::decode_from_slice(
-                    &bincode::encode_to_vec(&cross_archive, bincode::config::standard())?,
-                    bincode::config::standard(),
+                    &bincode::encode_to_vec(&cross_archive, config::standard())?,
+                    config::standard(),
                 )?;
             let mut cross_loaded = Vec::new();
             for restored in [cross_json, cross_binary] {
@@ -3510,9 +3496,9 @@ mod tests {
                     metadata_registry: None,
                 }],
             };
-            let binary = bincode::encode_to_vec(&archive, bincode::config::standard())?;
+            let binary = bincode::encode_to_vec(&archive, config::standard())?;
             let (binary, _): (StandaloneEvaluatorArchive<(), String>, _) =
-                bincode::decode_from_slice(&binary, bincode::config::standard())?;
+                bincode::decode_from_slice(&binary, config::standard())?;
             let json = serde_json::from_slice::<StandaloneEvaluatorArchive<(), String>>(
                 &serde_json::to_vec(&archive)?,
             )?;
@@ -3741,9 +3727,9 @@ mod tests {
                 metadata_registry: None,
             }],
         };
-        let encoded = bincode::encode_to_vec(&archive, bincode::config::standard())?;
+        let encoded = bincode::encode_to_vec(&archive, config::standard())?;
         let (binary, _): (StandaloneEvaluatorArchive<(), String>, _) =
-            bincode::decode_from_slice(&encoded, bincode::config::standard())?;
+            bincode::decode_from_slice(&encoded, config::standard())?;
         let json = serde_json::from_slice::<StandaloneEvaluatorArchive<(), String>>(
             &serde_json::to_vec(&archive)?,
         )?;
@@ -3830,7 +3816,7 @@ mod tests {
                 .unwrap();
             let mut rows = serde_json::to_value(stack.parametric_rows.as_ref().unwrap())?;
             if empty_rows {
-                rows["rows"] = serde_json::json!([]);
+                rows["rows"] = json!([]);
             } else {
                 rows["rows"][0].as_array_mut().unwrap().pop();
             }
