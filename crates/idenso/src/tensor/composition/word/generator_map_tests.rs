@@ -1,13 +1,24 @@
+use super::tests::canonical;
 use super::*;
-use crate::{bis, dirac::AGS};
+use crate::bis;
+use crate::dirac::AGS;
+use crate::test_support;
+use spenso::structure::abstract_index::AbstractIndex;
+use spenso::structure::partial::PartialIndex;
 use spenso::structure::representation::Minkowski;
+use spenso::structure::representation::{LibraryRep, RepName, Representation};
 use spenso::structure::slot::DummyAind;
+use spenso::structure::slot::{IsAbstractSlot, Slot};
+use std::env;
+use std::process::Command;
+use std::slice;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use symbolica::{function, symbol};
 
 type Tensor = SymbolicTensor<PartialStructure>;
 
 fn head() -> Symbol {
-    crate::test_support::test_initialize();
+    test_support::test_initialize();
     symbol!("word_generator_map::exterior"; Flat, Linear, Antisymmetric;
         tag = &SPENSO_TAG.tensor_word)
 }
@@ -43,11 +54,7 @@ fn renamed(generator: &Tensor, name: &str) -> Tensor {
 }
 
 fn marked(head: Symbol, value: &Tensor) -> Tensor {
-    Tensor::word(head, std::slice::from_ref(value)).unwrap()
-}
-
-fn canonical(value: &Tensor) -> Atom {
-    value.canonize().unwrap().expression
+    Tensor::word(head, slice::from_ref(value)).unwrap()
 }
 
 #[test]
@@ -347,7 +354,7 @@ fn generator_map_refuses_foreign_hidden_and_powered_word_grammars() {
     let foreign = symbol!("word_generator_map::foreign"; Flat, Linear, Antisymmetric;
         tag = &SPENSO_TAG.tensor_word);
     let source = marked(head, &a);
-    let foreign = Tensor::word(foreign, std::slice::from_ref(&b)).unwrap();
+    let foreign = Tensor::word(foreign, slice::from_ref(&b)).unwrap();
     assert!(
         source
             .map_word_generators(head, |_| Ok(foreign.clone()))
@@ -384,7 +391,6 @@ fn generator_map_refuses_foreign_hidden_and_powered_word_grammars() {
 
 #[test]
 fn generator_map_preserves_opaque_metadata_and_unchanged_normalizers() {
-    use std::sync::atomic::{AtomicUsize, Ordering};
     static CALLS: AtomicUsize = AtomicUsize::new(0);
     let head = head();
     let metadata = symbol!("word_generator_map::metadata"; Scalar);
@@ -513,8 +519,8 @@ fn generator_map_refuses_rank_changes_from_scoping_normalizers() {
 #[test]
 fn generator_map_scope_collision_at_the_actual_allocator_frontier() {
     const CHILD: &str = "IDENSO_WORD_MAP_SCOPE_FRONTIER_CHILD";
-    if std::env::var_os(CHILD).is_none() {
-        let output = std::process::Command::new(std::env::current_exe().unwrap())
+    if env::var_os(CHILD).is_none() {
+        let output = Command::new(env::current_exe().unwrap())
             .args([
                 "--exact",
                 "tensor::composition::word::generator_map_tests::generator_map_scope_collision_at_the_actual_allocator_frontier",
@@ -575,7 +581,6 @@ fn generator_map_scope_collision_at_the_actual_allocator_frontier() {
 
 #[test]
 fn word_constructor_reuses_explicit_operands_but_materializes_unresolved_ones() {
-    use std::sync::atomic::{AtomicUsize, Ordering};
     static CALLS: AtomicUsize = AtomicUsize::new(0);
     let head = head();
     let normalizer = symbol!(
@@ -613,7 +618,7 @@ fn word_constructor_reuses_explicit_operands_but_materializes_unresolved_ones() 
         ),
         PartialStructure::from_logical_slots([]),
     );
-    assert!(Tensor::word(head, &[invalid]).is_err());
+    assert!(invalid.is_err());
     let erased = symbol!(
         "word_generator_map::constructor_erased",
         tag = &SPENSO_TAG.tensor_word,
@@ -621,7 +626,7 @@ fn word_constructor_reuses_explicit_operands_but_materializes_unresolved_ones() 
             **output = Atom::one();
         }
     );
-    assert!(Tensor::word(erased, std::slice::from_ref(&explicit)).is_err());
+    assert!(Tensor::word(erased, slice::from_ref(&explicit)).is_err());
     let annihilated = symbol!(
         "word_generator_map::constructor_zero",
         tag = &SPENSO_TAG.tensor_word,
@@ -632,4 +637,107 @@ fn word_constructor_reuses_explicit_operands_but_materializes_unresolved_ones() 
     let zero = Tensor::word(annihilated, &[explicit]).unwrap();
     assert!(zero.is_zero());
     assert_eq!(zero.rank(), 1);
+}
+
+fn hidden_scalar(name: &str, index: usize) -> Tensor {
+    leaf(name, &[slot(index)])
+        .multiply(&leaf(&format!("{name}_partner"), &[slot(index)]))
+        .unwrap()
+        .with_algebra_result(Atom::one())
+        .unwrap()
+}
+
+fn probe_index(index: AbstractIndex) -> Tensor {
+    leaf(
+        "word_generator_map_history::probe",
+        &[Minkowski {}
+            .new_rep(4)
+            .slot::<AbstractIndex, _>(index)
+            .to_atom()],
+    )
+}
+
+#[test]
+fn generator_map_same_value_callback_retains_additional_hidden_history() {
+    let head = head();
+    let source = marked(
+        head,
+        &leaf("word_generator_map_history::same", &[slot(1001)]),
+    );
+    let rhs = hidden_scalar("word_generator_map_history::same_hidden", 1002)
+        .multiply_word(head, &source)
+        .unwrap();
+    assert!(rhs.same_value(&source));
+    let actual = source
+        .map_word_generators(head, |_| Ok(rhs.clone()))
+        .unwrap();
+    assert!(actual.same_value(&source));
+    let hidden = actual
+        .explicit_indices()
+        .unwrap()
+        .find(|index| *index != AbstractIndex::Normal(1001))
+        .expect("callback history survives");
+    assert!(matches!(
+        actual.multiply_word(head, &probe_index(hidden)),
+        Err(TensorCompositionError::InvalidExplicitMultiplicity { occurrences: 3, .. })
+    ));
+}
+
+#[test]
+fn generator_map_retains_freshened_histories_after_exterior_cancellation() {
+    let head = head();
+    let source = Tensor::word(
+        head,
+        &[
+            leaf("word_generator_map_history::cancel_a", &[]),
+            leaf("word_generator_map_history::cancel_b", &[]),
+        ],
+    )
+    .unwrap();
+    let rhs = hidden_scalar("word_generator_map_history::cancel_hidden", 1010)
+        .multiply_word(
+            head,
+            &marked(head, &leaf("word_generator_map_history::cancel_c", &[])),
+        )
+        .unwrap();
+    let actual = source
+        .map_word_generators(head, |_| Ok(rhs.clone()))
+        .unwrap();
+    assert!(actual.is_zero());
+    let indices = actual.explicit_indices().unwrap().collect::<Vec<_>>();
+    assert_eq!(indices.len(), 2);
+    assert!(matches!(
+        actual.multiply_word(head, &probe_index(indices[0])),
+        Err(TensorCompositionError::InvalidExplicitMultiplicity { occurrences: 3, .. })
+    ));
+}
+
+#[test]
+fn generator_map_reserves_scope_symbols_present_only_in_rhs_history() {
+    let head = head();
+    let source = marked(head, &leaf("word_generator_map_history::scope_a", &[]));
+    let rhs = hidden_scalar("word_generator_map_history::scope_hidden", 1020)
+        .multiply_word(
+            head,
+            &marked(head, &leaf("word_generator_map_history::scope_b", &[])),
+        )
+        .unwrap();
+    let AbstractIndex::Dummy(previous) = AbstractIndex::new_dummy() else {
+        unreachable!()
+    };
+    let occupied = AbstractIndex::Dummy(previous.checked_add(1).unwrap())
+        .to_atom()
+        .get_symbol()
+        .unwrap();
+    let rhs = rhs.wrap_indices(occupied, true).unwrap();
+    let original = rhs.explicit_indices().unwrap().next().unwrap();
+    let actual = source
+        .map_word_generators(head, |_| Ok(rhs.clone()))
+        .unwrap();
+    let inserted = actual.explicit_indices().unwrap().next().unwrap();
+    assert_ne!(inserted, original, "the occupied scope must not be reused");
+    assert!(matches!(
+        actual.multiply_word(head, &probe_index(inserted)),
+        Err(TensorCompositionError::InvalidExplicitMultiplicity { occurrences: 3, .. })
+    ));
 }

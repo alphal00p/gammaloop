@@ -5,8 +5,8 @@ use crate::tensor::inference::{InterfaceInference, TensorInferenceError, TensorI
 use spenso::network::tags::SPENSO_TAG;
 use spenso::structure::partial::{PartialStructure, PartialStructureExt};
 use spenso::structure::slot::ParseableAind;
-use std::mem;
 use std::sync::Arc;
+use std::{iter, mem, slice};
 use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol};
 use symbolica::symbol;
 
@@ -147,6 +147,30 @@ impl SymbolicTensor<PartialStructure> {
     /// zero returns unchanged without generator callbacks. Nonzero unresolved
     /// source ports are currently unsupported; this method does not claim an
     /// inverse materialization policy for those ports.
+    ///
+    /// # Errors
+    /// Rejects unsupported word grammar, nonzero unresolved source ports,
+    /// changed ordered callback slots, even or unmarked replacements, and
+    /// normalizers that violate the interface during bound-index freshening.
+    ///
+    /// # Example
+    /// ```
+    /// use std::slice;
+    /// use idenso::tensor::SymbolicTensor;
+    /// use idenso::tensor::inference::TensorInferenceError;
+    /// use spenso::network::tags::SPENSO_TAG;
+    /// use spenso::{mink, tensor_symbol};
+    /// use symbolica::{function, symbol};
+    /// let head = symbol!("word_map_example::exterior"; Flat, Linear, Antisymmetric;
+    ///     tag = &SPENSO_TAG.tensor_word);
+    /// let a = SymbolicTensor::infer(function!(tensor_symbol!("word_map_example::a"), mink!(4, 1)))?;
+    /// let word = SymbolicTensor::word(head, &[a])?;
+    /// let mapped = word.map_word_generators(head, |generator| {
+    ///     SymbolicTensor::word(head, slice::from_ref(generator))
+    /// })?;
+    /// assert!(mapped.same_value(&word));
+    /// # Ok::<(), TensorInferenceError>(())
+    /// ```
     pub fn map_word_generators(
         &self,
         head: Symbol,
@@ -158,11 +182,7 @@ impl SymbolicTensor<PartialStructure> {
                 "generator mapping requires a Flat, Linear, Antisymmetric exterior head",
             ));
         }
-        let composition_error =
-            |error: TensorCompositionError| TensorInferenceError::invalid(error.to_string());
-        ProductPlan::Scalar
-            .apply_word(head, &identity, self)
-            .map_err(composition_error)?;
+        ProductPlan::Scalar.apply_word(head, &identity, self)?;
         if self.is_zero() {
             return Ok(self.clone());
         }
@@ -176,15 +196,20 @@ impl SymbolicTensor<PartialStructure> {
         for term in self.expression.expand_in(Atom::var(head)).terms() {
             let mut coefficient = Vec::new();
             let mut generators = Vec::new();
-            Self::split_word_coefficient(head, term, &mut coefficient, &mut generators, &mut false)
-                .map_err(composition_error)?;
+            Self::split_word_coefficient(
+                head,
+                term,
+                &mut coefficient,
+                &mut generators,
+                &mut false,
+            )?;
             let mut values = Vec::with_capacity(generators.len());
             for generator in generators {
                 let interface = InterfaceInference::replacement_interface(generator.as_view())?;
                 let generator = Self::from_declared_parts(generator, interface)?;
-                let original = Self::word(head, std::slice::from_ref(&generator))?;
+                let original = Self::word(head, slice::from_ref(&generator))?;
                 let value = map(&generator)?;
-                value.ensure_validated()?;
+                let value_history = value.explicit_index_occurrences()?;
                 if value.structure.logical_slots() != generator.structure.logical_slots() {
                     return Err(TensorInferenceError::invalid(
                         "a mapped generator must preserve its complete ordered slots and labels",
@@ -203,15 +228,19 @@ impl SymbolicTensor<PartialStructure> {
                         &mut coefficient,
                         &mut generators,
                         &mut found,
-                    )
-                    .map_err(composition_error)?;
+                    )?;
                     if !found || generators.len().is_multiple_of(2) {
                         return Err(TensorInferenceError::invalid(
                             "a mapped generator must be a same-head odd word value or typed zero",
                         ));
                     }
                 }
-                let value_changed = !value.same_value(&original);
+                let original_history = original.explicit_index_occurrences()?;
+                let value_changed = !value.same_value(&original)
+                    || !value_history
+                        .oriented_entries()
+                        .eq(original_history.oriented_entries())
+                    || value_history.selected_pair != original_history.selected_pair;
                 changed |= value_changed;
                 values.push((value, value_changed));
             }
@@ -225,18 +254,25 @@ impl SymbolicTensor<PartialStructure> {
             return Ok(self.clone());
         }
         let dummies = Self::reserved_dummies(
-            std::iter::once(self).chain(
+            iter::once(self).chain(
                 terms
                     .iter()
                     .flat_map(|(_, values)| values.iter().map(|(value, _)| value)),
             ),
         );
         let mut used = self.expression.get_all_symbols(true);
+        for index in self.explicit_indices()? {
+            used.extend(index.to_atom().get_all_symbols(true));
+        }
         for (_, values) in &terms {
             for (value, _) in values {
                 used.extend(value.expression.get_all_symbols(true));
+                for index in value.explicit_indices()? {
+                    used.extend(index.to_atom().get_all_symbols(true));
+                }
             }
         }
+        let mut occurrences = self.explicit_index_occurrences()?.clone();
         let mut result = Vec::with_capacity(terms.len());
         for (coefficient, values) in terms {
             let interface = InterfaceInference::replacement_interface(coefficient.as_view())?;
@@ -253,17 +289,23 @@ impl SymbolicTensor<PartialStructure> {
                             break scope;
                         }
                     };
-                    value.wrap_indices(scope, true)?
+                    value.wrap_indices_checked(scope, true)?
                 } else {
                     value
                 };
-                term = term
-                    .multiply_word(head, &value)
-                    .map_err(composition_error)?;
+                term = term.multiply_word(head, &value)?;
             }
+            occurrences.branch_max(term.explicit_index_occurrences()?);
             result.push(term.expression);
         }
-        Self::from_declared_parts(Atom::add_many(result), self.structure.clone())
+        let value = Self::from_declared_parts(Atom::add_many(result), self.structure.clone())?;
+        occurrences.branch_max(value.explicit_index_occurrences()?);
+        occurrences.validate()?;
+        Ok(Self::from_validated_parts(
+            value.expression,
+            value.structure,
+            Arc::new(occurrences),
+        ))
     }
 
     /// Multiply marked tensor words using the ordinary automatic port plan.
@@ -513,14 +555,10 @@ impl SymbolicTensor<PartialStructure> {
                     .open_positions()
                     .into_iter()
                     .map(|position| (position, dummies.fresh_index()))
-                    .collect::<HashMap<_, _>>();
-                if replacements.is_empty() {
-                    // Already-explicit, validated operands need no port rewrite.
-                    // An empty rewrite still replays custom normalizers.
-                    Ok(operand.clone())
-                } else {
-                    operand.reindex_interface_ports(&replacements)
-                }
+                    .collect();
+                // The native reindex owner already returns explicit operands
+                // unchanged when no assignments are needed.
+                operand.reindex_interface_ports(&replacements)
             })
             .collect::<Result<Vec<_>, _>>()?;
         let occurrences =
@@ -614,7 +652,7 @@ mod tests {
         .unwrap()
     }
 
-    fn canonical(tensor: &SymbolicTensor<PartialStructure>) -> Atom {
+    pub(super) fn canonical(tensor: &SymbolicTensor<PartialStructure>) -> Atom {
         let mut slots = SlotMatcher::default();
         let mut indices = BTreeMap::new();
         tensor.expression.visitor(&mut |part| {

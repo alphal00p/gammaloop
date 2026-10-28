@@ -1339,6 +1339,33 @@ impl SymbolicTensor<PartialStructure> {
     ///
     /// Rejects invalid source metadata or invalid resulting explicit-index multiplicities.
     pub fn wrap_indices(&self, scope: Symbol, dummies_only: bool) -> InferenceResult<Self> {
+        let result = self.scoped_indices(scope, dummies_only)?;
+        TensorProofs::assert_normalization_preserves_interface(
+            "wrap_indices",
+            &[&self.expression],
+            &result.expression,
+            Ok(&result.structure),
+            None,
+        );
+        Ok(result)
+    }
+
+    /// Scope a callback-provided value through checked observational admission.
+    /// This shares index transport with ordinary wrapping, but returns a typed
+    /// error if a triggered normalizer changes the established interface.
+    pub(super) fn wrap_indices_checked(
+        &self,
+        scope: Symbol,
+        dummies_only: bool,
+    ) -> InferenceResult<Self> {
+        let result = self.scoped_indices(scope, dummies_only)?;
+        Self::validate_interface(&result.expression, &result.structure)?;
+        Ok(result)
+    }
+
+    /// Transport payload and retained metadata together. Callers must check or
+    /// assert the normalizer contract before exposing the resulting carrier.
+    fn scoped_indices(&self, scope: Symbol, dummies_only: bool) -> InferenceResult<Self> {
         self.explicit_index_occurrences()?;
         let mut structure = self.structure.logical_slots();
         let external = structure
@@ -1370,13 +1397,6 @@ impl SymbolicTensor<PartialStructure> {
         occurrences.validate()?;
         let mut result = Self::from_validated_parts(expression, structure, Arc::new(occurrences));
         result.proofs.normalized_product = self.proofs.normalized_product.clone();
-        TensorProofs::assert_normalization_preserves_interface(
-            "wrap_indices",
-            &[&self.expression],
-            &result.expression,
-            Ok(&result.structure),
-            None,
-        );
         Ok(result)
     }
 
