@@ -1,0 +1,256 @@
+{
+  "code": "0d3ddb5246416427be56c57c91ec1a095037e818",
+  "resource_test_configurations": [
+    {
+      "configuration": "default",
+      "names": [
+        "tests::missing_resources_name_the_installable_package",
+        "tests::failed_load_and_corrupt_install_do_not_prevent_a_verified_retry",
+        "tests::filesystem_resources_preserve_validation_lookup_and_retry"
+      ],
+      "unit_tests": 3,
+      "test_artifact": {
+        "reason": "compiler-artifact",
+        "package_id": "path+file:///shared/lcnbr/dev/gammaloop/generation-integration-plan/crates/symbolica-data#0.1.0",
+        "manifest_path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/crates/symbolica-data/Cargo.toml",
+        "target": {
+          "kind": [
+            "lib"
+          ],
+          "crate_types": [
+            "lib"
+          ],
+          "name": "symbolica_data",
+          "src_path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/crates/symbolica-data/src/lib.rs",
+          "edition": "2024",
+          "doc": true,
+          "doctest": true,
+          "test": true
+        },
+        "profile": {
+          "opt_level": "0",
+          "debuginfo": 2,
+          "debug_assertions": true,
+          "overflow_checks": true,
+          "test": true
+        },
+        "features": [],
+        "filenames": [
+          "/common/build-cache/lcnbr/4b/842977226ffc97/debug/deps/symbolica_data-d57858769387cc54"
+        ],
+        "executable": "/common/build-cache/lcnbr/4b/842977226ffc97/debug/deps/symbolica_data-d57858769387cc54",
+        "fresh": false,
+        "executable_sha256": "c980e40bfc3a035b35307d76b3ef30831282ecf84d10378abafd87fc028961c7"
+      },
+      "compile_only_doctests": 0,
+      "zero_test_pass_credit": 0
+    },
+    {
+      "configuration": "python",
+      "names": [
+        "tests::missing_resources_name_the_installable_package",
+        "tests::failed_load_and_corrupt_install_do_not_prevent_a_verified_retry",
+        "tests::filesystem_resources_preserve_validation_lookup_and_retry"
+      ],
+      "unit_tests": 3,
+      "test_artifact": {
+        "reason": "compiler-artifact",
+        "package_id": "path+file:///shared/lcnbr/dev/gammaloop/generation-integration-plan/crates/symbolica-data#0.1.0",
+        "manifest_path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/crates/symbolica-data/Cargo.toml",
+        "target": {
+          "kind": [
+            "lib"
+          ],
+          "crate_types": [
+            "lib"
+          ],
+          "name": "symbolica_data",
+          "src_path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/crates/symbolica-data/src/lib.rs",
+          "edition": "2024",
+          "doc": true,
+          "doctest": true,
+          "test": true
+        },
+        "profile": {
+          "opt_level": "0",
+          "debuginfo": 2,
+          "debug_assertions": true,
+          "overflow_checks": true,
+          "test": true
+        },
+        "features": [
+          "python"
+        ],
+        "filenames": [
+          "/common/build-cache/lcnbr/4b/842977226ffc97/debug/deps/symbolica_data-8e916252424858a1"
+        ],
+        "executable": "/common/build-cache/lcnbr/4b/842977226ffc97/debug/deps/symbolica_data-8e916252424858a1",
+        "fresh": false,
+        "executable_sha256": "601e9c03cc8f368cde1c51130e942998e656a7f91729d3b4f5f323531ffa82d9"
+      },
+      "compile_only_doctests": 1,
+      "zero_test_pass_credit": 0
+    }
+  ],
+  "unique_resource_tests": 3,
+  "unit_executions": 6,
+  "optional_python_doc_example": "One compile-only no_run doctest; not runtime coverage",
+  "commands": {
+    "default": [
+      "cargo",
+      "test",
+      "--locked",
+      "-p",
+      "symbolica-data",
+      "--message-format=json"
+    ],
+    "python": [
+      "cargo",
+      "test",
+      "--locked",
+      "-p",
+      "symbolica-data",
+      "--features",
+      "python",
+      "--message-format=json"
+    ],
+    "clippy": [
+      "cargo",
+      "clippy",
+      "--locked",
+      "-p",
+      "symbolica-data",
+      "--all-targets",
+      "--all-features",
+      "--",
+      "-D",
+      "warnings"
+    ],
+    "Rustfmt": [
+      "rustfmt",
+      "--edition",
+      "2024",
+      "--check",
+      "crates/symbolica-data/src/lib.rs"
+    ],
+    "kernel": [
+      "just",
+      "check-symbolica-feature-isolation"
+    ],
+    "packaging": [
+      "python3",
+      "-m",
+      "unittest",
+      "discover",
+      "-s",
+      "tests/packaging",
+      "-p",
+      "test_drawing_notices.py",
+      "-v"
+    ]
+  },
+  "all_exits": 0,
+  "packaging": "5 actual fixture/recipe/sdist/notice tests; no skips; no final Community wheel certification",
+  "resource_delivery": "delivery.json; source-generated actual manifest and current Cargo rlib; real552168byte Nix font payload; no stale host extension",
+  "Python_resource_embedding": "python-owner.json; actual public registration API and Python setter/manifest against newly compiled current resource owner; not full installed Community extension",
+  "docs": "103valid scopes/65titles/6products/16controls; original102 objects unchanged; registered note/plan PDF+HTML and canonical single-note bundle pass",
+  "historical": "Preparation default3 tests and28/101scope failures remain at277/main30; prior full canonical a372 pass not relabelled current",
+  "logs": [
+    {
+      "path": "target/wp3-source36/checks.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "target/wp3-source36/clippy.log",
+      "sha256": "9f0568ee70db5188e081fb2abf19a2f12c7e1779cc40909b02586ae743509810"
+    },
+    {
+      "path": "target/wp3-source36/delivery-compile.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "target/wp3-source36/delivery.log",
+      "sha256": "7753abd6360790f2a70aa8407d44feb65a5a7387fe785cbc70e31d8b0da134af"
+    },
+    {
+      "path": "target/wp3-source36/format.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "target/wp3-source36/generate-compile.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "target/wp3-source36/generate.log",
+      "sha256": "f74d365fad4ee153657b4cb67da8fdb623961862a5345f1e977ef42c5c120e32"
+    },
+    {
+      "path": "target/wp3-source36/kernel.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "target/wp3-source36/note-bundle.log",
+      "sha256": "f6291bee2aca5f6a6694512616225bc21e5352431485b391daf60be2898ee573"
+    },
+    {
+      "path": "target/wp3-source36/note-html.log",
+      "sha256": "d103175d5ac5ba1d2d4afae2e801958a1e0dafae1b43ffe6f1f44f3783a2f3ce"
+    },
+    {
+      "path": "target/wp3-source36/note-pdf.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "target/wp3-source36/packaging.log",
+      "sha256": "572707c58f622fe74e3776857538a9c52131f09c0b3b53575b155b8b4fad1a56"
+    },
+    {
+      "path": "target/wp3-source36/plan-html.log",
+      "sha256": "d103175d5ac5ba1d2d4afae2e801958a1e0dafae1b43ffe6f1f44f3783a2f3ce"
+    },
+    {
+      "path": "target/wp3-source36/plan-pdf.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "target/wp3-source36/probe.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "target/wp3-source36/probe.log",
+      "sha256": "cb9ef625bc24860f22c2ed80d30e2926d7ffa66b1db92395bba23e06be887c37"
+    },
+    {
+      "path": "target/wp3-source36/python-owner-compile.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "target/wp3-source36/python-owner.log",
+      "sha256": "7d5372b8cf0da7e7dcb088a150b61250dec85e1613063f5f45612f34fc2c316d"
+    },
+    {
+      "path": "target/wp3-source36/python-probe.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "target/wp3-source36/python-probe.log",
+      "sha256": "98dbfb3d9e88cee0770fa22e25bedd5cf4a1c74da2f4fc9b56528943256e8bf6"
+    },
+    {
+      "path": "target/wp3-source36/tests-default.stderr",
+      "sha256": "ae89aa5858bd71b4d9ea4aee3e7462edcf182e0dcd504fc3fc775328fcc0ddc8"
+    },
+    {
+      "path": "target/wp3-source36/tests-default.stdout",
+      "sha256": "112872abe023cb8a61e0eb96c3843dda88115b93f013405909dcc8a3c1e41c3a"
+    },
+    {
+      "path": "target/wp3-source36/tests-python.stderr",
+      "sha256": "cd589b2dc3e21d250d32baa9290abdd2d696e5a5ecc30b62713fb05092d2dfc9"
+    },
+    {
+      "path": "target/wp3-source36/tests-python.stdout",
+      "sha256": "16a3016cd1eb7637da38818c3dfd13da65d7d5ef5ae9af494aac5c92a2fe6b78"
+    }
+  ]
+}

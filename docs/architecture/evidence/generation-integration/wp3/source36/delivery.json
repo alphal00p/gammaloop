@@ -1,0 +1,83 @@
+{
+  "owner_source_sha256": "c9a5c55204a8cf9528e76462d926be118975399cf208634c4a6d63e0e3167168",
+  "linked_Cargo_artifact": {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///shared/lcnbr/dev/gammaloop/generation-integration-plan/crates/symbolica-data#0.1.0",
+    "manifest_path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/crates/symbolica-data/Cargo.toml",
+    "target": {
+      "kind": [
+        "lib"
+      ],
+      "crate_types": [
+        "lib"
+      ],
+      "name": "symbolica_data",
+      "src_path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/crates/symbolica-data/src/lib.rs",
+      "edition": "2024",
+      "doc": true,
+      "doctest": true,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "0",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": false
+    },
+    "features": [],
+    "filenames": [
+      "/common/build-cache/lcnbr/4b/842977226ffc97/debug/deps/libsymbolica_data-fb0faec9e1676f08.rlib",
+      "/common/build-cache/lcnbr/4b/842977226ffc97/debug/deps/libsymbolica_data-fb0faec9e1676f08.rmeta"
+    ],
+    "executable": null,
+    "fresh": false
+  },
+  "rlib_sha256": "96666d29fb2a4ae4535c32549177f2d2e5fc87c6eee924d609c7a3a773fb6d8c",
+  "generated_expectations": "target/wp3-source36/assets.rs",
+  "expectations_sha256": "b0cce490a45df625eb41e9adb1a8f19618f72f474547b42710a0b9c3105561a2",
+  "probes": [
+    {
+      "name": "generate",
+      "compile": [
+        "rustc",
+        "--edition=2024",
+        "target/wp3-source36/generate.rs",
+        "--extern",
+        "symbolica_data=/common/build-cache/lcnbr/4b/842977226ffc97/debug/deps/libsymbolica_data-fb0faec9e1676f08.rlib",
+        "-L",
+        "dependency=/common/build-cache/lcnbr/4b/842977226ffc97/debug/deps",
+        "-o",
+        "target/wp3-source36/generate"
+      ],
+      "run": [
+        "target/wp3-source36/generate"
+      ],
+      "exit": 0,
+      "binary_sha256": "69c4f4669ee96360e0bcd97158829a967601c3ddf16b4caccef8bed5af039d3e",
+      "stdout": "cargo:rerun-if-changed=crates/linnet-render-py/data.json\ncargo:rerun-if-changed=crates/linnet-render-py/fonts/STIXTwoMath-Regular.woff2\n"
+    },
+    {
+      "name": "delivery",
+      "compile": [
+        "rustc",
+        "--edition=2024",
+        "target/wp3-source36/delivery.rs",
+        "--extern",
+        "symbolica_data=/common/build-cache/lcnbr/4b/842977226ffc97/debug/deps/libsymbolica_data-fb0faec9e1676f08.rlib",
+        "-L",
+        "dependency=/common/build-cache/lcnbr/4b/842977226ffc97/debug/deps",
+        "-o",
+        "target/wp3-source36/delivery"
+      ],
+      "run": [
+        "target/wp3-source36/delivery",
+        "/nix/store/d7bngsa3jdpq4q7ah6lfl2wf1qxg05xi-gammaloop-render-data"
+      ],
+      "exit": 0,
+      "binary_sha256": "48709a0cd9292675a4891cbd787ca36321ab2825b6272b6c79f0bc652d772574",
+      "stdout": "actual resource delivery PASS: 552168 bytes; e623fcdb808e9a8a27833781f77d5a5ed5c7d5f34830aaa8bcc9fcf8ec32b9c9 ; missing/hash/size/nonmissing-error precedence/cache/retry\n"
+    }
+  ],
+  "scope": "Actual current Asset::generate and public Asset/Data consumer against official Nix render bundle and installed-style directory; no old host extension loaded, no mock resource owner, no installed Community wheel certification."
+}

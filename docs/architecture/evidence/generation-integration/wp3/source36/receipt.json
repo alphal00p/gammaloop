@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "status": "Source36-only integrated and focused combined validation complete; STOP for NEW independent Astra review before38",
+  "base": "510d79d94bbaf57aaaa992c641e7496905763324",
+  "original_source36": "5a99afbd1645250715ecf59361beb7ab4826d083",
+  "approved_preparation": {
+    "base": "7587d0c768363f200e89250683e7836c867c9b81",
+    "code": "6e9e5a245302806d872271861dd59b47dfcd4b86",
+    "candidate": "277d2f8b0051e0a41194b369fa683db550098bbb",
+    "review": "preparation-review.json",
+    "commands": "preparation-commands.json",
+    "historical_receipt": "docs/architecture/evidence/generation-asset-diagnostics-staged/receipt.json"
+  },
+  "code": "0d3ddb5246416427be56c57c91ec1a095037e818",
+  "code_change": "tznypqqkntuqtksqvrpomtnystqumqrw",
+  "author": "Lucien Huber <im@lcnbr.ch>",
+  "bookmark": "generation-integration-source36",
+  "source_disposition": "Reconcile SOURCE36 only; exact approved symbolica-data bytes. SOURCE25 already integrated and not replayed; original source attribution preserved in immutable source object and retained original-source.txt.",
+  "reconciliations": "Retain all31\u201335 note/scope objects, append one unique whole-file resource contract; registered note labels original main30 preparation as historical and current main35 integration separately. No old registry overlay or blind digest refresh.",
+  "validation": "validation.json",
+  "scopes": "scope-and-owner.json",
+  "integrity": "integrity.json",
+  "reused": "Current unchanged Python discovery/source-selection/font/notice inputs audited; official Nix render data payload reused only at matching source SHA; no old host extension reused for36 tests. Prior canonical site success remains a372 only.",
+  "limits": [
+    "No new installed Community host wheel/full-site/NixCI/repaired-compressed distributions qualification. Current official resource API and embedding entry point tested directly instead of a gratuitous full-host/docs rebuild.",
+    "Five packaging tests use fixture wheels and actual recipe/sdist/notice owners, not final release artifacts.",
+    "18scripts/three older frame failures/four omitted expansion helpers/fullWP3/five_a_ddx/BRST/physics/performance/finalWASM/distributions remain open. TwoSource19 hashes remain certified passing.",
+    "No source38+ import and no investigation/change of separate progress/frame/aa-to-ttbar expectation."
+  ],
+  "retained": "target/wp3-source36: source-aware Cargo JSON/logs, current3test/twofeature identities, real bundle delivery and official Python embedding probes, binaries/generated manifest, packaging evidence, note renders. Original proof/baseline/review artifacts and sources preserved.",
+  "cleanup": "No own background processes remain; no pushes/publication/uploads/shared-cache deletion/target override/manual seeding."
+}

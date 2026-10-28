@@ -1,0 +1,252 @@
+{
+  "tested_source": "0d3ddb5246416427be56c57c91ec1a095037e818",
+  "count": 49,
+  "artifacts": [
+    {
+      "path": "target/wp3-source36/assets.rs",
+      "bytes": 332,
+      "sha256": "b0cce490a45df625eb41e9adb1a8f19618f72f474547b42710a0b9c3105561a2"
+    },
+    {
+      "path": "target/wp3-source36/bookkeeping.py",
+      "bytes": 2760,
+      "sha256": "bb183d704f65774232d24650c200bc3fd84147c09ae00a0000944a1369756491"
+    },
+    {
+      "path": "target/wp3-source36/checks.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "target/wp3-source36/checks.sh",
+      "bytes": 1018,
+      "sha256": "8fc8f8904b82499aa20889bf104b91e57f8acbfd084523f322c00461632cfb3d"
+    },
+    {
+      "path": "target/wp3-source36/clippy.log",
+      "bytes": 391,
+      "sha256": "9f0568ee70db5188e081fb2abf19a2f12c7e1779cc40909b02586ae743509810"
+    },
+    {
+      "path": "target/wp3-source36/delivery",
+      "bytes": 7895896,
+      "sha256": "48709a0cd9292675a4891cbd787ca36321ab2825b6272b6c79f0bc652d772574"
+    },
+    {
+      "path": "target/wp3-source36/delivery-compile.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "target/wp3-source36/delivery.json",
+      "bytes": 3320,
+      "sha256": "42efdc9e70d5c75514a24ef384535b9d3b460683db285b4b1715568181af416c"
+    },
+    {
+      "path": "target/wp3-source36/delivery.log",
+      "bytes": 170,
+      "sha256": "7753abd6360790f2a70aa8407d44feb65a5a7387fe785cbc70e31d8b0da134af"
+    },
+    {
+      "path": "target/wp3-source36/delivery.rs",
+      "bytes": 2542,
+      "sha256": "25f212ed33d7e210717bd2dc169035ab706337606aaa160be012a1383d14a152"
+    },
+    {
+      "path": "target/wp3-source36/docs-check.py",
+      "bytes": 4833,
+      "sha256": "fbdb0348a1c1323868fa762524e931e90897d4400453644121d6f3a69555f9de"
+    },
+    {
+      "path": "target/wp3-source36/evidence.py",
+      "bytes": 9705,
+      "sha256": "16904f319705253b067f3242ed156652a1075fa7041e571107c4c66b4b4de7cd"
+    },
+    {
+      "path": "target/wp3-source36/format.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "target/wp3-source36/generate",
+      "bytes": 8140264,
+      "sha256": "69c4f4669ee96360e0bcd97158829a967601c3ddf16b4caccef8bed5af039d3e"
+    },
+    {
+      "path": "target/wp3-source36/generate-compile.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "target/wp3-source36/generate.log",
+      "bytes": 136,
+      "sha256": "f74d365fad4ee153657b4cb67da8fdb623961862a5345f1e977ef42c5c120e32"
+    },
+    {
+      "path": "target/wp3-source36/generate.rs",
+      "bytes": 280,
+      "sha256": "1f71d8aa28c85cbae5100c8ffa0650fb50f348282d77a8b2cae3cc7c07258931"
+    },
+    {
+      "path": "target/wp3-source36/kernel.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "target/wp3-source36/note-bundle/note-0.html",
+      "bytes": 3769,
+      "sha256": "3bd6b74a38eb63ea5c0b47f37e96b6f5f74cff48d0c59fb215886ebe28319c1f"
+    },
+    {
+      "path": "target/wp3-source36/note-bundle.log",
+      "bytes": 148,
+      "sha256": "f6291bee2aca5f6a6694512616225bc21e5352431485b391daf60be2898ee573"
+    },
+    {
+      "path": "target/wp3-source36/note-html.log",
+      "bytes": 250,
+      "sha256": "d103175d5ac5ba1d2d4afae2e801958a1e0dafae1b43ffe6f1f44f3783a2f3ce"
+    },
+    {
+      "path": "target/wp3-source36/note-pdf.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "target/wp3-source36/note-wrapper.typ",
+      "bytes": 150,
+      "sha256": "8ccff3d68c8d5b89435c571d309ed383a233aaa3819298fb77ffc54a141c3aee"
+    },
+    {
+      "path": "target/wp3-source36/note.html",
+      "bytes": 3719,
+      "sha256": "79a2f59ee7387c29cb1cfec961dee98e371b77abb3ce062daf5ae93d5938e6e4"
+    },
+    {
+      "path": "target/wp3-source36/note.pdf",
+      "bytes": 35199,
+      "sha256": "786c977d7be9db0855eb9aef20faab2f405cf91014526174437b6b37eaa43f4b"
+    },
+    {
+      "path": "target/wp3-source36/original-source.txt",
+      "bytes": 986,
+      "sha256": "fea56e5eed6983c3946a08d343bfa0ac40ac1c41e1b13d93a882b1898e40133e"
+    },
+    {
+      "path": "target/wp3-source36/packaging.log",
+      "bytes": 662,
+      "sha256": "572707c58f622fe74e3776857538a9c52131f09c0b3b53575b155b8b4fad1a56"
+    },
+    {
+      "path": "target/wp3-source36/plan-html.log",
+      "bytes": 250,
+      "sha256": "d103175d5ac5ba1d2d4afae2e801958a1e0dafae1b43ffe6f1f44f3783a2f3ce"
+    },
+    {
+      "path": "target/wp3-source36/plan-pdf.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "target/wp3-source36/plan.html",
+      "bytes": 39920,
+      "sha256": "c0f2f0af7cc96dfaea44c966dc2253e1d8258962b728de4231b5af3ebbbab7a6"
+    },
+    {
+      "path": "target/wp3-source36/plan.pdf",
+      "bytes": 200649,
+      "sha256": "bd1b307708dd24467caac4036b98875671d3de983c8718ea22dba242ce204e98"
+    },
+    {
+      "path": "target/wp3-source36/preparation.patch",
+      "bytes": 15909,
+      "sha256": "cf1b28b29934464bc04de4a173f221fe2a324b587787d58eeb8fb0b5ea85c066"
+    },
+    {
+      "path": "target/wp3-source36/probe.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "target/wp3-source36/probe.log",
+      "bytes": 730,
+      "sha256": "cb9ef625bc24860f22c2ed80d30e2926d7ffa66b1db92395bba23e06be887c37"
+    },
+    {
+      "path": "target/wp3-source36/probe.py",
+      "bytes": 1805,
+      "sha256": "cb49514ffd425c715f7d776c15ba6634725709e38cfa5c56fa2f4d480d447365"
+    },
+    {
+      "path": "target/wp3-source36/python-owner",
+      "bytes": 12377504,
+      "sha256": "2fb346965b26b034dd8af8aa6c1af9aa542679bf680fb6008e3ae5d8ceed2f2e"
+    },
+    {
+      "path": "target/wp3-source36/python-owner-compile.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "target/wp3-source36/python-owner.json",
+      "bytes": 5262,
+      "sha256": "cbde8d268013f0c9dc1199d073f8a3094fcf80b65a6a4b2a5e20308796eff6d6"
+    },
+    {
+      "path": "target/wp3-source36/python-owner.log",
+      "bytes": 80,
+      "sha256": "7d5372b8cf0da7e7dcb088a150b61250dec85e1613063f5f45612f34fc2c316d"
+    },
+    {
+      "path": "target/wp3-source36/python-owner.rs",
+      "bytes": 1222,
+      "sha256": "bd46f0fe7b762034ffed0fa82de9c548ecb7a83b29bdcccab533b3d58b7b6deb"
+    },
+    {
+      "path": "target/wp3-source36/python-probe.exit",
+      "bytes": 2,
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "target/wp3-source36/python-probe.log",
+      "bytes": 640,
+      "sha256": "98dbfb3d9e88cee0770fa22e25bedd5cf4a1c74da2f4fc9b56528943256e8bf6"
+    },
+    {
+      "path": "target/wp3-source36/python-probe.py",
+      "bytes": 1742,
+      "sha256": "e972ecf8e06efe2f668afd75628ab8811bd2e5daa6401b30cf36e5ac293f8a25"
+    },
+    {
+      "path": "target/wp3-source36/render.py",
+      "bytes": 2303,
+      "sha256": "f79420a2ab955a0be0d15533a45e6ed00bdfe3525f444d9310681e69555cb1e3"
+    },
+    {
+      "path": "target/wp3-source36/renders.json",
+      "bytes": 3314,
+      "sha256": "92add96dedff518cf9b4fa0342059bceeffca110cc556243681ecc9a5a896a75"
+    },
+    {
+      "path": "target/wp3-source36/tests-default.stderr",
+      "bytes": 881,
+      "sha256": "ae89aa5858bd71b4d9ea4aee3e7462edcf182e0dcd504fc3fc775328fcc0ddc8"
+    },
+    {
+      "path": "target/wp3-source36/tests-default.stdout",
+      "bytes": 25638,
+      "sha256": "112872abe023cb8a61e0eb96c3843dda88115b93f013405909dcc8a3c1e41c3a"
+    },
+    {
+      "path": "target/wp3-source36/tests-python.stderr",
+      "bytes": 683,
+      "sha256": "cd589b2dc3e21d250d32baa9290abdd2d696e5a5ecc30b62713fb05092d2dfc9"
+    },
+    {
+      "path": "target/wp3-source36/tests-python.stdout",
+      "bytes": 39773,
+      "sha256": "16a3016cd1eb7637da38818c3dfd13da65d7d5ef5ae9af494aac5c92a2fe6b78"
+    }
+  ],
+  "qualification": "Fixed retained-artifact snapshot after completed tests/probes/renders. No self-hash or current receipt hash; later inventory-binding helpers separate. No new Community host extension loaded."
+}

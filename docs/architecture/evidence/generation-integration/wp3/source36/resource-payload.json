@@ -1,0 +1,20 @@
+{
+  "bundle": "/nix/store/d7bngsa3jdpq4q7ah6lfl2wf1qxg05xi-gammaloop-render-data",
+  "NAR_hash": "sha256-aKfxOxrUbhGx3tg6Mx8vDCA4yWxSyaJbvjrTrFh+vOA=",
+  "registered_deriver": "/nix/store/x3z5jxjm069gazg8knjkdbz8q9b6m55b-gammaloop-render-data.drv",
+  "payload": [
+    {
+      "delivered": "/nix/store/d7bngsa3jdpq4q7ah6lfl2wf1qxg05xi-gammaloop-render-data/render/fonts/STIXTwoMath-Regular.woff2",
+      "source": "crates/linnet-render-py/fonts/STIXTwoMath-Regular.woff2",
+      "bytes": 552168,
+      "sha256": "e623fcdb808e9a8a27833781f77d5a5ed5c7d5f34830aaa8bcc9fcf8ec32b9c9"
+    },
+    {
+      "delivered": "/nix/store/d7bngsa3jdpq4q7ah6lfl2wf1qxg05xi-gammaloop-render-data/STIX-Two-OFL.txt",
+      "source": "crates/linnet-render-py/fonts/STIX-Two-OFL.txt",
+      "bytes": 4877,
+      "sha256": "ccee2172d0b1deb40e216efb0b7adec41573a14e813f3b17c143063607e54ec6"
+    }
+  ],
+  "qualification": "Existing unchanged official Nix resource closure, actual source/font/OFL bytes verified and font loaded by current resource/Python API probes. Not a new wheel/release qualification."
+}

@@ -1,0 +1,96 @@
+{
+  "code": "0d3ddb5246416427be56c57c91ec1a095037e818",
+  "renders": [
+    {
+      "source": "docs/architecture/generation-asset-diagnostics-staged.typ",
+      "source_sha256": "5805e9e24dd637c96118d9aa14aebfc52b0889541c66eb1673a41335796d5efb",
+      "PDF_sha256": "786c977d7be9db0855eb9aef20faab2f405cf91014526174437b6b37eaa43f4b",
+      "HTML_sha256": "79a2f59ee7387c29cb1cfec961dee98e371b77abb3ce062daf5ae93d5938e6e4",
+      "commands": [
+        [
+          "/nix/store/vnjry04dnavpyvl41mz607ir21pjb2hp-typst-0.15.1-env/bin/typst",
+          "compile",
+          "--root",
+          ".",
+          "--font-path",
+          "/nix/store/5yr5di50bq9mwr2dh9m7i8y50lxh24ib-roboto-3.016/share/fonts/truetype",
+          "--creation-timestamp",
+          "0",
+          "docs/architecture/generation-asset-diagnostics-staged.typ",
+          "target/wp3-source36/note.pdf"
+        ],
+        [
+          "/nix/store/vnjry04dnavpyvl41mz607ir21pjb2hp-typst-0.15.1-env/bin/typst",
+          "compile",
+          "--root",
+          ".",
+          "--features",
+          "html",
+          "--format",
+          "html",
+          "--creation-timestamp",
+          "0",
+          "docs/architecture/generation-asset-diagnostics-staged.typ",
+          "target/wp3-source36/note.html"
+        ]
+      ],
+      "exit": 0
+    },
+    {
+      "source": "docs/architecture/generation-integration-plan.typ",
+      "source_sha256": "6bf169bc6e3d1ce6edcad107325a5d0e568857382e46b00ae21a87e7c3ed5510",
+      "PDF_sha256": "bd1b307708dd24467caac4036b98875671d3de983c8718ea22dba242ce204e98",
+      "HTML_sha256": "c0f2f0af7cc96dfaea44c966dc2253e1d8258962b728de4231b5af3ebbbab7a6",
+      "commands": [
+        [
+          "/nix/store/vnjry04dnavpyvl41mz607ir21pjb2hp-typst-0.15.1-env/bin/typst",
+          "compile",
+          "--root",
+          ".",
+          "--font-path",
+          "/nix/store/5yr5di50bq9mwr2dh9m7i8y50lxh24ib-roboto-3.016/share/fonts/truetype",
+          "--creation-timestamp",
+          "0",
+          "docs/architecture/generation-integration-plan.typ",
+          "target/wp3-source36/plan.pdf"
+        ],
+        [
+          "/nix/store/vnjry04dnavpyvl41mz607ir21pjb2hp-typst-0.15.1-env/bin/typst",
+          "compile",
+          "--root",
+          ".",
+          "--features",
+          "html",
+          "--format",
+          "html",
+          "--creation-timestamp",
+          "0",
+          "docs/architecture/generation-integration-plan.typ",
+          "target/wp3-source36/plan.html"
+        ]
+      ],
+      "exit": 0
+    }
+  ],
+  "canonical_single_note_bundle": {
+    "command": [
+      "/nix/store/vnjry04dnavpyvl41mz607ir21pjb2hp-typst-0.15.1-env/bin/typst",
+      "compile",
+      "--root",
+      "/shared/lcnbr/dev/gammaloop/generation-integration-plan",
+      "--features",
+      "html,bundle",
+      "--format",
+      "bundle",
+      "--creation-timestamp",
+      "0",
+      "--input",
+      "git-commit=0d3ddb5246416427be56c57c91ec1a095037e818",
+      "target/wp3-source36/note-wrapper.typ",
+      "target/wp3-source36/note-bundle"
+    ],
+    "exit": 0,
+    "HTML_sha256": "3bd6b74a38eb63ea5c0b47f37e96b6f5f74cff48d0c59fb215886ebe28319c1f"
+  },
+  "qualification": "Affected note/plan PDF/HTML and canonical Typst single-note document bundle only; not a new full site/snapshot qualification."
+}

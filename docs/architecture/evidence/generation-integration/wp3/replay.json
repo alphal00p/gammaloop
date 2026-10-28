@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "status": "Source36-only integrated; focused validation in progress; NEW independent Astra review required before38",
+  "status": "Source36-only integrated and focused combined validation complete; STOP for NEW independent Astra review before38",
   "fixed_target": {
     "commit": "3f0df2a870806076820786994d4883decec8e9e3",
     "tree": "3c91ba47525c627fbc02d79f5afa1d58aa7c5b66",
@@ -649,8 +649,9 @@
       "planned_unit": "port-36",
       "planned_order": 32,
       "reason": "Keep actionable data-asset upgrade errors; preserve installed resource discovery.",
-      "status": "Integrated; NEW main36 review pending",
-      "integration_receipt": "docs/architecture/evidence/generation-integration/wp3/source36/receipt.json"
+      "status": "Integrated and focused validation passes; NEW Astra review pending before38",
+      "integration_receipt": "docs/architecture/evidence/generation-integration/wp3/source36/receipt.json",
+      "integration_commit": "0d3ddb5246416427be56c57c91ec1a095037e818"
     },
     {
       "commit": "cfe9e8d103b3d2a4ebf1f276f61d8d6980e3d054",
@@ -1109,11 +1110,14 @@
     "approved_code": "6e9e5a245302806d872271861dd59b47dfcd4b86",
     "receipt": "docs/architecture/evidence/generation-integration/wp3/source36/receipt.json",
     "candidate_bookmark": "generation-integration-source36",
-    "status": "Source36-only integrated; focused validation in progress; NEW independent Astra review required before38",
+    "status": "Source36-only integrated and focused combined validation complete; STOP for NEW independent Astra review before38",
     "source25": "Already integrated; no replay",
     "canonical_docs": "Earlier a372 success remains bound to a372; no new cold full-site qualification",
     "accounted_source_rows": 37,
-    "accounted_planned_units": 32
+    "accounted_planned_units": 32,
+    "code_commit": "0d3ddb5246416427be56c57c91ec1a095037e818",
+    "code_change": "tznypqqkntuqtksqvrpomtnystqumqrw",
+    "validation": "docs/architecture/evidence/generation-integration/wp3/source36/validation.json"
   },
   "staged_round1_review": {
     "verdict": "REQUEST_CHANGES",
@@ -1482,9 +1486,9 @@
     "evidence_change": "rsnwxksqkumlppzknlkkqvkrvpyrrzrt",
     "metadata_snapshot_commit": "2990045ccc658413f2eb2c07fe21e9d811ac4da8"
   },
-  "current_implementation_code_commit": "2ea39fd3ec164516b8e68775554fa2021998975a",
+  "current_implementation_code_commit": "0d3ddb5246416427be56c57c91ec1a095037e818",
   "current_documentation_code_commit": "a3729fe5d880f0db5f09d9ce7d0ef592bfc4d161",
-  "current_implementation_change": "vvxwvmpnulrtxorvyxvwwrwpuprtoxtt",
+  "current_implementation_change": "tznypqqkntuqtksqvrpomtnystqumqrw",
   "main32_35_review": {
     "candidate": "510d79d94bbaf57aaaa992c641e7496905763324",
     "verdict": "APPROVE",
@@ -1500,9 +1504,12 @@
     "approved_code": "6e9e5a245302806d872271861dd59b47dfcd4b86",
     "receipt": "docs/architecture/evidence/generation-integration/wp3/source36/receipt.json",
     "candidate_bookmark": "generation-integration-source36",
-    "status": "Source36-only integrated; focused validation in progress; NEW independent Astra review required before38",
+    "status": "Source36-only integrated and focused combined validation complete; STOP for NEW independent Astra review before38",
     "source25": "Already integrated; no replay",
-    "canonical_docs": "Earlier a372 success remains bound to a372; no new cold full-site qualification"
+    "canonical_docs": "Earlier a372 success remains bound to a372; no new cold full-site qualification",
+    "code_commit": "0d3ddb5246416427be56c57c91ec1a095037e818",
+    "code_change": "tznypqqkntuqtksqvrpomtnystqumqrw",
+    "validation": "docs/architecture/evidence/generation-integration/wp3/source36/validation.json"
   },
   "previous_slice32_35": {
     "status": "Sources32\u201335 combined validation complete; STOP for NEW independent Astra integration review before36. WP3 incomplete.",

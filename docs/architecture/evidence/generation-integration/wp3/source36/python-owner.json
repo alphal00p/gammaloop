@@ -1,0 +1,144 @@
+{
+  "compile": [
+    "rustc",
+    "--edition=2024",
+    "target/wp3-source36/python-owner.rs",
+    "-L",
+    "dependency=/common/build-cache/lcnbr/4b/842977226ffc97/debug/deps",
+    "-o",
+    "target/wp3-source36/python-owner",
+    "--extern",
+    "symbolica_data=/common/build-cache/lcnbr/4b/842977226ffc97/debug/deps/libsymbolica_data-0705424e3d0e4996.rlib",
+    "--extern",
+    "pyo3=/common/build-cache/lcnbr/4b/842977226ffc97/debug/deps/libpyo3-b0b8419cbd4b9d4b.rlib",
+    "--extern",
+    "serde_json=/common/build-cache/lcnbr/4b/842977226ffc97/debug/deps/libserde_json-8353170d227e1f52.rlib"
+  ],
+  "run": [
+    "target/wp3-source36/python-owner",
+    "/nix/store/d7bngsa3jdpq4q7ah6lfl2wf1qxg05xi-gammaloop-render-data"
+  ],
+  "exit": 0,
+  "source_sha256": "c9a5c55204a8cf9528e76462d926be118975399cf208634c4a6d63e0e3167168",
+  "binary_sha256": "2fb346965b26b034dd8af8aa6c1af9aa542679bf680fb6008e3ae5d8ceed2f2e",
+  "dependencies": {
+    "serde_json": {
+      "artifact": {
+        "reason": "compiler-artifact",
+        "package_id": "registry+https://github.com/rust-lang/crates.io-index#serde_json@1.0.149",
+        "manifest_path": "/home/lcnbr/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.149/Cargo.toml",
+        "target": {
+          "kind": [
+            "lib"
+          ],
+          "crate_types": [
+            "lib"
+          ],
+          "name": "serde_json",
+          "src_path": "/home/lcnbr/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde_json-1.0.149/src/lib.rs",
+          "edition": "2021",
+          "doc": true,
+          "doctest": true,
+          "test": true
+        },
+        "profile": {
+          "opt_level": "0",
+          "debuginfo": 2,
+          "debug_assertions": true,
+          "overflow_checks": true,
+          "test": false
+        },
+        "features": [
+          "default",
+          "std"
+        ],
+        "filenames": [
+          "/common/build-cache/lcnbr/4b/842977226ffc97/debug/deps/libserde_json-8353170d227e1f52.rlib",
+          "/common/build-cache/lcnbr/4b/842977226ffc97/debug/deps/libserde_json-8353170d227e1f52.rmeta"
+        ],
+        "executable": null,
+        "fresh": true
+      },
+      "sha256": "a45d26973a5dbd16d24c21332754eee3dd42a0b1ab14bbd78343b6d6c5111739"
+    },
+    "pyo3": {
+      "artifact": {
+        "reason": "compiler-artifact",
+        "package_id": "registry+https://github.com/rust-lang/crates.io-index#pyo3@0.28.3",
+        "manifest_path": "/home/lcnbr/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pyo3-0.28.3/Cargo.toml",
+        "target": {
+          "kind": [
+            "lib"
+          ],
+          "crate_types": [
+            "lib"
+          ],
+          "name": "pyo3",
+          "src_path": "/home/lcnbr/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/pyo3-0.28.3/src/lib.rs",
+          "edition": "2021",
+          "doc": true,
+          "doctest": true,
+          "test": true
+        },
+        "profile": {
+          "opt_level": "0",
+          "debuginfo": 2,
+          "debug_assertions": true,
+          "overflow_checks": true,
+          "test": false
+        },
+        "features": [
+          "macros",
+          "pyo3-macros"
+        ],
+        "filenames": [
+          "/common/build-cache/lcnbr/4b/842977226ffc97/debug/deps/libpyo3-b0b8419cbd4b9d4b.rlib",
+          "/common/build-cache/lcnbr/4b/842977226ffc97/debug/deps/libpyo3-b0b8419cbd4b9d4b.rmeta"
+        ],
+        "executable": null,
+        "fresh": false
+      },
+      "sha256": "6289564c69fa10e20f7402c8a095667d51c6e19670a662800dee0bfec30261bd"
+    },
+    "symbolica_data": {
+      "artifact": {
+        "reason": "compiler-artifact",
+        "package_id": "path+file:///shared/lcnbr/dev/gammaloop/generation-integration-plan/crates/symbolica-data#0.1.0",
+        "manifest_path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/crates/symbolica-data/Cargo.toml",
+        "target": {
+          "kind": [
+            "lib"
+          ],
+          "crate_types": [
+            "lib"
+          ],
+          "name": "symbolica_data",
+          "src_path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/crates/symbolica-data/src/lib.rs",
+          "edition": "2024",
+          "doc": true,
+          "doctest": true,
+          "test": true
+        },
+        "profile": {
+          "opt_level": "0",
+          "debuginfo": 2,
+          "debug_assertions": true,
+          "overflow_checks": true,
+          "test": false
+        },
+        "features": [
+          "python"
+        ],
+        "filenames": [
+          "/common/build-cache/lcnbr/4b/842977226ffc97/debug/deps/libsymbolica_data-0705424e3d0e4996.rlib",
+          "/common/build-cache/lcnbr/4b/842977226ffc97/debug/deps/libsymbolica_data-0705424e3d0e4996.rmeta"
+        ],
+        "executable": null,
+        "fresh": false
+      },
+      "sha256": "b81bfaece966ac82b2a482c3579ac1fca7d41c2fc5d0eefad7597421eb3247f6"
+    }
+  },
+  "stdout": "official Python resource registration/configuration/manifest PASS: 552168 bytes\n",
+  "scope": "Official symbolica_data::python::register embedding API, actual Python exported setters/manifest and actual Asset font load; no old Community extension, no fake asset implementation, no installed/release Community-wheel claim."
+}
