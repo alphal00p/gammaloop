@@ -1,18 +1,22 @@
-use crate::{
-    Cookable, IndexTooling,
-    color::CS,
-    representations::{ColorAdjoint, ColorFundamental},
-    test_support::test_initialize,
-};
-use spenso::{antisym, bracket, broadcast_symbol, cyclic, dind, euc, lor, mink, sym, tensor};
-use symbolica::{
-    atom::{Atom, AtomCore, AtomView},
-    function, parse_lit, symbol,
-};
+use std::env;
+use std::fmt::{Display, Formatter, Result as FmtResult};
+use std::process::Command;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
-use spenso::structure::{
-    abstract_index::AbstractIndex, representation::RepName, slot::IsAbstractSlot,
-};
+use crate::color::CS;
+use crate::representations::{ColorAdjoint, ColorFundamental};
+use crate::tensor::SymbolicTensor;
+use crate::test_support::test_initialize;
+use crate::{Cookable, IndexTooling};
+use spenso::network::tags::SPENSO_TAG;
+use spenso::structure::abstract_index::{AbstractIndex, AbstractIndexError};
+use spenso::structure::partial::PartialStructure;
+use spenso::structure::representation::{Minkowski, RepName};
+use spenso::structure::slot::{AbsInd, DummyAind, IsAbstractSlot, ParseableAind};
+use spenso::{antisym, bracket, broadcast_symbol, cyclic, dind, euc, lor, mink, sym, tensor};
+use symbolica::atom::{Atom, AtomCore, AtomView, Symbol, SymbolAttribute, SymbolBuilder};
+use symbolica::{function, parse_lit, symbol, wrap_symbol};
 
 fn canonicalize(expression: &Atom) -> Atom {
     expression
@@ -398,7 +402,7 @@ fn opaque_scalar_payloads_do_not_share_outer_dummy_indices() {
     let canonical = canonicalize(&(&scalar * &outer));
     assert_eq!(canonical, scalar * canonicalize(&outer));
     assert_eq!(canonical, canonicalize(&canonical));
-    assert!(!canonical.contains_symbol(spenso::network::tags::SPENSO_TAG.scalar));
+    assert!(!canonical.contains_symbol(SPENSO_TAG.scalar));
 }
 
 #[test]
@@ -412,18 +416,16 @@ fn nonlinear_scalar_payloads_preserve_their_literal_binding_on_repeated_canon() 
     let payload = function!(a, &i) * function!(b, &i);
     let outer = function!(c, &i) * function!(d, &i);
     for payload in [payload.clone(), canonicalize(&payload)] {
-        let scalar = function!(symbolica::atom::Symbol::COS, payload);
+        let scalar = function!(Symbol::COS, payload);
         let canonical = canonicalize(&(&scalar * &outer));
         assert_eq!(canonical, scalar * canonicalize(&outer));
         assert_eq!(canonical, canonicalize(&canonical));
-        assert!(!canonical.contains_symbol(spenso::network::tags::SPENSO_TAG.scalar));
+        assert!(!canonical.contains_symbol(SPENSO_TAG.scalar));
     }
 }
 
 #[test]
 fn opaque_scalar_hidden_powers_are_unchanged_by_outer_power_preparation() {
-    use crate::tensor::SymbolicTensor;
-    use spenso::structure::partial::PartialStructure;
     test_initialize();
     let metadata = symbol!("hidden_power_canon::metadata"; Scalar);
     let i = mink!(4, 709);
@@ -435,7 +437,7 @@ fn opaque_scalar_hidden_powers_are_unchanged_by_outer_power_preparation() {
     for exponent in [Atom::num(2), Atom::num(-1), Atom::num((1, 2))] {
         let exponent = SymbolicTensor::infer(exponent).unwrap();
         let power = inner.pow(&exponent).unwrap().into_expression();
-        for head in [metadata, symbolica::atom::Symbol::COS] {
+        for head in [metadata, Symbol::COS] {
             let payload = function!(head, &power);
             let canonical = canonicalize(&(&payload * &outer));
             assert_eq!(canonical, payload * canonicalize(&outer));
@@ -446,12 +448,6 @@ fn opaque_scalar_hidden_powers_are_unchanged_by_outer_power_preparation() {
 
 #[test]
 fn scalar_leaf_aliases_do_not_expose_temporary_metadata_to_tensor_hooks() {
-    use crate::tensor::SymbolicTensor;
-    use spenso::structure::partial::PartialStructure;
-    use std::sync::{
-        Arc,
-        atomic::{AtomicUsize, Ordering},
-    };
     test_initialize();
     let metadata = symbol!("scalar_roles_canon::metadata"; Scalar);
     let i = mink!(4, 710);
@@ -472,7 +468,7 @@ fn scalar_leaf_aliases_do_not_expose_temporary_metadata_to_tensor_hooks() {
         let head = spenso::tensor_symbol!(
             format!("scalar_roles_canon::hooked_{case}"),
             norm = move |value, output| {
-                if !matches!(value, symbolica::atom::AtomView::Fun(function)
+                if !matches!(value, AtomView::Fun(function)
                     if function.iter().next() == Some(expected_metadata.as_view()))
                 {
                     observed.fetch_add(1, Ordering::SeqCst);
@@ -497,7 +493,7 @@ fn opaque_scalar_aliases_do_not_capture_literal_native_handles() {
     let metadata = symbol!("literal_alias_canon::metadata"; Scalar);
     let i = mink!(4, 703);
     let outer = tensor!(literal_alias_a, &i) * tensor!(literal_alias_b, &i);
-    let native_handle = function!(spenso::network::tags::SPENSO_TAG.scalar, 0);
+    let native_handle = function!(SPENSO_TAG.scalar, 0);
     let canonical_name = Atom::var(symbol!("idenso::canonical_scalar_0"));
     let payload = function!(metadata, native_handle, canonical_name);
     let canonical = canonicalize(&(&payload * &outer));
@@ -509,9 +505,9 @@ fn opaque_scalar_aliases_do_not_capture_literal_native_handles() {
 #[test]
 fn canonical_scalar_aliases_skip_preexisting_global_heads() {
     const CHILD: &str = "IDENSO_CANONICAL_ALIAS_FRESHNESS_CHILD";
-    if std::env::var_os(CHILD).is_none() {
+    if env::var_os(CHILD).is_none() {
         for mode in ["opaque", "inverse"] {
-            let output = std::process::Command::new(std::env::current_exe().unwrap())
+            let output = Command::new(env::current_exe().unwrap())
                 .args([
                     "--exact",
                     "tensor::tests::canonicalization::canonical_scalar_aliases_skip_preexisting_global_heads",
@@ -530,10 +526,6 @@ fn canonical_scalar_aliases_skip_preexisting_global_heads() {
         }
         return;
     }
-    use symbolica::{
-        atom::{Symbol, SymbolAttribute, SymbolBuilder},
-        wrap_symbol,
-    };
     test_initialize();
     // The isolated process starts the allocator at zero, so this exercises an
     // occupied candidate without relying on parallel tests' global counters.
@@ -549,9 +541,7 @@ fn canonical_scalar_aliases_skip_preexisting_global_heads() {
     let payload = function!(metadata, symbol!("fresh_alias_canon::x"));
     let i = mink!(4, 708);
     let outer = tensor!(fresh_alias_a, i.clone()) * tensor!(fresh_alias_b, i);
-    let (source, expected) = if std::env::var(CHILD).unwrap() == "inverse" {
-        use crate::tensor::SymbolicTensor;
-        use spenso::structure::partial::PartialStructure;
+    let (source, expected) = if env::var(CHILD).unwrap() == "inverse" {
         let exponent = SymbolicTensor::<PartialStructure>::infer(Atom::num(-1)).unwrap();
         let source = SymbolicTensor::<PartialStructure>::infer(outer.clone())
             .unwrap()
@@ -592,8 +582,6 @@ fn equal_composite_scalar_coefficients_keep_signed_tensor_cancellation() {
 
 #[test]
 fn opaque_scalar_aliasing_retains_independent_inverse_and_fractional_base_canon() {
-    use crate::tensor::SymbolicTensor;
-    use spenso::structure::partial::PartialStructure;
     test_initialize();
     let i = mink!(4, 706);
     let j = mink!(4, 707);
@@ -679,12 +667,6 @@ fn unparseable_indices_are_rejected_before_signed_zero_pruning() {
 
 #[test]
 fn real_outer_power_preserves_scalar_metadata_without_hook_replay() {
-    use crate::tensor::SymbolicTensor;
-    use spenso::structure::{partial::PartialStructure, representation::Minkowski};
-    use std::sync::{
-        Arc,
-        atomic::{AtomicUsize, Ordering},
-    };
     test_initialize();
     let scope = symbol!("real_power_metadata_canon::scope");
     let private_index = Minkowski {}
@@ -730,8 +712,6 @@ fn real_outer_power_preserves_scalar_metadata_without_hook_replay() {
 
 #[test]
 fn exterior_word_scalar_coefficients_keep_independent_inner_bindings() {
-    use crate::tensor::SymbolicTensor;
-    use spenso::{network::tags::SPENSO_TAG, structure::partial::PartialStructure};
     test_initialize();
     type Tensor = SymbolicTensor<PartialStructure>;
     let i = mink!(4, 1801);
@@ -741,7 +721,7 @@ fn exterior_word_scalar_coefficients_keep_independent_inner_bindings() {
     let head = symbol!("word_scalar_canon::exterior"; Flat, Linear, Antisymmetric; tag=&SPENSO_TAG.tensor_word);
     let word = Tensor::word(head, &[a, b]).unwrap();
     let payload = function!(
-        symbolica::atom::Symbol::COS,
+        Symbol::COS,
         tensor!(word_scalar_canon_x, &i) * tensor!(word_scalar_canon_y, &i)
     );
     let weighted = Tensor::infer(&payload * word.expression()).unwrap();
@@ -767,8 +747,6 @@ fn exterior_word_scalar_coefficients_keep_independent_inner_bindings() {
 
 #[test]
 fn raw_and_typed_non_scalar_inverse_powers_remain_rejected() {
-    use crate::tensor::SymbolicTensor;
-    use spenso::structure::partial::PartialStructure;
     test_initialize();
     let source = tensor!(open_inverse_canon_a, mink!(4, 1901));
     let typed = SymbolicTensor::<PartialStructure>::infer(source.clone()).unwrap();
@@ -793,16 +771,11 @@ fn raw_and_typed_non_scalar_inverse_powers_remain_rejected() {
 
 #[test]
 fn operation_power_preparation_keeps_generic_index_storage() {
-    use spenso::structure::{
-        abstract_index::AbstractIndexError,
-        representation::Minkowski,
-        slot::{AbsInd, DummyAind, ParseableAind},
-    };
     #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
     struct WrappedIndex(AbstractIndex);
-    impl std::fmt::Display for WrappedIndex {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            std::fmt::Display::fmt(&self.0, f)
+    impl Display for WrappedIndex {
+        fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+            self.0.fmt(f)
         }
     }
     impl AbsInd for WrappedIndex {}

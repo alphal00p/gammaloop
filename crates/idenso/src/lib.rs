@@ -1,56 +1,49 @@
 #![allow(uncommon_codepoints)]
 
-use crate::tensor::{CollectionMode, SymbolicTensor};
-use spenso::network::tags::SPENSO_TAG;
-use spenso::network::tensor_symmetry::TensorSlotSymmetry;
-use spenso::structure::representation::LibraryRep;
-use spenso::structure::slot::{SlotMatch, SlotMatcher};
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use linnet::{
-    half_edge::subgraph::{BaseSubgraph, ModifySubSet, SuBitGraph, SubSetLike},
-    tree::child_vec::ChildVecStore,
-};
+use eyre::eyre;
+use linnet::half_edge::subgraph::{BaseSubgraph, ModifySubSet, SuBitGraph, SubSetLike};
+use linnet::tree::child_vec::ChildVecStore;
 use shorthands::metric::{list_dangling_impl, wrap_dummies_impl, wrap_indices_impl};
-use spenso::{
-    network::{
-        graph::{NetworkEdge, NetworkLeaf, NetworkNode, NetworkOp},
-        library::function_lib::INBUILTS,
-        library::symbolic::ETS,
-        parsing::{ParseSettings, ParseState, SchoonschipExpansionMode, ShorthandParsing},
-        store::TensorScalarStore,
-    },
-    shadowing::symbolica_utils::SpensoPrintSettings,
-    structure::{
-        abstract_index::AbstractIndex,
-        partial::{PartialStructure, PartialStructureExt},
-        representation::{Euclidean, Lorentz, Minkowski, RepName},
-        slot::{AbsInd, DualSlotTo, DummyAind, IsAbstractSlot, ParseableAind},
-    },
-    symbol_set,
-    symbolica_init::in_symbolica_initializer,
+use spenso::network::TensorNetworkError;
+use spenso::network::graph::{NetworkEdge, NetworkLeaf, NetworkNode, NetworkOp};
+use spenso::network::library::function_lib::INBUILTS;
+use spenso::network::library::symbolic::ETS;
+use spenso::network::parsing::{
+    ParseSettings, ParseState, SchoonschipExpansionMode, ShorthandParsing,
 };
-use symbolica::{
-    atom::{Atom, AtomCore, AtomView, Symbol, SymbolBuilder},
-    function,
-    id::{AliasedAtom, Pattern, Replacement},
-    initialize,
-    printer::AtomPrinter,
-    wrap_symbol,
+use spenso::network::store::TensorScalarStore;
+use spenso::network::tags::SPENSO_TAG;
+use spenso::network::tensor_symmetry::TensorSlotSymmetry;
+use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
+use spenso::structure::abstract_index::AbstractIndex;
+use spenso::structure::partial::{PartialStructure, PartialStructureExt};
+use spenso::structure::representation::{Euclidean, LibraryRep, Lorentz, Minkowski, RepName};
+use spenso::structure::slot::{
+    AbsInd, DualSlotTo, DummyAind, IsAbstractSlot, ParseableAind, SlotMatch, SlotMatcher,
 };
+use spenso::symbol_set;
+use spenso::symbolica_init::in_symbolica_initializer;
+use symbolica::atom::{Atom, AtomCore, AtomView, Symbol, SymbolBuilder};
+use symbolica::id::{AliasedAtom, Pattern, Replacement};
+use symbolica::printer::AtomPrinter;
+use symbolica::{function, initialize, wrap_symbol};
 use thiserror::Error;
 
-use crate::{
-    color::{CS, color_conj_impl},
-    dirac::AGS,
-    epsilon::EPSILON_SYMBOL,
-    rep_symbols::RS,
-    representations::{Bispinor, ColorAdjoint, ColorFundamental, ColorSextet, SpinFundamental},
-    shorthands::{UndoShorthands, chain::Chain},
-    tensor::{SymbolicNetExt, SymbolicNetParse, inference::InterfaceInference},
+use crate::color::{CS, color_conj_impl};
+use crate::dirac::AGS;
+use crate::epsilon::EPSILON_SYMBOL;
+use crate::rep_symbols::RS;
+use crate::representations::{
+    Bispinor, ColorAdjoint, ColorFundamental, ColorSextet, SpinFundamental,
 };
+use crate::shorthands::UndoShorthands;
+use crate::shorthands::chain::Chain;
+use crate::tensor::inference::InterfaceInference;
+use crate::tensor::{CollectionMode, SymbolicNetExt, SymbolicNetParse, SymbolicTensor};
 
 initialize!(|| {
     in_symbolica_initializer(|| {
@@ -386,7 +379,7 @@ impl tensor::SymbolicTensor<PartialStructure> {
             let tensor = Self::infer(cooked.clone()).map_err(|error| error.to_string())?;
             let prepared = tensor
                 .collect_with_map(
-                    tensor::CollectionMode::Factored,
+                    CollectionMode::Factored,
                     None,
                     |_| true,
                     |value, _, _| Ok(value),
@@ -678,12 +671,11 @@ impl IndexTooling for AtomView<'_> {
             }
             let canonical = base.canonize::<Aind>(&mut **nested_dummy.borrow_mut())?;
             Ok::<_, CanonicalizationError>(
-                tensor::SymbolicTensor::<PartialStructure>::scalar_power_expression(canonical)
+                SymbolicTensor::<PartialStructure>::scalar_power_expression(canonical, None)
                     .pow(exponent),
             )
         };
-        let native_error =
-            |error| spenso::network::TensorNetworkError::Other(eyre::eyre!("{error}"));
+        let native_error = |error| TensorNetworkError::Other(eyre!("{error}"));
         let tree = net.graph.expr_tree().cast::<ChildVecStore<()>>();
         let root = net.graph.graph.node_id(net.graph.head());
         let prepared = net
@@ -713,7 +705,7 @@ impl IndexTooling for AtomView<'_> {
                         Ok(Some(value))
                     }
                     NetworkNode::Op(_) => Ok(None),
-                    _ => Err(spenso::network::TensorNetworkError::Other(eyre::eyre!(
+                    _ => Err(TensorNetworkError::Other(eyre!(
                         "canonicalization requires stored symbolic leaves"
                     ))),
                 },
@@ -728,11 +720,12 @@ impl IndexTooling for AtomView<'_> {
                     };
                     if *power > 1 {
                         let expression =
-                            tensor::SymbolicTensor::<PartialStructure>::scalar_power_expression(
+                            SymbolicTensor::<PartialStructure>::scalar_power_expression(
                                 base.clone(),
+                                None,
                             )
                             .pow(*power);
-                        return tensor::SymbolicTensor::prepare_canonical_power::<Aind>(
+                        return SymbolicTensor::prepare_canonical_power::<Aind>(
                             expression.as_view(),
                             &state,
                         )
@@ -813,9 +806,8 @@ impl IndexTooling for AtomView<'_> {
                 NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) => {
                     let expression = &net.store.tensors[*index].expression;
                     let encoded = if let AtomView::Fun(function) = expression.as_view() {
-                        TensorSlotSymmetry::canonical_view(function).map_err(|error| {
-                            spenso::network::TensorNetworkError::Other(eyre::eyre!(error))
-                        })?
+                        TensorSlotSymmetry::canonical_view(function)
+                            .map_err(|error| TensorNetworkError::Other(eyre!(error)))?
                     } else {
                         expression.clone()
                     };
@@ -830,7 +822,7 @@ impl IndexTooling for AtomView<'_> {
                     }))
                 }
                 NetworkNode::Op(_) => Ok(None),
-                _ => Err(spenso::network::TensorNetworkError::Other(eyre::eyre!(
+                _ => Err(TensorNetworkError::Other(eyre!(
                     "canonicalization requires stored symbolic leaves"
                 ))),
             })
@@ -881,22 +873,34 @@ impl IndexTooling for AtomView<'_> {
                     break candidate.aind();
                 }
             };
-            reps.insert(d, target);
+            // The inventory retains literal spelling for Symbolica, while the
+            // typed mapper uses parsed identities (owner(1, 0) and owner(1)
+            // denote the same index). Key both sides through the slot parser.
+            let source = slots
+                .parse::<LibraryRep, Aind>(d.as_view())
+                .map_err(|error| CanonicalizationError::Prepare {
+                    reason: error.to_string(),
+                })?;
+            let source = if source.rep_name().is_dual() {
+                source.dual()
+            } else {
+                source
+            };
+            reps.insert(source, target);
         }
 
-        let relabeled = spenso::structure::slot::SlotMatcher::default()
-            .map_expression_indices::<Aind>(canonical.canonical_form.as_view(), |slot| {
+        let relabeled = SlotMatcher::default().map_expression_indices::<Aind>(
+            canonical.canonical_form.as_view(),
+            |slot| {
                 let slot = if slot.rep_name().is_dual() {
                     slot.dual()
                 } else {
                     *slot
                 };
-                reps.get(&slot.to_atom()).copied()
-            });
-        let canonical =
-            spenso::network::tensor_symmetry::TensorSlotSymmetry::restore_canonical_view(
-                &relabeled,
-            )
+                reps.get(&slot).copied()
+            },
+        );
+        let canonical = TensorSlotSymmetry::restore_canonical_view(&relabeled)
             .map_err(|reason| CanonicalizationError::Prepare { reason })?;
         Ok(scalar_definitions.map_root(|_| canonical).into_inner())
     }
