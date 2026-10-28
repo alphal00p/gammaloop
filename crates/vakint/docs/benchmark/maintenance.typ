@@ -40,6 +40,34 @@ receive the same policy, and resume rejects a different one. Uncached comparison
 samples retain this configured policy in their identity while attaching no cache.
 Cache loading remains outside the reduction timer.
 
+Python exposes the same authenticated single-file attachment through the frozen
+#raw("CacheFileIdentity") record. Obtain the identity document from an
+independently authenticated manifest or a trusted native export report; parsing
+the document alone does not authenticate its origin. The four fields use the
+native schema: compressed and decoded byte lengths plus their 32-byte BLAKE3
+digests. #raw("to_document()") preserves its JSON byte arrays, while the read-only
+digest properties are Python #raw("bytes"). For example, with the authenticated
+document and an existing decoded directory:
+
+```python
+from symbolica.community.hepkit.vakint import CacheFileIdentity, CacheFileOptions
+
+identity = CacheFileIdentity.from_document(authenticated_identity_document)
+options = CacheFileOptions(
+    max_compressed_bytes=identity.compressed_bytes,
+    max_decoded_bytes=identity.decoded_bytes,
+    decoded_directory=decoded_directory,
+)
+engine.load_cache(5, cache_path, file_options=options, file_identity=identity)
+```
+
+The native loader validates both content digests and lengths before attachment.
+The identity does not increase resource grants: set any larger index/storage
+grants explicitly from the inventory and available resources. Omission retains
+the existing trusted-generated-file API; official external-data loading retains
+its own authenticated identity handling. Single-file identities are rejected for
+lower-loop packs before their paths are read.
+
 Single-file records retain their existing #raw("cache_sha256") field unchanged.
 Directories instead set #raw("cache_native_index_identity"), with SHA-256 and byte
 lengths for the top bundle index and every child native index, or the standalone

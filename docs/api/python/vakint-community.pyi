@@ -36,6 +36,31 @@ class AvailablePrecision:
     def FixedPrecision(max_decimal_precision: builtins.int) -> AvailablePrecision: ...
 
 @typing.final
+class CacheFileIdentity:
+    r"""
+    Read-only native single-file content identity. Obtain this document from an
+    authenticated manifest; constructing the record does not authenticate its source.
+    """
+    @property
+    def compressed_bytes(self) -> builtins.int: ...
+    @property
+    def compressed_blake3(self) -> builtins.bytes: ...
+    @property
+    def decoded_bytes(self) -> builtins.int: ...
+    @property
+    def decoded_blake3(self) -> builtins.bytes: ...
+    def __new__(cls, *, compressed_bytes: builtins.int, compressed_blake3: typing.Sequence[builtins.int], decoded_bytes: builtins.int, decoded_blake3: typing.Sequence[builtins.int]) -> CacheFileIdentity: ...
+    @staticmethod
+    def from_document(document: dict) -> CacheFileIdentity:
+        r"""
+        Parse the exact native identity schema, rejecting missing or extra fields.
+        """
+    def to_document(self) -> dict:
+        r"""
+        Return a detached document in the native serializer's schema.
+        """
+
+@typing.final
 class CacheFileOptions:
     r"""
     Explicit native single-file transport and decoded-store grants. Ordinary
@@ -513,11 +538,13 @@ class Vakint:
         `monitor` selects optional per-call native diagnostics; detaching its TUI
         never requests cancellation. `progress_snapshot` writes latest native JSON.
         """
-    def load_cache(self, n_loops: builtins.int, path: builtins.str, *, ram_bytes: typing.Optional[builtins.int] = None, disk_bytes: typing.Optional[builtins.int] = None, cache_policy: typing.Optional[builtins.str] = None, lookup_budget_policy: typing.Optional[builtins.str] = None, cache_terms: typing.Optional[builtins.int] = None, cache_integrals: typing.Optional[builtins.int] = None, max_rule_applications: typing.Optional[builtins.int] = None, file_options: typing.Optional[CacheFileOptions] = None) -> None:
+    def load_cache(self, n_loops: builtins.int, path: builtins.str, *, ram_bytes: typing.Optional[builtins.int] = None, disk_bytes: typing.Optional[builtins.int] = None, cache_policy: typing.Optional[builtins.str] = None, lookup_budget_policy: typing.Optional[builtins.str] = None, cache_terms: typing.Optional[builtins.int] = None, cache_integrals: typing.Optional[builtins.int] = None, max_rule_applications: typing.Optional[builtins.int] = None, file_options: typing.Optional[CacheFileOptions] = None, file_identity: typing.Optional[CacheFileIdentity] = None) -> None:
         r"""
         Attach an exact read-only native cache bundle. Omitted settings preserve
         the active RAM, work, eviction and lookup policies. A new attachment
         uses native defaults, not preparation's larger RAM default.
+        For a five-loop single file, `file_identity` checks both compressed and
+        decoded content against an independently authenticated native identity.
         """
     def attach_running_cache(self, n_loops: builtins.int, path: builtins.str | os.PathLike | pathlib.Path, *, read_backing: builtins.bool = True, read_delta: builtins.bool = True, base_paths: typing.Optional[typing.Sequence[builtins.str | os.PathLike | pathlib.Path]] = None, snapshots: typing.Optional[typing.Sequence[dict]] = None, disk_bytes: typing.Optional[builtins.int] = None, max_pending_records: typing.Optional[builtins.int] = None, max_pending_bytes: typing.Optional[builtins.int] = None, batch_records: typing.Optional[builtins.int] = None, batch_bytes: typing.Optional[builtins.int] = None, checkpoint_interval_seconds: typing.Optional[builtins.float] = None, file_options: typing.Optional[CacheFileOptions] = None) -> RunningCacheControl:
         r"""

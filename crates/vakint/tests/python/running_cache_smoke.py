@@ -17,6 +17,7 @@ from pathlib import Path
 if os.environ.get("VAKINT_TEST_HOST") == "standalone":
     import vakint_hepkit_standalone as core
     from vakint_hepkit_standalone import (
+        CacheFileIdentity,
         CacheFileOptions,
         E,
         MasterSymbol,
@@ -28,6 +29,7 @@ if os.environ.get("VAKINT_TEST_HOST") == "standalone":
 else:
     from symbolica import E, core
     from symbolica.community.hepkit.vakint import (
+        CacheFileIdentity,
         CacheFileOptions,
         MasterSymbol,
         RunningCacheControl,
@@ -73,9 +75,39 @@ class RunningCacheSmoke(unittest.TestCase):
             decoded_directory=str(decoded),
         )
         self.obj.load_cache(5, str(output), file_options=options)
+        trusted = self.obj.cache_statistics(5)["saved_application"]["file"]
+        self.assertEqual(trusted["state_imports"], 0)
+        self.assertEqual(trusted["decoded_coefficients"], 0)
+        typed_identity = CacheFileIdentity.from_document(identity)
+        self.assertEqual(typed_identity.to_document(), identity)
+        self.obj.load_cache(
+            5, str(output), file_options=options, file_identity=typed_identity
+        )
         before = self.obj.cache_statistics(5)["saved_application"]["file"]
         self.assertEqual(before["state_imports"], 0)
         self.assertEqual(before["decoded_coefficients"], 0)
+        for field in (
+            "compressed_bytes",
+            "decoded_bytes",
+            "compressed_blake3",
+            "decoded_blake3",
+        ):
+            invalid = typed_identity.to_document()
+            if field.endswith("bytes"):
+                invalid[field] -= 1
+            else:
+                invalid[field][0] ^= 1
+            with self.subTest(field=field):
+                with self.assertRaisesRegex(ValueError, "mismatch"):
+                    self.obj.load_cache(
+                        5,
+                        str(output),
+                        file_options=options,
+                        file_identity=CacheFileIdentity.from_document(invalid),
+                    )
+                self.assertEqual(
+                    self.obj.cache_statistics(5)["saved_application"]["file"], before
+                )
         cached = self.obj.evaluate_rustred_symbolic(self.input)
         self.assert_complete_native_result(cached, reference)
         after = self.assert_backing_hit()["saved_application"]["file"]

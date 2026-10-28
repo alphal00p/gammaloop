@@ -86,6 +86,7 @@ macro_rules! define_vakint_python_surface {
 define_vakint_python_surface! {
     VakintWrapper,
     cache::RunningCacheControlWrapper,
+    cache::CacheFileIdentityWrapper,
     cache::CacheFileOptionsWrapper,
     NumericalEvaluationResultWrapper,
     VakintExpressionWrapper,
@@ -1261,7 +1262,9 @@ impl VakintWrapper {
     /// Attach an exact read-only native cache bundle. Omitted settings preserve
     /// the active RAM, work, eviction and lookup policies. A new attachment
     /// uses native defaults, not preparation's larger RAM default.
-    #[pyo3(signature = (n_loops, path, *, ram_bytes=None, disk_bytes=None, cache_policy=None, lookup_budget_policy=None, cache_terms=None, cache_integrals=None, max_rule_applications=None, file_options=None))]
+    /// For a five-loop single file, `file_identity` checks both compressed and
+    /// decoded content against an independently authenticated native identity.
+    #[pyo3(signature = (n_loops, path, *, ram_bytes=None, disk_bytes=None, cache_policy=None, lookup_budget_policy=None, cache_terms=None, cache_integrals=None, max_rule_applications=None, file_options=None, file_identity=None))]
     #[allow(clippy::too_many_arguments)]
     pub fn load_cache(
         &mut self,
@@ -1276,11 +1279,13 @@ impl VakintWrapper {
         cache_integrals: Option<usize>,
         max_rule_applications: Option<usize>,
         file_options: Option<PyRef<'_, cache::CacheFileOptionsWrapper>>,
+        file_identity: Option<PyRef<'_, cache::CacheFileIdentityWrapper>>,
     ) -> PyResult<()> {
         resources::run_committing(self.settings.rustred_resources, || {
             cache::check_loops(n_loops)?;
             let mut options = crate::RustRedCacheLoadOptions {
                 file_options: file_options.map(|options| options.native.clone()),
+                file_identity: file_identity.map(|identity| identity.native),
                 ..Default::default()
             };
             if ram_bytes.is_some()

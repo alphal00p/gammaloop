@@ -8,7 +8,7 @@ use std::{
 
 use pyo3::{
     prelude::*,
-    types::{PyAnyMethods, PyDict, PyDictMethods, PyList, PyListMethods, PyModule},
+    types::{PyAnyMethods, PyBytes, PyDict, PyDictMethods, PyList, PyListMethods, PyModule},
 };
 use rustred::{
     family::IntegralKey,
@@ -27,6 +27,91 @@ use crate::{
     RustRedCachePreparationOptions, RustRedCacheRoot, RustRedCacheSaveMode, RustRedCacheStatistics,
     RustRedCacheWorkload, RustRedMonitorDisplay, RustRedMonitorOptions, Vakint,
 };
+
+/// Read-only native single-file content identity. Obtain this document from an
+/// authenticated manifest; constructing the record does not authenticate its source.
+#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
+#[pyclass(
+    name = "CacheFileIdentity",
+    module = "symbolica.community.hepkit.vakint",
+    frozen,
+    from_py_object
+)]
+#[derive(Clone)]
+pub struct CacheFileIdentityWrapper {
+    pub(super) native: rustred_app::SavedApplicationCacheFileIdentity,
+}
+
+impl super::ModuleInit for CacheFileIdentityWrapper {}
+
+impl CacheFileIdentityWrapper {
+    fn parse(document: serde_json::Value) -> PyResult<Self> {
+        serde_json::from_value(document)
+            .map(|native| Self { native })
+            .map_err(|error| {
+                pyo3::exceptions::PyValueError::new_err(format!(
+                    "invalid cache file identity document: {error}"
+                ))
+            })
+    }
+}
+
+#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[pymethods]
+impl CacheFileIdentityWrapper {
+    #[new]
+    #[pyo3(signature = (*, compressed_bytes, compressed_blake3, decoded_bytes, decoded_blake3))]
+    fn new(
+        compressed_bytes: u64,
+        compressed_blake3: Vec<u8>,
+        decoded_bytes: u64,
+        decoded_blake3: Vec<u8>,
+    ) -> PyResult<Self> {
+        Self::parse(serde_json::json!({
+            "compressed_bytes": compressed_bytes,
+            "compressed_blake3": compressed_blake3,
+            "decoded_bytes": decoded_bytes,
+            "decoded_blake3": decoded_blake3,
+        }))
+    }
+
+    /// Parse the exact native identity schema, rejecting missing or extra fields.
+    #[staticmethod]
+    fn from_document(py: Python<'_>, document: &Bound<'_, PyDict>) -> PyResult<Self> {
+        Self::parse(json_document(py, document, "cache file identity")?)
+    }
+
+    /// Return a detached document in the native serializer's schema.
+    fn to_document(&self, py: Python<'_>) -> PyResult<Py<PyDict>> {
+        let document = serde_json::to_string(&self.native).map_err(|error| {
+            pyo3::exceptions::PyValueError::new_err(format!(
+                "cannot serialize cache file identity: {error}"
+            ))
+        })?;
+        json_report(py, &document)
+    }
+
+    #[getter]
+    fn compressed_bytes(&self) -> u64 {
+        self.native.compressed_bytes
+    }
+
+    #[getter]
+    fn compressed_blake3<'py>(&self, py: Python<'py>) -> Bound<'py, PyBytes> {
+        PyBytes::new(py, &self.native.compressed_blake3)
+    }
+
+    #[getter]
+    fn decoded_bytes(&self) -> u64 {
+        self.native.decoded_bytes
+    }
+
+    #[getter]
+    fn decoded_blake3<'py>(&self, py: Python<'py>) -> Bound<'py, PyBytes> {
+        PyBytes::new(py, &self.native.decoded_blake3)
+    }
+}
 
 /// Explicit native single-file transport and decoded-store grants. Ordinary
 /// construction retains the compact distribution defaults.
@@ -247,18 +332,10 @@ pub(super) fn running_options(
         ..Default::default()
     };
     if let Some(snapshots) = snapshots {
-        let json = PyModule::import(py, "json")?;
         options.snapshots = snapshots
             .into_iter()
             .map(|snapshot| {
-                let document: String = json
-                    .call_method1("dumps", (snapshot.bind(py),))?
-                    .extract()?;
-                let document = serde_json::from_str(&document).map_err(|error| {
-                    pyo3::exceptions::PyValueError::new_err(format!(
-                        "invalid running-cache snapshot document: {error}"
-                    ))
-                })?;
+                let document = json_document(py, snapshot.bind(py), "running-cache snapshot")?;
                 crate::RustRedRunningCacheSnapshot::from_document(&document).map_err(|source| {
                     vakint_to_python_error(
                         crate::RustRedEvaluationError::CacheOperation { source }.into(),
@@ -356,6 +433,19 @@ pub(super) fn workload(
             max_numerator_rank: rank.unwrap_or(1),
         }),
     }
+}
+
+fn json_document(
+    py: Python<'_>,
+    document: &Bound<'_, PyDict>,
+    description: &str,
+) -> PyResult<serde_json::Value> {
+    let document: String = PyModule::import(py, "json")?
+        .call_method1("dumps", (document,))?
+        .extract()?;
+    serde_json::from_str(&document).map_err(|error| {
+        pyo3::exceptions::PyValueError::new_err(format!("invalid {description} document: {error}"))
+    })
 }
 
 pub(super) fn json_report(py: Python<'_>, document: &str) -> PyResult<Py<PyDict>> {
