@@ -21,13 +21,11 @@ use std::{
     fmt::{Debug, Display},
 };
 #[cfg(feature = "shadowing")]
-use symbolica::{
-    atom::{
-        Atom, AtomCore, AtomView, FunctionBuilder, Symbol,
-        representation::{FunView, ListIterator},
-    },
-    symbol,
-};
+use symbolica::atom::representation::{FunView, ListIterator};
+#[cfg(feature = "shadowing")]
+use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol};
+#[cfg(feature = "shadowing")]
+use symbolica::symbol;
 
 use thiserror::Error;
 
@@ -570,6 +568,21 @@ impl SlotMatcher {
     /// visited independently. Returning `None` retains that slot unchanged.
     /// Generated labels are not revisited, so assignments are simultaneous.
     /// This transforms syntax; callers retain responsibility for tensor validation.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use spenso::structure::abstract_index::AbstractIndex;
+    /// use spenso::structure::representation::{LibraryRep, Minkowski, RepName};
+    /// use spenso::structure::slot::{IsAbstractSlot, SlotMatcher};
+    /// use symbolica::atom::AtomCore;
+    /// let slot = LibraryRep::from(Minkowski {}).new_rep(4)
+    ///     .slot::<AbstractIndex, _>(AbstractIndex::Normal(1));
+    /// let mapped = SlotMatcher::default().map_expression_indices(
+    ///     slot.to_atom().as_view(), |_| Some(AbstractIndex::Normal(2)),
+    /// );
+    /// assert_eq!(mapped, slot.reindex(AbstractIndex::Normal(2)).to_atom());
+    /// ```
     pub fn map_expression_indices<Aind: AbsInd + ParseableAind>(
         &mut self,
         expression: AtomView<'_>,
@@ -914,24 +927,25 @@ impl<T: RepName, Aind: AbsInd> DualSlotTo for Slot<T, Aind> {
 #[cfg(test)]
 #[cfg(feature = "shadowing")]
 mod shadowing_tests {
+    use crate::network::parsing::structure_inference::AtomStructureExt;
+    use crate::network::tags::SPENSO_TAG;
+    use crate::structure::abstract_index::{AIND_SYMBOLS, AbstractIndex};
+    use crate::structure::representation::{
+        DualLorentz, IndexPalette, IndexRow, LibraryRep, Lorentz, Minkowski, RepName,
+        Representation, RepresentationClass, RepresentationError, RepresentationMetadata,
+    };
+    use crate::structure::slot::{
+        AbsInd, DualSlotTo, IsAbstractSlot, ParseableAind, Slot, SlotError, SlotMatch, SlotMatcher,
+    };
+    use crate::structure::{OrderedStructure, TensorStructure};
+    use crate::tensor_symbol;
     use insta::assert_snapshot;
-    use symbolica::{
-        atom::{Atom, AtomCore, NamespacedSymbol, SymbolBuilder},
-        function, parse, symbol,
-    };
+    use std::fmt::{Display, Formatter, Result as FmtResult};
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use symbolica::atom::{Atom, AtomCore, AtomView, NamespacedSymbol, SymbolBuilder};
+    use symbolica::{function, parse, symbol};
     use symbolica_notation::IndexDisplay;
-
-    use crate::{
-        network::tags::SPENSO_TAG,
-        structure::{
-            abstract_index::{AIND_SYMBOLS, AbstractIndex},
-            representation::{
-                DualLorentz, IndexPalette, IndexRow, LibraryRep, Lorentz, Minkowski, RepName,
-                Representation, RepresentationClass, RepresentationError, RepresentationMetadata,
-            },
-            slot::{DualSlotTo, IsAbstractSlot, Slot, SlotError, SlotMatch, SlotMatcher},
-        },
-    };
 
     #[test]
     fn expression_index_mapping_is_simultaneous_and_preserves_native_variance() {
@@ -943,7 +957,7 @@ mod shadowing_tests {
         let retained = LibraryRep::from(Minkowski {})
             .new_rep(4)
             .slot::<AbstractIndex, _>(AbstractIndex::Normal(3103));
-        let head = crate::tensor_symbol!("slot_index_map::variance");
+        let head = tensor_symbol!("slot_index_map::variance");
         let source = function!(head, a.to_atom(), b.to_atom(), retained.to_atom());
         let expected = function!(
             head,
@@ -971,13 +985,10 @@ mod shadowing_tests {
 
     #[test]
     fn expression_index_mapping_uses_the_requested_generic_index_codec() {
-        use super::{AbsInd, ParseableAind};
-        use symbolica::atom::AtomView;
-
         #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
         struct Index(usize);
-        impl std::fmt::Display for Index {
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        impl Display for Index {
+            fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
                 write!(f, "index({})", self.0)
             }
         }
@@ -1006,7 +1017,7 @@ mod shadowing_tests {
         let rep = LibraryRep::from(Minkowski {}).new_rep(4);
         let slot = rep.slot::<Index, _>(Index(41));
         assert!(Slot::<LibraryRep>::try_from(slot.to_atom().as_view()).is_err());
-        let head = crate::tensor_symbol!("slot_index_map::generic");
+        let head = tensor_symbol!("slot_index_map::generic");
         let source = function!(head, slot.to_atom());
         let mut calls = 0;
         let actual = SlotMatcher::default().map_expression_indices(source.as_view(), |slot| {
@@ -1020,29 +1031,16 @@ mod shadowing_tests {
 
     #[test]
     fn expression_index_mapping_preserves_scalar_metadata_hooks_and_interfaces() {
-        use crate::{
-            network::parsing::structure_inference::AtomStructureExt,
-            structure::{OrderedStructure, TensorStructure},
-        };
-        use std::sync::{
-            Arc,
-            atomic::{AtomicUsize, Ordering},
-        };
-
         let rep = LibraryRep::from(Minkowski {}).new_rep(4);
         let slot = rep.slot::<AbstractIndex, _>(AbstractIndex::Normal(3201));
         let payload = function!(
             symbol!("slot_index_map::private"; Scalar),
-            function!(
-                crate::tensor_symbol!("slot_index_map::inner"),
-                slot.to_atom()
-            )
-            .pow(2)
+            function!(tensor_symbol!("slot_index_map::inner"), slot.to_atom()).pow(2)
         );
         let altered = Arc::new(AtomicUsize::new(0));
         let observed = altered.clone();
         let expected_payload = payload.clone();
-        let head = crate::tensor_symbol!(
+        let head = tensor_symbol!(
             "slot_index_map::hooked",
             norm = move |value, output| {
                 if !matches!(value, symbolica::atom::AtomView::Fun(function)
@@ -1088,7 +1086,7 @@ mod shadowing_tests {
             symbol!("slot_index_map::scope_private"; Scalar),
             selected.to_atom()
         );
-        let head = crate::tensor_symbol!("slot_index_map::scope_input");
+        let head = tensor_symbol!("slot_index_map::scope_input");
         let source = function!(
             head,
             &private,

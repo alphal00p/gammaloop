@@ -29,7 +29,7 @@ use crate::network::tags::{SPENSO_TAG, mathml};
 #[cfg(feature = "shadowing")]
 use crate::shadowing::symbolica_utils::{SpensoPrintBackend, SpensoPrintSettings};
 #[cfg(feature = "shadowing")]
-use crate::structure::slot::ParseableAind;
+use crate::structure::slot::{ParseableAind, SlotMatcher};
 use crate::utils::{to_subscript, to_superscript};
 #[cfg(feature = "shadowing")]
 use symbolica_utils::SerializableSymbol;
@@ -643,7 +643,7 @@ impl AbstractIndex {
         scope: Symbol,
         mut select: impl FnMut(&super::representation::LibrarySlot<Self>) -> bool,
     ) -> Atom {
-        super::slot::SlotMatcher::default().map_expression_indices(expression, |slot| {
+        SlotMatcher::default().map_expression_indices(expression, |slot| {
             // AUTO markers identify unresolved axes, not explicit names.
             if matches!(slot.aind, Self::Open { .. }) || !select(slot) {
                 None
