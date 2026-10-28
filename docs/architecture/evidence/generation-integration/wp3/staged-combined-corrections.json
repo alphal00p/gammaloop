@@ -1,5 +1,5 @@
 {
-  "status": "All approved staged corrections A/B/C/D/E4 combined: focused validation complete; NEW independent Astra integration review required",
+  "status": "APPROVED by both independent integration reviews for frozen d48/code d109 assigned scopes. Subsequent source19-21 work is separate and awaits review; no whole-WP3 approval.",
   "base": "edabf052c5780be6460a9043cb9704e1583a2e4c",
   "code_commit": "d109e898ecf569eeab1b568ce80462ee6094e58d",
   "frozen_original_candidate": "817b5886a50276efea05ab860d22016e1fb0c203",

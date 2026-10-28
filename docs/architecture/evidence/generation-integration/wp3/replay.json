@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "status": "Incomplete WP3; bounded drawing15/16+atomic17/18/37 candidate requires NEW independent Astra review before source19. Full rebuilt-tip matrix and later stages remain pending.",
+  "status": "Incomplete WP3: source19-21 implemented with focused semantic controls; two imported numerator-digest assertions remain FAIL, unmodified. NEW independent Astra review required before22. Full rebuilt-tip matrix and later stages pending.",
   "fixed_target": {
     "commit": "3f0df2a870806076820786994d4883decec8e9e3",
     "tree": "3c91ba47525c627fbc02d79f5afa1d58aa7c5b66",
@@ -373,7 +373,16 @@
       "planned_unit": "port-19",
       "planned_order": 15,
       "reason": "Adapt deterministic zero-colour removal to #210 completed colour-only algebra; remove dependency on obsolete PreparedNumerator::color_products_vanish. Retain canonical grouping and exact output comparisons.",
-      "status": "pending"
+      "status": "implemented; NEW independent Astra slice review pending; retained historical hash failures disclosed",
+      "new_commit": "4aa4d3d88394fd39be75f460b3ace4bc72a48894",
+      "new_change": "oyszwltqowtrkuoumoloqkvmwyuqownw",
+      "reconciliation": [
+        "Current #210 admitted color-only completion already satisfies obsolete product-zero intent; no PreparedNumerator::color_products_vanish restored and no preparation production edit.",
+        "Port oracle options, complete census/classes, diagnostic ratio-only parameter weights and sparse symbolic owner; preserve source-member selection and exact physical factors.",
+        "Retain stronger actual1/8/32 complete native-registration controls and add genuine reversible-index payload registration probes/fresh processes; source21 applies18 physical aliases to real graph fragments.",
+        "New source rows keep original expected digests. Both fail at numerator digest; canonical legacy serialization diagnostic reproduces old digest, YM not fully classified. No physics-equivalence or full oracle pass."
+      ],
+      "slice_receipt": "units19-21.json"
     },
     {
       "commit": "8eeaeaaeb0fed758111e9f711eb256c4a5efbf75",
@@ -383,7 +392,17 @@
       "planned_unit": "port-20",
       "planned_order": 16,
       "reason": "Retain sampled quotient normalization only with WP1 reviewed verdict/remedy. No exactness claim from matching sampled values; original numerator pair is the regression oracle.",
-      "status": "pending"
+      "status": "implemented; NEW independent Astra slice review pending; retained historical hash failures disclosed",
+      "new_commit": "c75ab826e6eb69c711130803bd54223664c9879a",
+      "new_change": "quzlusumwyyrlmtkrtpknmlwrpsrkxvu",
+      "reconciliation": [
+        "Copy all three frozen sampled_quotient fixtures byte-exact.",
+        "Normalize only existing numeric content inside a completed quotient, followed by factor cancellation and scalar/finite checks; never expand a graph numerator or replace metadata owners.",
+        "Move source21 fresh-process physical-pair intent into this regression atomically so original source20 fixture coverage uses real physical aliases rather than unrelated-symbol variation. Later21 commit adds observed Run-pool execution at1/8/32.",
+        "Exact local coupling ratio -2, signed route/projector/prefactor/edge factors and every mass ZERO are asserted; source sample fixtures alone are not an exact graph-identity certificate.",
+        "Approved GL028/034 B2 body/fixtures unchanged from d48 and explicitly rerun; no B2 production physics correction."
+      ],
+      "slice_receipt": "units19-21.json"
     },
     {
       "commit": "78f55a6d68aef17897638bacd1d1492047711f75",
@@ -393,7 +412,16 @@
       "planned_unit": "port-21",
       "planned_order": 17,
       "reason": "Retain nonfinite-sample rejection and physical card closure; carry reviewed WP1 production fallback regression with original budget/seed, distinct from samples=0 proof.",
-      "status": "pending"
+      "status": "implemented; NEW independent Astra slice review pending; retained historical hash failures disclosed",
+      "new_commit": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+      "new_change": "rqtnyqyostmprrnpqxlquqwmwplwltpu",
+      "reconciliation": [
+        "Reject every provided nonfinite candidate/master completed sample before canonical shortcuts, and direct operands before equality/division. Recheck ratio after concrete Nc substitution.",
+        "Finite/zero controls, all modes, canonical policies, every sample position, both physical graph orders and undefined values covered.",
+        "Actual six fresh forward/reverse physical-index processes use existing Run.in_pool; change visibility only to pub(crate), no public API or execution semantics change.",
+        "Register physical restriction card under current runtimeTest owner; compileTimeTest fixture subtree already includes witnesses. Source30 missing Python/reports closure remains open."
+      ],
+      "slice_receipt": "units19-21.json"
     },
     {
       "commit": "77dcd12272d0f86dc5309f8d74de94632a771b6e",
@@ -961,35 +989,29 @@
     "limitation": "Seven inherited registry digests remain stale; carried explicitly for source31/final reconciliation."
   },
   "current_slice": {
-    "base": "438b61500da4b32841c64211103e5da6fc4c4a72",
-    "drawing_commit": "8430e701d858b07e40203a25bfc3b1fa61b15f4a",
-    "staged_commit": "f264028690d117b4b99c320b61b7f2d5d89222d0",
-    "staged_change": "zvnxkyswsytpvzqlsxrpnwuwknwmrtmo",
-    "receipt": "drawing-staged15-18-37.json",
-    "files": "drawing-staged-files.json",
-    "net_files": "staged-net-files.json",
-    "accounted_source_rows": 19,
-    "accounted_planned_units": 14,
+    "status": "Incomplete WP3: source19-21 implemented with focused semantic controls; two imported numerator-digest assertions remain FAIL, unmodified. NEW independent Astra review required before22. Full rebuilt-tip matrix and later stages pending.",
+    "base": "d48f9d1aedc766eea5cb185ab6029d1f04462043",
+    "code_commit": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+    "evidence_change": "smlmnzlztwqwyqyvqsoqvwzvunsspooy",
+    "receipt": "wp3/units19-21.json",
+    "inventory": "wp3/units19-21-files.json",
+    "candidate_bookmark": "generation-integration-units19-21",
+    "accounted_source_rows": 22,
+    "accounted_planned_units": 17,
     "source_orders": [
-      15,
-      16,
-      17,
-      18,
-      37
+      19,
+      20,
+      21
     ],
-    "next_gate": "NEW independent Astra review; no source19+, other lane integration or WP4+ implementation",
-    "correction_candidate": {
-      "code_commit": "d109e898ecf569eeab1b568ce80462ee6094e58d",
-      "receipt": "staged-combined-corrections.json",
-      "status": "focused validation complete; new independent integration review required"
-    }
+    "parallel22_26": "Separate generation-projector-flow-staged reconciliation from approved d48; new Astra review pending, not imported or duplicated. Source36 remains later.",
+    "next_gate": "STOP for NEW independent Astra review before22; no WP4+ or benchmark work."
   },
   "staged_round1_review": {
     "verdict": "REQUEST_CHANGES",
     "candidate": "817b5886a50276efea05ab860d22016e1fb0c203",
     "aggregate_receipt": "staged-evidence-correction.json",
     "E4": "APPROVED independently by Astra coordinator at edabf052; metadata base preserved",
-    "D_round2": "Scoped APPROVE b1061d7; cumulative correction now integrated; new combined review required",
+    "D_round2": "Scoped APPROVE b1061d7; integrated d109/d48, subsequently approved in combined review",
     "pending_gates": [
       "Three newly imported historical frame hash assertions FAIL; representation diagnostic only, not physics proof or B2 routing closure.",
       "Source31: seven inherited and twenty new scope/anchor mismatches; Kurvst PDF stale.",
@@ -997,11 +1019,12 @@
       "DOT sorted content/count check does not certify incidence.",
       "Full WP3 matrix, five fresh a_ddx, BRST, combined physics and benchmark remain pending.",
       "Final Linnest WASM data/name provenance unresolved; no byte-exact reproduction claim.",
-      "Actual final sdist build/install, native/Pyodide/Community wheels and installed behavior remain pending."
+      "Actual final sdist build/install, native/Pyodide/Community wheels and installed behavior remain pending.",
+      "Source19 imports two additional active numerator-digest assertions that FAIL; unchanged expectations, canonical representation diagnostic only and YM first-boundary classification pending at WP9."
     ]
   },
   "combined_staged_corrections": {
-    "status": "All approved A/B/C/D/E4 combined checks complete; NEW independent Astra integration review required before19",
+    "status": "APPROVED by both independent combined integration reviews at frozen d48; code d109 checks retain historical identity",
     "code_commit": "d109e898ecf569eeab1b568ce80462ee6094e58d",
     "receipt": "docs/architecture/evidence/generation-integration/wp3/staged-combined-corrections.json",
     "graph_python": "4b60161d approved Astra round3; cumulative ba375387 plus1a68c9a8 integrated",
@@ -1009,8 +1032,8 @@
     "candidate_bookmark": "generation-integration-corrected-staged",
     "candidate_change": "pmnstxxwwwkzvyuxyzmsmswtutnkzkmy"
   },
-  "implementation_change": "wznkvqlumpuxkzytqqnlwvzvrnypmktk",
-  "implementation_code_commit": "d109e898ecf569eeab1b568ce80462ee6094e58d",
+  "implementation_change": "smlmnzlztwqwyqyvqsoqvwzvunsspooy",
+  "implementation_code_commit": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
   "combined_staged_integration_review": {
     "candidate": "d48f9d1aedc766eea5cb185ab6029d1f04462043",
     "verdict": "APPROVE both independent assigned scopes",
@@ -1029,9 +1052,45 @@
     "source19_gate": "Coordinator released19-21 only; NEW Astra review required before22"
   },
   "active_slice19_21": {
-    "status": "Implementation in progress",
+    "status": "Incomplete WP3: source19-21 implemented with focused semantic controls; two imported numerator-digest assertions remain FAIL, unmodified. NEW independent Astra review required before22. Full rebuilt-tip matrix and later stages pending.",
     "base": "d48f9d1aedc766eea5cb185ab6029d1f04462043",
-    "source19_code": "4aa4d3d88394fd39be75f460b3ace4bc72a48894",
-    "parallel22_26": "Reconciliation in generation-projector-flow-staged is separate and awaits new review; do not duplicate"
+    "code_commit": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+    "evidence_change": "smlmnzlztwqwyqyvqsoqvwzvunsspooy",
+    "receipt": "wp3/units19-21.json",
+    "inventory": "wp3/units19-21-files.json",
+    "candidate_bookmark": "generation-integration-units19-21",
+    "accounted_source_rows": 22,
+    "accounted_planned_units": 17,
+    "source_orders": [
+      19,
+      20,
+      21
+    ],
+    "parallel22_26": "Separate generation-projector-flow-staged reconciliation from approved d48; new Astra review pending, not imported or duplicated. Source36 remains later.",
+    "next_gate": "STOP for NEW independent Astra review before22; no WP4+ or benchmark work."
+  },
+  "previous_slice_drawing_staged": {
+    "base": "438b61500da4b32841c64211103e5da6fc4c4a72",
+    "drawing_commit": "8430e701d858b07e40203a25bfc3b1fa61b15f4a",
+    "staged_commit": "f264028690d117b4b99c320b61b7f2d5d89222d0",
+    "staged_change": "zvnxkyswsytpvzqlsxrpnwuwknwmrtmo",
+    "receipt": "drawing-staged15-18-37.json",
+    "files": "drawing-staged-files.json",
+    "net_files": "staged-net-files.json",
+    "accounted_source_rows": 19,
+    "accounted_planned_units": 14,
+    "source_orders": [
+      15,
+      16,
+      17,
+      18,
+      37
+    ],
+    "next_gate": "Historical slice subsequently approved by both independent combined d48 reviews; coordinator released19-21 only",
+    "correction_candidate": {
+      "code_commit": "d109e898ecf569eeab1b568ce80462ee6094e58d",
+      "receipt": "staged-combined-corrections.json",
+      "status": "APPROVED assigned scopes in frozen d48; historical source identities unchanged"
+    }
   }
 }

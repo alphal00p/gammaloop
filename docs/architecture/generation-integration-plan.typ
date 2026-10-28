@@ -244,6 +244,19 @@ own workspace. Bounded: one regression, one bisect, one written verdict.
   #link("generation-integration-wp3-staged.typ")[the staged integration record]
   and `evidence/generation-integration/wp3/prerequisites08-14.json`.
 
+- #strong[Bounded source19–21 candidate 2026-10-28:] implementation code
+  `4aa4d3d8` → `c75ab826` → `82c1eb5b` preserves current admitted colour
+  completion and adds completed-quotient/nonfinite controls without graph
+  numerator expansion. Both imported historical row expectations remain active
+  and FAIL at numerator digests; the canonical serialization diagnostic is not
+  a physics proof, and the YM difference is not fully classified. The separate
+  #link("generation-integration-wp3-grouping.typ")[deterministic grouping note]
+  and `evidence/generation-integration/wp3/units19-21.json` record exact checks
+  and limits. NEW independent Astra review is required before22. The staged
+  22–26 parallel preparation is not imported. The current registry inventory
+  retains seven inherited and twenty-one additional mismatches (one extra
+  existing grouping-note digest after this slice), for source31 reconciliation.
+
 - `jj duplicate` the v4 chain (`kursouxx::kpslpwqz`) onto the WP2 base; do not
   rebase in place, so the 19 live workspaces on older lines stay valid.
 - Drop the empty \#175/\#176 copies and the first \#177 (`nxmztorq`); adapt

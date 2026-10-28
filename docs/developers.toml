@@ -13,6 +13,42 @@ title = "Implemented architecture"
 summary = "How the current runtime, physics layers, parsers, and symbolic engines are organized."
 
 [[section.note]]
+id = "generation-integration-wp3-grouping"
+title = "Generation integration deterministic grouping"
+summary = "Source19-21 colour/oracle reconciliation, completed quotient and nonfinite policy, physical witnesses and exact validation limits."
+source = "docs/architecture/generation-integration-wp3-grouping.typ"
+kind = "Implementation record"
+status = "Candidate; NEW independent Astra review required before22"
+lifecycle = "investigation"
+owner = "unassigned"
+reviewed_at = "2026-10-28"
+review_ref = "82c1eb5b40c4911e59dfc25c9ba1786e282e111c"
+products = ["gammaloop", "feynkit"]
+topics = ["generation", "validation"]
+review_triggers = ["crates/feynkit-generator/src/grouping.rs", "crates/feynkit-generator/tests/generation_oracle/**", "crates/spenso/src/network/library/symbolic.rs", "nix/rust-workspace.nix"]
+
+[[section.note.scope]]
+path = "crates/feynkit-generator/src/grouping.rs"
+symbol = "finite quotient comparison"
+anchor = "fn compare(\n"
+end_anchor = "fn expressions_equal("
+digest = "1fde7e75dd6e13b44fafe38ee5dd3b9debb2babf"
+
+[[section.note.scope]]
+path = "crates/feynkit-generator/tests/generation_oracle/census.rs"
+symbol = "strict diagnostic weights"
+anchor = "    fn weight(factor: &Atom)"
+end_anchor = "    /// The encoded payload"
+digest = "fb41124fcb8c821236295e02eee59a1ec4fdcb3d"
+
+[[section.note.scope]]
+path = "crates/feynkit-generator/tests/generation_oracle/main.rs"
+symbol = "actual registration and pool controls"
+anchor = "fn register_indices("
+end_anchor = "/// A user filter"
+digest = "c0dea81605141dbd2db29be9413d1030ef942625"
+
+[[section.note]]
 id = "generation-staged-python-fixes"
 title = "Staged Python graph and exporter corrections"
 summary = "Live-view epoch and Python surface corrections, terminal callback coverage, current stub owners and real feature/signature validation."
@@ -124,8 +160,9 @@ path = "crates/feynkit-generator/src/generation/staged.rs"
 symbol = "staged Request / DiagramSet / BuiltDiagramSet"
 anchor = "pub struct LoopCounts {"
 end_anchor = "#[cfg(test)]\nmod tests {"
-# Current integration owner, awaiting independent Astra review; exact scoped source fingerprint.
-digest = "7a8d1e6d6d8c2b88df7816c084c8493b400fd67b"
+# Source19-21 owner reconciliation; B2 body/fixtures remain unchanged.
+# Quotient/nonfinite checks and actual Run pool coverage require new slice review.
+digest = "f13870d5c7d318468a8a1b83ae9b039bb7419826"
 
 [[section.note.scope]]
 path = "crates/feynkit-generator/src/generation.rs"
@@ -139,8 +176,9 @@ digest = "584e7d14e34cf83605500b892943ea2ca3043569"
 path = "crates/feynkit-generator/src/grouping.rs"
 symbol = "original-pair B2 certificate and current colour completion"
 anchor = "    fn vacuum_group28_original_pair_identity()"
-# Current integration owner, awaiting independent Astra review; exact scoped source fingerprint.
-digest = "3ff919fd9caa2b1f07fab2a89580722e8c5861bf"
+# Source19-21 owner reconciliation; B2 body/fixtures remain unchanged.
+# Quotient/nonfinite checks and actual Run pool coverage require new slice review.
+digest = "66cc3fe8280694c72b213d71dee37fb40a1ad997"
 
 [[section.note]]
 id = "gammaloop-architecture"

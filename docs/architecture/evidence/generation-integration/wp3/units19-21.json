@@ -1,0 +1,1097 @@
+{
+  "schema": 1,
+  "status": "Bounded19-21 implementation awaiting NEW independent Astra review. Retained two imported numerator-hash failures; not a full passing oracle/WP3 claim.",
+  "implementer": "Sol",
+  "author": {
+    "name": "Lucien Huber",
+    "email": "im@lcnbr.ch"
+  },
+  "base": "d48f9d1aedc766eea5cb185ab6029d1f04462043",
+  "frozen_code_commit": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+  "frozen_code_change": "rqtnyqyostmprrnpqxlquqwmwplwltpu",
+  "frozen_code_tree": "17f0552bbaea9ca7d707fd92449153375003ecba",
+  "candidate_evidence_change": "smlmnzlztwqwyqyvqsoqvwzvunsspooy",
+  "candidate_bookmark": "generation-integration-units19-21",
+  "code_files_sha256": {
+    "crates/feynkit-generator/examples/generation_workloads.rs": "a0c8b8733cd6e267cc8b1cccf20526cba5f7d250f85a05e06ff2405b032172a7",
+    "crates/feynkit-generator/src/generation/staged.rs": "6c8ebb4abd42e875742bb1fdfdfa5c6fc0ecff4e9c0c4adff8f49306b4110b21",
+    "crates/feynkit-generator/src/grouping.rs": "ee0e666ae2c7b8d13c14741d03d49adc41de50ace966034561f9d39d20191c00",
+    "crates/feynkit-generator/tests/fixtures/sampled_quotient/GL29.dot": "6fcc47615a4c963d70290dfd3c9193942a3987738b8b5ff0e1b0dc319f5f567f",
+    "crates/feynkit-generator/tests/fixtures/sampled_quotient/GL68.dot": "caf3be75d0a68153455c954a79bc6d0b836da6b464450443372b8a17d6325126",
+    "crates/feynkit-generator/tests/fixtures/sampled_quotient/prepared_samples.json": "c2f6060dc786c5730e2ebcecb8583c6bc8ba3cc0196427b6b247c682b47a2ed8",
+    "crates/feynkit-generator/tests/generation_oracle/cases.rs": "e3ef8ec52578364ef24cf278965eaba2ec967f1f626c707bb7667c2834e319a2",
+    "crates/feynkit-generator/tests/generation_oracle/census.rs": "b46641d3c13dd70304a457ad4f884cedd486f188ce86dd92c73328a6b1da05d3",
+    "crates/feynkit-generator/tests/generation_oracle/classes.rs": "f605e4436ff0a2225155840fdad2065d50e74fd88b34979faaa97f7153a3e4fe",
+    "crates/feynkit-generator/tests/generation_oracle/main.rs": "b23140aece24dd077c6442052143e6838130b02fb700188ca6d727e3b0ebb9b3",
+    "crates/spenso/src/network/library/symbolic.rs": "70a8ddeb801547cf69a5d763946d4d4308566145e8a98b16294a615181a67535",
+    "nix/rust-workspace.nix": "93c27fad3bf2ea4b434b13db0408f8bc3fe932e5899409db2d6a0363873d43f7"
+  },
+  "hash_semantics": "All12 code/source fixture hashes bound to frozen82c1, excluding mutable execution/replay/this receipt and note/inventory. Those are metadata-only continuation. Artifact hashes below refer to finalized files, not recursive/self hashes. No old test attributed to modified source.",
+  "base_reviews": {
+    "candidate": "d48f9d1aedc766eea5cb185ab6029d1f04462043",
+    "verdict": "APPROVE both independent assigned scopes",
+    "reviews": {
+      "runtime": {
+        "receipt": "docs/architecture/evidence/generation-integration/wp3/units19-21-base-reviews/runtime.json",
+        "sha256": "3aa4eb67acfa60cfab6f836e2eb4a846434e945476d84ac01602930b6eb730cf",
+        "verdict": "APPROVE assigned integration scope"
+      },
+      "bindings": {
+        "receipt": "docs/architecture/evidence/generation-integration/wp3/units19-21-base-reviews/bindings.json",
+        "sha256": "733ca1d8c8d2587ab266e422eb7c5b095d9ea7603f3228f67eaf71cc8cb4c023",
+        "verdict": "APPROVE assigned integration scope"
+      }
+    },
+    "source19_gate": "Coordinator released19-21 only; NEW Astra review required before22"
+  },
+  "source_mapping": [
+    {
+      "commit": "8d49e6ecf0d8fb1169e7433f2c0b41048aa92e60",
+      "source_change": "yrpmmsunvpsxzkvootvxurynzyzpsvss",
+      "source_order": 19,
+      "disposition": "reconcile",
+      "planned_unit": "port-19",
+      "planned_order": 15,
+      "reason": "Adapt deterministic zero-colour removal to #210 completed colour-only algebra; remove dependency on obsolete PreparedNumerator::color_products_vanish. Retain canonical grouping and exact output comparisons.",
+      "status": "implemented; NEW independent Astra slice review pending; retained historical hash failures disclosed",
+      "new_commit": "4aa4d3d88394fd39be75f460b3ace4bc72a48894",
+      "new_change": "oyszwltqowtrkuoumoloqkvmwyuqownw",
+      "reconciliation": [
+        "Current #210 admitted color-only completion already satisfies obsolete product-zero intent; no PreparedNumerator::color_products_vanish restored and no preparation production edit.",
+        "Port oracle options, complete census/classes, diagnostic ratio-only parameter weights and sparse symbolic owner; preserve source-member selection and exact physical factors.",
+        "Retain stronger actual1/8/32 complete native-registration controls and add genuine reversible-index payload registration probes/fresh processes; source21 applies18 physical aliases to real graph fragments.",
+        "New source rows keep original expected digests. Both fail at numerator digest; canonical legacy serialization diagnostic reproduces old digest, YM not fully classified. No physics-equivalence or full oracle pass."
+      ],
+      "slice_receipt": "units19-21.json"
+    },
+    {
+      "commit": "8eeaeaaeb0fed758111e9f711eb256c4a5efbf75",
+      "source_change": "mpyquuutlzpvlwusqnrxlzkotwklwtxx",
+      "source_order": 20,
+      "disposition": "reconcile",
+      "planned_unit": "port-20",
+      "planned_order": 16,
+      "reason": "Retain sampled quotient normalization only with WP1 reviewed verdict/remedy. No exactness claim from matching sampled values; original numerator pair is the regression oracle.",
+      "status": "implemented; NEW independent Astra slice review pending; retained historical hash failures disclosed",
+      "new_commit": "c75ab826e6eb69c711130803bd54223664c9879a",
+      "new_change": "quzlusumwyyrlmtkrtpknmlwrpsrkxvu",
+      "reconciliation": [
+        "Copy all three frozen sampled_quotient fixtures byte-exact.",
+        "Normalize only existing numeric content inside a completed quotient, followed by factor cancellation and scalar/finite checks; never expand a graph numerator or replace metadata owners.",
+        "Move source21 fresh-process physical-pair intent into this regression atomically so original source20 fixture coverage uses real physical aliases rather than unrelated-symbol variation. Later21 commit adds observed Run-pool execution at1/8/32.",
+        "Exact local coupling ratio -2, signed route/projector/prefactor/edge factors and every mass ZERO are asserted; source sample fixtures alone are not an exact graph-identity certificate.",
+        "Approved GL028/034 B2 body/fixtures unchanged from d48 and explicitly rerun; no B2 production physics correction."
+      ],
+      "slice_receipt": "units19-21.json"
+    },
+    {
+      "commit": "78f55a6d68aef17897638bacd1d1492047711f75",
+      "source_change": "msurxwzpxkktnsprnztwnktlumnsorov",
+      "source_order": 21,
+      "disposition": "reconcile",
+      "planned_unit": "port-21",
+      "planned_order": 17,
+      "reason": "Retain nonfinite-sample rejection and physical card closure; carry reviewed WP1 production fallback regression with original budget/seed, distinct from samples=0 proof.",
+      "status": "implemented; NEW independent Astra slice review pending; retained historical hash failures disclosed",
+      "new_commit": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+      "new_change": "rqtnyqyostmprrnpqxlquqwmwplwltpu",
+      "reconciliation": [
+        "Reject every provided nonfinite candidate/master completed sample before canonical shortcuts, and direct operands before equality/division. Recheck ratio after concrete Nc substitution.",
+        "Finite/zero controls, all modes, canonical policies, every sample position, both physical graph orders and undefined values covered.",
+        "Actual six fresh forward/reverse physical-index processes use existing Run.in_pool; change visibility only to pub(crate), no public API or execution semantics change.",
+        "Register physical restriction card under current runtimeTest owner; compileTimeTest fixture subtree already includes witnesses. Source30 missing Python/reports closure remains open."
+      ],
+      "slice_receipt": "units19-21.json"
+    }
+  ],
+  "atomic_adaptation": "Physical fresh-process registration intent from21 joined20 fixture regression instead of cosmetic unrelated-symbol variation.21 adds observed actual pool execution via crate-visible existing Run.in_pool. No later22+ imported.",
+  "checks": [
+    {
+      "name": "final combined owner controls",
+      "status": "PASS",
+      "source": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+      "command": "bash target/wp3-units19-21/owner-controls.sh",
+      "tests_run": 233,
+      "run_id": "d1c0f4b4-3eef-4798-a694-6f757d90e2fd",
+      "evidence": {
+        "path": "target/wp3-units19-21/owner-final.log",
+        "sha256": "25a31390d2173d81762ef33541472cc3a2ae3ffee3c38fadaed05443ba6d7cbe",
+        "asserted_result": "233 tests run: 233 passed"
+      },
+      "inventory": "target/wp3-units19-21/selected-owner-tests.json",
+      "exit_code": 0
+    },
+    {
+      "name": "earlier combined owner selection",
+      "status": "PASS",
+      "source": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+      "tests_run": 218,
+      "overlaps_final_selection": true,
+      "evidence": {
+        "path": "target/wp3-units19-21/combined-owner-controls.log",
+        "sha256": "5f3692f8f364c3ef69b481ec296b2978100dd31dc2438e5bc02a81681900def6",
+        "asserted_result": "218 tests run: 218 passed"
+      },
+      "semantics": "Historical retained producer output; final233 selection has exact command/inventory and is the primary handoff evidence. Counts are not summed.",
+      "exit_code": 0
+    },
+    {
+      "name": "completed quotient/nonfinite controls",
+      "status": "PASS",
+      "source": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+      "tests_run": 7,
+      "command": "cargo test --locked --profile ci-optim -p feynkit-generator --lib quotient -- --nocapture",
+      "evidence": {
+        "path": "target/wp3-units19-21/quotient-current.log",
+        "sha256": "3476c6af6a0b8aa286ba734576d766dfd890cc64b42526f21a3bac611c8e46d6",
+        "asserted_result": "7 passed; 0 failed; 0 ignored"
+      },
+      "overlaps_final_selection": true,
+      "exit_code": 0
+    },
+    {
+      "name": "original GL028/034 B2",
+      "status": "PASS",
+      "source": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+      "tests_run": 1,
+      "command": "cargo test --locked --profile ci-optim -p feynkit-generator --lib grouping::tests::vacuum_group28_original_pair_identity -- --exact --ignored --nocapture",
+      "evidence": {
+        "path": "target/wp3-units19-21/original-B2-final.log",
+        "sha256": "47d65b415d1194190736448dcc7afcdd0795dfec5cab5bd9a7d4aa4e496376fc",
+        "asserted_result": "1 passed; 0 failed; 0 ignored"
+      },
+      "scope": "Actual4D SU3 original pair only, N28=(7/2)N34; unchanged certificate/fixtures. Run again atR/F.",
+      "exit_code": 0
+    },
+    {
+      "name": "registration/census initial focused suite",
+      "status": "FAIL_TIMEOUT",
+      "source": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+      "tests_run": 4,
+      "passed": 3,
+      "timed_out": 1,
+      "evidence": {
+        "path": "target/wp3-units19-21/registration-final.log",
+        "sha256": "4b988260a2428eb5c3abb548fe8941fecd863fdd1725034b4f632ee894df2376",
+        "asserted_result": "3 passed (1 slow), 1 timed out"
+      },
+      "command": "FEYNKIT_ORACLE_THREADS=1,8,32 cargo nextest run --locked --cargo-profile ci-optim --profile ci_gammaloop -p feynkit-generator -p spenso --test-threads 1 -E 'test(=outputs_do_not_depend_on_index_registration_order) or test(=ids_do_not_depend_on_threads_or_symbol_registration) or test(=printed_numerators_do_not_depend_on_threads) or test(census_weights_substitute_parameters_only_in_group_ratios)'",
+      "semantics": "Three completed controls passed; parent fresh matrix exceeded fast240s limit. No timeout pass credit; exact selectors in registration recipe receipt."
+    },
+    {
+      "name": "fresh full-payload index-registration matrix",
+      "status": "PASS",
+      "source": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+      "tests_run": 1,
+      "exit_code": 0,
+      "fresh_children": 13,
+      "command": "FEYNKIT_ORACLE_THREADS=1,8,32 target/wp3-units19-21/run timeout 1800 /common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/generation_oracle-d9164d43ccf7443d --exact outputs_do_not_depend_on_index_registration_order --nocapture",
+      "evidence": {
+        "path": "target/wp3-units19-21/registration-matrix-long.log",
+        "sha256": "e8c36d8b367d97557c69b2be21ae1732e7944fc34f8bbb78fa5be452849a3275",
+        "asserted_result": "1 passed; 0 failed; 0 ignored"
+      },
+      "matrix": "baseline generation,1 then generation/increasing/decreasing/shuffled at EACH1/8/32; both new full cases plus seven-zero/two-survivor sampled subset, complete graph/numerator/interface/group/member/ratio payload equality. Nonzero worker events assert actual pool; child failures propagate."
+    },
+    {
+      "name": "SM filtered3loop",
+      "status": "PASS",
+      "source": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+      "tests_run": 1,
+      "command": "cargo nextest run --locked --cargo-profile ci-optim --profile ci_gammaloop -p gammaloop-integration-tests --test test_feyngen --test-threads1 -E test(=test_vacuum_amplitude_generation_full_sm_three_loop_filtered)",
+      "evidence": {
+        "path": "target/wp3-units19-21/sm-filtered.log",
+        "sha256": "e88d859898ac257b0c7c7d16c3c29d17d4e052fe855be8db20636dfe6d7894d2",
+        "asserted_result": "1 test run: 1 passed"
+      },
+      "assertions": "Unchanged helper ACTUALLY loops1/8,3150|-9861/16 and both original Lorentz-zero graphs.",
+      "exit_code": 0
+    },
+    {
+      "name": "Clippy affected all targets",
+      "status": "PASS",
+      "source": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+      "command": "cargo clippy --locked --profile ci-optim -p feynkit-generator -p spenso --all-targets --no-deps -- -D warnings",
+      "evidence": {
+        "path": "target/wp3-units19-21/clippy.log",
+        "sha256": "e4a13793191cee11ab67790fcf54076cd22146287e94bc858783b8291c39b3de",
+        "asserted_result": "Finished `ci-optim` profile"
+      },
+      "exit_code": 0
+    },
+    {
+      "name": "rustfmt",
+      "status": "PASS",
+      "source": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+      "command": "cargo fmt --all -- --check",
+      "evidence": {
+        "path": "target/wp3-units19-21/fmt.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "asserted_result": ""
+      },
+      "exit_code": 0
+    },
+    {
+      "name": "kernel isolation",
+      "status": "PASS",
+      "source": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+      "command": "just check-symbolica-feature-isolation",
+      "evidence": {
+        "path": "target/wp3-units19-21/kernel.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "asserted_result": ""
+      },
+      "exit_code": 0
+    },
+    {
+      "name": "source/ref/fixture/lock integrity",
+      "status": "PASS",
+      "evidence": {
+        "path": "target/wp3-units19-21/integrity.log",
+        "sha256": "7a9cc021a6a1d4c07eb779254bafc27adba75fdf2ceea372c03b82a3c10e1b04",
+        "asserted_result": "PASS protected inputs; 20 refs;3 exact fixtures;B2 body/fixtures;3 conflict-free code commits; 3 titles"
+      },
+      "receipt": "target/wp3-units19-21/integrity.json",
+      "exit_code": 0
+    },
+    {
+      "name": "four-loop colorfilter threads=1",
+      "status": "PASS",
+      "source": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+      "command": "cargo run --locked --profile ci-optim -p feynkit-generator --example four_loop_numerator -- 1 - true",
+      "evidence": {
+        "path": "target/wp3-units19-21/fourloop-1.log",
+        "sha256": "fa2b989eff0dd759b0803c07b2b47fa06b716087312ba8caa24aa6c558e311ff",
+        "asserted_result": "4664 diagrams, 306 zero numerators"
+      },
+      "assertions": "4970 total AND4664retained/306zero; all repeated commands fail on any run through set -euo pipefail.",
+      "exit_code": 0
+    },
+    {
+      "name": "four-loop colorfilter threads=8",
+      "status": "PASS",
+      "source": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+      "command": "cargo run --locked --profile ci-optim -p feynkit-generator --example four_loop_numerator -- 8 - true",
+      "evidence": {
+        "path": "target/wp3-units19-21/fourloop-8.log",
+        "sha256": "0e8727918a1016819216cdd442d98f886f2950806aa4d948de3d3960d32f9a4c",
+        "asserted_result": "4664 diagrams, 306 zero numerators"
+      },
+      "assertions": "4970 total AND4664retained/306zero; all repeated commands fail on any run through set -euo pipefail.",
+      "exit_code": 0
+    },
+    {
+      "name": "four-loop colorfilter threads=32",
+      "status": "PASS",
+      "source": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+      "command": "cargo run --locked --profile ci-optim -p feynkit-generator --example four_loop_numerator -- 32 - true",
+      "evidence": {
+        "path": "target/wp3-units19-21/fourloop-32.log",
+        "sha256": "dd6b8f6bcf17dd4a1e6d6fc309023f93daa4b7a74f46a7bacbdaa862ca44a1c0",
+        "asserted_result": "4664 diagrams, 306 zero numerators"
+      },
+      "assertions": "4970 total AND4664retained/306zero; all repeated commands fail on any run through set -euo pipefail.",
+      "exit_code": 0
+    },
+    {
+      "name": "Typst grouping",
+      "status": "PASS",
+      "command": "typst compile --root . docs/architecture/generation-integration-wp3-grouping.typ target/wp3-units19-21/grouping.pdf",
+      "evidence": {
+        "path": "target/wp3-units19-21/typst-grouping.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "asserted_result": ""
+      },
+      "artifact": {
+        "path": "target/wp3-units19-21/grouping.pdf",
+        "sha256": "4e54f76ec680844f7b6ff207cbd47c85031899285fee280ecbf2530a1732a8ef"
+      },
+      "exit_code": 0
+    },
+    {
+      "name": "Typst plan",
+      "status": "PASS",
+      "command": "typst compile --root . docs/architecture/generation-integration-plan.typ target/wp3-units19-21/plan.pdf",
+      "evidence": {
+        "path": "target/wp3-units19-21/typst-plan.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "asserted_result": ""
+      },
+      "artifact": {
+        "path": "target/wp3-units19-21/plan.pdf",
+        "sha256": "0cf77576f5c724ce80839fddd6609380a7d32ab1bf951466b841b2d32ec4e337"
+      },
+      "exit_code": 0
+    },
+    {
+      "name": "new/affected registry scopes and titles",
+      "status": "PASS_OWNED_SCOPES_ONLY",
+      "evidence": {
+        "path": "target/wp3-units19-21/registry-audit.log",
+        "sha256": "4de58d1b4d5e0f2d3e8b2dd400c7ec54d844bd2dc9ea1e7541f6a81f4c14e3e3",
+        "asserted_result": "Valid 57 inherited mismatches 7 new mismatches 21"
+      },
+      "inventory": "target/wp3-units19-21/registry-audit.json",
+      "limits": "Global registry not passing:7 inherited+21 additional (20 prior+1 now stale existing merge-readiness grouping digest). Three new scopes and two reconciled staged owner scopes valid; no blind global refresh.",
+      "exit_code": 0
+    },
+    {
+      "name": "Nix source parsing",
+      "status": "PASS",
+      "source": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+      "exit_code": 0,
+      "command": "nix-instantiate --parse nix/rust-workspace.nix",
+      "evidence": {
+        "path": "target/wp3-units19-21/nix-parse.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "asserted_result": ""
+      }
+    },
+    {
+      "name": "installed nixfmt baseline diagnostic",
+      "status": "FAIL_INHERITED_FORMATTER_STYLE",
+      "source": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+      "exit_code": 1,
+      "evidence": {
+        "path": "target/wp3-units19-21/nixfmt.log",
+        "sha256": "8fd078a6387c49090fb9802a11d3ba2e08b241f1a49f01b139fc13fae9ef14e9",
+        "asserted_result": "not formatted"
+      },
+      "baseline": "target/wp3-units19-21/nixfmt-boundary.json",
+      "semantics": "The unconfigured installed nixfmt also rejects unchanged d48 style. No unrelated whole-file formatting rewrite or formatting-pass claim."
+    },
+    {
+      "name": "pinned example binary threads=1",
+      "status": "PASS",
+      "exit_code": 0,
+      "source": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+      "command": "target/wp3-units19-21/run target/ci-optim/examples/four_loop_numerator 1 - true",
+      "evidence": {
+        "path": "target/wp3-units19-21/fourloop-binary-1.log",
+        "sha256": "12eb9f04b4e2c10885fa3a57693f04b2d3f0d8c134676aaf098601a9b73348f8",
+        "asserted_result": "4664 diagrams, 306 zero numerators"
+      },
+      "semantics": "Direct repeat to bind every cell to the same pre/post-hashed binary, after Cargo copied feature-specific examples to local target. No performance/benchmark claim."
+    },
+    {
+      "name": "pinned example binary threads=8",
+      "status": "PASS",
+      "exit_code": 0,
+      "source": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+      "command": "target/wp3-units19-21/run target/ci-optim/examples/four_loop_numerator 8 - true",
+      "evidence": {
+        "path": "target/wp3-units19-21/fourloop-binary-8.log",
+        "sha256": "89bc7c37f64b01b120683a5aebd7090ee478c4219299e23d052e4ccf898d6d32",
+        "asserted_result": "4664 diagrams, 306 zero numerators"
+      },
+      "semantics": "Direct repeat to bind every cell to the same pre/post-hashed binary, after Cargo copied feature-specific examples to local target. No performance/benchmark claim."
+    },
+    {
+      "name": "pinned example binary threads=32",
+      "status": "PASS",
+      "exit_code": 0,
+      "source": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+      "command": "target/wp3-units19-21/run target/ci-optim/examples/four_loop_numerator 32 - true",
+      "evidence": {
+        "path": "target/wp3-units19-21/fourloop-binary-32.log",
+        "sha256": "943d2fc31d5ec2f6b235a94f04bc5f9e9ac4e6d11bc1428e7ce0bef3bded8daf",
+        "asserted_result": "4664 diagrams, 306 zero numerators"
+      },
+      "semantics": "Direct repeat to bind every cell to the same pre/post-hashed binary, after Cargo copied feature-specific examples to local target. No performance/benchmark claim."
+    }
+  ],
+  "failure_before_fix": [
+    {
+      "name": "source20 stored samples",
+      "status": "FAIL_BEFORE_FIX",
+      "evidence": {
+        "path": "target/wp3-units19-21/source20-before.log",
+        "sha256": "8927073207b2c094834b750af6b5a567b624719e7b29aa73620c9e85e8a30507",
+        "asserted_result": "FAILED"
+      },
+      "meaning": "No ratio instead of exact -2 on original completed samples."
+    },
+    {
+      "name": "source21 nonfinite all modes/samples",
+      "status": "FAIL_BEFORE_FIX",
+      "evidence": {
+        "path": "target/wp3-units19-21/source21-expanded-before.log",
+        "sha256": "7e4e4d6303055756ace10d01f0ebfca1ab8803e99f0bc368e485094abafa2f0b",
+        "asserted_result": "3 failed"
+      },
+      "meaning": "Equal nonfinite values and finite/nonfinite divisions can bypass equality/quotient guards."
+    },
+    {
+      "name": "pool execution observer",
+      "status": "FAIL_BEFORE_FIX",
+      "evidence": {
+        "path": "target/wp3-units19-21/quotient-pool-observer-before.log",
+        "sha256": "70c080266c99d1c4ac39f2c96e7d339a2d2e5fa9db8122e6e8a74d703a41dbf8",
+        "asserted_result": "1 failed"
+      },
+      "meaning": "Run label alone does not install internal grouping-core pool; corrected with existing Run.in_pool owner."
+    },
+    {
+      "name": "source19 nested grouping-ratio diagnostic",
+      "status": "FAIL_BEFORE_FIX",
+      "evidence": {
+        "path": "target/wp3-units19-21/port19-owner-before.log",
+        "sha256": "be32d788a75bc6d5391e70fc993ffab74fdfeb67baa433af38695f36b7cac35c",
+        "asserted_result": "1 failed"
+      },
+      "meaning": "Retained nested wrappers need existing overall-factor evaluation, not only one-level substitution."
+    }
+  ],
+  "retained_row_failures": {
+    "status": "ACTIVE_FAIL_UNCHANGED_EXPECTATIONS",
+    "source": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+    "current_evidence": {
+      "frozen_code_commit": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+      "tests_run": 2,
+      "failed": 2,
+      "command": "timeout 600 <pinned generation_oracle binary> ym_ggg_zero_color_L3 xs_qcdqed_addx_canonical_scalar_lr_L3 --test-threads 1 --nocapture",
+      "rows": [
+        {
+          "name": "xs_qcdqed_addx_canonical_scalar_lr_L3",
+          "path": "target/wp3-units19-21/hash-diagnostics-current/xs_qcdqed_addx_canonical_scalar_lr_L3/left.json",
+          "sha256": "571f715365f414a4faaabd31ec02257f3774c64202d73a16793c93f4b08e8e53",
+          "identical_to_source19_initial_payload": true
+        },
+        {
+          "name": "ym_ggg_zero_color_L3",
+          "path": "target/wp3-units19-21/hash-diagnostics-current/ym_ggg_zero_color_L3/left.json",
+          "sha256": "1ea989a6584c09d5ec19b4243fbcdb4898c83f4b07c6cf70233ae04e5cc0d356",
+          "identical_to_source19_initial_payload": true
+        }
+      ],
+      "semantics": "Both retained assertions fail on current frozen code. Full dumped payload bytes equal initial source19 failure witnesses, so existing exact-integer diagnostic remains applicable. No expectation change or physics-equivalence assertion."
+    },
+    "current_log": {
+      "path": "target/wp3-units19-21/source19-current-rows.log",
+      "sha256": "f9a66a386b8334b634d8b0998e5d0defa49d47c76bec8042670169d45f2e209e",
+      "asserted_result": "0 passed; 2 failed; 0 ignored"
+    },
+    "initial_producer": "Original source19 failure log and diagnostic retained separately; current82 rerun produces byte-identical full witnesses. Full fresh registration equality is a distinct passing property.",
+    "log": {
+      "path": "target/wp3-units19-21/port19-case-controls.log",
+      "sha256": "124c912cadc1833619383a4bf45ad848980bb310615cac8a0aa3c1735c35d7d8",
+      "asserted_result": "2 failed"
+    },
+    "rows": [
+      {
+        "name": "ym_ggg_zero_color_L3",
+        "payload": "target/wp3-units19-21/hash-diagnostics/ym_ggg_zero_color_L3/left.json",
+        "sha256": "1ea989a6584c09d5ec19b4243fbcdb4898c83f4b07c6cf70233ae04e5cc0d356",
+        "diagrams": 1217,
+        "expected": 2023414268013597133,
+        "variants": {
+          "native": 12564710287510348289,
+          "legacy_spelling": 6040918855131697895,
+          "without_interfaces": 6389316436763041354,
+          "legacy_spelling_without_interfaces": 2849441535679065448
+        },
+        "reproduced": false
+      },
+      {
+        "name": "xs_qcdqed_addx_canonical_scalar_lr_L3",
+        "payload": "target/wp3-units19-21/hash-diagnostics/xs_qcdqed_addx_canonical_scalar_lr_L3/left.json",
+        "sha256": "571f715365f414a4faaabd31ec02257f3774c64202d73a16793c93f4b08e8e53",
+        "diagrams": 82,
+        "expected": 16218294366853174009,
+        "variants": {
+          "native": 9414812182237719052,
+          "legacy_spelling": 14943522780772781293,
+          "without_interfaces": 10726861983556325453,
+          "legacy_spelling_without_interfaces": 16218294366853174009
+        },
+        "reproduced": true
+      }
+    ],
+    "diagnostic": "Canonical old digest recovered only by legacy spellings plus omitting interface fields, NOT physics proof. YM expected digest not recovered; next decisive WP9 action is frozen-source numerator/local-fragment dump to locate first differing boundary. All class/thread/naming comparisons and other row fields completed/matched before hash assertion; no count-only physics claim."
+  },
+  "producer_binaries": [
+    {
+      "binary_id": "feynkit-generator",
+      "path": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/feynkit_generator-2fb5ab118d017c2e",
+      "sha256": "e1cd603d83600461503c429942dc0541c209db820e4d1d3a9693dbb831ff136d",
+      "selected": 163
+    },
+    {
+      "binary_id": "feynkit-graph",
+      "path": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/feynkit_graph-caf4ecef848ae0c6",
+      "sha256": "e75ac33d5c0640c3391df3b99349ee3b71894f2defc224aa714e4acca9b06768",
+      "selected": 28
+    },
+    {
+      "binary_id": "feynkit-model",
+      "path": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/feynkit_model-0cde7ac9c12446cb",
+      "sha256": "003022099aa266192521114c2ade73c0e818f38cdd208add2300d98637e5768a",
+      "selected": 41
+    },
+    {
+      "binary_id": "spenso",
+      "path": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/spenso-e03b33bbb7587d03",
+      "sha256": "7321bfd1ba4469015171bb943482a94b061b547910016d5392e21fc97498716d",
+      "selected": 1
+    },
+    {
+      "path": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/generation_oracle-d9164d43ccf7443d",
+      "sha256": "82d513e6831da83b653429ae3dfc0b3ee85a62604efdbeafbb750ce2815dacaa"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/ci-optim/examples/four_loop_numerator",
+      "sha256": "97760b66264b9944ef147614b39542c68bf4f44d75fe870f0b968f966a0a2484"
+    },
+    {
+      "path": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/feynkit_generator-820ca450194b8779",
+      "sha256": "b86130a20374b1e5fbc62f99084a951a4646bdc2503869077ed0693b2779e825"
+    },
+    {
+      "binary_id": "gammaloop-integration-tests::test_feyngen",
+      "path": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/test_feyngen-9581d43dfd98ca33",
+      "sha256": "ffa86cd73efe42a45b2987c68d0fb3ee0cd0606cf3158f45174b6b3c71386f51",
+      "selected": [
+        "test_vacuum_amplitude_generation_full_sm_three_loop_filtered"
+      ],
+      "semantics": "Exact unchanged compiled SM test inventory captured after successful run; no source/code changes between run and inventory."
+    }
+  ],
+  "integrity": {
+    "frozen_code_revision": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+    "code_tree": "17f0552bbaea9ca7d707fd92449153375003ecba",
+    "protected_inputs": {
+      "Cargo.lock": "def8dd7be5f208f4a290a4556081f7a63d10a5ae070c5df1808c1d350fa6161e",
+      "tydenso/Cargo.lock": "f1f0573d5f1c02d4ddb73d4491514cd291ae94ded7d84627342226917ca41dd0",
+      "examples/notebooks/symbolica-host/Cargo.lock": "03e18f00dbba096e08978063fd857d6558659f9f75e0ab09d73be3e543882c5a",
+      "uv.lock": "0ad8d1a18d9c520d298ff36ec20a746f9a63c7e0fdebe14e739a574cbb4fabf8",
+      "nix-ci.nix": "e031749e51a33ee48bc5c653d13c2dc7e7d3a51bddea77fc3c67d01ac217c540",
+      "crates/gammaloop-workspace-hack/Cargo.toml": "23b70d6e8e330ffb8cd46a3d83e9b014832d0c6547fcf1f2eb0b370503f5065d",
+      "crates/gammaloop-workspace-hack/build.rs": "13f6c3ba6785b4fee0cf3bd6cdd57b9b4875475589613609b4b9c5e3d7838b26"
+    },
+    "preserved_refs": {
+      "generation-integration-source-v4": "e0a779808174c64057fecfd062c948b8de8e5c1f",
+      "generation-integration-source-stage1": "f25961e21689ed1a33365430b4566a9a2e9c319a",
+      "generation-integration-source-transplant": "4e00851731541be7de4626b7d1e5274d79b9eea8",
+      "generation-integration-source-upstream": "588148851e3e989ecbb7478279db7d46727e23a8",
+      "generation-integration-source-v2": "d9ff71a6826166e57bf3bba56ffcf8a57ffaf9db",
+      "generation-integration-source-pre-v2": "75b6c7a88fb099f142bcec9227ee614b6fc56376",
+      "generation-integration-source-v3": "dfe6387606e44a96f110c1ce03f52d92824dbdb1",
+      "generation-integration-source-v3-original": "6d207cfce36ab2bb128d92d67cc3da182afb0bb1",
+      "generation-integration-source-m1-source": "9540f5bbf7a96609e69af6983d2bf7325530126d",
+      "generation-integration-plan": "4374f72027b75df9ff95c5c7a725ee75beac27a8",
+      "generation-integration-pre-rebuild": "5226894ee1af61797e6b819d7e801a22bf17bace",
+      "generation-integration-pre-staged": "438b61500da4b32841c64211103e5da6fc4c4a72",
+      "generation-integration-staged-code": "f264028690d117b4b99c320b61b7f2d5d89222d0",
+      "generation-integration-drawing15-16": "8430e701d858b07e40203a25bfc3b1fa61b15f4a",
+      "generation-integration-staged17-18-37": "817b5886a50276efea05ab860d22016e1fb0c203",
+      "generation-staged-evidence-fixes": "edabf052c5780be6460a9043cb9704e1583a2e4c",
+      "generation-integration-corrected-staged": "d48f9d1aedc766eea5cb185ab6029d1f04462043",
+      "generation-integration-source19-code": "4aa4d3d88394fd39be75f460b3ace4bc72a48894",
+      "generation-integration-source20-code": "c75ab826e6eb69c711130803bd54223664c9879a",
+      "generation-integration-source21-code": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c"
+    },
+    "source20_fixtures_exact": {
+      "crates/feynkit-generator/tests/fixtures/sampled_quotient/GL29.dot": "6fcc47615a4c963d70290dfd3c9193942a3987738b8b5ff0e1b0dc319f5f567f",
+      "crates/feynkit-generator/tests/fixtures/sampled_quotient/GL68.dot": "caf3be75d0a68153455c954a79bc6d0b836da6b464450443372b8a17d6325126",
+      "crates/feynkit-generator/tests/fixtures/sampled_quotient/prepared_samples.json": "c2f6060dc786c5730e2ebcecb8583c6bc8ba3cc0196427b6b247c682b47a2ed8"
+    },
+    "B2_unchanged_from_d48": {
+      "certificate_body_sha256": "c0c0ca37f3d008da9cf42f0aa1791f2d271fe7c90ea4a414681d31766edc06db",
+      "fixtures": {
+        "crates/feynkit-generator/tests/fixtures/vacuum_b2/GL028.dot": "05d1b5b9de947ee6b41795ac062d6283602cc6d96490b09e025e35056ca8635e",
+        "crates/feynkit-generator/tests/fixtures/vacuum_b2/GL034.dot": "36ef89039f8ac71907dfea68b91cc89f26c1e6b29db37fc094d629417f2d63c1"
+      }
+    },
+    "source19_current_210_preparation": {
+      "owner": "group_diagrams::prepare",
+      "unchanged_from": "d48f9d1aedc766eea5cb185ab6029d1f04462043",
+      "sha256": "2194af758f400373a636c1c0a7dd1926b0c2f1188f8522170d2e931c994c59db",
+      "semantics": "Current admitted simplify_algebra color-only completion followed by coefficients_are_zero or conservative exact-only check_zero_with; no source19 color_products_vanish helper restored."
+    },
+    "runtime_parameter_card_sha256": "c683f9abb9459375865ef694edea38890ffd78a0b8f118a25db3c3de09a8a1cb",
+    "all_code_commits_conflict_free": {
+      "4aa4d3d88394fd39be75f460b3ace4bc72a48894": false,
+      "c75ab826e6eb69c711130803bd54223664c9879a": false,
+      "82c1eb5b40c4911e59dfc25c9ba1786e282e111c": false
+    },
+    "titles_verified": [
+      "generation-integration-wp3-grouping",
+      "generation-integration-wp3-staged",
+      "generation-integration-plan"
+    ],
+    "source19_code_paths": [
+      "crates/feynkit-generator/examples/generation_workloads.rs",
+      "crates/feynkit-generator/tests/generation_oracle/cases.rs",
+      "crates/feynkit-generator/tests/generation_oracle/census.rs",
+      "crates/feynkit-generator/tests/generation_oracle/classes.rs",
+      "crates/feynkit-generator/tests/generation_oracle/main.rs",
+      "crates/spenso/src/network/library/symbolic.rs"
+    ],
+    "semantics": "Mutable execution/replay and this evidence are excluded from code hashes; all code identities explicitly bound to frozen82c1. Integers parsed with Python exact integers."
+  },
+  "scope_registry": {
+    "valid": 57,
+    "inherited": 7,
+    "additional": 21,
+    "previous_additional": 20,
+    "full_docs_pass": false
+  },
+  "counts": {
+    "accounted_source_rows": 22,
+    "planned_units": 17,
+    "total_source_rows": 46,
+    "total_planned_units": 41
+  },
+  "reuse": {
+    "numeric08_09": "Unchanged numeric implementation/locks from d48; independent approved8 numeric controls retained in base review, not rerun/credited as new-source execution.",
+    "Hakari": "Dependency manifests, workspace-hack and protected locks byte-identical to approved d48; d48 canonical Hakari validation reused. Nix runtime card source entry only; no dependency graph change.",
+    "bindings_packaging": "No binding/drawing/notice changes. Both approved d48 review receipts retain historical producer identities; no fresh whole-distribution claim."
+  },
+  "not_run_or_pending": [
+    "2 new source19 numerator digest assertions FAIL on current82 code with exact initial witnesses; YM boundary not fully classified",
+    "3 earlier historical frame hash assertions FAIL; no expectation refresh",
+    "4 existing graph-expanding parser helpers omitted; no repo-wide filter change",
+    "source30 request_decorator_contract.py and generation_reports/*.txt closure missing",
+    "source31 inherited7+additional21 scope/anchor drifts",
+    "remaining ordered source22+ and full rebuilt-tip matrix",
+    "five fresh a_ddx, full BRST quartet/epem/CoolQM combined physics",
+    "M-rebuild memory/performance",
+    "final Linnest WASM provenance, stale Kurvst PDF, actual final sdist/native/Pyodide/Community artifact/install certification"
+  ],
+  "parallel_lanes": "22-26 staged preparation is separate/new review pending;25/36,27-29,46 cumulative approved inputs available only at later ordered gates; source38 requires through36. Nothing imported here.",
+  "retained_artifact_directory": "target/wp3-units19-21",
+  "processes_retained": [],
+  "next_gate": "STOP for NEW independent Astra19-21 review before22; no WP4+.",
+  "artifacts": [
+    {
+      "path": "target/wp3-units19-21/clippy.log",
+      "bytes": 1662,
+      "sha256": "e4a13793191cee11ab67790fcf54076cd22146287e94bc858783b8291c39b3de"
+    },
+    {
+      "path": "target/wp3-units19-21/combined-owner-controls.log",
+      "bytes": 706,
+      "sha256": "5f3692f8f364c3ef69b481ec296b2978100dd31dc2438e5bc02a81681900def6"
+    },
+    {
+      "path": "target/wp3-units19-21/current-row-evidence.json",
+      "bytes": 1121,
+      "sha256": "b66e8d43267f07ba7c1b39ab0951dc12d93ef2d37836d0facbe9d96cdb110d78"
+    },
+    {
+      "path": "target/wp3-units19-21/current-row-evidence.log",
+      "bytes": 135,
+      "sha256": "e5090d284af58fa867e97fb1be20fd0855934ab6f3770475f0307e1cd02aabcf"
+    },
+    {
+      "path": "target/wp3-units19-21/current-row-evidence.py",
+      "bytes": 2362,
+      "sha256": "6fa1719810505784a67a366ec6dafd09a43c03011ef66ed5e8c7e8f7bdc9ca69"
+    },
+    {
+      "path": "target/wp3-units19-21/docs-checks.sh",
+      "bytes": 627,
+      "sha256": "4201687594ad77cda764d130ea0ad3ef997a7a50dd3a0ec72d5b41b27feb2b38"
+    },
+    {
+      "path": "target/wp3-units19-21/extend21.py",
+      "bytes": 2709,
+      "sha256": "4d58964ae9c3c1f9e790bb994ad8eab4aa0d9b0c87fd9fbd358f7b7f1f6b0625"
+    },
+    {
+      "path": "target/wp3-units19-21/final-verify.py",
+      "bytes": 2585,
+      "sha256": "bb9b32284dc2b9132235a3d095bbf4facebb348815b2aad3d0e25927e8075b39"
+    },
+    {
+      "path": "target/wp3-units19-21/finalize.py",
+      "bytes": 15161,
+      "sha256": "e6b24429580c9ea84e36d741278ba6a5d3d99d2d8d8591495a05a1329dd11d74"
+    },
+    {
+      "path": "target/wp3-units19-21/fmt.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "target/wp3-units19-21/fourloop-1.log",
+      "bytes": 253875,
+      "sha256": "fa2b989eff0dd759b0803c07b2b47fa06b716087312ba8caa24aa6c558e311ff"
+    },
+    {
+      "path": "target/wp3-units19-21/fourloop-32.log",
+      "bytes": 174498,
+      "sha256": "dd6b8f6bcf17dd4a1e6d6fc309023f93daa4b7a74f46a7bacbdaa862ca44a1c0"
+    },
+    {
+      "path": "target/wp3-units19-21/fourloop-8.log",
+      "bytes": 175480,
+      "sha256": "0e8727918a1016819216cdd442d98f886f2950806aa4d948de3d3960d32f9a4c"
+    },
+    {
+      "path": "target/wp3-units19-21/fourloop-binary-1.log",
+      "bytes": 253567,
+      "sha256": "12eb9f04b4e2c10885fa3a57693f04b2d3f0d8c134676aaf098601a9b73348f8"
+    },
+    {
+      "path": "target/wp3-units19-21/fourloop-binary-32.log",
+      "bytes": 174365,
+      "sha256": "943d2fc31d5ec2f6b235a94f04bc5f9e9ac4e6d11bc1428e7ce0bef3bded8daf"
+    },
+    {
+      "path": "target/wp3-units19-21/fourloop-binary-8.log",
+      "bytes": 175293,
+      "sha256": "89bc7c37f64b01b120683a5aebd7090ee478c4219299e23d052e4ccf898d6d32"
+    },
+    {
+      "path": "target/wp3-units19-21/fourloop-binary-after.sha256",
+      "bytes": 167,
+      "sha256": "98e6e9dcdb555b276441284e99afac654e45e80fe644370ed644fbfcc74cf373"
+    },
+    {
+      "path": "target/wp3-units19-21/fourloop-binary-before.sha256",
+      "bytes": 167,
+      "sha256": "98e6e9dcdb555b276441284e99afac654e45e80fe644370ed644fbfcc74cf373"
+    },
+    {
+      "path": "target/wp3-units19-21/fourloop-binary.sh",
+      "bytes": 513,
+      "sha256": "3c02344803cf78307e45ce9a44251e0083a2db89d966ea9b2cd84c25c4670839"
+    },
+    {
+      "path": "target/wp3-units19-21/fourloop.sh",
+      "bytes": 262,
+      "sha256": "966cd5b9d4d825b428a0a77f2366bd64f7455d3d831357b99552702482a2c7ec"
+    },
+    {
+      "path": "target/wp3-units19-21/grouping.pdf",
+      "bytes": 42315,
+      "sha256": "4e54f76ec680844f7b6ff207cbd47c85031899285fee280ecbf2530a1732a8ef"
+    },
+    {
+      "path": "target/wp3-units19-21/hash-boundary.json",
+      "bytes": 1317,
+      "sha256": "59c7c65937bf97775c532bd1cd4ed8d91bbd4fd7f8c805ebda4a904681e35038"
+    },
+    {
+      "path": "target/wp3-units19-21/hash-boundary.py",
+      "bytes": 1408,
+      "sha256": "8fe11e10794c41cbb730c7c96d312b7cb4d85e9abf590daf6f18d6c345d40557"
+    },
+    {
+      "path": "target/wp3-units19-21/hash-diagnostics/xs_qcdqed_addx_canonical_scalar_lr_L3/left.json",
+      "bytes": 3432582,
+      "sha256": "571f715365f414a4faaabd31ec02257f3774c64202d73a16793c93f4b08e8e53"
+    },
+    {
+      "path": "target/wp3-units19-21/hash-diagnostics/ym_ggg_zero_color_L3/left.json",
+      "bytes": 52132018,
+      "sha256": "1ea989a6584c09d5ec19b4243fbcdb4898c83f4b07c6cf70233ae04e5cc0d356"
+    },
+    {
+      "path": "target/wp3-units19-21/hash-diagnostics-current/xs_qcdqed_addx_canonical_scalar_lr_L3/left.json",
+      "bytes": 3432582,
+      "sha256": "571f715365f414a4faaabd31ec02257f3774c64202d73a16793c93f4b08e8e53"
+    },
+    {
+      "path": "target/wp3-units19-21/hash-diagnostics-current/ym_ggg_zero_color_L3/left.json",
+      "bytes": 52132018,
+      "sha256": "1ea989a6584c09d5ec19b4243fbcdb4898c83f4b07c6cf70233ae04e5cc0d356"
+    },
+    {
+      "path": "target/wp3-units19-21/inspect.py",
+      "bytes": 532,
+      "sha256": "2f48b5149d39f9510bf87390cd66d98da594a273a3540b29ef93db2c7e2b86c1"
+    },
+    {
+      "path": "target/wp3-units19-21/integrity.json",
+      "bytes": 5027,
+      "sha256": "6de7aff93de797412b0ac70c6062b7ca4b5e151eea03a0c55fed780d5ed748c7"
+    },
+    {
+      "path": "target/wp3-units19-21/integrity.log",
+      "bytes": 104,
+      "sha256": "7a9cc021a6a1d4c07eb779254bafc27adba75fdf2ceea372c03b82a3c10e1b04"
+    },
+    {
+      "path": "target/wp3-units19-21/integrity.py",
+      "bytes": 4977,
+      "sha256": "c78d29aeca105c158f326878cc95b34899b3fa28c2228e7fb785f26eb56ba4da"
+    },
+    {
+      "path": "target/wp3-units19-21/kernel.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "target/wp3-units19-21/nix-parse.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "target/wp3-units19-21/nixfmt-baseline.log",
+      "bytes": 65,
+      "sha256": "5ff985de0e2f329dcda43c0011d869537c26f68b6b5b266bdbf731d8f5d8f33f"
+    },
+    {
+      "path": "target/wp3-units19-21/nixfmt-boundary.json",
+      "bytes": 355,
+      "sha256": "34e6dd755cb4df1e142cbede5cd04c0a44f4a830b6511562976005b058b9d9b6"
+    },
+    {
+      "path": "target/wp3-units19-21/nixfmt.log",
+      "bytes": 38,
+      "sha256": "8fd078a6387c49090fb9802a11d3ba2e08b241f1a49f01b139fc13fae9ef14e9"
+    },
+    {
+      "path": "target/wp3-units19-21/original-B2-final.log",
+      "bytes": 792,
+      "sha256": "47d65b415d1194190736448dcc7afcdd0795dfec5cab5bd9a7d4aa4e496376fc"
+    },
+    {
+      "path": "target/wp3-units19-21/owner-controls.sh",
+      "bytes": 673,
+      "sha256": "7d30b3de767d5da0953e3edb68d2e9e91e217d506ccd72a71b04191301170b47"
+    },
+    {
+      "path": "target/wp3-units19-21/owner-final.log",
+      "bytes": 350,
+      "sha256": "25a31390d2173d81762ef33541472cc3a2ae3ffee3c38fadaed05443ba6d7cbe"
+    },
+    {
+      "path": "target/wp3-units19-21/owner-inventory.json",
+      "bytes": 152979,
+      "sha256": "eed1122d0bcb80bf1bf9d7c954a9160df58833a7d61fdcc8a0d344fa5b967c0c"
+    },
+    {
+      "path": "target/wp3-units19-21/owner-inventory.log",
+      "bytes": 63,
+      "sha256": "2ba81a7a9b8434ea2fb70d862d9f08bac0e5067093b8a25f5845bb57204e8433"
+    },
+    {
+      "path": "target/wp3-units19-21/physical-pair-final.log",
+      "bytes": 504,
+      "sha256": "42e0a9ed36d6a9e4a3aa95a927bd525a91f93df71803cafcb47255c2b94695de"
+    },
+    {
+      "path": "target/wp3-units19-21/plan.pdf",
+      "bytes": 184943,
+      "sha256": "0cf77576f5c724ce80839fddd6609380a7d32ab1bf951466b841b2d32ec4e337"
+    },
+    {
+      "path": "target/wp3-units19-21/port19-case-controls.log",
+      "bytes": 7037,
+      "sha256": "124c912cadc1833619383a4bf45ad848980bb310615cac8a0aa3c1735c35d7d8"
+    },
+    {
+      "path": "target/wp3-units19-21/port19-main.py",
+      "bytes": 6932,
+      "sha256": "1365012c1cc49555d8d3771d22479e9efca3f2ad35b1d2a08320242ab37c8bcd"
+    },
+    {
+      "path": "target/wp3-units19-21/port19-owner-after.log",
+      "bytes": 466,
+      "sha256": "246e9f433a6a336be2c268003a31b1359b8bcc32caac51b77a977a53d27cb668"
+    },
+    {
+      "path": "target/wp3-units19-21/port19-owner-before.log",
+      "bytes": 3000,
+      "sha256": "be32d788a75bc6d5391e70fc993ffab74fdfeb67baa433af38695f36b7cac35c"
+    },
+    {
+      "path": "target/wp3-units19-21/port19-owner-controls.log",
+      "bytes": 3000,
+      "sha256": "be32d788a75bc6d5391e70fc993ffab74fdfeb67baa433af38695f36b7cac35c"
+    },
+    {
+      "path": "target/wp3-units19-21/port19-registration-baseline.log",
+      "bytes": 59463595,
+      "sha256": "c2c16799d39ae965e00711871981e44aa1e5a4fc4f2940df89f9f0bc0a393ec6"
+    },
+    {
+      "path": "target/wp3-units19-21/port19-registration-reverse-encoded.log",
+      "bytes": 59463610,
+      "sha256": "efdab1bfea699b654b8ec05ccda65cee11729203f04157b54bd9edee26dabc9d"
+    },
+    {
+      "path": "target/wp3-units19-21/port19-registration-reverse.log",
+      "bytes": 1915,
+      "sha256": "9797763a110b1058ba9120741cd66814f58a6561014d288278a29236278cd536"
+    },
+    {
+      "path": "target/wp3-units19-21/port19.py",
+      "bytes": 2191,
+      "sha256": "6c5b2f2f17678029ddf175e013466001ac874c5c7602c83a1264c58e1c9f5667"
+    },
+    {
+      "path": "target/wp3-units19-21/port21.py",
+      "bytes": 4493,
+      "sha256": "6d2cc356fc2fa94701ec0afdcac10a15e1409c29ee86c4fe833b31c98d8e61c6"
+    },
+    {
+      "path": "target/wp3-units19-21/prepare20-tests.py",
+      "bytes": 5355,
+      "sha256": "ad8535d10ac16929fe8cbcf81425b3278637e9edca65d62c454bae3c65416570"
+    },
+    {
+      "path": "target/wp3-units19-21/quotient-current.log",
+      "bytes": 4979,
+      "sha256": "3476c6af6a0b8aa286ba734576d766dfd890cc64b42526f21a3bac611c8e46d6"
+    },
+    {
+      "path": "target/wp3-units19-21/quotient-final-controls.log",
+      "bytes": 6089,
+      "sha256": "70c080266c99d1c4ac39f2c96e7d339a2d2e5fa9db8122e6e8a74d703a41dbf8"
+    },
+    {
+      "path": "target/wp3-units19-21/quotient-pool-observer-before.log",
+      "bytes": 6089,
+      "sha256": "70c080266c99d1c4ac39f2c96e7d339a2d2e5fa9db8122e6e8a74d703a41dbf8"
+    },
+    {
+      "path": "target/wp3-units19-21/record-base-approval.py",
+      "bytes": 3098,
+      "sha256": "e1bb45879c4f10fc791782fb53663c5ceafcfce3d45d44a15431f04f71b6b9ad"
+    },
+    {
+      "path": "target/wp3-units19-21/register-note.py",
+      "bytes": 3601,
+      "sha256": "4d2dd0cac5bd8b1988853a7683e9f35c8803c82e4e2f2bd2c369abb16db73ab3"
+    },
+    {
+      "path": "target/wp3-units19-21/registration-final.log",
+      "bytes": 1345,
+      "sha256": "4b988260a2428eb5c3abb548fe8941fecd863fdd1725034b4f632ee894df2376"
+    },
+    {
+      "path": "target/wp3-units19-21/registration-initial-comparison.json",
+      "bytes": 290,
+      "sha256": "c7d888ac84ddc3b6df079eaa367a18bc84b0efeb49141d9e3a9c153810cdfb0d"
+    },
+    {
+      "path": "target/wp3-units19-21/registration-matrix-long.log",
+      "bytes": 270,
+      "sha256": "e8c36d8b367d97557c69b2be21ae1732e7944fc34f8bbb78fa5be452849a3275"
+    },
+    {
+      "path": "target/wp3-units19-21/registry-audit.json",
+      "bytes": 60883,
+      "sha256": "55507a5aad44eba631ee746371da36c1863636411fe69ba46bb5cb43652ca1f5"
+    },
+    {
+      "path": "target/wp3-units19-21/registry-audit.log",
+      "bytes": 1603,
+      "sha256": "4de58d1b4d5e0f2d3e8b2dd400c7ec54d844bd2dc9ea1e7541f6a81f4c14e3e3"
+    },
+    {
+      "path": "target/wp3-units19-21/registry-audit.py",
+      "bytes": 2376,
+      "sha256": "9a5ee883c6101ede6a37417e3431408e3ecf33e1bcc67b14349cd92b6d28facd"
+    },
+    {
+      "path": "target/wp3-units19-21/run",
+      "bytes": 366,
+      "sha256": "674b9b1d9776a60142d8fbe7c7985431680b7108cfc78ff5fa6c2db226f0ed4f"
+    },
+    {
+      "path": "target/wp3-units19-21/sample-tests.rs",
+      "bytes": 10367,
+      "sha256": "dc69ddd2b6a2c76383dd0eecac746bc096e08997554d2b40e30dc67e86fbedb0"
+    },
+    {
+      "path": "target/wp3-units19-21/selected-owner-tests.json",
+      "bytes": 21652,
+      "sha256": "14c5648bfe85ce396afff5ddf02844459d845a1f6f7079dae3c8063f6c50ea85"
+    },
+    {
+      "path": "target/wp3-units19-21/sm-filtered.log",
+      "bytes": 3430,
+      "sha256": "e88d859898ac257b0c7c7d16c3c29d17d4e052fe855be8db20636dfe6d7894d2"
+    },
+    {
+      "path": "target/wp3-units19-21/sm-inventory.json",
+      "bytes": 7036,
+      "sha256": "5c2e76d013b5a4f40e32b740553e9269747d1736a29d754b95c98c5e49cfda45"
+    },
+    {
+      "path": "target/wp3-units19-21/sm-inventory.log",
+      "bytes": 1291,
+      "sha256": "63947482c8b5fe6a4d6eefd33f08caf4ebe50e3ba41360cdb6aa947dd6f160ea"
+    },
+    {
+      "path": "target/wp3-units19-21/source19-current-rows.log",
+      "bytes": 2597,
+      "sha256": "f9a66a386b8334b634d8b0998e5d0defa49d47c76bec8042670169d45f2e209e"
+    },
+    {
+      "path": "target/wp3-units19-21/source19.patch",
+      "bytes": 38237,
+      "sha256": "0e1159e8887f811ddc8eed7bfc5bbe8b0635b38033f37ac587e33458b3b944b4"
+    },
+    {
+      "path": "target/wp3-units19-21/source20-after.log",
+      "bytes": 997,
+      "sha256": "8a11f57826d370c125fdcd9c65943918af989965b730dfb68d6b2fe7f8bf8cdc"
+    },
+    {
+      "path": "target/wp3-units19-21/source20-before-compile.log",
+      "bytes": 1253,
+      "sha256": "93cfe4f689da86f9a3419d4a4b6029d0383d2770dd2547cd145680c1853d1c2b"
+    },
+    {
+      "path": "target/wp3-units19-21/source20-before.log",
+      "bytes": 989,
+      "sha256": "8927073207b2c094834b750af6b5a567b624719e7b29aa73620c9e85e8a30507"
+    },
+    {
+      "path": "target/wp3-units19-21/source20.patch",
+      "bytes": 39096,
+      "sha256": "b2b34abd62cbb1c050de03f1570afe97122639a2bf981c1a7df49d00c51b7e66"
+    },
+    {
+      "path": "target/wp3-units19-21/source21-after.log",
+      "bytes": 4340,
+      "sha256": "062d83cfd577d0c5301ad88179daa1e3f56354911882e692c2a7707d38ed55e6"
+    },
+    {
+      "path": "target/wp3-units19-21/source21-before.log",
+      "bytes": 1477,
+      "sha256": "758bfb500d2341816b2f344f8ab4fb0d4f07809274ab10ccbc181996f96717e2"
+    },
+    {
+      "path": "target/wp3-units19-21/source21-expanded-before.log",
+      "bytes": 4048,
+      "sha256": "7e4e4d6303055756ace10d01f0ebfca1ab8803e99f0bc368e485094abafa2f0b"
+    },
+    {
+      "path": "target/wp3-units19-21/source21.patch",
+      "bytes": 9550,
+      "sha256": "0e7f674eca36f6553735b369a7af87c70450d021e2b73f285bc03882b07aa333"
+    },
+    {
+      "path": "target/wp3-units19-21/test-inventory.py",
+      "bytes": 797,
+      "sha256": "443b6fe98343a204a13642f6481d2fb94167aca81aa848b01d20c27a46d86529"
+    },
+    {
+      "path": "target/wp3-units19-21/tracking.log",
+      "bytes": 116,
+      "sha256": "eb1f732cc667e3487463fa321a96c8c9c958e7ac8abdad4a40c225f5c223b175"
+    },
+    {
+      "path": "target/wp3-units19-21/typst-grouping.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "target/wp3-units19-21/typst-plan.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "target/wp3-units19-21/update-tracking.py",
+      "bytes": 8158,
+      "sha256": "5e68a3d7faabab01f8a41a73e27a4c261e53a434b6b5b14951bfe6b67f10759e"
+    }
+  ]
+}

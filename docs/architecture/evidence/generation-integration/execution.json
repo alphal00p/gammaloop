@@ -1,5 +1,5 @@
 {
-  "date": "2026-10-27",
+  "date": "2026-10-28",
   "scope": "WP0, WP1 and WP2 approved; WP3 in progress",
   "authorization": "Implement the plan, have Astra review at each impl step, and have sol implement",
   "implementer": "Sol",
@@ -7,7 +7,7 @@
   "workspace": "/shared/lcnbr/dev/gammaloop/generation-integration-plan",
   "base_commit": "3f0df2a870806076820786994d4883decec8e9e3",
   "plan_commit": "4374f72027b75df9ff95c5c7a725ee75beac27a8",
-  "implementation_change": "wznkvqlumpuxkzytqqnlwvzvrnypmktk",
+  "implementation_change": "smlmnzlztwqwyqyvqsoqvwzvunsspooy",
   "implementation_bookmark": "generation-integration",
   "preserved_plan_bookmark": "generation-integration-plan",
   "author": {
@@ -73,12 +73,12 @@
       "scope": "Four packaging and two Clinnet tests; Nix WASM and license output; 49 hashes; byte-exact notices; not final wheel certification or all WP11"
     },
     "WP3": {
-      "status": "Incomplete WP3; bounded drawing15/16+atomic17/18/37 candidate requires NEW independent Astra review before source19. Full rebuilt-tip matrix and later stages remain pending.",
+      "status": "Incomplete WP3: source19-21 implemented with focused semantic controls; two imported numerator-digest assertions remain FAIL, unmodified. NEW independent Astra review required before22. Full rebuilt-tip matrix and later stages pending.",
       "pre_rebuild_ref": "generation-integration-pre-rebuild",
       "pre_rebuild_commit": "5226894ee1af61797e6b819d7e801a22bf17bace",
       "ancestry": "Reviewed planning/evidence chain descends from fixed target 3f0df2a8 and is retained as non-code base.",
-      "review": "Approved input438b6150 and drawing98cbf5b8; NEW independent Astra review required on bounded drawing/staged candidate before source19.",
-      "slice_receipt": "wp3/drawing-staged15-18-37.json",
+      "review": "Both independent combined d48 assigned scopes APPROVED; source19-21 requires NEW independent Astra review before22",
+      "slice_receipt": "wp3/units19-21.json",
       "approved_prefix": "74cebf6c8f673f5849b26afe55fa98035d5eba1d",
       "parallel_lanes": {
         "numeric08-09": {
@@ -99,7 +99,7 @@
           "measurement": "Only zero versus one discovery calls measured; no wider performance claim"
         },
         "drawing15-16-38": {
-          "status": "Approved cumulative15/16+notices integrated at8430e701d858b07e40203a25bfc3b1fa61b15f4a; combined staged slice still in progress; source38 remains pending through port36",
+          "status": "Approved cumulative15/16+notices and staged correction integration at frozen d48; source38 pending through port36",
           "input": "98cbf5b8f984e702f4699b1b176fbebfee059d3a",
           "reviewer": "Astra coordinator R3 closed registry P2 after Astra runtime/layout/packaging R1/R2",
           "receipt": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/target/astra-coordinator-drawing-r3/review.json"
@@ -143,6 +143,13 @@
           "base": "438b61500da4b32841c64211103e5da6fc4c4a72",
           "scope": "Source22 scalar bubble physical energy-flow orientation;23 qqx_aaa variance;24 projector slot conventions against modern #209 native indices",
           "gates": "Lane must defer staged API dependencies rather than importing this unreviewed work. Parent replay remains sequential; NEW Astra review required before future integration. Do not duplicate these ports."
+        },
+        "projector22-24": {
+          "status": "Original735d approved only on438b; separate staged22-26 preparation from d48 now pending new review, not imported",
+          "original_commit": "735d599a665acbce1577b2c40d149c152f01543d",
+          "workspace": "generation-projector-flow",
+          "new_bookmark": "generation-projector-flow-staged",
+          "limits": "22-24 plus approved25 ONLY and26 RQFT ghost LMB; source36 later; combined integration follows19-21 review"
         }
       },
       "policy_fix_receipt": "wp3/units03-07-policy-fix.json",
@@ -173,7 +180,7 @@
     ]
   },
   "combined_staged_corrections": {
-    "status": "All approved A/B/C/D/E4 combined checks complete; NEW independent Astra integration review required before19",
+    "status": "APPROVED assigned scopes at frozen d48; see durable independent reviews; historical code d109 unchanged",
     "code_commit": "d109e898ecf569eeab1b568ce80462ee6094e58d",
     "receipt": "docs/architecture/evidence/generation-integration/wp3/staged-combined-corrections.json",
     "graph_python": "4b60161d approved Astra round3; cumulative ba375387 plus1a68c9a8 integrated",
@@ -181,7 +188,7 @@
     "candidate_bookmark": "generation-integration-corrected-staged",
     "candidate_change": "pmnstxxwwwkzvyuxyzmsmswtutnkzkmy"
   },
-  "implementation_code_commit": "d109e898ecf569eeab1b568ce80462ee6094e58d",
+  "implementation_code_commit": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
   "combined_staged_integration_review": {
     "candidate": "d48f9d1aedc766eea5cb185ab6029d1f04462043",
     "verdict": "APPROVE both independent assigned scopes",
@@ -200,9 +207,21 @@
     "source19_gate": "Coordinator released19-21 only; NEW Astra review required before22"
   },
   "active_slice19_21": {
-    "status": "Implementation in progress",
+    "status": "Incomplete WP3: source19-21 implemented with focused semantic controls; two imported numerator-digest assertions remain FAIL, unmodified. NEW independent Astra review required before22. Full rebuilt-tip matrix and later stages pending.",
     "base": "d48f9d1aedc766eea5cb185ab6029d1f04462043",
-    "source19_code": "4aa4d3d88394fd39be75f460b3ace4bc72a48894",
-    "parallel22_26": "Reconciliation in generation-projector-flow-staged is separate and awaits new review; do not duplicate"
+    "code_commit": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+    "evidence_change": "smlmnzlztwqwyqyvqsoqvwzvunsspooy",
+    "receipt": "wp3/units19-21.json",
+    "inventory": "wp3/units19-21-files.json",
+    "candidate_bookmark": "generation-integration-units19-21",
+    "accounted_source_rows": 22,
+    "accounted_planned_units": 17,
+    "source_orders": [
+      19,
+      20,
+      21
+    ],
+    "parallel22_26": "Separate generation-projector-flow-staged reconciliation from approved d48; new Astra review pending, not imported or duplicated. Source36 remains later.",
+    "next_gate": "STOP for NEW independent Astra review before22; no WP4+ or benchmark work."
   }
 }
