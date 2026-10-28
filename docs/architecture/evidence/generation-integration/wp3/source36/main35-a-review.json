@@ -1,0 +1,218 @@
+{
+  "schema": 1,
+  "reviewer": "NEW independent Astra combined integration review; scope A",
+  "recorded_at_utc": "2026-10-28T16:31:48.212872+00:00",
+  "verdict": "APPROVE",
+  "scope": "A only: native interop, 22 script ports, retained rendering callers, native/offline Chromium camera, gallery API links and static/optional display contracts. Requires complementary NEW scope B approval before source36.",
+  "candidate": "510d79d94bbaf57aaaa992c641e7496905763324",
+  "change": "pyunoypxztklppkonykvospqrptrlswm",
+  "base": "191aaf7b77018e377a9e5e4e3b9c88357218aa48",
+  "implementation": "2ea39fd3ec164516b8e68775554fa2021998975a",
+  "documentation_code": "a3729fe5d880f0db5f09d9ce7d0ef592bfc4d161",
+  "validation_metadata": "783e3281d01134f8fe2e44eab366d0414c63b852",
+  "findings": [],
+  "blocking_findings": 0,
+  "code_assessments": [
+    {
+      "file": "crates/feynkit-py/src/graph_interop.rs",
+      "line": 236,
+      "assessment": "Existing LinnetExport whole-owner boundary now calls native node/source/sink/edge/build factories. No alternate owner or compatibility shim. Node payloads, graph name, edge eN names, immutable physics edge payloads, source/sink roles and all three orientations are retained. Self-loops allocate distinct half-edge specs. No numerator/tensor metadata is transformed."
+    },
+    {
+      "file": "crates/feynkit-py/src/graph_interop.rs",
+      "line": 298,
+      "assessment": "Native half-edge identity remains in data; existing exported/native inverse maps and topology revision are retained. Cache/owner/GC/epoch logic outside the factory migration is unchanged. Foreign/stale selection errors, parent/view refresh, callback/payload cycles and failed-build retry pass fresh checks."
+    },
+    {
+      "file": "crates/linnet-py/tests/test_community_rendering.py",
+      "line": 17,
+      "assessment": "All 3 retained cases use Request.generate then DiagramSet.build. Explicit two-index Amplitude input replaces unsupported lazy slicing; owner set, assertions, callbacks, styling, snapshots and export error cases remain and pass."
+    },
+    {
+      "file": "crates/linnet-py/tests/test_svg_browser.py",
+      "line": 13,
+      "assessment": "Native NodeSpec pinned placements produce actual small, medium, tall and wide geometry. Camera scale remains min(4/3,520/width); viewport containment, common physical label size, tall height, keyboard zoom, resize and reset are asserted. External label metrics are explicitly fixed fixtures, not claimed measured font metrics. Small numerical tolerance relaxation is appropriate to real emitted native geometry; no removed physical guarantee. Current source ran on real pinned Chromium with loaded embedded font and zero HTTP requests."
+    },
+    {
+      "file": "crates/feynkit-py/tests/installed_tensor_selectors.py",
+      "line": 17,
+      "assessment": "All 22 script files equal original source35 result bytes and approved preparation; approved31 preimages equal original source35 parent. Entire normalized ASTs match when only zero-argument to_expression conversions are stripped. All395 assertions/expected expressions and operation order retained; no added expand or new physics algebra. Only four selected safe scripts executed."
+    },
+    {
+      "file": "docs/products/feynkit/feyncalc-gallery.json",
+      "line": 1,
+      "assessment": "61 staged-generation rows reference35 existing scripts containing generate/build calls. Noncomponent gallery data equal approved31; tensor/display references retained. This validates links/API inventory, not execution of35 physics scripts."
+    },
+    {
+      "file": "docs/architecture/nix-crane-cache-reuse.typ",
+      "line": 1514,
+      "assessment": "Only native resource/vendor-consumer paragraph reconciled against approved31. Current ten-input/vendor-patch and lifecycle prose preserved; remaining28 implementation paths byte-exact approved prep. Workflow comment and vendor provenance agree with native MathML/static optional-widget ownership. Clarabel/NetworkX/Tiptoe notices retained; no final wheel claim."
+    }
+  ],
+  "fresh_checks": {
+    "source": "source-audit.json: all3567 tracked blobs; exact60-path inventory; 28 approved imports; 22 scripts/395assertions; 61 rows/35links",
+    "native_qualification": "runtime-qualification.json and producer-chain.json: physical core/wheel/19 RECORD hashes/notices; actual17 Cargo fingerprints with exact Python JSON integers;5 host dependency links; actual525 local source closure and precompile mtimes",
+    "runtime": {
+      "community_rendering_tests": 3,
+      "graph_cache_scripts": 2,
+      "selected_safe_scripts": 4,
+      "boundary_cases": 11,
+      "browser_tests": 1,
+      "skips": 0,
+      "record": "runtime.json"
+    },
+    "display": {
+      "native_MathML_tests": 3,
+      "static_and_widget_owner_cases": 3,
+      "record": "display-contracts.json",
+      "skips": 0
+    },
+    "rustfmt": {
+      "command": "rustfmt --edition 2024 --check crates/feynkit-py/src/graph_interop.rs",
+      "exit": 0
+    },
+    "guards": "final-guards.json"
+  },
+  "qualified_reuse": {
+    "native_artifact": {
+      "candidate": "510d79d94bbaf57aaaa992c641e7496905763324",
+      "compiled_inputs": 525,
+      "all_match": true,
+      "producer_receipt": "../generation-python-docs-ports/target/review-units32-35-astra-a-round1-20261028T091102Z/producer-qualification.json",
+      "producer_receipt_sha256": "7f3340551405ebc3b8259b696b59cc12dd43316d46352d0dfb67fdb5f162cd0a",
+      "wheel": "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/generation-python-docs-ports/wheels/symbolica-3.0.1-cp310-abi3-manylinux_2_39_x86_64.whl",
+      "wheel_sha256": "73ee3c1668dca9318320127a1d6655963541bf7d991083044c1e20652790506d",
+      "core": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-units32-35/installed/symbolica/core.abi3.so",
+      "core_sha256": "d2d9fecf95824ae50d06bb7fe7208489794e47785acd8ff516da66561ea8e7aa",
+      "features": {
+        "alphal00p-notebook-host-3d42e036b8014ba9": "[\"default\", \"native\"]",
+        "feynkit-py-b7dd161baa307aab": "[\"linnet-python\", \"native\", \"ufo\"]",
+        "linnet-py-75b3584825a76c6d": "[\"native\"]",
+        "pyo3-build-config-b24c5f4fa1fd20f2": "[\"abi3\", \"abi3-py310\", \"abi3-py311\", \"abi3-py312\", \"abi3-py313\", \"abi3-py314\", \"default\", \"extension-module\", \"resolve-config\"]",
+        "pyo3-macros-backend-712706f5a9499700": "[]",
+        "pyo3-stub-gen-derive-a25949ce4efa53fe": "[]",
+        "pyo3-ffi-0d70701015ec9bed": "[\"abi3\", \"abi3-py310\", \"abi3-py311\", \"abi3-py312\", \"abi3-py313\", \"abi3-py314\", \"default\", \"extension-module\"]",
+        "pyo3-13a44b194deee8ca": "[\"abi3\", \"abi3-py310\", \"abi3-py311\", \"abi3-py312\", \"abi3-py313\", \"abi3-py314\", \"default\", \"extension-module\", \"eyre\", \"inventory\", \"macros\", \"multiple-pymethods\", \"num-complex\", \"py-clone\", \"pyo3-macros\"]",
+        "pyo3-macros-e33dcef14b15b331": "[\"multiple-pymethods\"]",
+        "symbolica-data-4ab33879c4c98bcc": "[]",
+        "symbolica-data-c8c874a51277a0db": "[\"python\"]",
+        "symbolica-notation-64ed37281958106e": "[]",
+        "symbolica-typst-plugin-7d04207722784946": "[\"native\"]",
+        "symbolica-773ab1436d7ce79f": "[\"bincode\", \"float-mpfr\", \"integer-gmp\", \"native_code_generation\", \"numpy\", \"pyo3\", \"pyo3-stub-gen-derive\", \"python_export\", \"serde\"]",
+        "symbolica-d4c3f950544bd849": "[\"bincode\", \"float-mpfr\", \"integer-gmp\", \"native_code_generation\", \"serde\"]",
+        "symbolica-utils-ad84f0448cb10ac4": "[\"native\"]",
+        "spynso3-52182fa2a9e3652f": "[\"native\"]"
+      },
+      "records": 19,
+      "build": "reused approved local debug producer, no rebuild/install",
+      "native_source_list_sha256": "d9daff1afb134e2c40154386cf70aafdb794a5fc22aecf48714096536e4dfa8d"
+    },
+    "Clippy": {
+      "fresh_in_this_review": false,
+      "log": "target/wp3-units32-35/clippy.log",
+      "log_sha256": "357b2c12e7e792883ec9bfee6d073ca81aa18403b0b31ca1824904e2cac8d033",
+      "exit": 0,
+      "command": "nix develop -c bash -c \"cargo clippy --locked -p feynkit-py --no-default-features --features native,linnet-python,ufo --lib -- -D warnings\"",
+      "qualification": "Existing successful current implementation log inspected; changed Rust file byte-exact current candidate. Two existing Clarabel dependency warnings, none in feynkit-py. No duplicate rebuild."
+    },
+    "kernel": "Existing current check evidence; lock/manifests/uv/kernel pin remain byte-exact approved31. Not claimed as a fresh kernel check."
+  },
+  "policy": "Changed Rust code remains in existing owner with module-scope explicit imports, no new unsafe/lint suppressions, no new broad abstractions or clones. Existing untouched policy deviations are not expanded. No new departure identified.",
+  "failed_setup_attempts": "commands.json; includes missing optional dependency in first scratch probe. Not product regressions, hidden skips or pass credit.",
+  "limits": {
+    "unrun_source35_scripts": [
+      "crates/feynkit-py/tests/installed_feyncalc_generated_qed.py",
+      "crates/feynkit-py/tests/installed_feyncalc_ibp_phi4.py",
+      "crates/feynkit-py/tests/installed_feyncalc_identical_leptons.py",
+      "crates/feynkit-py/tests/installed_feyncalc_muon_decay.py",
+      "crates/feynkit-py/tests/installed_feyncalc_odd_photons.py",
+      "crates/feynkit-py/tests/installed_feyncalc_photon_gluon.py",
+      "crates/feynkit-py/tests/installed_feyncalc_photon_radiation.py",
+      "crates/feynkit-py/tests/installed_feyncalc_photon_two_loop.py",
+      "crates/feynkit-py/tests/installed_feyncalc_polarized_qed.py",
+      "crates/feynkit-py/tests/installed_feyncalc_qcd_annihilation.py",
+      "crates/feynkit-py/tests/installed_feyncalc_qcd_ghost_vertex.py",
+      "crates/feynkit-py/tests/installed_feyncalc_qcd_ghosts.py",
+      "crates/feynkit-py/tests/installed_feyncalc_quark_gluon_scattering.py",
+      "crates/feynkit-py/tests/installed_feyncalc_sewn_diphoton.py",
+      "crates/feynkit-py/tests/installed_feyncalc_sewn_qed.py",
+      "crates/feynkit-py/tests/installed_feyncalc_soft_function.py",
+      "crates/feynkit-py/tests/installed_feyncalc_ww.py",
+      "crates/feynkit-py/tests/installed_ufo_ghost_crossing.py"
+    ],
+    "unrun_count": 18,
+    "numbering": "All11 valid generated probes used identity exported/native half-edge maps. Every selection round-trip checked; malformed manually permuted snapshot rejected before export. No nonidentity-map runtime proof; unchanged inverse-map algorithm reviewed.",
+    "canonical": "Deep canonical Nix/full metadata qualification belongs to peerB. No fresh canonical documentation run in scopeA; final metadata docs target remains distinct/unbuilt. Realizing a development shell does not certify that target.",
+    "coverage": "Chromium camera only; no WebKit/full browser suite or browser label measurement certification. Widget MIME ownership/static fallback tested, not live widget measurement protocol.",
+    "open": "No source36+ imports; no fullWP3, general physics, BRST/five_a_ddx, performance/memory, repaired/compressed native/Pyodide/Community distributions, final WASM/PDF or release RECORD approval. Older frame failures and four omitted graph-expansion helpers remain open."
+  },
+  "cleanup": "Read-only tracked workspace and references. Unique ignored review dir retained with commands, probes and logs for review/continuation; no nested agents, installs, push/PR/publication, cache seeding/deletion, or other-lane edits. All review test/browser/Nix clients have completed; normal Nix dev-shell cache outputs retained.",
+  "final_guards": {
+    "passed": true,
+    "candidate": "510d79d94bbaf57aaaa992c641e7496905763324",
+    "change": "pyunoypxztklppkonykvospqrptrlswm",
+    "tracked_entries_checked": 3567,
+    "all_tracked_bytes_equal_frozen_candidate": true,
+    "exact_final_inventory_entries": 60,
+    "final_inventory_sha256": "1c9f7d0d47a6e72723bb19031af9ec6877d5396f981b20bb28d0f60103acf911",
+    "all_prior_git_refs_unchanged": true,
+    "concurrent_added_jj_keep_refs": {
+      "refs/jj/keep/927f1fba9bdcbe96aa13ed749fc69ec6afc4b350": "927f1fba9bdcbe96aa13ed749fc69ec6afc4b350",
+      "refs/jj/keep/99bbce448ffb36c5a4ff1f5247dd4e17d7fee117": "99bbce448ffb36c5a4ff1f5247dd4e17d7fee117",
+      "refs/jj/keep/fbf476599b4e9de9bf9b148a3477e771bf2ad14a": "fbf476599b4e9de9bf9b148a3477e771bf2ad14a"
+    },
+    "reference_observation": "Initial global-set equality guard detected only new shared refs/jj/keep entries; no previous ref was moved/deleted, no bookmark or frozen workspace changed. This reviewer executed no ref mutations. Raw observation retained in reference-observation.json.",
+    "all_jj_bookmarks_unchanged": true,
+    "working_change_unchanged": true,
+    "review_dir_ignored": "target/review-main32-35-astra-a-RDiyBBAD/review.json",
+    "core_sha256": "d2d9fecf95824ae50d06bb7fe7208489794e47785acd8ff516da66561ea8e7aa",
+    "tracked_edits": 0,
+    "reference_moves": 0,
+    "publication": false,
+    "nested_agents": 0
+  },
+  "retained_evidence_sha256": {
+    "audit.log": "2bb11fa5837fc4f561318f50ac91950a5458094b1edb5e0bf19cebde7c948e91",
+    "audit.py": "51453146cd80570c7e9cb3649afdedbe6df9baffe495cdfe656995e123a8864b",
+    "browser.json": "996c8e908638df3e751bdb05b883f897f52d338233daa8802c70ea9c91d5eeb1",
+    "browser.log": "f3dd08409aef8ae67c16ed24632df76112129020576f0334324cac98ec00fa26",
+    "browser.py": "c3c5008f55f23d7d381d93f34d012ab746c05e5dc40d6d2b9244532d3a52a6fd",
+    "commands.json": "97a46774d28423e326468f7b2851ed4624f19d903becb991a4baf109b0dca59e",
+    "community-rendering.log": "7662a3e933edb2ff37fec88ae4c09c6bd53fd31631aa99f8972f07189239caf7",
+    "display-contracts.json": "6b2affbbc1c942edbf95d4d0ecc835ca8f73f5c395306059f1c69a2d8a3cde60",
+    "extras-with-widget.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "extras-with-widget.log": "0cd8431b3f31ecd589304fd60b38043f96e9c0b8abe9a4891bbdf3b5baf26d30",
+    "extras.exit": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+    "extras.log": "1a7edb5c1e1c46d1fcadc871c3be04a92333132b174e4ed109d1a0719cf0e2fc",
+    "extras.py": "34686b108c9b32e50aecde10a455a7a7295a33311a2a92e2f17a5b78ba4a86f3",
+    "final-guards.json": "dc7fc0ec9c23568d1b9f26a4189b90c90d66c33a20bc6480c89c09c89ba1afae",
+    "finish-initial.exit": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+    "finish-initial.log": "b1e211a9ada27544b02134aea6adec29537365877e9ce999130137e0e2704ab4",
+    "finish.py": "019c07e664cc01cb3a88d6df290493a69628359143163ca29581632f8c20cad4",
+    "graph-boundary-results.json": "d6c4bd7e3c45eb6610a458ccfeac23a8c8952a9182d0066c003955cf93005796",
+    "graph-boundary.log": "8fe5b1e654d637ef467a007b5dcdac10c1f4cdde26a238f8a10ada0f84b14539",
+    "graph_boundary_probe.py": "10696db939bb46eee6e5317534f0dc958c0b83b5faf82dea945a8a3859949ad8",
+    "initial-guard.json": "64ecc0dfb2a6728c410adb1d1d7bdda56c4a9a7b2ad3963e2a5d5c91396a855f",
+    "installed_feyncalc_tensor.log": "d37bfa9637b387e276579cecf07c9984a3bc357012ae5bb0e68a29a4385f2342",
+    "installed_feyncalc_tree.log": "1f7a3f4030e18a560f78e419d6b861a7d30caf8f86deac69ef78adb994658a13",
+    "installed_graph_interop.log": "34a6d6fef4981096a55380fab10fb13e7d4bd8f4869a6b1e91bb0bb153a59017",
+    "installed_import_smoke.log": "320e78a831e2f38588752507cc1b7f1f4f0e44dd93d9005b8982028abb11b1a8",
+    "installed_subgraph_cache.log": "9ba9b686f06982babbd0ed0d7a2ea67ece7e8b9e9d59f5a9dd5fc9054c720b86",
+    "installed_tensor_selectors.log": "d7288e6ef51cf7a1a5cae135e7a3850b3daf3303a37cb83d0a75765842cfda90",
+    "producer-chain.json": "d542400501c48174d960905492741c5333a8023767283d000565786a2fd5425b",
+    "reference-observation.json": "1f522fd04e879d565740eb7af92f1e0ee9217a84c8cbccc5fe0f67d7424d82ed",
+    "run-extras-with-widget.sh": "e544023ab3284f6e2382fad7faf86ec784012f4162d215d2209982c9ea844b16",
+    "run-extras.sh": "70790c6e0bdf9253818299c70deb758cb0151efc8485c06c605cfe1dd937a5e1",
+    "run-local-shell.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "run-local-shell.log": "9464a53e4daf37cd0daaaeb42f50edc10a5da3ffac6c4f240981125db29d14e8",
+    "run.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "run.log": "06f0274d59cca9682d4e6c4445c8dac33552d12504a2b96976ad192b7ba1dd35",
+    "run.sh": "02b4ba3efb5d6cd69aadcc88088d740406b28685198f0ec4259300ff80136183",
+    "runtime-driver.log": "bf87f87ba72c607724097382c8ea59c80e3ca88bd7fe4190a565a323b5e351be",
+    "runtime-qualification.json": "b5cb154bc43e0ada648bd0d58f1f5ef2a4064b4e81af8bdfb395977d36f6840c",
+    "runtime.json": "bfaed796c83c970e9688c1ce060e79cae92cdc1821f94f4bc90274e0cff3d64a",
+    "runtime.py": "2a53f00c7cf31fee1a18fd1e11546729ce08c87f47bf4767f5617c50802afe15",
+    "rustfmt.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "source-audit.json": "65d61a30813a6a656c7fc4f1beb4ad2910f82e2ff191fee492d36940d90b3c82"
+  }
+}

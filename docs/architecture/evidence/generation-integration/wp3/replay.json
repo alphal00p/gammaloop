@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "status": "Sources32\u201335 combined validation complete; STOP for NEW independent Astra integration review before36. WP3 incomplete.",
+  "status": "Source36-only integrated; focused validation in progress; NEW independent Astra review required before38",
   "fixed_target": {
     "commit": "3f0df2a870806076820786994d4883decec8e9e3",
     "tree": "3c91ba47525c627fbc02d79f5afa1d58aa7c5b66",
@@ -601,7 +601,7 @@
       "planned_unit": "port-32",
       "planned_order": 28,
       "reason": "Update wheel contents prose to actual current resources; preserve #209 optional-widget/static-display contract and required notices.",
-      "status": "Integrated and combined validation passes; NEW independent Astra review required before36",
+      "status": "APPROVED combined integration at510d79d9; A/B reviews no findings",
       "integration_commit": "2ea39fd3ec164516b8e68775554fa2021998975a",
       "integration_receipt": "docs/architecture/evidence/generation-integration/wp3/main32-35/receipt.json"
     },
@@ -613,7 +613,7 @@
       "planned_unit": "port-33",
       "planned_order": 29,
       "reason": "Adapt browser camera test to current native drawing APIs and offline Chromium owner; do not restore obsolete viewer or removed Typst renderer.",
-      "status": "Integrated and combined validation passes; NEW independent Astra review required before36",
+      "status": "APPROVED combined integration at510d79d9; A/B reviews no findings",
       "integration_commit": "2ea39fd3ec164516b8e68775554fa2021998975a",
       "integration_receipt": "docs/architecture/evidence/generation-integration/wp3/main32-35/receipt.json"
     },
@@ -625,7 +625,7 @@
       "planned_unit": "port-34",
       "planned_order": 30,
       "reason": "Port FeynCalc gallery names to final staged API while retaining current tensor-expression and display examples.",
-      "status": "Integrated and combined validation passes; NEW independent Astra review required before36",
+      "status": "APPROVED combined integration at510d79d9; A/B reviews no findings",
       "integration_commit": "2ea39fd3ec164516b8e68775554fa2021998975a",
       "integration_receipt": "docs/architecture/evidence/generation-integration/wp3/main32-35/receipt.json"
     },
@@ -637,7 +637,7 @@
       "planned_unit": "port-35",
       "planned_order": 31,
       "reason": "Adapt Python scripts to current TensorExpression and native index boundary; do not import pre-#209 display tags.",
-      "status": "Integrated and combined validation passes; NEW independent Astra review required before36",
+      "status": "APPROVED combined integration at510d79d9; A/B reviews no findings",
       "integration_commit": "2ea39fd3ec164516b8e68775554fa2021998975a",
       "integration_receipt": "docs/architecture/evidence/generation-integration/wp3/main32-35/receipt.json"
     },
@@ -649,7 +649,8 @@
       "planned_unit": "port-36",
       "planned_order": 32,
       "reason": "Keep actionable data-asset upgrade errors; preserve installed resource discovery.",
-      "status": "pending"
+      "status": "Integrated; NEW main36 review pending",
+      "integration_receipt": "docs/architecture/evidence/generation-integration/wp3/source36/receipt.json"
     },
     {
       "commit": "cfe9e8d103b3d2a4ebf1f276f61d8d6980e3d054",
@@ -1101,40 +1102,18 @@
     "limitation": "Seven inherited registry digests remain stale; carried explicitly for source31/final reconciliation."
   },
   "current_slice": {
-    "status": "Sources32\u201335 combined validation complete; STOP for NEW independent Astra integration review before36. WP3 incomplete.",
-    "base": "191aaf7b77018e377a9e5e4e3b9c88357218aa48",
-    "source_order": [
-      32,
-      33,
-      34,
-      35
-    ],
-    "original_sources": [
-      "351c85036778be709117a021fc5f1656bbd5a964",
-      "ce9072e44a3335fdba7d223b0c3ae885cc29dc20",
-      "7e93e726e253ebb2a1af0d4b38177f3628d4b34b",
-      "8c12968bde84643623ca2f5099e0175180a73dc6"
-    ],
-    "approved_preparation": "43ef486177335b295bfbbc5474d0da04a0c58c27",
-    "approved_implementation": "c7ab0d1dd29dfbec194ee3fa24abe05bcfb6e794",
-    "import_commit": "2ea39fd3ec164516b8e68775554fa2021998975a",
-    "code_commit": "2ea39fd3ec164516b8e68775554fa2021998975a",
-    "documentation_code": "a3729fe5d880f0db5f09d9ce7d0ef592bfc4d161",
-    "receipt": "docs/architecture/evidence/generation-integration/wp3/main32-35/receipt.json",
-    "candidate_bookmark": "generation-integration-units32-35",
-    "extra": "Approved native graph_interop/current staged Community callers; source31 semantics and current scopes preserved; no36+",
-    "accounted_source_rows": 36,
-    "accounted_planned_units": 31,
-    "completion": {
-      "canonical_exit": 0,
-      "Rust_unique": 93,
-      "Python_pass": 107,
-      "Python_skipped": 6,
-      "shell_pages": 637
-    },
-    "code_change": "vvxwvmpnulrtxorvyxvwwrwpuprtoxtt",
-    "evidence_change": "snxolylkullnovwylnponpvtozuqusuu",
-    "metadata_snapshot_commit": "783e3281d01134f8fe2e44eab366d0414c63b852"
+    "base": "510d79d94bbaf57aaaa992c641e7496905763324",
+    "source_order": 36,
+    "original_source": "5a99afbd1645250715ecf59361beb7ab4826d083",
+    "approved_preparation": "277d2f8b0051e0a41194b369fa683db550098bbb",
+    "approved_code": "6e9e5a245302806d872271861dd59b47dfcd4b86",
+    "receipt": "docs/architecture/evidence/generation-integration/wp3/source36/receipt.json",
+    "candidate_bookmark": "generation-integration-source36",
+    "status": "Source36-only integrated; focused validation in progress; NEW independent Astra review required before38",
+    "source25": "Already integrated; no replay",
+    "canonical_docs": "Earlier a372 success remains bound to a372; no new cold full-site qualification",
+    "accounted_source_rows": 37,
+    "accounted_planned_units": 32
   },
   "staged_round1_review": {
     "verdict": "REQUEST_CHANGES",
@@ -1472,7 +1451,7 @@
     "preparation_base": "cb585c98a474628ca9c55bb17cf1e680450b8ef9",
     "preparation_tip": "43ef486177335b295bfbbc5474d0da04a0c58c27",
     "receipt": "docs/architecture/evidence/generation-integration/wp3/main32-35/receipt.json",
-    "status": "Sources32\u201335 combined validation complete; STOP for NEW independent Astra integration review before36. WP3 incomplete.",
+    "status": "APPROVED at510d79d9 by independentA/B reviews; prior validation source/binary/NAR bindings unchanged",
     "extra": "Approved direct native graph_interop builder repair and three staged Community rendering callers included. No aliases, no36.",
     "documentation_code": "a3729fe5d880f0db5f09d9ce7d0ef592bfc4d161",
     "canonical_documentation_code": "a3729fe5d880f0db5f09d9ce7d0ef592bfc4d161",
@@ -1505,5 +1484,60 @@
   },
   "current_implementation_code_commit": "2ea39fd3ec164516b8e68775554fa2021998975a",
   "current_documentation_code_commit": "a3729fe5d880f0db5f09d9ce7d0ef592bfc4d161",
-  "current_implementation_change": "vvxwvmpnulrtxorvyxvwwrwpuprtoxtt"
+  "current_implementation_change": "vvxwvmpnulrtxorvyxvwwrwpuprtoxtt",
+  "main32_35_review": {
+    "candidate": "510d79d94bbaf57aaaa992c641e7496905763324",
+    "verdict": "APPROVE",
+    "scope": "Combined32\u201335; both independentA/B scopes no findings; releases36 only",
+    "native_review": "docs/architecture/evidence/generation-integration/wp3/source36/main35-a-review.json",
+    "documentation_review": "docs/architecture/evidence/generation-integration/wp3/source36/main35-b-review.json"
+  },
+  "active_slice36": {
+    "base": "510d79d94bbaf57aaaa992c641e7496905763324",
+    "source_order": 36,
+    "original_source": "5a99afbd1645250715ecf59361beb7ab4826d083",
+    "approved_preparation": "277d2f8b0051e0a41194b369fa683db550098bbb",
+    "approved_code": "6e9e5a245302806d872271861dd59b47dfcd4b86",
+    "receipt": "docs/architecture/evidence/generation-integration/wp3/source36/receipt.json",
+    "candidate_bookmark": "generation-integration-source36",
+    "status": "Source36-only integrated; focused validation in progress; NEW independent Astra review required before38",
+    "source25": "Already integrated; no replay",
+    "canonical_docs": "Earlier a372 success remains bound to a372; no new cold full-site qualification"
+  },
+  "previous_slice32_35": {
+    "status": "Sources32\u201335 combined validation complete; STOP for NEW independent Astra integration review before36. WP3 incomplete.",
+    "base": "191aaf7b77018e377a9e5e4e3b9c88357218aa48",
+    "source_order": [
+      32,
+      33,
+      34,
+      35
+    ],
+    "original_sources": [
+      "351c85036778be709117a021fc5f1656bbd5a964",
+      "ce9072e44a3335fdba7d223b0c3ae885cc29dc20",
+      "7e93e726e253ebb2a1af0d4b38177f3628d4b34b",
+      "8c12968bde84643623ca2f5099e0175180a73dc6"
+    ],
+    "approved_preparation": "43ef486177335b295bfbbc5474d0da04a0c58c27",
+    "approved_implementation": "c7ab0d1dd29dfbec194ee3fa24abe05bcfb6e794",
+    "import_commit": "2ea39fd3ec164516b8e68775554fa2021998975a",
+    "code_commit": "2ea39fd3ec164516b8e68775554fa2021998975a",
+    "documentation_code": "a3729fe5d880f0db5f09d9ce7d0ef592bfc4d161",
+    "receipt": "docs/architecture/evidence/generation-integration/wp3/main32-35/receipt.json",
+    "candidate_bookmark": "generation-integration-units32-35",
+    "extra": "Approved native graph_interop/current staged Community callers; source31 semantics and current scopes preserved; no36+",
+    "accounted_source_rows": 36,
+    "accounted_planned_units": 31,
+    "completion": {
+      "canonical_exit": 0,
+      "Rust_unique": 93,
+      "Python_pass": 107,
+      "Python_skipped": 6,
+      "shell_pages": 637
+    },
+    "code_change": "vvxwvmpnulrtxorvyxvwwrwpuprtoxtt",
+    "evidence_change": "snxolylkullnovwylnponpvtozuqusuu",
+    "metadata_snapshot_commit": "783e3281d01134f8fe2e44eab366d0414c63b852"
+  }
 }

@@ -1,0 +1,72 @@
+{
+  "schema": 1,
+  "unit": "SOURCE36 asset diagnostics independent preparation",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-import-diagnostics",
+  "base_commit": "7587d0c768363f200e89250683e7836c867c9b81",
+  "source_manifest": "docs/architecture/evidence/generation-integration/wp2/base-manifest.json",
+  "source_order": 36,
+  "original_source_commit": "5a99afbd1645250715ecf59361beb7ab4826d083",
+  "previous_approved_inputs": {
+    "implementation_commit": "7cf78f1c02088eaed3a951329af650e796494945",
+    "cumulative_correction_commit": "c0e9ce68c325f9d597847d68cc4f1c924da29f19",
+    "preserved_bookmark": "generation-import-diagnostics",
+    "source25_prior_commit": "5e96b3f00a78c850236609527914dce1154f726c",
+    "source25_disposition": "Already integrated in main 22–26; no SOURCE25 code, caller, parser, or documentation replayed."
+  },
+  "prepared": {
+    "bookmark": "generation-asset-diagnostics-staged",
+    "code_change": "xtmvotwmwzskmkzokrxkltzzyltrkzty",
+    "code_commit": "6e9e5a245302806d872271861dd59b47dfcd4b86",
+    "evidence_change": "uvvtsopywykxlwpwylquzwqsxouusqrl",
+    "author": "Lucien Huber <im@lcnbr.ch>",
+    "exact_file_inventory": [
+      "crates/symbolica-data/src/lib.rs",
+      "docs/architecture/generation-asset-diagnostics-staged.typ",
+      "docs/architecture/evidence/generation-asset-diagnostics-staged/receipt.json",
+      "docs/developers.toml"
+    ]
+  },
+  "mapping": {
+    "production": "Asset::validate and Asset::bytes retain size/hash validation, ordered installed-directory lookup, missing-root continuation, bounded reads, raw filesystem error precedence, and successful cache insertion. Missing and incompatible errors name actionable upgrades.",
+    "tests": "The three approved symbolica-data tests are retained. Filesystem test checks its actual local cache after each failed lookup; File and ErrorKind are imported at module scope. Generic-resource message is asserted within the existing missing-resource test.",
+    "current_owner": "symbolica-data Data and Asset; installed font discovery through examples/notebooks/symbolica-host/python/symbolica/data.py and current linnet-render-py/data.json.",
+    "package_and_notice": "Current symbolica-fonts and Vakint guidance retained. Generic resources advise a matching bundle without asserting a future standalone wheel. Clarabel, NetworkX, Tiptoe, font license and package paths untouched."
+  },
+  "hashes": {
+    "base_symbolica_data_git_blob": "abb4e22749f940731c8b0f1ad7d92f04d6d6e809",
+    "previous_cumulative_symbolica_data_git_blob": "f8eb76e9d258ba354496b950122ea651d0b04727",
+    "prepared_symbolica_data_git_blob": "be8392d004f1369bfc2cab83a01bb79c0d606acf",
+    "passed_resource_test_binary_sha256": "71a48174b703a39cd57b24c8e219e59ee276b47565bfc843579d889e45a9ad28"
+  },
+  "checks_executed_here": [
+    {
+      "command": "nix develop -c cargo test --locked -p symbolica-data",
+      "outcome": "PASS: 3 tests, 0 doctests. Test binary at /common/build-cache/lcnbr/1a/9788c9f99c3c8b/debug/deps/symbolica_data-d57858769387cc54."
+    },
+    {
+      "command": "nix develop -c cargo clippy --locked -p symbolica-data --all-targets -- -D warnings",
+      "outcome": "PASS: no warnings."
+    },
+    {
+      "command": "nix develop -c just fmt --check",
+      "outcome": "Initial run found one assertion layout issue; corrected. Final rerun PASS."
+    },
+    {
+      "command": "nix develop -c cargo run --locked --profile docs -p alphal00p-docs-builder -- check",
+      "outcome": "BLOCKED by inherited gammaloop-architecture scope for crates/gammaloop-api/src/state.rs: expected 5113940a12e8bac5ec042c59db01bd0ecfb05ef0, found 3598dbe299f9a32da1ed8d034706a82959d84abb. The approved base and this workspace have the same source blob."
+    },
+    {
+      "command": "nix develop -c python3 -m json.tool receipt.json; typst compile --root . docs/architecture/generation-asset-diagnostics-staged.typ",
+      "outcome": "PASS: JSON parsed and standalone Typst note rendered; temporary PDF removed."
+    }
+  ],
+  "checks_reused_as_prior_evidence": "Prior independent Astra review reported 3 resource tests, 12 DOT/native tests, affected Clippy, formatting and 3 Typst render/title checks; this preparation does not claim those checks were rerun on main 30.",
+  "documentation_scope": "Predecessor reported 28 inherited scope mismatches at main 30; this preparation adds no verified scope or modifications to any pre-existing scoped source. Current docs check stops on the first inherited mismatch. New entry/title/trigger paths require separate static validation.",
+  "integration_order": "Independent preparation only. Main order: SOURCE31, SOURCE32–35, SOURCE36. Rerun combined resource and packaging checks and obtain new independent Astra review before integration.",
+  "limits": [
+    "No cold whole-physics build, production numerator expansion, or snapshot expectation change.",
+    "No main integration, later source work, push, PR, upload, publication, or CI enablement.",
+    "No standalone package or wheel certification is claimed."
+  ],
+  "retained": "Old c0 bookmark, commits, reviews, and artifacts retained; new workspace/bookmark and evidence retained for review. Shared caches retained. No task-owned background processes or scratch artifacts intended to remain."
+}

@@ -1,0 +1,264 @@
+[
+  {
+    "name": "resource-tests",
+    "argv": [
+      "cargo",
+      "test",
+      "--locked",
+      "-p",
+      "symbolica-data",
+      "--message-format=json"
+    ],
+    "environment": "nix develop; inherited license preserved or silently loaded; normal shared Cargo cache, no overrides",
+    "cwd": "/shared/lcnbr/dev/gammaloop/generation-import-diagnostics",
+    "started_at": "2026-10-28T10:31:23.101788+00:00",
+    "elapsed_seconds": 0.35183370183221996,
+    "exit_code": 0,
+    "pid": 2398846,
+    "stdout": "resource-tests.stdout",
+    "stderr": "resource-tests.stderr",
+    "artifacts": [
+      {
+        "package_id": "path+file:///shared/lcnbr/dev/gammaloop/generation-import-diagnostics/crates/symbolica-data#0.1.0",
+        "target": {
+          "kind": [
+            "lib"
+          ],
+          "crate_types": [
+            "lib"
+          ],
+          "name": "symbolica_data",
+          "src_path": "/shared/lcnbr/dev/gammaloop/generation-import-diagnostics/crates/symbolica-data/src/lib.rs",
+          "edition": "2024",
+          "doc": true,
+          "doctest": true,
+          "test": true
+        },
+        "profile": {
+          "opt_level": "0",
+          "debuginfo": 2,
+          "debug_assertions": true,
+          "overflow_checks": true,
+          "test": false
+        },
+        "features": [],
+        "filenames": [
+          "/common/build-cache/lcnbr/1a/9788c9f99c3c8b/debug/deps/libsymbolica_data-fb0faec9e1676f08.rlib",
+          "/common/build-cache/lcnbr/1a/9788c9f99c3c8b/debug/deps/libsymbolica_data-fb0faec9e1676f08.rmeta"
+        ],
+        "executable": null,
+        "fresh": true
+      },
+      {
+        "package_id": "path+file:///shared/lcnbr/dev/gammaloop/generation-import-diagnostics/crates/symbolica-data#0.1.0",
+        "target": {
+          "kind": [
+            "lib"
+          ],
+          "crate_types": [
+            "lib"
+          ],
+          "name": "symbolica_data",
+          "src_path": "/shared/lcnbr/dev/gammaloop/generation-import-diagnostics/crates/symbolica-data/src/lib.rs",
+          "edition": "2024",
+          "doc": true,
+          "doctest": true,
+          "test": true
+        },
+        "profile": {
+          "opt_level": "0",
+          "debuginfo": 2,
+          "debug_assertions": true,
+          "overflow_checks": true,
+          "test": true
+        },
+        "features": [],
+        "filenames": [
+          "/common/build-cache/lcnbr/1a/9788c9f99c3c8b/debug/deps/symbolica_data-d57858769387cc54"
+        ],
+        "executable": "/common/build-cache/lcnbr/1a/9788c9f99c3c8b/debug/deps/symbolica_data-d57858769387cc54",
+        "fresh": true,
+        "executable_sha256": "71a48174b703a39cd57b24c8e219e59ee276b47565bfc843579d889e45a9ad28"
+      }
+    ]
+  },
+  {
+    "name": "resource-clippy",
+    "argv": [
+      "cargo",
+      "clippy",
+      "--locked",
+      "-p",
+      "symbolica-data",
+      "--all-targets",
+      "--",
+      "-D",
+      "warnings"
+    ],
+    "environment": "nix develop; inherited license preserved or silently loaded; normal shared Cargo cache, no overrides",
+    "cwd": "/shared/lcnbr/dev/gammaloop/generation-import-diagnostics",
+    "started_at": "2026-10-28T10:31:23.495642+00:00",
+    "elapsed_seconds": 0.3189456930849701,
+    "exit_code": 0,
+    "pid": 2399261,
+    "stdout": "resource-clippy.stdout",
+    "stderr": "resource-clippy.stderr"
+  },
+  {
+    "name": "format",
+    "argv": [
+      "just",
+      "fmt",
+      "--check"
+    ],
+    "environment": "nix develop; inherited license preserved or silently loaded; normal shared Cargo cache, no overrides",
+    "cwd": "/shared/lcnbr/dev/gammaloop/generation-import-diagnostics",
+    "started_at": "2026-10-28T10:31:23.815166+00:00",
+    "elapsed_seconds": 12.45440434385091,
+    "exit_code": 0,
+    "pid": 2399507,
+    "stdout": "format.stdout",
+    "stderr": "format.stderr"
+  },
+  {
+    "name": "canonical-docs",
+    "argv": [
+      "cargo",
+      "run",
+      "--locked",
+      "--profile",
+      "docs",
+      "-p",
+      "alphal00p-docs-builder",
+      "--",
+      "check"
+    ],
+    "environment": "nix develop; inherited license preserved or silently loaded; normal shared Cargo cache, no overrides",
+    "cwd": "/shared/lcnbr/dev/gammaloop/generation-import-diagnostics",
+    "started_at": "2026-10-28T10:31:36.270114+00:00",
+    "elapsed_seconds": 0.5036088761407882,
+    "exit_code": 1,
+    "pid": 2402820,
+    "stdout": "canonical-docs.stdout",
+    "stderr": "canonical-docs.stderr"
+  },
+  {
+    "name": "typst",
+    "argv": [
+      "typst",
+      "compile",
+      "--root",
+      ".",
+      "docs/architecture/generation-asset-diagnostics-staged.typ",
+      "/shared/lcnbr/dev/gammaloop/generation-import-diagnostics/.local/reviews/source36-main30-astra-20261028-wrOoeg/note.pdf"
+    ],
+    "environment": "nix develop; inherited license preserved or silently loaded; normal shared Cargo cache, no overrides",
+    "cwd": "/shared/lcnbr/dev/gammaloop/generation-import-diagnostics",
+    "started_at": "2026-10-28T10:31:36.775261+00:00",
+    "elapsed_seconds": 0.09995194803923368,
+    "exit_code": 0,
+    "pid": 2402952,
+    "stdout": "typst.stdout",
+    "stderr": "typst.stderr"
+  },
+  {
+    "name": "receipt-json",
+    "argv": [
+      "python3",
+      "-m",
+      "json.tool",
+      "docs/architecture/evidence/generation-asset-diagnostics-staged/receipt.json"
+    ],
+    "environment": "nix develop; inherited license preserved or silently loaded; normal shared Cargo cache, no overrides",
+    "cwd": "/shared/lcnbr/dev/gammaloop/generation-import-diagnostics",
+    "started_at": "2026-10-28T10:31:36.875698+00:00",
+    "elapsed_seconds": 0.04071397101506591,
+    "exit_code": 0,
+    "pid": 2403337,
+    "stdout": "receipt-json.stdout",
+    "stderr": "receipt-json.stderr"
+  },
+  {
+    "name": "kernel-isolation",
+    "argv": [
+      "just",
+      "check-symbolica-feature-isolation"
+    ],
+    "cwd": "/shared/lcnbr/dev/gammaloop/generation-import-diagnostics",
+    "environment": "nix develop; normal shared cache; license preserved/loaded silently",
+    "exit_code": 0,
+    "pid": 2538597,
+    "elapsed_seconds": 0.9121913248673081,
+    "stdout": "kernel-isolation.stdout",
+    "stderr": "kernel-isolation.stderr"
+  },
+  {
+    "name": "typst-html",
+    "argv": [
+      "typst",
+      "compile",
+      "--root",
+      "/shared/lcnbr/dev/gammaloop/generation-import-diagnostics",
+      "--features",
+      "html,bundle",
+      "--format",
+      "bundle",
+      "--creation-timestamp",
+      "1793183248",
+      "--input",
+      "git-commit=277d2f8b0051e0a41194b369fa683db550098bbb",
+      "/shared/lcnbr/dev/gammaloop/generation-import-diagnostics/.local/reviews/source36-main30-astra-20261028-wrOoeg/note-wrapper.typ",
+      "/shared/lcnbr/dev/gammaloop/generation-import-diagnostics/.local/reviews/source36-main30-astra-20261028-wrOoeg/note-bundle"
+    ],
+    "cwd": "/shared/lcnbr/dev/gammaloop/generation-import-diagnostics",
+    "environment": "nix develop; normal shared cache; license preserved/loaded silently",
+    "exit_code": 0,
+    "pid": 2538892,
+    "elapsed_seconds": 0.044738007010892034,
+    "stdout": "typst-html.stdout",
+    "stderr": "typst-html.stderr"
+  },
+  {
+    "name": "rustc-version",
+    "argv": [
+      "rustc",
+      "--version",
+      "--verbose"
+    ],
+    "cwd": "/shared/lcnbr/dev/gammaloop/generation-import-diagnostics",
+    "environment": "nix develop; normal shared cache; license preserved/loaded silently",
+    "exit_code": 0,
+    "pid": 2539319,
+    "elapsed_seconds": 0.014650031924247742,
+    "stdout": "rustc-version.stdout",
+    "stderr": "rustc-version.stderr"
+  },
+  {
+    "name": "cargo-version",
+    "argv": [
+      "cargo",
+      "--version"
+    ],
+    "cwd": "/shared/lcnbr/dev/gammaloop/generation-import-diagnostics",
+    "environment": "nix develop; normal shared cache; license preserved/loaded silently",
+    "exit_code": 0,
+    "pid": 2539330,
+    "elapsed_seconds": 0.00783531297929585,
+    "stdout": "cargo-version.stdout",
+    "stderr": "cargo-version.stderr"
+  },
+  {
+    "name": "typst-version",
+    "argv": [
+      "typst",
+      "--version"
+    ],
+    "cwd": "/shared/lcnbr/dev/gammaloop/generation-import-diagnostics",
+    "environment": "nix develop; normal shared cache; license preserved/loaded silently",
+    "exit_code": 0,
+    "pid": 2539339,
+    "elapsed_seconds": 0.008799616014584899,
+    "stdout": "typst-version.stdout",
+    "stderr": "typst-version.stderr"
+  }
+]

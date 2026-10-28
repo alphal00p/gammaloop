@@ -71,8 +71,9 @@ impl Asset {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!(
-                    "data asset {} differs from the compiled expectation",
-                    self.name
+                    "data asset {} differs from the compiled expectation; {} or configure a matching data directory",
+                    self.name,
+                    self.remediation()
                 ),
             ));
         }
@@ -101,16 +102,23 @@ impl Asset {
     /// Missing data can be supplied later and the same request retried.
     pub fn bytes(&self) -> io::Result<Arc<[u8]>> {
         let mut data = Data::shared().lock().unwrap();
+        self.bytes_from(&mut data)
+    }
+
+    fn remediation(&self) -> &'static str {
+        if self.name.starts_with("render/fonts/") {
+            "install or upgrade symbolica-fonts with `python -m pip install --upgrade symbolica-fonts`"
+        } else if self.name.starts_with("vakint/") {
+            "install or upgrade symbolica-vakint-data with `python -m pip install --upgrade symbolica-vakint-data`"
+        } else {
+            "supply a resource bundle matching this build"
+        }
+    }
+
+    fn bytes_from(&self, data: &mut Data) -> io::Result<Arc<[u8]>> {
         if let Some(bytes) = data.bytes.get(&(self.name, self.sha256)) {
             return Ok(bytes.clone());
         }
-        let install = if self.name.starts_with("render/fonts/") {
-            "install symbolica-fonts with `python -m pip install symbolica-fonts`"
-        } else if self.name.starts_with("vakint/") {
-            "install symbolica-vakint-data with `python -m pip install symbolica-vakint-data`"
-        } else {
-            "install its resource wheel"
-        };
         let file = data
             .directories
             .iter()
@@ -122,8 +130,9 @@ impl Asset {
                 Err(io::Error::new(
                     io::ErrorKind::NotFound,
                     format!(
-                        "data asset {} is unavailable; {install} or configure a data directory",
-                        self.name
+                        "data asset {} is unavailable; {} or configure a data directory",
+                        self.name,
+                        self.remediation()
                     ),
                 ))
             })?;
@@ -207,6 +216,73 @@ impl Asset {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::env;
+    use std::fs::File;
+    use std::io::ErrorKind;
+    use std::process;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn filesystem_resources_preserve_validation_lookup_and_retry() {
+        let root = env::temp_dir().join(format!(
+            "generation-import-diagnostics-{}-{}",
+            process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let installed = root.join("installed");
+        fs::create_dir_all(installed.join("vakint")).unwrap();
+        let asset = Asset {
+            name: "vakint/fixture.txt",
+            sha256: "2689367b205c16ce32ed4200942b8b8b1e262dfc70d9bc9fbc77c49699a4f1df",
+            size: 2,
+            description: "isolated resource fixture",
+        };
+        let mut data = Data {
+            directories: vec![root.join("absent"), root.join("installed")],
+            ..Data::default()
+        };
+        let missing = asset.bytes_from(&mut data).unwrap_err();
+        let mut incompatible = Vec::new();
+        for payload in [b"no".as_slice(), b"too long".as_slice()] {
+            fs::write(installed.join(asset.name), payload).unwrap();
+            incompatible.push(asset.bytes_from(&mut data).unwrap_err());
+            assert!(data.bytes.is_empty());
+        }
+        fs::write(installed.join(asset.name), b"ok").unwrap();
+        let verified = asset.bytes_from(&mut data);
+        let blocked = root.join("not-a-directory");
+        fs::write(&blocked, b"blocked").unwrap();
+        let original = File::open(blocked.join(asset.name)).unwrap_err();
+        let io_error = asset
+            .bytes_from(&mut Data {
+                directories: vec![blocked, installed],
+                ..Data::default()
+            })
+            .unwrap_err();
+        fs::remove_dir_all(&root).unwrap();
+        assert_eq!(io_error.kind(), original.kind());
+        assert_eq!(io_error.raw_os_error(), original.raw_os_error());
+        assert_eq!(missing.kind(), ErrorKind::NotFound);
+        for error in incompatible {
+            assert_eq!(error.kind(), ErrorKind::InvalidData);
+            assert!(
+                error
+                    .to_string()
+                    .contains("differs from the compiled expectation")
+            );
+            assert!(
+                error
+                    .to_string()
+                    .contains("pip install --upgrade symbolica-vakint-data")
+            );
+        }
+        assert_eq!(&*verified.unwrap(), b"ok");
+        // A successful lookup is cached even after its resource directory disappears.
+        assert_eq!(&*asset.bytes_from(&mut data).unwrap(), b"ok");
+    }
 
     #[test]
     fn missing_resources_name_the_installable_package() {
@@ -220,15 +296,31 @@ mod tests {
                 size: 0,
                 description: "missing resource fixture",
             };
-            let error = asset.bytes().unwrap_err();
-            assert_eq!(error.kind(), io::ErrorKind::NotFound);
+            let mut data = Data::default();
+            let error = asset.bytes_from(&mut data).unwrap_err();
+            assert_eq!(error.kind(), ErrorKind::NotFound);
             assert!(
                 error
                     .to_string()
-                    .contains(&format!("pip install {package}"))
+                    .contains(&format!("pip install --upgrade {package}"))
             );
-            assert!(!asset.is_loaded());
+            assert!(data.bytes.is_empty());
         }
+
+        let asset = Asset {
+            name: "other/missing.bin",
+            sha256: "",
+            size: 0,
+            description: "unowned resource fixture",
+        };
+        let mut data = Data::default();
+        let error = asset.bytes_from(&mut data).unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("resource bundle matching this build")
+        );
+        assert!(data.bytes.is_empty());
     }
 
     #[test]

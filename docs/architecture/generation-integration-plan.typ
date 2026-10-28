@@ -317,7 +317,18 @@ own workspace. Bounded: one regression, one bisect, one written verdict.
   SOURCE31 semantics and all 102 scoped source digests remain valid.
   Exact current-source checks and canonical Git-backed outcomes are recorded in
   `evidence/generation-integration/wp3/main32-35/receipt.json`.
-  NEW independent Astra integration review is required before36.
+  Independent Astra A/B APPROVE this slice at `510d79d9` and release36.
+
+- #strong[Source36 ordered asset diagnostics 2026-10-28:]
+  approved36-only preparation `7587d0c7..277d2f8b` is reconciled onto
+  `510d79d9`; SOURCE25 is not replayed. Existing `Asset`/`Data` owners retain
+  strict ordered discovery, bounded validation, filesystem error sources and
+  verified retry/cache behavior. Current diagnostics name actionable upgrades.
+  New owner/resource delivery and packaging checks are recorded separately in
+  `evidence/generation-integration/wp3/source36/receipt.json`.
+  Existing102 scopes are preserved; the explicit resource owner adds one scope.
+  Prior canonical documentation success stays bound to `a3729fe5`.
+  NEW independent Astra integration review is required before geometry38.
 
 - `jj duplicate` the v4 chain (`kursouxx::kpslpwqz`) onto the WP2 base; do not
   rebase in place, so the 19 live workspaces on older lines stay valid.

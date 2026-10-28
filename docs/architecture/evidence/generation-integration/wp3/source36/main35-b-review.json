@@ -1,0 +1,141 @@
+{
+  "schema": 1,
+  "recorded_at_utc": "2026-10-28T16:31:57.961309+00:00",
+  "reviewer": "NEW independent Astra combined integration review, scope B",
+  "verdict": "APPROVE",
+  "findings": [],
+  "scope": "Manifest32\u201335 documentation reconciliation, canonical build, resources/provenance and evidence integrity. Requires complementary scope-A approval before36. No whole-WP3 approval.",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-integration-plan",
+  "review_directory": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/review-main32-35-astra-b-20261028-gem5TjfO",
+  "candidate": "510d79d94bbaf57aaaa992c641e7496905763324",
+  "change": "pyunoypxztklppkonykvospqrptrlswm",
+  "base_approved_main31": "191aaf7b77018e377a9e5e4e3b9c88357218aa48",
+  "implementation": "2ea39fd3ec164516b8e68775554fa2021998975a",
+  "qualified_documentation_code": "a3729fe5d880f0db5f09d9ce7d0ef592bfc4d161",
+  "validation_metadata": "783e3281d01134f8fe2e44eab366d0414c63b852",
+  "author": "Lucien Huber <im@lcnbr.ch>",
+  "bookmarks": [
+    "generation-integration",
+    "generation-integration-units32-35"
+  ],
+  "fresh_independent_checks": [
+    {
+      "name": "Frozen identity and full inventory",
+      "result": "60 changed files exact; 3567 tracked file bytes, executable modes and symlink kinds/targets match candidate; final guards equal initial guards; all protected refs unchanged.",
+      "evidence": [
+        "initial-guards.json",
+        "final-guards.json",
+        "mode-guard.json",
+        "inventory-summary.json"
+      ]
+    },
+    {
+      "name": "Registry canonical ownership",
+      "result": "102 valid exact Git-blob digests, unique nonempty starts, unique ordered exclusive ends where declared; 64 matching titles and six products. Production owner semantics inspected at crates/alphal00p-docs-builder/src/lib.rs:930. Registry unchanged from approved31; no fingerprint refresh.",
+      "evidence": "registry.json"
+    },
+    {
+      "name": "Retained successful Nix identity",
+      "result": "Fresh real Git full-SHA evaluations reproduce a372 and final derivations; independently hashed producer/output NARs and retrieved canonical Nix logs match committed receipts. All 1345 Cargo and 2432 Pages source entries match frozen a372 Git bytes. 2450 validation and 2454 final metadata entries match their respective revisions/NARs.",
+      "evidence": [
+        "fresh-evaluations.json",
+        "source-verification.json",
+        "canonical-verification.json"
+      ]
+    },
+    {
+      "name": "Actual retained canonical HTML",
+      "result": "All 4229 HTML hashes verified; fresh official accessibility/semantic/no-JS checker passes 637 shell pages. Independent link/fragment/source-target audit:78335 local,1194 source links,zero errors; all source links pinned to a372.",
+      "evidence": [
+        "html-accessibility.log",
+        "html-links.json"
+      ]
+    },
+    {
+      "name": "Producer archive provenance",
+      "result": "Five retained x86-64 ELF identities match streamed bytes from registered producer target.tar.zst, including the reference hardlink. No extraction, seeding or rebuild; no equality inferred to consumer-context binaries.",
+      "evidence": "producer-archive-verification.json"
+    },
+    {
+      "name": "Historical approvals, frozen inventories and retained artifacts",
+      "result": "119 indexed artifacts rehashed; four copied reviews byte-exact; 28 implementation paths match approved prep. Slice30/cumulative1676 at implementation and slice56/cumulative1699 at validation metadata verified against exact Git blobs, including deletions. 216 preexisting evidence files preserved. Historical prep audit independently reproduces99 scopes:71matches,24digest mismatches,4missing starts.",
+      "evidence": [
+        "artifact-verification.json",
+        "supplemental-verification.json"
+      ]
+    },
+    {
+      "name": "Resources and native local-wheel qualification",
+      "result": "525 native inputs unchanged; retained debug wheel/core and19 hashed RECORD entries verified; Clarabel/NetworkX/Tiptoe notices preserved byte-exact. This checks local reuse, not final packaging.",
+      "evidence": "supplemental-verification.json"
+    },
+    {
+      "name": "Semantic source and final metadata boundary",
+      "result": "Cache-note equals approved31 plus exactly the intended no-vendored-consumer paragraph. SOURCE31 lifecycle/source30 ten-input/local-patch ownership preserved; all seven repaired headers and SOURCE31 Kurvst manual preserved. Canonical plan includes current32\u201335 scope/limits; final focused HTML/PDF hashes match a372 source. All later changes are nonrendered JSON; distinct final terminal output is absent/unbuilt.",
+      "evidence": "prose-boundary.json"
+    },
+    {
+      "name": "Kernel, locks and exact JSON",
+      "result": "Kernel1a1829b1f3d0a88b53b44085b3b9f34ef77945b3/root/Tydenso/host/uv unchanged; host463-package checksum/source subset valid; NixCI=false;29 JSON packets parse with exact arbitrary-precision integers and reject duplicate keys/nonstandard constants.",
+      "evidence": "supplemental-verification.json"
+    }
+  ],
+  "reused_success_not_fresh_runtime": {
+    "canonical_input": "git+file:///shared/lcnbr/dev/gammaloop/main?rev=a3729fe5d880f0db5f09d9ce7d0ef592bfc4d161&shallow=1",
+    "canonical_derivation": "/nix/store/lv1zvzdj75mfyc17x3pplw718mwpz375-alphal00p-docs-pages-0.1.0.drv",
+    "canonical_output": "/nix/store/gcvim7hlma0234gng35ldm1b91vjndwf-alphal00p-docs-pages-0.1.0",
+    "canonical_source_NAR": "sha256-maBmCzKU5bx1bAA7mG7bBC9sK7Hl22Q80YcpZX0hfFA=",
+    "tests": {
+      "unique_Rust": 93,
+      "reference_checks": 2,
+      "stub_checks": 5,
+      "Python_run": 113,
+      "Python_pass": 107,
+      "Python_skip_uncredited": 6,
+      "errors": 0,
+      "failures": 0
+    },
+    "deduplication": "88 examples+3gammaloop exporter+2linnet exporter; seven repeated isolated test occurrences not double counted.",
+    "rendering": "All3 CommunityRenderingTests included by unfiltered test_*.py discovery, no decorators/conditional skips; current staged generation and assertions remain. Focused runtime/browser independently assigned to peer A, not duplicated here.",
+    "sandbox_wheel": "Actual offline/locked Maturin build from examples/notebooks/symbolica-host/Cargo.toml, default native / ABI3-py310 extension, ci-optim; wheel installed offline/no-deps, font resource staged then113-test discovery. Log/source/derivation verify this route. No claim sandbox release-profile core equals qualified local debug core.",
+    "pipeline": "FeynKit catalog Rust examples compile-only; Python examples compile syntax; selected runtime docs/graph/small-tensor checks do not select four old graph-expansion helpers. No graph-numerator expansion run here.",
+    "snapshot": "ECD snapshot remains historical ECD evidence; successful inspected a372 output is actual latest, not a previous composite.",
+    "separate_final_metadata": {
+      "revision": "510d79d94bbaf57aaaa992c641e7496905763324",
+      "derivation": "/nix/store/jbk21glz6kqzpcv1xvbhkriknfxr1j80-alphal00p-docs-pages-0.1.0.drv",
+      "source": "/nix/store/9sipmnfgj345cx89ql190hm2piprgk25-source",
+      "NAR": "sha256-CfXN0YjdiUOaNJhq26jdJV0zoVnzcfKqJRON6+6bgXM=",
+      "built": false
+    }
+  },
+  "failed_and_skipped_accounting": {
+    "initial_2ea_build": "client cancellation exit1 retained; no pass/progress reuse credit; final normal producer restart completed",
+    "historical_prep": "99-scope global FAIL remains historical, separate from current102pass",
+    "Typstyle": "whole-cache-note exit1 inherited at approved31/current; no global formatting pass claimed",
+    "skips": "six ordinary canonical-suite skips uncredited; five browser cases lack Playwright and one Marimo/AnyWidget case lacks optional packages in that terminal environment",
+    "reviewer_harness": "Three initial reviewer-only errors (serialized derivation field name; Git/JJ inventory order; guessed manual path) fixed in ignored scripts. Failed logs retained explicitly; corrected audits exit0. No product finding or false pass credited."
+  },
+  "limits": [
+    "Scope A focused native/browser review is separate and still required before36; no36+ import approved.",
+    "18 of22 source35 scripts remain unrun;395 assertions preserved is not395 runtime passes. No full physics/BRST/five_a_ddx claim.",
+    "11 graph probes did not observe a nontrivial exported/native numbering permutation; no claim of that coverage.",
+    "Three older frame failures/four omitted graph-expansion parity helpers and fullWP3 remain open.",
+    "No performance/memory benchmark, full NixCI, final WASM, general PDF correctness, or final repaired/compressed native/Pyodide/Community distribution approval.",
+    "Canonical sandbox wheel/core is not retained as a final distribution artifact; local debug wheel/notices are qualified only for stated source-bound local reuse.",
+    "Final metadata source is evaluated and unbuilt; source revision/timestamp/source links would differ from a372 on a new build."
+  ],
+  "cleanup": {
+    "tracked_edits": false,
+    "ref_moves": false,
+    "integration": false,
+    "publication": false,
+    "nested_agents": false,
+    "owned_processes_retained": [],
+    "retained": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/review-main32-35-astra-b-20261028-gem5TjfO",
+    "reason": "Review JSON, exact command records, validation scripts, complete logs and final guards support parent review/continuation. All prior artifacts and normal shared Nix caches retained."
+  },
+  "commands": [
+    "commands.txt",
+    "commands.jsonl"
+  ]
+}

@@ -1857,6 +1857,29 @@ products = ["idenso"]
 topics = ["generation", "inference", "testing"]
 review_triggers = ["crates/idenso/src/tensor/inference.rs", "crates/idenso/src/tensor/inference/tests/scalar_admission.rs"]
 
+[[section.note]]
+id = "generation-asset-diagnostics-staged"
+title = "Staged generation asset diagnostics"
+summary = "Ordered SOURCE36 resource remediation with preserved discovery, validation, filesystem errors and cache semantics."
+source = "docs/architecture/generation-asset-diagnostics-staged.typ"
+kind = "Integration implementation record"
+status = "Preparation approved; ordered integration awaiting NEW Astra review"
+lifecycle = "investigation"
+owner = "unassigned"
+reviewed_at = "2026-10-28"
+review_ref = "277d2f8b0051e0a41194b369fa683db550098bbb"
+products = ["feynkit", "gammaloop"]
+topics = ["generation", "integration", "resources"]
+review_triggers = ["crates/symbolica-data/src/lib.rs", "crates/linnet-render-py/data.json", "examples/notebooks/symbolica-host/python/symbolica/data.py"]
+
+# Current SOURCE36 contract: strict ordered lookup, bounded reads and validation,
+# raw filesystem error precedence, verified cache/retry, and package remediation.
+[[section.note.scope]]
+path = "crates/symbolica-data/src/lib.rs"
+symbol = "Asset and Data resource owner"
+anchor = "//! External assets belong to the host; consumers retain the expected hashes."
+digest = "be8392d004f1369bfc2cab83a01bb79c0d606acf"
+
 [[section]]
 id = "investigations"
 title = "Engineering investigations"
