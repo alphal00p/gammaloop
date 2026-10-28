@@ -540,6 +540,8 @@ class Gallery:
             os.environ["VAKINT_GALLERY_ARTIFACTS"],
             "--work-dir",
             str(work),
+            "--progress-snapshot",
+            str(work / "monitor.json"),
             "--prepared-input",
             str(prepared_input),
             "--running-cache",

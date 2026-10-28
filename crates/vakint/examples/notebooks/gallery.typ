@@ -135,6 +135,11 @@ bundle. Reusing scalar input does not cache its IBP result.
 The browser stays responsive and reads atomic status records. A process lock
 permits one gallery benchmark at a time. Physical reductions have no default
 time cutoff.
+The worker refreshes elapsed time and worker/machine RAM observations every five
+seconds while waiting for the collector. Its native #raw("WORK/monitor.json")
+snapshot is displayed through a bounded JSON preview with its actual file age.
+Before the first Native event, progress remains explicitly pending; repeated
+heartbeats do not imply scientific progress or a new Native observation.
 Requests, logs and resulting receipts remain below the configured workspace.
 The app never starts #raw("prepare_cache") or a #raw("build_cache") production
 job. Completed native work captured during reductions can later join the

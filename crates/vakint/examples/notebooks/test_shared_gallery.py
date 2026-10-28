@@ -114,6 +114,12 @@ class GalleryBenchmarkTests(unittest.TestCase):
             str((self.prepared / projection).resolve()),
         )
         self.assertEqual(command[command.index("--work-dir") + 1], str(work))
+        self.assertEqual(command.count("--progress-snapshot"), 1)
+        self.assertEqual(
+            command[command.index("--progress-snapshot") + 1],
+            str(work / "monitor.json"),
+        )
+        self.assertNotIn("--monitor", command)
         self.assertEqual(
             command[command.index("--artifacts") + 1],
             self.environment["VAKINT_GALLERY_ARTIFACTS"],
@@ -164,6 +170,10 @@ class GalleryBenchmarkTests(unittest.TestCase):
         )
         self.assertNotIn("--running-cache-capture-only", command)
         self.assertNotIn("--running-cache-no-read-delta", command)
+        self.assertEqual(
+            command[command.index("--progress-snapshot") + 1],
+            str(work / "monitor.json"),
+        )
 
     def test_cached_launch_accepts_an_immutable_native_directory(self):
         cache = Path(self.environment["VAKINT_GALLERY_CACHE"])
@@ -239,32 +249,73 @@ class GalleryWorkerTests(unittest.TestCase):
         self.command = ["NOT-AN-EXECUTABLE", "--prepared-input", "synthetic-bundle"]
         (self.work / "request.json").write_text(json.dumps({"command": self.command}))
 
-    def run_worker(self, *, result=None, error=None, output=""):
+    def run_worker(self, *, result=0, error=None, output="", timeouts=0):
         descriptor = os.open(
             self.work / "benchmark.lock", os.O_CREAT | os.O_RDWR, 0o600
         )
+        fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        clock = SimpleNamespace(elapsed=0.0)
+        self.running_statuses = []
+        self.wait_timeouts = []
+        self.child_context_entered = False
+        self.child_context_exited = False
+        owner = self
 
-        def run(command, **kwargs):
+        class Child:
+            pid = 123456789
+
+            def __enter__(self):
+                owner.child_context_entered = True
+                return self
+
+            def __exit__(self, *_):
+                owner.child_context_exited = True
+                return False
+
+            def wait(self, *, timeout):
+                owner.assertEqual(timeout, 5)
+                os.fstat(descriptor)
+                owner.running_statuses.append(
+                    json.loads((owner.work / "status.json").read_text())
+                )
+                owner.wait_timeouts.append(timeout)
+                if len(owner.wait_timeouts) <= timeouts:
+                    clock.elapsed += timeout
+                    raise subprocess.TimeoutExpired(owner.command, timeout)
+                return result
+
+        def spawn(command, **kwargs):
             self.assertEqual(command, self.command)
             self.assertNotIn("timeout", kwargs)
-            self.assertFalse(kwargs["check"])
+            self.assertNotIn("check", kwargs)
             self.assertEqual(kwargs["stderr"], subprocess.STDOUT)
             os.fstat(descriptor)
             kwargs["stdout"].write(output)
             if error is not None:
                 raise error
-            return SimpleNamespace(returncode=result)
+            return Child()
+
+        def resources(pid):
+            self.assertEqual(pid, Child.pid)
+            return {"sampled_unix_seconds": 1000 + clock.elapsed}
 
         with (
             patch.object(
                 sys, "argv", ["benchmark_job.py", str(self.work), str(descriptor)]
             ),
-            patch("benchmark_job.subprocess.run", side_effect=run) as subprocess_run,
+            patch("benchmark_job.monotonic", side_effect=lambda: clock.elapsed),
+            patch("benchmark_job.time", side_effect=lambda: 1000 + clock.elapsed),
+            patch("benchmark_job.worker_resources", side_effect=resources),
+            patch("benchmark_job.subprocess.Popen", side_effect=spawn) as popen,
         ):
             benchmark_job.main()
-        subprocess_run.assert_called_once()
+        popen.assert_called_once()
+        self.assertEqual(self.child_context_entered, error is None)
+        self.assertEqual(self.child_context_exited, error is None)
         with self.assertRaises(OSError):
             os.fstat(descriptor)
+        with (self.work / "benchmark.lock").open("a+") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         return json.loads((self.work / "status.json").read_text())
 
     def test_success_has_no_default_deadline_and_preserves_receipt(self):
@@ -274,6 +325,83 @@ class GalleryWorkerTests(unittest.TestCase):
         self.assertEqual(status["state"], "complete")
         self.assertEqual(status["receipt"], receipt)
         self.assertGreaterEqual(status["elapsed_seconds"], 0)
+
+    def test_heartbeat_stays_fresh_before_native_progress_without_a_job_deadline(self):
+        status = self.run_worker(timeouts=7)
+        self.assertEqual(status["state"], "complete")
+        self.assertEqual(status["elapsed_seconds"], 35)
+        self.assertEqual(self.wait_timeouts, [5] * 8)
+        self.assertEqual(
+            [row["elapsed_seconds"] for row in self.running_statuses],
+            [0, 5, 10, 15, 20, 25, 30, 35],
+        )
+        for row in self.running_statuses:
+            self.assertEqual(row["state"], "running")
+            self.assertEqual(row["updated_unix_seconds"], 1000 + row["elapsed_seconds"])
+            self.assertEqual(row["native_progress"]["state"], "pending")
+            self.assertEqual(row["worker_pid"], 123456789)
+            self.assertEqual(
+                row["resources"]["sampled_unix_seconds"], row["updated_unix_seconds"]
+            )
+
+    def test_heartbeat_does_not_make_a_stale_native_snapshot_look_new(self):
+        monitor = self.work / "monitor.json"
+        raw = {"phase": "saved-rule-application", "terms": 12}
+        monitor.write_text(json.dumps(raw))
+        os.utime(monitor, (995, 995))
+        status = self.run_worker(timeouts=2)
+        self.assertEqual(status["state"], "complete")
+        self.assertEqual(
+            [row["native_progress"]["age_seconds"] for row in self.running_statuses],
+            [5, 10, 15],
+        )
+        for row in self.running_statuses:
+            self.assertEqual(row["native_progress"]["state"], "available")
+            self.assertEqual(row["native_progress"]["snapshot"], raw)
+        self.assertEqual(monitor.read_text(), json.dumps(raw))
+
+    def test_missing_or_bad_native_monitor_does_not_fail_a_successful_child(self):
+        monitor = self.work / "monitor.json"
+        for label, payload, expected in (
+            ("missing", None, "pending"),
+            ("malformed", "{", "unavailable"),
+            ("nonobject", "[]", "unavailable"),
+            ("oversize", json.dumps({"value": "x" * 100}), "unavailable"),
+        ):
+            with self.subTest(case=label):
+                if payload is None:
+                    monitor.unlink(missing_ok=True)
+                else:
+                    monitor.write_text(payload)
+                with patch.object(Gallery, "display_receipt_bytes", 64):
+                    status = self.run_worker(timeouts=1)
+                self.assertEqual(status["state"], "complete")
+                self.assertEqual(status["native_progress"]["state"], expected)
+                self.assertEqual(self.wait_timeouts, [5, 5])
+
+    def test_deep_native_monitor_does_not_interrupt_the_child_or_change_the_artifact(
+        self,
+    ):
+        monitor = self.work / "monitor.json"
+        raw = '{"layers":' + "[" * 2000 + "0" + "]" * 2000 + "}"
+        monitor.write_text(raw)
+        decode_json = json.loads
+
+        def decode(payload, *args, **kwargs):
+            # Decoder nesting limits differ across supported Python versions.
+            if payload == raw.encode():
+                raise RecursionError("synthetic decoder nesting limit")
+            return decode_json(payload, *args, **kwargs)
+
+        with (
+            patch.object(Gallery, "display_receipt_bytes", 10_000),
+            patch("benchmark_job.json.loads", side_effect=decode),
+        ):
+            status = self.run_worker(timeouts=1)
+        self.assertEqual(status["state"], "complete")
+        self.assertEqual(status["native_progress"]["state"], "unavailable")
+        self.assertEqual(self.wait_timeouts, [5, 5])
+        self.assertEqual(monitor.read_text(), raw)
 
     def test_nonzero_exit_retains_failure_and_log(self):
         capture = self.work / "running-cache"
@@ -285,11 +413,81 @@ class GalleryWorkerTests(unittest.TestCase):
         self.assertEqual(status["exit_code"], 17)
         self.assertIn("synthetic native failure", status["message"])
         self.assertEqual(prefix.read_bytes(), b"synthetic durable prefix")
+        self.assertEqual(
+            (self.work / "run.log").read_text(), "synthetic native failure"
+        )
 
     def test_spawn_error_is_reported_and_releases_descriptor(self):
         status = self.run_worker(error=OSError("synthetic worker error"))
         self.assertEqual(status["state"], "failed")
         self.assertIn("synthetic worker error", status["message"])
+
+
+class GalleryWorkerObservationTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory(prefix="gallery-observation-contract-")
+        self.addCleanup(temporary.cleanup)
+        self.work = Path(temporary.name)
+
+    def test_native_progress_uses_bounded_display_and_file_age(self):
+        raw = {"phase": "working", "long_field": "x" * 3000}
+        monitor = self.work / "monitor.json"
+        monitor.write_text(json.dumps(raw))
+        os.utime(monitor, (100, 100))
+        with patch("benchmark_job.time", return_value=107):
+            progress = benchmark_job.read_native_progress(self.work)
+        self.assertEqual(progress["state"], "available")
+        self.assertEqual(progress["artifact"], str(monitor))
+        self.assertEqual(progress["age_seconds"], 7)
+        self.assertEqual(progress["snapshot"], Gallery.display_receipt(raw))
+        self.assertLess(len(progress["snapshot"]["long_field"]), len(raw["long_field"]))
+        self.assertEqual(json.loads(monitor.read_text()), raw)
+
+    def test_unreadable_native_progress_is_best_effort(self):
+        with patch.object(
+            Path, "open", side_effect=PermissionError("synthetic denial")
+        ):
+            progress = benchmark_job.read_native_progress(self.work)
+        self.assertEqual(progress["state"], "unavailable")
+        self.assertIn("synthetic denial", progress["message"])
+
+    def test_worker_resources_samples_the_requested_pid_and_machine_memory(self):
+        proc = self.work / "proc"
+        (proc / "321").mkdir(parents=True)
+        (proc / "321/status").write_text("Name: synthetic\nVmRSS: 7 kB\nVmHWM: 11 kB\n")
+        (proc / "meminfo").write_text("MemTotal: 1000 kB\nMemAvailable: 750 kB\n")
+        with patch("benchmark_job.time", return_value=1234):
+            resources = benchmark_job.worker_resources(321, proc=proc)
+        self.assertEqual(resources["worker_rss_bytes"], 7 * 1024)
+        self.assertEqual(resources["worker_peak_rss_bytes"], 11 * 1024)
+        self.assertEqual(resources["machine_available_bytes"], 750 * 1024)
+        self.assertEqual(resources["machine_total_bytes"], 1000 * 1024)
+        self.assertEqual(resources["sampled_unix_seconds"], 1234)
+        self.assertIn("/proc", resources["source"])
+        self.assertIn("unavailable fields are null", resources["source"])
+
+    def test_missing_proc_resources_are_null_and_do_not_raise(self):
+        with patch("benchmark_job.time", return_value=1234):
+            resources = benchmark_job.worker_resources(321, proc=self.work / "absent")
+        for field in (
+            "worker_rss_bytes",
+            "worker_peak_rss_bytes",
+            "machine_available_bytes",
+            "machine_total_bytes",
+        ):
+            self.assertIsNone(resources[field])
+        self.assertEqual(resources["sampled_unix_seconds"], 1234)
+
+    def test_bad_worker_memory_does_not_hide_available_machine_memory(self):
+        proc = self.work / "proc"
+        (proc / "321").mkdir(parents=True)
+        (proc / "321/status").write_text("VmRSS: invalid kB\n")
+        (proc / "meminfo").write_text("MemAvailable: 750 kB\n")
+        resources = benchmark_job.worker_resources(321, proc=proc)
+        self.assertIsNone(resources["worker_rss_bytes"])
+        self.assertIsNone(resources["worker_peak_rss_bytes"])
+        self.assertEqual(resources["machine_available_bytes"], 750 * 1024)
+        self.assertIsNone(resources["machine_total_bytes"])
 
 
 class GalleryReceiptTests(unittest.TestCase):
