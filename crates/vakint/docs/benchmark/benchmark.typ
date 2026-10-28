@@ -2,6 +2,8 @@
 // Visual reference: https://github.com/alphal00p/ninjars/blob/main/docs/benchmark/benchmark.pdf
 #let report = json("data/results.json")
 #let delivery-id = report.at("selected_delivery_checkpoint", default: none)
+#let delivery-state = if delivery-id == none { none } else { report.delivery_checkpoints.at(delivery-id) }
+#let final-q0 = if delivery-state == none { none } else { delivery-state.at("final_cached_q0", default: none) }
 #let selected = report.at("selected_reduction_run", default: none)
 #let data = if selected == none { report } else { report.reduction_runs.at(selected) }
 #assert(data.validation_passed, message: "Only validated benchmark results may be published")
@@ -188,7 +190,16 @@ Refresh instructions: #raw("../../AGENTS.md").
 }
 #let primary-cell(run, id, variant) = {
   let row = primary(run, id)
-  if row == none or row.status != "measured" {
+  if id == "zero-momentum-diagnostic" and final-q0 != none {
+    table.cell(fill: pale, {
+      let observed = if variant == "uncached" { delivery-state.historical_uncached_seconds } else { final-q0.observed_seconds.public_reduction }
+      text(15pt, weight: "bold")[#timing(observed) s]
+      linebreak()
+      text(8pt)[n = 1 · #if variant == "uncached" [historical cohort] else [final HEAVY · monitored]]
+      linebreak()
+      text(7.5pt)[Separate cohorts · no matched ratio]
+    })
+  } else if row == none or row.status != "measured" {
     if physical-deferred(id) or (row != none and row.status == "deferred") { [Deferred] } else { [Pending] }
     if row != none and row.functional_records.len() > 0 {
       linebreak()
@@ -262,7 +273,7 @@ an independent master basis. One observed run supports no statistical speedup
 claim. Earlier interrupted checks are not a timing baseline.
 
 #v(0.5em)
-#text(13pt, weight: "bold", fill: navy)[Five-loop reduction comparison]
+#text(13pt, weight: "bold", fill: navy)[#if final-q0 == none [Five-loop reduction comparison] else [Five-loop reduction observations]]
 #v(0.25em)
 #{
   set text(font: "DejaVu Sans", size: 9pt)
@@ -285,8 +296,12 @@ claim. Earlier interrupted checks are not a timing baseline.
       (case.label, ..for selection in five-selections {
         let five = five-run(selection)
         if case.id == "held-out-suite" {
-          (if five == none or five.held_out == none { [Pending] } else { [Individual rows below] },
-           if five == none or five.held_out == none { [Pending] } else { [Individual rows below] })
+          if final-q0 != none {
+            ([No matched suite timings], [Functional controls reported separately])
+          } else {
+            (if five == none or five.held_out == none { [Pending] } else { [Individual rows below] },
+             if five == none or five.held_out == none { [Pending] } else { [Individual rows below] })
+          }
         } else {
           (primary-cell(five, case.id, "uncached"), primary-cell(five, case.id, "cached"))
         }
@@ -312,6 +327,15 @@ claim. Earlier interrupted checks are not a timing baseline.
 #v(0.35em)
 #block(fill: pale, inset: 9pt, radius: 4pt, width: 100%)[
   #set text(9pt)
+  #if final-q0 != none [
+    *Reading guide.* q0 cells are actual one-shot observations, with exact
+    retained-result and guard validation. The user accepted the historical cold
+    reference and waived new uncached repetitions. The cached observation uses
+    the accepted final HEAVY file; its source cohort and monitoring differ from
+    the historical producer. No matched three-sample median, cache-only ratio or
+    performance colour is claimed. Final science, cache tiers and detailed timer
+    boundaries appear on the delivery page. The quadratic example remains deferred.
+  ] else [
   *Eligibility and reading guide.* Primary cells require catalogue closure and
   exact result/guard agreement,
   #if cumulative-cache [a validated snapshot of strictly completed records,] else [a completed strict cache,]
@@ -325,6 +349,7 @@ claim. Earlier interrupted checks are not a timing baseline.
   historical reference and completed functional checks appear on the delivery page.]
   #if tier-selections != none [Each tier retains its own matched uncached baseline;
   no baseline or sample is inferred from the other tier.]
+  ]
 ]
 
 #v(0.35em)
@@ -364,7 +389,7 @@ acceptance was pending in that historical record. Full revisions: #raw("data/res
   for case in pending.cases.filter(case => case.id != "held-out-suite") {
     let row = primary(five, case.id)
     v(0.3em)
-    [*#case.label:* #if row.status == "deferred" or (row.status != "measured" and physical-deferred(case.id)) [Deferred; unmeasured in this scope.] else [#row.status.]]
+    [*#case.label:* #if case.id == "zero-momentum-diagnostic" and final-q0 != none [Complete exact final-file validation; n = 1 observations on the delivery page.] else if row.status == "deferred" or (row.status != "measured" and physical-deferred(case.id)) [Deferred; unmeasured in this scope.] else [#row.status.]]
     if row.functional_records.len() > 0 {
       let functional = row.functional_records.filter(record => not record.performance_eligible)
       if functional.len() > 0 {
@@ -420,7 +445,7 @@ acceptance was pending in that historical record. Full revisions: #raw("data/res
     }
   }
   v(0.4em)
-  text(13pt, weight: "bold", fill: navy)[#if light-cache [LIGHT selected-cache export] else if cumulative-cache [Cumulative native cache] else [Finite selected-cache preparation]]
+  text(13pt, weight: "bold", fill: navy)[#if light-cache [LIGHT selected-cache export] else if cumulative-cache [Cumulative native cache] else if final-q0 != none [Historical finite-cache preparation] else [Finite selected-cache preparation]]
   if five.cache == none {
     [ Pending: no completed final strict-cache receipt selected.]
   } else if light-cache {
@@ -1016,100 +1041,160 @@ Refresh and validation contract: #raw("maintenance.typ").]
 }
 
 #if delivery-id != none {
-  let delivery = report.delivery_checkpoints.at(delivery-id)
+  let delivery = delivery-state
   let freeze = delivery.records.light_freeze.raw_receipt
-  let monitor = delivery.records.monitor.raw_receipt
+  let prior = delivery.records.monitor.raw_receipt
   let sources = delivery.records.heavy_sources.raw_receipt
+  let publication = delivery.at("publication", default: none)
+  let consumers = delivery.at("published_consumers", default: none)
+  let heldout = delivery.at("heldout_correctness", default: none)
+  let heavy = delivery.at("final_heavy", default: none)
+  let q0 = final-q0
+  let science = if q0 == none {
+    (masters: prior.science.master_identity_union_count,
+     coefficients: prior.science.exact_scalar_product_count,
+     guards: prior.science.ordered_guard_Atom_count,
+     heartbeat: prior.monitor.maximum_conservative_freshness_bound_seconds,
+     peak: prior.actual_OS_resources.worker_HWM_max_observed_bytes,
+     samples: prior.monitor.sample_count,
+     available: prior.actual_OS_resources.machine_MemAvailable_min_observed_bytes)
+  } else {
+    (masters: q0.master_count, coefficients: q0.scalar_coefficient_count,
+     guards: q0.ordered_public_guard_count,
+     heartbeat: q0.monitor.max_conservative_freshness_bound_seconds,
+     peak: q0.monitor.maximum_observed_worker_HWM_bytes,
+     samples: q0.monitor.sample_count,
+     available: q0.monitor.minimum_observed_machine_MemAvailable_bytes)
+  }
+  let storage(bytes) = if bytes >= 1000000000 { fixed(bytes / 1000000000, 2) + " GB" } else { fixed(bytes / 1000000, 2) + " MB" }
   assert(delivery.schema == "vakint.q0-delivery-checkpoint.v1")
   assert(not delivery.performance_eligible and not delivery.cache_performance_winner)
   assert(delivery.new_uncached_repetitions_waived)
   pagebreak()
-  set text(font: "Libertinus Serif", size: 10pt, fill: black)
+  set text(font: "Libertinus Serif", size: 9pt, fill: black)
+  set par(leading: 0.45em)
   align(center)[
-    #text(21pt, weight: "bold", fill: navy)[Zero-momentum delivery checkpoint]
-    #v(0.2em)
-    #text(11pt, fill: luma(80))[Frozen LIGHT cache · exact monitored reuse · 28 October 2026]
-  ]
-  v(0.55em)
-  block(fill: pale, inset: 10pt, radius: 4pt, width: 100%)[
-    *Scope and timing reference.* The required physical example is the complete
-    zero-momentum four-rung fixture; the quadratic example is deferred.
-    The user waived three new uncached repetitions. The completed historical
-    uncached public reduction took #timing(delivery.historical_uncached_seconds) s
-    (#fixed(delivery.historical_uncached_seconds / 3600, 1) h), in its original older cohort.
-    It remains a historical reference, not a matched baseline for a new cache-only
-    ratio. The earlier approximately 5.5× assembly observation concerns Vakint's
-    coefficient-local source change; it is separate from cache-format performance.
-  ]
-  v(0.55em)
-  text(13pt, weight: "bold", fill: navy)[LIGHT · accepted as sufficient]
-  v(0.25em)
-  table(columns: (1fr, 1fr, 1fr), inset: (x: 8pt, y: 11pt),
-    stroke: 0.4pt + luma(215),
-    fill: (x, y) => if y == 0 { navy } else { rgb("#e8f1ea") },
-    table.header(
-      text(fill: white)[Strict native records],
-      text(fill: white)[Compressed size],
-      text(fill: white)[Decoded size],
-    ),
-    text(17pt, weight: "bold")[#freeze.selected_records],
-    text(17pt, weight: "bold")[#fixed(freeze.compressed_bytes / 1000000, 2) MB],
-    text(17pt, weight: "bold")[#fixed(freeze.decoded_bytes / 1000000, 2) MB],
-  )
-  v(0.25em)
-  [Candidate B retains 54 Route and 2048 Apply records. Complete Native reimport
-  verified exact coefficients and the original ordered cache-record guards.
-  The user accepted this existing cache and ended selection/tuning; this does
-  not declare B a performance winner. The earlier A/B observations and all
-  completed capture prefixes remain preserved.]
-  v(0.2em)
-  block[
-    #set text(8pt)
-    #set par(justify: false)
-    Exact lengths: #freeze.compressed_bytes compressed / #freeze.decoded_bytes decoded bytes.
-    Compressed SHA-256: #raw(freeze.sha256). Publication and actual download/offline
-    validation remain pending in this checkpoint.
-  ]
-  v(0.55em)
-  text(13pt, weight: "bold", fill: navy)[Monitored HEAVY reuse · functional acceptance]
-  v(0.25em)
-  table(columns: (1fr, 1fr, 1fr), inset: (x: 8pt, y: 11pt),
-    stroke: 0.4pt + luma(215),
-    fill: (x, y) => if y == 0 { navy } else { pale },
-    table.header(
-      text(fill: white)[Exact master identities / coefficients],
-      text(fill: white)[Heartbeat freshness bound],
-      text(fill: white)[Observed peak RAM],
-    ),
-    text(17pt, weight: "bold")[#monitor.science.master_identity_union_count / #monitor.science.exact_scalar_product_count],
-    text(17pt, weight: "bold")[#fixed(monitor.monitor.maximum_conservative_freshness_bound_seconds, 3) s],
-    text(17pt, weight: "bold")[#fixed(monitor.actual_OS_resources.worker_HWM_max_observed_bytes / 1000000000, 2) GB],
-  )
-  v(0.25em)
-  [All #monitor.science.ordered_guard_Atom_count exported guard Atoms agree in order,
-  with mass, couplings, normalization and family identities preserved.
-  #monitor.monitor.sample_count OS/monitor samples observed no faults.
-  The heartbeat covered loading, native work, exact combination, serialization
-  and the final SHA scan; native scientific counters may age during opaque phases.
-  All physical workers have exited. This instrumented check supplies no new
-  performance median.]
-  v(0.25em)
-  text(8pt)[The peak is an observed OS high-water mark, not a bound on every
-  instantaneous allocation. The 50 GB machine-available-memory guard stayed
-  satisfied; minimum observed available RAM was
-  #fixed(monitor.actual_OS_resources.machine_MemAvailable_min_observed_bytes / 1000000000, 1) GB.
-  Public guard-vector equality is distinct from the original ordered guards
-  inside each Native cache record.]
-  v(0.5em)
-  block(stroke: 0.5pt + luma(200), inset: 9pt, radius: 4pt, width: 100%)[
-    *Final HEAVY export: pending.* All #sources.source_count precious sources are
-    closed, with #str(sources.total_stored_record_references) stored record references
-    before deduplication. Final unique count, compressed/decoded lengths,
-    SHA-256 and export/reimport durations remain unmeasured. The previously
-    validated 96 GB snapshot stays preserved; it is not relabeled as this final union.
+    #text(20pt, weight: "bold", fill: navy)[#if q0 == none [Zero-momentum delivery checkpoint] else [Five-loop delivery · zero momentum]]
+    #v(0.15em)
+    #text(10.5pt, fill: luma(80))[Frozen LIGHT · cumulative HEAVY · #if q0 == none [functional evidence] else [final-file science complete]]
   ]
   v(0.35em)
-  text(8pt, fill: luma(100))[Evidence: #raw("provenance/q0_delivery_evidence_index.json").
-  Exact raw receipts and user decisions are appended in #raw("data/results.json").
-  No master values were evaluated: the 640 declared five-loop masters remain uncomputed.]
+  block(fill: pale, inset: 8pt, radius: 4pt, width: 100%)[
+    *Scope and reference.* The quadratic example remains deferred. The user
+    accepted the historical uncached q0 reference, #timing(delivery.historical_uncached_seconds) s
+    (#fixed(delivery.historical_uncached_seconds / 3600, 1) h, n = 1, original capture/cohort),
+    and waived new uncached repetitions. Final cached observations retain their
+    own cohort and n = 1 label: no matched median or cache-only ratio is claimed.
+    The earlier 5.48× assembly observation concerns Vakint's coefficient-local
+    source change, separately from cache format.
+  ]
+  v(0.35em)
+  text(12pt, weight: "bold", fill: navy)[Cache tiers]
+  v(0.2em)
+  table(columns: (0.8fr, 1.2fr, 1fr, 1fr), inset: (x: 7pt, y: 8pt),
+    stroke: 0.4pt + luma(215), fill: (x, y) => if y == 0 { navy } else { pale },
+    table.header(text(fill: white)[Native file], text(fill: white)[Strict unique records],
+      text(fill: white)[Compressed], text(fill: white)[Decoded]),
+    [*LIGHT*], text(14pt, weight: "bold")[#freeze.selected_records],
+    text(14pt, weight: "bold")[#storage(freeze.compressed_bytes)],
+    text(14pt, weight: "bold")[#storage(freeze.decoded_bytes)],
+    ..if heavy == none { () } else { (
+      [*HEAVY*], text(14pt, weight: "bold")[#heavy.unique_records],
+      text(14pt, weight: "bold")[#storage(heavy.artifact.compressed_bytes)],
+      text(14pt, weight: "bold")[#storage(heavy.artifact.decoded_bytes)],
+    ) },
+  )
+  v(0.2em)
+  [LIGHT B: 54 Route + 2048 Apply records, accepted as sufficient by the user;
+  selection/tuning ended. Complete Native reimport checked exact coefficients
+  and original ordered cache guards. This does not identify a performance winner.]
+  v(0.15em)
+  text(8pt)[#if publication == none [Publication remains pending.] else [Published
+  #link(publication.immutable_release)[#publication.version], then #link(publication.latest_alias)[data-latest].]
+  #if consumers == none [Actual download/offline validation remains pending.] else [Fresh
+  immutable/latest downloads, fresh-process offline reuses and cache opt-out passed;
+  all 640 uncomputed master getters passed in Community #raw(consumers.qualified_community.Community_public_head.slice(0, 7))
+  and Vakint #raw(consumers.qualified_community.source_cohort.Gammaloop.slice(0, 7)).
+  Zero TCP connections applies to offline official-loader windows, excluding licensed startup.]]
+  if q0 != none {
+    v(0.35em)
+    text(12pt, weight: "bold", fill: navy)[Final-file cached q0 · one monitored process]
+    v(0.2em)
+    table(columns: (1fr, 1fr, 1fr), inset: (x: 7pt, y: 8pt),
+      stroke: 0.4pt + luma(215), fill: (x, y) => if y == 0 { navy } else { pale },
+      table.header(text(fill: white)[Complete public reduction],
+        text(fill: white)[Data / native FILE loading], text(fill: white)[Collector / controller E2E]),
+      text(14pt, weight: "bold")[#timing(q0.observed_seconds.public_reduction) s],
+      [#timing(q0.observed_seconds.data_loading) / #timing(q0.observed_seconds.cache_loading_authentication_decode_index) s],
+      [#timing(q0.observed_seconds.prepared_input_to_serialization) / #timing(q0.observed_seconds.controller_inclusive) s],
+    )
+    v(0.15em)
+    text(8pt)[Prepared scalar input; original graph preparation excluded. Native saved call
+    #timing(q0.observed_seconds.saved_native_call_inclusive) s; final coefficient combination
+    #timing(q0.observed_seconds.final_coefficient_combination) s, included in the public call.
+    Loading includes authentication/decode/indexing; the collector and controller retain
+    their different SHA/close boundaries. Pure IBP and isolated SHA/decode are unmeasured.
+    Source #raw(q0.cohort.main_revision.slice(0, 7)) · Native #raw(q0.cohort.native_revision.slice(0, 7))
+    · kernel #raw(q0.cohort.kernel_revision.slice(0, 7)) · normal #q0.cohort.profile profile.
+    Actual Route hits #q0.actual_persistent_work.route_hits, misses #q0.actual_persistent_work.misses,
+    new rules #q0.actual_native_work.rule_applications. This seen-input check is separate
+    from prior 96 GB engineering observations and held-out performance.]
+  }
+  v(0.35em)
+  text(12pt, weight: "bold", fill: navy)[#if q0 == none [Prior monitored q0 · historical file] else [Exact science and monitor]]
+  v(0.2em)
+  table(columns: (1fr, 1fr, 1fr), inset: (x: 7pt, y: 8pt),
+    stroke: 0.4pt + luma(215), fill: (x, y) => if y == 0 { navy } else { pale },
+    table.header(text(fill: white)[Masters / product coefficients],
+      text(fill: white)[Heartbeat freshness bound], text(fill: white)[Observed peak RAM]),
+    text(14pt, weight: "bold")[#science.masters / #science.coefficients],
+    text(14pt, weight: "bold")[#fixed(science.heartbeat, 3) s],
+    text(14pt, weight: "bold")[#storage(science.peak)],
+  )
+  v(0.2em)
+  [All #science.guards exported public guard Atoms agree in order, with mass,
+  couplings, normalization and full family identities preserved. #science.samples
+  monitor samples cover the complete job, including loading, CAS, serialization
+  and final SHA; native scientific-counter age remains separate. All workers exited.]
+  v(0.15em)
+  text(8pt)[RAM is the observed OS high-water mark, not an instantaneous allocation bound.
+  Minimum sampled machine-available RAM #storage(science.available), above the 50 GB guard.
+  Public guard order is separate from each Native cache record's original guard vector.]
+  v(0.3em)
+  if heavy == none {
+    block(stroke: 0.5pt + luma(200), inset: 8pt, radius: 4pt, width: 100%)[
+      *Final HEAVY validation pending:* #sources.source_count closed precious sources,
+      #sources.total_stored_record_references references before deduplication.
+      No final unique count, file identity or phase duration is inferred from the
+      previously validated 96 GB snapshot.
+    ]
+  } else {
+    [*Final HEAVY complete:* #heavy.record_references original references across
+    #heavy.source_count closed sources; #heavy.unique_records unique records and
+    #heavy.identical_duplicates exact duplicates. Exhaustive reimport checked every
+    coefficient and original ordered guard vector, including multiplicity.
+    Native finalization census / export / reimport:
+    #timing(heavy.native_phase_seconds.census) / #timing(heavy.native_phase_seconds.export) /
+    #timing(heavy.native_phase_seconds.reimport) s; these are cache-finalization phases,
+    separate from original reduction/capture production.]
+    v(0.1em)
+    text(8pt)[HEAVY SHA-256 #raw(heavy.artifact.sha256.slice(0, 20))…;
+    LIGHT #raw(freeze.sha256.slice(0, 20))… . Exact lengths, complete digests and
+    local independently hosted HEAVY path remain in the raw receipts. The old
+    96 GB snapshot is preserved separately; Native helper provenance is not a Vakint consumer build.]
+  }
+  if heldout != none {
+    v(0.2em)
+    text(8pt)[*Held-out functional control:* parent 30527, double dot/rank one;
+    full value bytes, #heldout.public_guard_set_count canonical public guards as a set,
+    #heldout.master_count used masters / #heldout.used_family_count used families agree.
+    Fresh replay: #heldout.replay_requested_root_hits requested-root hit,
+    #heldout.replay_rule_applications new rules. Its #heldout.captured_records strict
+    records join HEAVY; LIGHT excludes them. No out-of-sample timing, unexported family-map
+    equality or Native guard-vector comparison is inferred from this pair.]
+  }
+  v(0.25em)
+  text(7.5pt, fill: luma(100))[Hashed evidence: #raw(delivery.evidence.path.split("/").last()).
+  All historical records and raw phase arrays remain in #raw("data/results.json").
+  The 640 declared five-loop masters remain uncomputed; no master values were evaluated.]
 }

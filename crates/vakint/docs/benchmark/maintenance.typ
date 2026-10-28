@@ -267,6 +267,46 @@ engineering run IDs. It validates the accepted LIGHT bytes against that export,
 keeps the historical uncached cohort separate, and leaves final HEAVY export and
 published-download fields null until actual receipts exist. A user waiver of
 new repetitions never creates a matched median or a cache-only speedup claim.
+Optional paired #raw("publication") and #raw("release_assets") receipts record
+the actual source push and immutable-before-alias publication. They must bind
+the same source revision and successful deterministic pack preflight. Publication
+alone leaves fresh-download and offline-reuse validation pending.
+The optional #raw("published_consumers") receipt requires those publication
+bindings, the frozen LIGHT identity, all five cumulative loops, fresh immutable
+and latest downloads, both fresh-process offline reuses, cache opt-out and all
+640 uncomputed master getters. Zero TCP connections apply only to each official
+loader window, rather than the whole licensed process.
+Optional #raw("heldout_correctness") records one completed strict control and
+fresh replay separately from timing suites. Validate full-value bytes, public
+canonical guard sets and used-master/family inventories, retain their limited
+comparison scope, and require every new nonempty capture in the sealed final
+HEAVY source manifest. This evidence never changes frozen LIGHT selection.
+Final HEAVY evidence is an all-or-none set of #raw("heavy_census"),
+#raw("heavy_export"), #raw("heavy_reimport"),
+#raw("heavy_reimport_controller") and #raw("heavy_reimport_terminals"). The
+adapter uses the existing Native phase/controller/PIDFD schemas, matching the
+closed source manifest, all reference visits, typed file identity and exhaustive
+coefficient/original-ordered-guard equality. It does not parse cache payloads or
+reconstruct Native records. Cache-finalization durations retain their original
+phase scope and never become reduction timings.
+
+The subsequent single cached final-file q0 observation supplies another complete
+set: #raw("final_q0_benchmark"), #raw("final_q0_execution"),
+#raw("final_q0_verification"), #raw("final_q0_coefficient_proof"),
+#raw("final_q0_monitor"), #raw("final_q0_terminals") and
+#raw("final_q0_capture"). It requires accepted final HEAVY evidence, actual
+original process terminals, complete exact scalar-product/public-guard proofs,
+verified raw stage arrays and a clean saved capture. Unexpected new captured
+records require preservation and a new final-HEAVY disposition before delivery.
+Suite collectors require an explicit null #raw("reduction_error"); the physical
+collector may omit that field only with its separately verified successful
+execution receipt. An explicitly reported error is never ignored.
+Display these actual observations as #raw("n = 1"), retaining the historical cold
+reference, separate source/cache cohorts, null pure-IBP/hash timings and the
+explicit waiver. Do not leave completed science labeled as pending matched
+benchmarks; matched medians and suite timings that were not obtained remain
+explicitly unclaimed. Append a new checkpoint/index; preserve its earlier
+pending predecessor and all historical four-loop samples.
 
 ```sh
 python3 crates/vakint/docs/benchmark/merge_physical_capture_results.py \

@@ -59,6 +59,68 @@ def json_record(item, base):
     return {"evidence": item, "raw_receipt": read(reference(item, base))}
 
 
+def strict_closed_capture(cache, *, physical_execution=None):
+    """Validate capture close; physical collectors attest reduction success separately."""
+    native = cache.get("report", {})
+    counters = (
+        "generation",
+        "accepted_records",
+        "committed_records",
+        "pending_records",
+        "pending_bytes",
+        "capture_skipped_records",
+    )
+    errors = ("flush_error", "snapshot_error")
+    physical_success = (
+        isinstance(physical_execution, dict)
+        and physical_execution.get("schema")
+        == "vakint.final-instrumented-q0-replay-execution.v1"
+        and physical_execution.get("status") == "PASS"
+        and physical_execution.get("collector_exit_code") == 0
+        and physical_execution.get("collector_wait_is_authoritative") is True
+        and physical_execution.get("errors")
+        == physical_execution.get("signals_sent")
+        == []
+    )
+    close = cache.get("close", {})
+    require(
+        isinstance(native, dict)
+        and isinstance(close, dict)
+        and isinstance(cache.get("snapshot"), dict)
+        and cache.get("terminal") is True
+        and cache.get("flush_complete") is True
+        and all(key in cache and cache[key] is None for key in errors)
+        and (
+            ("reduction_error" in cache and cache["reduction_error"] is None)
+            or ("reduction_error" not in cache and physical_success)
+        )
+        and {"error", "report"} <= close.keys()
+        and close["error"] is None
+        and close["report"] == native
+        and native.get("schema") == "rustred.running-application-cache.v1"
+        and native.get("closed") is True
+        and "writer_error" in native
+        and native["writer_error"] is None
+        and "last_error" in native
+        and native["last_error"] is None
+        and native.get("capture_metadata_exhausted") is False
+        and all(type(native.get(key)) is int and native[key] >= 0 for key in counters)
+        and native["generation"] > 0
+        and native["accepted_records"] == native["committed_records"]
+        and native["pending_records"]
+        == native["pending_bytes"]
+        == native["capture_skipped_records"]
+        == 0
+        and all(
+            cache.get("flush_report", {}).get(key) == native[key] for key in counters
+        )
+        and cache.get("snapshot", {}).get("schema")
+        == "rustred.running-application-cache-snapshot.v1",
+        "strict capture lacks a complete clean flush/snapshot/close",
+    )
+    return native
+
+
 def completed_run(config_path, *, expected_job_id="q0"):
     projections = {
         "q0": ("zero-momentum", "zero-momentum-metric"),
@@ -536,6 +598,36 @@ def physical_capture(campaign, physical_scope=None):
     return result
 
 
+def exact_scalar_parity(report, verified, proof_record):
+    proof = proof_record["raw_receipt"]
+    require(
+        verified["full58_proof"]["sha256"] == proof_record["evidence"]["sha256"]
+        and verified["full58_scalar_coefficient_parity"] is True
+        and verified["original_native_baseline_authenticated"] is True
+        and verified["Float_numeric_atoms_rejected"] is True
+        and proof["schema"] == "vakint.complete-master-product-parity.v1"
+        and proof["status"] == "PASS"
+        and type(proof["master_count"]) is int
+        and proof["master_count"] > 0
+        and proof["master_count"]
+        == verified["master_identity_union_count"]
+        == report["catalogue_closure"]["master_count"]
+        and proof["product_union_count"]
+        == verified["full_scalar_coefficient_count"]
+        == len(proof["full_scalar_proofs"])
+        and proof["product_union_count"] > 0
+        and len({row["product"] for row in proof["full_scalar_proofs"]})
+        == len(proof["full_scalar_proofs"])
+        and all(
+            row["exact_difference_zero"] is True for row in proof["full_scalar_proofs"]
+        )
+        and proof["global_together_or_full_amplitude_difference"] is False
+        and proof["unit_mass_or_coupling_replacement"] is False
+        and proof["numerical_sampling"] is False,
+        "coefficient proof differs from the full exact scalar-product comparison",
+    )
+
+
 def engineering_comparison(index_path):
     """Project accepted JSON receipts only; never reopen symbolic/cache payloads."""
     index_path = Path(index_path).resolve()
@@ -643,34 +735,9 @@ def engineering_comparison(index_path):
                 "historical engineering baseline is not exact",
             )
         else:
-            proof = records["coefficient_proof"]["raw_receipt"]
+            exact_scalar_parity(report, verified, records["coefficient_proof"])
             require(
-                verified["full58_proof"]["sha256"]
-                == records["coefficient_proof"]["evidence"]["sha256"]
-                and verified["full58_scalar_coefficient_parity"] is True
-                and verified["original_native_baseline_authenticated"] is True
-                and verified["Float_numeric_atoms_rejected"] is True
-                and proof["schema"] == "vakint.complete-master-product-parity.v1"
-                and proof["status"] == "PASS"
-                and type(proof["master_count"]) is int
-                and proof["master_count"] > 0
-                and proof["master_count"]
-                == verified["master_identity_union_count"]
-                == report["catalogue_closure"]["master_count"]
-                and proof["product_union_count"]
-                == verified["full_scalar_coefficient_count"]
-                == len(proof["full_scalar_proofs"])
-                and proof["product_union_count"] > 0
-                and len({row["product"] for row in proof["full_scalar_proofs"]})
-                == len(proof["full_scalar_proofs"])
-                and all(
-                    row["exact_difference_zero"] is True
-                    for row in proof["full_scalar_proofs"]
-                )
-                and proof["global_together_or_full_amplitude_difference"] is False
-                and proof["unit_mass_or_coupling_replacement"] is False
-                and proof["numerical_sampling"] is False
-                and report["cache_hit_diagnostic_enabled"] == (name == "after_on"),
+                report["cache_hit_diagnostic_enabled"] == (name == "after_on"),
                 "engineering coefficient proof or diagnostic mode differs",
             )
         observations[name] = {
@@ -1006,14 +1073,346 @@ def cache_file_engineering(index_path, base):
     }
 
 
+def final_heavy_cache(records):
+    """Join accepted metadata only; the native helper owns exhaustive file validation."""
+    sources = records["heavy_sources"]["raw_receipt"]
+    census = records["heavy_census"]["raw_receipt"]
+    exported = records["heavy_export"]["raw_receipt"]
+    imported = records["heavy_reimport"]["raw_receipt"]
+    controller = records["heavy_reimport_controller"]["raw_receipt"]
+    terminals = records["heavy_reimport_terminals"]["raw_receipt"]
+    artifact = exported["artifact"]
+    details = imported["details"]
+    expected = {row["id"]: row for row in sources["sources"]}
+    visits = {row["source_id"]: row for row in details["source_visits"]}
+    seals = {row["source_id"]: row for row in imported["source_seals"]}
+    require(
+        census["schema"] == "vakint.final-thirteen-source-census-postflight.v1"
+        and census["status"] == "PASS_ACTUAL_FULL13_CENSUS_ORIGINAL_PIDFDS_TERMINAL"
+        and exported["schema"] == "vakint.final-thirteen-source-export-postflight.v1"
+        and exported["status"]
+        == "PASS_ACTUAL_ONE_FINAL13_EXPORT_ORIGINAL_PIDFDS_TERMINAL"
+        and exported["source_manifest"]["sha256"]
+        == records["heavy_sources"]["evidence"]["sha256"]
+        and exported["actual_accepted_census"]["sha256"]
+        == records["heavy_census"]["evidence"]["sha256"]
+        and sources["source_count"]
+        == census["source_count"]
+        == exported["source_count"]
+        and sources["total_stored_record_references"]
+        == census["input_all_version_references"]
+        == exported["all13_input_references"]
+        == details["input_records"]
+        and census["unique_records"]
+        == exported["actual_unique_records"]
+        == exported["actual_writer_statistics"]["records"]
+        and census["identical_duplicates"] == exported["identical_duplicates"]
+        and census["unique_records"] + census["identical_duplicates"]
+        == details["input_records"]
+        and census["full_row_conflicts"] == 0
+        and census["original12_source_rows_and_seals_unchanged_superset"] is True
+        and exported["original12_source_rows_and_index_seals_unchanged_superset"]
+        is True
+        and exported["all13_source_seals_unchanged_and_equal_actual_census"] is True
+        and exported[
+            "all_census_record_duplicate_coefficient_payload_and_row_spool_metrics_match"
+        ]
+        is True,
+        "final HEAVY source/census/export bindings differ",
+    )
+    require(
+        imported["schema"] == "vakint.heavy-native-phase.v1"
+        and imported["phase"] == "reimport"
+        and imported["status"] == "PASS"
+        and imported["performance_claim"] is False
+        and imported["request_sha256"] == exported["request"]["sha256"]
+        and imported["request_sha256"] == controller["request_sha256"]
+        and details["all_exact_record_values_and_ordered_guards_equal"] is True
+        and details["state_imports_shared"] is True
+        and details["cache_path"] == artifact["path"]
+        and details["cache_sha256"] == artifact["sha256"]
+        and details["cache_identity"] == artifact["typed_Native_identity"]
+        and all(
+            artifact[key] == artifact["typed_Native_identity"][key]
+            for key in ("compressed_bytes", "decoded_bytes")
+        )
+        and len(visits)
+        == len(details["source_visits"])
+        == len(seals)
+        == len(imported["source_seals"])
+        == sources["source_count"]
+        and visits.keys() == seals.keys() == expected.keys()
+        and all(
+            visits[source_id]["emitted_references"] == row["stored_record_references"]
+            and all(
+                seals[source_id][key] == row[key]
+                for key in (
+                    "directory",
+                    "generation",
+                    "native_index_identity",
+                    "stored_record_references",
+                )
+            )
+            for source_id, row in expected.items()
+        ),
+        "final HEAVY lacks exhaustive source-reference/ordered-guard round-trip equality",
+    )
+    require(
+        controller["schema"] == "vakint.heavy-finalization-controller-phase.v1"
+        and controller["phase"] == "reimport"
+        and controller["status"] == "PASS"
+        and controller["child_returncode"] == 0
+        and controller["signals_sent"] == []
+        and controller["driver_receipt_sha256"]
+        == records["heavy_reimport"]["evidence"]["sha256"]
+        and controller["helper_sha256"] == imported["helper_executable"]["sha256"]
+        and controller["child"]["pid"] == imported["pid"]
+        and terminals["schema"]
+        == "vakint.final-heavy-phase-original-pidfds-terminal.v1"
+        and terminals["phase"] == "reimport"
+        and terminals["all_original_PIDFDs_terminal"] is True
+        and terminals["signals_sent"] == []
+        and all(
+            terminals["terminal"][name]["original_PIDFD_terminal"] is True
+            and all(
+                terminals["terminal"][name]["original"][key] == controller[role][key]
+                for key in ("pid", "start_ticks", "uid")
+            )
+            for name, role in (("helper", "child"), ("controller", "controller"))
+        ),
+        "final HEAVY reimport lacks an actual successful wait and original terminals",
+    )
+    return {
+        "artifact": artifact,
+        "source_count": sources["source_count"],
+        "record_references": details["input_records"],
+        "unique_records": census["unique_records"],
+        "identical_duplicates": census["identical_duplicates"],
+        "unique_coefficients": exported["actual_writer_statistics"][
+            "unique_coefficients"
+        ],
+        "native_phase_seconds": {
+            "census": seconds(census["Native_seconds"]),
+            "export": seconds(exported["Native_seconds"]),
+            "reimport": seconds(imported["seconds"]),
+        },
+        "controller_phase_seconds": {
+            "census": seconds(census["controller_elapsed_seconds"]),
+            "export": seconds(exported["controller_elapsed_seconds"]),
+            "reimport": seconds(controller["elapsed_seconds"]),
+        },
+        "cohort": {
+            "native_revision": imported["native_revision"],
+            "symbolica_revision": imported["symbolica_revision"],
+            "request_main_revision_label": imported["main_revision"],
+            "helper_executable": imported["helper_executable"],
+            "qualification": "Native helper does not link Vakint; its request Main revision is provenance, not the final public consumer cohort.",
+        },
+        "comparison_scope": "Every original source reference, exact coefficient and original ordered guard vector including multiplicity; final file reimport and shared state proved by the existing Native implementation. No cache payload is read by this metadata adapter.",
+    }
+
+
+def final_cached_q0(records, heavy, reference_report):
+    """Validate one final-file cached observation without deriving matched timings."""
+    report = records["final_q0_benchmark"]["raw_receipt"]
+    execution = records["final_q0_execution"]["raw_receipt"]
+    verified = records["final_q0_verification"]["raw_receipt"]
+    monitor = records["final_q0_monitor"]["raw_receipt"]
+    terminals = records["final_q0_terminals"]["raw_receipt"]
+    capture = records["final_q0_capture"]["raw_receipt"]
+    require(
+        report["schema"] == "vakint.qcd-ladder.benchmark.v1"
+        and execution["schema"] == "vakint.final-instrumented-q0-replay-execution.v1"
+        and verified["schema"]
+        == "vakint.shared-file-physical-q0-engineering-verification.v1"
+        and execution["status"] == verified["status"] == "PASS"
+        and execution["collector_exit_code"] == 0
+        and execution["collector_wait_is_authoritative"] is True
+        and execution["errors"] == execution["signals_sent"] == []
+        and report["reduction_completed"] is True
+        and report["retained_result_available"] is True
+        and report["performance_claim"] is False
+        and report["warm_requested"] is False
+        and report["projection"] == "zero-momentum-metric"
+        and report["input_mode"] == "prepared"
+        and report["fresh_native_preparation"] is False
+        and report["preparation_seconds"] is None
+        and report["input_sha256"] == reference_report["input_sha256"]
+        and report["source_commit"]
+        == report["compiled_cohort"]["main_revision"]
+        == execution["source_head"]
+        == verified["collector_source_head"]
+        and report["compiled_cohort"]["native_revision"]
+        == heavy["cohort"]["native_revision"]
+        and report["compiled_cohort"]["kernel_revision"]
+        == heavy["cohort"]["symbolica_revision"]
+        and report["end_to_end_scope"]
+        == "verified prepared-input loading through cold result serialization; original preparation excluded",
+        "final cached q0 lacks a completed single saved-input/source observation",
+    )
+    exact_scalar_parity(report, verified, records["final_q0_coefficient_proof"])
+    require(
+        verified["whole_ordered_guard_Atoms_equal"] is True
+        and verified["families_equal"] is True
+        and verified["cache_identity_unchanged"] is True
+        and verified["guard_count"]
+        == report["guards"]["count"]
+        == reference_report["guards"]["count"]
+        and verified["whole_canonical_input_sha256"] == report["input_sha256"]
+        and verified["whole_canonical_result_sha256"] == report["result_sha256"]
+        and verified["cache_identity"]
+        == report["cache_identity"]
+        == report["cache_identity_after"]
+        and report["cache_identity"]["cache_sha256"] == heavy["artifact"]["sha256"]
+        and verified["file_attachment"]["path"] == heavy["artifact"]["path"]
+        and verified["file_attachment"]["known_sha256"] == heavy["artifact"]["sha256"]
+        and verified["measured_public_reduction_seconds"] == report["reduction_seconds"]
+        and verified["pure_ibp_seconds"] is None
+        and verified["HEAVY_file_performance_claim"] is False
+        and all(
+            verified[key] == 0
+            for key in (
+                "numerical_evaluations",
+                "master_values_evaluated",
+                "IBP_runs_in_verifier",
+            )
+        )
+        and report["catalogue_closure"]["closed"] is True
+        and report["catalogue_closure"]["unknown_count"] == 0
+        and verified["running_capture_durably_closed"] is True
+        and verified["running_cache_read_delta"] is False
+        and report["running_cache_read_delta"] is False
+        and capture["read_delta"] is False
+        and report["saved_application_cache"]["native"]
+        == verified["actual_native_work"]
+        and report["saved_application_cache"]["persistent"]
+        == verified["actual_persistent_work_and_captures"]
+        and strict_closed_capture(capture, physical_execution=execution)[
+            "committed_records"
+        ]
+        == 0
+        and capture["path"] == verified["running_cache_path"],
+        "final cached q0 lacks full exact science/file identity or a closed preserved capture",
+    )
+    require(
+        report["stages"].keys() == verified["stages"].keys()
+        and all(
+            isinstance(samples, list)
+            and samples
+            and verified["stages"][phase]["samples"] == len(samples)
+            and verified["stages"][phase]["total_seconds"]
+            == sum(seconds(value) for value in samples)
+            for phase, samples in report["stages"].items()
+        ),
+        "final cached q0 stage samples differ from the scientific verifier",
+    )
+    require(
+        monitor["schema"] == "vakint.q0-monitor-responsiveness.v1"
+        and monitor["status"] == "PASS"
+        and monitor["fault_count"] == 0
+        and monitor["performance_claim"] is False
+        and monitor["actual_worker_terminal"] is True
+        and seconds(monitor["max_conservative_freshness_bound_seconds"]) <= 30
+        and all(
+            monitor["worker"][key] == execution["worker"][key]
+            for key in ("pid", "start_ticks")
+        )
+        and terminals["schema"] == "vakint.q0-monitor-original-three-pidfds-terminal.v1"
+        and terminals["all_three_original_PIDFDs_terminal"] is True
+        and terminals["signals_sent"] == []
+        and all(
+            terminals["terminal"][name]["original_PIDFD_terminal"] is True
+            and terminals["terminal"][name]["original"]
+            == terminals["registration"]["originals"][name]
+            and all(
+                terminals["terminal"][name]["original"][key] == original[key]
+                for key in ("pid", "start_ticks")
+            )
+            and (
+                "uid" not in original
+                or terminals["terminal"][name]["original"]["uid"] == original["uid"]
+            )
+            for name, original in (
+                ("worker", execution["worker"]),
+                ("controller", execution["controller"]),
+                ("guard", execution["guard_registration"]["guard"]),
+            )
+        ),
+        "final cached q0 lacks a fresh full-job monitor and actual original terminals",
+    )
+    return {
+        "sample_count": 1,
+        "seen_input": True,
+        "performance_eligible": False,
+        "cohort": report["compiled_cohort"],
+        "executable_sha256": report["executable_sha256"],
+        "file_sha256": heavy["artifact"]["sha256"],
+        "master_count": verified["master_identity_union_count"],
+        "scalar_coefficient_count": verified["full_scalar_coefficient_count"],
+        "ordered_public_guard_count": verified["guard_count"],
+        "observed_seconds": {
+            "input_loading": seconds(report["input_loading_seconds"]),
+            "data_loading": seconds(report["data_loading_seconds"]),
+            "cache_loading_authentication_decode_index": seconds(
+                report["cache_loading_seconds"]
+            ),
+            "public_reduction": seconds(report["reduction_seconds"]),
+            "prepared_input_to_serialization": seconds(report["end_to_end_seconds"]),
+            "controller_inclusive": seconds(
+                execution["controller_inclusive_elapsed_seconds"]
+            ),
+            "saved_native_call_inclusive": sum(
+                report["stages"]["saved_rule_application"]
+            ),
+            "final_coefficient_combination": sum(
+                report["stages"]["retained_catalogue_exact_combination"]
+            ),
+        },
+        "pure_ibp_seconds": None,
+        "isolated_sha_seconds": None,
+        "actual_native_work": verified["actual_native_work"],
+        "actual_persistent_work": verified["actual_persistent_work_and_captures"],
+        "monitor": monitor,
+        "identity_scope": verified["file_attachment"],
+        "timing_scope": "One n=1 monitored final-file cached saved-input process. Retain original phase boundaries and both inherent FILE SHA scans; loading/decode/hash/CAS are not isolated IBP. No matched median, causal cache-only speedup or unseen-input result.",
+    }
+
+
 def delivery_checkpoint(index_path, base):
     """Record delivery decisions and functional evidence, never performance medians."""
     index_path = Path(index_path).resolve()
     index = read(index_path)
+    required = {"light_freeze", "monitor", "authorization", "heavy_sources"}
+    publication_records = {"publication", "release_assets"}
+    heavy_records = {
+        "heavy_census",
+        "heavy_export",
+        "heavy_reimport",
+        "heavy_reimport_controller",
+        "heavy_reimport_terminals",
+    }
+    q0_records = {
+        "final_q0_benchmark",
+        "final_q0_execution",
+        "final_q0_verification",
+        "final_q0_coefficient_proof",
+        "final_q0_monitor",
+        "final_q0_terminals",
+        "final_q0_capture",
+    }
+    optional = (
+        publication_records
+        | heavy_records
+        | q0_records
+        | {"heldout_correctness", "published_consumers"}
+    )
+    keys = set(index["records"])
     require(
         index["schema"] == "vakint.q0-delivery-evidence-index.v1"
-        and set(index["records"])
-        == {"light_freeze", "monitor", "authorization", "heavy_sources"},
+        and required <= keys <= required | optional
+        and (not keys & publication_records or publication_records <= keys)
+        and (not keys & heavy_records or heavy_records <= keys)
+        and (not keys & q0_records or q0_records | heavy_records <= keys),
         "unknown delivery evidence index",
     )
     records = {
@@ -1081,7 +1480,7 @@ def delivery_checkpoint(index_path, base):
         == sources["total_stored_record_references"],
         "monitor freshness or closed HEAVY source inventory differs",
     )
-    return {
+    checkpoint = {
         "schema": "vakint.q0-delivery-checkpoint.v1",
         "performance_eligible": False,
         "cache_performance_winner": False,
@@ -1103,6 +1502,259 @@ def delivery_checkpoint(index_path, base):
         },
         "evidence": evidence(index_path),
     }
+    if publication_records <= keys:
+        publication = records["publication"]["raw_receipt"]
+        assets = records["release_assets"]["raw_receipt"]
+        version = publication["version"]
+        require(
+            publication["schema"] == "vakint.external-data.serial-publication.v1"
+            and publication["status"] == "PASS"
+            and [stage["stage"] for stage in publication["stages"]]
+            == ["source-push", "immutable-then-latest"]
+            and all(stage["exit_code"] == 0 for stage in publication["stages"])
+            and publication["immutable_release"]
+            == f"https://github.com/alphal00p/vakint-external-data/releases/tag/{version}"
+            and publication["latest_alias"]
+            == "https://github.com/alphal00p/vakint-external-data/releases/tag/data-latest"
+            and assets["schema"] == "vakint.frozen-light-full-release-pack-preflight.v1"
+            and assets["status"]
+            == "PASS_TWO_INDEPENDENT_FULL_PACKS_AND_LOCAL_PUBLISHER_PREFLIGHT"
+            and assets["source_commit"] == publication["source"]
+            and assets["checksums_byte_identical"] is True
+            and assets["local_publisher_checked_assets_both_passed"] is True
+            and assets["all_assets_below_decimal2GB"] is True,
+            "publication lacks successful ordered stages or source-bound release assets",
+        )
+        checkpoint["publication"] = {
+            "version": version,
+            "source_commit": publication["source"],
+            "immutable_release": publication["immutable_release"],
+            "latest_alias": publication["latest_alias"],
+            "release_manifest": assets["assets"]["manifest.json"],
+            "five_loop_pack": assets["assets"][
+                f"vakint-external-data-{version}-5L.tar.gz"
+            ],
+        }
+        del checkpoint["pending"]["published_release_url"]
+    if "published_consumers" in records:
+        require(
+            publication_records <= keys, "consumer proof lacks publication bindings"
+        )
+        consumers = records["published_consumers"]["raw_receipt"]
+        published = checkpoint["publication"]
+        require(
+            consumers["schema"] == "vakint.final-published-B-consumer-handoff.v1"
+            and consumers["status"]
+            == "PASS_ACTUAL_FRESH_IMMUTABLE_LATEST_OFFLINE_AND_CACHE_OPTOUT"
+            and consumers["publication"]["sha256"]
+            == records["publication"]["evidence"]["sha256"]
+            and consumers["data_source_revision"] == published["source_commit"]
+            and consumers["version"] == published["version"]
+            and consumers["release_manifest_sha256"]
+            == published["release_manifest"]["sha256"]
+            and consumers["five_loop_archive"]["sha256"]
+            == published["five_loop_pack"]["sha256"]
+            and consumers["five_loop_archive"]["bytes"]
+            == published["five_loop_pack"]["bytes"]
+            and all(
+                consumers["selected_B"][key] == freeze[freeze_key]
+                for key, freeze_key in (
+                    ("records", "selected_records"),
+                    ("compressed_bytes", "compressed_bytes"),
+                    ("decoded_bytes", "decoded_bytes"),
+                    ("sha256", "sha256"),
+                )
+            )
+            and consumers["performance_claim"] is False
+            and consumers["five_loop_reduction_evaluate_calls"] == 0
+            and consumers["signals_sent"] == []
+            and consumers["catalogue"]["actual_get_master_alias_checks"]
+            == consumers["catalogue"]["declared_uncomputed_5L"]
+            == 640,
+            "published consumer lacks authenticated release/cache/getter bindings",
+        )
+        stages = {row["label"]: row for row in consumers["stages"]}
+        expected = {
+            "fresh-immutable",
+            "fresh-latest",
+            "offline-immutable",
+            "offline-latest",
+            "offline-optout-control",
+        }
+        require(
+            len(consumers["stages"]) == len(expected) and stages.keys() == expected,
+            "published consumer stage inventory differs",
+        )
+        for label, row in stages.items():
+            reused = label.startswith("offline-")
+            prepared = label != "offline-optout-control"
+            origin = "reused" if reused else "downloaded"
+            require(
+                row["status"] == "PASS"
+                and row["original_worker_PIDFD_terminal"] is True
+                and row["load_source"] == origin
+                and row["loop_sources"] == {str(loop): origin for loop in range(1, 6)}
+                and row["load_prepared_caches"] is prepared
+                and row["loop_cache_attachments"]
+                == {str(loop): prepared for loop in range(1, 6)}
+                and (not reused or row["official_API_TCP_connects"] == 0)
+                and (
+                    row["file_statistics"]["records"] == freeze["selected_records"]
+                    if prepared
+                    else row["file_statistics"] is None
+                ),
+                "published download/reuse/cache-optout stage is incomplete",
+            )
+        checkpoint["published_consumers"] = {
+            "fresh_downloads": ["immutable", "latest"],
+            "fresh_process_offline_reuse": ["immutable", "latest"],
+            "cache_optout_control": True,
+            "all_640_get_master_checks": True,
+            "network_scope": consumers["network_scope"],
+            "qualified_community": consumers["qualified_community"],
+        }
+        del checkpoint["pending"]["actual_download_and_offline_reuse"]
+    if "heldout_correctness" in records:
+        heldout = records["heldout_correctness"]["raw_receipt"]
+        require(
+            heldout["schema"]
+            == "vakint.single-heldout-correctness-and-replay-handoff.v1"
+            and heldout["status"]
+            == "PASS_FULL_VALUE_PUBLIC_GUARD_SET_USED_MASTERS_FAMILIES_CATALOGUE"
+            and heldout["performance_claim"] is False
+            and heldout["eligibility_or_selection_authority"] is False
+            and heldout["full_unexported_result_families_map_claim"] is False
+            and heldout["literal_public_vector_order_claim"] is False
+            and heldout["LIGHT_B_sha256"] == freeze["sha256"]
+            and heldout["all_original_worker_controller_PIDFD_terminal"] is True
+            and heldout["strict_noReadDelta_both_closed"] is True
+            and all(
+                heldout[key] is True
+                for key in (
+                    "full_value_bytes_equal",
+                    "public_canonical_guard_SET_equal",
+                    "used_master_and_family_inventory_equal",
+                    "catalogue_closed_equal",
+                )
+            )
+            and [row["stage"] for row in heldout["rows"]] == ["reduction", "replay"],
+            "held-out case lacks qualified functional completion",
+        )
+        first, replay = heldout["rows"]
+        captures = {}
+        for row in heldout["rows"]:
+            capture_refs = [
+                item
+                for item in row["raw_outputs"]
+                if Path(item["path"]).name == "running-cache.json"
+            ]
+            require(
+                len(capture_refs) == 1, "held-out stage lacks one saved capture receipt"
+            )
+            capture = json_record(capture_refs[0], index_path.parent)
+            raw_capture = capture["raw_receipt"]
+            native = strict_closed_capture(raw_capture)
+            require(
+                native == row["closed_capture_report"]
+                and raw_capture["path"] == row["closed_capture_path"]
+                and raw_capture["read_delta"] is False,
+                "held-out saved capture differs from its closed stage receipt",
+            )
+            captures[row["stage"]] = capture
+        require(
+            all(
+                first[key] == replay[key]
+                for key in (
+                    "input_sha256",
+                    "full_value_sha256",
+                    "public_guard_set_sha256",
+                    "public_guard_set_count",
+                    "used_masters",
+                    "used_family_sha256",
+                    "raw_reduction_settings",
+                    "raw_reduction_settings_source",
+                    "conventions",
+                )
+            )
+            and all(
+                row["catalogue_closure"]["closed"] is True
+                and row["catalogue_closure"]["unknown_count"] == 0
+                and not row["signals_sent"]
+                for row in heldout["rows"]
+            )
+            and replay["cache_statistics"]["native"]["rule_applications"] == 0
+            and replay["cache_statistics"]["persistent"]["requested_root_hits"] > 0
+            and replay["closed_capture_report"]["committed_records"] == 0
+            and {
+                source["native_index_identity"]["sha256"]
+                for source in heldout["new_nonempty_capture_sources"]
+            }
+            <= {
+                source["native_index_identity"]["sha256"]
+                for source in sources["sources"]
+            },
+            "held-out exact output, replay or HEAVY capture membership differs",
+        )
+        checkpoint["heldout_correctness"] = {
+            "case_id": heldout["case_id"],
+            "source_commit": heldout["actual_source"],
+            "public_guard_set_count": first["public_guard_set_count"],
+            "master_count": len(first["used_masters"]),
+            "used_family_count": len(first["used_family_sha256"]),
+            "captured_records": first["closed_capture_report"]["committed_records"],
+            "replay_requested_root_hits": replay["cache_statistics"]["persistent"][
+                "requested_root_hits"
+            ],
+            "replay_rule_applications": replay["cache_statistics"]["native"][
+                "rule_applications"
+            ],
+            "strict_capture_receipts": captures,
+        }
+    if heavy_records <= keys:
+        checkpoint["final_heavy"] = final_heavy_cache(records)
+        for key in tuple(checkpoint["pending"]):
+            if key.startswith("final_heavy_"):
+                del checkpoint["pending"][key]
+    if q0_records <= keys:
+        reference_report = study["records"]["heavy"]["raw_receipt"][
+            "full_actual_benchmark_metadata"
+        ]
+        checkpoint["final_cached_q0"] = final_cached_q0(
+            records, checkpoint["final_heavy"], reference_report
+        )
+    if "acceptance" in index:
+        require(
+            q0_records | heavy_records <= keys
+            and set(index["acceptance"])
+            == {"heavy", "q0", "heavy_handoff", "q0_handoff"},
+            "final acceptance requires complete HEAVY and q0 evidence",
+        )
+        authority = {
+            name: json_record(item, index_path.parent)
+            for name, item in index["acceptance"].items()
+        }
+        native = authority["heavy"]["raw_receipt"]
+        science = authority["q0"]["raw_receipt"]
+        require(
+            native["schema"] == "vakint.root-final13-native-cache-acceptance.v1"
+            and native["status"]
+            == "PASS_ACTUAL_FINAL13_CENSUS_EXPORT_EXHAUSTIVE_REIMPORT"
+            and native["artifact"]["sha256"]
+            == checkpoint["final_heavy"]["artifact"]["sha256"]
+            and native["consolidated_handoff"]["sha256"]
+            == authority["heavy_handoff"]["evidence"]["sha256"]
+            and science["schema"]
+            == "vakint.root-final13-cached-q0-full-functional-acceptance.v1"
+            and science["status"]
+            == "PASS_ACTUAL_FULL55_58_146678_Q0_SCIENCE_MONITOR_AND_CACHE"
+            and science["handoff"]["sha256"]
+            == authority["q0_handoff"]["evidence"]["sha256"]
+            and science["actual_small_proofs"]["full_science_proof"]["sha256"]
+            == records["final_q0_verification"]["evidence"]["sha256"],
+            "final Root acceptance differs from the actual cache/science proof",
+        )
+        checkpoint["accepted_completion_authorities"] = authority
+    return checkpoint
 
 
 def main():

@@ -1,0 +1,129 @@
+{
+  "schema": "vakint.q0-delivery-evidence-index.v1",
+  "cache_file_engineering_run": "cache-file-engineering-188fbde4006e5a3d70df7fe9",
+  "historical_physical_run": "physical-capture-717e66516cdcb6f5bd04a30b",
+  "records": {
+    "light_freeze": {
+      "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/final-light-user-freeze-20261028/selection-freeze.json",
+      "bytes": 1621,
+      "sha256": "2cd0ce44d794d732f65efb68f11e04e18581b0bd9aac5a34759d54df800808c0"
+    },
+    "monitor": {
+      "path": "/shared/codex-1/vakint_rustred/workspace/validation/q0-monitor-responsiveness-20261028/final-functional-handoff.json",
+      "bytes": 12718,
+      "sha256": "90d2f587c465be33887043322f86ce4dec701ed45b7cf1b5d6775089fd0f5269"
+    },
+    "authorization": {
+      "path": "q0_delivery_authorization.json",
+      "bytes": 794,
+      "sha256": "33b4340a6fc3d86befb4927938e0807323e2b7fadd3f36cb8ae20799bbcb1e88"
+    },
+    "heavy_sources": {
+      "path": "/shared/codex-1/vakint_rustred/workspace/validation/heavy-final-union-inputs-13-20261028/source-manifest.final.json",
+      "bytes": 21641,
+      "sha256": "d719bc8c1d0ee4678befe5d91037a82a113d7f15eb732412c5dce5d1039f554e"
+    },
+    "publication": {
+      "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/final-external-publication-20261028/completion.json",
+      "bytes": 1308,
+      "sha256": "11fe824444fcaea64e5f43984241284f48c8eb87011da46e901a05c3307412c6"
+    },
+    "release_assets": {
+      "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/final-light-external-adoption-20261028/release-pack-preflight.json",
+      "bytes": 3854,
+      "sha256": "557d9ff1c98abf5aaf1703e005727ebc9450bb8ac0ce65af778deb3f5fe6307d"
+    },
+    "published_consumers": {
+      "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/final-data-community-consumer-20261028/published-consumer-final-handoff.json",
+      "bytes": 24542,
+      "sha256": "3ed46752bfbcad39572d005158552eca1fef6487e41f3976180f41dd0bbe7895"
+    },
+    "heldout_correctness": {
+      "path": "/shared/codex-1/vakint_rustred/workspace/validation/heldout-30527-correctness-e4af-20261028/final-correctness-handoff.json",
+      "bytes": 105764,
+      "sha256": "b4a65070e73af74d27a2a66511413b4af1d5db8459050a7408641eb777a0138e"
+    },
+    "heavy_census": {
+      "path": "/shared/codex-1/vakint_rustred/workspace/validation/heavy-final-union-inputs-13-20261028/census-run1/postflight.json",
+      "bytes": 12085,
+      "sha256": "177654422462883446d0ea62da5294c10ddb6325737bfe9c4a6ef84cd0b3de36"
+    },
+    "heavy_export": {
+      "path": "/shared/codex-1/vakint_rustred/workspace/validation/heavy-final-union-inputs-13-20261028/export-run1/postflight.json",
+      "bytes": 14575,
+      "sha256": "dd036cfa51b337857ace11eedaf438dfbee830cdb1013f1da2191644c67eb2bd"
+    },
+    "heavy_reimport": {
+      "path": "/shared/codex-1/vakint_rustred/workspace/validation/heavy-final-union-inputs-13-20261028/reimport-run1/native-reimport/receipt.json",
+      "bytes": 22161,
+      "sha256": "a9eb43f87622a217c81ba31b124a01c9d51262650b490a677ea71e1bfb7e39c9"
+    },
+    "heavy_reimport_controller": {
+      "path": "/shared/codex-1/vakint_rustred/workspace/validation/heavy-final-union-inputs-13-20261028/reimport-run1/controller/receipt.json",
+      "bytes": 2836,
+      "sha256": "a52f59aecd0f077ad1337ea0674589a7f860bd66066fce41cbb936c3a5a715f7"
+    },
+    "heavy_reimport_terminals": {
+      "path": "/shared/codex-1/vakint_rustred/workspace/validation/heavy-final-union-inputs-13-20261028/reimport-run1/original-pidfds-terminal.json",
+      "bytes": 1392,
+      "sha256": "94d78309d2149fc3645e679b8faf9f38621538335fadad7fda331807130ae139"
+    },
+    "final_q0_benchmark": {
+      "path": "/shared/codex-1/vakint_rustred/workspace/validation/q0-final13-cached-validation-20261028/cached-run1/run/benchmark.json",
+      "bytes": 46689,
+      "sha256": "d669a82ca6cccd929727b6a2f4a05800a163bee1e2ac188769b5336643d0bf2a"
+    },
+    "final_q0_execution": {
+      "path": "/shared/codex-1/vakint_rustred/workspace/validation/q0-final13-cached-validation-20261028/cached-run1/completion.json",
+      "bytes": 8155,
+      "sha256": "76e0d98a0cb56f330b2376428ce85bf42c7c7bd4057f8a35e235939ed2c5d83d"
+    },
+    "final_q0_verification": {
+      "path": "/shared/codex-1/vakint_rustred/workspace/validation/q0-final13-cached-validation-20261028/verify-run1/verification.json",
+      "bytes": 11629,
+      "sha256": "9fa79f331f9b38ed86204add993d4f399d4f54b173ce06dee88f568a6e7df037"
+    },
+    "final_q0_coefficient_proof": {
+      "path": "/shared/codex-1/vakint_rustred/workspace/validation/q0-final13-cached-validation-20261028/verify-run1/full58-scalar-proof.json",
+      "bytes": 26233,
+      "sha256": "06d8872b7f65e91746ff30562aab871588d41c3eaf72da40fd1abfab9bc93d64"
+    },
+    "final_q0_monitor": {
+      "path": "/shared/codex-1/vakint_rustred/workspace/validation/q0-final13-cached-validation-20261028/cached-run1/monitor-summary.json",
+      "bytes": 2879,
+      "sha256": "21fd0cc3307554822ac097272357d62354aaa32cadb0135587a774d5686a5694"
+    },
+    "final_q0_terminals": {
+      "path": "/shared/codex-1/vakint_rustred/workspace/validation/q0-final13-cached-validation-20261028/all-original-pidfds-terminal.json",
+      "bytes": 2401,
+      "sha256": "6e7a1f9c0725769d2ebcf518c036660174d5bc7a0cf6c6a29f4006a106e42e23"
+    },
+    "final_q0_capture": {
+      "path": "/shared/codex-1/vakint_rustred/workspace/validation/q0-final13-cached-validation-20261028/cached-run1/run/running-cache.json",
+      "bytes": 8262,
+      "sha256": "48037704388cab63bafe7db57d20dd11187893667239a907ba14699f08a9b319"
+    }
+  },
+  "acceptance": {
+    "heavy": {
+      "path": "/shared/codex-1/vakint_rustred/workspace/validation/heavy-final-union-inputs-13-20261028/root-final-native-acceptance.json",
+      "bytes": 6853,
+      "sha256": "a51a0e9b1018c1715bc2de432e6ac945821436aaec97f74d77d2405a325badbc"
+    },
+    "q0": {
+      "path": "/shared/codex-1/vakint_rustred/workspace/validation/q0-final13-cached-validation-20261028/root-final-functional-acceptance.json",
+      "bytes": 4563,
+      "sha256": "2b883c777f62786279a4007a41d6e840063a563dbb32311c936863f02983bacf"
+    },
+    "heavy_handoff": {
+      "path": "/shared/codex-1/vakint_rustred/workspace/validation/heavy-final-union-inputs-13-20261028/final-heavy-handoff.json",
+      "bytes": 35223,
+      "sha256": "dfaaffa3e3ef4ea77a1b1e829dcae699166c98872017afe12df687397420b9f5"
+    },
+    "q0_handoff": {
+      "path": "/shared/codex-1/vakint_rustred/workspace/validation/q0-final13-cached-validation-20261028/final-functional-handoff.json",
+      "bytes": 28954,
+      "sha256": "ff81f1ca14b20c12c9a2c5d5672b87d8dec1c063539494d20fe6b3e0a03cd990"
+    }
+  }
+}

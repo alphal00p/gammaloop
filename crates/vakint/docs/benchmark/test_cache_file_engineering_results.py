@@ -580,6 +580,441 @@ class DeliveryCheckpointContracts(unittest.TestCase):
             merged["delivery_checkpoints"][selected]["performance_eligible"]
         )
 
+    def add_publication(self):
+        self.documents.update(
+            publication={
+                "schema": "vakint.external-data.serial-publication.v1",
+                "status": "PASS",
+                "source": "1" * 40,
+                "version": "v0.1.2",
+                "immutable_release": "https://github.com/alphal00p/vakint-external-data/releases/tag/v0.1.2",
+                "latest_alias": "https://github.com/alphal00p/vakint-external-data/releases/tag/data-latest",
+                "stages": [
+                    {"stage": "source-push", "exit_code": 0},
+                    {"stage": "immutable-then-latest", "exit_code": 0},
+                ],
+            },
+            release_assets={
+                "schema": "vakint.frozen-light-full-release-pack-preflight.v1",
+                "status": "PASS_TWO_INDEPENDENT_FULL_PACKS_AND_LOCAL_PUBLISHER_PREFLIGHT",
+                "source_commit": "1" * 40,
+                "checksums_byte_identical": True,
+                "local_publisher_checked_assets_both_passed": True,
+                "all_assets_below_decimal2GB": True,
+                "assets": {
+                    "manifest.json": {"bytes": 10, "sha256": "2" * 64},
+                    "vakint-external-data-v0.1.2-5L.tar.gz": {
+                        "bytes": 20,
+                        "sha256": "3" * 64,
+                    },
+                },
+            },
+        )
+
+    def test_publication_does_not_establish_download_or_offline_reuse(self):
+        self.add_publication()
+        run = adapter.delivery_checkpoint(self.index(), self.base)
+        self.assertEqual(run["publication"]["version"], "v0.1.2")
+        self.assertNotIn("published_release_url", run["pending"])
+        self.assertIsNone(run["pending"]["actual_download_and_offline_reuse"])
+        self.assertIsNone(run["pending"]["final_heavy_unique_records"])
+
+    def test_rejects_reversed_publication_order_and_unbound_asset_source(self):
+        self.add_publication()
+        self.documents["publication"]["stages"].reverse()
+        with self.assertRaisesRegex(ValueError, "ordered stages"):
+            adapter.delivery_checkpoint(self.index(), self.base)
+        self.documents["publication"]["stages"].reverse()
+        self.documents["release_assets"]["source_commit"] = "0" * 40
+        with self.assertRaisesRegex(ValueError, "source-bound release assets"):
+            adapter.delivery_checkpoint(self.index(), self.base)
+
+    def test_rejects_partial_final_heavy_or_q0_proof_groups(self):
+        for key in ("heavy_export", "final_q0_benchmark"):
+            with self.subTest(key=key):
+                self.documents[key] = {"synthetic_incomplete_group": True}
+                with self.assertRaisesRegex(
+                    ValueError, "unknown delivery evidence index"
+                ):
+                    adapter.delivery_checkpoint(self.index(), self.base)
+                del self.documents[key]
+
+
+class StrictClosedCaptureContracts(unittest.TestCase):
+    @staticmethod
+    def capture(**native_fields):
+        native = {
+            "schema": "rustred.running-application-cache.v1",
+            "closed": True,
+            "writer_error": None,
+            "last_error": None,
+            "capture_metadata_exhausted": False,
+            "generation": 1,
+            "accepted_records": 2,
+            "committed_records": 2,
+            "pending_records": 0,
+            "pending_bytes": 0,
+            "capture_skipped_records": 0,
+            **native_fields,
+        }
+        return {
+            "terminal": True,
+            "flush_complete": True,
+            "flush_error": None,
+            "snapshot_error": None,
+            "reduction_error": None,
+            "report": native,
+            "flush_report": copy.deepcopy(native),
+            "close": {"error": None, "report": copy.deepcopy(native)},
+            "snapshot": {"schema": "rustred.running-application-cache-snapshot.v1"},
+        }
+
+    def test_clean_empty_replay_and_nonempty_capture_are_valid(self):
+        for count in (0, 2):
+            capture = self.capture(accepted_records=count, committed_records=count)
+            self.assertEqual(
+                adapter.strict_closed_capture(capture)["committed_records"], count
+            )
+
+    def test_rejects_uncommitted_skipped_exhausted_or_pending_records(self):
+        for key, value in (
+            ("accepted_records", 3),
+            ("capture_skipped_records", 1),
+            ("capture_metadata_exhausted", True),
+            ("pending_records", 1),
+            ("pending_bytes", 1),
+            ("closed", False),
+        ):
+            # All report copies agree, so the strict invariant must reject this.
+            with (
+                self.subTest(key=key),
+                self.assertRaisesRegex(ValueError, "clean flush/snapshot/close"),
+            ):
+                adapter.strict_closed_capture(self.capture(**{key: value}))
+
+    def test_rejects_writer_and_last_errors(self):
+        for key in ("writer_error", "last_error"):
+            with (
+                self.subTest(key=key),
+                self.assertRaisesRegex(ValueError, "clean flush/snapshot/close"),
+            ):
+                adapter.strict_closed_capture(self.capture(**{key: "synthetic fault"}))
+
+    def test_rejects_flush_snapshot_reduction_and_close_errors(self):
+        for key in ("flush_error", "snapshot_error", "reduction_error", "close"):
+            with self.subTest(key=key):
+                capture = self.capture()
+                if key == "close":
+                    capture["close"]["error"] = "synthetic close fault"
+                else:
+                    capture[key] = "synthetic fault"
+                with self.assertRaisesRegex(ValueError, "clean flush/snapshot/close"):
+                    adapter.strict_closed_capture(capture)
+
+    def test_missing_error_field_is_not_an_explicit_success(self):
+        capture = self.capture()
+        del capture["snapshot_error"]
+        with self.assertRaisesRegex(ValueError, "clean flush/snapshot/close"):
+            adapter.strict_closed_capture(capture)
+
+    def test_missing_reduction_error_requires_successful_physical_execution(self):
+        capture = self.capture()
+        del capture["reduction_error"]
+        with self.assertRaisesRegex(ValueError, "clean flush/snapshot/close"):
+            adapter.strict_closed_capture(capture)
+        execution = {
+            "schema": "vakint.final-instrumented-q0-replay-execution.v1",
+            "status": "PASS",
+            "collector_exit_code": 0,
+            "collector_wait_is_authoritative": True,
+            "errors": [],
+            "signals_sent": [],
+        }
+        self.assertEqual(
+            adapter.strict_closed_capture(capture, physical_execution=execution),
+            capture["report"],
+        )
+        with self.assertRaisesRegex(ValueError, "clean flush/snapshot/close"):
+            adapter.strict_closed_capture(
+                capture, physical_execution={**execution, "collector_exit_code": 1}
+            )
+        capture["reduction_error"] = "synthetic explicit reduction failure"
+        with self.assertRaisesRegex(ValueError, "clean flush/snapshot/close"):
+            adapter.strict_closed_capture(capture, physical_execution=execution)
+
+
+class FinalCacheCompletionContracts(unittest.TestCase):
+    """Synthetic bounded receipts; absent cache/physics paths must never be opened."""
+
+    @staticmethod
+    def record(value, sha="5" * 64):
+        return {"evidence": {"sha256": sha}, "raw_receipt": value}
+
+    def setUp(self):
+        self.fixture = q0_fixtures.EngineeringQ0Contracts()
+        self.fixture.setUp()
+        self.addCleanup(self.fixture.doCleanups)
+        rows = [
+            {
+                "id": name,
+                "directory": f"/absent/synthetic-{name}",
+                "generation": 1,
+                "native_index_identity": {"sha256": name},
+                "stored_record_references": count,
+            }
+            for name, count in (("one", 1), ("two", 2))
+        ]
+        native_origin = {"pid": 77, "start_ticks": 111, "uid": 1}
+        controller_origin = {"pid": 88, "start_ticks": 222, "uid": 1}
+        identity = {
+            "compressed_bytes": 10,
+            "decoded_bytes": 20,
+            "compressed_blake3": [1] * 32,
+            "decoded_blake3": [2] * 32,
+        }
+        artifact = {
+            "path": "/absent/synthetic-heavy.rrcache.gz",
+            "sha256": "f" * 64,
+            "compressed_bytes": 10,
+            "decoded_bytes": 20,
+            "typed_Native_identity": identity,
+        }
+        census = {
+            "schema": "vakint.final-thirteen-source-census-postflight.v1",
+            "status": "PASS_ACTUAL_FULL13_CENSUS_ORIGINAL_PIDFDS_TERMINAL",
+            "source_count": 2,
+            "input_all_version_references": 3,
+            "unique_records": 2,
+            "identical_duplicates": 1,
+            "full_row_conflicts": 0,
+            "original12_source_rows_and_seals_unchanged_superset": True,
+            "Native_seconds": 1.0,
+            "controller_elapsed_seconds": 1.5,
+        }
+        exported = {
+            "schema": "vakint.final-thirteen-source-export-postflight.v1",
+            "status": "PASS_ACTUAL_ONE_FINAL13_EXPORT_ORIGINAL_PIDFDS_TERMINAL",
+            "source_manifest": {"sha256": "8" * 64},
+            "actual_accepted_census": {"sha256": "7" * 64},
+            "request": {"sha256": "6" * 64},
+            "source_count": 2,
+            "all13_input_references": 3,
+            "actual_unique_records": 2,
+            "identical_duplicates": 1,
+            "actual_writer_statistics": {"records": 2, "unique_coefficients": 4},
+            "all13_source_seals_unchanged_and_equal_actual_census": True,
+            "original12_source_rows_and_index_seals_unchanged_superset": True,
+            "all_census_record_duplicate_coefficient_payload_and_row_spool_metrics_match": True,
+            "artifact": artifact,
+            "Native_seconds": 2.0,
+            "controller_elapsed_seconds": 2.5,
+        }
+        imported = {
+            "schema": "vakint.heavy-native-phase.v1",
+            "phase": "reimport",
+            "status": "PASS",
+            "performance_claim": False,
+            "request_sha256": "6" * 64,
+            "helper_executable": {"sha256": "4" * 64},
+            "pid": native_origin["pid"],
+            "source_seals": [
+                {"source_id": row["id"], **{k: v for k, v in row.items() if k != "id"}}
+                for row in rows
+            ],
+            "native_revision": "c" * 40,
+            "symbolica_revision": "d" * 40,
+            "main_revision": "0" * 40,
+            "seconds": 3.0,
+            "details": {
+                "input_records": 3,
+                "all_exact_record_values_and_ordered_guards_equal": True,
+                "state_imports_shared": True,
+                "cache_path": artifact["path"],
+                "cache_sha256": artifact["sha256"],
+                "cache_identity": identity,
+                "source_visits": [
+                    {
+                        "source_id": row["id"],
+                        "emitted_references": row["stored_record_references"],
+                    }
+                    for row in rows
+                ],
+            },
+        }
+        controller = {
+            "schema": "vakint.heavy-finalization-controller-phase.v1",
+            "phase": "reimport",
+            "status": "PASS",
+            "request_sha256": "6" * 64,
+            "child_returncode": 0,
+            "signals_sent": [],
+            "driver_receipt_sha256": "5" * 64,
+            "helper_sha256": "4" * 64,
+            "child": native_origin,
+            "controller": controller_origin,
+            "elapsed_seconds": 3.5,
+        }
+        terminal = {
+            "schema": "vakint.final-heavy-phase-original-pidfds-terminal.v1",
+            "phase": "reimport",
+            "all_original_PIDFDs_terminal": True,
+            "signals_sent": [],
+            "terminal": {
+                name: {"original_PIDFD_terminal": True, "original": origin}
+                for name, origin in (
+                    ("helper", native_origin),
+                    ("controller", controller_origin),
+                )
+            },
+        }
+        self.heavy_records = {
+            "heavy_sources": self.record(
+                {
+                    "source_count": 2,
+                    "total_stored_record_references": 3,
+                    "sources": rows,
+                },
+                "8" * 64,
+            ),
+            "heavy_census": self.record(census, "7" * 64),
+            "heavy_export": self.record(exported),
+            "heavy_reimport": self.record(imported),
+            "heavy_reimport_controller": self.record(controller),
+            "heavy_reimport_terminals": self.record(terminal),
+        }
+        self.heavy = adapter.final_heavy_cache(self.heavy_records)
+        observation = copy.deepcopy(self.fixture.observations["after_off"])
+        report, execution, verified = (
+            observation[key] for key in ("benchmark", "execution", "verification")
+        )
+        report.update(
+            warm_requested=False,
+            executable_sha256="9" * 64,
+            input_loading_seconds=0.1,
+            data_loading_seconds=0.2,
+            cache_loading_seconds=0.3,
+            cache_identity={"cache_sha256": artifact["sha256"]},
+            cache_identity_after={"cache_sha256": artifact["sha256"]},
+        )
+        report["compiled_cohort"].update(
+            native_revision="c" * 40, kernel_revision="d" * 40
+        )
+        worker, parent, guard = (
+            {"pid": pid, "start_ticks": pid * 10, "uid": 1} for pid in (101, 102, 103)
+        )
+        execution.update(
+            worker=worker,
+            controller=parent,
+            guard_registration={
+                "guard": {key: guard[key] for key in ("pid", "start_ticks")}
+            },
+            controller_inclusive_elapsed_seconds=4.0,
+        )
+        capture = StrictClosedCaptureContracts.capture(
+            accepted_records=0, committed_records=0
+        )
+        del capture[
+            "reduction_error"
+        ]  # Physical collector schema; execution proves success.
+        capture["path"] = "/absent/synthetic-empty-capture"
+        capture["read_delta"] = False
+        verified.update(
+            schema="vakint.shared-file-physical-q0-engineering-verification.v1",
+            cache_identity=report["cache_identity"],
+            file_attachment={
+                "path": artifact["path"],
+                "known_sha256": artifact["sha256"],
+            },
+            running_cache_path=capture["path"],
+            running_cache_read_delta=False,
+            running_capture_durably_closed=True,
+            actual_native_work={"rule_applications": 0},
+            actual_persistent_work_and_captures={"route_hits": 1, "misses": 0},
+        )
+        report["running_cache_read_delta"] = False
+        report["saved_application_cache"] = {
+            "native": verified["actual_native_work"],
+            "persistent": verified["actual_persistent_work_and_captures"],
+        }
+        monitor = {
+            "schema": "vakint.q0-monitor-responsiveness.v1",
+            "status": "PASS",
+            "fault_count": 0,
+            "performance_claim": False,
+            "actual_worker_terminal": True,
+            "worker": worker,
+            "max_conservative_freshness_bound_seconds": 1.0,
+        }
+        q0_terminals = {
+            "schema": "vakint.q0-monitor-original-three-pidfds-terminal.v1",
+            "all_three_original_PIDFDs_terminal": True,
+            "signals_sent": [],
+            "registration": {
+                "originals": copy.deepcopy(
+                    {"worker": worker, "controller": parent, "guard": guard}
+                )
+            },
+            "terminal": {
+                name: {"original_PIDFD_terminal": True, "original": origin}
+                for name, origin in (
+                    ("worker", worker),
+                    ("controller", parent),
+                    ("guard", guard),
+                )
+            },
+        }
+        self.q0_records = {
+            "final_q0_benchmark": self.record(report),
+            "final_q0_execution": self.record(execution),
+            "final_q0_verification": self.record(verified),
+            "final_q0_monitor": self.record(monitor),
+            "final_q0_terminals": self.record(q0_terminals),
+            "final_q0_capture": self.record(capture),
+            "final_q0_coefficient_proof": {
+                "evidence": verified["full58_proof"],
+                "raw_receipt": observation["coefficient_proof"],
+            },
+        }
+        self.reference = copy.deepcopy(report)
+
+    def test_final_file_observation_is_single_and_never_a_matched_median(self):
+        result = adapter.final_cached_q0(self.q0_records, self.heavy, self.reference)
+        self.assertEqual(result["sample_count"], 1)
+        self.assertFalse(result["performance_eligible"])
+        self.assertIsNone(result["pure_ibp_seconds"])
+
+    def test_rejects_false_original_native_guard_equality(self):
+        self.heavy_records["heavy_reimport"]["raw_receipt"]["details"][
+            "all_exact_record_values_and_ordered_guards_equal"
+        ] = False
+        with self.assertRaisesRegex(ValueError, "ordered-guard round-trip"):
+            adapter.final_heavy_cache(self.heavy_records)
+
+    def test_rejects_final_file_identity_or_collector_cohort_mismatch(self):
+        self.heavy["artifact"]["sha256"] = "0" * 64
+        with self.assertRaisesRegex(ValueError, "science/file identity"):
+            adapter.final_cached_q0(self.q0_records, self.heavy, self.reference)
+        self.heavy["artifact"]["sha256"] = "f" * 64
+        self.q0_records["final_q0_benchmark"]["raw_receipt"]["compiled_cohort"][
+            "native_revision"
+        ] = "0" * 40
+        with self.assertRaisesRegex(ValueError, "saved-input/source observation"):
+            adapter.final_cached_q0(self.q0_records, self.heavy, self.reference)
+
+    def test_rejects_missing_full_scalar_parity(self):
+        self.q0_records["final_q0_verification"]["raw_receipt"][
+            "full58_scalar_coefficient_parity"
+        ] = False
+        with self.assertRaisesRegex(ValueError, "coefficient proof"):
+            adapter.final_cached_q0(self.q0_records, self.heavy, self.reference)
+
+    def test_guard_uid_must_match_authenticated_original_registration(self):
+        self.q0_records["final_q0_terminals"]["raw_receipt"]["terminal"]["guard"][
+            "original"
+        ]["uid"] = 99
+        with self.assertRaisesRegex(ValueError, "actual original terminals"):
+            adapter.final_cached_q0(self.q0_records, self.heavy, self.reference)
+
 
 if __name__ == "__main__":
     unittest.main()
