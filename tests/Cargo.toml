@@ -13,6 +13,8 @@ path = "tests/test_python_api.rs"
 required-features = ["python-api-tests"]
 
 [dependencies]
+alphal00p-persistence = { workspace = true }
+alphal00p-workspace = { workspace = true }
 bincode = { workspace = true }
 color-eyre = { workspace = true }
 colored = { workspace = true }

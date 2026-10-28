@@ -423,13 +423,7 @@ mod tests {
                 keep_sources: false,
                 mode: None,
             }
-            .run(
-                &mut state,
-                temp.path(),
-                false,
-                &cli_settings.global,
-                &runtime,
-            )?;
+            .run(&mut state, temp.path(), &cli_settings.global, &runtime)?;
 
             // Evaluation must use the generated graph's mode, even if subsequent
             // commands select vacuum defaults for future generation.

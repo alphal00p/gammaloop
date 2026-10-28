@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use alphal00p_docs_builder::WatchRequest;
 use alphal00p_docs_builder::{BuildChannel, BuildRequest, RustdocCacheMode, SiteBuilder};
 use clap::{Parser, Subcommand};
+use eyre::Result;
 
 #[derive(Debug, Parser)]
 #[command(about = "Build and validate the alphal00p multi-product documentation")]
@@ -27,8 +28,8 @@ enum Command {
         /// Root of the ready-to-deploy Pages artifact.
         #[arg(long, default_value = "target/alphal00p-docs")]
         output: PathBuf,
-        /// Exact Git tag used when channel is snapshot.
-        #[arg(long, env = "GITHUB_REF_NAME")]
+        /// Exact Git tag required when channel is snapshot.
+        #[arg(long)]
         snapshot_tag: Option<String>,
         /// Skip exhaustive cargo rustdoc sidecars.
         #[arg(long)]
@@ -70,7 +71,7 @@ enum Command {
     },
 }
 
-fn main() -> eyre::Result<()> {
+fn main() -> Result<()> {
     let cli = Cli::parse();
     let builder = SiteBuilder::discover()?;
 
@@ -112,5 +113,71 @@ fn main() -> eyre::Result<()> {
             serve: !no_serve,
             include_rustdoc: !skip_rustdoc,
         }),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::env;
+    use std::process::Command as ProcessCommand;
+
+    use super::*;
+
+    #[test]
+    fn snapshot_tags_are_explicit_even_in_ci() {
+        const CASE: &str = "ALPHAL00P_DOCS_CLI_TEST_REF";
+        if env::var_os(CASE).is_none() {
+            // Child environments avoid mutating the parallel test runner's globals.
+            for reference in ["main", "feature/docs", "v0.3.4"] {
+                let output = ProcessCommand::new(env::current_exe().unwrap())
+                    .args(["--exact", "tests::snapshot_tags_are_explicit_even_in_ci"])
+                    .env(CASE, reference)
+                    .env("GITHUB_REF_NAME", reference)
+                    .output()
+                    .unwrap();
+                assert!(output.status.success(), "reference {reference}: {output:?}");
+                let stdout = String::from_utf8(output.stdout).unwrap();
+                let summary = stdout.lines().find(|line| line.starts_with("test result:"));
+                assert!(
+                    summary
+                        .is_some_and(|line| line
+                            .starts_with("test result: ok. 1 passed; 0 failed; 0 ignored;")),
+                    "expected exactly one subprocess test for {reference}: {stdout}"
+                );
+            }
+            return;
+        }
+
+        for args in [
+            vec!["docs", "build"],
+            vec!["docs", "build", "--channel", "latest"],
+            vec!["docs", "build", "--channel", "snapshot"],
+        ] {
+            let cli = Cli::try_parse_from(args).unwrap();
+            let Command::Build { snapshot_tag, .. } = cli.command else {
+                panic!("expected a build request");
+            };
+            assert_eq!(snapshot_tag, None);
+        }
+
+        let cli = Cli::try_parse_from([
+            "docs",
+            "build",
+            "--channel",
+            "snapshot",
+            "--snapshot-tag",
+            "linnet-v1.2.3",
+        ])
+        .unwrap();
+        let Command::Build {
+            channel,
+            snapshot_tag,
+            ..
+        } = cli.command
+        else {
+            panic!("expected a build request");
+        };
+        assert_eq!(channel, BuildChannel::Snapshot);
+        assert_eq!(snapshot_tag.as_deref(), Some("linnet-v1.2.3"));
     }
 }

@@ -14,7 +14,9 @@ use std::{
 use color_eyre::{Result, Section};
 use eyre::{Context, eyre};
 use std::collections::BTreeMap;
+use std::result::Result as StdResult;
 use thiserror::Error;
+use toml::ser::Error as TomlEncodeError;
 
 use std::{fs, fs::File, io::Read};
 
@@ -94,7 +96,67 @@ fn schema_ref() -> String {
         .unwrap_or_else(|| format!("v{}", env!("CARGO_PKG_VERSION")))
 }
 
+/// Whether smart TOML serialization includes values equal to their defaults.
+/// See [`SmartSerde::to_toml`] for an example of both modes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SerdeDefaults {
+    /// Include default-valued fields so persisted settings record the full configuration.
+    Include,
+    /// Omit default-valued fields using their serialization predicates.
+    Omit,
+}
+
 pub trait SmartSerde: Serialize + DeserializeOwned {
+    /// Serialize TOML with an optional editor schema and explicit default visibility.
+    /// Schema reference resolution precedes the defaults guard; only serialization
+    /// holds the guard, and no output file is opened or written here.
+    /// Callers must not already hold a [`ShowDefaultsGuard`].
+    ///
+    /// # Errors
+    /// Returns the TOML encoder error if the value cannot be represented as TOML.
+    ///
+    /// ```
+    /// # use gammalooprs::settings::RuntimeSettings;
+    /// # use gammalooprs::utils::serde_utils::{SerdeDefaults, SmartSerde};
+    /// # use toml::ser::Error as TomlEncodeError;
+    /// let settings = RuntimeSettings::default();
+    /// let persisted = settings.to_toml(SerdeDefaults::Include)?;
+    /// let compact = settings.to_toml(SerdeDefaults::Omit)?;
+    /// assert!(persisted.starts_with("#:schema "));
+    /// assert!(persisted.len() > compact.len());
+    /// # Ok::<(), TomlEncodeError>(())
+    /// ```
+    fn to_toml(&self, defaults: SerdeDefaults) -> StdResult<String, TomlEncodeError> {
+        let mut text = self
+            .schema_path()
+            .map(|schema| format!("#:schema {}\n", schema.display()))
+            .unwrap_or_default();
+        let serialized = {
+            let _guard = ShowDefaultsGuard::new(defaults == SerdeDefaults::Include);
+            toml::to_string_pretty(self)?
+        };
+        text.push_str(&serialized);
+        Ok(text)
+    }
+
+    /// Write JSON, YAML, or TOML according to the destination's extension.
+    /// TOML always includes defaults and any editor schema reference; JSON and YAML
+    /// follow the ambient defaults setting. Callers must not already hold a
+    /// [`ShowDefaultsGuard`]: TOML serialization acquires this non-reentrant guard.
+    /// Missing parent directories are created; existing files require `override_existing`.
+    ///
+    /// # Errors
+    /// Returns filesystem, missing or unsupported extension, and serialization errors.
+    /// File creation or truncation occurs before serialization, so failure may leave
+    /// an incomplete file. Callers needing atomic publication must stage the output.
+    ///
+    /// ```no_run
+    /// # use color_eyre::Report;
+    /// # use gammalooprs::settings::RuntimeSettings;
+    /// # use gammalooprs::utils::serde_utils::SmartSerde;
+    /// RuntimeSettings::default().to_file("settings/runtime.toml", false)?;
+    /// # Ok::<(), Report>(())
+    /// ```
     fn to_file(&self, file_path: impl AsRef<Path>, override_existing: bool) -> Result<()> {
         if let Some(parent) = file_path.as_ref().parent()
             && !parent.as_os_str().is_empty()
@@ -116,16 +178,7 @@ pub trait SmartSerde: Serialize + DeserializeOwned {
                     "yaml" | "yml" => serde_yaml::to_writer(f, self)
                         .map_err(|e| eyre!(format!("Error serializing yaml: {}", e)))?,
                     "toml" => {
-                        let mut toml_string = if let Some(schema_path) = self.has_schema_path(true)
-                        {
-                            let schema_path = schema_path?;
-                            format!("#:schema {}\n", schema_path.display())
-                        } else {
-                            String::new()
-                        };
-
-                        toml_string.push_str(&toml::to_string_pretty(&self)?);
-
+                        let toml_string = self.to_toml(SerdeDefaults::Include)?;
                         f.write_all(toml_string.as_bytes())?;
                     }
                     _ => return Err(eyre!(format!("Unknown file extension: {}", ext))),
@@ -233,8 +286,10 @@ pub trait SmartSerde: Serialize + DeserializeOwned {
         }
     }
 
-    fn has_schema_path(&self, _online: bool) -> Option<Result<PathBuf>> {
-        Option::None
+    /// Return the editor schema reference, if this type defines one.
+    /// The reference is included by [`Self::to_toml`], as shown in its example.
+    fn schema_path(&self) -> Option<PathBuf> {
+        None
     }
 }
 
@@ -247,40 +302,56 @@ impl SmartSerde for Model {}
 // impl SmartSerde for Schema {}
 
 impl SmartSerde for GlobalSettings {
-    fn has_schema_path(&self, online: bool) -> Option<Result<PathBuf>> {
-        Some(get_schema_folder(online).map(|f| f.join("global.json")))
+    fn schema_path(&self) -> Option<PathBuf> {
+        Some(get_schema_folder().join("global.json"))
     }
 }
 impl SmartSerde for RuntimeSettings {
-    fn has_schema_path(&self, online: bool) -> Option<Result<PathBuf>> {
-        Some(get_schema_folder(online).map(|f| f.join("runtime.json")))
+    fn schema_path(&self) -> Option<PathBuf> {
+        Some(get_schema_folder().join("runtime.json"))
     }
 }
 
-pub fn get_schema_folder(online: bool) -> Result<PathBuf> {
+/// Resolve the schema reference without creating directories or fetching schemas.
+/// Uses `GAMMALOOP_SCHEMA_PATH` when set, otherwise the versioned online reference.
+/// See [`SmartSerde::to_toml`] for its use in serialized settings.
+pub fn get_schema_folder() -> PathBuf {
+    env::var("GAMMALOOP_SCHEMA_PATH")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| {
+            let schema_ref = schema_ref();
+            PathBuf::from(format!(
+                "https://raw.githubusercontent.com/alphal00p/gammaloop/{schema_ref}/assets/schemas"
+            ))
+        })
+}
+
+/// Create the local schema export directory, honoring `GAMMALOOP_SCHEMA_PATH`.
+///
+/// # Errors
+/// Fails if the home directory cannot be determined or the directory cannot be created.
+///
+/// ```no_run
+/// # use color_eyre::Report;
+/// # use gammalooprs::utils::serde_utils;
+/// let directory = serde_utils::get_local_schema_folder()?;
+/// assert!(directory.is_dir());
+/// # Ok::<(), Report>(())
+/// ```
+pub fn get_local_schema_folder() -> Result<PathBuf> {
     let folder = match env::var("GAMMALOOP_SCHEMA_PATH") {
         Ok(path) => PathBuf::from(path),
-        Err(_) => {
-            if online {
-                let schema_ref = schema_ref();
-                PathBuf::from(format!(
-                    "https://raw.githubusercontent.com/alphal00p/gammaloop/{schema_ref}/assets/schemas"
-                ))
-            } else {
-                match home_dir() {
-                    Some(home) => home.join(".config").join("gammaloop").join("schemas"),
-                    None => {
-                        return Err(eyre!("Could not determine home directory")).with_suggestion(
-                            || "Set the GAMMALOOP_SCHEMA_PATH environment variable",
-                        );
-                    }
-                }
+        Err(_) => match home_dir() {
+            Some(home) => home.join(".config").join("gammaloop").join("schemas"),
+            None => {
+                return Err(eyre!("Could not determine home directory"))
+                    .with_suggestion(|| "Set the GAMMALOOP_SCHEMA_PATH environment variable");
             }
-        }
+        },
     };
 
-    if !online && !folder.exists() {
-        std::fs::create_dir_all(&folder).wrap_err_with(|| {
+    if !folder.exists() {
+        fs::create_dir_all(&folder).wrap_err_with(|| {
             format!(
                 "Could not create schema folder at {}",
                 folder.to_string_lossy()
@@ -455,14 +526,67 @@ pub fn is_default_rotation_axis(
 #[cfg(test)]
 mod tests {
     use crate::utils::{load_generic_model, test_utils::output_dir};
+    use serde::{Deserialize, Serialize};
+    use std::collections::BTreeMap;
     use std::fs;
+    use std::path::PathBuf;
 
-    use super::{SerdeFileError, SmartSerde};
+    use super::{IsDefault, SerdeDefaults, SerdeFileError, SmartSerde};
+
+    #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+    struct SettingsFixture {
+        #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+        enabled: bool,
+    }
+
+    impl SmartSerde for SettingsFixture {
+        fn schema_path(&self) -> Option<PathBuf> {
+            Some(PathBuf::from("https://example.invalid/settings.json"))
+        }
+    }
+
+    #[derive(Debug, Serialize, Deserialize)]
+    struct InvalidToml {
+        values: BTreeMap<Vec<u8>, bool>,
+    }
+
+    impl SmartSerde for InvalidToml {}
+
+    #[test]
+    fn smart_toml_preserves_schema_and_explicit_default_visibility() {
+        let settings = SettingsFixture::default();
+        let included = settings.to_toml(SerdeDefaults::Include).unwrap();
+        let omitted = settings.to_toml(SerdeDefaults::Omit).unwrap();
+        for document in [&included, &omitted] {
+            assert!(document.starts_with("#:schema https://example.invalid/settings.json\n"));
+            assert_eq!(document.matches("#:schema").count(), 1);
+            assert_eq!(
+                toml::from_str::<SettingsFixture>(document).unwrap(),
+                settings
+            );
+        }
+        assert!(included.contains("enabled = false"));
+        assert!(!omitted.contains("enabled"));
+
+        let without_schema = BTreeMap::from([("entry".to_owned(), (1.0, 2.0))]);
+        let document = without_schema.to_toml(SerdeDefaults::Include).unwrap();
+        assert!(!document.contains("#:schema"));
+    }
+
+    #[test]
+    fn smart_toml_releases_defaults_guard_on_encoder_error() {
+        let invalid = InvalidToml {
+            values: BTreeMap::from([(vec![1], true)]),
+        };
+        assert!(invalid.to_toml(SerdeDefaults::Include).is_err());
+        let omitted = SettingsFixture::default()
+            .to_toml(SerdeDefaults::Omit)
+            .unwrap();
+        assert!(!omitted.contains("enabled"));
+    }
 
     #[test]
     fn test_file_vs_parse_errors() {
-        use std::collections::BTreeMap;
-
         // Test file not found error
         let result: Result<BTreeMap<String, (f64, f64)>, SerdeFileError> =
             SmartSerde::from_file_typed("/nonexistent/file.json");
@@ -508,8 +632,6 @@ mod tests {
 
     #[test]
     fn test_from_file_backward_compatibility() {
-        use std::collections::BTreeMap;
-
         // Test that the regular from_file function still works and returns color_eyre::Result
         let temp_path = std::env::temp_dir().join("test_compat.json");
         fs::write(&temp_path, r#"{"test": [1.0, 2.0]}"#).unwrap();
@@ -527,8 +649,6 @@ mod tests {
 
     #[test]
     fn test_to_file_creates_missing_parent_directories() {
-        use std::collections::BTreeMap;
-
         let unique_dir = std::env::temp_dir().join(format!(
             "gammaloop-smart-serde-{}-{}",
             std::process::id(),
@@ -548,6 +668,18 @@ mod tests {
         let roundtrip: BTreeMap<String, (f64, f64)> =
             SmartSerde::from_file(&file_path, "test").unwrap();
         assert_eq!(roundtrip.get("test"), Some(&(1.0, 2.0)));
+
+        let settings = SettingsFixture::default();
+        let settings_path = unique_dir.join("nested").join("settings.toml");
+        settings.to_file(&settings_path, true).unwrap();
+        assert_eq!(
+            fs::read_to_string(&settings_path).unwrap(),
+            settings.to_toml(SerdeDefaults::Include).unwrap()
+        );
+        assert_eq!(
+            SettingsFixture::from_file_typed(&settings_path).unwrap(),
+            settings
+        );
 
         fs::remove_dir_all(&unique_dir).unwrap();
     }

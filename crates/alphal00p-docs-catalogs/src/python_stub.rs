@@ -692,11 +692,10 @@ fn split_top_level_once(source: &str, delimiter: char) -> Option<(&str, &str)> {
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
-
     use alphal00p_docs_schema::{ApiLanguage, DocItemKind, DocMemberKind};
 
     use super::*;
+    use crate::tests;
     use crate::{CatalogRequest, export_catalog, first_sentence};
 
     #[test]
@@ -1063,10 +1062,7 @@ def run(value: str, strict: bool = False) -> str:
 
     #[test]
     fn existing_snapshots_generate_deterministic_nested_catalogs() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .ancestors()
-            .nth(2)
-            .unwrap();
+        let root = tests::workspace_root();
         let components = [
             ("gammaloop-python", "gammaloop._gammaloop"),
             ("linnet-graph", "symbolica.community.graph"),
@@ -1089,8 +1085,8 @@ def run(value: str, strict: bool = False) -> str:
             let stub = root
                 .join("docs/api/python")
                 .join(format!("{component}.pyi"));
-            let first = export_catalog(&request, root, Some(&stub)).unwrap();
-            let second = export_catalog(&request, root, Some(&stub)).unwrap();
+            let first = export_catalog(&request, &root, Some(&stub)).unwrap();
+            let second = export_catalog(&request, &root, Some(&stub)).unwrap();
             assert_eq!(
                 serde_json::to_vec(&first).unwrap(),
                 serde_json::to_vec(&second).unwrap()

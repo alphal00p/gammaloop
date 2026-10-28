@@ -2,6 +2,7 @@
 //!
 //! Root coordinates compilation/execution. The ignored producer retains every
 //! prepared view until its own browser receipt has completed native rendering.
+use std::env;
 use std::ffi::CString;
 
 use linnest::svg::{
@@ -147,7 +148,11 @@ fn run_python(entry: &str) -> PyResult<()> {
         locals.set_item("adapter_source", include_str!("../src/view.py"))?;
         locals.set_item(
             "test_directory",
-            concat!(env!("CARGO_MANIFEST_DIR"), "/tests"),
+            format!(
+                "{}/tests",
+                env::var("CARGO_MANIFEST_DIR")
+                    .expect("Cargo and Nextest provide the runtime crate directory")
+            ),
         )?;
         let source = CString::new(include_str!("mathml_view_support.py")).unwrap();
         py.run(&source, Some(&locals), Some(&locals))?;

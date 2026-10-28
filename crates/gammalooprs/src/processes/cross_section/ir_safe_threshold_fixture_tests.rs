@@ -1,5 +1,7 @@
 use crate::integrands::process::EvaluationTarget;
 use crate::model::ModelGammaLoopExt;
+use crate::processes::IntegrandPayload;
+use alphal00p_persistence::OutputPath;
 use feynkit_generator::GenerationType;
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -1849,7 +1851,8 @@ fn gl638_cartesian_structure_and_full_cut_runtime_roundtrip() {
             assert!(event_count > 0, "the selected samples must produce events");
             assert!(
                 target_component_ids.is_subset(&observed_component_ids),
-                "the selected samples must exercise every intended target-cut Cartesian component: missing {:?}",
+                "the selected samples must exercise every intended target-cut \
+                 Cartesian component: missing {:?}",
                 target_component_ids
                     .difference(&observed_component_ids)
                     .collect::<Vec<_>>(),
@@ -1867,7 +1870,8 @@ fn gl638_cartesian_structure_and_full_cut_runtime_roundtrip() {
             );
 
             let save_root = TemporaryDirectory::new("gl638-ir-safe-threshold");
-            cross_section.save(&save_root.0, true).unwrap();
+            let output = OutputPath::new(&save_root.0).unwrap();
+            cross_section.write_snapshot(&output).unwrap();
 
             let mut state_bytes = Vec::new();
             State::export(&mut state_bytes).unwrap();
@@ -1876,8 +1880,12 @@ fn gl638_cartesian_structure_and_full_cut_runtime_roundtrip() {
                 model: &model,
                 state_map: &state_map,
             };
-            let mut loaded =
-                CrossSection::load(save_root.0.join("NNLO_fixture"), context).unwrap();
+            let mut loaded = CrossSection::load(
+                &output.join("NNLO_fixture").unwrap(),
+                context,
+                IntegrandPayload::Generated,
+            )
+            .unwrap();
             let loaded_integrand = loaded
                 .integrand
                 .as_mut()

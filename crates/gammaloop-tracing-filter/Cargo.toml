@@ -28,3 +28,6 @@ default = []
 clap = ["dep:clap"]
 python = ["dep:pyo3"]
 symbolica = ["dep:spenso", "dep:symbolica"]
+
+[dev-dependencies]
+alphal00p-workspace.workspace = true

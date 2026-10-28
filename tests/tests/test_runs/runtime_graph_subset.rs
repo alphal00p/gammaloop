@@ -1,18 +1,15 @@
-use super::utils::*;
+use super::utils;
 use super::*;
-use gammalooprs::{
-    graph::GroupId,
-    integrands::{HasIntegrand, process::ProcessIntegrand},
-    integrate::{IntegrationWorkspaceManifest, workspace_manifest_path},
-    settings::RuntimeSettings,
-    utils::serde_utils::SmartSerde,
-};
+use gammalooprs::graph::GroupId;
+use gammalooprs::integrands::HasIntegrand;
+use gammalooprs::integrands::evaluation::EvaluationResult;
+use gammalooprs::integrands::process::ProcessIntegrand;
+use gammalooprs::integrate::{IntegrationCheckpoint, SlotIndex};
 use std::collections::BTreeSet;
+use std::slice;
 use symbolica::numerical_integration::{Grid, Sample};
 
-fn effective_result(
-    result: &gammalooprs::integrands::evaluation::EvaluationResult,
-) -> Complex<f64> {
+fn effective_result(result: &EvaluationResult) -> Complex<f64> {
     let factor = result.parameterization_jacobian.unwrap_or(F(1.0)).0 * result.integrator_weight.0;
     Complex::new(
         result.integrand_result.re.0 * factor,
@@ -88,7 +85,7 @@ fn amplitude_runtime_graph_subset_preserves_complete_group_metadata() -> Result<
         .state
         .resolve_model_for_integrand(process_id, &integrand_name)?;
     let selected =
-        source.clone_with_selected_graph_groups(&model, std::slice::from_ref(&master_name))?;
+        source.clone_with_selected_graph_groups(&model, slice::from_ref(&master_name))?;
 
     assert_eq!(source.resume_fingerprint()?, source_fingerprint);
     assert_eq!(selected.active_f64_backend(), source_backend);
@@ -96,7 +93,7 @@ fn amplitude_runtime_graph_subset_preserves_complete_group_metadata() -> Result<
     assert_eq!(selected.graph_group_master_names(), [master_name.as_str()]);
     assert_eq!(
         selected.get_settings().sampling.selected_graph_names(),
-        std::slice::from_ref(&master_name)
+        slice::from_ref(&master_name)
     );
 
     let (ProcessIntegrand::Amplitude(source), ProcessIntegrand::Amplitude(selected)) =
@@ -161,7 +158,7 @@ fn cross_section_runtime_graph_subset_is_compact_normalized_and_event_safe() -> 
     let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let test_name = "cross_section_runtime_graph_subset_is_compact_normalized_and_event_safe";
     let mut cli = setup_sm_differential_lu_cli(test_name)?;
-    set_process_incoming_helicities(&mut cli, "epem_ddxg", "default", "[1, -1]")?;
+    utils::set_process_incoming_helicities(&mut cli, "epem_ddxg", "default", "[1, -1]")?;
     cli.run_command(
         "set process kv general.generate_events=true general.store_additional_weights_in_event=true stability.rotation_axis=[]",
     )?;
@@ -213,10 +210,8 @@ fn cross_section_runtime_graph_subset_is_compact_normalized_and_event_safe() -> 
         selected.get_settings().sampling.selected_graph_names(),
         expected_master_names
     );
-    let single_reduced = source.clone_with_selected_graph_groups(
-        &model,
-        std::slice::from_ref(&expected_master_names[0]),
-    )?;
+    let single_reduced = source
+        .clone_with_selected_graph_groups(&model, slice::from_ref(&expected_master_names[0]))?;
     assert!(single_reduced.graph_count() < source.graph_count());
     assert_eq!(single_reduced.graph_group_count(), 1);
     let Grid::Discrete(selected_grid) = selected.create_grid() else {
@@ -260,7 +255,7 @@ fn cross_section_runtime_graph_subset_is_compact_normalized_and_event_safe() -> 
         selected_channel_sum += selected_effective / group_count as f64;
 
         let mut individual =
-            source.clone_with_selected_graph_groups(&model, std::slice::from_ref(master_name))?;
+            source.clone_with_selected_graph_groups(&model, slice::from_ref(master_name))?;
         individual.warm_up(&model)?;
         let individual_sample = discrete_sample(0, 1.0, &point);
         let individual_result = individual.evaluate_sample(
@@ -323,10 +318,8 @@ fn cross_section_runtime_graph_subset_is_compact_normalized_and_event_safe() -> 
     };
     integrate.run(&mut cli.state, &cli.cli_settings)?;
 
-    let manifest: IntegrationWorkspaceManifest = IntegrationWorkspaceManifest::from_file(
-        workspace_manifest_path(&workspace),
-        "runtime graph-subset integration manifest",
-    )?;
+    let checkpoint = IntegrationCheckpoint::open(&workspace)?;
+    let manifest = &checkpoint.manifest().workspace;
     let warmed_source_fingerprint = cli
         .state
         .process_list
@@ -335,17 +328,13 @@ fn cross_section_runtime_graph_subset_is_compact_normalized_and_event_safe() -> 
         .resume_fingerprint()?;
     assert_eq!(
         manifest.integrand_fingerprints.as_slice(),
-        std::slice::from_ref(&warmed_source_fingerprint)
+        slice::from_ref(&warmed_source_fingerprint)
     );
     assert_ne!(warmed_source_fingerprint, source_fingerprint);
-    let slot_workspace = selected_slot_workspace(&cli, &workspace, None, Some(&integrand_name))?;
-    let workspace_settings: RuntimeSettings = RuntimeSettings::from_file(
-        slot_workspace.join("settings.toml"),
-        "runtime graph-subset workspace settings",
-    )?;
+    let workspace_settings = checkpoint.read_slot_settings(SlotIndex::from(0))?;
     assert_eq!(
         workspace_settings.sampling.selected_graph_names(),
-        std::slice::from_ref(persisted_master_name)
+        slice::from_ref(persisted_master_name)
     );
 
     let full_source = cli
@@ -374,7 +363,7 @@ fn cross_section_runtime_graph_subset_is_compact_normalized_and_event_safe() -> 
             .get_settings()
             .sampling
             .selected_graph_names(),
-        std::slice::from_ref(persisted_master_name)
+        slice::from_ref(persisted_master_name)
     );
     assert!(
         resumed_source
@@ -397,7 +386,7 @@ fn correlated_runtime_graph_subsets_allow_different_graph_names() -> Result<()> 
     let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let test_name = "correlated_runtime_graph_subsets_allow_different_graph_names";
     let mut cli = setup_sm_differential_lu_cli(test_name)?;
-    set_process_incoming_helicities(&mut cli, "epem_ddxg", "default", "[1, -1]")?;
+    utils::set_process_incoming_helicities(&mut cli, "epem_ddxg", "default", "[1, -1]")?;
 
     let (process_id, integrand_name) = cli.state.find_integrand_ref(None, None)?;
     let master_names = cli

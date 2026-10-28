@@ -1,3 +1,4 @@
+use std::env;
 use std::ffi::CString;
 
 use feynkit_graph::{DiagramEdge, DiagramVertex, FeynmanDiagram, NumeratorInterface};
@@ -86,7 +87,11 @@ fn browser_display_fixtures() {
         let locals = PyDict::new(py);
         locals.set_item(
             "test_directory",
-            concat!(env!("CARGO_MANIFEST_DIR"), "/tests"),
+            format!(
+                "{}/tests",
+                env::var("CARGO_MANIFEST_DIR")
+                    .expect("Cargo and Nextest provide the runtime crate directory")
+            ),
         )?;
         py.run(&code, Some(&locals), Some(&locals))
     })

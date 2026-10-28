@@ -71,7 +71,7 @@ sync-drawing-assets:
       install_asset assets/embedded/drawing/justfile gammaloop_state/justfile
     fi
 
-    nix build .#linnest-wasm --print-build-logs
+    just nix-build linnest-wasm --print-build-logs
 
     install_asset result/kurvst.wasm crates/kurvst/typst/kurvst.wasm
     install_asset result/linnest.wasm crates/linnest/typst/linnest.wasm

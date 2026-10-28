@@ -602,19 +602,13 @@ fn remove_compiled_cpp_sources(root: &Path) -> Result<usize> {
 fn compile_integrands_for_generation(
     state: &mut State,
     compile_folder: &Path,
-    override_existing_compiled: bool,
     global_settings: &GlobalSettings,
     process_id: Option<usize>,
     integrand_name: Option<String>,
     keep_sources: bool,
 ) -> Result<Vec<GeneratedGraphReport>> {
-    let reports = state.compile_integrands(
-        compile_folder,
-        override_existing_compiled,
-        global_settings,
-        process_id,
-        integrand_name,
-    )?;
+    let reports =
+        state.compile_integrands(compile_folder, global_settings, process_id, integrand_name)?;
 
     if !keep_sources {
         let removed_count = remove_compiled_cpp_sources(compile_folder)?;
@@ -644,7 +638,6 @@ impl Generate {
         &self,
         state: &mut State,
         compile_folder: impl AsRef<Path>,
-        override_existing_compiled: bool,
         global_settings: &GlobalSettings,
         runtime_settings: &RuntimeSettings,
     ) -> Result<()> {
@@ -785,7 +778,6 @@ impl Generate {
                             compile_integrands_for_generation(
                                 state,
                                 compile_folder,
-                                override_existing_compiled,
                                 global_settings,
                                 Some(this_process_id),
                                 Some(generated_integrand_name_for_compile),
@@ -824,7 +816,6 @@ impl Generate {
                         compile_integrands_for_generation(
                             state,
                             compile_folder,
-                            override_existing_compiled,
                             global_settings,
                             Some(process_id),
                             process_args.integrand_name.clone(),
@@ -850,7 +841,6 @@ impl Generate {
                         compile_integrands_for_generation(
                             state,
                             compile_folder,
-                            override_existing_compiled,
                             global_settings,
                             None,
                             None,
@@ -2247,7 +2237,7 @@ mod tests {
                     unreachable!();
                 };
                 let error = generate
-                    .run(&mut state, temp.path(), false, &settings, &runtime)
+                    .run(&mut state, temp.path(), &settings, &runtime)
                     .unwrap_err();
                 assert!(error.to_string().contains("`xs`"), "{command}: {error}");
                 assert!(error.to_string().contains("not supported"));
@@ -2284,7 +2274,7 @@ mod tests {
                 keep_sources: false,
                 mode: None,
             }
-            .run(&mut state, temp.path(), false, &settings, &runtime)
+            .run(&mut state, temp.path(), &settings, &runtime)
             .unwrap_err();
             assert!(error.to_string().contains("`xs`"), "{mode:?}: {error}");
             assert!(error.to_string().contains("not supported"));

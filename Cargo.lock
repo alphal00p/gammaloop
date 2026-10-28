@@ -78,6 +78,8 @@ name = "alphal00p-docs-builder"
 version = "0.1.0"
 dependencies = [
  "alphal00p-docs-schema",
+ "alphal00p-persistence",
+ "alphal00p-workspace",
  "chrono",
  "clap",
  "comemo",
@@ -104,6 +106,7 @@ version = "0.1.0"
 dependencies = [
  "alphal00p-docs-macros",
  "alphal00p-docs-schema",
+ "alphal00p-workspace",
  "clap",
  "eyre",
  "gammaloop-api",
@@ -161,6 +164,7 @@ dependencies = [
 name = "alphal00p-docs-python-exporter"
 version = "0.1.0"
 dependencies = [
+ "alphal00p-workspace",
  "feynkit-py",
  "gammaloop-api",
  "linnet-py",
@@ -178,6 +182,26 @@ dependencies = [
  "indexmap",
  "serde",
  "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "alphal00p-persistence"
+version = "0.1.0"
+dependencies = [
+ "blake3",
+ "same-file",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "alphal00p-workspace"
+version = "0.1.0"
+dependencies = [
+ "tempfile",
  "thiserror 2.0.18",
 ]
 
@@ -901,6 +925,7 @@ dependencies = [
 name = "clinnet"
 version = "0.1.8"
 dependencies = [
+ "alphal00p-workspace",
  "blake3",
  "clap",
  "eyre",
@@ -2222,6 +2247,8 @@ name = "gammaloop-api"
 version = "0.1.0"
 dependencies = [
  "ahash 0.8.12",
+ "alphal00p-persistence",
+ "alphal00p-workspace",
  "bincode 2.0.1",
  "chrono",
  "clap",
@@ -2287,6 +2314,8 @@ dependencies = [
 name = "gammaloop-integration-tests"
 version = "0.1.0"
 dependencies = [
+ "alphal00p-persistence",
+ "alphal00p-workspace",
  "bincode 2.0.1",
  "cc",
  "color-eyre",
@@ -2321,6 +2350,7 @@ dependencies = [
 name = "gammaloop-tracing-filter"
 version = "0.1.0"
 dependencies = [
+ "alphal00p-workspace",
  "chrono",
  "clap",
  "colored 3.1.1",
@@ -2372,6 +2402,7 @@ dependencies = [
  "num-integer",
  "num-traits",
  "numerica",
+ "once_cell",
  "proc-macro2",
  "quote",
  "rand 0.8.6",
@@ -2404,6 +2435,8 @@ name = "gammalooprs"
 version = "0.3.4"
 dependencies = [
  "ahash 0.8.12",
+ "alphal00p-persistence",
+ "alphal00p-workspace",
  "base62",
  "bincode 2.0.1",
  "bincode-trait-derive",

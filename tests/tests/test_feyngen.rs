@@ -1,3 +1,4 @@
+use alphal00p_persistence::OutputPath;
 use color_eyre::{Result, eyre::eyre};
 use std::fs;
 
@@ -818,7 +819,7 @@ fn amplitude_standalone_export_reloads_and_evaluates() -> Result<()> {
     cli.run_command("generate")?;
 
     cli.state.process_list.export_standalone(
-        &output_dir,
+        &OutputPath::new(&output_dir)?,
         &StandaloneExportSettings {
             mode: StandaloneExportMode::Rust,
             format: StandaloneDataFormat::Json,
@@ -878,7 +879,7 @@ fn cross_section_standalone_export_writes_archive_and_loader() -> Result<()> {
 
     for format in [StandaloneDataFormat::Json, StandaloneDataFormat::Binary] {
         cli.state.process_list.export_standalone(
-            &output_dir,
+            &OutputPath::new(&output_dir)?,
             &StandaloneExportSettings {
                 mode: StandaloneExportMode::Rust,
                 format,

@@ -1,5 +1,6 @@
 use super::utils::*;
 use super::*;
+use gammalooprs::integrate::{IntegrationCheckpoint, SlotIndex};
 
 #[test]
 fn test_multi_integrand() -> Result<()> {
@@ -97,16 +98,17 @@ fn test_multi_integrand() -> Result<()> {
         box_slot.integral,
         single_slot_integral(&box_above_baseline),
     );
-    assert!(
-        triangle_box_workspace
-            .join("integrands/triangle@scalar_tri/settings.toml")
-            .exists()
-    );
-    assert!(
-        triangle_box_workspace
-            .join("integrands/box@scalar_box/settings.toml")
-            .exists()
-    );
+    let triangle_box_checkpoint = IntegrationCheckpoint::open(&triangle_box_workspace)?;
+    for key in ["triangle@scalar_tri", "box@scalar_box"] {
+        let slot = triangle_box_checkpoint
+            .manifest()
+            .workspace
+            .slots
+            .iter()
+            .position(|slot| slot.key() == key)
+            .expect("correlated slot must have persisted settings");
+        triangle_box_checkpoint.read_slot_settings(SlotIndex::from(slot))?;
+    }
 
     cli.run_command(
         "duplicate integrand -p box -i scalar_box --output_process_name box_copy --output_integrand_name scalar_box_copy",
@@ -167,16 +169,17 @@ fn test_multi_integrand() -> Result<()> {
         box_below_slot.integral,
         single_slot_integral(&box_below_baseline),
     );
-    assert!(
-        box_pair_workspace
-            .join("integrands/box@scalar_box/settings.toml")
-            .exists()
-    );
-    assert!(
-        box_pair_workspace
-            .join("integrands/box_copy@scalar_box_copy/settings.toml")
-            .exists()
-    );
+    let box_pair_checkpoint = IntegrationCheckpoint::open(&box_pair_workspace)?;
+    for key in ["box@scalar_box", "box_copy@scalar_box_copy"] {
+        let slot = box_pair_checkpoint
+            .manifest()
+            .workspace
+            .slots
+            .iter()
+            .position(|slot| slot.key() == key)
+            .expect("correlated slot must have persisted settings");
+        box_pair_checkpoint.read_slot_settings(SlotIndex::from(slot))?;
+    }
 
     clean_test(&cli.cli_settings.state.folder);
     Ok(())

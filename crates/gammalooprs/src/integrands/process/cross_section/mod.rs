@@ -50,8 +50,8 @@ use crate::{
         self, CrossSectionGraph, CutGroupData, CutGroupId, CutId,
         CutThresholdCountertermAssociations, GraphGenerationStats, GraphGroupSelectionPlan,
         IteratedCtCollection, LUCounterTermData, LUThresholdHelperOutputs, LeftThresholdId,
-        RightThresholdId, ThresholdCountertermMetadataRegistry, ThresholdCountertermVariantId,
-        ThresholdCountertermVariantStatus, TopologicalThresholdId,
+        ProcessPayloadError, RightThresholdId, ThresholdCountertermMetadataRegistry,
+        ThresholdCountertermVariantId, ThresholdCountertermVariantStatus, TopologicalThresholdId,
     },
     settings::{
         GlobalSettings, RuntimeSettings,
@@ -72,14 +72,14 @@ use crate::{
             shape_from_cut_cff_index, simple_n_deriv_shape,
         },
         newton_solver::{NewtonIterationResult, RadialRootIdentity},
-        serde_utils::SmartSerde,
     },
 };
+use alphal00p_persistence::OutputPath;
 use bincode::Encode;
 use bincode_trait_derive::Decode;
 use color_eyre::{Result, owo_colors::OwoColorize};
-use eyre::Context;
-use eyre::eyre;
+use eyre::{Context, eyre};
+use std::result::Result as StdResult;
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
     sync::Arc,
@@ -96,11 +96,7 @@ use rayon::{
     iter::{IntoParallelRefMutIterator, ParallelIterator},
 };
 use spenso::algebra::complex::Complex;
-use std::{
-    fs::{self},
-    path::Path,
-    vec,
-};
+use std::vec;
 use symbolica::{
     domains::{dual::HyperDual, float::SingleFloat},
     numerical_integration::{Grid, Sample},
@@ -109,10 +105,11 @@ use tracing::{debug, warn};
 use typed_index_collections::{TiVec, ti_vec};
 
 use super::{
-    GraphTerm, LmbMultiChannelingSetup, ProcessIntegrandImpl, create_grid, evaluate_sample,
-    filtered_orientation_count, format_orientation_label, format_sampling_channel_label,
-    histogram_process_info_for_integrand, resolve_visible_orientation_id,
-    validate_group_orientation_catalogs, validate_process_runtime_settings,
+    GraphTerm, IntegrandSnapshot, LmbMultiChannelingSetup, ProcessIntegrandImpl, create_grid,
+    evaluate_sample, filtered_orientation_count, format_orientation_label,
+    format_sampling_channel_label, histogram_process_info_for_integrand,
+    resolve_visible_orientation_id, validate_group_orientation_catalogs,
+    validate_process_runtime_settings,
 };
 
 pub mod export;
@@ -382,25 +379,11 @@ impl CrossSectionIntegrand {
         }
     }
 
-    pub(crate) fn save(&self, path: impl AsRef<Path>, override_existing: bool) -> Result<()> {
-        let binary = bincode::encode_to_vec(&self.data, bincode::config::standard())?;
-        fs::write(path.as_ref().join("integrand.bin"), binary)?;
-
-        self.settings
-            .to_file(path.as_ref().join("settings.toml"), override_existing)
-            .with_context(|| "Error saving settings.toml file for cross-section integrand")?;
-        Ok(())
-    }
-
-    pub(crate) fn load(path: impl AsRef<Path>, context: GammaLoopContextContainer) -> Result<Self> {
-        let binary = fs::read(path.as_ref().join("integrand.bin"))?;
-        let (data, _): (CrossSectionIntegrandData, _) =
-            bincode::decode_from_slice_with_context(&binary, bincode::config::standard(), context)?;
-
-        let settings = SmartSerde::from_file(
-            path.as_ref().join("settings.toml"),
-            "runtime settings for cross-section integrand",
-        )?;
+    pub(crate) fn load(
+        path: &OutputPath,
+        context: GammaLoopContextContainer<'_>,
+    ) -> StdResult<Self, ProcessPayloadError> {
+        let IntegrandSnapshot { data, settings } = IntegrandSnapshot::load(path, context)?;
 
         Ok(CrossSectionIntegrand {
             settings,
@@ -412,8 +395,7 @@ impl CrossSectionIntegrand {
 
     pub(crate) fn compile(
         &mut self,
-        path: impl AsRef<Path> + Sync,
-        override_existing: bool,
+        path: &OutputPath,
         thread_pool: &ThreadPool,
     ) -> Result<Vec<(String, Duration)>> {
         let frozen_mode = self.data.compilation.clone();
@@ -422,7 +404,7 @@ impl CrossSectionIntegrand {
                 .graph_terms
                 .par_iter_mut()
                 .map(|term| {
-                    term.compile(path.as_ref(), override_existing, &frozen_mode)
+                    term.compile(path, &frozen_mode)
                         .map(|duration| (term.graph.name.clone(), duration))
                 })
                 .collect::<Result<Vec<_>>>()
@@ -1446,22 +1428,30 @@ impl CrossSectionGraphTerm {
         ))
     }
 
+    /// Compile the graph's evaluators using the selected frozen backend.
+    ///
+    /// See [`crate::processes::ProcessList::compile`] for an example.
+    ///
+    /// # Errors
+    /// Returns artifact directory or evaluator compilation failures.
     pub fn compile(
         &mut self,
-        path: impl AsRef<Path>,
-        _override_existing: bool,
+        path: &OutputPath,
         frozen_mode: &FrozenCompilationMode,
     ) -> Result<Duration> {
         let compile_started = Instant::now();
-        let graph_path = path.as_ref().join(&self.graph.name);
+        let graph_path = path.join(&self.graph.name)?;
 
-        fs::create_dir_all(&graph_path).with_context(|| {
+        graph_path.ensure_directory().with_context(|| {
             format!(
                 "Failed to create directory for cross section graph {} at {}",
                 self.graph.name,
-                graph_path.display()
+                graph_path.as_path().display()
             )
         })?;
+
+        graph_path.check_tree()?;
+        let graph_path = graph_path.as_path();
 
         for (cut_group_id, integrands) in self.integrand.iter_mut().enumerate() {
             for (cut_cff_index, integrand) in integrands.iter_mut() {
@@ -1471,13 +1461,13 @@ impl CrossSectionGraphTerm {
                         "integrand_zen_cut_group_{}_deriv_{}",
                         cut_group_id, n_derivatives
                     ),
-                    graph_path.clone(),
+                    graph_path,
                     frozen_mode,
                 )?;
             }
         }
 
-        self.counterterm.compile(&graph_path, frozen_mode)?;
+        self.counterterm.compile(graph_path, frozen_mode)?;
 
         for (index, evaluator) in self
             .cut_group_data

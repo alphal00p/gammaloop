@@ -67,6 +67,9 @@ third-party = [
 # archives.
 [final-excludes]
 workspace-members = [
+    # Filesystem utilities remain independent of numerical runtime features.
+    "alphal00p-persistence",
+    "alphal00p-workspace",
     "feynkit",
     "feynkit-cff",
     "feynkit-generator",

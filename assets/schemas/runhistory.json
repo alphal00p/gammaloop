@@ -425,6 +425,55 @@
         "prescription"
       ]
     },
+    "Cleanup": {
+      "description": "Remove superseded generations while retaining the validated current snapshot.\n\nOrdinary saves and integration iterations retain every generation until explicitly cleaned up.\n\n```text\ncleanup state --path saved-state\ncleanup integration -w integration-workspace\ncleanup integration\n```\nWithout a workspace path, integration cleanup uses the same default as `integrate`.",
+      "oneOf": [
+        {
+          "description": "Prune older saved-state generations; keep the current committed state.",
+          "type": "object",
+          "properties": {
+            "State": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "description": "Saved-state folder; defaults to the active state folder.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "State"
+          ]
+        },
+        {
+          "description": "Prune older integration generations; keep the last committed iteration.",
+          "type": "object",
+          "properties": {
+            "Integration": {
+              "type": "object",
+              "properties": {
+                "workspace_path": {
+                  "description": "Integration workspace; defaults to the same workspace as `integrate`.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              }
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Integration"
+          ]
+        }
+      ]
+    },
     "CliNumeratorSamplesNormalization": {
       "type": "string",
       "enum": [
@@ -516,6 +565,19 @@
           "additionalProperties": false,
           "required": [
             "Save"
+          ]
+        },
+        {
+          "description": "Remove superseded saved-state or integration generations under the writer lock.",
+          "type": "object",
+          "properties": {
+            "Cleanup": {
+              "$ref": "#/$defs/Cleanup"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Cleanup"
           ]
         },
         {
@@ -2547,7 +2609,7 @@
           "type": "boolean"
         },
         "process": {
-          "description": "Process reference: `#<id>`, `name:<name>`, or `<id>/<name>`; repeat with `-i` to select multiple integrands",
+          "description": "Process reference: `#<id>`, `name:<name>`, or `<id>/<name>`;\nrepeat with `-i` to select multiple integrands",
           "type": "array",
           "items": {
             "$ref": "#/$defs/ProcessRef"
@@ -2601,7 +2663,7 @@
           "$ref": "#/$defs/ContributionSortOption"
         },
         "target": {
-          "description": "Specify a target as either `re im` / `re,im` for one shared target or `process@integrand=re,im`",
+          "description": "Specify a target as either `re im` / `re,im` for one shared target\nor `process@integrand=re,im`",
           "type": "array",
           "items": {
             "type": "string"

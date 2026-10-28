@@ -2,6 +2,9 @@
 # Edit only top-level enable manually; regeneration preserves it.
 {
   dependencies = {
+    "checks.x86_64-linux.gammaloop-ci-runtime" = [
+      "packages.x86_64-linux.ci-runtime-environment"
+    ];
     "checks.x86_64-linux.gammaloop-clippy" = [
       "packages.x86_64-linux.cargoCheckArtifacts"
     ];
@@ -17,6 +20,8 @@
     ];
     "checks.x86_64-linux.gammaloop-nextest-binaries-core" = [
       "packages.x86_64-linux.cargoArtifacts"
+      "packages.x86_64-linux.crate-test-binaries-alphal00p-persistence"
+      "packages.x86_64-linux.crate-test-binaries-alphal00p-workspace"
       "packages.x86_64-linux.crate-test-binaries-gammaloop-api"
       "packages.x86_64-linux.crate-test-binaries-gammaloop-tracing-filter"
       "packages.x86_64-linux.crate-test-binaries-gammaloop-tracing-filter-macros"
@@ -103,6 +108,12 @@
     ];
     "packages.x86_64-linux.crate-test-binaries-alphal00p-docs-schema" = [
       "packages.x86_64-linux.crate-test-dependencies-alphal00p-docs-schema"
+    ];
+    "packages.x86_64-linux.crate-test-binaries-alphal00p-persistence" = [
+      "packages.x86_64-linux.crate-test-dependencies-alphal00p-persistence"
+    ];
+    "packages.x86_64-linux.crate-test-binaries-alphal00p-workspace" = [
+      "packages.x86_64-linux.crate-test-dependencies-alphal00p-workspace"
     ];
     "packages.x86_64-linux.crate-test-binaries-clinnet" = [
       "packages.x86_64-linux.crate-test-dependencies-clinnet"
@@ -201,6 +212,8 @@
       "packages.x86_64-linux.cargoArtifacts"
       "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
       "packages.x86_64-linux.crate-test-dependencies-alphal00p-docs-schema"
+      "packages.x86_64-linux.crate-test-dependencies-alphal00p-persistence"
+      "packages.x86_64-linux.crate-test-dependencies-alphal00p-workspace"
       "packages.x86_64-linux.crate-test-dependencies-linnest"
     ];
     "packages.x86_64-linux.crate-test-dependencies-alphal00p-docs-catalogs" = [
@@ -208,6 +221,7 @@
       "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
       "packages.x86_64-linux.crate-test-dependencies-alphal00p-docs-macros"
       "packages.x86_64-linux.crate-test-dependencies-alphal00p-docs-schema"
+      "packages.x86_64-linux.crate-test-dependencies-alphal00p-workspace"
       "packages.x86_64-linux.crate-test-dependencies-gammaloop-api"
       "packages.x86_64-linux.crate-test-dependencies-gammalooprs"
       "packages.x86_64-linux.crate-test-dependencies-vakint"
@@ -242,6 +256,7 @@
     "packages.x86_64-linux.crate-test-dependencies-alphal00p-docs-python-exporter" = [
       "packages.x86_64-linux.cargoArtifacts"
       "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+      "packages.x86_64-linux.crate-test-dependencies-alphal00p-workspace"
       "packages.x86_64-linux.crate-test-dependencies-feynkit-py"
       "packages.x86_64-linux.crate-test-dependencies-gammaloop-api"
       "packages.x86_64-linux.crate-test-dependencies-linnet-py"
@@ -252,9 +267,18 @@
       "packages.x86_64-linux.cargoArtifacts"
       "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
     ];
+    "packages.x86_64-linux.crate-test-dependencies-alphal00p-persistence" = [
+      "packages.x86_64-linux.cargoArtifacts"
+      "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+    ];
+    "packages.x86_64-linux.crate-test-dependencies-alphal00p-workspace" = [
+      "packages.x86_64-linux.cargoArtifacts"
+      "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+    ];
     "packages.x86_64-linux.crate-test-dependencies-clinnet" = [
       "packages.x86_64-linux.cargoArtifacts"
       "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+      "packages.x86_64-linux.crate-test-dependencies-alphal00p-workspace"
     ];
     "packages.x86_64-linux.crate-test-dependencies-feynkit" = [
       "packages.x86_64-linux.cargoArtifacts"
@@ -358,6 +382,8 @@
     "packages.x86_64-linux.crate-test-dependencies-gammaloop-api" = [
       "packages.x86_64-linux.cargoArtifacts"
       "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+      "packages.x86_64-linux.crate-test-dependencies-alphal00p-persistence"
+      "packages.x86_64-linux.crate-test-dependencies-alphal00p-workspace"
       "packages.x86_64-linux.crate-test-dependencies-feynkit-cff"
       "packages.x86_64-linux.crate-test-dependencies-feynkit-generator"
       "packages.x86_64-linux.crate-test-dependencies-feynkit-graph"
@@ -373,6 +399,8 @@
     "packages.x86_64-linux.crate-test-dependencies-gammaloop-integration-tests" = [
       "packages.x86_64-linux.cargoArtifacts"
       "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+      "packages.x86_64-linux.crate-test-dependencies-alphal00p-persistence"
+      "packages.x86_64-linux.crate-test-dependencies-alphal00p-workspace"
       "packages.x86_64-linux.crate-test-dependencies-feynkit-generator"
       "packages.x86_64-linux.crate-test-dependencies-feynkit-graph"
       "packages.x86_64-linux.crate-test-dependencies-feynkit-model"
@@ -387,6 +415,7 @@
     "packages.x86_64-linux.crate-test-dependencies-gammaloop-tracing-filter" = [
       "packages.x86_64-linux.cargoArtifacts"
       "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+      "packages.x86_64-linux.crate-test-dependencies-alphal00p-workspace"
       "packages.x86_64-linux.crate-test-dependencies-gammaloop-tracing-filter-macros"
       "packages.x86_64-linux.crate-test-dependencies-spenso"
     ];
@@ -397,6 +426,8 @@
     "packages.x86_64-linux.crate-test-dependencies-gammalooprs" = [
       "packages.x86_64-linux.cargoArtifacts"
       "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
+      "packages.x86_64-linux.crate-test-dependencies-alphal00p-persistence"
+      "packages.x86_64-linux.crate-test-dependencies-alphal00p-workspace"
       "packages.x86_64-linux.crate-test-dependencies-feynkit-amplitude"
       "packages.x86_64-linux.crate-test-dependencies-feynkit-cff"
       "packages.x86_64-linux.crate-test-dependencies-feynkit-generator"
@@ -513,50 +544,62 @@
     ];
     "packages.x86_64-linux.nix-ci-check-alphal00p-docs" = [
       "packages.x86_64-linux.alphal00p-docs-cargo-artifacts"
+      "packages.x86_64-linux.ci-runtime-environment"
       "packages.x86_64-linux.gammaloop-render-data"
     ];
     "packages.x86_64-linux.nix-ci-check-gammaloop-doctest" = [
       "packages.x86_64-linux.cargoArtifacts"
       "packages.x86_64-linux.cargoCheckArtifacts"
+      "packages.x86_64-linux.ci-runtime-environment"
       "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
       "packages.x86_64-linux.gammaloop-render-data"
     ];
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-browser" = [
       "checks.x86_64-linux.gammaloop-nextest-binaries-browser"
+      "packages.x86_64-linux.ci-runtime-environment"
       "packages.x86_64-linux.gammaloop-render-data"
     ];
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-clinnet" = [
       "checks.x86_64-linux.gammaloop-nextest-binaries-clinnet"
+      "packages.x86_64-linux.ci-runtime-environment"
     ];
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-core" = [
       "checks.x86_64-linux.gammaloop-nextest-binaries-core"
+      "packages.x86_64-linux.ci-runtime-environment"
       "packages.x86_64-linux.gammaloop-ufo-python-runtime"
     ];
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-docs" = [
       "checks.x86_64-linux.gammaloop-nextest-binaries-docs"
+      "packages.x86_64-linux.ci-runtime-environment"
       "packages.x86_64-linux.gammaloop-render-data"
     ];
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-feynkit" = [
       "checks.x86_64-linux.gammaloop-nextest-binaries-feynkit"
+      "packages.x86_64-linux.ci-runtime-environment"
       "packages.x86_64-linux.gammaloop-render-data"
     ];
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-integration" = [
       "checks.x86_64-linux.gammaloop-nextest-binaries-integration"
+      "packages.x86_64-linux.ci-runtime-environment"
     ];
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-linnet" = [
       "checks.x86_64-linux.gammaloop-nextest-binaries-linnet"
+      "packages.x86_64-linux.ci-runtime-environment"
       "packages.x86_64-linux.gammaloop-render-data"
     ];
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-python-api" = [
       "checks.x86_64-linux.gammaloop-nextest-binaries-python-api"
+      "packages.x86_64-linux.ci-runtime-environment"
       "packages.x86_64-linux.gammaloop-python-module"
     ];
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-spenso" = [
       "checks.x86_64-linux.gammaloop-nextest-binaries-spenso"
+      "packages.x86_64-linux.ci-runtime-environment"
       "packages.x86_64-linux.gammaloop-render-data"
     ];
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-vakint" = [
       "checks.x86_64-linux.gammaloop-nextest-binaries-vakint"
+      "packages.x86_64-linux.ci-runtime-environment"
     ];
   };
   dependency-discovery = {
@@ -574,6 +617,7 @@
   fail-fast = true;
   fail-on-dangling-dependencies = true;
   onlyBuild = [
+    "checks.x86_64-linux.gammaloop-ci-runtime"
     "checks.x86_64-linux.gammaloop-clippy"
     "checks.x86_64-linux.gammaloop-fmt"
     "checks.x86_64-linux.gammaloop-guppy-workspace-graph"
@@ -590,6 +634,7 @@
     "packages.x86_64-linux.alphal00p-docs-cargo-artifacts"
     "packages.x86_64-linux.cargoArtifacts"
     "packages.x86_64-linux.cargoCheckArtifacts"
+    "packages.x86_64-linux.ci-runtime-environment"
     "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
     "packages.x86_64-linux.crate-test-binaries-alphal00p-docs-builder"
     "packages.x86_64-linux.crate-test-binaries-alphal00p-docs-catalogs"
@@ -597,6 +642,8 @@
     "packages.x86_64-linux.crate-test-binaries-alphal00p-docs-macros"
     "packages.x86_64-linux.crate-test-binaries-alphal00p-docs-python-exporter"
     "packages.x86_64-linux.crate-test-binaries-alphal00p-docs-schema"
+    "packages.x86_64-linux.crate-test-binaries-alphal00p-persistence"
+    "packages.x86_64-linux.crate-test-binaries-alphal00p-workspace"
     "packages.x86_64-linux.crate-test-binaries-clinnet"
     "packages.x86_64-linux.crate-test-binaries-feynkit"
     "packages.x86_64-linux.crate-test-binaries-feynkit-amplitude"
@@ -634,6 +681,8 @@
     "packages.x86_64-linux.crate-test-dependencies-alphal00p-docs-macros"
     "packages.x86_64-linux.crate-test-dependencies-alphal00p-docs-python-exporter"
     "packages.x86_64-linux.crate-test-dependencies-alphal00p-docs-schema"
+    "packages.x86_64-linux.crate-test-dependencies-alphal00p-persistence"
+    "packages.x86_64-linux.crate-test-dependencies-alphal00p-workspace"
     "packages.x86_64-linux.crate-test-dependencies-clinnet"
     "packages.x86_64-linux.crate-test-dependencies-feynkit"
     "packages.x86_64-linux.crate-test-dependencies-feynkit-amplitude"

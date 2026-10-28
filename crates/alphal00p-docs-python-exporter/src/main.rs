@@ -1,6 +1,10 @@
 //! Emit one pyo3-stub-gen inventory as a deterministic checked-in stub.
 
-use std::{env, error::Error, fs, path::PathBuf};
+use alphal00p_workspace::{WorkspaceError, WorkspaceMarker, WorkspaceRoot};
+use std::env;
+use std::error::Error;
+use std::fs;
+use std::path::PathBuf;
 
 #[cfg(any(
     feature = "feynkit",
@@ -71,22 +75,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .join("\n");
     normalized.push('\n');
     let mut outputs = vec![output];
-    match component.as_str() {
-        "feynkit-community" => outputs.push(
-            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("../feynkit-py/python/symbolica/community/hepkit/__init__.pyi"),
-        ),
-        "linnet-graph" => outputs.extend([
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../linnet-py/python/symbolica/community/graph/__init__.pyi"),
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples/notebooks/symbolica-host/python/symbolica/community/graph/__init__.pyi"),
-        ]),
-        "spynso3" => outputs.push(
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
-                "../../examples/notebooks/symbolica-host/python/symbolica/community/tensor/__init__.pyi",
-            ),
-        ),
-        _ => {}
-    }
+    outputs.extend(shared_stub_outputs(&component)?);
     outputs.sort();
     outputs.dedup();
     for output in outputs {
@@ -115,6 +104,28 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
     Ok(())
+}
+
+// The explicit output stays caller-owned; paired package snapshots belong to this
+// runtime workspace.
+fn shared_stub_outputs(component: &str) -> Result<Vec<PathBuf>, WorkspaceError> {
+    let paths: &[&str] = match component {
+        "feynkit-community" => {
+            &["crates/feynkit-py/python/symbolica/community/hepkit/__init__.pyi"]
+        }
+        "linnet-graph" => &[
+            "crates/linnet-py/python/symbolica/community/graph/__init__.pyi",
+            "examples/notebooks/symbolica-host/python/symbolica/community/graph/__init__.pyi",
+        ],
+        "spynso3" => {
+            &["examples/notebooks/symbolica-host/python/symbolica/community/tensor/__init__.pyi"]
+        }
+        _ => return Ok(Vec::new()),
+    };
+    let root = WorkspaceRoot::discover_from_manifest_or_cwd(&[WorkspaceMarker::File(
+        "docs/products/registry.toml",
+    )])?;
+    Ok(paths.iter().map(|path| root.as_path().join(path)).collect())
 }
 
 #[cfg(any(feature = "feynkit", feature = "gammaloop", feature = "linnet"))]

@@ -746,6 +746,8 @@ impl TypstRenderer {
 
 #[cfg(test)]
 mod tests {
+    use alphal00p_workspace::{WorkspaceMarker, WorkspaceRoot};
+
     use super::*;
 
     fn value_dict(fields: impl IntoIterator<Item = (impl Into<String>, TypstValue)>) -> TypstValue {
@@ -1294,24 +1296,28 @@ mod tests {
             .compile_template(&assertions, base.join("generic-assertions.pdf"), &[])
             .unwrap();
 
-        let gamma_assertions =
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/resources/gamma-style-behavior.typ");
-        let repository = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let workspace = WorkspaceRoot::discover_runtime(
+            Path::new(env!("CARGO_MANIFEST_DIR")),
+            &[WorkspaceMarker::File("crates/clinnet/Cargo.toml")],
+        )
+        .expect("rendering tests require a runtime clinnet workspace");
+        let repository = workspace.as_path();
+        let resources = repository.join("crates/clinnet/tests/resources");
+        let gamma_assertions = resources.join("gamma-style-behavior.typ");
         renderer
             .compile_template(
                 &gamma_assertions,
                 base.join("gamma-style-assertions.pdf"),
-                &[&repository],
+                &[repository],
             )
             .unwrap();
 
-        let preparation_assertions =
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/resources/preparation-behavior.typ");
+        let preparation_assertions = resources.join("preparation-behavior.typ");
         renderer
             .compile_template(
                 &preparation_assertions,
                 base.join("preparation-assertions.pdf"),
-                &[&repository],
+                &[repository],
             )
             .unwrap();
 

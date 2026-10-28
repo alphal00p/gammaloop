@@ -32,6 +32,8 @@
         if hasUfoWheel then null
         else "not (test(=commands::import::model::tests::ufo_and_json_restrictions_preserve_model_content) or test(=commands::import::model::tests::fresh_sm_ufo_preserves_virtual_gauge_and_covariant_cut_states))";
       packages = [
+        "alphal00p-persistence"
+        "alphal00p-workspace"
         "gammaloop-api"
         "gammaloop-tracing-filter"
         "gammaloop-tracing-filter-macros"
@@ -105,6 +107,49 @@
       packages = ["vakint"];
     }
   ];
+  runtimeJob = {
+    name,
+    group ? null,
+    profile ? null,
+    partition ? null,
+  }: {
+    inherit name group profile partition system;
+    package = "nix-ci-check-${name}";
+    os =
+      if system == "aarch64-darwin"
+      then "macos-14"
+      else "ubuntu-24.04";
+  };
+  documentationJobs = map (name: runtimeJob {inherit name;}) ["alphal00p-docs" "gammaloop-doctest"];
+  runtimeJobs =
+    documentationJobs
+    ++ map (group: runtimeJob {
+      name = "gammaloop-nextest-${group.name}";
+      group = group.name;
+      profile = "ci_gammaloop";
+    })
+    groups;
+  mainRuntimeJobs =
+    documentationJobs
+    ++ map (group: runtimeJob {
+      name = "gammaloop-nextest-${group.name}${
+        if group.name == "integration"
+        then ""
+        else "-full"
+      }";
+      group = group.name;
+      profile =
+        if group.name == "integration"
+        then "ci_gammaloop"
+        else "ci_full";
+    })
+    groups
+    ++ map (index: runtimeJob {
+      name = "gammaloop-nextest-long-${toString index}";
+      group = "integration";
+      profile = "ci_slow";
+      partition = "hash:${toString index}/4";
+    }) [1 2 3 4];
   unique = values:
     builtins.attrNames (builtins.listToAttrs (map (value: {
         name = value;
@@ -261,7 +306,7 @@
     (builtins.listToAttrs (map (group: {
         name = "packages.${system}.nix-ci-check-gammaloop-nextest-${group.name}";
         value =
-          [(nextestArchiveAttr group.name)]
+          [(nextestArchiveAttr group.name) "packages.${system}.ci-runtime-environment"]
           ++ (
             if group.runtimePythonModule or false
             then ["packages.${system}.gammaloop-python-module"]
@@ -300,25 +345,17 @@
       "checks.${system}.gammaloop-check" = ["packages.${system}.cargoCheckArtifacts"];
       "checks.${system}.gammaloop-clippy" = ["packages.${system}.cargoCheckArtifacts"];
       "checks.${system}.gammaloop-doc" = ["packages.${system}.cargoCheckArtifacts"];
-      "checks.${system}.gammaloop-doctest" = [
-        "packages.${system}.cargoCheckArtifacts"
-        (cratePackageDepsAttr "gammaloop-api")
-        "packages.${system}.gammaloop-render-data"
-      ];
-      "packages.${system}.alphal00p-docs-pages" = ["packages.${system}.alphal00p-docs-cargo-artifacts"];
-      "packages.${system}.alphal00p-docs-snapshot-fixture" = ["packages.${system}.alphal00p-docs-cargo-artifacts"];
+      "checks.${system}.gammaloop-ci-runtime" = ["packages.${system}.ci-runtime-environment"];
       "packages.${system}.alphal00p-docs-cargo-artifacts" = [(cratePackageDepsAttr "gammaloop-api")];
-      "checks.${system}.alphal00p-docs" = [
-        "packages.${system}.alphal00p-docs-pages"
-        "packages.${system}.alphal00p-docs-snapshot-fixture"
-      ];
+      "packages.${system}.alphal00p-docs-build" = ["packages.${system}.alphal00p-docs-cargo-artifacts" "packages.${system}.ci-runtime-environment" "packages.${system}.gammaloop-render-data"];
       "packages.${system}.workspaceBuildArtifacts" = ["packages.${system}.cargoArtifacts"];
       "checks.${system}.gammaloop-nextest-binaries" = nextestBinaryChecks;
       "packages.${system}.linnest-wasm" = ["packages.${system}.linnestWasmCargoArtifacts"];
       "checks.${system}.linnest-wasm" = ["packages.${system}.linnest-wasm"];
       "packages.${system}.gammaloop-llvm-coverage" = ["packages.${system}.gammaloop"];
-      "packages.${system}.nix-ci-check-alphal00p-docs" = ["packages.${system}.alphal00p-docs-cargo-artifacts" "packages.${system}.gammaloop-render-data"];
+      "packages.${system}.nix-ci-check-alphal00p-docs" = ["packages.${system}.ci-runtime-environment" "packages.${system}.alphal00p-docs-cargo-artifacts" "packages.${system}.gammaloop-render-data"];
       "packages.${system}.nix-ci-check-gammaloop-doctest" = [
+        "packages.${system}.ci-runtime-environment"
         "packages.${system}.cargoCheckArtifacts"
         (cratePackageDepsAttr "gammaloop-api")
         "packages.${system}.gammaloop-render-data"
@@ -329,7 +366,11 @@
           "packages.${system}.gammaloop-python-module"
           "packages.${system}.gammaloop-render-data"
         ]
-        ++ (if hasUfoWheel then ["packages.${system}.gammaloop-ufo-python-runtime"] else []);
+        ++ (
+          if hasUfoWheel
+          then ["packages.${system}.gammaloop-ufo-python-runtime"]
+          else []
+        );
     }
   ];
   missingWorkspaceCratePackageEdges =
@@ -368,8 +409,6 @@
   doNotBuild = unique (
     [
       "checks.${system}.gammaloop"
-      "checks.${system}.gammaloop-doctest"
-      "checks.${system}.gammaloop-nextest"
       "checks.${system}.gammaloop-nextest-binaries"
       "packages.${system}.default"
       "packages.${system}.crane-ci-prebuild"
@@ -377,7 +416,6 @@
       "packages.${system}.gammaloop-llvm-coverage"
       "packages.${system}.nix-ci-check-gammaloop-nextest"
     ]
-    ++ map (group: "checks.${system}.gammaloop-nextest-${group.name}") groups
     ++ [
       (crateTestBinaryAttr workspaceHackPackage)
       (workspacePackageGraphAttr workspaceHackPackage)
@@ -397,11 +435,10 @@
       "checks.${system}.gammaloop-clippy"
       "checks.${system}.gammaloop-fmt"
       "checks.${system}.gammaloop-guppy-workspace-graph"
-      "packages.${system}.nix-ci-check-alphal00p-docs"
-      "packages.${system}.nix-ci-check-gammaloop-doctest"
+      "checks.${system}.gammaloop-ci-runtime"
       "packages.${system}.nix-ci-passed"
     ]
-    ++ map (group: "packages.${system}.nix-ci-check-gammaloop-nextest-${group.name}") groups;
+    ++ map (job: "packages.${system}.${job.package}") runtimeJobs;
   # Schedule final test archives and the Python module independently.
   # Package compilation remains split into the existing cached derivations.
   requiredJobs = unique (map (entry: entry.key) (builtins.genericClosure {
@@ -454,6 +491,8 @@
 in {
   inherit
     groups
+    runtimeJobs
+    mainRuntimeJobs
     testFeatures
     ufoWheelTags
     workspaceDependencyClosureFor
@@ -489,16 +528,16 @@ in {
       synchronous = true;
     };
     dependencies = validatedProjectedDependencies;
-    test = builtins.listToAttrs (map (name: {
-      inherit name;
+    test = builtins.listToAttrs (map (job: {
+      inherit (job) name;
       value = {
-        package = "packages.${system}.nix-ci-check-${name}";
+        package = "packages.${system}.${job.package}";
         inherit system;
         in-repo = true;
-        # Keep the legacy repository key available to branches on older Symbolica.
+        # Delivered to the user process; Nix never evaluates the value.
         secrets = ["SYMBOLICA_LICENSE_SIGNED"];
       };
-    }) (["alphal00p-docs" "gammaloop-doctest"] ++ map (group: "gammaloop-nextest-${group.name}") groups));
+    }) runtimeJobs);
     deploy = {
       ci-passed = {
         package = "packages.${system}.nix-ci-passed";

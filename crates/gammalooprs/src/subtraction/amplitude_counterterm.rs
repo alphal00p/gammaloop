@@ -1,3 +1,4 @@
+use crate::settings::global::FrozenCompilationMode;
 use std::{collections::BTreeMap, path::Path, sync::Arc};
 
 use crate::cff::{
@@ -882,11 +883,16 @@ impl AmplitudeCountertermData {
         Ok((local, integrated))
     }
 
+    /// Compile the graph's evaluators using the selected frozen backend.
+    ///
+    /// See [`crate::processes::ProcessList::compile`] for an example.
+    ///
+    /// # Errors
+    /// Returns artifact directory or evaluator compilation failures.
     pub fn compile(
         &mut self,
         path: impl AsRef<Path>,
-        _override_existing: bool,
-        frozen_mode: &crate::settings::global::FrozenCompilationMode,
+        frozen_mode: &FrozenCompilationMode,
     ) -> Result<()> {
         for (i, e) in self.evaluators.iter_mut_enumerated() {
             for (cff_index, evaluator_stack) in e.evaluator_stacks.iter_mut() {

@@ -59,7 +59,6 @@ env:
   # closure separate from the broader Nix producer set.
   HESTIA_CACHE_VERSION_SALT: gammaloop-docs-no-closure-v1
   HESTIA_DRAIN_TIMEOUT: 7200
-  SYMBOLICA_LICENSE: ${{ secrets.SYMBOLICA_LICENSE_SIGNED || 'GAMMALOOP_USER' }}
 
 jobs:
   build:
@@ -157,11 +156,6 @@ jobs:
             fi
           done
           git checkout --detach "refs/tags/$SNAPSHOT_TAG"
-          if grep -q '"alphal00p-docs-pages"' flake.nix; then
-            echo "cacheable=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "cacheable=false" >> "$GITHUB_OUTPUT"
-          fi
 
       - name: Refresh publication catalogue
         if: steps.release.outputs.channel == 'latest'
@@ -171,9 +165,9 @@ jobs:
             python3 scripts/update-publications.py --keep-existing-on-error
 
       - id: docs
-        name: Build all five sites
+        name: Validate and build all six sites
         env:
-          CACHEABLE_SNAPSHOT: ${{ steps.snapshot_source.outputs.cacheable }}
+          SYMBOLICA_LICENSE_SIGNED: ${{ secrets.SYMBOLICA_LICENSE_SIGNED }}
           CHANNEL: ${{ steps.release.outputs.channel }}
           SNAPSHOT_TAG: ${{ steps.release.outputs.snapshot_tag }}
         run: |
@@ -181,33 +175,25 @@ jobs:
           build_started=$SECONDS
           ALPHAL00P_DOCS_GIT_COMMIT="$(git rev-parse HEAD)"
           ALPHAL00P_DOCS_GIT_TIMESTAMP="$(git log -1 --format=%ct)"
-          ALPHAL00P_DOCS_CHANNEL=$CHANNEL
-          ALPHAL00P_DOCS_SNAPSHOT_TAG=$SNAPSHOT_TAG
           export \
-            ALPHAL00P_DOCS_CHANNEL \
             ALPHAL00P_DOCS_GIT_COMMIT \
-            ALPHAL00P_DOCS_GIT_TIMESTAMP \
-            ALPHAL00P_DOCS_SNAPSHOT_TAG
+            ALPHAL00P_DOCS_GIT_TIMESTAMP
 
-          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] \
-            && [ "$CHANNEL" = snapshot ] \
-            && [ "$CACHEABLE_SNAPSHOT" = false ]; then
-            # Historical five-product tags predate the cacheable Pages output.
-            nix develop --command \
-              just docs-site all "$CHANNEL" "$SNAPSHOT_TAG" target/alphal00p-docs
-            docs_path=$PWD/target/alphal00p-docs
-            cargo_producer=historical-build
-          else
+          docs_path="$RUNNER_TEMP/alphal00p-docs"
+          # Inspect only the package name, never a historical licensed Pages
+          # derivation. The launcher is composed through runtimeCheckPackages.
+          has_runtime_builder=$(env -u SYMBOLICA_LICENSE -u SYMBOLICA_LICENSE_SIGNED nix eval --raw .#packages.x86_64-linux \
+            --apply 'p: if p ? alphal00p-docs-build then "yes" else "no"')
+          if [ "$has_runtime_builder" = yes ]; then
             nix_log=$RUNNER_TEMP/alphal00p-docs-nix.log
-            docs_path=$(
-              nix build \
-                --impure \
-                --no-link \
-                --print-build-logs \
-                --print-out-paths \
-                .#packages.x86_64-linux.alphal00p-docs-pages \
-                2> >(tee "$nix_log" >&2)
-            )
+            env -u SYMBOLICA_LICENSE -u SYMBOLICA_LICENSE_SIGNED nix build --out-link "$RUNNER_TEMP/alphal00p-docs-launcher" \
+              --print-build-logs .#alphal00p-docs-build 2> >(tee "$nix_log" >&2)
+            docs_args=(--channel "$CHANNEL" --output "$docs_path" \
+              --report-dir "$RUNNER_TEMP/alphal00p-docs-reports")
+            if [ "$CHANNEL" = snapshot ]; then
+              docs_args+=(--snapshot-tag "$SNAPSHOT_TAG")
+            fi
+            "$RUNNER_TEMP/alphal00p-docs-launcher/bin/alphal00p-docs-build" "${docs_args[@]}"
             if grep -Eq "building '.+-alphal00p-docs-cargo-[^']+\\.drv'" "$nix_log"; then
               cargo_producer=rebuilt
             elif grep -Eq "copying path '.+-alphal00p-docs-cargo-[^']+'" "$nix_log"; then
@@ -215,6 +201,25 @@ jobs:
             else
               cargo_producer=already-present
             fi
+          else
+            # Historical sources use their native recipe only if their Nix
+            # environment cannot serialize a runtime credential.
+            if ! python3 -c '
+          import pathlib, re, sys
+          pattern = re.compile(r"builtins\s*\.\s*getEnv\s*\"SYMBOLICA_LICENSE(?:_SIGNED)?\"")
+          paths = [str(path) for path in pathlib.Path(".").rglob("*.nix") if pattern.search(path.read_text())]
+          print("\n".join(paths)) if paths else None
+          sys.exit(bool(paths))
+          '; then
+              echo "::error::Selected historical source captures a license during Nix evaluation; rebuilding it is unsupported."
+              exit 2
+            fi
+            set +x
+            if [ -z "${SYMBOLICA_LICENSE:-}" ]; then
+              export SYMBOLICA_LICENSE="$SYMBOLICA_LICENSE_SIGNED"
+            fi
+            nix develop --command just docs-site all "$CHANNEL" "$SNAPSHOT_TAG" "$docs_path"
+            cargo_producer=historical-build
           fi
           test -d "$docs_path"
           build_seconds=$((SECONDS - build_started))
@@ -223,7 +228,7 @@ jobs:
             echo "seconds=$build_seconds"
             echo "cargo_producer=$cargo_producer"
           } >> "$GITHUB_OUTPUT"
-          echo "Reusable Cargo producer: $cargo_producer; five-site build: ${build_seconds}s"
+          echo "Reusable Cargo producer: $cargo_producer; six-site runtime build: ${build_seconds}s"
 
       - id: notebook_source
         name: Select browser notebook support at the documented revision
@@ -435,7 +440,7 @@ jobs:
             echo "| Canonical example journeys | $canonical_examples |"
             echo "| Canonical verification tiers | $pull_request_examples pull request · $scheduled_examples scheduled |"
             echo "| Reusable Cargo producer | $CARGO_PRODUCER |"
-            echo "| Five-site build | ${SECONDS_ELAPSED}s |"
+            echo "| Six-site runtime build | ${SECONDS_ELAPSED}s |"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Retain publication input
