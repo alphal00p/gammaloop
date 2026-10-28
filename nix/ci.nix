@@ -33,6 +33,7 @@
         else "not (test(=commands::import::model::tests::ufo_and_json_restrictions_preserve_model_content) or test(=commands::import::model::tests::fresh_sm_ufo_preserves_virtual_gauge_and_covariant_cut_states))";
       packages = [
         "gammaloop-api"
+        "gammaloop-statistics"
         "gammaloop-tracing-filter"
         "gammaloop-tracing-filter-macros"
         "gammalooprs"
