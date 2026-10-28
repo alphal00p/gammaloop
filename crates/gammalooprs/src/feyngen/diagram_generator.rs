@@ -34,7 +34,6 @@ use symbolica::coefficient::Coefficient;
 use symbolica::domains::algebraic::AlgebraicExtension;
 use symbolica::domains::finite_field::PrimeIteratorU64;
 use symbolica::domains::float::Complex as SymbolicaComplex;
-use symbolica::domains::integer::Integer;
 use symbolica::function;
 use symbolica::graph::{GenerationSettings, HalfEdge};
 use symbolica::id::Replacement;
@@ -155,20 +154,6 @@ impl EdgeColor {
             pdg: particle.0.pdg_code,
         }
     }
-}
-
-pub(crate) fn feynman_graph_automorphism_group_size<N, E>(
-    graph: &SymbolicaGraph<N, E>,
-    symbolica_group_size: &Integer,
-) -> Integer {
-    // Graphica 3.0 counts a flip for every self-loop, including directed
-    // loops. Their ends are distinct particle/antiparticle fields, so
-    // those flips do not belong to the Feynman graph automorphism group.
-    graph
-        .edges()
-        .iter()
-        .filter(|edge| edge.directed && edge.vertices.0 == edge.vertices.1)
-        .fold(symbolica_group_size.clone(), |size, _| size / 2)
 }
 
 fn polyrat_to_atom(
@@ -3445,14 +3430,14 @@ impl ProcessDefinition {
             bar.finish_and_clear();
         }
 
-        // The Feynman graph automorphism group appears in the denominator.
+        // Graphica's automorphism group includes edge permutations and
+        // undirected self-loop flips. Its size appears in the denominator.
         let graphs = graphs
             .iter()
             .map(|(g, symmetry_factor)| {
-                let symmetry_factor = feynman_graph_automorphism_group_size(g, symmetry_factor);
                 (
                     g.clone(),
-                    Atom::num(1) / function!(symbol!("AutG"), Atom::num(symmetry_factor)),
+                    Atom::num(1) / function!(symbol!("AutG"), Atom::num(symmetry_factor.clone())),
                 )
             })
             .collect::<HashMap<_, _>>();

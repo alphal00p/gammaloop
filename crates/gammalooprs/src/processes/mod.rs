@@ -13,12 +13,11 @@ use schemars::JsonSchema;
 use symbolica::evaluate::OptimizationSettings;
 use tracing::debug;
 
-use crate::{
-    GammaLoopContext, GammaLoopContextContainer,
-    settings::{GlobalSettings, runtime::LockedRuntimeSettings},
-    utils::serde_utils::{IsDefault, is_false, is_true, is_usize, show_defaults_helper},
-    uv::export::UVForestExportSettings,
-};
+use crate::settings::runtime::LockedRuntimeSettings;
+use crate::settings::{GlobalSettings, RuntimeSettings};
+use crate::utils::serde_utils::{IsDefault, is_false, is_true, is_usize, show_defaults_helper};
+use crate::uv::export::UVForestExportSettings;
+use crate::{GammaLoopContext, GammaLoopContextContainer};
 use serde::{Deserialize, Serialize};
 
 use crate::model::Model;
@@ -766,12 +765,13 @@ impl ProcessList {
         &self,
         path: impl AsRef<Path>,
         settings: &StandaloneExportSettings,
+        model_for_settings: impl Fn(&RuntimeSettings) -> Result<Model>,
     ) -> Result<()> {
         let path = path.as_ref().join("processes");
         fs::create_dir_all(&path)?;
 
         for p in self.processes.iter() {
-            p.export_standalone(&path, settings)?;
+            p.export_standalone(&path, settings, &model_for_settings)?;
         }
         Ok(())
     }

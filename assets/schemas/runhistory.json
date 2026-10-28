@@ -3168,11 +3168,34 @@
         }
       ]
     },
+    "OverlapCenterObjective": {
+      "oneOf": [
+        {
+          "description": "Maximize the smallest unnormalized energy depth, as in the original solver.",
+          "type": "string",
+          "const": "max_min_depth"
+        },
+        {
+          "description": "Maximize a conservative Euclidean ball radius using the active routing norms.",
+          "type": "string",
+          "const": "relaxed_chebyshev"
+        },
+        {
+          "description": "Minimize the signed sum of E-surface values while preserving the best certified\nrelaxed-Chebyshev clearance within solver accuracy.",
+          "type": "string",
+          "const": "min_sum"
+        }
+      ]
+    },
     "OverlapSettings": {
       "type": "object",
       "properties": {
         "check_global_center": {
           "description": "Validate that the selected global center lies inside every required E-surface.",
+          "type": "boolean"
+        },
+        "enable_heuristics": {
+          "description": "Enable the configured heuristic center tests before invoking the overlap solver.\nAn explicitly forced center is independent of this switch and is always validated.",
           "type": "boolean"
         },
         "force_global_center": {
@@ -3190,6 +3213,10 @@
             "maxItems": 3,
             "minItems": 3
           }
+        },
+        "objective": {
+          "description": "Refine final maximal-overlap centers after enabled heuristics fail their interior checks.\nOptional objectives leave catalogue membership unchanged and retain a certified witness\nif their fixed iteration budget or physical validation rejects an optimization result.",
+          "$ref": "#/$defs/OverlapCenterObjective"
         },
         "try_origin": {
           "description": "Try the loop-momentum origin as the global center before solving for another point.",

@@ -6,6 +6,8 @@ use std::{
 use bincode_trait_derive::{Decode, Encode};
 use eyre::Result;
 use linnet::half_edge::involution::EdgeVec;
+#[cfg(feature = "python")]
+use pyo3::pyclass;
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use spenso::algebra::{algebraic_traits::IsZero, complex::Complex};
@@ -2606,12 +2608,36 @@ impl Default for IntegratedCounterTermRange {
     }
 }
 
+#[cfg_attr(feature = "python", pyclass(from_py_object))]
+#[derive(
+    Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq, Encode, Decode, JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum OverlapCenterObjective {
+    /// Maximize the smallest unnormalized energy depth, as in the original solver.
+    #[default]
+    MaxMinDepth,
+    /// Maximize a conservative Euclidean ball radius using the active routing norms.
+    RelaxedChebyshev,
+    /// Minimize the signed sum of E-surface values while preserving the best certified
+    /// relaxed-Chebyshev clearance within solver accuracy.
+    MinSum,
+}
+
 #[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[serde(default)]
 pub struct OverlapSettings {
-    //v
+    /// Refine final maximal-overlap centers after enabled heuristics fail their interior checks.
+    /// Optional objectives leave catalogue membership unchanged and retain a certified witness
+    /// if their fixed iteration budget or physical validation rejects an optimization result.
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub objective: OverlapCenterObjective,
+    /// Enable the configured heuristic center tests before invoking the overlap solver.
+    /// An explicitly forced center is independent of this switch and is always validated.
+    #[serde(skip_serializing_if = "is_true")]
+    pub enable_heuristics: bool,
     /// Explicit three-vector center used for every threshold overlap, when provided.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub force_global_center: Option<Vec<[f64; 3]>>,
@@ -2629,6 +2655,8 @@ pub struct OverlapSettings {
 impl Default for OverlapSettings {
     fn default() -> Self {
         Self {
+            objective: OverlapCenterObjective::default(),
+            enable_heuristics: true,
             force_global_center: None,
             check_global_center: true,
             try_origin: true,

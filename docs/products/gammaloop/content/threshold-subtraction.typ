@@ -187,6 +187,54 @@ member-specific. Implicit amplitude defaults retain native full-space treatment.
 cross-section graph groups, explicit threshold metadata on non-master graphs is currently
 rejected. This does not restrict sharing between cuts of the same master graph.
 
+== Choosing overlap centers at runtime
+
+The center objective is a runtime setting. The default retains the existing
+max-min energy-depth solve and first tries the origin. For example, this runtime
+fragment requests geometric clearance followed by a signed-sum refinement and
+disables heuristic-center tests:
+
+// docs-example: syntax
+```toml
+[subtraction.overlap_settings]
+objective = "min_sum"
+enable_heuristics = false
+```
+
+#table(
+  columns: (auto, 1fr),
+  table.header([*Objective*], [*Meaning*]),
+  [`max_min_depth`], [Default. Maximize the smallest value of `-E_s` among the
+    required E-surfaces. This is an energy margin.],
+  [`relaxed_chebyshev`], [Maximize a conservative radius of a Euclidean ball
+    inside every required surface, in the active solve LMB coordinates.],
+  [`min_sum`], [First obtain relaxed-Chebyshev clearance, then minimize the signed
+    sum of E-surface values while preserving that clearance within solver accuracy.],
+)
+
+For the geometric objective, each surface has a routing-derived Lipschitz bound
+`L_s`. The constraints `E_s(k) + L_s rho <= 0` certify a ball of radius `rho`
+inside their intersection. This is a conservative geometric bound; changing
+the loop-coordinate metric changes its meaning. A signed sum alone could improve
+by approaching one threshold while moving away from others, which is why
+`min_sum` preserves the common geometric clearance first. None of these objectives
+guarantees a unique mathematical optimizer or a measured stability improvement.
+
+With `enable_heuristics = true` (the default), a valid enabled heuristic center is
+accepted before optimization. `try_origin` selects the existing origin heuristic;
+an explicit `force_global_center` takes precedence independently of the heuristic
+switch and is always validated. The existing `try_origin_all_lmbs` selector is
+unimplemented and should remain disabled.
+
+The optional objectives refine only the final maximal-overlap groups. They do
+not add optimization passes to candidate overlap tests or change catalogue
+membership. Refinement uses deterministic ordering and fixed iteration limits,
+with at most one additional solve for `relaxed_chebyshev` and two for `min_sum`.
+If construction, optimization, or physical certification fails, GammaLoop retains
+the last certified interior center and records the outcome under the
+`subtraction`, `threshold`, `overlap`, and `socp` debug tags. Such a refinement
+failure does not reject an otherwise valid sample.
+
 == Multiplier expressions and reusable functions
 
 Each multiplier contains `expression`, optional `function_map`, `symmetrize = false` and

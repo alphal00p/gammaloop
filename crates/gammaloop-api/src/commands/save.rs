@@ -237,7 +237,11 @@ impl Save {
                     format,
                     precision,
                 };
-                state.process_list.export_standalone(&target_dir, &settings)
+                state
+                    .process_list
+                    .export_standalone(&target_dir, &settings, |settings| {
+                        state.resolve_model_for_settings(settings)
+                    })
             }
 
             Save::Schema {} => write_schemas(),

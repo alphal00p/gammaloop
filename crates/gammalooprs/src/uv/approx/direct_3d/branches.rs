@@ -7,6 +7,8 @@ use std::{
     },
 };
 
+use crate::GammaLoopContext;
+use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use eyre::{ensure, eyre};
 use spenso::shadowing::{ANTISYM, CYCLIC, SYM};
@@ -18,20 +20,15 @@ use symbolica::{
     symbol,
 };
 
-use crate::{
-    cff::{
-        expression::{OrientationID, energy_map_replacements_gs},
-        surface::LinearEnergyExpr,
-    },
-    graph::Graph,
-    integrands::process::param_builder::FnMapEntry,
-    numerator::symbolica_ext::NumeratorAtomExt,
-    utils::{GS, external_energy_atom_from_index, ose_atom_from_index},
-    uv::{
-        Integrands,
-        approx::{OrientationProjection, local_3d::OrientationIntegrands},
-    },
-};
+use crate::cff::expression::{OrientationID, energy_map_replacements_gs};
+use crate::cff::surface::LinearEnergyExpr;
+use crate::graph::Graph;
+use crate::integrands::process::param_builder::FnMapEntry;
+use crate::numerator::symbolica_ext::NumeratorAtomExt;
+use crate::utils::{GS, external_energy_atom_from_index, ose_atom_from_index};
+use crate::uv::approx::OrientationProjection;
+use crate::uv::approx::local_3d::OrientationIntegrands;
+use crate::uv::{Integrands, ParametricIntegrandRow, ParametricIntegrandTerm};
 
 use super::coefficients::ScalarCoefficients;
 
@@ -43,13 +40,15 @@ static NUMERATOR_SCOPE: AtomicUsize = AtomicUsize::new(0);
 /// sources retain their explicit map because it is part of their residue key,
 /// not temporary projection metadata. Every factor in a branch is mapped with
 /// this one authority; the Taylor operator only changes its rescaling series.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
 pub(crate) enum DirectEnergyMap {
     Production,
     Source(Vec<LinearEnergyExpr>),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
 pub(crate) struct DirectResidueKey {
     pub(crate) selector_host: OrientationID,
     pub(crate) energy_map: DirectEnergyMap,
@@ -155,9 +154,9 @@ impl DirectResidueBranches {
         }
         let fallback_zero = branches
             .iter()
-            .find(|(_, integrands)| integrands.iter().all(|(_, atom)| atom.is_zero()))
+            .find(|(_, integrands)| integrands.is_zero())
             .cloned();
-        branches.retain(|(_, integrands)| !integrands.iter().all(|(_, atom)| atom.is_zero()));
+        branches.retain(|(_, integrands)| !integrands.is_zero());
         if branches.is_empty() {
             branches.extend(fallback_zero);
         }
@@ -469,6 +468,7 @@ impl DirectResidueBranches {
         graph: &Graph,
         factor: &Atom,
         scope: (usize, Atom),
+        retain_rows: bool,
     ) -> Result<Self> {
         if matches!(factor.as_view(), AtomView::Num(_)) || factor.is_zero() {
             return Ok(self.map(|atom| atom * factor));
@@ -497,6 +497,36 @@ impl DirectResidueBranches {
                     // The complete branch key owns one energy substitution;
                     // every selected cut order reuses that same mapped factor.
                     ensure!(*key == row_key, "prepared numerator residue order changed");
+                    if retain_rows {
+                        let coefficients: Vec<Rational> = arguments
+                            .iter()
+                            .map(|argument| {
+                                Rational::try_from(argument.as_view()).map_err(|error| eyre!(error))
+                            })
+                            .collect::<Result<_>>()?;
+                        let rows = Integrands::from_iter(
+                            integrands.cut_indices().map(|index| (*index, Atom::Zero)),
+                        )
+                        .with_parametric_terms(
+                            integrands
+                                .cut_indices()
+                                .map(|index| {
+                                    Ok((
+                                        *index,
+                                        ParametricIntegrandTerm::new(
+                                            Arc::clone(&entry),
+                                            vec![ParametricIntegrandRow {
+                                                coefficients: coefficients.clone(),
+                                                carrier: Atom::one(),
+                                                source_keys: vec![key.clone()],
+                                            }],
+                                        )?,
+                                    ))
+                                })
+                                .collect::<Result<Vec<_>>>()?,
+                        )?;
+                        return Ok((key.clone(), integrands.zip_mul(&rows)?));
+                    }
                     let call =
                         entry
                             .lhs
@@ -591,6 +621,16 @@ impl DirectResidueBranches {
         mut expand: impl FnMut(&Atom, Rational) -> Result<Series<AtomField>>,
         mut finish: impl FnMut(&Atom) -> Result<Atom>,
     ) -> Result<Self> {
+        // Projected local-4D rows are constructed after Taylor expansion. This
+        // scalar-family series must never silently discard their separate lane.
+        ensure!(
+            self.iter_keys().all(|(_, integrands)| {
+                integrands
+                    .cut_indices()
+                    .all(|cut| integrands.parametric_terms(cut).is_empty())
+            }),
+            "shared numerator Taylor series does not support projected parametric rows"
+        );
         // Each instantiated scalar call owns its Laurent valuation: identical
         // templates at different arguments can have different leading poles.
         // Feed one temporary parameter-free family per call into the existing
@@ -872,6 +912,7 @@ impl DirectResidueBranches {
             };
             probes.push(
                 FnMapEntry {
+                    inlining: Default::default(),
                     rhs: if normalized.is_zero() {
                         Atom::Zero
                     } else {
@@ -1162,28 +1203,27 @@ impl Neg for DirectResidueBranches {
 
 #[cfg(test)]
 mod tests {
+    use crate::initialisation;
     use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
     use spenso::structure::representation::{LibraryRep, Minkowski, RepName};
-    use symbolica::{domains::rational::Rational, function, id::Replacement};
+    use symbolica::domains::rational::Rational;
+    use symbolica::function;
+    use symbolica::id::Replacement;
     use typed_index_collections::TiVec;
 
-    use crate::{
-        cff::{
-            CutCFFIndex,
-            expression::{OrientationData, OrientationExpression},
-        },
-        dot,
-        graph::{Graph, parse::IntoGraph},
-        initialisation::test_initialise,
-        settings::global::OrientationPattern,
-        utils::GS,
-    };
+    use crate::cff::CutCFFIndex;
+    use crate::cff::expression::{OrientationData, OrientationExpression};
+    use crate::dot;
+    use crate::graph::Graph;
+    use crate::graph::parse::IntoGraph;
+    use crate::settings::global::OrientationPattern;
+    use crate::utils::GS;
 
     use super::*;
 
     #[test]
     fn scalar_resolution_shares_bindings_and_numerator_bodies_across_residue_rows() -> Result<()> {
-        test_initialise()?;
+        initialisation::test_initialise()?;
         let scalar = Integrands::scalar_symbol();
         let family = symbol!("gammalooprs::uv::numerator_family");
         let parameter = symbol!("shared_scalar_resolution_test::p");
@@ -1267,7 +1307,7 @@ mod tests {
 
     #[test]
     fn shared_numerator_series_normalizes_known_multilinear_owners() -> Result<()> {
-        test_initialise()?;
+        initialisation::test_initialise()?;
         let variable = symbol!("shared_multilinear_test::t"; Scalar);
         let s = symbol!("shared_multilinear_test::s"; Scalar);
         let z = symbol!("shared_multilinear_test::z"; Scalar);
@@ -1412,7 +1452,7 @@ mod tests {
 
     #[test]
     fn shared_numerator_series_does_not_capture_multilinear_scope_names() -> Result<()> {
-        test_initialise()?;
+        initialisation::test_initialise()?;
         let tag = DirectResidueBranches::numerator_scope().1;
         let series_scope = DirectResidueBranches::numerator_scope().1;
         let next = NUMERATOR_SCOPE.load(Ordering::Relaxed);
@@ -1479,7 +1519,7 @@ mod tests {
 
     #[test]
     fn shared_numerator_series_preserves_independent_tensor_factors() -> Result<()> {
-        test_initialise()?;
+        initialisation::test_initialise()?;
         let variable = symbol!("shared_series_factor_test::t");
         let [a, b, c, d] = ["a", "b", "c", "d"].map(|name| {
             Atom::var(symbol!(
@@ -1574,7 +1614,7 @@ mod tests {
 
     #[test]
     fn shared_numerator_series_matches_specialized_laurent_products() -> Result<()> {
-        test_initialise()?;
+        initialisation::test_initialise()?;
         let variable = symbol!("direct_series_test::t");
         let parameters = ["sigma", "node", "tau", "other_node"]
             .map(|name| Atom::var(symbol!(format!("direct_series_test::{name}").as_str())));
@@ -1707,7 +1747,7 @@ mod tests {
 
     #[test]
     fn shared_numerator_series_differentiates_scalar_denominators_once() -> Result<()> {
-        test_initialise()?;
+        initialisation::test_initialise()?;
         static DERIVATIVES: AtomicUsize = AtomicUsize::new(0);
         let variable = symbol!("direct_probe_reuse_test::t");
         let t = Atom::var(variable);
@@ -1765,7 +1805,7 @@ mod tests {
 
     #[test]
     fn shared_numerator_series_handles_finite_zero_probes_and_cancellation() -> Result<()> {
-        test_initialise()?;
+        initialisation::test_initialise()?;
         let variable = symbol!("direct_zero_series_test::t");
         let t = Atom::var(variable);
         let a = Atom::var(symbol!("direct_zero_series_test::a"));
@@ -1818,7 +1858,7 @@ mod tests {
 
     #[test]
     fn shared_numerator_exact_series_keeps_tiny_inverse_differences() -> Result<()> {
-        test_initialise()?;
+        initialisation::test_initialise()?;
         let variable = symbol!("shared_exact_inverse_test::t");
         let t = Atom::var(variable);
         let x = Atom::var(symbol!("shared_exact_inverse_test::x"));
@@ -1878,7 +1918,7 @@ mod tests {
 
     #[test]
     fn shared_numerator_exact_negative_endpoint_lifts_bodies_and_keeps_empty_roots() -> Result<()> {
-        test_initialise()?;
+        initialisation::test_initialise()?;
         let variable = symbol!("shared_exact_endpoint_test::t");
         let t = Atom::var(variable);
         let a = Atom::var(symbol!("shared_exact_endpoint_test::a"));
@@ -1928,7 +1968,7 @@ mod tests {
 
     #[test]
     fn shared_numerator_series_rejects_singular_specialization_and_hidden_calls() -> Result<()> {
-        test_initialise()?;
+        initialisation::test_initialise()?;
         let variable = symbol!("direct_invalid_series_test::t");
         let parameter = symbol!("direct_invalid_series_test::z");
         let t = Atom::var(variable);
@@ -1975,8 +2015,48 @@ mod tests {
     }
 
     #[test]
+    fn shared_numerator_series_rejects_projected_parametric_rows() -> Result<()> {
+        initialisation::test_initialise()?;
+        let variable = symbol!("direct_parametric_series_test::t");
+        let parameter = symbol!("direct_parametric_series_test::z");
+        let tag = DirectResidueBranches::numerator_scope().1;
+        let numerator = Arc::new(FnMapEntry {
+            is_alias: false,
+            lhs: symbol!("gammalooprs::uv::numerator_family")
+                .call_args([tag.clone(), Atom::var(parameter)]),
+            rhs: Atom::var(parameter) + Atom::var(variable),
+            args: vec![parameter.into()],
+            tags: vec![tag],
+            inlining: Default::default(),
+        });
+        let key = DirectResidueKey::production(OrientationID(0));
+        let integrands = Integrands::from_iter([]).with_parametric_terms([(
+            CutCFFIndex::new_all_none(),
+            ParametricIntegrandTerm::new(
+                numerator,
+                vec![ParametricIntegrandRow {
+                    coefficients: vec![Rational::from(2)],
+                    carrier: Atom::num(3),
+                    source_keys: vec![key.clone()],
+                }],
+            )?,
+        )])?;
+        let branches = DirectResidueBranches::from_keyed([(key, integrands)])?;
+        let error = branches
+            .series_preserving_numerators(
+                variable,
+                Atom::Zero.as_view(),
+                1,
+                DirectResidueBranches::numerator_scope().1,
+            )
+            .unwrap_err();
+        assert!(error.to_string().contains("projected parametric rows"));
+        Ok(())
+    }
+
+    #[test]
     fn prepared_numerator_keeps_full_affine_rows_and_independent_sampling_nodes() -> Result<()> {
-        test_initialise()?;
+        initialisation::test_initialise()?;
         let graph: Graph = dot!(
             digraph G {
                 edge [particle="scalar_1"];
@@ -2116,7 +2196,7 @@ mod tests {
 
     #[test]
     fn prepared_numerator_reuses_vector_loop_and_external_mapping_rules() -> Result<()> {
-        test_initialise()?;
+        initialisation::test_initialise()?;
         let graph: Graph = dot!(digraph G {
             edge [num=1 mass=0]
             node [num=1]
@@ -2180,7 +2260,7 @@ mod tests {
 
     #[test]
     fn one_source_residue_map_is_a_homomorphism_for_all_factorized_factors() -> Result<()> {
-        test_initialise()?;
+        initialisation::test_initialise()?;
         let graph: Graph = dot!(
             digraph G {
                 edge [particle="scalar_1"];
@@ -2272,7 +2352,27 @@ mod tests {
             &graph,
             &factor,
             DirectResidueBranches::numerator_scope(),
+            false,
         )?;
+        let parametric = branches.multiply_key_mapped(
+            orientation,
+            &graph,
+            &factor,
+            DirectResidueBranches::numerator_scope(),
+            true,
+        )?;
+        let parametric_sum = parametric.materialize(false)?;
+        for cut in [index, raised] {
+            assert!(parametric_sum.atom(&cut).unwrap().is_zero());
+            let terms = parametric_sum.parametric_terms(&cut);
+            assert_eq!(
+                terms.len(),
+                1,
+                "native rows must not duplicate the generic root"
+            );
+            assert_eq!(terms[0].rows.len(), 2);
+            assert!(terms[0].rows.iter().all(|row| row.source_keys.len() == 1));
+        }
         let expected_sum = [2, 3].into_iter().fold(Atom::Zero, |sum, scale| {
             let energy = Atom::num(scale) * Atom::var(GS.numerator_sampling_scale);
             sum + (&energy + &a) * (&energy + &b)
@@ -2287,6 +2387,11 @@ mod tests {
         for actual in [
             mapped.materialize(false)?.resolved()?,
             localized.map(|atom| host.select(atom.as_view())),
+            parametric_sum.resolved()?,
+            parametric
+                .materialize(true)?
+                .resolved()?
+                .map(|atom| host.select(atom.as_view())),
         ] {
             let difference = actual.checked_zip(&expected, |_, actual, expected| {
                 Ok((actual - expected).expand())
@@ -2330,7 +2435,7 @@ mod tests {
     fn captured_gl1_numerator_shares_one_body_across_all_residue_rows() -> Result<()> {
         use crate::cff::orientations::GraphOrientation;
 
-        test_initialise()?;
+        initialisation::test_initialise()?;
         // Replay the historical source140 Taylor-entry tensor without distributing
         // its vertex sums. This tests mapping and selector support, not a fresh
         // physical generation or the subsequent Taylor operation.
@@ -2417,6 +2522,7 @@ mod tests {
             &graph,
             &numerator,
             DirectResidueBranches::numerator_scope(),
+            false,
         )?;
         let definition = &shared.0[0].1.numerators()[0];
         assert_eq!(definition.args.len(), 5);

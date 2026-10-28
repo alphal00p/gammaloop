@@ -3,16 +3,12 @@ use global::{GenerationSettings, Parallelisation};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    GammaLoopContext,
-    observables::{ObservablesSettings, QuantitiesSettings, SelectorsSettings},
-    settings::runtime::HFunctionSettings,
-    utils::{
-        F, FloatLike,
-        serde_utils::{IsDefault, show_defaults_helper},
-        tracing::LogStyle,
-    },
-};
+use crate::GammaLoopContext;
+use crate::observables::{ObservablesSettings, QuantitiesSettings, SelectorsSettings};
+use crate::settings::runtime::HFunctionSettings;
+use crate::utils::serde_utils::{IsDefault, show_defaults_helper};
+use crate::utils::tracing::LogStyle;
+use crate::utils::{F, FloatLike};
 
 #[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
 #[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, JsonSchema, PartialEq)]
@@ -134,32 +130,33 @@ impl Default for GlobalSettings {
 }
 
 pub mod global;
+pub use runtime::kinematic::KinematicsSettings;
 pub use runtime::{
     GeneralSettings, IntegratorSettings, ObservablesOutputSettings, RuntimeModelSettings,
-    SamplingSettings, StabilitySettings, SubtractionSettings, kinematic::KinematicsSettings,
+    SamplingSettings, StabilitySettings, SubtractionSettings,
 };
 pub mod runtime;
 
 #[cfg(test)]
 mod tests {
+    use crate::settings::runtime::{OverlapCenterObjective, OverlapSettings};
+    use bincode::config;
+    use schemars::schema_for;
     use serde::{Deserialize, Serialize};
 
-    use crate::{
-        momentum::{Dep, ExternalMomenta, Helicity},
-        settings::{
-            GlobalSettings, RuntimeSettings, SamplingSettings, SubtractionSettings,
-            global::{GammaloopCompileOptions, GenerationSettings, ThresholdSubtractionSettings},
-            runtime::{
-                DiscreteGraphSamplingSettings, DiscreteGraphSamplingType,
-                GammaloopTropicalSamplingSettings, SamplingChannelWeight,
-                kinematic::{Externals, improvement::PhaseSpaceImprovementSettings},
-            },
-        },
-        utils::{
-            DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, F,
-            serde_utils::{SHOWDEFAULTS, ShowDefaultsGuard},
-        },
+    use crate::momentum::{Dep, ExternalMomenta, Helicity};
+    use crate::settings::global::{
+        GammaloopCompileOptions, GenerationSettings, ThresholdSubtractionSettings,
     };
+    use crate::settings::runtime::kinematic::Externals;
+    use crate::settings::runtime::kinematic::improvement::PhaseSpaceImprovementSettings;
+    use crate::settings::runtime::{
+        DiscreteGraphSamplingSettings, DiscreteGraphSamplingType,
+        GammaloopTropicalSamplingSettings, SamplingChannelWeight,
+    };
+    use crate::settings::{GlobalSettings, RuntimeSettings, SamplingSettings, SubtractionSettings};
+    use crate::utils::serde_utils::{SHOWDEFAULTS, ShowDefaultsGuard};
+    use crate::utils::{DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, F};
     use std::fmt::Debug;
 
     fn generic_test_settings<T>()
@@ -746,6 +743,50 @@ mod tests {
         generic_test_settings::<OverlapSettings>();
     }
 
+    #[test]
+    fn overlap_objectives_preserve_defaults_and_round_trip() {
+        {
+            let _guard = ShowDefaultsGuard::new(false);
+            assert_eq!(toml::to_string(&OverlapSettings::default()).unwrap(), "");
+            for (name, objective) in [
+                ("max_min_depth", OverlapCenterObjective::MaxMinDepth),
+                (
+                    "relaxed_chebyshev",
+                    OverlapCenterObjective::RelaxedChebyshev,
+                ),
+                ("min_sum", OverlapCenterObjective::MinSum),
+            ] {
+                let parsed: OverlapSettings =
+                    toml::from_str(&format!("objective = '{name}'\nenable_heuristics = false"))
+                        .unwrap();
+                assert_eq!(parsed.objective, objective);
+                assert!(!parsed.enable_heuristics);
+                assert!(
+                    parsed.try_origin,
+                    "the master gate preserves the configured heuristic"
+                );
+                let restored: OverlapSettings =
+                    toml::from_str(&toml::to_string(&parsed).unwrap()).unwrap();
+                assert_eq!(restored, parsed);
+                let binary = bincode::encode_to_vec(&parsed, config::standard()).unwrap();
+                let (restored, _): (OverlapSettings, _) =
+                    bincode::decode_from_slice(&binary, config::standard()).unwrap();
+                assert_eq!(restored, parsed);
+            }
+        }
+        {
+            let _guard = ShowDefaultsGuard::new(true);
+            let defaults = toml::to_string(&OverlapSettings::default()).unwrap();
+            assert!(defaults.contains("objective = \"max_min_depth\""));
+            assert!(defaults.contains("enable_heuristics = true"));
+        }
+        assert!(toml::from_str::<OverlapSettings>("objective='unknown'").is_err());
+        let _guard = ShowDefaultsGuard::new(true);
+        let schema = serde_json::to_value(schema_for!(OverlapSettings)).unwrap();
+        assert!(schema.to_string().contains("relaxed_chebyshev"));
+        assert!(schema.to_string().contains("min_sum"));
+        assert_eq!(schema["properties"]["enable_heuristics"]["default"], true);
+    }
     #[test]
     fn test_h_function_settings_serialize_deserialize() {
         use crate::settings::runtime::HFunctionSettings;

@@ -1,6 +1,6 @@
+use crate::integrands::process::sampling::maps::SamplingEvaluationError;
 use crate::integrands::process::{
     GenericEvaluatorFloat, LmbMultiChannelingSetup, SamplingChannelBridge,
-    sampling::maps::SamplingEvaluationError,
 };
 use crate::model::Model;
 use crate::momentum::sample::{
@@ -24,7 +24,7 @@ use linnet::half_edge::involution::EdgeIndex;
 
 use rand::Rng;
 use ref_ops::{RefAdd, RefDiv, RefMul, RefNeg, RefRem, RefSub};
-use rug::float::{Constant, ParseFloatError, Round};
+use rug::float::{Constant, ParseFloatError, Round, Special};
 use rug::ops::{CompleteRound, Pow};
 use rug::{Assign, Float};
 use schemars::JsonSchema;
@@ -46,18 +46,18 @@ use spenso::tensors::data::StorageTensor;
 use spenso::tensors::parametric::ParamTensor;
 use spenso::tensors::parametric::to_param::ToAtom;
 use spenso_hep_lib::hep_lib_atom;
-use symbolica::{
-    domains::{
-        dual::HyperDual,
-        float::{FixedPrecision, Float as SymbolicaFloat, FloatLike as SymFloatLike},
-    },
-    prelude::*,
+use symbolica::domains::dual::HyperDual;
+use symbolica::domains::float::{
+    FixedPrecision, Float as SymbolicaFloat, FloatLike as SymFloatLike,
 };
+use symbolica::evaluate::ComplexEvaluationDomain;
+use symbolica::prelude::*;
 
 use std::cell::RefCell;
 use std::cmp::{Ord, Ordering};
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
+use std::num::FpCategory;
 use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, Sub, SubAssign};
 use std::str::FromStr;
 use std::sync::{LazyLock, OnceLock, RwLock};
@@ -307,6 +307,141 @@ pub mod tracing;
 
 #[cfg(test)]
 mod tests {
+    use super::{
+        ArbPrec, F, FloatLike, QuadFloat, SamplingFloat, SymFloatLike, SymbolicaFloat, VarFloat,
+    };
+    use rug::Float;
+    use rug::ops::CompleteRound;
+    use spenso::algebra::complex::Complex;
+    use std::cmp::Ordering;
+    use std::num::FpCategory;
+    use symbolica::domains::float::{DoubleFloat, Real};
+    #[test]
+    fn numeric_wrappers_forward_scalar_capabilities() {
+        fn check<T: FloatLike>() {
+            let zero = F(T::from_f64_exact_binary(0.));
+            let one = zero.one();
+            let negative_zero = F(T::from_f64_exact_binary(-0.));
+            let nan = one.nan().expect("floating domains represent NaN");
+            assert_eq!(zero.real_classify(), Some(FpCategory::Zero));
+            assert_eq!(one.real_classify(), Some(FpCategory::Normal));
+            assert_eq!(nan.real_classify(), Some(FpCategory::Nan));
+            assert_eq!(one.real_cmp(&zero), Some(Ordering::Greater));
+            assert_eq!(nan.real_cmp(&one), None);
+            assert!(zero.needs_rescaling());
+            assert!(nan.needs_rescaling());
+            assert!(!one.needs_rescaling());
+            assert_eq!(one.select_nonzero(&one, &nan), one);
+            assert_eq!(zero.select_nonzero(&nan, &one), one);
+            assert_eq!(one.copy_sign(&negative_zero), -one);
+        }
+
+        check::<f64>();
+        check::<QuadFloat>();
+        check::<SamplingFloat>();
+        check::<ArbPrec>();
+    }
+
+    #[test]
+    fn numeric_wrappers_preserve_signed_zero_and_small_log_increments() {
+        assert_eq!(
+            F(0.0_f64).copy_sign(&F(-0.)).0.to_bits(),
+            (-0.0f64).to_bits()
+        );
+        let quad_zero = F(QuadFloat::from(DoubleFloat::from(0.)));
+        let quad_minus_zero = F(QuadFloat::from(DoubleFloat::from(-0.)));
+        assert!(
+            quad_zero
+                .copy_sign(&quad_minus_zero)
+                .0
+                .0
+                .into_inner()
+                .hi()
+                .is_sign_negative()
+        );
+        let arb_zero = F(ArbPrec::from_f64_exact_binary(0.));
+        let arb_minus_zero = F(ArbPrec::from_f64_exact_binary(-0.));
+        assert!(
+            arb_zero
+                .copy_sign(&arb_minus_zero)
+                .0
+                .float
+                .is_sign_negative()
+        );
+
+        assert_eq!(F(1e-20_f64).log1p().0, 1e-20_f64.ln_1p());
+        let quad = F(QuadFloat::from(DoubleFloat::from_compensated_sum(
+            1.,
+            2.0f64.powi(-80),
+        )));
+        assert_eq!(quad.real_cmp(&quad.one()), Some(Ordering::Greater));
+        let actual = SymbolicaFloat::from(quad.log1p().0).into_raw();
+        let input = Float::with_val(256, 1) + (Float::with_val(256, 1) >> 80u32);
+        let expected = input.ln_1p_ref().complete(256);
+        assert!(
+            Float::with_val(256, actual - expected).abs() < (Float::with_val(256, 1) >> 100u32)
+        );
+    }
+
+    #[test]
+    fn mpfr_wrapper_math_preserves_lane_precision_and_range() {
+        fn check<const N: u32>()
+        where
+            VarFloat<N>: FloatLike,
+        {
+            let one = F(VarFloat::<N>::from(Float::with_val(N, 1)));
+            let tiny = F(VarFloat::<N>::from(Float::with_val(N, 1) >> (2 * N)));
+            let logarithm = tiny.log1p();
+            assert_eq!(logarithm, tiny);
+            assert_eq!(logarithm.0.float.prec(), N);
+            assert_eq!(tiny.real_classify(), Some(FpCategory::Normal));
+            assert_eq!(tiny.real_cmp(&one.zero()), Some(Ordering::Greater));
+            assert!(!tiny.needs_rescaling());
+            let nan = one.nan().unwrap();
+            assert!(nan.0.float.is_nan());
+            assert_eq!(nan.0.float.prec(), N);
+            let large = F(VarFloat::<N>::from(Float::with_val(N, 1) << (2 * N)));
+            let magnitude =
+                (large.clone() * one.from_i64(3)).hypot(&(large.clone() * one.from_i64(4)));
+            assert_eq!(magnitude / large, one.from_i64(5));
+
+            let logarithm = Real::log(&Complex::new(one.clone(), tiny.clone()));
+            assert!(logarithm.re > one.zero());
+            assert_eq!(logarithm.re.get_precision(), N);
+            let scaled = logarithm.re / (tiny.clone() * tiny);
+            assert!(
+                (scaled - one.clone() / one.from_i64(2)).norm()
+                    < one.clone() / one.from_i64(2).pow((N - 20) as u64)
+            );
+        }
+
+        check::<256>();
+        check::<1000>();
+    }
+
+    #[test]
+    fn quad_power_forwards_full_width_provider_contract() {
+        let negative_one = F(QuadFloat::from_f64_exact_binary(-1.));
+        assert_eq!(negative_one.pow(u64::MAX), negative_one);
+        let negative_zero = F(QuadFloat::from_f64_exact_binary(-0.));
+        assert!(
+            negative_zero
+                .pow(u64::MAX)
+                .0
+                .0
+                .into_inner()
+                .hi()
+                .is_sign_negative()
+        );
+        let infinity = F(QuadFloat::from_f64_exact_binary(f64::INFINITY));
+        assert_eq!(
+            infinity.pow(1u64 << 63).0.0.into_inner().hi(),
+            f64::INFINITY
+        );
+        let nan = F(QuadFloat::from_f64_exact_binary(f64::NAN));
+        assert_eq!(nan.pow(0), negative_one.one());
+    }
+
     #[test]
     fn native_hypot_preserves_finite_range() {
         use super::{ArbPrec, F};
@@ -1144,6 +1279,24 @@ impl<const N: u32> RefOne for VarFloat<N> {
 }
 
 impl<const N: u32> SymFloatLike for VarFloat<N> {
+    fn real_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.float.partial_cmp(&other.float)
+    }
+
+    fn real_classify(&self) -> Option<FpCategory> {
+        Some(self.float.classify())
+    }
+
+    fn needs_rescaling(&self) -> bool {
+        !self.float.is_normal()
+    }
+
+    fn nan(&self) -> Option<Self> {
+        Some(Self {
+            float: Float::with_val(self.float.prec(), Special::Nan),
+        })
+    }
+
     #[inline]
     fn set_from(&mut self, other: &Self) {
         self.float.assign(&other.float);
@@ -1258,6 +1411,24 @@ impl<const N: u32> RealLike for VarFloat<N> {
 }
 
 impl<const N: u32> Real for VarFloat<N> {
+    fn hypot(&self, other: &Self) -> Self {
+        Self {
+            float: self.float.clone().hypot(&other.float),
+        }
+    }
+
+    fn copy_sign(&self, sign: &Self) -> Self {
+        Self {
+            float: self.float.clone().copysign(&sign.float),
+        }
+    }
+
+    fn log1p(&self) -> Self {
+        Self {
+            float: self.float.clone().ln_1p(),
+        }
+    }
+
     fn i(&self) -> Option<Self> {
         None
     }
@@ -1367,6 +1538,26 @@ impl RefOne for QuadFloat {
 }
 
 impl SymFloatLike for QuadFloat {
+    fn real_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.0.real_cmp(&other.0)
+    }
+
+    fn real_classify(&self) -> Option<FpCategory> {
+        self.0.real_classify()
+    }
+
+    fn needs_rescaling(&self) -> bool {
+        self.0.needs_rescaling()
+    }
+
+    fn select_nonzero(&self, nonzero: &Self, zero: &Self) -> Self {
+        Self(self.0.select_nonzero(&nonzero.0, &zero.0))
+    }
+
+    fn nan(&self) -> Option<Self> {
+        self.0.nan().map(Self)
+    }
+
     #[inline]
     fn set_from(&mut self, other: &Self) {
         self.0.set_from(&other.0);
@@ -1413,26 +1604,7 @@ impl SymFloatLike for QuadFloat {
     }
 
     fn pow(&self, e: u64) -> Self {
-        // Old direct wrapper around Symbolica's DoubleFloat::pow -> Df64::powi.
-        // Keep this inactive until the upstream bug is fixed in Symbolica.
-        // Self(self.0.pow(e))
-
-        // Temporary local workaround kept active in GammaLoop for now.
-        // Equivalent explicit implementation:
-        // let mut base = *self;
-        // let mut acc = Self::one();
-        // let mut exponent = e;
-        // while exponent > 0 {
-        //     if exponent & 1 == 1 {
-        //         acc *= base;
-        //     }
-        //     exponent >>= 1;
-        //     if exponent > 0 {
-        //         base *= base;
-        //     }
-        // }
-        // acc
-        self.pow_u64_via_mul(e)
+        Self(self.0.pow(e))
     }
 
     fn sample_unit<R: Rng + ?Sized>(&self, rng: &mut R) -> Self {
@@ -1485,6 +1657,18 @@ impl RealLike for QuadFloat {
 }
 
 impl Real for QuadFloat {
+    fn hypot(&self, other: &Self) -> Self {
+        Self(self.0.hypot(&other.0))
+    }
+
+    fn copy_sign(&self, sign: &Self) -> Self {
+        Self(self.0.copy_sign(&sign.0))
+    }
+
+    fn log1p(&self) -> Self {
+        Self(self.0.log1p())
+    }
+
     fn i(&self) -> Option<Self> {
         None
     }
@@ -1938,23 +2122,6 @@ impl<const N: u32> VarFloat<N> {
 }
 
 impl QuadFloat {
-    fn pow_u64_via_mul(&self, mut exponent: u64) -> Self {
-        let mut base = *self;
-        let mut acc = Self::one();
-
-        while exponent > 0 {
-            if exponent & 1 == 1 {
-                acc *= base;
-            }
-            exponent >>= 1;
-            if exponent > 0 {
-                base *= base;
-            }
-        }
-
-        acc
-    }
-
     fn machine_epsilon(&self) -> Self {
         self.from_i64(2)
             .pow((self.get_precision() - 1) as u64)
@@ -2419,6 +2586,8 @@ impl<T: FloatLike + EvaluationDomain> EvaluationDomain for F<T> {
     }
 }
 
+impl<T: FloatLike + EvaluationDomain> ComplexEvaluationDomain for F<T> {}
+
 impl<T: TensorLibraryData + FloatLike> TensorLibraryData for F<T> {
     fn one() -> Self {
         F(<T as TensorLibraryData>::one())
@@ -2625,6 +2794,26 @@ impl<T: FloatLike> std::fmt::LowerExp for F<T> {
 }
 
 impl<T: FloatLike> SymFloatLike for F<T> {
+    fn real_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.0.real_cmp(&other.0)
+    }
+
+    fn real_classify(&self) -> Option<FpCategory> {
+        self.0.real_classify()
+    }
+
+    fn needs_rescaling(&self) -> bool {
+        self.0.needs_rescaling()
+    }
+
+    fn select_nonzero(&self, nonzero: &Self, zero: &Self) -> Self {
+        F(self.0.select_nonzero(&nonzero.0, &zero.0))
+    }
+
+    fn nan(&self) -> Option<Self> {
+        self.0.nan().map(F)
+    }
+
     #[inline]
     fn set_from(&mut self, other: &Self) {
         self.0.set_from(&other.0);
@@ -2701,6 +2890,18 @@ impl<T: FloatLike + Constructible> Constructible for F<T> {
 }
 
 impl<T: FloatLike> Real for F<T> {
+    fn hypot(&self, other: &Self) -> Self {
+        F(self.0.hypot(&other.0))
+    }
+
+    fn copy_sign(&self, sign: &Self) -> Self {
+        F(self.0.copy_sign(&sign.0))
+    }
+
+    fn log1p(&self) -> Self {
+        F(self.0.log1p())
+    }
+
     fn atan2(&self, x: &Self) -> Self {
         F(self.0.atan2(&x.0))
     }
@@ -2930,14 +3131,7 @@ impl<T: FloatLike> F<T> {
 
     /// Euclidean magnitude without squaring unscaled native components.
     pub(crate) fn hypot(&self, other: &Self) -> Self {
-        if !self.0.is_finite() || !other.0.is_finite() {
-            return self.abs() + other.abs();
-        }
-        let scale = self.abs().max(other.abs());
-        if scale == scale.zero() {
-            return scale;
-        }
-        ((self / &scale).square() + (other / &scale).square()).sqrt() * scale
+        <Self as Real>::hypot(self, other)
     }
 
     pub(crate) fn sqrt(&self) -> Self {
@@ -3000,7 +3194,7 @@ impl<T: FloatLike> F<T> {
     pub(crate) fn square(&self) -> Self {
         F(self.0.square())
     }
-    pub(crate) fn powi(&self, n: i32) -> Self {
+    pub fn powi(&self, n: i32) -> Self {
         F(self.0.powi(n))
     }
     pub(crate) fn epsilon(&self) -> Self {

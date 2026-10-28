@@ -1,7 +1,7 @@
 use eyre::{Result, eyre};
 
-/// Physical inputs and their archived constants use parameter-major jets with
-/// the same derivative shape for every evaluator in a stack.
+/// Physical inputs precede any program-specific row or auxiliary ports. Their
+/// archived constants are parameter-major jets in the same shape for every layout.
 /// Cross-section archives may omit representative inputs and require caller inputs.
 pub(crate) fn validate_standalone_input_layout<'a>(
     parameter_count: usize,

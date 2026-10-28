@@ -379,9 +379,13 @@ impl ProcessIntegrand {
         &self,
         path: impl AsRef<Path>,
         settings: &StandaloneExportSettings,
+        model_for_settings: &impl Fn(&RuntimeSettings) -> Result<Model>,
     ) -> Result<()> {
         match self {
-            Self::Amplitude(a) => a.export_standalone(path, settings),
+            Self::Amplitude(a) => {
+                let model = model_for_settings(&a.settings)?;
+                a.export_standalone(path, settings, &model)
+            }
             Self::CrossSection(a) => a.export_standalone(path, settings),
         }
     }
@@ -5948,6 +5952,7 @@ pub(crate) mod tests {
         validate_process_runtime_settings,
     };
     use crate::cff::expression::OrientationID;
+    use crate::observables::AdditionalWeightKey;
     use crate::{
         dot,
         graph::{
@@ -8376,7 +8381,7 @@ pub(crate) mod tests {
             .additional_weights
             .weights
             .insert(
-                crate::observables::AdditionalWeightKey::Original,
+                AdditionalWeightKey::Original,
                 Complex::new_re(small.clone()),
             );
         assert!(
@@ -8384,7 +8389,7 @@ pub(crate) mod tests {
                 .contains("additional_weights[Original].re")
         );
 
-        let full_factor_key = crate::observables::AdditionalWeightKey::FullMultiplicativeFactor;
+        let full_factor_key = AdditionalWeightKey::FullMultiplicativeFactor;
         auxiliary.event_groups[0][0]
             .additional_weights
             .weights
@@ -8392,7 +8397,7 @@ pub(crate) mod tests {
         assert_eq!(
             auxiliary.clone().try_into_f64().unwrap().event_groups[0][0]
                 .additional_weights
-                .weights[&crate::observables::AdditionalWeightKey::Original],
+                .weights[&AdditionalWeightKey::Original],
             Complex::new_zero(),
         );
         // An unknown component of a complex multiplier cannot certify a tail,
@@ -8420,6 +8425,59 @@ pub(crate) mod tests {
         assert!(
             format!("{:#}", auxiliary.try_into_f64().unwrap_err())
                 .contains("additional_weights[Original].re")
+        );
+
+        // A genuinely complex factor can add two individually suppressed terms
+        // into one normal component. Use the original pair to certify rounding,
+        // including when only one raw phase rounds to zero.
+        let minimum = F::<ArbPrec>::from_f64(f64::MIN_POSITIVE);
+        for (factor, imaginary_fraction, real_rounds_to_zero) in [
+            (
+                one.from_usize(10).powi(16),
+                one.from_usize(3) / one.from_usize(4),
+                true,
+            ),
+            (
+                one.from_usize(4) * one.from_usize(10).powi(15),
+                one.from_usize(3) / one.from_usize(10),
+                false,
+            ),
+        ] {
+            let raw = Complex::new(
+                &minimum * one.from_usize(3) / one.from_usize(4) / &factor,
+                &minimum * imaginary_fraction / &factor,
+            );
+            assert_eq!(raw.re.into_f64() == 0.0, real_rounds_to_zero);
+            assert_eq!(raw.im.into_f64(), 0.0);
+            let full_factor = Complex::new(factor.clone(), factor.clone());
+            assert!((&raw * &full_factor).im > minimum);
+            let mut mixing = result.clone();
+            let weights = &mut mixing.event_groups[0][0].additional_weights.weights;
+            weights.insert(full_factor_key, full_factor);
+            weights.insert(AdditionalWeightKey::Original, raw);
+            assert!(
+                format!("{:#}", mixing.try_into_f64().unwrap_err())
+                    .contains("additional_weights[Original]")
+            );
+        }
+
+        // Both completed phases remain below the normal range here, so the
+        // same complex normalization may safely lose genuinely tiny raw values.
+        let factor = one.from_usize(10).powi(16);
+        let tiny = &minimum / (&factor * one.from_usize(4));
+        let raw = Complex::new(tiny.clone(), tiny);
+        let full_factor = Complex::new(factor.clone(), factor);
+        let complete = &raw * &full_factor;
+        assert!(complete.re.abs() < minimum && complete.im.abs() < minimum);
+        let mut mixing = result.clone();
+        let weights = &mut mixing.event_groups[0][0].additional_weights.weights;
+        weights.insert(full_factor_key, full_factor);
+        weights.insert(AdditionalWeightKey::Original, raw);
+        assert_eq!(
+            mixing.try_into_f64().unwrap().event_groups[0][0]
+                .additional_weights
+                .weights[&AdditionalWeightKey::Original],
+            Complex::new_zero()
         );
 
         // A cancelling total does not make individually unrepresentable event

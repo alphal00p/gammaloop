@@ -16,6 +16,7 @@ use pyo3::{
     prelude::*,
     types::{PyComplex, PyFloat, PySlice, PyTuple, PyType},
 };
+use pyo3::{PyResult, Python};
 
 #[cfg(feature = "python-stubs")]
 use pyo3_stub_gen::{
@@ -757,8 +758,8 @@ impl Spensor {
         display::concrete_tensor_to_html(py, self, &display::DisplaySettings::default(), None).ok()
     }
 
-    fn _repr_latex_(&self) -> Option<String> {
-        display::format_concrete_tensor_output(self, false).latex
+    fn _repr_latex_(&self, py: Python<'_>) -> PyResult<Option<String>> {
+        display::format_concrete_tensor_output(self, false)._repr_latex_(py)
     }
 
     fn _repr_pretty_(&self, pretty: &Bound<'_, PyAny>, cycle: bool) -> PyResult<()> {

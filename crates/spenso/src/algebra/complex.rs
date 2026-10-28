@@ -250,7 +250,7 @@ impl<T: Float + for<'a> RefMul<&'a T, Output = T> + Add<T, Output = T>> FloatDer
     for Complex<T>
 {
     fn norm(&self) -> T {
-        self.norm_squared().sqrt()
+        self.re.hypot(self.im)
     }
 
     #[inline]
@@ -258,7 +258,7 @@ impl<T: Float + for<'a> RefMul<&'a T, Output = T> + Add<T, Output = T>> FloatDer
     where
         T: Float,
     {
-        (self.norm_squared().sqrt(), self.arg())
+        (self.re.hypot(self.im), self.arg())
     }
 
     #[inline]
@@ -523,7 +523,17 @@ impl<T: Display> Display for RealOrComplex<T> {
 
 #[cfg(test)]
 mod formatting_tests {
-    use super::Complex;
+    use super::{Complex, FloatDerived};
+
+    #[test]
+    fn float_derived_magnitude_and_polar_radius_preserve_range() {
+        for scale in [1e-200_f64, 1., 1e200] {
+            let value = Complex::new(3. * scale, 4. * scale);
+            assert!((FloatDerived::norm(&value) / scale - 5.).abs() < 1e-14);
+            let (radius, _) = value.to_polar_coordinates();
+            assert!((radius / scale - 5.).abs() < 1e-14);
+        }
+    }
 
     #[test]
     fn lower_exp_preserves_default_component_formatting() {

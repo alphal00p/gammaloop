@@ -804,6 +804,7 @@ impl Process {
         &self,
         path: impl AsRef<Path>,
         settings: &StandaloneExportSettings,
+        model_for_settings: &impl Fn(&RuntimeSettings) -> Result<Model>,
     ) -> Result<()> {
         match &self.collection {
             ProcessCollection::Amplitudes(a) => {
@@ -820,7 +821,7 @@ impl Process {
                         )
                     })?;
 
-                    amp.export_standalone(&amp_path, settings)?;
+                    amp.export_standalone(&amp_path, settings, model_for_settings)?;
                 }
             }
             ProcessCollection::CrossSections(cs) => {
@@ -837,7 +838,7 @@ impl Process {
                         )
                     })?;
 
-                    cs.export_standalone(&cs_path, settings)?;
+                    cs.export_standalone(&cs_path, settings, model_for_settings)?;
                 }
             }
         }

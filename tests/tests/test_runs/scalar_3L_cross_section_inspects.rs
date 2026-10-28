@@ -1046,9 +1046,7 @@ fn run_scalar_3l_cross_section_case_impl(
             let ltd_4d_arb = evaluate_arb(&mut ltd_4d, &process, &integrand)?;
             if zero_source {
                 let zero_tolerance = F(localized_3d_arb.re.0.epsilon()).sqrt()
-                    * F(F::<ArbPrec>::from_f64(zero_weights.e_cm)
-                        .0
-                        .powi(zero_weights.energy_dimension));
+                    * F::<ArbPrec>::from_f64(zero_weights.e_cm).powi(zero_weights.energy_dimension);
                 for (route, actual) in [
                     ("orientation-local local-3D", localized_3d_arb),
                     ("explicit-sum local-3D", &explicit_3d_arb),
