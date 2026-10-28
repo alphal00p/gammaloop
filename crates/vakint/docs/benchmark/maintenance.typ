@@ -257,6 +257,24 @@ a three-run median or a LIGHT utility winner. The 95,000,000-byte LIGHT cap and
 complete native export/reimport checks remain required; neither export counts nor
 typed exporter identities establish typed application attachment or performance.
 
+The #raw("--delivery-checkpoint INDEX.json") mode appends hashed user decisions,
+the completed monitor acceptance, and the closed HEAVY source inventory without
+altering historical measurements or their selections. Its
+#raw("vakint.q0-delivery-evidence-index.v1") index binds bounded JSON records for
+#raw("light_freeze"), #raw("authorization"), #raw("monitor"), and
+#raw("heavy_sources"), plus the existing historical physical and cache-file
+engineering run IDs. It validates the accepted LIGHT bytes against that export,
+keeps the historical uncached cohort separate, and leaves final HEAVY export and
+published-download fields null until actual receipts exist. A user waiver of
+new repetitions never creates a matched median or a cache-only speedup claim.
+
+```sh
+python3 crates/vakint/docs/benchmark/merge_physical_capture_results.py \
+  --base crates/vakint/docs/benchmark/data/results.json \
+  --delivery-checkpoint crates/vakint/docs/benchmark/provenance/q0_delivery_evidence_index.json \
+  --output /path/to/workspace/new-results.json --select-current
+```
+
 === Display both cache tiers
 
 Use #raw("--select-tier heavy") for an authenticated cumulative native cache, or

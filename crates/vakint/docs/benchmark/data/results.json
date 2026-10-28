@@ -16237,5 +16237,739 @@
     }
   },
   "selected_engineering_optimization_run": "q0-engineering-5327526dec8cda942773dc57",
-  "selected_cache_file_engineering_run": "cache-file-engineering-188fbde4006e5a3d70df7fe9"
+  "selected_cache_file_engineering_run": "cache-file-engineering-188fbde4006e5a3d70df7fe9",
+  "delivery_checkpoints": {
+    "q0-delivery-6218a07b6405bba0f34bf459": {
+      "schema": "vakint.q0-delivery-checkpoint.v1",
+      "performance_eligible": false,
+      "cache_performance_winner": false,
+      "new_uncached_repetitions_waived": true,
+      "historical_physical_run": "physical-capture-717e66516cdcb6f5bd04a30b",
+      "historical_uncached_seconds": 144005.78694374,
+      "cache_file_engineering_run": "cache-file-engineering-188fbde4006e5a3d70df7fe9",
+      "records": {
+        "light_freeze": {
+          "evidence": {
+            "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/final-light-user-freeze-20261028/selection-freeze.json",
+            "bytes": 1621,
+            "sha256": "2cd0ce44d794d732f65efb68f11e04e18581b0bd9aac5a34759d54df800808c0"
+          },
+          "raw_receipt": {
+            "schema": "vakint.light-cache.user-directed-freeze.v1",
+            "utc": "2026-10-28T12:51:34.111268+00:00",
+            "user_prompt_verbatim": "Continue as planned, but assume that the smaller cache you built right now is good enough, and just fully complete the objective and the vakint commit+push to a final tested form.",
+            "selection": "existing validated B:54Route+2048Apply",
+            "selected_records": 2102,
+            "compressed_bytes": 89635796,
+            "decoded_bytes": 104661730,
+            "sha256": "708361954e61e853666d5bb637ad0d58a4336385d4bc9f23133d6ed7e3330021",
+            "decoded_sha256": "2a9e18b58e33b875ad469d6c0f5a975270d475cef2b0be166d731e4791fa04e1",
+            "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/light-cache-selection-next-actions-20261028/physical-route-budget-additions-pilot-run1/native-core-54-plus-2048-export-run1/cache-output/cache.rrcache.gz",
+            "native_validation": "actual complete2102selected/reimported/complete;0missing/partial; exactcoefficients+originalorderedguards; unchanged2658source/bindingcodec6/knownterminals",
+            "user_acceptance_scope": "good-enough assumption waives further selection/tuning/optimization; not a measured performance winner or new certification",
+            "frozen_before_final_heldout": true,
+            "all_heldout_outcomes_used_for_selection": false,
+            "performance_claim": false,
+            "future_tuning_allowed": false,
+            "preserve_all_precious_work": true,
+            "current_cost_run": "finishstrictcloseandarchive, no newselection after",
+            "pending_delivery": "adoptvalidatedbytes/provenance+native/data checks; finishfinaltests/publication/actualdownloads+offline/MainCIupload+directbranchpush"
+          }
+        },
+        "monitor": {
+          "evidence": {
+            "path": "/shared/codex-1/vakint_rustred/workspace/validation/q0-monitor-responsiveness-20261028/final-functional-handoff.json",
+            "bytes": 12718,
+            "sha256": "90d2f587c465be33887043322f86ce4dec701ed45b7cf1b5d6775089fd0f5269"
+          },
+          "raw_receipt": {
+            "schema": "vakint.q0-monitor-responsiveness-actual-final-handoff.v1",
+            "author": "/root/heavy_union_readiness",
+            "utc": "2026-10-28T13:34:39.543995+00:00",
+            "status": "PASS_ACTUAL_ONE_CACHED_Q0_MONITOR_AND_FULL55_58_146678_SCIENCE",
+            "scope": "Final functional monitor diagnostic, not a performance window. Exactly one cached physicalq0, then one actual-terminal-bound saved-result verifier. No cold benchmark/reduction repetitions or optimization/selection.",
+            "source_authorization": {
+              "Root_source_review": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/validation/q0-monitor-responsiveness-20261028/root-source-review.json",
+                "bytes": 1805,
+                "sha256": "7fcf937d3235e9f3bb6c2c570df1ecce11d51022b1970dad0c42f57c207b0e69"
+              },
+              "Root_conditional_replay_GO": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/validation/q0-monitor-responsiveness-20261028/root-go-replay.json",
+                "bytes": 2132,
+                "sha256": "8fe372564bf8ba9aba527641d85721ae19d5da29896493e95d10630ebea51503"
+              },
+              "cost_no_overlap_admission": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/validation/q0-monitor-responsiveness-20261028/cost-terminal-admission.json",
+                "bytes": 2374,
+                "sha256": "05deb1e0d40c6da9f2169da358b2fd0af0cf02013498943f4089a06ca76210c1"
+              },
+              "runtime_bindings": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/validation/q0-monitor-responsiveness-20261028/actual-runtime-bindings.json",
+                "bytes": 3510,
+                "sha256": "e5eedd3d27169a4948af560623bc2045dc3687abe8841a236b1df7305f50a3b9"
+              }
+            },
+            "actual_worker": {
+              "pid": 1802493,
+              "start_ticks": 122574996,
+              "ppid": 1802455,
+              "state": "R",
+              "uid": 1124
+            },
+            "actual_native_terminal": {
+              "path": "/shared/codex-1/vakint_rustred/workspace/validation/q0-monitor-responsiveness-20261028/all-original-pidfds-terminal.json",
+              "bytes": 1605,
+              "sha256": "7bae91f97366864063945d2e789ff733e0bbe5e595821392be1a4c0c36dec42c"
+            },
+            "actual_native_controller_receipt": {
+              "path": "/shared/codex-1/vakint_rustred/workspace/validation/q0-monitor-responsiveness-20261028/cold-run1/completion.json",
+              "bytes": 8034,
+              "sha256": "7e418bdcd3b257a4c7ccd18bda13aa0219427b7768440270d518a46f16ea8924"
+            },
+            "actual_postflight_originals_terminal": {
+              "path": "/shared/codex-1/vakint_rustred/workspace/validation/q0-monitor-responsiveness-20261028/postflight-original-pidfds-terminal.json",
+              "bytes": 1226,
+              "sha256": "18433fcc359f1ed7858573edb216cb79fafe9b7b5a7c977b86d045bf29c9fbf5"
+            },
+            "actual_postflight_binding": {
+              "path": "/shared/codex-1/vakint_rustred/workspace/validation/q0-monitor-responsiveness-20261028/actual-postflight-binding.json",
+              "bytes": 2525,
+              "sha256": "1060dfb0e1d2264f4b1540f26a32ac08cb980990b3b01136eef0e8d08dc71581"
+            },
+            "actual_postflight_control": {
+              "path": "/shared/codex-1/vakint_rustred/workspace/validation/q0-monitor-responsiveness-20261028/verify-run1/control.json",
+              "bytes": 1222,
+              "sha256": "d67a925cc6bd1083aee77863212acfbea2301e15b7a9f3deb13915bcf3251a64"
+            },
+            "full_science_proof": {
+              "path": "/shared/codex-1/vakint_rustred/workspace/validation/q0-monitor-responsiveness-20261028/verify-run1/verification.json",
+              "bytes": 11583,
+              "sha256": "942c83af7050483f6df92a02b6ce154448833019b4116770904f081995dfd558"
+            },
+            "all58_exact_scalar_proofs": {
+              "path": "/shared/codex-1/vakint_rustred/workspace/validation/q0-monitor-responsiveness-20261028/verify-run1/full58-scalar-proof.json",
+              "bytes": 26233,
+              "sha256": "06d8872b7f65e91746ff30562aab871588d41c3eaf72da40fd1abfab9bc93d64"
+            },
+            "science": {
+              "master_identity_union_count": 55,
+              "exact_scalar_product_count": 58,
+              "ordered_guard_Atom_count": 146678,
+              "all_original_mass_coupling_normalization_preserved": true,
+              "input_result_guard_and_family_identity_authenticated": true,
+              "Float_numeric_atoms_rejected": true,
+              "cache_identity_unchanged": true,
+              "verifier_cache_loads_or_IBP_or_master_evaluations_or_numeric_samples": 0,
+              "verifier_host_qualification": true
+            },
+            "monitor": {
+              "summary": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/validation/q0-monitor-responsiveness-20261028/cold-run1/monitor-summary.json",
+                "bytes": 2908,
+                "sha256": "a9f12d152a4d9dfee1251d5059be312d4e15dc1222a748d7347790c1ad87f17d"
+              },
+              "scalar_rows": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/validation/q0-monitor-responsiveness-20261028/cold-run1/monitor-observations.jsonl",
+                "bytes": 2540206,
+                "sha256": "283df1c7ef7f0be9bdabe08930cead547300b93238f3dfa16dc061a0a5111326"
+              },
+              "sample_count": 1903,
+              "snapshot_count": 1902,
+              "fault_count": 0,
+              "partial_or_observer_fault_rows": 0,
+              "initial_snapshot_observed_elapsed_seconds": 1.0314343960490078,
+              "maximum_observed_heartbeat_age_seconds": 1.4090490341186523,
+              "maximum_parent_sample_gap_seconds": 1.197174766100943,
+              "maximum_conservative_freshness_bound_seconds": 2.077254979638383,
+              "required_limit_seconds": 30,
+              "all_actual_worker_births_match": true,
+              "job_scope": "job, separately tracked API status; API succeeded before finalFILE SHA while job_finished=false; final successful job_finished=true only after durable work.",
+              "actual_phases_observed": {
+                "request_start": 1,
+                "initial_cache_identity_verification": 110,
+                "external_data_loading": 116,
+                "persistent_cache_loading": 831,
+                "routing_verification": 10,
+                "native Transport": 1,
+                "native RootCollection": 512,
+                "native RootMaterialization": 16,
+                "terminal_substitution": 2,
+                "lower_factor_normalization_unobserved": 16,
+                "retained_guard_materialization": 4,
+                "caller_result_merge": 1,
+                "retained_catalogue_exact_combination": 171,
+                "result_guard_serialization": 8,
+                "final_cache_identity_verification": 95,
+                "final_durable_report": 8
+              },
+              "named_short_or_coalesced_phases_not_observed": [
+                "saved_rule_application",
+                "retained_coefficient_materialization"
+              ],
+              "coverage_qualification": "Do not invent per-phase observations or duration. Continuous scalar samples plus conservative previousage+pollgap bound cover full elapsed call; source scope and actual science prove completed work. Native/scientific ages may grow during opaque phases and are not heartbeat age.",
+              "final_frame_scalars": {
+                "observed_unix_seconds": 1793193990.042916,
+                "elapsed_seconds": 1940.1795098769944,
+                "parent_sample_gap_seconds": 1.197174766100943,
+                "parent_resources": {
+                  "utc": "2026-10-28T13:26:28.845651+00:00",
+                  "MemAvailable_bytes": 379903201280,
+                  "output_filesystem_available_bytes": 2032688431104,
+                  "MemTotal_bytes": 1216967950336
+                },
+                "terminal_read": true,
+                "published_unix_seconds": 1793193988.633867,
+                "worker_pid": 1802493,
+                "worker_start_ticks": 122574996,
+                "request_sequence": 1,
+                "scope_kind": "job",
+                "phase": "final_durable_report",
+                "status": "Succeeded",
+                "api_status": "Succeeded",
+                "job_finished": true,
+                "native_document_age_seconds": 0.000104421,
+                "event_age_seconds": 0.050269933,
+                "native_observation_age_seconds": 310.199320084,
+                "native_quantitative_sample_age_seconds": 310.199320084,
+                "native_guard_current_process_covered": true,
+                "native_guard_status": "active",
+                "native_guard_report_age_seconds": 0.546699523,
+                "native_resources": {
+                  "process_pid": 1802493,
+                  "process_start_ticks": 122574996,
+                  "process_identity_verified": true,
+                  "rss_bytes": 7686848512,
+                  "peak_rss_bytes": 8598171648,
+                  "mem_available_bytes": 379890036736,
+                  "mem_total_bytes": 1216967950336,
+                  "sample_age_seconds": 0.127255624
+                },
+                "file_mtime_age_seconds": 1.398472785949707,
+                "heartbeat_age_seconds": 1.4090490341186523,
+                "faults": []
+              }
+            },
+            "actual_OS_resources": {
+              "worker_RSS_max_observed_bytes": 8544612352,
+              "worker_HWM_max_observed_bytes": 8598171648,
+              "machine_MemAvailable_min_observed_bytes": 379903201280,
+              "machine_MemTotal_observed_bytes": 1216967950336,
+              "guard_threshold_MemAvailable_bytes": 50000000000,
+              "disk_reserve_bytes": 100000000000,
+              "cpus": [
+                114,
+                115
+              ],
+              "math_threads": 1,
+              "signals_sent": [],
+              "no_arbitrary_time_RSS_or_work_quota": true,
+              "qualification": "Actual OS samples; maxima are observed RSS/HWM, not a guaranteed capture of every instantaneous peak."
+            },
+            "inclusive_clock": {
+              "controller_entry_through_terminal_receipt_seconds": 1941.8566454118118,
+              "physical_controller_spawn_through_cleanup_seconds": 1941.2054813799914,
+              "timing_is_diagnostic_only": true
+            },
+            "closed_precious_capture": {
+              "directory": "/shared/codex-1/vakint_rustred/workspace/validation/q0-monitor-responsiveness-20261028/cold-run1/capture/running-cache",
+              "writer_report": {
+                "accepted_records": 0,
+                "capture_metadata_exhausted": false,
+                "capture_skipped_records": 0,
+                "checkpoint_age_scope": "session_acknowledgement",
+                "checkpoint_age_seconds": 755.298493164,
+                "closed": true,
+                "committed_records": 0,
+                "generation": 1,
+                "last_error": null,
+                "pending_bytes": 0,
+                "pending_records": 0,
+                "schema": "rustred.running-application-cache.v1",
+                "writer_error": null,
+                "writer_mode": "thread"
+              },
+              "terminal_receipt": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/validation/q0-monitor-responsiveness-20261028/cold-run1/run/running-cache.json",
+                "bytes": 8236,
+                "sha256": "4faeaf15428d4c69cb24a2c9aea39340cf24c67fdbb830cd0cc0eebe10133f7c"
+              },
+              "loadable_snapshot_descriptor": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/validation/q0-monitor-responsiveness-20261028/cold-run1/run/running-cache-snapshots/ladder-cold-1802493-1793193876595642386.json",
+                "bytes": 5873,
+                "sha256": "9d3649b63c61c9dd5b369494664c98f2938f47e4266280068b7cd1c58e96e41d"
+              },
+              "loadable_snapshot_manifest": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/validation/q0-monitor-responsiveness-20261028/cold-run1/run/running-cache-snapshots/ladder-cold-1802493-1793193876595642386.rrindex",
+                "bytes": 5224,
+                "sha256": "6c2f0ec63669e9458492f977875fb9352d69e80e511afd646fe29c349ab4c2a3"
+              },
+              "closed_live_manifest": {
+                "path": "/shared/codex-1/vakint_rustred/workspace/validation/q0-monitor-responsiveness-20261028/cold-run1/capture/running-cache/cache.rrindex",
+                "bytes": 5224,
+                "sha256": "6c2f0ec63669e9458492f977875fb9352d69e80e511afd646fe29c349ab4c2a3"
+              },
+              "snapshot_equals_closed_live_index": true,
+              "native_index_identity": {
+                "schema": "vakint.native-cache-index-identity.v1",
+                "layout": "pack",
+                "indexes": {
+                  "cache.rrindex": {
+                    "bytes": 5224,
+                    "sha256": "6c2f0ec63669e9458492f977875fb9352d69e80e511afd646fe29c349ab4c2a3"
+                  }
+                },
+                "sha256": "bfe8e8aa87967aa87c316899a2f95368c6fa6d1f7ab3ae4227b0a2ec796dec63"
+              },
+              "generation": 1,
+              "stored_record_references": 0,
+              "runs": 0,
+              "chunks": 0,
+              "referenced_compressed_bytes": 0,
+              "manifest_bytes": 5224,
+              "read_delta": false,
+              "flush_snapshot_close_complete": true,
+              "preserved_even_when_empty": true,
+              "future_final_HEAVY_inclusion_required": true,
+              "payload_validation_scope": "Zero-rule prefix; bounded Native manifest metadata/index seals only. No record/chunk payload or extraHEAVY scan."
+            },
+            "immutable_source": {
+              "actual_release_worker_ELF_SHA256": "ca89f4eb6776c88bb28a1147a6363233638517b1d52cc026a03798cdeb8ed1e1",
+              "Main": "2d70bfe439d84b6888cbd29d2574df9c1ed7aae6",
+              "Native": "c2ca815cc906bdeaf7cb8c63b637e81a80fba917",
+              "officialSymbolica": "9cd57678d8817ec33c05cacba4925162f1c86b0b",
+              "HEAVY_SHA256_before_and_after": "37a3f1edb76736b773e9f02c2fe80cf97439ebb1eeac499b444290957dcd4b9f",
+              "actual_inherent_HEAVY96GB_SHA_passes": 2,
+              "auditor_added_HEAVY_payload_read_or_hash_passes": 0
+            },
+            "latest_user_steering": {
+              "small_cache_candidate_B_frozen": {
+                "records": 2102,
+                "compressed_bytes": 89635796,
+                "sha256": "708361954e61e853666d5bb637ad0d58a4336385d4bc9f23133d6ed7e3330021"
+              },
+              "new_cold_benchmark_repetitions_waived": true,
+              "further_optimization_selection_tuning_ranking_or_candidate_exports": false
+            },
+            "next": "Return to Root for one final all-precious-source HEAVY union after final metadata list is frozen; separate NativeGO required. No automatic Native probe/census/export/reimport/release or new physical/math run."
+          }
+        },
+        "authorization": {
+          "evidence": {
+            "path": "q0_delivery_authorization.json",
+            "bytes": 794,
+            "sha256": "33b4340a6fc3d86befb4927938e0807323e2b7fadd3f36cb8ae20799bbcb1e88"
+          },
+          "raw_receipt": {
+            "schema": "vakint.q0-delivery-authorization.v1",
+            "user_prompt_verbatim": "Yes, speed-track this step and used completed baseline to finish validation early.",
+            "question_context": "Three new fresh uncached zero-momentum repetitions would each take approximately 40 hours. Use the completed uncached run as a clearly labeled historical timing reference and finish correctness/cached validation.",
+            "new_uncached_repetitions_waived": true,
+            "required_physical_examples": [
+              "zero-momentum"
+            ],
+            "deferred_physical_examples": [
+              "quadratic"
+            ],
+            "scope_qualification": "The waiver changes delivery work, not source identities, measured timer boundaries, performance eligibility or campaign certification. No matched cache-only ratio or fresh three-sample median is inferred."
+          }
+        },
+        "heavy_sources": {
+          "evidence": {
+            "path": "/shared/codex-1/vakint_rustred/workspace/validation/heavy-final-union-inputs-20261028/source-manifest.final.json",
+            "bytes": 20465,
+            "sha256": "b04e18465e5a57ccb8caa0f981333cd253e7223685d33d9cfa127ba099471b9f"
+          },
+          "raw_receipt": {
+            "schema": "vakint.heavy-final-union-source-manifest.v1",
+            "status": "complete",
+            "cutoff_utc": "2026-10-28T13:26:30.049724+00:00",
+            "pending_sources": [],
+            "source_count": 12,
+            "total_stored_record_references": 3416555,
+            "original_request": {
+              "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/heavy-five-source-finalization-20261027/metadata-preparation/request.filled-for-root-review.json",
+              "bytes": 16054,
+              "sha256": "25816be58b56639e3f16c91f7f26ed7f7c18c14b3aca77e7fdb79375894286a1"
+            },
+            "binding": {
+              "artifact_digest": [
+                162,
+                68,
+                185,
+                180,
+                206,
+                143,
+                114,
+                40,
+                199,
+                12,
+                133,
+                132,
+                8,
+                135,
+                208,
+                168,
+                201,
+                62,
+                78,
+                199,
+                29,
+                175,
+                102,
+                4,
+                104,
+                117,
+                83,
+                104,
+                97,
+                251,
+                210,
+                115
+              ],
+              "family_fingerprint": "rustred-integral-family-v2;N27:tide_five_loop_common_basis;L5;2:k1;2:k2;2:k3;2:k4;2:k5;E0;P1;1:d;Q5,0,15;M;RY1,1;I+1;X1;Y1,1;I+1;X0;D15;RY1,1;I-1;X0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I-1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I-1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I-1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I-1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,1;I-1;X0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I-2;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I-1;X0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I-2;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I-1;X0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I-2;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,1;I-1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,1;I-2;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I-1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I-2;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I-1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I-2;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,1;I-1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I-2;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,1;I-1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,1;I-2;X0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,1;I-1;X0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,1;I+2;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I-2;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I-2;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I-1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,1;I-2;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,1;I+1;X0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;G0;U15;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;RY1,0;Y1,1;I+1;X0;",
+              "layer": "saved-application-route-apply-v1",
+              "physical_arity": 15
+            },
+            "sources": [
+              {
+                "id": "q0-complete",
+                "directory": "/shared/codex-1/vakint_rustred/workspace/5l-push/physics/capture-enabled-physical-user-units-20261025/q0-running-cache",
+                "native_index_identity": {
+                  "schema": "vakint.native-cache-index-identity.v1",
+                  "layout": "pack",
+                  "indexes": {
+                    "cache.rrindex": {
+                      "bytes": 27639777,
+                      "sha256": "d410c9422c335f4e492e57e968d9c03059d01793e5b9a99393008769e40fbb5b"
+                    }
+                  },
+                  "sha256": "9ae091abcb5c9c24082de7bd81c0f07fbe77612452964604d957d5c5d0d12720"
+                },
+                "generation": 59836,
+                "stored_record_references": 2229270,
+                "runs": 36683,
+                "chunks": 59835,
+                "referenced_compressed_bytes": 103139195449,
+                "manifest_bytes": 27639777,
+                "closure_authority": {
+                  "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/heavy-five-source-finalization-20261027/metadata-preparation/source-authority-q0-complete.json",
+                  "bytes": 2205,
+                  "sha256": "d629c149e1db14a307eecd09cc3ea261abad3f25dbc9e8ec306db133a13ded9e"
+                }
+              },
+              {
+                "id": "tuning-120",
+                "directory": "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/native-large-cache-tuning-pilot-v2/run1/running-delta/case-7f1bf9dfb5ec85cdb38274c6fe0bb000f2bf966c0c2d719edebc443a94c24d37-sample-0-cached",
+                "native_index_identity": {
+                  "schema": "vakint.native-cache-index-identity.v1",
+                  "layout": "pack",
+                  "indexes": {
+                    "cache.rrindex": {
+                      "bytes": 6556,
+                      "sha256": "535eb5c1d986e264934fee200e6c0b4b480d531af6dfafc306e66e5159442b86"
+                    }
+                  },
+                  "sha256": "e89d19f8dfb6ebe50bd5322db2257d5cc3def74f8ec4eecd254cbdee4333f185"
+                },
+                "generation": 3,
+                "stored_record_references": 120,
+                "runs": 2,
+                "chunks": 2,
+                "referenced_compressed_bytes": 17818,
+                "manifest_bytes": 6556,
+                "closure_authority": {
+                  "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/heavy-five-source-finalization-20261027/metadata-preparation/source-authority-tuning-120.json",
+                  "bytes": 1325,
+                  "sha256": "3157103b48227d63dc05b44bcd45eedcb36a56934f841894a945a11b8d041b5e"
+                }
+              },
+              {
+                "id": "q-monitor-1089",
+                "directory": "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/vakint-running-cache-monitor-cli-q-capture-run1/persistent-running-delta/case-7f1bf9dfb5ec85cdb38274c6fe0bb000f2bf966c0c2d719edebc443a94c24d37-sample-0-uncached",
+                "native_index_identity": {
+                  "schema": "vakint.native-cache-index-identity.v1",
+                  "layout": "pack",
+                  "indexes": {
+                    "cache.rrindex": {
+                      "bytes": 17266,
+                      "sha256": "caa183c75a3d4ffd67fc909866107ef0607dddf016045ce859c8dc2821c5e78b"
+                    }
+                  },
+                  "sha256": "61feaf63d8ace13bd2e44f36cf2b4f2c633c660b217e51d21ad3b2dd871385cf"
+                },
+                "generation": 19,
+                "stored_record_references": 1089,
+                "runs": 18,
+                "chunks": 18,
+                "referenced_compressed_bytes": 102373,
+                "manifest_bytes": 17266,
+                "closure_authority": {
+                  "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/heavy-five-source-finalization-20261027/metadata-preparation/source-authority-q-monitor-1089.json",
+                  "bytes": 1300,
+                  "sha256": "efe6449c3fcc1ee1b32535ca209bf52bc62b93da5e3f926f380c071d3a6facee"
+                }
+              },
+              {
+                "id": "old-completed-node-prefix",
+                "directory": "/shared/codex-1/vakint_rustred/workspace/5l-push/cache-workload/cumulative-nativepack-recovery-v1/preserved-base-run1/native-bundle",
+                "native_index_identity": {
+                  "schema": "vakint.native-cache-index-identity.v1",
+                  "layout": "bundle",
+                  "indexes": {
+                    "bundle.rrindex": {
+                      "bytes": 5254,
+                      "sha256": "4f940e610956c96a5f344bf8f0540021ab70908873bbd3ade9c0c4bf9f0f0f6d"
+                    },
+                    "bindings/6b235c09ae267174886f88a033214526be0dc1a3158fd597f4fb97b8dccd9853/cache.rrindex": {
+                      "bytes": 8659793,
+                      "sha256": "c4c7d5e7b201b3c3fcfc5197761eb3c806597a408b0e32e46661e0eeb35f2007"
+                    }
+                  },
+                  "sha256": "ecea54ccb2248a40e2173eed462b867db1ae11b5f7283cf90d455e00f731a027"
+                },
+                "generation": 12389,
+                "stored_record_references": 792832,
+                "runs": 9164,
+                "chunks": 12388,
+                "referenced_compressed_bytes": 14732415653,
+                "manifest_bytes": 8659793,
+                "closure_authority": {
+                  "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/heavy-five-source-finalization-20261027/metadata-preparation/source-authority-old-completed-node-prefix.json",
+                  "bytes": 1838,
+                  "sha256": "63bdc784622a5491b37f93ab5637c07979ad53dff94c0b913d8eb8c07dc98c9e"
+                }
+              },
+              {
+                "id": "accepted-small-two-root",
+                "directory": "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/legacy-cache-accumulation-audit/preservation-v1/preserved-small-native-bundle",
+                "native_index_identity": {
+                  "schema": "vakint.native-cache-index-identity.v1",
+                  "layout": "bundle",
+                  "indexes": {
+                    "bundle.rrindex": {
+                      "bytes": 5254,
+                      "sha256": "4f940e610956c96a5f344bf8f0540021ab70908873bbd3ade9c0c4bf9f0f0f6d"
+                    },
+                    "bindings/6b235c09ae267174886f88a033214526be0dc1a3158fd597f4fb97b8dccd9853/cache.rrindex": {
+                      "bytes": 280387,
+                      "sha256": "1b418fa69fa43d0f68211a4e26dd4a5c452856b4cda16a82c1d09d37e3d74585"
+                    }
+                  },
+                  "sha256": "9f3ea1a0a40203e2adb43554bc1863e27d9ce221f695094c4e287b8d4db8d350"
+                },
+                "generation": 393,
+                "stored_record_references": 25088,
+                "runs": 388,
+                "chunks": 392,
+                "referenced_compressed_bytes": 5043279,
+                "manifest_bytes": 280387,
+                "closure_authority": {
+                  "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/heavy-five-source-finalization-20261027/metadata-preparation/source-authority-accepted-small-two-root.json",
+                  "bytes": 2124,
+                  "sha256": "db1fc3a2139011290bcb0fd7beae308ae73690a3a8ab74db2f633d4b44fc446c"
+                }
+              },
+              {
+                "id": "q0-coefficient-local-usage-2d70-capture-run2",
+                "directory": "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/q0-coefficient-local-usage-2d70-20261028/capture-run2/native-capture/case-bc8740bb4d5a6c80a4cdf8211110cbe4afcdab2b0e700fb5a537aaef2b22437c-sample-0-cached",
+                "native_index_identity": {
+                  "schema": "vakint.native-cache-index-identity.v1",
+                  "layout": "pack",
+                  "indexes": {
+                    "cache.rrindex": {
+                      "bytes": 225463,
+                      "sha256": "e8592adef2512706176531bcba824ef5356704efc4884ab0f9d5aec23b79eada"
+                    }
+                  },
+                  "sha256": "f4c5984a46b91571ea5d61256a84fc2b3d0fdb3b5f2c078df9add5822589e247"
+                },
+                "generation": 331,
+                "stored_record_references": 19807,
+                "runs": 326,
+                "chunks": 330,
+                "referenced_compressed_bytes": 142095907,
+                "manifest_bytes": 225463,
+                "closure_authority": {
+                  "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/q0-coefficient-local-usage-2d70-20261028/capture-run2/final-handoff.json",
+                  "bytes": 12946,
+                  "sha256": "3ceeee83f6756c75e5b80290bc7782e728dbc392ce84402058ae288974fa968c"
+                }
+              },
+              {
+                "id": "q0-light-utility-A-closed",
+                "directory": "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/q0-coefficient-local-usage-2d70-20261028/light-utility-A-run1/native-capture/case-bc8740bb4d5a6c80a4cdf8211110cbe4afcdab2b0e700fb5a537aaef2b22437c-sample-0-cached",
+                "native_index_identity": {
+                  "schema": "vakint.native-cache-index-identity.v1",
+                  "layout": "pack",
+                  "indexes": {
+                    "cache.rrindex": {
+                      "bytes": 1296989,
+                      "sha256": "9133d2b6e962772a39b549b18838b8ab2a3fabc51b0ddb3fb7191529658e47a7"
+                    }
+                  },
+                  "sha256": "094c64193ff284af0f4ab5be70c81e0da67fcc7eea26f39c717bb3f2cf358208"
+                },
+                "generation": 1882,
+                "stored_record_references": 117059,
+                "runs": 1868,
+                "chunks": 1881,
+                "referenced_compressed_bytes": 673723669,
+                "manifest_bytes": 1296989,
+                "closure_authority": {
+                  "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/q0-coefficient-local-usage-2d70-20261028/light-utility-engineering-pilots-report.json",
+                  "bytes": 38878,
+                  "sha256": "a96bf7fb8e2a12c0559429c9865d77ad1b5982e28d74f92c1e9b24962dbb66c0"
+                }
+              },
+              {
+                "id": "q0-light-utility-B-closed",
+                "directory": "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/q0-coefficient-local-usage-2d70-20261028/light-utility-B-run1/native-capture/case-bc8740bb4d5a6c80a4cdf8211110cbe4afcdab2b0e700fb5a537aaef2b22437c-sample-0-cached",
+                "native_index_identity": {
+                  "schema": "vakint.native-cache-index-identity.v1",
+                  "layout": "pack",
+                  "indexes": {
+                    "cache.rrindex": {
+                      "bytes": 1266921,
+                      "sha256": "ff254c4293f9926a28bdec9fdcd17c29703ca9e8c498f1e986126d792e76de6c"
+                    }
+                  },
+                  "sha256": "51831d13f38f32585b97989b52f66b2a106a5e9fc85fa1ae272340f0d7e93d89"
+                },
+                "generation": 1845,
+                "stored_record_references": 114225,
+                "runs": 1829,
+                "chunks": 1844,
+                "referenced_compressed_bytes": 665493577,
+                "manifest_bytes": 1266921,
+                "closure_authority": {
+                  "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/q0-coefficient-local-usage-2d70-20261028/light-utility-engineering-pilots-report.json",
+                  "bytes": 38878,
+                  "sha256": "a96bf7fb8e2a12c0559429c9865d77ad1b5982e28d74f92c1e9b24962dbb66c0"
+                }
+              },
+              {
+                "id": "q0-shared-file-physical-engineering-empty-closed",
+                "directory": "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/q0-shared-file-physical-engineering-20261028/cold-run1/capture/running-cache",
+                "native_index_identity": {
+                  "schema": "vakint.native-cache-index-identity.v1",
+                  "layout": "pack",
+                  "indexes": {
+                    "cache.rrindex": {
+                      "bytes": 5224,
+                      "sha256": "6c2f0ec63669e9458492f977875fb9352d69e80e511afd646fe29c349ab4c2a3"
+                    }
+                  },
+                  "sha256": "bfe8e8aa87967aa87c316899a2f95368c6fa6d1f7ab3ae4227b0a2ec796dec63"
+                },
+                "generation": 1,
+                "stored_record_references": 0,
+                "runs": 0,
+                "chunks": 0,
+                "referenced_compressed_bytes": 0,
+                "manifest_bytes": 5224,
+                "closure_authority": {
+                  "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/q0-shared-file-physical-engineering-20261028/final-engineering-handoff.json",
+                  "bytes": 135561,
+                  "sha256": "e59f598781c7fe7fb3b24f44e3178e4ae84523e595e562dd2d6121df4b529f77"
+                }
+              },
+              {
+                "id": "native-cost-study-actual-closed",
+                "directory": "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/light-cache-cost-study-runtime-20261028/native-cost-study-run1/native-capture/case-bc8740bb4d5a6c80a4cdf8211110cbe4afcdab2b0e700fb5a537aaef2b22437c-sample-0-cached",
+                "native_index_identity": {
+                  "schema": "vakint.native-cache-index-identity.v1",
+                  "layout": "pack",
+                  "indexes": {
+                    "cache.rrindex": {
+                      "bytes": 1295646,
+                      "sha256": "68341324280ac76ba3e90779e1040d4369168f62ba1a7881e8c5096da375dda4"
+                    }
+                  },
+                  "sha256": "3047d5a5591d0f6bc1ad4a231fc70cb558430c5a044b1c9108f0c1c4a42e0a41"
+                },
+                "generation": 1872,
+                "stored_record_references": 117059,
+                "runs": 1859,
+                "chunks": 1871,
+                "referenced_compressed_bytes": 673128435,
+                "manifest_bytes": 1295646,
+                "closure_authority": {
+                  "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/light-cache-cost-study-runtime-20261028/terminal-monitor-handoff.json",
+                  "bytes": 3939,
+                  "sha256": "8029b7bbea0ebd4cc805c07d7e26db46e24d0f6004444d41e0ed96b88db84db6"
+                }
+              },
+              {
+                "id": "p65-unmodified-actual-preserved-closed",
+                "directory": "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/current-public-1f-standalone-host-20261028/p65-preservation-run1/retained-tempdirs/vakint-running-python-ld7z7xit/single-file-delta",
+                "native_index_identity": {
+                  "schema": "vakint.native-cache-index-identity.v1",
+                  "layout": "pack",
+                  "indexes": {
+                    "cache.rrindex": {
+                      "bytes": 5403,
+                      "sha256": "ef3c0140f7e2e34568126c8c1298339a4dd8f6a836fd12d29ce5d38d7431c696"
+                    }
+                  },
+                  "sha256": "512390d4dcd4da614d1cc16b55f4adcd70bbe4272909794b8861a7a5f42f4cfb"
+                },
+                "generation": 2,
+                "stored_record_references": 6,
+                "runs": 1,
+                "chunks": 1,
+                "referenced_compressed_bytes": 1117,
+                "manifest_bytes": 5403,
+                "closure_authority": {
+                  "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/current-public-1f-standalone-host-20261028/p65-preservation-run1/final-handoff.json",
+                  "bytes": 19401,
+                  "sha256": "60b85c040ecdb9853a29247bf87d2ae9277e86696bdad691cbe1ff72f446534f"
+                }
+              },
+              {
+                "id": "q0-monitor-responsiveness-actual-closed-empty",
+                "directory": "/shared/codex-1/vakint_rustred/workspace/validation/q0-monitor-responsiveness-20261028/cold-run1/capture/running-cache",
+                "native_index_identity": {
+                  "schema": "vakint.native-cache-index-identity.v1",
+                  "layout": "pack",
+                  "indexes": {
+                    "cache.rrindex": {
+                      "bytes": 5224,
+                      "sha256": "6c2f0ec63669e9458492f977875fb9352d69e80e511afd646fe29c349ab4c2a3"
+                    }
+                  },
+                  "sha256": "bfe8e8aa87967aa87c316899a2f95368c6fa6d1f7ab3ae4227b0a2ec796dec63"
+                },
+                "generation": 1,
+                "stored_record_references": 0,
+                "runs": 0,
+                "chunks": 0,
+                "referenced_compressed_bytes": 0,
+                "manifest_bytes": 5224,
+                "closure_authority": {
+                  "path": "/shared/codex-1/vakint_rustred/workspace/validation/q0-monitor-responsiveness-20261028/final-functional-handoff.json",
+                  "bytes": 12718,
+                  "sha256": "90d2f587c465be33887043322f86ce4dec701ed45b7cf1b5d6775089fd0f5269"
+                }
+              }
+            ]
+          }
+        }
+      },
+      "pending": {
+        "final_heavy_unique_records": null,
+        "final_heavy_compressed_bytes": null,
+        "final_heavy_decoded_bytes": null,
+        "final_heavy_sha256": null,
+        "final_heavy_export_reimport_seconds": null,
+        "published_release_url": null,
+        "actual_download_and_offline_reuse": null
+      },
+      "evidence": {
+        "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/final-zero-momentum-benchmark-20261028/crates/vakint/docs/benchmark/provenance/q0_delivery_evidence_index.json",
+        "sha256": "f96fd2b008cb216617327c26d0a781a54d6aa4ec12ba6da902bbc06791d75929"
+      }
+    }
+  },
+  "selected_delivery_checkpoint": "q0-delivery-6218a07b6405bba0f34bf459"
 }

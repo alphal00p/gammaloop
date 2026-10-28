@@ -1,0 +1,27 @@
+{
+  "schema": "vakint.q0-delivery-evidence-index.v1",
+  "cache_file_engineering_run": "cache-file-engineering-188fbde4006e5a3d70df7fe9",
+  "historical_physical_run": "physical-capture-717e66516cdcb6f5bd04a30b",
+  "records": {
+    "light_freeze": {
+      "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/validation/final-light-user-freeze-20261028/selection-freeze.json",
+      "bytes": 1621,
+      "sha256": "2cd0ce44d794d732f65efb68f11e04e18581b0bd9aac5a34759d54df800808c0"
+    },
+    "monitor": {
+      "path": "/shared/codex-1/vakint_rustred/workspace/validation/q0-monitor-responsiveness-20261028/final-functional-handoff.json",
+      "bytes": 12718,
+      "sha256": "90d2f587c465be33887043322f86ce4dec701ed45b7cf1b5d6775089fd0f5269"
+    },
+    "authorization": {
+      "path": "q0_delivery_authorization.json",
+      "bytes": 794,
+      "sha256": "33b4340a6fc3d86befb4927938e0807323e2b7fadd3f36cb8ae20799bbcb1e88"
+    },
+    "heavy_sources": {
+      "path": "/shared/codex-1/vakint_rustred/workspace/validation/heavy-final-union-inputs-20261028/source-manifest.final.json",
+      "bytes": 20465,
+      "sha256": "b04e18465e5a57ccb8caa0f981333cd253e7223685d33d9cfa127ba099471b9f"
+    }
+  }
+}

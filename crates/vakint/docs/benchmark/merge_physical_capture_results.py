@@ -46,6 +46,19 @@ def reference(item, base):
     return path
 
 
+def json_record(item, base):
+    """Read authenticated bounded metadata without opening its referenced payloads."""
+    path = Path(item["path"])
+    path = path if path.is_absolute() else base / path
+    require(
+        path.suffix == ".json"
+        and type(item["bytes"]) is int
+        and 0 < item["bytes"] == path.stat().st_size <= 1_000_000,
+        "evidence must be bounded JSON metadata",
+    )
+    return {"evidence": item, "raw_receipt": read(reference(item, base))}
+
+
 def completed_run(config_path, *, expected_job_id="q0"):
     projections = {
         "q0": ("zero-momentum", "zero-momentum-metric"),
@@ -712,21 +725,10 @@ def cache_file_engineering(index_path, base):
         "unknown cache-file engineering index",
     )
 
-    def json_record(item):
-        path = Path(item["path"])
-        path = path if path.is_absolute() else index_path.parent / path
-        require(
-            path.suffix == ".json"
-            and type(item["bytes"]) is int
-            and 0 < item["bytes"] == path.stat().st_size <= 1_000_000,
-            "engineering evidence must be bounded JSON metadata",
-        )
-        return {
-            "evidence": item,
-            "raw_receipt": read(reference(item, index_path.parent)),
-        }
-
-    records = {name: json_record(item) for name, item in index["records"].items()}
+    records = {
+        name: json_record(item, index_path.parent)
+        for name, item in index["records"].items()
+    }
     prior = base["engineering_optimization_runs"][index["baseline_engineering_run"]]
     require(
         prior["schema"] == "vakint.q0-engineering-comparison.v1"
@@ -865,8 +867,10 @@ def cache_file_engineering(index_path, base):
         and all(item["final_held_out_used"] is False for item in (budget, additions)),
         "LIGHT evidence is not completed engineering-only selection",
     )
-    candidate_a = json_record(budget["accepted_result"])
-    records["light_baseline"] = json_record(light["prior_measurement"])
+    candidate_a = json_record(budget["accepted_result"], index_path.parent)
+    records["light_baseline"] = json_record(
+        light["prior_measurement"], index_path.parent
+    )
     light_baseline = records["light_baseline"]["raw_receipt"]
     require(
         light_baseline["success"] is True
@@ -891,7 +895,7 @@ def cache_file_engineering(index_path, base):
         if item["cache"] == light["pilots"][1]["cache_file"]
     )
     records["candidate_a"] = candidate_a
-    records["candidate_b"] = json_record(candidate_b["result"])
+    records["candidate_b"] = json_record(candidate_b["result"], index_path.parent)
     candidates = [candidate_a["raw_receipt"], records["candidate_b"]["raw_receipt"]]
     for pilot, candidate in zip(light["pilots"], candidates):
         schema, additional = {
@@ -1002,6 +1006,105 @@ def cache_file_engineering(index_path, base):
     }
 
 
+def delivery_checkpoint(index_path, base):
+    """Record delivery decisions and functional evidence, never performance medians."""
+    index_path = Path(index_path).resolve()
+    index = read(index_path)
+    require(
+        index["schema"] == "vakint.q0-delivery-evidence-index.v1"
+        and set(index["records"])
+        == {"light_freeze", "monitor", "authorization", "heavy_sources"},
+        "unknown delivery evidence index",
+    )
+    records = {
+        name: json_record(item, index_path.parent)
+        for name, item in index["records"].items()
+    }
+    freeze = records["light_freeze"]["raw_receipt"]
+    monitor = records["monitor"]["raw_receipt"]
+    authorization = records["authorization"]["raw_receipt"]
+    sources = records["heavy_sources"]["raw_receipt"]
+    require(
+        freeze["schema"] == "vakint.light-cache.user-directed-freeze.v1"
+        and freeze["performance_claim"] is False
+        and freeze["future_tuning_allowed"] is False
+        and freeze["all_heldout_outcomes_used_for_selection"] is False
+        and 0 < freeze["compressed_bytes"] <= 95_000_000
+        and freeze["selected_records"] > 0,
+        "LIGHT lacks an accepted non-performance freeze",
+    )
+    study = base["engineering_optimization_runs"][index["cache_file_engineering_run"]]
+    candidate = study["records"]["candidate_b"]["raw_receipt"]
+    require(
+        candidate["actual_compressed_bytes"] == freeze["compressed_bytes"]
+        and candidate["actual_decoded_bytes"] == freeze["decoded_bytes"]
+        and candidate["cache"]["sha256"] == freeze["sha256"]
+        and candidate["native_counts"]["complete_records"]
+        == freeze["selected_records"],
+        "frozen LIGHT differs from the complete native export",
+    )
+    require(
+        authorization["schema"] == "vakint.q0-delivery-authorization.v1"
+        and authorization["new_uncached_repetitions_waived"] is True
+        and authorization["required_physical_examples"] == ["zero-momentum"]
+        and authorization["user_prompt_verbatim"].strip(),
+        "historical-baseline waiver or physical scope is absent",
+    )
+    historical = base["physical_capture_runs"][index["historical_physical_run"]]
+    require(
+        historical["performance_eligible"] is False,
+        "historical reference must retain its original non-performance cohort",
+    )
+    require(
+        monitor["schema"] == "vakint.q0-monitor-responsiveness-actual-final-handoff.v1"
+        and monitor["status"]
+        == "PASS_ACTUAL_ONE_CACHED_Q0_MONITOR_AND_FULL55_58_146678_SCIENCE"
+        and monitor["science"]["all_original_mass_coupling_normalization_preserved"]
+        is True
+        and monitor["science"]["input_result_guard_and_family_identity_authenticated"]
+        is True
+        and monitor["monitor"]["fault_count"] == 0
+        and monitor["monitor"]["all_actual_worker_births_match"] is True
+        and monitor["actual_OS_resources"]["signals_sent"] == [],
+        "monitor lacks complete functional acceptance",
+    )
+    freshness = seconds(
+        monitor["monitor"]["maximum_conservative_freshness_bound_seconds"]
+    )
+    require(
+        freshness <= monitor["monitor"]["required_limit_seconds"]
+        and sources["schema"] == "vakint.heavy-final-union-source-manifest.v1"
+        and sources["status"] == "complete"
+        and sources["pending_sources"] == []
+        and len(sources["sources"]) == sources["source_count"]
+        and sum(row["stored_record_references"] for row in sources["sources"])
+        == sources["total_stored_record_references"],
+        "monitor freshness or closed HEAVY source inventory differs",
+    )
+    return {
+        "schema": "vakint.q0-delivery-checkpoint.v1",
+        "performance_eligible": False,
+        "cache_performance_winner": False,
+        "new_uncached_repetitions_waived": True,
+        "historical_physical_run": index["historical_physical_run"],
+        "historical_uncached_seconds": seconds(
+            historical["observed_seconds"]["producer_reduction"]
+        ),
+        "cache_file_engineering_run": index["cache_file_engineering_run"],
+        "records": records,
+        "pending": {
+            "final_heavy_unique_records": None,
+            "final_heavy_compressed_bytes": None,
+            "final_heavy_decoded_bytes": None,
+            "final_heavy_sha256": None,
+            "final_heavy_export_reimport_seconds": None,
+            "published_release_url": None,
+            "actual_download_and_offline_reuse": None,
+        },
+        "evidence": evidence(index_path),
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base", type=Path, required=True)
@@ -1009,18 +1112,22 @@ def main():
     source.add_argument("--campaign", type=Path)
     source.add_argument("--engineering", type=Path)
     source.add_argument("--file-engineering", type=Path)
+    source.add_argument("--delivery-checkpoint", type=Path)
     parser.add_argument("--physical-scope", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--select-current", action="store_true")
     args = parser.parse_args()
     require(not args.output.exists(), "output must be a new path")
     require(
-        not (args.engineering or args.file_engineering) or not args.physical_scope,
+        not (args.engineering or args.file_engineering or args.delivery_checkpoint)
+        or not args.physical_scope,
         "engineering evidence cannot change physical completion scope",
     )
     physical_scope, scope_authorization = load_physical_scope(args.physical_scope)
     merged = copy.deepcopy(read(args.base))
-    if args.file_engineering:
+    if args.delivery_checkpoint:
+        run = delivery_checkpoint(args.delivery_checkpoint, merged)
+    elif args.file_engineering:
         run = cache_file_engineering(args.file_engineering, merged)
     elif args.engineering:
         run = engineering_comparison(args.engineering)
@@ -1035,14 +1142,18 @@ def main():
     if scope_authorization is not None:
         identity = [identity, scope_authorization["evidence"]]
     run_id = (
-        "cache-file-engineering-"
+        "q0-delivery-"
+        if args.delivery_checkpoint
+        else "cache-file-engineering-"
         if args.file_engineering
         else "q0-engineering-"
         if args.engineering
         else "physical-capture-"
     ) + hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()[:24]
     namespace = (
-        "engineering_optimization_runs"
+        "delivery_checkpoints"
+        if args.delivery_checkpoint
+        else "engineering_optimization_runs"
         if args.engineering or args.file_engineering
         else "physical_capture_runs"
     )
@@ -1051,7 +1162,9 @@ def main():
     runs[run_id] = run
     if args.select_current:
         selector = (
-            "selected_cache_file_engineering_run"
+            "selected_delivery_checkpoint"
+            if args.delivery_checkpoint
+            else "selected_cache_file_engineering_run"
             if args.file_engineering
             else "selected_engineering_optimization_run"
             if args.engineering

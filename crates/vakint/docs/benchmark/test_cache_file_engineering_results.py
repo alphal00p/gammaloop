@@ -434,5 +434,152 @@ class CacheFileEngineeringContracts(unittest.TestCase):
         self.assertFalse(runs[selected]["performance_eligible"])
 
 
+class DeliveryCheckpointContracts(unittest.TestCase):
+    def setUp(self):
+        self.fixture = CacheFileEngineeringContracts()
+        self.fixture.setUp()
+        self.addCleanup(self.fixture.doCleanups)
+        self.root = self.fixture.root
+        self.base = copy.deepcopy(self.fixture.base)
+        self.base["engineering_optimization_runs"]["synthetic-file"] = (
+            adapter.cache_file_engineering(self.fixture.index(), self.base)
+        )
+        self.base["physical_capture_runs"]["historical-physical"][
+            "observed_seconds"
+        ] = {"producer_reduction": 100.0}
+        self.documents = {
+            "light_freeze": {
+                "schema": "vakint.light-cache.user-directed-freeze.v1",
+                "performance_claim": False,
+                "future_tuning_allowed": False,
+                "all_heldout_outcomes_used_for_selection": False,
+                "compressed_bytes": 80,
+                "decoded_bytes": 160,
+                "sha256": "b" * 64,
+                "selected_records": 56,
+            },
+            "authorization": {
+                "schema": "vakint.q0-delivery-authorization.v1",
+                "new_uncached_repetitions_waived": True,
+                "required_physical_examples": ["zero-momentum"],
+                "user_prompt_verbatim": "Synthetic user waiver fixture.",
+            },
+            "monitor": {
+                "schema": "vakint.q0-monitor-responsiveness-actual-final-handoff.v1",
+                "status": "PASS_ACTUAL_ONE_CACHED_Q0_MONITOR_AND_FULL55_58_146678_SCIENCE",
+                "science": {
+                    "all_original_mass_coupling_normalization_preserved": True,
+                    "input_result_guard_and_family_identity_authenticated": True,
+                },
+                "monitor": {
+                    "fault_count": 0,
+                    "all_actual_worker_births_match": True,
+                    "maximum_conservative_freshness_bound_seconds": 2.0,
+                    "required_limit_seconds": 30,
+                },
+                "actual_OS_resources": {"signals_sent": []},
+            },
+            "heavy_sources": {
+                "schema": "vakint.heavy-final-union-source-manifest.v1",
+                "status": "complete",
+                "pending_sources": [],
+                "source_count": 2,
+                "total_stored_record_references": 3,
+                "sources": [
+                    {"stored_record_references": 1},
+                    {"stored_record_references": 2},
+                ],
+            },
+        }
+
+    def index(self):
+        return self.fixture.write(
+            "delivery-index.json",
+            {
+                "schema": "vakint.q0-delivery-evidence-index.v1",
+                "cache_file_engineering_run": "synthetic-file",
+                "historical_physical_run": "historical-physical",
+                "records": {
+                    name: self.fixture.write(name + ".json", value)
+                    for name, value in self.documents.items()
+                },
+            },
+        )["path"]
+
+    def test_keeps_functional_evidence_separate_and_final_sizes_pending(self):
+        run = adapter.delivery_checkpoint(self.index(), self.base)
+        self.assertFalse(run["performance_eligible"])
+        self.assertFalse(run["cache_performance_winner"])
+        self.assertEqual(run["historical_uncached_seconds"], 100.0)
+        self.assertTrue(all(value is None for value in run["pending"].values()))
+
+    def test_rejects_cache_freeze_drift(self):
+        self.documents["light_freeze"]["sha256"] = "0" * 64
+        with self.assertRaisesRegex(ValueError, "frozen LIGHT differs"):
+            adapter.delivery_checkpoint(self.index(), self.base)
+
+    def test_rejects_selection_using_heldout_or_claiming_performance(self):
+        for key in ("all_heldout_outcomes_used_for_selection", "performance_claim"):
+            with self.subTest(key=key):
+                self.documents["light_freeze"][key] = True
+                with self.assertRaisesRegex(ValueError, "non-performance freeze"):
+                    adapter.delivery_checkpoint(self.index(), self.base)
+                self.documents["light_freeze"][key] = False
+
+    def test_rejects_absent_waiver(self):
+        self.documents["authorization"]["new_uncached_repetitions_waived"] = False
+        with self.assertRaisesRegex(ValueError, "waiver or physical scope"):
+            adapter.delivery_checkpoint(self.index(), self.base)
+
+    def test_rejects_unaccepted_monitor_and_stale_heartbeat(self):
+        for key, value in (
+            ("fault_count", 1),
+            ("all_actual_worker_births_match", False),
+            ("maximum_conservative_freshness_bound_seconds", 31.0),
+        ):
+            with self.subTest(key=key):
+                original = self.documents["monitor"]["monitor"][key]
+                self.documents["monitor"]["monitor"][key] = value
+                with self.assertRaisesRegex(ValueError, "monitor"):
+                    adapter.delivery_checkpoint(self.index(), self.base)
+                self.documents["monitor"]["monitor"][key] = original
+
+    def test_rejects_unclosed_heavy_sources_or_wrong_reference_total(self):
+        for key, value in (("pending_sources", ["open"]), ("source_count", 3)):
+            with self.subTest(key=key):
+                original = self.documents["heavy_sources"][key]
+                self.documents["heavy_sources"][key] = value
+                with self.assertRaisesRegex(ValueError, "source inventory"):
+                    adapter.delivery_checkpoint(self.index(), self.base)
+                self.documents["heavy_sources"][key] = original
+
+    def test_cli_preserves_every_historical_field_and_selection(self):
+        self.fixture.write("delivery-base.json", self.base)
+        output = self.root / "delivery-appended.json"
+        subprocess.run(
+            [
+                sys.executable,
+                adapter.__file__,
+                "--base",
+                str(self.root / "delivery-base.json"),
+                "--delivery-checkpoint",
+                str(self.index()),
+                "--output",
+                str(output),
+                "--select-current",
+            ],
+            check=True,
+            capture_output=True,
+        )
+        merged = json.loads(output.read_text())
+        for key, value in self.base.items():
+            self.assertEqual(merged[key], value)
+        selected = merged["selected_delivery_checkpoint"]
+        self.assertTrue(selected.startswith("q0-delivery-"))
+        self.assertFalse(
+            merged["delivery_checkpoints"][selected]["performance_eligible"]
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,13 @@
+{
+  "schema": "vakint.q0-delivery-authorization.v1",
+  "user_prompt_verbatim": "Yes, speed-track this step and used completed baseline to finish validation early.",
+  "question_context": "Three new fresh uncached zero-momentum repetitions would each take approximately 40 hours. Use the completed uncached run as a clearly labeled historical timing reference and finish correctness/cached validation.",
+  "new_uncached_repetitions_waived": true,
+  "required_physical_examples": [
+    "zero-momentum"
+  ],
+  "deferred_physical_examples": [
+    "quadratic"
+  ],
+  "scope_qualification": "The waiver changes delivery work, not source identities, measured timer boundaries, performance eligibility or campaign certification. No matched cache-only ratio or fresh three-sample median is inferred."
+}

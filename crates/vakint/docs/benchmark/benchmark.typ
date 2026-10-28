@@ -1,6 +1,7 @@
 // Render from the checked measurement record; never edit timing values here.
 // Visual reference: https://github.com/alphal00p/ninjars/blob/main/docs/benchmark/benchmark.pdf
 #let report = json("data/results.json")
+#let delivery-id = report.at("selected_delivery_checkpoint", default: none)
 #let selected = report.at("selected_reduction_run", default: none)
 #let data = if selected == none { report } else { report.reduction_runs.at(selected) }
 #assert(data.validation_passed, message: "Only validated benchmark results may be published")
@@ -320,6 +321,8 @@ claim. Earlier interrupted checks are not a timing baseline.
   Multipliers are _cached ÷ uncached_, using the same colour scale as page 1.
   Functional runs, including the exploratory q0 cohort, never supply these medians.
   Cache preparation and held-out performance retain separate evidence.
+  #if delivery-id != none [The user waived new uncached q0 repetitions; its
+  historical reference and completed functional checks appear on the delivery page.]
   #if tier-selections != none [Each tier retains its own matched uncached baseline;
   no baseline or sample is inferred from the other tier.]
 ]
@@ -994,7 +997,8 @@ Refresh and validation contract: #raw("maintenance.typ").]
   same case took #timing(light.baseline.evaluation_seconds) s and
   #light.baseline.new_native_rules new rules (receipt #raw(light.prior_measurement.sha256.slice(0, 12))).
   These fresh pilots ran alongside unrelated physical work; they do not establish
-  a performance winner or final LIGHT selection. All new completed capture nodes
+  a performance winner. The later user-directed LIGHT freeze is recorded on the
+  delivery page. All new completed capture nodes
   remain preserved; neither run read its delta. Public timings include capture overhead.]
   v(0.25em)
   text(8pt)[Both native exports passed full reimport/count/ordered-guard checks within
@@ -1009,4 +1013,103 @@ Refresh and validation contract: #raw("maintenance.typ").]
   Complete source cohorts, closed captures, raw phases and timer scopes remain in
   #raw("data/results.json"). Source hashes in
   #raw("provenance/cache_file_engineering_evidence_index.json").]
+}
+
+#if delivery-id != none {
+  let delivery = report.delivery_checkpoints.at(delivery-id)
+  let freeze = delivery.records.light_freeze.raw_receipt
+  let monitor = delivery.records.monitor.raw_receipt
+  let sources = delivery.records.heavy_sources.raw_receipt
+  assert(delivery.schema == "vakint.q0-delivery-checkpoint.v1")
+  assert(not delivery.performance_eligible and not delivery.cache_performance_winner)
+  assert(delivery.new_uncached_repetitions_waived)
+  pagebreak()
+  set text(font: "Libertinus Serif", size: 10pt, fill: black)
+  align(center)[
+    #text(21pt, weight: "bold", fill: navy)[Zero-momentum delivery checkpoint]
+    #v(0.2em)
+    #text(11pt, fill: luma(80))[Frozen LIGHT cache · exact monitored reuse · 28 October 2026]
+  ]
+  v(0.55em)
+  block(fill: pale, inset: 10pt, radius: 4pt, width: 100%)[
+    *Scope and timing reference.* The required physical example is the complete
+    zero-momentum four-rung fixture; the quadratic example is deferred.
+    The user waived three new uncached repetitions. The completed historical
+    uncached public reduction took #timing(delivery.historical_uncached_seconds) s
+    (#fixed(delivery.historical_uncached_seconds / 3600, 1) h), in its original older cohort.
+    It remains a historical reference, not a matched baseline for a new cache-only
+    ratio. The earlier approximately 5.5× assembly observation concerns Vakint's
+    coefficient-local source change; it is separate from cache-format performance.
+  ]
+  v(0.55em)
+  text(13pt, weight: "bold", fill: navy)[LIGHT · accepted as sufficient]
+  v(0.25em)
+  table(columns: (1fr, 1fr, 1fr), inset: (x: 8pt, y: 11pt),
+    stroke: 0.4pt + luma(215),
+    fill: (x, y) => if y == 0 { navy } else { rgb("#e8f1ea") },
+    table.header(
+      text(fill: white)[Strict native records],
+      text(fill: white)[Compressed size],
+      text(fill: white)[Decoded size],
+    ),
+    text(17pt, weight: "bold")[#freeze.selected_records],
+    text(17pt, weight: "bold")[#fixed(freeze.compressed_bytes / 1000000, 2) MB],
+    text(17pt, weight: "bold")[#fixed(freeze.decoded_bytes / 1000000, 2) MB],
+  )
+  v(0.25em)
+  [Candidate B retains 54 Route and 2048 Apply records. Complete Native reimport
+  verified exact coefficients and the original ordered cache-record guards.
+  The user accepted this existing cache and ended selection/tuning; this does
+  not declare B a performance winner. The earlier A/B observations and all
+  completed capture prefixes remain preserved.]
+  v(0.2em)
+  block[
+    #set text(8pt)
+    #set par(justify: false)
+    Exact lengths: #freeze.compressed_bytes compressed / #freeze.decoded_bytes decoded bytes.
+    Compressed SHA-256: #raw(freeze.sha256). Publication and actual download/offline
+    validation remain pending in this checkpoint.
+  ]
+  v(0.55em)
+  text(13pt, weight: "bold", fill: navy)[Monitored HEAVY reuse · functional acceptance]
+  v(0.25em)
+  table(columns: (1fr, 1fr, 1fr), inset: (x: 8pt, y: 11pt),
+    stroke: 0.4pt + luma(215),
+    fill: (x, y) => if y == 0 { navy } else { pale },
+    table.header(
+      text(fill: white)[Exact master identities / coefficients],
+      text(fill: white)[Heartbeat freshness bound],
+      text(fill: white)[Observed peak RAM],
+    ),
+    text(17pt, weight: "bold")[#monitor.science.master_identity_union_count / #monitor.science.exact_scalar_product_count],
+    text(17pt, weight: "bold")[#fixed(monitor.monitor.maximum_conservative_freshness_bound_seconds, 3) s],
+    text(17pt, weight: "bold")[#fixed(monitor.actual_OS_resources.worker_HWM_max_observed_bytes / 1000000000, 2) GB],
+  )
+  v(0.25em)
+  [All #monitor.science.ordered_guard_Atom_count exported guard Atoms agree in order,
+  with mass, couplings, normalization and family identities preserved.
+  #monitor.monitor.sample_count OS/monitor samples observed no faults.
+  The heartbeat covered loading, native work, exact combination, serialization
+  and the final SHA scan; native scientific counters may age during opaque phases.
+  All physical workers have exited. This instrumented check supplies no new
+  performance median.]
+  v(0.25em)
+  text(8pt)[The peak is an observed OS high-water mark, not a bound on every
+  instantaneous allocation. The 50 GB machine-available-memory guard stayed
+  satisfied; minimum observed available RAM was
+  #fixed(monitor.actual_OS_resources.machine_MemAvailable_min_observed_bytes / 1000000000, 1) GB.
+  Public guard-vector equality is distinct from the original ordered guards
+  inside each Native cache record.]
+  v(0.5em)
+  block(stroke: 0.5pt + luma(200), inset: 9pt, radius: 4pt, width: 100%)[
+    *Final HEAVY export: pending.* All #sources.source_count precious sources are
+    closed, with #str(sources.total_stored_record_references) stored record references
+    before deduplication. Final unique count, compressed/decoded lengths,
+    SHA-256 and export/reimport durations remain unmeasured. The previously
+    validated 96 GB snapshot stays preserved; it is not relabeled as this final union.
+  ]
+  v(0.35em)
+  text(8pt, fill: luma(100))[Evidence: #raw("provenance/q0_delivery_evidence_index.json").
+  Exact raw receipts and user decisions are appended in #raw("data/results.json").
+  No master values were evaluated: the 640 declared five-loop masters remain uncomputed.]
 }
