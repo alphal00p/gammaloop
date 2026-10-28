@@ -31,7 +31,7 @@ review_triggers = ["crates/feynkit-generator/src/grouping.rs", "crates/feynkit-g
 path = "crates/feynkit-generator/src/grouping.rs"
 symbol = "finite quotient comparison"
 anchor = "fn compare(\n"
-end_anchor = "fn expressions_equal("
+end_anchor = "fn expressions_equal(\n    left: &SymbolicTensor<PartialStructure>,"
 digest = "1fde7e75dd6e13b44fafe38ee5dd3b9debb2babf"
 
 [[section.note.scope]]
@@ -46,7 +46,7 @@ path = "crates/feynkit-generator/tests/generation_oracle/main.rs"
 symbol = "actual registration and pool controls"
 anchor = "fn register_indices("
 end_anchor = "/// A user filter"
-digest = "c0dea81605141dbd2db29be9413d1030ef942625"
+digest = "0d638c2b0b4d89183621d6d202a8e551fb5e3f34"
 
 [[section.note]]
 id = "generation-staged-python-fixes"

@@ -254,8 +254,12 @@ own workspace. Bounded: one regression, one bisect, one written verdict.
   and `evidence/generation-integration/wp3/units19-21.json` record exact checks
   and limits. NEW independent Astra review is required before22. The staged
   22–26 parallel preparation is not imported. The current registry inventory
-  retains seven inherited and twenty-one additional mismatches (one extra
-  existing grouping-note digest after this slice), for source31 reconciliation.
+  was incorrectly reported as57/7/21 at `df551850`; canonical rules found56/7/22
+  because the new grouping end anchor was ambiguous. The bounded ORACLE-P2
+  correction restores computed57/7/21 and splits the registration matrix into
+  individually budgeted tests; see the grouping note and correction receipt.
+  Both P1 row gates and NEW independent Astra review remain required. Unrelated
+  source31 reconciliation stays pending.
 
 - `jj duplicate` the v4 chain (`kursouxx::kpslpwqz`) onto the WP2 base; do not
   rebase in place, so the 19 live workspaces on older lines stay valid.

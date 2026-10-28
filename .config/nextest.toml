@@ -221,6 +221,13 @@ threads-required = "num-test-threads"
 filter = "package(gammaloop-integration-tests) and binary(=test_feyngen)"
 test-group = "feyngen-serial"
 
+# Source19 full-payload oracle children use actual 1/8/32-thread Run pools.
+# Bound these parent processes with the existing two-slot resource group under
+# the Nix runner's up-to-16-worker budget; preserve the global 240s timeout.
+[[profile.default.overrides]]
+filter = "package(feynkit-generator) and binary(=generation_oracle) and (test(outputs_do_not_depend_on_index_registration_order_) or test(=index_registration_child_failure_propagates) or test(=ym_ggg_zero_color_L3) or test(=xs_qcdqed_addx_canonical_scalar_lr_L3))"
+test-group = "memory-intensive"
+
 [profile.ci_gammaloop]
 inherits = "default"
 

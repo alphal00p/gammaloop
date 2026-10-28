@@ -105,14 +105,49 @@ symmetry factors, content and IDs match. A diagnostic reproduces the canonical
 row's recorded digest using verified old spellings and omitted interface fields;
 this is not a physics certificate. The analogous YM diagnostic does not recover
 its recorded digest. That difference is not classified as physics-equivalent:
-WP9 needs a frozen-source numerator/local-fragment dump at the first differing
+Before source22, MainSol needs a frozen-source numerator/local-fragment dump at the first differing
 boundary. No expectation, snapshot or physical convention is rerecorded.
 
 The three earlier frame assertions remain failures too. Four existing parser
 helpers that expand graph numerators remain omitted without repository-wide
 filter changes. The seven inherited plus twenty-one additional scope/anchor drifts stay
 with source31; this includes one newly stale existing grouping-note digest.
-The new note scopes and the two explicitly reconciled staged scopes are valid. Final full-WP3/five fresh a_ddx/BRST/epem/CoolQM, memory/performance,
+The earlier claim that all new note scopes were valid was false at `df551850`: the
+production end anchor matched twice. The ORACLE-P2 correction below supersedes it. Final full-WP3/five fresh a_ddx/BRST/epem/CoolQM, memory/performance,
 Linnest WASM provenance, Kurvst PDF and actual final sdist/native/Pyodide/Community
 wheel checks remain pending. Later22–26 preparation and approved25/36,27–29,46
 lanes are not imported here. Source38 still needs prerequisites through36.
+
+
+== ORACLE P2 correction awaiting NEW independent Astra review
+
+The correction starts from frozen `df55185059f31bea548a5de27c95828656fbdc52`.
+ORACLE-P2-REGISTRY now uses the unique production multiline header. The corrected
+retained audit checks exactly one start and end, ordered nonoverlapping bounds,
+and the exact Git blob digest, matching the canonical documentation owner.
+The original presence-only audit and receipt are historical false-positive
+evidence, not pass credit: the reviewed base actually had56 valid scopes,
+7 inherited mismatches and22 additional mismatches. After this correction the
+computed inventory is57/7/21; every new owned scope is valid. Unrelated source31
+scopes are unchanged. The existing canonical boundary regression covers repeated
+starts, repeated ends and reversed ranges.
+
+ORACLE-P2-TEST-BUDGET replaces the bundled matrix with12 default tests named
+`outputs_do_not_depend_on_index_registration_order_<order>_<threads>`.
+Each captures a fresh `generation,1` reference and compares one cell from
+{generation, increasing, decreasing, shuffled} × {1,8,32} to that same semantic
+reference. The two full cases and seven-zero/two-survivor subset, exact exported
+payload lines, registration assertions and nonzero worker observations remain.
+A separate negative control verifies child panic propagation. Current selection:
+#raw("cargo nextest run --locked --cargo-profile ci-optim --profile ci_gammaloop -p feynkit-generator --test generation_oracle --test-threads 2 -E 'test(outputs_do_not_depend_on_index_registration_order_) or test(=index_registration_child_failure_propagates)'", block: true)
+Run through the licensed Nix development environment. The correction receipt
+`evidence/generation-integration/wp3/oracle-p2-corrections.json` records the
+actual run identities, normal240-second budgets, durations and coverage.
+The earlier435.83-second manual pass does not certify the canonical runner.
+
+These two corrections do not clear either P1 row gate. YM remains unclassified;
+canonical serialization is not a physical/local-factor certificate. MainSol owns
+the frozen-baseline diagnosis. No source22+, expectation, production grouping,
+quotient algebra or baseline reference changes are included. Earlier frame
+failures and full WP3, source30/31, physics, performance and distribution gates
+remain. Stop for NEW independent Astra review before any parent integration.

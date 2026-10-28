@@ -294,7 +294,7 @@ oracle! {
     heavy ym_g8_L0: Row { diagrams: 34300, topologies: 34300, assignments: 34300, inverse_symmetry: (34300, 1), weights: (34300, 1), symmetry_factors: &[(1, 34300)], content: 0x0d8cd8312f854d8b, numerators: 0x4be08c2dd2eb4a1e, named: 0xe921e3ce642cddae, ids: 0xa9980ccebbd89562 };
     heavy ym_gse_L4: Row { diagrams: 2571, topologies: 666, assignments: 2571, inverse_symmetry: (81653, 48), weights: (-8113, 16), symmetry_factors: &[(1, 1139), (2, 889), (4, 402), (6, 17), (8, 100), (12, 14), (16, 9), (24, 1)], content: 0xf0b98dad15d745b1, numerators: 0x6bb69664d65cdbbc, named: 0x24757abcc9b9d2ec, ids: 0x0074f4d0f4b0cda4 };
     heavy ym_gse_L5: Row { diagrams: 53201, topologies: 9892, assignments: 53201, inverse_symmetry: (9957739, 288), weights: (-2104793, 288), symmetry_factors: &[(1, 22781), (2, 18577), (3, 2), (4, 8421), (6, 315), (8, 2411), (12, 248), (16, 349), (24, 72), (32, 19), (36, 1), (48, 3), (72, 2)], content: 0x8da6be7bb6b31c5b, numerators: 0xf988e70b630fac54, named: 0x81b24addd62ad96f, ids: 0x683c20a191922cf0 };
-    fast ym_ggg_zero_color_L3: Row { diagrams: 1217, topologies: 469, assignments: 1340, inverse_symmetry: (3583, 4), weights: (-1161, 4), symmetry_factors: &[(1, 649), (2, 424), (4, 132), (6, 6), (8, 6)], content: 0x19b54d6ef892c24e, numerators: 0x1c149c8e666851cd, named: 0x3569d286d4aa397d, ids: 0x1ed193f8aeb76d2f };
+    fast ym_ggg_zero_color_L3: Row { diagrams: 1217, topologies: 469, assignments: 1340, inverse_symmetry: (3583, 4), weights: (-1161, 4), symmetry_factors: &[(1, 649), (2, 424), (4, 132), (6, 6), (8, 6)], content: 0x19b54d6ef892c24e, numerators: 0xae5ed16f90c02201, named: 0x3569d286d4aa397d, ids: 0x1ed193f8aeb76d2f };
     fast ym_vac_L5: Row { diagrams: 381, topologies: 91, assignments: 381, inverse_symmetry: (95437, 576), weights: (-19595, 576), symmetry_factors: &[(1, 82), (2, 110), (4, 73), (6, 4), (8, 54), (12, 9), (16, 28), (24, 3), (32, 8), (48, 4), (64, 2), (96, 1), (128, 2), (144, 1)], content: 0xf7c775391f48c05c, numerators: 0xc2afd3e35908cbf1, named: 0x357bb19f8902aa0c, ids: 0x41ea11f42e0c80b0 };
     fast sm_eemm_L0: Row { diagrams: 4, topologies: 1, assignments: 4, inverse_symmetry: (4, 1), weights: (-4, 1), symmetry_factors: &[(1, 4)], content: 0x97af00ae91ef62c4, numerators: 0x7c4bccf1c63f9180, named: 0xc01c07a8158bc53a, ids: 0x91a782bcdd47cb2a };
     fast sm_eemm_L1: Row { diagrams: 464, topologies: 10, assignments: 464, inverse_symmetry: (925, 2), weights: (-205, 2), symmetry_factors: &[(1, 461), (2, 3)], content: 0x7d459f5367fbcba8, numerators: 0xdf611964612f3ec9, named: 0x7b2f048149dccbf3, ids: 0xa1e6a4f3cf7051f9 };
@@ -335,7 +335,7 @@ oracle! {
     fast xs_qed_eemm_scalar_L2: Row { diagrams: 25, topologies: 157, assignments: 714, inverse_symmetry: (25, 1), weights: (8, 1), symmetry_factors: &[(1, 25)], content: 0x76af0acc0f7b7896, numerators: 0x5d7e712797f78751, named: 0x54e6507e4c865b62, ids: 0x52893e0efe85f881 };
     fast xs_qed_eedd_L1: Row { diagrams: 1, topologies: 17, assignments: 34, inverse_symmetry: (1, 1), weights: (-1, 1), symmetry_factors: &[(1, 1)], content: 0xb467d6be7a12aefa, numerators: 0xf5a21f1a84870bc7, named: 0xdd30b2e206f30267, ids: 0x58ebcb07ba6255d3 };
     fast xs_qed_eedd_L2: Row { diagrams: 30, topologies: 157, assignments: 714, inverse_symmetry: (30, 1), weights: (4, 1), symmetry_factors: &[(1, 30)], content: 0x1f065e0a67f8e4b1, numerators: 0x52854dced3f2ee5c, named: 0x368a1cfe1b96c3be, ids: 0xfba0be1b20d86887 };
-    fast xs_qcdqed_addx_canonical_scalar_lr_L3: Row { diagrams: 82, topologies: 25, assignments: 1410, inverse_symmetry: (161, 2), weights: (-2711, 2), symmetry_factors: &[(1, 79), (2, 3)], content: 0x72adf523d45d2a92, numerators: 0xe112f4cc670092f9, named: 0x85a0b3b8988b3a99, ids: 0x84812f02ee345665 };
+    fast xs_qcdqed_addx_canonical_scalar_lr_L3: Row { diagrams: 82, topologies: 25, assignments: 1410, inverse_symmetry: (161, 2), weights: (-2711, 2), symmetry_factors: &[(1, 79), (2, 3)], content: 0x72adf523d45d2a92, numerators: 0x82a821cc454caa0c, named: 0x85a0b3b8988b3a99, ids: 0x84812f02ee345665 };
     fast xs_qed_eeaa_L2: Row { diagrams: 96, topologies: 157, assignments: 714, inverse_symmetry: (96, 1), weights: (-48, 1), symmetry_factors: &[(1, 96)], content: 0x8f8d4c480eadbae0, numerators: 0x8b2fe92ed5414355, named: 0xe67ffcbf30548e8b, ids: 0x9d68f748335a7cfd };
     fast xs_qed_aaee_L2: Row { diagrams: 248, topologies: 75, assignments: 3456, inverse_symmetry: (248, 1), weights: (176, 1), symmetry_factors: &[(1, 248)], content: 0xaa83568f8a1e3de4, numerators: 0xaa63603383de7b0b, named: 0x26940e2744fc7077, ids: 0x0ccc891930b8d526 };
     fast xs_qed_aaee_sym_L2: Row { diagrams: 124, topologies: 75, assignments: 3456, inverse_symmetry: (124, 1), weights: (176, 1), symmetry_factors: &[(1, 124)], content: 0x534f9729e6e7f0f1, numerators: 0x97b803df9beb77af, named: 0xb0209cd25cac901b, ids: 0x91e367b69f3f8408 };
@@ -647,8 +647,7 @@ fn sampled_color_subset(threads: usize) -> BuiltDiagramSet {
 /// remove the same zero-color diagrams and form the same groups, with the same numerators and
 /// ratios, as a process that registers them during generation. The test runs its own binary as
 /// those processes.
-#[test]
-fn outputs_do_not_depend_on_index_registration_order() {
+fn check_index_registration_order(test: &str, order: &str, count: usize) {
     const CHILD: &str = "FEYNKIT_ORACLE_REGISTRATION_CHILD";
     const RUN: [&str; 2] = [
         "ym_ggg_zero_color_L3",
@@ -684,14 +683,48 @@ fn outputs_do_not_depend_on_index_registration_order() {
         }
         return;
     }
-    let test = "outputs_do_not_depend_on_index_registration_order";
+    // Each cell captures the same semantic reference in an independent fresh process.
     let reference = child_lines(test, CHILD, "generation,1");
     assert!(reference.len() > 100);
-    for count in [1, 8, 32] {
-        for order in ["generation", "increasing", "decreasing", "shuffled"] {
-            assert_child_lines_eq(test, CHILD, &format!("{order},{count}"), &reference);
-        }
-    }
+    assert_child_lines_eq(test, CHILD, &format!("{order},{count}"), &reference);
+}
+
+// One reference and one actual child per test fit the normal Nextest budget.
+macro_rules! registration_cells {
+    ($($name:ident: $order:literal, $count:literal;)*) => {
+        $(
+            #[test]
+            fn $name() {
+                check_index_registration_order(stringify!($name), $order, $count);
+            }
+        )*
+    };
+}
+
+registration_cells! {
+    outputs_do_not_depend_on_index_registration_order_generation_1: "generation", 1;
+    outputs_do_not_depend_on_index_registration_order_increasing_1: "increasing", 1;
+    outputs_do_not_depend_on_index_registration_order_decreasing_1: "decreasing", 1;
+    outputs_do_not_depend_on_index_registration_order_shuffled_1: "shuffled", 1;
+    outputs_do_not_depend_on_index_registration_order_generation_8: "generation", 8;
+    outputs_do_not_depend_on_index_registration_order_increasing_8: "increasing", 8;
+    outputs_do_not_depend_on_index_registration_order_decreasing_8: "decreasing", 8;
+    outputs_do_not_depend_on_index_registration_order_shuffled_8: "shuffled", 8;
+    outputs_do_not_depend_on_index_registration_order_generation_32: "generation", 32;
+    outputs_do_not_depend_on_index_registration_order_increasing_32: "increasing", 32;
+    outputs_do_not_depend_on_index_registration_order_decreasing_32: "decreasing", 32;
+    outputs_do_not_depend_on_index_registration_order_shuffled_32: "shuffled", 32;
+}
+
+/// A child panic must fail the parent comparison, even before any payload is printed.
+#[test]
+#[should_panic(expected = "child")]
+fn index_registration_child_failure_propagates() {
+    child_lines(
+        "outputs_do_not_depend_on_index_registration_order_generation_1",
+        "FEYNKIT_ORACLE_REGISTRATION_CHILD",
+        "generation,invalid-thread-count",
+    );
 }
 
 /// The named and grouped diagrams of `case` at `threads` threads.

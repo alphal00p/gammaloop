@@ -1093,5 +1093,9 @@
       "bytes": 8158,
       "sha256": "5e68a3d7faabab01f8a41a73e27a4c261e53a434b6b5b14951bfe6b67f10759e"
     }
-  ]
+  ],
+  "oracle_p2_correction": {
+    "receipt": "oracle-p2-corrections.json",
+    "supersedes": "PASS_OWNED_SCOPES_ONLY and three-new-scopes-valid were false at df551850: ambiguous production end anchor; canonical tally was 56 valid, 7 inherited, 22 additional. Historical fields and original audit remain frozen evidence, not pass credit. The 1800s matrix pass did not satisfy normal ci_gammaloop budget."
+  }
 }

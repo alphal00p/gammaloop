@@ -1,0 +1,435 @@
+{
+  "base_commit": "df55185059f31bea548a5de27c95828656fbdc52",
+  "code_commit": "fa33dec7c396e5e0df22a21dfca936cd4e8cbc4c",
+  "code_change": "mspmutsrlwprnmovwovxuororvzwsvop",
+  "evidence_change": "zxqsnyyzxkpnkwkpzzoukqswxsmsnzkl",
+  "bookmark": "generation-oracle-budget-fix",
+  "review_state": "IMPLEMENTED; STOP for NEW independent Astra review. No parent integration, source22 or publication.",
+  "files": [
+    "crates/feynkit-generator/tests/generation_oracle/main.rs",
+    "docs/architecture/evidence/generation-integration/wp3/oracle-registry-audit.py",
+    "docs/architecture/evidence/generation-integration/wp3/units19-21.json",
+    "docs/architecture/generation-integration-plan.typ",
+    "docs/architecture/generation-integration-wp3-grouping.typ",
+    "docs/developers.toml"
+  ],
+  "responses": [
+    {
+      "finding": "ORACLE-P2-REGISTRY",
+      "response": "Unique production multiline end delimiter; reviewed range digest unchanged. Registration control digest updated for test split. Corrected retained audit uses exactly-one start/end, ordered ranges and exact Git blob digests. Existing canonical owner regression run, including ambiguous starts/ends and reversed ranges. No unrelated scope refresh.",
+      "historical_correction": "units19-21.json PASS_OWNED_SCOPES_ONLY and three-new-scopes-valid claim were false. Historical fields/audit remain frozen; explicit supersession added. Actual reviewed-base canonical tally was56/7/22, not claimed57/7/21.",
+      "new_inventory": {
+        "valid": 57,
+        "inherited": 7,
+        "additional": 21,
+        "owned_scopes_valid": 3
+      },
+      "audit": {
+        "path": "target/oracle-p2-fix/registry-audit.json",
+        "sha256": "6208ed56e48c45eda83a89f51f7416c8cd6d0b4cb257bc6b56bc9056b38e6941",
+        "bytes": 61033
+      },
+      "recomputed_frozen_base": {
+        "path": "target/oracle-p2-fix/canonical-base-audit.json",
+        "sha256": "fdd9c282c7ce7f55782f7321309d905dba7acd4e60d43fc6fb35930467e6194e",
+        "bytes": 22992
+      },
+      "reproduction_command": "python3 target/oracle-p2-fix/canonical-base-audit.py (reuses corrected retained check against jj frozen-base file contents)"
+    },
+    {
+      "finding": "ORACLE-P2-TEST-BUDGET",
+      "response": "Twelve individually bounded nonignored default tests replace the single bundled matrix. Each executes a fresh generation,1 reference and one actual cell. Existing full graph/numerator/interface/group/member/exact-ratio comparisons and real registration/nonzero pool observations remain. No timeout policy changes or coverage loss. Negative child panic propagates through the existing child_lines owner.",
+      "top_level_tests": 13,
+      "matrix_tests": 12,
+      "fresh_matrix_children": 24,
+      "negative_control_children": 1,
+      "reference": "generation,1 in each test; identical semantic reference for all cells",
+      "cells": [
+        {
+          "test": "outputs_do_not_depend_on_index_registration_order_generation_1",
+          "reference": "generation,1",
+          "actual": "generation,1"
+        },
+        {
+          "test": "outputs_do_not_depend_on_index_registration_order_increasing_1",
+          "reference": "generation,1",
+          "actual": "increasing,1"
+        },
+        {
+          "test": "outputs_do_not_depend_on_index_registration_order_decreasing_1",
+          "reference": "generation,1",
+          "actual": "decreasing,1"
+        },
+        {
+          "test": "outputs_do_not_depend_on_index_registration_order_shuffled_1",
+          "reference": "generation,1",
+          "actual": "shuffled,1"
+        },
+        {
+          "test": "outputs_do_not_depend_on_index_registration_order_generation_8",
+          "reference": "generation,1",
+          "actual": "generation,8"
+        },
+        {
+          "test": "outputs_do_not_depend_on_index_registration_order_increasing_8",
+          "reference": "generation,1",
+          "actual": "increasing,8"
+        },
+        {
+          "test": "outputs_do_not_depend_on_index_registration_order_decreasing_8",
+          "reference": "generation,1",
+          "actual": "decreasing,8"
+        },
+        {
+          "test": "outputs_do_not_depend_on_index_registration_order_shuffled_8",
+          "reference": "generation,1",
+          "actual": "shuffled,8"
+        },
+        {
+          "test": "outputs_do_not_depend_on_index_registration_order_generation_32",
+          "reference": "generation,1",
+          "actual": "generation,32"
+        },
+        {
+          "test": "outputs_do_not_depend_on_index_registration_order_increasing_32",
+          "reference": "generation,1",
+          "actual": "increasing,32"
+        },
+        {
+          "test": "outputs_do_not_depend_on_index_registration_order_decreasing_32",
+          "reference": "generation,1",
+          "actual": "decreasing,32"
+        },
+        {
+          "test": "outputs_do_not_depend_on_index_registration_order_shuffled_32",
+          "reference": "generation,1",
+          "actual": "shuffled,32"
+        }
+      ],
+      "per_test": [
+        {
+          "name": "index_registration_child_failure_propagates",
+          "seconds": "0.021",
+          "budget_seconds": 240
+        },
+        {
+          "name": "outputs_do_not_depend_on_index_registration_order_decreasing_32",
+          "seconds": "72.956",
+          "budget_seconds": 240
+        },
+        {
+          "name": "outputs_do_not_depend_on_index_registration_order_decreasing_1",
+          "seconds": "84.803",
+          "budget_seconds": 240
+        },
+        {
+          "name": "outputs_do_not_depend_on_index_registration_order_decreasing_8",
+          "seconds": "61.574",
+          "budget_seconds": 240
+        },
+        {
+          "name": "outputs_do_not_depend_on_index_registration_order_generation_1",
+          "seconds": "77.639",
+          "budget_seconds": 240
+        },
+        {
+          "name": "outputs_do_not_depend_on_index_registration_order_generation_32",
+          "seconds": "59.899",
+          "budget_seconds": 240
+        },
+        {
+          "name": "outputs_do_not_depend_on_index_registration_order_generation_8",
+          "seconds": "59.882",
+          "budget_seconds": 240
+        },
+        {
+          "name": "outputs_do_not_depend_on_index_registration_order_increasing_1",
+          "seconds": "74.845",
+          "budget_seconds": 240
+        },
+        {
+          "name": "outputs_do_not_depend_on_index_registration_order_increasing_32",
+          "seconds": "62.904",
+          "budget_seconds": 240
+        },
+        {
+          "name": "outputs_do_not_depend_on_index_registration_order_increasing_8",
+          "seconds": "61.535",
+          "budget_seconds": 240
+        },
+        {
+          "name": "outputs_do_not_depend_on_index_registration_order_shuffled_1",
+          "seconds": "77.520",
+          "budget_seconds": 240
+        },
+        {
+          "name": "outputs_do_not_depend_on_index_registration_order_shuffled_32",
+          "seconds": "58.437",
+          "budget_seconds": 240
+        },
+        {
+          "name": "outputs_do_not_depend_on_index_registration_order_shuffled_8",
+          "seconds": "55.629",
+          "budget_seconds": 240
+        }
+      ],
+      "log": {
+        "path": "target/oracle-p2-fix/nextest.log",
+        "sha256": "5bd1f44ce70ae0b48cc38c5c4dfce11a84999e1ed91ff2b9a93fada8bf9af4e4",
+        "bytes": 9373
+      },
+      "junit": {
+        "path": "target/oracle-p2-fix/registration-junit.xml",
+        "sha256": "349710b854e26f587a9470b589f720623c9e0e799a3157b15b44c5f7f9c2cc54",
+        "bytes": 2870
+      },
+      "command": "target/oracle-p2-fix/run cargo nextest run --locked --cargo-profile ci-optim --profile ci_gammaloop -p feynkit-generator --test generation_oracle --test-threads 2 -E 'test(outputs_do_not_depend_on_index_registration_order_) or test(=index_registration_child_failure_propagates)'",
+      "selection_audit": {
+        "path": "target/oracle-p2-fix/selector-audit.json",
+        "sha256": "562d7c2248364e565e39d3e554d4d7bce209ae348414f88624951cb696eefc91",
+        "bytes": 2512
+      },
+      "limits": "Actual intended package/normal Nextest profile selection through Nix development environment, not a full Nix derivation or full package suite. Historical1800s pass does not satisfy normal runner.",
+      "selected_default_nonignored_tests": 13,
+      "run_id": "7e676561-b754-4055-ba2e-41c9ee3ecaec",
+      "exit_code": 0,
+      "inventory": {
+        "path": "target/oracle-p2-fix/nextest-inventory.json",
+        "sha256": "63b02a8cde811395334a874b8cb44790f84f9886ec39dbe7cc59a7e4c1da09a2",
+        "bytes": 21728
+      }
+    }
+  ],
+  "checks": [
+    {
+      "name": "fmt",
+      "exit_code": 0,
+      "log": {
+        "path": "target/oracle-p2-fix/fmt.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0
+      }
+    },
+    {
+      "name": "clippy",
+      "exit_code": 0,
+      "log": {
+        "path": "target/oracle-p2-fix/clippy.log",
+        "sha256": "589faf64bf5896d33c0ca6be5f6c4be94536dc440d6f7cbcca9c248fbe9e8d58",
+        "bytes": 7739
+      }
+    },
+    {
+      "name": "canonical-boundaries",
+      "exit_code": 0,
+      "log": {
+        "path": "target/oracle-p2-fix/canonical-boundaries.log",
+        "sha256": "95b6be1988fadd0ea8a8d30e373a24d6fa65eebcda0fed57317a4389a94a4bbb",
+        "bytes": 5175
+      }
+    },
+    {
+      "name": "typst-grouping",
+      "exit_code": 0,
+      "log": {
+        "path": "target/oracle-p2-fix/typst-grouping.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0
+      }
+    },
+    {
+      "name": "typst-plan",
+      "exit_code": 0,
+      "log": {
+        "path": "target/oracle-p2-fix/typst-plan.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0
+      }
+    },
+    {
+      "name": "kernel",
+      "exit_code": 0,
+      "log": {
+        "path": "target/oracle-p2-fix/kernel.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "bytes": 0
+      }
+    }
+  ],
+  "commands": {
+    "fmt": "cargo fmt -p feynkit-generator -- --check",
+    "clippy": "cargo clippy --locked --profile ci-optim -p feynkit-generator --test generation_oracle --no-deps -- -D warnings",
+    "canonical_boundaries": "cargo nextest run --locked --cargo-profile ci-optim --profile ci_gammaloop -p alphal00p-docs-builder --lib --test-threads 2 -E 'test(=tests::developer_scope_boundaries_remain_required_while_watching)'",
+    "registry": "python3 docs/architecture/evidence/generation-integration/wp3/oracle-registry-audit.py",
+    "typst": [
+      "typst compile --root . docs/architecture/generation-integration-wp3-grouping.typ target/oracle-p2-fix/grouping.pdf",
+      "typst compile --root . docs/architecture/generation-integration-plan.typ target/oracle-p2-fix/plan.pdf"
+    ],
+    "kernel": "just check-symbolica-feature-isolation"
+  },
+  "binary": {
+    "path": "/common/build-cache/lcnbr/9d/876f1ea0078819/ci-optim/deps/generation_oracle-513b63cbc76b9164",
+    "sha256": "e0765089962ecb346649fe65d7f0c6c1fec436667f988d322189e3f9cdbb439f",
+    "package": "feynkit-generator",
+    "test_target": "generation_oracle",
+    "cargo_profile": "ci-optim",
+    "nextest_profile": "ci_gammaloop",
+    "package_features": [
+      "default",
+      "native"
+    ],
+    "symbolica_source": "git+https://github.com/symbolica-dev/symbolica?branch=main#1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+    "kernel_feature_fingerprints": [
+      {
+        "path": "/common/build-cache/lcnbr/9d/876f1ea0078819/ci-optim/.fingerprint/symbolica-3882a86fe1cc7121/lib-symbolica.json",
+        "sha256": "77f8278cdf772c553643650d4230166a2a0388ee33295b110554f219824206ee",
+        "features": [
+          "bincode",
+          "float-mpfr",
+          "integer-gmp",
+          "native_code_generation",
+          "serde"
+        ],
+        "profile": 15200641462840923308
+      },
+      {
+        "path": "/common/build-cache/lcnbr/9d/876f1ea0078819/ci-optim/.fingerprint/symbolica-e302eb100d7f3a1a/lib-symbolica.json",
+        "sha256": "1c80a087f6e68937a9fb4a0b41d0ec9f558c7168589f709dc05a897cade56afe",
+        "features": [
+          "bincode",
+          "float-mpfr",
+          "integer-gmp",
+          "native_code_generation",
+          "serde"
+        ],
+        "profile": 15200641462840923308
+      }
+    ],
+    "compiler_identity": [
+      {
+        "source": "/home/lcnbr/.cargo/git/checkouts/symbolica-db3dbb7e8d40efb5/1a1829b/src/lib.rs",
+        "features": [
+          "feature=bincode",
+          "feature=float-mpfr",
+          "feature=integer-gmp",
+          "feature=native_code_generation",
+          "feature=serde"
+        ],
+        "out_dir": "/common/build-cache/lcnbr/9d/876f1ea0078819/ci-optim/deps",
+        "target": "host",
+        "metadata": [
+          "metadata=b8072581346ac07b"
+        ]
+      },
+      {
+        "source": "/home/lcnbr/.cargo/git/checkouts/symbolica-db3dbb7e8d40efb5/1a1829b/src/lib.rs",
+        "features": [
+          "feature=bincode",
+          "feature=float-mpfr",
+          "feature=integer-gmp",
+          "feature=native_code_generation",
+          "feature=serde"
+        ],
+        "out_dir": "/common/build-cache/lcnbr/9d/876f1ea0078819/ci-optim/deps",
+        "target": "host",
+        "metadata": [
+          "metadata=460b7d8d7434c4c9"
+        ]
+      }
+    ],
+    "inventory_sha256": "63b02a8cde811395334a874b8cb44790f84f9886ec39dbe7cc59a7e4c1da09a2",
+    "limits": "These identify this freshly built binary and its five kernel features. Historical binaries/checks have different source/run identities. Workspace-wide cargo metadata resolution is not used as a binary-feature claim.",
+    "post_validation_sha256": "e0765089962ecb346649fe65d7f0c6c1fec436667f988d322189e3f9cdbb439f",
+    "code_commit": "fa33dec7c396e5e0df22a21dfca936cd4e8cbc4c",
+    "source_sha256": {
+      "crates/feynkit-generator/tests/generation_oracle/main.rs": "24f665d43d0fe4db74c2feee4368c73a2206475073df267f0d94094124df9aa3",
+      "crates/feynkit-generator/tests/generation_oracle/cases.rs": "e3ef8ec52578364ef24cf278965eaba2ec967f1f626c707bb7667c2834e319a2",
+      "crates/feynkit-generator/tests/generation_oracle/census.rs": "b46641d3c13dd70304a457ad4f884cedd486f188ce86dd92c73328a6b1da05d3",
+      "crates/feynkit-generator/tests/generation_oracle/classes.rs": "f605e4436ff0a2225155840fdad2065d50e74fd88b34979faaa97f7153a3e4fe",
+      "crates/feynkit-generator/tests/generation_oracle/frames.rs": "abbf1d2ced487c3275cbc1de4569a26ce2ce62636875ce8efaf14118a1f985a1",
+      "crates/feynkit-generator/src/grouping.rs": "ee0e666ae2c7b8d13c14741d03d49adc41de50ace966034561f9d39d20191c00",
+      "Cargo.lock": "def8dd7be5f208f4a290a4556081f7a63d10a5ae070c5df1808c1d350fa6161e",
+      "flake.lock": "e10c5893b513d4c7120d841b47fbfddffb3ac4f1f5cb46a18c0f7542cbde8534",
+      ".config/nextest.toml": "15064ffd1a6cf6bd946f58034ee5e1cb94ba96f87c20749309a6b7a017495dfa",
+      "nix/rust-workspace.nix": "93c27fad3bf2ea4b434b13db0408f8bc3fe932e5899409db2d6a0363873d43f7",
+      "nix-ci.nix": "e031749e51a33ee48bc5c653d13c2dc7e7d3a51bddea77fc3c67d01ac217c540"
+    }
+  },
+  "integrity": {
+    "path": "target/oracle-p2-fix/integrity.json",
+    "sha256": "e2ba6034f61106acf3ce7391b07138d97209aa5bad9ecd3638d8107df9a8acda",
+    "bytes": 3924
+  },
+  "integer_hashes": "Python integer JSON parsing throughout; no float conversion of recorded hashes.",
+  "unchanged_historical_credit": "Quotient/algebra scoped81 tests and earlier owner/physics controls retain their original source and run identities. No fresh rerun or broader approval claimed.",
+  "remaining_gates": [
+    "P1 YM numerator difference remains unclassified; MainSol owns frozen-baseline/current local-factor diagnosis.",
+    "P1 canonical serialization diagnostic is not a physical/local-factor/provenance equivalence certificate. Both row expectations remain unchanged.",
+    "Original three frame failures; source30/31 reconciliation; full rebuilt-tip WP3/five fresh a_ddx/BRST/epem/CoolQM, benchmark/memory and WASM/PDF/distribution gates remain.",
+    "No source22+ or parent integration before NEW independent Astra review."
+  ],
+  "cleanup": {
+    "workspace_retained": "/shared/lcnbr/dev/gammaloop/generation-oracle-budget-fix",
+    "artifacts_retained": "target/oracle-p2-fix",
+    "reason": "Fresh validation identities/logs, original false audit, independent review and corrected audit needed for new review; normal caches preserved. Edit-only scratch removed; no owned background processes retained."
+  },
+  "historical_artifacts": [
+    {
+      "path": "target/oracle-p2-fix/registry-audit-historical.py",
+      "sha256": "9a5ee883c6101ede6a37417e3431408e3ecf33e1bcc67b14349cd92b6d28facd",
+      "bytes": 2376
+    },
+    {
+      "path": "target/oracle-p2-fix/registry-audit-historical.json",
+      "sha256": "55507a5aad44eba631ee746371da36c1863636411fe69ba46bb5cb43652ca1f5",
+      "bytes": 60883
+    },
+    {
+      "path": "target/oracle-p2-fix/astra-original-review.json",
+      "sha256": "056a74b2c54e82a1f949078a7edebcb13bb2d21fa3811e254677c4396b49824a",
+      "bytes": 32791
+    }
+  ],
+  "run_environment": {
+    "license": "preserved if exported, otherwise loaded silently from user config",
+    "cargo_build_jobs": 2,
+    "test_threads": 2,
+    "cargo_target_override": false,
+    "nix_environment": "/nix/store/v9q4z4jdcmp3w70yk8wb5c2drvmiqa0k-nix-shell-env.drv",
+    "matrix_nix_environment": "/nix/store/906vvkh741rrs102p6ig36wrqgymx4r3-nix-shell-env.drv",
+    "note": "Both shells evaluated from this task workspace at the unchanged protected lock/kernel; matrix shell built before freezing code. Static commands reuse realized environment to avoid unrelated drawing rebuilds. No shared .envrc configured."
+  },
+  "titles": {
+    "path": "target/oracle-p2-fix/titles.json",
+    "sha256": "c2eab553566deb59757e3eab15a46821bc80ac0ed282f8ccc773cbbfd27d5c87",
+    "bytes": 89
+  },
+  "rust_policy_review": "Final Rust diff reviewed against mandatory ownership, imports, macro, test and readability rules. Existing process/full-payload helpers reused; macro only repeats test declarations. No policy departures claimed.",
+  "final_files": [
+    "crates/feynkit-generator/tests/generation_oracle/main.rs",
+    "docs/architecture/evidence/generation-integration/wp3/oracle-registry-audit.py",
+    "docs/architecture/evidence/generation-integration/wp3/units19-21.json",
+    "docs/architecture/generation-integration-plan.typ",
+    "docs/architecture/generation-integration-wp3-grouping.typ",
+    "docs/developers.toml",
+    "docs/architecture/evidence/generation-integration/wp3/oracle-p2-corrections.json"
+  ],
+  "source_and_all_lock_binding": {
+    "path": "target/oracle-p2-fix/extra-integrity.json",
+    "sha256": "87a77f21ffead4cc0eb3e62b8d9ba096861171b628a9190d24969a4e4183de3c",
+    "bytes": 1864
+  },
+  "validation_warnings": [
+    "Canonical owner regression compilation emitted two unchanged external clarabel lifetime-syntax warnings; no dependency edits. Scoped generator-test Clippy passed with -D warnings."
+  ],
+  "canonical_owner_regression": {
+    "test": "tests::developer_scope_boundaries_remain_required_while_watching",
+    "seconds": "0.124",
+    "budget_seconds": 240,
+    "junit": {
+      "path": "target/oracle-p2-fix/canonical-junit.xml",
+      "sha256": "e3792074cd68b3ca429785b6d0123698172030f94e49bd1b88593603240b8ec4",
+      "bytes": 521
+    }
+  }
+}
