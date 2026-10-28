@@ -4,6 +4,7 @@ use crate::tensor::composition::{ExplicitIndexOccurrences, ProductPlan, TensorCo
 use crate::tensor::inference::{InterfaceInference, TensorInferenceError, TensorInterface};
 use spenso::network::tags::SPENSO_TAG;
 use spenso::structure::partial::{PartialStructure, PartialStructureExt};
+use spenso::structure::slot::ParseableAind;
 use std::mem;
 use std::sync::Arc;
 use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol};
@@ -37,7 +38,11 @@ impl ProductAlgebra {
     ) -> Result<SymbolicTensor<PartialStructure>, TensorCompositionError> {
         let interface = match self {
             Self::Commuting => interface,
-            Self::Word(_) => composition::interface_in_atom_order(&expression, &interface)?,
+            Self::Word(_) => {
+                let interface = composition::interface_in_atom_order(&expression, &interface)?;
+                SymbolicTensor::validate_interface(&expression, &interface)?;
+                interface
+            }
         };
         SymbolicTensor::from_validated_parts(expression, interface, occurrences)
             .validate_rewrite(operation, sources)
@@ -64,23 +69,43 @@ impl ProductPlan {
     /// `Compose` is intentionally unsupported: use an explicit `Contract`
     /// plan for word endpoints and keep compact matrix chains word-free.
     /// This operation assigns no conjugation or adjoint convention.
+    ///
+    /// # Errors
+    /// Rejects invalid heads, unpublished operands, unsupported word grammar,
+    /// incompatible ports, and excessive index multiplicities.
+    ///
+    /// # Example
+    /// ```
+    /// use idenso::tensor::SymbolicTensor;
+    /// use idenso::tensor::composition::{ProductPlan, TensorCompositionError};
+    /// use spenso::network::tags::SPENSO_TAG;
+    /// use spenso::{mink, tensor_symbol};
+    /// use symbolica::{function, symbol};
+    /// let head = symbol!("word_product_example::exterior"; Flat, Linear, Antisymmetric;
+    ///     tag = &SPENSO_TAG.tensor_word);
+    /// let a = SymbolicTensor::infer(function!(tensor_symbol!("word_product_example::a"), mink!(4, 1)))?;
+    /// let b = SymbolicTensor::infer(function!(tensor_symbol!("word_product_example::b"), mink!(4, 2)))?;
+    /// let a = SymbolicTensor::word(head, &[a])?;
+    /// let b = SymbolicTensor::word(head, &[b])?;
+    /// let product = ProductPlan::Outer.apply_word(head, &a, &b)?;
+    /// assert!(product.same_value(&a.multiply_word(head, &b)?));
+    /// assert!(a.pow_word(head, 2)?.is_zero());
+    /// # Ok::<(), TensorCompositionError>(())
+    /// ```
     pub fn apply_word(
         &self,
         head: Symbol,
         left: &SymbolicTensor<PartialStructure>,
         right: &SymbolicTensor<PartialStructure>,
     ) -> Result<SymbolicTensor<PartialStructure>, TensorCompositionError> {
-        SymbolicTensor::word(head, &[])
-            .map_err(|error| TensorCompositionError::InvalidResultInterface(error.to_string()))?;
+        SymbolicTensor::word(head, &[])?;
         if !head.is_flat() || !head.is_linear() {
             return Err(TensorCompositionError::InvalidResultInterface(
                 "word multiplication requires a Flat, Linear tensor-word head".into(),
             ));
         }
         for operand in [left, right] {
-            operand.explicit_index_occurrences().map_err(|error| {
-                TensorCompositionError::InvalidResultInterface(error.to_string())
-            })?;
+            operand.explicit_index_occurrences()?;
             for term in operand.expression.expand_in(Atom::var(head)).terms() {
                 SymbolicTensor::split_word_coefficient(
                     head,
@@ -98,7 +123,10 @@ impl ProductPlan {
 impl SymbolicTensor<PartialStructure> {
     /// Multiply marked tensor words using the ordinary automatic port plan.
     ///
-    /// For a chosen endpoint contraction, use [`ProductPlan::apply_word`].
+    /// For a chosen endpoint contraction and an example, see [`ProductPlan::apply_word`].
+    ///
+    /// # Errors
+    /// Returns planning or word-admission errors from [`ProductPlan::apply_word`].
     pub fn multiply_word(
         &self,
         head: Symbol,
@@ -114,18 +142,25 @@ impl SymbolicTensor<PartialStructure> {
     /// as an explicitly written product. Each repeated occurrence receives an
     /// independent bound-index scope while explicit free ports keep their
     /// identities; no separate nilpotency rule is used.
+    /// See the example on [`ProductPlan::apply_word`].
+    ///
+    /// # Errors
+    /// Rejects invalid word grammar or tensor powers with invalid index multiplicities.
     pub fn pow_word(&self, head: Symbol, exponent: u32) -> Result<Self, TensorCompositionError> {
-        let scalar_exponent = Self::infer(Atom::num(exponent))
-            .map_err(|error| TensorCompositionError::InvalidResultInterface(error.to_string()))?;
-        let expected = self
-            .pow(&scalar_exponent)
-            .map_err(|error| TensorCompositionError::InvalidResultInterface(error.to_string()))?;
-        let identity = Self::word(head, &[])
-            .map_err(|error| TensorCompositionError::InvalidResultInterface(error.to_string()))?;
+        let scalar_exponent = Self::infer(Atom::num(exponent))?;
+        // Each repeated bound contraction gets an independent scope below.
+        // Validate only the public boundary with the native power owner; the
+        // unsplit source history would falsely count its bound indices again.
+        let boundary = Self::from_declared_parts(Atom::Zero, self.structure.clone())?;
+        let expected = boundary.pow(&scalar_exponent)?;
+        let identity = Self::word(head, &[])?;
         let initial = ProductPlan::Scalar.apply_word(head, &identity, self)?;
         let mut result = if exponent == 0 { identity } else { initial };
         let dummies = Self::reserved_dummies([self]);
         let mut used = self.expression.get_all_symbols(true);
+        for index in self.explicit_indices()? {
+            used.extend(index.to_atom().get_all_symbols(true));
+        }
         for _ in 1..exponent {
             let scope = loop {
                 let scope = dummies
@@ -137,13 +172,23 @@ impl SymbolicTensor<PartialStructure> {
                     break scope;
                 }
             };
-            let copy = self.wrap_indices(scope, true).map_err(|error| {
-                TensorCompositionError::InvalidResultInterface(error.to_string())
-            })?;
+            let copy = self.wrap_indices(scope, true)?;
             result = result.multiply_word(head, &copy)?;
         }
-        let occurrences = Arc::clone(result.proofs.occurrences.get().expect("published word history"));
-        ProductAlgebra::Word(head).finish(result.expression, expected.structure, occurrences, &[self], "pow_word")
+        let occurrences = Arc::clone(
+            result
+                .proofs
+                .occurrences
+                .get()
+                .expect("published word history"),
+        );
+        ProductAlgebra::Word(head).finish(
+            result.expression,
+            expected.structure,
+            occurrences,
+            &[self],
+            "pow_word",
+        )
     }
 
     /// Extract the existing word and its commuting factors, without sorting
@@ -343,8 +388,8 @@ impl SymbolicTensor<PartialStructure> {
                     .map(|operand| operand.expression.as_view()),
             )
             .finish();
-        let interface = composition::interface_in_atom_order(&expression, &interface)
-            .map_err(|error| TensorInferenceError::invalid(error.to_string()))?;
+        let interface = composition::interface_in_atom_order(&expression, &interface)?;
+        Self::validate_interface(&expression, &interface)?;
         Self::from_validated_parts(expression, interface, Arc::new(occurrences)).finish_parts()
     }
 
@@ -379,17 +424,21 @@ impl SymbolicTensor<PartialStructure> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::AdjointError;
+    use crate::dirac::AGS;
+    use crate::representations::Bispinor;
+    use crate::tensor::composition::{MatrixChannel, PortPair};
     use crate::tensor::{SymbolicNetExt, SymbolicNetParse};
     use crate::test_support;
+    use crate::{AdjointError, bis};
     use spenso::network::library::symbolic::ETS;
     use spenso::structure::abstract_index::AbstractIndex;
     use spenso::structure::dimension::Dimension;
     use spenso::structure::partial::PartialIndex;
     use spenso::structure::representation::{LibraryRep, Minkowski, RepName};
-    use spenso::structure::slot::IsAbstractSlot;
-    use std::collections::HashMap;
+    use spenso::structure::slot::{DummyAind, IsAbstractSlot, ParseableAind, SlotMatcher};
+    use std::collections::{BTreeMap, HashMap};
     use std::slice;
+    use symbolica::id::{Pattern, Replacement};
     use symbolica::{function, symbol};
 
     fn head() -> Symbol {
@@ -412,6 +461,35 @@ mod tests {
             PartialStructure::from_logical_slots([rep.slot(PartialIndex::open(0))]),
         )
         .unwrap()
+    }
+
+    fn canonical(tensor: &SymbolicTensor<PartialStructure>) -> Atom {
+        let mut slots = SlotMatcher::default();
+        let mut indices = BTreeMap::new();
+        tensor.expression.visitor(&mut |part| {
+            if let Ok(slot) = slots.parse::<LibraryRep, AbstractIndex>(part) {
+                indices.insert(slot.to_atom(), slot.rep());
+                return false;
+            }
+            true
+        });
+        let canonical = tensor.expression.canonize_tensors(indices).unwrap();
+        let replacements = canonical
+            .dummy_indices
+            .into_iter()
+            .enumerate()
+            .map(|(position, (source, representation))| {
+                Replacement::new(
+                    Pattern::Literal(source),
+                    Pattern::Literal(
+                        representation
+                            .slot::<AbstractIndex, _>(AbstractIndex::Dummy(position))
+                            .to_atom(),
+                    ),
+                )
+            })
+            .collect::<Vec<_>>();
+        canonical.canonical_form.replace_multiple(&replacements)
     }
 
     #[test]
@@ -655,6 +733,30 @@ mod tests {
     }
 
     #[test]
+    fn word_product_retains_cancelled_occurrences_through_native_plans() {
+        let head = head();
+        let a = component("word_product_history::a", 900);
+        let zero = SymbolicTensor::word(head, &[a.clone(), a]).unwrap();
+        assert!(zero.is_zero());
+        let c = SymbolicTensor::word(head, &[component("word_product_history::c", 901)]).unwrap();
+        let probe = component("word_product_history::probe", 900);
+        for plan in [ProductPlan::Scalar, ProductPlan::Outer] {
+            let result = plan.apply_word(head, &zero, &c).unwrap();
+            assert!(matches!(
+                result.multiply_word(head, &probe),
+                Err(TensorCompositionError::InvalidExplicitMultiplicity { occurrences: 3, .. })
+            ));
+            let contracted = ProductPlan::Contract(vec![PortPair { left: 0, right: 0 }])
+                .apply_word(head, &result, &c)
+                .unwrap();
+            assert!(matches!(
+                contracted.multiply_word(head, &probe),
+                Err(TensorCompositionError::InvalidExplicitMultiplicity { occurrences: 3, .. })
+            ));
+        }
+    }
+
+    #[test]
     fn word_product_extends_through_a_contracted_tensor_coefficient() {
         let head = head();
         let a = component("word_product_tests::a", 201);
@@ -663,7 +765,7 @@ mod tests {
         let coefficient = component("word_product_tests::coefficient", 201);
         let ab = SymbolicTensor::word(head, &[a.clone(), b.clone()]).unwrap();
         let weighted = coefficient.multiply(&ab).unwrap();
-        let c_word = SymbolicTensor::word(head, std::slice::from_ref(&c)).unwrap();
+        let c_word = SymbolicTensor::word(head, slice::from_ref(&c)).unwrap();
         let actual = weighted.multiply_word(head, &c_word).unwrap();
         let direct = SymbolicTensor::word(head, &[a, b, c]).unwrap();
         let expected = coefficient.multiply(&direct).unwrap();
@@ -676,8 +778,8 @@ mod tests {
         let head = head();
         let a = component("word_product_tests::ordered_a", 211);
         let b = component("word_product_tests::ordered_b", 212);
-        let a_word = SymbolicTensor::word(head, std::slice::from_ref(&a)).unwrap();
-        let b_word = SymbolicTensor::word(head, std::slice::from_ref(&b)).unwrap();
+        let a_word = SymbolicTensor::word(head, slice::from_ref(&a)).unwrap();
+        let b_word = SymbolicTensor::word(head, slice::from_ref(&b)).unwrap();
         let forward = a_word.multiply_word(head, &b_word).unwrap();
         let reverse = b_word.multiply_word(head, &a_word).unwrap();
         assert_eq!(forward.expression, -&reverse.expression);
@@ -726,7 +828,6 @@ mod tests {
 
     #[test]
     fn word_product_current_keeps_the_second_gamma_endpoint_open() {
-        use crate::{bis, dirac::AGS, representations::Bispinor};
         let head = head();
         let leaf = |name| {
             SymbolicTensor::infer(
@@ -758,8 +859,8 @@ mod tests {
             .apply_word(head, &first, &psi)
             .unwrap();
         assert_eq!(current.rank(), 1);
-        let left = port_atom(barred.structure.logical_slots()[0]);
-        let right = port_atom(psi.structure.logical_slots()[0]);
+        let left = composition::port_atom(barred.structure.logical_slots()[0]);
+        let right = composition::port_atom(psi.structure.logical_slots()[0]);
         let expected_gamma = SymbolicTensor::infer(function!(AGS.gamma, left, right, &mu)).unwrap();
         let expected_word = SymbolicTensor::word(head, &[barred, psi]).unwrap();
         let expected = expected_gamma.multiply(&expected_word).unwrap();
@@ -836,8 +937,8 @@ mod tests {
         let a = component("word_product_tests::mixed_a", 254);
         let coefficient = component("word_product_tests::mixed_even", 254);
         let b = component("word_product_tests::mixed_b", 255);
-        let a_word = SymbolicTensor::word(head, std::slice::from_ref(&a)).unwrap();
-        let b_word = SymbolicTensor::word(head, std::slice::from_ref(&b)).unwrap();
+        let a_word = SymbolicTensor::word(head, slice::from_ref(&a)).unwrap();
+        let b_word = SymbolicTensor::word(head, slice::from_ref(&b)).unwrap();
         let scalar = SymbolicTensor::infer(Atom::num(2)).unwrap();
         let sum = coefficient
             .multiply(&a_word)
@@ -921,8 +1022,63 @@ mod tests {
     }
 
     #[test]
+    fn word_power_reserves_scope_symbols_retained_only_in_zero_history() {
+        let head = head();
+        let a = component("word_power_hidden_scope::a", 920);
+        let zero = SymbolicTensor::word(head, &[a.clone(), a]).unwrap();
+        let AbstractIndex::Dummy(previous) = AbstractIndex::new_dummy() else {
+            unreachable!()
+        };
+        let occupied_scope = AbstractIndex::Dummy(previous.checked_add(1).unwrap())
+            .to_atom()
+            .get_symbol()
+            .unwrap();
+        let zero = zero.wrap_indices(occupied_scope, true).unwrap();
+        assert!(zero.is_zero());
+        let squared = zero.pow_word(head, 2).unwrap();
+        assert!(squared.is_zero());
+        assert!(squared.is_scalar());
+        assert_eq!(squared.explicit_indices().unwrap().count(), 2);
+    }
+
+    #[test]
+    fn word_power_freshens_bound_indices_before_validating_free_port_multiplicities() {
+        let head = head();
+        let matrix = |name, indices: [usize; 2]| {
+            SymbolicTensor::infer(
+                FunctionBuilder::new(SPENSO_TAG.tensor_symbol(name))
+                    .add_args(indices.map(|index| {
+                        Minkowski {}
+                            .new_rep(4)
+                            .slot::<AbstractIndex, _>(AbstractIndex::Normal(index))
+                            .to_atom()
+                    }))
+                    .finish(),
+            )
+            .unwrap()
+        };
+        let source = SymbolicTensor::word(
+            head,
+            &[
+                matrix("word_power_mixed::a", [910, 911]),
+                matrix("word_power_mixed::b", [910, 912]),
+            ],
+        )
+        .unwrap();
+        assert_eq!(source.rank(), 2);
+        let copy = source
+            .wrap_indices(symbol!("word_power_mixed::copy"), true)
+            .unwrap();
+        let explicit = source.multiply_word(head, &copy).unwrap();
+        let squared = source.pow_word(head, 2).unwrap();
+        assert!(!squared.is_zero());
+        assert!(squared.is_scalar());
+        assert_eq!(canonical(&squared), canonical(&explicit));
+        assert!(source.pow_word(head, 3).is_err());
+    }
+
+    #[test]
     fn word_power_freshens_closed_contractions_before_exterior_normalization() {
-        use spenso::structure::slot::SlotMatcher;
         let head = head();
         let closed = SymbolicTensor::word(
             head,
@@ -937,34 +1093,7 @@ mod tests {
             true,
         )
         .unwrap();
-        let canonical = |tensor: &SymbolicTensor<PartialStructure>| {
-            let mut slots = SlotMatcher::default();
-            let mut indices = std::collections::BTreeMap::new();
-            tensor.expression.visitor(&mut |part| {
-                if let Ok(slot) = slots.parse::<LibraryRep, AbstractIndex>(part) {
-                    indices.insert(slot.to_atom(), slot.rep());
-                    return false;
-                }
-                true
-            });
-            let canonical = tensor.expression.canonize_tensors(indices).unwrap();
-            let replacements = canonical
-                .dummy_indices
-                .into_iter()
-                .enumerate()
-                .map(|(position, (source, representation))| {
-                    symbolica::id::Replacement::new(
-                        symbolica::id::Pattern::Literal(source),
-                        symbolica::id::Pattern::Literal(
-                            representation
-                                .slot::<AbstractIndex, _>(AbstractIndex::Dummy(position))
-                                .to_atom(),
-                        ),
-                    )
-                })
-                .collect::<Vec<_>>();
-            canonical.canonical_form.replace_multiple(&replacements)
-        };
+
         let left = closed
             .wrap_indices(symbol!("word_power_scopes::left"), true)
             .unwrap();
@@ -990,7 +1119,6 @@ mod tests {
 
     #[test]
     fn word_product_retains_even_compact_matrix_chains_as_coefficients() {
-        use crate::{bis, dirac::AGS};
         let head = head();
         let matrix = SymbolicTensor::infer(function!(AGS.projp, bis!(4), bis!(4))).unwrap();
         let channel = MatrixChannel {

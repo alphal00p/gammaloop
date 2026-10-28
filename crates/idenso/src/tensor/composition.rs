@@ -2313,10 +2313,19 @@ impl ProductPlan {
                     occurrences.validate()?;
                 }
                 let atom = match algebra {
-                    ProductAlgebra::Commuting => left.expression.as_ref() * right.expression.as_ref(),
+                    ProductAlgebra::Commuting => {
+                        left.expression.as_ref() * right.expression.as_ref()
+                    }
                     ProductAlgebra::Word(_) => {
-                        let atom = algebra.expression(left.expression.as_view(), right.expression.as_view())?;
-                        return algebra.finish(atom, interface, Arc::new(occurrences), &[left, right], "multiply_word");
+                        let atom = algebra
+                            .expression(left.expression.as_view(), right.expression.as_view())?;
+                        return algebra.finish(
+                            atom,
+                            interface,
+                            Arc::new(occurrences),
+                            &[left, right],
+                            "multiply_word",
+                        );
                     }
                 };
                 let value =
@@ -2983,7 +2992,11 @@ impl SymbolicTensor<PartialStructure> {
         self.outer_algebra(right, ProductAlgebra::Commuting)
     }
 
-    fn outer_algebra(&self, right: &Self, algebra: ProductAlgebra) -> Result<Self, TensorCompositionError> {
+    fn outer_algebra(
+        &self,
+        right: &Self,
+        algebra: ProductAlgebra,
+    ) -> Result<Self, TensorCompositionError> {
         let collisions = compatible_pairs(&self.structure, &right.structure)
             .into_iter()
             .filter(|pair| {
@@ -3145,7 +3158,13 @@ impl SymbolicTensor<PartialStructure> {
         };
         let occurrences =
             ExplicitIndexOccurrences::product(&[materialized_left, materialized_right])?;
-        algebra.finish(atom, interface, Arc::new(occurrences), &[materialized_left, materialized_right], "contract_ports")
+        algebra.finish(
+            atom,
+            interface,
+            Arc::new(occurrences),
+            &[materialized_left, materialized_right],
+            "contract_ports",
+        )
     }
 
     fn compact_dot_expression(&self, right: &Self) -> Result<Atom, TensorCompositionError> {
