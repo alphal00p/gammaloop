@@ -868,6 +868,7 @@
     simplify-gamma: expression => plugin-module.simplify_gamma(_payload(engine, expression)),
     contract: expression => plugin-module.contract(_payload(engine, expression)),
     to-dots: expression => plugin-module.to_dots(_payload(engine, expression)),
+    undo-dots: expression => plugin-module.undo_dots(_payload(engine, expression)),
     wrap-dummies: (expression, header) => plugin-module.wrap_dummies(
       _payload(engine, expression), _payload(engine, header, label: "header"),
     ),
@@ -1367,6 +1368,9 @@
   /// and `"call"` groups top and bottom rows around a semicolon.
   /// -> str | none
   tensor-layout: none,
+  /// Concrete coordinates: `"superscript"` gives A(x,7)^{0,1}; `"array"` gives A(x,7)[0,1].
+  /// -> str | none
+  component-style: none,
   /// Show each representation and dimension on its indices.
   /// -> bool | none
   with-dim: none,
@@ -1400,6 +1404,7 @@
 ) = tensor-notation.notation(
   settings: settings,
   tensor-layout: tensor-layout,
+  component-style: component-style,
   with-dim: with-dim,
   parens: parens,
   commas: commas,
@@ -1505,6 +1510,11 @@
 ///
 /// -> bytes
 #let to-dots(expression) = (_default-engine().to-dots)(expression)
+
+/// Open dots into symbolic indexed contractions without expanding the numerator.
+///
+/// -> bytes
+#let undo-dots(expression) = (_default-engine().undo-dots)(expression)
 
 /// Wrap dummy indices under the given header symbol.
 ///

@@ -11,8 +11,9 @@ use idenso::{Cookable, IndexTooling};
 use spenso::network::tags::SPENSO_TAG;
 use spenso::portable_payload::{
     MATH_DISPLAY_ATTACHMENT_SCHEMA, MathDisplayDeclaration, MathDisplayDeclarations,
-    PortableRepresentationClass, REPRESENTATION_ATTACHMENT_SCHEMA, RepresentationDeclaration,
-    RepresentationDeclarations, canonical_math_display_symbol_name, canonical_representation_name,
+    NOTATION_ATTACHMENT_SCHEMA, NotationDeclarations, PortableRepresentationClass,
+    REPRESENTATION_ATTACHMENT_SCHEMA, RepresentationDeclaration, RepresentationDeclarations,
+    canonical_math_display_symbol_name, canonical_representation_name,
     register_math_display_symbol,
 };
 use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
@@ -97,6 +98,7 @@ struct InputContext {
     passthrough: AttachmentSet,
     representations: RepresentationDeclarations,
     math_displays: MathDisplayDeclarations,
+    notation: NotationDeclarations,
 }
 
 impl InputContext {
@@ -152,9 +154,14 @@ impl InputContext {
             .absorb_attachments(incoming)
             .map_err(|error| error.to_string())?;
 
+        candidate
+            .notation
+            .absorb_attachments(incoming)
+            .map_err(|error| error.to_string())?;
         for attachment in incoming.iter() {
             if attachment.schema() != REPRESENTATION_ATTACHMENT_SCHEMA
                 && attachment.schema() != MATH_DISPLAY_ATTACHMENT_SCHEMA
+                && attachment.schema() != NOTATION_ATTACHMENT_SCHEMA
             {
                 candidate
                     .passthrough
@@ -180,10 +187,16 @@ impl InputContext {
         self.math_displays
             .preflight_registration()
             .map_err(|error| error.to_string())?;
+        self.notation
+            .preflight_registration()
+            .map_err(|error| error.to_string())?;
         self.representations
             .register_before_atom_import()
             .map_err(|error| error.to_string())?;
         self.math_displays
+            .register_before_atom_import()
+            .map_err(|error| error.to_string())?;
+        self.notation
             .register_before_atom_import()
             .map_err(|error| error.to_string())
     }
@@ -236,6 +249,9 @@ fn output_attachments(atom: &Atom, context: &InputContext) -> Result<AttachmentS
         .and_then(|declarations| declarations.append_attachments_to(&mut attachments))
         .map_err(|error| error.to_string())?;
     MathDisplayDeclarations::referenced_by_atom(atom)
+        .and_then(|declarations| declarations.append_attachments_to(&mut attachments))
+        .map_err(|error| error.to_string())?;
+    NotationDeclarations::referenced_by_atom(atom)
         .and_then(|declarations| declarations.append_attachments_to(&mut attachments))
         .map_err(|error| error.to_string())?;
     Ok(attachments)
@@ -1458,6 +1474,16 @@ pub fn to_dots(expr: &[u8]) -> Result<Vec<u8>, String> {
 }
 
 #[wasm_func]
+pub fn undo_dots(expr: &[u8]) -> Result<Vec<u8>, String> {
+    let (atom, context) = decode_atom_with_context(expr, "expr")?;
+    let result = SymbolicTensor::infer(atom)
+        .map_err(|error| error.to_string())?
+        .undo_dots()
+        .map_err(|error| error.to_string())?;
+    encode_atom_with_context(result.expression(), &context)
+}
+
+#[wasm_func]
 pub fn wrap_dummies(expr: &[u8], header: &[u8]) -> Result<Vec<u8>, String> {
     let mut context = InputContext::default();
     let expr_payload = context.inspect_payload(expr, "expr")?;
@@ -1491,6 +1517,47 @@ mod tests {
         decode_representation_declaration, encode_representation_declaration,
     };
     use spenso::structure::representation::{RepresentationClass, RepresentationMetadata};
+    use symbolica_notation::Notation;
+
+    #[test]
+    fn portable_notation_is_registered_before_import_and_retained() {
+        let name = "tydenso_notation_test::portable_head";
+        let symbol = SymbolBuilder::new(NamespacedSymbol::parse(name))
+            .build()
+            .unwrap();
+        let atom = Atom::var(symbol);
+        let data = encode_cbor(Value::Map(vec![(
+            Value::Text("head".to_owned()),
+            Value::Array(vec![
+                Value::Text("symbol".to_owned()),
+                Value::Text("eta".to_owned()),
+            ]),
+        )]))
+        .unwrap();
+        let attachments = AttachmentSet::from_attachments([Attachment::new(
+            AttachmentKey::new(NOTATION_ATTACHMENT_SCHEMA, 1, name.as_bytes().to_vec()).unwrap(),
+            data,
+        )
+        .unwrap()])
+        .unwrap();
+        let payload = encode_atom_from_set(&atom, &attachments).unwrap();
+        assert!(Notation::lookup(symbol).unwrap().is_none());
+        let (imported, context) = decode_atom_with_context(&payload, "expr").unwrap();
+        assert_eq!(imported, atom);
+        assert_eq!(
+            Notation::lookup(symbol).unwrap().unwrap().head,
+            Some(IndexDisplay::symbol("eta").unwrap())
+        );
+        let output = encode_atom_with_context(&imported, &context).unwrap();
+        assert!(
+            parse_payload(&output)
+                .unwrap()
+                .attachment_set()
+                .iter()
+                .any(|record| record.schema() == NOTATION_ATTACHMENT_SCHEMA)
+        );
+        assert_eq!(decode_atom(&output, "expr").unwrap(), atom);
+    }
 
     #[test]
     fn tydenso_initializes_every_builtin_representation_palette() {
@@ -2162,6 +2229,38 @@ mod tests {
             atom_from_value(&second, "spenso")
                 .unwrap_err()
                 .contains("different fixed index palette")
+        );
+    }
+
+    #[test]
+    fn dot_toggles_preserve_indexed_inputs_and_roundtrip_compact_products() {
+        use spenso::{dot, g, mink, vector};
+        let indexed =
+            vector!(tydenso_dot_p, mink!(4, 99001)) * vector!(tydenso_dot_q, mink!(4, 99001));
+        assert_eq!(
+            decode_atom(
+                &to_dots(&encode_atom(&indexed).unwrap()).unwrap(),
+                "indexed dots"
+            )
+            .unwrap(),
+            indexed,
+        );
+        let p = vector!(tydenso_dot_p, mink!(4));
+        let q = vector!(tydenso_dot_q, mink!(4));
+        let compact = encode_atom(&g!(&p, &q)).unwrap();
+        let dotted = to_dots(&compact).unwrap();
+        let expected = dot!(&p, &q);
+        assert_eq!(decode_atom(&dotted, "compact dots").unwrap(), expected);
+        let opened = undo_dots(&dotted).unwrap();
+        assert!(
+            !decode_atom(&opened, "opened dots")
+                .unwrap()
+                .contains_symbol(SPENSO_TAG.dot)
+        );
+        let closed = contract(&opened).unwrap();
+        assert_eq!(
+            decode_atom(&to_dots(&closed).unwrap(), "dot roundtrip").unwrap(),
+            expected
         );
     }
 
