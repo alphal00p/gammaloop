@@ -154,7 +154,13 @@ fn native_scene_displays_dots_without_an_automatic_title() {
     let scene = diagram
         .to_scene(None, &Default::default(), None, &SceneOptions::default())
         .unwrap();
-    assert!(scene.pages.iter().any(|label| label.contains("^(2)")));
+    assert!(scene.pages.iter().any(|label| {
+        label.mathml.contains("<mn>2</mn>")
+            && label
+                .typst
+                .as_ref()
+                .is_some_and(|source| source.contains("^(2)"))
+    }));
     assert!(scene.title.is_none());
     assert!(
         scene
