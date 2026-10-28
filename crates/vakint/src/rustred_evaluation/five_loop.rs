@@ -638,6 +638,20 @@ impl Vakint {
         self.evaluate_rustred_symbolic_observed(settings, input, None, None)
     }
 
+    /// Experimental five-loop diagnostics on the ordinary public evaluation.
+    /// The borrowed callback observes Native boundaries without presentation;
+    /// it must not block or reenter the engine. Observation faults preserve the
+    /// mathematical result; callers must inspect the observer's final status.
+    #[cfg(feature = "experimental-rustred")]
+    pub fn evaluate_rustred_symbolic_with_observer(
+        &self,
+        settings: &VakintSettings,
+        input: AtomView,
+        observer: &mut CandidateRoutedApplicationObserver<'_>,
+    ) -> Result<RustRedSymbolicEvaluation, VakintError> {
+        self.evaluate_rustred_symbolic_observed(settings, input, Some(observer), None)
+    }
+
     /// Retain exact five-loop masters and guards with optional per-call diagnostics.
     pub fn evaluate_rustred_symbolic_with_monitor(
         &self,
@@ -1464,6 +1478,38 @@ mod tests {
                 RustRedEvaluationError::SavedApplicationUnavailable
             ))
         ));
+    }
+
+    #[test]
+    #[cfg(feature = "experimental-rustred")]
+    fn raw_observer_preserves_public_admission_errors_and_isolates_faults() {
+        use rustred::solver::{
+            CandidateRoutedObservationOptions, CandidateRoutedObserverFault,
+            CandidateRoutedObserverStatus,
+        };
+        let vakint = Vakint::new().unwrap();
+        let settings = settings();
+        let input = root();
+        let ordinary = vakint
+            .evaluate_rustred_symbolic(&settings, input.as_view())
+            .unwrap_err();
+        let mut callback = |_: &rustred::solver::CandidateRoutedApplicationEnvelope<'_>| Err(());
+        let mut observer = CandidateRoutedApplicationObserver::new(
+            CandidateRoutedObservationOptions::default(),
+            &mut callback,
+        );
+        let observed = vakint
+            .evaluate_rustred_symbolic_with_observer(&settings, input.as_view(), &mut observer)
+            .unwrap_err();
+        assert_eq!(ordinary.to_string(), observed.to_string());
+        assert!(matches!(
+            observed,
+            VakintError::RustRedEvaluation(RustRedEvaluationError::SavedApplicationUnavailable)
+        ));
+        assert_eq!(
+            observer.status(),
+            CandidateRoutedObserverStatus::Faulted(CandidateRoutedObserverFault::CallbackError)
+        );
     }
 
     #[test]

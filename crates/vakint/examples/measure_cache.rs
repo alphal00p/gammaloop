@@ -5,6 +5,9 @@ mod cache_file_args;
 mod cache_hit_capture;
 #[path = "build_cache/cache_identity.rs"]
 mod cache_identity;
+#[cfg(feature = "experimental-rustred")]
+#[path = "build_cache/cost_observation.rs"]
+mod cost_observation;
 #[path = "build_cache/owner_proof.rs"]
 #[cfg_attr(
     not(test),
@@ -181,6 +184,7 @@ struct Options {
     running_cache: Option<PathBuf>,
     running_cache_capture_only: bool,
     running_cache_no_read_delta: bool,
+    held_out_quarantine: bool,
     work_dir: PathBuf,
     suite: String,
     repetitions: usize,
@@ -194,6 +198,7 @@ struct Options {
     only_case: Option<String>,
     monitor: RustRedMonitorOptions,
     classify_cache_hits: bool,
+    observe_native_costs: bool,
 }
 
 impl Options {
@@ -308,6 +313,7 @@ impl Options {
         let mut running_cache = None;
         let mut running_cache_capture_only = false;
         let mut running_cache_no_read_delta = false;
+        let mut held_out_quarantine = false;
         let mut work_dir = None;
         let mut suite = "tuning".to_owned();
         let mut repetitions = 3;
@@ -321,6 +327,7 @@ impl Options {
         let mut only_case = None;
         let mut monitor = RustRedMonitorOptions::default();
         let mut classify_cache_hits = false;
+        let mut observe_native_costs = false;
         while let Some(arg) = args.next() {
             if matches!(arg.as_str(), "--help" | "-h") {
                 println!(
@@ -332,8 +339,12 @@ impl Options {
                      [--running-cache PATH] [--running-cache-capture-only] persist completed native records.\n\
                      PATH is a capture root; each case/sample/variant owns a separate native delta.\n\
                      Capture-only disables persistent reads and cannot be combined with --cache.\n\
-                     Held-out measurements forbid --running-cache and read --cache without modifying it.\n\
+                     Held-out measurements read an immutable --cache; capture requires --held-out-quarantine.\n\
                      [--running-cache-no-read-delta] reads immutable bases only; requires --running-cache.\n\
+                     [--held-out-quarantine] preserves fresh held-out deltas without LIGHT selection authority.\n\
+                     Requires --running-cache, --running-cache-no-read-delta and authenticated held-out inputs.\n\
+                     Uncached quarantine requires capture-only without --cache; cached quarantine uses a direct\n\
+                     cached worker or one classifier diagnostic. Later HEAVY union reuse is seen-input reuse.\n\
                      [--provisional] permits legacy functional pilots without native key authentication.\n\
                      [--only-case ID] selects one frozen case and requires --provisional.\n\
                      Every case/sample/variant runs in a fresh process. Default: three samples, no deadline.\n\
@@ -345,7 +356,11 @@ impl Options {
                      Monitored timings include diagnostic observation overhead.\n\
                      [--classify-cache-hits] records a lossless diagnostic for offline owner mapping.\n\
                      Requires experimental-rustred, --cache and --repetitions 1; runs only the cached variant.\n\
-                     Forbids presentation, running capture and performance claims.\n\
+                     Forbids presentation and performance claims; capture requires held-out quarantine.\n\
+                     [--observe-native-costs] records advisory per-node costs for one direct tuning worker.\n\
+                     Requires experimental-rustred, --worker --variant cached --repetitions 1,\n\
+                     --cache, --running-cache and --running-cache-no-read-delta; forbids presentation,\n\
+                     cache-hit classification, diagnostic deadlines and held-out execution.\n\
                      Run with fixed affinity in a serialized measurement window."
                 );
                 return Ok(None);
@@ -366,12 +381,20 @@ impl Options {
                 running_cache_no_read_delta = true;
                 continue;
             }
+            if arg == "--held-out-quarantine" {
+                held_out_quarantine = true;
+                continue;
+            }
             if arg == "--monitor" {
                 monitor.display = RustRedMonitorDisplay::Tui;
                 continue;
             }
             if arg == "--classify-cache-hits" {
                 classify_cache_hits = true;
+                continue;
+            }
+            if arg == "--observe-native-costs" {
+                observe_native_costs = true;
                 continue;
             }
             let value = args
@@ -420,8 +443,8 @@ impl Options {
             "cached worker needs --cache"
         );
         ensure!(
-            suite != "held-out" || running_cache.is_none(),
-            "held-out measurements require a read-only --cache and forbid --running-cache"
+            suite != "held-out" || running_cache.is_none() || held_out_quarantine,
+            "held-out running capture requires explicit --held-out-quarantine"
         );
         ensure!(
             !running_cache_capture_only || (running_cache.is_some() && cache.is_none()),
@@ -430,6 +453,24 @@ impl Options {
         ensure!(
             !running_cache_no_read_delta || running_cache.is_some(),
             "--running-cache-no-read-delta requires --running-cache"
+        );
+        ensure!(
+            !held_out_quarantine
+                || (suite == "held-out"
+                    && running_cache.is_some()
+                    && running_cache_no_read_delta
+                    && !provisional),
+            "--held-out-quarantine requires authenticated held-out inputs, --running-cache and --running-cache-no-read-delta"
+        );
+        ensure!(
+            !held_out_quarantine
+                || if cache.is_none() {
+                    running_cache_capture_only
+                } else {
+                    !running_cache_capture_only
+                        && ((worker && variant == "cached") || classify_cache_hits)
+                },
+            "uncached quarantine requires capture-only without --cache; cached quarantine requires a direct cached worker or classifier, not a paired supervisor"
         );
         ensure!(
             only_case.is_none() || provisional,
@@ -449,12 +490,33 @@ impl Options {
         );
         ensure!(
             !classify_cache_hits
-                || (cache.is_some() && repetitions == 1 && running_cache.is_none()),
-            "classification requires one cached diagnostic and forbids running capture"
+                || (cache.is_some()
+                    && repetitions == 1
+                    && (running_cache.is_none() || held_out_quarantine)),
+            "classification requires one cached diagnostic; running capture requires held-out quarantine"
         );
         ensure!(
             !classify_cache_hits || !worker || variant == "cached",
             "a classification worker must use the cached variant"
+        );
+        ensure!(
+            !observe_native_costs
+                || (cfg!(feature = "experimental-rustred")
+                    && worker
+                    && variant == "cached"
+                    && suite == "tuning"
+                    && repetitions == 1
+                    && sample == Some(0)
+                    && case_id.is_some()
+                    && cache.is_some()
+                    && running_cache.is_some()
+                    && running_cache_no_read_delta
+                    && !running_cache_capture_only
+                    && !classify_cache_hits
+                    && !monitor.enabled()
+                    && max_case_seconds.is_none()
+                    && worker_deadline.is_none()),
+            "native cost observation requires one direct cached tuning worker with a fresh NoReadDelta capture and no presentation, classification or deadline"
         );
         ensure!(
             worker_deadline.is_none_or(|deadline| deadline.is_finite()),
@@ -476,6 +538,7 @@ impl Options {
             running_cache,
             running_cache_capture_only,
             running_cache_no_read_delta,
+            held_out_quarantine,
             suite,
             repetitions,
             max_case_seconds,
@@ -488,6 +551,7 @@ impl Options {
             only_case,
             monitor,
             classify_cache_hits,
+            observe_native_costs,
         }))
     }
 
@@ -514,6 +578,44 @@ impl Options {
         if let Some(directory) = options.decoded_directory {
             command.arg("--cache-decoded-directory").arg(directory);
         }
+    }
+
+    fn quarantine_provenance(&self) -> Option<Value> {
+        self.held_out_quarantine.then(|| {
+            json!({
+                "suite":"held-out","light_selection_allowed":false,"light_eligibility_allowed":false,
+                "authority":"This run's observations and usage never authorize LIGHT selection; prior eligible keys are unchanged",
+                "heavy_union_allowed":true,
+                "qualification_scope":"Named immutable cache identity before qualification; later HEAVY union replay is seen-input reuse",
+            })
+        })
+    }
+
+    fn running_cache_path(&self, case_id: &str) -> Result<Option<PathBuf>> {
+        self.running_cache
+            .as_ref()
+            .map(|root| {
+                if self.held_out_quarantine {
+                    ensure!(
+                        fs::symlink_metadata(root)?.is_dir(),
+                        "quarantine capture parent must be an existing directory, not a symlink"
+                    );
+                }
+                let sample = self
+                    .sample
+                    .ok_or_else(|| eyre::eyre!("running-cache worker requires a sample number"))?;
+                let path = root.join(format!(
+                    "case-{:x}-sample-{sample}-{}",
+                    Sha256::digest(case_id.as_bytes()),
+                    self.variant
+                ));
+                ensure!(
+                    !path.is_symlink() && !path.try_exists()?,
+                    "preserve the existing worker running cache; choose a fresh --running-cache root"
+                );
+                Ok(path)
+            })
+            .transpose()
     }
 
     fn identity(&self) -> Result<Value> {
@@ -574,6 +676,23 @@ impl Options {
                 "performance_claim_allowed":false,
             });
         }
+        if self.observe_native_costs {
+            identity["native_cost_observation"] = json!({
+                "diagnostic_only":true,"advisory_ranking_only":true,
+                "interval_ns":0,"frontier_frames":0,"path_nodes":0,
+                "eligibility_source":"unchanged authenticated profiles; this run adds no eligibility cohort",
+                "performance_claim_allowed":false,
+            });
+            #[cfg(feature = "experimental-rustred")]
+            {
+                identity["collector_helper_sources_sha256"]["crates/vakint/examples/build_cache/cost_observation.rs"] =
+                    format!(
+                        "{:x}",
+                        Sha256::digest(include_bytes!("build_cache/cost_observation.rs"))
+                    )
+                    .into();
+            }
+        }
         if let Some(path) = &self.running_cache {
             identity["running_cache"] = json!({
                 "path":path,"read_backing":!self.running_cache_capture_only,
@@ -581,6 +700,9 @@ impl Options {
                 "read_delta":!self.running_cache_no_read_delta,
                 "delta_scope":"one native delta per case, sample and variant",
             });
+        }
+        if let Some(provenance) = self.quarantine_provenance() {
+            identity["held_out_quarantine"] = provenance;
         }
         Ok(identity)
     }
@@ -823,29 +945,12 @@ fn measure(options: &Options, root: &Root, identity: &Value, workload: &Workload
         engine.clear_cache(5)?;
     }
     let cache_loading_seconds = cache_started.elapsed().as_secs_f64();
-    let running_cache_path = options
-        .running_cache
-        .as_ref()
-        .map(|root_path| {
-            let sample = options
-                .sample
-                .ok_or_else(|| eyre::eyre!("running-cache worker requires a sample number"))?;
-            Ok::<_, eyre::Report>(root_path.join(format!(
-                "case-{:x}-sample-{sample}-{}",
-                Sha256::digest(root.id.as_bytes()),
-                options.variant
-            )))
-        })
-        .transpose()?;
+    let running_cache_path = options.running_cache_path(&root.id)?;
     let running_read_backing = running_cache_path.is_some() && !options.running_cache_capture_only;
     let running_cache_started = Instant::now();
     let running_cache = running_cache_path
         .as_ref()
         .map(|path| {
-            ensure!(
-                !path.exists(),
-                "preserve the existing worker running cache; choose a fresh --running-cache root"
-            );
             engine
                 .attach_running_cache(
                     5,
@@ -861,6 +966,8 @@ fn measure(options: &Options, root: &Root, identity: &Value, workload: &Workload
         .transpose()?;
     let running_cache_loading_seconds = running_cache_started.elapsed().as_secs_f64();
     let mut running_cache_receipt = None;
+    #[cfg(feature = "experimental-rustred")]
+    let mut cost_observation_document = None;
     let measured = (|| -> Result<()> {
         let running_cache_attached =
             running_cache.is_some() && engine.cache_statistics(5)?.attached;
@@ -895,8 +1002,14 @@ fn measure(options: &Options, root: &Root, identity: &Value, workload: &Workload
         let owner_proof_seconds = proof_started.elapsed().as_secs_f64();
         let owners_before = engine.rustred_application_owner_preparation_statistics()?;
         *LOGGER.stages() = Stages::default();
+        #[cfg(feature = "experimental-rustred")]
+        let mut cost_observation = options
+            .observe_native_costs
+            .then(|| cost_observation::CostObservation::new(binding.clone()));
+        #[cfg(feature = "experimental-rustred")]
+        let mut cost_observer_status = rustred::solver::CandidateRoutedObserverStatus::Detached;
         let started = Instant::now();
-        let outcome = {
+        let evaluate = || {
             let _logging = ClassificationLogging::enter(options.classify_cache_hits);
             if options.monitor.enabled() || options.classify_cache_hits {
                 let mut monitor = options.monitor.clone();
@@ -910,6 +1023,31 @@ fn measure(options: &Options, root: &Root, identity: &Value, workload: &Workload
                 engine.evaluate_rustred_symbolic(&settings, input.as_view())
             }
         };
+        #[cfg(feature = "experimental-rustred")]
+        let outcome = if let Some(collector) = &mut cost_observation {
+            let mut callback = |envelope: &rustred::solver::CandidateRoutedApplicationEnvelope<
+                '_,
+            >| { collector.observe(envelope) };
+            let mut observer = rustred::solver::CandidateRoutedApplicationObserver::new(
+                rustred::solver::CandidateRoutedObservationOptions {
+                    interval: Duration::ZERO,
+                    max_frontier_frames: 0,
+                    max_path_nodes: 0,
+                },
+                &mut callback,
+            );
+            let result = engine.evaluate_rustred_symbolic_with_observer(
+                &settings,
+                input.as_view(),
+                &mut observer,
+            );
+            cost_observer_status = observer.status();
+            result
+        } else {
+            evaluate()
+        };
+        #[cfg(not(feature = "experimental-rustred"))]
+        let outcome = evaluate();
         let evaluation_seconds = started.elapsed().as_secs_f64();
         // The native flush is the durability acknowledgement on success and ordinary
         // reduction errors. Killed workers rely on the native periodic checkpoints.
@@ -999,6 +1137,24 @@ fn measure(options: &Options, root: &Root, identity: &Value, workload: &Workload
             "reduction_error":outcome.as_ref().err().map(ToString::to_string),
         })
     });
+        #[cfg(feature = "experimental-rustred")]
+        {
+            cost_observation_document = cost_observation.map(|collector| {
+                let mut document = collector.finish(outcome.is_ok(), cost_observer_status);
+                document["identity"] = identity.clone();
+                document["case_id"] = root.id.clone().into();
+                document["input_sha256"] = format!(
+                    "{:x}",
+                    Sha256::digest(input.to_canonical_string().as_bytes())
+                )
+                .into();
+                document["reduction_settings"] = reduction_settings.clone();
+                document["strict_capture"] = running_cache_receipt.clone().into();
+                document["eligibility_source"] =
+                    "unchanged authenticated profiles; this run adds no eligibility cohort".into();
+                document
+            });
+        }
         let reduction_error_message = outcome.as_ref().err().map(ToString::to_string);
         let (outcome, mut reduction_error): (_, Option<eyre::Report>) = match outcome {
             Ok(result) => (Some(result), None),
@@ -1081,6 +1237,9 @@ fn measure(options: &Options, root: &Root, identity: &Value, workload: &Workload
             receipt["cache_hit_diagnostic"] = stages
                 .cache_hits
                 .save_hit_diagnostic(&options.work_dir, outcome.is_some());
+            receipt["performance_claim_allowed"] = false.into();
+        }
+        if options.observe_native_costs {
             receipt["performance_claim_allowed"] = false.into();
         }
         if let Some(proof) = &proof {
@@ -1232,15 +1391,45 @@ fn measure(options: &Options, root: &Root, identity: &Value, workload: &Workload
         receipt["close"] = json!({"seconds":started.elapsed().as_secs_f64(),
             "report":document,"error":closed.as_ref().err().map(ToString::to_string)});
         receipt["terminal"] = true.into();
+        if let Some(provenance) = options.quarantine_provenance() {
+            receipt["held_out_quarantine"] = provenance;
+        }
         closed.err()
     });
     let terminal_receipt = (|| -> Result<()> {
+        #[cfg(feature = "experimental-rustred")]
+        let cost_reference = if let Some(mut document) = cost_observation_document.take() {
+            let capture_complete = running_cache_receipt.as_ref().is_some_and(|receipt| {
+                receipt["terminal"] == true
+                    && receipt["flush_complete"] == true
+                    && receipt["close"]["error"].is_null()
+                    && receipt["snapshot_error"].is_null()
+            });
+            document["counter_observation_complete"] = document["complete"].clone();
+            document["strict_capture"] = running_cache_receipt.clone().into();
+            document["capture_complete"] = capture_complete.into();
+            document["public_worker_checks_passed"] = measured.is_ok().into();
+            document["complete"] =
+                (document["complete"] == true && capture_complete && measured.is_ok()).into();
+            let path = options.work_dir.join("native-cost-observation.json");
+            write_bytes(&path, &serde_json::to_vec(&document)?)?;
+            Some(json!({
+                "path":path,"sha256":digest(&path)?,"complete":document["complete"],
+                "diagnostic_only":true,"advisory_ranking_only":true,
+            }))
+        } else {
+            None
+        };
         if let Some(receipt) = &running_cache_receipt {
             write_json(&options.work_dir.join("running-cache.json"), receipt)?;
             let worker_path = options.work_dir.join("worker.json");
             if worker_path.exists() {
                 let mut worker: Value = serde_json::from_slice(&fs::read(&worker_path)?)?;
                 worker["running_cache"] = receipt.clone();
+                #[cfg(feature = "experimental-rustred")]
+                if let Some(reference) = &cost_reference {
+                    worker["native_cost_observation"] = reference.clone();
+                }
                 if let Some(error) = &close_error {
                     worker["success"] = false.into();
                     if worker["error"].is_null() {
@@ -1643,7 +1832,7 @@ fn main() -> Result<()> {
         && identity["cpu_affinity"].is_string();
     write_json(
         &options.work_dir.join("summary.json"),
-        &json!({"schema":"vakint.five-loop-cache-suite.v1","identity":identity,"complete":complete,"cases":cases,"measurements":measurements,"geometric_mean_uncached_over_cached_ratio":geometric_mean,"provisional":options.provisional,"diagnostic_only":options.classify_cache_hits,"native_keys_authenticated":authenticated,"execution_provenance_complete":provenance_complete,"final_held_out_comparison":!options.classify_cache_hits && authenticated && provenance_complete && options.suite=="held-out" && options.cache.is_some() && options.repetitions>=3,"selection_allowed":!options.classify_cache_hits && authenticated && provenance_complete && options.suite=="tuning" && options.cache.is_some() && options.repetitions>=3}),
+        &json!({"schema":"vakint.five-loop-cache-suite.v1","identity":identity,"complete":complete,"cases":cases,"measurements":measurements,"geometric_mean_uncached_over_cached_ratio":geometric_mean,"provisional":options.provisional,"diagnostic_only":options.classify_cache_hits,"native_keys_authenticated":authenticated,"execution_provenance_complete":provenance_complete,"final_held_out_comparison":!options.classify_cache_hits && authenticated && provenance_complete && options.suite=="held-out" && options.cache.is_some() && options.repetitions>=3,"selection_allowed":!options.held_out_quarantine && !options.classify_cache_hits && authenticated && provenance_complete && options.suite=="tuning" && options.cache.is_some() && options.repetitions>=3}),
     )?;
     ensure!(
         complete,
@@ -1769,10 +1958,281 @@ mod tests {
         assert_eq!(options.case_deadline(100.0)?, None);
         assert_eq!(options.worker_allowance(100.0)?, None);
         assert!(!options.classify_cache_hits);
+        assert!(!options.observe_native_costs);
+        assert!(!options.held_out_quarantine);
+        assert!(options.quarantine_provenance().is_none());
         assert!(!options.monitor.enabled());
         #[cfg(feature = "experimental-rustred")]
         assert!(!options.monitor.cache_hit_diagnostic);
         assert!(!options.deadline_exhausted(None, Duration::from_secs(u64::MAX), f64::MAX)?);
+        Ok(())
+    }
+
+    #[test]
+    fn held_out_quarantine_requires_explicit_no_read_delta_capture() -> Result<()> {
+        let fixed = [
+            "--suite",
+            "held-out",
+            "--held-out-quarantine",
+            "--running-cache",
+            "quarantine",
+            "--running-cache-no-read-delta",
+            "--running-cache-capture-only",
+        ];
+        let options = parsed_options(&fixed)?;
+        assert!(options.held_out_quarantine);
+        assert!(options.cache.is_none());
+        assert!(options.running_cache_capture_only);
+        for extra in [vec!["--suite", "tuning"], vec!["--provisional"]] {
+            let mut args = fixed.to_vec();
+            args.extend(extra);
+            assert!(parsed_options(&args).is_err());
+        }
+        for args in [
+            vec!["--held-out-quarantine"],
+            vec![
+                "--suite",
+                "held-out",
+                "--running-cache",
+                "quarantine",
+                "--running-cache-no-read-delta",
+                "--running-cache-capture-only",
+            ],
+            vec![
+                "--suite",
+                "held-out",
+                "--held-out-quarantine",
+                "--running-cache",
+                "quarantine",
+                "--running-cache-capture-only",
+            ],
+            vec![
+                "--suite",
+                "held-out",
+                "--held-out-quarantine",
+                "--running-cache",
+                "quarantine",
+                "--running-cache-no-read-delta",
+            ],
+        ] {
+            assert!(parsed_options(&args).is_err(), "accepted {args:?}");
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn cached_quarantine_requires_a_direct_cached_worker() -> Result<()> {
+        let fixed = [
+            "--suite",
+            "held-out",
+            "--held-out-quarantine",
+            "--running-cache",
+            "quarantine",
+            "--running-cache-no-read-delta",
+            "--cache",
+            "frozen-heavy.gz",
+        ];
+        assert!(parsed_options(&fixed).is_err());
+        let mut worker = fixed.to_vec();
+        worker.extend([
+            "--worker",
+            "--variant",
+            "cached",
+            "--case-id",
+            "case",
+            "--sample",
+            "0",
+        ]);
+        let options = parsed_options(&worker)?;
+        assert!(!options.running_cache_capture_only);
+        assert!(options.running_cache_no_read_delta);
+        worker.extend(["--variant", "uncached"]);
+        assert!(parsed_options(&worker).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn quarantine_identity_propagates_without_light_selection_authority() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let fixed = [
+            "--suite",
+            "held-out",
+            "--held-out-quarantine",
+            "--running-cache",
+            "quarantine",
+            "--running-cache-no-read-delta",
+            "--running-cache-capture-only",
+        ];
+        let mut parent = parsed_options(&fixed)?;
+        let mut worker_args = fixed.to_vec();
+        worker_args.extend([
+            "--worker",
+            "--case-id",
+            "case",
+            "--variant",
+            "uncached",
+            "--sample",
+            "0",
+        ]);
+        let mut worker = parsed_options(&worker_args)?;
+        let artifacts = directory.path().join("data");
+        fs::create_dir(&artifacts)?;
+        write_json(&artifacts.join("manifest.json"), &json!({}))?;
+        let workload = directory.path().join("workload.json");
+        write_json(
+            &workload,
+            &json!({
+                "schema":"vakint.five-loop-cache-workload.v1",
+                "data_manifest_sha256":"a".repeat(64),"source_census_sha256":"b".repeat(64),
+                "training":[],"tuning":[],"held_out":[],
+            }),
+        )?;
+        let census = directory.path().join("census.json");
+        write_json(&census, &json!({}))?;
+        for options in [&mut parent, &mut worker] {
+            options.artifacts = artifacts.clone();
+            options.workload = workload.clone();
+            options.source_census = census.clone();
+        }
+        let identity = parent.identity()?;
+        assert_eq!(identity, worker.identity()?);
+        assert_eq!(
+            identity["held_out_quarantine"]["light_selection_allowed"],
+            false
+        );
+        assert_eq!(
+            identity["held_out_quarantine"]["light_eligibility_allowed"],
+            false
+        );
+        assert_eq!(identity["held_out_quarantine"]["heavy_union_allowed"], true);
+        assert_eq!(identity["running_cache"]["read_backing"], false);
+        assert_eq!(identity["running_cache"]["read_delta"], false);
+        let receipt = json!({"identity":identity,"case_id":"case","variant":"uncached","sample":0});
+        validate_receipt(&receipt, &identity, "case", "uncached", 0)?;
+        let mut changed = identity.clone();
+        changed["held_out_quarantine"]["light_selection_allowed"] = true.into();
+        assert!(validate_receipt(&receipt, &changed, "case", "uncached", 0).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn quarantine_delta_paths_are_fresh_and_isolated() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let parent = directory.path().join("quarantine");
+        fs::create_dir(&parent)?;
+        let mut options = parsed_options(&[
+            "--suite",
+            "held-out",
+            "--held-out-quarantine",
+            "--running-cache",
+            "quarantine",
+            "--running-cache-no-read-delta",
+            "--running-cache-capture-only",
+            "--worker",
+            "--case-id",
+            "case",
+            "--sample",
+            "0",
+        ])?;
+        options.running_cache = Some(parent.clone());
+        let first = options.running_cache_path("case")?.unwrap();
+        assert_ne!(first, options.running_cache_path("other-case")?.unwrap());
+        options.sample = Some(1);
+        assert_ne!(first, options.running_cache_path("case")?.unwrap());
+        options.sample = Some(0);
+        options.variant = "cached".into();
+        assert_ne!(first, options.running_cache_path("case")?.unwrap());
+        options.variant = "uncached".into();
+        fs::create_dir(&first)?;
+        assert!(options.running_cache_path("case").is_err());
+        options.running_cache = Some(directory.path().join("missing-parent"));
+        assert!(options.running_cache_path("case").is_err());
+        #[cfg(unix)]
+        {
+            let alias = directory.path().join("parent-symlink");
+            std::os::unix::fs::symlink(&parent, &alias)?;
+            options.running_cache = Some(alias);
+            assert!(options.running_cache_path("case").is_err());
+        }
+        Ok(())
+    }
+
+    #[cfg(feature = "experimental-rustred")]
+    #[test]
+    fn classification_capture_exception_requires_held_out_quarantine() -> Result<()> {
+        let fixed = [
+            "--classify-cache-hits",
+            "--cache",
+            "frozen-heavy.gz",
+            "--repetitions",
+            "1",
+            "--suite",
+            "held-out",
+            "--held-out-quarantine",
+            "--running-cache",
+            "quarantine",
+            "--running-cache-no-read-delta",
+        ];
+        let options = parsed_options(&fixed)?;
+        assert!(options.classify_cache_hits && options.held_out_quarantine);
+        assert!(options.monitor.cache_hit_diagnostic);
+        assert!(!options.monitor.enabled());
+        for extra in [
+            vec!["--suite", "tuning"],
+            vec!["--repetitions", "3"],
+            vec!["--progress-snapshot", "presentation.json"],
+            vec!["--observe-native-costs"],
+        ] {
+            let mut args = fixed.to_vec();
+            args.extend(extra);
+            assert!(parsed_options(&args).is_err());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn native_cost_observation_requires_a_separate_single_tuning_capture() -> Result<()> {
+        let fixed = [
+            "--observe-native-costs",
+            "--worker",
+            "--sample",
+            "0",
+            "--case-id",
+            "frozen-tuning-case",
+            "--variant",
+            "cached",
+            "--suite",
+            "tuning",
+            "--repetitions",
+            "1",
+            "--cache",
+            "light.gz",
+            "--running-cache",
+            "fresh-capture",
+            "--running-cache-no-read-delta",
+        ];
+        #[cfg(feature = "experimental-rustred")]
+        {
+            let options = parsed_options(&fixed)?;
+            assert!(options.observe_native_costs);
+            assert!(!options.classify_cache_hits);
+            assert!(!options.monitor.enabled());
+        }
+        #[cfg(not(feature = "experimental-rustred"))]
+        assert!(parsed_options(&fixed).is_err());
+        for extra in [
+            vec!["--classify-cache-hits"],
+            vec!["--sample", "1"],
+            vec!["--suite", "held-out"],
+            vec!["--monitor"],
+            vec!["--progress-snapshot", "presentation.json"],
+            vec!["--max-case-seconds", "30", "--worker-deadline", "130"],
+        ] {
+            let mut args = fixed.to_vec();
+            args.extend(extra);
+            assert!(parsed_options(&args).is_err());
+        }
+        assert!(parsed_options(&["--observe-native-costs"]).is_err());
         Ok(())
     }
 
