@@ -81,13 +81,15 @@ The completed drawing has hover labels, pinned click details and local selection
 using Shift-, Ctrl-, or Meta-click. These interactions do not update Python graph
 selections automatically. Display `view` directly in Marimo, IPython or Jupyter.
 Drag the drawing to pan, or use Ctrl/Meta-scroll to zoom gently around the pointer.
-At 100%, SVG points retain their physical size, so equally styled labels, vertices,
-and strokes have the same size across drawings. The viewport grows vertically to
-keep the whole drawing visible. Narrow columns or explicitly bounded previews
-can shrink the drawing to fit; the zoom indicator reports that actual scale.
+At 100%, small standalone drawings use a bounded enlargement for readable labels.
+Larger drawings and explicitly bounded or embedded previews retain their authored
+scale. The viewport follows the drawing's height without reserving space for
+hidden details. Narrow columns or explicitly bounded previews can shrink the
+drawing to fit; the zoom indicator reports the scale relative to its default size.
 With the graph focused, `+` and `-` zoom in five-percent steps and `0` fits the
-drawing without enlarging it above 100%. Hover previews details beside the graph when space permits,
-and below it in narrow outputs. The preview disappears when the pointer leaves the element;
+drawing up to that 100% baseline. Hover previews details below standalone drawings
+without moving the graph; bounded or embedded previews show details in an overlay.
+The preview disappears when the pointer leaves the element;
 keyboard focus also previews details. Clicking pins the details until the panel is closed.
 The graph's `RenderSettings` combines layout options, drawing defaults, and Python selectors.
 `Graph` and `Subgraph` drawings use Rust for layout and SVG geometry, with direct
