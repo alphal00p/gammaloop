@@ -3,26 +3,19 @@
 //! Group positions refer to function arguments, including any intervening scalar
 //! metadata. Only the selected arguments are permuted. Symbolica normalizes each
 //! group; no tensor expression is expanded into a sum of permutations.
-use std::{
-    collections::{BTreeSet, HashMap},
-    sync::{Mutex, OnceLock},
+use crate::network::tags::{SPENSO_TAG, tensor_print};
+use crate::shadowing::FactorProjector;
+use crate::structure::representation::{LibraryRep, Representation};
+use crate::structure::slot::{SlotMatch, SlotMatcher};
+use crate::symbolica_init_lazy_static;
+use std::collections::{BTreeSet, HashMap};
+use std::sync::{Mutex, OnceLock};
+use symbolica::atom::representation::FunView;
+use symbolica::atom::{
+    Atom, AtomCore, AtomView, FunctionBuilder, NamespacedSymbol, Symbol, SymbolAttribute,
+    SymbolBuilder, UserData,
 };
-
-use crate::{
-    network::tags::{SPENSO_TAG, tensor_print},
-    shadowing::FactorProjector,
-    structure::{
-        representation::{LibraryRep, Representation},
-        slot::{SlotMatch, SlotMatcher},
-    },
-};
-use symbolica::{
-    atom::{
-        Atom, AtomCore, AtomView, FunctionBuilder, NamespacedSymbol, Symbol, SymbolAttribute,
-        SymbolBuilder, UserData, representation::FunView,
-    },
-    symbol,
-};
+use symbolica::symbol;
 
 const TAG_PREFIX: &str = "spenso::slot-symmetry:v1:";
 
@@ -32,6 +25,7 @@ const TAG_PREFIX: &str = "spenso::slot-symmetry:v1:";
 /// serialized by Symbolica: restore the declaration with [`Self::register_symbol`]
 /// before importing its atoms in a fresh process. Native admission rejects an
 /// imported declaration whose normalization callback has not been registered.
+/// See the [registration example](Self::new).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TensorSlotSymmetry {
     groups: Vec<(FactorProjector, Vec<usize>)>,
@@ -43,6 +37,27 @@ fn registrations() -> &'static Mutex<HashMap<Symbol, TensorSlotSymmetry>> {
 }
 
 impl TensorSlotSymmetry {
+    /// Declare disjoint symmetric or antisymmetric argument groups.
+    ///
+    /// # Errors
+    /// Rejects empty, overlapping, singleton, and cyclic argument groups.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use spenso::network::tensor_symmetry::TensorSlotSymmetry;
+    /// use spenso::shadowing::FactorProjector;
+    /// use symbolica::atom::{NamespacedSymbol, UserData};
+    /// let declaration = TensorSlotSymmetry::new([
+    ///     (FactorProjector::Antisymmetric, vec![0, 2]),
+    /// ])?;
+    /// let head = declaration.register_symbol(
+    ///     NamespacedSymbol::parse("slot_symmetry_example::tensor"),
+    ///     vec![], vec![], UserData::None,
+    /// )?;
+    /// assert_eq!(TensorSlotSymmetry::from_symbol(head)?, Some(declaration));
+    /// # Ok::<(), String>(())
+    /// ```
     pub fn new(
         groups: impl IntoIterator<Item = (FactorProjector, Vec<usize>)>,
     ) -> Result<Self, String> {
@@ -74,6 +89,7 @@ impl TensorSlotSymmetry {
         Ok(Self { groups })
     }
 
+    /// Inspect selected argument groups; see the [declaration example](Self::new).
     pub fn groups(&self) -> impl Iterator<Item = (FactorProjector, &[usize])> {
         self.groups
             .iter()
@@ -101,6 +117,10 @@ impl TensorSlotSymmetry {
     }
 
     /// Read the complete persisted declaration without relying on a callback.
+    /// See the [registration example](Self::new).
+    ///
+    /// # Errors
+    /// Rejects malformed, duplicated, unsupported, or invalid persisted group declarations.
     pub fn from_symbol(symbol: Symbol) -> Result<Option<Self>, String> {
         Self::from_tags(symbol.get_tags())
     }
@@ -140,6 +160,10 @@ impl TensorSlotSymmetry {
     /// Restore a declaration from archived tags before importing its expressions.
     /// This reattaches the native callback from persisted scientific metadata;
     /// callers do not construct or serialize a normalization closure.
+    /// See the [registration example](Self::new).
+    ///
+    /// # Errors
+    /// Rejects invalid archived declarations or incompatible symbol registrations.
     pub fn restore_symbol(
         name: NamespacedSymbol,
         attributes: Vec<SymbolAttribute>,
@@ -159,6 +183,10 @@ impl TensorSlotSymmetry {
     /// data. Repeating an identical registration returns the established symbol.
     /// A previously imported head lacking its callback cannot be repaired in
     /// place; register first, then import the atom archive.
+    /// See the [registration example](Self::new).
+    ///
+    /// # Errors
+    /// Rejects incompatible whole-head attributes, conflicting persisted tags, missing callbacks, or an existing symbol with a different declaration.
     pub fn register_symbol(
         &self,
         name: NamespacedSymbol,
@@ -240,6 +268,10 @@ impl TensorSlotSymmetry {
     }
 
     /// Validate callback restoration and the concrete argument-group signature.
+    /// See the [registration example](Self::new).
+    ///
+    /// # Errors
+    /// Rejects unavailable callbacks or arguments incompatible with the declared slot groups.
     pub fn validate_function(function: FunView<'_>) -> Result<(), String> {
         let symbol = function.get_symbol();
         let Some(declaration) = Self::from_symbol(symbol)? else {
@@ -384,10 +416,10 @@ impl TensorSlotSymmetry {
     }
 }
 
-crate::symbolica_init_lazy_static! {
+symbolica_init_lazy_static! {
     static ENVELOPE, ENVELOPE_INNER: Symbol = || symbol!("spenso::slot_symmetry_envelope"; Linear);
 }
-crate::symbolica_init_lazy_static! {
+symbolica_init_lazy_static! {
     static FIXED, FIXED_INNER: Symbol = || symbol!("spenso::slot_symmetry_fixed");
 }
 
@@ -396,6 +428,10 @@ impl TensorSlotSymmetry {
     /// a compact temporary encoding. Fixed argument wrappers protect arbitrary
     /// scalar metadata from the envelope's linear coefficient extraction.
     /// This expression is an internal canonicalization view, not tensor input.
+    /// See the [registration example](Self::new).
+    ///
+    /// # Errors
+    /// Rejects invalid declarations, unavailable callbacks, or incompatible group signatures.
     pub fn canonical_view(function: FunView<'_>) -> Result<Atom, String> {
         let Some(declaration) = Self::from_symbol(function.get_symbol())? else {
             return Ok(function.as_view().to_owned());
@@ -426,6 +462,10 @@ impl TensorSlotSymmetry {
 
     /// Remove the compact canonicalization view after Symbolica has chosen
     /// dummy labels. Rebuilding the physical head invokes its native normalizer.
+    /// See the [registration example](Self::new).
+    ///
+    /// # Errors
+    /// Rejects malformed internal envelopes or missing canonical tensor arguments.
     pub fn restore_canonical_view(expression: &Atom) -> Result<Atom, String> {
         if !expression.contains_symbol(*ENVELOPE) {
             return Ok(expression.clone());
@@ -514,15 +554,13 @@ impl TensorSlotSymmetry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        network::parsing::AtomStructureExt,
-        structure::{
-            OrderedStructure,
-            abstract_index::AbstractIndex,
-            representation::{Minkowski, RepName},
-            slot::IsAbstractSlot,
-        },
-    };
+    use crate::network::parsing::{AtomStructureExt, ShadowedStructure};
+    use crate::structure::OrderedStructure;
+    use crate::structure::abstract_index::AbstractIndex;
+    use crate::structure::representation::{Minkowski, RepName};
+    use crate::structure::slot::IsAbstractSlot;
+    use std::process::Command;
+    use std::{env, fs, process};
     use symbolica::{function, wrap_symbol};
 
     fn slot(index: usize) -> Atom {
@@ -622,7 +660,6 @@ mod tests {
 
     #[test]
     fn component_shadow_requires_an_explicit_realization() {
-        use crate::network::parsing::ShadowedStructure;
         let value = function!(
             head("slot_symmetry_tests::component_shadow"),
             5,
@@ -702,12 +739,12 @@ mod tests {
 
     #[test]
     fn fresh_process_archive_child() {
-        let Ok(path) = std::env::var("SPENSO_SLOT_SYMMETRY_ARCHIVE") else {
+        let Ok(path) = env::var("SPENSO_SLOT_SYMMETRY_ARCHIVE") else {
             return;
         };
-        let bytes = std::fs::read(path).unwrap();
+        let bytes = fs::read(path).unwrap();
         let (tags, payload): (Vec<String>, Vec<u8>) = serde_json::from_slice(&bytes).unwrap();
-        let mode = std::env::var("SPENSO_SLOT_SYMMETRY_RESTORE").unwrap();
+        let mode = env::var("SPENSO_SLOT_SYMMETRY_RESTORE").unwrap();
         let restore = mode != "no";
         if mode == "rename" {
             SymbolBuilder::new(wrap_symbol!("slot_symmetry_tests::archive"))
@@ -765,15 +802,14 @@ mod tests {
         let value = function!(head, 5, slot(1), slot(7), slot(2));
         let mut payload = Vec::new();
         value.export(&mut payload).unwrap();
-        let path =
-            std::env::temp_dir().join(format!("spenso-slot-symmetry-{}.json", std::process::id()));
-        std::fs::write(
+        let path = env::temp_dir().join(format!("spenso-slot-symmetry-{}.json", process::id()));
+        fs::write(
             &path,
             serde_json::to_vec(&(head.get_tags(), payload)).unwrap(),
         )
         .unwrap();
         for restore in ["no", "yes", "rename"] {
-            let output = std::process::Command::new(std::env::current_exe().unwrap())
+            let output = Command::new(env::current_exe().unwrap())
                 .args([
                     "--exact",
                     "network::tensor_symmetry::tests::fresh_process_archive_child",
@@ -790,6 +826,6 @@ mod tests {
                 String::from_utf8_lossy(&output.stderr)
             );
         }
-        std::fs::remove_file(path).unwrap();
+        fs::remove_file(path).unwrap();
     }
 }

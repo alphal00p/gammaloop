@@ -1,20 +1,15 @@
+use crate::tensor::SymbolicTensor;
+use crate::tensor::composition::MatrixChannel;
+use spenso::network::tensor_symmetry::TensorSlotSymmetry;
+use spenso::shadowing::FactorProjector;
+use spenso::structure::abstract_index::AbstractIndex;
+use spenso::structure::partial::{PartialIndex, PartialStructure, PartialStructureExt};
+use spenso::structure::representation::{LibraryRep, Minkowski, RepName};
+use spenso::structure::slot::IsAbstractSlot;
+use spenso::tensor_symbol;
 use std::collections::HashMap;
-
-use super::super::{SymbolicTensor, composition::MatrixChannel};
-use spenso::{
-    network::tensor_symmetry::TensorSlotSymmetry,
-    shadowing::FactorProjector,
-    structure::{
-        abstract_index::AbstractIndex,
-        partial::{PartialIndex, PartialStructure, PartialStructureExt},
-        representation::{LibraryRep, Minkowski, RepName},
-        slot::IsAbstractSlot,
-    },
-};
-use symbolica::{
-    atom::{Atom, AtomCore, NamespacedSymbol, Symbol, SymbolAttribute, UserData},
-    function,
-};
+use symbolica::atom::{Atom, AtomCore, NamespacedSymbol, Symbol, SymbolAttribute, UserData};
+use symbolica::function;
 
 type Tensor = SymbolicTensor<PartialStructure>;
 fn slot(n: usize) -> Atom {
@@ -47,7 +42,7 @@ fn port(tensor: &Tensor, n: usize) -> usize {
 }
 fn vector(n: usize) -> Tensor {
     Tensor::infer(function!(
-        spenso::tensor_symbol!("slot_symmetry_native::v";Real),
+        tensor_symbol!("slot_symmetry_native::v";Real),
         slot(n)
     ))
     .unwrap()
@@ -73,9 +68,9 @@ fn selected_slot_reindexing_preserves_derivative_spectator_and_typed_trace_zero(
         .unwrap();
     assert!(zero.is_zero());
     assert_eq!(zero.rank(), 3);
-    let automatically_traced = zero.clone().finish_parts().unwrap();
-    assert!(automatically_traced.is_zero());
-    assert_eq!(automatically_traced.rank(), 1);
+    let finished = zero.clone().finish_parts().unwrap();
+    assert!(finished.is_zero());
+    assert_eq!(finished.structure(), zero.structure());
     let positions: Vec<_> = zero
         .structure()
         .logical_slots()
@@ -96,10 +91,6 @@ fn selected_slot_reindexing_preserves_derivative_spectator_and_typed_trace_zero(
     assert_eq!(
         trace.structure().logical_slots()[0].aind,
         PartialIndex::Explicit(AbstractIndex::Normal(7))
-    );
-    assert_eq!(
-        automatically_traced.structure().logical_slots(),
-        trace.structure().logical_slots()
     );
 }
 
@@ -142,7 +133,7 @@ fn selected_slot_canonicalization_reuses_subgroups_for_dummy_names() {
     let head = head("slot_symmetry_native::dummy");
     let w = |n| {
         Tensor::infer(function!(
-            spenso::tensor_symbol!("slot_symmetry_native::w";Real),
+            tensor_symbol!("slot_symmetry_native::w";Real),
             slot(n)
         ))
         .unwrap()
@@ -193,7 +184,7 @@ fn selected_slot_conjugation_composition_and_atom_reentry_keep_physical_head() {
         value.dirac_adjoint(true).unwrap().expression()
     );
     let matrix = Tensor::infer(function!(
-        spenso::tensor_symbol!("slot_symmetry_native::matrix";Real),
+        tensor_symbol!("slot_symmetry_native::matrix";Real),
         slot(2),
         slot(3)
     ))

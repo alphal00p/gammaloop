@@ -7,6 +7,7 @@
 //!
 //! Tests compare this syntax result to the existing fully expanded graph parser.
 
+use crate::network::tensor_symmetry::TensorSlotSymmetry;
 use symbolica::{
     atom::{
         Atom, AtomCore, AtomView, FunctionBuilder, MulView, PowView, Symbol,
@@ -604,8 +605,7 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
         fun: FunView<'_>,
         matcher: &mut SlotMatcher,
     ) -> Result<Canonicalized<Self>, StructureError> {
-        crate::network::tensor_symmetry::TensorSlotSymmetry::validate_function(fun)
-            .map_err(StructureError::ParsingError)?;
+        TensorSlotSymmetry::validate_function(fun).map_err(StructureError::ParsingError)?;
         if fun.get_symbol() == matcher.tags().dot {
             if matcher.compact_inner_product_parts::<Aind>(fun).is_none() {
                 return Err(StructureError::ParsingError(
@@ -887,9 +887,8 @@ impl<Aind: AbsInd + ParseableAind> NamedStructure<Symbol, Vec<Atom>, LibraryRep,
         value: FunView<'_>,
         matcher: &mut SlotMatcher,
     ) -> Result<Canonicalized<Self>, StructureError> {
-        crate::network::tensor_symmetry::TensorSlotSymmetry::validate_function(value)
-            .map_err(StructureError::ParsingError)?;
-        if crate::network::tensor_symmetry::TensorSlotSymmetry::from_symbol(value.get_symbol())
+        TensorSlotSymmetry::validate_function(value).map_err(StructureError::ParsingError)?;
+        if TensorSlotSymmetry::from_symbol(value.get_symbol())
             .map_err(StructureError::ParsingError)?
             .is_some()
         {

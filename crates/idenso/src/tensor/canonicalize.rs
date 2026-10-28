@@ -15,6 +15,8 @@ use linnet::permutation::Permutation;
 use linnet::tree::child_pointer::ParentChildStore;
 use spenso::network::graph::{NetworkEdge, NetworkLeaf, NetworkNode, NetworkOp};
 use spenso::network::store::NetworkStoreAccess;
+use spenso::network::tensor_symmetry::TensorSlotSymmetry;
+use spenso::shadowing::FactorProjector;
 use spenso::structure::abstract_index::AbstractIndex;
 use spenso::structure::partial::PartialStructure;
 use spenso::structure::representation::{LibraryRep, LibrarySlot, RepName, Representation};
@@ -369,13 +371,13 @@ fn contains_antisymmetric_tensor<Aind: AbsInd>(network: &SymbolicNet<Aind>) -> b
         };
         network.store.tensors[*index].name().is_some_and(|head| {
             head.is_antisymmetric()
-                || spenso::network::tensor_symmetry::TensorSlotSymmetry::from_symbol(head)
+                || TensorSlotSymmetry::from_symbol(head)
                     .ok()
                     .flatten()
                     .is_some_and(|declaration| {
-                        declaration.groups().any(|(kind, _)| {
-                            kind == spenso::shadowing::FactorProjector::Antisymmetric
-                        })
+                        declaration
+                            .groups()
+                            .any(|(kind, _)| kind == FactorProjector::Antisymmetric)
                     })
         })
     })
@@ -590,38 +592,31 @@ fn tensor_color<Aind: AbsInd + ParseableAind>(
 
     let mut argument_positions = (0..slots.len()).collect::<Vec<_>>();
     let mut metadata_positions = Vec::new();
-    let groups = if let Some(declaration) =
-        spenso::network::tensor_symmetry::TensorSlotSymmetry::from_symbol(function.get_symbol())
-            .ok()?
-    {
-        let mut unmatched = slots
-            .iter()
-            .enumerate()
-            .map(|(position, slot)| (position, slot.to_atom()))
-            .collect::<Vec<_>>();
-        for (argument, value) in function.iter().enumerate() {
-            if let Some(found) = unmatched
+    let groups =
+        if let Some(declaration) = TensorSlotSymmetry::from_symbol(function.get_symbol()).ok()? {
+            let mut unmatched = slots
                 .iter()
-                .position(|(_, slot)| slot.as_view() == value)
-            {
-                let (position, _) = unmatched.remove(found);
-                argument_positions[position] = argument;
-            } else {
-                metadata_positions.push(argument);
+                .enumerate()
+                .map(|(position, slot)| (position, slot.to_atom()))
+                .collect::<Vec<_>>();
+            for (argument, value) in function.iter().enumerate() {
+                if let Some(found) = unmatched
+                    .iter()
+                    .position(|(_, slot)| slot.as_view() == value)
+                {
+                    let (position, _) = unmatched.remove(found);
+                    argument_positions[position] = argument;
+                } else {
+                    metadata_positions.push(argument);
+                }
             }
-        }
-        declaration
-            .groups()
-            .map(|(kind, group)| {
-                (
-                    group.to_vec(),
-                    kind == spenso::shadowing::FactorProjector::Antisymmetric,
-                )
-            })
-            .collect::<Vec<_>>()
-    } else {
-        Vec::new()
-    };
+            declaration
+                .groups()
+                .map(|(kind, group)| (group.to_vec(), kind == FactorProjector::Antisymmetric))
+                .collect::<Vec<_>>()
+        } else {
+            Vec::new()
+        };
     Some((
         TensorColor {
             head: function.get_symbol(),
