@@ -476,6 +476,8 @@ impl Options {
                     && variant == "cached"
                     && suite == "tuning"
                     && repetitions == 1
+                    && sample == Some(0)
+                    && case_id.is_some()
                     && cache.is_some()
                     && running_cache.is_some()
                     && running_cache_no_read_delta
@@ -1857,6 +1859,10 @@ mod tests {
         let mut command = Command::new("unlaunched-collector");
         command.args(args).args([
             "--worker",
+            "--sample",
+            "0",
+            "--case-id",
+            "frozen-tuning-case",
             "--case-id",
             "case",
             "--variant",
@@ -1934,6 +1940,7 @@ mod tests {
         assert!(parsed_options(&fixed).is_err());
         for extra in [
             vec!["--classify-cache-hits"],
+            vec!["--sample", "1"],
             vec!["--suite", "held-out"],
             vec!["--monitor"],
             vec!["--progress-snapshot", "presentation.json"],
