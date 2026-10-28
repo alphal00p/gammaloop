@@ -22,7 +22,7 @@ status = "Candidate; NEW independent Astra review required before22"
 lifecycle = "investigation"
 owner = "unassigned"
 reviewed_at = "2026-10-28"
-review_ref = "82c1eb5b40c4911e59dfc25c9ba1786e282e111c"
+review_ref = "35b444d09d739bd5532deac21ec013ed7422d35b"
 products = ["gammaloop", "feynkit"]
 topics = ["generation", "validation"]
 review_triggers = ["crates/feynkit-generator/src/grouping.rs", "crates/feynkit-generator/tests/generation_oracle/**", "crates/spenso/src/network/library/symbolic.rs", "nix/rust-workspace.nix"]
@@ -47,6 +47,13 @@ symbol = "actual registration and pool controls"
 anchor = "fn register_indices("
 end_anchor = "/// A user filter"
 digest = "0d638c2b0b4d89183621d6d202a8e551fb5e3f34"
+
+[[section.note.scope]]
+path = ".config/nextest.toml"
+symbol = "source19 normal-run resource reservation"
+anchor = "# Source19 full-payload oracle children use actual 1/8/32-thread Run pools."
+end_anchor = "\n[profile.ci_gammaloop]"
+digest = "6f601f9f2e0ecb0d421aa50724834cb7fee18117"
 
 [[section.note]]
 id = "generation-staged-python-fixes"

@@ -244,22 +244,24 @@ own workspace. Bounded: one regression, one bisect, one written verdict.
   #link("generation-integration-wp3-staged.typ")[the staged integration record]
   and `evidence/generation-integration/wp3/prerequisites08-14.json`.
 
-- #strong[Bounded source19–21 candidate 2026-10-28:] implementation code
-  `4aa4d3d8` → `c75ab826` → `82c1eb5b` preserves current admitted colour
-  completion and adds completed-quotient/nonfinite controls without graph
-  numerator expansion. Both imported historical row expectations remain active
-  and FAIL at numerator digests; the canonical serialization diagnostic is not
-  a physics proof, and the YM difference is not fully classified. The separate
-  #link("generation-integration-wp3-grouping.typ")[deterministic grouping note]
-  and `evidence/generation-integration/wp3/units19-21.json` record exact checks
-  and limits. NEW independent Astra review is required before22. The staged
-  22–26 parallel preparation is not imported. The current registry inventory
-  was incorrectly reported as57/7/21 at `df551850`; canonical rules found56/7/22
-  because the new grouping end anchor was ambiguous. The bounded ORACLE-P2
-  correction restores computed57/7/21 and splits the registration matrix into
-  individually budgeted tests; see the grouping note and correction receipt.
-  Both P1 row gates and NEW independent Astra review remain required. Unrelated
-  source31 reconciliation stays pending.
+- #strong[Source19–21 recertification and P2 candidate 2026-10-28:]
+  frozen `df551850` and runtime `82c1eb5b` remain preserved. Two independent
+  Astra adjudications approve complete fixed-case physical/typed-interface
+  equivalence against source19 `8d49e6ec`; both original rows pass there.
+  Exact whole-factor/local-factor, signed-routing, axis and native group/source
+  weight certificates justify only the two authorized native numerator-digest
+  updates. No other expected field or production algebra changes. The compact
+  #link("generation-integration-wp3-grouping.typ")[grouping note/archive] records
+  the old/current integers and frozen235-artifact index.
+  Cumulative P2 input `ea0e78bc` / code `fa33dec7` is also APPROVED and integrated.
+  Candidate code `35b444d0` adds a bounded use of the existing two-slot resource
+  group for the actual Nix16-worker/240-second policy. Combined normal15-test
+  execution passes under the Nix-derived16-worker/two-slot policy; NEW independent
+  Astra review is required before22. No whole
+  WP3/physics/performance/distribution approval is claimed. The three older
+  frame expectations and source30/31 remain untouched. Prepared22–26 `f2e32c44`
+  is independently approved but separate; later integration must correct its
+  inherited audit classification with canonical scope rules.
 
 - `jj duplicate` the v4 chain (`kursouxx::kpslpwqz`) onto the WP2 base; do not
   rebase in place, so the 19 live workspaces on older lines stay valid.

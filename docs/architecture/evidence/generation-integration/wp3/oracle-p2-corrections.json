@@ -431,5 +431,14 @@
       "sha256": "e3792074cd68b3ca429785b6d0123698172030f94e49bd1b88593603240b8ec4",
       "bytes": 521
     }
+  },
+  "current_supersession": {
+    "input_candidate": "ea0e78bcc246cd070cb2f7b26c82b45f9a65ed81",
+    "scoped_review": "row-recertification/p2-review.json",
+    "status": "Input P2 APPROVED and cumulatively integrated; new combined candidate/resource validation and review pending",
+    "warning_classification": "Supersedes validation_warnings wording: one existing Clarabel unused-import warning and one mismatched-lifetime-syntax warning; not two lifetime warnings. Original branch receipt remains frozen at ea0e78bc.",
+    "normal_budget": "Original two-process validation remains historical. Actual nextestCheckFor cap is16 on this host; new candidate assigns owned15 tests to existing memory-intensive max2 group and runs without --test-threads override.",
+    "input_artifacts_workspace": "/shared/lcnbr/dev/gammaloop/generation-oracle-budget-fix",
+    "combined_normal_outcome": "15/15 PASS, run c18e0610, actual16-worker Nix-derived setting and checked-in max2 resource group; NEW combined review required"
   }
 }

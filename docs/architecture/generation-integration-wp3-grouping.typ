@@ -95,18 +95,35 @@ kernel isolation, Nix parsing and the two Typst notes pass. The installed nixfmt
 rejects the unchanged baseline style too; no unrelated whole-file rewrite or
 Nix formatter pass is claimed.
 
-The slice receipt separates successful semantic/metadata controls from failing
-historical assertions. Both imported source19 row tests retain their exact
-expectations and fail again on frozen `82c1eb5b` only at the numerator digest.
-Both current full witness payloads are byte-identical to the initial source19
-failure witnesses. Their preceding
-class/naming/thread comparisons completed, and reported counts, weights,
-symmetry factors, content and IDs match. A diagnostic reproduces the canonical
-row's recorded digest using verified old spellings and omitted interface fields;
-this is not a physics certificate. The analogous YM diagnostic does not recover
-its recorded digest. That difference is not classified as physics-equivalent:
-Before source22, MainSol needs a frozen-source numerator/local-fragment dump at the first differing
-boundary. No expectation, snapshot or physical convention is rerecorded.
+At frozen `df551850` / runtime `82c1eb5b`, both imported numerator-digest rows
+failed with unchanged expectations. The initial spelling/interface-omission
+experiment did not establish physical equivalence. Subsequent frozen-source
+investigation built exact source19 `8d49e6ec` with its locked `c78cffc2` kernel:
+both original rows pass. Two independent Astra certificate adjudications now
+APPROVE fixed-case values, live typed interfaces and complete native provenance.
+The compact archive `evidence/generation-integration/wp3/row-recertification/`
+retains both exact review receipts, the frozen diagnosis and235-artifact hash
+index, first local witness and proof scripts. Complete raw captures and the
+unchanged task-owned baseline workspace remain available at their recorded paths.
+
+The complete join covers1537 full keys,29451 local factors and97412 labelled
+axes. All280 nonliteral local pairs and1537 already-factorized whole graph
+numerators are exactly equal under both pinned kernels without expansion.
+All8170 axis permutations and explicit source interfaces are retained and
+checked, with exact routing, source factors, group members, ratios and weights.
+YM first differs before colour filtering at a symmetry-equivalent four-gluon
+source-expression order; canonical local expressions agree under the verified
+constructor spellings. This is bounded physical and typed-interface equivalence,
+not private proof-history/archive identity or an all-physics theorem.
+
+The coordinator authorized only the two native numerator-digest migrations:
+YM `0x1c149c8e666851cd` → `0xae5ed16f90c02201`; canonical
+`0xe112f4cc670092f9` → `0x82a821cc454caa0c`. Values are recomputed from untouched
+native82 captures with exact integers and every interface field retained.
+All other expected fields and physical assertions remain unchanged. Code
+`35b444d0` combines these literals with the approved cumulative P2 split and an
+owned resource reservation. Actual migration and combined normal-run outcomes
+are recorded separately; NEW independent Astra review remains required before22.
 
 The three earlier frame assertions remain failures too. Four existing parser
 helpers that expand graph numerators remain omitted without repository-wide
@@ -119,7 +136,7 @@ wheel checks remain pending. Later22–26 preparation and approved25/36,27–29,
 lanes are not imported here. Source38 still needs prerequisites through36.
 
 
-== ORACLE P2 correction awaiting NEW independent Astra review
+== Approved P2 input and combined resource validation
 
 The correction starts from frozen `df55185059f31bea548a5de27c95828656fbdc52`.
 ORACLE-P2-REGISTRY now uses the unique production multiline header. The corrected
@@ -128,7 +145,9 @@ and the exact Git blob digest, matching the canonical documentation owner.
 The original presence-only audit and receipt are historical false-positive
 evidence, not pass credit: the reviewed base actually had56 valid scopes,
 7 inherited mismatches and22 additional mismatches. After this correction the
-computed inventory is57/7/21; every new owned scope is valid. Unrelated source31
+computed input inventory is57/7/21; its three owned scopes are valid. The combined
+candidate adds one uniquely bounded resource-policy scope; its current audit is
+recorded separately. Unrelated source31
 scopes are unchanged. The existing canonical boundary regression covers repeated
 starts, repeated ends and reversed ranges.
 
@@ -138,16 +157,41 @@ Each captures a fresh `generation,1` reference and compares one cell from
 {generation, increasing, decreasing, shuffled} × {1,8,32} to that same semantic
 reference. The two full cases and seven-zero/two-survivor subset, exact exported
 payload lines, registration assertions and nonzero worker observations remain.
-A separate negative control verifies child panic propagation. Current selection:
-#raw("cargo nextest run --locked --cargo-profile ci-optim --profile ci_gammaloop -p feynkit-generator --test generation_oracle --test-threads 2 -E 'test(outputs_do_not_depend_on_index_registration_order_) or test(=index_registration_child_failure_propagates)'", block: true)
-Run through the licensed Nix development environment. The correction receipt
-`evidence/generation-integration/wp3/oracle-p2-corrections.json` records the
-actual run identities, normal240-second budgets, durations and coverage.
-The earlier435.83-second manual pass does not certify the canonical runner.
+A separate negative control verifies child panic propagation. The cumulative
+P2 input `ea0e78bc` / code `fa33dec7` is independently APPROVED. Its original
+two-process runs retain that source identity. The actual Nix `nextestCheckFor`
+owner computes min(nproc, positive NIX_BUILD_CORES,16), selects `ci_gammaloop`,
+and has no feynkit run filter. This host derives16 workers. To preserve each
+240-second budget while avoiding16 simultaneous graph-heavy parents, the
+combined candidate assigns the12 cells, failure control and two rows to the
+existing `memory-intensive` group (maximum2). No group cap or global timeout
+is relaxed. The normal command is retained as
+`target/wp3-units19-21-recertification/run-combined.sh`; it supplies the exact
+Nix-derived worker budget without a two-thread CLI override and runs all15
+selected default tests with FEYNKIT_ORACLE_THREADS=1,8,32.
 
-These two corrections do not clear either P1 row gate. YM remains unclassified;
-canonical serialization is not a physical/local-factor certificate. MainSol owns
-the frozen-baseline diagnosis. No source22+, expectation, production grouping,
-quotient algebra or baseline reference changes are included. Earlier frame
-failures and full WP3, source30/31, physics, performance and distribution gates
-remain. Stop for NEW independent Astra review before any parent integration.
+Both approved input corrections, the exact native expected migration and the
+additional resource reconciliation require NEW combined Astra review. Earlier
+frame failures and full WP3, source30/31, physics, performance and distribution
+gates remain; no22–26 preparation is imported here.
+
+== Combined normal-run result awaiting review
+
+On candidate code `35b444d0`, normal `ci_gammaloop` run
+`c18e0610-341d-4060-a1f7-f687b16b4158` passes all15 selected tests in494.041s.
+The12 registration cells and expected child-failure control pass with the
+Nix-derived16-worker budget and effective two-slot resource group. Every test
+remains below240s. The YM row passes in92.593s and the canonical row in16.203s;
+each keeps actual1/8/32 Classes::None/Auto and Named/Minimal full-payload controls.
+The same-production pre-change normal run failed exactly the two old hashes
+in97.701s/12.565s; these failed assertions remain archived as historical evidence.
+All production Rust, kernels, locks, source fixtures and physical assertions
+are unchanged. Focused oracle Clippy and Rustfmt pass. The corrected canonical
+scope audit reports58 valid ranges,7 inherited and21 additional mismatches;
+all four owned scopes and both current note titles are valid. This origin
+breakdown is not a claim that all mismatches are anchor failures or digests.
+No full documentation or Nix runtime derivation pass is claimed. Source30 and
+all remaining WP3 physics/distribution/performance gates stay pending.
+
+The fixed-case certificates and P2 input approvals do not approve this new
+expected-migration/resource candidate. Stop for NEW combined Astra review before22.

@@ -1,0 +1,597 @@
+{
+  "schema": 1,
+  "status": "Combined recertification/P2 candidate validated; STOP for NEW independent Astra review before22. No whole-WP3 approval.",
+  "implementer": "Sol",
+  "author": {
+    "name": "Lucien Huber",
+    "email": "im@lcnbr.ch"
+  },
+  "base": "df55185059f31bea548a5de27c95828656fbdc52",
+  "frozen_test_and_config_commit": "35b444d09d739bd5532deac21ec013ed7422d35b",
+  "code_change": "qolsquwuzxtusvwtkkwmvyupunxvstvw",
+  "evidence_change": "xrkpqnsqlplywkoortzrmwwvqtszzwyu",
+  "candidate_bookmark": "generation-integration-units19-21-recertified",
+  "code_files_sha256": {
+    "crates/feynkit-generator/tests/generation_oracle/main.rs": "cdf70ce91b2512ff7aa47fb232910abffa770f16b31834c831b5785961868c53",
+    ".config/nextest.toml": "03e166fbe150d150450df98ebfa00e3b823b487cab5f6f9ff3d4cfb4bff4b09f",
+    "docs/architecture/evidence/generation-integration/wp3/oracle-registry-audit.py": "c6fc5292b603b9bd80ebb702495606747a0cd20369b4e5f958554bf735eb2aef"
+  },
+  "hash_semantics": "All code/source hashes above bound to frozen35b. Mutable registry/execution/replay/receipt excluded. Old235-artifact certificate remains frozen df551/82 with original source and producers unchanged. No recursive/self hashes. Derivation before/after_file_sha256 describe ONLY two-token intermediate edit before approved cumulative P2 replay; final combined main binds35b and equals approvedfa33 bytes plus exactly those2 literals.",
+  "authorized_expected_migration": {
+    "input_code": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+    "frozen_candidate": "df55185059f31bea548a5de27c95828656fbdc52",
+    "before_file_sha256": "b23140aece24dd077c6442052143e6838130b02fb700188ca6d727e3b0ebb9b3",
+    "after_file_sha256": "03d1482e0eb1ee4acf66243a83c41aa5aae8a309f4ce0329fb20142081d51f7c",
+    "rows": [
+      {
+        "case": "ym_ggg_zero_color_L3",
+        "old_integer": 2023414268013597133,
+        "old_hex": "0x1c149c8e666851cd",
+        "new_integer": 12564710287510348289,
+        "new_hex": "0xae5ed16f90c02201",
+        "current_native_capture": "target/wp3-units19-21/frozen-row-diagnosis/current-decoded/captures/ym_ggg_zero_color_L3/grouped.json",
+        "current_sha256": "1ea989a6584c09d5ec19b4243fbcdb4898c83f4b07c6cf70233ae04e5cc0d356",
+        "baseline_native_capture": "target/wp3-units19-21/frozen-row-diagnosis/baseline-decoded/captures/ym_ggg_zero_color_L3/grouped.json",
+        "baseline_sha256": "d0a1b760170a4d68e65517ee99dcb30ed9e8a1fa685393d6278bdd11458f7cfc",
+        "hashing": "Every native interface retained; no head mapping, payload normalization or parameter substitution in the digest derivation."
+      },
+      {
+        "case": "xs_qcdqed_addx_canonical_scalar_lr_L3",
+        "old_integer": 16218294366853174009,
+        "old_hex": "0xe112f4cc670092f9",
+        "new_integer": 9414812182237719052,
+        "new_hex": "0x82a821cc454caa0c",
+        "current_native_capture": "target/wp3-units19-21/frozen-row-diagnosis/current-decoded/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/grouped.json",
+        "current_sha256": "571f715365f414a4faaabd31ec02257f3774c64202d73a16793c93f4b08e8e53",
+        "baseline_native_capture": "target/wp3-units19-21/frozen-row-diagnosis/baseline-decoded/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/grouped.json",
+        "baseline_sha256": "0da4eadf85fa19ce39aad53f20f4100595340ab430fd97edd566aaef89160b61",
+        "hashing": "Every native interface retained; no head mapping, payload normalization or parameter substitution in the digest derivation."
+      }
+    ],
+    "precision": "Python exact arbitrary-precision integers; u64 wrapping is explicit. No JS-number or floating conversion."
+  },
+  "physical_assertions": "Same counts, zero memberships, source inventory, topology/assignment/aut/symmetry/cuts/weights, full graph/local numerator/interface payloads, group members/ratios, other digest expectations and global240s timeout. Main file is byte-exact approvedfa33 except the2 authorized literals. All existing crate Rust files other than the oracle test main, and all production sources, are byte-identical to82. New archived diagnostic Rust files are exact approved-proof copies.",
+  "certificate_approvals": {
+    "provenance": {
+      "receipt": "row-recertification/provenance-review.json",
+      "sha256": "2894eb537002e38061594c4040df0438fa372d70d1c17f83a469bf4b6e813492"
+    },
+    "mathematics": {
+      "receipt": "row-recertification/math-review.json",
+      "sha256": "940cfc19b4d665bcf2c354dade2b6ee22248b980ed0b1e5958fe7d083ce55ed7"
+    },
+    "scope": "Exact two fixed cases:1537 full keys,29451 local factors,97412 axes/8170 interfaces; both kernels agree without graph expansion; complete native signed/source/group weights and ratios. No private-history/all-physics theorem.",
+    "archive_index": "row-recertification/archive-index.json",
+    "full_original_artifacts": "target/wp3-units19-21/frozen-row-diagnosis",
+    "baseline_workspace": "/shared/lcnbr/dev/gammaloop/generation-row-baseline"
+  },
+  "approved_cumulative_P2": {
+    "base": "df55185059f31bea548a5de27c95828656fbdc52",
+    "input": "ea0e78bcc246cd070cb2f7b26c82b45f9a65ed81",
+    "code": "fa33dec7c396e5e0df22a21dfca936cd4e8cbc4c",
+    "review": "row-recertification/p2-review.json",
+    "receipt": "oracle-p2-corrections.json",
+    "reconciliation": "Whole approved cumulative test split/canonical checker/registry/evidence incorporated, not only evidence tip. Main expected2-token delta outside registration scope. Existing grouped/source/pool assertions and all12 cells retained.",
+    "P3_warning_supersession": "Current receipt explicitly corrects old wording to one Clarabel unused-import warning and one mismatched-lifetime-syntax warning; original frozen branch receipt unchanged."
+  },
+  "Nix_runtime_validation": {
+    "owner_files": [
+      "nix/ci.nix",
+      "nix/rust-workspace.nix"
+    ],
+    "evaluation": "target/wp3-units19-21-recertification/nix-runtime-owner-v2.json",
+    "evaluated": {
+      "generatorExtraFeatures": [],
+      "name": "feynkit",
+      "packages": [
+        "feynkit",
+        "feynkit-amplitude",
+        "feynkit-cff",
+        "feynkit-generator",
+        "feynkit-graph",
+        "feynkit-kinematics",
+        "feynkit-model",
+        "feynkit-py",
+        "feynkit-tensor",
+        "feynkit-ufo"
+      ],
+      "runFilter": null
+    },
+    "profile": "ci_gammaloop",
+    "worker_policy": "min(nproc, positive NIX_BUILD_CORES,16);actual384/384 derives16",
+    "budget_evidence": "target/wp3-units19-21-recertification/runtime-budget.log",
+    "source_reconciliation": "The prior P2 validation used a2-process CLI override. Actual Nix can schedule16 parents; added one exact owned override assigning the12 parents/failure control/two rows to existing memory-intensive(max2). Global cap/group cap/timeout unchanged.",
+    "effective_group_evidence": "target/wp3-units19-21-recertification/effective-test-groups.log",
+    "execution": "Exact retained nextestCheckFor budget calculation; no --test-threads override on combined run. Task Nix wrapper preserves/loads license silently and retains2 Cargo jobs/global Rayon budget; explicit Run1/8/32 assertions remain. No full Nix archive extraction/runtime derivation or source30 closure certification claimed."
+  },
+  "checks": [
+    {
+      "name": "before normal2 rows",
+      "status": "EXPECTED_FAIL_BEFORE_LITERAL_MIGRATION",
+      "exit_code": 100,
+      "source": "df55185059f31bea548a5de27c95828656fbdc52",
+      "production": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+      "profile": "ci_gammaloop",
+      "threads": [
+        1,
+        8,
+        32
+      ],
+      "test_processes": 1,
+      "selected": 2,
+      "failed": 2,
+      "seconds": 110.273,
+      "per_row_seconds": {
+        "ym_ggg_zero_color_L3": 97.701,
+        "xs_qcdqed_addx_canonical_scalar_lr_L3": 12.565
+      },
+      "all_summary_fields_except_numerator_digest_identical": true,
+      "log": "target/wp3-units19-21-recertification/before-normal.log",
+      "binary": {
+        "path": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/generation_oracle-513b63cbc76b9164",
+        "sha256": "bfa018c4d608aaad37e5aceca025d64060dd1559eaf0e1a72bec1a35d6c6322c",
+        "preserved_copy": "target/wp3-units19-21-recertification/frozen-before-oracle",
+        "source": "df55185059f31bea548a5de27c95828656fbdc52",
+        "production": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c"
+      }
+    },
+    {
+      "name": "combined normal matrix+rows",
+      "status": "PASS",
+      "exit_code": 0,
+      "run_id": "c18e0610-341d-4060-a1f7-f687b16b4158",
+      "source": "35b444d09d739bd5532deac21ec013ed7422d35b",
+      "profile": "ci_gammaloop",
+      "global_workers": 16,
+      "effective_owned_group": "memory-intensive",
+      "group_max": 2,
+      "per_test_budget_seconds": 240,
+      "selected": 15,
+      "passed": 15,
+      "failed": 0,
+      "timed_out": 0,
+      "seconds": 494.041,
+      "thread_modes": [
+        1,
+        8,
+        32
+      ],
+      "parent_child_mode": "Default parents; child-mode variable not set by invocation or Nix owner. Post-run environment preflight is labelled as such; attempted late live snapshot receives no credit.",
+      "tests": [
+        {
+          "name": "index_registration_child_failure_propagates",
+          "classname": "feynkit-generator::generation_oracle",
+          "timestamp": "2026-10-28T03:58:08.852+00:00",
+          "time": "0.018"
+        },
+        {
+          "name": "outputs_do_not_depend_on_index_registration_order_decreasing_32",
+          "classname": "feynkit-generator::generation_oracle",
+          "timestamp": "2026-10-28T03:58:08.869+00:00",
+          "time": "63.769"
+        },
+        {
+          "name": "outputs_do_not_depend_on_index_registration_order_decreasing_1",
+          "classname": "feynkit-generator::generation_oracle",
+          "timestamp": "2026-10-28T03:58:08.852+00:00",
+          "time": "82.732"
+        },
+        {
+          "name": "outputs_do_not_depend_on_index_registration_order_decreasing_8",
+          "classname": "feynkit-generator::generation_oracle",
+          "timestamp": "2026-10-28T03:59:12.639+00:00",
+          "time": "60.209"
+        },
+        {
+          "name": "outputs_do_not_depend_on_index_registration_order_generation_1",
+          "classname": "feynkit-generator::generation_oracle",
+          "timestamp": "2026-10-28T03:59:31.584+00:00",
+          "time": "77.252"
+        },
+        {
+          "name": "outputs_do_not_depend_on_index_registration_order_generation_32",
+          "classname": "feynkit-generator::generation_oracle",
+          "timestamp": "2026-10-28T04:00:12.848+00:00",
+          "time": "60.861"
+        },
+        {
+          "name": "outputs_do_not_depend_on_index_registration_order_generation_8",
+          "classname": "feynkit-generator::generation_oracle",
+          "timestamp": "2026-10-28T04:00:48.835+00:00",
+          "time": "59.428"
+        },
+        {
+          "name": "outputs_do_not_depend_on_index_registration_order_increasing_1",
+          "classname": "feynkit-generator::generation_oracle",
+          "timestamp": "2026-10-28T04:01:13.709+00:00",
+          "time": "75.613"
+        },
+        {
+          "name": "outputs_do_not_depend_on_index_registration_order_increasing_32",
+          "classname": "feynkit-generator::generation_oracle",
+          "timestamp": "2026-10-28T04:01:48.263+00:00",
+          "time": "60.055"
+        },
+        {
+          "name": "outputs_do_not_depend_on_index_registration_order_increasing_8",
+          "classname": "feynkit-generator::generation_oracle",
+          "timestamp": "2026-10-28T04:02:29.322+00:00",
+          "time": "61.240"
+        },
+        {
+          "name": "outputs_do_not_depend_on_index_registration_order_shuffled_1",
+          "classname": "feynkit-generator::generation_oracle",
+          "timestamp": "2026-10-28T04:02:48.319+00:00",
+          "time": "78.215"
+        },
+        {
+          "name": "outputs_do_not_depend_on_index_registration_order_shuffled_32",
+          "classname": "feynkit-generator::generation_oracle",
+          "timestamp": "2026-10-28T04:03:30.562+00:00",
+          "time": "63.529"
+        },
+        {
+          "name": "xs_qcdqed_addx_canonical_scalar_lr_L3",
+          "classname": "feynkit-generator::generation_oracle",
+          "timestamp": "2026-10-28T04:04:34.092+00:00",
+          "time": "16.203"
+        },
+        {
+          "name": "outputs_do_not_depend_on_index_registration_order_shuffled_8",
+          "classname": "feynkit-generator::generation_oracle",
+          "timestamp": "2026-10-28T04:04:06.534+00:00",
+          "time": "63.534"
+        },
+        {
+          "name": "ym_ggg_zero_color_L3",
+          "classname": "feynkit-generator::generation_oracle",
+          "timestamp": "2026-10-28T04:04:50.296+00:00",
+          "time": "92.593"
+        }
+      ],
+      "log": "target/wp3-units19-21-recertification/combined-normal.log",
+      "junit": "target/wp3-units19-21-recertification/combined-junit.xml",
+      "binary": {
+        "path": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/generation_oracle-513b63cbc76b9164",
+        "sha256": "5d22a60d79b0a7b479d388862f4cc33113b19749c0d903fc6c99600f00340e29",
+        "source": "35b444d09d739bd5532deac21ec013ed7422d35b",
+        "selected_names": [
+          "index_registration_child_failure_propagates",
+          "outputs_do_not_depend_on_index_registration_order_decreasing_1",
+          "outputs_do_not_depend_on_index_registration_order_decreasing_32",
+          "outputs_do_not_depend_on_index_registration_order_decreasing_8",
+          "outputs_do_not_depend_on_index_registration_order_generation_1",
+          "outputs_do_not_depend_on_index_registration_order_generation_32",
+          "outputs_do_not_depend_on_index_registration_order_generation_8",
+          "outputs_do_not_depend_on_index_registration_order_increasing_1",
+          "outputs_do_not_depend_on_index_registration_order_increasing_32",
+          "outputs_do_not_depend_on_index_registration_order_increasing_8",
+          "outputs_do_not_depend_on_index_registration_order_shuffled_1",
+          "outputs_do_not_depend_on_index_registration_order_shuffled_32",
+          "outputs_do_not_depend_on_index_registration_order_shuffled_8",
+          "xs_qcdqed_addx_canonical_scalar_lr_L3",
+          "ym_ggg_zero_color_L3"
+        ]
+      }
+    },
+    {
+      "name": "focused oracle Clippy -Dwarnings",
+      "status": "PASS",
+      "exit_code": 0,
+      "command": "cargo clippy --locked --profile ci-optim -p feynkit-generator --test generation_oracle --no-deps -- -D warnings",
+      "log": "target/wp3-units19-21-recertification/clippy.log"
+    },
+    {
+      "name": "Rustfmt",
+      "status": "PASS",
+      "exit_code": 0,
+      "command": "cargo fmt --all -- --check",
+      "log": "target/wp3-units19-21-recertification/fmt-final.log"
+    },
+    {
+      "name": "canonical scopes/title",
+      "status": "PASS_OWNED_ONLY",
+      "owned_scopes": 4,
+      "titles": 2,
+      "global_valid": 58,
+      "global_origin_inherited": 7,
+      "global_origin_additional": 21,
+      "all_status_counts": {
+        "valid": 58,
+        "stale-digest": 24,
+        "missing-or-ambiguous-anchor": 4
+      },
+      "full_docs_pass": false,
+      "script": "target/wp3-units19-21-recertification/canonical-audit.py",
+      "log": "target/wp3-units19-21-recertification/canonical-audit.log",
+      "integrity": "target/wp3-units19-21-recertification/metadata-integrity.json"
+    },
+    {
+      "name": "Typst2 notes",
+      "status": "PASS",
+      "exit_code": 0,
+      "command": "bash target/wp3-units19-21-recertification/docs-checks.sh"
+    }
+  ],
+  "verification_reuse": "Do not repeat unchanged both-kernel exact proofs or broad233 owner suite. Independent approvals and all235 hashes verified; production/locks/NixCI/runtime owner/Hakari manifests unchanged. Original81 scoped algebra approval remains source82.",
+  "setup_errors_no_credit": [
+    "Initial Nix query asked for a non-exported helper; corrected real ci.groups evaluation succeeds.",
+    "Late live-parent snapshot ran after all tests ended; receives no live-environment credit. Retained invocation, budget/group output, JUnit15 cases and labelled post-run preflight provide normal-run evidence."
+  ],
+  "preserved": {
+    "frozen_source19_21_ref": "df55185059f31bea548a5de27c95828656fbdc52",
+    "certificate_sha256": "73036766b34c3151de753465c770b168a654adaa08632a6288485fd35a0a7f9f",
+    "original235_artifacts_verified": true,
+    "original86_artifacts_and8_binaries_verified": true,
+    "refs": {
+      "generation-integration-source-v4": "e0a779808174c64057fecfd062c948b8de8e5c1f",
+      "generation-integration-source-stage1": "f25961e21689ed1a33365430b4566a9a2e9c319a",
+      "generation-integration-source-transplant": "4e00851731541be7de4626b7d1e5274d79b9eea8",
+      "generation-integration-source-upstream": "588148851e3e989ecbb7478279db7d46727e23a8",
+      "generation-integration-source-v2": "d9ff71a6826166e57bf3bba56ffcf8a57ffaf9db",
+      "generation-integration-source-pre-v2": "75b6c7a88fb099f142bcec9227ee614b6fc56376",
+      "generation-integration-source-v3": "dfe6387606e44a96f110c1ce03f52d92824dbdb1",
+      "generation-integration-source-v3-original": "6d207cfce36ab2bb128d92d67cc3da182afb0bb1",
+      "generation-integration-source-m1-source": "9540f5bbf7a96609e69af6983d2bf7325530126d",
+      "generation-integration-plan": "4374f72027b75df9ff95c5c7a725ee75beac27a8",
+      "generation-integration-pre-rebuild": "5226894ee1af61797e6b819d7e801a22bf17bace",
+      "generation-integration-pre-staged": "438b61500da4b32841c64211103e5da6fc4c4a72",
+      "generation-integration-staged-code": "f264028690d117b4b99c320b61b7f2d5d89222d0",
+      "generation-integration-drawing15-16": "8430e701d858b07e40203a25bfc3b1fa61b15f4a",
+      "generation-integration-staged17-18-37": "817b5886a50276efea05ab860d22016e1fb0c203",
+      "generation-staged-evidence-fixes": "edabf052c5780be6460a9043cb9704e1583a2e4c",
+      "generation-integration-corrected-staged": "d48f9d1aedc766eea5cb185ab6029d1f04462043",
+      "generation-integration-source19-code": "4aa4d3d88394fd39be75f460b3ace4bc72a48894",
+      "generation-integration-source20-code": "c75ab826e6eb69c711130803bd54223664c9879a",
+      "generation-integration-source21-code": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+      "generation-integration-units19-21": "df55185059f31bea548a5de27c95828656fbdc52"
+    },
+    "historical_task_marker_at_capture": {
+      "generation-integration": "df55185059f31bea548a5de27c95828656fbdc52"
+    },
+    "intentional_task_ref_move": "Only generation-integration will advance to new candidate after finalization; generation-integration-units19-21/817/d48/source/plan refs remain frozen."
+  },
+  "future_scope": "Prepared22-26 f2e32c44 approved elsewhere but NOT imported. Later canonical audit P3 recorded in execution. Source25/36,27-29,46 remain ordered later;38 through36.",
+  "remaining_gates": [
+    "NEW combined Astra review before22",
+    "three older historical frame-hash rows unchanged",
+    "source30 missing non-Rust inputs and source31 unrelated registry drift",
+    "remaining fullWP3/fivea_ddx/BRST/epem/CoolQM physics",
+    "M-rebuild memory/performance",
+    "final WASM/PDF/sdist/native/Pyodide/Community distribution certification"
+  ],
+  "retained_processes": [],
+  "retained_artifacts": "target/wp3-units19-21-recertification",
+  "artifacts": [
+    {
+      "path": "target/wp3-units19-21-recertification/after-binary.json",
+      "bytes": 1233,
+      "sha256": "dc2badf51f0a9018d4ebdc8d7018765a16c0b5161b0da40b849b6f63d22cb98c"
+    },
+    {
+      "path": "target/wp3-units19-21-recertification/archive-proof.py",
+      "bytes": 2330,
+      "sha256": "20254e3e5836742618b97111dffd20272f64186b4a0913a04f053b6f7580d0df"
+    },
+    {
+      "path": "target/wp3-units19-21-recertification/before-binary.json",
+      "bytes": 387,
+      "sha256": "eb127db04032718926136431b3959bf8166376195e61d4f7c8e362969346a327"
+    },
+    {
+      "path": "target/wp3-units19-21-recertification/before-inventory.json",
+      "bytes": 20114,
+      "sha256": "9294069c8baa4240e72acb5e8ac7763a94b97d77a4e2fd55c1caf82693c30a9e"
+    },
+    {
+      "path": "target/wp3-units19-21-recertification/before-inventory.log",
+      "bytes": 63,
+      "sha256": "4830204c81d9682313346756c34cb4cb46d3be5942b49ad8c7b04ceb0f58f499"
+    },
+    {
+      "path": "target/wp3-units19-21-recertification/before-normal.log",
+      "bytes": 6867,
+      "sha256": "1d305719d3a27852428967fdcd001c40360ec2ed17d51ca4746917adae49bd16"
+    },
+    {
+      "path": "target/wp3-units19-21-recertification/canonical-audit.log",
+      "bytes": 1655,
+      "sha256": "1984064fc95e18118aad60f7609751985f5aa9357d2cf2389a41a76718a82e6c"
+    },
+    {
+      "path": "target/wp3-units19-21-recertification/canonical-audit.py",
+      "bytes": 3308,
+      "sha256": "67ac86a0bb37da923e6a15ec220c539bba41ecb64960c3a5189fcf5e5e42aab3"
+    },
+    {
+      "path": "target/wp3-units19-21-recertification/check-metadata.py",
+      "bytes": 3375,
+      "sha256": "4b3563099afb5656b25d7a32ece76aa03ec16b01f4c28a213937e8fc003cd1f7"
+    },
+    {
+      "path": "target/wp3-units19-21-recertification/clippy.log",
+      "bytes": 855,
+      "sha256": "d2d8093a86b425677813bf2f2cbdabba7fbfc58f6b132cbd1e7c0c6f960ff250"
+    },
+    {
+      "path": "target/wp3-units19-21-recertification/combined-inventory.json",
+      "bytes": 21679,
+      "sha256": "846a2db2491f2c2a14482edf36438da693c420b4e10fad612e3cc16328ffe1d6"
+    },
+    {
+      "path": "target/wp3-units19-21-recertification/combined-inventory.log",
+      "bytes": 185,
+      "sha256": "78362349133bccf0fbfbc4a482ff54ffe9f57dc340aed141518491f900e1e9ef"
+    },
+    {
+      "path": "target/wp3-units19-21-recertification/combined-junit.xml",
+      "bytes": 3193,
+      "sha256": "68d0b7aa8c9e8e551069025c7ab6743711ddc8f12e356643b1859ea01c3f80ed"
+    },
+    {
+      "path": "target/wp3-units19-21-recertification/combined-normal.log",
+      "bytes": 345,
+      "sha256": "477894967c59ed56bc325690b21320cafda6f3e8fa2864d6d9b74c50345f9e74"
+    },
+    {
+      "path": "target/wp3-units19-21-recertification/default-inventory.json",
+      "bytes": 18827,
+      "sha256": "50cfb18760842d977daf8a6474813bff8bebc41b375ad4b400598978523707ce"
+    },
+    {
+      "path": "target/wp3-units19-21-recertification/default-inventory.log",
+      "bytes": 63,
+      "sha256": "6fa023be974b00abadead0d2e738ef83331979b30b919405ecafda0e038de648"
+    },
+    {
+      "path": "target/wp3-units19-21-recertification/derivation.json",
+      "bytes": 2139,
+      "sha256": "fbb30cb4071e376fe35e3d392237512ed800fbd308f90887d15e813f5f5b94eb"
+    },
+    {
+      "path": "target/wp3-units19-21-recertification/derive-and-edit.py",
+      "bytes": 2855,
+      "sha256": "c91537dfe250d6ca2e4d0326af5e56b544e6fa792fe4cae7ddb28bdf4edd46c1"
+    },
+    {
+      "path": "target/wp3-units19-21-recertification/docs-checks.sh",
+      "bytes": 418,
+      "sha256": "b8856ee54bc180feeef3898e06692f3047cad3c547ccafe78b2e49da39386161"
+    },
+    {
+      "path": "target/wp3-units19-21-recertification/effective-test-groups.log",
+      "bytes": 1861,
+      "sha256": "3685f21e383ee83199446dfcd85fa445e16f9707ec872b0e44ab3212f7816700"
+    },
+    {
+      "path": "target/wp3-units19-21-recertification/environment-preflight.json",
+      "bytes": 501,
+      "sha256": "e9b5d001f8e17327ba724dc1f423709da98a797661f09806cd389e15e5f7776a"
+    },
+    {
+      "path": "target/wp3-units19-21-recertification/final-check.py",
+      "bytes": 2209,
+      "sha256": "e3e65d9f51fbb87099d36717c505892fcab27d70ccf447173aec673733c22e0f"
+    },
+    {
+      "path": "target/wp3-units19-21-recertification/finalize-receipt.py",
+      "bytes": 11280,
+      "sha256": "5aebe3abe34b20750324572f5ae39a309c70446d5c7283d8d1f50c40f0b90b99"
+    },
+    {
+      "path": "target/wp3-units19-21-recertification/fmt-code.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "target/wp3-units19-21-recertification/fmt-final.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "target/wp3-units19-21-recertification/frozen-before-oracle",
+      "bytes": 60429496,
+      "sha256": "bfa018c4d608aaad37e5aceca025d64060dd1559eaf0e1a72bec1a35d6c6322c"
+    },
+    {
+      "path": "target/wp3-units19-21-recertification/metadata-integrity.json",
+      "bytes": 344,
+      "sha256": "a7db1e85f41326d6ead79a17fc48c7466bb15fd8627de2a207dc0866a0200948"
+    },
+    {
+      "path": "target/wp3-units19-21-recertification/metadata-integrity.log",
+      "bytes": 139,
+      "sha256": "dcf37ba8f509230badb301b2a1c481dc4ab1bad496ecb742b26a0da0f1e2ba4e"
+    },
+    {
+      "path": "target/wp3-units19-21-recertification/nix-runtime-owner-v2.json",
+      "bytes": 238,
+      "sha256": "816a3b6a355fb3e6a4ffec81fbb205025ca2b670c78c925c3aff09e07d64c00d"
+    },
+    {
+      "path": "target/wp3-units19-21-recertification/nix-runtime-owner-v2.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "target/wp3-units19-21-recertification/nix-runtime-owner-v2.nix",
+      "bytes": 484,
+      "sha256": "6e07b6f028900c88fcc3a120906e7dcfa47f067274c75f982b45e6022ec201f4"
+    },
+    {
+      "path": "target/wp3-units19-21-recertification/nix-runtime-owner.json",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "target/wp3-units19-21-recertification/nix-runtime-owner.log",
+      "bytes": 802,
+      "sha256": "bb1040e91ea738270084c4986b4e0f321b9bb2e95f1fd8b2706d70eea1c4da86"
+    },
+    {
+      "path": "target/wp3-units19-21-recertification/nix-runtime-owner.nix",
+      "bytes": 398,
+      "sha256": "a0c47cfbf3809eda427f97ccab284c6929d70d3c1bea672f383dd3fbdda72fa0"
+    },
+    {
+      "path": "target/wp3-units19-21-recertification/normal-results.json",
+      "bytes": 3931,
+      "sha256": "fee4580eed6d03b1f6636c8c13b96781ec0d73c4fa7d77077ea48a85e47fce68"
+    },
+    {
+      "path": "target/wp3-units19-21-recertification/p2-cumulative.patch",
+      "bytes": 34912,
+      "sha256": "b1414f3bfac0870a71fb246c2ee893c39acd1aa7d3b763e5827189c78e75f64f"
+    },
+    {
+      "path": "target/wp3-units19-21-recertification/plan.pdf",
+      "bytes": 185982,
+      "sha256": "c7db9f0bdd7e2112d2a87341739c47e14a24199be94f62c673ae2d7c7c8b402b"
+    },
+    {
+      "path": "target/wp3-units19-21-recertification/record-outcomes.py",
+      "bytes": 5632,
+      "sha256": "c9f6aa8152f2e828d94e94eae58d872fefec55ad5dec96c051482ba5b02ed003"
+    },
+    {
+      "path": "target/wp3-units19-21-recertification/registry-audit.json",
+      "bytes": 61547,
+      "sha256": "c36897b0a9eb98406872d609c080587022593157989f58c87bfb352e8d83c973"
+    },
+    {
+      "path": "target/wp3-units19-21-recertification/run-combined.sh",
+      "bytes": 1351,
+      "sha256": "5db47fd4ab8e253f4355acb08c7a1e73d6ab03cfa5957117c5e4d4bfa81855f8"
+    },
+    {
+      "path": "target/wp3-units19-21-recertification/runtime-budget.log",
+      "bytes": 54,
+      "sha256": "712adcefa3d4900095a2b82835f19bc65bc3617767d9cd28d0dd1d85a16c0665"
+    },
+    {
+      "path": "target/wp3-units19-21-recertification/show-config-help.log",
+      "bytes": 9120,
+      "sha256": "b31905341764b5beab833d13c4d93630818de687d62f50625eea138ccd057f0c"
+    },
+    {
+      "path": "target/wp3-units19-21-recertification/typst-plan.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "target/wp3-units19-21-recertification/typst-wp3-grouping.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "target/wp3-units19-21-recertification/update-notes.py",
+      "bytes": 10439,
+      "sha256": "2a233554ed153cbcd0f84680393a0e7e872bbc569075285a148fdc7522866d10"
+    },
+    {
+      "path": "target/wp3-units19-21-recertification/wp3-grouping.pdf",
+      "bytes": 56296,
+      "sha256": "21ab4964054aed578b199d688409019d0fe25a905b68062eaf6e6d8d3557bfbc"
+    }
+  ]
+}

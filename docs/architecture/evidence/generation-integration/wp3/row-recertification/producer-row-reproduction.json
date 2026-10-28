@@ -1,0 +1,16 @@
+[
+  {
+    "case": "ym_ggg_zero_color_L3",
+    "baseline_native_digest": 2023414268013597133,
+    "current_native_digest": 12564710287510348289,
+    "baseline_original_expected_reproduced": true,
+    "current_frozen_witness_value_equal": true
+  },
+  {
+    "case": "xs_qcdqed_addx_canonical_scalar_lr_L3",
+    "baseline_native_digest": 16218294366853174009,
+    "current_native_digest": 9414812182237719052,
+    "baseline_original_expected_reproduced": true,
+    "current_frozen_witness_value_equal": true
+  }
+]

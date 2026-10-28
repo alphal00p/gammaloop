@@ -1,0 +1,120 @@
+{
+  "frozen_candidate": "df55185059f31bea548a5de27c95828656fbdc52",
+  "runtime_code": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+  "historical_source": "8d49e6ecf0d8fb1169e7433f2c0b41048aa92e60",
+  "frozen_certificate_sha256": "73036766b34c3151de753465c770b168a654adaa08632a6288485fd35a0a7f9f",
+  "full_artifact_manifest": "diagnosis.json artifacts:235 exact original files, including all source/binary bindings",
+  "full_raw_artifacts_retained": "target/wp3-units19-21/frozen-row-diagnosis",
+  "baseline_workspace": "/shared/lcnbr/dev/gammaloop/generation-row-baseline",
+  "copies": [
+    {
+      "archived": "docs/architecture/evidence/generation-integration/wp3/row-recertification/diagnosis.json",
+      "original": "target/wp3-units19-21/frozen-row-diagnosis/diagnosis.json",
+      "bytes": 77310,
+      "sha256": "73036766b34c3151de753465c770b168a654adaa08632a6288485fd35a0a7f9f"
+    },
+    {
+      "archived": "docs/architecture/evidence/generation-integration/wp3/row-recertification/producer-row-reproduction.json",
+      "original": "target/wp3-units19-21/frozen-row-diagnosis/producer-row-reproduction.json",
+      "bytes": 510,
+      "sha256": "094376121a3b83b98a1a085af890d1d3d23a076b9430e5ec6a913aff318964c5"
+    },
+    {
+      "archived": "docs/architecture/evidence/generation-integration/wp3/row-recertification/axis-proof-summary.json",
+      "original": "target/wp3-units19-21/frozen-row-diagnosis/axis-proof-summary.json",
+      "bytes": 117,
+      "sha256": "b84e34b30b40dde8bea44b238dd355d73875edf4d053273bd8bff2158bde3d46"
+    },
+    {
+      "archived": "docs/architecture/evidence/generation-integration/wp3/row-recertification/first-YM-local-witness.json",
+      "original": "target/wp3-units19-21/frozen-row-diagnosis/first-YM-local-witness.json",
+      "bytes": 113627,
+      "sha256": "7118bfa6d3a1f032071527ba526245ba93cb96db3cea20bceef00322c189381a"
+    },
+    {
+      "archived": "docs/architecture/evidence/generation-integration/wp3/row-recertification/prepare-local-proof.py",
+      "original": "target/wp3-units19-21/frozen-row-diagnosis/prepare-local-proof.py",
+      "bytes": 2662,
+      "sha256": "5270ffeebb305e29b8cc6a6f31237b20f7bc905de045cba5866a42f0a66889a7"
+    },
+    {
+      "archived": "docs/architecture/evidence/generation-integration/wp3/row-recertification/local-proof.rs",
+      "original": "target/wp3-units19-21/frozen-row-diagnosis/local-proof.rs",
+      "bytes": 1220,
+      "sha256": "12004b8f3d2d824103c735710e95fa846a014254b617de5ab3828e0c3e0acd30"
+    },
+    {
+      "archived": "docs/architecture/evidence/generation-integration/wp3/row-recertification/graph-proof.rs",
+      "original": "target/wp3-units19-21/frozen-row-diagnosis/graph-proof.rs",
+      "bytes": 1034,
+      "sha256": "3102912e26d310306cff104f6460e20efbf343207157eca6c01ced3d92e09f75"
+    },
+    {
+      "archived": "docs/architecture/evidence/generation-integration/wp3/row-recertification/metadata-bijection.py",
+      "original": "target/wp3-units19-21/frozen-row-diagnosis/metadata-bijection.py",
+      "bytes": 2166,
+      "sha256": "63057791c64cdd8c534f73c2c9c197fee7817f22df522cf7ba33f79717b4a5a4"
+    },
+    {
+      "archived": "docs/architecture/evidence/generation-integration/wp3/row-recertification/final-axis-proof.py",
+      "original": "target/wp3-units19-21/frozen-row-diagnosis/final-axis-proof.py",
+      "bytes": 2116,
+      "sha256": "a1b2dd95a875dc4f59a566d9ff767ad8171629f238999c151423b10b46dbf08c"
+    },
+    {
+      "archived": "docs/architecture/evidence/generation-integration/wp3/row-recertification/compare-stages.py",
+      "original": "target/wp3-units19-21/frozen-row-diagnosis/compare-stages.py",
+      "bytes": 3477,
+      "sha256": "d5726017844980f4e8ef28e037894832bb8c2dd8e8495201c91b0f7305a59783"
+    },
+    {
+      "archived": "docs/architecture/evidence/generation-integration/wp3/row-recertification/finalize-diagnosis.py",
+      "original": "target/wp3-units19-21/frozen-row-diagnosis/finalize-diagnosis.py",
+      "bytes": 17378,
+      "sha256": "1f3c640071befa08febaa214e1c29c813992206f02ac00c17605abf55caa968b"
+    },
+    {
+      "archived": "docs/architecture/evidence/generation-integration/wp3/row-recertification/provenance-review.json",
+      "original": "target/astra-row-certificate-provenance-4iI9i00e/review.json",
+      "bytes": 13265,
+      "sha256": "2894eb537002e38061594c4040df0438fa372d70d1c17f83a469bf4b6e813492"
+    },
+    {
+      "archived": "docs/architecture/evidence/generation-integration/wp3/row-recertification/math-review.json",
+      "original": "target/astra-row-certificate-math-20261028-e2wo8E/review.json",
+      "bytes": 16109,
+      "sha256": "940cfc19b4d665bcf2c354dade2b6ee22248b980ed0b1e5958fe7d083ce55ed7"
+    },
+    {
+      "archived": "docs/architecture/evidence/generation-integration/wp3/row-recertification/p2-review.json",
+      "original": "../generation-oracle-budget-fix/target/astra-p2-round2-BCaMJqtU/review.json",
+      "bytes": 22135,
+      "sha256": "535050df3758914a23811185e9f0e1cb0f6ed93671a90d016539dad59bb83b77"
+    },
+    {
+      "archived": "docs/architecture/evidence/generation-integration/wp3/row-recertification/derive-and-edit.py",
+      "original": "target/wp3-units19-21-recertification/derive-and-edit.py",
+      "bytes": 2855,
+      "sha256": "c91537dfe250d6ca2e4d0326af5e56b544e6fa792fe4cae7ddb28bdf4edd46c1"
+    },
+    {
+      "archived": "docs/architecture/evidence/generation-integration/wp3/row-recertification/derivation.json",
+      "original": "target/wp3-units19-21-recertification/derivation.json",
+      "bytes": 2139,
+      "sha256": "fbb30cb4071e376fe35e3d392237512ed800fbd308f90887d15e813f5f5b94eb"
+    },
+    {
+      "archived": "docs/architecture/evidence/generation-integration/wp3/row-recertification/run-combined.sh",
+      "original": "target/wp3-units19-21-recertification/run-combined.sh",
+      "bytes": 1351,
+      "sha256": "5db47fd4ab8e253f4355acb08c7a1e73d6ab03cfa5957117c5e4d4bfa81855f8"
+    },
+    {
+      "archived": "docs/architecture/evidence/generation-integration/wp3/row-recertification/nix-runtime-owner-v2.nix",
+      "original": "target/wp3-units19-21-recertification/nix-runtime-owner-v2.nix",
+      "bytes": 484,
+      "sha256": "6e07b6f028900c88fcc3a120906e7dcfa47f067274c75f982b45e6022ec201f4"
+    }
+  ],
+  "scope": "Bounded two-case approved certificate and native expected migration. No massive capture/probe-binary payload committed. No all-physics/private-history claim or source22 release."
+}

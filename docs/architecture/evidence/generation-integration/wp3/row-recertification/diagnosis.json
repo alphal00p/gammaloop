@@ -1,0 +1,1523 @@
+{
+  "schema": 1,
+  "scope": "Read-only P1 diagnosis for TWO complete source19 cases. No tracked edits, candidate commits/ref moves, expectation refresh or source22+ integration.",
+  "candidate": "df55185059f31bea548a5de27c95828656fbdc52",
+  "code": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+  "historical_source": "8d49e6ecf0d8fb1169e7433f2c0b41048aa92e60",
+  "historical_workspace": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-row-baseline",
+    "working_copy": "3b6ee6a6fe522345886d93a651fda41794ef93af",
+    "change": "wmtxxklprsryzzmmxnypznkozlzwlwvn",
+    "state": "Described empty task-owned working change, tree equals immutable source19; all files/locks untouched; NixCI=false. Retained for warm-cache reproduction, no new shared source bookmark."
+  },
+  "kernel_versions": {
+    "baseline": "c78cffc20f318df1fce50539a587cbe8ffc717c0",
+    "current": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+    "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\n",
+    "limits": "Both exact historical/current kernels were built from their unchanged locked dependencies under the retained Nix devshell, same Rust1.98.1. No pin-swapped counterfactual, dependency relock, cache override or seeding. Host/target duplicate crate identities in manual probe linking were resolved against Cargo artifact identities and checked by Rust types; failed diagnostic attempts are retained and receive no pass credit."
+  },
+  "baseline_original_row_check": {
+    "command": "FEYNKIT_ORACLE_THREADS=1 FEYNKIT_ORACLE_DUMP=<own baseline ignored dump dir> cargo test --locked --profile ci-optim -p feynkit-generator --test generation_oracle -- --test-threads 1 --nocapture ym_ggg_zero_color_L3 xs_qcdqed_addx_canonical_scalar_lr_L3",
+    "exit_code": 0,
+    "selected": 2,
+    "passed": 2,
+    "failed": 0,
+    "ignored": 0,
+    "seconds": 82.91,
+    "build_seconds": 928,
+    "log": "target/wp3-units19-21/frozen-row-diagnosis/baseline-build-evidence/original-rows-build-run.log",
+    "conclusion": "Pre-existing-failure hypothesis tested and REJECTED on this exact locked baseline: both original expected assertions pass. No oracle-record/force-pass flags used."
+  },
+  "producer_row_reproduction": [
+    {
+      "case": "ym_ggg_zero_color_L3",
+      "baseline_native_digest": 2023414268013597133,
+      "current_native_digest": 12564710287510348289,
+      "baseline_original_expected_reproduced": true,
+      "current_frozen_witness_value_equal": true
+    },
+    {
+      "case": "xs_qcdqed_addx_canonical_scalar_lr_L3",
+      "baseline_native_digest": 16218294366853174009,
+      "current_native_digest": 9414812182237719052,
+      "baseline_original_expected_reproduced": true,
+      "current_frozen_witness_value_equal": true
+    }
+  ],
+  "pipeline": {
+    "identical_inputs": "Case source code identical after removing comments only. Raw serialized Model JSON literally equal for both cases, not parameter-substituted. Numerator/grouping option JSON equal. Classes::None, Named D output, Run1, same process/loop/topology/cuts and physical parameters. Diagnostic wrappers include the exact frozen Case and Census modules, not a duplicated generation/physics implementation.",
+    "ordered_stages": [
+      "same model and request configuration",
+      "same enumeration/interaction assignment (full canonical graph-key and raw source order bijection)",
+      "tensor index admission/localization: old reversible variables versus current validated Native Named labels",
+      "raw complete unfiltered graph/local factors and typed logical ports",
+      "case-specific zero-color build/filter",
+      "case-specific grouping; canonical case samples=0, same modes and concrete-color options",
+      "full native census serializer and historical FNV assertion"
+    ],
+    "last_shared_boundary": "Same model/request and full raw incidence/assignment inventory before tensor admission/localization. 1537 exact full canonical-key joins; all vertex/edge incidence, oriented slot data, signed loop basis, particle/rule IDs, masses/physical model, source signs/factors and nonnumerator payload fields match.",
+    "first_observed_representation_boundary": {
+      "historical_owner": "8d49: idenso::CookSettings::cook_function -> cook_function_symbol; representation index payloads become reversible idenso::cooked_* symbols",
+      "current_owner": "82c1: crates/idenso/src/cook.rs:765-785 cook_function_atom in CookContext::Index validates and preserves AbstractIndex::Named via Atom::from(index)",
+      "evidence": "Live port captures before uncooking show old cooked variables/current Native Named calls. Decoding each old label through its ACTUAL old CookSettings::uncook owner gives the same complete labelled/dual/dimensional port set. No name/index/representation fields erased.",
+      "effect": "Old encoded-index ordering versus native ordering changes logical-axis order and source-expression symmetry normal form. Current source serialization retains explicit interfaces for exactly8170 raw owners; the certificate records every actual old-to-current axis permutation."
+    },
+    "YM_first_nonliteral_local_factor": {
+      "case": "ym_ggg_zero_color_L3",
+      "graph_id": "3a30d2cc8949fcc1d5f226d286d16690",
+      "owner": "vertex:0",
+      "rule_id": 2,
+      "witness": "target/wp3-units19-21/frozen-row-diagnosis/first-YM-local-witness.json",
+      "pair_index": 0,
+      "example": "After the separately verified display-head mapping, f(coad(8,vertex(0,1)),coad(8,hedge(0,1)),coad(8,hedge(5,1))) is cyclically ordered as f(coad(8,hedge(0,1)),coad(8,hedge(5,1)),coad(8,vertex(0,1))). The3-cycle is even. Both pinned kernels identify the COMPLETE5207-character four-gluon local factors as exactly equal on parse, without contraction or expansion. Other signed symmetry permutations are covered by all280 exact unique pairs, not inferred from this one example."
+    },
+    "canonical_first_difference": "Before zero-color/grouping, local expressions already match literally under the five constructor spelling mappings. The actual tensor logical-axis order differs; full labelled axis bijections and retained explicit interfaces account for it. The82 final groups have identical master IDs, source membership, source factors and exact parameter-dependent ratios."
+  },
+  "proofs": {
+    "full_key_bijections": {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/full-key-bijection.json",
+      "graphs": 1537,
+      "method": "Join full serialized CanonicalDiagramKey, assert uniqueness, then check actual IDs, source order, signed routing and every local owner incidence field; not a digest-only join."
+    },
+    "local_factor_inventory": {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/local-factor-inventory.json",
+      "factors": 29451,
+      "literal_equal_after_exact_head_mapping": 28432,
+      "nonliteral_instances": 1019,
+      "unique_nonliteral_pairs": 280,
+      "physical_scope": "All nonliteral pairs are YM vertex factors. Canonical case all3349 local factors match literally under the head mapping; no component probes or model parameters-at-one used."
+    },
+    "local_exact_symbolic": {
+      "kernels": [
+        "c78cffc",
+        "1a1829b"
+      ],
+      "pairs_per_kernel": 280,
+      "parsed_atom_equal": 280,
+      "secondary_local_factoring_equal": 280,
+      "primary_certificate": "Exact Atom equality immediately after parsing unchanged factorized local expressions. Does not rely on the optional local collect_factors result. No numerical evaluation, tensor contraction, graph expansion or arbitrary coefficient thresholds. Sign and exact factor2 corruptions rejected for every pair under BOTH kernels; additional owner/dimension corruptions rejected in current kernel."
+    },
+    "factorized_whole_graph": {
+      "pairs_per_kernel": 1537,
+      "equal_in_both_kernels": 1537,
+      "files": [
+        "target/wp3-units19-21/frozen-row-diagnosis/graph-proof-results.json",
+        "target/wp3-units19-21/frozen-row-diagnosis/graph-proof-baseline-results.json"
+      ],
+      "method": "Parse complete already-factorized exported graph numerator expressions in each pinned kernel and compare exact Atoms/canonical strings. No collect_factors, expansion, contraction, sampling or evaluator call is used by graph-proof.rs."
+    },
+    "interfaces": {
+      "summary": {
+        "raw_tensors": 29451,
+        "axes": 97412,
+        "permuted_owners": 8170,
+        "explicit_source_interfaces_checked": 8170
+      },
+      "full_raw_maps": "target/wp3-units19-21/frozen-row-diagnosis/all-raw-axis-bijections.jsonl",
+      "post_filter_and_group_checks": "target/wp3-units19-21/frozen-row-diagnosis/metadata-bijection.json",
+      "meaning": "Every raw local tensor has the same labelled/dual/dimensional axis multiset with an explicit injective permutation; all metric/composite flags match. Every retained explicit source interface is checked against its actual logical ports. Interface fields are NOT stripped as a proof. Typed opaque internal proof-cache/archive identity across incompatible historical schemas is not asserted; the current hidden-history/admission owner controls remain separately approved unchanged."
+    },
+    "zero_and_group_provenance": {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/zero-groups-provenance.json",
+      "YM": "1340 raw ->1217 retained, exactly the same123 full-key sources removed, all1217 singleton member records/source factors equal.",
+      "canonical": "197 raw/unfiltered ->82 groups representing exactly the same137 sources; same60 grouping-omitted full-key sources and all55 merged additional member records/parameter ratios. Both source and output exact overall factors remain native strings. No ratios substituted by1 in this certificate.",
+      "scope": "This is exact old/current pipeline and weighted factorized-output equivalence for these cases. It is not a new general theorem proving the independent physical zero of every discarded graph or an all-grouping certification."
+    },
+    "complete_stage_field_comparison": "target/wp3-units19-21/frozen-row-diagnosis/stage-comparison-decoded.json",
+    "head_mapping": "Exactly the five old/current constructor display-hint spellings already verified against immutable symbols.rs declarations; rank/tensor/index/symmetry/domain, namespace, head name and arguments retained. Source diff is saved. Models themselves are literally equal before this mapping."
+  },
+  "classification": {
+    "YM": "The previously unclassified extra digest difference is now located BEFORE zero-color at symmetry-equivalent local four-gluon source notation, in addition to display-head and explicit-interface serialization differences. Complete raw factor graphs and grouped weighted payloads are physically equal under explicit labelled transports.",
+    "canonical": "Representation/interface serialization boundary, now certified by complete raw local factors, every typed axis bijection, signed routing, exact groups/provenance/source factors and both-kernel whole-graph Atom equality; no longer supported merely by legacy hash recovery.",
+    "kernel_limit": "Both kernels independently agree on exact symbolic values. The live admission difference is directly observed and code-owned; no claim that every byte-order effect can uniquely be assigned to only cooking or only kernel internals without a pin-swapped counterfactual. Such a counterfactual was deliberately not introduced.",
+    "existing_owner_fix": "No production physics/algebra defect or corrective production patch is indicated by these two complete-case certificates. The failed assertions compare historical serialized numerators with a different accepted metadata/source-notation schema."
+  },
+  "review_and_gate": {
+    "reviews": {
+      "algebra": {
+        "path": "target/wp3-units19-21/frozen-row-diagnosis/reviews/algebra.json",
+        "sha256": "954a5e7fc995b264b216e6cd73d566e46976e26327776afecec296c67fa46471"
+      },
+      "oracle": {
+        "path": "target/wp3-units19-21/frozen-row-diagnosis/reviews/oracle.json",
+        "sha256": "056a74b2c54e82a1f949078a7edebcb13bb2d21fa3811e254677c4396b49824a"
+      }
+    },
+    "unchanged_algebra": "Independent81-test scoped APPROVE preserved, no unrelated suite repeated.",
+    "P1": "Certificate submitted for independent Astra/coordinator adjudication. NO self-approval or source22 release.",
+    "P2": "Unique doc-anchor/canonical-audit correction and normal-run registration budget correction belong to generation-oracle-budget-fix; not implemented, imported or duplicated here. The old57/7/21 owned-scope audit claim is known false per oracle review; this diagnosis makes no documentation-validation pass claim.",
+    "active_assertions": "Both current native hash assertions remain unchanged and fail. This work does not update expectations or move them to a passing/skipped category.",
+    "adequacy": "This provides complete fixed-case physical/local-factor/provenance classification, sufficient material for Astra to assess whether scoped native-schema oracle migration or explicit WP9 scheduling is acceptable. Historical hash recovery/count stability alone was insufficient. Until independent adjudication plus the separately assigned P2 corrections, source22 remains BLOCKED.",
+    "next_decisive_action": "Independently verify full-key/axis tables and both-kernel exact-factor proof, then have coordinator authorize any targeted oracle serialization/expected-row migration. No automatic rerecord or changes applied."
+  },
+  "source_files": [
+    {
+      "revision": "8d49e6ecf0d8fb1169e7433f2c0b41048aa92e60",
+      "path": "Cargo.lock",
+      "sha256": "29abed8df55accfd70d23546274008d42a694c26018b58c7a76bba2e907604b5"
+    },
+    {
+      "revision": "8d49e6ecf0d8fb1169e7433f2c0b41048aa92e60",
+      "path": "tydenso/Cargo.lock",
+      "sha256": "96d127be5572d29a74160fda76c3017f066e78f96b092cf226d4eb3601abefac"
+    },
+    {
+      "revision": "8d49e6ecf0d8fb1169e7433f2c0b41048aa92e60",
+      "path": "examples/notebooks/symbolica-host/Cargo.lock",
+      "sha256": "1df7e648a48ddc36c49e0154aea52d76ba0ad4264d65fb55a599bd38993bf438"
+    },
+    {
+      "revision": "8d49e6ecf0d8fb1169e7433f2c0b41048aa92e60",
+      "path": "uv.lock",
+      "sha256": "fc361fb740b14ba5bc1ee88e91604b6151ea9fac11bd934aaf105602b25aedbe"
+    },
+    {
+      "revision": "8d49e6ecf0d8fb1169e7433f2c0b41048aa92e60",
+      "path": "nix-ci.nix",
+      "sha256": "0bfcb83894414a85f14321c9b55a4e90a8b14d35fe1fa3c5f299ecade5504d5d"
+    },
+    {
+      "revision": "8d49e6ecf0d8fb1169e7433f2c0b41048aa92e60",
+      "path": "crates/feynkit-generator/tests/generation_oracle/cases.rs",
+      "sha256": "58102e8b1f1f8b45352d1627c0d61572f4aeae822cdf1a5faa4f541155598616"
+    },
+    {
+      "revision": "8d49e6ecf0d8fb1169e7433f2c0b41048aa92e60",
+      "path": "crates/feynkit-generator/tests/generation_oracle/census.rs",
+      "sha256": "a71e478fda2eabd9b14ff799696b788b06828c9263321d585ceccfddd79a1247"
+    },
+    {
+      "revision": "8d49e6ecf0d8fb1169e7433f2c0b41048aa92e60",
+      "path": "crates/feynkit-generator/src/grouping.rs",
+      "sha256": "38151069e86c5ced98002f15df1f064558ec961f6b7f3c8b164d0ec11b5d3c6a"
+    },
+    {
+      "revision": "8d49e6ecf0d8fb1169e7433f2c0b41048aa92e60",
+      "path": "crates/idenso/src/cook.rs",
+      "sha256": "2ec8560b1cb5fca5c97c93a201d35a70d6db7040fef1dd2a3679833cf70b916a"
+    },
+    {
+      "revision": "8d49e6ecf0d8fb1169e7433f2c0b41048aa92e60",
+      "path": "crates/feynkit-graph/src/numerator_interface.rs",
+      "sha256": "436093f48d817627895fb68286971f90e116c2f2999239f2b1afe17a531d2d0e"
+    },
+    {
+      "revision": "8d49e6ecf0d8fb1169e7433f2c0b41048aa92e60",
+      "path": "crates/feynkit-graph/src/symbols.rs",
+      "sha256": "0a13fee39574d1f8a819cdac3ecc0c9607a266b765907fcae0eaaaf146da174b"
+    },
+    {
+      "revision": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+      "path": "Cargo.lock",
+      "sha256": "def8dd7be5f208f4a290a4556081f7a63d10a5ae070c5df1808c1d350fa6161e"
+    },
+    {
+      "revision": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+      "path": "tydenso/Cargo.lock",
+      "sha256": "f1f0573d5f1c02d4ddb73d4491514cd291ae94ded7d84627342226917ca41dd0"
+    },
+    {
+      "revision": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+      "path": "examples/notebooks/symbolica-host/Cargo.lock",
+      "sha256": "03e18f00dbba096e08978063fd857d6558659f9f75e0ab09d73be3e543882c5a"
+    },
+    {
+      "revision": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+      "path": "uv.lock",
+      "sha256": "0ad8d1a18d9c520d298ff36ec20a746f9a63c7e0fdebe14e739a574cbb4fabf8"
+    },
+    {
+      "revision": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+      "path": "nix-ci.nix",
+      "sha256": "e031749e51a33ee48bc5c653d13c2dc7e7d3a51bddea77fc3c67d01ac217c540"
+    },
+    {
+      "revision": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+      "path": "crates/feynkit-generator/tests/generation_oracle/cases.rs",
+      "sha256": "e3ef8ec52578364ef24cf278965eaba2ec967f1f626c707bb7667c2834e319a2"
+    },
+    {
+      "revision": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+      "path": "crates/feynkit-generator/tests/generation_oracle/census.rs",
+      "sha256": "b46641d3c13dd70304a457ad4f884cedd486f188ce86dd92c73328a6b1da05d3"
+    },
+    {
+      "revision": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+      "path": "crates/feynkit-generator/src/grouping.rs",
+      "sha256": "ee0e666ae2c7b8d13c14741d03d49adc41de50ace966034561f9d39d20191c00"
+    },
+    {
+      "revision": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+      "path": "crates/idenso/src/cook.rs",
+      "sha256": "6bf40b5bc5f015c1982967c3a610f0d70d67c8e0242ba1bd0628d18c8de16436"
+    },
+    {
+      "revision": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+      "path": "crates/feynkit-graph/src/numerator_interface.rs",
+      "sha256": "596a58fda9f2f182ba19a3da2457b3ed45e73b554d1dd67092cc42a4c2f68ed8"
+    },
+    {
+      "revision": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+      "path": "crates/feynkit-graph/src/symbols.rs",
+      "sha256": "b580b7c70db4f11bf79fd02f8109a715c01b74d63a560a54d49868b8e5c4aa9d"
+    }
+  ],
+  "producers": [
+    {
+      "kind": "native full-pipeline diagnostic capture",
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-decoded/probe",
+      "sha256": "aab4b3eba0e24d236b8dbd5554ccb3848cffe782a55b6f7561735b59fe2d70b2",
+      "rustc_arguments": "target/wp3-units19-21/frozen-row-diagnosis/current-decoded/rustc-command.json",
+      "source_wrapper": "target/wp3-units19-21/frozen-row-diagnosis/current-decoded/probe.rs",
+      "source_wrapper_sha256": "4de71d0d547feab6aeead3cbc3805f28362883c29c1f7e0e1eb1e5878c1420f4"
+    },
+    {
+      "kind": "native full-pipeline diagnostic capture",
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-decoded/probe",
+      "sha256": "975e6bdea2ebe9636fa5101cba71330a06b3831612a2abc4551a3e6b45ff5f83",
+      "rustc_arguments": "target/wp3-units19-21/frozen-row-diagnosis/baseline-decoded/rustc-command.json",
+      "source_wrapper": "target/wp3-units19-21/frozen-row-diagnosis/baseline-decoded/probe.rs",
+      "source_wrapper_sha256": "19c9a1c4ff1630fc4ef9d0ead70f659b54f1d36d94c2e52e132b9a910dc0b2b2"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/local-proof",
+      "sha256": "3ef16a383b7f4c5cfd16c343d356a8c5933b1543f21d8fef7e11ec22b09bc050"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/local-proof-baseline",
+      "sha256": "dde918670cb32dee6ad54b19601e4576224e602426c6e610bd93fe8cc090dd2e"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/local-proof-adversarial",
+      "sha256": "f055038c0f5c356c1576fff367b1492a330dd25b618ab35b500b6c24c843fc55"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/graph-proof",
+      "sha256": "01b56fbc4fc35ead7da023569c10775d6189602dd397ae7790bc55ba6cdff4a7"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/graph-proof-baseline",
+      "sha256": "38e8b53bb694d3d89592e0e5030e55418d42582c36876bff2a95d51b3602c4d9"
+    },
+    {
+      "path": "/common/build-cache/lcnbr/7b/12be5b14aa9826/ci-optim/deps/generation_oracle-de23d835aff56301",
+      "sha256": "d0460027ee6715cdafa89e7a811267d8a0fbcaf51f610bb8edbf153c8c4f86b0"
+    }
+  ],
+  "preserved_originals": {
+    "refs": {
+      "generation-integration-source-v4": "e0a779808174c64057fecfd062c948b8de8e5c1f",
+      "generation-integration-source-stage1": "f25961e21689ed1a33365430b4566a9a2e9c319a",
+      "generation-integration-source-transplant": "4e00851731541be7de4626b7d1e5274d79b9eea8",
+      "generation-integration-source-upstream": "588148851e3e989ecbb7478279db7d46727e23a8",
+      "generation-integration-source-v2": "d9ff71a6826166e57bf3bba56ffcf8a57ffaf9db",
+      "generation-integration-source-pre-v2": "75b6c7a88fb099f142bcec9227ee614b6fc56376",
+      "generation-integration-source-v3": "dfe6387606e44a96f110c1ce03f52d92824dbdb1",
+      "generation-integration-source-v3-original": "6d207cfce36ab2bb128d92d67cc3da182afb0bb1",
+      "generation-integration-source-m1-source": "9540f5bbf7a96609e69af6983d2bf7325530126d",
+      "generation-integration-plan": "4374f72027b75df9ff95c5c7a725ee75beac27a8",
+      "generation-integration-pre-rebuild": "5226894ee1af61797e6b819d7e801a22bf17bace",
+      "generation-integration-pre-staged": "438b61500da4b32841c64211103e5da6fc4c4a72",
+      "generation-integration-staged-code": "f264028690d117b4b99c320b61b7f2d5d89222d0",
+      "generation-integration-drawing15-16": "8430e701d858b07e40203a25bfc3b1fa61b15f4a",
+      "generation-integration-staged17-18-37": "817b5886a50276efea05ab860d22016e1fb0c203",
+      "generation-staged-evidence-fixes": "edabf052c5780be6460a9043cb9704e1583a2e4c",
+      "generation-integration-corrected-staged": "d48f9d1aedc766eea5cb185ab6029d1f04462043",
+      "generation-integration-source19-code": "4aa4d3d88394fd39be75f460b3ace4bc72a48894",
+      "generation-integration-source20-code": "c75ab826e6eb69c711130803bd54223664c9879a",
+      "generation-integration-source21-code": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+      "generation-integration": "df55185059f31bea548a5de27c95828656fbdc52",
+      "generation-integration-units19-21": "df55185059f31bea548a5de27c95828656fbdc52"
+    },
+    "artifact_hashes_checked": 86,
+    "binary_hashes_checked": 8,
+    "main_revision_unchanged": "df55185059f31bea548a5de27c95828656fbdc52"
+  },
+  "retained": "Complete old/current native stage dumps, typed encoded+decoded logical ports, exact full-key/axis bijections, first local witness, proof source/commands/results, original baseline row logs and both review receipts. Task-owned baseline workspace kept unchanged for reproducibility; shared caches untouched.",
+  "processes_retained": [],
+  "not_claimed": [
+    "source22 gate release or whole19-21 approval",
+    "all grouping/tensor physics",
+    "private old/new proof-cache or archive-schema byte equivalence",
+    "full WP3/BRST/epem/CoolQM/five-a_ddx matrix",
+    "performance/memory benchmark",
+    "distribution/notice artifact certification"
+  ],
+  "artifacts": [
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/add-metadata-probe.py",
+      "bytes": 1728,
+      "sha256": "fb8e274b27264758307444da758173cc73e423604244241ee808ce076aaaa372"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/all-raw-axis-bijections.jsonl",
+      "bytes": 27970458,
+      "sha256": "fd2afdcdb68d04bdab2f539d961554db8421ad8fedc4e5592ec6b526cb2c8bda"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/axis-proof-summary.json",
+      "bytes": 117,
+      "sha256": "b84e34b30b40dde8bea44b238dd355d73875edf4d053273bd8bff2158bde3d46"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline/probe.rs",
+      "bytes": 4137,
+      "sha256": "74a6da4166fd2b42aa795f9d9ac2041d2ca8ec9170f9cd9b2e857a201c7a55e6"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline/rustc-command.json",
+      "bytes": 3012,
+      "sha256": "f01009c08c305fab71bbfa953637415ebebd210fb1dced016618078efe7f7225"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-build-evidence/build-artifacts.jsonl",
+      "bytes": 255940,
+      "sha256": "d0d056f75d1a0d2502b2491dab44d516614a516d507ff538f87404cf47b8ce38"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-build-evidence/build-artifacts.log",
+      "bytes": 63,
+      "sha256": "5313fc2d8b135684d893f4998ffdd83d758d8a69b0e4af72b2c8de9fb59c851e"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-build-evidence/dumps/xs_qcdqed_addx_canonical_scalar_lr_L3.census",
+      "bytes": 136251,
+      "sha256": "a1e7b2bf4cf09f67bf7c9b365939da90c919d525b53ca448562b9ed332658423"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-build-evidence/dumps/xs_qcdqed_addx_canonical_scalar_lr_L3.classes-Auto-t1.json",
+      "bytes": 3023223,
+      "sha256": "4a79c6bf1449da7a28cc55b89e15fe0877aef9c7032adf9e24eba7a910ef55eb"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-build-evidence/dumps/xs_qcdqed_addx_canonical_scalar_lr_L3.classes-Auto-t1.sources.json",
+      "bytes": 7215482,
+      "sha256": "43c4a671f5002a2231d650e8db86844be2712e7453804756d09022ef522eb988"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-build-evidence/dumps/xs_qcdqed_addx_canonical_scalar_lr_L3.classes-None-t1.json",
+      "bytes": 3023225,
+      "sha256": "0da4eadf85fa19ce39aad53f20f4100595340ab430fd97edd566aaef89160b61"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-build-evidence/dumps/xs_qcdqed_addx_canonical_scalar_lr_L3.classes-None-t1.sources.json",
+      "bytes": 7215482,
+      "sha256": "4bfe4c56d7327d42956f9e3d3b65ae24d733e8ccf54e53940c1aba39bbf4ba5b"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-build-evidence/dumps/ym_ggg_zero_color_L3.census",
+      "bytes": 1430733,
+      "sha256": "7ae34c187370bc8c8f156c09efbaeb5b144eb0ee0d8a6f38a0fdd1c1369ad270"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-build-evidence/dumps/ym_ggg_zero_color_L3.classes-Auto-t1.json",
+      "bytes": 50745938,
+      "sha256": "d0a1b760170a4d68e65517ee99dcb30ed9e8a1fa685393d6278bdd11458f7cfc"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-build-evidence/dumps/ym_ggg_zero_color_L3.classes-Auto-t1.sources.json",
+      "bytes": 50745938,
+      "sha256": "d0a1b760170a4d68e65517ee99dcb30ed9e8a1fa685393d6278bdd11458f7cfc"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-build-evidence/dumps/ym_ggg_zero_color_L3.classes-None-t1.json",
+      "bytes": 50745938,
+      "sha256": "d0a1b760170a4d68e65517ee99dcb30ed9e8a1fa685393d6278bdd11458f7cfc"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-build-evidence/dumps/ym_ggg_zero_color_L3.classes-None-t1.sources.json",
+      "bytes": 50745938,
+      "sha256": "d0a1b760170a4d68e65517ee99dcb30ed9e8a1fa685393d6278bdd11458f7cfc"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-build-evidence/graph-proof-baseline-run.log",
+      "bytes": 77,
+      "sha256": "5cdecb3dcfe3d15e728f6c95cab62f85e25407d7cf46d095c453766095e7edb9"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-build-evidence/local-proof-baseline-run.log",
+      "bytes": 48,
+      "sha256": "2a2781e9404a2ca31ef56316fe0135961d502d753e62b28959219016a8e7d1ca"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-build-evidence/metadata.json",
+      "bytes": 3629516,
+      "sha256": "ab19757c88551d9bf7d2eef97814a2f12b436b294b3fdb887a3468daed20db17"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-build-evidence/metadata.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-build-evidence/original-rows-build-run.log",
+      "bytes": 9184,
+      "sha256": "ff7878f2423e1dd9e3456f6fdcf9faf66d711611d13f70f971c3b603c342e448"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-build-evidence/original-rows.log",
+      "bytes": 165,
+      "sha256": "78cd2978c1f115aa0f14dccb1f7f2abc890d1e006922989dfa972a4e3f88fa1f"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-build-evidence/probe-build-decoded.log",
+      "bytes": 59,
+      "sha256": "3c46db532bcbb1d550f9cd6992a4ec8df31810bc5435f963e0214272185626d6"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-build-evidence/probe-build-r2.log",
+      "bytes": 59,
+      "sha256": "3c46db532bcbb1d550f9cd6992a4ec8df31810bc5435f963e0214272185626d6"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-build-evidence/probe-build.log",
+      "bytes": 20859,
+      "sha256": "cdb05e61f9b26afd80cf9cc886fb30fc03a2a3875b5c5017e715b9c013dc827a"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-build-evidence/probe-run-decoded.log",
+      "bytes": 85,
+      "sha256": "e1610fddb4ddcd34c15bb6c2bc8a5337feb2093f88cd16e43b7f221bb9200617"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-build-evidence/probe-run-r2.log",
+      "bytes": 85,
+      "sha256": "e1610fddb4ddcd34c15bb6c2bc8a5337feb2093f88cd16e43b7f221bb9200617"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-build-evidence/run",
+      "bytes": 365,
+      "sha256": "ae05de88e46c243204310921386fc1867350c799d9b89f0a20c6db60970b9e97"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-decoded/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/filtered-metadata.json",
+      "bytes": 1442112,
+      "sha256": "1316c1ad43be669bea7351a2ee569e78f745f403f42ec632fce692c0398a8985"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-decoded/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/filtered-report.txt",
+      "bytes": 138,
+      "sha256": "bde30a0bddfa3dd39ce40a5b7081521d7a9d4c347033e865f4e2af04436f0b91"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-decoded/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/filtered.json",
+      "bytes": 7215482,
+      "sha256": "4bfe4c56d7327d42956f9e3d3b65ae24d733e8ccf54e53940c1aba39bbf4ba5b"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-decoded/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/grouped-metadata.json",
+      "bytes": 574185,
+      "sha256": "c8fff32c0c8c8606c806be7dffe1ecf2870785f0c0974ccd60cce8ff959b3139"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-decoded/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/grouped-report.txt",
+      "bytes": 138,
+      "sha256": "4a31017c66dd46ec68a214f090ad0bb3481714dbee721e8351ba024333bacc2a"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-decoded/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/grouped.json",
+      "bytes": 3023225,
+      "sha256": "0da4eadf85fa19ce39aad53f20f4100595340ab430fd97edd566aaef89160b61"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-decoded/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/grouping.json",
+      "bytes": 218,
+      "sha256": "005e28152004e4ca5f7f9f92a4d33e7c3344e8d556efd4885cde7880b9403420"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-decoded/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/model.json",
+      "bytes": 33022,
+      "sha256": "3808fd9a710f9be69dd73ef5acbd16a0efe5392e4b36cb31f372da020e9edd27"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-decoded/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/options.json",
+      "bytes": 150,
+      "sha256": "902f9700155918f019896a8345c5d3ebabee98f119140346ef913a8771e08925"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-decoded/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/prepared-report.txt",
+      "bytes": 138,
+      "sha256": "bde30a0bddfa3dd39ce40a5b7081521d7a9d4c347033e865f4e2af04436f0b91"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-decoded/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/raw-metadata.json",
+      "bytes": 1442112,
+      "sha256": "1316c1ad43be669bea7351a2ee569e78f745f403f42ec632fce692c0398a8985"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-decoded/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/raw-report.txt",
+      "bytes": 138,
+      "sha256": "bde30a0bddfa3dd39ce40a5b7081521d7a9d4c347033e865f4e2af04436f0b91"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-decoded/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/raw.json",
+      "bytes": 7215482,
+      "sha256": "4bfe4c56d7327d42956f9e3d3b65ae24d733e8ccf54e53940c1aba39bbf4ba5b"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-decoded/captures/ym_ggg_zero_color_L3/filtered-metadata.json",
+      "bytes": 8639519,
+      "sha256": "102b18a31f561ec1dac23d66fe224bb48b4549cdc7b17ab3d0a54cdc8e1a72ee"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-decoded/captures/ym_ggg_zero_color_L3/filtered-report.txt",
+      "bytes": 142,
+      "sha256": "ac933d17016a6c802ca8c5d8fa34d49c412ff3a603c39371d9f973d5f8ebc89c"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-decoded/captures/ym_ggg_zero_color_L3/filtered.json",
+      "bytes": 50745938,
+      "sha256": "d0a1b760170a4d68e65517ee99dcb30ed9e8a1fa685393d6278bdd11458f7cfc"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-decoded/captures/ym_ggg_zero_color_L3/grouped-metadata.json",
+      "bytes": 8639519,
+      "sha256": "102b18a31f561ec1dac23d66fe224bb48b4549cdc7b17ab3d0a54cdc8e1a72ee"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-decoded/captures/ym_ggg_zero_color_L3/grouped-report.txt",
+      "bytes": 142,
+      "sha256": "ac933d17016a6c802ca8c5d8fa34d49c412ff3a603c39371d9f973d5f8ebc89c"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-decoded/captures/ym_ggg_zero_color_L3/grouped.json",
+      "bytes": 50745938,
+      "sha256": "d0a1b760170a4d68e65517ee99dcb30ed9e8a1fa685393d6278bdd11458f7cfc"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-decoded/captures/ym_ggg_zero_color_L3/grouping.json",
+      "bytes": 6,
+      "sha256": "30a0924a3360be687d1df9fcbbfdff62c01bc0fd14036ab9076cf7f451568666"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-decoded/captures/ym_ggg_zero_color_L3/model.json",
+      "bytes": 21510,
+      "sha256": "cecb61a579d96bd974fd2c362a3d26cac3f04c13a16dca478e1474e7b609cd72"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-decoded/captures/ym_ggg_zero_color_L3/options.json",
+      "bytes": 149,
+      "sha256": "217c85fb4c1c9099833c77504651dad267f1c16dd9dac0f5d85191d47e94a5b8"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-decoded/captures/ym_ggg_zero_color_L3/prepared-report.txt",
+      "bytes": 140,
+      "sha256": "3cd0cabf8a6ea5b0d5225d19e7be0b4267a8e9b6b6a29e185351fbb4d27fa145"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-decoded/captures/ym_ggg_zero_color_L3/raw-metadata.json",
+      "bytes": 9507266,
+      "sha256": "aa087b04fc0b437f019d81b1ef3f495ad82c91cf1ee118fc861cf0faae888432"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-decoded/captures/ym_ggg_zero_color_L3/raw-report.txt",
+      "bytes": 140,
+      "sha256": "3cd0cabf8a6ea5b0d5225d19e7be0b4267a8e9b6b6a29e185351fbb4d27fa145"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-decoded/captures/ym_ggg_zero_color_L3/raw.json",
+      "bytes": 55161260,
+      "sha256": "2cdfd0f39afe15a95f91c960e8bc0bbcfca209ddd6af0d7be2d23cacb5f5e276"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-decoded/probe",
+      "bytes": 60478416,
+      "sha256": "975e6bdea2ebe9636fa5101cba71330a06b3831612a2abc4551a3e6b45ff5f83"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-decoded/probe.rs",
+      "bytes": 4325,
+      "sha256": "19c9a1c4ff1630fc4ef9d0ead70f659b54f1d36d94c2e52e132b9a910dc0b2b2"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-decoded/rustc-command.json",
+      "bytes": 3028,
+      "sha256": "9f1c73e4d7c0dcc3d49c7a4ee7a0b588f3be6808671e40ec3ac5a095b2166e4e"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-r2/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/filtered-metadata.json",
+      "bytes": 1635376,
+      "sha256": "dceb8f2128206b9829d402c745e1c235544bf122c8c0b2bc61b29514a0a07d5d"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-r2/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/filtered-report.txt",
+      "bytes": 138,
+      "sha256": "bde30a0bddfa3dd39ce40a5b7081521d7a9d4c347033e865f4e2af04436f0b91"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-r2/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/filtered.json",
+      "bytes": 7215482,
+      "sha256": "4bfe4c56d7327d42956f9e3d3b65ae24d733e8ccf54e53940c1aba39bbf4ba5b"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-r2/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/grouped-metadata.json",
+      "bytes": 651055,
+      "sha256": "b9f51a671e2095d7356ea2716a579d2586f787d25a6b68018f133c1b099ebe24"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-r2/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/grouped-report.txt",
+      "bytes": 138,
+      "sha256": "4a31017c66dd46ec68a214f090ad0bb3481714dbee721e8351ba024333bacc2a"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-r2/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/grouped.json",
+      "bytes": 3023225,
+      "sha256": "0da4eadf85fa19ce39aad53f20f4100595340ab430fd97edd566aaef89160b61"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-r2/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/grouping.json",
+      "bytes": 218,
+      "sha256": "005e28152004e4ca5f7f9f92a4d33e7c3344e8d556efd4885cde7880b9403420"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-r2/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/model.json",
+      "bytes": 33022,
+      "sha256": "3808fd9a710f9be69dd73ef5acbd16a0efe5392e4b36cb31f372da020e9edd27"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-r2/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/options.json",
+      "bytes": 150,
+      "sha256": "902f9700155918f019896a8345c5d3ebabee98f119140346ef913a8771e08925"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-r2/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/prepared-report.txt",
+      "bytes": 138,
+      "sha256": "bde30a0bddfa3dd39ce40a5b7081521d7a9d4c347033e865f4e2af04436f0b91"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-r2/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/raw-metadata.json",
+      "bytes": 1635376,
+      "sha256": "dceb8f2128206b9829d402c745e1c235544bf122c8c0b2bc61b29514a0a07d5d"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-r2/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/raw-report.txt",
+      "bytes": 138,
+      "sha256": "bde30a0bddfa3dd39ce40a5b7081521d7a9d4c347033e865f4e2af04436f0b91"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-r2/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/raw.json",
+      "bytes": 7215482,
+      "sha256": "4bfe4c56d7327d42956f9e3d3b65ae24d733e8ccf54e53940c1aba39bbf4ba5b"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-r2/captures/ym_ggg_zero_color_L3/filtered-metadata.json",
+      "bytes": 9837409,
+      "sha256": "a9685121c62cff6969a93ae335fdd383ff02711c854008a9fabc256d0a1a1a11"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-r2/captures/ym_ggg_zero_color_L3/filtered-report.txt",
+      "bytes": 142,
+      "sha256": "ac933d17016a6c802ca8c5d8fa34d49c412ff3a603c39371d9f973d5f8ebc89c"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-r2/captures/ym_ggg_zero_color_L3/filtered.json",
+      "bytes": 50745938,
+      "sha256": "d0a1b760170a4d68e65517ee99dcb30ed9e8a1fa685393d6278bdd11458f7cfc"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-r2/captures/ym_ggg_zero_color_L3/grouped-metadata.json",
+      "bytes": 9837409,
+      "sha256": "a9685121c62cff6969a93ae335fdd383ff02711c854008a9fabc256d0a1a1a11"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-r2/captures/ym_ggg_zero_color_L3/grouped-report.txt",
+      "bytes": 142,
+      "sha256": "ac933d17016a6c802ca8c5d8fa34d49c412ff3a603c39371d9f973d5f8ebc89c"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-r2/captures/ym_ggg_zero_color_L3/grouped.json",
+      "bytes": 50745938,
+      "sha256": "d0a1b760170a4d68e65517ee99dcb30ed9e8a1fa685393d6278bdd11458f7cfc"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-r2/captures/ym_ggg_zero_color_L3/grouping.json",
+      "bytes": 6,
+      "sha256": "30a0924a3360be687d1df9fcbbfdff62c01bc0fd14036ab9076cf7f451568666"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-r2/captures/ym_ggg_zero_color_L3/model.json",
+      "bytes": 21510,
+      "sha256": "cecb61a579d96bd974fd2c362a3d26cac3f04c13a16dca478e1474e7b609cd72"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-r2/captures/ym_ggg_zero_color_L3/options.json",
+      "bytes": 149,
+      "sha256": "217c85fb4c1c9099833c77504651dad267f1c16dd9dac0f5d85191d47e94a5b8"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-r2/captures/ym_ggg_zero_color_L3/prepared-report.txt",
+      "bytes": 140,
+      "sha256": "3cd0cabf8a6ea5b0d5225d19e7be0b4267a8e9b6b6a29e185351fbb4d27fa145"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-r2/captures/ym_ggg_zero_color_L3/raw-metadata.json",
+      "bytes": 10824580,
+      "sha256": "2e21595e0db7cc741b32361202a836563132c995fc86c3cc394eae2f4f266865"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-r2/captures/ym_ggg_zero_color_L3/raw-report.txt",
+      "bytes": 140,
+      "sha256": "3cd0cabf8a6ea5b0d5225d19e7be0b4267a8e9b6b6a29e185351fbb4d27fa145"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-r2/captures/ym_ggg_zero_color_L3/raw.json",
+      "bytes": 55161260,
+      "sha256": "2cdfd0f39afe15a95f91c960e8bc0bbcfca209ddd6af0d7be2d23cacb5f5e276"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-r2/probe",
+      "bytes": 60475736,
+      "sha256": "5e03792fce81c52836743597bdb91ce2dab455928aa2296bcb961f31ffa56752"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-r2/probe.rs",
+      "bytes": 4137,
+      "sha256": "74a6da4166fd2b42aa795f9d9ac2041d2ca8ec9170f9cd9b2e857a201c7a55e6"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-r2/rustc-command.json",
+      "bytes": 3018,
+      "sha256": "2e8250df2e4eba010f2c99fb0c8e01a63ee26ba3ca72e7eec6155f6eeae99bbb"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/compare-decoded.log",
+      "bytes": 6522,
+      "sha256": "99201652592b37eb369fe777a98cb756f0d998324826fccb34be632c8c27288b"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/compare-decoded.py",
+      "bytes": 3486,
+      "sha256": "97c29aa978e415149818abe40ee47066e8558fcbb288d527f1a8d8f6b94a4285"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/compare-stages.py",
+      "bytes": 3477,
+      "sha256": "d5726017844980f4e8ef28e037894832bb8c2dd8e8495201c91b0f7305a59783"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/filtered-report.txt",
+      "bytes": 138,
+      "sha256": "bde30a0bddfa3dd39ce40a5b7081521d7a9d4c347033e865f4e2af04436f0b91"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/filtered.json",
+      "bytes": 8291526,
+      "sha256": "224bdef0e9ea5e8a46329fe1159846ae651036481a49c00dac901b4ae91dc9da"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/grouped-report.txt",
+      "bytes": 138,
+      "sha256": "4a31017c66dd46ec68a214f090ad0bb3481714dbee721e8351ba024333bacc2a"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/grouped.json",
+      "bytes": 3432582,
+      "sha256": "571f715365f414a4faaabd31ec02257f3774c64202d73a16793c93f4b08e8e53"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/grouping.json",
+      "bytes": 218,
+      "sha256": "005e28152004e4ca5f7f9f92a4d33e7c3344e8d556efd4885cde7880b9403420"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/model.json",
+      "bytes": 33022,
+      "sha256": "3808fd9a710f9be69dd73ef5acbd16a0efe5392e4b36cb31f372da020e9edd27"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/options.json",
+      "bytes": 150,
+      "sha256": "902f9700155918f019896a8345c5d3ebabee98f119140346ef913a8771e08925"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/prepared-report.txt",
+      "bytes": 138,
+      "sha256": "bde30a0bddfa3dd39ce40a5b7081521d7a9d4c347033e865f4e2af04436f0b91"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/raw-report.txt",
+      "bytes": 138,
+      "sha256": "bde30a0bddfa3dd39ce40a5b7081521d7a9d4c347033e865f4e2af04436f0b91"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/raw.json",
+      "bytes": 8291526,
+      "sha256": "224bdef0e9ea5e8a46329fe1159846ae651036481a49c00dac901b4ae91dc9da"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current/captures/ym_ggg_zero_color_L3/filtered-report.txt",
+      "bytes": 142,
+      "sha256": "ac933d17016a6c802ca8c5d8fa34d49c412ff3a603c39371d9f973d5f8ebc89c"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current/captures/ym_ggg_zero_color_L3/filtered.json",
+      "bytes": 52132018,
+      "sha256": "1ea989a6584c09d5ec19b4243fbcdb4898c83f4b07c6cf70233ae04e5cc0d356"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current/captures/ym_ggg_zero_color_L3/grouped-report.txt",
+      "bytes": 142,
+      "sha256": "ac933d17016a6c802ca8c5d8fa34d49c412ff3a603c39371d9f973d5f8ebc89c"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current/captures/ym_ggg_zero_color_L3/grouped.json",
+      "bytes": 52132018,
+      "sha256": "1ea989a6584c09d5ec19b4243fbcdb4898c83f4b07c6cf70233ae04e5cc0d356"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current/captures/ym_ggg_zero_color_L3/grouping.json",
+      "bytes": 6,
+      "sha256": "30a0924a3360be687d1df9fcbbfdff62c01bc0fd14036ab9076cf7f451568666"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current/captures/ym_ggg_zero_color_L3/model.json",
+      "bytes": 21510,
+      "sha256": "cecb61a579d96bd974fd2c362a3d26cac3f04c13a16dca478e1474e7b609cd72"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current/captures/ym_ggg_zero_color_L3/options.json",
+      "bytes": 149,
+      "sha256": "217c85fb4c1c9099833c77504651dad267f1c16dd9dac0f5d85191d47e94a5b8"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current/captures/ym_ggg_zero_color_L3/prepared-report.txt",
+      "bytes": 140,
+      "sha256": "3cd0cabf8a6ea5b0d5225d19e7be0b4267a8e9b6b6a29e185351fbb4d27fa145"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current/captures/ym_ggg_zero_color_L3/raw-report.txt",
+      "bytes": 140,
+      "sha256": "3cd0cabf8a6ea5b0d5225d19e7be0b4267a8e9b6b6a29e185351fbb4d27fa145"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current/captures/ym_ggg_zero_color_L3/raw.json",
+      "bytes": 56695010,
+      "sha256": "eba3f54f827943b557b58f2a245a1360a6822f02042b03f13bf979ca07d4b39a"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current/probe",
+      "bytes": 64045792,
+      "sha256": "1ff95a77096553e4a85d93cd8a6fdc788b85f77308dfb3f5590b6d53d1b92420"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current/probe.rs",
+      "bytes": 2602,
+      "sha256": "0acabd814cdd392219dd266388f59811dd74d927b0462f30c4c7fe4a00cafdca"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current/rustc-command.json",
+      "bytes": 3010,
+      "sha256": "7c7f97edb54b3b6b0d6c79613bcde2b7b8d0f4b4d9d87026dd9d5fbef765be14"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-build-artifacts.jsonl",
+      "bytes": 259565,
+      "sha256": "7cfef215e65d7f1b4c608fae2960f912e4f42250c80265c650177450c365701d"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-build.log",
+      "bytes": 185,
+      "sha256": "c2def811cfdbc207c7c35ca8f8df886b04a34141bf52f8d3e637d3c8450efda2"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-capture-check.json",
+      "bytes": 382,
+      "sha256": "8370b8a369dced487ebf1755cdf8d784eb3d925fa1245e1f3a76aa9d7cc9a8aa"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-decoded/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/filtered-metadata.json",
+      "bytes": 1442112,
+      "sha256": "4a7f71d7c74f1e1406e402c7cddee4c9a9fd25825831a410c84d564425e9f544"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-decoded/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/filtered-report.txt",
+      "bytes": 138,
+      "sha256": "bde30a0bddfa3dd39ce40a5b7081521d7a9d4c347033e865f4e2af04436f0b91"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-decoded/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/filtered.json",
+      "bytes": 8291526,
+      "sha256": "224bdef0e9ea5e8a46329fe1159846ae651036481a49c00dac901b4ae91dc9da"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-decoded/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/grouped-metadata.json",
+      "bytes": 574185,
+      "sha256": "5fb072625ab2476bf7d294688ee01ab646492d3e29a27287069266de214bafef"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-decoded/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/grouped-report.txt",
+      "bytes": 138,
+      "sha256": "4a31017c66dd46ec68a214f090ad0bb3481714dbee721e8351ba024333bacc2a"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-decoded/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/grouped.json",
+      "bytes": 3432582,
+      "sha256": "571f715365f414a4faaabd31ec02257f3774c64202d73a16793c93f4b08e8e53"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-decoded/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/grouping.json",
+      "bytes": 218,
+      "sha256": "005e28152004e4ca5f7f9f92a4d33e7c3344e8d556efd4885cde7880b9403420"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-decoded/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/model.json",
+      "bytes": 33022,
+      "sha256": "3808fd9a710f9be69dd73ef5acbd16a0efe5392e4b36cb31f372da020e9edd27"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-decoded/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/options.json",
+      "bytes": 150,
+      "sha256": "902f9700155918f019896a8345c5d3ebabee98f119140346ef913a8771e08925"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-decoded/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/prepared-report.txt",
+      "bytes": 138,
+      "sha256": "bde30a0bddfa3dd39ce40a5b7081521d7a9d4c347033e865f4e2af04436f0b91"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-decoded/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/raw-metadata.json",
+      "bytes": 1442112,
+      "sha256": "4a7f71d7c74f1e1406e402c7cddee4c9a9fd25825831a410c84d564425e9f544"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-decoded/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/raw-report.txt",
+      "bytes": 138,
+      "sha256": "bde30a0bddfa3dd39ce40a5b7081521d7a9d4c347033e865f4e2af04436f0b91"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-decoded/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/raw.json",
+      "bytes": 8291526,
+      "sha256": "224bdef0e9ea5e8a46329fe1159846ae651036481a49c00dac901b4ae91dc9da"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-decoded/captures/ym_ggg_zero_color_L3/filtered-metadata.json",
+      "bytes": 8639519,
+      "sha256": "f598f334b455df375a639c6ab56318b2bc3dae355f7449be794a992c0b5c5742"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-decoded/captures/ym_ggg_zero_color_L3/filtered-report.txt",
+      "bytes": 142,
+      "sha256": "ac933d17016a6c802ca8c5d8fa34d49c412ff3a603c39371d9f973d5f8ebc89c"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-decoded/captures/ym_ggg_zero_color_L3/filtered.json",
+      "bytes": 52132018,
+      "sha256": "1ea989a6584c09d5ec19b4243fbcdb4898c83f4b07c6cf70233ae04e5cc0d356"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-decoded/captures/ym_ggg_zero_color_L3/grouped-metadata.json",
+      "bytes": 8639519,
+      "sha256": "f598f334b455df375a639c6ab56318b2bc3dae355f7449be794a992c0b5c5742"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-decoded/captures/ym_ggg_zero_color_L3/grouped-report.txt",
+      "bytes": 142,
+      "sha256": "ac933d17016a6c802ca8c5d8fa34d49c412ff3a603c39371d9f973d5f8ebc89c"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-decoded/captures/ym_ggg_zero_color_L3/grouped.json",
+      "bytes": 52132018,
+      "sha256": "1ea989a6584c09d5ec19b4243fbcdb4898c83f4b07c6cf70233ae04e5cc0d356"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-decoded/captures/ym_ggg_zero_color_L3/grouping.json",
+      "bytes": 6,
+      "sha256": "30a0924a3360be687d1df9fcbbfdff62c01bc0fd14036ab9076cf7f451568666"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-decoded/captures/ym_ggg_zero_color_L3/model.json",
+      "bytes": 21510,
+      "sha256": "cecb61a579d96bd974fd2c362a3d26cac3f04c13a16dca478e1474e7b609cd72"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-decoded/captures/ym_ggg_zero_color_L3/options.json",
+      "bytes": 149,
+      "sha256": "217c85fb4c1c9099833c77504651dad267f1c16dd9dac0f5d85191d47e94a5b8"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-decoded/captures/ym_ggg_zero_color_L3/prepared-report.txt",
+      "bytes": 140,
+      "sha256": "3cd0cabf8a6ea5b0d5225d19e7be0b4267a8e9b6b6a29e185351fbb4d27fa145"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-decoded/captures/ym_ggg_zero_color_L3/raw-metadata.json",
+      "bytes": 9507266,
+      "sha256": "3b55ee183867dd03d9ac8f0f3b15401e17d07e2429071f121c805951007c0260"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-decoded/captures/ym_ggg_zero_color_L3/raw-report.txt",
+      "bytes": 140,
+      "sha256": "3cd0cabf8a6ea5b0d5225d19e7be0b4267a8e9b6b6a29e185351fbb4d27fa145"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-decoded/captures/ym_ggg_zero_color_L3/raw.json",
+      "bytes": 56695010,
+      "sha256": "eba3f54f827943b557b58f2a245a1360a6822f02042b03f13bf979ca07d4b39a"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-decoded/probe",
+      "bytes": 64085760,
+      "sha256": "aab4b3eba0e24d236b8dbd5554ccb3848cffe782a55b6f7561735b59fe2d70b2"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-decoded/probe.rs",
+      "bytes": 4333,
+      "sha256": "4de71d0d547feab6aeead3cbc3805f28362883c29c1f7e0e1eb1e5878c1420f4"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-decoded/rustc-command.json",
+      "bytes": 3026,
+      "sha256": "20fdb33323600651ad68cdd685b2cdbcc9732804d929e34c13c995f75a27a049"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-decoded-build.log",
+      "bytes": 949,
+      "sha256": "4ada738f9bfc46ea8efff623291f1f2898cc9c367f61422a540499d7bb52dc39"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-decoded-run.log",
+      "bytes": 85,
+      "sha256": "e1610fddb4ddcd34c15bb6c2bc8a5337feb2093f88cd16e43b7f221bb9200617"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-metadata/probe.rs",
+      "bytes": 3881,
+      "sha256": "3057f942ef60878e277c5c58c1315e6a3ddbc58f41dae5d3096d49ccf43a97c4"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-metadata/rustc-command.json",
+      "bytes": 3028,
+      "sha256": "e7d85cd07069442872205fcd8d62a5a23d64f4e120c76380f170c469ebc295c7"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-metadata-probe-build-r2.log",
+      "bytes": 6454,
+      "sha256": "c75b5fc9fcd17f483607b4a62505f15475d56a2733d3b8aa292b8767b0ddaee2"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-metadata-probe-build-r3.log",
+      "bytes": 949,
+      "sha256": "4ada738f9bfc46ea8efff623291f1f2898cc9c367f61422a540499d7bb52dc39"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-metadata-probe-build.log",
+      "bytes": 5820,
+      "sha256": "7631e5bc80b55643bb9777bfe614c12d5ed74acfce635751593dfc52da9f685d"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-metadata-probe-run-r3.log",
+      "bytes": 85,
+      "sha256": "e1610fddb4ddcd34c15bb6c2bc8a5337feb2093f88cd16e43b7f221bb9200617"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-metadata-probe-run.log",
+      "bytes": 133,
+      "sha256": "490ea8e67f12402dee0be8e77749eac740117fbec54309b92d3e194b09cc1b4d"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-metadata-r2/probe.rs",
+      "bytes": 4071,
+      "sha256": "32de059cc85b13a42c7f3cd7817b642c14f7c4421883c3bbd01ff25aa99a6ffc"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-metadata-r2/rustc-command.json",
+      "bytes": 3034,
+      "sha256": "2ae78a97a7d7ceb608b64020c3e037984dc46dc35491d5530be42987a7cde860"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-metadata-r3/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/filtered-metadata.json",
+      "bytes": 1442112,
+      "sha256": "4a7f71d7c74f1e1406e402c7cddee4c9a9fd25825831a410c84d564425e9f544"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-metadata-r3/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/filtered-report.txt",
+      "bytes": 138,
+      "sha256": "bde30a0bddfa3dd39ce40a5b7081521d7a9d4c347033e865f4e2af04436f0b91"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-metadata-r3/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/filtered.json",
+      "bytes": 8291526,
+      "sha256": "224bdef0e9ea5e8a46329fe1159846ae651036481a49c00dac901b4ae91dc9da"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-metadata-r3/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/grouped-metadata.json",
+      "bytes": 574185,
+      "sha256": "5fb072625ab2476bf7d294688ee01ab646492d3e29a27287069266de214bafef"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-metadata-r3/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/grouped-report.txt",
+      "bytes": 138,
+      "sha256": "4a31017c66dd46ec68a214f090ad0bb3481714dbee721e8351ba024333bacc2a"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-metadata-r3/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/grouped.json",
+      "bytes": 3432582,
+      "sha256": "571f715365f414a4faaabd31ec02257f3774c64202d73a16793c93f4b08e8e53"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-metadata-r3/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/grouping.json",
+      "bytes": 218,
+      "sha256": "005e28152004e4ca5f7f9f92a4d33e7c3344e8d556efd4885cde7880b9403420"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-metadata-r3/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/model.json",
+      "bytes": 33022,
+      "sha256": "3808fd9a710f9be69dd73ef5acbd16a0efe5392e4b36cb31f372da020e9edd27"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-metadata-r3/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/options.json",
+      "bytes": 150,
+      "sha256": "902f9700155918f019896a8345c5d3ebabee98f119140346ef913a8771e08925"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-metadata-r3/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/prepared-report.txt",
+      "bytes": 138,
+      "sha256": "bde30a0bddfa3dd39ce40a5b7081521d7a9d4c347033e865f4e2af04436f0b91"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-metadata-r3/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/raw-metadata.json",
+      "bytes": 1442112,
+      "sha256": "4a7f71d7c74f1e1406e402c7cddee4c9a9fd25825831a410c84d564425e9f544"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-metadata-r3/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/raw-report.txt",
+      "bytes": 138,
+      "sha256": "bde30a0bddfa3dd39ce40a5b7081521d7a9d4c347033e865f4e2af04436f0b91"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-metadata-r3/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/raw.json",
+      "bytes": 8291526,
+      "sha256": "224bdef0e9ea5e8a46329fe1159846ae651036481a49c00dac901b4ae91dc9da"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-metadata-r3/captures/ym_ggg_zero_color_L3/filtered-metadata.json",
+      "bytes": 8639519,
+      "sha256": "f598f334b455df375a639c6ab56318b2bc3dae355f7449be794a992c0b5c5742"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-metadata-r3/captures/ym_ggg_zero_color_L3/filtered-report.txt",
+      "bytes": 142,
+      "sha256": "ac933d17016a6c802ca8c5d8fa34d49c412ff3a603c39371d9f973d5f8ebc89c"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-metadata-r3/captures/ym_ggg_zero_color_L3/filtered.json",
+      "bytes": 52132018,
+      "sha256": "1ea989a6584c09d5ec19b4243fbcdb4898c83f4b07c6cf70233ae04e5cc0d356"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-metadata-r3/captures/ym_ggg_zero_color_L3/grouped-metadata.json",
+      "bytes": 8639519,
+      "sha256": "f598f334b455df375a639c6ab56318b2bc3dae355f7449be794a992c0b5c5742"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-metadata-r3/captures/ym_ggg_zero_color_L3/grouped-report.txt",
+      "bytes": 142,
+      "sha256": "ac933d17016a6c802ca8c5d8fa34d49c412ff3a603c39371d9f973d5f8ebc89c"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-metadata-r3/captures/ym_ggg_zero_color_L3/grouped.json",
+      "bytes": 52132018,
+      "sha256": "1ea989a6584c09d5ec19b4243fbcdb4898c83f4b07c6cf70233ae04e5cc0d356"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-metadata-r3/captures/ym_ggg_zero_color_L3/grouping.json",
+      "bytes": 6,
+      "sha256": "30a0924a3360be687d1df9fcbbfdff62c01bc0fd14036ab9076cf7f451568666"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-metadata-r3/captures/ym_ggg_zero_color_L3/model.json",
+      "bytes": 21510,
+      "sha256": "cecb61a579d96bd974fd2c362a3d26cac3f04c13a16dca478e1474e7b609cd72"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-metadata-r3/captures/ym_ggg_zero_color_L3/options.json",
+      "bytes": 149,
+      "sha256": "217c85fb4c1c9099833c77504651dad267f1c16dd9dac0f5d85191d47e94a5b8"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-metadata-r3/captures/ym_ggg_zero_color_L3/prepared-report.txt",
+      "bytes": 140,
+      "sha256": "3cd0cabf8a6ea5b0d5225d19e7be0b4267a8e9b6b6a29e185351fbb4d27fa145"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-metadata-r3/captures/ym_ggg_zero_color_L3/raw-metadata.json",
+      "bytes": 9507266,
+      "sha256": "3b55ee183867dd03d9ac8f0f3b15401e17d07e2429071f121c805951007c0260"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-metadata-r3/captures/ym_ggg_zero_color_L3/raw-report.txt",
+      "bytes": 140,
+      "sha256": "3cd0cabf8a6ea5b0d5225d19e7be0b4267a8e9b6b6a29e185351fbb4d27fa145"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-metadata-r3/captures/ym_ggg_zero_color_L3/raw.json",
+      "bytes": 56695010,
+      "sha256": "eba3f54f827943b557b58f2a245a1360a6822f02042b03f13bf979ca07d4b39a"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-metadata-r3/probe",
+      "bytes": 64083624,
+      "sha256": "91880d519e7148de179d675ad7f25efd3ab3742e0919571c81eb9c1465352f71"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-metadata-r3/probe.rs",
+      "bytes": 4145,
+      "sha256": "27bd7549f56256c13454081b5caac6bd4384160e6511ffedb34b443bf8b38829"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-metadata-r3/rustc-command.json",
+      "bytes": 3034,
+      "sha256": "2a8003763c2d0bababa7b68ba93dc717b32ac4564af659c248cb757cec23fea5"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-metadata.json",
+      "bytes": 3271499,
+      "sha256": "3a8b23cce91adc71efb24a48804f2fd56037c185e13b108a2d13fa8269c6ab56"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-metadata.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-probe-build-r2.log",
+      "bytes": 21716,
+      "sha256": "b5532d8d6299e29d4ec623b279c28e9b39a024bfd27ced5103d2cbfda5db920a"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-probe-build-r3.log",
+      "bytes": 949,
+      "sha256": "4ada738f9bfc46ea8efff623291f1f2898cc9c367f61422a540499d7bb52dc39"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-probe-build.log",
+      "bytes": 48027,
+      "sha256": "cefac94ecc38ccd1eb335393a13d7dae724334b28372b19fdf039a1127c93cad"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/current-probe-run.log",
+      "bytes": 85,
+      "sha256": "e1610fddb4ddcd34c15bb6c2bc8a5337feb2093f88cd16e43b7f221bb9200617"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/factorized-graph-pairs.json",
+      "bytes": 49708617,
+      "sha256": "2ac94c6317d1d67b4275ee1bc288a1db93facaf0a33ebde0c2d79670ba11b15c"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/final-axis-proof.py",
+      "bytes": 2116,
+      "sha256": "a1b2dd95a875dc4f59a566d9ff767ad8171629f238999c151423b10b46dbf08c"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/finalize-diagnosis.py",
+      "bytes": 17378,
+      "sha256": "1f3c640071befa08febaa214e1c29c813992206f02ac00c17605abf55caa968b"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/first-YM-local-witness.json",
+      "bytes": 113627,
+      "sha256": "7118bfa6d3a1f032071527ba526245ba93cb96db3cea20bceef00322c189381a"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/frozen-inputs.json",
+      "bytes": 20174,
+      "sha256": "09a5b8ca1ad23def73c44c25dcc767b1b034368652ff9595accafbcdedaecd9d"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/full-key-bijection.json",
+      "bytes": 4851796,
+      "sha256": "0b7861edcb4548751d1e6d5b9b4dd7cbe27c5b1313d486badc426779a5066ddb"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/graph-proof",
+      "bytes": 33898064,
+      "sha256": "01b56fbc4fc35ead7da023569c10775d6189602dd397ae7790bc55ba6cdff4a7"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/graph-proof-baseline",
+      "bytes": 32354296,
+      "sha256": "38e8b53bb694d3d89592e0e5030e55418d42582c36876bff2a95d51b3602c4d9"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/graph-proof-baseline-results.json",
+      "bytes": 18445,
+      "sha256": "0a847353632b791e779cadad2f890ca441f9f5f2ff6e971be2e66ff5e24e2d48"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/graph-proof-baseline-rustc.json",
+      "bytes": 3026,
+      "sha256": "7a43d8871526e226ebe359f5f2daf030893e67802d557ae510689a989a2e3257"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/graph-proof-results.json",
+      "bytes": 18445,
+      "sha256": "0a847353632b791e779cadad2f890ca441f9f5f2ff6e971be2e66ff5e24e2d48"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/graph-proof-run.log",
+      "bytes": 77,
+      "sha256": "5cdecb3dcfe3d15e728f6c95cab62f85e25407d7cf46d095c453766095e7edb9"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/graph-proof-rustc.json",
+      "bytes": 3008,
+      "sha256": "535dd14baf68c274ac1f53853e483011f89095b9c80bcfc21dd9bc6afc153b94"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/graph-proof.rs",
+      "bytes": 1034,
+      "sha256": "3102912e26d310306cff104f6460e20efbf343207157eca6c01ced3d92e09f75"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/identical-case-settings.patch",
+      "bytes": 1019,
+      "sha256": "f0e66973e01ad8c632e61b89c474d89a274bf547f362af083b7ed079efe7394c"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/local-factor-inventory.json",
+      "bytes": 4968151,
+      "sha256": "04385e7cdabf987e64327a1f81e5b5182dd0e23e6ac9dc1b2be90d80c4489056"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/local-pairs.json",
+      "bytes": 2937929,
+      "sha256": "836c7444a78fec1bdd8bb07c9d99ae064523f2cc247cd61ec6ee1b5f312b2f02"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/local-proof",
+      "bytes": 33834536,
+      "sha256": "3ef16a383b7f4c5cfd16c343d356a8c5933b1543f21d8fef7e11ec22b09bc050"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/local-proof-adversarial",
+      "bytes": 33846056,
+      "sha256": "f055038c0f5c356c1576fff367b1492a330dd25b618ab35b500b6c24c843fc55"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/local-proof-adversarial-results.json",
+      "bytes": 3361,
+      "sha256": "f66eac5e9925351de1a298b9038780d286f824b128189778bcd6fdaeb0d0e333"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/local-proof-adversarial-run.log",
+      "bytes": 48,
+      "sha256": "2a2781e9404a2ca31ef56316fe0135961d502d753e62b28959219016a8e7d1ca"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/local-proof-adversarial-rustc.json",
+      "bytes": 3044,
+      "sha256": "002818646aaf12635834d419080d97122ca8c2f693b601ac643dd6663440e0b2"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/local-proof-adversarial.rs",
+      "bytes": 1802,
+      "sha256": "1d014a809437bf4748643e0f80bb745c42eba14cfeb0790fd299808a5c57d6e7"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/local-proof-baseline",
+      "bytes": 32257248,
+      "sha256": "dde918670cb32dee6ad54b19601e4576224e602426c6e610bd93fe8cc090dd2e"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/local-proof-baseline-results.json",
+      "bytes": 3361,
+      "sha256": "f66eac5e9925351de1a298b9038780d286f824b128189778bcd6fdaeb0d0e333"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/local-proof-baseline-rustc.json",
+      "bytes": 3026,
+      "sha256": "b87db99e7e5dce967e3bc8fcde720735ca417436735ac2e7084553babd3a99b5"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/local-proof-results.json",
+      "bytes": 3361,
+      "sha256": "f66eac5e9925351de1a298b9038780d286f824b128189778bcd6fdaeb0d0e333"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/local-proof-run.log",
+      "bytes": 48,
+      "sha256": "2a2781e9404a2ca31ef56316fe0135961d502d753e62b28959219016a8e7d1ca"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/local-proof-rustc.json",
+      "bytes": 3008,
+      "sha256": "f1bc2fcbee015d1e28dee33716813639407f3c2fda730e9a71250bf51a256503"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/local-proof.rs",
+      "bytes": 1220,
+      "sha256": "12004b8f3d2d824103c735710e95fa846a014254b617de5ab3828e0c3e0acd30"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/make-decoded-metadata-probe.py",
+      "bytes": 6117,
+      "sha256": "91f89a347613e4a4c7dd1963e6af54dccb615c3fa98d0fa6ad616b5a53312181"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/make-metadata-probe.py",
+      "bytes": 5929,
+      "sha256": "eb456e9b47ad5552019666534ea5052d06ac26116d62471853db4c864beff6db"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/make-probe.py",
+      "bytes": 4304,
+      "sha256": "6e84792c32b8d0c8be07eb3b85b493d268834ebcb51d8541f7461761d6edd00c"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/metadata-bijection.json",
+      "bytes": 10624,
+      "sha256": "bbf329863e7ccb67ac5a570a3deb0e275f6c1fe13a3f8cd6eff28ce83db107f8"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/metadata-bijection.py",
+      "bytes": 2166,
+      "sha256": "63057791c64cdd8c534f73c2c9c197fee7817f22df522cf7ba33f79717b4a5a4"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/native-index-boundary.patch",
+      "bytes": 15632,
+      "sha256": "f3ac747071a1b25de7930875e422a3019bab9e793d829f67c7b53055a7fbe770"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/prepare-local-proof.py",
+      "bytes": 2662,
+      "sha256": "5270ffeebb305e29b8cc6a6f31237b20f7bc905de045cba5866a42f0a66889a7"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/producer-row-reproduction.json",
+      "bytes": 510,
+      "sha256": "094376121a3b83b98a1a085af890d1d3d23a076b9430e5ec6a913aff318964c5"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/reviews/algebra.json",
+      "bytes": 11181,
+      "sha256": "954a5e7fc995b264b216e6cd73d566e46976e26327776afecec296c67fa46471"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/reviews/oracle.json",
+      "bytes": 32791,
+      "sha256": "056a74b2c54e82a1f949078a7edebcb13bb2d21fa3811e254677c4396b49824a"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/stage-comparison-decoded.json",
+      "bytes": 283377,
+      "sha256": "98faec0e454e0811086165ad0b385cfa408650f36fdb41ec666fc236fe09bf90"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/stage-comparison.json",
+      "bytes": 283836,
+      "sha256": "bde1fb9b3bf04e451ddcb2c5be2720de6cad8698e6f5e29f2611c3d67c503e82"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/symbol-head-boundary.patch",
+      "bytes": 14210,
+      "sha256": "68d24b47be06a2f98d1e304599a4324db36ae12f8de00d7e5e0e422e21684460"
+    },
+    {
+      "path": "target/wp3-units19-21/frozen-row-diagnosis/zero-groups-provenance.json",
+      "bytes": 1043322,
+      "sha256": "a0770647c6fdafc373a361b968136e31ded5c2d973a9406b907ddbad862e2711"
+    }
+  ]
+}

@@ -1097,5 +1097,42 @@
   "oracle_p2_correction": {
     "receipt": "oracle-p2-corrections.json",
     "supersedes": "PASS_OWNED_SCOPES_ONLY and three-new-scopes-valid were false at df551850: ambiguous production end anchor; canonical tally was 56 valid, 7 inherited, 22 additional. Historical fields and original audit remain frozen evidence, not pass credit. The 1800s matrix pass did not satisfy normal ci_gammaloop budget."
+  },
+  "row_certificate_and_migration_supersession": {
+    "status": "Two native numerator digests recertified from approved fixed-case proof; approved cumulative P2 plus owned Nix-budget reconciliation integrated. Combined ci_gammaloop15/15 passed under16-worker/two-slot policy. NEW combined Astra review required before22; not whole WP3.",
+    "base": "df55185059f31bea548a5de27c95828656fbdc52",
+    "code_commit": "35b444d09d739bd5532deac21ec013ed7422d35b",
+    "receipt": "wp3/row-recertification.json",
+    "certificate": "wp3/row-recertification/diagnosis.json",
+    "reviews": {
+      "math": "wp3/row-recertification/math-review.json",
+      "provenance": "wp3/row-recertification/provenance-review.json",
+      "p2": "wp3/row-recertification/p2-review.json"
+    },
+    "P1": "Both independent fixed-case certificates APPROVED; authorized ONLY two native numerator-digest literals. Actual migration awaits NEW combined review.",
+    "P2": "Cumulative df551..ea0e78bc/codefa33 integrated. Additional existing two-slot resource-group assignment is owned reconciliation for actual up-to16 Nix worker budget; global240s unchanged.",
+    "source22": "BLOCKED until combined recertification/P2 review. Prepared22-26 f2e32c44 remains separate.",
+    "normal_run": {
+      "run_id": "c18e0610-341d-4060-a1f7-f687b16b4158",
+      "source": "35b444d09d739bd5532deac21ec013ed7422d35b",
+      "profile": "ci_gammaloop",
+      "global_workers": 16,
+      "effective_owned_group": "memory-intensive",
+      "group_max": 2,
+      "per_test_budget_seconds": 240,
+      "selected": 15,
+      "passed": 15,
+      "failed": 0,
+      "timed_out": 0,
+      "seconds": 494.041,
+      "thread_modes": [
+        1,
+        8,
+        32
+      ],
+      "parent_child_mode": "Default parents; child-mode variable not set by invocation or Nix owner. Post-run environment preflight is labelled as such; attempted late live snapshot receives no credit."
+    },
+    "evidence_change": "xrkpqnsqlplywkoortzrmwwvqtszzwyu",
+    "candidate_bookmark": "generation-integration-units19-21-recertified"
   }
 }

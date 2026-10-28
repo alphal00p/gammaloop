@@ -1,0 +1,221 @@
+{
+  "scoped_verdict": "APPROVE_CERTIFICATE",
+  "reviewer": "Astra independent producer, pipeline and provenance reviewer",
+  "scope": "Read-only SOURCE19 two-row certificate adjudication. Algebra/parse soundness is the separate peer scope; coordinator must aggregate both scoped verdicts before migration.",
+  "certificate": {
+    "path": "target/wp3-units19-21/frozen-row-diagnosis/diagnosis.json",
+    "sha256": "73036766b34c3151de753465c770b168a654adaa08632a6288485fd35a0a7f9f",
+    "artifact_count": 235
+  },
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-integration-plan",
+  "review_directory": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-row-certificate-provenance-4iI9i00e",
+  "candidate": "df55185059f31bea548a5de27c95828656fbdc52",
+  "code": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+  "approved_base": "d48f9d1aedc766eea5cb185ab6029d1f04462043",
+  "historical_source": "8d49e6ecf0d8fb1169e7433f2c0b41048aa92e60",
+  "findings": [],
+  "identity_clarification": "The selected generation-integration-plan workspace and integration bookmarks are df551850. The separate physical /shared/lcnbr/dev/gammaloop/main checkout is bc837a547dba552883755ed5323ec934d9ddf1ba (start from updated main), not df551850; all its 2271 tracked files match that checkout. This pre-existing naming distinction is recorded, not changed. All protected integration refs match the certificate.",
+  "independent_checks": {
+    "immutability": {
+      "artifacts": 235,
+      "prior_artifacts": 86,
+      "prior_binaries": 8,
+      "producers": 8,
+      "source_files": 22,
+      "preserved_refs": 22,
+      "main": {
+        "revision": "bc837a547dba552883755ed5323ec934d9ddf1ba",
+        "tracked_files_equal": 2271
+      },
+      "generation-integration-plan": {
+        "revision": "df55185059f31bea548a5de27c95828656fbdc52",
+        "tracked_files_equal": 3380
+      },
+      "generation-row-baseline": {
+        "revision": "8d49e6ecf0d8fb1169e7433f2c0b41048aa92e60",
+        "tracked_files_equal": 3551
+      },
+      "baseline_empty_change": true
+    },
+    "kernel_and_producer_identity": [
+      {
+        "kind": "baseline",
+        "kernel": "c78cffc20f318df1fce50539a587cbe8ffc717c0",
+        "resolved_kernel_package": "git+https://github.com/symbolica-dev/symbolica?rev=c78cffc20f318df1fce50539a587cbe8ffc717c0#3.0.1",
+        "direct_cargo_link_bindings": 19,
+        "symbolica_rlib": "/common/build-cache/lcnbr/7b/12be5b14aa9826/ci-optim/deps/libsymbolica-f735f6850e72ae44.rlib",
+        "symbolica_rlib_sha256": "07fecdd6492f0d501c2dc08cc64b489391e34dced01c7643017985f5740d190b",
+        "kernel_depfile": "/common/build-cache/lcnbr/7b/12be5b14aa9826/ci-optim/deps/symbolica-f735f6850e72ae44.d",
+        "binaries": [
+          {
+            "path": "target/wp3-units19-21/frozen-row-diagnosis/baseline-decoded/probe",
+            "sha256": "975e6bdea2ebe9636fa5101cba71330a06b3831612a2abc4551a3e6b45ff5f83",
+            "embedded_kernel_source_path": "c78cffc"
+          },
+          {
+            "path": "/common/build-cache/lcnbr/7b/12be5b14aa9826/ci-optim/deps/generation_oracle-de23d835aff56301",
+            "sha256": "d0460027ee6715cdafa89e7a811267d8a0fbcaf51f610bb8edbf153c8c4f86b0",
+            "embedded_kernel_source_path": "c78cffc"
+          }
+        ]
+      },
+      {
+        "kind": "current",
+        "kernel": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+        "resolved_kernel_package": "git+https://github.com/symbolica-dev/symbolica?branch=main#3.0.1",
+        "direct_cargo_link_bindings": 19,
+        "symbolica_rlib": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/libsymbolica-3882a86fe1cc7121.rlib",
+        "symbolica_rlib_sha256": "158b06f5d18dbd161c84763a20473d67ff2c3152f1cf83f82b5d6889e1acb518",
+        "kernel_depfile": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/symbolica-3882a86fe1cc7121.d",
+        "binaries": [
+          {
+            "path": "target/wp3-units19-21/frozen-row-diagnosis/current-decoded/probe",
+            "sha256": "aab4b3eba0e24d236b8dbd5554ccb3848cffe782a55b6f7561735b59fe2d70b2",
+            "embedded_kernel_source_path": "1a1829b"
+          },
+          {
+            "path": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/generation_oracle-d9164d43ccf7443d",
+            "sha256": "82d513e6831da83b653429ae3dfc0b3ee85a62604efdbeafbb750ce2815dacaa",
+            "embedded_kernel_source_path": "1a1829b"
+          }
+        ]
+      }
+    ],
+    "reproductions": [
+      {
+        "name": "baseline-original",
+        "binary": "/common/build-cache/lcnbr/7b/12be5b14aa9826/ci-optim/deps/generation_oracle-de23d835aff56301",
+        "sha256": "d0460027ee6715cdafa89e7a811267d8a0fbcaf51f610bb8edbf153c8c4f86b0",
+        "arguments": [
+          "--test-threads",
+          "1",
+          "--nocapture",
+          "ym_ggg_zero_color_L3",
+          "xs_qcdqed_addx_canonical_scalar_lr_L3"
+        ],
+        "exit_code": 0,
+        "expected_exit": 0,
+        "seconds": 68.34408956789412,
+        "cpus": [
+          0,
+          1
+        ]
+      },
+      {
+        "name": "current-original",
+        "binary": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/generation_oracle-d9164d43ccf7443d",
+        "sha256": "82d513e6831da83b653429ae3dfc0b3ee85a62604efdbeafbb750ce2815dacaa",
+        "arguments": [
+          "--test-threads",
+          "1",
+          "--nocapture",
+          "ym_ggg_zero_color_L3",
+          "xs_qcdqed_addx_canonical_scalar_lr_L3"
+        ],
+        "exit_code": 101,
+        "expected_exit": 101,
+        "seconds": 83.68204753194004,
+        "cpus": [
+          0,
+          1
+        ]
+      },
+      {
+        "name": "baseline-decoded",
+        "binary": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-units19-21/frozen-row-diagnosis/baseline-decoded/probe",
+        "sha256": "975e6bdea2ebe9636fa5101cba71330a06b3831612a2abc4551a3e6b45ff5f83",
+        "arguments": [
+          "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-row-certificate-provenance-4iI9i00e/baseline-captures"
+        ],
+        "exit_code": 0,
+        "expected_exit": 0,
+        "seconds": 27.607924622949213,
+        "cpus": [
+          0,
+          1
+        ]
+      },
+      {
+        "name": "current-decoded",
+        "binary": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-units19-21/frozen-row-diagnosis/current-decoded/probe",
+        "sha256": "aab4b3eba0e24d236b8dbd5554ccb3848cffe782a55b6f7561735b59fe2d70b2",
+        "arguments": [
+          "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-row-certificate-provenance-4iI9i00e/current-captures"
+        ],
+        "exit_code": 0,
+        "expected_exit": 0,
+        "seconds": 27.501572346081957,
+        "cpus": [
+          0,
+          1
+        ]
+      }
+    ],
+    "fresh_output_bindings": {
+      "path": "target/astra-row-certificate-provenance-4iI9i00e/fresh-capture-bindings.json",
+      "count": 56,
+      "method": "Byte-for-byte equality of all fresh old/current model, settings, report, raw/filtered/grouped and logical-metadata files; original row Classes::None full outputs independently equal the grouped captures."
+    },
+    "complete_data_audit": {
+      "path": "target/astra-row-certificate-provenance-4iI9i00e/audit-results.json",
+      "script": "target/astra-row-certificate-provenance-4iI9i00e/audit.py",
+      "full_keys": 1537,
+      "local_factors": 29451,
+      "nonliteral_instances": 1019,
+      "unique_pairs": 280,
+      "graph_pair_bindings": 1537,
+      "axes": 97412,
+      "explicit_interfaces": 8170
+    },
+    "masters_and_source_indices": {
+      "path": "target/astra-row-certificate-provenance-4iI9i00e/master-bindings.json",
+      "method": "All groups at all 12 old/current stage captures have unique complete keys/IDs and matching output order; each master index is its output position, first member ID/name identifies that master, and its ratio is one."
+    },
+    "YM_provenance": "1340 full raw sources; identical 123 full-key removed sources; 1217 retained singleton members; exact native source/output factors.",
+    "canonical_provenance": "197 full raw and filtered sources; 82 groups; exactly 137 represented sources, 55 additional members with parameter-dependent ratios, and 60 identified omitted full-key sources. Every native group summand binds its actual source index, exact symbolic ratio and original factor. No parameter-at-one proof.",
+    "all_fields": "Recursive complete JSON traversal over every old/current stage diagram, including model fingerprint, full key, ID, source order/name, edge/vertex incidence, interaction and particle IDs, half-edge order, orientation, source/target slots, signed loop basis, cuts, threshold candidates, aut, native overall factor, numerator, local factors, prefactor, projector and explicit interfaces. Differences restricted to the documented numerator spellings and interface presence; metadata transports checked rather than omitted.",
+    "original_native_controls": {
+      "binary": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/generation_oracle-d9164d43ccf7443d",
+      "sha256": "82d513e6831da83b653429ae3dfc0b3ee85a62604efdbeafbb750ce2815dacaa",
+      "arguments": [
+        "--test-threads",
+        "1",
+        "--nocapture",
+        "census::streamed_exact_dump_matches_original_diagram_values",
+        "census::class_factor_bindings_reject_invalid_provenance_or_weights",
+        "census::census_weights_substitute_parameters_only_in_group_ratios"
+      ],
+      "exit_code": 0,
+      "cpus": [
+        0,
+        1
+      ]
+    },
+    "native_control_results": "3 passed: native streamed serializer versus original diagram serialization, malformed provenance/weights rejection, and parameter substitution restricted to diagnostic group ratios.",
+    "review_controls": "Exact group-factor validation rejects sign, factor2, source-index and parameter-power perturbations.",
+    "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8\n",
+    "integer_handling": "Python json retains arbitrary-precision integers; all FNV64 digests independently recomputed without JS-number conversion."
+  },
+  "reused_and_limits": [
+    "Reused matching hash-verified Cargo binaries, libraries, lockfiles and original Nix shell; no cold baseline rebuild, dependency pin swap, cache override or manual artifact seeding.",
+    "Read final capture wrappers and exact imported Case/Census modules, native serialization owners, original assertion/classes path, comparison and inventory producers. Cases differ only in comments; Request/Process/default-options diffs contain import/macro spelling changes only; actual model and option/grouping JSON are byte-identical.",
+    "The algebra peer owns exact 280-pair and 1537-graph Atom proof execution, parser/normalizer hidden callbacks and admission semantics. This review binds every such proof input back to the actual full raw inventory and checks their kernel link selections, but does not claim an independent rerun of those algebra proofs.",
+    "No independent theorem that all discarded graphs are physically zero, no proof of arbitrary grouping/tensor behavior, no equality of private proof-cache/archive schemas, and no unique kernel-versus-index-order causal attribution.",
+    "Fresh production stages preserve already-factorized native graph expressions. This review performs no graph numerator expansion, contraction, numerical sampling, or denominator-evenness inference."
+  ],
+  "decision": "Within this scope, immutable inputs/producers and complete fixed-case physical-output/group-provenance coverage are adequate. No production defect or missing provenance witness was found. Subject to the separate algebra/interface APPROVE_CERTIFICATE and coordinator aggregation, only a narrowly targeted native-schema recertification of these two numerator digests is justified, preserving all existing physical assertions.",
+  "gates": {
+    "actual_assertions": "Unchanged; both frozen-current assertions still fail and were independently reproduced.",
+    "migration": "Requires subsequent Sol change plus targeted expected-migration tests and independent review. No expectation edits authorized or performed by this receipt alone.",
+    "source22": "BLOCKED pending aggregate adjudication, P2 documentation scope/runner corrections, and recertification review.",
+    "whole19_21_or_WP3": "Not approved by this scoped review."
+  },
+  "cleanup": {
+    "tracked_edits": false,
+    "ref_moves": false,
+    "license_output": false,
+    "new_background_processes_retained": [],
+    "retained": "Unique ignored review directory with scripts, logs, exact fresh captures, binding manifests and this scoped receipt for coordinator review. All original artifacts and shared caches preserved.",
+    "environment_note": "Initial plain nix develop only resolved/built its current normal development shell and printed Python version; all certificate reproduction/checks used the retained original pinned shell launcher. No baseline build was repeated."
+  }
+}

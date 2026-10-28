@@ -1,0 +1,33 @@
+{
+  "input_code": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+  "frozen_candidate": "df55185059f31bea548a5de27c95828656fbdc52",
+  "before_file_sha256": "b23140aece24dd077c6442052143e6838130b02fb700188ca6d727e3b0ebb9b3",
+  "after_file_sha256": "03d1482e0eb1ee4acf66243a83c41aa5aae8a309f4ce0329fb20142081d51f7c",
+  "rows": [
+    {
+      "case": "ym_ggg_zero_color_L3",
+      "old_integer": 2023414268013597133,
+      "old_hex": "0x1c149c8e666851cd",
+      "new_integer": 12564710287510348289,
+      "new_hex": "0xae5ed16f90c02201",
+      "current_native_capture": "target/wp3-units19-21/frozen-row-diagnosis/current-decoded/captures/ym_ggg_zero_color_L3/grouped.json",
+      "current_sha256": "1ea989a6584c09d5ec19b4243fbcdb4898c83f4b07c6cf70233ae04e5cc0d356",
+      "baseline_native_capture": "target/wp3-units19-21/frozen-row-diagnosis/baseline-decoded/captures/ym_ggg_zero_color_L3/grouped.json",
+      "baseline_sha256": "d0a1b760170a4d68e65517ee99dcb30ed9e8a1fa685393d6278bdd11458f7cfc",
+      "hashing": "Every native interface retained; no head mapping, payload normalization or parameter substitution in the digest derivation."
+    },
+    {
+      "case": "xs_qcdqed_addx_canonical_scalar_lr_L3",
+      "old_integer": 16218294366853174009,
+      "old_hex": "0xe112f4cc670092f9",
+      "new_integer": 9414812182237719052,
+      "new_hex": "0x82a821cc454caa0c",
+      "current_native_capture": "target/wp3-units19-21/frozen-row-diagnosis/current-decoded/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/grouped.json",
+      "current_sha256": "571f715365f414a4faaabd31ec02257f3774c64202d73a16793c93f4b08e8e53",
+      "baseline_native_capture": "target/wp3-units19-21/frozen-row-diagnosis/baseline-decoded/captures/xs_qcdqed_addx_canonical_scalar_lr_L3/grouped.json",
+      "baseline_sha256": "0da4eadf85fa19ce39aad53f20f4100595340ab430fd97edd566aaef89160b61",
+      "hashing": "Every native interface retained; no head mapping, payload normalization or parameter substitution in the digest derivation."
+    }
+  ],
+  "precision": "Python exact arbitrary-precision integers; u64 wrapping is explicit. No JS-number or floating conversion."
+}

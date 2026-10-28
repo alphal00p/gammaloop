@@ -1,0 +1,285 @@
+{
+  "scoped_verdict": "APPROVE_CERTIFICATE",
+  "reviewer": "Astra independent mathematical exactness, representation and typed-interface reviewer",
+  "scope": "Read-only completed SOURCE19 two-row diagnostic certificate. No expectation edit, production change, integration, publication, or source22 release.",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-integration-plan",
+  "review_directory": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-row-certificate-math-20261028-e2wo8E",
+  "candidate": "df55185059f31bea548a5de27c95828656fbdc52",
+  "code": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+  "approved_base": "d48f9d1aedc766eea5cb185ab6029d1f04462043",
+  "historical_source": "8d49e6ecf0d8fb1169e7433f2c0b41048aa92e60",
+  "baseline_working_copy": "3b6ee6a6fe522345886d93a651fda41794ef93af",
+  "certificate": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-units19-21/frozen-row-diagnosis/diagnosis.json",
+    "sha256": "73036766b34c3151de753465c770b168a654adaa08632a6288485fd35a0a7f9f",
+    "artifacts_verified": 235
+  },
+  "findings": [],
+  "decision": {
+    "mathematical": "The full finite inputs in these two cases have equal local symbolic values and complete already-factorized graph numerators under the explicitly checked constructor spelling transport. The full labelled, dimensioned and dualized interfaces, flags, and global repeated-index bindings are preserved. No further mathematical defect or missing minimal witness was found in this scope.",
+    "permission": "With the separate provenance APPROVE_CERTIFICATE receipt, permits only narrowly justified native-schema recertification of the TWO historical numerator digests, retaining all physical assertions, full-key/field/interface/provenance checks and current admission guards. Actual expectation changes still require the subsequent Sol implementation and targeted migration-test review.",
+    "not_approval": "The active native assertions remain unchanged and fail. This is neither changed-expectation approval nor whole19-21/WP3 approval. Source22 stays BLOCKED pending P2 documentation scope/runner-budget fixes and migration tests/review."
+  },
+  "independent_checks": {
+    "source_and_artifact_identity": {
+      "artifacts": 235,
+      "source_bindings": 22,
+      "diagnosis_sha256": "73036766b34c3151de753465c770b168a654adaa08632a6288485fd35a0a7f9f"
+    },
+    "rebuilt_inputs": {
+      "unique_nonliteral_pairs": 280,
+      "complete_graph_pairs": 1537,
+      "counts": {
+        "ym_ggg_zero_color_L3:local_factors": 26102,
+        "literal": 28432,
+        "nonliteral": 1019,
+        "xs_qcdqed_addx_canonical_scalar_lr_L3:local_factors": 3349
+      },
+      "stages": [
+        {
+          "case": "ym_ggg_zero_color_L3",
+          "stage": "raw",
+          "local_tensors": 26102,
+          "axes": 84992,
+          "permuted": 5800,
+          "open_axes": 0,
+          "explicit_interfaces": 5800
+        },
+        {
+          "case": "ym_ggg_zero_color_L3",
+          "stage": "filtered",
+          "local_tensors": 23573,
+          "axes": 77273,
+          "permuted": 5235,
+          "open_axes": 0,
+          "explicit_interfaces": 5235
+        },
+        {
+          "case": "ym_ggg_zero_color_L3",
+          "stage": "grouped",
+          "local_tensors": 23573,
+          "axes": 77273,
+          "permuted": 5235,
+          "open_axes": 0,
+          "explicit_interfaces": 5235
+        },
+        {
+          "case": "xs_qcdqed_addx_canonical_scalar_lr_L3",
+          "stage": "raw",
+          "explicit_interfaces": 2370,
+          "local_tensors": 3349,
+          "axes": 12420,
+          "permuted": 2370,
+          "open_axes": 0
+        },
+        {
+          "case": "xs_qcdqed_addx_canonical_scalar_lr_L3",
+          "stage": "filtered",
+          "explicit_interfaces": 2370,
+          "local_tensors": 3349,
+          "axes": 12420,
+          "permuted": 2370,
+          "open_axes": 0
+        },
+        {
+          "case": "xs_qcdqed_addx_canonical_scalar_lr_L3",
+          "stage": "grouped",
+          "explicit_interfaces": 934,
+          "local_tensors": 1394,
+          "axes": 4936,
+          "permuted": 934,
+          "open_axes": 0
+        }
+      ]
+    },
+    "cached_both_kernel_runs": [
+      {
+        "binary": "local-proof",
+        "sha256": "3ef16a383b7f4c5cfd16c343d356a8c5933b1543f21d8fef7e11ec22b09bc050",
+        "rows": 280,
+        "both_exact_predicates_true": true,
+        "seconds": 0.10112561495043337,
+        "exit": 0
+      },
+      {
+        "binary": "local-proof-baseline",
+        "sha256": "dde918670cb32dee6ad54b19601e4576224e602426c6e610bd93fe8cc090dd2e",
+        "rows": 280,
+        "both_exact_predicates_true": true,
+        "seconds": 0.10106853512115777,
+        "exit": 0
+      },
+      {
+        "binary": "local-proof-adversarial",
+        "sha256": "f055038c0f5c356c1576fff367b1492a330dd25b618ab35b500b6c24c843fc55",
+        "rows": 280,
+        "both_exact_predicates_true": true,
+        "seconds": 0.13368342886678874,
+        "exit": 0
+      },
+      {
+        "binary": "graph-proof",
+        "sha256": "01b56fbc4fc35ead7da023569c10775d6189602dd397ae7790bc55ba6cdff4a7",
+        "rows": 1537,
+        "both_exact_predicates_true": true,
+        "seconds": 1.8885575579479337,
+        "exit": 0
+      },
+      {
+        "binary": "graph-proof-baseline",
+        "sha256": "38e8b53bb694d3d89592e0e5030e55418d42582c36876bff2a95d51b3602c4d9",
+        "rows": 1537,
+        "both_exact_predicates_true": true,
+        "seconds": 1.9206161089241505,
+        "exit": 0
+      }
+    ],
+    "additional_negative_controls": {
+      "per_kernel": 1120,
+      "kernels": [
+        "c78cffc20f318df1fce50539a587cbe8ffc717c0",
+        "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3"
+      ],
+      "controls_per_unique_pair": [
+        "sign reversal",
+        "exact coefficient factor 2",
+        "replace one actual hedge owner by 999999",
+        "replace one actual adjoint dimension 8 by 9"
+      ],
+      "result": "All 280 pairs times four actual source mutations rejected by exact Atom and canonical-string equality in both cached graph-proof binaries; no collect_factors used for these added controls. All changed inputs asserted different before execution.",
+      "inputs": "negative-pairs.json",
+      "results": [
+        "negative-current.json",
+        "negative-baseline.json"
+      ]
+    },
+    "native_admission": {
+      "per_kernel": 29451,
+      "result": "Every actual raw local numerator/prefactor/projector re-parsed with the native Idenso representation registration and admitted via that kernel build of NumeratorInterface::admit using its original optional source interface. Every resulting decoded logical port vector exactly matched its original live capture. No old/current expectation value supplied to admission.",
+      "sources": [
+        "native-admission.rs",
+        "extra-checks.py"
+      ],
+      "results": [
+        "native-admission-current.json",
+        "native-admission-baseline.json"
+      ]
+    },
+    "global_binding_transport": [
+      {
+        "kernel": "baseline",
+        "occurrences": 97412,
+        "unique_typed_ports": 90,
+        "injective_both_directions": true
+      },
+      {
+        "kernel": "current",
+        "occurrences": 97412,
+        "unique_typed_ports": 90,
+        "injective_both_directions": true
+      }
+    ],
+    "hidden_callback_and_expansion_audit": {
+      "source": "parse-audit.rs, the exact graph-proof.rs/local-proof.rs sources, both pinned parser.rs/normalize.rs/state.rs/atom.rs implementations, and native Idenso/Spenso/FeynKit constructor/admission owners",
+      "input_heads": 28,
+      "custom_normalization_callbacks_on_input_heads_in_either_parse_context": 0,
+      "complete_graph_pairs_per_kernel": 1537,
+      "zero_parsed_graph_inputs": 0,
+      "preserved_products_containing_sums_per_kernel_across_both_inputs": 8948,
+      "raw_linear_calls_checked": 114962,
+      "raw_linear_argument_result": "Every raw serialized gamma/metric call was checked before normalization: no sum/product/power in its argument list; linear-function distribution is not invoked on these inputs.",
+      "callstack": "Atom::parse -> Token::to_atom -> to_atom_with_output_no_norm under symbol registration lock -> normalize. Both kernels retain products, merge exact coefficients/powers and canonicalize symmetry signs. No graph collect_factors, expand, contraction, component evaluation, sampling, or denominator rewrite in graph-proof. Serialized attributes supply the Real/Antisymmetric f and other constructor attributes without application normalizers. All 28 heads were checked before parsing entire graphs, and all graph nodes afterward.",
+      "local_secondary_factoring": "The cached local-proof also calls collect_factors on local factors only. Its true parsed_equal result is independent and primary. Added complete negative controls used the graph-proof parser-only route.",
+      "results": [
+        "parse-audit-current.json",
+        "parse-audit-baseline.json",
+        "raw-linear-argument-check.json"
+      ]
+    },
+    "first_YM_witness": {
+      "owner": {
+        "case": "ym_ggg_zero_color_L3",
+        "id": "3a30d2cc8949fcc1d5f226d286d16690",
+        "owner": "vertex:0",
+        "proof": 0
+      },
+      "baseline_characters": 5339,
+      "mapped_baseline_characters": 5207,
+      "current_characters": 5207,
+      "raw_before_filter": true
+    },
+    "final_preservation": {
+      "encoded_decoded_bijections": [
+        {
+          "kernel": "baseline",
+          "occurrences": 97412,
+          "unique_typed_ports": 90,
+          "injective_both_directions": true
+        },
+        {
+          "kernel": "current",
+          "occurrences": 97412,
+          "unique_typed_ports": 90,
+          "injective_both_directions": true
+        }
+      ],
+      "raw_linear_calls": 114962,
+      "whole_first_witness": true,
+      "all_protected_workspaces_unchanged": true,
+      "all_protected_refs_unchanged": true,
+      "all_git_refs_unchanged": true,
+      "certificate_artifacts_unchanged": 235,
+      "both_kernel_checkout_ids_verified": true
+    }
+  },
+  "reviewed_mathematical_boundaries": [
+    {
+      "boundary": "Five constructor head mappings",
+      "evidence": "Immutable 8d49 and 82c1 feynkit-graph/src/symbols.rs declarations and certificate source SHA bindings. Q/K/P lose only tensor-label:q/k/p; edge/vertex lose only index-label:e/v. Old tag consumers are presentation functions; current declarations put these hints in process-local Notation. Namespace, head, arguments, rank1/tensor/index tags, symmetries, representation and dimensions are preserved. Mapping is injective on these heads."
+    },
+    {
+      "boundary": "Reversible old cooking versus native Named indices",
+      "evidence": "Old cook_function_symbol stores the complete source Atom as UserData::Atom; uncook replaces the actual encoded symbol with that stored payload. Current cook_function_atom(Index) validates Named(owner,local) and reconstructs the same tagged head and integers. Independent global maps checked 97412 occurrences and 90 unique typed ports in each version, forward/reverse injective across owners and graphs. The representation wrapper retains dimension and dind dualization. No open/anonymous free ports occur in these captures."
+    },
+    {
+      "boundary": "Logical axes and explicit source interfaces",
+      "evidence": "All 29451 raw tensors, 97412 axes, 8170 actual permutations and 8170 explicit declarations rebuilt from raw data; each permutation injective, each declaration equals actual ordered logical slots, and metric/composite flags equal. Equivalent checks also pass for every filtered/grouped local tensor. No interface is erased to establish equivalence."
+    },
+    {
+      "boundary": "Local and full graph values",
+      "evidence": "28432 local pairs literally equal after only the five head mappings; all 1019 remaining instances join to the independently regenerated 280 distinct pairs. Exact Atom equality succeeds on parse in BOTH kernels. All 1537 full raw numerator pairs independently bound to full-key-joined payloads also pass exact Atom equality in both kernels. Matching local owners and the global label bijection preserve shared contraction identities; denominator evenness is never used."
+    },
+    {
+      "boundary": "Pre-zero YM four-gluon witness",
+      "evidence": "Whole raw vertex:0 factor at graph 3a30d2cc8949fcc1d5f226d286d16690 (rule 2) equals unique pair 0: old 5339 characters, 5207 after display mapping, current 5207. The f constructor is Real/Antisymmetric in both immutable declarations. The exhibited three-cycle is even; all complete nonliteral pairs, rather than that illustration alone, were independently tested. Witness exists before zero-color filtering."
+    },
+    {
+      "boundary": "Canonical case",
+      "evidence": "All 3349 local factors literally agree after exact head mapping; it is covered by whole-graph, live typed-axis and native-admission checks. Approval does not depend on recovering a legacy serialized hash."
+    },
+    {
+      "boundary": "Private proof histories",
+      "evidence": "SymbolicTensor explicitly distinguishes value/logical-interface equality from retained occurrences, collision history, completion proofs and archive state. These probes establish fixed-case values and actual admitted logical interfaces, not identical private proof tokens. No proof cache is imported or transferred between versions. Current from_declared_parts validates observed scopes/multiplicities and ports; translate retains native history under checked injective renaming. A serializer digest migration may not weaken those already-approved guards."
+    }
+  ],
+  "peer_provenance_reused": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-row-certificate-provenance-4iI9i00e/review.json",
+    "sha256": "2894eb537002e38061594c4040df0438fa372d70d1c17f83a469bf4b6e813492",
+    "scoped_verdict": "APPROVE_CERTIFICATE",
+    "reused": "Independent native producer/kernel/library bindings; two original historical rows pass and two current rows fail; 56 fresh byte-identical captures; complete signed routing, grouping and source-weight/provenance audit including all 55 parameter-dependent ratios and omitted source inventories; three native controls. Did not duplicate full generation or a cold baseline build."
+  },
+  "limits": [
+    "Exact fixed-case equivalence only: no general zero-color theorem, all-grouping theorem, all-model physics, full WP3, benchmark, or distribution claim.",
+    "No claim of private old/new proof-cache, retained hidden occurrence history or archive-byte identity. Current admitted-interface/history safeguards must stay intact.",
+    "Both pinned kernels agree on these exact symbolic inputs; no pin-swapped counterfactual or sole-cause attribution between index ordering and kernel internals.",
+    "Source/routing/group completeness approval is the named peer scope; this receipt independently executes the mathematical and typed-interface scope.",
+    "Initial review-helper setup errors (using the integration commit as the physical main file list, then a Python delimiter typo) were corrected in ignored review artifacts and receive no pass credit. All credited runs exit zero; neither touched tracked files."
+  ],
+  "identity_clarification": "The selected workspace/integration references are df551850. Physical sibling main is the pre-existing bc837a547dba552883755ed5323ec934d9ddf1ba, also noted by the peer. Its 2271 files, selected workspace 3380 files, baseline 3551 files, all locks, all refs and all235 certificate artifacts were unchanged throughout this review.",
+  "cleanup": {
+    "tracked_edits": false,
+    "expectation_changes": false,
+    "processes_retained": [],
+    "retained": "Ignored review scripts, compiler commands, matching native probe binaries, complete inputs/results and preservation receipts retained for coordinator review and reproducibility. Original artifacts and shared caches untouched."
+  }
+}

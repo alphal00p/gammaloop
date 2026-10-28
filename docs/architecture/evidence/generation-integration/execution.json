@@ -7,7 +7,7 @@
   "workspace": "/shared/lcnbr/dev/gammaloop/generation-integration-plan",
   "base_commit": "3f0df2a870806076820786994d4883decec8e9e3",
   "plan_commit": "4374f72027b75df9ff95c5c7a725ee75beac27a8",
-  "implementation_change": "smlmnzlztwqwyqyvqsoqvwzvunsspooy",
+  "implementation_change": "xrkpqnsqlplywkoortzrmwwvqtszzwyu",
   "implementation_bookmark": "generation-integration",
   "preserved_plan_bookmark": "generation-integration-plan",
   "author": {
@@ -73,12 +73,12 @@
       "scope": "Four packaging and two Clinnet tests; Nix WASM and license output; 49 hashes; byte-exact notices; not final wheel certification or all WP11"
     },
     "WP3": {
-      "status": "Incomplete WP3: source19-21 implemented with focused semantic controls; two imported numerator-digest assertions remain FAIL, unmodified. NEW independent Astra review required before22. Full rebuilt-tip matrix and later stages pending.",
+      "status": "Two native numerator digests recertified from approved fixed-case proof; approved cumulative P2 plus owned Nix-budget reconciliation integrated. Combined ci_gammaloop15/15 passed under16-worker/two-slot policy. NEW combined Astra review required before22; not whole WP3.",
       "pre_rebuild_ref": "generation-integration-pre-rebuild",
       "pre_rebuild_commit": "5226894ee1af61797e6b819d7e801a22bf17bace",
       "ancestry": "Reviewed planning/evidence chain descends from fixed target 3f0df2a8 and is retained as non-code base.",
-      "review": "Both independent combined d48 assigned scopes APPROVED; source19-21 requires NEW independent Astra review before22",
-      "slice_receipt": "wp3/units19-21.json",
+      "review": "Fixed-case physical/interface equivalence certificates and scoped P2 input approved; NEW combined migration/resource review pending",
+      "slice_receipt": "wp3/row-recertification.json",
       "approved_prefix": "74cebf6c8f673f5849b26afe55fa98035d5eba1d",
       "parallel_lanes": {
         "numeric08-09": {
@@ -145,11 +145,13 @@
           "gates": "Lane must defer staged API dependencies rather than importing this unreviewed work. Parent replay remains sequential; NEW Astra review required before future integration. Do not duplicate these ports."
         },
         "projector22-24": {
-          "status": "Original735d approved only on438b; separate staged22-26 preparation from d48 now pending new review, not imported",
-          "original_commit": "735d599a665acbce1577b2c40d149c152f01543d",
-          "workspace": "generation-projector-flow",
-          "new_bookmark": "generation-projector-flow-staged",
-          "limits": "22-24 plus approved25 ONLY and26 RQFT ghost LMB; source36 later; combined integration follows19-21 review"
+          "status": "Prepared cumulative22-26 APPROVED independently, AVAILABLE ONLY FOR LATER ordered replay after current combined review; not imported",
+          "candidate": "f2e32c44c986058ede1d7e585b9e2e4fefe1110c",
+          "code": "0d13655702c2986f2fc7923fd9121278c4439709",
+          "base": "d48f9d1aedc766eea5cb185ab6029d1f04462043",
+          "bookmark": "generation-projector-flow-staged",
+          "receipt": "/shared/lcnbr/dev/gammaloop/generation-projector-flow/target/astra-staged22-26-r1-20261028/review.json",
+          "later_P3": "Correct staged scope audit no-end start-anchor validation with canonical owner rules;23 stale digests+4 anchor failures inherited,7+20 denotes origin breakdown. No blind unrelated rescope."
         }
       },
       "policy_fix_receipt": "wp3/units03-07-policy-fix.json",
@@ -188,7 +190,7 @@
     "candidate_bookmark": "generation-integration-corrected-staged",
     "candidate_change": "pmnstxxwwwkzvyuxyzmsmswtutnkzkmy"
   },
-  "implementation_code_commit": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+  "implementation_code_commit": "35b444d09d739bd5532deac21ec013ed7422d35b",
   "combined_staged_integration_review": {
     "candidate": "d48f9d1aedc766eea5cb185ab6029d1f04462043",
     "verdict": "APPROVE both independent assigned scopes",
@@ -207,7 +209,7 @@
     "source19_gate": "Coordinator released19-21 only; NEW Astra review required before22"
   },
   "active_slice19_21": {
-    "status": "Incomplete WP3: source19-21 implemented with focused semantic controls; two imported numerator-digest assertions remain FAIL, unmodified. NEW independent Astra review required before22. Full rebuilt-tip matrix and later stages pending.",
+    "status": "Two native numerator digests recertified from approved fixed-case proof; approved cumulative P2 plus owned Nix-budget reconciliation integrated. Combined ci_gammaloop15/15 passed under16-worker/two-slot policy. NEW combined Astra review required before22; not whole WP3.",
     "base": "d48f9d1aedc766eea5cb185ab6029d1f04462043",
     "code_commit": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
     "evidence_change": "smlmnzlztwqwyqyvqsoqvwzvunsspooy",
@@ -221,7 +223,81 @@
       20,
       21
     ],
-    "parallel22_26": "Separate generation-projector-flow-staged reconciliation from approved d48; new Astra review pending, not imported or duplicated. Source36 remains later.",
-    "next_gate": "STOP for NEW independent Astra review before22; no WP4+ or benchmark work."
+    "parallel22_26": "Prepared staged22–26 f2e32c44/code0d136557 independently APPROVED; no import in this correction slice. Await current combined recertification/P2 review before ordered replay. Later inherited-audit P3 remains for integration.",
+    "next_gate": "STOP for NEW independent Astra review before22; no WP4+ or benchmark work.",
+    "recertification": {
+      "status": "Two native numerator digests recertified from approved fixed-case proof; approved cumulative P2 plus owned Nix-budget reconciliation integrated. Combined ci_gammaloop15/15 passed under16-worker/two-slot policy. NEW combined Astra review required before22; not whole WP3.",
+      "base": "df55185059f31bea548a5de27c95828656fbdc52",
+      "code_commit": "35b444d09d739bd5532deac21ec013ed7422d35b",
+      "receipt": "wp3/row-recertification.json",
+      "certificate": "wp3/row-recertification/diagnosis.json",
+      "reviews": {
+        "math": "wp3/row-recertification/math-review.json",
+        "provenance": "wp3/row-recertification/provenance-review.json",
+        "p2": "wp3/row-recertification/p2-review.json"
+      },
+      "P1": "Both independent fixed-case certificates APPROVED; authorized ONLY two native numerator-digest literals. Actual migration awaits NEW combined review.",
+      "P2": "Cumulative df551..ea0e78bc/codefa33 integrated. Additional existing two-slot resource-group assignment is owned reconciliation for actual up-to16 Nix worker budget; global240s unchanged.",
+      "source22": "BLOCKED until combined recertification/P2 review. Prepared22-26 f2e32c44 remains separate.",
+      "normal_run": {
+        "run_id": "c18e0610-341d-4060-a1f7-f687b16b4158",
+        "source": "35b444d09d739bd5532deac21ec013ed7422d35b",
+        "profile": "ci_gammaloop",
+        "global_workers": 16,
+        "effective_owned_group": "memory-intensive",
+        "group_max": 2,
+        "per_test_budget_seconds": 240,
+        "selected": 15,
+        "passed": 15,
+        "failed": 0,
+        "timed_out": 0,
+        "seconds": 494.041,
+        "thread_modes": [
+          1,
+          8,
+          32
+        ],
+        "parent_child_mode": "Default parents; child-mode variable not set by invocation or Nix owner. Post-run environment preflight is labelled as such; attempted late live snapshot receives no credit."
+      },
+      "evidence_change": "xrkpqnsqlplywkoortzrmwwvqtszzwyu",
+      "candidate_bookmark": "generation-integration-units19-21-recertified"
+    }
+  },
+  "row_recertification": {
+    "status": "Two native numerator digests recertified from approved fixed-case proof; approved cumulative P2 plus owned Nix-budget reconciliation integrated. Combined ci_gammaloop15/15 passed under16-worker/two-slot policy. NEW combined Astra review required before22; not whole WP3.",
+    "base": "df55185059f31bea548a5de27c95828656fbdc52",
+    "code_commit": "35b444d09d739bd5532deac21ec013ed7422d35b",
+    "receipt": "wp3/row-recertification.json",
+    "certificate": "wp3/row-recertification/diagnosis.json",
+    "reviews": {
+      "math": "wp3/row-recertification/math-review.json",
+      "provenance": "wp3/row-recertification/provenance-review.json",
+      "p2": "wp3/row-recertification/p2-review.json"
+    },
+    "P1": "Both independent fixed-case certificates APPROVED; authorized ONLY two native numerator-digest literals. Actual migration awaits NEW combined review.",
+    "P2": "Cumulative df551..ea0e78bc/codefa33 integrated. Additional existing two-slot resource-group assignment is owned reconciliation for actual up-to16 Nix worker budget; global240s unchanged.",
+    "source22": "BLOCKED until combined recertification/P2 review. Prepared22-26 f2e32c44 remains separate.",
+    "normal_run": {
+      "run_id": "c18e0610-341d-4060-a1f7-f687b16b4158",
+      "source": "35b444d09d739bd5532deac21ec013ed7422d35b",
+      "profile": "ci_gammaloop",
+      "global_workers": 16,
+      "effective_owned_group": "memory-intensive",
+      "group_max": 2,
+      "per_test_budget_seconds": 240,
+      "selected": 15,
+      "passed": 15,
+      "failed": 0,
+      "timed_out": 0,
+      "seconds": 494.041,
+      "thread_modes": [
+        1,
+        8,
+        32
+      ],
+      "parent_child_mode": "Default parents; child-mode variable not set by invocation or Nix owner. Post-run environment preflight is labelled as such; attempted late live snapshot receives no credit."
+    },
+    "evidence_change": "xrkpqnsqlplywkoortzrmwwvqtszzwyu",
+    "candidate_bookmark": "generation-integration-units19-21-recertified"
   }
 }

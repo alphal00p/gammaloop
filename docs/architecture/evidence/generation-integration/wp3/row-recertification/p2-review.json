@@ -1,0 +1,418 @@
+{
+  "reviewer": "NEW independent Astra ROUND2; read-only review",
+  "scope": [
+    "ORACLE-P2-REGISTRY",
+    "ORACLE-P2-TEST-BUDGET"
+  ],
+  "scoped_verdict": "APPROVE",
+  "blocking_findings": [],
+  "base": "df55185059f31bea548a5de27c95828656fbdc52",
+  "code": "fa33dec7c396e5e0df22a21dfca936cd4e8cbc4c",
+  "candidate": "ea0e78bcc246cd070cb2f7b26c82b45f9a65ed81",
+  "code_change": "mspmutsrlwprnmovwovxuororvzwsvop",
+  "candidate_change": "zxqsnyyzxkpnkwkpzzoukqswxsmsnzkl",
+  "bookmark": "generation-oracle-budget-fix",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-oracle-budget-fix",
+  "closed_findings": [
+    {
+      "id": "ORACLE-P2-REGISTRY",
+      "prior_severity": "P2",
+      "location": "docs/developers.toml:34",
+      "result": "APPROVE",
+      "evidence": "Unique literal multiline delimiter. Rust str::matches is literal, nonoverlapping substring matching, not regex. Independent byte-range and git hash-object audit agrees with retained checker on every scope at frozen base and candidate. Exactly one nonblank start/end and end >= start+anchor length, whole source when no end anchor, unchanged reviewed grouping bytes/digest. New registration scope digest binds test split. Computed 56/7/22 -> 57/7/21. All three owned scopes valid; source31 drift remains.",
+      "canonical_owner": "Fresh existing ambiguous-start, ambiguous-end, missing/empty-end and reversed-range regression passed. Actual checked_in_registry_is_valid reaches later gammaloop-architecture/state.rs stale digest, demonstrating the earlier three owned scopes were accepted; this is an expected global failure, not full documentation pass.",
+      "history": "Old units19-21 JSON is byte-semantically unchanged except the appended explicit supersession; original false audit and failed normal run remain historical, with no pass credit."
+    },
+    {
+      "id": "ORACLE-P2-TEST-BUDGET",
+      "prior_severity": "P2",
+      "location": "crates/feynkit-generator/tests/generation_oracle/main.rs:650",
+      "result": "APPROVE",
+      "evidence": "Twelve ordinary nonignored tests cover all four registration orders x 1/8/32 threads. Each fresh reference uses generation,1 and same test function/workloads/settings as its actual child. Comparisons remain complete line-by-line plus equal lengths, including full canonical graph keys, factorized numerator/local factors/interfaces, IDs/names/routing and group/member/exact-ratio payloads. No production grouping or expectations changed.",
+      "worker_and_registration": "register_indices still creates/admit/exports 192 reversible aliases for non-generation orders and checks their real registration order. grouped retains requested Run pool and nonzero progress assertions for the full workloads; sampled nine-input/seven-zero/two-survivor subset retains requested Run and grouping. This is preregistration stability; it does not claim generated graphs use every alias.",
+      "failure_control": "Fresh default parent should_panic control passed. Additional direct invalid-count child failed with exit101 at main.rs:658, before payload emission. Existing child_lines asserts unsuccessful status; a no-test/empty child cannot satisfy reference length. No child-mode variable was set in default parent reruns.",
+      "selection": "Fresh no-filter default inventory independently discovers all13. Current selector includes12-cell prefix plus negative control. Old exact selector survives only as frozen historical evidence; existing WP2 substring retains all12 cells. No just/Nix/config selector needs renaming."
+    }
+  ],
+  "nonblocking_observations": [
+    {
+      "severity": "P3",
+      "location": "docs/architecture/evidence/generation-integration/wp3/oracle-p2-corrections.json:423",
+      "title": "Clarify warning classification",
+      "detail": "The receipt calls both existing Clarabel diagnostics lifetime-syntax warnings. Original and independent logs show one unused-import warning and one mismatched-lifetime-syntax warning. Only the receipt description is inaccurate; it does not affect either P2 closure."
+    }
+  ],
+  "independent_checks": {
+    "representative_matrix": {
+      "result": "PASS",
+      "run_id": "cf0b1bca-0a5e-4ff5-a23e-e3502586abe4",
+      "profile": "ci_gammaloop",
+      "test_threads": 2,
+      "per_test": [
+        {
+          "name": "index_registration_child_failure_propagates",
+          "seconds": "0.015",
+          "budget_seconds": 240
+        },
+        {
+          "name": "outputs_do_not_depend_on_index_registration_order_decreasing_32",
+          "seconds": "57.450",
+          "budget_seconds": 240
+        },
+        {
+          "name": "outputs_do_not_depend_on_index_registration_order_decreasing_1",
+          "seconds": "72.768",
+          "budget_seconds": 240
+        }
+      ],
+      "log": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-budget-fix/target/astra-p2-round2-BCaMJqtU/representative.log",
+        "sha256": "3cd064e5e647755c702f1fb1fd61f30c18c1b91cc0ebaaf3e258482d326a0884",
+        "bytes": 654
+      },
+      "counting": "3 top-level tests include4 fresh full-workload children and1 expected-failing negative-control child. Not a fresh all13 run."
+    },
+    "canonical_owner": {
+      "result": "PASS",
+      "run_id": "e17925b2-085b-4f2b-8090-9fd96d434713",
+      "test": "tests::developer_scope_boundaries_remain_required_while_watching",
+      "seconds": "0.114",
+      "budget_seconds": 240,
+      "log": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-budget-fix/target/astra-p2-round2-BCaMJqtU/canonical-owner.log",
+        "sha256": "e83085e37ee3cd8b87dfda98f506eb32c74ca5fb30ddd62abf1c7443138944d0",
+        "bytes": 1685
+      },
+      "binary": {
+        "path": "/common/build-cache/lcnbr/9d/876f1ea0078819/ci-optim/deps/alphal00p_docs_builder-0af4996c444b7bde",
+        "sha256": "a8162653e8c6ce4d0fbf5f8dfae6f598ba782c79fc659bab7ff0c36cce2ebb50",
+        "bytes": 8180632
+      }
+    },
+    "expected_failures": [
+      {
+        "test": "invalid-thread-count child",
+        "exit": 101,
+        "log": {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-budget-fix/target/astra-p2-round2-BCaMJqtU/negative-child.log",
+          "sha256": "ca72bd7a376adfffb0166d7d9f21dba82ad65ad48da262785ca4309c64227c2d",
+          "bytes": 605
+        }
+      },
+      {
+        "test": "tests::checked_in_registry_is_valid",
+        "exit": 101,
+        "expected_failure": "Existing later gammaloop-architecture crates/gammaloop-api/src/state.rs scope drift",
+        "log": {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-budget-fix/target/astra-p2-round2-BCaMJqtU/canonical-registry-expected-drift.log",
+          "sha256": "2de5ac1db1a78a72abd3b117ee29a3a56f25e47d9ed68bb1a54dfde2f9a35eec",
+          "bytes": 794
+        }
+      }
+    ],
+    "registry": {
+      "frozen_base": {
+        "valid": 56,
+        "inherited": 7,
+        "additional": 22
+      },
+      "candidate": {
+        "valid": 57,
+        "inherited": 7,
+        "additional": 21
+      },
+      "audit": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-budget-fix/target/astra-p2-round2-BCaMJqtU/registry.json",
+        "sha256": "42873139d44431a69dfd5db0df42c31df35ccea00449fd8faeb4abd5e32554d4",
+        "bytes": 74830
+      }
+    },
+    "fmt": "cargo fmt -p feynkit-generator -- --check: PASS",
+    "typst_and_titles": {
+      "result": "PASS",
+      "titles": [
+        {
+          "source": "docs/architecture/generation-integration-wp3-grouping.typ",
+          "title": "Generation integration deterministic grouping"
+        },
+        {
+          "source": "docs/architecture/generation-integration-plan.typ",
+          "title": "Combined generation integration plan"
+        }
+      ],
+      "temporary_outputs_removed": [
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-budget-fix/target/astra-p2-round2-BCaMJqtU/grouping.pdf",
+          "sha256": "cb382eef432ec7f9e81e8ac9c37cd39ac3c5e4873a18ba6f760acb11a39b0e99",
+          "bytes": 50389
+        },
+        {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-budget-fix/target/astra-p2-round2-BCaMJqtU/plan.pdf",
+          "sha256": "2b144e8095c10a08c7dd23a6810e1bfac70863aefee9645e5952fc327942891a",
+          "bytes": 185373
+        }
+      ]
+    },
+    "source_integrity": {
+      "tracked_files": 3382,
+      "refs": 25,
+      "recorded_artifact_hashes": 22,
+      "pre_post_equal": true,
+      "protected_locks": 11,
+      "integer_json": "Python exact integers throughout; no float conversion for digests or fingerprint integers."
+    }
+  },
+  "reused_checks": {
+    "source": "fa33dec7c396e5e0df22a21dfca936cd4e8cbc4c",
+    "matrix": {
+      "result": "PASS",
+      "run_id": "7e676561-b754-4055-ba2e-41c9ee3ecaec",
+      "top_level_tests": 13,
+      "matrix_children": 24,
+      "negative_children": 1,
+      "per_test_seconds": {
+        "index_registration_child_failure_propagates": "0.021",
+        "outputs_do_not_depend_on_index_registration_order_decreasing_32": "72.956",
+        "outputs_do_not_depend_on_index_registration_order_decreasing_1": "84.803",
+        "outputs_do_not_depend_on_index_registration_order_decreasing_8": "61.574",
+        "outputs_do_not_depend_on_index_registration_order_generation_1": "77.639",
+        "outputs_do_not_depend_on_index_registration_order_generation_32": "59.899",
+        "outputs_do_not_depend_on_index_registration_order_generation_8": "59.882",
+        "outputs_do_not_depend_on_index_registration_order_increasing_1": "74.845",
+        "outputs_do_not_depend_on_index_registration_order_increasing_32": "62.904",
+        "outputs_do_not_depend_on_index_registration_order_increasing_8": "61.535",
+        "outputs_do_not_depend_on_index_registration_order_shuffled_1": "77.520",
+        "outputs_do_not_depend_on_index_registration_order_shuffled_32": "58.437",
+        "outputs_do_not_depend_on_index_registration_order_shuffled_8": "55.629"
+      },
+      "junit": "target/oracle-p2-fix/registration-junit.xml",
+      "hash_verified": true,
+      "not_independent_rerun": true
+    },
+    "clippy": "Retained scoped generator-test -D warnings pass; exact tested code and log hash verified, not rerun.",
+    "kernel_isolation": "Retained check-symbolica-feature-isolation pass; all lock/source inputs unchanged and independently verified.",
+    "older_algebra_physics": "81-test algebra approval and other older controls remain historical at original identities. Not rerun or upgraded by this review."
+  },
+  "binary": {
+    "path": "/common/build-cache/lcnbr/9d/876f1ea0078819/ci-optim/deps/generation_oracle-513b63cbc76b9164",
+    "sha256": "e0765089962ecb346649fe65d7f0c6c1fec436667f988d322189e3f9cdbb439f",
+    "package_features": [
+      "default",
+      "native"
+    ],
+    "kernel_revision": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+    "kernel_binding": [
+      {
+        "path": "/common/build-cache/lcnbr/9d/876f1ea0078819/ci-optim/.fingerprint/symbolica-3882a86fe1cc7121/lib-symbolica.json",
+        "matches_test_dependency": true,
+        "features": [
+          "bincode",
+          "float-mpfr",
+          "integer-gmp",
+          "native_code_generation",
+          "serde"
+        ]
+      },
+      {
+        "path": "/common/build-cache/lcnbr/9d/876f1ea0078819/ci-optim/.fingerprint/symbolica-e302eb100d7f3a1a/lib-symbolica.json",
+        "matches_test_dependency": false,
+        "features": [
+          "bincode",
+          "float-mpfr",
+          "integer-gmp",
+          "native_code_generation",
+          "serde"
+        ]
+      }
+    ],
+    "profile": "ci-optim",
+    "warm_metadata_revalidation": "Cargo nextest binary discovery finished in0.34s without compilation; canonical owner revalidation in0.27s. Source, hashes and exact linked fingerprint dependency verified."
+  },
+  "execution_limits": {
+    "environment": "Licensed Nix develop via realized task environment /nix/store/v9q4z4jdcmp3w70yk8wb5c2drvmiqa0k-nix-shell-env.drv, explicit task cwd. Existing license preserved or loaded silently; no shared envrc configured.",
+    "resources": "Configured shared Cargo cache unchanged; CARGO_BUILD_JOBS=2, Nextest --test-threads2; no target override/manual copy/seeding.",
+    "normal_budget": "ci_gammaloop inherits default and all-test override enforces120s x2 =240s, retries0, normal default filter. Own config differs only in store.dir to protect others receipts.",
+    "config_store": {
+      "dir": "target/astra-p2-round2-BCaMJqtU/nextest"
+    },
+    "default_concurrency": "Repository default test-threads16; Nix runtime uses min(nproc,positive NIX_BUILD_CORES,16). No new per-cell reservations. This review and retained full13 run demonstrate two-process execution only, not unrestricted16-way contention or a full Nix runtime derivation.",
+    "independent_selection": "Representative worst retained one-thread cell decreasing1 and decreasing32 plus real failure control; all12 declarations/default discovery and original13 JUnit cells verified."
+  },
+  "future_integration_requirements": [
+    "Parent must separately adjudicate both P1 frozen-baseline/current factorized physical/local-factor/provenance certificates; this review does not release source22 or change either expectation.",
+    "Rebind this approval to the actual integrated source/test/kernel/config identities; if relevant logic changes, rerun impacted checks. Validate the eventual Nix runtime selection at its actual CPU/concurrency budget.",
+    "Original three frame failures, source30 runtime closure, source31 global registry reconciliation and final rebuilt-tip WP3 remain.",
+    "Five fresh a_ddx, full BRST/epem/CoolQM, benchmark/memory, WASM/PDF and native/sdist/Pyodide/Community distribution gates remain; no full-WP3/physics/performance/distribution approval."
+  ],
+  "files": [
+    "crates/feynkit-generator/tests/generation_oracle/main.rs",
+    "docs/architecture/evidence/generation-integration/wp3/oracle-p2-corrections.json",
+    "docs/architecture/evidence/generation-integration/wp3/oracle-registry-audit.py",
+    "docs/architecture/evidence/generation-integration/wp3/units19-21.json",
+    "docs/architecture/generation-integration-plan.typ",
+    "docs/architecture/generation-integration-wp3-grouping.typ",
+    "docs/developers.toml"
+  ],
+  "cleanup": {
+    "tracked_edits": false,
+    "ref_changes": false,
+    "expectation_updates": false,
+    "nested_agents": false,
+    "integration_or_publication": false,
+    "processes_retained": [],
+    "retained": "/shared/lcnbr/dev/gammaloop/generation-oracle-budget-fix/target/astra-p2-round2-BCaMJqtU",
+    "reason": "Independent review receipt, reproducible audit/probes/config, exact inventories and run logs for parent review. Temporary rendered PDFs removed after hashing. Shared caches, all contributor work and original receipts preserved."
+  },
+  "artifacts": [
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-budget-fix/target/astra-p2-round2-BCaMJqtU/binaries.json",
+      "sha256": "6efb231f3609fc6269b7645017e592de224fac66bc1bc19a124aa4470af85ac4",
+      "bytes": 1195
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-budget-fix/target/astra-p2-round2-BCaMJqtU/binaries.log",
+      "sha256": "cd3f5d72072d695829a116d6df26fe58c46460a163f4b24c3668e8258dc28262",
+      "bytes": 63
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-budget-fix/target/astra-p2-round2-BCaMJqtU/canonical-owner.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "bytes": 2
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-budget-fix/target/astra-p2-round2-BCaMJqtU/canonical-owner.log",
+      "sha256": "e83085e37ee3cd8b87dfda98f506eb32c74ca5fb30ddd62abf1c7443138944d0",
+      "bytes": 1685
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-budget-fix/target/astra-p2-round2-BCaMJqtU/canonical-registry-expected-drift.exit",
+      "sha256": "39b8dc3fc8b44765c8e6f1adee04c5b465e555ab791cc42d0d9e810d5b64297c",
+      "bytes": 4
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-budget-fix/target/astra-p2-round2-BCaMJqtU/canonical-registry-expected-drift.log",
+      "sha256": "2de5ac1db1a78a72abd3b117ee29a3a56f25e47d9ed68bb1a54dfde2f9a35eec",
+      "bytes": 794
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-budget-fix/target/astra-p2-round2-BCaMJqtU/default-inventory.json",
+      "sha256": "efbb899d5b44bf3af39ac65430898dba6a472108079162a5ce34f2ce1d7f18b7",
+      "bytes": 18830
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-budget-fix/target/astra-p2-round2-BCaMJqtU/default-inventory.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-budget-fix/target/astra-p2-round2-BCaMJqtU/finalize.py",
+      "sha256": "d47c1951876717d4a32c6d9a4e04237f84d532c310d744ef2795ad0e7c0ddb95",
+      "bytes": 11822
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-budget-fix/target/astra-p2-round2-BCaMJqtU/fmt.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "bytes": 2
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-budget-fix/target/astra-p2-round2-BCaMJqtU/fmt.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-budget-fix/target/astra-p2-round2-BCaMJqtU/identity-after.json",
+      "sha256": "0255e5aae93ca40aba0ddb417e2172bcb0a5954251b5dc052a2b5c4ec5c846e7",
+      "bytes": 9221
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-budget-fix/target/astra-p2-round2-BCaMJqtU/identity-before.json",
+      "sha256": "0255e5aae93ca40aba0ddb417e2172bcb0a5954251b5dc052a2b5c4ec5c846e7",
+      "bytes": 9221
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-budget-fix/target/astra-p2-round2-BCaMJqtU/negative-child.exit",
+      "sha256": "39b8dc3fc8b44765c8e6f1adee04c5b465e555ab791cc42d0d9e810d5b64297c",
+      "bytes": 4
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-budget-fix/target/astra-p2-round2-BCaMJqtU/negative-child.log",
+      "sha256": "ca72bd7a376adfffb0166d7d9f21dba82ad65ad48da262785ca4309c64227c2d",
+      "bytes": 605
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-budget-fix/target/astra-p2-round2-BCaMJqtU/nextest/ci_gammaloop/junit.xml",
+      "sha256": "f933a19d9460d9f0dfe477597b8fe6b63d6a593fe06b30e0ba9dbf4d8e86dfc6",
+      "bytes": 521
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-budget-fix/target/astra-p2-round2-BCaMJqtU/nextest.toml",
+      "sha256": "7770c68ee04b09ed8f6d018196bf8cb2589edc0e6182ff7bd3ad7b27bd75a298",
+      "bytes": 20390
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-budget-fix/target/astra-p2-round2-BCaMJqtU/registry.json",
+      "sha256": "42873139d44431a69dfd5db0df42c31df35ccea00449fd8faeb4abd5e32554d4",
+      "bytes": 74830
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-budget-fix/target/astra-p2-round2-BCaMJqtU/representative.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "bytes": 2
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-budget-fix/target/astra-p2-round2-BCaMJqtU/representative.log",
+      "sha256": "3cd064e5e647755c702f1fb1fd61f30c18c1b91cc0ebaaf3e258482d326a0884",
+      "bytes": 654
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-budget-fix/target/astra-p2-round2-BCaMJqtU/run",
+      "sha256": "00028fa646f5a79dba042faf128065700377016da15cd767dd784b7b017b3105",
+      "bytes": 504
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-budget-fix/target/astra-p2-round2-BCaMJqtU/tracked-and-refs-after.json",
+      "sha256": "c9da24fd5349a2c17d7c75210a388fc4b2496c3453b62238713c2157eedd4244",
+      "bytes": 353197
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-budget-fix/target/astra-p2-round2-BCaMJqtU/tracked-and-refs-before.json",
+      "sha256": "c9da24fd5349a2c17d7c75210a388fc4b2496c3453b62238713c2157eedd4244",
+      "bytes": 353197
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-budget-fix/target/astra-p2-round2-BCaMJqtU/typst-grouping.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "bytes": 2
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-budget-fix/target/astra-p2-round2-BCaMJqtU/typst-grouping.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-budget-fix/target/astra-p2-round2-BCaMJqtU/typst-plan.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "bytes": 2
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-budget-fix/target/astra-p2-round2-BCaMJqtU/typst-plan.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-budget-fix/target/astra-p2-round2-BCaMJqtU/verify-after.log",
+      "sha256": "6d4515fa2033e052422b4d79cf6740a8b3492166950cc9193afa5cd361847cbf",
+      "bytes": 333
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-budget-fix/target/astra-p2-round2-BCaMJqtU/verify-before.log",
+      "sha256": "6d4515fa2033e052422b4d79cf6740a8b3492166950cc9193afa5cd361847cbf",
+      "bytes": 333
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-oracle-budget-fix/target/astra-p2-round2-BCaMJqtU/verify.py",
+      "sha256": "fd6a8ab3dc8225ee09a264082575a511bac12b757d1a571a8440934b6adbea77",
+      "bytes": 9556
+    }
+  ]
+}
