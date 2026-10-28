@@ -1,0 +1,17 @@
+{
+  "code": "f99fe4bf25db77df58ce4619e2ff176268499a58",
+  "frozen_metadata": "2990045ccc658413f2eb2c07fe21e9d811ac4da8",
+  "prior_refs_verified": 26,
+  "review_and_completion_copies_verified": 3,
+  "affected_ELF_bytes_and_runtime_hashes_verified": true,
+  "actual_test_executables": 15,
+  "runtime_passes": 5,
+  "changed_JSON_parsed_exactly": 22,
+  "new_conflicted_commits": 0,
+  "final_flake_eval_matches_built_identities": true,
+  "NixCI": false,
+  "no_graph_numerator_expansion": true,
+  "processes_retained": [],
+  "scope": "SOURCE30 only; source31/fullphysics/distribution not approved",
+  "final_postreceipt_identity_eval_matches": true
+}

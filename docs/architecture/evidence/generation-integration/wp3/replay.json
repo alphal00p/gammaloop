@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "status": "Source30 combined closure/producers and five focused runtime consumers validated; NEW independent Astra review required before31. WP3 remains incomplete.",
+  "status": "Source30 combined closure/actual producers and five focused runtime consumers validated; STOP for NEW independent Astra review before31. WP3 incomplete.",
   "fixed_target": {
     "commit": "3f0df2a870806076820786994d4883decec8e9e3",
     "tree": "3c91ba47525c627fbc02d79f5afa1d58aa7c5b66",
@@ -1093,7 +1093,7 @@
     "limitation": "Seven inherited registry digests remain stale; carried explicitly for source31/final reconciliation."
   },
   "current_slice": {
-    "status": "Source30 combined closure/producers and five focused runtime consumers validated; NEW independent Astra review required before31. WP3 remains incomplete.",
+    "status": "Source30 combined closure/actual producers and five focused runtime consumers validated; STOP for NEW independent Astra review before31. WP3 incomplete.",
     "base": "cb585c98a474628ca9c55bb17cf1e680450b8ef9",
     "source_order": 30,
     "original_source": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
@@ -1108,7 +1108,9 @@
     "candidate_bookmark": "generation-integration-source30",
     "accounted_source_rows": 31,
     "accounted_planned_units": 26,
-    "completion": "wp3/source30-integration/completion.json"
+    "completion": "wp3/source30-integration/completion.json",
+    "evidence_change": "rsnwxksqkumlppzknlkkqvkrvpyrrzrt",
+    "metadata_snapshot_commit": "2990045ccc658413f2eb2c07fe21e9d811ac4da8"
   },
   "staged_round1_review": {
     "verdict": "REQUEST_CHANGES",
@@ -1136,7 +1138,7 @@
     "candidate_bookmark": "generation-integration-corrected-staged",
     "candidate_change": "pmnstxxwwwkzvyuxyzmsmswtutnkzkmy"
   },
-  "implementation_change": "wvkyzoookuptpykmxzyssmtulmzuxxvz",
+  "implementation_change": "rsnwxksqkumlppzknlkkqvkrvpyrrzrt",
   "implementation_code_commit": "f99fe4bf25db77df58ce4619e2ff176268499a58",
   "combined_staged_integration_review": {
     "candidate": "d48f9d1aedc766eea5cb185ab6029d1f04462043",
@@ -1367,7 +1369,7 @@
     "receipt": "wp3/source30-integration/main27-29-review.json"
   },
   "active_slice30": {
-    "status": "Source30 combined closure/producers and five focused runtime consumers validated; NEW independent Astra review required before31. WP3 remains incomplete.",
+    "status": "Source30 combined closure/actual producers and five focused runtime consumers validated; STOP for NEW independent Astra review before31. WP3 incomplete.",
     "base": "cb585c98a474628ca9c55bb17cf1e680450b8ef9",
     "source_order": 30,
     "original_source": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
@@ -1382,6 +1384,8 @@
     "candidate_bookmark": "generation-integration-source30",
     "accounted_source_rows": 31,
     "accounted_planned_units": 26,
-    "completion": "wp3/source30-integration/completion.json"
+    "completion": "wp3/source30-integration/completion.json",
+    "evidence_change": "rsnwxksqkumlppzknlkkqvkrvpyrrzrt",
+    "metadata_snapshot_commit": "2990045ccc658413f2eb2c07fe21e9d811ac4da8"
   }
 }

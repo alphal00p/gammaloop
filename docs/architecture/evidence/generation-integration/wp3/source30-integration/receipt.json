@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "status": "Source30 combined producers and five focused runtime consumers pass; NEW independent Astra integration review required before31",
+  "status": "Source30 combined closure/actual producers and five focused runtime consumers validated; STOP for NEW independent Astra review before31. WP3 incomplete.",
   "base": "cb585c98a474628ca9c55bb17cf1e680450b8ef9",
   "source_order": 30,
   "original_source": "a50f20f1ef485315f381d97b00a69c3b5461b07c",
@@ -10,7 +10,7 @@
   "Clinnet_extension_commit": "29cc026df9c9ca4f31be9b0e851ad6f076c475c7",
   "declared_patch_correction_commit": "f99fe4bf25db77df58ce4619e2ff176268499a58",
   "code_commit": "f99fe4bf25db77df58ce4619e2ff176268499a58",
-  "evidence_change": "wvkyzoookuptpykmxzyssmtulmzuxxvz",
+  "evidence_change": "rsnwxksqkumlppzknlkkqvkrvpyrrzrt",
   "candidate_bookmark": "generation-integration-source30",
   "closure": "closure.json",
   "sensitivity": "sensitivity.json",
@@ -63,7 +63,7 @@
     "Source31 preparation87dfd362 approved only for preparation; post30 refresh/headerless-table fixes/new review remain necessary.32\u201335 owns three obsolete Python rendering callers. No later source imported.",
     "Inherited28 documentation failures remain; no unrelated scope hashes refreshed."
   ],
-  "hash_semantics": "Code hashes bind frozenf99; registry/notes/current receipts are later metadata. Explicit frozen metadata snapshot will bind note/registry hashes; mutable current receipt/replay/execution are not code_files or self-hashes.",
+  "hash_semantics": "Code hashes bind frozenf99; registry/notes/current receipts are later metadata. Explicit frozen metadata snapshot will bind note/registry hashes; mutable current receipt/replay/execution are not code_files or self-hashes. Current registry/notes are frozen at2990045c; final receipt/execution/replay and inventories are later metadata and excluded from code/self hashes. Final postmetadata flake re-evaluation is exactly equal to built identities.",
   "completion": "completion.json",
   "runtime_passes": 5,
   "selected_real_test_executables": 15,
@@ -80,6 +80,20 @@
     "sensitivity_snapshot_removed": true,
     "real_inactive_vendor_directory_untouched": true,
     "shared_cache_deleted_or_overridden": false,
-    "retained": "Exact Nix outputs and ignored target/wp3-source30 source/ELF/depfile/discovery/runtime/build artifacts for review; previous proof/baseline/reviews intact."
-  }
+    "retained": "Exact Nix outputs and ignored target/wp3-source30 source/ELF/depfile/discovery/runtime/build artifacts for review; previous proof/baseline/reviews intact.",
+    "removed_unused_editors": [
+      "target/wp3-source30/bookkeeping.py",
+      "target/wp3-source30/track.py"
+    ]
+  },
+  "metadata_snapshot_commit": "2990045ccc658413f2eb2c07fe21e9d811ac4da8",
+  "registry_snapshot": {
+    "revision": "2990045ccc658413f2eb2c07fe21e9d811ac4da8",
+    "path": "docs/developers.toml",
+    "sha256": "f431e7007be9ab8d721ccf3251cacf73941bd76bc48d667faf58545a8ed7ac86"
+  },
+  "final_tip_identities_rechecked": true,
+  "files": "files.json",
+  "integrity": "integrity.json",
+  "processes_retained": []
 }

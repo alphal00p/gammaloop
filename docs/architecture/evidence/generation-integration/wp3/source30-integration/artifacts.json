@@ -1,0 +1,392 @@
+{
+  "code": "f99fe4bf25db77df58ce4619e2ff176268499a58",
+  "metadata": "2990045ccc658413f2eb2c07fe21e9d811ac4da8",
+  "artifacts": [
+    {
+      "path": "target/wp3-source30/after-metadata.json",
+      "bytes": 1964,
+      "sha256": "16875151cef2c9119342bd866fa415ca9a576325d1dbb77eac28c12f4474c6ed",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/after-metadata.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/approved-six.json",
+      "bytes": 1964,
+      "sha256": "57585147113e20f30fddd7b093811068c415b2c17201ff962b5a696cbf4a4352",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/approved-six.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/approved.patch",
+      "bytes": 34957,
+      "sha256": "ac56229b5f634755e5e0c2376bdaa913d79da9e3e463b6b3f1b6401a60898ca0",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/artifact-inspection.json",
+      "bytes": 12017,
+      "sha256": "b92ecfba27363ed7c8ba3c910f798b8f434d4910b15737bd0d948bcf7b72c1b6",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/before.json",
+      "bytes": 1964,
+      "sha256": "6ad2d9f118d212258ce004c3810b7506cc2e8f53d0bd8d07af46b78828f597a9",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/before.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/build-final.log",
+      "bytes": 6717,
+      "sha256": "9c5cb777fa0af4e34fe4606d881f6bf9ac9316421b6d4a034cf531c5f4324459",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/build.log",
+      "bytes": 26742,
+      "sha256": "e3d5df554055b8b0c98731b5ff01d37c87ac022eed4f137e5baaed94eedf326a",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/clinnet-kurvst_marks-discovery.log",
+      "bytes": 124,
+      "sha256": "19ecf2c846b06c83433d6ac2262e9a85127c756eb42332005067d263a2a6cdbc",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/clinnet-producer.log",
+      "bytes": 4415,
+      "sha256": "d91c38a311c44fcacfa32efb1525bdc1d17424e27402bbb6bd32d81dc04e43e1",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/clinnet-public_linnest_identity_targets_and_collision_lines_behave.log",
+      "bytes": 184,
+      "sha256": "ab599646bfd1d3ecd882ee68df5815f4cd40235fb3325793aae0a13a0260057b",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/clinnet-public_mark_constructors_and_batch_geometry_behave.log",
+      "bytes": 175,
+      "sha256": "c26b6a48789f748282aad7f6ebc7db22cdd244bbc13a30e61637fbfb67799e88",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/clinnet-public_native_curve_splits_layers_and_route_points_behave.log",
+      "bytes": 183,
+      "sha256": "23f3469916fc19bd3d508108f71c94127856173412304be326a8923d1498e8fb",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/clinnet-public_typst_behavior-discovery.log",
+      "bytes": 1332,
+      "sha256": "59358b370d52e4f9954f35208f12c53de9fb55fc64e2453495c0b4ce71460205",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/closure.json",
+      "bytes": 21653,
+      "sha256": "d80c76c740b4675909a09c59f7629da80ab51f2ef87361b72b5afdd6fe5f6b54",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/closure.py",
+      "bytes": 3611,
+      "sha256": "00d226deaf2e1d3ac4906708eba1c206e10ebd2f6b1150f2c6898248a6acbd46",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/eval.nix",
+      "bytes": 586,
+      "sha256": "b89b511b608110fed96dae50c6fc0617d3409a3c909315c0158682ea68877a85",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/feynkit-dependency-progress.log",
+      "bytes": 144,
+      "sha256": "7d65b5f228e133f79a335cdf6971dcdc4264c4f08c57a6acb32f32e2782bb877",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/feynkit-feynkit_py-discovery.log",
+      "bytes": 2982,
+      "sha256": "3d18f05f5ee056b660828eef6fc9b90a93920a30d0df5cb1a64985f9757f8144",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/feynkit-inspection.log",
+      "bytes": 75,
+      "sha256": "758644df51c0bb97f97932c5366555ce72fcc01e4abe56c2bb095c49a8c52c04",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/feynkit-producer-progress.log",
+      "bytes": 14516,
+      "sha256": "a0887ff7c42c2a9419b99e2ba4a3726ca053952c89ffe9bb094328058cff7dde",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/feynkit-producer.log",
+      "bytes": 14516,
+      "sha256": "67aabf9dc1adcebcf752a76d6b94d8cdcdd9e4ca21bd9ff87951621d01456fba",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/feynkit-request_decorators_preserve_dispatch_gc_and_heredity_contracts.log",
+      "bytes": 849,
+      "sha256": "679f83c4a661c8ca15a730f0e07a99d40e414e6c85affe018aa90e0b48dd76d3",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/feynkit-runtime-driver.log",
+      "bytes": 73,
+      "sha256": "117e0a81f90b741bbad18feee6ed730f484bfe44c4b710d177bd016380857df0",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/final-declared.json",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "semantics": "Raw failed stdout (no JSON/pass credit)"
+    },
+    {
+      "path": "target/wp3-source30/final-declared.log",
+      "bytes": 1114,
+      "sha256": "5e772c9530ce278fe437cba51a1427d5b6723732b32324be05da73c3f9fcebe0",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/final-owner.json",
+      "bytes": 1964,
+      "sha256": "16875151cef2c9119342bd866fa415ca9a576325d1dbb77eac28c12f4474c6ed",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/final-owner.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/final-tip-eval.json",
+      "bytes": 1964,
+      "sha256": "16875151cef2c9119342bd866fa415ca9a576325d1dbb77eac28c12f4474c6ed",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/final-tip-eval.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/final.json",
+      "bytes": 1964,
+      "sha256": "e94bd0275b05bd9bf7f19fe8c7aada4340562f995496ffacf726b5a220ba175e",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/final.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/finalize.py",
+      "bytes": 5913,
+      "sha256": "e6c3e40b9d5288fee784f96c0386d714dc5c6d5144fcbbc3501b4408bc64d143",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/finish.py",
+      "bytes": 4638,
+      "sha256": "9379ad213d23bc088ff87c798719781bb5600f0b800531c5195f20bd30b9e54e",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/format-clinnet.nix",
+      "bytes": 646,
+      "sha256": "2dbabb7fee44fb563ad3e2e5cf789138e082a73b1c52c5b5ba8fd898c5574ae0",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/format-declared-patches.nix",
+      "bytes": 357,
+      "sha256": "9143f6f2b59cf04b5528ad48fb8568305c9e83c2f07fd9dc657b2d4fb0d70fea",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/format-feynkit-py.nix",
+      "bytes": 824,
+      "sha256": "67fba88da0f9aec318d61215c2be5d969b5fa7e951b4190ae33b50134ff70226",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/format-linnet.nix",
+      "bytes": 124,
+      "sha256": "f0c4d8d81efd6a90c0778d0369d35860ddb10c5a191ace293759d5daac52e3fa",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/format.json",
+      "bytes": 478,
+      "sha256": "e148c79aca7f5bd6c70fe8f0cd77931b7f1fdd5e17b111eaddcaba27e03bead0",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/format.py",
+      "bytes": 1427,
+      "sha256": "5d611f66b9c5de75a9fab1b42952b7027f3c5775ff21af37c9388f5114b0c6ec",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/inspect.py",
+      "bytes": 4403,
+      "sha256": "3685235756aaca9c7a426c9bbfd1070d3cef0a38159080de887c36fa94db00c1",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/inspection.log",
+      "bytes": 149,
+      "sha256": "289bd5c2bd68d4601f49456bd3d62681453d47e2e04dd9c510f84efba976b1aa",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/kernel.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/linnet-drv-diff.json",
+      "bytes": 1554,
+      "sha256": "546100bd7837d8432fe48b32adde27e21c4437eb63b14f7ea8a183ecb23729aa",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/linnet-explanations_snapshot_the_lowered_request_and_infeasibility.log",
+      "bytes": 184,
+      "sha256": "5d613b644ead1c1dea3a44544f3881413d3de6d13f5e2f32f605bc69c497275e",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/linnet-generation_report-discovery.log",
+      "bytes": 66,
+      "sha256": "f1021d97caab12e3bb54e35e7cf7629666eef513b665551843d977b9daeca599",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/linnet-producer.log",
+      "bytes": 8155,
+      "sha256": "f6acdaf6277b29f55e16331c20647277d76f53dc679f5a499dc02c6d2bf4feeb",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/note.html",
+      "bytes": 5374,
+      "sha256": "cf9e9ede9c9e4022d116281679dfca259dc230810f544d81d3a599e2a28fc233",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/old-linnet-drv.json",
+      "bytes": 38835,
+      "sha256": "de05b6ca0ce1d417ebbe4caca1e06ae7d84f8726397f8d423f95b007d708bfbc",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/owner-before-format.nix",
+      "bytes": 350,
+      "sha256": "3baba4f57fc9ed9af25d9108e73699a4a11f80fbda19b8c05c18c1472d5d715e",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/owner-formatted.nix",
+      "bytes": 357,
+      "sha256": "9143f6f2b59cf04b5528ad48fb8568305c9e83c2f07fd9dc657b2d4fb0d70fea",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/plan.html",
+      "bytes": 37340,
+      "sha256": "758dc13cfbbb9a8b7ad59ffaf5decd0ec8679f35dbdeb5b46ebb61cf8f53aa74",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/runtime-driver.log",
+      "bytes": 267,
+      "sha256": "32289f2102956a984ce0517286c1475824ae21bcf59b65a8279620f6c0f8a409",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/runtime.json",
+      "bytes": 4233,
+      "sha256": "e7dd49ce454f8476d7096202f3114b3000b985d33fab0bd37d0f6fef0e441e36",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/runtime.py",
+      "bytes": 2287,
+      "sha256": "e1d5442665a1b820754754450481d728d968f8f304be8e31c314e361fb6b7219",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/sensitivity-eval.nix",
+      "bytes": 627,
+      "sha256": "a192b8a9072b8e7e6276c92878de34c5b154dcb8f3cc39af800f6cabc373886f",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/sensitivity.json",
+      "bytes": 5273,
+      "sha256": "2b0bccfa3ae1780fbed1edb3c05eb08bb717060162bb20a7435803b46e7803f0",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/sensitivity.log",
+      "bytes": 753,
+      "sha256": "9bf000994b3e2cc08d782869451f92f38bf330f0aae61602fe49d8b92b1f7f76",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/sensitivity.py",
+      "bytes": 2711,
+      "sha256": "3d1936086dc090107d5dbbc0c48ae4ea3e4d76a13e7bc5f281a7ae4387042603",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/store-identities.json",
+      "bytes": 8740,
+      "sha256": "b2b9ec1e089e7a880d087d65c9137d3b1241c1381169e8acba6b2948f6ae086e",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/typst-note.log",
+      "bytes": 250,
+      "sha256": "d103175d5ac5ba1d2d4afae2e801958a1e0dafae1b43ffe6f1f44f3783a2f3ce",
+      "semantics": "Retained producer/evidence artifact"
+    },
+    {
+      "path": "target/wp3-source30/typst-plan.log",
+      "bytes": 250,
+      "sha256": "d103175d5ac5ba1d2d4afae2e801958a1e0dafae1b43ffe6f1f44f3783a2f3ce",
+      "semantics": "Retained producer/evidence artifact"
+    }
+  ],
+  "ELF_and_depfile_manifest": "artifact-inspection.json",
+  "no_mutable_receipt_hashes": true
+}
