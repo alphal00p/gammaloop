@@ -1446,17 +1446,19 @@ impl SymbolicTensor<PartialStructure> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::bis;
     use crate::epsilon::EPSILON_SYMBOL;
     use crate::tensor::composition::TensorCompositionError;
     use crate::test_support;
-    use spenso::mink;
     use spenso::network::library::symbolic::ETS;
     use spenso::network::tags::SPENSO_TAG;
     use spenso::shadowing::SYM;
     use spenso::structure::representation::{Minkowski, RepName};
+    use spenso::{mink, tensor_symbol, vector_symbol};
     use std::slice;
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use symbolica::atom::{FunctionBuilder, Symbol};
-    use symbolica::symbol;
+    use symbolica::{function, symbol};
 
     fn tensor(head: Symbol, slots: &[Atom]) -> Atom {
         FunctionBuilder::new(head).add_args(slots).finish()
@@ -2875,12 +2877,11 @@ mod tests {
 
     #[test]
     fn coefficient_list_preserves_compact_anonymous_tensor_interfaces() {
-        crate::test_support::test_initialize();
-        let weight =
-            Atom::var(symbolica::symbol!("compact_collection_t"; Scalar)).pow(Atom::num((3, 2)));
+        test_support::test_initialize();
+        let weight = Atom::var(symbol!("compact_collection_t"; Scalar)).pow(Atom::num((3, 2)));
         for (name, representation) in [
-            ("compact_collection_spinor", crate::bis!(4)),
-            ("compact_collection_vector", spenso::mink!(4)),
+            ("compact_collection_spinor", bis!(4)),
+            ("compact_collection_vector", mink!(4)),
         ] {
             let value =
                 SymbolicTensor::infer(tensor(SPENSO_TAG.tensor_symbol(name), &[representation]))
@@ -2903,17 +2904,15 @@ mod tests {
 
     #[test]
     fn coefficient_list_retains_compact_vector_symbolic_dimensions() {
-        use spenso::structure::representation::{Minkowski, RepName};
-        crate::test_support::test_initialize();
-        let dimension =
-            Atom::var(symbolica::symbol!("compact_collection_D"; Scalar, Real, Positive));
+        test_support::test_initialize();
+        let dimension = Atom::var(symbol!("compact_collection_D"; Scalar, Real, Positive));
         let vector = SymbolicTensor::infer(tensor(
-            spenso::vector_symbol!("compact_collection_symbolic_vector"),
+            vector_symbol!("compact_collection_symbolic_vector"),
             &[Minkowski {}.to_symbolic([dimension])],
         ))
         .unwrap();
         assert_eq!(vector.structure.open_positions(), vec![0]);
-        let weight = Atom::var(symbolica::symbol!("compact_collection_vector_t"; Scalar));
+        let weight = Atom::var(symbol!("compact_collection_vector_t"; Scalar));
         let source = SymbolicTensor::infer(&weight * &vector.expression).unwrap();
         let rows = source
             .coefficient_list(TensorCollectFilter::<0>::Tensors)
@@ -2928,22 +2927,13 @@ mod tests {
 
     #[test]
     fn coefficient_list_retains_multiple_anonymous_ports_in_logical_order() {
-        crate::test_support::test_initialize();
-        let a = tensor(
-            spenso::tensor_symbol!("compact_collection_multi_a"),
-            &[spenso::mink!(4)],
-        );
-        let b = tensor(
-            spenso::tensor_symbol!("compact_collection_multi_b"),
-            &[crate::bis!(4)],
-        );
-        let c = tensor(
-            spenso::tensor_symbol!("compact_collection_multi_c"),
-            &[spenso::mink!(4)],
-        );
+        test_support::test_initialize();
+        let a = tensor(tensor_symbol!("compact_collection_multi_a"), &[mink!(4)]);
+        let b = tensor(tensor_symbol!("compact_collection_multi_b"), &[bis!(4)]);
+        let c = tensor(tensor_symbol!("compact_collection_multi_c"), &[mink!(4)]);
         let selected = SymbolicTensor::infer(&a * &b * &c).unwrap();
         assert_eq!(selected.structure.open_positions(), vec![0, 1, 2]);
-        let weight = Atom::var(symbolica::symbol!("compact_collection_multi_t"; Scalar));
+        let weight = Atom::var(symbol!("compact_collection_multi_t"; Scalar));
         let source = SymbolicTensor::infer(&weight * &selected.expression).unwrap();
         let rows = source
             .coefficient_list(TensorCollectFilter::<0>::Tensors)
@@ -3002,10 +2992,10 @@ mod tests {
 
     #[test]
     fn coefficient_list_preserves_anonymous_typed_zero_coefficients() {
-        crate::test_support::test_initialize();
+        test_support::test_initialize();
         let value = SymbolicTensor::infer(tensor(
-            spenso::tensor_symbol!("compact_collection_zero"),
-            &[crate::bis!(4), spenso::mink!(4)],
+            tensor_symbol!("compact_collection_zero"),
+            &[bis!(4), mink!(4)],
         ))
         .unwrap();
         let zero =
@@ -3023,20 +3013,16 @@ mod tests {
 
     #[test]
     fn coefficient_list_observes_compact_ports_without_replaying_metadata_hooks() {
-        use std::sync::atomic::{AtomicUsize, Ordering};
-        crate::test_support::test_initialize();
+        test_support::test_initialize();
         let calls = Arc::new(AtomicUsize::new(0));
         let seen = Arc::clone(&calls);
-        let metadata = symbolica::symbol!("compact_collection_metadata"; Scalar;
+        let metadata = symbol!("compact_collection_metadata"; Scalar;
             norm = move |_, _| { seen.fetch_add(1, Ordering::Relaxed); });
-        let hidden = tensor(
-            spenso::tensor_symbol!("compact_collection_hidden"),
-            &[spenso::mink!(4)],
-        );
-        let coefficient = symbolica::function!(metadata, &hidden);
+        let hidden = tensor(tensor_symbol!("compact_collection_hidden"), &[mink!(4)]);
+        let coefficient = function!(metadata, &hidden);
         let selected = SymbolicTensor::infer(tensor(
-            spenso::tensor_symbol!("compact_collection_visible"),
-            &[crate::bis!(4)],
+            tensor_symbol!("compact_collection_visible"),
+            &[bis!(4)],
         ))
         .unwrap();
         let source = SymbolicTensor::infer(&selected.expression * &coefficient).unwrap();

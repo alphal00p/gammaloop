@@ -1,21 +1,19 @@
 //! Checked transformations of explicitly selected, independently closed payloads.
 
-use spenso::{
-    network::{library::function_lib::INBUILTS, tags::SPENSO_TAG},
-    structure::{
-        abstract_index::AIND_SYMBOLS,
-        partial::{PartialStructure, PartialStructureExt},
-        slot::{SlotMatch, SlotMatcher},
-    },
-};
-use symbolica::atom::{Atom, AtomView, FunctionBuilder, PowView, Symbol, representation::FunView};
+use spenso::network::library::function_lib::INBUILTS;
+use spenso::network::tags::SPENSO_TAG;
+use spenso::structure::abstract_index::AIND_SYMBOLS;
+use spenso::structure::partial::{PartialStructure, PartialStructureExt};
+use spenso::structure::slot::{SlotMatch, SlotMatcher};
+use std::result::Result as StdResult;
+use std::sync::{Arc, OnceLock};
+use symbolica::atom::representation::FunView;
+use symbolica::atom::{Atom, AtomView, FunctionBuilder, PowView, Symbol};
 
-use super::{
-    SymbolicTensor, composition,
-    inference::{InterfaceInference, TensorInferenceError},
-};
+use super::inference::{InterfaceInference, TensorInferenceError};
+use super::{SymbolicTensor, composition};
 
-type Result<T> = std::result::Result<T, TensorInferenceError>;
+type Result<T> = StdResult<T, TensorInferenceError>;
 type Tensor = SymbolicTensor<PartialStructure>;
 
 /// An original syntactic position whose value may be an independent scalar.
@@ -24,6 +22,7 @@ type Tensor = SymbolicTensor<PartialStructure>;
 /// its native interface before and after the transformation. Function argument
 /// numbers are zero-based. Tensor, conjugation and word operands are opaque;
 /// a bracket is offered as one ordered, checked expression.
+/// See the [mapping example](SymbolicTensor::map_closed_scalar_payloads).
 #[derive(Clone, Copy, Debug)]
 pub enum ScalarPayloadPosition<'a> {
     Root {
@@ -61,12 +60,33 @@ impl Tensor {
     /// must retain the original outer logical interface. Scalar here describes
     /// only the interface: a closed native word retains its word algebra and
     /// is not certified to commute or to admit ordinary scalar series.
+    ///
+    /// # Errors
+    /// Rejects unpublished inputs, selected open payloads, invalid callback
+    /// results, and changes to the original outer logical interface.
+    ///
+    /// # Example
+    /// ```
+    /// use idenso::tensor::{ScalarPayloadPosition, SymbolicTensor};
+    /// use idenso::tensor::inference::TensorInferenceError;
+    /// use symbolica::atom::{Atom, AtomCore};
+    /// use symbolica::{function, symbol};
+    ///
+    /// let f = symbol!("docs::scalar_payload_f");
+    /// let source = SymbolicTensor::infer(function!(f, Atom::num(2)))?;
+    /// let mapped = source.map_closed_scalar_payloads(
+    ///     |position| matches!(position, ScalarPayloadPosition::FunctionArgument { .. }),
+    ///     |_, value| value.with_checked_expression(value.expression() + Atom::one()),
+    /// )?;
+    /// assert_eq!(mapped.expression(), &function!(f, Atom::num(3)));
+    /// # Ok::<(), TensorInferenceError>(())
+    /// ```
     pub fn map_closed_scalar_payloads(
         &self,
         mut select: impl FnMut(ScalarPayloadPosition<'_>) -> bool,
         map: impl FnMut(ScalarPayloadPosition<'_>, &Self) -> Result<Self>,
     ) -> Result<Self> {
-        self.ensure_validated()?;
+        self.explicit_index_occurrences()?;
         let position = ScalarPayloadPosition::Root {
             expression: self.expression().as_view(),
         };
@@ -78,14 +98,9 @@ impl Tensor {
         }
         let mut mapper = ClosedPayloadMapper { select, map };
         let expression = mapper.expression(self.expression().as_view())?;
-        let result = if expression == *self.expression() {
-            self.clone()
-        } else {
-            Self::from_declared_parts(expression, self.structure().clone())?
-        };
+        let result = self.borrowed_parts().with_checked_payload(expression)?;
         if root_selected {
-            let result = mapper.apply(position, &result)?;
-            Self::from_declared_parts(result.into_expression(), self.structure().clone())
+            mapper.apply(position, &result)
         } else {
             Ok(result)
         }
@@ -103,7 +118,7 @@ where
     M: FnMut(ScalarPayloadPosition<'_>, &Tensor) -> Result<Tensor>,
 {
     fn require_scalar(value: &Tensor) -> Result<()> {
-        value.ensure_validated()?;
+        value.explicit_index_occurrences()?;
         if !value.is_scalar() {
             return Err(TensorInferenceError::invalid(
                 "a selected scalar payload must have a closed scalar interface",
@@ -114,8 +129,20 @@ where
 
     fn apply(&mut self, position: ScalarPayloadPosition<'_>, value: &Tensor) -> Result<Tensor> {
         Self::require_scalar(value)?;
-        let result = (self.map)(position, value)?;
+        let mut result = (self.map)(position, value)?;
         Self::require_scalar(&result)?;
+        // A callback can return a fresh carrier or cancel written indices.
+        // Retain both admitted histories, without exporting nested closed
+        // payloads into their enclosing expression's contraction scope.
+        let source_history = value.explicit_index_occurrences()?;
+        let result_history = result.explicit_index_occurrences()?;
+        if !source_history.is_bounded_by(result_history) {
+            let mut history = result_history.clone();
+            history.branch_max(source_history);
+            history.validate()?;
+            result.proofs = result.proofs.algebra_result();
+            result.proofs.occurrences = OnceLock::from(Arc::new(history));
+        }
         Ok(result)
     }
 
@@ -144,7 +171,7 @@ where
         let value = if expression == *value.expression() {
             value
         } else {
-            Tensor::from_declared_parts(expression, value.structure().clone())?
+            value.borrowed_parts().with_checked_payload(expression)?
         };
         Ok(self.apply(position, &value)?.into_expression())
     }
@@ -269,28 +296,22 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{
-        Arc,
-        atomic::{AtomicUsize, Ordering},
-    };
+    use std::slice;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
-    use spenso::{
-        bracket, mink,
-        network::{library::function_lib::INBUILTS, tags::SPENSO_TAG},
-        structure::{
-            abstract_index::AbstractIndex,
-            partial::{PartialStructure, PartialStructureExt},
-            representation::{Minkowski, RepName},
-            slot::IsAbstractSlot,
-        },
-        tensor_symbol,
-    };
-    use symbolica::{
-        atom::{Atom, AtomCore, Symbol},
-        function, symbol,
-    };
+    use spenso::network::library::function_lib::INBUILTS;
+    use spenso::network::tags::SPENSO_TAG;
+    use spenso::structure::abstract_index::AbstractIndex;
+    use spenso::structure::partial::{PartialStructure, PartialStructureExt};
+    use spenso::structure::representation::{Minkowski, RepName};
+    use spenso::structure::slot::IsAbstractSlot;
+    use spenso::{bracket, mink, tensor_symbol};
+    use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
+    use symbolica::{function, symbol};
 
     use super::{ScalarPayloadPosition as Position, Tensor};
+    use crate::tensor::composition::TensorCompositionError;
     use crate::test_support::test_initialize;
 
     fn vector(head: Symbol, label: usize) -> Atom {
@@ -305,6 +326,126 @@ mod tests {
 
     fn expression(atom: Atom) -> Tensor {
         Tensor::infer(atom).unwrap()
+    }
+
+    #[test]
+    fn root_mapping_retains_hidden_occurrences_and_unchanged_proofs() {
+        test_initialize();
+        let a = expression(vector(tensor_symbol!("closed_payload::history_a"), 4701));
+        let b = expression(vector(tensor_symbol!("closed_payload::history_b"), 4701));
+        let pair = a.multiply(&b).unwrap();
+        let zero = pair.multiply(&expression(Atom::Zero)).unwrap();
+        let unchanged = zero
+            .map_closed_scalar_payloads(
+                |position| matches!(position, Position::Root { .. }),
+                |_, value| Ok(value.clone()),
+            )
+            .unwrap();
+        assert!(unchanged.same_reduction_state(&zero));
+        for source in [&pair, &zero] {
+            for replacement in [Atom::one(), Atom::Zero] {
+                let mapped = source
+                    .map_closed_scalar_payloads(
+                        |position| matches!(position, Position::Root { .. }),
+                        |_, _| Ok(expression(replacement.clone())),
+                    )
+                    .unwrap();
+                assert_eq!(mapped.expression(), &replacement);
+                assert!(matches!(
+                    mapped.multiply(&a),
+                    Err(TensorCompositionError::InvalidExplicitMultiplicity { occurrences: 3, .. })
+                ));
+            }
+        }
+
+        // Callback-created hidden history also survives when the source had none.
+        let mapped = expression(Atom::one())
+            .map_closed_scalar_payloads(
+                |position| matches!(position, Position::Root { .. }),
+                |_, _| Ok(zero.clone()),
+            )
+            .unwrap();
+        assert!(mapped.same_reduction_state(&zero));
+        assert!(mapped.multiply(&a).is_err());
+
+        let c = expression(vector(tensor_symbol!("closed_payload::history_c"), 4703));
+        let d = expression(vector(tensor_symbol!("closed_payload::history_d"), 4703));
+        let other_zero = c
+            .multiply(&d)
+            .unwrap()
+            .multiply(&expression(Atom::Zero))
+            .unwrap();
+        let mapped = zero
+            .map_closed_scalar_payloads(
+                |position| matches!(position, Position::Root { .. }),
+                |_, _| Ok(other_zero.clone()),
+            )
+            .unwrap();
+        assert!(mapped.multiply(&a).is_err());
+        assert!(mapped.multiply(&c).is_err());
+    }
+
+    #[test]
+    fn payload_mapping_rejects_unpublished_inputs_and_callback_results() {
+        test_initialize();
+        let source = expression(Atom::one());
+        let mut unpublished = source.clone();
+        unpublished.invalidate_proofs();
+        assert!(
+            unpublished
+                .map_closed_scalar_payloads(|_| false, |_, value| Ok(value.clone()))
+                .is_err()
+        );
+        assert!(
+            unpublished
+                .scalar_algebra_input(symbol!("closed_payload::unpublished_t"; Scalar), |_| false)
+                .is_err()
+        );
+        assert!(
+            source
+                .map_closed_scalar_payloads(
+                    |position| matches!(position, Position::Root { .. }),
+                    |_, _| Ok(unpublished.clone()),
+                )
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn changed_bracket_payload_keeps_ordered_syntax_until_its_callback() {
+        test_initialize();
+        let f = symbol!("closed_payload::changed_bracket_f");
+        let a = vector(tensor_symbol!("closed_payload::changed_bracket_a"), 4702);
+        let b = vector(tensor_symbol!("closed_payload::changed_bracket_b"), 4702);
+        let source = Tensor::from_declared_parts(
+            bracket!(function!(f, 2), &a, &b),
+            PartialStructure::from_logical_slots([]),
+        )
+        .unwrap();
+        let mut visited_bracket = false;
+        let result = source
+            .map_closed_scalar_payloads(
+                |position| {
+                    matches!(
+                        position,
+                        Position::ClosedBracket { .. } | Position::FunctionArgument { .. }
+                    )
+                },
+                |position, value| match position {
+                    Position::FunctionArgument { .. } => {
+                        value.with_checked_expression(Atom::num(3))
+                    }
+                    Position::ClosedBracket { .. } => {
+                        visited_bracket = true;
+                        assert_eq!(value.expression(), &bracket!(function!(f, 3), &a, &b));
+                        Ok(value.clone())
+                    }
+                    _ => unreachable!(),
+                },
+            )
+            .unwrap();
+        assert!(visited_bracket);
+        assert_eq!(result.expression(), &bracket!(function!(f, 3), a, b));
     }
 
     #[test]
@@ -382,7 +523,7 @@ mod tests {
         let tensor = expression(function!(head, function!(f, x), mink!(4, 4101)));
         let word_head = symbol!("closed_payload::opaque_word"; Flat, Linear;
             tag = &SPENSO_TAG.tensor_word);
-        let word = Tensor::word(word_head, std::slice::from_ref(&tensor)).unwrap();
+        let word = Tensor::word(word_head, slice::from_ref(&tensor)).unwrap();
         for value in [
             tensor,
             word,
@@ -572,7 +713,7 @@ mod tests {
                     Position::ClosedBracket { function } => {
                         assert_eq!(function.get_nargs(), 3);
                         order.push("bracket");
-                        assert!(matches!(value.expression().as_view(), symbolica::atom::AtomView::Fun(f) if f.get_symbol()==SPENSO_TAG.bracket));
+                        assert!(matches!(value.expression().as_view(), AtomView::Fun(f) if f.get_symbol()==SPENSO_TAG.bracket));
                     }
                     _ => unreachable!(),
                 }
@@ -631,7 +772,7 @@ mod tests {
             result.expression(),
             scalar.pow(&expression(Atom::num(-1))).unwrap().expression()
         );
-        result.ensure_validated().unwrap();
+        result.explicit_index_occurrences().unwrap();
     }
 
     #[test]
@@ -726,7 +867,7 @@ mod tests {
         let source_head = symbol!(
             "closed_payload::rank_changing_normalizer",
             norm = move |value, out| {
-                if let symbolica::atom::AtomView::Fun(function) = value
+                if let AtomView::Fun(function) = value
                     && function.iter().next().is_some_and(|arg| arg.is_one())
                 {
                     **out = output.clone();

@@ -1,53 +1,22 @@
 //! Reversible scalar-algebra inputs on established tensor interfaces.
 
-use std::{
-    cell::Cell,
-    collections::{BTreeMap, HashSet},
-    sync::atomic::{AtomicU64, Ordering},
-};
+use std::cell::Cell;
+use std::collections::{BTreeMap, HashSet};
+use std::result::Result as StdResult;
+use std::sync::atomic::{AtomicU64, Ordering};
 
-use spenso::{
-    network::tags::SPENSO_TAG,
-    shadowing::TensorCollectFilter,
-    structure::{TensorStructure, partial::PartialStructure},
-};
+use spenso::network::tags::SPENSO_TAG;
+use spenso::shadowing::TensorCollectFilter;
+use spenso::structure::TensorStructure;
+use spenso::structure::partial::PartialStructure;
 use symbolica::atom::{
     AliasedAtom, Atom, AtomCore, AtomView, NamespacedSymbol, Symbol, SymbolAttribute, SymbolBuilder,
 };
 
-use super::{
-    ScalarPayloadPosition, SymbolicTensor,
-    inference::{InterfaceInference, TensorInferenceError},
-};
+use super::inference::{InterfaceInference, TensorInferenceError};
+use super::{ScalarPayloadPosition, SymbolicTensor};
 
-type Result<T> = std::result::Result<T, TensorInferenceError>;
-
-fn selected_closed_payload(
-    position: ScalarPayloadPosition<'_>,
-    select: &mut impl FnMut(ScalarPayloadPosition<'_>) -> bool,
-    failure: &mut Option<TensorInferenceError>,
-) -> bool {
-    let value = match position {
-        ScalarPayloadPosition::Root { .. } => return false,
-        _ if failure.is_some() || !select(position) => return false,
-        ScalarPayloadPosition::FunctionArgument { function, argument } => {
-            function.iter().nth(argument).unwrap()
-        }
-        ScalarPayloadPosition::PowerBase { power } => power.get_base_exp().0,
-        ScalarPayloadPosition::PowerExponent { power } => power.get_base_exp().1,
-        ScalarPayloadPosition::ClosedBracket { function } => AtomView::Fun(function),
-    };
-    // Only role-selected mathematical positions are observed. Valid open
-    // tensor powers and conjugated component fields remain native; unselected
-    // metadata is never entered.
-    match InterfaceInference::replacement_interface(value) {
-        Ok(interface) => interface.canonical().is_scalar(),
-        Err(error) => {
-            *failure = Some(error);
-            false
-        }
-    }
-}
+type Result<T> = StdResult<T, TensorInferenceError>;
 
 struct ScalarAlgebraInput {
     variable: Symbol,
@@ -56,6 +25,34 @@ struct ScalarAlgebraInput {
 }
 
 impl ScalarAlgebraInput {
+    fn selected_closed_payload(
+        position: ScalarPayloadPosition<'_>,
+        select: &mut impl FnMut(ScalarPayloadPosition<'_>) -> bool,
+        failure: &mut Option<TensorInferenceError>,
+    ) -> bool {
+        let value = match position {
+            ScalarPayloadPosition::Root { .. } => return false,
+            _ if failure.is_some() || !select(position) => return false,
+            ScalarPayloadPosition::FunctionArgument { function, argument } => function
+                .iter()
+                .nth(argument)
+                .expect("selected argument belongs to its original function"),
+            ScalarPayloadPosition::PowerBase { power } => power.get_base_exp().0,
+            ScalarPayloadPosition::PowerExponent { power } => power.get_base_exp().1,
+            ScalarPayloadPosition::ClosedBracket { function } => AtomView::Fun(function),
+        };
+        // Only role-selected mathematical positions are observed. Valid open
+        // tensor powers and conjugated component fields remain native; unselected
+        // metadata is never entered.
+        match InterfaceInference::replacement_interface(value) {
+            Ok(interface) => interface.canonical().is_scalar(),
+            Err(error) => {
+                *failure = Some(error);
+                false
+            }
+        }
+    }
+
     fn new(source: &SymbolicTensor<PartialStructure>, variable: Symbol) -> Self {
         Self {
             variable,
@@ -73,10 +70,20 @@ impl ScalarAlgebraInput {
     }
 
     fn contains_word(value: &Atom) -> bool {
-        value
-            .get_all_symbols(true)
-            .iter()
-            .any(|symbol| symbol.has_tag(&SPENSO_TAG.tensor_word))
+        let mut contains_word = false;
+        value.visitor(&mut |node| {
+            if let AtomView::Fun(function) = node {
+                let symbol = function.get_symbol();
+                contains_word |= symbol.has_tag(&SPENSO_TAG.tensor_word);
+                // Scalar metadata and tensor parameters are opaque. A word
+                // name written there does not supply a mathematical operand.
+                return !contains_word
+                    && !SPENSO_TAG.is_scalar_metadata(symbol)
+                    && !symbol.has_tag(&SPENSO_TAG.tensor);
+            }
+            !contains_word
+        });
+        contains_word
     }
 
     fn reject_packed_variable(&self, value: &Atom) -> Result<()> {
@@ -160,6 +167,7 @@ impl ScalarAlgebraInput {
             {
                 let protected = SymbolicTensor::<PartialStructure>::scalar_power_expression(
                     selected.expression().clone(),
+                    Some(!selected.explicit_index_occurrences()?.is_empty()),
                 );
                 if self.contains_variable(&protected) {
                     return Err(TensorInferenceError::invalid(
@@ -198,17 +206,47 @@ impl SymbolicTensor<PartialStructure> {
     /// [`Self::with_scalar_algebra_result`] to restore the unmodified registry
     /// before checked tensor publication. Temporary aliases must not be
     /// published or persisted.
+    ///
+    /// # Errors
+    /// Rejects unpublished inputs, hidden expansion variables, unsupported
+    /// nonlinear word payloads, and invalid selected scalar interfaces.
+    ///
+    /// # Example
+    /// ```
+    /// use std::error::Error;
+    /// use idenso::tensor::SymbolicTensor;
+    /// use symbolica::atom::{Atom, AtomCore};
+    /// use symbolica::poly::series::SeriesDepth;
+    /// use symbolica::symbol;
+    ///
+    /// let variable = symbol!("docs::scalar_algebra_t"; Scalar);
+    /// let t = Atom::var(variable);
+    /// let source = SymbolicTensor::infer((Atom::one() + &t).pow(2))?;
+    /// let input = source.scalar_algebra_input(variable, |_| false)?;
+    /// let series = input.get_root().series(variable, 0, SeriesDepth::absolute(2))?;
+    /// let result = source.with_scalar_algebra_result(
+    ///     &input, series.to_atom(), |_| false,
+    /// )?;
+    /// assert_eq!(result.expression(), &(Atom::one() + Atom::num(2) * &t + t.pow(2)));
+    /// # Ok::<(), Box<dyn Error>>(())
+    /// ```
     pub fn scalar_algebra_input(
         &self,
         variable: Symbol,
         mut select_payload: impl FnMut(ScalarPayloadPosition<'_>) -> bool,
     ) -> Result<AliasedAtom> {
-        self.ensure_validated()?;
+        self.explicit_index_occurrences()?;
         let mut input = ScalarAlgebraInput::new(self, variable);
         input.reject_packed_variable(self.expression())?;
         let mut failure = None;
         let prepared = self.map_closed_scalar_payloads(
-            |position| selected_closed_payload(position, &mut select_payload, &mut failure),
+            |position| {
+                ScalarAlgebraInput::selected_closed_payload(
+                    position,
+                    &mut select_payload,
+                    &mut failure,
+                )
+            },
             |position, value| {
                 input.prepare(
                     value,
@@ -243,6 +281,11 @@ impl SymbolicTensor<PartialStructure> {
     /// The native product normalizer then removes redundant brackets only at
     /// those independent payload roots, retaining protected power bases and
     /// unselected metadata exactly.
+    /// See the [preparation and series example](Self::scalar_algebra_input).
+    ///
+    /// # Errors
+    /// Rejects escaped temporary aliases, malformed selected payloads, and
+    /// results that change this tensor's original logical interface.
     pub fn with_scalar_algebra_result(
         &self,
         input: &AliasedAtom,
@@ -264,7 +307,13 @@ impl SymbolicTensor<PartialStructure> {
         let restored = self.with_checked_expression(restored)?;
         let mut failure = None;
         let normalized = restored.map_closed_scalar_payloads(
-            |position| selected_closed_payload(position, &mut select_payload, &mut failure),
+            |position| {
+                ScalarAlgebraInput::selected_closed_payload(
+                    position,
+                    &mut select_payload,
+                    &mut failure,
+                )
+            },
             |_, value| {
                 value.with_checked_expression(
                     Self::normalize_products(value.expression().as_view()).into_owned(),
@@ -274,27 +323,33 @@ impl SymbolicTensor<PartialStructure> {
         if let Some(error) = failure {
             return Err(error);
         }
-        self.with_checked_expression(normalized.into_expression())
+        if normalized.expression() == self.expression() {
+            Ok(normalized)
+        } else {
+            normalized.finish_parts()
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{Arc, atomic::AtomicUsize};
+    use std::env;
+    use std::process::Command;
+    use std::sync::Arc;
+    use std::sync::atomic::AtomicUsize;
 
     use super::*;
-    use crate::{representations::ColorFundamental, test_support::test_initialize};
-    use spenso::{
-        algebra::ScalarMul,
-        structure::representation::{Minkowski, RepName},
-    };
-    use symbolica::{
-        coefficient::Coefficient,
-        domains::{atom::AtomField, integer::Z, rational::Q},
-        function,
-        poly::series::{Series, SeriesDepth},
-        symbol,
-    };
+    use crate::representations::ColorFundamental;
+    use crate::test_support::test_initialize;
+    use spenso::algebra::ScalarMul;
+    use spenso::structure::representation::{Minkowski, RepName};
+    use spenso::{bracket, dind, mink};
+    use symbolica::coefficient::Coefficient;
+    use symbolica::domains::atom::AtomField;
+    use symbolica::domains::integer::Z;
+    use symbolica::domains::rational::Q;
+    use symbolica::poly::series::{Series, SeriesDepth};
+    use symbolica::{function, symbol};
 
     type Tensor = SymbolicTensor<PartialStructure>;
 
@@ -315,7 +370,7 @@ mod tests {
         Tensor::infer(
             function!(
                 SPENSO_TAG.tensor_symbol(&format!("scalar_algebra::{name}_bar")),
-                spenso::dind!(slot.clone())
+                dind!(slot.clone())
             ) * function!(
                 SPENSO_TAG.tensor_symbol(&format!("scalar_algebra::{name}")),
                 slot
@@ -326,6 +381,89 @@ mod tests {
 
     fn constant(value: i64) -> Tensor {
         Tensor::infer(Atom::num(value)).unwrap()
+    }
+
+    #[test]
+    fn restoration_finishes_a_bracket_created_by_an_ancestor_normalizer() {
+        let p = pair("normalizer_input", 91);
+        let q = pair("normalizer_output", 92);
+        let output = bracket!(q.expression());
+        let head = symbol!(
+            "scalar_algebra::restoration_bracket",
+            norm = move |value, out| {
+                if let AtomView::Fun(function) = value
+                    && function
+                        .iter()
+                        .next()
+                        .is_some_and(|arg| matches!(arg, AtomView::Mul(_)))
+                {
+                    **out = output.clone();
+                }
+            }
+        );
+        let source = Tensor::from_declared_parts(
+            function!(head, bracket!(p.expression())),
+            p.structure().clone(),
+        )
+        .unwrap();
+        let variable = symbol!("scalar_algebra::restoration_bracket_t"; Scalar);
+        let input = source.scalar_algebra_input(variable, |_| false).unwrap();
+        let restored = source
+            .with_scalar_algebra_result(&input, input.get_root().clone(), |_| true)
+            .unwrap();
+        assert_eq!(restored.expression(), q.expression());
+    }
+
+    #[test]
+    fn nonlinear_word_detection_keeps_scalar_metadata_opaque() {
+        test_initialize();
+        let word = symbol!("scalar_algebra::metadata_word"; Flat, Linear;
+            tag = &SPENSO_TAG.tensor_word);
+        let metadata_head = symbol!("scalar_algebra::word_metadata"; Scalar);
+        let variable = symbol!("scalar_algebra::word_metadata_t"; Scalar, Real, Positive);
+        for payload in [Atom::var(word), function!(word, Atom::one())] {
+            let metadata = function!(metadata_head, payload);
+            let source = Tensor::infer((Atom::var(variable) * &metadata).sin()).unwrap();
+            let (input, expansion) = series(&source, variable, 3);
+            assert_equal(
+                &coefficient(&source, &input, &expansion, 1),
+                &Tensor::infer(metadata.clone()).unwrap(),
+            );
+            assert_equal(
+                &coefficient(&source, &input, &expansion, 3),
+                &Tensor::infer(Atom::num((-1, 6)) * metadata.pow(3)).unwrap(),
+            );
+        }
+    }
+
+    #[test]
+    fn nonlinear_word_detection_enters_dot_operands() {
+        test_initialize();
+        let head = symbol!("scalar_algebra::dot_word"; Flat, Linear;
+            tag = &SPENSO_TAG.tensor_word);
+        let a = Tensor::infer(function!(
+            SPENSO_TAG.tensor_symbol("scalar_algebra::dot_word_a"),
+            mink!(4, 93)
+        ))
+        .unwrap();
+        let b = Tensor::infer(function!(
+            SPENSO_TAG.tensor_symbol("scalar_algebra::dot_word_b"),
+            mink!(4, 94)
+        ))
+        .unwrap();
+        let word = Tensor::word(head, &[a]).unwrap();
+        let dot = function!(SPENSO_TAG.dot, word.expression(), b.expression());
+        // Exercise the detector independently of the enclosing preparation's
+        // other admission checks, which can refuse this syntax earlier.
+        assert!(ScalarAlgebraInput::contains_word(&dot));
+        let variable = symbol!("scalar_algebra::dot_word_t"; Scalar, Real, Positive);
+        let source = Tensor::infer((Atom::var(variable) * dot).sin()).unwrap();
+        assert!(source.expression().contains_symbol(head));
+        assert!(
+            source
+                .scalar_algebra_input(variable, mathematical_position)
+                .is_err()
+        );
     }
 
     fn series(source: &Tensor, variable: Symbol, order: i64) -> (AliasedAtom, Series<AtomField>) {
@@ -380,7 +518,7 @@ mod tests {
         let variable = symbol!("scalar_algebra::power_t"; Scalar, Real, Positive);
         let t = Atom::var(variable);
         let marked = p
-            .with_checked_expression(spenso::bracket!(t.pow(2) * p.expression()).pow(2))
+            .with_checked_expression(bracket!(t.pow(2) * p.expression()).pow(2))
             .unwrap();
         let (input, expansion) = series(&marked, variable, 4);
         assert!(coefficient(&marked, &input, &expansion, 0).is_zero());
@@ -417,7 +555,7 @@ mod tests {
         let t = Atom::var(variable);
         let mixed = p
             .with_checked_expression(
-                spenso::bracket!(t.pow(2) * p.expression() + t.pow(3) * q.expression()).pow(2),
+                bracket!(t.pow(2) * p.expression() + t.pow(3) * q.expression()).pow(2),
             )
             .unwrap();
         let (input, expansion) = series(&mixed, variable, 6);
@@ -471,9 +609,7 @@ mod tests {
         let p = pair("large_p", 4);
         let variable = symbol!("scalar_algebra::large_t"; Scalar, Real, Positive);
         let marked = p
-            .with_checked_expression(spenso::bracket!(
-                Atom::var(variable).pow(2) * p.expression()
-            ))
+            .with_checked_expression(bracket!(Atom::var(variable).pow(2) * p.expression()))
             .unwrap();
         let marked = marked.pow(&constant(10_000)).unwrap();
         let (input, expansion) = series(&marked, variable, 6);
@@ -508,7 +644,7 @@ mod tests {
         // as a closed coefficient during preparation.
         let anonymous = Tensor::infer(function!(
             SPENSO_TAG.tensor_symbol("scalar_algebra::anonymous_vector"),
-            spenso::mink!(4)
+            mink!(4)
         ))
         .unwrap();
         assert_eq!(anonymous.rank(), 1);
@@ -615,8 +751,8 @@ mod tests {
     #[test]
     fn globally_preoccupied_alias_assumptions_and_hooks_are_never_adopted() {
         const CHILD: &str = "IDENSO_SCALAR_ALGEBRA_ALIAS_OCCUPANCY_CHILD";
-        if std::env::var_os(CHILD).is_none() {
-            let output = std::process::Command::new(std::env::current_exe().unwrap())
+        if env::var_os(CHILD).is_none() {
+            let output = Command::new(env::current_exe().unwrap())
                 .args([
                     "--exact",
                     "tensor::scalar_algebra::tests::globally_preoccupied_alias_assumptions_and_hooks_are_never_adopted",

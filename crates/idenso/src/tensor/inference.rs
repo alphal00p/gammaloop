@@ -363,18 +363,35 @@ impl<'a> BorrowedTensorParts<'a> {
         &self,
         expression: Atom,
     ) -> InferenceResult<SymbolicTensor<PartialStructure>> {
+        let unchanged = expression.as_view() == self.expression.as_view();
+        let value = self.with_checked_payload(expression)?;
+        if unchanged {
+            Ok(value)
+        } else {
+            value.finish_parts()
+        }
+    }
+
+    /// Check a replacement payload while retaining its exact ordered syntax.
+    /// Product finishing is separate so selected brackets remain intact until
+    /// their owning transformation explicitly normalizes them.
+    pub(super) fn with_checked_payload(
+        &self,
+        expression: Atom,
+    ) -> InferenceResult<SymbolicTensor<PartialStructure>> {
+        self.explicit_index_occurrences()?;
         if expression.is_zero() && expression.as_view() != self.expression.as_view() {
             return self.with_established_expression(expression);
         }
         if expression.as_view() != self.expression.as_view()
             && !self.structure.open_positions().is_empty()
         {
-            return self.finish_checked_open_expression(expression);
+            return self.check_open_expression(expression);
         }
-        self.finish_checked_expression(expression, self.structure, LeafInference::Observe)
+        self.check_expression(expression, self.structure, LeafInference::Observe)
     }
 
-    fn finish_checked_open_expression(
+    fn check_open_expression(
         &self,
         expression: Atom,
     ) -> InferenceResult<SymbolicTensor<PartialStructure>> {
@@ -410,11 +427,7 @@ impl<'a> BorrowedTensorParts<'a> {
                 && (encoded.open_positions().is_empty()
                     || partial.logical_slots() == self.structure.logical_slots())
             {
-                return self.finish_checked_expression(
-                    expression,
-                    &encoded,
-                    LeafInference::ObserveEncoded,
-                );
+                return self.check_expression(expression, &encoded, LeafInference::ObserveEncoded);
             }
         }
         // Closed scalar factors do not identify anonymous tensor ports. Keep
@@ -467,11 +480,7 @@ impl<'a> BorrowedTensorParts<'a> {
                         && left.logical_slots() == right.logical_slots()
                 });
         if retained_ports {
-            return self.finish_checked_expression(
-                expression,
-                self.structure,
-                LeafInference::Observe,
-            );
+            return self.check_expression(expression, self.structure, LeafInference::Observe);
         }
         // Report invalid result syntax before refusing an otherwise valid
         // rewrite whose unresolved identities have no safe witness. This
@@ -482,7 +491,7 @@ impl<'a> BorrowedTensorParts<'a> {
         ))
     }
 
-    fn finish_checked_expression(
+    fn check_expression(
         &self,
         expression: Atom,
         observed: &PartialStructure,
@@ -528,7 +537,7 @@ impl<'a> BorrowedTensorParts<'a> {
             self.structure.clone(),
             Arc::new(occurrences),
         );
-        value.finish_parts()
+        Ok(value)
     }
 
     pub(super) fn with_algebra_result(
