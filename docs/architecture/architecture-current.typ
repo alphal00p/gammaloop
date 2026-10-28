@@ -993,19 +993,33 @@ compiled per point. Eager dual evaluators differentiate only requested active co
 parameters remain fixed; a singular derivative in an inactive column cannot contaminate an
 otherwise valid active Jacobian.
 
-The source policy is fixed at warm-up for the complete integrand epoch. It selects Quad when
-the catalogue, requested accuracy and represented inputs permit it, otherwise fixed 256-bit or
-Arb precision. It does not switch maps based on a point's physical stability. Each source draw
-retains its complete mapped points, `J*w` factors, support decisions and selected-host records in
-canonical storage. Physical Double/Quad/Arb attempts materialize independently from that anchor;
+The source policy is fixed at warm-up for the complete integrand epoch. Ordinary default
+parameterisations and complete catalogues containing only LMB channels retain a binary64 draw
+when the fixed inputs and requested source accuracy permit it. Their physical attempts promote
+the exact stored momenta and combined `J*w` factor, without Arb embedding or factor certificates
+on each draw. The Double lane caches its rounding of the original Arb-improved external
+authority at warm-up; rescue lanes use that same authority at their own precision. Stricter
+accuracy or unrepresentable fixed inputs retain higher-precision preparation. Tropical sampling,
+named or surface channels, mixed catalogues and user proxies keep the existing source policy:
+Quad when eligible, otherwise fixed 256-bit or Arb precision. The policy never switches maps
+based on a point's physical stability. Each source draw retains its complete mapped points,
+`J*w` factors, support decisions and selected-host records. Physical Double/Quad/Arb attempts
+materialize independently from that anchor;
 they never redraw maps, choose another support branch or recompute the partition. Matching only
 discrete branch decisions would be insufficient: a point-dependent switch between two separately
 normalized continuous maps can change the sampled law. Direct selected momenta prepare their
 partition without a forward Jacobian; direct unselected momenta need neither.
 
 Cross-section threshold overlaps have a separate immutable authority. Before choosing common
-centers, the physical LU owner prepares every accepted cut's actual rescaled kinematics. The
-existing solve groups then choose SOCP/forced centers once in the identity frame. Subsequent
+centers, the physical LU owner prepares the actual rescaled kinematics of accepted cuts with
+active threshold counterterms. Other physical cuts need no overlap authority.
+Ordinary binary64 draws are promoted exactly into an Arb authority only when these dependencies
+require physical overlap preparation; this does not replay their map or change their weight.
+Complete shared solve groups retain every contributing cut, including foreign complements. Retained sampling
+roots can supply these kinematics only after source authentication and certification against
+the complete original physical ray at canonical geometry accuracy; uncertain candidates use
+the original Arb solve. The existing solve groups then choose SOCP/forced centers once in the
+identity frame. Subsequent
 rotations and precision attempts retain those centers, validate full group membership and signed
 solve signatures, and preserve each association's native parent/complement and LU/alpha solves.
 Stored binary64 center bits are promoted exactly before native rotation. A mismatch is an error,
