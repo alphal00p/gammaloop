@@ -255,7 +255,14 @@ pub(super) fn monitor_options(
     monitor: &str,
     progress_snapshot: Option<PathBuf>,
     interval: f64,
+    cache_hit_diagnostic: bool,
 ) -> PyResult<RustRedMonitorOptions> {
+    #[cfg(not(feature = "experimental-rustred"))]
+    if cache_hit_diagnostic {
+        return Err(pyo3::exceptions::PyValueError::new_err(
+            "cache-hit diagnostics require the experimental-rustred feature",
+        ));
+    }
     let display = match monitor {
         "off" => RustRedMonitorDisplay::Off,
         "tui" => RustRedMonitorDisplay::Tui,
@@ -275,12 +282,22 @@ pub(super) fn monitor_options(
         display,
         progress_snapshot,
         interval,
+        #[cfg(feature = "experimental-rustred")]
+        cache_hit_diagnostic,
         ..Default::default()
     };
     options
         .validate()
         .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
     Ok(options)
+}
+
+pub(super) fn monitor_requested(options: &RustRedMonitorOptions) -> bool {
+    #[cfg(feature = "experimental-rustred")]
+    if options.cache_hit_diagnostic {
+        return true;
+    }
+    options.enabled()
 }
 
 pub(super) fn check_loops(loops: usize) -> PyResult<()> {
@@ -641,7 +658,7 @@ pub(super) fn prepare(
         let observer = &mut observer;
         let cancelled = &cancelled;
         py.detach(move || {
-            if monitor.enabled() {
+            if monitor_requested(&monitor) {
                 engine.prepare_cache_with_monitor(
                     loops,
                     &output,
@@ -791,6 +808,25 @@ pub(super) fn statistics(py: Python<'_>, stats: &RustRedCacheStatistics) -> PyRe
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn lossless_diagnostics_are_explicit_and_separate_from_presentation() {
+        assert!(!monitor_requested(
+            &monitor_options("off", None, 1.0, false).unwrap()
+        ));
+        #[cfg(feature = "experimental-rustred")]
+        {
+            let diagnostic = monitor_options("off", None, 1.0, true).unwrap();
+            assert!(diagnostic.cache_hit_diagnostic);
+            assert!(!diagnostic.enabled());
+            assert!(monitor_requested(&diagnostic));
+            assert!(monitor_options("json", Some("latest.json".into()), 1.0, true).is_err());
+            assert!(monitor_options("off", Some("latest.json".into()), 1.0, true).is_err());
+        }
+        #[cfg(not(feature = "experimental-rustred"))]
+        assert!(monitor_options("off", None, 1.0, true).is_err());
+    }
+
     #[test]
     fn controls_preserve_omitted_limits_and_validate_workload_modes() {
         let mut limits = ReductionLimits {

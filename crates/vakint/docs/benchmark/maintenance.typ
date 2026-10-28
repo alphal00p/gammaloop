@@ -68,6 +68,34 @@ the existing trusted-generated-file API; official external-data loading retains
 its own authenticated identity handling. Single-file identities are rejected for
 lower-loop packs before their paths are read.
 
+Python #raw("evaluate"), #raw("evaluate_rustred_symbolic"), and
+#raw("prepare_cache") expose #raw("cache_hit_diagnostic=False"). Setting it
+to true selects the existing lossless native observer; DEBUG verbosity alone
+does not enable that observer. It requires #raw("experimental-rustred") and
+cannot be combined with terminal presentation or progress snapshots. The host
+initializes the existing Rust-to-Python logger once and preserves a logger
+already owned by an embedding application. Configure Python handlers and DEBUG
+levels before the first native message because the bridge caches enablement:
+
+```python
+import logging
+from symbolica import core
+
+core.use_custom_logger()
+logging.getLogger("vakint").setLevel(logging.DEBUG)
+# Attach a caller-owned logging.Handler before evaluating.
+value, guards, families = engine.evaluate_rustred_symbolic(
+    integral, cache_hit_diagnostic=True,
+)
+```
+
+The native #raw("vakint::cache_workload") and
+#raw("vakint::benchmark_cache_hits") targets become Python
+#raw("vakint.cache_workload") and #raw("vakint.benchmark_cache_hits"). Their
+messages retain the existing JSON documents. Retain and reconcile every event;
+a latest monitor snapshot or aggregate hit counter cannot establish per-seed
+Route coverage. The flag performs no numerical reevaluation or cache capture.
+
 Single-file records retain their existing #raw("cache_sha256") field unchanged.
 Directories instead set #raw("cache_native_index_identity"), with SHA-256 and byte
 lengths for the top bundle index and every child native index, or the standalone

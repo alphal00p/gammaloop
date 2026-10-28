@@ -695,7 +695,10 @@ anchor = "pub struct VakintWrapper {"
 # Reviewed 2026-10-28: load_cache accepts an optional native CacheFileIdentity.
 # Direct forwarding preserves existing transport grants, defaults and official
 # loader authentication; existing callers retain their original behavior.
-digest = "d4076aa37d9fb94882754e83417353773e315744"
+# Reviewed 2026-10-28: the explicit cache_hit_diagnostic keyword forwards the
+# existing native observer through the monitored path without changing its false
+# default, presentation exclusion, reduction semantics or cache ownership.
+digest = "319a6fda0681ed73c9ef8e9c3751b330982e6aed"
 
 [[section.note.scope]]
 path = "crates/vakint/src/symbolica_community_module/numerical.rs"
