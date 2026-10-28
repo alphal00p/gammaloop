@@ -4606,7 +4606,7 @@ impl PyFeynmanDiagram {
     ///     ``render().measured().to_html()`` on the displayed view instead.
     #[pyo3(signature = (*, config=None, style=None, momenta=false, lmb=None, highlight=None, browser=None))]
     #[allow(clippy::too_many_arguments)] // Mirrors render's Python keywords plus explicit browser selection.
-    pub fn to_html(
+    fn to_html(
         &self,
         py: Python<'_>,
         config: Option<&PyRenderSettings>,
