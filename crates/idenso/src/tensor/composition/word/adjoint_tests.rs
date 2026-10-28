@@ -1,10 +1,19 @@
 use super::*;
-use crate::{AdjointError, bis, dirac::AGS, gamma};
-use spenso::structure::representation::Minkowski;
+use crate::dirac::AGS;
+use crate::tensor::AlgebraSettings;
+use crate::test_support;
+use crate::{bis, gamma};
+use spenso::mink;
+use spenso::structure::abstract_index::AbstractIndex;
+use spenso::structure::partial::PartialIndex;
+use spenso::structure::representation::{LibraryRep, Minkowski, RepName};
+use spenso::structure::slot::{IsAbstractSlot, SlotMatcher};
+use std::collections::HashMap;
+use std::slice;
 use symbolica::{function, symbol};
 
 fn head() -> Symbol {
-    crate::test_support::test_initialize();
+    test_support::test_initialize();
     symbol!("word_adjoint::exterior"; Flat, Linear, Antisymmetric;
         tag = &SPENSO_TAG.tensor_word)
 }
@@ -68,8 +77,8 @@ fn bar(
 #[test]
 fn word_adjoint_conjugates_exact_scalar_weights_and_reverses_generators() {
     let head = head();
-    let a = leaf("word_adjoint::a", &[spenso::mink!(4, 1)]);
-    let b = leaf("word_adjoint::b", &[spenso::mink!(4, 1)]);
+    let a = leaf("word_adjoint::a", &[mink!(4, 1)]);
+    let b = leaf("word_adjoint::b", &[mink!(4, 1)]);
     let word = SymbolicTensor::word(head, &[a.clone(), b.clone()]).unwrap();
     let reversed = SymbolicTensor::word(head, &[bar(&b).unwrap(), bar(&a).unwrap()]).unwrap();
     let unreversed = SymbolicTensor::word(head, &[bar(&a).unwrap(), bar(&b).unwrap()]).unwrap();
@@ -112,8 +121,8 @@ fn word_adjoint_preserves_free_slot_order_duality_labels_and_jet_metadata() {
         "word_adjoint::jet",
         &[
             Atom::num(2),
-            spenso::mink!(4, 32),
-            spenso::mink!(4, 33),
+            mink!(4, 32),
+            mink!(4, 33),
             representation
                 .dual()
                 .slot::<AbstractIndex, _>(AbstractIndex::Normal(34))
@@ -198,7 +207,7 @@ fn word_adjoint_uses_native_gamma_and_projector_coefficient_adjoint() {
     let head = head();
     let canonical = |value: &SymbolicTensor<PartialStructure>| {
         value
-            .simplify_algebra(&crate::tensor::AlgebraSettings {
+            .simplify_algebra(&AlgebraSettings {
                 gamma: Some(Default::default()),
                 ..Default::default()
             })
@@ -242,11 +251,11 @@ fn word_adjoint_uses_native_gamma_and_projector_coefficient_adjoint() {
 #[test]
 fn word_adjoint_distributes_sums_with_even_and_odd_terms() {
     let head = head();
-    let a = leaf("word_adjoint::a", &[spenso::mink!(4, 51)]);
-    let b = leaf("word_adjoint::b", &[spenso::mink!(4, 51)]);
-    let odd = SymbolicTensor::word(head, std::slice::from_ref(&a))
+    let a = leaf("word_adjoint::a", &[mink!(4, 51)]);
+    let b = leaf("word_adjoint::b", &[mink!(4, 51)]);
+    let odd = SymbolicTensor::word(head, slice::from_ref(&a))
         .unwrap()
-        .multiply(&leaf("word_adjoint::even", &[spenso::mink!(4, 51)]))
+        .multiply(&leaf("word_adjoint::even", &[mink!(4, 51)]))
         .unwrap();
     let word = SymbolicTensor::word(head, &[a, b]).unwrap();
     let scalar = SymbolicTensor::infer(Atom::num((3, 5)) + Atom::i()).unwrap();
@@ -293,8 +302,8 @@ fn word_adjoint_materializes_open_coefficients_and_retains_ranked_zero() {
     let word = SymbolicTensor::word(
         head,
         &[
-            leaf("word_adjoint::a", &[spenso::mink!(4, 61)]),
-            leaf("word_adjoint::b", &[spenso::mink!(4, 61)]),
+            leaf("word_adjoint::a", &[mink!(4, 61)]),
+            leaf("word_adjoint::b", &[mink!(4, 61)]),
         ],
     )
     .unwrap();
@@ -326,14 +335,11 @@ fn word_adjoint_materializes_open_coefficients_and_retains_ranked_zero() {
 #[test]
 fn word_adjoint_rejects_wrong_callback_interfaces_words_and_unsupported_fields() {
     let head = head();
-    let a = leaf("word_adjoint::a", &[spenso::mink!(4, 71)]);
-    let word = SymbolicTensor::word(head, std::slice::from_ref(&a)).unwrap();
+    let a = leaf("word_adjoint::a", &[mink!(4, 71)]);
+    let word = SymbolicTensor::word(head, slice::from_ref(&a)).unwrap();
     assert!(
-        word.dirac_adjoint_word(head, |_| Ok(leaf(
-            "word_adjoint::abar",
-            &[spenso::mink!(4, 72)]
-        )))
-        .is_err()
+        word.dirac_adjoint_word(head, |_| Ok(leaf("word_adjoint::abar", &[mink!(4, 72)])))
+            .is_err()
     );
     assert!(
         word.dirac_adjoint_word(head, |generator| Ok(SymbolicTensor::word(
@@ -342,8 +348,8 @@ fn word_adjoint_rejects_wrong_callback_interfaces_words_and_unsupported_fields()
         )?))
         .is_err()
     );
-    let even_composite = leaf("word_adjoint::even_c", &[spenso::mink!(4, 81)])
-        .multiply(&leaf("word_adjoint::even_d", &[spenso::mink!(4, 81)]))
+    let even_composite = leaf("word_adjoint::even_c", &[mink!(4, 81)])
+        .multiply(&leaf("word_adjoint::even_d", &[mink!(4, 81)]))
         .unwrap();
     assert!(
         word.dirac_adjoint_word(head, |generator| {
@@ -352,16 +358,14 @@ fn word_adjoint_rejects_wrong_callback_interfaces_words_and_unsupported_fields()
         .is_err()
     );
     for unsupported in ["word_adjoint::majorana", "word_adjoint::ghost"] {
-        let word =
-            SymbolicTensor::word(head, &[leaf(unsupported, &[spenso::mink!(4, 71)])]).unwrap();
+        let word = SymbolicTensor::word(head, &[leaf(unsupported, &[mink!(4, 71)])]).unwrap();
         assert!(matches!(
             word.dirac_adjoint_word(head, bar),
             Err(AdjointError::Tensor(TensorInferenceError::Invalid(reason)))
                 if reason == "unsupported field policy"
         ));
     }
-    let b =
-        SymbolicTensor::word(head, &[leaf("word_adjoint::b", &[spenso::mink!(4, 72)])]).unwrap();
+    let b = SymbolicTensor::word(head, &[leaf("word_adjoint::b", &[mink!(4, 72)])]).unwrap();
     assert!(
         word.multiply(&b)
             .unwrap()
@@ -376,4 +380,33 @@ fn word_adjoint_rejects_wrong_callback_interfaces_words_and_unsupported_fields()
         word.dirac_adjoint(true),
         Err(AdjointError::ImplicitTensorWordAdjoint)
     ));
+}
+
+#[test]
+fn word_adjoint_retains_hidden_occurrences_for_zero_and_nonzero_results() {
+    let head = head();
+    let a = leaf("word_adjoint_history::a", &[mink!(4, 991)]);
+    let zero = SymbolicTensor::word(head, &[a.clone(), a]).unwrap();
+    // Additive terms bind their own internal contractions. Use the native
+    // algebra-result owner to retain hidden history in a nonzero scalar.
+    let scalar = zero.with_algebra_result(Atom::one()).unwrap();
+    let odd =
+        SymbolicTensor::word(head, &[leaf("word_adjoint_history::b", &[mink!(4, 992)])]).unwrap();
+    let nonzero = scalar.multiply_word(head, &odd).unwrap();
+    let probe = leaf("word_adjoint_history::probe", &[mink!(4, 991)]);
+    for source in [zero, nonzero] {
+        assert!(
+            source
+                .explicit_indices()
+                .unwrap()
+                .any(|index| index == AbstractIndex::Normal(991))
+        );
+        let adjoint = source
+            .dirac_adjoint_word(head, |generator| Ok(generator.clone()))
+            .unwrap();
+        assert!(matches!(
+            adjoint.multiply_word(head, &probe),
+            Err(TensorCompositionError::InvalidExplicitMultiplicity { occurrences: 3, .. })
+        ));
+    }
 }

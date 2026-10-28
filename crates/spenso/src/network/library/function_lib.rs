@@ -7,6 +7,8 @@ use symbolica::{
     symbol,
 };
 
+#[cfg(test)]
+use crate::mink;
 use colored::Colorize;
 
 use crate::{
@@ -494,7 +496,7 @@ fn broadcast_conjugation_uses_symbolica_for_proven_scalars() {
 fn broadcast_conjugation_preserves_unknown_and_closed_tensor_arguments() {
     let unknown = Atom::var(symbol!("spenso::scalar_conjugation::unknown"));
     let tensor = SPENSO_TAG.tensor_symbol("spenso::scalar_conjugation::tensor");
-    let vector = function!(tensor, crate::mink!(4, 1));
+    let vector = function!(tensor, mink!(4, 1));
     for value in [unknown, vector.clone(), vector.pow(2)] {
         assert!(!value.is_scalar().is_true());
         let actual = INBUILTS.conj(&value);

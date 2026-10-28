@@ -1,3 +1,4 @@
+use crate::AdjointError;
 use crate::tensor::SymbolicTensor;
 use crate::tensor::composition;
 use crate::tensor::composition::{ExplicitIndexOccurrences, ProductPlan, TensorCompositionError};
@@ -143,11 +144,32 @@ impl SymbolicTensor<PartialStructure> {
     /// [`Self::dirac_adjoint`]. Ranked zero retains its interface and requires
     /// no generator callbacks. Ordinary `dirac_adjoint` continues to reject
     /// nonzero tensor words without an explicit policy.
+    ///
+    /// # Errors
+    /// Propagates invalid word grammar, generator policy failures, incompatible
+    /// dual ports, and invalid resulting tensor interfaces.
+    ///
+    /// # Example
+    /// ```
+    /// use idenso::AdjointError;
+    /// use idenso::tensor::SymbolicTensor;
+    /// use spenso::network::tags::SPENSO_TAG;
+    /// use spenso::{mink, tensor_symbol};
+    /// use symbolica::{function, symbol};
+    /// let head = symbol!("word_adjoint_example::exterior"; Flat, Linear, Antisymmetric;
+    ///     tag = &SPENSO_TAG.tensor_word);
+    /// let a = SymbolicTensor::infer(function!(tensor_symbol!("word_adjoint_example::a"), mink!(4, 1)))?;
+    /// let word = SymbolicTensor::word(head, &[a])?;
+    /// // An explicit identity policy for a formally self-conjugate generator.
+    /// let adjoint = word.dirac_adjoint_word(head, |generator| Ok(generator.clone()))?;
+    /// assert!(adjoint.same_value(&word));
+    /// # Ok::<(), AdjointError>(())
+    /// ```
     pub fn dirac_adjoint_word(
         &self,
         head: Symbol,
-        mut adjoint_generator: impl FnMut(&Self) -> Result<Self, crate::AdjointError>,
-    ) -> Result<Self, crate::AdjointError> {
+        mut adjoint_generator: impl FnMut(&Self) -> Result<Self, AdjointError>,
+    ) -> Result<Self, AdjointError> {
         let identity = Self::word(head, &[])?;
         // Reuse the product boundary's head and complete operand-grammar checks.
         ProductPlan::Scalar.apply_word(head, &identity, self)?;
@@ -159,8 +181,15 @@ impl SymbolicTensor<PartialStructure> {
                 .into_iter()
                 .map(|slot| slot.dual()),
         );
+        let mut occurrences = source
+            .explicit_index_occurrences()?
+            .mapped(|slot| Ok::<_, TensorInferenceError>(slot.dual()))?;
         if source.is_zero() {
-            return Ok(Self::from_declared_parts(Atom::Zero, interface)?);
+            return Ok(Self::from_validated_parts(
+                Atom::Zero,
+                interface,
+                Arc::new(occurrences),
+            ));
         }
         let mut terms = Vec::new();
         for term in source.expression.expand_in(Atom::var(head)).terms() {
@@ -214,14 +243,20 @@ impl SymbolicTensor<PartialStructure> {
                     }
                     Ok(adjoint)
                 })
-                .collect::<Result<Vec<_>, crate::AdjointError>>()?;
+                .collect::<Result<Vec<_>, AdjointError>>()?;
             let word = Self::word(head, &generators)?;
-            terms.push(coefficient.multiply_word(head, &word)?.expression);
+            let term = coefficient.multiply_word(head, &word)?;
+            occurrences.branch_max(term.explicit_index_occurrences()?);
+            terms.push(term.expression);
         }
-        Ok(Self::from_declared_parts(
-            terms.into_iter().sum(),
-            interface,
-        )?)
+        let value = Self::from_declared_parts(terms.into_iter().sum(), interface)?;
+        occurrences.branch_max(value.explicit_index_occurrences()?);
+        occurrences.validate()?;
+        Ok(Self::from_validated_parts(
+            value.expression,
+            value.structure,
+            Arc::new(occurrences),
+        ))
     }
 
     /// Multiply marked tensor words using the ordinary automatic port plan.
