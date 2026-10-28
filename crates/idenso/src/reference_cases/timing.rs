@@ -11,7 +11,6 @@ use crate::tensor::ReductionStatus;
 pub(crate) enum Phase {
     Admission,
     InterfaceDiscovery,
-    Validation,
     CandidateScan,
     Planning,
     ShallowGraph,
@@ -27,10 +26,9 @@ pub(crate) enum Phase {
     ContractionEmission,
 }
 
-const PHASES: [&str; 16] = [
+const PHASES: [&str; 15] = [
     "admission",
     "interface_discovery",
-    "validation",
     "candidate_scan",
     "planning",
     "shallow_graph",

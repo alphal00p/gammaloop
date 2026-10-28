@@ -500,6 +500,7 @@
 
   workspacePackageExtraSourceRoots.compileTimeTest = {
     spynso3 = [
+      "crates/spynso3/tests/evaluator_horner.py"
       "crates/spynso3/tests/installed_symbolic_preview.py"
       "crates/spynso3/tests/installed_tensor_paging.py"
     ];
