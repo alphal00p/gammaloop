@@ -839,7 +839,7 @@ impl PyDiagramView {
         Ok(bundle.into_any().unbind())
     }
 
-    /// Marimo adapter: retained widget when available, otherwise static HTML.
+    /// Marimo adapter: retained widget when available, otherwise isolated HTML.
     /// See [`Self::widget`] for explicit widget construction.
     ///
     /// # Errors
@@ -855,8 +855,10 @@ impl PyDiagramView {
                 .call_method1("anywidget", (self.widget(py)?,))
                 .map(Bound::unbind)
         } else {
+            // Interactive SVG controls mutate their document. Keep those
+            // mutations outside Marimo's React-owned output tree on reruns.
             marimo
-                .call_method1("Html", (self.to_html(py)?,))
+                .call_method1("iframe", (self.to_html(py)?,))
                 .map(Bound::unbind)
         }
     }
@@ -1059,6 +1061,44 @@ finally:
     widget.close()
     other.close()
 assert widget._view is None and widget._font_css == ''
+"#,
+                Some(&locals),
+                Some(&locals),
+            )?;
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn marimo_without_anywidget_isolates_interactive_output() {
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let html = "<figure><svg></svg><script>document.body.append('graph')</script></figure>";
+            let snapshot = PyDiagramRender::new("<svg/>".into(), html.into());
+            let view = PyDiagramView::from_render(snapshot);
+            let locals = PyDict::new(py);
+            locals.set_item("view", Py::new(py, view)?)?;
+            locals.set_item("html", html)?;
+            PyDiagramView::python(py)?;
+            py.run(
+                cr#"
+import sys
+from types import SimpleNamespace
+from unittest.mock import patch
+
+calls = []
+def iframe(source):
+    calls.append(source)
+    return SimpleNamespace(_mime_=lambda: ('text/html', '<iframe>isolated</iframe>'))
+
+# Deliberately provide no Html factory: raw interactive HTML in the React tree
+# renders once but can break insertBefore when a reactive cell replaces it.
+with patch.dict(sys.modules, {'anywidget': None, 'marimo': SimpleNamespace(iframe=iframe)}):
+    assert view._display_()._mime_() == ('text/html', '<iframe>isolated</iframe>')
+    assert view._mime_() == ('text/html', '<iframe>isolated</iframe>')
+    assert calls == [html, html]
+    assert view.to_html() == html
 "#,
                 Some(&locals),
                 Some(&locals),
