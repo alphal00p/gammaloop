@@ -2,11 +2,13 @@
 
 use super::composition::ExplicitIndexOccurrences;
 use super::inference::{InterfaceInference, TensorInferenceError};
-use super::{SymbolicTensor, composition};
+use super::{SymbolicTensor, TensorProofs, composition};
 use spenso::structure::partial::{PartialStructure, PartialStructureExt};
-use spenso::structure::slot::{ParseableAind, SlotMatcher};
+use spenso::structure::slot::{IsAbstractSlot, ParseableAind, SlotMatcher};
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
+use std::iter;
+use std::mem;
 use std::sync::Arc;
 use symbolica::atom::{Atom, AtomCore, AtomOrView, AtomView, Symbol};
 use symbolica::id::{
@@ -264,8 +266,44 @@ impl SymbolicTensor<PartialStructure> {
     /// A validated zero returns unchanged without callbacks, preserving rank
     /// and logical order. Caller callbacks can allocate while constructing raw
     /// RHS values; the reservation ordering covers this operation's insertions.
+    ///
+    /// # Errors
+    ///
+    /// Rejects unpublished or non-intrinsic source tensors, unresolved nonzero
+    /// source ports, malformed RHS expressions, or changed external interfaces.
+    /// Invalid index multiplicities and unsupported scopes retain their typed errors.
+    ///
+    /// # Example
+    ///
+    /// Opt into new contracted pairs without changing the source's external port:
+    ///
+    /// ```
+    /// use std::slice;
+    /// use idenso::tensor::{SymbolicTensor, TensorRule};
+    /// use idenso::tensor::inference::TensorInferenceError;
+    /// use spenso::structure::abstract_index::AbstractIndex;
+    /// use spenso::structure::representation::{Minkowski, RepName};
+    /// use spenso::structure::slot::IsAbstractSlot;
+    /// use spenso::tensor_symbol;
+    /// use symbolica::atom::AtomCore;
+    /// use symbolica::function;
+    ///
+    /// let representation = Minkowski {}.new_rep(4);
+    /// let port = representation.slot::<AbstractIndex, _>(AbstractIndex::Normal(7)).to_atom();
+    /// let internal = representation.slot::<AbstractIndex, _>(AbstractIndex::Normal(9)).to_atom();
+    /// let source = SymbolicTensor::infer(function!(tensor_symbol!("docs::fresh_from"), &port))?
+    ///     .finish_parts()?;
+    /// let rhs = function!(tensor_symbol!("docs::fresh_to"), port)
+    ///     * function!(tensor_symbol!("docs::fresh_left"), &internal)
+    ///     * function!(tensor_symbol!("docs::fresh_right"), internal);
+    /// let rule = TensorRule::new(source.expression().to_pattern(), rhs.into(), None, 0)?;
+    /// assert!(source.replace(&rule).is_err());
+    /// let replaced = source.replace_rules_with_fresh_bindings(slice::from_ref(&rule))?;
+    /// assert_ne!(replaced.expression(), source.expression());
+    /// # Ok::<(), TensorInferenceError>(())
+    /// ```
     pub fn replace_rules_with_fresh_bindings(&self, rules: &[TensorRule<'_>]) -> Result<Self> {
-        self.ensure_validated()?;
+        self.explicit_index_occurrences()?;
         if rules.is_empty() || self.is_zero() {
             return Ok(self.clone());
         }
@@ -277,8 +315,6 @@ impl SymbolicTensor<PartialStructure> {
         let mut replacement = TensorReplacement {
             rules: rules.iter().map(RuleApplication::new).collect(),
             source_signatures: HashMap::new(),
-            proof: InterfaceInference::default(),
-            rewrite_preserved: true,
             slots: SlotMatcher::default(),
             stage: ReplacementStage::Prepare(Vec::new()),
         };
@@ -290,7 +326,7 @@ impl SymbolicTensor<PartialStructure> {
             ));
         }
         let ReplacementStage::Prepare(mut entries) =
-            std::mem::replace(&mut replacement.stage, ReplacementStage::Direct)
+            mem::replace(&mut replacement.stage, ReplacementStage::Direct)
         else {
             return Err(TensorInferenceError::invalid(
                 "fresh tensor replacement lost its preparation stage",
@@ -302,16 +338,21 @@ impl SymbolicTensor<PartialStructure> {
         {
             return Ok(self.clone());
         }
-        let dummies = Self::reserved_dummies(std::iter::once(self).chain(
-            entries.iter().filter_map(|entry| match &entry.value {
-                PreparedValue::Original => None,
-                PreparedValue::Replaced(value) => Some(value.as_ref()),
-            }),
-        ));
-        let mut used = self.expression.get_all_symbols(true);
-        for entry in &entries {
-            if let PreparedValue::Replaced(value) = &entry.value {
-                used.extend(value.expression.get_all_symbols(true));
+        let dummies =
+            Self::reserved_dummies(iter::once(self).chain(entries.iter().filter_map(|entry| {
+                match &entry.value {
+                    PreparedValue::Original => None,
+                    PreparedValue::Replaced(value) => Some(value.as_ref()),
+                }
+            })));
+        let mut used = HashSet::new();
+        for value in iter::once(self).chain(entries.iter().filter_map(|entry| match &entry.value {
+            PreparedValue::Original => None,
+            PreparedValue::Replaced(value) => Some(value.as_ref()),
+        })) {
+            used.extend(value.expression.get_all_symbols(true));
+            for (slot, _) in value.explicit_index_occurrences()?.entries() {
+                used.extend(slot.to_atom().get_all_symbols(true));
             }
         }
         for entry in &mut entries {
@@ -332,6 +373,17 @@ impl SymbolicTensor<PartialStructure> {
                 **value = value.wrap_indices(scope, true)?;
             }
         }
+        // The source owns indices hidden by earlier cancellation. Every scoped
+        // insertion also owns history that replay can erase through normalization.
+        // External uses are unchanged and insertion scopes are independent, so
+        // conservative branch maxima preserve both without counting ports twice.
+        let mut occurrences = self.explicit_index_occurrences()?.clone();
+        for entry in &entries {
+            if let PreparedValue::Replaced(value) = &entry.value {
+                occurrences.branch_max(value.explicit_index_occurrences()?);
+            }
+        }
+        occurrences.validate()?;
         replacement.stage = ReplacementStage::Replay { entries, cursor: 0 };
         let expression = replacement.apply(self.expression.as_view())?;
         if !matches!(&replacement.stage, ReplacementStage::Replay { entries, cursor }
@@ -344,7 +396,19 @@ impl SymbolicTensor<PartialStructure> {
         match expression {
             AtomOrView::View(_) => Ok(self.clone()),
             expression => {
-                Self::from_declared_parts(expression.into_owned(), self.structure.clone())
+                let result = Self::from_validated_parts(
+                    expression.into_owned(),
+                    self.structure.clone(),
+                    Arc::new(occurrences),
+                );
+                TensorProofs::assert_normalization_preserves_interface(
+                    "replace_rules_with_fresh_bindings",
+                    &[&self.expression],
+                    &result.expression,
+                    Ok(&result.structure),
+                    None,
+                );
+                Ok(result)
             }
         }
     }
@@ -368,10 +432,17 @@ impl Signature {
         })
     }
 
-    fn accepts(&self, rhs: &Self, zero: bool, fresh_bindings: bool) -> bool {
+    fn accepts(&self, rhs: &Self, zero: bool, policy: BindingPolicy) -> bool {
         (zero || InterfaceInference::additive_interfaces_match(&self.interface, &rhs.interface))
-            && (fresh_bindings || rhs.occurrences.is_bounded_by(&self.occurrences))
+            && (policy == BindingPolicy::FreshBindings
+                || rhs.occurrences.is_bounded_by(&self.occurrences))
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum BindingPolicy {
+    ExistingIndices,
+    FreshBindings,
 }
 
 type Bindings<'source> = Vec<(Symbol, Match<'source>)>;
@@ -394,16 +465,19 @@ impl<'source, 'rule, 'rhs> RuleApplication<'source, 'rule, 'rhs> {
     }
 }
 
+#[derive(Debug)]
 enum PreparedValue {
     Original,
     Replaced(Box<SymbolicTensor<PartialStructure>>),
 }
 
+#[derive(Debug)]
 struct PreparedLeaf<'source> {
     original: AtomView<'source>,
     value: PreparedValue,
 }
 
+#[derive(Debug)]
 enum ReplacementStage<'source> {
     Direct,
     Prepare(Vec<PreparedLeaf<'source>>),
@@ -465,7 +539,7 @@ impl<'source> TensorReplacement<'source, '_, '_> {
 
     fn replace_leaf(&mut self, value: AtomView<'source>) -> Result<AtomOrView<'source>> {
         if let ReplacementStage::Replay { entries, cursor } = &mut self.stage {
-            let entry = entries.get(*cursor).ok_or_else(|| {
+            let entry = entries.get_mut(*cursor).ok_or_else(|| {
                 TensorInferenceError::invalid(
                     "fresh tensor replacement exhausted its prepared entries",
                 )
@@ -476,13 +550,19 @@ impl<'source> TensorReplacement<'source, '_, '_> {
                 ));
             }
             *cursor += 1;
-            return Ok(match &entry.value {
-                PreparedValue::Original => value.into(),
-                PreparedValue::Replaced(value) => value.expression.clone().into(),
-            });
+            return Ok(
+                match mem::replace(&mut entry.value, PreparedValue::Original) {
+                    PreparedValue::Original => value.into(),
+                    PreparedValue::Replaced(value) => value.expression.into(),
+                },
+            );
         }
-        let fresh_bindings = matches!(self.stage, ReplacementStage::Prepare(_));
-        let (expression, interface) = self.resolve_leaf(value, fresh_bindings)?;
+        let policy = if matches!(self.stage, ReplacementStage::Prepare(_)) {
+            BindingPolicy::FreshBindings
+        } else {
+            BindingPolicy::ExistingIndices
+        };
+        let (expression, interface) = self.resolve_leaf(value, policy)?;
         if let ReplacementStage::Prepare(entries) = &mut self.stage {
             let prepared = match expression {
                 AtomOrView::View(_) => PreparedValue::Original,
@@ -511,7 +591,7 @@ impl<'source> TensorReplacement<'source, '_, '_> {
     fn resolve_leaf(
         &mut self,
         value: AtomView<'source>,
-        fresh_bindings: bool,
+        policy: BindingPolicy,
     ) -> Result<(AtomOrView<'source>, Option<PartialStructure>)> {
         let mut matched = None;
         for application in &mut self.rules {
@@ -558,19 +638,21 @@ impl<'source> TensorReplacement<'source, '_, '_> {
         };
         let key = found.get_matches();
         if let Some((rhs, signature)) = application.rhs_cache.get(key) {
-            if !source.accepts(signature, rhs.is_zero(), fresh_bindings) {
-                return Err(TensorInferenceError::invalid(if fresh_bindings {
-                    "fresh tensor replacement changes the matched external interface"
-                } else {
-                    "tensor replacement changes the matched interface or introduces explicit indices"
-                }));
+            if !source.accepts(signature, rhs.is_zero(), policy) {
+                return Err(TensorInferenceError::invalid(
+                    if policy == BindingPolicy::FreshBindings {
+                        "fresh tensor replacement changes the matched external interface"
+                    } else {
+                        "tensor replacement changes the matched interface or introduces explicit indices"
+                    },
+                ));
             }
             return Ok(if rhs.as_view() == value {
                 (value.into(), None)
             } else {
                 (
                     rhs.clone().into(),
-                    fresh_bindings.then(|| source.interface.clone()),
+                    (policy == BindingPolicy::FreshBindings).then(|| source.interface.clone()),
                 )
             });
         }
@@ -601,12 +683,14 @@ impl<'source> TensorReplacement<'source, '_, '_> {
             }
             Arc::new(Signature::observe(rhs.as_view(), &mut self.slots)?)
         };
-        if !source.accepts(&signature, rhs.is_zero(), fresh_bindings) {
-            return Err(TensorInferenceError::invalid(if fresh_bindings {
-                "fresh tensor replacement changes the matched external interface"
-            } else {
-                "tensor replacement changes the matched interface or introduces explicit indices"
-            }));
+        if !source.accepts(&signature, rhs.is_zero(), policy) {
+            return Err(TensorInferenceError::invalid(
+                if policy == BindingPolicy::FreshBindings {
+                    "fresh tensor replacement changes the matched external interface"
+                } else {
+                    "tensor replacement changes the matched interface or introduces explicit indices"
+                },
+            ));
         }
         if application.rhs_cache.len() < application.rule.rhs_cache_size {
             application
@@ -616,7 +700,10 @@ impl<'source> TensorReplacement<'source, '_, '_> {
         Ok(if rhs.as_view() == value {
             (value.into(), None)
         } else {
-            (rhs.into(), fresh_bindings.then(|| source.interface.clone()))
+            (
+                rhs.into(),
+                (policy == BindingPolicy::FreshBindings).then(|| source.interface.clone()),
+            )
         })
     }
 }
