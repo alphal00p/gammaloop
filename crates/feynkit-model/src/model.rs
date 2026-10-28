@@ -2387,6 +2387,7 @@ fn reference<'a, V>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::{Value, json};
 
     fn model_json(coupling_name: &str) -> String {
         format!(
@@ -2740,14 +2741,13 @@ mod tests {
     #[test]
     fn coupling_expansion_preserves_literal_wildcard_like_names_on_both_sides() {
         for name in ["GC1", "GC_"] {
-            let mut definition: serde_json::Value =
-                serde_json::from_str(&model_json(name)).unwrap();
+            let mut definition: Value = serde_json::from_str(&model_json(name)).unwrap();
             definition["couplings"][0]["name"] = name.into();
             definition["couplings"][0]["expression"] = "g_".into();
             definition["parameters"]
                 .as_array_mut()
                 .unwrap()
-                .push(serde_json::json!({
+                .push(json!({
                     "name": "g_", "nature": "external", "parameter_type": "real",
                     "expression": null, "value": [2.0, 0.0]
                 }));

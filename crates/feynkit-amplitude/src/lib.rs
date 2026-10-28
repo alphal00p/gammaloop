@@ -37,12 +37,9 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     sync::Arc,
 };
-use symbolica::{
-    atom::{Atom, AtomCore, Symbol},
-    function,
-    id::{Pattern, Replacement},
-    symbol,
-};
+use symbolica::atom::{Atom, AtomCore, Symbol};
+use symbolica::id::{Pattern, Replacement};
+use symbolica::{function, symbol};
 use thiserror::Error;
 
 /// Invalid diagram collection or unsupported external-state operation.
