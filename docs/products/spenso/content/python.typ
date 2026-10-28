@@ -95,10 +95,12 @@ metadata, local index aliases and a bounded leaf cache while preserving logical
 index order and the source expression. Paging uses no CBOR render tree, Typst
 compiler or notation worker.
 
-Use `expression.paged(page_size=25)` to request the tensor viewer explicitly.
+Use `expression.paged()` to request the tensor viewer explicitly. The default
+`page_size=None` allows a complete compact product to fit the initial preview;
+other pages use 25 entries. An explicit `page_size=25` keeps that entry limit.
 `expression.to_expression().mathml_viewer()` opens the same viewer with
-native Symbolica notation. Page sizes range from 1 to 500; rendering budgets
-may shorten a page. `paged()`, `formatted()` and expression `to_html()` reject
+native Symbolica notation. Explicit page sizes range from 1 to 500; rendering
+budgets may shorten a page. `paged()`, `formatted()` and expression `to_html()` reject
 `notation_source` with `ValueError`. Explicit `to_html()` emits complete direct
 MathML without paging or Typst compilation. Custom Typst notation is available
 through `to_typst_project()` and optional vector `to_svg()` export.

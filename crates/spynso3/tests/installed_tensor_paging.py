@@ -13,7 +13,7 @@ import xml.etree.ElementTree as ET
 from contextlib import ExitStack
 from html.parser import HTMLParser
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 from unittest.mock import Mock, patch
 
 from symbolica import AtomType, E, Expression, MathMLViewer, PrintMode, S
@@ -497,6 +497,53 @@ class BrowserPagingTests(PagingAssertions):
         self.enterContext(
             patch("subprocess.run", side_effect=AssertionError("WASM has no processes"))
         )
+
+    def test_automatic_product_preview_preserves_explicit_page_sizes(self):
+        head = TensorName("paging_automatic_product::T")
+        rep = Representation.euc(3)
+        for count in (34, 51):
+            value = TensorExpression(1)
+            for index in range(count):
+                value *= head(rep(f"i{index}"))
+            original = self.tensorState(value)
+            automatic_end = count if count == 34 else 25
+            for options in ({}, {"page_size": None}, {"page_size": 25}):
+                with self.subTest(count=count, options=options):
+                    viewer = value.paged(**options)
+                    self.addCleanup(viewer.close)
+                    page = viewer.page()
+                    root = self.assertPage(page)[0]
+                    end = 25 if options.get("page_size") == 25 else automatic_end
+                    self.assertEqual(page["kind"], "Product")
+                    self.assertEqual(
+                        (page["start"], page["end"], page["total"]), (0, end, count)
+                    )
+                    self.assertEqual(self.visible(root).count("T"), end)
+                    if end == count:
+                        self.assertIsNone(page["next"])
+                        self.assertFalse(page["marker_ids"])
+                    else:
+                        self.assertEqual(page["next"], 25)
+                        self.assertTrue(page["marker_ids"])
+            if count == 34:
+                # Default notebook display must select the same automatic mode,
+                # including without the optional live widget frontend.
+                with patch.dict(
+                    sys.modules,
+                    {
+                        "anywidget": None,
+                        "marimo": SimpleNamespace(Html=lambda html: html),
+                    },
+                ):
+                    document = value._display_()
+                root = ET.fromstring(
+                    re.search(r"<math\b.*?</math>", document, re.DOTALL).group()
+                )
+                self.assertFalse(
+                    any("data-symbolica-marker" in node.attrib for node in root.iter())
+                )
+                self.assertEqual(self.visible(root).count("T"), count)
+            self.assertEqual(self.tensorState(value), original)
 
     def test_embedded_pages_are_contiguous_and_reversible(self):
         pages = []

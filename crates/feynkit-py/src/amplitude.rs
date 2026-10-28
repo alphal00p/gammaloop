@@ -705,22 +705,24 @@ impl PySquaredAmplitude {
     /// --------
     /// Using the setup in the ``SquaredAmplitude`` class example:
     ///
-    /// >>> viewer = squared.paged(page_size=25)
+    /// >>> viewer = squared.paged()
     /// >>> first_page = viewer.page()
     ///
     /// Parameters
     /// ----------
-    /// page_size : int, default 25
-    ///     Maximum entries on a page, between 1 and 500.
+    /// page_size : int, optional
+    ///     None uses automatic previews: compact products may be shown completely,
+    ///     with 25 entries per page otherwise. An explicit size sets the maximum
+    ///     entries per page, between 1 and 500. Rendering budgets may show fewer.
     /// settings : DisplaySettings, optional
     ///     Tensor notation, index labels, and presentation preferences.
     /// notation_source : str, optional
     ///     Unsupported by the direct MathML pager, as for TensorExpression.paged().
-    #[pyo3(signature = (page_size=25, *, settings=None, notation_source=None))]
+    #[pyo3(signature = (page_size=None, *, settings=None, notation_source=None))]
     fn paged(
         &self,
         py: Python<'_>,
-        page_size: usize,
+        page_size: Option<usize>,
         settings: Option<PyRef<'_, DisplaySettings>>,
         notation_source: Option<String>,
     ) -> PyResult<Py<PyAny>> {

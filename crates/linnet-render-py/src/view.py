@@ -17,6 +17,17 @@ def available(module):
     return True
 
 
+def iframe(html, javascript):
+    """Keep Marimo's isolated frame hidden until its own document is initialized."""
+    import marimo
+
+    # A hidden parent is present from the first paint. The child reveals only
+    # its iframe after layout; the notebook's React-owned container stays intact.
+    return marimo.iframe(f"<script>{javascript}</script>{html}").style(
+        {"visibility": "hidden"}
+    )
+
+
 def scripts(templates, interactive):
     """Only Rust-authored templates supply executable notebook controls.
 

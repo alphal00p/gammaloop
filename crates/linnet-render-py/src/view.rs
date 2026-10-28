@@ -857,8 +857,8 @@ impl PyDiagramView {
         } else {
             // Interactive SVG controls mutate their document. Keep those
             // mutations outside Marimo's React-owned output tree on reruns.
-            marimo
-                .call_method1("iframe", (self.to_html(py)?,))
+            Self::python(py)?
+                .call_method1("iframe", (self.to_html(py)?, include_str!("iframe.js")))
                 .map(Bound::unbind)
         }
     }
@@ -1090,14 +1090,19 @@ from unittest.mock import patch
 calls = []
 def iframe(source):
     calls.append(source)
-    return SimpleNamespace(_mime_=lambda: ('text/html', '<iframe>isolated</iframe>'))
+    def style(css):
+        assert css == {'visibility': 'hidden'}
+        return SimpleNamespace(_mime_=lambda: ('text/html', '<iframe>isolated</iframe>'))
+    return SimpleNamespace(style=style)
 
 # Deliberately provide no Html factory: raw interactive HTML in the React tree
 # renders once but can break insertBefore when a reactive cell replaces it.
 with patch.dict(sys.modules, {'anywidget': None, 'marimo': SimpleNamespace(iframe=iframe)}):
     assert view._display_()._mime_() == ('text/html', '<iframe>isolated</iframe>')
     assert view._mime_() == ('text/html', '<iframe>isolated</iframe>')
-    assert calls == [html, html]
+    assert calls[0] == calls[1]
+    assert calls[0].startswith('<script>') and calls[0].endswith(html)
+    assert 'DOMContentLoaded' in calls[0]
     assert view.to_html() == html
 "#,
                 Some(&locals),

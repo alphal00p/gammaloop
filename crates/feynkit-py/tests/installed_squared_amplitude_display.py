@@ -24,6 +24,27 @@ assert fermions.spin_summed == [0, 1]
 for value in (squared, fermions):
     tensor = value.expression()
     exact = tensor.to_expression()
+    for options in ({}, {"page_size": None}, {"page_size": 25}):
+        viewer = value.paged(**options)
+        expected_viewer = tensor.paged(**options)
+        try:
+            page = viewer.page()
+            expected = expected_viewer.page()
+            for key in (
+                "html",
+                "start",
+                "end",
+                "total",
+                "next",
+                "page_size",
+                "marker_ids",
+            ):
+                assert page[key] == expected[key], (options, key)
+            if options.get("page_size") == 25:
+                assert page["page_size"] == 25
+        finally:
+            viewer.close()
+            expected_viewer.close()
     default_pages = None
     for settings in (None, DisplaySettings(index_style="raw", show_dimensions=True)):
         viewer = value.paged(page_size=1, settings=settings)

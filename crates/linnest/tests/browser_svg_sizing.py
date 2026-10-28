@@ -141,12 +141,12 @@ def main():
                     diameter: viewport.querySelector('circle').getBoundingClientRect().width,
                     contained: bounds.left >= outer.left - .01
                         && bounds.right <= outer.right + .01
-                        && bounds.top >= outer.top + 40 - .01
+                        && bounds.top >= outer.top - .01
                         && bounds.bottom <= outer.bottom + .01,
                 };
             }"""
             # Allow browser subpixel rounding of the outer SVG dimensions.
-            for name, expected in (("tall", 4 / 3), ("wide", 4 / 3), ("small", 7 / 3)):
+            for name, expected in (("tall", 4 / 3), ("wide", 4 / 3), ("small", 3)):
                 result = page.locator(f"#{name}").evaluate(measure)
                 assert abs(result["scale"] - expected) < 1e-3, result
                 assert abs(result["diameter"] - 10 * expected) < 0.02, result
@@ -212,9 +212,9 @@ def main():
             camera = compact.locator(".linnet-viewport")
             label = camera.locator("text")
             assert svg.locator("output").inner_text() == "100%"
-            assert 210 < svg.bounding_box()["height"] < 220
-            assert abs(label.evaluate("e => e.getScreenCTM().a") * 9 - 21) < 0.01
-            for width, expected in ((320, "91%"), (220, "63%"), (800, "100%")):
+            assert 220 < svg.bounding_box()["height"] < 230
+            assert abs(label.evaluate("e => e.getScreenCTM().a") * 9 - 27) < 0.01
+            for width, expected in ((320, "71%"), (220, "49%"), (800, "100%")):
                 compact.evaluate("(e, width) => e.style.width = width + 'px'", width)
                 page.wait_for_function(
                     "expected => document.querySelector('#compact output').textContent === expected",
@@ -224,13 +224,44 @@ def main():
                     const art = svg.querySelector('.linnet-viewport > rect').getBoundingClientRect();
                     const caption = svg.parentElement.querySelector('figcaption').getBoundingClientRect();
                     const outer = svg.getBoundingClientRect();
+                    const viewport = svg.querySelector('.linnet-viewport');
+                    const controls = svg.querySelector('.linnet-toolbar').getBoundingClientRect();
                     return {
                         centered: Math.abs((art.left + art.right - caption.left - caption.right) / 2) < .1,
                         contained: art.left >= outer.left - .1 && art.right <= outer.right + .1
-                            && art.top >= outer.top + 39.9 && art.bottom <= outer.bottom + .1,
+                            && art.top >= outer.top - .1 && art.bottom <= outer.bottom + .1,
+                        noToolbarRow: viewport.y.baseVal.value === 0
+                            && Math.abs(viewport.height.baseVal.value - outer.height) < .1,
+                        compactControls: controls.width < 84 && controls.height <= 28
+                            && controls.right <= outer.right && controls.top >= outer.top
+                            && controls.left > outer.right - 88,
+                        captionGap: caption.top - outer.bottom,
                     };
                 }""")
                 assert result["centered"] and result["contained"], result
+                assert result["noToolbarRow"] and result["compactControls"], result
+                assert 0 <= result["captionGap"] <= 4, result
+                # The hint stays legible at narrow widths without creating a
+                # toolbar row or adding output height, and remains accessible
+                # by keyboard as well as hover.
+                help = compact.locator(".linnet-navigation-help")
+                hint = compact.locator(".linnet-navigation-hint")
+                height = svg.bounding_box()["height"]
+                help.focus()
+                assert hint.is_visible()
+                assert "0 to fit" in help.get_attribute("aria-label")
+                hint_box, svg_box = hint.bounding_box(), svg.bounding_box()
+                assert hint_box["x"] >= svg_box["x"] - 0.1
+                assert (
+                    hint_box["x"] + hint_box["width"]
+                    <= svg_box["x"] + svg_box["width"] + 0.1
+                )
+                assert svg.bounding_box()["height"] == height
+                initial_camera = camera.get_attribute("viewBox")
+                help.dispatch_event("wheel", {"deltaY": -100, "ctrlKey": True})
+                assert camera.get_attribute("viewBox") == initial_camera
+                camera.focus()
+                assert not hint.is_visible()
             before = label.bounding_box()
             height = svg.bounding_box()["height"]
             target = compact.locator('[data-linnet-kind="node"]')
@@ -249,16 +280,131 @@ def main():
             assert not panel.is_visible() and svg.bounding_box()["height"] == height
             camera.press("+")
             assert svg.locator("output").inner_text() == "105%"
-            assert abs(label.evaluate("e => e.getScreenCTM().a") - 2.45) < 1e-3
+            assert abs(label.evaluate("e => e.getScreenCTM().a") - 3.15) < 1e-3
             camera.press("0")
             assert svg.locator("output").inner_text() == "100%"
-            assert abs(label.evaluate("e => e.getScreenCTM().a") - 7 / 3) < 1e-3
+            assert abs(label.evaluate("e => e.getScreenCTM().a") - 3) < 1e-3
             assert label.bounding_box() == before
             assert svg.bounding_box()["height"] == height
+            # At the reported 223% zoom, clipping is confined to the canvas;
+            # the output frame and caption still occupy their original bounds.
+            bounds = svg.bounding_box()
+            for _ in range(8):
+                camera.dispatch_event(
+                    "wheel",
+                    {
+                        "deltaY": -100,
+                        "ctrlKey": True,
+                        "clientX": bounds["x"] + bounds["width"] / 2,
+                        "clientY": bounds["y"] + bounds["height"] / 2,
+                    },
+                )
+            assert svg.locator("output").inner_text() == "223%"
+            assert svg.bounding_box()["height"] == height
+            assert camera.evaluate("e => getComputedStyle(e).overflow") == "hidden"
+            assert camera.get_attribute("y") == "0"
+            camera.press("0")
+            assert label.bounding_box() == before
             assert not errors, errors
             print(
                 "Readable compact preview, centered resizing, stable inspection, and baseline reset passed"
             )
+            # Graph-only notebook frames shed the browser's default body inset,
+            # while explicit page margins and the notebook's padding remain.
+            for body_style, inset in (("", 0), ("body { margin: 12px; }", 12)):
+                page.set_content(
+                    '<div style="width:600px;padding:16px"><iframe style="width:100%;border:0"></iframe></div>'
+                )
+                graph_only = drawing.replace("body { margin: 0; }", body_style).replace(
+                    "margin: 8px 0", "margin: 0"
+                )
+                page.locator("iframe").evaluate(
+                    "(frame, content) => frame.srcdoc = content", graph_only
+                )
+                page.frame_locator("iframe").locator(".linnet-viewport").wait_for()
+                page.wait_for_function("document.querySelector('iframe').style.height")
+                state = page.evaluate("""() => {
+                    const frame = document.querySelector('iframe');
+                    const doc = frame.contentDocument;
+                    const svg = doc.querySelector('svg');
+                    return {
+                        margin: frame.contentWindow.getComputedStyle(doc.body).margin,
+                        canvas: svg.querySelector('.linnet-viewport').y.baseVal.value,
+                        svg: svg.getBoundingClientRect().x,
+                        hostPadding: getComputedStyle(frame.parentElement).padding,
+                        slack: frame.getBoundingClientRect().height
+                            - doc.querySelector('figcaption').getBoundingClientRect().bottom,
+                    };
+                }""")
+                assert state["margin"] == f"{inset}px" and state["svg"] == inset, state
+                assert state["canvas"] == 0 and state["hostPadding"] == "16px", state
+                assert inset <= state["slack"] < inset + 1, state
+            assert not errors, errors
+            print(
+                "Compact iframe margins and authored/notebook padding preservation passed"
+            )
+            # Pinned overlay details leave the floating controls and their
+            # tooltip accessible without taking height from the graph canvas.
+            for embedded in (False, True):
+                detail = json.dumps({"properties": [["Details", "long text " * 100]]})
+                graph = f"""
+                    <svg id="overlay" data-linnet-interactive
+                         viewBox="0 0 500 180" width="500" height="180"
+                         data-linnet-viewport-height="{0 if embedded else 180}">
+                      <rect width="500" height="180" fill="lightblue"/>
+                      <a data-linnet-kind="node" data-linnet-id="0"
+                         data-linnet-detail='{detail}'>
+                        <text x="20" y="90">node</text>
+                      </a>
+                    </svg>
+                """
+                if embedded:
+                    graph = f'<svg width="500" height="180">{graph}</svg>'
+                page.set_content(
+                    f"<style>{(source / 'interactive.css').read_text()}</style>"
+                    f'<div style="width:500px">{graph}</div>'
+                )
+                page.add_script_tag(content=(source / "interactive.js").read_text())
+                svg = page.locator("#overlay")
+                canvas = svg.locator(".linnet-pan-surface")
+                canvas_geometry = """e => [e.x.baseVal.value, e.y.baseVal.value,
+                    e.width.baseVal.value, e.height.baseVal.value,
+                    e.getScreenCTM().toString()]"""
+                original_canvas = canvas.evaluate(canvas_geometry)
+                original = svg.bounding_box()
+                svg.locator('[data-linnet-kind="node"]').dispatch_event("click")
+                panel = svg.locator(".linnet-inspector")
+                assert "Pinned" in panel.inner_text()
+                controls = svg.locator(".linnet-toolbar").bounding_box()
+                bounds = panel.bounding_box()
+                assert bounds["y"] >= controls["y"] + controls["height"]
+                assert bounds["y"] + bounds["height"] <= original["y"] + 180
+                assert panel.evaluate("e => getComputedStyle(e).maxHeight") == "144px"
+                assert svg.bounding_box() == original
+                camera = svg.locator(".linnet-viewport")
+                assert camera.get_attribute("y") == "0"
+                assert camera.get_attribute("height") == "180"
+                help = svg.locator(".linnet-navigation-help")
+                help.hover()
+                hint = svg.locator(".linnet-navigation-hint")
+                assert hint.is_visible()
+                assert hint.evaluate("""element => {
+                    const bounds = element.getBoundingClientRect();
+                    return element.contains(document.elementFromPoint(
+                        bounds.x + bounds.width / 2, bounds.y + bounds.height / 2));
+                }""")
+                help.focus()
+                assert hint.is_visible()
+                camera.press("+")
+                assert svg.locator("output").inner_text() == "105%"
+                # Ignore focus strokes and zoomed ink in SVG bounding boxes.
+                assert canvas.evaluate(canvas_geometry) == original_canvas
+                page.mouse.move(0, 0)
+                assert not hint.is_visible()
+                svg.get_by_role("button", name="Close graph details").click()
+                assert not panel.is_visible()
+            assert not errors, errors
+            print("Pinned bounded and embedded inspector controls remain accessible")
             # A domain overlay uses the same precise native half-edge geometry
             # as hover, without changing selection or depending on camera zoom.
             page.set_content("""

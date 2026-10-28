@@ -47,7 +47,7 @@ class SvgBrowserTests(unittest.TestCase):
                             owner = page.locator(f"#graph-{index}")
                             camera = owner.locator(".linnet-viewport")
                             scale = camera.evaluate("s => s.getScreenCTM().a")
-                            expected = (7 / 3, 4 / 3, 4 / 3, 520 / 900)[index]
+                            expected = (3, 4 / 3, 4 / 3, 520 / 900)[index]
                             self.assertAlmostEqual(scale, expected, places=5)
                             self.assertEqual(
                                 owner.locator("output").inner_text(),
@@ -69,12 +69,12 @@ class SvgBrowserTests(unittest.TestCase):
                         # larger drawings preserve their physical dimensions.
                         for label in labels[1:3]:
                             self.assertAlmostEqual(
-                                label["height"] * 1.75, labels[0]["height"], places=3
+                                label["height"] * 2.25, labels[0]["height"], places=3
                             )
                             self.assertAlmostEqual(
-                                label["width"] * 1.75, labels[0]["width"], places=3
+                                label["width"] * 2.25, labels[0]["width"], places=3
                             )
-                        self.assertGreater(
+                        self.assertGreaterEqual(
                             page.locator("#graph-2 > figure > svg").bounding_box()[
                                 "height"
                             ],
@@ -90,7 +90,7 @@ class SvgBrowserTests(unittest.TestCase):
                             "document.querySelector('#graph-0 svg').viewBox.baseVal.width === 300"
                         )
                         self.assertAlmostEqual(
-                            camera.evaluate("s => s.getScreenCTM().a"), 2.45, places=5
+                            camera.evaluate("s => s.getScreenCTM().a"), 3.15, places=5
                         )
                         self.assertEqual(first.locator("output").inner_text(), "105%")
                         page.keyboard.press("0")
@@ -168,15 +168,30 @@ class SvgBrowserTests(unittest.TestCase):
                         page.set_content('<meta charset="utf-8">' + drawing)
                         svg = page.locator("svg[data-linnet-interactive]")
                         target = page.locator('[data-linnet-kind="node"]').first
-                        self.assertEqual(svg.bounding_box()["height"], 400)
+                        self.assertEqual(svg.bounding_box()["height"], 360)
                         target.dispatch_event("pointerover")
-                        self.assertEqual(svg.bounding_box()["height"], 400)
+                        self.assertEqual(svg.bounding_box()["height"], 360)
                         panel = page.locator(".linnet-inspector")
                         self.assertTrue(panel.is_visible())
                         target.dispatch_event("click")
                         target.dispatch_event("pointerout")
                         self.assertIn("Pinned", panel.inner_text())
-                        self.assertEqual(svg.bounding_box()["height"], 400)
+                        self.assertEqual(svg.bounding_box()["height"], 360)
+                        controls = svg.locator(".linnet-toolbar").bounding_box()
+                        bounds = panel.bounding_box()
+                        self.assertGreaterEqual(
+                            bounds["y"], controls["y"] + controls["height"]
+                        )
+                        self.assertLessEqual(
+                            bounds["y"] + bounds["height"],
+                            svg.bounding_box()["y"] + 360,
+                        )
+                        help = svg.locator(".linnet-navigation-help")
+                        help.hover()
+                        self.assertTrue(
+                            svg.locator(".linnet-navigation-hint").is_visible()
+                        )
+                        page.mouse.move(0, 0)
                         page.get_by_role("button", name="Close graph details").click()
                         self.assertFalse(panel.is_visible())
                     finally:

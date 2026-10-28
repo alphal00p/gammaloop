@@ -23,7 +23,7 @@
        This is 100% for zoom/reset; fixed and embedded views keep their own
        authored scale. Bound enlargement independently of the column width. */
     const previewScale = embedded || Number(svg.dataset.linnetViewportHeight) > 0 ? 1
-      : Math.max(1, Math.min(1.75, 360 / (box.width * authoredScale), 240 / (box.height * authoredScale)));
+      : Math.max(1, Math.min(2.25, 450 / (box.width * authoredScale), 300 / (box.height * authoredScale)));
     const naturalScale = authoredScale * previewScale;
     let scale = 1;
     let fitted = true;
@@ -99,6 +99,11 @@
     try {
       const frame = window.frameElement;
       if (frame && document.body && !svg.closest('[data-linnet-frame-owner]')) {
+        /* A graph-only notebook frame needs no second browser body inset.
+           Leave authored page margins and surrounding notebook padding alone. */
+        const roots = [...document.body.children].filter(element => !['style', 'script', 'link'].includes(element.localName));
+        if (roots.length === 1 && (roots[0] === svg || roots[0].localName === 'figure' && roots[0].contains(svg))
+          && getComputedStyle(document.body).margin === '8px') document.body.style.margin = '0';
         /* Measure content rather than the viewport: Marimo's own iframe
            observer grows outputs but deliberately does not shrink them. */
         document.documentElement.style.overflow = 'hidden';
@@ -177,13 +182,12 @@
     help.append(hint);
     controls.append(help);
     toolbar.append(controls);
-    svg.append(toolbar);
     const panel = svgElement('foreignObject');
     const content = html('div');
     content.className = 'linnet-inspector';
     content.setAttribute('role', 'status');
     panel.append(content);
-    svg.append(panel);
+    svg.append(panel, toolbar);
     let layoutWidth = 0;
     const layout = () => {
       const screenWidth = Math.max(1, svg.getBoundingClientRect().width);
@@ -198,12 +202,15 @@
          the target. The camera height follows the bounded initial drawing size. */
       const fitWidth = Math.min(1, graphWidth / (box.width * naturalScale));
       const graphHeight = embedded ? box.height : fixedHeight || box.height * naturalScale * fitWidth;
-      const toolbarHeight = 40;
-      const graphTop = embedded ? 0 : toolbarHeight;
-      toolbar.setAttribute('width', width);
-      toolbar.setAttribute('height', toolbarHeight);
+      /* Navigation floats over one corner; it never reserves a canvas row. */
+      const controlWidth = Math.min(84, Math.max(1, width - 8));
+      toolbar.setAttribute('x', Math.max(0, width - controlWidth - 4));
+      toolbar.setAttribute('y', 4);
+      toolbar.setAttribute('width', controlWidth);
+      toolbar.setAttribute('height', 28);
+      controls.style.setProperty('--linnet-hint-width', `${Math.max(1, width - 8)}px`);
       viewport.setAttribute('x', 0);
-      viewport.setAttribute('y', graphTop);
+      viewport.setAttribute('y', 0);
       viewport.setAttribute('width', graphWidth);
       viewport.setAttribute('height', graphHeight);
       const center = fitted
@@ -215,18 +222,22 @@
       camera.x = center.x - camera.width / 2;
       camera.y = center.y - camera.height / 2;
       paintCamera();
-      panSurface.setAttribute('y', graphTop);
+      panSurface.setAttribute('y', 0);
       panSurface.setAttribute('width', graphWidth);
       panSurface.setAttribute('height', graphHeight);
+      /* Overlay details leave the floating controls accessible without
+         reserving any part of the graph's canvas for navigation. */
+      const panelTop = overlay ? Math.min(36, graphHeight) : graphHeight + 12;
+      const panelRoom = Math.max(0, graphHeight - panelTop);
       panel.setAttribute('x', overlay ? width - panelWidth : 0);
-      panel.setAttribute('y', overlay ? graphTop : toolbarHeight + graphHeight + 12);
+      panel.setAttribute('y', panelTop);
       panel.setAttribute('width', panelWidth);
-      const panelHeight = panel.style.display === 'none' ? 0 : content.offsetHeight;
-      panel.setAttribute('height', overlay ? Math.min(panelHeight, graphHeight) : panelHeight);
-      content.style.maxHeight = overlay ? `${graphHeight}px` : '';
+      content.style.maxHeight = overlay ? `${panelRoom}px` : '';
       content.style.overflowY = overlay ? 'auto' : '';
+      const panelHeight = panel.style.display === 'none' ? 0 : content.offsetHeight;
+      panel.setAttribute('height', overlay ? Math.min(panelHeight, panelRoom) : panelHeight);
       panel.style.pointerEvents = overlay && !pinned ? 'none' : '';
-      const height = toolbarHeight + graphHeight + (!overlay && panelHeight ? panelHeight + 12 : 0);
+      const height = graphHeight + (!overlay && panelHeight ? panelHeight + 12 : 0);
       if (!embedded) {
         svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
         svg.setAttribute('height', height);
