@@ -1,12 +1,20 @@
 use super::*;
-use crate::{bis, gamma, tensor::AlgebraSettings};
+use crate::tensor::AlgebraSettings;
+use crate::test_support;
+use crate::{bis, gamma};
+use spenso::mink;
+use spenso::shadowing::FactorProjector;
+use spenso::structure::abstract_index::AbstractIndex;
 use spenso::structure::representation::Minkowski;
+use spenso::structure::representation::{LibraryRep, RepName, Representation};
+use spenso::structure::slot::IsAbstractSlot;
+use std::slice;
 use symbolica::{function, symbol};
 
 type Tensor = SymbolicTensor<PartialStructure>;
 
 fn head() -> Symbol {
-    crate::test_support::test_initialize();
+    test_support::test_initialize();
     symbol!("word_derivative::exterior"; Flat, Linear, Antisymmetric;
         tag = &SPENSO_TAG.tensor_word)
 }
@@ -50,7 +58,11 @@ fn tangent(
     }
     Ok(Some(Tensor::from_declared_parts(
         expression,
-        concatenate_interfaces(occurrence, variable.into_iter().map(|slot| slot.dual())),
+        PartialStructure::from_logical_slots(
+            (occurrence)
+                .into_iter()
+                .chain(variable.into_iter().map(|slot| slot.dual())),
+        ),
     )?))
 }
 
@@ -78,24 +90,13 @@ fn word_derivative_left_and_right_reconstruct_native_one_to_four_and_ghost_shift
     let t = symbol!("word_derivative::t"; Scalar);
     for count in 1..=4 {
         let factors = (0..count)
-            .map(|i| {
-                leaf(
-                    &format!("word_derivative::f{i}"),
-                    &[spenso::mink!(4, 10 + i)],
-                )
-            })
+            .map(|i| leaf(&format!("word_derivative::f{i}"), &[mink!(4, 10 + i)]))
             .collect::<Vec<_>>();
         let source = Tensor::word(head, &factors).unwrap();
         for (position, generator) in factors.iter().enumerate() {
-            let variable = target(&[spenso::mink!(4, 100 + position)]);
-            let response = leaf(
-                "word_derivative::response",
-                &[spenso::mink!(4, 100 + position)],
-            );
-            let local_response = leaf(
-                "word_derivative::response",
-                &[spenso::mink!(4, 10 + position)],
-            );
+            let variable = target(&[mink!(4, 100 + position)]);
+            let response = leaf("word_derivative::response", &[mink!(4, 100 + position)]);
+            let local_response = leaf("word_derivative::response", &[mink!(4, 10 + position)]);
             let shifted = generator
                 .try_add(
                     &local_response
@@ -120,13 +121,14 @@ fn word_derivative_left_and_right_reconstruct_native_one_to_four_and_ghost_shift
                     .unwrap();
                 assert_eq!(
                     cut.structure.logical_slots(),
-                    concatenate_interfaces(
-                        source.structure.logical_slots(),
-                        variable.logical_slots().into_iter().map(|slot| slot.dual())
+                    PartialStructure::from_logical_slots(
+                        (source.structure.logical_slots())
+                            .into_iter()
+                            .chain(variable.logical_slots().into_iter().map(|slot| slot.dual()))
                     )
                     .logical_slots()
                 );
-                let response = Tensor::word(head, std::slice::from_ref(&response)).unwrap();
+                let response = Tensor::word(head, slice::from_ref(&response)).unwrap();
                 let reconstructed = match side {
                     WordDerivativeSide::Left => response.multiply_word(head, &cut),
                     WordDerivativeSide::Right => cut.multiply_word(head, &response),
@@ -164,7 +166,7 @@ fn word_derivative_left_and_right_reconstruct_native_one_to_four_and_ghost_shift
                 tangent(g, ghost.expression.get_symbol().unwrap(), &variable)
             })
             .unwrap();
-        let response = Tensor::word(head, std::slice::from_ref(&eta)).unwrap();
+        let response = Tensor::word(head, slice::from_ref(&eta)).unwrap();
         let reconstructed = match side {
             WordDerivativeSide::Left => response.multiply_word(head, &cut),
             WordDerivativeSide::Right => cut.multiply_word(head, &response),
@@ -195,10 +197,7 @@ fn word_derivative_keeps_dual_target_variance_and_spectator_ports() {
         "word_derivative::partner",
         &[slot(charge.dual(), 706), slot(flavor, 707)],
     );
-    let coefficient = leaf(
-        "word_derivative::spectator_coefficient",
-        &[spenso::mink!(4, 703)],
-    );
+    let coefficient = leaf("word_derivative::spectator_coefficient", &[mink!(4, 703)]);
     let source = coefficient
         .multiply_word(
             head,
@@ -233,9 +232,10 @@ fn word_derivative_keeps_dual_target_variance_and_spectator_ports() {
             .unwrap();
         assert_eq!(
             cut.structure.logical_slots(),
-            concatenate_interfaces(
-                source.structure.logical_slots(),
-                variable.logical_slots().into_iter().map(|s| s.dual())
+            PartialStructure::from_logical_slots(
+                (source.structure.logical_slots())
+                    .into_iter()
+                    .chain(variable.logical_slots().into_iter().map(|s| s.dual()))
             )
             .logical_slots()
         );
@@ -247,7 +247,7 @@ fn word_derivative_keeps_dual_target_variance_and_spectator_ports() {
             cut.structure.logical_slots()[source.rank() + 1].rep(),
             flavor
         );
-        let response = Tensor::word(head, std::slice::from_ref(&response)).unwrap();
+        let response = Tensor::word(head, slice::from_ref(&response)).unwrap();
         let reconstructed = match side {
             WordDerivativeSide::Left => response.multiply_word(head, &cut),
             WordDerivativeSide::Right => cut.multiply_word(head, &response),
@@ -266,7 +266,11 @@ fn word_derivative_keeps_dual_target_variance_and_spectator_ports() {
     assert_eq!(zero.rank(), source.rank() + variable.logical_slots().len());
     let wrong_variance = Tensor::from_declared_parts(
         Atom::Zero,
-        concatenate_interfaces(field.structure.logical_slots(), variable.logical_slots()),
+        PartialStructure::from_logical_slots(
+            (field.structure.logical_slots())
+                .into_iter()
+                .chain(variable.logical_slots()),
+        ),
     )
     .unwrap();
     assert!(
@@ -328,8 +332,8 @@ fn word_derivative_retains_gamma_coefficients_and_explicit_spinor_target() {
 #[test]
 fn word_derivative_sums_repeated_components_and_preserves_exact_coefficients() {
     let head = head();
-    let a = leaf("word_derivative::repeated", &[spenso::mink!(4, 301)]);
-    let b = leaf("word_derivative::repeated", &[spenso::mink!(4, 302)]);
+    let a = leaf("word_derivative::repeated", &[mink!(4, 301)]);
+    let b = leaf("word_derivative::repeated", &[mink!(4, 302)]);
     let word = Tensor::word(head, &[a.clone(), b.clone()]).unwrap();
     let scalar = Tensor::infer(Atom::num((2, 7)) + Atom::i()).unwrap();
     let source = scalar
@@ -337,7 +341,7 @@ fn word_derivative_sums_repeated_components_and_preserves_exact_coefficients() {
         .unwrap()
         .try_add(&word)
         .unwrap();
-    let variable = target(&[spenso::mink!(4, 303)]);
+    let variable = target(&[mink!(4, 303)]);
     let cut = source
         .differentiate_word_with(head, &variable, WordDerivativeSide::Left, |g| {
             tangent(g, a.expression.get_symbol().unwrap(), &variable)
@@ -346,10 +350,7 @@ fn word_derivative_sums_repeated_components_and_preserves_exact_coefficients() {
     assert!(!cut.is_zero());
     let response = Tensor::word(
         head,
-        &[leaf(
-            "word_derivative::repeat_response",
-            &[spenso::mink!(4, 303)],
-        )],
+        &[leaf("word_derivative::repeat_response", &[mink!(4, 303)])],
     )
     .unwrap();
     let reconstructed = response.multiply_word(head, &cut).unwrap();
@@ -357,7 +358,7 @@ fn word_derivative_sums_repeated_components_and_preserves_exact_coefficients() {
     let shifted = [a, b].map(|g| {
         let xi = leaf(
             "word_derivative::repeat_response",
-            &[port_atom(g.structure.logical_slots()[0])],
+            &[composition::port_atom(g.structure.logical_slots()[0])],
         );
         g.try_add(
             &xi.with_algebra_result(Atom::var(t) * xi.expression())
@@ -389,12 +390,12 @@ fn word_derivative_materializes_open_coefficients_and_retains_no_match_zero_shap
         PartialStructure::from_logical_slots([rep.slot(PartialIndex::open(0))]),
     )
     .unwrap();
-    let a = leaf("word_derivative::a", &[spenso::mink!(4, 401)]);
-    let b = leaf("word_derivative::b", &[spenso::mink!(4, 401)]);
+    let a = leaf("word_derivative::a", &[mink!(4, 401)]);
+    let b = leaf("word_derivative::b", &[mink!(4, 401)]);
     let source = coefficient
         .multiply_word(head, &Tensor::word(head, &[a.clone(), b]).unwrap())
         .unwrap();
-    let variable = target(&[spenso::mink!(4, 402)]);
+    let variable = target(&[mink!(4, 402)]);
     let actual = source
         .differentiate_word_with(head, &variable, WordDerivativeSide::Left, |g| {
             tangent(g, a.expression.get_symbol().unwrap(), &variable)
@@ -427,7 +428,7 @@ fn word_derivative_materializes_open_coefficients_and_retains_no_match_zero_shap
         &[
             a.clone(),
             a,
-            leaf("word_derivative::free", &[spenso::mink!(4, 403)]),
+            leaf("word_derivative::free", &[mink!(4, 403)]),
         ],
     )
     .unwrap();
@@ -448,23 +449,18 @@ fn word_derivative_accepts_explicit_native_symmetric_and_antisymmetric_tangent_m
         (
             symbol!("word_derivative::symmetric"; Symmetric; tag=&SPENSO_TAG.tensor),
             symbol!("word_derivative::symmetric_response"; Symmetric; tag=&SPENSO_TAG.tensor),
-            shadowing::FactorProjector::Symmetric,
+            FactorProjector::Symmetric,
         ),
         (
             symbol!("word_derivative::antisymmetric"; Antisymmetric; tag=&SPENSO_TAG.tensor),
             symbol!("word_derivative::antisymmetric_response"; Antisymmetric; tag=&SPENSO_TAG.tensor),
-            shadowing::FactorProjector::Antisymmetric,
+            FactorProjector::Antisymmetric,
         ),
     ] {
-        let field = Tensor::infer(function!(
-            field_head,
-            spenso::mink!(4, 501),
-            spenso::mink!(4, 502)
-        ))
-        .unwrap();
+        let field = Tensor::infer(function!(field_head, mink!(4, 501), mink!(4, 502))).unwrap();
         let spectator = leaf("word_derivative::spectator", &[]);
         let source = Tensor::word(head, &[field.clone(), spectator.clone()]).unwrap();
-        let variable = target(&[spenso::mink!(4, 503), spenso::mink!(4, 504)]);
+        let variable = target(&[mink!(4, 503), mink!(4, 504)]);
         let rep = Minkowski {}.new_rep(4);
         let expression: Atom = kind
             .permutations(2)
@@ -477,9 +473,10 @@ fn word_derivative_accepts_explicit_native_symmetric_and_antisymmetric_tangent_m
             .sum();
         let map = Tensor::from_declared_parts(
             expression,
-            concatenate_interfaces(
-                field.structure.logical_slots(),
-                variable.logical_slots().into_iter().map(|slot| slot.dual()),
+            PartialStructure::from_logical_slots(
+                (field.structure.logical_slots())
+                    .into_iter()
+                    .chain(variable.logical_slots().into_iter().map(|slot| slot.dual())),
             ),
         )
         .unwrap();
@@ -490,24 +487,14 @@ fn word_derivative_accepts_explicit_native_symmetric_and_antisymmetric_tangent_m
             .unwrap();
         let response = Tensor::word(
             head,
-            &[Tensor::infer(function!(
-                response_head,
-                spenso::mink!(4, 503),
-                spenso::mink!(4, 504)
-            ))
-            .unwrap()],
+            &[Tensor::infer(function!(response_head, mink!(4, 503), mink!(4, 504))).unwrap()],
         )
         .unwrap();
         let actual = response.multiply_word(head, &cut).unwrap();
         let expected = Tensor::word(
             head,
             &[
-                Tensor::infer(function!(
-                    response_head,
-                    spenso::mink!(4, 501),
-                    spenso::mink!(4, 502)
-                ))
-                .unwrap(),
+                Tensor::infer(function!(response_head, mink!(4, 501), mink!(4, 502))).unwrap(),
                 spectator,
             ],
         )
@@ -519,12 +506,12 @@ fn word_derivative_accepts_explicit_native_symmetric_and_antisymmetric_tangent_m
 #[test]
 fn word_derivative_rejects_collisions_wrong_policies_and_unsupported_grammar() {
     let head = head();
-    let a = leaf("word_derivative::reject_a", &[spenso::mink!(4, 601)]);
-    let b = leaf("word_derivative::reject_b", &[spenso::mink!(4, 602)]);
+    let a = leaf("word_derivative::reject_a", &[mink!(4, 601)]);
+    let b = leaf("word_derivative::reject_b", &[mink!(4, 602)]);
     let source = Tensor::word(head, &[a.clone(), b.clone()]).unwrap();
-    let variable = target(&[spenso::mink!(4, 603)]);
+    let variable = target(&[mink!(4, 603)]);
     for invalid in [
-        target(&[spenso::mink!(4, 601)]),
+        target(&[mink!(4, 601)]),
         PartialStructure::from_logical_slots([Minkowski {}
             .new_rep(4)
             .cast::<LibraryRep>()
@@ -548,7 +535,7 @@ fn word_derivative_rejects_collisions_wrong_policies_and_unsupported_grammar() {
         head,
         &[
             a.clone(),
-            leaf("word_derivative::reject_b", &[spenso::mink!(4, 601)]),
+            leaf("word_derivative::reject_b", &[mink!(4, 601)]),
         ],
     )
     .unwrap();
@@ -556,7 +543,7 @@ fn word_derivative_rejects_collisions_wrong_policies_and_unsupported_grammar() {
         closed
             .differentiate_word_with(
                 head,
-                &target(&[spenso::mink!(4, 601)]),
+                &target(&[mink!(4, 601)]),
                 WordDerivativeSide::Left,
                 |_| panic!("bound collision must fail before callback")
             )
@@ -567,16 +554,13 @@ fn word_derivative_rejects_collisions_wrong_policies_and_unsupported_grammar() {
         .unwrap();
     for bad in [
         Tensor::infer(Atom::one()).unwrap(),
-        leaf(
-            "word_derivative::bad",
-            &[spenso::mink!(4, 601), spenso::mink!(4, 604)],
-        ),
+        leaf("word_derivative::bad", &[mink!(4, 601), mink!(4, 604)]),
         map.permuted(&[1, 0]).unwrap(),
         Tensor::word(
             head,
             &[leaf(
                 "word_derivative::bad",
-                &[spenso::mink!(4, 601), spenso::mink!(4, 603)],
+                &[mink!(4, 601), mink!(4, 603)],
             )],
         )
         .unwrap(),
@@ -615,4 +599,32 @@ fn word_derivative_rejects_collisions_wrong_policies_and_unsupported_grammar() {
             .differentiate_word_with(head, &variable, WordDerivativeSide::Left, |_| Ok(None))
             .is_err()
     );
+}
+
+#[test]
+fn word_derivative_rejects_hidden_target_collisions_and_retains_no_match_history() {
+    let head = head();
+    let a = leaf("word_derivative_history::a", &[mink!(4, 991)]);
+    let zero = Tensor::word(head, &[a.clone(), a]).unwrap();
+    let nonzero = zero.with_algebra_result(Atom::one()).unwrap();
+    let collision = target(&[mink!(4, 991)]);
+    let fresh = target(&[mink!(4, 992)]);
+    let probe = leaf("word_derivative_history::probe", &[mink!(4, 991)]);
+    for source in [zero, nonzero] {
+        assert!(
+            source
+                .differentiate_word_with(head, &collision, WordDerivativeSide::Left, |_| panic!(
+                    "target freshness must precede callbacks"
+                ))
+                .is_err()
+        );
+        let derivative = source
+            .differentiate_word_with(head, &fresh, WordDerivativeSide::Left, |_| Ok(None))
+            .unwrap();
+        assert!(derivative.is_zero());
+        assert!(matches!(
+            derivative.multiply_word(head, &probe),
+            Err(TensorCompositionError::InvalidExplicitMultiplicity { occurrences: 3, .. })
+        ));
+    }
 }

@@ -4,8 +4,9 @@ use crate::tensor::composition;
 use crate::tensor::composition::{ExplicitIndexOccurrences, ProductPlan, TensorCompositionError};
 use crate::tensor::inference::{InterfaceInference, TensorInferenceError, TensorInterface};
 use spenso::network::tags::SPENSO_TAG;
-use spenso::structure::partial::{PartialStructure, PartialStructureExt};
+use spenso::structure::partial::{PartialIndex, PartialStructure, PartialStructureExt};
 use spenso::structure::slot::{DualSlotTo, ParseableAind};
+use std::collections::HashSet;
 use std::mem;
 use std::sync::Arc;
 use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol};
@@ -17,6 +18,7 @@ mod adjoint_tests;
 mod derivative_tests;
 
 /// Where the odd response is factored out of a directional variation.
+/// See the example on [`SymbolicTensor::differentiate_word_with`].
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum WordDerivativeSide {
     Left,
@@ -162,6 +164,31 @@ impl SymbolicTensor<PartialStructure> {
     /// products retain the coefficient's contractions with the tangent map.
     /// Output ports are the materialized source ports followed by dual target
     /// ports, even for a no-match or ranked-zero result.
+    ///
+    /// # Errors
+    /// Rejects unsupported word grammar, nonfresh target indices, callback
+    /// failures, and tangent maps with incompatible ordered ports.
+    ///
+    /// # Example
+    /// ```
+    /// use idenso::tensor::SymbolicTensor;
+    /// use idenso::tensor::composition::WordDerivativeSide;
+    /// use idenso::tensor::inference::TensorInferenceError;
+    /// use spenso::network::tags::SPENSO_TAG;
+    /// use spenso::{mink, tensor_symbol};
+    /// use symbolica::{function, symbol};
+    /// let head = symbol!("word_derivative_example::exterior"; Flat, Linear, Antisymmetric;
+    ///     tag = &SPENSO_TAG.tensor_word);
+    /// let a = SymbolicTensor::infer(function!(tensor_symbol!("word_derivative_example::a"), mink!(4, 1)))?;
+    /// let target = SymbolicTensor::infer(function!(tensor_symbol!("word_derivative_example::target"), mink!(4, 2)))?;
+    /// let word = SymbolicTensor::word(head, &[a])?;
+    /// let derivative = word.differentiate_word_with(
+    ///     head, target.structure(), WordDerivativeSide::Left, |_| Ok(None),
+    /// )?;
+    /// assert!(derivative.is_zero());
+    /// assert_eq!(derivative.rank(), 2);
+    /// # Ok::<(), TensorInferenceError>(())
+    /// ```
     pub fn differentiate_word_with(
         &self,
         head: Symbol,
@@ -178,7 +205,8 @@ impl SymbolicTensor<PartialStructure> {
         }
         let target_slots = target.logical_slots();
         let source_slots = self.structure.logical_slots();
-        let reserved = &self.reduction_observations().reserved_indices;
+        let mut reserved = self.reduction_observations().reserved_indices.clone();
+        reserved.extend(self.explicit_indices()?);
         let mut target_indices = HashSet::new();
         for slot in &target_slots {
             let PartialIndex::Explicit(index) = slot.aind else {
@@ -211,10 +239,15 @@ impl SymbolicTensor<PartialStructure> {
             .into_iter()
             .map(|slot| slot.dual())
             .collect::<Vec<_>>();
-        let interface = concatenate_interfaces(
-            source.structure.logical_slots(),
-            dual_target.iter().copied(),
+        let interface = PartialStructure::from_logical_slots(
+            source
+                .structure
+                .logical_slots()
+                .into_iter()
+                .chain(dual_target.iter().copied()),
         );
+        let mut occurrences = source.explicit_index_occurrences()?.clone();
+        occurrences.branch_max(&ExplicitIndexOccurrences::from_interface(&interface));
         let mut terms = Vec::new();
         for term in source.expression.expand_in(Atom::var(head)).terms() {
             let mut coefficient = Vec::new();
@@ -240,7 +273,7 @@ impl SymbolicTensor<PartialStructure> {
                 let Some(tangent) = differentiate_generator(generator)? else {
                     continue;
                 };
-                tangent.ensure_validated()?;
+                tangent.explicit_index_occurrences()?;
                 let expected = generator
                     .structure
                     .logical_slots()
@@ -280,6 +313,7 @@ impl SymbolicTensor<PartialStructure> {
                     WordDerivativeSide::Left => position,
                     WordDerivativeSide::Right => generators.len() - 1 - position,
                 };
+                occurrences.branch_max(result.explicit_index_occurrences()?);
                 terms.push(if crossings % 2 == 0 {
                     result.expression
                 } else {
@@ -287,7 +321,14 @@ impl SymbolicTensor<PartialStructure> {
                 });
             }
         }
-        Self::from_declared_parts(terms.into_iter().sum(), interface)
+        let value = Self::from_declared_parts(terms.into_iter().sum(), interface)?;
+        occurrences.branch_max(value.explicit_index_occurrences()?);
+        occurrences.validate()?;
+        Ok(Self::from_validated_parts(
+            value.expression,
+            value.structure,
+            Arc::new(occurrences),
+        ))
     }
 
     /// Dirac adjoint in a tensor-word algebra with an explicit odd-generator map.
