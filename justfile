@@ -113,7 +113,7 @@ check-symbolica-feature-isolation:
       echo "the root lock must select one Symbolica revision from the official community branch" >&2
       exit 1
     fi
-    for lock in "$root/Cargo.lock"; do
+    for lock in "$root/Cargo.lock" "$root/tydenso/Cargo.lock"; do
       for package in symbolica numerica graphica; do
         source="$symbolica_source"
         version="3.0.1"
@@ -121,19 +121,6 @@ check-symbolica-feature-isolation:
         resolved="$(sed -n "/^name = \"$package\"$/,/^\[\[package\]\]/p" "$lock" | grep -E '^(version|source) = ')"
         if [ "$resolved" != "$expected" ]; then
           echo "$lock must resolve exactly one $package at $version from $source; found ${resolved:-none}" >&2
-          exit 1
-        fi
-      done
-    done
-
-    for lock in "$root/tydenso/Cargo.lock"; do
-      for specification in symbolica:3.0.1 numerica:3.0.1 graphica:3.0.0; do
-        package="${specification%:*}"
-        version="${specification#*:}"
-        expected="$(printf 'version = "%s"\nsource = "registry+https://github.com/rust-lang/crates.io-index"\n' "$version")"
-        resolved="$(sed -n "/^name = \"$package\"$/,/^\[\[package\]\]/p" "$lock" | grep -E '^(version|source) = ')"
-        if [ "$resolved" != "$expected" ]; then
-          echo "$lock must resolve exactly one crates.io $package at $version; found ${resolved:-none}" >&2
           exit 1
         fi
       done
