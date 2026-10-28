@@ -606,8 +606,11 @@
     "canonical_exit": 0,
     "canonical_receipt": "docs/architecture/evidence/generation-integration/wp3/main32-35/canonical.json",
     "focused_native_core_sha256": "d2d9fecf95824ae50d06bb7fe7208489794e47785acd8ff516da66561ea8e7aa",
-    "source_bound_native_input_count": 525
+    "source_bound_native_input_count": 525,
+    "validation_metadata_commit": "783e3281d01134f8fe2e44eab366d0414c63b852",
+    "source_binding": "docs/architecture/evidence/generation-integration/wp3/main32-35/metadata-source.json"
   },
   "current_implementation_code_commit": "2ea39fd3ec164516b8e68775554fa2021998975a",
-  "current_documentation_code_commit": "a3729fe5d880f0db5f09d9ce7d0ef592bfc4d161"
+  "current_documentation_code_commit": "a3729fe5d880f0db5f09d9ce7d0ef592bfc4d161",
+  "current_implementation_change": "vvxwvmpnulrtxorvyxvwwrwpuprtoxtt"
 }

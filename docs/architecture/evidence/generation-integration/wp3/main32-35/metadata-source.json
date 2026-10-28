@@ -1,0 +1,117 @@
+{
+  "metadata_revision": "783e3281d01134f8fe2e44eab366d0414c63b852",
+  "qualified_documentation_code": "a3729fe5d880f0db5f09d9ce7d0ef592bfc4d161",
+  "implementation_code": "2ea39fd3ec164516b8e68775554fa2021998975a",
+  "input": "git+file:///shared/lcnbr/dev/gammaloop/main?rev=783e3281d01134f8fe2e44eab366d0414c63b852&shallow=1",
+  "Cargo_derivation": "/nix/store/pbc604ci3bl9xq0gvf32xaii8h0zby8a-alphal00p-docs-cargo-0.1.0.drv",
+  "Cargo_producer_exact_registered_reuse": true,
+  "pages_derivation": "/nix/store/k83cpvqbqln2ffgd2ah65x4x8dvf4nhm-alphal00p-docs-pages-0.1.0.drv",
+  "source": "/nix/store/f25jbpyvpcbf2j1jk8g6x4zknxh021sg-source",
+  "source_NAR_hash": "sha256-jqAWNlFUiWvO5n+b/QHmWAJ8UFAv03P8I6uU1atirA0=",
+  "source_entries": 2450,
+  "delta": [
+    {
+      "path": "docs/architecture/evidence/generation-integration/execution.json",
+      "qualified": "c775e283097818017caf5161b8caa55ea9e0679b80bccf44ad57eaf53e95e8c6",
+      "metadata": "8d669611331495d09970e0045e7638a54fb678b0ddb9f8be556ff0476d90a750"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main32-35/api-check.json",
+      "qualified": null,
+      "metadata": "975609fdb06d9a906e534ef10185ea296bf25c3664069ebcd314b1890888d072"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main32-35/artifact-index.json",
+      "qualified": null,
+      "metadata": "d931a0a0553be4c60a7fb71422ccc58e9ae2f3481b907d1efe915cf9113cfd37"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main32-35/browser.json",
+      "qualified": null,
+      "metadata": "996c8e908638df3e751bdb05b883f897f52d338233daa8802c70ea9c91d5eeb1"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main32-35/canonical.json",
+      "qualified": null,
+      "metadata": "f1036aa5c623b1113137cb5b4219d8a2cb7c3e0e86bb885ee06070b4cfa9e70d"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main32-35/consumer-switch.json",
+      "qualified": null,
+      "metadata": "b4ab2bdc5d494d0a3c2d1b4de6357c9abbfc0e903f670823bfced45095c30e48"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main32-35/docs-focused.json",
+      "qualified": null,
+      "metadata": "99ab0290b97f19a9ee5ec33254df189e118e83a9485b3b6882c3f05b535f3249"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main32-35/frozen-inventories.json",
+      "qualified": null,
+      "metadata": "2830f88b5c3379c12b46a21cae106dae31bd23f59056fe8357fb20a0aa835495"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main32-35/gallery.json",
+      "qualified": null,
+      "metadata": "ef5b82635f8032414da226055de400e5c168cb557565b69621e5ec5f41e006c9"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main32-35/graph-boundary-results.json",
+      "qualified": null,
+      "metadata": "d6c4bd7e3c45eb6610a458ccfeac23a8c8952a9182d0066c003955cf93005796"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main32-35/integrity.json",
+      "qualified": null,
+      "metadata": "977bb177b53aa718992fcbbd79d77eb787bcc10e754983cd8c809148d1bea195"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main32-35/links.json",
+      "qualified": null,
+      "metadata": "8dc0ec7ed8d01b69ccd3378dce12f9f4c133bc442dda670facccbd1c8c6d0144"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main32-35/pipeline-audit.json",
+      "qualified": null,
+      "metadata": "7d2e4e1a5ea3a0bdf6cd0a9449e93e8c833b0d2d2f9f592484333c59328dce8a"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main32-35/plan-final-renders.json",
+      "qualified": null,
+      "metadata": "e532850983cc887b2a890d83cb9e1da8f8b25990dee6778bc8a08eb0039312c5"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main32-35/producer.json",
+      "qualified": null,
+      "metadata": "d25372956bc71f792f1029ccfb53344b343f29625495c95749798098e2348f4f"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main32-35/receipt.json",
+      "qualified": null,
+      "metadata": "4cfb8b2a60ce7f562901848579b7e534da624c8d5e1c06cd2bd05370bd525ce6"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main32-35/runtime.json",
+      "qualified": null,
+      "metadata": "aa44d4b53831133d7fe31c547e017a3904c080a16f1adf2caf5b972f32c4d8b1"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main32-35/source-bindings.json",
+      "qualified": null,
+      "metadata": "7ef65ee3b92d3c92de4731400d2e7b908cfafdef00311a27571af0e5a3400944"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main32-35/wheel-qualification.json",
+      "qualified": null,
+      "metadata": "2be98b7ac14d7d2c32938ec3f30d74716f4dd601956d94b0b0805fd8e7d33abd"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/replay.json",
+      "qualified": "199a3755de1898959d1c69d2834244be69d768e981ecaee05a790965910b7b01",
+      "metadata": "d95cc9bd6875a1aaa16c0296c1ef08c1c8a368591dab4c652094140a1c10f4b2"
+    }
+  ],
+  "all_rendered_prose_registry_Runtime_sources_identical": true,
+  "output_built": false,
+  "qualification": "Only nonrendered evidence/tracker JSON differs from qualified a372 inputs; current Git revision/timestamp/source links would differ on a new build. This source/NAR is distinct and unbuilt, not the successful a372 output. No self-hash/rebuild loop or binary equality inferred."
+}

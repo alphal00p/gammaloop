@@ -130,5 +130,11 @@
   "publication": "No push/PR/upload/publication/CI enablement;NixCI=false;kernel1a1829b1 and locks/uv/host subset unchanged.",
   "inventories": "frozen-inventories.json; final evidence inventory separately bound after freezing validation metadata",
   "cleanup": "All own build/check/browser clients complete; task-owned logs/scripts/qualified payload and extracted producer ELFs retained for review. No shared cache override/seeding/deletion, no other-lane writes or source-ref mutation.",
-  "metadata_qualification": "All rendered inputs frozen at a372; subsequent tracker/result records are JSON metadata only. Their full source/NAR is separately evaluated and explicitly unbuilt; no self-referential receipt hash."
+  "metadata_qualification": "All rendered inputs frozen at a372; subsequent tracker/result records are JSON metadata only. Their full source/NAR is separately evaluated and explicitly unbuilt; no self-referential receipt hash.",
+  "validation_metadata_commit": "783e3281d01134f8fe2e44eab366d0414c63b852",
+  "validation_inventory": "validation-files.json",
+  "cumulative_inventory": "cumulative-inventory.json",
+  "metadata_source": "metadata-source.json",
+  "final_integrity": "final-integrity.json",
+  "final_tip_evaluation": "Post-freeze exact final candidate evaluation retained at target/wp3-units32-35/final-source.json; final source/NAR explicitly unbuilt. The committed metadata-source.json binds frozen validation revision783e3281; no current receipt hashes itself."
 }

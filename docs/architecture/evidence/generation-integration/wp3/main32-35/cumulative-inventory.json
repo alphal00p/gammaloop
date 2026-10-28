@@ -1,0 +1,11 @@
+{
+  "frozen_revision": "783e3281d01134f8fe2e44eab366d0414c63b852",
+  "count": 1699,
+  "retained_full_inventory": "target/wp3-units32-35/cumulative-validation-files.json",
+  "sha256": "432a736810bc12a424a7cfe92eb5cdc47189f7dd35985b53fc72107c6321c9e3",
+  "later_metadata_packet": "validation-files.json",
+  "original_source_rows": 46,
+  "planned_units": 41,
+  "accounted_source_rows": 36,
+  "accounted_planned_units": 31
+}

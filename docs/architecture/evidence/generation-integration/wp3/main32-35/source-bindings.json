@@ -40,5 +40,5 @@
       "source_manifest_sha256": "99ace1460cf4807fef1eae2ffc78df1d49018248a307f1c43d71e631a3beba9c"
     }
   ],
-  "qualification": "Actual build invocation license/INSTA environment differs from preliminary unlicensed evaluation; actual build derivations recorded, no secret environment values printed or archived. Every selected source bound byte-exactly to frozen Git commit, not later bookkeeping."
+  "qualification": "Actual successful licensed build at a372: every selected source bound byte-exactly to its frozen Git revision (symlinks compare Git link text, not dereferenced bytes). The earlier preliminary/unlicensed comparison belongs to initial2ea evaluation retained separately, not a final-revision comparison. No secret environment values archived."
 }

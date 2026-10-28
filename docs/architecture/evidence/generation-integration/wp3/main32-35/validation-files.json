@@ -1,0 +1,298 @@
+{
+  "base": "191aaf7b77018e377a9e5e4e3b9c88357218aa48",
+  "frozen_validation_revision": "783e3281d01134f8fe2e44eab366d0414c63b852",
+  "count": 56,
+  "files": [
+    {
+      "path": ".github/workflows/linnet-py-wasm.yml",
+      "deleted": false,
+      "sha256": "6fc960d9b9154fa5b9ccc3b0d6317fab84d808bb6f12dd6de3117a99454f1a02"
+    },
+    {
+      "path": "crates/feynkit-py/src/graph_interop.rs",
+      "deleted": false,
+      "sha256": "2fd6ef021437cbc3b9ad5db3b007c5e7447ea4f6fd115be44852c2f2c17c8659"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_generated_qed.py",
+      "deleted": false,
+      "sha256": "d6cadcf862bcae9d602ce2b014a84a47179c25d11b7e9ac680bed8816193680c"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_ibp_phi4.py",
+      "deleted": false,
+      "sha256": "cf52c1c3a522f59b08ae6c7a98d1a49c93a49dab81aa2b59bd8d3770e604124a"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_identical_leptons.py",
+      "deleted": false,
+      "sha256": "dbe788cb076d8e22b175665399f306bfced31518857d7e0590eb1830ee0c492f"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_muon_decay.py",
+      "deleted": false,
+      "sha256": "ed58f161c7ae72ce3f16c5dd60806f1e99db32200d1697d3a79e8400b886d69d"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_odd_photons.py",
+      "deleted": false,
+      "sha256": "dac50f4216b10a02e1c2b7f2d9d7487a7b8708e1afc6ff23ddea1b3f7fafa889"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_photon_gluon.py",
+      "deleted": false,
+      "sha256": "3d85758902cc22cd7512e8626f15069ad3ff2bf936b453c064c76de96c571bc6"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_photon_radiation.py",
+      "deleted": false,
+      "sha256": "186dc3df5ab86c6e89e25c5acda925e3a299af5cb91413049388afe71532bb59"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_photon_two_loop.py",
+      "deleted": false,
+      "sha256": "d98beff59f1a57bef601572d45242e37b60407f12cf411a95745d03de3ae5482"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_polarized_qed.py",
+      "deleted": false,
+      "sha256": "2b44d7d5311f7d156640af37306e9a8a88bb157f189e48ee11ce742b09aca45c"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_qcd_annihilation.py",
+      "deleted": false,
+      "sha256": "3516a00b138fde960485b7cfb1663506d01b5b63a5d5663d7a739e13d410f700"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_qcd_ghost_vertex.py",
+      "deleted": false,
+      "sha256": "911c0efe15152ea5993ffa093a86be44668c45d5d0b2da2a64477115ef52e860"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_qcd_ghosts.py",
+      "deleted": false,
+      "sha256": "0d2bcbadf5d7620048e7e4c94291b94aa3bb17def69467ae18f2a2742404ce4d"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_quark_gluon_scattering.py",
+      "deleted": false,
+      "sha256": "4335595c0d601105fc265f172ed01efcdb9132b86009ff9f0f74f3bebe1acf02"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_sewn_diphoton.py",
+      "deleted": false,
+      "sha256": "bb077482a199716dd823dacb7096593879bbad2a9d2e549e99c02e8f4bce6c06"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_sewn_qed.py",
+      "deleted": false,
+      "sha256": "0273da4f2c6d5486dbc965665dc57b6c0eb36349a30f7e3a4d21af9f779b42c7"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_soft_function.py",
+      "deleted": false,
+      "sha256": "175e4c1069324bdc038bf5396bf03dd7ca368cbfdf44964e46494893090a219a"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_tensor.py",
+      "deleted": false,
+      "sha256": "efc101bc59800bc63d0d7445a1f0bad26bed9826fd3096064f73249fc6379eff"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_tree.py",
+      "deleted": false,
+      "sha256": "7d3adaa076fcfa5cf76b7ec1aeb2718fae002b803c1ddbe1370b7a720a4b09c7"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_feyncalc_ww.py",
+      "deleted": false,
+      "sha256": "abdfde6ee886336500631c556cc8b52b6f542caa390d721a9b7caecfb53baeac"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_import_smoke.py",
+      "deleted": false,
+      "sha256": "cc6e7906da0953063918489564e9b19495e6cffa573d5029fdd27bf97466618b"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_tensor_selectors.py",
+      "deleted": false,
+      "sha256": "08a6bcbfaed617fcae89875777f26caa1f09f30f9e101855ad9dcdab2c1926f0"
+    },
+    {
+      "path": "crates/feynkit-py/tests/installed_ufo_ghost_crossing.py",
+      "deleted": false,
+      "sha256": "1d5821f38e682522b827d9b4037f60524ec03001ae462382c0776450e8eb989b"
+    },
+    {
+      "path": "crates/linnet-py/tests/test_community_rendering.py",
+      "deleted": false,
+      "sha256": "75373a380035e60e8fff0389bbe960068e247dc33cf98c0fa703e2ab3aad6b04"
+    },
+    {
+      "path": "crates/linnet-py/tests/test_svg_browser.py",
+      "deleted": false,
+      "sha256": "f745e8c1a0f04c0371a5f00f4bb304faa623237eb2e5eb9c61c002fc8949bf2b"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/execution.json",
+      "deleted": false,
+      "sha256": "8d669611331495d09970e0045e7638a54fb678b0ddb9f8be556ff0476d90a750"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main32-35/api-check.json",
+      "deleted": false,
+      "sha256": "975609fdb06d9a906e534ef10185ea296bf25c3664069ebcd314b1890888d072"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main32-35/artifact-index.json",
+      "deleted": false,
+      "sha256": "d931a0a0553be4c60a7fb71422ccc58e9ae2f3481b907d1efe915cf9113cfd37"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main32-35/browser.json",
+      "deleted": false,
+      "sha256": "996c8e908638df3e751bdb05b883f897f52d338233daa8802c70ea9c91d5eeb1"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main32-35/canonical.json",
+      "deleted": false,
+      "sha256": "f1036aa5c623b1113137cb5b4219d8a2cb7c3e0e86bb885ee06070b4cfa9e70d"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main32-35/consumer-switch.json",
+      "deleted": false,
+      "sha256": "b4ab2bdc5d494d0a3c2d1b4de6357c9abbfc0e903f670823bfced45095c30e48"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main32-35/docs-focused.json",
+      "deleted": false,
+      "sha256": "99ab0290b97f19a9ee5ec33254df189e118e83a9485b3b6882c3f05b535f3249"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main32-35/frozen-inventories.json",
+      "deleted": false,
+      "sha256": "2830f88b5c3379c12b46a21cae106dae31bd23f59056fe8357fb20a0aa835495"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main32-35/gallery.json",
+      "deleted": false,
+      "sha256": "ef5b82635f8032414da226055de400e5c168cb557565b69621e5ec5f41e006c9"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main32-35/graph-boundary-results.json",
+      "deleted": false,
+      "sha256": "d6c4bd7e3c45eb6610a458ccfeac23a8c8952a9182d0066c003955cf93005796"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main32-35/integrity.json",
+      "deleted": false,
+      "sha256": "977bb177b53aa718992fcbbd79d77eb787bcc10e754983cd8c809148d1bea195"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main32-35/links.json",
+      "deleted": false,
+      "sha256": "8dc0ec7ed8d01b69ccd3378dce12f9f4c133bc442dda670facccbd1c8c6d0144"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main32-35/main31-review.json",
+      "deleted": false,
+      "sha256": "d70f7dafe9684647883572e3efedfc9a79c6c60cf30058e62b9f4b0f54f4d214"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main32-35/pipeline-audit.json",
+      "deleted": false,
+      "sha256": "7d2e4e1a5ea3a0bdf6cd0a9449e93e8c833b0d2d2f9f592484333c59328dce8a"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main32-35/plan-final-renders.json",
+      "deleted": false,
+      "sha256": "e532850983cc887b2a890d83cb9e1da8f8b25990dee6778bc8a08eb0039312c5"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main32-35/prep-a-review.json",
+      "deleted": false,
+      "sha256": "6f27e50804bc3df6548c9b1009d60282e6679df78ef289f0ce8f7b16c9c1aefc"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main32-35/prep-b-round1-review.json",
+      "deleted": false,
+      "sha256": "ac8f057cdf2fb16795d09da4aaba61cc613674a7141a02c343e3e5f8cc18f9d2"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main32-35/prep-b-round2-review.json",
+      "deleted": false,
+      "sha256": "90696e081dd59348942b6f5420799d0178a0553b21b5979b947da3d1f3399385"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main32-35/producer.json",
+      "deleted": false,
+      "sha256": "d25372956bc71f792f1029ccfb53344b343f29625495c95749798098e2348f4f"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main32-35/receipt.json",
+      "deleted": false,
+      "sha256": "4cfb8b2a60ce7f562901848579b7e534da624c8d5e1c06cd2bd05370bd525ce6"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main32-35/runtime.json",
+      "deleted": false,
+      "sha256": "aa44d4b53831133d7fe31c547e017a3904c080a16f1adf2caf5b972f32c4d8b1"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main32-35/source-bindings.json",
+      "deleted": false,
+      "sha256": "7ef65ee3b92d3c92de4731400d2e7b908cfafdef00311a27571af0e5a3400944"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main32-35/static.json",
+      "deleted": false,
+      "sha256": "23ae2f07f5a0d9fd14eb558b04bae3cceb43b381b575f4084046513c75dafa8f"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main32-35/wheel-qualification.json",
+      "deleted": false,
+      "sha256": "2be98b7ac14d7d2c32938ec3f30d74716f4dd601956d94b0b0805fd8e7d33abd"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/replay.json",
+      "deleted": false,
+      "sha256": "d95cc9bd6875a1aaa16c0296c1ef08c1c8a368591dab4c652094140a1c10f4b2"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/units32-35/receipt.json",
+      "deleted": false,
+      "sha256": "a25b2e34f65161d7866455b435dac1f112d38985a5fb93c6462211c17633ff86"
+    },
+    {
+      "path": "docs/architecture/generation-integration-plan.typ",
+      "deleted": false,
+      "sha256": "728e4328164d792883ed1af61666c6ea4b354e4bb15551ede2a0b9131f493582"
+    },
+    {
+      "path": "docs/architecture/nix-crane-cache-reuse.typ",
+      "deleted": false,
+      "sha256": "2a90c8127210674be1f100b2bcc21c4da444a3deaba0f368b9b51c1cd134dc8a"
+    },
+    {
+      "path": "docs/products/feynkit/feyncalc-gallery.json",
+      "deleted": false,
+      "sha256": "572b5e2ae613d6193f4eaa7ed5b01026ba21f06bbcb9f715042d87ca49e00990"
+    },
+    {
+      "path": "vendor/typst-packages/PROVENANCE.typ",
+      "deleted": false,
+      "sha256": "f7da0fda01647923950e2d2909f089fa21934847799eb1ce8ca228aba9418597"
+    }
+  ],
+  "subsequent_metadata_packet": [
+    "docs/architecture/evidence/generation-integration/wp3/main32-35/metadata-source.json",
+    "docs/architecture/evidence/generation-integration/wp3/main32-35/validation-files.json",
+    "docs/architecture/evidence/generation-integration/wp3/main32-35/cumulative-inventory.json",
+    "docs/architecture/evidence/generation-integration/wp3/main32-35/final-integrity.json",
+    "docs/architecture/evidence/generation-integration/wp3/main32-35/receipt.json",
+    "docs/architecture/evidence/generation-integration/wp3/main32-35/source-bindings.json",
+    "docs/architecture/evidence/generation-integration/execution.json",
+    "docs/architecture/evidence/generation-integration/wp3/replay.json"
+  ],
+  "semantics": "Hashes bind exact frozen validation revision, not mutable/current receipts. Subsequent packet is JSON-only and separately inspected; no self-hash."
+}
