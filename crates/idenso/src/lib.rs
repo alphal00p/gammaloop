@@ -1042,24 +1042,20 @@ impl IndexTooling for AtomView<'_> {
 
 #[cfg(test)]
 pub mod test {
+    use crate::representations::ColorFundamental;
     use crate::tensor::SymbolicTensor;
     use crate::tensor::inference::InterfaceInference;
     use insta::assert_snapshot;
-    use spenso::mink;
     use spenso::network::library::function_lib::INBUILTS;
+    use spenso::network::tags::SPENSO_TAG;
+    use spenso::structure::abstract_index::AbstractIndex;
+    use spenso::structure::partial::PartialStructureExt;
     use spenso::structure::representation::{LibraryRep, RepName};
-    use spenso::structure::slot::IsAbstractSlot;
-    use spenso::{
-        network::tags::SPENSO_TAG,
-        p, slot,
-        structure::{abstract_index::AbstractIndex, slot::ParseableAind},
-    };
-    use symbolica::{
-        atom::{Atom, AtomCore, FunctionBuilder},
-        function, parse_lit,
-        printer::CanonicalOrderingSettings,
-        symbol,
-    };
+    use spenso::structure::slot::{DualSlotTo, IsAbstractSlot, ParseableAind};
+    use spenso::{mink, p, slot, tensor_symbol};
+    use symbolica::atom::{Atom, AtomCore, FunctionBuilder};
+    use symbolica::printer::CanonicalOrderingSettings;
+    use symbolica::{function, parse_lit, symbol};
     use symbolica_utils::AtomPrintExt;
 
     use crate::{
@@ -1265,6 +1261,53 @@ pub mod test {
         assert!(actual.expression().contains(&spectator));
         assert_ne!(actual.expression(), &actual.expression().expand());
         assert_eq!(actual.canonize().unwrap().expression(), actual.expression());
+    }
+
+    #[test]
+    fn typed_adjoint_dualizes_registered_representations() {
+        test_initialize();
+        let field = tensor_symbol!("typed_adjoint::multiplet");
+        let custom = LibraryRep::new_dual("typed_adjoint::custom").unwrap();
+        let self_dual = LibraryRep::new_self_dual("typed_adjoint::self_dual").unwrap();
+        let color = LibraryRep::from(ColorFundamental {});
+        let mut failures = Vec::new();
+        for representation in [self_dual, custom, custom.dual(), color, color.dual()] {
+            let raw = function!(field, representation.new_rep(3).to_symbolic([Atom::num(7)]));
+            let source = SymbolicTensor::infer(raw).unwrap();
+            let expected_slots = source
+                .structure()
+                .logical_slots()
+                .into_iter()
+                .map(|slot| slot.dual())
+                .collect::<Vec<_>>();
+            for preserve_indices in [false, true] {
+                let adjoint = match source.dirac_adjoint(preserve_indices) {
+                    Ok(adjoint) => adjoint,
+                    Err(error) => {
+                        failures.push(format!(
+                            "{representation:?}, preserve_indices={preserve_indices}: {error}"
+                        ));
+                        continue;
+                    }
+                };
+                assert_eq!(adjoint.structure().logical_slots(), expected_slots);
+                assert!(source.multiply(&adjoint).unwrap().is_scalar());
+                assert!(
+                    adjoint
+                        .dirac_adjoint(preserve_indices)
+                        .unwrap()
+                        .same_value(&source)
+                );
+                let zero = source
+                    .with_checked_expression(Atom::Zero)
+                    .unwrap()
+                    .dirac_adjoint(preserve_indices)
+                    .unwrap();
+                assert!(zero.is_zero());
+                assert_eq!(zero.structure().logical_slots(), expected_slots);
+            }
+        }
+        assert!(failures.is_empty(), "{}", failures.join("\n"));
     }
 
     #[test]
