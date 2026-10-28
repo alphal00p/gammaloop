@@ -303,7 +303,6 @@ impl CostObservation {
                 let work = event.current.ok_or("completion omitted current work")?;
                 self.complete(
                     dispatch_id,
-                    family_id,
                     work,
                     source,
                     event.sequence,
@@ -474,13 +473,13 @@ impl CostObservation {
     fn complete(
         &mut self,
         dispatch_id: usize,
-        family_id: usize,
         work: Work<'_>,
         source: Source,
         sequence: u64,
         now: u64,
         counters: Counters,
     ) -> DiagnosticResult<()> {
+        let family_id = self.dispatches[dispatch_id].family_id;
         let id = *self
             .stack
             .last()
