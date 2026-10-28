@@ -32,5 +32,19 @@
     "No production Rust/manifest/kernel/lock/uv change;no graph numerator expansion;NixCI=false;no Clippy/physics/fullruntime/fullNix rebuild warranted."
   ],
   "retained": "target/wp3-source31-round2 plus all original logs/proof/workspaces/caches; no shared-cache override/seeding/deletion, no external action.",
-  "files": "files.json"
+  "files": "files.json",
+  "correction_code": "2f500641ddbf08a57c5420194398aa68e761f41f",
+  "source_evaluation": "source.json",
+  "canonical_build_decision": "Nonrendered TOML comments only; exact parsed registry and all Typst/runtime inputs unchanged, consumer boundary proved. New source/NAR distinct/unbuilt. No duplicate cold pipeline or corrected snapshot qualification asserted.",
+  "reused_results_source": "ECD only, not this candidate.",
+  "code_files": [
+    "docs/architecture/evidence/generation-integration/execution.json",
+    "docs/architecture/evidence/generation-integration/wp3/replay.json",
+    "docs/architecture/evidence/generation-integration/wp3/source31-round2/checks.json",
+    "docs/architecture/evidence/generation-integration/wp3/source31-round2/decisions.json",
+    "docs/architecture/evidence/generation-integration/wp3/source31-round2/receipt.json",
+    "docs/architecture/evidence/generation-integration/wp3/source31-round2/scope-a-review.json",
+    "docs/architecture/evidence/generation-integration/wp3/source31-round2/scope-b-review.json",
+    "docs/developers.toml"
+  ]
 }

@@ -1,0 +1,56 @@
+{
+  "revision": "2f500641ddbf08a57c5420194398aa68e761f41f",
+  "round1": "3a90bc05e1e50fc85b0f7541ef82086a0e2db873",
+  "input": "git+file:///shared/lcnbr/dev/gammaloop/main?rev=2f500641ddbf08a57c5420194398aa68e761f41f&shallow=1",
+  "Cargo_derivation": "/nix/store/7kvm9zxk0vnn4g3szh4grdfq1db85gqm-alphal00p-docs-cargo-0.1.0.drv",
+  "Cargo_producer_exact_reuse": true,
+  "snapshot_derivation": "/nix/store/w808nwr8jzmwl5dw90drs7s3lsdmfmb9-alphal00p-docs-snapshot-fixture-0.1.0.drv",
+  "source": "/nix/store/fyffshk8axshfyls9rxcj4rip0rn4b9c-source",
+  "source_NAR_hash": "sha256-q9zoBmGj6bFb7G3ybXjXhBBrSTidSBjJwKPf50Pf4j4=",
+  "documentation_output_built": false,
+  "delta": [
+    {
+      "path": "docs/architecture/evidence/generation-integration/execution.json",
+      "before": "19f37338bffcb200c53afc099b4aab147650c19c8a9441f1ed11a7cd3339a577",
+      "after": "d36c6e57184587cd43c2a6c78ef35a5c819978ca382e9ab005670396ef23a7cd"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/replay.json",
+      "before": "76cd94bf4228d5245cc8706ad0388e0cb1274f21aa77ecb8e2a82f574b819410",
+      "after": "b5bee2820d14d0a0b03bbfc18b24b3198f09aeff589dfd614dc8c54846eeaa2f"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/source31-round2/checks.json",
+      "before": null,
+      "after": "4a878def884262ef9fd0f8475192d60b324c179b44424b49ae64c279794eee24"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/source31-round2/decisions.json",
+      "before": null,
+      "after": "75a3e6e1fe3bf5393fd10a01863cd053843f7a86be1cb3deb00386a02a6f2ac1"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/source31-round2/receipt.json",
+      "before": null,
+      "after": "a1e8a265b1375004ded289416404eb5fa7e55c0192f20dd14276e4f4b5e036aa"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/source31-round2/scope-a-review.json",
+      "before": null,
+      "after": "ef12d14fde7cf5f1629f46753c50fd40fa362bb4e2e7bd9b61d5c6d6dc68319a"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/source31-round2/scope-b-review.json",
+      "before": null,
+      "after": "1ed8607aa773a096d4e4cc15e35801a49fb7ab53778ea41276ea5c1f918c0236"
+    },
+    {
+      "path": "docs/developers.toml",
+      "before": "501a733fcbc203021e92dca3b18a013fd9a4a836c1c99c32d86af26394ce4980",
+      "after": "8e90d8a08393f6ef81ee0774334ae2861a406337093df6de1dfc491bbea406d6"
+    }
+  ],
+  "parsed_registry_equal": true,
+  "all_rendered_source_and_runtime_inputs_unchanged": true,
+  "qualification": "Registry difference is comments only; all other deltas nonrendered evidence JSON. Actual builder consumes Serde-parsed registry fields, not comments. Revision/timestamp/links would differ on a new build; no new canonical output or byte-identity claimed. ECD637page pass retained at ECD."
+}
