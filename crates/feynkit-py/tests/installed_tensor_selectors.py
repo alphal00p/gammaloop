@@ -17,28 +17,28 @@ ki, pi = k(0, mink(D, mu)), p(0, mink(D, mu))
 # TensorName and bare Expression select the entire head, preserving namespaces.
 for head in (name, k):
     reducer = fk.TensorReducer(D, integrated=[head])
-    assert reducer.reduce(ki) == E("0")
-    assert reducer.reduce(k(1, mink(D, mu))) == E("0")
-    assert reducer.reduce(pi) == pi
+    assert reducer.reduce(ki).to_expression() == E("0")
+    assert reducer.reduce(k(1, mink(D, mu))).to_expression() == E("0")
+    assert reducer.reduce(pi).to_expression() == pi
 
 # Expression and TensorExpression select an exact compact vector, including args.
 for vector in (kc, name(0, lorentz)):
     reducer = fk.TensorReducer(D, integrated=(vector,))
-    assert reducer.reduce(ki) == E("0")
-    assert reducer.reduce(k(1, mink(D, mu))) == k(1, mink(D, mu))
-    assert reducer.reduce(pi) == pi
+    assert reducer.reduce(ki).to_expression() == E("0")
+    assert reducer.reduce(k(1, mink(D, mu))).to_expression() == k(1, mink(D, mu))
+    assert reducer.reduce(pi).to_expression() == pi
 
 # Both external representations produce the same longitudinal projection.
 expected = dot(kc, pc) / dot(pc, pc) * pi
 for external in (pc, other(0, lorentz)):
     reducer = fk.TensorReducer(D, integrated=[name(0, lorentz)], external=[external])
-    assert (reducer.reduce(ki) - expected).together() == E("0")
-    assert reducer.reduce(pi) == pi
+    assert (reducer.reduce(ki).to_expression() - expected).together() == E("0")
+    assert reducer.reduce(pi).to_expression() == pi
 
 # An external basis entry takes precedence over selecting its whole head.
 reducer = fk.TensorReducer(D, integrated=[name, other], external=[other(0, lorentz)])
-assert (reducer.reduce(ki) - expected).together() == E("0")
-assert reducer.reduce(pi) == pi
+assert (reducer.reduce(ki).to_expression() - expected).together() == E("0")
+assert reducer.reduce(pi).to_expression() == pi
 
 for invalid in (E("0"), k + 1, k**2):
     try:

@@ -151,7 +151,7 @@ for name, incoming, outgoing in [
             )
             squared += (
                 diagram.overall_factor_expression(evaluate=True)
-                * diagram.numerator_prefactor_expression()
+                * diagram.numerator_prefactor_expression().to_expression()
                 * numerator
                 / denominator
             )

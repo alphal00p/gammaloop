@@ -1511,8 +1511,9 @@ run as required tests. The per-package input and runtime-tool owners retain this
 
 The shared Python rendering package is `linnet-render-py`, using Linnest's native
 SVG renderer. The graph API remains in `linnet-py`, and both packages retain
-separate Cargo dependency boundaries. Typst authoring assets live under
-`vendor/typst-packages`; their consumers own those source inputs.
+separate Cargo dependency boundaries. No current build reads the Typst packages
+under `vendor/typst-packages`; the authored documentation renderer receives its
+package tree from `docsTypst`.
 Asset manifests accompany their owning packages in dependency and production
 builds. `linnet-render-py` owns `data.json`, the checked-in browser font and the
 shared `view.py`/`view.js` measurement widget. Spynso retains its tensor Typst

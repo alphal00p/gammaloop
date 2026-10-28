@@ -84,7 +84,7 @@ for count in (1, 3, 5):
         assert tensor.is_scalar
         weight = (
             diagram.overall_factor_expression(evaluate=True)
-            * diagram.numerator_prefactor_expression()
+            * diagram.numerator_prefactor_expression().to_expression()
         )
         trace = (
             kinematics.apply(
@@ -114,7 +114,7 @@ for count in (1, 3, 5):
         assert mapping is not None
         assert (mapping.apply(traces[0]) + traces[0]).expand() == E("0")
         vacuum = hep.TensorReducer(D, integrated=[K(0, mink(D))])
-        assert vacuum.reduce(traces[0]).expand() == E("0")
+        assert vacuum.reduce(traces[0]).to_expression().expand() == E("0")
         pairs = [(0, 0, mapping)]
     else:
         remaining, pairs = set(range(len(families))), []

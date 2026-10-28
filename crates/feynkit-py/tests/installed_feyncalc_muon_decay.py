@@ -98,7 +98,7 @@ contracted = (
     .contract(collect_chains=False, collect_traces=False)
 )
 assert contracted.contraction_complete
-contracted = contracted.to_expression().to_dots()
+contracted = contracted.to_dots()
 assert contracted.is_scalar
 # s=(electron+antinue)^2; t=(electron+numu)^2. All four external momenta
 # are future directed, with P0=P1+P2+P3 and both neutrinos massless.

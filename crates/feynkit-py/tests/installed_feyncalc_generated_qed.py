@@ -88,7 +88,12 @@ denominator = kin.apply(
 assert (denominator - s**2).expand() == E("0")
 factor = diagram.overall_factor_expression(evaluate=True)
 assert factor == E("-1")
-squared = factor * diagram.numerator_prefactor_expression() * contracted / denominator
+squared = (
+    factor
+    * diagram.numerator_prefactor_expression().to_expression()
+    * contracted
+    / denominator
+)
 expected = (
     2
     * e**4

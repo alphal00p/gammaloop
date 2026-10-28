@@ -174,9 +174,9 @@ for diagram in result.diagrams:
         .to_expression()
     )
     scalar = source_family.rewrite_numerator(
-        kinematics.apply(reducer.reduce(traced)), coordinates
+        kinematics.apply(reducer.reduce(traced).to_expression()), coordinates
     )
-    scalar *= factor * diagram.numerator_prefactor_expression()
+    scalar *= factor * diagram.numerator_prefactor_expression().to_expression()
     # Scalar basis labels avoid differentiating symbolic-D tensor slots during
     # the epsilon expansion.  The complete open tensor is checked before this.
     cg = scalar.expand().coefficient(gmunu)
@@ -294,7 +294,7 @@ assert len(one_loop_generated.diagrams) == 1
 one_loop_diagram = one_loop_generated.diagrams[0]
 factor = (
     one_loop_diagram.overall_factor_expression(evaluate=True)
-    * one_loop_diagram.numerator_prefactor_expression()
+    * one_loop_diagram.numerator_prefactor_expression().to_expression()
 )
 assert factor == -one  # Preserve the native closed-fermion-loop sign.
 fermions = [edge for edge in one_loop_diagram.edges if not edge.is_external]
@@ -381,7 +381,7 @@ for label, inserted, powers, weight in insertions:
         .to_expression()
     )
     scalar = ct_family.rewrite_numerator(
-        ct_kinematics.apply(ct_reducer.reduce(trace)), [ct_coordinate]
+        ct_kinematics.apply(ct_reducer.reduce(trace).to_expression()), [ct_coordinate]
     )
     tensor = (factor * scalar / charge**2).together().expand()
     scalar = tensor.replace(gmunu, Qg).replace(ppmunu, Qpp).expand()

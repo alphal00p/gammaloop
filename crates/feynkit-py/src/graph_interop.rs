@@ -7,13 +7,9 @@ use linnet::half_edge::involution::{Flow, Hedge, HedgePair, Orientation};
 use linnet::half_edge::subgraph::{ModifySubSet, SuBitGraph, SubSetLike};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::{
-    Bound, Py, PyAny, PyAnyMethods, PyBoolMethods, PyByteArrayMethods, PyBytesMethods,
-    PyCapsuleMethods, PyComplexMethods, PyDictMethods, PyFloatMethods, PyFrozenSetMethods,
-    PyListMethods, PyMappingMethods, PyMappingProxyMethods, PyModuleMethods, PyRef, PyResult,
-    PySequenceMethods, PySetMethods, PySliceMethods, PyStringMethods, PyTracebackMethods,
-    PyTupleMethods, PyTypeMethods, PyWeakrefMethods, Python, pyclass, pymethods,
+    Bound, Py, PyAny, PyAnyMethods, PyDictMethods, PyRef, PyResult, Python, pyclass, pymethods,
 };
-use pyo3::types::PyDict;
+use pyo3::types::{PyDict, PyTuple};
 use pyo3::{PyTraverseError, PyVisit};
 
 use crate::graph::PyFeynmanDiagram;
@@ -243,9 +239,8 @@ impl LinnetExport {
         // Export the complete owner graph even when the caller is a view.
         let diagram = diagram.whole();
         let native = diagram.inner.underlying();
-        let node_type = module.getattr("Node")?;
-        let half_edge_type = module.getattr("HalfEdge")?;
-        let edge_type = module.getattr("Edge")?;
+        let node_type = module.getattr("node")?;
+        let edge_type = module.getattr("edge")?;
         let mut nodes = Vec::new();
         for vertex in diagram.vertices() {
             let kwargs = PyDict::new(py);
@@ -255,25 +250,29 @@ impl LinnetExport {
         let edges = diagram.edges();
         let mut edge_specs = Vec::new();
         for (pair, edge, data) in native.iter_edges() {
-            let endpoint = |hedge: Hedge| -> PyResult<Py<PyAny>> {
+            let endpoint = |hedge: Hedge, flow: Flow| -> PyResult<Py<PyAny>> {
                 let kwargs = PyDict::new(py);
                 kwargs.set_item("data", hedge.0)?;
-                Ok(half_edge_type
+                Ok(module
+                    .getattr(match flow {
+                        Flow::Source => "source",
+                        Flow::Sink => "sink",
+                    })?
                     .call((native.node_id(hedge).0,), Some(&kwargs))?
                     .unbind())
             };
-            let (source, sink) = match pair {
-                HedgePair::Paired { source, sink } => {
-                    (Some(endpoint(source)?), Some(endpoint(sink)?))
-                }
+            let (first, second) = match pair {
+                HedgePair::Paired { source, sink } => (
+                    endpoint(source, Flow::Source)?,
+                    Some(endpoint(sink, Flow::Sink)?),
+                ),
                 HedgePair::Unpaired { hedge, flow } => match flow {
-                    Flow::Source => (Some(endpoint(hedge)?), None),
-                    Flow::Sink => (None, Some(endpoint(hedge)?)),
+                    Flow::Source => (endpoint(hedge, Flow::Source)?, None),
+                    Flow::Sink => (endpoint(hedge, Flow::Sink)?, None),
                 },
                 HedgePair::Split { .. } => unreachable!("whole diagrams have no split edges"),
             };
             let kwargs = PyDict::new(py);
-            kwargs.set_item("name", format!("e{}", edge.0))?;
             kwargs.set_item("data", Py::new(py, edges[edge.0].clone())?)?;
             kwargs.set_item(
                 "orientation",
@@ -285,13 +284,17 @@ impl LinnetExport {
                         Orientation::Undirected => "Undirected",
                     })?,
             )?;
-            edge_specs.push(edge_type.call((source, sink), Some(&kwargs))?.unbind());
+            edge_specs.push(
+                edge_type
+                    .call((first, format!("e{}", edge.0), second), Some(&kwargs))?
+                    .unbind(),
+            );
         }
         let kwargs = PyDict::new(py);
-        kwargs.set_item("nodes", nodes)?;
-        kwargs.set_item("edges", edge_specs)?;
         kwargs.set_item("name", diagram.inner.name())?;
-        let graph = module.getattr("Graph")?.call((), Some(&kwargs))?;
+        nodes.extend(edge_specs);
+        let items = PyTuple::new(py, nodes)?;
+        let graph = module.getattr("build")?.call(items, Some(&kwargs))?;
         let mut native_hedges = vec![0; native.n_hedges()];
         let mut exported_hedges = vec![0; native.n_hedges()];
         for hedge in graph.call_method0("half_edges")?.try_iter()? {

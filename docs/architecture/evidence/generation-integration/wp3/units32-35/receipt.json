@@ -1,0 +1,266 @@
+{
+  "schema": 1,
+  "recorded_at_utc": "2026-10-28T08:51:26.708455+00:00",
+  "scope": "Independent preparation of WP3 sources32-35; no source30/31 import or parent integration",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports",
+  "base": {
+    "commit": "cb585c98a474628ca9c55bb17cf1e680450b8ef9",
+    "change": "uspzstwlmnqqsloyxqlkoumqqknnlyws"
+  },
+  "code": {
+    "commit": "c7ab0d1dd29dfbec194ee3fa24abe05bcfb6e794",
+    "change": "ulpllwlpunztnrtmoknovqxprpqospxw"
+  },
+  "sources": [
+    {
+      "order": 32,
+      "original": "351c85036778be709117a021fc5f1656bbd5a964",
+      "mapping": "Correct current native wheel/resource prose. Historical typst-NOTICE files and standalone linnet-py workflow have no current owner; retain current Clarabel, NetworkX and Tiptoe notices and optional-widget/static-display contract.",
+      "files": [
+        ".github/workflows/linnet-py-wasm.yml",
+        "docs/architecture/nix-crane-cache-reuse.typ",
+        "vendor/typst-packages/PROVENANCE.typ"
+      ]
+    },
+    {
+      "order": 33,
+      "original": "ce9072e44a3335fdba7d223b0c3ae885cc29dc20",
+      "mapping": "Build pinned NodeSpec native drawings with current graph.build, measure static SVG dimensions, and exercise Chromium camera scale, fitting, uncropped viewBox, label size and keyboard resize.",
+      "files": [
+        "crates/linnet-py/tests/test_svg_browser.py"
+      ]
+    },
+    {
+      "order": 34,
+      "original": "7e93e726e253ebb2a1af0d4b38177f3628d4b34b",
+      "mapping": "Replace obsolete gallery API component names, retain tensor/display examples, and identify the current staged Request.generate to DiagramSet.build boundary in 61 rows whose 35 distinct tests call build.",
+      "files": [
+        "docs/products/feynkit/feyncalc-gallery.json"
+      ]
+    },
+    {
+      "order": 35,
+      "original": "8c12968bde84643623ca2f5099e0175180a73dc6",
+      "mapping": "Carry exact original TensorExpression to plain Expression conversions in 22 scripts; each target matched the original predecessor bytes before application. No asserted physics value changed.",
+      "files": [
+        "crates/feynkit-py/tests/installed_feyncalc_generated_qed.py",
+        "crates/feynkit-py/tests/installed_feyncalc_ibp_phi4.py",
+        "crates/feynkit-py/tests/installed_feyncalc_identical_leptons.py",
+        "crates/feynkit-py/tests/installed_feyncalc_muon_decay.py",
+        "crates/feynkit-py/tests/installed_feyncalc_odd_photons.py",
+        "crates/feynkit-py/tests/installed_feyncalc_photon_gluon.py",
+        "crates/feynkit-py/tests/installed_feyncalc_photon_radiation.py",
+        "crates/feynkit-py/tests/installed_feyncalc_photon_two_loop.py",
+        "crates/feynkit-py/tests/installed_feyncalc_polarized_qed.py",
+        "crates/feynkit-py/tests/installed_feyncalc_qcd_annihilation.py",
+        "crates/feynkit-py/tests/installed_feyncalc_qcd_ghost_vertex.py",
+        "crates/feynkit-py/tests/installed_feyncalc_qcd_ghosts.py",
+        "crates/feynkit-py/tests/installed_feyncalc_quark_gluon_scattering.py",
+        "crates/feynkit-py/tests/installed_feyncalc_sewn_diphoton.py",
+        "crates/feynkit-py/tests/installed_feyncalc_sewn_qed.py",
+        "crates/feynkit-py/tests/installed_feyncalc_soft_function.py",
+        "crates/feynkit-py/tests/installed_feyncalc_tensor.py",
+        "crates/feynkit-py/tests/installed_feyncalc_tree.py",
+        "crates/feynkit-py/tests/installed_feyncalc_ww.py",
+        "crates/feynkit-py/tests/installed_import_smoke.py",
+        "crates/feynkit-py/tests/installed_tensor_selectors.py",
+        "crates/feynkit-py/tests/installed_ufo_ghost_crossing.py"
+      ]
+    }
+  ],
+  "separate_caller_migration": {
+    "source": "source31 docs-check-final.log: three test_community_rendering errors from removed Process.generate_diagrams",
+    "file": "crates/linnet-py/tests/test_community_rendering.py",
+    "mapping": "Use Process.amplitude(...).generate().build() and indexed BuiltDiagramSet access; update the existing FeynmanDiagram.to_graph exporter to construct current native NodeSpec, HalfEdgeSpec and EdgeSpec with graph.build. Retain all three rendering assertions and actual diagram-to-graph export.",
+    "files": [
+      "crates/linnet-py/tests/test_community_rendering.py",
+      "crates/feynkit-py/src/graph_interop.rs"
+    ]
+  },
+  "file_inventory_git_blob_sha1": {
+    ".github/workflows/linnet-py-wasm.yml": "314708e014f08e2de17ad15f9a50300c788a44a1",
+    "crates/feynkit-py/src/graph_interop.rs": "09cf86d1cd5d94468ae1ef7b5d12ce3e93a5580f",
+    "crates/feynkit-py/tests/installed_feyncalc_generated_qed.py": "a4ac22072c0e1de353753ba5466c2d72d17cff84",
+    "crates/feynkit-py/tests/installed_feyncalc_ibp_phi4.py": "e3c3899f3340d61dcfbf5d2f9ce45e3c90416afe",
+    "crates/feynkit-py/tests/installed_feyncalc_identical_leptons.py": "d1ba7019ca1166e4178ee1368055443ae11a747e",
+    "crates/feynkit-py/tests/installed_feyncalc_muon_decay.py": "d93122e4b9d77b9f6a4ae039454c8b6769445a45",
+    "crates/feynkit-py/tests/installed_feyncalc_odd_photons.py": "9d289ff551686b9c51735e4254921ad45287983f",
+    "crates/feynkit-py/tests/installed_feyncalc_photon_gluon.py": "6007dc62d7585af3d49ffa4c84b341e5129a6eb7",
+    "crates/feynkit-py/tests/installed_feyncalc_photon_radiation.py": "8b32e7dd1847c0b621c47eeaac53575ad48063b7",
+    "crates/feynkit-py/tests/installed_feyncalc_photon_two_loop.py": "c82f18c9c85de2198cbfe88da290d5830e5409b9",
+    "crates/feynkit-py/tests/installed_feyncalc_polarized_qed.py": "1ff062aacfcb7bd184a546810f50a65907e0783b",
+    "crates/feynkit-py/tests/installed_feyncalc_qcd_annihilation.py": "589676d5513ff419380ff3648b85c890625dab71",
+    "crates/feynkit-py/tests/installed_feyncalc_qcd_ghost_vertex.py": "1d5b444ba867aa38187322d5160501358e3e00e6",
+    "crates/feynkit-py/tests/installed_feyncalc_qcd_ghosts.py": "85ebce537c6fcb1ea76f43b0a6d64356ecdbd6e5",
+    "crates/feynkit-py/tests/installed_feyncalc_quark_gluon_scattering.py": "46a562d3dc5d58045a1aad48208e16cbb8d81bd9",
+    "crates/feynkit-py/tests/installed_feyncalc_sewn_diphoton.py": "fa49b8c27d865f7104e543b99062461c0f6f05ea",
+    "crates/feynkit-py/tests/installed_feyncalc_sewn_qed.py": "0fe85bf8f20b6a9414d433a7452fb1eb19dc678e",
+    "crates/feynkit-py/tests/installed_feyncalc_soft_function.py": "7c8ab62a2d02332457a2378678bbd058e22d1900",
+    "crates/feynkit-py/tests/installed_feyncalc_tensor.py": "858ba0671a5c9ec2e68833c0c2b4890caf5611c9",
+    "crates/feynkit-py/tests/installed_feyncalc_tree.py": "d56367070fd0a2577f98090ad5e2a024588637a1",
+    "crates/feynkit-py/tests/installed_feyncalc_ww.py": "b63dc5dc90f3d750201d6bf85ee357163559b57e",
+    "crates/feynkit-py/tests/installed_import_smoke.py": "ac817afb13b39dfebd5c0a8b0009fb8a210ff1ef",
+    "crates/feynkit-py/tests/installed_tensor_selectors.py": "5dc3b89f03f6c6dc4c7d005bc970c1dede3fde12",
+    "crates/feynkit-py/tests/installed_ufo_ghost_crossing.py": "e6189fd911097d565850f3f1e285deb098a7db3b",
+    "crates/linnet-py/tests/test_community_rendering.py": "84d543ec6c79aec37cdf681ef50459fec88a8745",
+    "crates/linnet-py/tests/test_svg_browser.py": "c5affbd51089f56b46e3374738237ebbf481305d",
+    "docs/architecture/nix-crane-cache-reuse.typ": "ee19864f7cc01dbfd07cfe207b260f7c95899182",
+    "docs/products/feynkit/feyncalc-gallery.json": "42eca3f0866eb21ded619338b63df6c272875a84",
+    "vendor/typst-packages/PROVENANCE.typ": "f518f0b77ac1b98806a73ed9c7273860400a3d97"
+  },
+  "checks": [
+    {
+      "command": "CARGO_BUILD_JOBS=4 nix develop -c maturin build --locked --manifest-path examples/notebooks/symbolica-host/Cargo.toml --out target/generation-python-docs-ports/wheels",
+      "result": "pass; local abi3 host wheel built with CARGO_BUILD_JOBS=4"
+    },
+    {
+      "command": "nix develop -c bash -c: PYTHONPATH=target/generation-python-docs-ports/installed:crates/linnet-py/tests LINNET_TEST_CHROMIUM=/nix/store/ds6wq0gzyimhl7c1kmzdvql0w4d2rcv4-chromium-153.0.8010.36/bin/chromium LINNET_TEST_BROWSER_ENGINES=chromium PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 /nix/store/dl2srz8kkixqpxmdvxkprsb9z5brn5hp-python3-3.13.15-env/bin/python3 -m unittest test_svg_browser.SvgBrowserTests.test_physical_scale_is_shared_and_fitted_drawings_are_not_cropped -v",
+      "environment": "PYTHONPATH=local wheel install and linnet tests; pinned Nix Playwright 1.61.0; LINNET_TEST_CHROMIUM=/nix/store/ds6wq0gzyimhl7c1kmzdvql0w4d2rcv4-chromium-153.0.8010.36/bin/chromium; LINNET_TEST_BROWSER_ENGINES=chromium; PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1; Nix bundled font resource",
+      "result": "pass, 1 real Chromium browser test"
+    },
+    {
+      "command": "nix develop -c bash -c: PYTHONPATH=target/generation-python-docs-ports/installed:crates/linnet-py/tests /nix/store/dl2srz8kkixqpxmdvxkprsb9z5brn5hp-python3-3.13.15-env/bin/python3 -m unittest test_community_rendering -v",
+      "environment": "PYTHONPATH=local wheel install and linnet tests",
+      "result": "pass, 3 real rendering/export tests"
+    },
+    {
+      "command": "nix develop -c bash -c: PYTHONPATH=target/generation-python-docs-ports/installed; for script in installed_tensor_selectors.py installed_feyncalc_tensor.py installed_import_smoke.py installed_feyncalc_tree.py; do /nix/store/dl2srz8kkixqpxmdvxkprsb9z5brn5hp-python3-3.13.15-env/bin/python3 crates/feynkit-py/tests/$script; done",
+      "environment": "PYTHONPATH=local wheel install; scripts executed separately",
+      "result": "pass, 4 scripts"
+    },
+    {
+      "command": "nix develop -c python3 -m compileall -q crates/feynkit-py/tests crates/linnet-py/tests; python3 -m json.tool docs/products/feynkit/feyncalc-gallery.json",
+      "result": "pass"
+    },
+    {
+      "command": "nix develop -c python3 -B target/generation-python-docs-ports/scope-audit-correction.py",
+      "result": "FAIL (exit 1): 99 scopes; 4 missing start anchors, 24 valid-scope digest mismatches, 71 matches. Exact base/head failed paths and classifications identical; no scoped source or registry entry changed.",
+      "exit_status": 1
+    },
+    {
+      "command": "typstyle --check vendor/typst-packages/PROVENANCE.typ docs/architecture/nix-crane-cache-reuse.typ",
+      "result": "provenance pass; nix-crane-cache-reuse.typ fails existing whole-file formatting (parent baseline also fails)"
+    },
+    {
+      "command": "nix develop -c bash -c: PYTHONPATH=target/generation-python-docs-ports/installed:crates/linnet-py/tests; /nix/store/dl2srz8kkixqpxmdvxkprsb9z5brn5hp-python3-3.13.15-env/bin/python3 crates/feynkit-py/tests/installed_graph_interop.py; ... installed_subgraph_cache.py",
+      "result": "pass, 2 installed graph owner/caching scripts; retained community rendering tests also rerun and pass against rebuilt wheel"
+    },
+    {
+      "command": "CARGO_BUILD_JOBS=4 nix develop -c cargo clippy --locked -p feynkit-py --no-default-features --features native,linnet-python,ufo --lib -- -D warnings",
+      "result": "pass; inherited Clarabel dependency warnings remain outside feynkit-py"
+    },
+    {
+      "command": "nix develop -c rustfmt --edition 2024 crates/feynkit-py/src/graph_interop.rs",
+      "result": "pass; touched Rust owner formatted"
+    }
+  ],
+  "wheel_fixture": {
+    "path": "target/generation-python-docs-ports/wheels/symbolica-3.0.1-cp310-abi3-manylinux_2_39_x86_64.whl",
+    "sha256": "73ee3c1668dca9318320127a1d6655963541bf7d991083044c1e20652790506d",
+    "entries": 20,
+    "notices": [
+      "clarabel-LICENSE",
+      "networkx-LICENSE",
+      "tiptoe-LICENSE"
+    ],
+    "stix_embedded": false,
+    "typst_notice_embedded": false,
+    "limit": "Local host wheel inspection only, not native/Pyodide/Community release certification or final RECORD/notices audit."
+  },
+  "limits": [
+    "Sources30 and31 must pass independent review and precede this patch before integration; fresh combined checks and new independent Astra review are required.",
+    "Full just docs-check was not run here; source31 has a separate seven-table accessibility repair and registry reconciliation.",
+    "The remaining 18 source35 graph-physics scripts were not executed: this preparation does not run existing graph-numerator expansion helpers or certify their physics.",
+    "No rebuilt/compressed final distributions, WASM assets, SVG/PDF regeneration, push, PR, upload or CI enablement.",
+    "Scope A independently APPROVED the reviewed graph interop/source35 and retained rendering code at e7bbdc1182bf5e99290b38650f5ec57146749206; this receipt-only correction awaits NEW independent scope-B rereview.",
+    "Canonical global docs scope audit exits 1 on the unchanged inherited registry: 4 missing start anchors and 24 valid-scope digest mismatches; 71/99 match. This is not a successful global documentation audit."
+  ],
+  "retained_artifacts": [
+    "target/generation-python-docs-ports/wheels (local validation wheel)",
+    "target/generation-python-docs-ports/installed (local validation install)",
+    "target Cargo build cache (reuse)"
+  ],
+  "canonical_scope_audit_correction": {
+    "authoritative_owner": "docs/architecture/evidence/generation-integration/wp3/oracle-registry-audit.py::check",
+    "semantics": "unique start anchor even when no end anchor; unique ordered end anchor when present; exact Git blob SHA-1 of the valid selected range or whole file",
+    "command": "nix develop -c python3 -B target/generation-python-docs-ports/scope-audit-correction.py",
+    "exit_status": 1,
+    "output": "warning: ignoring untrusted flake configuration setting 'extra-substituters'.\nPass '--accept-flake-config' to trust it\nwarning: ignoring untrusted flake configuration setting 'extra-trusted-public-keys'.\nPass '--accept-flake-config' to trust it\n{\n  \"owner\": \"docs/architecture/evidence/generation-integration/wp3/oracle-registry-audit.py\",\n  \"base_commit\": \"cb585c98a474628ca9c55bb17cf1e680450b8ef9\",\n  \"reviewed_head\": \"e7bbdc1182bf5e99290b38650f5ec57146749206\",\n  \"scopes\": 99,\n  \"base_counts\": {\n    \"missing_start_anchor\": 4,\n    \"valid_scope_digest_mismatch\": 24,\n    \"matches\": 71\n  },\n  \"head_counts\": {\n    \"missing_start_anchor\": 4,\n    \"valid_scope_digest_mismatch\": 24,\n    \"matches\": 71\n  },\n  \"identical_failed_paths_and_classifications\": true,\n  \"status\": \"fail_inherited_registry\"\n}\n",
+    "base": "cb585c98a474628ca9c55bb17cf1e680450b8ef9",
+    "reviewed_head": "e7bbdc1182bf5e99290b38650f5ec57146749206",
+    "scope_count": 99,
+    "base_counts": {
+      "missing_start_anchor": 4,
+      "valid_scope_digest_mismatch": 24,
+      "matches": 71
+    },
+    "reviewed_head_counts": {
+      "missing_start_anchor": 4,
+      "valid_scope_digest_mismatch": 24,
+      "matches": 71
+    },
+    "failure_count": 28,
+    "missing_start_anchors": [
+      {
+        "note": "gammaloop-architecture",
+        "path": "crates/feynkit-generator/src/generation.rs",
+        "symbol": "feynkit_generator::Generator::generate",
+        "end_anchor_present": false
+      },
+      {
+        "note": "gammaloop-architecture",
+        "path": "crates/gammalooprs/src/graph/parse/mod.rs",
+        "symbol": "gammalooprs::graph::Graph DOT import boundary",
+        "end_anchor_present": true
+      },
+      {
+        "note": "linnet-architecture",
+        "path": "crates/linnet/src/half_edge.rs",
+        "symbol": "linnet::half_edge::HedgeGraph",
+        "end_anchor_present": false
+      },
+      {
+        "note": "linnet-architecture",
+        "path": "crates/linnet/src/parser/mod.rs",
+        "symbol": "linnet::parser::DotGraph",
+        "end_anchor_present": false
+      }
+    ],
+    "all_failed_paths_and_classifications_identical_at_base_and_reviewed_head": true,
+    "registry_and_all_scoped_source_bytes_identical_at_base_and_reviewed_head": true,
+    "claim": "Failed global canonical scope audit; inventory and inherited-origin comparison only. Source31 owns semantic registry repair; no hash or anchor refreshed here.",
+    "artifacts": [
+      {
+        "path": "target/generation-python-docs-ports/scope-audit-correction.py",
+        "sha256": "3e60f6799c98f18d4e81eb66820389599c605aa4405a1bfdc3b0e9bbd0984c30"
+      },
+      {
+        "path": "target/generation-python-docs-ports/scope-audit-correction.json",
+        "sha256": "ea1810c13d9469ebfc80e7dd9f083e083e227deef191bdbc58e4668ac64f8ba0"
+      },
+      {
+        "path": "target/generation-python-docs-ports/scope-audit-correction.log",
+        "sha256": "be02fdeaa88c53f7e2949471bff638dccfab21eecc7e95a7622f89739a86f1c9"
+      }
+    ],
+    "new_evidence_tip_delta": {
+      "command": "jj diff --from e7bbdc1182bf5e99290b38650f5ec57146749206 --to @ --name-only --no-pager",
+      "output": "docs/architecture/evidence/generation-integration/wp3/units32-35/receipt.json",
+      "scope_effect": "No registry or scoped source path changed by the metadata-only correction."
+    }
+  },
+  "review_round_1": {
+    "scope_a": {
+      "verdict": "APPROVE",
+      "reviewed_candidate": "e7bbdc1182bf5e99290b38650f5ec57146749206",
+      "record": "target/review-units32-35-astra-a-round1-20261028T091102Z/review.json",
+      "status": "reviewed code unchanged by this receipt correction"
+    },
+    "scope_b": {
+      "verdict": "REQUEST_CHANGES",
+      "finding": "B-R1-01 P2 receipt scope audit classification",
+      "record": "target/review-wp3-32-35-scope-b-r1-H1IJk8eg/review.json",
+      "status": "evidence corrected; NEW independent scope-B rereview pending"
+    }
+  }
+}

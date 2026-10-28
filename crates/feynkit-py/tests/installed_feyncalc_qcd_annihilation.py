@@ -132,7 +132,7 @@ denominator = kinematics.apply(
 assert (denominator - s**2).expand() == E("0")
 squared = (
     diagram.overall_factor_expression(evaluate=True)
-    * diagram.numerator_prefactor_expression()
+    * diagram.numerator_prefactor_expression().to_expression()
     * kinematics.apply(routed)
     / denominator
 ).replace(dA, Nc**2 - 1)

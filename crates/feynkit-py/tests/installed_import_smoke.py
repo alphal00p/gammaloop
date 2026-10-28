@@ -53,8 +53,10 @@ tensor_input = (
     * projector_momentum(mink(dimension, mu))
     * projector_momentum(mink(dimension, nu))
 )
-tensor_reduced = feynkit.TensorReducer(dimension, integrated=[loop_momentum]).reduce(
-    tensor_input
+tensor_reduced = (
+    feynkit.TensorReducer(dimension, integrated=[loop_momentum])
+    .reduce(tensor_input)
+    .to_expression()
 )
 tensor_expected = (
     dot(loop_momentum(mink(dimension)), loop_momentum(mink(dimension)))

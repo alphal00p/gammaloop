@@ -164,7 +164,7 @@ for label, pdgs in (
             .contract(collect_chains=False, collect_traces=False)
         )
         assert scalar.contraction_complete
-        scalar = scalar.to_expression().to_dots()
+        scalar = scalar.to_dots()
         assert scalar.is_scalar
         evaluated.append(
             kin.apply(scalar.to_expression()).replace(u, 4 * mass**2 - s - t).together()

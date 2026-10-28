@@ -40,7 +40,7 @@ mink, dot = S("spenso::mink", "spenso::dot")
 qc, pc = q(mink(d)), p(mink(d))
 shifted_line = 1 / (denominator + 2 * scaling * dot(qc, pc) + scaling**2 * dot(pc, pc))
 taylor = shifted_line.series(scaling, 0, 2).to_expression().replace(scaling, E("1"))
-taylor = hep.TensorReducer(d, integrated=[qc]).reduce(taylor)
+taylor = hep.TensorReducer(d, integrated=[qc]).reduce(taylor).to_expression()
 taylor = (
     taylor.replace(dot(qc, qc), denominator + mass_squared)
     .replace(dot(pc, pc), p_squared)
@@ -106,7 +106,7 @@ for diagram in generated.diagrams:
     numerator = model.expand_couplings(diagram.numerator_expression().to_expression())
     factor = (
         diagram.overall_factor_expression(evaluate=True)
-        * diagram.numerator_prefactor_expression()
+        * diagram.numerator_prefactor_expression().to_expression()
     )
     raw_family = diagram.propagator_family(kinematics=hep.Kinematics(d))
     raw = factor * numerator / (Symbol.I * model_coupling**2)
@@ -134,7 +134,7 @@ for diagram in generated.diagrams:
             family.rewrite_numerator(values[quad_], coordinates),
         )
     scalar = family.rewrite_numerator(
-        external_kinematics.apply(reducer.reduce(expanded)), coordinates
+        external_kinematics.apply(reducer.reduce(expanded).to_expression()), coordinates
     )
     scalar = (scalar * factor / (Symbol.I * model_coupling**2)).together().expand()
     for monomial, coefficient in scalar.coefficient_list(*coordinates):
@@ -358,7 +358,7 @@ for loops, ct_order in [(1, 1), (0, 2)]:
             )
         factor = (
             diagram.overall_factor_expression(evaluate=True)
-            * diagram.numerator_prefactor_expression()
+            * diagram.numerator_prefactor_expression().to_expression()
         )
         numerator = external_kinematics.apply(numerator) * factor
         if loops:
@@ -479,7 +479,7 @@ for diagram in vertex_diagrams:
         (
             expanded
             * diagram.overall_factor_expression(evaluate=True)
-            * diagram.numerator_prefactor_expression()
+            * diagram.numerator_prefactor_expression().to_expression()
             / (Symbol.I * model_coupling**3)
         )
         .together()
@@ -594,7 +594,7 @@ for loops, order in [(1, 1), (0, 2)]:
             )
         numerator *= (
             diagram.overall_factor_expression(evaluate=True)
-            * diagram.numerator_prefactor_expression()
+            * diagram.numerator_prefactor_expression().to_expression()
         )
         if loops:
             scalar = (

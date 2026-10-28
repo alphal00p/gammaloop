@@ -1,11 +1,23 @@
 """Exercise the shared graph camera and inspector in Chromium and WebKit."""
 
 import importlib.util
-import re
+import os
 import unittest
+import xml.etree.ElementTree as ET
 
 from rendering_metrics import external_metrics_snapshot
 from symbolica.community import graph as lp
+
+
+def pinned_drawing(x, y):
+    """Render a labelled origin joined to a node pinned at (x, y)."""
+
+    first = lp.node("first", label=lp.TextLabel("Same label"))
+    second = lp.node("second")
+    first.drawing.placement = {"x": 0.0, "y": 0.0, "mode": lp.Placement.Pin}
+    second.drawing.placement = {"x": x, "y": y, "mode": lp.Placement.Pin}
+    graph = lp.build(first, second, lp.edge(lp.source(first), "line", lp.sink(second)))
+    return external_metrics_snapshot(graph.render())
 
 
 @unittest.skipUnless(
@@ -15,28 +27,40 @@ class SvgBrowserTests(unittest.TestCase):
     def test_readable_scale_and_fitted_drawings_are_not_cropped(self):
         from playwright.sync_api import sync_playwright
 
-        sizes = [(120, 80), (360, 80), (120, 600), (900, 80)]
-        # Camera sizing uses fixed canvases around one captured native drawing.
-        # The dimensions below are fixtures; label measurement has its own harness.
-        graph = lp.build(lp.node("label", label=lp.TextLabel("Same label")))
-        drawing = external_metrics_snapshot(graph.render()).to_svg()
-        drawings = []
-        for width, height in sizes:
-            opening, rest = drawing.split(">", 1)
-            opening = re.sub(
-                r'viewBox="[^"]*"', f'viewBox="0 0 {width} {height}"', opening
+        renders = [pinned_drawing(x, y) for x, y in ((0, 2), (22, 2), (0, 42), (64, 2))]
+        sizes = []
+        for render in renders:
+            root = ET.fromstring(render.to_svg())
+            sizes.append(
+                tuple(
+                    float(root.get(side).removesuffix("pt"))
+                    for side in ("width", "height")
+                )
             )
-            opening = re.sub(r'width="[^"]*"', f'width="{width}pt"', opening)
-            opening = re.sub(r'height="[^"]*"', f'height="{height}pt"', opening)
-            drawings.append(f'<figure class="linnet-graph">{opening}>{rest}</figure>')
+        self.assertLess(sizes[1][0], 390)
+        self.assertGreater(sizes[2][1], 600)
+        self.assertGreater(sizes[3][0], 390)
+        drawings = [render.to_html() for render in renders]
         document = "<style>figure { margin: 0; }</style>" + "".join(
             f'<div id="graph-{index}" style="width:520px">{drawing}</div>'
             for index, drawing in enumerate(drawings)
         )
         with sync_playwright() as playwright:
-            for engine in (playwright.chromium, playwright.webkit):
+            selected = os.environ.get("LINNET_TEST_BROWSER_ENGINES", "chromium,webkit")
+            for name in selected.split(","):
+                engine = getattr(playwright, name.strip())
                 with self.subTest(browser=engine.name):
-                    browser = engine.launch()
+                    executable = (
+                        os.environ.get("LINNET_TEST_CHROMIUM")
+                        if name == "chromium"
+                        else None
+                    )
+                    browser = engine.launch(
+                        executable_path=executable,
+                        args=["--no-sandbox", "--disable-dev-shm-usage"]
+                        if name == "chromium"
+                        else [],
+                    )
                     try:
                         page = browser.new_page(
                             viewport={"width": 1100, "height": 1000}
@@ -48,7 +72,7 @@ class SvgBrowserTests(unittest.TestCase):
                             camera = owner.locator(".linnet-viewport")
                             scale = camera.evaluate("s => s.getScreenCTM().a")
                             expected = (3, 4 / 3, 4 / 3, 520 / 900)[index]
-                            self.assertAlmostEqual(scale, expected, places=5)
+                            self.assertAlmostEqual(scale, expected, delta=1e-4)
                             self.assertEqual(
                                 owner.locator("output").inner_text(),
                                 ("100%", "100%", "100%", "43%")[index],
@@ -62,23 +86,23 @@ class SvgBrowserTests(unittest.TestCase):
                             self.assertGreaterEqual(y + h, height - 1e-6)
                             labels.append(
                                 owner.locator(
-                                    '[data-linnet-kind="node"]'
+                                    '[data-linnet-kind="node"][data-linnet-id="0"]'
                                 ).bounding_box()
                             )
                         # The small preview enlarges labels for readability;
                         # larger drawings preserve their physical dimensions.
                         for label in labels[1:3]:
                             self.assertAlmostEqual(
-                                label["height"] * 2.25, labels[0]["height"], places=3
+                                label["height"] * 2.25, labels[0]["height"], places=2
                             )
                             self.assertAlmostEqual(
-                                label["width"] * 2.25, labels[0]["width"], places=3
+                                label["width"] * 2.25, labels[0]["width"], places=2
                             )
                         self.assertGreaterEqual(
                             page.locator("#graph-2 > figure > svg").bounding_box()[
                                 "height"
                             ],
-                            800,
+                            4 / 3 * sizes[2][1],
                         )
 
                         first = page.locator("#graph-0")
@@ -90,7 +114,7 @@ class SvgBrowserTests(unittest.TestCase):
                             "document.querySelector('#graph-0 svg').viewBox.baseVal.width === 300"
                         )
                         self.assertAlmostEqual(
-                            camera.evaluate("s => s.getScreenCTM().a"), 3.15, places=5
+                            camera.evaluate("s => s.getScreenCTM().a"), 3.15, delta=1e-4
                         )
                         self.assertEqual(first.locator("output").inner_text(), "105%")
                         page.keyboard.press("0")

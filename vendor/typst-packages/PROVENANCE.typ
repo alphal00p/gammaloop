@@ -1,6 +1,8 @@
 = Standalone Typst packages
 
-These vendored packages support standalone Typst documents and documentation builds.
+No current build reads this vendored directory. The documentation build takes
+MiTeX 0.2.6 from its Nix Typst package set; drawing benchmarks use stock
+packages from the Typst package cache.
 No Python display (graph, FeynKit or tensor-network rendering) embeds these packages
 or their WASM plugins; those displays render SVG natively.
 

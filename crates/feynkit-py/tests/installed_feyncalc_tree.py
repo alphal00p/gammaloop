@@ -53,7 +53,6 @@ contracted = (
     .contract(collect_chains=False, collect_traces=False)
     .to_dots()
     .to_expression()
-    .to_expression()
 )
 squared = kin.apply(contracted) * e**4 / s**2
 expected = (
@@ -101,7 +100,6 @@ contracted = (
     traces.simplify_algebra(gamma=False, color=False, epsilon=True)
     .contract(collect_chains=False, collect_traces=False)
     .to_dots()
-    .to_expression()
     .to_expression()
 )
 # Undo the two initial spin averages: each projected state is specified.

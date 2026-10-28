@@ -9,8 +9,8 @@ on:
 permissions:
   contents: read
 
-# The standalone linnet_py wheel was replaced by the shared Symbolica
-# Community host, which ships graph, HEP toolkit and tensor modules together.
+# This builds the shared Symbolica Community host, which ships graph, HEP toolkit
+# and tensor modules together. There is no standalone wheel build in this workflow.
 # Keep full builds on main/manual dispatch; PR performance gating is separate.
 jobs:
   wheel:

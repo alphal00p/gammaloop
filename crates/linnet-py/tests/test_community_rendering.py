@@ -17,7 +17,9 @@ class CommunityRenderingTests(unittest.TestCase):
         diagram = (
             hepkit.Model.phi3()
             .process(["phi"], ["phi", "phi"])
-            .generate_diagrams(loops=0, progress=None)
+            .amplitude(loops=hepkit.Loops.total(0))
+            .generate()
+            .build()
             .diagrams[0]
         )
         network = tensor.TensorNetwork(E("x+2"))
@@ -63,7 +65,9 @@ class CommunityRenderingTests(unittest.TestCase):
         diagrams = (
             hepkit.Model.phi3()
             .process(["phi", "phi"], ["phi", "phi"])
-            .generate_diagrams(loops=0, progress=None)
+            .amplitude(loops=hepkit.Loops.total(0))
+            .generate()
+            .build()
             .diagrams
         )
         diagram = diagrams[0]
@@ -73,7 +77,7 @@ class CommunityRenderingTests(unittest.TestCase):
             (generic.full_subgraph(), 1),
             (diagram, 1),
             (tensor.TensorNetwork(E("x+2")), 1),
-            (hepkit.Amplitude(diagrams[:2]), 2),
+            (hepkit.Amplitude([diagrams[0], diagrams[1]]), 2),
         )
         self.assertFalse(hasattr(hepkit, "AmplitudeRender"))
         with TemporaryDirectory() as directory:
@@ -118,7 +122,9 @@ class CommunityRenderingTests(unittest.TestCase):
         diagram = (
             hepkit.Model.phi3()
             .process(["phi"], ["phi", "phi"])
-            .generate_diagrams(loops=0, progress=None)
+            .amplitude(loops=hepkit.Loops.total(0))
+            .generate()
+            .build()
             .diagrams[0]
         )
         seen = []

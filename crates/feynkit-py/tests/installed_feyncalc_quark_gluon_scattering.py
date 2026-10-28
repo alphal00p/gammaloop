@@ -73,7 +73,7 @@ for boson, count in (("ghG", 1), ("ghG~", 1), ("g", 3)):
         amplitude += (
             numerator
             * diagram.overall_factor_expression(evaluate=True)
-            * diagram.numerator_prefactor_expression()
+            * diagram.numerator_prefactor_expression().to_expression()
             / denominator
         )
     assert all(

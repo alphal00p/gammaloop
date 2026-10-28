@@ -36,29 +36,33 @@ expected = [
 ]
 for index, result in zip([mu, nu, rho, sigma], expected):
     numerator *= k(mink(D, index)) * r(mink(D, index))
-    assert (reducer.reduce(numerator) - result).together() == E("0")
+    assert (reducer.reduce(numerator).to_expression() - result).together() == E("0")
 
 # Spenso compact contractions and explicit Einstein products are equivalent.
 # The external basis p remains fixed; the spectator r is projected.
 for rank, result in enumerate(expected, 1):
-    compact_result = reducer.reduce(dot(kc, rc) ** rank)
+    compact_result = reducer.reduce(dot(kc, rc) ** rank).to_expression()
     assert (compact_result - result).together() == E("0")
-    assert (reducer.reduce(compact_result) - compact_result).together() == E("0")
+    assert (
+        reducer.reduce(compact_result).to_expression() - compact_result
+    ).together() == E("0")
 
 vacuum = fk.TensorReducer(D, integrated=[kc])
-assert vacuum.reduce(dot(kc, rc)) == E("0")
+assert vacuum.reduce(dot(kc, rc)).to_expression() == E("0")
 assert (
-    vacuum.reduce(dot(kc, rc) ** 2) - dot(kc, kc) * dot(rc, rc) / D
+    vacuum.reduce(dot(kc, rc) ** 2).to_expression() - dot(kc, kc) * dot(rc, rc) / D
 ).together() == E("0")
 assert (
-    vacuum.reduce(dot(kc, rc) * k(mink(D, mu))) - dot(kc, kc) * r(mink(D, mu)) / D
+    vacuum.reduce(dot(kc, rc) * k(mink(D, mu))).to_expression()
+    - dot(kc, kc) * r(mink(D, mu)) / D
 ).together() == E("0")
 
 # Scalar loop invariants multiply the projector; they must not themselves be
 # replaced by transverse norms during projection.
 weighted = dot(kc, kc) * k(mink(D, mu))
 assert (
-    reducer.reduce(weighted) - dot(kc, kc) * dot(kc, pc) / dot(pc, pc) * p(mink(D, mu))
+    reducer.reduce(weighted).to_expression()
+    - dot(kc, kc) * dot(kc, pc) / dot(pc, pc) * p(mink(D, mu))
 ).together() == E("0")
 
 # An auxiliary null direction makes the two-vector Gram matrix invertible.
@@ -66,8 +70,10 @@ assert (
 null_kin = (
     fk.Kinematics(D).with_scalar_product(p, p, E("0")).with_scalar_product(r, r, E("0"))
 )
-null_result = fk.TensorReducer(D, integrated=[kc], external=[pc, rc]).reduce(
-    k(mink(D, mu))
+null_result = (
+    fk.TensorReducer(D, integrated=[kc], external=[pc, rc])
+    .reduce(k(mink(D, mu)))
+    .to_expression()
 )
 null_expected = (dot(kc, rc) * p(mink(D, mu)) + dot(kc, pc) * r(mink(D, mu))) / dot(
     pc, rc

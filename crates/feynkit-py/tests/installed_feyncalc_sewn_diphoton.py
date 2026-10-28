@@ -120,7 +120,7 @@ for coordinate_index in (0, 1):
             )
             total += (
                 diagram.overall_factor_expression(evaluate=True)
-                * diagram.numerator_prefactor_expression()
+                * diagram.numerator_prefactor_expression().to_expression()
                 * contracted
                 / denominator
             ).replace(s, 2 * mass**2 - t - u)

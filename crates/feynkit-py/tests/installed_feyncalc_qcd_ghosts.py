@@ -64,7 +64,7 @@ for outgoing, vertices, count in (
         amplitude += (
             numerator
             * diagram.overall_factor_expression(evaluate=True)
-            * diagram.numerator_prefactor_expression()
+            * diagram.numerator_prefactor_expression().to_expression()
             / denominator
         )
     assert all(
