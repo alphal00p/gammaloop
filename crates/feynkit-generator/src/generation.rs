@@ -5357,6 +5357,10 @@ mod tests {
     use serde_json::json;
     use spenso::tensor_symbol;
     use std::array;
+    #[cfg(not(target_arch = "wasm32"))]
+    use std::env;
+    #[cfg(not(target_arch = "wasm32"))]
+    use std::process::Command;
 
     fn test_atom(expression: &str) -> Atom {
         Atom::parse(expression, "UFO", ParseSettings::default()).unwrap()
@@ -6682,7 +6686,7 @@ mod tests {
     #[test]
     fn printed_numerators_and_overall_factors_do_not_depend_on_generation_order() {
         const RUN: &str = "FEYNKIT_GENERATOR_PRINT_TEST_RUN";
-        if let Ok(run) = std::env::var(RUN) {
+        if let Ok(run) = env::var(RUN) {
             let generator = Generator::new(standard_model());
             let generate = |loops, threads| {
                 generator
@@ -6714,7 +6718,7 @@ mod tests {
             return;
         }
         let child = |run: &str| {
-            let output = std::process::Command::new(std::env::current_exe().unwrap())
+            let output = Command::new(env::current_exe().unwrap())
                 .args([
                     "--exact",
                     "generation::tests::printed_numerators_and_overall_factors_do_not_depend_on_generation_order",

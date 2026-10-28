@@ -69,9 +69,9 @@ use thiserror::Error;
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::prelude::*;
 
+use crate::generation::FACTOR_HEADS;
 use crate::{
     DiagramGroup, GenerationOptions, GraphGroupingOptions, GroupMember, NumeratorGrouping,
-    generation::FACTOR_HEADS,
 };
 
 #[derive(Debug, Error)]

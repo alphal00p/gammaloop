@@ -12,14 +12,12 @@ use linnet::half_edge::{
     involution::Orientation,
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
-use symbolica::{
-    atom::{Atom, AtomCore},
-    domains::rational::Rational,
-    id::{Pattern, Replacement},
-    parser::ParseSettings,
-    printer::CanonicalOrderingSettings,
-    symbol, try_symbol,
-};
+use symbolica::atom::{Atom, AtomCore};
+use symbolica::domains::rational::Rational;
+use symbolica::id::{Pattern, Replacement};
+use symbolica::parser::ParseSettings;
+use symbolica::printer::CanonicalOrderingSettings;
+use symbolica::{symbol, try_symbol};
 
 use crate::{
     ComplexValue, EntityKind, EvaluatedValues, EvaluationRequest, ModelError, ModelEvaluator,
