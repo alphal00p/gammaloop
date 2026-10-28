@@ -585,5 +585,21 @@
       "wp3/source31-round2/scope-a-review.json",
       "wp3/source31-round2/scope-b-review.json"
     ]
+  },
+  "main_source31_review": {
+    "candidate": "191aaf7b77018e377a9e5e4e3b9c88357218aa48",
+    "verdict": "APPROVE",
+    "reviewer": "NEW independent Astra combined SOURCE31 round2",
+    "receipt": "docs/architecture/evidence/generation-integration/wp3/main32-35/main31-review.json",
+    "scope": "BothA findings closed; B canonical output approval remains at ECD. Releases32, not wholeWP3."
+  },
+  "active_slice32_35": {
+    "base": "191aaf7b77018e377a9e5e4e3b9c88357218aa48",
+    "code": "2ea39fd3ec164516b8e68775554fa2021998975a",
+    "preparation_base": "cb585c98a474628ca9c55bb17cf1e680450b8ef9",
+    "preparation_tip": "43ef486177335b295bfbbc5474d0da04a0c58c27",
+    "receipt": "docs/architecture/evidence/generation-integration/wp3/main32-35/receipt.json",
+    "status": "Integrated approved cumulative32\u201335; current-source validation in progress; NEW independent Astra combined review required before36.",
+    "extra": "Approved direct native graph_interop builder repair and three staged Community rendering callers included. No aliases, no36."
   }
 }

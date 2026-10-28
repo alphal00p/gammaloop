@@ -1,0 +1,500 @@
+{
+  "schema": 1,
+  "recorded_at_utc": "2026-10-28T09:26:45.003355+00:00",
+  "reviewer": "NEW independent Astra ROUND1, scope B",
+  "verdict": "REQUEST_CHANGES",
+  "scope": "WP3 sources32-35 PREPARATION: wheel/resource prose, native browser camera test, gallery and evidence. Production graph_interop behavior and source35 script behavior remain scope A.",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports",
+  "base": "cb585c98a474628ca9c55bb17cf1e680450b8ef9",
+  "code": "c7ab0d1dd29dfbec194ee3fa24abe05bcfb6e794",
+  "candidate": "e7bbdc1182bf5e99290b38650f5ec57146749206",
+  "candidate_tree": "fe6a268a1b9b5b1d0b49d933911f823bfe7d0226",
+  "code_tree": "a04b2779f2ce68cb770b0df4b0a1d2c37c20700d",
+  "bookmark": "generation-python-docs-ports",
+  "author_and_committer": "Lucien Huber <im@lcnbr.ch>",
+  "findings": [
+    {
+      "id": "B-R1-01",
+      "severity": "P2",
+      "file": "docs/architecture/evidence/generation-integration/wp3/units32-35/receipt.json",
+      "line": 136,
+      "title": "Report the missing start anchors in the claimed canonical scope audit",
+      "details": "The receipt describes a canonical audit checking unique anchors but summarizes all 28 failures as digest mismatches. Exact replay of the canonical owner at crates/alphal00p-docs-builder/src/lib.rs:943 instead has four absent start anchors (three scopes have no end anchor), 24 digest mismatches among the 95 valid scopes, and 71 matches. A missing bounded start cannot be hashed as a valid reviewed range; missing whole-file starts also fail the canonical check even though their whole-file bytes can be hashed. The aggregate total 28 is the same but conceals the additional failure class. No scoped source path or registry entry was changed by this candidate.",
+      "evidence": "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-wp3-32-35-scope-b-r1-H1IJk8eg/canonical-scope-result.json",
+      "absent_anchor_registry_lines": [
+        458,
+        587,
+        1416,
+        1456
+      ],
+      "required_change": "Correct the preparation receipt to record the canonical audit as failed with 4 missing-start errors, 24 valid-scope digest mismatches and 71 matches out of 99; retain a reproducible audit command/script and its nonzero status. Keep all inherited registry repairs assigned to source31 and final combined-head reconciliation; do not refresh their hashes or edit source31 in this lane."
+    }
+  ],
+  "implementation_assessment": {
+    "source32": "No new semantic finding. Three-file port matches present package ownership. The workflow builds the shared host, docsTypst supplies MiTeX 0.2.6 and stock Typst packages, native graph/tensor displays use native SVG/MathML with optional widget/static MIME fallback, and STIX is external through symbolica-data. Historical standalone wheel/Typst renderer notice changes are correctly not resurrected. Current Wasm/source resources and Clarabel/NetworkX/Tiptoe notices remain unchanged.",
+    "source33": "No new semantic finding. Compared original ce9072e4 and native Spec/build owner. Four actual pinned drawings replace edited SVG-size fixtures. Static SVG physical sizes feed shared 4/3 scale/fitting, noncropping, identical node size, tall drawing, keyboard zoom and resize assertions. Fractional tolerances match the original source33 rationale. Existing external_metrics_snapshot supplies fixed 24x12 point label metrics; this is camera coverage, not a browser label-measurement round trip.",
+    "source34": "No new semantic finding. Entire JSON equals original source34 output plus DiagramSet.build after each Request.generate. All non-component fields equal the approved base, preserving tensor/display examples, historical results/qualifications and source35 links. Exactly 61 staged rows reference 35 scripts with real generate/build calls; current installed API members exist. No future WP4/WP5 route or renamed-owner claim was introduced.",
+    "source35_crossreferences": "All 22 changed scripts match exact original source35 bytes, and base bytes match their original predecessors. This establishes faithful historical migration, not execution or physics certification. Scope A owns their behavioral review.",
+    "separate_caller_migration": "Read the source31 frozen completion log confirming 3 Process.generate_diagrams errors among 113 tests with 6 skips. Candidate explicitly identifies the two additional files, including the production graph_interop rewrite. Scope B does not approve that production change based on the three rendering controls."
+  },
+  "identity_and_invariants": {
+    "changed_files": 30,
+    "implementation_files": 29,
+    "inventory_git_blob_sha1": {
+      ".github/workflows/linnet-py-wasm.yml": "314708e014f08e2de17ad15f9a50300c788a44a1",
+      "crates/feynkit-py/src/graph_interop.rs": "09cf86d1cd5d94468ae1ef7b5d12ce3e93a5580f",
+      "crates/feynkit-py/tests/installed_feyncalc_generated_qed.py": "a4ac22072c0e1de353753ba5466c2d72d17cff84",
+      "crates/feynkit-py/tests/installed_feyncalc_ibp_phi4.py": "e3c3899f3340d61dcfbf5d2f9ce45e3c90416afe",
+      "crates/feynkit-py/tests/installed_feyncalc_identical_leptons.py": "d1ba7019ca1166e4178ee1368055443ae11a747e",
+      "crates/feynkit-py/tests/installed_feyncalc_muon_decay.py": "d93122e4b9d77b9f6a4ae039454c8b6769445a45",
+      "crates/feynkit-py/tests/installed_feyncalc_odd_photons.py": "9d289ff551686b9c51735e4254921ad45287983f",
+      "crates/feynkit-py/tests/installed_feyncalc_photon_gluon.py": "6007dc62d7585af3d49ffa4c84b341e5129a6eb7",
+      "crates/feynkit-py/tests/installed_feyncalc_photon_radiation.py": "8b32e7dd1847c0b621c47eeaac53575ad48063b7",
+      "crates/feynkit-py/tests/installed_feyncalc_photon_two_loop.py": "c82f18c9c85de2198cbfe88da290d5830e5409b9",
+      "crates/feynkit-py/tests/installed_feyncalc_polarized_qed.py": "1ff062aacfcb7bd184a546810f50a65907e0783b",
+      "crates/feynkit-py/tests/installed_feyncalc_qcd_annihilation.py": "589676d5513ff419380ff3648b85c890625dab71",
+      "crates/feynkit-py/tests/installed_feyncalc_qcd_ghost_vertex.py": "1d5b444ba867aa38187322d5160501358e3e00e6",
+      "crates/feynkit-py/tests/installed_feyncalc_qcd_ghosts.py": "85ebce537c6fcb1ea76f43b0a6d64356ecdbd6e5",
+      "crates/feynkit-py/tests/installed_feyncalc_quark_gluon_scattering.py": "46a562d3dc5d58045a1aad48208e16cbb8d81bd9",
+      "crates/feynkit-py/tests/installed_feyncalc_sewn_diphoton.py": "fa49b8c27d865f7104e543b99062461c0f6f05ea",
+      "crates/feynkit-py/tests/installed_feyncalc_sewn_qed.py": "0fe85bf8f20b6a9414d433a7452fb1eb19dc678e",
+      "crates/feynkit-py/tests/installed_feyncalc_soft_function.py": "7c8ab62a2d02332457a2378678bbd058e22d1900",
+      "crates/feynkit-py/tests/installed_feyncalc_tensor.py": "858ba0671a5c9ec2e68833c0c2b4890caf5611c9",
+      "crates/feynkit-py/tests/installed_feyncalc_tree.py": "d56367070fd0a2577f98090ad5e2a024588637a1",
+      "crates/feynkit-py/tests/installed_feyncalc_ww.py": "b63dc5dc90f3d750201d6bf85ee357163559b57e",
+      "crates/feynkit-py/tests/installed_import_smoke.py": "ac817afb13b39dfebd5c0a8b0009fb8a210ff1ef",
+      "crates/feynkit-py/tests/installed_tensor_selectors.py": "5dc3b89f03f6c6dc4c7d005bc970c1dede3fde12",
+      "crates/feynkit-py/tests/installed_ufo_ghost_crossing.py": "e6189fd911097d565850f3f1e285deb098a7db3b",
+      "crates/linnet-py/tests/test_community_rendering.py": "84d543ec6c79aec37cdf681ef50459fec88a8745",
+      "crates/linnet-py/tests/test_svg_browser.py": "c5affbd51089f56b46e3374738237ebbf481305d",
+      "docs/architecture/nix-crane-cache-reuse.typ": "ee19864f7cc01dbfd07cfe207b260f7c95899182",
+      "docs/products/feynkit/feyncalc-gallery.json": "42eca3f0866eb21ded619338b63df6c272875a84",
+      "vendor/typst-packages/PROVENANCE.typ": "f518f0b77ac1b98806a73ed9c7273860400a3d97"
+    },
+    "receipt_sha256": "665fd951837809789c794a78a16fe110694500045937c78411abb1b40c46c356",
+    "kernel": {
+      "Cargo.lock": {
+        "graphica": "git+https://github.com/symbolica-dev/symbolica?branch=main#1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+        "numerica": "git+https://github.com/symbolica-dev/symbolica?branch=main#1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+        "symbolica": "git+https://github.com/symbolica-dev/symbolica?branch=main#1a1829b1f3d0a88b53b44085b3b9f34ef77945b3"
+      },
+      "tydenso/Cargo.lock": {
+        "graphica": "git+https://github.com/symbolica-dev/symbolica?branch=main#1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+        "numerica": "git+https://github.com/symbolica-dev/symbolica?branch=main#1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+        "symbolica": "git+https://github.com/symbolica-dev/symbolica?branch=main#1a1829b1f3d0a88b53b44085b3b9f34ef77945b3"
+      },
+      "examples/notebooks/symbolica-host/Cargo.lock": {
+        "graphica": "git+https://github.com/symbolica-dev/symbolica?branch=main#1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+        "numerica": "git+https://github.com/symbolica-dev/symbolica?branch=main#1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+        "symbolica": "git+https://github.com/symbolica-dev/symbolica?branch=main#1a1829b1f3d0a88b53b44085b3b9f34ef77945b3"
+      }
+    },
+    "protected_file_blobs": {
+      "Cargo.lock": "8340c09d9780402372effb23a594523d8b7e8337",
+      "tydenso/Cargo.lock": "ae10b503ef49b56a97d0c6fb295c7d0f42176872",
+      "examples/notebooks/symbolica-host/Cargo.lock": "d11a0fe8e7513e99b70f56cacb2fb77c787e1aa7",
+      "uv.lock": "89586a2b88043244700683e20acbc1e588626a81",
+      "pyproject.toml": "5a84502580570dc42ce862da84ae2447b14e2464",
+      "nix-ci.nix": "48afc8976a9289e1b0b298c942fe16da9209505d",
+      "flake.lock": "c911542bae4a7396ecf759b95107ce0b9fd0fec2"
+    },
+    "host_lock_subset_packages": 463,
+    "nix_ci_enable": false,
+    "chain": "candidate parent = code; code parent = approved base; no source30/31 layer imported",
+    "no_tracked_edits_or_ref_mutations_by_reviewer": true
+  },
+  "reused_artifact": {
+    "wheel_path": "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/generation-python-docs-ports/wheels/symbolica-3.0.1-cp310-abi3-manylinux_2_39_x86_64.whl",
+    "wheel_sha256": "73ee3c1668dca9318320127a1d6655963541bf7d991083044c1e20652790506d",
+    "entries": 20,
+    "native_output_path": "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/examples/notebooks/symbolica-host/target/debug/libcore.so",
+    "native_and_installed_extension_sha256": "d2d9fecf95824ae50d06bb7fe7208489794e47785acd8ff516da66561ea8e7aa",
+    "qualification": "Installed payload equals wheel except installer-updated RECORD; wheel extension equals retained libcore.so. Wheel RECORD sizes and SHA256s verified. Cargo dependency file names this workspace; all 526 local listed inputs equal candidate blobs and predate output. Retained Cargo fingerprints record host default/native and feynkit-py linnet-python/native/ufo features; metadata and SBOM identify local host. Exact fingerprints, dependency input hashes/timestamps and integers retained in audit.json. No build/cache/install mutation was needed.",
+    "notices": [
+      "clarabel-LICENSE",
+      "networkx-LICENSE",
+      "tiptoe-LICENSE"
+    ],
+    "notices_match_source": true,
+    "embedded_stix_font_file": false,
+    "embedded_typst_notice_file": false,
+    "font_resource": {
+      "path": "/nix/store/d7bngsa3jdpq4q7ah6lfl2wf1qxg05xi-gammaloop-render-data/render/fonts/STIXTwoMath-Regular.woff2",
+      "sha256": "e623fcdb808e9a8a27833781f77d5a5ed5c7d5f34830aaa8bcc9fcf8ec32b9c9",
+      "source_bytes_equal": true
+    },
+    "limit": "Local native host fixture only; no final repaired/compressed native, Pyodide or Community distribution certification, no general notices/RECORD release audit."
+  },
+  "fresh_checks": [
+    {
+      "command": "nix develop -c python3 /shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-wp3-32-35-scope-b-r1-H1IJk8eg/audit.py",
+      "exit": 0,
+      "result": "Identity/inventory/gallery/artifact survey completed; canonical failures are explicitly collected, not accepted as a passing gate.",
+      "evidence": "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-wp3-32-35-scope-b-r1-H1IJk8eg/audit.json"
+    },
+    {
+      "command": "nix develop -c python3 /shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-wp3-32-35-scope-b-r1-H1IJk8eg/canonical_scope_check.py",
+      "exit": 1,
+      "result": "99 scopes: 4 absent starts, 24 valid-scope digest mismatches, 71 matches; all inherited.",
+      "evidence": "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-wp3-32-35-scope-b-r1-H1IJk8eg/canonical-scope-result.json"
+    },
+    {
+      "command": [
+        "nix",
+        "develop",
+        "-c",
+        "env",
+        "PYTHONDONTWRITEBYTECODE=1",
+        "PYTHONPATH=target/generation-python-docs-ports/installed:crates/linnet-py/tests",
+        "LINNET_TEST_CHROMIUM=/nix/store/ds6wq0gzyimhl7c1kmzdvql0w4d2rcv4-chromium-153.0.8010.36/bin/chromium",
+        "LINNET_TEST_BROWSER_ENGINES=chromium",
+        "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1",
+        "TMPDIR=/tmp/glb-r1-XAI3xQ",
+        "/nix/store/dl2srz8kkixqpxmdvxkprsb9z5brn5hp-python3-3.13.15-env/bin/python3",
+        "-B",
+        "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-wp3-32-35-scope-b-r1-H1IJk8eg/browser_check.py"
+      ],
+      "exit": 0,
+      "result": {
+        "core": "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/generation-python-docs-ports/installed/symbolica/core.abi3.so",
+        "core_sha256": "d2d9fecf95824ae50d06bb7fe7208489794e47785acd8ff516da66561ea8e7aa",
+        "playwright_version": "1.61.0",
+        "launches": [
+          {
+            "engine": "chromium",
+            "version": "153.0.8010.36",
+            "kwargs": {
+              "executable_path": "/nix/store/ds6wq0gzyimhl7c1kmzdvql0w4d2rcv4-chromium-153.0.8010.36/bin/chromium",
+              "args": [
+                "--no-sandbox",
+                "--disable-dev-shm-usage"
+              ]
+            }
+          }
+        ],
+        "http_requests": [],
+        "documents": [
+          {
+            "sha256": "f3c267f24b5ac44fb682e61c969a674da1f6b5f3915002eaa0829feeaddf0c8b",
+            "embedded_font_data_uri": true,
+            "loaded_fonts": [
+              {
+                "family": "Linnet Offline Math",
+                "status": "loaded"
+              }
+            ]
+          }
+        ],
+        "test": "test_svg_browser.SvgBrowserTests.test_physical_scale_is_shared_and_fitted_drawings_are_not_cropped",
+        "tests_run": 1,
+        "failures": 0,
+        "errors": 0,
+        "skips": [],
+        "success": true
+      },
+      "instrumentation": "Unmodified candidate unittest, with wrappers recording launch/version, denying and recording HTTP(S) requests, recording font loads, and asserting exact imported extension path/SHA. 1 test, 0 skips. Initial attempt with an overly long task TMPDIR failed Chromium Unix socket setup; corrected to an owned short /tmp directory and passed. Initial setup log retained; no candidate defect inferred."
+    },
+    {
+      "command": "nix develop -c python3 /shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-wp3-32-35-scope-b-r1-H1IJk8eg/docs_check.py",
+      "result": [
+        {
+          "name": "provenance-typstyle",
+          "command": [
+            "typstyle",
+            "--check",
+            "vendor/typst-packages/PROVENANCE.typ"
+          ],
+          "returncode": 0
+        },
+        {
+          "name": "provenance-base-typstyle",
+          "command": [
+            "typstyle",
+            "--check"
+          ],
+          "returncode": 0
+        },
+        {
+          "name": "provenance-html",
+          "command": [
+            "typst",
+            "compile",
+            "--root",
+            ".",
+            "--features",
+            "html",
+            "--format",
+            "html",
+            "vendor/typst-packages/PROVENANCE.typ",
+            "target/review-wp3-32-35-scope-b-r1-H1IJk8eg/provenance.html"
+          ],
+          "returncode": 0
+        },
+        {
+          "name": "cache-note-typstyle",
+          "command": [
+            "typstyle",
+            "--check",
+            "docs/architecture/nix-crane-cache-reuse.typ"
+          ],
+          "returncode": 1
+        },
+        {
+          "name": "cache-note-base-typstyle",
+          "command": [
+            "typstyle",
+            "--check"
+          ],
+          "returncode": 1
+        },
+        {
+          "name": "cache-note-html",
+          "command": [
+            "typst",
+            "compile",
+            "--root",
+            ".",
+            "--features",
+            "html",
+            "--format",
+            "html",
+            "docs/architecture/nix-crane-cache-reuse.typ",
+            "target/review-wp3-32-35-scope-b-r1-H1IJk8eg/cache-note.html"
+          ],
+          "returncode": 0
+        },
+        {
+          "name": "kernel-isolation",
+          "command": [
+            "just",
+            "check-symbolica-feature-isolation"
+          ],
+          "returncode": 0
+        }
+      ],
+      "limit": "Two direct Typst HTML renders only, not full docs/site accessibility/publication. Compiler emitted standard experimental HTML warning. Cache-note typstyle fails identically on base and candidate; provenance passes both."
+    },
+    {
+      "command": "nix develop -c env PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=target/generation-python-docs-ports/installed /nix/store/dl2srz8kkixqpxmdvxkprsb9z5brn5hp-python3-3.13.15-env/bin/python3 -B - (AST parse + installed API-member probe)",
+      "exit": 0,
+      "result": {
+        "syntax_files": [
+          "crates/feynkit-py/tests/installed_feyncalc_generated_qed.py",
+          "crates/feynkit-py/tests/installed_feyncalc_ibp_phi4.py",
+          "crates/feynkit-py/tests/installed_feyncalc_identical_leptons.py",
+          "crates/feynkit-py/tests/installed_feyncalc_muon_decay.py",
+          "crates/feynkit-py/tests/installed_feyncalc_odd_photons.py",
+          "crates/feynkit-py/tests/installed_feyncalc_photon_gluon.py",
+          "crates/feynkit-py/tests/installed_feyncalc_photon_radiation.py",
+          "crates/feynkit-py/tests/installed_feyncalc_photon_two_loop.py",
+          "crates/feynkit-py/tests/installed_feyncalc_polarized_qed.py",
+          "crates/feynkit-py/tests/installed_feyncalc_qcd_annihilation.py",
+          "crates/feynkit-py/tests/installed_feyncalc_qcd_ghost_vertex.py",
+          "crates/feynkit-py/tests/installed_feyncalc_qcd_ghosts.py",
+          "crates/feynkit-py/tests/installed_feyncalc_quark_gluon_scattering.py",
+          "crates/feynkit-py/tests/installed_feyncalc_sewn_diphoton.py",
+          "crates/feynkit-py/tests/installed_feyncalc_sewn_qed.py",
+          "crates/feynkit-py/tests/installed_feyncalc_soft_function.py",
+          "crates/feynkit-py/tests/installed_feyncalc_tensor.py",
+          "crates/feynkit-py/tests/installed_feyncalc_tree.py",
+          "crates/feynkit-py/tests/installed_feyncalc_ww.py",
+          "crates/feynkit-py/tests/installed_import_smoke.py",
+          "crates/feynkit-py/tests/installed_tensor_selectors.py",
+          "crates/feynkit-py/tests/installed_ufo_ghost_crossing.py",
+          "crates/linnet-py/tests/test_community_rendering.py",
+          "crates/linnet-py/tests/test_svg_browser.py"
+        ],
+        "installed_api_members": [
+          "Request.generate",
+          "DiagramSet.build",
+          "FeynmanDiagram.half_edges",
+          "TensorReducer.reduce",
+          "TensorExpression.simplify_algebra",
+          "TensorExpression.contract",
+          "TensorExpression.to_dots",
+          "TensorExpression.undo_dots"
+        ],
+        "result": "pass"
+      }
+    }
+  ],
+  "reused_checks": [
+    {
+      "name": "community-rendering",
+      "command": [
+        "/nix/store/dl2srz8kkixqpxmdvxkprsb9z5brn5hp-python3-3.13.15-env/bin/python3",
+        "-B",
+        "-m",
+        "unittest",
+        "test_community_rendering",
+        "-v"
+      ],
+      "exit": 0,
+      "seconds": 1.2931712181307375,
+      "log": "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-units32-35-astra-a-round1-20261028T091102Z/community-rendering.log",
+      "log_sha256": "a2ed0e9ec349ba7fa8f30f93c5f8dfbe6714aa21b90b3666b3adbf72df6fb707",
+      "attribution": "Executed by concurrent scope-A reviewer; read and reused by scope B, not executed by scope B.",
+      "loaded_extension_identity": {
+        "loaded_core": "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/generation-python-docs-ports/installed/symbolica/core.abi3.so",
+        "sha256": "d2d9fecf95824ae50d06bb7fe7208489794e47785acd8ff516da66561ea8e7aa"
+      }
+    },
+    {
+      "name": "installed_graph_interop",
+      "command": [
+        "/nix/store/dl2srz8kkixqpxmdvxkprsb9z5brn5hp-python3-3.13.15-env/bin/python3",
+        "-B",
+        "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/crates/feynkit-py/tests/installed_graph_interop.py"
+      ],
+      "exit": 0,
+      "seconds": 0.9160144480410963,
+      "log": "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-units32-35-astra-a-round1-20261028T091102Z/installed_graph_interop.log",
+      "log_sha256": "0be157334264540f0fe58669fdf333d31234e41d006afc21ce2864fbea16f770",
+      "attribution": "Executed by concurrent scope-A reviewer; read and reused by scope B, not executed by scope B.",
+      "loaded_extension_identity": {
+        "loaded_core": "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/generation-python-docs-ports/installed/symbolica/core.abi3.so",
+        "sha256": "d2d9fecf95824ae50d06bb7fe7208489794e47785acd8ff516da66561ea8e7aa"
+      }
+    },
+    {
+      "name": "installed_subgraph_cache",
+      "command": [
+        "/nix/store/dl2srz8kkixqpxmdvxkprsb9z5brn5hp-python3-3.13.15-env/bin/python3",
+        "-B",
+        "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/crates/feynkit-py/tests/installed_subgraph_cache.py"
+      ],
+      "exit": 0,
+      "seconds": 0.7656415558885783,
+      "log": "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-units32-35-astra-a-round1-20261028T091102Z/installed_subgraph_cache.log",
+      "log_sha256": "98c977e07cbd90f3d8ff73aba0e4a57737b17e0162c421cb33b58ea569c5ed88",
+      "attribution": "Executed by concurrent scope-A reviewer; read and reused by scope B, not executed by scope B.",
+      "loaded_extension_identity": {
+        "loaded_core": "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/generation-python-docs-ports/installed/symbolica/core.abi3.so",
+        "sha256": "d2d9fecf95824ae50d06bb7fe7208489794e47785acd8ff516da66561ea8e7aa"
+      }
+    },
+    {
+      "name": "installed_tensor_selectors",
+      "command": [
+        "/nix/store/dl2srz8kkixqpxmdvxkprsb9z5brn5hp-python3-3.13.15-env/bin/python3",
+        "-B",
+        "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/crates/feynkit-py/tests/installed_tensor_selectors.py"
+      ],
+      "exit": 0,
+      "seconds": 0.6170578319579363,
+      "log": "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-units32-35-astra-a-round1-20261028T091102Z/installed_tensor_selectors.log",
+      "log_sha256": "b2b50f2f9f3907e022ac2eae65042941557e3fc0d7804afa84d908e3479f4a05",
+      "attribution": "Executed by concurrent scope-A reviewer; read and reused by scope B, not executed by scope B.",
+      "loaded_extension_identity": {
+        "loaded_core": "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/generation-python-docs-ports/installed/symbolica/core.abi3.so",
+        "sha256": "d2d9fecf95824ae50d06bb7fe7208489794e47785acd8ff516da66561ea8e7aa"
+      }
+    },
+    {
+      "name": "installed_feyncalc_tensor",
+      "command": [
+        "/nix/store/dl2srz8kkixqpxmdvxkprsb9z5brn5hp-python3-3.13.15-env/bin/python3",
+        "-B",
+        "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/crates/feynkit-py/tests/installed_feyncalc_tensor.py"
+      ],
+      "exit": 0,
+      "seconds": 0.7666805209591985,
+      "log": "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-units32-35-astra-a-round1-20261028T091102Z/installed_feyncalc_tensor.log",
+      "log_sha256": "ad7887584321ffde25259be76d69cc1a8834318e82547637f6fdd7483f98983c",
+      "attribution": "Executed by concurrent scope-A reviewer; read and reused by scope B, not executed by scope B.",
+      "loaded_extension_identity": {
+        "loaded_core": "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/generation-python-docs-ports/installed/symbolica/core.abi3.so",
+        "sha256": "d2d9fecf95824ae50d06bb7fe7208489794e47785acd8ff516da66561ea8e7aa"
+      }
+    },
+    {
+      "name": "installed_import_smoke",
+      "command": [
+        "/nix/store/dl2srz8kkixqpxmdvxkprsb9z5brn5hp-python3-3.13.15-env/bin/python3",
+        "-B",
+        "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/crates/feynkit-py/tests/installed_import_smoke.py"
+      ],
+      "exit": 0,
+      "seconds": 0.6154674149584025,
+      "log": "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-units32-35-astra-a-round1-20261028T091102Z/installed_import_smoke.log",
+      "log_sha256": "4944864142771b40419b4697ce02262096a944f32b4ef2eccc14daf9a491ae5b",
+      "attribution": "Executed by concurrent scope-A reviewer; read and reused by scope B, not executed by scope B.",
+      "loaded_extension_identity": {
+        "loaded_core": "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/generation-python-docs-ports/installed/symbolica/core.abi3.so",
+        "sha256": "d2d9fecf95824ae50d06bb7fe7208489794e47785acd8ff516da66561ea8e7aa"
+      }
+    },
+    {
+      "name": "installed_feyncalc_tree",
+      "command": [
+        "/nix/store/dl2srz8kkixqpxmdvxkprsb9z5brn5hp-python3-3.13.15-env/bin/python3",
+        "-B",
+        "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/crates/feynkit-py/tests/installed_feyncalc_tree.py"
+      ],
+      "exit": 0,
+      "seconds": 1.4174114619381726,
+      "log": "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-units32-35-astra-a-round1-20261028T091102Z/installed_feyncalc_tree.log",
+      "log_sha256": "c8a0e4c7ad4706933cdf0bdc2c0204689112cc2533dc34a76e05ce0da87140cb",
+      "attribution": "Executed by concurrent scope-A reviewer; read and reused by scope B, not executed by scope B.",
+      "loaded_extension_identity": {
+        "loaded_core": "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/generation-python-docs-ports/installed/symbolica/core.abi3.so",
+        "sha256": "d2d9fecf95824ae50d06bb7fe7208489794e47785acd8ff516da66561ea8e7aa"
+      }
+    }
+  ],
+  "evidence_command_assessment": "Original receipt loops/pseudocommands do not by themselves establish each child success; no original per-command logs were retained beside its wheel/install. Reused scope-A evidence was checked per child: seven exit-0 entries, each log beginning with exact imported extension SHA/path, including 3 rendering cases and six scripts. The runner does not aggregate a nonzero final exit, so this review relies on each captured subprocess status, not the final runner exit. Original Clippy is reported by implementer only and was not independently rerun by scope B.",
+  "required_integration_checks": [
+    "Correct the scope-audit evidence finding and obtain fresh independent review of that correction.",
+    "Scope A must independently approve all 22 source35 scripts and the substantive production graph_interop change before sources32-35 preparation overall can clear.",
+    "Integrate only after approved source30 and source31, in order; source31 semantic prep87dfd362 and its separate accessibility repair must be reconciled on the actual combined head.",
+    "Rebind or rebuild through the canonical normal owner when combined source/features/input identity changes; avoid duplicate shared builds/installations.",
+    "Fresh combined-head native Chromium camera, actual community rendering/export, graph interop/cache and relevant installed script checks, applicable Rust Clippy, protected kernel/lock/host-subset/CI invariants and canonical scope audit.",
+    "Complete source31 combined full docs/accessibility and registry reconciliation with independent combined-head Astra review; do not blind-refresh inherited hashes."
+  ],
+  "limits": [
+    "No full docs suite, full physics or performance run.",
+    "18 remaining source35 scripts unrun; no graph-numerator expansion helpers executed in scope B.",
+    "No final distributions, repaired/compressed wheels, Pyodide build, Wasm/SVG/PDF regeneration, publication, push, PR, upload or CI enablement.",
+    "No approval of source30/source31, scope-A production behavior, whole preparation, whole WP3 or final integration."
+  ],
+  "cleanup": {
+    "tracked_edits": false,
+    "refs_changed": false,
+    "builds_or_installs_started": false,
+    "nested_agents": false,
+    "owned_browser_processes_retained": false,
+    "owned_temporary_directories_removed": [
+      "/tmp/glb-r1-XAI3xQ",
+      "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-wp3-32-35-scope-b-r1-H1IJk8eg/tmp"
+    ],
+    "retained": "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-wp3-32-35-scope-b-r1-H1IJk8eg",
+    "reason": "Review JSON, exact identities, audit scripts/results, browser logs and focused rendered pages retained for correction/review. Existing wheel/install, peer evidence and shared Cargo caches preserved."
+  },
+  "retained_evidence_sha256": {
+    "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-wp3-32-35-scope-b-r1-H1IJk8eg/audit.json": "8b7bb4deb2eed593178347b122492b27e3c9a9f7d94617f3e2d4319c9f76a9da",
+    "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-wp3-32-35-scope-b-r1-H1IJk8eg/audit.log": "0e86432acc2c91a8fe29ab1f614def0e6b771f20c14f3ab3f3264be27553bf3c",
+    "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-wp3-32-35-scope-b-r1-H1IJk8eg/audit.py": "328148efb03e56eb146c36e74e13677fc71fbd900c8aea918543c824e5e843e2",
+    "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-wp3-32-35-scope-b-r1-H1IJk8eg/browser-setup-error.json": "1c1c38bc098802317c76f8f76820a5f2ecfac3d5e2c2774000e87bcbb3fe4f74",
+    "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-wp3-32-35-scope-b-r1-H1IJk8eg/browser-setup-error.log": "27fa56f95431e39b24151793680069925ffe01174ef4e17b271ea7bd4f54cf23",
+    "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-wp3-32-35-scope-b-r1-H1IJk8eg/browser.json": "24d6038cf7489aa138fd39cfb56da14619c33b4b1e5bb343baf1e2e0ccfe6774",
+    "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-wp3-32-35-scope-b-r1-H1IJk8eg/browser.log": "3e221d9928f95710f1f0957fad9e464c513f9109a57d5ea402b45221d62ee355",
+    "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-wp3-32-35-scope-b-r1-H1IJk8eg/browser_check.py": "e220c3b2582cedaa4043a464b9a40891a722b611e0746a43845063a241f0d5eb",
+    "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-wp3-32-35-scope-b-r1-H1IJk8eg/cache-note-base-typstyle.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-wp3-32-35-scope-b-r1-H1IJk8eg/cache-note-html.log": "d103175d5ac5ba1d2d4afae2e801958a1e0dafae1b43ffe6f1f44f3783a2f3ce",
+    "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-wp3-32-35-scope-b-r1-H1IJk8eg/cache-note-typstyle.log": "f0d2febc94f992d4c22bbb57f737c5f9246f936a85fd58167e2f246478b5170d",
+    "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-wp3-32-35-scope-b-r1-H1IJk8eg/cache-note.html": "7d65e199942daf03e74f719160c9b08894a3f8641b7d1a49b3d789b4f55e4b44",
+    "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-wp3-32-35-scope-b-r1-H1IJk8eg/canonical-scope-result.json": "368bb4b91811d5d29e911ffee43cbe74522d342453545ab9c04d98e0db444f18",
+    "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-wp3-32-35-scope-b-r1-H1IJk8eg/canonical-scope.log": "727b8c3b82c5d775cc0fe343c18d9fa080019fe61ff8950cad3530ba15a29856",
+    "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-wp3-32-35-scope-b-r1-H1IJk8eg/canonical_scope_check.py": "ca2ee9f2b6295e0b2983e0e9e0e4f74d3173319aac06f65ca5d62967fd8691d1",
+    "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-wp3-32-35-scope-b-r1-H1IJk8eg/docs-checks.json": "b521b3c700c9e0a5055e3462070123f3b627ea16d4c4ae6df36171f434fdfae5",
+    "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-wp3-32-35-scope-b-r1-H1IJk8eg/docs_check.py": "a3c141fb8f78d4470eac2d566375398185a83fb8159ebf99ad3d54a7b3830036",
+    "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-wp3-32-35-scope-b-r1-H1IJk8eg/environment-wheel.log": "1e36bbf2e203aad3e3d75e2142b10529fdd8c5b29c664b48d8274e6e4bfda73f",
+    "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-wp3-32-35-scope-b-r1-H1IJk8eg/kernel-isolation.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-wp3-32-35-scope-b-r1-H1IJk8eg/provenance-base-typstyle.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-wp3-32-35-scope-b-r1-H1IJk8eg/provenance-html.log": "d103175d5ac5ba1d2d4afae2e801958a1e0dafae1b43ffe6f1f44f3783a2f3ce",
+    "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-wp3-32-35-scope-b-r1-H1IJk8eg/provenance-typstyle.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-wp3-32-35-scope-b-r1-H1IJk8eg/provenance.html": "7bc82fcdfdde406966fb612ba55dcf969a5f2b7d4df4eb103b248afb770707ed",
+    "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-wp3-32-35-scope-b-r1-H1IJk8eg/syntax-api.json": "1ef164b7ee3ba98ec19aa62f8ea6a324d1d826eb488ba955853e29d950e58f68",
+    "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-wp3-32-35-scope-b-r1-H1IJk8eg/write_review.py": "0ccfbf13175777e94ff5e82b6b44e2c7cf468db766005412774655aa43cd1653"
+  }
+}

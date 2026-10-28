@@ -1,0 +1,167 @@
+{
+  "schema": 1,
+  "recorded_at_utc": "2026-10-28T09:43:51.219972+00:00",
+  "reviewer": "NEW independent Astra ROUND2, scope B receipt-only rereview",
+  "verdict": "APPROVE",
+  "findings": [],
+  "scope": "Only the receipt correction and continued applicability of qualified ROUND1 A/B preparation checks; no new implementation, ordered main integration or whole-WP3 approval.",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports",
+  "review_json": "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-wp3-32-35-scope-b-r2-dHDFRgYb/review.json",
+  "candidate": "43ef486177335b295bfbbc5474d0da04a0c58c27",
+  "candidate_tree": "2a9820728a110e91111c905a4433041a29e0622a",
+  "change": "lqkntqqwnomwwmroorplkrstlkytzqop",
+  "bookmark": "generation-python-docs-ports",
+  "reviewed_parent": "e7bbdc1182bf5e99290b38650f5ec57146749206",
+  "reviewed_parent_bookmark": "generation-python-docs-ports-reviewed-r1",
+  "code": "c7ab0d1dd29dfbec194ee3fa24abe05bcfb6e794",
+  "base": "cb585c98a474628ca9c55bb17cf1e680450b8ef9",
+  "receipt_sha256": "a25b2e34f65161d7866455b435dac1f112d38985a5fb93c6462211c17633ff86",
+  "receipt_git_blob": "9d08d5297e33c55e4c7d1caa08d6ac42b0ecc2b8",
+  "p2_disposition": {
+    "id": "B-R1-01",
+    "severity": "P2",
+    "status": "resolved",
+    "file": "docs/architecture/evidence/generation-integration/wp3/units32-35/receipt.json",
+    "line": 136,
+    "assessment": "Correctly records canonical global audit FAIL / exit 1, 4 missing start anchors, 24 valid-scope digest mismatches and 71 matches out of 99. Same 28 paths/classifications and exact scoped source/registry bytes at approved base, reviewed parent and corrected candidate. Source31 retains repair ownership; no anchor or digest refreshed.",
+    "owner": "docs/architecture/evidence/generation-integration/wp3/oracle-registry-audit.py::check",
+    "production_owner_checked": "crates/alphal00p-docs-builder/src/lib.rs:943",
+    "semantics": "Exactly one nonempty start is required even without an end; a present end must be nonempty, unique and follow the whole start. Only valid ranges or valid whole-file scopes receive exact Git-blob SHA-1 classification. All four missing starts have zero occurrences, including three unbounded scopes.",
+    "nonzero_status": "Both independent canonical audit and unchanged correction-script replay returned process status 1 through nix develop; shell captured and returned each status. Existing failure evidence remains preserved. No successful-global-audit claim."
+  },
+  "fresh_independent_checks": [
+    {
+      "name": "canonical scope verification",
+      "command": "nix develop -c python3 -B /shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-wp3-32-35-scope-b-r2-dHDFRgYb/canonical_check.py",
+      "exit_status": 1,
+      "result": "Expected inherited global audit failure, not a pass. Exact Git-object reads at three immutable revisions, canonical owner plus independent byte-range/Git-hash verification, 8 boundary probes; all 99 classifications agree and all 28 failures equal corrected artifact and ROUND1 evidence.",
+      "evidence": "canonical-result.json"
+    },
+    {
+      "name": "unchanged correction-script replay",
+      "command": "nix develop -c python3 -B /shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-wp3-32-35-scope-b-r2-dHDFRgYb/replay_correction.py",
+      "exit_status": 1,
+      "result": "Executed exact retained scope-audit-correction.py bytes via runpy. Its sole JSON artifact write was redirected into this new ignored directory, preserving original artifacts. Replay result JSON is byte-identical; stdout JSON equals original output; receipt output equals the retained original log exactly.",
+      "evidence": "replayed-correction.json"
+    },
+    {
+      "name": "receipt, source and retained evidence integrity",
+      "command": "nix develop -c python3 -B /shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-wp3-32-35-scope-b-r2-dHDFRgYb/integrity_check.py",
+      "exit_status": 0,
+      "result": "One-file parent delta and unchanged code; all 3476 tracked files/modes equal frozen candidate, 29 implementation blobs plus receipt match 30-file base inventory; strict duplicate-free integer-aware JSON; three correction artifacts and 49 prior-review/evidence records hashed; whitespace clean; protected locks/manifests/kernel/host subset/CI checked; artifact reuse qualified.",
+      "evidence": "integrity-result.json"
+    }
+  ],
+  "immutable_history": {
+    "chain": "43ef486177335b295bfbbc5474d0da04a0c58c27 -> e7bbdc1182bf5e99290b38650f5ec57146749206 -> c7ab0d1dd29dfbec194ee3fa24abe05bcfb6e794 -> cb585c98a474628ca9c55bb17cf1e680450b8ef9",
+    "only_correction_path": [
+      "docs/architecture/evidence/generation-integration/wp3/units32-35/receipt.json"
+    ],
+    "source30_and_source31_absent_from_candidate": true,
+    "prior_review_sha256": {
+      "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-units32-35-astra-a-round1-20261028T091102Z/review.json": "6f27e50804bc3df6548c9b1009d60282e6679df78ef289f0ce8f7b16c9c1aefc",
+      "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-wp3-32-35-scope-b-r1-H1IJk8eg/review.json": "ac8f057cdf2fb16795d09da4aaba61cc613674a7141a02c343e3e5f8cc18f9d2"
+    },
+    "prior_receipt_sha256": "665fd951837809789c794a78a16fe110694500045937c78411abb1b40c46c356",
+    "assessment": "Historical commands, code/base identities, source32-35 mappings, implementation inventory and local-wheel limitations are preserved. Scope A APPROVE and Scope B REQUEST_CHANGES remain explicitly attributed to immutable e7bbdc11; the correction does not recast them as new runtime results."
+  },
+  "reused_checks": {
+    "scope_b_round1": "Source32 wheel/resource/notices and optional-widget/static-display semantics; 1 genuine offline Chromium test, 0 skips, no HTTP(S) requests, bundled font loaded; 2 changed Typst HTML renders, gallery 61 rows/35 build scripts, syntax/API and kernel checks. No new semantic finding was open in those areas.",
+    "scope_a_round1": "APPROVE for production graph_interop, 22 source35 script migrations/395 preserved assertions and retained community rendering. Reused 3 real rendering tests, 2 graph/cache scripts, 4 selected scripts, 11 graph-boundary scratch cases and formatting/static audit. Seven recorded child statuses and their exact loaded module path/SHA were checked individually; no last-loop-exit inference.",
+    "qualified_original_candidate": "e7bbdc1182bf5e99290b38650f5ec57146749206",
+    "unchanged_code": "c7ab0d1dd29dfbec194ee3fa24abe05bcfb6e794",
+    "wheel_sha256": "73ee3c1668dca9318320127a1d6655963541bf7d991083044c1e20652790506d",
+    "core_sha256": "d2d9fecf95824ae50d06bb7fe7208489794e47785acd8ff516da66561ea8e7aa",
+    "source_binding": "525 scope-A local source inputs and all 526 scope-B listed input rows still match candidate Git blobs; 17 retained feature fingerprints are integer-aware and all live fingerprint hashes still equal retained values. Host features default/native; feynkit-py linnet-python/native/ufo; linnet-py native; pyo3 abi3-py310 and extension-module. Retained producer, installed module and wheel core still agree byte-for-byte.",
+    "resources": "20 wheel entries rehashed against ROUND1; installed members agree except the already-qualified installer RECORD rewrite. Bundled Nix font hash still matches. Clarabel/NetworkX/Tiptoe notices retained; no final native/Pyodide/Community certification.",
+    "not_fresh": "No rebuild, install, browser test, Typst render, physics script or full/cold docs run in ROUND2. Original Clippy remains implementer-reported, not independently rerun or newly certified."
+  },
+  "protected_state": {
+    "kernel": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+    "protected_file_blobs": {
+      "Cargo.lock": "8340c09d9780402372effb23a594523d8b7e8337",
+      "tydenso/Cargo.lock": "ae10b503ef49b56a97d0c6fb295c7d0f42176872",
+      "examples/notebooks/symbolica-host/Cargo.lock": "d11a0fe8e7513e99b70f56cacb2fb77c787e1aa7",
+      "uv.lock": "89586a2b88043244700683e20acbc1e588626a81",
+      "pyproject.toml": "5a84502580570dc42ce862da84ae2447b14e2464",
+      "nix-ci.nix": "48afc8976a9289e1b0b298c942fe16da9209505d",
+      "flake.lock": "c911542bae4a7396ecf759b95107ce0b9fd0fec2"
+    },
+    "host_dependency_subset_packages": 463,
+    "nix_ci_enable": false,
+    "existing_git_refs_changed_during_observation": {},
+    "git_refs_added_by_concurrent_work": {
+      "refs/heads/pr-174-published-20261028": "033910560bc62f9ae34701f0f0ae8b75d3a096a5",
+      "refs/heads/pr-207-published-20261028": "cde4d7da34fc7d11b3e80ce95ecd1b20b0e0dbcb",
+      "refs/jj/keep/2990045ccc658413f2eb2c07fe21e9d811ac4da8": "2990045ccc658413f2eb2c07fe21e9d811ac4da8",
+      "refs/jj/keep/31c70977425ea1b307d4982dff7ea55ce05f29fe": "31c70977425ea1b307d4982dff7ea55ce05f29fe",
+      "refs/jj/keep/67ba533d5f69b9db6ae371c59a355c61a128ebc0": "67ba533d5f69b9db6ae371c59a355c61a128ebc0",
+      "refs/jj/keep/7587d0c768363f200e89250683e7836c867c9b81": "7587d0c768363f200e89250683e7836c867c9b81",
+      "refs/jj/keep/91ed782635557493154bf0c8b2d545539d831085": "91ed782635557493154bf0c8b2d545539d831085",
+      "refs/jj/keep/d1e1576c2baf2fa3fc1aab1575c9e07adeb4ad36": "d1e1576c2baf2fa3fc1aab1575c9e07adeb4ad36"
+    },
+    "jj_bookmarks_changed_by_concurrent_work": {
+      "generation-integration": [
+        "uspzstwl cb585c98 finalize combined sampling27\u201329 review candidate receipts",
+        "rsnwxksq 7587d0c7 finalize source30 combined producer review candidate"
+      ]
+    },
+    "jj_bookmarks_added_by_concurrent_work": {
+      "generation-integration-source30": "rsnwxksq 7587d0c7 finalize source30 combined producer review candidate"
+    },
+    "assessment": "Reviewer used only read-only Git and jj --ignore-working-copy operations. Task candidate and reviewed-parent bookmarks stayed fixed. Other work advanced generation-integration to its source30 candidate and added unrelated preservation refs during this review; these were observed, not changed or imported by this reviewer. All pre-existing Git refs were unchanged."
+  },
+  "preparation_gate": "This APPROVE clears scope B for candidate43ef4861. Together with unchanged-code scope A APPROVE at e7bbdc11, sources32-35 preparation gate is clear. Ordered main integration and full WP3 remain unapproved.",
+  "required_integration_checks": [
+    "Sources30 and31 must pass their own independent gates and precede source32; refresh/reconcile this preparation on their actual ordered combined head.",
+    "Source31 owns semantic registry/accessibility repair. Recheck unique starts/ends and exact reviewed-range Git blob hashes on combined sources; never blanket-refresh inherited drift.",
+    "Qualify combined-head source/features/wheel/module identities through one canonical build owner. Rerun focused native offline Chromium, actual community rendering/export, graph/cache scripts, safe selected scripts, relevant lint/format and protected kernel/lock/host-subset/CI checks.",
+    "Complete combined full documentation/accessibility checks after source31 repairs and obtain NEW independent combined-head Astra review before integration clearance."
+  ],
+  "limits": [
+    "18 source35 scripts remain unrun; no general physics/performance or graph-numerator expansion qualification.",
+    "Canonical global audit still fails with 28 inherited failures. Cache-note Typstyle fails on both base and reviewed candidate; reused provenance formatting and 2 direct renders pass. No full docs claim.",
+    "No final repaired/compressed native, Pyodide or Community distribution, final RECORD/notices, WASM or general release certification.",
+    "No authorization for main integration, publication, push, PR, upload or enabling CI follows from this approval."
+  ],
+  "review_setup_notes": [
+    "Two scratch integrity-harness setup mistakes were corrected: unexported Jujutsu bookmarks must be read through jj, and the standalone host package itself is excluded from the canonical dependency-subset check. Both initial logs/exits are retained; neither was a candidate failure.",
+    "The replay Nix shell emitted an ignored eval-cache SQLite busy diagnostic while both bounded read-only audits were starting. Audit results completed and actual exit 1 propagated; no cache override or deletion was used."
+  ],
+  "cleanup": {
+    "tracked_edits": false,
+    "ref_mutations": false,
+    "nested_agents": false,
+    "builds_or_installs": false,
+    "background_processes_retained": false,
+    "retained": "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-wp3-32-35-scope-b-r2-dHDFRgYb",
+    "ignored_directory_verified": true,
+    "reason": "Review decision, exact identities/hashes, reproducible read-only audits, exit-status logs and initial harness diagnostics retained for parent review and ordered integration. Original reviews/artifacts/shared caches preserved."
+  },
+  "retained_evidence_sha256": {
+    "candidate-after.txt": "9bea22b7c7ff7fc27d81e19c762cc0e11716a7477e5427b5bd8a0787e1a53289",
+    "candidate-before.txt": "9bea22b7c7ff7fc27d81e19c762cc0e11716a7477e5427b5bd8a0787e1a53289",
+    "canonical-result.json": "2005a939bed42cdf259b57135aac318f94adf54f67b49a236e125acf9e193512",
+    "canonical.exit": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+    "canonical.log": "674cc3cdd8f3f0840948ece1fc26c56eb12386f62e6d84d13388e7b3a70b9ae0",
+    "canonical_check.py": "49d97848c8c23645a518b78658bf6da99fa6ce3729711e443eeee7d9705d8850",
+    "git-refs-after.txt": "1ea77d84f79a73a02e51c5394d191708e458bf0a723f8233cc7a4b6d68aa83df",
+    "git-refs-before.txt": "380287d2a92c8a5bd1a0c78036ba5bdd71513c78670bc1b4fa637b1fb644c02a",
+    "integrity-result.json": "bdb9cdae9bc24dde737ac164aa99aa5e2f01c489afdee894379b48e1079c7cfa",
+    "integrity-setup-error-01.exit": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+    "integrity-setup-error-01.log": "a53fc1b7f5d3d8a31ae40920997c2d6b2b95e41ce0585cc2aa6a7e84972077a9",
+    "integrity-setup-error-02.exit": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+    "integrity-setup-error-02.log": "09ff17fe37a3420001017246c2cb6c823cadf422c996d666de9122db44e531f8",
+    "integrity.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "integrity.log": "a9ee5ac8411c04ead4ebacb3223e0127c9c1033dc3913be1f28b65e79329f450",
+    "integrity_check.py": "b3641fe42488d0688bf188fc1b34cafbf2e9669c7baef0a00b1ac091f4b436c0",
+    "jj-bookmarks-after.txt": "2447514871311d9588e6d150c745e9985aedb73d702cd51cf8ce1ebaf1c97c6f",
+    "jj-bookmarks-before.txt": "38c63fbe8af36e463661c85ff7e4122351d5b42445beff05d5975b1f39abcb60",
+    "receipt.diff": "eafd0837c977d00ec0e08960fc14319051b3d69ae161e6ddaacb7005802fa4e2",
+    "replay.exit": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+    "replay.log": "6484c347167007abe840a56f4eeaf9a44a455216385693c90b2ba387c6cf8b0f",
+    "replay_correction.py": "baa3c85f621c9fb5a1a0895b1455891387c93ca9299cd8cf6592df7f24bd6559",
+    "replayed-correction.json": "ea1810c13d9469ebfc80e7dd9f083e083e227deef191bdbc58e4668ac64f8ba0",
+    "write_review.py": "6f0dcb550ac654b815f4e384ddad4348c73d8b46dd64c144347f5823c6479020"
+  }
+}

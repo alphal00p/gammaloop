@@ -304,8 +304,20 @@ own workspace. Bounded: one regression, one bisect, one written verdict.
   precede their digest updates. Seven semantic table headers preserve all data.
   Exact current checks and Git-pinned canonical documentation outcomes are recorded
   in `evidence/generation-integration/wp3/source31-integration/receipt.json`.
-  NEW independent Astra review is required before32. No full WP3, physics,
-  performance, final WASM or distribution approval is implied.
+  Independent Astra APPROVES SOURCE31 at `191aaf7b`; both registry-attestation
+  findings are closed. Canonical output approval remains source-bound to ECD.
+  No full WP3, physics, performance, final WASM or distribution approval is implied.
+
+- #strong[Sources32–35 ordered integration 2026-10-28:]
+  approved cumulative `cb585c98..43ef4861` is reconciled onto `191aaf7b`.
+  Wheel/resource prose retains current native display and notice ownership;
+  the native camera and gallery use current staged/build APIs. All 22 migrated
+  scripts retain 395 assertions; 18 remain unrun. The separately approved native
+  graph export and three retained rendering callers use the current builder.
+  SOURCE31 semantics and all 102 scoped source digests remain valid.
+  Exact current-source checks and canonical Git-backed outcomes are recorded in
+  `evidence/generation-integration/wp3/main32-35/receipt.json`.
+  NEW independent Astra integration review is required before36.
 
 - `jj duplicate` the v4 chain (`kursouxx::kpslpwqz`) onto the WP2 base; do not
   rebase in place, so the 19 live workspaces on older lines stay valid.

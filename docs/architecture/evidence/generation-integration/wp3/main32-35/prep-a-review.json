@@ -1,0 +1,275 @@
+{
+  "schema": 1,
+  "recorded_at_utc": "2026-10-28T09:25:58.489889+00:00",
+  "reviewer": "Fresh independent Astra ROUND1, assigned scope A",
+  "verdict": "APPROVE",
+  "approval_scope": "Preparation only: native graph_interop.rs exporter, all 22 source35 script edits, and three retained community rendering caller migrations. Does not approve scope B or overall preparation/integration.",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports",
+  "review_directory": "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-units32-35-astra-a-round1-20261028T091102Z",
+  "review_json": "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-units32-35-astra-a-round1-20261028T091102Z/review.json",
+  "base": "cb585c98a474628ca9c55bb17cf1e680450b8ef9",
+  "code": "c7ab0d1dd29dfbec194ee3fa24abe05bcfb6e794",
+  "candidate_evidence": "e7bbdc1182bf5e99290b38650f5ec57146749206",
+  "bookmark": "generation-python-docs-ports",
+  "code_change": "ulpllwlpunztnrtmoknovqxprpqospxw",
+  "evidence_change": "lvsvzznp (short JJ ID observed)",
+  "findings": [],
+  "source_inventory": {
+    "implementation_files": 29,
+    "receipt_files": 1,
+    "total_changed_files": 30,
+    "source35_original": "8c12968bde84643623ca2f5099e0175180a73dc6",
+    "source35_files": 22,
+    "all_22_base_files_equal_original_parent_blobs": true,
+    "all_22_candidate_files_equal_original_result_blobs": true,
+    "all_changed_working_files_equal_candidate_blobs": true,
+    "exact_hashes": "identity.json",
+    "source32_33_34_content_review": "Assigned to reviewer B; only global inventory/hash and dependency mapping checked here."
+  },
+  "substantive_review": [
+    {
+      "file": "crates/feynkit-py/src/graph_interop.rs",
+      "lines": [
+        235,
+        317
+      ],
+      "assessment": "Uses existing native Spec/build owner. Node specs precede edge specs and both retain native iterator order; current graph.build adds nodes/edges in that order. Export is from diagram.whole(), preserving full owner for views. Explicit source/sink roles implement paired and dangling endpoints; orientation enum and PyDiagramVertex/PyDiagramEdge payloads survive. Names e{id} and graph name survive. Native half-edge IDs are carried in payloads and inverse maps are rebuilt from live exported IDs; selection and revision checks remain unchanged. No compatibility owner or alternate graph type introduced."
+    },
+    {
+      "file": "crates/feynkit-py/src/graph_interop.rs",
+      "lines": [
+        7,
+        15,
+        253,
+        297
+      ],
+      "assessment": "Added/changed imports are explicit module-scope imports, including PyTuple. New logic introduces no generic floating-point constants and propagates PyErr with ?. No new structured error flattening. Injected exact exception instances from each existing native factory propagate unchanged and a following real export succeeds; mutex/cache lifecycle unchanged."
+    },
+    {
+      "file": "crates/linnet-py/tests/test_community_rendering.py",
+      "lines": [
+        17,
+        22,
+        65,
+        81,
+        122,
+        129
+      ],
+      "assessment": "Faithful staged amplitude(...).generate().build() migration; explicitly indexes lazy diagrams instead of unsupported slicing. No assertion, owner, rendering/export path or callback removed/skipped. All 3 unittest cases and all their subtests execute on real installed native owners. Independently read frozen source31 log: the same 3 cases previously failed on removed Process.generate_diagrams; full log records 113 tests, 3 errors, 6 unrelated skips."
+    },
+    {
+      "file": "crates/feynkit-py/tests",
+      "assessment": "All 22 files audited individually against original source35 and current TensorReducer/TensorExpression/native producer boundaries. ASTs are identical after removing to_expression calls, including all 395 assertions; expansion-call count unchanged in every file. No new expanded whole numerator or pre-#209 display tag. Scalar default prefactors convert to ordinary algebra; reducer results convert where the remaining consumer uses plain algebra; muon/identical-lepton contractions deliberately stay tensor-aware through to_dots/is_scalar. Exact per-script review in script-audit.json."
+    }
+  ],
+  "fresh_checks": [
+    {
+      "name": "community-rendering",
+      "command": [
+        "/nix/store/dl2srz8kkixqpxmdvxkprsb9z5brn5hp-python3-3.13.15-env/bin/python3",
+        "-B",
+        "-m",
+        "unittest",
+        "test_community_rendering",
+        "-v"
+      ],
+      "exit": 0,
+      "seconds": 1.2931712181307375,
+      "log": "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-units32-35-astra-a-round1-20261028T091102Z/community-rendering.log"
+    },
+    {
+      "name": "installed_graph_interop",
+      "command": [
+        "/nix/store/dl2srz8kkixqpxmdvxkprsb9z5brn5hp-python3-3.13.15-env/bin/python3",
+        "-B",
+        "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/crates/feynkit-py/tests/installed_graph_interop.py"
+      ],
+      "exit": 0,
+      "seconds": 0.9160144480410963,
+      "log": "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-units32-35-astra-a-round1-20261028T091102Z/installed_graph_interop.log"
+    },
+    {
+      "name": "installed_subgraph_cache",
+      "command": [
+        "/nix/store/dl2srz8kkixqpxmdvxkprsb9z5brn5hp-python3-3.13.15-env/bin/python3",
+        "-B",
+        "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/crates/feynkit-py/tests/installed_subgraph_cache.py"
+      ],
+      "exit": 0,
+      "seconds": 0.7656415558885783,
+      "log": "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-units32-35-astra-a-round1-20261028T091102Z/installed_subgraph_cache.log"
+    },
+    {
+      "name": "installed_tensor_selectors",
+      "command": [
+        "/nix/store/dl2srz8kkixqpxmdvxkprsb9z5brn5hp-python3-3.13.15-env/bin/python3",
+        "-B",
+        "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/crates/feynkit-py/tests/installed_tensor_selectors.py"
+      ],
+      "exit": 0,
+      "seconds": 0.6170578319579363,
+      "log": "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-units32-35-astra-a-round1-20261028T091102Z/installed_tensor_selectors.log"
+    },
+    {
+      "name": "installed_feyncalc_tensor",
+      "command": [
+        "/nix/store/dl2srz8kkixqpxmdvxkprsb9z5brn5hp-python3-3.13.15-env/bin/python3",
+        "-B",
+        "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/crates/feynkit-py/tests/installed_feyncalc_tensor.py"
+      ],
+      "exit": 0,
+      "seconds": 0.7666805209591985,
+      "log": "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-units32-35-astra-a-round1-20261028T091102Z/installed_feyncalc_tensor.log"
+    },
+    {
+      "name": "installed_import_smoke",
+      "command": [
+        "/nix/store/dl2srz8kkixqpxmdvxkprsb9z5brn5hp-python3-3.13.15-env/bin/python3",
+        "-B",
+        "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/crates/feynkit-py/tests/installed_import_smoke.py"
+      ],
+      "exit": 0,
+      "seconds": 0.6154674149584025,
+      "log": "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-units32-35-astra-a-round1-20261028T091102Z/installed_import_smoke.log"
+    },
+    {
+      "name": "installed_feyncalc_tree",
+      "command": [
+        "/nix/store/dl2srz8kkixqpxmdvxkprsb9z5brn5hp-python3-3.13.15-env/bin/python3",
+        "-B",
+        "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/crates/feynkit-py/tests/installed_feyncalc_tree.py"
+      ],
+      "exit": 0,
+      "seconds": 1.4174114619381726,
+      "log": "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-units32-35-astra-a-round1-20261028T091102Z/installed_feyncalc_tree.log"
+    },
+    {
+      "name": "reviewer graph-boundary probe",
+      "command": "nix develop -c bash -c: PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=target/generation-python-docs-ports/installed RAYON_NUM_THREADS=2 /nix/store/dl2srz8kkixqpxmdvxkprsb9z5brn5hp-python3-3.13.15-env/bin/python3 -B /shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-units32-35-astra-a-round1-20261028T091102Z/graph_boundary_probe.py",
+      "exit": 0,
+      "results": "graph-boundary-results.json",
+      "case_count": 11,
+      "coverage": "Self-loop, dangling incoming/outgoing, directed ghost and anti-ghost lines, both electron-exchange graphs, scalar triangle; Default/Reversed/Undirected; native/exported endpoint and half-edge correspondence, owner sharing, names/payloads and per-half selection round-trips; exact exception/retry for node/source/sink/edge/build."
+    },
+    {
+      "name": "read-only Rust formatting",
+      "command": "nix develop -c rustfmt --check --edition 2024 crates/feynkit-py/src/graph_interop.rs",
+      "exit": 0,
+      "log": "rustfmt.log"
+    },
+    {
+      "name": "script syntax and normalized AST/inventory audit",
+      "command": "nix develop -c python3 -B /shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-units32-35-astra-a-round1-20261028T091102Z/static_audit.py",
+      "exit": 0,
+      "scripts": 22,
+      "assertions": 395,
+      "source_closure_files": 525,
+      "log": "static-audit.log"
+    },
+    {
+      "name": "diff whitespace",
+      "command": "git --git-dir=../main/.git diff --check cb585c98a474628ca9c55bb17cf1e680450b8ef9 e7bbdc1182bf5e99290b38650f5ec57146749206",
+      "exit": 0
+    }
+  ],
+  "artifact_reuse": {
+    "wheel": "target/generation-python-docs-ports/wheels/symbolica-3.0.1-cp310-abi3-manylinux_2_39_x86_64.whl",
+    "wheel_sha256": "73ee3c1668dca9318320127a1d6655963541bf7d991083044c1e20652790506d",
+    "wheel_entries": 20,
+    "loaded_module": "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/generation-python-docs-ports/installed/symbolica/core.abi3.so",
+    "loaded_core_and_producer_sha256": "d2d9fecf95824ae50d06bb7fe7208489794e47785acd8ff516da66561ea8e7aa",
+    "features": {
+      "host": [
+        "default",
+        "native"
+      ],
+      "feynkit_py": [
+        "linnet-python",
+        "native",
+        "ufo"
+      ],
+      "linnet_py": [
+        "native"
+      ],
+      "pyo3": "abi3-py310, extension-module confirmed in retained exact fingerprint"
+    },
+    "qualification": "Producer libcore.so and shared-cache deps/libcore.so bytes equal installed core and wheel member. Host dependency fingerprint integers match retained library fingerprints. Cargo dep file resolves 525 local source inputs, each byte-equal to code commit and mtime before host invocation; graph_interop.rs changed before feynkit-py compilation. Exact fingerprints stored with integer-aware Python JSON in producer-qualification.json. Actual loaded module path/SHA checked in every fresh test subprocess. No build/install/cache mutation performed. Wheel members match install except installer-rewritten RECORD (expected; not distribution certification)."
+  },
+  "reported_not_fresh": {
+    "scoped_clippy": "Implementation receipt reports passing cargo clippy --locked -p feynkit-py --no-default-features --features native,linnet-python,ufo --lib -- -D warnings; not rerun or independently claimed as a new pass. Read-only code-policy review and fresh rustfmt completed.",
+    "browser_prose_catalog_wheel": "Reviewer B owns substantive verification; not approved here."
+  },
+  "limitations": {
+    "unrun_source35_scripts": [
+      "crates/feynkit-py/tests/installed_feyncalc_generated_qed.py",
+      "crates/feynkit-py/tests/installed_feyncalc_ibp_phi4.py",
+      "crates/feynkit-py/tests/installed_feyncalc_identical_leptons.py",
+      "crates/feynkit-py/tests/installed_feyncalc_muon_decay.py",
+      "crates/feynkit-py/tests/installed_feyncalc_odd_photons.py",
+      "crates/feynkit-py/tests/installed_feyncalc_photon_gluon.py",
+      "crates/feynkit-py/tests/installed_feyncalc_photon_radiation.py",
+      "crates/feynkit-py/tests/installed_feyncalc_photon_two_loop.py",
+      "crates/feynkit-py/tests/installed_feyncalc_polarized_qed.py",
+      "crates/feynkit-py/tests/installed_feyncalc_qcd_annihilation.py",
+      "crates/feynkit-py/tests/installed_feyncalc_qcd_ghost_vertex.py",
+      "crates/feynkit-py/tests/installed_feyncalc_qcd_ghosts.py",
+      "crates/feynkit-py/tests/installed_feyncalc_quark_gluon_scattering.py",
+      "crates/feynkit-py/tests/installed_feyncalc_sewn_diphoton.py",
+      "crates/feynkit-py/tests/installed_feyncalc_sewn_qed.py",
+      "crates/feynkit-py/tests/installed_feyncalc_soft_function.py",
+      "crates/feynkit-py/tests/installed_feyncalc_ww.py",
+      "crates/feynkit-py/tests/installed_ufo_ghost_crossing.py"
+    ],
+    "unrun_count": 18,
+    "physics": "No full physics or performance qualification. Exact source35 port does not certify the 18 unrun scripts. Inherited whole-numerator/UV expansion at odd_photons:77, photon_two_loop:169/376, qcd_ghost_vertex:144, sewn_diphoton:96 and soft_function:168/173 remains unqualified and was not executed. Other unrun scripts may be factor-preserving but remain outside fresh execution scope.",
+    "docs": "No full documentation check; source31 accessibility repair and registry reconciliation remain external dependencies.",
+    "graph_permutation": "All successful generated graph probes had identity exported-to-native half-edge maps, though every individual selection round-trip was checked. A manually permuted serialized snapshot with stale routing was correctly rejected by DiagramError before export; it is not evidence for a non-identity export map. Mapping algorithm was not changed by this patch.",
+    "distribution": "Local unrepaired/uncompressed-release debug host wheel only; no native/Pyodide/Community final distribution, final RECORD/notice, WASM or browser certification from scope A."
+  },
+  "required_integration_checks": [
+    "Obtain independent scope B approval; this scope A approval alone does not clear preparation overall.",
+    "Sources30 and31 must pass their own gates and be integrated in order before source32; this candidate directly descends from approved cb585c98 and includes neither.",
+    "Reconcile source31 developer scopes/accessibility changes semantically against the combined source, using unique anchors and exact Git blob hashes; do not refresh inherited drift blindly.",
+    "On the actual combined head, requalify the produced wheel/module source/features/hash and rerun both graph/cache scripts, the 3 retained community rendering tests, 4 safe small scripts, focused offline Chromium test, affected documentation checks and relevant lint/format checks. Coordinate one canonical build owner.",
+    "Complete the planned full docs check after source31 accessibility repair on the combined head; maintain the 18-script/full-physics and final-distribution limitations until separately qualified.",
+    "Obtain fresh independent Astra combined-head review before integration gate clearance; no push/publication/NixCI enablement authorized by this verdict."
+  ],
+  "review_probe_development": "Scratch-only setup corrections were made: Python obtained through Nix; installed RECORD correctly excluded from wheel byte comparison; dep paths normalized before Git lookup. A manually reversed half-edge order with unchanged routing was rejected. The final retained probe treats that malformed snapshot as a negative control and does not claim non-identity mapping coverage. No product change or assertion weakening occurred.",
+  "cleanup": {
+    "tracked_edits": false,
+    "ref_changes": false,
+    "nested_agents": false,
+    "builds_or_installations": false,
+    "background_processes_retained": false,
+    "empty_tmp_removed": true,
+    "retained": "/shared/lcnbr/dev/gammaloop/generation-python-docs-ports/target/review-units32-35-astra-a-round1-20261028T091102Z",
+    "reason": "Read-only review evidence, exact identities, runnable scratch probes and fresh logs needed for parent review/integration. Existing wheel/install and normal Cargo caches preserved.",
+    "nixci_enable": false,
+    "protected_kernel": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+    "lock_and_manifest_changes_in_candidate": false
+  },
+  "retained_evidence_sha256": {
+    "community-rendering.log": "a2ed0e9ec349ba7fa8f30f93c5f8dfbe6714aa21b90b3666b3adbf72df6fb707",
+    "checks.json": "0ad6291e70300845396945ff0c7fa87473e77b25f0a0e14d07fe730a2a3ee471",
+    "identity.json": "d09a8990c29e3bab478ace1115feac0730ad424497e897773fe81fb6656355dd",
+    "write_review.py": "a213a7ff409e304979b1a8ed7a386a7cc606b6da499600319cfb589e725ae126",
+    "installed_feyncalc_tensor.log": "ad7887584321ffde25259be76d69cc1a8834318e82547637f6fdd7483f98983c",
+    "graph-boundary-results.json": "d6c4bd7e3c45eb6610a458ccfeac23a8c8952a9182d0066c003955cf93005796",
+    "run_checks.py": "ebfc02e62246861d75dca6406dc386f47101bbb95ac5ce131cb5ae95099bc40f",
+    "installed_feyncalc_tree.log": "c8a0e4c7ad4706933cdf0bdc2c0204689112cc2533dc34a76e05ce0da87140cb",
+    "inspect_boundaries.py": "c251e630986627568a0fa73d50ae072e119059eed714b9f7c58a8cf519251b23",
+    "installed_subgraph_cache.log": "98c977e07cbd90f3d8ff73aba0e4a57737b17e0162c421cb33b58ea569c5ed88",
+    "static_audit.py": "5c242aaa0630172905d3d8a2f6d028cd89e80b8bed5f52ab79583ad5bf8b4074",
+    "script-audit.json": "03249dec1372704507554fd39ad79b827e8b11b6f4b55f7a85d2e310d04ea5aa",
+    "static-audit.log": "c586529a6886b52aee7e25da18e78d84d930982ee2f43830f6c38b872c5278b2",
+    "identity_audit.py": "7198aaf63088127d505532177022b7f7035ada854d6c149d21737feab74351a2",
+    "installed_import_smoke.log": "4944864142771b40419b4697ce02262096a944f32b4ef2eccc14daf9a491ae5b",
+    "graph_boundary_probe.py": "73398a250d37002521f0a310b32d3d5e45c6eefe9013008189b0a60710d67451",
+    "inspect_boundaries.log": "1d7869a2601ddf86450cb2804d1824932e00c67a1e29c1f178daa06ad934878a",
+    "installed_graph_interop.log": "0be157334264540f0fe58669fdf333d31234e41d006afc21ce2864fbea16f770",
+    "producer-qualification.json": "7f3340551405ebc3b8259b696b59cc12dd43316d46352d0dfb67fdb5f162cd0a",
+    "installed_tensor_selectors.log": "b2b50f2f9f3907e022ac2eae65042941557e3fc0d7804afa84d908e3479f4a05",
+    "graph-boundary.log": "d6c4bd7e3c45eb6610a458ccfeac23a8c8952a9182d0066c003955cf93005796",
+    "rustfmt.log": "9464a53e4daf37cd0daaaeb42f50edc10a5da3ffac6c4f240981125db29d14e8"
+  }
+}
