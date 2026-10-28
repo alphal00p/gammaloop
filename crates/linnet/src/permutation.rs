@@ -9,7 +9,7 @@
 //!   the image of `i`) and its inverse mapping.
 //! - **Construction**:
 //!   - Identity permutation: `Permutation::id(n)`.
-//!   - From a mapping vector: `Permutation::from_map(vec![...])`.
+//!   - From a checked mapping vector: `Permutation::try_from_map(vec![...])`.
 //!   - From disjoint cycles: `Permutation::from_disjoint_cycles(&[vec![...]])`.
 //!   - From potentially overlapping cycles with specified composition order:
 //!     `Permutation::from_cycles_ordered(&[vec![...]], order)`.
@@ -40,21 +40,40 @@
 //! The module is designed to be comprehensive for permutation-related tasks,
 //! including those relevant to combinatorial algorithms and graph theory.
 
-use std::{
-    collections::BTreeMap, fmt, iter::FusedIterator, marker::PhantomData, ops::Index, ptr::NonNull,
-};
+use std::cmp::Ordering;
+use std::collections::BTreeMap;
+use std::fmt::{Display, Formatter, Result as FmtResult};
+use std::iter::FusedIterator;
+use std::marker::PhantomData;
+use std::mem;
+use std::ops::Index;
+use std::ptr::NonNull;
 
-use crate::half_edge::{
-    HedgeGraph, NodeIndex,
-    involution::Hedge,
-    subgraph::{BaseSubgraph, InternalSubGraph, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps},
-};
 use ahash::AHashSet;
+#[cfg(feature = "bincode")]
+use bincode::de::Decoder;
+#[cfg(feature = "bincode")]
+use bincode::error::DecodeError;
+#[cfg(feature = "bincode")]
+use bincode::{impl_borrow_decode, Decode, Encode};
+#[cfg(feature = "serde")]
+use serde::de::Error as DeserializeError;
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Deserializer, Serialize};
 use thiserror::Error;
 
-use crate::half_edge::involution::Flow;
+use crate::half_edge::involution::{Flow, Hedge};
+use crate::half_edge::subgraph::{
+    BaseSubgraph, InternalSubGraph, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps,
+};
+use crate::half_edge::{HedgeGraph, NodeIndex};
 
 /// A permutation of `0..n`, with the ability to apply itself (or its inverse) to slices.
+///
+/// Both mappings are bijections of `0..n` and are each other's inverse. Constructors
+/// and deserializers enforce this invariant, which mutable slice iteration relies on.
+/// Serialized values retain the `map` and `inv` fields; decoding rejects inconsistent pairs.
+/// Use [`Self::try_from_map`] or [`Self::try_from_inv`] for untrusted mappings.
 ///
 /// # Examples
 ///
@@ -70,16 +89,52 @@ use crate::half_edge::involution::Flow;
 /// assert_eq!(permuted, vec![20, 30, 10, 40]);
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "bincode", derive(bincode::Encode, bincode::Decode))]
+#[cfg_attr(feature = "serde", derive(Serialize))]
+#[cfg_attr(feature = "bincode", derive(Encode))]
 pub struct Permutation {
     map: Vec<usize>,
     inv: Vec<usize>,
 }
 
+#[cfg(feature = "serde")]
+#[derive(Deserialize)]
+#[serde(rename = "Permutation")]
+struct PermutationRepr {
+    map: Vec<usize>,
+    inv: Vec<usize>,
+}
+
+#[cfg(feature = "serde")]
+impl<'de> Deserialize<'de> for Permutation {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let repr = PermutationRepr::deserialize(deserializer)?;
+        Self::try_from_parts(repr.map, repr.inv).map_err(D::Error::custom)
+    }
+}
+
+#[cfg(feature = "bincode")]
+impl<Context> Decode<Context> for Permutation {
+    fn decode<D: Decoder<Context = Context>>(decoder: &mut D) -> Result<Self, DecodeError> {
+        let map = Vec::<usize>::decode(decoder)?;
+        let inv = Vec::<usize>::decode(decoder)?;
+        Self::try_from_parts(map, inv).map_err(|error| DecodeError::OtherString(error.to_string()))
+    }
+}
+
+#[cfg(feature = "bincode")]
+impl_borrow_decode!(Permutation);
+
+impl TryFrom<Vec<usize>> for Permutation {
+    type Error = PermutationError;
+
+    fn try_from(map: Vec<usize>) -> Result<Self, Self::Error> {
+        Self::try_from_map(map)
+    }
+}
+
 /// Implement ordering comparisons for permutations based on their `map` field.
 impl PartialOrd for Permutation {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         self.map.partial_cmp(&other.map)
     }
 }
@@ -108,6 +163,11 @@ impl Permutation {
     /// Creates a permutation from a mapping vector.
     /// The `map` vector states where index `i` is sent: `map[i]` is the image of `i`.
     ///
+    /// # Panics
+    ///
+    /// Panics if an image is outside `0..map.len()` or appears more than once.
+    /// See [`Self::try_from_map`] for a fallible alternative.
+    ///
     /// # Examples
     ///
     /// ```
@@ -116,21 +176,111 @@ impl Permutation {
     /// assert_eq!(p.apply_slice(&[10,20,30]), vec![20,30,10]);
     /// ```
     pub fn from_map(map: Vec<usize>) -> Self {
-        let mut inv = vec![0; map.len()];
-        for (i, &j) in map.iter().enumerate() {
-            inv[j] = i;
-        }
-        Permutation { map, inv }
+        Self::try_from_map(map).expect("mapping must be a bijection of 0..map.len()")
     }
 
-    /// Creates a permutation from a inverse mapping vector.
-    /// The `inv` vector states that index `i` is actually `inv[i]`.
-    pub fn from_inv(inv: Vec<usize>) -> Self {
-        let mut map = vec![0; inv.len()];
-        for (i, &j) in inv.iter().enumerate() {
-            map[j] = i;
+    /// Checks a direct mapping and builds its inverse without copying the mapping.
+    ///
+    /// `map[i]` is the image of `i`. Empty mappings are valid. The standard
+    /// `TryFrom<Vec<usize>>` conversion uses this same check.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PermutationError::IndexOutOfRange`] for an image outside `0..map.len()`
+    /// or [`PermutationError::DuplicateImage`] for a repeated image.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use linnet::permutation::{Permutation, PermutationError};
+    ///
+    /// let p = Permutation::try_from_map(vec![2, 0, 1])?;
+    /// assert_eq!(p.inv(), &[1, 2, 0]);
+    /// assert_eq!(Permutation::try_from(vec![2, 0, 1])?, p);
+    /// assert!(matches!(
+    ///     Permutation::try_from_map(vec![0, 0]),
+    ///     Err(PermutationError::DuplicateImage { value: 0, .. })
+    /// ));
+    /// assert!(matches!(
+    ///     Permutation::try_from_map(vec![1]),
+    ///     Err(PermutationError::IndexOutOfRange { index: 0, value: 1, len: 1 })
+    /// ));
+    /// # Ok::<(), PermutationError>(())
+    /// ```
+    pub fn try_from_map(map: Vec<usize>) -> Result<Self, PermutationError> {
+        // Every real index is below map.len(), so map.len() is an unused-slot sentinel.
+        let mut inv = vec![map.len(); map.len()];
+        for (i, &j) in map.iter().enumerate() {
+            if j >= map.len() {
+                return Err(PermutationError::IndexOutOfRange {
+                    index: i,
+                    value: j,
+                    len: map.len(),
+                });
+            }
+            if inv[j] != map.len() {
+                return Err(PermutationError::DuplicateImage {
+                    value: j,
+                    first_index: inv[j],
+                    second_index: i,
+                });
+            }
+            inv[j] = i;
         }
-        Permutation { map, inv }
+        Ok(Self { map, inv })
+    }
+
+    /// Creates a permutation from an inverse mapping: `inv[i]` is the preimage of `i`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if a preimage is outside `0..inv.len()` or appears more than once.
+    /// See [`Self::try_from_inv`] for a fallible alternative and an example.
+    pub fn from_inv(inv: Vec<usize>) -> Self {
+        Self::try_from_inv(inv).expect("inverse mapping must be a bijection of 0..inv.len()")
+    }
+
+    /// Checks an inverse mapping and builds the corresponding direct mapping.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same errors as [`Self::try_from_map`], with indices referring to `inv`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use linnet::permutation::{Permutation, PermutationError};
+    ///
+    /// let p = Permutation::try_from_inv(vec![1, 2, 0])?;
+    /// assert_eq!(p.map(), &[2, 0, 1]);
+    /// assert!(Permutation::try_from_inv(vec![0, 0]).is_err());
+    /// # Ok::<(), PermutationError>(())
+    /// ```
+    pub fn try_from_inv(inv: Vec<usize>) -> Result<Self, PermutationError> {
+        let mut permutation = Self::try_from_map(inv)?;
+        mem::swap(&mut permutation.map, &mut permutation.inv);
+        Ok(permutation)
+    }
+
+    #[cfg(any(feature = "serde", feature = "bincode"))]
+    fn try_from_parts(map: Vec<usize>, inv: Vec<usize>) -> Result<Self, PermutationError> {
+        if map.len() != inv.len() {
+            return Err(PermutationError::InverseLengthMismatch {
+                map_len: map.len(),
+                inv_len: inv.len(),
+            });
+        }
+        let permutation = Self::try_from_map(map)?;
+        for (index, (&expected, &actual)) in permutation.inv.iter().zip(&inv).enumerate() {
+            if expected != actual {
+                return Err(PermutationError::InconsistentInverse {
+                    index,
+                    expected,
+                    actual,
+                });
+            }
+        }
+        Ok(permutation)
     }
 
     /// Creates a permutation from (from,to) pairs, minimizing swaps among all valid completions.
@@ -138,10 +288,6 @@ impl Permutation {
     where
         I: IntoIterator<Item = (usize, usize)>,
     {
-        if size == 0 {
-            return Ok(Self::id(0));
-        }
-
         // Identity to start from
         let mut map: Vec<usize> = (0..size).collect();
 
@@ -241,7 +387,7 @@ impl Permutation {
         // 4) Final uniqueness check
         let mut seen = vec![false; size];
         for &to in &map {
-            if to >= size || std::mem::replace(&mut seen[to], true) {
+            if to >= size || mem::replace(&mut seen[to], true) {
                 return Err("Failed to create valid permutation".to_string());
             }
         }
@@ -276,10 +422,6 @@ impl Permutation {
     where
         I: IntoIterator<Item = usize>,
     {
-        if size == 0 {
-            return Ok(Self::id(0));
-        }
-
         // Collect sources and validate in O(n+k)
         let src_vec: Vec<usize> = sources.into_iter().collect();
         let k = src_vec.len();
@@ -292,7 +434,7 @@ impl Permutation {
             if s >= size {
                 return Err(format!("Source {s} out of bounds for size {size}"));
             }
-            if std::mem::replace(&mut seen_source[s], true) {
+            if mem::replace(&mut seen_source[s], true) {
                 return Err(format!("Duplicate source index {s}"));
             }
         }
@@ -387,7 +529,7 @@ impl Permutation {
         // 4) Verify permutation validity
         let mut seen = vec![false; size];
         for &to in &map {
-            if to >= size || std::mem::replace(&mut seen[to], true) {
+            if to >= size || mem::replace(&mut seen[to], true) {
                 return Err("Construction failed: duplicate or OOB target".into());
             }
         }
@@ -614,7 +756,7 @@ impl Permutation {
     /// assert_eq!(data, vec![110, 220, 30]);
     /// ```
     pub fn iter_slice_mut<'a, T>(&'a self, slice: &'a mut [T]) -> PermutationMapIterMut<'a, T> {
-        PermutationMapIterMut::new(slice, &self.map)
+        PermutationMapIterMut::new(slice, self, PermutationDirection::Direct)
     }
 
     /// Returns a mutable iterator that yields mutable references to the elements of the slice
@@ -640,7 +782,7 @@ impl Permutation {
     /// assert_eq!(data, vec![210, 20, 130]);
     /// ```
     pub fn iter_slice_inv_mut<'a, T>(&'a self, slice: &'a mut [T]) -> PermutationMapIterMut<'a, T> {
-        PermutationMapIterMut::new(slice, &self.inv)
+        PermutationMapIterMut::new(slice, self, PermutationDirection::Inverse)
     }
 
     // --------------------------------------------------------------------------------------------
@@ -779,7 +921,7 @@ impl Permutation {
     /// ```
     pub fn myrvold_ruskey_rank1(mut self) -> usize {
         let n = self.map.len();
-        if self.map.len() == 1 {
+        if n <= 1 {
             return 0;
         }
 
@@ -827,7 +969,7 @@ impl Permutation {
     /// ```
     pub fn myrvold_ruskey_rank2(mut self) -> usize {
         let n = self.map.len();
-        if n == 1 {
+        if n <= 1 {
             return 0;
         }
         let s = self.map[n - 1];
@@ -944,8 +1086,8 @@ pub enum CycleOrder {
     FirstFirst,
 }
 
-impl fmt::Display for Permutation {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Display for Permutation {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         // First show cycle notation
         let cycles = self.find_cycles();
         let mut first = true;
@@ -984,39 +1126,57 @@ impl fmt::Display for Permutation {
 }
 
 impl Permutation {
+    fn cycle_domain_len(cycles: &[Vec<usize>]) -> Result<usize, PermutationError> {
+        cycles.iter().flatten().max().map_or(Ok(0), |&index| {
+            index
+                .checked_add(1)
+                .ok_or(PermutationError::CycleIndexOverflow { index })
+        })
+    }
+
     /// Creates a permutation from a set of disjoint cycles.
     /// Each cycle should be a `Vec<usize>` representing indices in the cycle.
     /// The cycles must be disjoint (no shared elements).
     ///
+    /// # Errors
+    ///
+    /// Returns [`PermutationError::NonDisjointCycles`] for a repeated index (including
+    /// within one cycle), or [`PermutationError::CycleIndexOverflow`] if the largest
+    /// index cannot be incremented to form the permutation size.
+    ///
     /// # Examples
     ///
     /// ```
-    /// # use linnet::permutation::Permutation;
+    /// use linnet::permutation::{Permutation, PermutationError};
     /// let cycles = vec![vec![0, 1, 2], vec![3, 4]];
-    /// let p = Permutation::from_disjoint_cycles(&cycles).unwrap();
+    /// let p = Permutation::from_disjoint_cycles(&cycles)?;
     /// assert_eq!(p.map(), &[1, 2, 0, 4, 3]);
     ///
     /// // Error if cycles are not disjoint
     /// let invalid = vec![vec![0, 1], vec![1, 2]];
-    /// assert!(Permutation::from_disjoint_cycles(&invalid).is_err());
+    /// assert_eq!(
+    ///     Permutation::from_disjoint_cycles(&invalid),
+    ///     Err(PermutationError::NonDisjointCycles {
+    ///         index: 1, first_cycle: 0, second_cycle: 1,
+    ///     })
+    /// );
+    /// # Ok::<(), PermutationError>(())
     /// ```
-    pub fn from_disjoint_cycles(cycles: &[Vec<usize>]) -> Result<Self, String> {
-        // Find the size of the permutation (maximum index + 1)
-        let n = cycles
-            .iter()
-            .flat_map(|cycle| cycle.iter())
-            .max()
-            .map(|&max| max + 1)
-            .unwrap_or(0);
+    pub fn from_disjoint_cycles(cycles: &[Vec<usize>]) -> Result<Self, PermutationError> {
+        let n = Self::cycle_domain_len(cycles)?;
 
         // Check for duplicates across cycles
-        let mut seen = vec![false; n];
-        for cycle in cycles {
-            for &idx in cycle {
-                if seen[idx] {
-                    return Err("Cycles are not disjoint".to_string());
+        let mut seen = vec![None; n];
+        for (cycle_index, cycle) in cycles.iter().enumerate() {
+            for &index in cycle {
+                if let Some(first_cycle) = seen[index] {
+                    return Err(PermutationError::NonDisjointCycles {
+                        index,
+                        first_cycle,
+                        second_cycle: cycle_index,
+                    });
                 }
-                seen[idx] = true;
+                seen[index] = Some(cycle_index);
             }
         }
 
@@ -1037,47 +1197,95 @@ impl Permutation {
 
         Ok(Permutation::from_map(map))
     }
-    /// Creates a permutation from any set of cycles with specified reading order.
+    /// Creates a permutation from cycles with specified reading order.
+    /// Cycles may overlap, but each individual cycle must contain distinct indices.
+    /// See [`Self::try_from_cycles_ordered`] for a fallible alternative and examples.
+    ///
+    /// # Panics
+    ///
+    /// Panics if a cycle repeats an index or the largest index cannot be incremented.
     pub fn from_cycles_ordered(cycles: &[Vec<usize>], order: CycleOrder) -> Self {
-        // Find the size of the permutation
-        let n = cycles
-            .iter()
-            .flat_map(|cycle| cycle.iter())
-            .max()
-            .map(|&max| max + 1)
-            .unwrap_or(0);
+        Self::try_from_cycles_ordered(cycles, order)
+            .expect("each cycle must contain distinct indices that fit in a permutation")
+    }
 
-        // Start with identity permutation
-        let mut result = Permutation::id(n);
+    /// Checks cycles and composes them in the specified order, fixing unlisted indices.
+    ///
+    /// Indices may be shared between cycles but must be distinct within each cycle.
+    /// Empty and singleton cycles do not move indices. The size is one more than the
+    /// largest index, or zero if all cycles are empty.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PermutationError::RepeatedCycleIndex`] if an index repeats within a
+    /// cycle, or [`PermutationError::CycleIndexOverflow`] if the largest index cannot
+    /// be incremented. Error cycle numbers refer to the original input order.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use linnet::permutation::{CycleOrder, Permutation, PermutationError};
+    ///
+    /// let cycles = [vec![0, 1], vec![1, 2]];
+    /// let right_first = Permutation::try_from_cycles_ordered(&cycles, CycleOrder::LastFirst)?;
+    /// let left_first = Permutation::try_from_cycles_ordered(&cycles, CycleOrder::FirstFirst)?;
+    /// assert_eq!(right_first.map(), &[1, 2, 0]);
+    /// assert_eq!(left_first.map(), &[2, 0, 1]);
+    /// assert_eq!(
+    ///     Permutation::try_from_cycles_ordered(&[vec![1, 1]], CycleOrder::FirstFirst),
+    ///     Err(PermutationError::RepeatedCycleIndex { cycle: 0, index: 1 })
+    /// );
+    /// # Ok::<(), PermutationError>(())
+    /// ```
+    pub fn try_from_cycles_ordered(
+        cycles: &[Vec<usize>],
+        order: CycleOrder,
+    ) -> Result<Self, PermutationError> {
+        let n = Self::cycle_domain_len(cycles)?;
+        let mut result = Self::id(n);
 
-        // Choose iteration order based on CycleOrder
-        let cycle_iter: Box<dyn Iterator<Item = &Vec<usize>>> = match order {
-            CycleOrder::LastFirst => Box::new(cycles.iter().rev()),
-            CycleOrder::FirstFirst => Box::new(cycles.iter()),
-        };
-
-        // Apply cycles in specified order
-        for cycle in cycle_iter {
+        for step in 0..cycles.len() {
+            let cycle_index = match order {
+                CycleOrder::LastFirst => cycles.len() - 1 - step,
+                CycleOrder::FirstFirst => step,
+            };
+            let cycle = &cycles[cycle_index];
             if cycle.len() <= 1 {
                 continue;
             }
 
             // Create a single cycle permutation
-            let mut cycle_map = (0..n).collect::<Vec<_>>();
+            let mut cycle_map = vec![n; n];
             for i in 0..cycle.len() {
                 let from = cycle[i];
                 let to = cycle[(i + 1) % cycle.len()];
+                if cycle_map[from] != n {
+                    return Err(PermutationError::RepeatedCycleIndex {
+                        cycle: cycle_index,
+                        index: from,
+                    });
+                }
                 cycle_map[from] = to;
+            }
+            for (index, image) in cycle_map.iter_mut().enumerate() {
+                if *image == n {
+                    *image = index;
+                }
             }
             let cycle_perm = Permutation::from_map(cycle_map);
             result = cycle_perm.compose(&result);
         }
 
-        result
+        Ok(result)
     }
 
     /// Creates a permutation from cycles using right-to-left reading order (default).
-    /// Equivalent to `from_cycles_ordered(cycles, CycleOrder::RightToLeft)`.
+    /// Equivalent to `from_cycles_ordered(cycles, CycleOrder::LastFirst)`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if a cycle repeats an index or the largest index cannot be incremented.
+    /// See [`Self::try_from_cycles`] for a fallible alternative.
     ///
     /// # Examples
     ///
@@ -1088,13 +1296,58 @@ impl Permutation {
     /// assert_eq!(p.map(), &[1, 0, 2]);
     /// ```
     pub fn from_cycles(cycles: &[Vec<usize>]) -> Self {
-        Self::from_cycles_ordered(cycles, CycleOrder::LastFirst)
+        Self::try_from_cycles(cycles)
+            .expect("each cycle must contain distinct indices that fit in a permutation")
+    }
+
+    /// Checks cycles and composes them from right to left.
+    ///
+    /// Equivalent to [`Self::try_from_cycles_ordered`] with [`CycleOrder::LastFirst`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PermutationError::RepeatedCycleIndex`] if an index repeats within a
+    /// cycle, or [`PermutationError::CycleIndexOverflow`] if the largest index cannot
+    /// be incremented. Overlap between different cycles is allowed.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use linnet::permutation::{Permutation, PermutationError};
+    ///
+    /// let p = Permutation::try_from_cycles(&[vec![0, 1, 2], vec![1, 2]])?;
+    /// assert_eq!(p.map(), &[1, 0, 2]);
+    /// assert_eq!(
+    ///     Permutation::try_from_cycles(&[vec![usize::MAX]]),
+    ///     Err(PermutationError::CycleIndexOverflow { index: usize::MAX })
+    /// );
+    /// # Ok::<(), PermutationError>(())
+    /// ```
+    pub fn try_from_cycles(cycles: &[Vec<usize>]) -> Result<Self, PermutationError> {
+        Self::try_from_cycles_ordered(cycles, CycleOrder::LastFirst)
     }
 
     pub fn length(&self) -> usize {
         self.map.len()
     }
 
+    /// Generates the group spanned by permutations of the same size.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PermutationError::EmptyGenerators`] if no generators are supplied,
+    /// or [`PermutationError::InvalidGeneratorLength`] if their sizes differ.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use linnet::permutation::{Permutation, PermutationError};
+    ///
+    /// let swap = Permutation::try_from_map(vec![1, 0])?;
+    /// assert_eq!(Permutation::generate_all(&[swap])?.len(), 2);
+    /// assert_eq!(Permutation::generate_all(&[]), Err(PermutationError::EmptyGenerators));
+    /// # Ok::<(), PermutationError>(())
+    /// ```
     pub fn generate_all(generators: &[Permutation]) -> Result<Vec<Permutation>, PermutationError> {
         let size = if let Some(generator) = generators.first() {
             generator.length()
@@ -1122,11 +1375,88 @@ impl Permutation {
     }
 }
 
-#[derive(Error, Debug)]
+/// Failures when checking mappings or cycles, or generating a permutation group.
+///
+/// See [`Permutation::try_from_map`] for checked-construction examples. Generated
+/// typed-vector conversions also report [`Self::MissingMapping`] for absent entries;
+/// decoding reports length and inverse inconsistencies instead of admitting invalid values.
+///
+/// # Examples
+///
+/// ```
+/// use linnet::half_edge::involution::{EdgeIndex, EdgeVec};
+/// use linnet::permutation::{Permutation, PermutationError};
+///
+/// let incomplete = EdgeVec::from(vec![Some(EdgeIndex(0)), None]);
+/// assert_eq!(
+///     Permutation::try_from(incomplete),
+///     Err(PermutationError::MissingMapping { index: 1 })
+/// );
+/// # #[cfg(feature = "serde")]
+/// # {
+/// // Both a wrong inverse and a wrong inverse length are rejected during decoding.
+/// for input in [r#"{"map":[1,0],"inv":[0,1]}"#, r#"{"map":[0],"inv":[]}"#] {
+///     assert!(serde_json::from_str::<Permutation>(input).is_err());
+/// }
+/// # }
+/// ```
+#[derive(Error, Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum PermutationError {
+    /// An entry is outside the mapping's index domain. See [`Permutation::try_from_map`].
+    #[error("Mapping entry {index} has image {value}, outside 0..{len}")]
+    IndexOutOfRange {
+        index: usize,
+        value: usize,
+        len: usize,
+    },
+
+    /// Two entries have the same image. See [`Permutation::try_from_map`].
+    #[error("Image {value} is repeated at indices {first_index} and {second_index}")]
+    DuplicateImage {
+        value: usize,
+        first_index: usize,
+        second_index: usize,
+    },
+
+    /// An index cannot fit in the cycle domain. See [`Permutation::try_from_cycles`].
+    #[error("Cycle index {index} cannot be incremented to form a permutation size")]
+    CycleIndexOverflow { index: usize },
+
+    /// A cycle repeats an index. See [`Permutation::try_from_cycles_ordered`].
+    #[error("Cycle {cycle} repeats index {index}")]
+    RepeatedCycleIndex { cycle: usize, index: usize },
+
+    /// Disjoint cycles repeat an index. See [`Permutation::from_disjoint_cycles`].
+    /// The cycle numbers are equal when the repetition is within one cycle.
+    #[error("Index {index} occurs in both cycle {first_cycle} and cycle {second_cycle}")]
+    NonDisjointCycles {
+        index: usize,
+        first_cycle: usize,
+        second_cycle: usize,
+    },
+
+    /// Serialized mappings have different lengths. See [`PermutationError`].
+    #[error("Mapping length {map_len} differs from inverse length {inv_len}")]
+    InverseLengthMismatch { map_len: usize, inv_len: usize },
+
+    /// A serialized inverse disagrees with the checked direct mapping. See [`PermutationError`].
+    #[error("Inverse entry {index} is {actual}, expected {expected}")]
+    InconsistentInverse {
+        index: usize,
+        expected: usize,
+        actual: usize,
+    },
+
+    /// A typed-vector entry has no image. See [`PermutationError`].
+    #[error("Missing mapping at index {index}")]
+    MissingMapping { index: usize },
+
+    /// Generators have different sizes. See [`Permutation::generate_all`].
     #[error("Invalid generator length")]
     InvalidGeneratorLength,
 
+    /// No generator establishes a group size. See [`Permutation::generate_all`].
     #[error("Empty generators")]
     EmptyGenerators,
 }
@@ -1135,14 +1465,12 @@ pub trait HedgeGraphExt {
     fn hedges_between(&self, a: NodeIndex, b: NodeIndex) -> SuBitGraph;
 
     fn permute_subgraph<S: SubSetLike>(&self, subgraph: &S, hedge_perm: &Permutation)
-    -> SuBitGraph;
+        -> SuBitGraph;
 
     fn orientation_ord(&self, hedge: Hedge) -> u8;
 }
 
 pub trait PermutationExt<Orderer: Ord = ()> {
-    // fn from_disjoint_cycles(cycles: &[Vec<usize>]) -> Result<Self, String>;
-    //
     type Output;
     type Edges;
 
@@ -1343,6 +1671,16 @@ impl<E, V, H, O: Ord> PermutationExt<O> for HedgeGraph<E, V, H> {
     }
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+enum PermutationDirection {
+    Direct,
+    Inverse,
+}
+
+/// An exclusive iterator over slice elements in direct or inverse permutation order.
+///
+/// See [`Permutation::iter_slice_mut`] and [`Permutation::iter_slice_inv_mut`] for
+/// construction examples. Yielded references may outlive the iterator.
 #[derive(Debug)]
 pub struct PermutationMapIterMut<'a, T: 'a> {
     ptr: NonNull<T>,
@@ -1353,15 +1691,21 @@ pub struct PermutationMapIterMut<'a, T: 'a> {
 }
 
 impl<'a, T: 'a> PermutationMapIterMut<'a, T> {
-    fn new(slice: &'a mut [T], map_indices: &'a [usize]) -> Self {
-        let slice_len = slice.len();
-        // This check also guarantees that every index in `map_indices` is valid for `slice`,
-        // assuming the permutation map itself does not contain duplicated or otherwise invalid entries.
-        if let Some(max_index) = max_out_of_bounds_index(map_indices, slice_len) {
-            panic!(
-                "Slice length ({slice_len}) is too short for all indices in permutation map. Max index in map: Some({max_index})"
-            );
-        }
+    fn new(
+        slice: &'a mut [T],
+        permutation: &'a Permutation,
+        direction: PermutationDirection,
+    ) -> Self {
+        assert!(
+            slice.len() >= permutation.length(),
+            "Slice length ({}) is too short for permutation length ({})",
+            slice.len(),
+            permutation.length(),
+        );
+        let map_indices = match direction {
+            PermutationDirection::Direct => permutation.map(),
+            PermutationDirection::Inverse => permutation.inv(),
+        };
         PermutationMapIterMut {
             ptr: NonNull::new(slice.as_mut_ptr()).expect("Slice pointer cannot be null"),
             map_indices,
@@ -1382,13 +1726,13 @@ impl<'a, T> Iterator for PermutationMapIterMut<'a, T> {
             let perm_idx = self.map_indices[self.current_map_idx];
             self.current_map_idx += 1;
             self.len -= 1;
-            // SAFETY:
-            // - `ptr` is valid and non-null for the lifetime 'a.
-            // - `perm_idx` is an index from the permutation's map.
-            // - `PermutationMapIterMut::new` asserts that `slice.len()` is sufficient,
-            //   and that all `map_indices` are valid for a slice of length `map_indices.len()`.
-            // - Each call to `next` uses a unique index from `map_indices`,
-            //   yielding a mutable reference to a distinct element.
+            // SAFETY: `ptr` comes from the exclusively borrowed slice, which remains
+            // alive and inaccessible through other paths for 'a. `new` requires a
+            // validated Permutation and checks its length against the slice. Both its
+            // maps are bijections, so indices are unique and in bounds. The cursor only
+            // advances, and the iterator cannot be cloned, hence each element is
+            // yielded at most once even when earlier references outlive the iterator.
+            // This also holds for ZSTs: distinct indexed elements occupy no bytes.
             unsafe { Some(&mut *self.ptr.as_ptr().add(perm_idx)) }
         }
     }
@@ -1480,7 +1824,8 @@ impl Index<usize> for Permutation {
 
 #[cfg(test)]
 mod tests {
-    use crate::half_edge::{builder::HedgeGraphBuilder, involution::Flow};
+    use crate::half_edge::builder::HedgeGraphBuilder;
+    use crate::half_edge::involution::Flow;
 
     use super::*;
 
@@ -1668,23 +2013,22 @@ mod tests {
     #[test]
     fn test_iter_slice_panic_too_short() {
         let p = Permutation::from_map(vec![0, 1, 2]); // Needs slice of length at least 3
-        // The iterator constructors panic on this condition; the helper lets us check it directly.
+                                                      // The iterator constructors panic on this condition; the helper lets us check it directly.
         assert_eq!(max_out_of_bounds_index(&p.map, 2), Some(2));
     }
 
     #[test]
     fn test_iter_slice_panic_map_idx_out_of_bounds() {
-        // This case should ideally be caught by Permutation::from_map validation
-        // but if map somehow contains an index larger than its own length, this test covers iter_slice.
-        // However, current Permutation::from_map generates inv based on map.len(),
-        // so map itself won't have indices > map.len().
-        // This test ensures that if map_indices somehow had an index pointing beyond slice.len(), it would panic.
-        let p = Permutation {
-            map: vec![0, 5, 1],
-            inv: vec![0, 2, 1],
-        }; // map[1] = 5
-        // This covers the corrupted-map case without depending on panic handling in the test runner.
-        assert_eq!(max_out_of_bounds_index(&p.map, 3), Some(5));
+        // Test the bounds helper without constructing a corrupted Permutation.
+        assert_eq!(max_out_of_bounds_index(&[0, 5, 1], 3), Some(5));
+        assert!(matches!(
+            Permutation::try_from_map(vec![0, 5, 1]),
+            Err(PermutationError::IndexOutOfRange {
+                index: 1,
+                value: 5,
+                len: 3
+            })
+        ));
     }
 
     #[test]
@@ -2633,5 +2977,423 @@ mod swaps_optimality_tests {
         // Out of bounds
         let forced = [(0, 5)];
         assert!(Permutation::from_mappings(forced.iter().copied(), n).is_err());
+    }
+}
+
+#[cfg(test)]
+mod admission_tests {
+    #[cfg(feature = "bincode")]
+    use bincode::{config, serde as bincode_serde};
+
+    use super::*;
+
+    #[test]
+    fn checked_constructors_reject_duplicate_and_out_of_range_images() {
+        for input in [vec![0, 0], vec![1, 1], vec![2, 0, 2], vec![0, 0, 0]] {
+            assert!(matches!(
+                Permutation::try_from_map(input.clone()),
+                Err(PermutationError::DuplicateImage { .. })
+            ));
+            assert!(matches!(
+                Permutation::try_from_inv(input),
+                Err(PermutationError::DuplicateImage { .. })
+            ));
+        }
+        for input in [vec![1], vec![0, 2], vec![usize::MAX, 0]] {
+            assert!(matches!(
+                Permutation::try_from_map(input.clone()),
+                Err(PermutationError::IndexOutOfRange { .. })
+            ));
+            assert!(matches!(
+                Permutation::try_from_inv(input),
+                Err(PermutationError::IndexOutOfRange { .. })
+            ));
+        }
+        assert_eq!(
+            Permutation::try_from_map(vec![2, 0, 2]),
+            Err(PermutationError::DuplicateImage {
+                value: 2,
+                first_index: 0,
+                second_index: 2
+            })
+        );
+    }
+
+    #[test]
+    fn checked_admission_matches_all_small_bijections() {
+        for len in 0usize..=4 {
+            // Include len itself to exercise out-of-range rejection as well as duplicates.
+            for mut code in 0..(len + 1).pow(len as u32) {
+                let input: Vec<_> = (0..len)
+                    .map(|_| {
+                        let value = code % (len + 1);
+                        code /= len + 1;
+                        value
+                    })
+                    .collect();
+                let mut sorted = input.clone();
+                sorted.sort_unstable();
+                let is_bijection = sorted.iter().copied().eq(0..len);
+                let direct = Permutation::try_from_map(input.clone());
+                let inverse = Permutation::try_from_inv(input);
+                assert_eq!(direct.is_ok(), is_bijection);
+                assert_eq!(inverse.is_ok(), is_bijection);
+                if let (Ok(direct), Ok(inverse)) = (direct, inverse) {
+                    assert_eq!(direct.inverse(), inverse);
+                    for i in 0..len {
+                        assert_eq!(direct.inv()[direct[i]], i);
+                        assert_eq!(direct[direct.inv()[i]], i);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn empty_constructors_and_ranking_are_valid() {
+        let empty = Permutation::id(0);
+        assert_eq!(Permutation::try_from(Vec::new()).unwrap(), empty);
+        assert_eq!(Permutation::from_mappings([], 0).unwrap(), empty);
+        assert_eq!(Permutation::from_prefix_sources([], 0).unwrap(), empty);
+        assert!(Permutation::from_mappings([(0, 0)], 0).is_err());
+        assert!(Permutation::from_prefix_sources([0], 0).is_err());
+        assert_eq!(empty.clone().myrvold_ruskey_rank1(), 0);
+        assert_eq!(empty.myrvold_ruskey_rank2(), 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "mapping must be a bijection")]
+    fn from_map_panics_on_duplicates() {
+        Permutation::from_map(vec![0, 0]);
+    }
+
+    #[test]
+    #[should_panic(expected = "mapping must be a bijection")]
+    fn from_map_panics_on_out_of_range_image() {
+        Permutation::from_map(vec![1]);
+    }
+
+    #[test]
+    #[should_panic(expected = "inverse mapping must be a bijection")]
+    fn from_inv_panics_on_duplicates() {
+        Permutation::from_inv(vec![0, 0]);
+    }
+
+    #[test]
+    #[should_panic(expected = "inverse mapping must be a bijection")]
+    fn from_inv_panics_on_out_of_range_image() {
+        Permutation::from_inv(vec![1]);
+    }
+
+    #[test]
+    #[should_panic(expected = "each cycle must contain distinct indices")]
+    fn ordered_cycles_reject_repeated_indices() {
+        Permutation::from_cycles(&[vec![0, 1, 0, 1]]);
+    }
+
+    #[test]
+    fn checked_cycles_report_repetitions_in_input_order() {
+        for order in [CycleOrder::FirstFirst, CycleOrder::LastFirst] {
+            for repeated in [vec![2, 2], vec![2, 3, 2], vec![2, 3, 2, 3]] {
+                assert_eq!(
+                    Permutation::try_from_cycles_ordered(&[vec![], repeated], order),
+                    Err(PermutationError::RepeatedCycleIndex { cycle: 1, index: 2 })
+                );
+            }
+        }
+        assert_eq!(
+            Permutation::try_from_cycles(&[vec![0, 1, 0, 1]]),
+            Err(PermutationError::RepeatedCycleIndex { cycle: 0, index: 0 })
+        );
+        assert_eq!(
+            Permutation::from_disjoint_cycles(&[vec![0, 1], vec![1, 2]]),
+            Err(PermutationError::NonDisjointCycles {
+                index: 1,
+                first_cycle: 0,
+                second_cycle: 1,
+            })
+        );
+        assert_eq!(
+            Permutation::from_disjoint_cycles(&[vec![0, 1, 0]]),
+            Err(PermutationError::NonDisjointCycles {
+                index: 0,
+                first_cycle: 0,
+                second_cycle: 0,
+            })
+        );
+    }
+
+    #[test]
+    fn checked_cycles_reject_size_overflow_before_allocation() {
+        let cycles = [vec![usize::MAX]];
+        let error = Err(PermutationError::CycleIndexOverflow { index: usize::MAX });
+        assert_eq!(Permutation::from_disjoint_cycles(&cycles), error);
+        assert_eq!(Permutation::try_from_cycles(&cycles), error);
+        for order in [CycleOrder::FirstFirst, CycleOrder::LastFirst] {
+            assert_eq!(Permutation::try_from_cycles_ordered(&cycles, order), error);
+        }
+    }
+
+    #[test]
+    fn checked_cycles_preserve_empty_singleton_and_overlapping_cycles() {
+        for order in [CycleOrder::FirstFirst, CycleOrder::LastFirst] {
+            assert_eq!(
+                Permutation::try_from_cycles_ordered(&[], order).unwrap(),
+                Permutation::id(0)
+            );
+            assert_eq!(
+                Permutation::try_from_cycles_ordered(&[vec![], vec![3], vec![3]], order).unwrap(),
+                Permutation::id(4)
+            );
+            let p = Permutation::try_from_cycles_ordered(&[vec![0, 2], vec![2, 4]], order).unwrap();
+            assert_eq!(
+                p.map(),
+                match order {
+                    CycleOrder::LastFirst => &[2, 1, 4, 3, 0],
+                    CycleOrder::FirstFirst => &[4, 1, 0, 3, 2],
+                }
+            );
+            for i in 0..p.length() {
+                assert_eq!(p.inv()[p[i]], i);
+            }
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "each cycle must contain distinct indices")]
+    fn explicitly_ordered_cycles_reject_repeated_indices() {
+        Permutation::from_cycles_ordered(&[vec![0, 0]], CycleOrder::FirstFirst);
+    }
+
+    #[test]
+    #[should_panic(expected = "CycleIndexOverflow")]
+    fn cycle_wrapper_rejects_size_overflow() {
+        Permutation::from_cycles(&[vec![usize::MAX]]);
+    }
+
+    #[test]
+    fn mutable_iteration_keeps_references_after_partial_iteration() {
+        let permutation = Permutation::try_from_map(vec![2, 0, 1]).unwrap();
+        for inverse in [false, true] {
+            let mut data = [10, 20, 30, 40];
+            let (first, second) = {
+                let mut iter = if inverse {
+                    permutation.iter_slice_inv_mut(&mut data)
+                } else {
+                    permutation.iter_slice_mut(&mut data)
+                };
+                assert_eq!(iter.size_hint(), (3, Some(3)));
+                let first = iter.next().unwrap();
+                let second = iter.next().unwrap();
+                assert_eq!(iter.len(), 1);
+                (first, second)
+            };
+            *first += 100;
+            *second += 200;
+            assert_eq!(
+                data,
+                if inverse {
+                    [10, 120, 230, 40]
+                } else {
+                    [210, 20, 130, 40]
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn mutable_iteration_retains_all_references_in_both_directions() {
+        let permutation = Permutation::try_from_inv(vec![1, 2, 0]).unwrap();
+        for inverse in [false, true] {
+            let mut data = [10, 20, 30];
+            let mut iter = if inverse {
+                permutation.iter_slice_inv_mut(&mut data)
+            } else {
+                permutation.iter_slice_mut(&mut data)
+            };
+            let references: Vec<_> = iter.by_ref().collect();
+            assert_eq!(iter.len(), 0);
+            assert!(iter.next().is_none());
+            assert!(iter.next().is_none());
+            for (index, value) in references.into_iter().enumerate() {
+                *value += 100 * index;
+            }
+            assert_eq!(
+                data,
+                if inverse {
+                    [210, 20, 130]
+                } else {
+                    [110, 220, 30]
+                }
+            );
+        }
+    }
+
+    #[test]
+    fn mutable_iteration_handles_empty_singleton_and_zero_sized_elements() {
+        for map in [vec![], vec![0], vec![2, 0, 1]] {
+            let permutation = Permutation::try_from_map(map).unwrap();
+            let mut data = vec![(); permutation.length()];
+            let refs: Vec<_> = permutation.iter_slice_mut(&mut data).collect();
+            assert_eq!(refs.len(), permutation.length());
+            let refs: Vec<_> = permutation.iter_slice_inv_mut(&mut data).collect();
+            assert_eq!(refs.len(), permutation.length());
+        }
+        let empty = Permutation::id(0);
+        let mut data = [10];
+        assert!(empty.iter_slice_mut(&mut data).next().is_none());
+        assert!(empty.iter_slice_inv_mut(&mut data).next().is_none());
+        assert_eq!(data, [10]);
+    }
+
+    #[test]
+    #[should_panic(expected = "too short")]
+    fn mutable_map_iteration_rejects_short_slices() {
+        Permutation::id(3).iter_slice_mut(&mut [0; 2]);
+    }
+
+    #[test]
+    #[should_panic(expected = "too short")]
+    fn mutable_inverse_iteration_rejects_short_slices() {
+        Permutation::id(3).iter_slice_inv_mut(&mut [0; 2]);
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn serde_rejects_invalid_and_malformed_representations() {
+        for input in [
+            r#"{"map":[0,0],"inv":[1,0]}"#,
+            r#"{"map":[0,2],"inv":[0,1]}"#,
+            r#"{"map":[1,0],"inv":[0,1]}"#,
+            r#"{"map":[1,0],"inv":[0,0]}"#,
+            r#"{"map":[1,0],"inv":[1,2]}"#,
+            r#"{"map":[0],"inv":[]}"#,
+            r#"{"map":[],"inv":[0]}"#,
+            r#"{"map":[0]}"#,
+            r#"{"inv":[0]}"#,
+            r#"{"map":[-1],"inv":[0]}"#,
+            r#"{"map":false,"inv":[]}"#,
+            r#"{"map":[],"map":[],"inv":[]}"#,
+            r#"{"map":[0],"inv":[0]"#,
+        ] {
+            assert!(
+                serde_json::from_str::<Permutation>(input).is_err(),
+                "{input}"
+            );
+        }
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn serde_roundtrips_preserve_map_and_inverse_fields() {
+        for map in [vec![], vec![0], vec![2, 0, 1]] {
+            let permutation = Permutation::try_from_map(map).unwrap();
+            let encoded = serde_json::to_string(&permutation).unwrap();
+            let decoded: Permutation = serde_json::from_str(&encoded).unwrap();
+            assert_eq!(decoded, permutation);
+            assert_eq!(
+                serde_json::to_value(&permutation).unwrap(),
+                serde_json::json!({ "map": permutation.map(), "inv": permutation.inv() })
+            );
+        }
+    }
+
+    #[cfg(feature = "bincode")]
+    #[test]
+    fn bincode_rejects_invalid_and_truncated_representations() {
+        let cases: &[(&[usize], &[usize])] = &[
+            (&[0, 0], &[1, 0]),
+            (&[0, 2], &[0, 1]),
+            (&[1, 0], &[0, 1]),
+            (&[1, 0], &[0, 0]),
+            (&[1, 0], &[1, 2]),
+            (&[0], &[]),
+            (&[], &[0]),
+        ];
+        for &(map, inv) in cases {
+            let encoded = bincode::encode_to_vec((map, inv), config::standard()).unwrap();
+            assert!(
+                bincode::decode_from_slice::<Permutation, _>(&encoded, config::standard()).is_err()
+            );
+            assert!(bincode::borrow_decode_from_slice::<Permutation, _>(
+                &encoded,
+                config::standard()
+            )
+            .is_err());
+            assert!(bincode_serde::decode_from_slice::<Permutation, _>(
+                &encoded,
+                config::standard()
+            )
+            .is_err());
+        }
+        let valid = Permutation::from_map(vec![2, 0, 1]);
+        let encoded = bincode::encode_to_vec(&valid, config::standard()).unwrap();
+        for end in 0..encoded.len() {
+            assert!(bincode::decode_from_slice::<Permutation, _>(
+                &encoded[..end],
+                config::standard()
+            )
+            .is_err());
+            assert!(bincode::borrow_decode_from_slice::<Permutation, _>(
+                &encoded[..end],
+                config::standard()
+            )
+            .is_err());
+            assert!(bincode_serde::decode_from_slice::<Permutation, _>(
+                &encoded[..end],
+                config::standard()
+            )
+            .is_err());
+        }
+    }
+
+    #[cfg(feature = "bincode")]
+    #[test]
+    fn bincode_roundtrips_keep_wire_format_and_support_generic_contexts() {
+        for map in [vec![], vec![0], vec![2, 0, 1]] {
+            let permutation = Permutation::try_from_map(map).unwrap();
+            let encoded = bincode::encode_to_vec(&permutation, config::standard()).unwrap();
+            let fields =
+                bincode::encode_to_vec((permutation.map(), permutation.inv()), config::standard())
+                    .unwrap();
+            assert_eq!(encoded, fields);
+            assert_eq!(
+                bincode_serde::encode_to_vec(&permutation, config::standard()).unwrap(),
+                fields
+            );
+            let expected = (permutation, encoded.len());
+            assert_eq!(
+                bincode::decode_from_slice::<Permutation, _>(&encoded, config::standard()).unwrap(),
+                expected
+            );
+            assert_eq!(
+                bincode::borrow_decode_from_slice::<Permutation, _>(&encoded, config::standard())
+                    .unwrap(),
+                expected
+            );
+            assert_eq!(
+                bincode_serde::decode_from_slice::<Permutation, _>(&encoded, config::standard())
+                    .unwrap(),
+                expected
+            );
+            assert_eq!(
+                bincode::decode_from_slice_with_context::<_, Permutation, _>(
+                    &encoded,
+                    config::standard(),
+                    "context"
+                )
+                .unwrap(),
+                expected
+            );
+            assert_eq!(
+                bincode::borrow_decode_from_slice_with_context::<_, Permutation, _>(
+                    &encoded,
+                    config::standard(),
+                    "context"
+                )
+                .unwrap(),
+                expected
+            );
+        }
     }
 }
