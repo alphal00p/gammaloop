@@ -51,8 +51,8 @@ def main():
                 "(frame, content) => { frame.srcdoc = content; }", drawing
             )
             page.frame_locator("iframe").locator(".linnet-viewport").wait_for()
-            # Cross the scrollbar threshold in both directions, and cross
-            # the 600px breakpoint between stacked and side-by-side details.
+            # Cross the scrollbar threshold in both directions at wide and
+            # narrow notebook column widths.
             for width, limit in (
                 (1000, 580),
                 (1000, 550),
@@ -109,8 +109,9 @@ def main():
             assert not errors, errors
             print("Exact fit:", json.dumps(measurements))
 
-            # Different aspect ratios must preserve the same physical drawing
-            # scale. Include a tall graph exceeding the old 520px height cap.
+            # Small standalone drawings get a readable baseline. Large and
+            # fixed-height drawings retain their scale and are never cropped.
+            # Include a tall graph exceeding the old 520px height cap.
             page.set_content(
                 f"<style>{(source / 'interactive.css').read_text()}</style>"
                 + "".join(
@@ -145,10 +146,10 @@ def main():
                 };
             }"""
             # Allow browser subpixel rounding of the outer SVG dimensions.
-            for name in ("tall", "wide", "small"):
+            for name, expected in (("tall", 4 / 3), ("wide", 4 / 3), ("small", 7 / 3)):
                 result = page.locator(f"#{name}").evaluate(measure)
-                assert abs(result["scale"] - 4 / 3) < 1e-3, result
-                assert abs(result["diameter"] - 40 / 3) < 0.02, result
+                assert abs(result["scale"] - expected) < 1e-3, result
+                assert abs(result["diameter"] - 10 * expected) < 0.02, result
                 assert result["label"] == "100%", result
                 assert result["contained"], result
             fixed = page.locator("#fixed").evaluate(measure)
@@ -185,7 +186,78 @@ def main():
             assert wide.evaluate(measure)["contained"]
             assert not errors, errors
             print(
-                "Consistent point scale, width fitting, fixed-height fitting, and zoom/reset passed"
+                "Readable baseline, width fitting, fixed-height fitting, and zoom/reset passed"
+            )
+            # A small notebook diagram should be readable and centered above
+            # its caption, without blank space reserved for hidden details.
+            page.set_content(
+                f"<style>{(source / 'interactive.css').read_text()}</style>"
+                + """
+                <figure id="compact" style="width:800px;margin:0;text-align:center">
+                  <svg data-linnet-interactive viewBox="0 0 150 75"
+                       width="150pt" height="75pt">
+                    <rect width="150" height="75" fill="lightblue"/>
+                    <a data-linnet-kind="node" data-linnet-id="0"
+                       data-linnet-detail='{"edges":[0]}'>
+                      <text x="75" y="40" font-size="9" text-anchor="middle">g</text>
+                    </a>
+                  </svg>
+                  <figcaption>One-loop diagram</figcaption>
+                </figure>
+                """
+            )
+            page.add_script_tag(content=(source / "interactive.js").read_text())
+            compact = page.locator("#compact")
+            svg = compact.locator("svg[data-linnet-interactive]")
+            camera = compact.locator(".linnet-viewport")
+            label = camera.locator("text")
+            assert svg.locator("output").inner_text() == "100%"
+            assert 210 < svg.bounding_box()["height"] < 220
+            assert abs(label.evaluate("e => e.getScreenCTM().a") * 9 - 21) < 0.01
+            for width, expected in ((320, "91%"), (220, "63%"), (800, "100%")):
+                compact.evaluate("(e, width) => e.style.width = width + 'px'", width)
+                page.wait_for_function(
+                    "expected => document.querySelector('#compact output').textContent === expected",
+                    arg=expected,
+                )
+                result = svg.evaluate("""svg => {
+                    const art = svg.querySelector('.linnet-viewport > rect').getBoundingClientRect();
+                    const caption = svg.parentElement.querySelector('figcaption').getBoundingClientRect();
+                    const outer = svg.getBoundingClientRect();
+                    return {
+                        centered: Math.abs((art.left + art.right - caption.left - caption.right) / 2) < .1,
+                        contained: art.left >= outer.left - .1 && art.right <= outer.right + .1
+                            && art.top >= outer.top + 39.9 && art.bottom <= outer.bottom + .1,
+                    };
+                }""")
+                assert result["centered"] and result["contained"], result
+            before = label.bounding_box()
+            height = svg.bounding_box()["height"]
+            target = compact.locator('[data-linnet-kind="node"]')
+            target.hover()
+            panel = compact.locator(".linnet-inspector")
+            assert panel.is_visible()
+            assert (
+                panel.bounding_box()["y"]
+                >= camera.bounding_box()["y"] + camera.bounding_box()["height"]
+            )
+            assert label.bounding_box() == before
+            target.click()
+            page.mouse.move(1000, 700)
+            assert panel.is_visible() and label.bounding_box() == before
+            compact.get_by_role("button", name="Close graph details").click()
+            assert not panel.is_visible() and svg.bounding_box()["height"] == height
+            camera.press("+")
+            assert svg.locator("output").inner_text() == "105%"
+            assert abs(label.evaluate("e => e.getScreenCTM().a") - 2.45) < 1e-3
+            camera.press("0")
+            assert svg.locator("output").inner_text() == "100%"
+            assert abs(label.evaluate("e => e.getScreenCTM().a") - 7 / 3) < 1e-3
+            assert label.bounding_box() == before
+            assert svg.bounding_box()["height"] == height
+            assert not errors, errors
+            print(
+                "Readable compact preview, centered resizing, stable inspection, and baseline reset passed"
             )
             # A domain overlay uses the same precise native half-edge geometry
             # as hover, without changing selection or depending on camera zoom.

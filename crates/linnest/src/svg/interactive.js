@@ -17,9 +17,14 @@
     const bounds = svg.viewBox.baseVal;
     const box = { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height };
     /* SVG lengths resolve pt/mm to CSS pixels. Read the authored width before
-       replacing it with the responsive viewer width: 100% keeps that physical
-       scale, independently of the drawing bounds or notebook column width. */
-    const naturalScale = embedded ? 1 : svg.width.baseVal.value / box.width;
+       replacing it with the responsive viewer width. */
+    const authoredScale = embedded ? 1 : svg.width.baseVal.value / box.width;
+    /* Enlarge small standalone diagrams to a readable notebook baseline.
+       This is 100% for zoom/reset; fixed and embedded views keep their own
+       authored scale. Bound enlargement independently of the column width. */
+    const previewScale = embedded || Number(svg.dataset.linnetViewportHeight) > 0 ? 1
+      : Math.max(1, Math.min(1.75, 360 / (box.width * authoredScale), 240 / (box.height * authoredScale)));
+    const naturalScale = authoredScale * previewScale;
     let scale = 1;
     let fitted = true;
     let pinned = false;
@@ -164,7 +169,7 @@
     help.className = 'linnet-navigation-help';
     help.tabIndex = 0;
     help.setAttribute('role', 'img');
-    const shortcuts = 'Drag to pan · Ctrl/⌘ + scroll or +/− to zoom · 0 to fit · 100% = original size';
+    const shortcuts = 'Drag to pan · Ctrl/⌘ + scroll or +/− to zoom · 0 to fit · 100% = default size';
     help.setAttribute('aria-label', shortcuts);
     const hint = html('span', shortcuts);
     hint.className = 'linnet-navigation-hint';
@@ -184,16 +189,15 @@
       const screenWidth = Math.max(1, svg.getBoundingClientRect().width);
       const width = embedded ? box.width : screenWidth;
       layoutWidth = screenWidth;
-      const wide = !embedded && width >= 600 && targets.length > 0;
       const fixedHeight = Number(svg.dataset.linnetViewportHeight) || 0;
       const overlay = embedded || fixedHeight > 0;
-      const panelWidth = overlay ? Math.min(300, width) : wide ? 260 : width;
-      const graphWidth = overlay ? width : wide ? width - panelWidth - 16 : width;
-      /* Grow vertically to show the whole drawing at its physical scale.
-         Narrow columns and explicitly bounded previews may need a smaller
-         fit, whose actual percentage is reported by the same camera. */
+      const panelWidth = overlay ? Math.min(300, width) : width;
+      const graphWidth = width;
+      /* Keep the graph and caption centered without reserving empty space for
+         an inspector. Standalone details open below, so hovering never moves
+         the target. The camera height follows the bounded initial drawing size. */
       const fitWidth = Math.min(1, graphWidth / (box.width * naturalScale));
-      const graphHeight = embedded ? box.height : fixedHeight || Math.max(240, box.height * naturalScale * fitWidth);
+      const graphHeight = embedded ? box.height : fixedHeight || box.height * naturalScale * fitWidth;
       const toolbarHeight = 40;
       const graphTop = embedded ? 0 : toolbarHeight;
       toolbar.setAttribute('width', width);
@@ -214,15 +218,15 @@
       panSurface.setAttribute('y', graphTop);
       panSurface.setAttribute('width', graphWidth);
       panSurface.setAttribute('height', graphHeight);
-      panel.setAttribute('x', overlay ? width - panelWidth : wide ? graphWidth + 16 : 0);
-      panel.setAttribute('y', overlay || wide ? graphTop : toolbarHeight + graphHeight + 12);
+      panel.setAttribute('x', overlay ? width - panelWidth : 0);
+      panel.setAttribute('y', overlay ? graphTop : toolbarHeight + graphHeight + 12);
       panel.setAttribute('width', panelWidth);
       const panelHeight = panel.style.display === 'none' ? 0 : content.offsetHeight;
       panel.setAttribute('height', overlay ? Math.min(panelHeight, graphHeight) : panelHeight);
       content.style.maxHeight = overlay ? `${graphHeight}px` : '';
       content.style.overflowY = overlay ? 'auto' : '';
       panel.style.pointerEvents = overlay && !pinned ? 'none' : '';
-      const height = toolbarHeight + (overlay ? graphHeight : wide ? Math.max(graphHeight, panelHeight) : graphHeight + (panelHeight ? panelHeight + 12 : 0));
+      const height = toolbarHeight + graphHeight + (!overlay && panelHeight ? panelHeight + 12 : 0);
       if (!embedded) {
         svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
         svg.setAttribute('height', height);

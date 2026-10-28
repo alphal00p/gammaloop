@@ -10,9 +10,10 @@ use std::sync::Arc;
 use feynkit_amplitude::{Amplitude, AmplitudeLeg, AmplitudeOptions, SquaredAmplitude};
 use feynkit_graph::ExternalState;
 use pyo3::prelude::{
-    Bound, Py, PyAny, PyAnyMethods, PyModuleMethods, PyResult, Python, pyclass, pymethods,
+    Bound, Py, PyAny, PyAnyMethods, PyDictMethods, PyModuleMethods, PyRef, PyResult, Python,
+    pyclass, pymethods,
 };
-use pyo3::types::PyModule;
+use pyo3::types::{PyDict, PyModule};
 use spynso3::expression::TensorExpression;
 use spynso3::structure::SpensoSlot;
 use symbolica::api::python::{ConvertibleToExpression, PythonExpression};
@@ -697,6 +698,80 @@ impl PySquaredAmplitude {
             self.spin_summed(),
             self.color_summed()
         )
+    }
+    /// Explore the current tensor expression with the interactive notebook pager.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``SquaredAmplitude`` class example:
+    ///
+    /// >>> viewer = squared.paged(page_size=25)
+    /// >>> first_page = viewer.page()
+    ///
+    /// Parameters
+    /// ----------
+    /// page_size : int, default 25
+    ///     Maximum entries on a page, between 1 and 500.
+    /// settings : DisplaySettings, optional
+    ///     Tensor notation, index labels, and presentation preferences.
+    /// notation_source : str, optional
+    ///     Unsupported by the direct MathML pager, as for TensorExpression.paged().
+    #[pyo3(signature = (page_size=25, *, settings=None, notation_source=None))]
+    fn paged(
+        &self,
+        py: Python<'_>,
+        page_size: usize,
+        settings: Option<PyRef<'_, DisplaySettings>>,
+        notation_source: Option<String>,
+    ) -> PyResult<Py<PyAny>> {
+        let kwargs = PyDict::new(py);
+        kwargs.set_item("settings", settings)?;
+        kwargs.set_item("notation_source", notation_source)?;
+        Ok(self
+            .expression(py)?
+            .bind(py)
+            .call_method("paged", (page_size,), Some(&kwargs))?
+            .unbind())
+    }
+    /// Present the current tensor expression with its interactive notebook display.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``SquaredAmplitude`` class example:
+    ///
+    /// >>> presentation = squared._display_()
+    fn _display_(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        Ok(self
+            .expression(py)?
+            .bind(py)
+            .call_method0("_display_")?
+            .unbind())
+    }
+    /// Return the tensor expression's static and optional live representations.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``SquaredAmplitude`` class example:
+    ///
+    /// >>> bundle = squared._repr_mimebundle_(include=["text/html"])
+    /// >>> html = bundle["text/html"]
+    ///
+    /// Parameters
+    /// ----------
+    /// include, exclude : list[str], optional
+    ///     MIME types to include or exclude from the returned representations.
+    #[pyo3(signature = (include=None, exclude=None))]
+    fn _repr_mimebundle_(
+        &self,
+        py: Python<'_>,
+        include: Option<Vec<String>>,
+        exclude: Option<Vec<String>>,
+    ) -> PyResult<Py<PyAny>> {
+        Ok(self
+            .expression(py)?
+            .bind(py)
+            .call_method1("_repr_mimebundle_", (include, exclude))?
+            .unbind())
     }
     /// Render the current tensor expression with Spenso's printer.
     ///

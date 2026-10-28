@@ -26,6 +26,41 @@ const MODEL_JSON: &str = include_str!("fixtures/scalars_2p_3p.json");
 const SPENSO_WRAPPER: &str = "from ..tensor_native import *\n\ninitialize_module()\n";
 
 #[test]
+fn squared_amplitude_tensor_pager() {
+    Python::initialize();
+    Python::attach(|py| -> PyResult<()> {
+        let symbolica = install_package(py, "symbolica")?;
+        let core = PyModule::new(py, "symbolica.core")?;
+        python::create_symbolica_module(&core)?;
+        py.import("sys")?
+            .getattr("modules")?
+            .set_item("symbolica.core", &core)?;
+        symbolica.add("core", &core)?;
+        for name in ["E", "S"] {
+            symbolica.add(name, core.getattr(name)?)?;
+        }
+        let community = install_package(py, "symbolica.community")?;
+        symbolica.add("community", &community)?;
+        register_native::<GraphModule>(&core)?;
+        register_native::<FeynkitModule>(&core)?;
+        register_native::<SpensoModule>(&core)?;
+        import_wrapper(py, &community, "symbolica.community.graph", GRAPH_WRAPPER)?;
+        import_wrapper(
+            py,
+            &community,
+            "symbolica.community.hepkit",
+            FEYNKIT_WRAPPER,
+        )?;
+        import_wrapper(py, &community, "symbolica.community.tensor", SPENSO_WRAPPER)?;
+        let code = CString::new(include_str!("installed_squared_amplitude_display.py")).unwrap();
+        let locals = PyDict::new(py);
+        py.run(&code, Some(&locals), Some(&locals))
+            .inspect_err(|error| error.print(py))
+    })
+    .unwrap();
+}
+
+#[test]
 fn shared_numeric_external_states_in_installed_host() {
     Python::initialize();
     Python::attach(|py| -> PyResult<()> {

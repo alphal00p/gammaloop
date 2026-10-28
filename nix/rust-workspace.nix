@@ -500,6 +500,7 @@
 
   workspacePackageExtraSourceRoots.compileTimeTest = {
     spynso3 = [
+      "crates/spynso3/tests/evaluator_horner.py"
       "crates/spynso3/tests/installed_symbolic_preview.py"
       "crates/spynso3/tests/installed_tensor_paging.py"
     ];
@@ -538,6 +539,7 @@
       "crates/feynkit-py/tests/fixtures"
       "crates/feynkit-py/tests/cff_display.py"
       "crates/feynkit-py/tests/browser_display_fixtures.py"
+      "crates/feynkit-py/tests/installed_squared_amplitude_display.py"
       "crates/feynkit-py/tests/installed_wavefunctions.py"
       "crates/feynkit-py/tests/installed_offline_rendering.py"
       "crates/feynkit-py/tests/native_forwarding.py"

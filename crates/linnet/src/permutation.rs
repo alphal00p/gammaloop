@@ -45,9 +45,9 @@ use std::{
 };
 
 use crate::half_edge::{
-    HedgeGraph, NodeIndex,
     involution::Hedge,
     subgraph::{BaseSubgraph, InternalSubGraph, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps},
+    HedgeGraph, NodeIndex,
 };
 use ahash::AHashSet;
 use thiserror::Error;
@@ -1135,7 +1135,7 @@ pub trait HedgeGraphExt {
     fn hedges_between(&self, a: NodeIndex, b: NodeIndex) -> SuBitGraph;
 
     fn permute_subgraph<S: SubSetLike>(&self, subgraph: &S, hedge_perm: &Permutation)
-    -> SuBitGraph;
+        -> SuBitGraph;
 
     fn orientation_ord(&self, hedge: Hedge) -> u8;
 }
@@ -1668,7 +1668,7 @@ mod tests {
     #[test]
     fn test_iter_slice_panic_too_short() {
         let p = Permutation::from_map(vec![0, 1, 2]); // Needs slice of length at least 3
-        // The iterator constructors panic on this condition; the helper lets us check it directly.
+                                                      // The iterator constructors panic on this condition; the helper lets us check it directly.
         assert_eq!(max_out_of_bounds_index(&p.map, 2), Some(2));
     }
 
@@ -1683,7 +1683,7 @@ mod tests {
             map: vec![0, 5, 1],
             inv: vec![0, 2, 1],
         }; // map[1] = 5
-        // This covers the corrupted-map case without depending on panic handling in the test runner.
+           // This covers the corrupted-map case without depending on panic handling in the test runner.
         assert_eq!(max_out_of_bounds_index(&p.map, 3), Some(5));
     }
 
