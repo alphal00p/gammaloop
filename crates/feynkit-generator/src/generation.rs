@@ -3630,6 +3630,7 @@ impl Generator {
             None
         };
         let instantiation = NumeratorInstantiation {
+            lorentz_dimension: self.lorentz_dimension,
             owner: key.owner,
             legs: &key.legs,
         };
@@ -3771,6 +3772,7 @@ impl Generator {
                     })
                     .collect::<Vec<_>>();
                 let instantiation = NumeratorInstantiation {
+                    lorentz_dimension: self.lorentz_dimension,
                     owner: NumeratorOwner::Edge(0),
                     legs: &canonical,
                 };
@@ -5395,7 +5397,6 @@ mod tests {
     use super::*;
     use idenso::tensor::composition::TensorCompositionError;
     use idenso::tensor::inference::TensorInferenceError;
-    use serde_json::json;
     use spenso::tensor_symbol;
     use std::array;
 
@@ -7571,6 +7572,7 @@ mod tests {
                 leg.color = 1;
             }
             let instantiation = NumeratorInstantiation {
+                lorentz_dimension: Dimension::Concrete(4),
                 owner: NumeratorOwner::Vertex(owner),
                 legs: &legs,
             };
@@ -7620,6 +7622,7 @@ mod tests {
         let mut numerators = Vec::new();
         for owner in [7, 12] {
             let instantiation = NumeratorInstantiation {
+                lorentz_dimension: Dimension::Concrete(4),
                 owner: NumeratorOwner::Vertex(owner),
                 legs: &legs,
             };
@@ -7681,6 +7684,7 @@ mod tests {
         let head = tensor_symbol!("generation_cancelled_template_probe");
         for owner in [4, 9] {
             let instantiation = NumeratorInstantiation {
+                lorentz_dimension: Dimension::Concrete(4),
                 owner: NumeratorOwner::Vertex(owner),
                 legs: &legs,
             };
@@ -7741,6 +7745,7 @@ mod tests {
         legs[1].edge = legs[0].edge;
         for owner in [4, 9] {
             let instantiation = NumeratorInstantiation {
+                lorentz_dimension: Dimension::Concrete(4),
                 owner: NumeratorOwner::Vertex(owner),
                 legs: &legs,
             };
@@ -7805,6 +7810,7 @@ mod tests {
                     color: particle.color,
                 });
                 let instantiation = NumeratorInstantiation {
+                    lorentz_dimension: Dimension::Concrete(4),
                     owner: NumeratorOwner::Edge(edge),
                     legs: &legs,
                 };
@@ -7858,6 +7864,7 @@ mod tests {
                     color: 1,
                 });
                 let instantiation = NumeratorInstantiation {
+                    lorentz_dimension: Dimension::Concrete(4),
                     owner: NumeratorOwner::Vertex(owner),
                     legs: &legs,
                 };
@@ -7914,6 +7921,7 @@ mod tests {
                     color: particle.color,
                 });
                 let instantiation = NumeratorInstantiation {
+                    lorentz_dimension: Dimension::Concrete(4),
                     owner: NumeratorOwner::Edge(edge),
                     legs: &legs,
                 };
@@ -7971,6 +7979,7 @@ mod tests {
                     color: 1,
                 });
                 let instantiation = NumeratorInstantiation {
+                    lorentz_dimension: Dimension::Concrete(4),
                     owner: NumeratorOwner::Vertex(7),
                     legs: &legs,
                 };
@@ -8049,6 +8058,7 @@ mod tests {
                     color: particle.color,
                 });
                 let instantiation = NumeratorInstantiation {
+                    lorentz_dimension: Dimension::Concrete(4),
                     owner: NumeratorOwner::Edge(edge),
                     legs: &legs,
                 };
@@ -8120,6 +8130,7 @@ mod tests {
         let mut legs = tensor_test_legs()[..3].to_vec();
         for owner in [3, 6] {
             let instantiation = NumeratorInstantiation {
+                lorentz_dimension: Dimension::Concrete(4),
                 owner: NumeratorOwner::Vertex(owner),
                 legs: &legs,
             };
@@ -8162,6 +8173,7 @@ mod tests {
             let mut owner_indices = Vec::new();
             for owner in [7, 12] {
                 let instantiation = NumeratorInstantiation {
+                    lorentz_dimension: Dimension::Concrete(4),
                     owner: NumeratorOwner::Vertex(owner),
                     legs: &legs,
                 };
@@ -8243,6 +8255,7 @@ mod tests {
         let generator = Generator::new(model);
         let legs = tensor_test_legs();
         let instantiation = NumeratorInstantiation {
+            lorentz_dimension: Dimension::Concrete(4),
             owner: NumeratorOwner::Vertex(7),
             legs: &legs[..3],
         };
@@ -8291,6 +8304,7 @@ mod tests {
         let legs = tensor_test_legs();
         for owner in [3, 6] {
             let instantiation = NumeratorInstantiation {
+                lorentz_dimension: Dimension::Concrete(4),
                 owner: NumeratorOwner::Vertex(owner),
                 legs: &legs[..3],
             };
@@ -8357,6 +8371,7 @@ mod tests {
         let zero = source.with_checked_expression(Atom::Zero).unwrap();
         let legs = tensor_test_legs();
         let instantiation = NumeratorInstantiation {
+            lorentz_dimension: Dimension::Concrete(4),
             owner: NumeratorOwner::Vertex(7),
             legs: &legs[..2],
         };
@@ -8403,6 +8418,7 @@ mod tests {
         assert_eq!(source.rank(), 0);
         let legs = tensor_test_legs();
         let instantiation = NumeratorInstantiation {
+            lorentz_dimension: Dimension::Concrete(4),
             owner: NumeratorOwner::Vertex(7),
             legs: &legs[..2],
         };
