@@ -5,7 +5,12 @@ use feynkit_generator::Orders;
 use feynkit_generator::ParticleSelector;
 use feynkit_generator::Restrict;
 use feynkit_generator::VertexSelector;
+use num_bigint::BigUint;
 use std::collections::BTreeMap;
+use std::env;
+use std::fs;
+use std::fs::File;
+use std::io::BufWriter;
 use std::io::Write as _;
 use std::sync::Arc;
 
@@ -22,10 +27,22 @@ use super::threads;
 pub fn check(case: &Case) -> Census {
     let model = case.model();
     let request = case.request(&model);
-    check_request(model, request, case.grouping(), case.name)
+    check_request(
+        model,
+        request,
+        case.numerators(),
+        case.grouping(),
+        case.name,
+    )
 }
 
-fn check_request(model: Model, request: Request, grouping: Grouping, name: &str) -> Census {
+fn check_request(
+    model: Model,
+    request: Request,
+    numerators: NumeratorOptions,
+    grouping: Grouping,
+    name: &str,
+) -> Census {
     let model = Arc::new(model);
     let mut particle_reference: Option<(Arc<Census>, Arc<Census>, _)> = None;
     for mode in [Classes::None, Classes::Auto] {
@@ -67,7 +84,7 @@ fn check_request(model: Model, request: Request, grouping: Grouping, name: &str)
             );
             assert_eq!(
                 counts.diagrams,
-                num_bigint::BigUint::from(prepared.len()),
+                BigUint::from(prepared.len()),
                 "{context}: count"
             );
             let inverse: BigRational = prepared
@@ -78,7 +95,7 @@ fn check_request(model: Model, request: Request, grouping: Grouping, name: &str)
 
             let build_minimal = || {
                 let minimal_set = prepared
-                    .build(&NumeratorOptions::default().with_naming(Naming::None), &run)
+                    .build(&numerators.clone().with_naming(Naming::None), &run)
                     .unwrap_or_else(|error| panic!("{context}: Minimal numerators: {error}"))
                     .group(&grouping, &run)
                     .unwrap_or_else(|error| panic!("{context}: Minimal grouping: {error}"));
@@ -86,13 +103,8 @@ fn check_request(model: Model, request: Request, grouping: Grouping, name: &str)
             };
             // Cover both cache orders without reconstructing any identical configuration.
             let minimal = (thread_index == 0).then(&build_minimal);
-            let numerators = NumeratorOptions::default().with_naming(Naming::prefix("D"));
-            assert!(
-                !numerators.filter_zero_color,
-                "{context}: unfiltered source inventory"
-            );
             let built = prepared
-                .build(&numerators, &run)
+                .build(&numerators.clone().with_naming(Naming::prefix("D")), &run)
                 .unwrap_or_else(|error| panic!("{context}: numerators: {error}"));
             let ungrouped = Arc::new(Census::of(&built));
             let named = if matches!(grouping, Grouping::None) {
@@ -109,31 +121,38 @@ fn check_request(model: Model, request: Request, grouping: Grouping, name: &str)
             named.assert_minimal(&minimal, &context);
             drop(prepared);
             named.assert_group_sources(&ungrouped, &context);
-            let physical_weight: BigRational = ungrouped
-                .diagrams
-                .iter()
-                .map(|diagram| {
-                    BigRational::new(
-                        diagram.weight.numerator().to_string().parse().unwrap(),
-                        diagram.weight.denominator().to_string().parse().unwrap(),
-                    )
-                })
-                .sum();
             assert_eq!(
-                counts.physical_weight, physical_weight,
-                "{context}: exact signed count weight"
+                &counts.diagrams,
+                &(&ungrouped.report.zero_numerator_count + ungrouped.diagrams.len()),
+                "{context}: retained and zero-color diagrams"
             );
-            if let Ok(directory) = std::env::var("FEYNKIT_ORACLE_DUMP") {
-                std::fs::create_dir_all(&directory).unwrap();
+            // The zero-color filter removes physical weight that the count still has.
+            if !numerators.filter_zero_color {
+                let physical_weight: BigRational = ungrouped
+                    .diagrams
+                    .iter()
+                    .map(|diagram| {
+                        BigRational::new(
+                            diagram.weight.numerator().to_string().parse().unwrap(),
+                            diagram.weight.denominator().to_string().parse().unwrap(),
+                        )
+                    })
+                    .sum();
+                assert_eq!(
+                    counts.physical_weight, physical_weight,
+                    "{context}: exact signed count weight"
+                );
+            }
+            if let Ok(directory) = env::var("FEYNKIT_ORACLE_DUMP") {
+                fs::create_dir_all(&directory).unwrap();
                 let prefix = format!("{directory}/{name}.classes-{mode:?}-t{count}");
                 for (census, suffix) in [(&named, "json"), (&ungrouped, "sources.json")] {
                     if suffix == "sources.json" && Arc::ptr_eq(&named, &ungrouped) {
-                        std::fs::copy(format!("{prefix}.json"), format!("{prefix}.{suffix}"))
-                            .unwrap();
+                        fs::copy(format!("{prefix}.json"), format!("{prefix}.{suffix}")).unwrap();
                         continue;
                     }
-                    let file = std::fs::File::create(format!("{prefix}.{suffix}")).unwrap();
-                    let mut output = std::io::BufWriter::new(file);
+                    let file = File::create(format!("{prefix}.{suffix}")).unwrap();
+                    let mut output = BufWriter::new(file);
                     census.write_exact_dump(&mut output).unwrap();
                     output.flush().unwrap();
                 }
@@ -216,6 +235,7 @@ fn mass_selective_vetoes_preserve_physical_content() {
                 check_request(
                     model,
                     request.with_topology(topology),
+                    NumeratorOptions::default(),
                     Grouping::None,
                     &format!("{name}-veto-{kind}-{veto:?}"),
                 );
@@ -281,6 +301,7 @@ fn restrictions_preserve_original_ids_and_empty_intersections() {
         check_request(
             model.clone(),
             request,
+            NumeratorOptions::default(),
             Grouping::None,
             &format!("restriction-{name}"),
         );
@@ -311,6 +332,7 @@ fn cut_amplitude_orders_and_unresolved_membership_preserve_class_content() {
                 check_request(
                     model,
                     request.with_cuts(cuts).with_orders(orders),
+                    NumeratorOptions::default(),
                     Grouping::None,
                     &format!("{name}-lr-{left_right}-unresolved-{unresolved}"),
                 );

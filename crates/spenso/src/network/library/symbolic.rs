@@ -1356,6 +1356,7 @@ mod metric_normalization_tests {
 #[cfg(test)]
 #[allow(clippy::type_complexity)]
 mod test {
+    use crate::vector_symbol;
     use symbolica::{function, parse};
 
     use crate::{
@@ -1733,10 +1734,10 @@ mod test {
     fn mixed_tensor_path_handles_sparse_zero_scalar_mwe() {
         initialize();
         let _delta = ETS.delta;
-        let _q = crate::vector_symbol!(Q);
-        let _q3 = crate::vector_symbol!(
-            Q3,
-            norm = |f, out| {
+        let q = vector_symbol!(symbolic_lib_test_sparse_q);
+        let _q3 = vector_symbol!(
+            symbolic_lib_test_sparse_q3,
+            norm = move |f, out| {
                 if let AtomView::Fun(ff) = f
                     && ff.get_nargs() == 2
                 {
@@ -1750,7 +1751,7 @@ mod test {
                         if i == 0 {
                             **out = Atom::Zero;
                         } else {
-                            **out = FunctionBuilder::new(crate::vector_symbol!(Q))
+                            **out = FunctionBuilder::new(q)
                                 .add_arg(eid)
                                 .add_arg(cind.as_view())
                                 .finish()
@@ -1764,10 +1765,10 @@ mod test {
         lib.update_ids();
 
         let expr = parse!(
-            "t*Q(0,spenso::mink(4,e))^2
+            "t*symbolic_lib_test_sparse_q(0,spenso::mink(4,e))^2
             -(spenso::dot(
                 δ(spenso::cind(0),spenso::mink(4)),
-                Q3(4,spenso::mink(4))
+                symbolic_lib_test_sparse_q3(4,spenso::mink(4))
             )*s+1)"
         );
         let settings = ParseSettings {
@@ -1791,7 +1792,7 @@ mod test {
 
         assert_eq!(
             result,
-            "-1+t*(Q(0,cind(0))^2-Q(0,cind(1))^2-Q(0,cind(2))^2-Q(0,cind(3))^2)"
+            "-1+t*(symbolic_lib_test_sparse_q(0,cind(0))^2-symbolic_lib_test_sparse_q(0,cind(1))^2-symbolic_lib_test_sparse_q(0,cind(2))^2-symbolic_lib_test_sparse_q(0,cind(3))^2)"
         );
     }
 

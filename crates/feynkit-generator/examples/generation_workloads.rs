@@ -20,7 +20,7 @@
 mod cases;
 
 use cases::{CASES, Case, REFERENCE};
-use feynkit_generator::{Naming, NumeratorOptions, Run};
+use feynkit_generator::{Naming, Run};
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -47,10 +47,7 @@ fn run(case: &Case, generation_only: bool) {
         prepared.report().clone()
     } else {
         prepared
-            .build(
-                &NumeratorOptions::default().with_naming(Naming::prefix("D")),
-                &run,
-            )
+            .build(&case.numerators().with_naming(Naming::prefix("D")), &run)
             .and_then(|built| built.group(&case.grouping(), &run))
             .unwrap_or_else(|error| panic!("{}: {error}", case.name))
             .report()

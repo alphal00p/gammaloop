@@ -32,21 +32,31 @@ mod classes;
 mod frames;
 
 use feynkit_graph::symbols;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
+use std::env;
 use std::process::Command;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::thread;
 
 use cases::{CASES, Case, REFERENCE};
 use census::{Census, Scope, Summary};
-use feynkit_generator::{BuiltDiagramSet, Classes, Naming, NumeratorOptions, Run, Selection};
+use feynkit_generator::{
+    BuiltDiagramSet, Classes, GenerationControl, GraphGroupingOptions, Grouping, Naming,
+    NumeratorOptions, Run, Selection, Stage,
+};
 use feynkit_graph::{FeynmanDiagram, NumeratorInterface};
 use feynkit_model::Model;
+use idenso::{CookMode, CookSettings, CookSourceFilter};
 use spenso::structure::representation::{Minkowski, RepName};
 use spenso::{index_symbol, tensor_symbol};
-use symbolica::atom::{Atom, AtomCore, FunctionBuilder};
+use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder, UserData};
 use symbolica::domains::rational::Rational;
+use symbolica::function;
+use symbolica::state::State;
 
 fn threads() -> Vec<usize> {
-    std::env::var("FEYNKIT_ORACLE_THREADS").map_or(vec![1, 8, 32], |threads| {
+    env::var("FEYNKIT_ORACLE_THREADS").map_or(vec![1, 8, 32], |threads| {
         threads.split(',').map(|t| t.parse().unwrap()).collect()
     })
 }
@@ -61,7 +71,7 @@ fn census_with_naming(case: &Case, threads: usize, naming: Naming, classes: Clas
     let run = Run::default().threads(threads);
     let result = request
         .generate(model.into(), &run)
-        .and_then(|prepared| prepared.build(&NumeratorOptions::default().with_naming(naming), &run))
+        .and_then(|prepared| prepared.build(&case.numerators().with_naming(naming), &run))
         .and_then(|built| built.group(&case.grouping(), &run))
         .unwrap_or_else(|error| panic!("{}: {error}", case.name));
     assert!(result.report().completed, "{} did not complete", case.name);
@@ -107,7 +117,7 @@ fn check(name: &str, tier: &str, row: Row) {
     // The particle-only reference is also the historical oracle; generation and the
     // Named/Minimal builds are shared with the full class/thread comparison matrix.
     let reference = classes::check(case);
-    let numerators = NumeratorOptions::default().with_naming(Naming::prefix("D"));
+    let numerators = case.numerators().with_naming(Naming::prefix("D"));
     // The source name/index assertion is specific to these selector-free fixtures.
     let serialized = serde_json::to_value(&numerators).unwrap();
     assert_eq!(
@@ -121,12 +131,12 @@ fn check(name: &str, tier: &str, row: Row) {
     for field in ["vetoed_diagram_ids", "vetoed_diagram_names"] {
         assert_eq!(serialized[field], serde_json::json!([]), "{name}: {field}");
     }
-    if let Ok(directory) = std::env::var("FEYNKIT_ORACLE_DUMP") {
+    if let Ok(directory) = env::var("FEYNKIT_ORACLE_DUMP") {
         std::fs::create_dir_all(&directory).unwrap();
         std::fs::write(format!("{directory}/{name}.census"), reference.dump()).unwrap();
     }
     let summary = reference.summary();
-    if std::env::var_os("FEYNKIT_ORACLE_RECORD").is_some() {
+    if env::var_os("FEYNKIT_ORACLE_RECORD").is_some() {
         println!("    {tier} {name}: {summary};");
     } else {
         let expected = Summary::from(&row);
@@ -155,10 +165,7 @@ fn fails(name: &str, error: &[&str]) {
                 .request(&model)
                 .generate(model.into(), &run)
                 .and_then(|prepared| {
-                    prepared.build(
-                        &NumeratorOptions::default().with_naming(output.clone()),
-                        &run,
-                    )
+                    prepared.build(&case.numerators().with_naming(output.clone()), &run)
                 })
                 .and_then(|built| built.group(&case.grouping(), &run));
             match result {
@@ -287,6 +294,7 @@ oracle! {
     heavy ym_g8_L0: Row { diagrams: 34300, topologies: 34300, assignments: 34300, inverse_symmetry: (34300, 1), weights: (34300, 1), symmetry_factors: &[(1, 34300)], content: 0x0d8cd8312f854d8b, numerators: 0x4be08c2dd2eb4a1e, named: 0xe921e3ce642cddae, ids: 0xa9980ccebbd89562 };
     heavy ym_gse_L4: Row { diagrams: 2571, topologies: 666, assignments: 2571, inverse_symmetry: (81653, 48), weights: (-8113, 16), symmetry_factors: &[(1, 1139), (2, 889), (4, 402), (6, 17), (8, 100), (12, 14), (16, 9), (24, 1)], content: 0xf0b98dad15d745b1, numerators: 0x6bb69664d65cdbbc, named: 0x24757abcc9b9d2ec, ids: 0x0074f4d0f4b0cda4 };
     heavy ym_gse_L5: Row { diagrams: 53201, topologies: 9892, assignments: 53201, inverse_symmetry: (9957739, 288), weights: (-2104793, 288), symmetry_factors: &[(1, 22781), (2, 18577), (3, 2), (4, 8421), (6, 315), (8, 2411), (12, 248), (16, 349), (24, 72), (32, 19), (36, 1), (48, 3), (72, 2)], content: 0x8da6be7bb6b31c5b, numerators: 0xf988e70b630fac54, named: 0x81b24addd62ad96f, ids: 0x683c20a191922cf0 };
+    fast ym_ggg_zero_color_L3: Row { diagrams: 1217, topologies: 469, assignments: 1340, inverse_symmetry: (3583, 4), weights: (-1161, 4), symmetry_factors: &[(1, 649), (2, 424), (4, 132), (6, 6), (8, 6)], content: 0x19b54d6ef892c24e, numerators: 0x1c149c8e666851cd, named: 0x3569d286d4aa397d, ids: 0x1ed193f8aeb76d2f };
     fast ym_vac_L5: Row { diagrams: 381, topologies: 91, assignments: 381, inverse_symmetry: (95437, 576), weights: (-19595, 576), symmetry_factors: &[(1, 82), (2, 110), (4, 73), (6, 4), (8, 54), (12, 9), (16, 28), (24, 3), (32, 8), (48, 4), (64, 2), (96, 1), (128, 2), (144, 1)], content: 0xf7c775391f48c05c, numerators: 0xc2afd3e35908cbf1, named: 0x357bb19f8902aa0c, ids: 0x41ea11f42e0c80b0 };
     fast sm_eemm_L0: Row { diagrams: 4, topologies: 1, assignments: 4, inverse_symmetry: (4, 1), weights: (-4, 1), symmetry_factors: &[(1, 4)], content: 0x97af00ae91ef62c4, numerators: 0x7c4bccf1c63f9180, named: 0xc01c07a8158bc53a, ids: 0x91a782bcdd47cb2a };
     fast sm_eemm_L1: Row { diagrams: 464, topologies: 10, assignments: 464, inverse_symmetry: (925, 2), weights: (-205, 2), symmetry_factors: &[(1, 461), (2, 3)], content: 0x7d459f5367fbcba8, numerators: 0xdf611964612f3ec9, named: 0x7b2f048149dccbf3, ids: 0xa1e6a4f3cf7051f9 };
@@ -327,6 +335,7 @@ oracle! {
     fast xs_qed_eemm_scalar_L2: Row { diagrams: 25, topologies: 157, assignments: 714, inverse_symmetry: (25, 1), weights: (8, 1), symmetry_factors: &[(1, 25)], content: 0x76af0acc0f7b7896, numerators: 0x5d7e712797f78751, named: 0x54e6507e4c865b62, ids: 0x52893e0efe85f881 };
     fast xs_qed_eedd_L1: Row { diagrams: 1, topologies: 17, assignments: 34, inverse_symmetry: (1, 1), weights: (-1, 1), symmetry_factors: &[(1, 1)], content: 0xb467d6be7a12aefa, numerators: 0xf5a21f1a84870bc7, named: 0xdd30b2e206f30267, ids: 0x58ebcb07ba6255d3 };
     fast xs_qed_eedd_L2: Row { diagrams: 30, topologies: 157, assignments: 714, inverse_symmetry: (30, 1), weights: (4, 1), symmetry_factors: &[(1, 30)], content: 0x1f065e0a67f8e4b1, numerators: 0x52854dced3f2ee5c, named: 0x368a1cfe1b96c3be, ids: 0xfba0be1b20d86887 };
+    fast xs_qcdqed_addx_canonical_scalar_lr_L3: Row { diagrams: 82, topologies: 25, assignments: 1410, inverse_symmetry: (161, 2), weights: (-2711, 2), symmetry_factors: &[(1, 79), (2, 3)], content: 0x72adf523d45d2a92, numerators: 0xe112f4cc670092f9, named: 0x85a0b3b8988b3a99, ids: 0x84812f02ee345665 };
     fast xs_qed_eeaa_L2: Row { diagrams: 96, topologies: 157, assignments: 714, inverse_symmetry: (96, 1), weights: (-48, 1), symmetry_factors: &[(1, 96)], content: 0x8f8d4c480eadbae0, numerators: 0x8b2fe92ed5414355, named: 0xe67ffcbf30548e8b, ids: 0x9d68f748335a7cfd };
     fast xs_qed_aaee_L2: Row { diagrams: 248, topologies: 75, assignments: 3456, inverse_symmetry: (248, 1), weights: (176, 1), symmetry_factors: &[(1, 248)], content: 0xaa83568f8a1e3de4, numerators: 0xaa63603383de7b0b, named: 0x26940e2744fc7077, ids: 0x0ccc891930b8d526 };
     fast xs_qed_aaee_sym_L2: Row { diagrams: 124, topologies: 75, assignments: 3456, inverse_symmetry: (124, 1), weights: (176, 1), symmetry_factors: &[(1, 124)], content: 0x534f9729e6e7f0f1, numerators: 0x97b803df9beb77af, named: 0xb0209cd25cac901b, ids: 0x91e367b69f3f8408 };
@@ -381,7 +390,7 @@ fn is_ghost(model: &Model, diagram: &FeynmanDiagram) -> bool {
 fn ids_do_not_depend_on_threads_or_symbol_registration() {
     const CHILD: &str = "FEYNKIT_ORACLE_ID_CHILD";
     const RUN: [&str; 3] = ["qcd_uugg_L1", "sm_eemm_L1", "xs_qed_eemm_L2"];
-    if let Ok(child) = std::env::var(CHILD) {
+    if let Ok(child) = env::var(CHILD) {
         let (threads, registration) = child.split_once(',').unwrap_or((&child, "ordinary"));
         // These names have no global initializer. Assert the actual registration order,
         // rather than assuming a preload changed the process-global symbol table.
@@ -475,34 +484,139 @@ fn ids_do_not_depend_on_threads_or_symbol_registration() {
 #[test]
 fn printed_numerators_do_not_depend_on_threads() {
     const CHILD: &str = "FEYNKIT_ORACLE_PRINT_CHILD";
-    const RUN: [&str; 2] = ["qcd_uugg_L1", "sm_eemm_L1"];
-    if let Ok(threads) = std::env::var(CHILD) {
+    const RUN: [&str; 4] = [
+        "qcd_uugg_L1",
+        "sm_eemm_L1",
+        "ym_ggg_zero_color_L3",
+        "xs_qcdqed_addx_canonical_scalar_lr_L3",
+    ];
+    if let Ok(threads) = env::var(CHILD) {
+        let threads = threads.parse().unwrap();
         for name in RUN {
-            for diagram in grouped(Case::named(name), threads.parse().unwrap()).iter() {
-                let (numerator, _) =
-                    feynkit_graph::NumeratorInterface::export(diagram.numerator().unwrap());
-                println!(
-                    "{CHILD} {name} {} {numerator} {}",
-                    diagram.name().expect("named oracle output"),
-                    diagram.overall_factor()
-                );
-            }
+            print_outputs(CHILD, name, &grouped(Case::named(name), threads));
         }
+        print_outputs(
+            CHILD,
+            "ym_ggg_sampled_sign_subset_L3",
+            &sampled_color_subset(threads),
+        );
         return;
     }
     let test = "printed_numerators_do_not_depend_on_threads";
     let reference = child_lines(test, CHILD, "1");
     assert!(reference.len() > 500);
     for threads in [1, 8, 32] {
-        assert_eq!(child_lines(test, CHILD, &threads.to_string()), reference);
+        assert_child_lines_eq(test, CHILD, &threads.to_string(), &reference);
     }
 }
 
-/// The named and grouped diagrams of `case` at `threads` threads.
-fn grouped(case: &Case, threads: usize) -> BuiltDiagramSet {
+/// Cook the tensor-index payloads `owner(n, 1)` of the half-edge, edge and vertex owners for
+/// `n < 64` in `order` (`generation` cooks none) and return the number of symbols registered
+/// afterwards.
+fn register_indices(order: &str) -> usize {
+    let mut payloads = [
+        symbols::hedge_index(),
+        symbols::edge_index(),
+        symbols::vertex_index(),
+    ]
+    .into_iter()
+    .flat_map(|owner| (0..64).map(move |n| function!(owner, n, 1)))
+    .collect::<Vec<_>>();
+    match order {
+        "generation" => payloads.clear(),
+        "increasing" => {}
+        "decreasing" => payloads.reverse(),
+        "shuffled" => {
+            // Fisher-Yates with a fixed linear congruential sequence.
+            let mut state = 0x2545_f491_4f6c_dd1d_u64;
+            for last in (1..payloads.len()).rev() {
+                state = state
+                    .wrapping_mul(6_364_136_223_846_793_005)
+                    .wrapping_add(1_442_695_040_888_963_407);
+                payloads.swap(last, (state >> 33) as usize % (last + 1));
+            }
+        }
+        _ => panic!("unknown registration order {order}"),
+    }
+    // Native index cooking deliberately preserves Named indices after #209.
+    // Explicit function encoding exercises the supported reversible aliases instead.
+    let cooking = CookSettings::indices()
+        .with_source_filter(CookSourceFilter::AnyFunction)
+        .with_mode(CookMode::ReversibleEncoding);
+    let mut registered = BTreeMap::new();
+    for payload in &payloads {
+        let AtomView::Fun(payload) = payload.as_view() else {
+            unreachable!("index payloads are functions")
+        };
+        let cooked = cooking.cook_function(payload).unwrap();
+        let AtomView::Var(variable) = cooked.as_view() else {
+            panic!("cooked index must be a variable")
+        };
+        registered.insert(variable.get_symbol(), payload.as_view().to_owned());
+        let head = tensor_symbol!("feynkit_oracle_registration::cooked_probe");
+        let tensor = NumeratorInterface::admit(
+            function!(head, Minkowski {}.new_rep(4).to_symbolic([cooked])),
+            None,
+        )
+        .unwrap();
+        assert_eq!(tensor.rank(), 1);
+        assert_eq!(
+            NumeratorInterface::export(&tensor).0,
+            function!(
+                head,
+                Minkowski {}
+                    .new_rep(4)
+                    .to_symbolic([payload.as_view().to_owned()])
+            )
+        );
+    }
+    assert_eq!(
+        registered.values().collect::<Vec<_>>(),
+        payloads.iter().collect::<Vec<_>>(),
+        "actual cooked index registration order"
+    );
+    State::symbol_iter().count()
+}
+
+/// Print the process-independent outputs of `name`, each line prefixed by
+/// `prefix`: the zero-color count, every diagram's exported numerator and overall factor, and
+/// every group's members with their ratios.
+fn print_outputs(prefix: &str, name: &str, result: &BuiltDiagramSet) {
+    println!(
+        "{prefix} {name} zero {}",
+        result.report().zero_numerator_count
+    );
+    for diagram in result.iter() {
+        let (numerator, _) = NumeratorInterface::export(diagram.numerator().unwrap());
+        println!(
+            "{prefix} {name} {} {numerator} {}",
+            diagram.name().expect("named oracle output"),
+            diagram.overall_factor()
+        );
+    }
+    let mut exact = Vec::new();
+    Census::of(result).write_exact_dump(&mut exact).unwrap();
+    println!("{prefix} {name} full {}", String::from_utf8(exact).unwrap());
+    for group in result.groups() {
+        let members = group
+            .members
+            .iter()
+            .map(|member| format!("{}:{}", member.source_diagram, member.ratio))
+            .collect::<Vec<_>>();
+        println!("{prefix} {name} group {}", members.join(" "));
+    }
+}
+
+/// A small witness from the full YM fixture keeps sampled-grouping registration checks cheap.
+/// D0096, D0194, D0196, D0201, D0203, D0480 and D0492 vanish by color algebra; the old grouped
+/// zero test misses some of them under permuted registration. D0000/D0001 exercise sampling of
+/// survivors. The standalone filter is off, so only grouping can remove these seven zeros.
+fn sampled_color_subset(threads: usize) -> BuiltDiagramSet {
+    let case = Case::named("ym_ggg_zero_color_L3");
     let model = case.model();
     let run = Run::default().threads(threads);
-    case.request(&model)
+    let built = case
+        .request(&model)
         .generate(model.into(), &run)
         .unwrap()
         .build(
@@ -510,14 +624,117 @@ fn grouped(case: &Case, threads: usize) -> BuiltDiagramSet {
             &run,
         )
         .unwrap()
-        .group(&case.grouping(), &run)
+        .select(
+            &Selection::new().select_names([
+                "D0000", "D0001", "D0096", "D0194", "D0196", "D0201", "D0203", "D0480", "D0492",
+            ]),
+            &run,
+        )
+        .unwrap();
+    assert_eq!(built.len(), 9, "sampled color-zero witness selection");
+    let result = built
+        .group(&Grouping::UpToSign(GraphGroupingOptions::default()), &run)
+        .unwrap();
+    assert_eq!(result.report().zero_numerator_count.to_string(), "7");
+    result
+}
+
+/// Symbolica orders terms by symbol registration, and the parallel build cooks the tensor indices
+/// of half-edges, edges and vertices into symbols in the order its threads first meet them. The
+/// zero-color proof (including sampled grouping with the filter off) and canonical numerator
+/// grouping must not depend on that order: fresh
+/// processes that register these indices first, in increasing, decreasing or shuffled order,
+/// remove the same zero-color diagrams and form the same groups, with the same numerators and
+/// ratios, as a process that registers them during generation. The test runs its own binary as
+/// those processes.
+#[test]
+fn outputs_do_not_depend_on_index_registration_order() {
+    const CHILD: &str = "FEYNKIT_ORACLE_REGISTRATION_CHILD";
+    const RUN: [&str; 2] = [
+        "ym_ggg_zero_color_L3",
+        "xs_qcdqed_addx_canonical_scalar_lr_L3",
+    ];
+    if let Ok(order) = env::var(CHILD) {
+        let (order, count) = order.split_once(',').unwrap();
+        let count = count.parse().unwrap();
+        let registered = register_indices(order);
+        for name in RUN {
+            print_outputs(CHILD, name, &grouped(Case::named(name), count));
+        }
+        print_outputs(
+            CHILD,
+            "ym_ggg_sampled_sign_subset_L3",
+            &sampled_color_subset(count),
+        );
+        // Generation must have met only pre-registered indices. Cooked index symbols keep their
+        // payload; cooked dimensions encode it in their names.
+        let cooked_later = State::symbol_iter()
+            .skip(registered)
+            .filter(|(_, name)| name.starts_with("idenso::cooked_"))
+            .filter_map(|(symbol, _)| match symbol.get_data() {
+                UserData::Atom(payload) => Some(payload.to_canonical_string()),
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+        if order != "generation" {
+            assert!(
+                cooked_later.is_empty(),
+                "{order}: generation cooked unregistered indices {cooked_later:?}"
+            );
+        }
+        return;
+    }
+    let test = "outputs_do_not_depend_on_index_registration_order";
+    let reference = child_lines(test, CHILD, "generation,1");
+    assert!(reference.len() > 100);
+    for count in [1, 8, 32] {
+        for order in ["generation", "increasing", "decreasing", "shuffled"] {
+            assert_child_lines_eq(test, CHILD, &format!("{order},{count}"), &reference);
+        }
+    }
+}
+
+/// The named and grouped diagrams of `case` at `threads` threads.
+fn grouped(case: &Case, threads: usize) -> BuiltDiagramSet {
+    let model = case.model();
+    let observed = Arc::new(AtomicUsize::new(0));
+    let sink = Arc::clone(&observed);
+    let caller = thread::current().id();
+    let run = Run::default().threads(threads).progress(move |progress| {
+        if matches!(
+            progress.stage,
+            Stage::ZeroColor | Stage::Numerators | Stage::GroupingPreparation
+        ) && progress.completed > 0usize.into()
+        {
+            if threads == 1 {
+                assert_eq!(thread::current().id(), caller);
+                assert!(rayon::current_thread_index().is_none());
+            } else {
+                assert_eq!(rayon::current_num_threads(), threads);
+            }
+            sink.fetch_add(1, Ordering::Relaxed);
+        }
+        GenerationControl::Continue
+    });
+    let result = case
+        .request(&model)
+        .generate(model.into(), &run)
         .unwrap()
+        .build(&case.numerators().with_naming(Naming::prefix("D")), &run)
+        .unwrap()
+        .group(&case.grouping(), &run)
+        .unwrap();
+    assert!(
+        observed.load(Ordering::Relaxed) > 0,
+        "actual worker pool was not observed"
+    );
+    result
 }
 
 /// Run `test` of this binary in a fresh process with `variable=value` and return the lines it
 /// prints that start with `variable`.
 fn child_lines(test: &str, variable: &str, value: &str) -> Vec<String> {
-    let output = Command::new(std::env::current_exe().unwrap())
+    let output = Command::new(env::current_exe().unwrap())
         .args(["--exact", test, "--nocapture"])
         .env(variable, value)
         .output()
@@ -525,14 +742,33 @@ fn child_lines(test: &str, variable: &str, value: &str) -> Vec<String> {
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert!(
         output.status.success(),
-        "{value}: {stdout}{}",
+        "{value}: child {}: stdout/stderr (first4000 characters each):\n{}\n{}",
+        output.status,
+        stdout.chars().take(4000).collect::<String>(),
         String::from_utf8_lossy(&output.stderr)
+            .chars()
+            .take(4000)
+            .collect::<String>()
     );
     stdout
         .lines()
         .filter(|line| line.starts_with(variable))
         .map(str::to_owned)
         .collect()
+}
+
+/// Report the first differing line without dumping all exported numerators.
+fn assert_child_lines_eq(test: &str, variable: &str, value: &str, reference: &[String]) {
+    let actual = child_lines(test, variable, value);
+    for (index, (actual, expected)) in actual.iter().zip(reference).enumerate() {
+        assert!(
+            actual == expected,
+            "{value}: line {index} differs (first 240 characters):\nactual: {}\nexpected: {}",
+            actual.chars().take(240).collect::<String>(),
+            expected.chars().take(240).collect::<String>()
+        );
+    }
+    assert_eq!(actual.len(), reference.len(), "{value}: output line count");
 }
 
 /// A user filter pruning in flight, a particle veto and post-filtering the unfiltered diagrams

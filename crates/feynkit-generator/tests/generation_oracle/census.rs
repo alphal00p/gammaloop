@@ -67,6 +67,8 @@ pub struct Entry {
     factor: Atom,
     /// The overall factor with its bookkeeping heads evaluated: `1 / |Aut|` with the fermion
     /// signs and the number of diagrams that symmetrization or grouping identified with this one.
+    /// Only this diagnostic weight takes model parameters at one inside group ratios;
+    /// source factors and exact payloads retain their original values.
     pub weight: Rational,
     /// Historical frame/numerator digests are needed only for the recorded reference.
     digests: OnceLock<(u64, u64)>,
@@ -719,6 +721,30 @@ pub struct Census {
     pub groups: Vec<Group>,
 }
 
+#[test]
+fn census_weights_substitute_parameters_only_in_group_ratios() {
+    let parameter = Atom::var(symbol!("UFO::generation_oracle_weight_parameter"));
+    let head = symbol!("feynkit_generator_factor::NumeratorDependentGrouping");
+    let grouped = function!(head, 0, 12 * parameter.pow(2), Atom::num((1, 2)));
+    assert_eq!(Entry::weight(&grouped), Rational::from(6));
+    let nested = function!(head, 1, &parameter, &grouped);
+    assert_eq!(Entry::weight(&nested), Rational::from(6));
+    assert_eq!(Entry::weight(&Atom::num((1, 2))), Rational::from((1, 2)));
+    for invalid in [
+        parameter.clone(),
+        &parameter * &grouped,
+        function!(head, 0, &parameter, &parameter),
+        function!(
+            head,
+            0,
+            Atom::var(symbol!("generation_oracle::not_a_parameter")),
+            1
+        ),
+    ] {
+        assert!(catch_unwind(|| Entry::weight(&invalid)).is_err());
+    }
+}
+
 /// What [`Census::diff`] compares.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Scope {
@@ -831,6 +857,35 @@ fn canonical(atom: &Atom) -> String {
 }
 
 impl Entry {
+    /// Evaluate census weights with model parameters at one only inside group ratios.
+    /// Source factors remain strict, including those nested in grouping provenance.
+    fn weight(factor: &Atom) -> Rational {
+        let factor = factor.replace_map_bottom_up(|view, _, out| {
+            if let AtomView::Fun(group) = view
+                && group.get_symbol()
+                    == symbol!("feynkit_generator_factor::NumeratorDependentGrouping")
+                && group.get_nargs() == 3
+            {
+                let mut args = group.iter();
+                let source = args.next().unwrap();
+                let ratio = args.next().unwrap();
+                let source_factor = args.next().unwrap();
+                let ratio = ratio.replace_map(|view, _, out| {
+                    if let AtomView::Var(parameter) = view
+                        && parameter.get_symbol().get_namespace() == "UFO"
+                    {
+                        **out = Atom::num(1);
+                    }
+                });
+                let normalized = function!(group.get_symbol(), source, ratio, source_factor);
+                **out = evaluate_overall_factor(normalized.as_view());
+            }
+        });
+        let weight = evaluate_overall_factor(factor.as_view());
+        Rational::try_from(&weight)
+            .unwrap_or_else(|_| panic!("overall factor {factor} evaluates to non-numeric {weight}"))
+    }
+
     /// The encoded payload of `diagram` and the entry built from that payload once it is stored.
     fn of(diagram: &FeynmanDiagram) -> (Vec<u8>, impl FnOnce(Payload) -> Entry + Send) {
         let full_key = Arc::new(diagram.canonical_key().unwrap());
@@ -838,13 +893,7 @@ impl Entry {
             .json(&serde_json::to_value(full_key.as_ref()).unwrap())
             .0;
         let bytes = Payload::encode(&PhysicalPayload::of(diagram));
-        let weight = evaluate_overall_factor(diagram.overall_factor().as_view());
-        let weight = Rational::try_from(&weight).unwrap_or_else(|_| {
-            panic!(
-                "{:?}: overall factor {weight} is not a number",
-                diagram.name()
-            )
-        });
+        let weight = Self::weight(diagram.overall_factor());
         let (id, name, symmetry_factor) = (
             diagram.id().unwrap(),
             diagram.name().map(str::to_owned),
@@ -1269,9 +1318,11 @@ impl Census {
 
     /// Resolve every Named member by identity against the full ungrouped inventory,
     /// including discarded sources. Grouped output positions may differ, but each
-    /// source index refers to the original request's ungrouped inventory.
+    /// source index refers to the original request's ungrouped inventory, including removed colour zeros.
     pub fn assert_group_sources(&self, ungrouped: &Census, context: &str) {
         assert_eq!(ungrouped.groups.len(), ungrouped.diagrams.len());
+        let inventory = ungrouped.diagrams.len()
+            + usize::try_from(&ungrouped.report.zero_numerator_count).expect("zero count");
         let source_indices: BTreeSet<_> = ungrouped
             .groups
             .iter()
@@ -1296,7 +1347,7 @@ impl Census {
             ungrouped.diagrams.len(),
             "{context}: repeated source ID"
         );
-        let width = sources.len().saturating_sub(1).to_string().len();
+        let width = inventory.saturating_sub(1).to_string().len();
         let mut seen_indices = BTreeSet::new();
         let mut seen_sources = BTreeSet::new();
         for group in &self.groups {
@@ -1309,7 +1360,7 @@ impl Census {
             );
             for member in &group.members {
                 assert!(
-                    member.source_index < sources.len(),
+                    member.source_index < inventory,
                     "{context}: grouped source index out of bounds"
                 );
                 assert!(

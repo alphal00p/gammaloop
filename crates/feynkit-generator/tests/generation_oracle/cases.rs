@@ -7,12 +7,13 @@
 //! theory), `xs_*` cases are cross sections with physical cuts, `ct_*` models duplicate vertex
 //! rules with identical field content, as split UFO vertices and counterterms do,
 //! `identical`, `sign` and `scalar` group numerators that are identical, equal up to a sign or
-//! proportional, `sym` symmetrizes identical external states and `lr` identifies cross-section
-//! mirror images.
+//! proportional (`canonical` compares canonical forms instead of samples), `zero_color` removes
+//! the diagrams whose color factor vanishes, `sym` symmetrizes identical external states and `lr`
+//! identifies cross-section mirror images.
 
 use feynkit_generator::{
-    Bridges, Cuts, GenerationType, GraphGroupingOptions, Grouping, Loops, Orders, ParticleSelector,
-    Process, Range, Request, Restrict, Symmetrize, TopologyRules,
+    Bridges, Cuts, GenerationType, GraphGroupingOptions, Grouping, Loops, NumeratorOptions, Orders,
+    ParticleSelector, Process, Range, Request, Restrict, Symmetrize, TopologyRules, Veto,
 };
 use feynkit_model::{Model, Particle};
 
@@ -27,6 +28,7 @@ pub struct Case {
     loops: (usize, usize),
     configure: Configure,
     grouping: Option<fn(GraphGroupingOptions) -> Grouping>,
+    filter_zero_color: bool,
 }
 
 /// The reference workloads of the instruction gate: gg->gg L3, gg->ggg L2, uu~->gg L3, the
@@ -79,6 +81,16 @@ impl Case {
         })
     }
 
+    /// The case's numerator options; outputs choose their naming separately.
+    pub fn numerators(&self) -> NumeratorOptions {
+        NumeratorOptions::default().with_zero_color_filter(self.filter_zero_color)
+    }
+
+    const fn with_zero_color_filter(mut self) -> Self {
+        self.filter_zero_color = true;
+        self
+    }
+
     const fn with_grouping(mut self, grouping: fn(GraphGroupingOptions) -> Grouping) -> Self {
         self.grouping = Some(grouping);
         self
@@ -107,6 +119,7 @@ pub(super) const fn amplitude(
         loops: (loops, loops),
         configure,
         grouping: None,
+        filter_zero_color: false,
     }
 }
 
@@ -238,6 +251,30 @@ fn beam_exchange(_: &Model, request: Request) -> Request {
 fn left_right(_: &Model, request: Request) -> Request {
     let cuts = request.cuts().clone().with_symmetrize_left_right(true);
     request.with_cuts(cuts)
+}
+
+/// Mirror images identified, without self-energy and tadpole insertions or massless snails, as
+/// GammaLoop's `--filter-selfenergies --filter-tadpoles --filter-snails` request them.
+fn left_right_insertions_vetoed(model: &Model, request: Request) -> Request {
+    let topology = request
+        .topology()
+        .clone()
+        .with_self_energies(Veto::all())
+        .with_tadpoles(Veto::all())
+        .with_snails(Veto::massless());
+    left_right(model, request.with_topology(topology))
+}
+
+/// Compare canonical forms with concrete colour dimensions and shared sewn polarizations.
+/// Zero samples disables component-sample fallback; physical model parameters stay symbolic.
+fn canonical_scalar(options: GraphGroupingOptions) -> Grouping {
+    Grouping::UpToScalar(GraphGroupingOptions {
+        number_of_numerical_samples: 0,
+        fully_numerical_substitution: true,
+        check_canonical_numerator: true,
+        symmetric_polarizations: true,
+        ..options
+    })
 }
 
 fn beam_exchange_left_right(model: &Model, request: Request) -> Request {
@@ -527,6 +564,8 @@ pub const CASES: &[Case] = &[
     amplitude("ym_g8_L0", Model::yang_mills, GG, &["g"; 6], 0, plain),
     amplitude("ym_gse_L4", Model::yang_mills, G, G, 4, one_pi),
     amplitude("ym_gse_L5", Model::yang_mills, G, G, 5, one_pi),
+    // Color zeros whose proof must not depend on term order, which follows symbol registration.
+    amplitude("ym_ggg_zero_color_L3", Model::yang_mills, G, GG, 3, one_pi).with_zero_color_filter(),
     amplitude("ym_vac_L5", Model::yang_mills, NONE, NONE, 5, plain),
     // The Standard Model with the full CKM matrix.
     amplitude("sm_eemm_L0", Model::standard_model, EE, MUMU, 0, plain),
@@ -774,6 +813,10 @@ pub const CASES: &[Case] = &[
     cross_section("xs_qed_eemm_L1", Model::qed, EE, MUMU, 1, plain),
     cross_section("xs_qed_eemm_L2", Model::qed, EE, MUMU, 2, plain),
     cross_section("xs_qed_eemm_L3", Model::qed, EE, MUMU, 3, plain),
+    // One pair of the 30 forward graphs is identical: the muon self-energy on the cut mu- line
+    // and on the cut mu+ line, the two orientations of a closed fermion loop with four vector
+    // vertices, which charge conjugation makes equal. Sampling both wavefunctions of the sewn
+    // electron lines proves it. The d and s quark vacuum polarizations differ by their masses.
     cross_section("xs_qed_eemm_identical_L2", Model::qed, EE, MUMU, 2, plain)
         .with_grouping(Grouping::Identical),
     cross_section("xs_qed_eemm_sign_L2", Model::qed, EE, MUMU, 2, plain)
@@ -782,6 +825,17 @@ pub const CASES: &[Case] = &[
         .with_grouping(Grouping::UpToScalar),
     cross_section("xs_qed_eedd_L1", Model::qed, EE, DD, 1, plain),
     cross_section("xs_qed_eedd_L2", Model::qed, EE, DD, 2, plain),
+    // QCD and QED corrections grouped by canonical forms, which must not depend on the order in
+    // which index symbols were registered.
+    cross_section(
+        "xs_qcdqed_addx_canonical_scalar_lr_L3",
+        Model::qcd_qed,
+        A,
+        DD,
+        3,
+        left_right_insertions_vetoed,
+    )
+    .with_grouping(canonical_scalar),
     cross_section("xs_qed_eeaa_L2", Model::qed, EE, &["a", "a"], 2, plain),
     // Identical beams under the beam exchange, the mirror identification and both.
     cross_section("xs_qed_aaee_L2", Model::qed, &["a", "a"], EE, 2, plain),
