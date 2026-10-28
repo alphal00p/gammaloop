@@ -1,0 +1,237 @@
+{
+  "source_commit": "c2cce079a92c66fd1435a2ad42d86c17e16353be",
+  "metadata_snapshot_commit": "130b857ef74218cbb8e3b68409dca5a4641b367c",
+  "artifacts": [
+    {
+      "path": "target/wp3-units27-29/acceptance-binaries.json",
+      "bytes": 2376,
+      "sha256": "544ad66a6177ba3650374e03d5cc10bdb2f428af8d34cdb1d5c1e884ce84d5ba"
+    },
+    {
+      "path": "target/wp3-units27-29/acceptance-binaries.log",
+      "bytes": 1709,
+      "sha256": "61056c1d7782cadb48ec4826d27785618d7070b6457c35999c263c3153fca6a2"
+    },
+    {
+      "path": "target/wp3-units27-29/acceptance-junit.xml",
+      "bytes": 785,
+      "sha256": "ac2d074d096e8d756ac86ec0839466407cd30791d0854b146d30ba86ca01f6df"
+    },
+    {
+      "path": "target/wp3-units27-29/acceptance-main.log",
+      "bytes": 162723,
+      "sha256": "d52fba7a8c259e363c19a7fedc4f0a47d6feb4366508effe3aaaa84e640b285b"
+    },
+    {
+      "path": "target/wp3-units27-29/acceptance.log",
+      "bytes": 184,
+      "sha256": "9d3b897e8b959ba8448962ae85e424f5ce5d53630f19b7306b8565ebe2f30c42"
+    },
+    {
+      "path": "target/wp3-units27-29/approved-cumulative.patch",
+      "bytes": 78420,
+      "sha256": "3d507ecf35cdeb71cfc02292ed73cc9945eb5880b1ab3c16e5ee532420cd792a"
+    },
+    {
+      "path": "target/wp3-units27-29/audit.py",
+      "bytes": 5130,
+      "sha256": "690cf8937d7b55ef9feaec0e5e97e59a85744dc74ef5bac061e0effe2dbc9bab"
+    },
+    {
+      "path": "target/wp3-units27-29/bubble-binaries.json",
+      "bytes": 50823,
+      "sha256": "f801ec946b902240ae39b6e24b0f7bc0815d79bbf110cd66c6d0d8e6aacf6326"
+    },
+    {
+      "path": "target/wp3-units27-29/bubble-binaries.log",
+      "bytes": 1655,
+      "sha256": "187acdcf87fcf83b437c26e8b5eb718f1eaf4858884950f33a474c29244d6599"
+    },
+    {
+      "path": "target/wp3-units27-29/bubble.log",
+      "bytes": 2019,
+      "sha256": "a5f17d35782c7aff8f40c2d2082ab8c7033c00f9bb9da0127b9aee5b4e15208f"
+    },
+    {
+      "path": "target/wp3-units27-29/clippy.log",
+      "bytes": 1650,
+      "sha256": "f0a75988fe244333cdf759871c4ff926033772e989a425328e99c21ba2499e86"
+    },
+    {
+      "path": "target/wp3-units27-29/driver.log",
+      "bytes": 34,
+      "sha256": "ddc6fcf2dde23248e7d51a16d2d0e7b0a5dc9819ebb830514aaab132cf432168"
+    },
+    {
+      "path": "target/wp3-units27-29/finalize.py",
+      "bytes": 8173,
+      "sha256": "f912cc7a1f3039bb91191667186b4c3e4e13a1889104e29d51394843270ff341"
+    },
+    {
+      "path": "target/wp3-units27-29/fmt.log",
+      "bytes": 24,
+      "sha256": "1dadf1b63f3fc19e19b1e9fb9a6c3f7772d8ba250861dcced4346f892ae2fca3"
+    },
+    {
+      "path": "target/wp3-units27-29/generator-binaries.json",
+      "bytes": 34957,
+      "sha256": "ec1dbbad924ff00a71ecedaffbb64df111209b9bd08aa042dd46d3c58a933ae2"
+    },
+    {
+      "path": "target/wp3-units27-29/generator-binaries.log",
+      "bytes": 375,
+      "sha256": "b7c0b77d98bf3c153625a1697ea27ae7125b63702bb244c1c034fbb8535bf83e"
+    },
+    {
+      "path": "target/wp3-units27-29/grouping-admission-junit.xml",
+      "bytes": 5162,
+      "sha256": "bb2dcb461f39020634df4ede56d8dddb69d02e033ca40bbf81477dee515f3bd3"
+    },
+    {
+      "path": "target/wp3-units27-29/grouping-admission.log",
+      "bytes": 3646,
+      "sha256": "46f7e3ca1fcc4ae3f49da642b430a047e9b69cd35e58b10a3b51b104f8e4d495"
+    },
+    {
+      "path": "target/wp3-units27-29/import.json",
+      "bytes": 1413,
+      "sha256": "98282fb33c8a6d9860ad88b29f2063e19ed6718e85675547cf333b0b17437544"
+    },
+    {
+      "path": "target/wp3-units27-29/integrity.py",
+      "bytes": 3848,
+      "sha256": "08f80a13412261244a658a8f3f09396e1e2a0476f389abb1c5148355b664386e"
+    },
+    {
+      "path": "target/wp3-units27-29/kernel.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "target/wp3-units27-29/note.html",
+      "bytes": 5525,
+      "sha256": "5ab9de04f2ec690f3c755d2bf098405d90be144ecaecf06643e170bb86014f57"
+    },
+    {
+      "path": "target/wp3-units27-29/numeric-junit.xml",
+      "bytes": 6429,
+      "sha256": "9cecade04c068c21559d8a49145ab1003f22c2839144d3cdc544f69a4433d585"
+    },
+    {
+      "path": "target/wp3-units27-29/numeric.log",
+      "bytes": 5653,
+      "sha256": "fb4282e54b6c23b66ff56d122ca1b89c96f78d1b53515dcc04b3f6ad7a95741f"
+    },
+    {
+      "path": "target/wp3-units27-29/original-pair-B2.log",
+      "bytes": 373,
+      "sha256": "2e9f03c43a0a41c9fabd5188f08b6ecc2544674b02e80e0fdaf9ae3484d73b41"
+    },
+    {
+      "path": "target/wp3-units27-29/plan.html",
+      "bytes": 36450,
+      "sha256": "ce551702e303c1c0ad8df8b1476469d4c208ab41aac3a9a06f6fcfa4435c7b52"
+    },
+    {
+      "path": "target/wp3-units27-29/results.py",
+      "bytes": 4138,
+      "sha256": "02521d97f7d48cd41c3eaa1efa048d1dc8484f9f84cb8fd111c73c9bc99d1065"
+    },
+    {
+      "path": "target/wp3-units27-29/resume-driver.log",
+      "bytes": 106,
+      "sha256": "296a2d0d0d5bf5e3026a7166ec6777ec15b4f7951fe509873339dcb7b4231a31"
+    },
+    {
+      "path": "target/wp3-units27-29/resume.py",
+      "bytes": 3143,
+      "sha256": "f30c299b0614473beb5f2f34a0a69e943eb655ba57c0ee0de46ae2dd1057350c"
+    },
+    {
+      "path": "target/wp3-units27-29/runner-argument-control.log",
+      "bytes": 184,
+      "sha256": "9d3b897e8b959ba8448962ae85e424f5ce5d53630f19b7306b8565ebe2f30c42"
+    },
+    {
+      "path": "target/wp3-units27-29/sampling-binaries.json",
+      "bytes": 244766,
+      "sha256": "fd485bd722d176b395def7cc63ccb3afd0bde01ab4000b0c67ad747a388d06bc"
+    },
+    {
+      "path": "target/wp3-units27-29/sampling-binaries.log",
+      "bytes": 1291,
+      "sha256": "1c083c27d4d99401342ab8eea2a59b38ef62f730e0f456b839841beebe7bc2cd"
+    },
+    {
+      "path": "target/wp3-units27-29/sampling-junit.xml",
+      "bytes": 38212,
+      "sha256": "f1aff961a98bd1baf0e02e1a603cfcd7214165488615d2cfd36c30aabead4cfd"
+    },
+    {
+      "path": "target/wp3-units27-29/sampling.log",
+      "bytes": 29006,
+      "sha256": "48c598573a9eba3674602e9e590980abc61275314077b3cd7472b81e28837182"
+    },
+    {
+      "path": "target/wp3-units27-29/staged-runtime-junit.xml",
+      "bytes": 2516,
+      "sha256": "9461802b74936f557a709cf5570a4ae6d2ac815b775a9182af9f3f9494f95c12"
+    },
+    {
+      "path": "target/wp3-units27-29/staged-runtime.log",
+      "bytes": 3084,
+      "sha256": "e00490c3fd967714d095854d1a5ef82e35f19ed4e18f768efb47215b10f6753a"
+    },
+    {
+      "path": "target/wp3-units27-29/transport-binaries.json",
+      "bytes": 29385,
+      "sha256": "074ea1d63f0bb151807133b790b500b9ed79fe93a32cff4701aed53a8e698038"
+    },
+    {
+      "path": "target/wp3-units27-29/transport-binaries.log",
+      "bytes": 481,
+      "sha256": "506d8e2d1edb5f5d783805d900f55e1dac457aed42b6d4dffd495d5ed3a89c25"
+    },
+    {
+      "path": "target/wp3-units27-29/transport-junit.xml",
+      "bytes": 5383,
+      "sha256": "999b912b3d996def66c7de927532e6b9fdb2781cfb1b87e4a45e5514db8a3860"
+    },
+    {
+      "path": "target/wp3-units27-29/transport.log",
+      "bytes": 4458,
+      "sha256": "071efacfae6783db71080813ade0ec88dacfa2918ffab9db75732786accd2f56"
+    },
+    {
+      "path": "target/wp3-units27-29/typst-note.log",
+      "bytes": 250,
+      "sha256": "d103175d5ac5ba1d2d4afae2e801958a1e0dafae1b43ffe6f1f44f3783a2f3ce"
+    },
+    {
+      "path": "target/wp3-units27-29/typst-plan.log",
+      "bytes": 250,
+      "sha256": "d103175d5ac5ba1d2d4afae2e801958a1e0dafae1b43ffe6f1f44f3783a2f3ce"
+    },
+    {
+      "path": "target/wp3-units27-29/validate-initial.py",
+      "bytes": 2948,
+      "sha256": "a389ee0f59337bbb9bbe71625178dc399b3baeccec2efcb6cb2e8551aecacb77"
+    },
+    {
+      "path": "target/wp3-units27-29/validate.py",
+      "bytes": 3247,
+      "sha256": "2c7e7983db3ce330782bb41993acc8d8a429c97bf45daa9a73863f6e76450fe1"
+    },
+    {
+      "path": "target/wp3-units27-29/validation-initial.json",
+      "bytes": 2661,
+      "sha256": "e4ffe7676011cca32fc0689f6316cf75da7326ef8bb053d66bdaae65333d4d2d"
+    },
+    {
+      "path": "target/wp3-units27-29/validation.json",
+      "bytes": 7601,
+      "sha256": "d57f95f997bc4b948836cf5280f2420b9aa35f6162af6f76194f3b3cb73cf87b"
+    }
+  ],
+  "semantics": "Completed ignored producer captures, including explicit setup failures without test credit. Current tracked receipt/replay/execution/inventory excluded."
+}

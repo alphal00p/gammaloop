@@ -1,10 +1,10 @@
 {
   "schema": 1,
-  "status": "Combined sources27\u201329 integrated; validation in progress; NEW independent Astra review required before30",
+  "status": "Sources27\u201329 combined candidate validated; STOP for NEW independent Astra review before30. WP3 remains incomplete.",
   "base": "a517ca563d78d161cff17fe60e661f80529c9a83",
   "code_commit": "c2cce079a92c66fd1435a2ad42d86c17e16353be",
   "code_change": "kpuovnvyssoystyzvultvlkqsmxxwomt",
-  "evidence_change": "musszptlrzptpvqpszskysyuvqvyoulr",
+  "evidence_change": "uspzstwlmnqqsloyxqlkoumqqknnlyws",
   "candidate_bookmark": "generation-integration-units27-29",
   "source_mapping": "source-mapping.json",
   "code_inventory": "code-inventory.json",
@@ -55,5 +55,116 @@
   "nixci": false,
   "kernel": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
   "dependencies": "No Cargo/feature/lock/uv/hostsubset changes; no relock/Hakari regeneration needed; isolation check scheduled.",
-  "hash_semantics": "Code/import hashes bind frozen c2cce079. Current registry/notes/receipt/execution are later metadata, excluded from code hashes; explicit frozen metadata snapshot will bind registry/note hashes. No recursive receipt hashes."
+  "hash_semantics": "Code/import hashes bind frozen c2cce079. Current registry/notes/receipt/execution are later metadata, excluded from code hashes; explicit frozen metadata snapshot will bind registry/note hashes. No recursive receipt hashes. Current registry/notes are frozen at130b857e. Final receipt/execution/replay/path inventory are separate metadata, not code_files hashes. No self-referential hash updates. Current registry/notes are frozen at130b857e. Final receipt/execution/replay/path inventory are separate metadata, not code_files hashes. No self-referential hash updates.",
+  "metadata_snapshot_commit": "130b857ef74218cbb8e3b68409dca5a4641b367c",
+  "registry_snapshot": {
+    "revision": "130b857ef74218cbb8e3b68409dca5a4641b367c",
+    "path": "docs/developers.toml",
+    "sha256": "2acfe5f32b7e7dde09542a9c55d924cb392dc70051bc2b3d74bb364eff517895"
+  },
+  "validation": "validation.json",
+  "test_inventory": "test-inventory.json",
+  "binary_identities": "binary-identities.json",
+  "physics": "physics.json",
+  "unique_fresh_Rust_tests_passed": 279,
+  "validation_pending": [],
+  "processes_retained": [],
+  "files": "files.json",
+  "fresh_checks": {
+    "sampling": 179,
+    "numeric": 34,
+    "overlap_sampling_numeric": 1,
+    "original178_retained": true,
+    "fixed_physics_acceptances": 2,
+    "grouping_quotient_nonfinite_admission": 25,
+    "B2_exact_ignored": 1,
+    "native_transport": 26,
+    "staged_runtime": 12,
+    "overlap_sampling_staged_runtime": 1,
+    "bubble_precision_reversal": 2,
+    "all_target_Clippy_D_warnings": true,
+    "fmt": true,
+    "kernel_isolation": true,
+    "Typst_note_plan": true,
+    "six_new_scopes": true,
+    "global_docs_pass": false
+  },
+  "scope_limit": {
+    "current_type_counts": {
+      "valid": 71,
+      "stale-digest": 24,
+      "missing-or-ambiguous-anchor": 4
+    },
+    "origin_vs_a517": {
+      "valid": 71,
+      "inherited_exact": 27,
+      "preexisting_failure_changed_source": 1
+    },
+    "note": "Already-stale process whole-file scope now has changed payload; do not label every inherited failure byte-identical. Source31 remains separate."
+  },
+  "warnings": "Inherited Clarabel dependency warnings: one unused import, one mismatched lifetime syntax. No new local warnings; strict relevant Clippy passes.",
+  "auxiliary_commands": [
+    {
+      "command": "typst compile --features html --format html --root . docs/architecture/generation-sampling-staged.typ target/wp3-units27-29/note.html",
+      "exit_code": 0,
+      "source_snapshot": "130b857ef74218cbb8e3b68409dca5a4641b367c",
+      "log_sha256": "d103175d5ac5ba1d2d4afae2e801958a1e0dafae1b43ffe6f1f44f3783a2f3ce"
+    },
+    {
+      "command": "typst compile --features html --format html --root . docs/architecture/generation-integration-plan.typ target/wp3-units27-29/plan.html",
+      "exit_code": 0,
+      "source_snapshot": "130b857ef74218cbb8e3b68409dca5a4641b367c",
+      "log_sha256": "d103175d5ac5ba1d2d4afae2e801958a1e0dafae1b43ffe6f1f44f3783a2f3ce"
+    },
+    {
+      "command": [
+        "cargo",
+        "nextest",
+        "run",
+        "--locked",
+        "--cargo-profile",
+        "ci-optim",
+        "--profile",
+        "ci_gammaloop",
+        "-p",
+        "gammaloop-integration-tests",
+        "--test",
+        "test_runs",
+        "--test-threads",
+        "2",
+        "-E",
+        "test(scalar_bubble_inspect) or test(bubble_energy_source_is_invariant_under_stored_edge_reversal)",
+        "--status-level",
+        "pass",
+        "--retries",
+        "0"
+      ],
+      "exit_code": 0,
+      "source_snapshot": "c2cce079a92c66fd1435a2ad42d86c17e16353be",
+      "tests_passed": 2,
+      "log": "target/wp3-units27-29/bubble.log",
+      "log_sha256": "a5f17d35782c7aff8f40c2d2082ab8c7033c00f9bb9da0127b9aee5b4e15208f"
+    }
+  ],
+  "rust_policy": "Incoming four Rust files reviewed against current mandatory import, error, ownership/locality and precision policy; production/regression bytes retained from independently approved staged preparation. No compatibility layer, prohibited expansion, new numeric threshold, or speculative optimization.",
+  "retained": "target/wp3-units27-29 contains actual new producers, logs, source/feature/binary inventories and setup-error history; original235 proof/baseline and all previous frozen reviews/refs/caches untouched.",
+  "rerun_recipe": {
+    "full_corrected_script": "target/wp3-units27-29/validate.py",
+    "output": "target/wp3-units27-29/reproduction",
+    "executed_producers": [
+      "target/wp3-units27-29/validate-initial.py",
+      "target/wp3-units27-29/resume.py"
+    ],
+    "semantics": "Full corrected script supplied for future reproduction, not rerun/credited. Original initial argument failure and the actual successful resumed producer preserved. Future reproduction writes separately and exits nonzero on any failed command."
+  },
+  "cleanup": {
+    "task_processes_retained": false,
+    "negative_or_setup_artifacts": "CLI-only argument failure retained separately; no physics-pass credit",
+    "retained": "Review-required source/producer/log/hash artifacts and all prior proof/baseline/reviews/caches; no other workspace cleanup.",
+    "removed_unused_one_time_editors": [
+      "target/wp3-units27-29/metadata.py",
+      "target/wp3-units27-29/track.py"
+    ]
+  },
+  "integrity": "integrity.json"
 }

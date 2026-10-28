@@ -1,0 +1,14 @@
+{
+  "frozen_code_commit": "c2cce079a92c66fd1435a2ad42d86c17e16353be",
+  "frozen_metadata_commit": "130b857ef74218cbb8e3b68409dca5a4641b367c",
+  "protected_files_verified": 87,
+  "protected_refs_verified": 24,
+  "actual_binaries_and_features_verified": 5,
+  "review_copies_verified": 2,
+  "completed_artifacts_verified": 46,
+  "changed_JSON_parsed_exactly": 20,
+  "conflicted_new_commits": 0,
+  "task_build_test_processes_retained": [],
+  "nixci": false,
+  "semantics": "Frozen code and registry/note snapshots verified. Mutable current receipt/execution/replay/current inventories have no self hashes. Failed CLI setup has no test/physics credit. All previous raw proofs/refs retained; no fullWP3 or distribution claim."
+}

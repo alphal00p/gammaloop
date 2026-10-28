@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "status": "Source27\u201329 combined code integrated; fresh validation in progress; NEW independent Astra review before30",
+  "status": "Sources27\u201329 combined candidate validated; STOP for NEW independent Astra review before30. WP3 remains incomplete.",
   "fixed_target": {
     "commit": "3f0df2a870806076820786994d4883decec8e9e3",
     "tree": "3c91ba47525c627fbc02d79f5afa1d58aa7c5b66",
@@ -536,7 +536,7 @@
       "planned_unit": "port-27",
       "planned_order": 23,
       "reason": "Keep co-oriented parallel-bundle LMB sampling with signed routing correctness tests.",
-      "status": "Integrated; combined validation and NEW Astra review pending",
+      "status": "Integrated and validated; NEW independent Astra review pending before30",
       "new_commit": "c2cce079a92c66fd1435a2ad42d86c17e16353be",
       "receipt": "wp3/units27-29/receipt.json",
       "approved_preparation": "2d679436ba300c339cf12fa8d647abaa97e6eda9"
@@ -549,7 +549,7 @@
       "planned_unit": "port-28",
       "planned_order": 24,
       "reason": "Keep zero-coefficient omission in affine sampling frames; preserve nonzero contributions.",
-      "status": "Integrated; combined validation and NEW Astra review pending",
+      "status": "Integrated and validated; NEW independent Astra review pending before30",
       "new_commit": "c2cce079a92c66fd1435a2ad42d86c17e16353be",
       "receipt": "wp3/units27-29/receipt.json",
       "approved_preparation": "2d679436ba300c339cf12fa8d647abaa97e6eda9"
@@ -562,7 +562,7 @@
       "planned_unit": "port-29",
       "planned_order": 25,
       "reason": "Retain already accepted CoolQM three-sigma gate and original fixed seed; no reseeding or broader tolerance.",
-      "status": "Integrated; combined validation and NEW Astra review pending",
+      "status": "Integrated and validated; NEW independent Astra review pending before30",
       "new_commit": "c2cce079a92c66fd1435a2ad42d86c17e16353be",
       "receipt": "wp3/units27-29/receipt.json",
       "approved_preparation": "2d679436ba300c339cf12fa8d647abaa97e6eda9"
@@ -1079,7 +1079,7 @@
     "limitation": "Seven inherited registry digests remain stale; carried explicitly for source31/final reconciliation."
   },
   "current_slice": {
-    "status": "Source27\u201329 combined code integrated; fresh validation in progress; NEW independent Astra review before30",
+    "status": "Sources27\u201329 combined candidate validated; STOP for NEW independent Astra review before30. WP3 remains incomplete.",
     "source_orders": [
       27,
       28,
@@ -1088,7 +1088,7 @@
     "base": "a517ca563d78d161cff17fe60e661f80529c9a83",
     "code_commit": "c2cce079a92c66fd1435a2ad42d86c17e16353be",
     "code_change": "kpuovnvyssoystyzvultvlkqsmxxwomt",
-    "evidence_change": "musszptlrzptpvqpszskysyuvqvyoulr",
+    "evidence_change": "uspzstwlmnqqsloyxqlkoumqqknnlyws",
     "candidate_bookmark": "generation-integration-units27-29",
     "receipt": "wp3/units27-29/receipt.json",
     "mapping": "wp3/units27-29/source-mapping.json",
@@ -1098,7 +1098,10 @@
     "prepared_code": "a205202b17b1c915190e17aa615cb4fe76391102",
     "prepared_base": "f2e32c44c986058ede1d7e585b9e2e4fefe1110c",
     "preparation_review": "wp3/units27-29/sampling-preparation-review.json",
-    "limits": "Preparation214unique checks are not fresh main credit. P3weighted sum is partition unity, not independent evaluator multiplicity. No source30/31/fullWP3/benchmark/distribution closure."
+    "limits": "Preparation214unique checks are not fresh main credit. P3weighted sum is partition unity, not independent evaluator multiplicity. No source30/31/fullWP3/benchmark/distribution closure.",
+    "metadata_snapshot_commit": "130b857ef74218cbb8e3b68409dca5a4641b367c",
+    "validation_receipt": "wp3/units27-29/validation.json",
+    "unique_fresh_Rust_tests_passed": 279
   },
   "staged_round1_review": {
     "verdict": "REQUEST_CHANGES",
@@ -1126,7 +1129,7 @@
     "candidate_bookmark": "generation-integration-corrected-staged",
     "candidate_change": "pmnstxxwwwkzvyuxyzmsmswtutnkzkmy"
   },
-  "implementation_change": "musszptlrzptpvqpszskysyuvqvyoulr",
+  "implementation_change": "uspzstwlmnqqsloyxqlkoumqqknnlyws",
   "implementation_code_commit": "c2cce079a92c66fd1435a2ad42d86c17e16353be",
   "combined_staged_integration_review": {
     "candidate": "d48f9d1aedc766eea5cb185ab6029d1f04462043",
@@ -1327,7 +1330,7 @@
     "review": "wp3/units27-29/integration22-26-review.json"
   },
   "active_slice27_29": {
-    "status": "Source27\u201329 combined code integrated; fresh validation in progress; NEW independent Astra review before30",
+    "status": "Sources27\u201329 combined candidate validated; STOP for NEW independent Astra review before30. WP3 remains incomplete.",
     "source_orders": [
       27,
       28,
@@ -1336,7 +1339,7 @@
     "base": "a517ca563d78d161cff17fe60e661f80529c9a83",
     "code_commit": "c2cce079a92c66fd1435a2ad42d86c17e16353be",
     "code_change": "kpuovnvyssoystyzvultvlkqsmxxwomt",
-    "evidence_change": "musszptlrzptpvqpszskysyuvqvyoulr",
+    "evidence_change": "uspzstwlmnqqsloyxqlkoumqqknnlyws",
     "candidate_bookmark": "generation-integration-units27-29",
     "receipt": "wp3/units27-29/receipt.json",
     "mapping": "wp3/units27-29/source-mapping.json",
@@ -1346,6 +1349,9 @@
     "prepared_code": "a205202b17b1c915190e17aa615cb4fe76391102",
     "prepared_base": "f2e32c44c986058ede1d7e585b9e2e4fefe1110c",
     "preparation_review": "wp3/units27-29/sampling-preparation-review.json",
-    "limits": "Preparation214unique checks are not fresh main credit. P3weighted sum is partition unity, not independent evaluator multiplicity. No source30/31/fullWP3/benchmark/distribution closure."
+    "limits": "Preparation214unique checks are not fresh main credit. P3weighted sum is partition unity, not independent evaluator multiplicity. No source30/31/fullWP3/benchmark/distribution closure.",
+    "metadata_snapshot_commit": "130b857ef74218cbb8e3b68409dca5a4641b367c",
+    "validation_receipt": "wp3/units27-29/validation.json",
+    "unique_fresh_Rust_tests_passed": 279
   }
 }

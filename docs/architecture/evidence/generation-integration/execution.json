@@ -7,7 +7,7 @@
   "workspace": "/shared/lcnbr/dev/gammaloop/generation-integration-plan",
   "base_commit": "3f0df2a870806076820786994d4883decec8e9e3",
   "plan_commit": "4374f72027b75df9ff95c5c7a725ee75beac27a8",
-  "implementation_change": "musszptlrzptpvqpszskysyuvqvyoulr",
+  "implementation_change": "uspzstwlmnqqsloyxqlkoumqqknnlyws",
   "implementation_bookmark": "generation-integration",
   "preserved_plan_bookmark": "generation-integration-plan",
   "author": {
@@ -73,7 +73,7 @@
       "scope": "Four packaging and two Clinnet tests; Nix WASM and license output; 49 hashes; byte-exact notices; not final wheel certification or all WP11"
     },
     "WP3": {
-      "status": "Source27\u201329 combined code integrated; fresh validation in progress; NEW independent Astra review before30",
+      "status": "Sources27\u201329 combined candidate validated; STOP for NEW independent Astra review before30. WP3 remains incomplete.",
       "pre_rebuild_ref": "generation-integration-pre-rebuild",
       "pre_rebuild_commit": "5226894ee1af61797e6b819d7e801a22bf17bace",
       "ancestry": "Reviewed planning/evidence chain descends from fixed target 3f0df2a8 and is retained as non-code base.",
@@ -194,9 +194,9 @@
       "prerequisite_validation": "Approved by Astra: independent572 combined+2 exporter tests plus fmt/kernel/Typst/manifests/refs. Seven inherited stale registry digests tracked for source31/final reconciliation.",
       "pre_staged_ref": "generation-integration-pre-staged",
       "pre_staged_commit": "438b61500da4b32841c64211103e5da6fc4c4a72",
-      "implementation_change": "musszptlrzptpvqpszskysyuvqvyoulr",
+      "implementation_change": "uspzstwlmnqqsloyxqlkoumqqknnlyws",
       "staged_code_commit": "f264028690d117b4b99c320b61b7f2d5d89222d0",
-      "current_slice_review": "Source27\u201329 combined code integrated; fresh validation in progress; NEW independent Astra review before30",
+      "current_slice_review": "Sources27\u201329 combined candidate validated; STOP for NEW independent Astra review before30. WP3 remains incomplete.",
       "active_slice22_26": {
         "status": "APPROVED at a517; source27 gate cleared",
         "source_orders": [
@@ -235,7 +235,7 @@
       },
       "implementation_code_commit": "c2cce079a92c66fd1435a2ad42d86c17e16353be",
       "active_slice27_29": {
-        "status": "Source27\u201329 combined code integrated; fresh validation in progress; NEW independent Astra review before30",
+        "status": "Sources27\u201329 combined candidate validated; STOP for NEW independent Astra review before30. WP3 remains incomplete.",
         "source_orders": [
           27,
           28,
@@ -244,7 +244,7 @@
         "base": "a517ca563d78d161cff17fe60e661f80529c9a83",
         "code_commit": "c2cce079a92c66fd1435a2ad42d86c17e16353be",
         "code_change": "kpuovnvyssoystyzvultvlkqsmxxwomt",
-        "evidence_change": "musszptlrzptpvqpszskysyuvqvyoulr",
+        "evidence_change": "uspzstwlmnqqsloyxqlkoumqqknnlyws",
         "candidate_bookmark": "generation-integration-units27-29",
         "receipt": "wp3/units27-29/receipt.json",
         "mapping": "wp3/units27-29/source-mapping.json",
@@ -254,7 +254,10 @@
         "prepared_code": "a205202b17b1c915190e17aa615cb4fe76391102",
         "prepared_base": "f2e32c44c986058ede1d7e585b9e2e4fefe1110c",
         "preparation_review": "wp3/units27-29/sampling-preparation-review.json",
-        "limits": "Preparation214unique checks are not fresh main credit. P3weighted sum is partition unity, not independent evaluator multiplicity. No source30/31/fullWP3/benchmark/distribution closure."
+        "limits": "Preparation214unique checks are not fresh main credit. P3weighted sum is partition unity, not independent evaluator multiplicity. No source30/31/fullWP3/benchmark/distribution closure.",
+        "metadata_snapshot_commit": "130b857ef74218cbb8e3b68409dca5a4641b367c",
+        "validation_receipt": "wp3/units27-29/validation.json",
+        "unique_fresh_Rust_tests_passed": 279
       }
     }
   },
@@ -459,7 +462,7 @@
     "review": "wp3/units27-29/integration22-26-review.json"
   },
   "active_slice27_29": {
-    "status": "Source27\u201329 combined code integrated; fresh validation in progress; NEW independent Astra review before30",
+    "status": "Sources27\u201329 combined candidate validated; STOP for NEW independent Astra review before30. WP3 remains incomplete.",
     "source_orders": [
       27,
       28,
@@ -468,7 +471,7 @@
     "base": "a517ca563d78d161cff17fe60e661f80529c9a83",
     "code_commit": "c2cce079a92c66fd1435a2ad42d86c17e16353be",
     "code_change": "kpuovnvyssoystyzvultvlkqsmxxwomt",
-    "evidence_change": "musszptlrzptpvqpszskysyuvqvyoulr",
+    "evidence_change": "uspzstwlmnqqsloyxqlkoumqqknnlyws",
     "candidate_bookmark": "generation-integration-units27-29",
     "receipt": "wp3/units27-29/receipt.json",
     "mapping": "wp3/units27-29/source-mapping.json",
@@ -478,6 +481,9 @@
     "prepared_code": "a205202b17b1c915190e17aa615cb4fe76391102",
     "prepared_base": "f2e32c44c986058ede1d7e585b9e2e4fefe1110c",
     "preparation_review": "wp3/units27-29/sampling-preparation-review.json",
-    "limits": "Preparation214unique checks are not fresh main credit. P3weighted sum is partition unity, not independent evaluator multiplicity. No source30/31/fullWP3/benchmark/distribution closure."
+    "limits": "Preparation214unique checks are not fresh main credit. P3weighted sum is partition unity, not independent evaluator multiplicity. No source30/31/fullWP3/benchmark/distribution closure.",
+    "metadata_snapshot_commit": "130b857ef74218cbb8e3b68409dca5a4641b367c",
+    "validation_receipt": "wp3/units27-29/validation.json",
+    "unique_fresh_Rust_tests_passed": 279
   }
 }
