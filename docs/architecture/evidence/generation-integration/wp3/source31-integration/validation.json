@@ -1,0 +1,47 @@
+{
+  "code": "ecd901151e9c6a4b30df75198c7613f1532416b1",
+  "canonical": "canonical.json",
+  "scope_pass": 102,
+  "scope_negative_controls": 16,
+  "current_note_titles": 64,
+  "focused_typst_outputs": 18,
+  "manual": "Reused source-matched independently reviewed output after complete tracked Typst input-tree equality.",
+  "rust_controls": "No new Rust source/manifest/lock changes; no fresh Clippy needed. Canonical Rust builder execution comes from actual pinned Nix snapshot. Bare local Cargo-launch failure and zero-binary unit discovery receive no pass credit.",
+  "failed_or_superseded_attempts": [
+    {
+      "path": "target/wp3-source31/snapshot-first-missing-shallow.log",
+      "sha256": "5a475cacb2bae3c800c7795bde63af0c9896587d9761b034f8b5519286aa10d7",
+      "qualification": "Historical failed/incomplete/superseded attempt; no canonical pass credit."
+    },
+    {
+      "path": "target/wp3-source31/snapshot-build.log",
+      "sha256": "7df6ae84826679c2986ed5416bd67f26126e4fee286588226fa50fffbfd9c969",
+      "qualification": "Historical failed/incomplete/superseded attempt; no canonical pass credit."
+    },
+    {
+      "path": "target/wp3-source31/snapshot-final.log",
+      "sha256": "ee700661e2f28dab48157ea9f60727f41cf0721a61332c45c282d095630c3125",
+      "qualification": "Historical failed/incomplete/superseded attempt; no canonical pass credit."
+    },
+    {
+      "path": "target/wp3-source31/pages-final.log",
+      "sha256": "4e68f18b84834a50b8769cdee62aeac5de98edb6bd827c872744aa3d622ca647",
+      "qualification": "Historical failed/incomplete/superseded attempt; no canonical pass credit."
+    },
+    {
+      "path": "target/wp3-source31/canonical-check.log",
+      "sha256": "68a8113a325d4a0ddccf871dd31cf95ae05df43172e46668f19d383e0e30efed",
+      "qualification": "Historical failed/incomplete/superseded attempt; no canonical pass credit."
+    }
+  ],
+  "provenance": "Code and later evidence tip are distinct. Nix includes all docs evidence JSON; no unbuilt evidence-tip NAR or derivation identity is claimed equal to frozen canonical output.",
+  "limits": [
+    "Source32\u201335 obsolete Python rendering callers remain unmodified; latest-site outcome separately recorded.",
+    "No full WP3 physics, benchmark, publication/browser or distribution result. Three older frame failures and four omitted expansion-based parity helpers remain open."
+  ],
+  "test_inventory": "test-inventory.json",
+  "snapshot_shell_pages": 637,
+  "current_sources": "source-binding.json",
+  "failure_boundary": "Three exact known obsolete calls test_community_rendering.py:20,66,121, assigned32\u201335. No assertion weakened or caller imported here.",
+  "warnings": "Inherited Clarabel unused-import and mismatched-lifetime warnings, plus existing metadata maintenance/experimental Typst HTML warnings; no new Rust/source/lint changes."
+}

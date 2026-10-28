@@ -1,0 +1,124 @@
+{
+  "preparation_scope_count": 94,
+  "post27_30_scopes_untouched": [
+    {
+      "note": "generation-test-source-closure",
+      "scope": {
+        "path": "nix/rust-workspace.nix",
+        "symbol": "generation compile-time test source owners",
+        "anchor": "  workspacePackageExtraSourceRoots.compileTimeTest = {",
+        "end_anchor": "  workspacePackageExtraSourceRoots.runtimeTest = {",
+        "digest": "51720341de64b4bd1a32becfcb74389754dbbfef"
+      }
+    },
+    {
+      "note": "generation-test-source-closure",
+      "scope": {
+        "path": "nix/rust-workspace.nix",
+        "symbol": "declared local Cargo patch source ownership",
+        "anchor": "  workspaceCargoPatches =",
+        "end_anchor": "  localCargoPatchSources =",
+        "digest": "b8ef6794d3fb70d911b1e39e8ee3b4a98d03f227"
+      }
+    },
+    {
+      "note": "generation-sampling-staged",
+      "scope": {
+        "path": "crates/gammalooprs/src/integrands/process/mod.rs",
+        "symbol": "bundle incidence",
+        "anchor": "    fn antiparallel_edges(&self)",
+        "end_anchor": "    /// Compile channels after preparing",
+        "digest": "fa84abc99317adbeae2c80083e8a6eeffce546ab"
+      }
+    },
+    {
+      "note": "generation-sampling-staged",
+      "scope": {
+        "path": "crates/gammalooprs/src/integrands/process/sampling/maps.rs",
+        "symbol": "signed affine input blocks",
+        "anchor": "    pub(super) fn identity(",
+        "end_anchor": "    pub fn dimension(&self) -> usize {\n        self.dimension\n    }\n\n    pub fn determinant(",
+        "digest": "c914fffdc29bc975430dc87ee68bda2e11c2fc5c"
+      }
+    },
+    {
+      "note": "generation-sampling-staged",
+      "scope": {
+        "path": "crates/gammalooprs/src/integrands/process/sampling/maps.rs",
+        "symbol": "exact zero affine coefficients",
+        "anchor": "    fn apply(&self, matrix:",
+        "end_anchor": "    fn validate_dimension(",
+        "digest": "08c5ff1dc2daf0f7e601b640de95ccd36a3a8b15"
+      }
+    },
+    {
+      "note": "generation-sampling-staged",
+      "scope": {
+        "path": "crates/gammalooprs/src/integrands/process/sampling/selection.rs",
+        "symbol": "shared signed LMB frame",
+        "anchor": "fn compile_lmb_map<",
+        "end_anchor": "impl SamplingChannelCatalogue {",
+        "digest": "cb0a19bd463a7c4f03905dff4e66f8c37e38b69b"
+      }
+    },
+    {
+      "note": "generation-sampling-staged",
+      "scope": {
+        "path": "crates/gammalooprs/src/integrands/process/mod.rs",
+        "symbol": "graph-derived reflection controls",
+        "anchor": "    fn lmb_sampling_detects_only_oppositely_stored_parallel_edges()",
+        "end_anchor": "    fn canonical_lmb_density_partition_matches_inverse_jacobians()",
+        "digest": "a07a79ea2a2ab2ba9e0544357f113fd7ceaf2a60"
+      }
+    },
+    {
+      "note": "generation-sampling-staged",
+      "scope": {
+        "path": "tests/tests/test_nlo_acceptance/cool_qm_eos.rs",
+        "symbol": "fixed seed CoolQM gate",
+        "anchor": "fn cool_qm_eos_nlo_matches_example_target()",
+        "digest": "fd8f5ff00a6b7b7cf3b3b5299f61624dcd7cbc79"
+      }
+    }
+  ],
+  "current_count": 102,
+  "post27_30_owner_updates": [
+    {
+      "note": "gammaloop-architecture",
+      "previous_scope": {
+        "path": "crates/gammalooprs/src/integrands/process/mod.rs",
+        "symbol": "gammalooprs::integrands::process::ProcessIntegrand::warm_up",
+        "anchor": "pub fn warm_up(&mut self, model",
+        "digest": "4e93e77570220de9a2247f6a363095d321511181"
+      },
+      "current_scope": {
+        "path": "crates/gammalooprs/src/integrands/process/mod.rs",
+        "symbol": "gammalooprs::integrands::process::ProcessIntegrand::warm_up",
+        "anchor": "pub fn warm_up(&mut self, model",
+        "digest": "b1711442cd184b4e9776b84d92c313d85f70b7b0"
+      },
+      "decision": "Retain whole-file ProcessIntegrand warm-up scope. Current LmbMultiChannelingSetup records antiparallel physical edge directions in the existing compile context; fixed external affine shifts and physical edge-local numerator transport remain unchanged. Graph-derived weighted sum is a partition-unity test, not independent full evaluator multiplicity proof.",
+      "source_sha256": "8d22c67f564cc9cf51dc1bd6ba2223ee9e852a8ad45496dcac569c25a6bd64a6"
+    },
+    {
+      "note": "nix-crane-cache-reuse",
+      "previous_scope": {
+        "path": "nix/rust-workspace.nix",
+        "symbol": "workspace package source ownership",
+        "anchor": "documentationCatalogAnnotatedItemSourcePaths =",
+        "end_anchor": "workspacePackageExtraSourceRootsForSourcePackages =",
+        "digest": "2ecd200b0d9bf0434fc9c15f9ebcb076d777dd70"
+      },
+      "current_scope": {
+        "path": "nix/rust-workspace.nix",
+        "symbol": "workspace package source ownership",
+        "anchor": "documentationCatalogAnnotatedItemSourcePaths =",
+        "end_anchor": "workspacePackageExtraSourceRootsForSourcePackages =",
+        "digest": "8450390593797e6fc5c8399df468e4f0025dfe4e"
+      },
+      "decision": "Retain entire package-source ownership range. Source30 adds six FeynKit/Linnet inputs and four literal Clinnet fixtures only to compile-time-test owners; runtime restriction card remains runtime-only. Declared Cargo vendor patches, not incidental directory presence, select local patch sources; independent source30 sensitivity and producer identities certify that boundary.",
+      "source_sha256": "5b60b87af71a0fead5b28977676878d4ee3ac10a8d7e4fc9ffd023310776ff20"
+    }
+  ],
+  "claim": "All94 approved prepared scopes retained with only the two attested current digest updates; all8 additional27\u201330 scopes are byte-exact. Original93 coverage retention and one staged addition are independently certified in preparation review. No scope dropped or narrowed."
+}

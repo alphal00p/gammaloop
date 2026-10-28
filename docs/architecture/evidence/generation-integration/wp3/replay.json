@@ -1394,7 +1394,7 @@
     "receipt": "wp3/source31-integration/source30-review.json"
   },
   "active_slice31": {
-    "status": "Ordered SOURCE31 refresh; combined validation and NEW independent Astra review required before32.",
+    "status": "SOURCE31 ordered refresh qualified at frozen codeECD; canonical snapshot exit0/637pages. Latest validation exit1 at three known32\u201335 callers; NEW independent Astra combined review required before32.",
     "source_order": 31,
     "original_source": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
     "base": "7587d0c768363f200e89250683e7836c867c9b81",
@@ -1404,6 +1404,24 @@
     "receipt": "wp3/source31-integration/receipt.json",
     "accounted_source_rows": 32,
     "accounted_planned_units": 27,
-    "limits": "No source32+ imports; three known obsolete Python rendering callers remain separately queued. Full WP3/physics/performance/distribution remain open."
+    "limits": "No source32+ imports; three known obsolete Python rendering callers remain separately queued. Full WP3/physics/performance/distribution remain open.",
+    "code_commit": "ecd901151e9c6a4b30df75198c7613f1532416b1",
+    "source_mapping": "wp3/source31-integration/source-mapping.json",
+    "validation": "wp3/source31-integration/validation.json",
+    "canonical_snapshot_exit": 0,
+    "canonical_pages_exit": 1,
+    "source31_itself_approved": false,
+    "scope_count": 102,
+    "scope_invalid": 0,
+    "note_titles": 64,
+    "snapshot_shell_pages": 637,
+    "Rust_unique_passed": 93,
+    "Python_installed_wheel": {
+      "run": 113,
+      "passed": 104,
+      "errors": 3,
+      "skipped": 6
+    },
+    "code_vs_receipts": "Canonical artifact is codeECD; later evidence JSON is included by documentationSrc and is an explicitly distinct unbuilt source/NAR, not silently relabelled current artifact."
   }
 }

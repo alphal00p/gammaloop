@@ -5,7 +5,7 @@
   "approved_preparation_base": "a517ca563d78d161cff17fe60e661f80529c9a83",
   "approved_cumulative_preparation": "eb2a02f5dcee0171a728c6143ff28d7f16f40f40",
   "method": "Cumulative approved semantic and seven-table preparation applied to current ordered head. Text patches reconcile current registry/plan rather than overwrite. Binary manual copied exactly from approved source-matched output. Current process/sampling and Nix owner decisions precede two required post-preparation digest updates.",
-  "status": "Implementation frozen for combined canonical qualification; NEW independent Astra review required before32.",
+  "status": "Ordered SOURCE31 refresh qualified at frozen code; NEW independent Astra combined review required before32.",
   "review_copies": {
     "source30-review.json": "e16887de4682a30491b9ff28f41d06db67198d31a99d03fd55e1f62faea73492",
     "preparation-semantic-review.json": "47e588dc816298291f16a613b9c960fd404750551565831820d202a21f3587b7",
@@ -28,5 +28,38 @@
     "No full WP3 physics/performance/distribution; three older frame failures and four expansion-based helpers remain open.",
     "Full Nix client exit in original preparation remains unknown; composite635-page accessibility is historical, not canonical pass.",
     "Known Linnest WASM provenance and source38 manual refresh remain later."
-  ]
+  ],
+  "code_commit": "ecd901151e9c6a4b30df75198c7613f1532416b1",
+  "integration_commits": [
+    "cde7b7e2e0a68feb5615829755da054d8b8e0c8d",
+    "ecd901151e9c6a4b30df75198c7613f1532416b1"
+  ],
+  "scope_retention": "scope-retention.json",
+  "current_semantic_bindings": "semantic-reuse.json",
+  "code_inventory": "code-inventory.json",
+  "canonical": "canonical.json",
+  "snapshot_exit": 0,
+  "pages_exit": 1,
+  "code_vs_evidence": "All code hashes/site artifacts bind explicit frozen code ECD. Later metadata/evidence source delta is recorded separately; documentationSrc includes evidence JSON, so final evidence tip is not claimed as the same unbuilt NAR. No self-referential current receipt hashes.",
+  "remaining": [
+    "Three older frame failures;four omitted expansion helpers;full WP3/fivea_ddx/BRST/physics/performance/distributions.",
+    "SOURCE32\u201335 queued, not imported;source36 staged277d2f8b available later, not imported;source38/46 remain later."
+  ],
+  "latest_limit": "Actual Nix pages validation exit1 at test_community_rendering.py:20,66,121: three removed Process.generate_diagrams calls owned by queued32\u201335. 113run/104pass/3error/6skip. Known later dependency, not an owned31 snapshot/scope defect; no full docs/publication/distribution approval.",
+  "test_inventory": "test-inventory.json",
+  "origin": "origin.json",
+  "source_binding": "source-binding.json",
+  "producer_binaries": "producer-binaries.json",
+  "snapshot_pages": 637,
+  "Rust_unique_passed": 93,
+  "Python_installed_wheel": {
+    "run": 113,
+    "passed": 104,
+    "errors": 3,
+    "skipped": 6
+  },
+  "producer_reuse": "Completed Cargo producer NAR and5 ELFs verified. Consumers recompiled in their contexts; producer ELF bytes are not asserted to equal consumer runtime binaries.",
+  "preserved": "All production Rust/manifests/locks/uv/assets other than source-matched manual.pdf unchanged against7587.27previous protected refs unchanged. NixCI=false; kernel1a1829b1 unchanged.",
+  "retained_artifacts": "target/wp3-source31: exact Nix logs/identities/source+HTML manifests/proof helpers/5producerELF inspection outputs. Prior235proof/baseline/oldreviews untouched.",
+  "cleanup": "No shared cache deletion/overrides/manual Cargo seeding; no other-lane writes or publication; completed own clients cleaned before final handoff."
 }

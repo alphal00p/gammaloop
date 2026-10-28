@@ -1,0 +1,196 @@
+{
+  "code": "ecd901151e9c6a4b30df75198c7613f1532416b1",
+  "input": "git+file:///shared/lcnbr/dev/gammaloop/main?rev=ecd901151e9c6a4b30df75198c7613f1532416b1&shallow=1",
+  "snapshot_exit": 0,
+  "pages_exit": 1,
+  "derivations": [
+    {
+      "target": "alphal00p-docs-cargo-artifacts",
+      "revision": "ecd901151e9c6a4b30df75198c7613f1532416b1",
+      "derivation": "/nix/store/7kvm9zxk0vnn4g3szh4grdfq1db85gqm-alphal00p-docs-cargo-0.1.0.drv",
+      "derivation_sha256": "65d31ad0e8032eb5a6d390c4b0ff07e877d4b9364f2b330f26eff4ccaa184a5a",
+      "outputs": {
+        "out": {
+          "path": "vsvphx6dliq1bxp1b1xlv9jbq00mqfs9-alphal00p-docs-cargo-0.1.0"
+        }
+      },
+      "source": "/nix/store/0fckr83mxbamrrcqikzk7svicrql0701-source",
+      "documented_commit": null,
+      "documented_timestamp": null,
+      "build_command": null,
+      "cargo_profile": "ci-optim",
+      "source_files": [
+        {
+          "path": "crates/gammalooprs/src/integrands/process/mod.rs",
+          "sha256": "8d22c67f564cc9cf51dc1bd6ba2223ee9e852a8ad45496dcac569c25a6bd64a6"
+        }
+      ],
+      "output": "/nix/store/vsvphx6dliq1bxp1b1xlv9jbq00mqfs9-alphal00p-docs-cargo-0.1.0",
+      "registered_output_exists": true,
+      "build_log": "target/wp3-source31/alphal00p-docs-cargo-artifacts-build.log",
+      "build_log_sha256": "c69ef66da37890c5dcf496f9075f2a9eba71d8707c44ceeec8a708dfd929715b",
+      "store_info": {
+        "/nix/store/vsvphx6dliq1bxp1b1xlv9jbq00mqfs9-alphal00p-docs-cargo-0.1.0": {
+          "ca": null,
+          "deriver": "/nix/store/7kvm9zxk0vnn4g3szh4grdfq1db85gqm-alphal00p-docs-cargo-0.1.0.drv",
+          "narHash": "sha256-4YKLcQT1evLu7/H+H0PeUJawJqKmDbG1pQnLHYCFXHk=",
+          "narSize": 862232000,
+          "references": [
+            "/nix/store/9619qg4vmdl3x44six7q3r6i56lxq99p-vendor-cargo-deps",
+            "/nix/store/n5s84kjf83iciyx1y5n3glnh3bbkd84f-gammaloop-crate-gammaloop-api-dependency-deps-0.1.0"
+          ],
+          "registrationTime": 1793188815,
+          "signatures": [],
+          "storeDir": "/nix/store",
+          "ultimate": true,
+          "version": 1
+        }
+      },
+      "registered_deriver": "/nix/store/7kvm9zxk0vnn4g3szh4grdfq1db85gqm-alphal00p-docs-cargo-0.1.0.drv"
+    },
+    {
+      "target": "alphal00p-docs-snapshot-fixture",
+      "revision": "ecd901151e9c6a4b30df75198c7613f1532416b1",
+      "derivation": "/nix/store/hp7q7rc6dr8q37242y368i0cnw9l3iyq-alphal00p-docs-snapshot-fixture-0.1.0.drv",
+      "derivation_sha256": "826c38e77abb861247438731bdcfe1ed5a38ed46442b102977f75f4cb7fc1614",
+      "outputs": {
+        "out": {
+          "path": "acw4y7n3snw84fj4whf49qx0rwii46k2-alphal00p-docs-snapshot-fixture-0.1.0"
+        }
+      },
+      "source": "/nix/store/8kjyjwgcd85d248gawl910055al379xq-source",
+      "documented_commit": "ecd901151e9c6a4b30df75198c7613f1532416b1",
+      "documented_timestamp": "1793183090",
+      "build_command": null,
+      "cargo_profile": "ci-optim",
+      "source_files": [
+        {
+          "path": "docs/developers.toml",
+          "sha256": "501a733fcbc203021e92dca3b18a013fd9a4a836c1c99c32d86af26394ce4980"
+        },
+        {
+          "path": "docs/architecture/generation-integration-plan.typ",
+          "sha256": "620d13d2cd1fa1a9e1b006deb4157915661c4cb73d95f24e60a270df3e4cf1b8"
+        },
+        {
+          "path": "docs/architecture/architecture-current.typ",
+          "sha256": "e77d42dd7715223e8a88188d1c23afb2c81ad3b68a1604fcc7a7f8bc105936df"
+        },
+        {
+          "path": "docs/architecture/nix-crane-cache-reuse.typ",
+          "sha256": "9a7d0213229a4cbd04b46aa2060dec9a468da6fe5f061d9c43076aab92747abb"
+        },
+        {
+          "path": "crates/gammalooprs/src/integrands/process/mod.rs",
+          "sha256": "8d22c67f564cc9cf51dc1bd6ba2223ee9e852a8ad45496dcac569c25a6bd64a6"
+        },
+        {
+          "path": "nix/rust-workspace.nix",
+          "sha256": "5b60b87af71a0fead5b28977676878d4ee3ac10a8d7e4fc9ffd023310776ff20"
+        }
+      ],
+      "output": "/nix/store/acw4y7n3snw84fj4whf49qx0rwii46k2-alphal00p-docs-snapshot-fixture-0.1.0",
+      "registered_output_exists": true,
+      "build_log": "target/wp3-source31/alphal00p-docs-snapshot-fixture-build.log",
+      "build_log_sha256": "13ffc78afa48666625c4cd65cadc015c07b6016b847e8cfd5505c6f276cbba63",
+      "store_info": {
+        "/nix/store/acw4y7n3snw84fj4whf49qx0rwii46k2-alphal00p-docs-snapshot-fixture-0.1.0": {
+          "ca": null,
+          "deriver": "/nix/store/hp7q7rc6dr8q37242y368i0cnw9l3iyq-alphal00p-docs-snapshot-fixture-0.1.0.drv",
+          "narHash": "sha256-3NZc8aVuYabvzFUlobwlgxmBay6guTwiXeTfYq4y8ps=",
+          "narSize": 377086128,
+          "references": [
+            "/nix/store/c3bpv60f5wgp4pmgsifaykxk214h6463-rust-stable-with-components-2026-09-03",
+            "/nix/store/z4c6k0mrlkwl3s4w9ysxc8vq1wylm3ms-gcc-wrapper-15.3.0"
+          ],
+          "registrationTime": 1793190413,
+          "signatures": [],
+          "storeDir": "/nix/store",
+          "ultimate": true,
+          "version": 1
+        }
+      },
+      "registered_deriver": "/nix/store/hp7q7rc6dr8q37242y368i0cnw9l3iyq-alphal00p-docs-snapshot-fixture-0.1.0.drv",
+      "html_manifest": "target/wp3-source31/alphal00p-docs-snapshot-fixture-html-manifest.json",
+      "html_manifest_sha256": "01db5a4cd39226344465c6cacd7bc70bcc30ca7d8a6dced767f50b84e819530c",
+      "html_count": 4223,
+      "critical_html": [
+        {
+          "path": "developers/architecture/gammaloop-architecture/index.html",
+          "sha256": "3b111544e48297e978e8c180531e5e977edb112f2a2b360a3b219aca8aff7323"
+        },
+        {
+          "path": "developers/architecture/generation-documentation-reconcile/index.html",
+          "sha256": "88cb12c860a67bb1365cb03a9340f9d0c6602c2317e98837976f4f89d63853b4"
+        },
+        {
+          "path": "developers/architecture/generation-integration-plan/index.html",
+          "sha256": "439e3bc34a23b64d637a1a368089b2fce97bc9d69d27a4bff368e012ea75b7cb"
+        },
+        {
+          "path": "developers/architecture/generation-integration-wp1/index.html",
+          "sha256": "ffdaff632ee7c6add3ee693ea04687d956236177c5b1a3e39c03c4ddeedc7f02"
+        },
+        {
+          "path": "developers/architecture/kurvst-arrowhead-engine/index.html",
+          "sha256": "6af52d19196930be77fc46936b22d7a52d8666df84dce6722a40e7ead5b7bb1e"
+        },
+        {
+          "path": "developers/architecture/nix-crane-cache-reuse/index.html",
+          "sha256": "890ebf562ddac247670497f8dcb3d99b07137c1df5666e182a10853cea2e1641"
+        },
+        {
+          "path": "index.html",
+          "sha256": "be072d9c4de577c033be5c4d416a2ff0d6b801e3115d9395f3062017110a6308"
+        }
+      ]
+    },
+    {
+      "target": "alphal00p-docs-pages",
+      "revision": "ecd901151e9c6a4b30df75198c7613f1532416b1",
+      "derivation": "/nix/store/4jcvpmvdj5m6pkkfpwhcjiynjh9dv4hc-alphal00p-docs-pages-0.1.0.drv",
+      "derivation_sha256": "1110014a1f5c9ed5fc6feb9fc49cf94a7d42cbf516dbd9d57588224c9c7e420d",
+      "outputs": {
+        "out": {
+          "path": "xwnapvgxk3lnmsfns5mbr7iw8ahyj1z9-alphal00p-docs-pages-0.1.0"
+        }
+      },
+      "source": "/nix/store/8kjyjwgcd85d248gawl910055al379xq-source",
+      "documented_commit": "ecd901151e9c6a4b30df75198c7613f1532416b1",
+      "documented_timestamp": "1793183090",
+      "build_command": null,
+      "cargo_profile": "ci-optim",
+      "source_files": [
+        {
+          "path": "docs/developers.toml",
+          "sha256": "501a733fcbc203021e92dca3b18a013fd9a4a836c1c99c32d86af26394ce4980"
+        },
+        {
+          "path": "docs/architecture/generation-integration-plan.typ",
+          "sha256": "620d13d2cd1fa1a9e1b006deb4157915661c4cb73d95f24e60a270df3e4cf1b8"
+        },
+        {
+          "path": "docs/architecture/architecture-current.typ",
+          "sha256": "e77d42dd7715223e8a88188d1c23afb2c81ad3b68a1604fcc7a7f8bc105936df"
+        },
+        {
+          "path": "docs/architecture/nix-crane-cache-reuse.typ",
+          "sha256": "9a7d0213229a4cbd04b46aa2060dec9a468da6fe5f061d9c43076aab92747abb"
+        },
+        {
+          "path": "crates/gammalooprs/src/integrands/process/mod.rs",
+          "sha256": "8d22c67f564cc9cf51dc1bd6ba2223ee9e852a8ad45496dcac569c25a6bd64a6"
+        },
+        {
+          "path": "nix/rust-workspace.nix",
+          "sha256": "5b60b87af71a0fead5b28977676878d4ee3ac10a8d7e4fc9ffd023310776ff20"
+        }
+      ],
+      "output": "/nix/store/xwnapvgxk3lnmsfns5mbr7iw8ahyj1z9-alphal00p-docs-pages-0.1.0",
+      "registered_output_exists": false,
+      "build_log": "target/wp3-source31/alphal00p-docs-pages-build.log",
+      "build_log_sha256": "316817874ecae15a769de45be05fa725232fb10328897b8a1a99c38f3af51ae4"
+    }
+  ],
+  "semantics": "Actual Git-backed full SHA; snapshot build includes unchanged HTML/accessibility checker and six snapshot roots. Pages outcome is separate; no full publication/browser success inferred."
+}

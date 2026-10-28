@@ -1,0 +1,153 @@
+{
+  "code": "ecd901151e9c6a4b30df75198c7613f1532416b1",
+  "compiler": "/nix/store/vnjry04dnavpyvl41mz607ir21pjb2hp-typst-0.15.1-env/bin/typst",
+  "timestamp": 0,
+  "font": "/nix/store/5yr5di50bq9mwr2dh9m7i8y50lxh24ib-roboto-3.016/share/fonts/truetype",
+  "renders": [
+    {
+      "source": "docs/architecture/kurvst-arrowhead-engine.typ",
+      "source_sha256": "ef2e8dcee369496e897c3bb0aa1ab3d7255bf6214bb891687208420f460deacc",
+      "format": "pdf",
+      "output": "target/wp3-source31/kurvst-arrowhead-engine.pdf",
+      "output_sha256": "6a7d47eaed7a12caed41d39d00a89ddc079d82f4b2b5c51a2ba99ad4617f76c2",
+      "exit": 0
+    },
+    {
+      "source": "docs/architecture/kurvst-arrowhead-engine.typ",
+      "source_sha256": "ef2e8dcee369496e897c3bb0aa1ab3d7255bf6214bb891687208420f460deacc",
+      "format": "html",
+      "output": "target/wp3-source31/kurvst-arrowhead-engine.html",
+      "output_sha256": "a270dd1fa04ac9a39a43b4b0ca51d3d66c97d62d5009a0031ebb15201c4f5f3c",
+      "exit": 0
+    },
+    {
+      "source": "docs/architecture/architecture-current.typ",
+      "source_sha256": "e77d42dd7715223e8a88188d1c23afb2c81ad3b68a1604fcc7a7f8bc105936df",
+      "format": "pdf",
+      "output": "target/wp3-source31/architecture-current.pdf",
+      "output_sha256": "3cd486c08254bb209482244d7836c8cb64832d2fcc543720652c6ed07d55b567",
+      "exit": 0
+    },
+    {
+      "source": "docs/architecture/architecture-current.typ",
+      "source_sha256": "e77d42dd7715223e8a88188d1c23afb2c81ad3b68a1604fcc7a7f8bc105936df",
+      "format": "html",
+      "output": "target/wp3-source31/architecture-current.html",
+      "output_sha256": "02e3a0b213187234470bf0d7cdfb9abadeb3260de5f7ebe0a5db51f690b3ccf8",
+      "exit": 0
+    },
+    {
+      "source": "docs/architecture/ratatui-integration-dashboard.typ",
+      "source_sha256": "b124d94ee6f6c6c5c4578245798ef93248dd1c28effbb1a2307e42e59912b5a3",
+      "format": "pdf",
+      "output": "target/wp3-source31/ratatui-integration-dashboard.pdf",
+      "output_sha256": "9a4469cf30095e63939729d706ddd4c518afb25b633b2589c7f55bdacadc01f5",
+      "exit": 0
+    },
+    {
+      "source": "docs/architecture/ratatui-integration-dashboard.typ",
+      "source_sha256": "b124d94ee6f6c6c5c4578245798ef93248dd1c28effbb1a2307e42e59912b5a3",
+      "format": "html",
+      "output": "target/wp3-source31/ratatui-integration-dashboard.html",
+      "output_sha256": "88c34283fdc50792fa455325a6913ee8c540382e10255fbab744c7b98b4d497d",
+      "exit": 0
+    },
+    {
+      "source": "docs/architecture/nix-crane-cache-reuse.typ",
+      "source_sha256": "9a7d0213229a4cbd04b46aa2060dec9a468da6fe5f061d9c43076aab92747abb",
+      "format": "pdf",
+      "output": "target/wp3-source31/nix-crane-cache-reuse.pdf",
+      "output_sha256": "e14b93b5bfbf31ec30b787da80c646a1adb7621de767c1011241ad19e1c5ed44",
+      "exit": 0
+    },
+    {
+      "source": "docs/architecture/nix-crane-cache-reuse.typ",
+      "source_sha256": "9a7d0213229a4cbd04b46aa2060dec9a468da6fe5f061d9c43076aab92747abb",
+      "format": "html",
+      "output": "target/wp3-source31/nix-crane-cache-reuse.html",
+      "output_sha256": "c7c71dfdeb58bb1de484589374f48196e8024c83a695f47bd0d7df689a37ee7f",
+      "exit": 0
+    },
+    {
+      "source": "docs/architecture/generation-integration-plan.typ",
+      "source_sha256": "620d13d2cd1fa1a9e1b006deb4157915661c4cb73d95f24e60a270df3e4cf1b8",
+      "format": "pdf",
+      "output": "target/wp3-source31/generation-integration-plan.pdf",
+      "output_sha256": "bc3fa80948604cf3d8e2a958e33bd6ffa62d424bf69f096c83e49f99c369a746",
+      "exit": 0
+    },
+    {
+      "source": "docs/architecture/generation-integration-plan.typ",
+      "source_sha256": "620d13d2cd1fa1a9e1b006deb4157915661c4cb73d95f24e60a270df3e4cf1b8",
+      "format": "html",
+      "output": "target/wp3-source31/generation-integration-plan.html",
+      "output_sha256": "7eb111ed55a4bd4d6efe4441aff0337674d42c88f2b661c8dab9ca3f91cbc579",
+      "exit": 0
+    },
+    {
+      "source": "docs/architecture/generation-documentation-reconcile.typ",
+      "source_sha256": "97378c7dab21c8a51f4293b5acf954535cd3eb9bc27aa6cf4c2868ef996a8161",
+      "format": "pdf",
+      "output": "target/wp3-source31/generation-documentation-reconcile.pdf",
+      "output_sha256": "e180460ab4e455ae79e8c27be57a8407545955f4ffb279d82c7d9f19c071b9d8",
+      "exit": 0
+    },
+    {
+      "source": "docs/architecture/generation-documentation-reconcile.typ",
+      "source_sha256": "97378c7dab21c8a51f4293b5acf954535cd3eb9bc27aa6cf4c2868ef996a8161",
+      "format": "html",
+      "output": "target/wp3-source31/generation-documentation-reconcile.html",
+      "output_sha256": "537757b8272e6ca37840e9b534d6de088ecdf9bceaad13e2a5760ee2f0f0d13c",
+      "exit": 0
+    },
+    {
+      "source": "docs/architecture/idenso-architecture.typ",
+      "source_sha256": "e00b282ec054df67b01fa35b259791acbc4d4ef363138d8f0502d521757391fc",
+      "format": "pdf",
+      "output": "target/wp3-source31/idenso-architecture.pdf",
+      "output_sha256": "cc3b278b2079a24baf10a2884ae270926a516d68446e46db8747cf808cf246f9",
+      "exit": 0
+    },
+    {
+      "source": "docs/architecture/idenso-architecture.typ",
+      "source_sha256": "e00b282ec054df67b01fa35b259791acbc4d4ef363138d8f0502d521757391fc",
+      "format": "html",
+      "output": "target/wp3-source31/idenso-architecture.html",
+      "output_sha256": "63a9bee276ebf6bdb5617b0ddda2186c529732c8808332d4c619f3f1ab41ca8b",
+      "exit": 0
+    },
+    {
+      "source": "docs/architecture/generation-integration-wp1.typ",
+      "source_sha256": "9af88ac35be9bc861271a501382d2931e3d89d8aeb34015b257efb7b21a28272",
+      "format": "pdf",
+      "output": "target/wp3-source31/generation-integration-wp1.pdf",
+      "output_sha256": "9ac120828a30b93f88b5703091c20d8112f0dc9e8fcb03e612813217c3ffdf87",
+      "exit": 0
+    },
+    {
+      "source": "docs/architecture/generation-integration-wp1.typ",
+      "source_sha256": "9af88ac35be9bc861271a501382d2931e3d89d8aeb34015b257efb7b21a28272",
+      "format": "html",
+      "output": "target/wp3-source31/generation-integration-wp1.html",
+      "output_sha256": "b19adb99bc19c6da5304b71c1352d477cf988a669582db6bfcdb56e23a0da5ed",
+      "exit": 0
+    },
+    {
+      "source": "docs/architecture/feynkit-merge-readiness.typ",
+      "source_sha256": "f41dcb2c70a88b4d9845eb830a90796e920b85fb7a8196e6ab26e5b9b3114e40",
+      "format": "pdf",
+      "output": "target/wp3-source31/feynkit-merge-readiness.pdf",
+      "output_sha256": "4168f262e14416d5f82ba7f31cedd33dd29ec27e6962a7797cf32bfb2091b4f9",
+      "exit": 0
+    },
+    {
+      "source": "docs/architecture/feynkit-merge-readiness.typ",
+      "source_sha256": "f41dcb2c70a88b4d9845eb830a90796e920b85fb7a8196e6ab26e5b9b3114e40",
+      "format": "html",
+      "output": "target/wp3-source31/feynkit-merge-readiness.html",
+      "output_sha256": "2b87b2324ab50f5e08bd10eac637e95919f482b75dbdf9fe66d618f543909ecc",
+      "exit": 0
+    }
+  ],
+  "limits": "Focused note PDF/HTML output, not canonical shell/site/accessibility; inherited Typst experimental HTML/ignored alignment warnings retained."
+}

@@ -1,0 +1,55 @@
+{
+  "code": "ecd901151e9c6a4b30df75198c7613f1532416b1",
+  "producer": "/nix/store/7kvm9zxk0vnn4g3szh4grdfq1db85gqm-alphal00p-docs-cargo-0.1.0.drv",
+  "output": "/nix/store/vsvphx6dliq1bxp1b1xlv9jbq00mqfs9-alphal00p-docs-cargo-0.1.0",
+  "store_info": {
+    "/nix/store/vsvphx6dliq1bxp1b1xlv9jbq00mqfs9-alphal00p-docs-cargo-0.1.0": {
+      "ca": null,
+      "deriver": "/nix/store/7kvm9zxk0vnn4g3szh4grdfq1db85gqm-alphal00p-docs-cargo-0.1.0.drv",
+      "narHash": "sha256-4YKLcQT1evLu7/H+H0PeUJawJqKmDbG1pQnLHYCFXHk=",
+      "narSize": 862232000,
+      "references": [
+        "/nix/store/9619qg4vmdl3x44six7q3r6i56lxq99p-vendor-cargo-deps",
+        "/nix/store/n5s84kjf83iciyx1y5n3glnh3bbkd84f-gammaloop-crate-gammaloop-api-dependency-deps-0.1.0"
+      ],
+      "registrationTime": 1793188815,
+      "signatures": [],
+      "storeDir": "/nix/store",
+      "ultimate": true,
+      "version": 1
+    }
+  },
+  "ELFs": [
+    {
+      "path": "target/wp3-source31/elf/ci-optim/alphal00p-docs-builder",
+      "name": "alphal00p-docs-builder",
+      "sha256": "b3ee81b9fc277f3858833a585825d40072b341fe1803e63ba957cfc7937a9849",
+      "bytes": 59712640
+    },
+    {
+      "path": "target/wp3-source31/elf/ci-optim/alphal00p-docs-catalogs",
+      "name": "alphal00p-docs-catalogs",
+      "sha256": "9453ffb82714369a12af467f8815f3ab292d79b59ea2025e49b16ac383366626",
+      "bytes": 2478640
+    },
+    {
+      "path": "target/wp3-source31/elf/ci-optim/alphal00p-docs-gammaloop-reference",
+      "name": "alphal00p-docs-gammaloop-reference",
+      "sha256": "6ce762277196e8e5af857259475646dc50477cde4d3b0699e1950097208e23c1",
+      "bytes": 215703208
+    },
+    {
+      "path": "target/wp3-source31/elf/ci-optim/alphal00p-docs-python-exporter",
+      "name": "alphal00p-docs-python-exporter",
+      "sha256": "816c1bb424a370195cc1853c9d1fba51f90bcb69f8b7b3d4d375f1037044b1de",
+      "bytes": 101941872
+    },
+    {
+      "path": "target/wp3-source31/elf/ci-optim/alphal00p-docs-vakint-reference",
+      "name": "alphal00p-docs-vakint-reference",
+      "sha256": "a1d90d3db3b0768445e269be2c979d581468dc8c47236a35471f904ab3650d8d",
+      "bytes": 215351992
+    }
+  ],
+  "qualification": "Actual completed producer archive ELF identities. Canonical consumers recompile in their own contexts, so these are not claimed as byte-identical consumer runtime executables. No runtime test credit or Cargo cache injection."
+}

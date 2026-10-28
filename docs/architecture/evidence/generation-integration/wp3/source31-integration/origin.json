@@ -1,0 +1,542 @@
+{
+  "main_base": "7587d0c768363f200e89250683e7836c867c9b81",
+  "preparation_base": "a517ca563d78d161cff17fe60e661f80529c9a83",
+  "counts_by_type": {
+    "stale-digest": 24,
+    "missing-or-ambiguous-anchor": 4
+  },
+  "counts_by_origin": {
+    "inherited_identical_scope_from_a517": 28,
+    "new_failing_scopes": 0
+  },
+  "scopes": [
+    {
+      "note": "gammaloop-architecture",
+      "scope": {
+        "path": "crates/gammaloop-api/src/state.rs",
+        "symbol": "gammaloop_api::state::State::load",
+        "anchor": "load_state_manifest(&save_path)?",
+        "digest": "5113940a12e8bac5ec042c59db01bd0ecfb05ef0"
+      },
+      "result": {
+        "status": "stale-digest",
+        "actual": "3598dbe299f9a32da1ed8d034706a82959d84abb"
+      },
+      "origin": "Identical registered scope already failing at approved a517 preparation base; not a new scope failure from27\u201330.",
+      "preparation_base_check": {
+        "status": "stale-digest",
+        "actual": "3598dbe299f9a32da1ed8d034706a82959d84abb"
+      },
+      "owner_bytes_changed_since_preparation": false
+    },
+    {
+      "note": "gammaloop-architecture",
+      "scope": {
+        "path": "crates/gammaloop-api/src/commands/integrate.rs",
+        "symbol": "gammaloop_api::commands::integrate::Integrate::default_workspace_path",
+        "anchor": "fn default_workspace_path(&self",
+        "digest": "0f0ae2c8e593ca91f12be4b4c4e456f8817d7f9b"
+      },
+      "result": {
+        "status": "stale-digest",
+        "actual": "bcce3d43713b42fe428e3b5d89784e18c8d47fa7"
+      },
+      "origin": "Identical registered scope already failing at approved a517 preparation base; not a new scope failure from27\u201330.",
+      "preparation_base_check": {
+        "status": "stale-digest",
+        "actual": "bcce3d43713b42fe428e3b5d89784e18c8d47fa7"
+      },
+      "owner_bytes_changed_since_preparation": false
+    },
+    {
+      "note": "gammaloop-architecture",
+      "scope": {
+        "path": "crates/gammalooprs/src/integrands/process/mod.rs",
+        "symbol": "gammalooprs::integrands::process::ProcessIntegrand::warm_up",
+        "anchor": "pub fn warm_up(&mut self, model",
+        "digest": "c795c1a404f9a6118501d7b5ee2d5e580e44886c"
+      },
+      "result": {
+        "status": "stale-digest",
+        "actual": "b1711442cd184b4e9776b84d92c313d85f70b7b0"
+      },
+      "origin": "Identical registered scope already failing at approved a517 preparation base; not a new scope failure from27\u201330.",
+      "preparation_base_check": {
+        "status": "stale-digest",
+        "actual": "4e93e77570220de9a2247f6a363095d321511181"
+      },
+      "owner_bytes_changed_since_preparation": true
+    },
+    {
+      "note": "gammaloop-architecture",
+      "scope": {
+        "path": "crates/gammalooprs/src/observables/mod.rs",
+        "symbol": "gammalooprs::observables::EventProcessingRuntime",
+        "anchor": "pub struct EventProcessingRuntime {",
+        "digest": "e0a87225a5073e48c6d82a4d8f39cddac43d1684"
+      },
+      "result": {
+        "status": "stale-digest",
+        "actual": "b672f52f6674d08d11b6cc68ef0621c399386926"
+      },
+      "origin": "Identical registered scope already failing at approved a517 preparation base; not a new scope failure from27\u201330.",
+      "preparation_base_check": {
+        "status": "stale-digest",
+        "actual": "b672f52f6674d08d11b6cc68ef0621c399386926"
+      },
+      "owner_bytes_changed_since_preparation": false
+    },
+    {
+      "note": "gammaloop-architecture",
+      "scope": {
+        "path": "crates/gammaloop-api/src/python.rs",
+        "symbol": "gammaloop_api::python::GammaLoopAPI",
+        "anchor": "struct GammaLoopAPI {",
+        "digest": "adc6974f20de538c6acfb2913aa5c9b16b590617"
+      },
+      "result": {
+        "status": "stale-digest",
+        "actual": "872d2b855d14a4aded443e18df435f899c2bf42a"
+      },
+      "origin": "Identical registered scope already failing at approved a517 preparation base; not a new scope failure from27\u201330.",
+      "preparation_base_check": {
+        "status": "stale-digest",
+        "actual": "872d2b855d14a4aded443e18df435f899c2bf42a"
+      },
+      "owner_bytes_changed_since_preparation": false
+    },
+    {
+      "note": "gammaloop-architecture",
+      "scope": {
+        "path": "crates/feynkit-generator/src/generation.rs",
+        "symbol": "feynkit_generator::Generator::generate",
+        "anchor": "pub fn generate(",
+        "digest": "b723525194b3a59789d47b1a1a10e2df95c0d83c"
+      },
+      "result": {
+        "status": "missing-or-ambiguous-anchor"
+      },
+      "origin": "Identical registered scope already failing at approved a517 preparation base; not a new scope failure from27\u201330.",
+      "preparation_base_check": {
+        "status": "missing-or-ambiguous-anchor"
+      },
+      "owner_bytes_changed_since_preparation": false
+    },
+    {
+      "note": "gammaloop-architecture",
+      "scope": {
+        "path": "crates/feynkit-model/src/model.rs",
+        "symbol": "feynkit_model::Model",
+        "anchor": "pub struct Model {",
+        "digest": "3887f65c1c670de301495664dd4d4929dd76f60d"
+      },
+      "result": {
+        "status": "stale-digest",
+        "actual": "b04029827b0ecb3c8f23289bf0937e1ea422e176"
+      },
+      "origin": "Identical registered scope already failing at approved a517 preparation base; not a new scope failure from27\u201330.",
+      "preparation_base_check": {
+        "status": "stale-digest",
+        "actual": "b04029827b0ecb3c8f23289bf0937e1ea422e176"
+      },
+      "owner_bytes_changed_since_preparation": false
+    },
+    {
+      "note": "gammaloop-architecture",
+      "scope": {
+        "path": "crates/feynkit-graph/src/lib.rs",
+        "symbol": "feynkit_graph::FeynmanDiagram",
+        "anchor": "pub struct FeynmanDiagram {",
+        "digest": "2d8a36f8ae16bf33adf8ba933a7f58f25f02ba0a"
+      },
+      "result": {
+        "status": "stale-digest",
+        "actual": "03fa811b133f5816415a2b445445ea5a2d87365d"
+      },
+      "origin": "Identical registered scope already failing at approved a517 preparation base; not a new scope failure from27\u201330.",
+      "preparation_base_check": {
+        "status": "stale-digest",
+        "actual": "03fa811b133f5816415a2b445445ea5a2d87365d"
+      },
+      "owner_bytes_changed_since_preparation": false
+    },
+    {
+      "note": "gammaloop-architecture",
+      "scope": {
+        "path": "crates/gammalooprs/src/graph/parse/mod.rs",
+        "symbol": "gammalooprs::graph::Graph DOT import boundary",
+        "anchor": "    pub fn import_dot(input: &str, model: &Model) -> Result<Vec<Self>> {",
+        "end_anchor": "    pub fn dot_serialize(&self, settings: &DotExportSettings) -> String {",
+        "digest": "fc058e64317d80978ebfc2ede480a29fd852a8a3"
+      },
+      "result": {
+        "status": "missing-or-ambiguous-anchor"
+      },
+      "origin": "Identical registered scope already failing at approved a517 preparation base; not a new scope failure from27\u201330.",
+      "preparation_base_check": {
+        "status": "missing-or-ambiguous-anchor"
+      },
+      "owner_bytes_changed_since_preparation": false
+    },
+    {
+      "note": "integration-dashboard",
+      "scope": {
+        "path": "crates/gammaloop-api/src/commands/integrate.rs",
+        "symbol": "gammaloop_api::commands::integrate::dashboard_event_loop",
+        "anchor": "fn dashboard_event_loop(receiver",
+        "digest": "0f0ae2c8e593ca91f12be4b4c4e456f8817d7f9b"
+      },
+      "result": {
+        "status": "stale-digest",
+        "actual": "bcce3d43713b42fe428e3b5d89784e18c8d47fa7"
+      },
+      "origin": "Identical registered scope already failing at approved a517 preparation base; not a new scope failure from27\u201330.",
+      "preparation_base_check": {
+        "status": "stale-digest",
+        "actual": "bcce3d43713b42fe428e3b5d89784e18c8d47fa7"
+      },
+      "owner_bytes_changed_since_preparation": false
+    },
+    {
+      "note": "integration-dashboard",
+      "scope": {
+        "path": "crates/gammalooprs/src/integrate/mod.rs",
+        "symbol": "gammalooprs::integrate",
+        "anchor": "mod render_ratatui;",
+        "digest": "d131b0f6a513af1310b647474fac787105610a1b"
+      },
+      "result": {
+        "status": "stale-digest",
+        "actual": "2cbbafcb254b4b7ac042b6ca8dab6682f9a0ce21"
+      },
+      "origin": "Identical registered scope already failing at approved a517 preparation base; not a new scope failure from27\u201330.",
+      "preparation_base_check": {
+        "status": "stale-digest",
+        "actual": "2cbbafcb254b4b7ac042b6ca8dab6682f9a0ce21"
+      },
+      "owner_bytes_changed_since_preparation": false
+    },
+    {
+      "note": "uv-renormalization",
+      "scope": {
+        "path": "crates/gammalooprs/src/uv/orchestrator.rs",
+        "symbol": "gammalooprs::uv::UVOrchestrator",
+        "anchor": "impl UVOrchestrator {",
+        "digest": "19e0c07de61017d01b36bfda24f60e48d4b17bfc"
+      },
+      "result": {
+        "status": "stale-digest",
+        "actual": "4acc87a62891dbff0b3ca2cef2e8ab505c1de6d5"
+      },
+      "origin": "Identical registered scope already failing at approved a517 preparation base; not a new scope failure from27\u201330.",
+      "preparation_base_check": {
+        "status": "stale-digest",
+        "actual": "4acc87a62891dbff0b3ca2cef2e8ab505c1de6d5"
+      },
+      "owner_bytes_changed_since_preparation": false
+    },
+    {
+      "note": "spenso-symbolica-syntax-and-rewrites",
+      "scope": {
+        "path": "crates/idenso/src/lib.rs",
+        "symbol": "idenso::IndexTooling",
+        "anchor": "pub trait IndexTooling {",
+        "digest": "b6b8af1e73031ce2c7dc97185cc31f4a90c63d64"
+      },
+      "result": {
+        "status": "stale-digest",
+        "actual": "820fbf610c4bb06867a7013d0b8631e57704ff7d"
+      },
+      "origin": "Identical registered scope already failing at approved a517 preparation base; not a new scope failure from27\u201330.",
+      "preparation_base_check": {
+        "status": "stale-digest",
+        "actual": "820fbf610c4bb06867a7013d0b8631e57704ff7d"
+      },
+      "owner_bytes_changed_since_preparation": false
+    },
+    {
+      "note": "spenso-architecture",
+      "scope": {
+        "path": "crates/spenso/src/network/mod.rs",
+        "symbol": "spenso::network::Network",
+        "anchor": "pub struct Network<S, LibKey, FunKey, Aind = AbstractIndex> {",
+        "digest": "410491ec4a23db5061510dc830fe9a880b6b6a0a"
+      },
+      "result": {
+        "status": "stale-digest",
+        "actual": "14f66a4d6e62a4fd878c2f52f0bc6ab336cf7f24"
+      },
+      "origin": "Identical registered scope already failing at approved a517 preparation base; not a new scope failure from27\u201330.",
+      "preparation_base_check": {
+        "status": "stale-digest",
+        "actual": "14f66a4d6e62a4fd878c2f52f0bc6ab336cf7f24"
+      },
+      "owner_bytes_changed_since_preparation": false
+    },
+    {
+      "note": "idenso-architecture",
+      "scope": {
+        "path": "crates/idenso/src/lib.rs",
+        "symbol": "idenso::IndexTooling",
+        "anchor": "pub trait IndexTooling {",
+        "digest": "b6b8af1e73031ce2c7dc97185cc31f4a90c63d64"
+      },
+      "result": {
+        "status": "stale-digest",
+        "actual": "820fbf610c4bb06867a7013d0b8631e57704ff7d"
+      },
+      "origin": "Identical registered scope already failing at approved a517 preparation base; not a new scope failure from27\u201330.",
+      "preparation_base_check": {
+        "status": "stale-digest",
+        "actual": "820fbf610c4bb06867a7013d0b8631e57704ff7d"
+      },
+      "owner_bytes_changed_since_preparation": false
+    },
+    {
+      "note": "idenso-architecture",
+      "scope": {
+        "path": "crates/idenso/src/tensor/mod.rs",
+        "symbol": "idenso::tensor::SymbolicTensor",
+        "anchor": "pub struct SymbolicTensor<S = OrderedStructure<LibraryRep, AbstractIndex>, E = Atom> {",
+        "digest": "73043dc6e75efb7d9961f007520c75f29d45d5a8"
+      },
+      "result": {
+        "status": "stale-digest",
+        "actual": "b95ee5f1852b22a03b1fe79bfe4342d3c42e831e"
+      },
+      "origin": "Identical registered scope already failing at approved a517 preparation base; not a new scope failure from27\u201330.",
+      "preparation_base_check": {
+        "status": "stale-digest",
+        "actual": "b95ee5f1852b22a03b1fe79bfe4342d3c42e831e"
+      },
+      "owner_bytes_changed_since_preparation": false
+    },
+    {
+      "note": "idenso-architecture",
+      "scope": {
+        "path": "crates/idenso/src/tensor/contract.rs",
+        "symbol": "idenso::tensor::ContractSettings",
+        "anchor": "pub struct ContractSettings<'a> {",
+        "digest": "94e9d8b2efc414ab4457e7f33d9e8ee4a41b439c"
+      },
+      "result": {
+        "status": "stale-digest",
+        "actual": "442fe89c0ec2fc603e7eeb88b73e69ad9e1b7e60"
+      },
+      "origin": "Identical registered scope already failing at approved a517 preparation base; not a new scope failure from27\u201330.",
+      "preparation_base_check": {
+        "status": "stale-digest",
+        "actual": "442fe89c0ec2fc603e7eeb88b73e69ad9e1b7e60"
+      },
+      "owner_bytes_changed_since_preparation": false
+    },
+    {
+      "note": "idenso-architecture",
+      "scope": {
+        "path": "crates/idenso/src/tensor/simplification.rs",
+        "symbol": "idenso::tensor::AlgebraSettings",
+        "anchor": "pub struct AlgebraSettings {",
+        "digest": "3a0628ea619e65a4c7e10e270e7a4aa29fd4e07b"
+      },
+      "result": {
+        "status": "stale-digest",
+        "actual": "49ae6d4398bf4decc931f01d09ef49e69f64996f"
+      },
+      "origin": "Identical registered scope already failing at approved a517 preparation base; not a new scope failure from27\u201330.",
+      "preparation_base_check": {
+        "status": "stale-digest",
+        "actual": "49ae6d4398bf4decc931f01d09ef49e69f64996f"
+      },
+      "owner_bytes_changed_since_preparation": false
+    },
+    {
+      "note": "idenso-architecture",
+      "scope": {
+        "path": "crates/idenso/src/tensor/collection/collected.rs",
+        "symbol": "idenso::tensor::CollectedOutput",
+        "anchor": "pub(crate) struct CollectedOutput",
+        "digest": "de3aeb2b35712816908c6f6490d548e46cb864ba"
+      },
+      "result": {
+        "status": "stale-digest",
+        "actual": "ca8c5cb4f9dd9ee5152cbb94df6c8d919e098c35"
+      },
+      "origin": "Identical registered scope already failing at approved a517 preparation base; not a new scope failure from27\u201330.",
+      "preparation_base_check": {
+        "status": "stale-digest",
+        "actual": "ca8c5cb4f9dd9ee5152cbb94df6c8d919e098c35"
+      },
+      "owner_bytes_changed_since_preparation": false
+    },
+    {
+      "note": "idenso-architecture",
+      "scope": {
+        "path": "crates/idenso/src/tensor/collection.rs",
+        "symbol": "idenso::tensor::SymbolicTensor::collect_with_map",
+        "anchor": "    pub(crate) fn collect_with_map(",
+        "end_anchor": "    fn collection_observations(",
+        "digest": "fea694882a4b5be3160175636d9ecaeaa1b6ecfe"
+      },
+      "result": {
+        "status": "stale-digest",
+        "actual": "8f078f8c9d4f7fd1fea495180aa1185894b5cfa3"
+      },
+      "origin": "Identical registered scope already failing at approved a517 preparation base; not a new scope failure from27\u201330.",
+      "preparation_base_check": {
+        "status": "stale-digest",
+        "actual": "8f078f8c9d4f7fd1fea495180aa1185894b5cfa3"
+      },
+      "owner_bytes_changed_since_preparation": false
+    },
+    {
+      "note": "linnet-architecture",
+      "scope": {
+        "path": "crates/linnet/src/half_edge.rs",
+        "symbol": "linnet::half_edge::HedgeGraph",
+        "anchor": "pub struct HedgeGraph<E, V, H = NoData, S: NodeStorage<NodeData = V> = DefaultNodeStore<V>> {",
+        "digest": "ab9af84a52f5a11adfd57083fb87d524b28bdd55"
+      },
+      "result": {
+        "status": "missing-or-ambiguous-anchor"
+      },
+      "origin": "Identical registered scope already failing at approved a517 preparation base; not a new scope failure from27\u201330.",
+      "preparation_base_check": {
+        "status": "missing-or-ambiguous-anchor"
+      },
+      "owner_bytes_changed_since_preparation": false
+    },
+    {
+      "note": "linnet-architecture",
+      "scope": {
+        "path": "crates/linnet/src/half_edge/involution.rs",
+        "symbol": "linnet::half_edge::involution::Involution",
+        "anchor": "pub struct Involution<E = EdgeIndex> {",
+        "digest": "cb55dd1e057261356f1f2fdce9808b2252fc55ae"
+      },
+      "result": {
+        "status": "stale-digest",
+        "actual": "2a5162885ac2e05dc8a1ec79d5fec555a9f6ed36"
+      },
+      "origin": "Identical registered scope already failing at approved a517 preparation base; not a new scope failure from27\u201330.",
+      "preparation_base_check": {
+        "status": "stale-digest",
+        "actual": "2a5162885ac2e05dc8a1ec79d5fec555a9f6ed36"
+      },
+      "owner_bytes_changed_since_preparation": false
+    },
+    {
+      "note": "linnet-architecture",
+      "scope": {
+        "path": "crates/linnet/src/half_edge/subgraph.rs",
+        "symbol": "linnet::half_edge::subgraph::SubGraphLike",
+        "anchor": "pub trait SubGraphLike: SubSetLike<Hedge> + Inclusion<HedgePair> {",
+        "digest": "61c2d5f958487a63d422201ad7d71a77840f90a7"
+      },
+      "result": {
+        "status": "stale-digest",
+        "actual": "929ee2f716f95ba3a0bf7a9afdb8f8bf2a458765"
+      },
+      "origin": "Identical registered scope already failing at approved a517 preparation base; not a new scope failure from27\u201330.",
+      "preparation_base_check": {
+        "status": "stale-digest",
+        "actual": "929ee2f716f95ba3a0bf7a9afdb8f8bf2a458765"
+      },
+      "owner_bytes_changed_since_preparation": false
+    },
+    {
+      "note": "linnet-architecture",
+      "scope": {
+        "path": "crates/linnet/src/parser/mod.rs",
+        "symbol": "linnet::parser::DotGraph",
+        "anchor": "pub struct DotGraph<N: NodeStorage<NodeData = DotVertexData> = DefaultNodeStore<DotVertexData>> {",
+        "digest": "075b13acb171934ea04a1ef527db0bd6a9e40025"
+      },
+      "result": {
+        "status": "missing-or-ambiguous-anchor"
+      },
+      "origin": "Identical registered scope already failing at approved a517 preparation base; not a new scope failure from27\u201330.",
+      "preparation_base_check": {
+        "status": "missing-or-ambiguous-anchor"
+      },
+      "owner_bytes_changed_since_preparation": false
+    },
+    {
+      "note": "cff-surface-cache-ownership",
+      "scope": {
+        "path": "crates/feynkit-cff/src/generation.rs",
+        "symbol": "feynkit_cff::CffGenerator::generate_into",
+        "anchor": "pub fn generate_into(",
+        "digest": "89000ab1668f83dfb3b32351e6dbed65e0d5c91e"
+      },
+      "result": {
+        "status": "stale-digest",
+        "actual": "47ea515ff9c91e24d6f6b501da289996a06dfe9a"
+      },
+      "origin": "Identical registered scope already failing at approved a517 preparation base; not a new scope failure from27\u201330.",
+      "preparation_base_check": {
+        "status": "stale-digest",
+        "actual": "47ea515ff9c91e24d6f6b501da289996a06dfe9a"
+      },
+      "owner_bytes_changed_since_preparation": false
+    },
+    {
+      "note": "cff-surface-cache-ownership",
+      "scope": {
+        "path": "crates/feynkit-cff/src/surface.rs",
+        "symbol": "feynkit_cff::SurfaceCache",
+        "anchor": "pub struct SurfaceCache {",
+        "digest": "e35249fe2ae3d1ed12cd9c5059e7a9f42f56eb51"
+      },
+      "result": {
+        "status": "stale-digest",
+        "actual": "cf07dd60f15885153560f050d552600cfb19034a"
+      },
+      "origin": "Identical registered scope already failing at approved a517 preparation base; not a new scope failure from27\u201330.",
+      "preparation_base_check": {
+        "status": "stale-digest",
+        "actual": "cf07dd60f15885153560f050d552600cfb19034a"
+      },
+      "owner_bytes_changed_since_preparation": false
+    },
+    {
+      "note": "feynkit-merge-readiness",
+      "scope": {
+        "path": "crates/feynkit-generator/src/grouping.rs",
+        "symbol": "group_diagrams",
+        "anchor": "pub(crate) fn group_diagrams(",
+        "digest": "7c402dd069754864108f236abdf155e9a1ab4f6e"
+      },
+      "result": {
+        "status": "stale-digest",
+        "actual": "66cc3fe8280694c72b213d71dee37fb40a1ad997"
+      },
+      "origin": "Identical registered scope already failing at approved a517 preparation base; not a new scope failure from27\u201330.",
+      "preparation_base_check": {
+        "status": "stale-digest",
+        "actual": "66cc3fe8280694c72b213d71dee37fb40a1ad997"
+      },
+      "owner_bytes_changed_since_preparation": false
+    },
+    {
+      "note": "nix-crane-cache-reuse",
+      "scope": {
+        "path": "nix/rust-workspace.nix",
+        "symbol": "workspace package source ownership",
+        "anchor": "documentationCatalogAnnotatedItemSourcePaths =",
+        "end_anchor": "workspacePackageExtraSourceRootsForSourcePackages =",
+        "digest": "40c9f9e222f79069e9fef94da1288be3aacab0ac"
+      },
+      "result": {
+        "status": "stale-digest",
+        "actual": "8450390593797e6fc5c8399df468e4f0025dfe4e"
+      },
+      "origin": "Identical registered scope already failing at approved a517 preparation base; not a new scope failure from27\u201330.",
+      "preparation_base_check": {
+        "status": "stale-digest",
+        "actual": "2ecd200b0d9bf0434fc9c15f9ebcb076d777dd70"
+      },
+      "owner_bytes_changed_since_preparation": true
+    }
+  ],
+  "qualification": "The two process/Nix owners changed after preparation while their inherited registered scopes were already stale; current-owner decisions explicitly reconcile those changes. 24 digest failures plus4 anchor failures, not7 digest plus20 anchor."
+}

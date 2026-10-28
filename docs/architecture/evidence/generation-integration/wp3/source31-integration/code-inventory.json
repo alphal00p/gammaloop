@@ -1,0 +1,131 @@
+{
+  "base": "7587d0c768363f200e89250683e7836c867c9b81",
+  "code": "ecd901151e9c6a4b30df75198c7613f1532416b1",
+  "files": [
+    {
+      "path": "crates/kurvst/typst/docs/manual.pdf",
+      "sha256": "db25c8b6bd9ef4fe93891e3d82271568abe880b8dec9dd91f3c01d525b65cfaf"
+    },
+    {
+      "path": "docs/architecture/architecture-current.typ",
+      "sha256": "e77d42dd7715223e8a88188d1c23afb2c81ad3b68a1604fcc7a7f8bc105936df"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/execution.json",
+      "sha256": "99a5eca9e709b98971ff6f57b025a6f9f73647c9677bc0da99a3f4750efc4a0b"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/source31/inventory-before.json",
+      "sha256": "435c911450bb6d14350c2bd9fa2e973d8f964ffe049b979d8b5c2864d500ad27"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/source31/manual.json",
+      "sha256": "5963428ffaa6e68586bef585ff727d5883a98193d9b329ce906c1ed3b74202c9"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/source31/protected-inputs.json",
+      "sha256": "6bb445637278fb561959ae016b1e45e28516d1c6e58e139738353d7ddffc5d72"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/source31/receipt.json",
+      "sha256": "0af40f52c96088f246680770e1763a7aa091371041d790c3604e8c4dac1e12f9"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/source31/registry-metadata.json",
+      "sha256": "9143bd5bc990d16273e13799df585c277f3320c60e1476b4501afc385f2b3b3d"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/source31/scope-audit-after.json",
+      "sha256": "3c8c7d4e7ae25a8432ed7ce95c14c3e28336dd78603e00e4a472f636bde9953e"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/source31/semantic-attestations.json",
+      "sha256": "07fe6433eb47c1e983ef38bb52a6aa4de50d7d0a2e342dd1a24d492aff6d5b90"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/source31/validation.json",
+      "sha256": "5b891e74d24b115429f56c25799b020099d3a30af41ff843158347dfc9276241"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/replay.json",
+      "sha256": "ee9c9c190bc38321a1efc51539fce6527caa80cf8a87a32fb4f2f051dcbee643"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/source31-integration/after.json",
+      "sha256": "633a60bc8ab4aba5d838c4b7f2b7919783c53a55388b2607dfc59a450ffc79ec"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/source31-integration/before.json",
+      "sha256": "15797e68e5488ed40f96fb173c76eda069d98948a8cf091ddac7fc306b32e5dc"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/source31-integration/checks.json",
+      "sha256": "13fdd5b54727b5f4b833491d8f48a88719ab4fe7dabc04690684bf282b1d4f91"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/source31-integration/current-owner-decisions.json",
+      "sha256": "b76eb942e756249c933584082e4b2598f48452a5ecb744c95a09202f17933701"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/source31-integration/preparation-semantic-review.json",
+      "sha256": "47e588dc816298291f16a613b9c960fd404750551565831820d202a21f3587b7"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/source31-integration/preparation-table-review.json",
+      "sha256": "b14859ec69c2a65df05a4b85be4977cf3a08f95b6980e78059f0472f14651991"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/source31-integration/protected-refs.json",
+      "sha256": "706bafa21297d5e22e2381ebc0f322bd07558156c8868a4eda847ccbaca05f47"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/source31-integration/receipt.json",
+      "sha256": "df3dc45cc262dbcccfa90e973ceacc9f32596197e3ebac0dfa58b3c7f4477d57"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/source31-integration/semantic-reuse.json",
+      "sha256": "b2c91a0c590c96755a2335712e2afe992b0c65e688421dba1c410d3fd245438f"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/source31-integration/source30-review.json",
+      "sha256": "e16887de4682a30491b9ff28f41d06db67198d31a99d03fd55e1f62faea73492"
+    },
+    {
+      "path": "docs/architecture/feynkit-merge-readiness.typ",
+      "sha256": "f41dcb2c70a88b4d9845eb830a90796e920b85fb7a8196e6ab26e5b9b3114e40"
+    },
+    {
+      "path": "docs/architecture/generation-documentation-reconcile.typ",
+      "sha256": "97378c7dab21c8a51f4293b5acf954535cd3eb9bc27aa6cf4c2868ef996a8161"
+    },
+    {
+      "path": "docs/architecture/generation-integration-plan.typ",
+      "sha256": "620d13d2cd1fa1a9e1b006deb4157915661c4cb73d95f24e60a270df3e4cf1b8"
+    },
+    {
+      "path": "docs/architecture/generation-integration-wp1.typ",
+      "sha256": "9af88ac35be9bc861271a501382d2931e3d89d8aeb34015b257efb7b21a28272"
+    },
+    {
+      "path": "docs/architecture/idenso-architecture.typ",
+      "sha256": "e00b282ec054df67b01fa35b259791acbc4d4ef363138d8f0502d521757391fc"
+    },
+    {
+      "path": "docs/architecture/kurvst-arrowhead-engine.typ",
+      "sha256": "ef2e8dcee369496e897c3bb0aa1ab3d7255bf6214bb891687208420f460deacc"
+    },
+    {
+      "path": "docs/architecture/nix-crane-cache-reuse.typ",
+      "sha256": "9a7d0213229a4cbd04b46aa2060dec9a468da6fe5f061d9c43076aab92747abb"
+    },
+    {
+      "path": "docs/architecture/ratatui-integration-dashboard.typ",
+      "sha256": "b124d94ee6f6c6c5c4578245798ef93248dd1c28effbb1a2307e42e59912b5a3"
+    },
+    {
+      "path": "docs/developers.toml",
+      "sha256": "501a733fcbc203021e92dca3b18a013fd9a4a836c1c99c32d86af26394ce4980"
+    }
+  ],
+  "semantics": "All hashes bind frozen code revision, not mutable evidence candidate. Rust/manifests/locks/uv/assets other than approved source-matched Kurvst manual untouched."
+}

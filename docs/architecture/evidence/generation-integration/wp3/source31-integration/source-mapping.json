@@ -1,0 +1,11 @@
+{
+  "31": {
+    "original": "e85430d4f7a0cb1db66fc26f614b2eeb5feb20eb",
+    "preparation_base": "a517ca563d78d161cff17fe60e661f80529c9a83",
+    "approved_cumulative_preparation": "eb2a02f5dcee0171a728c6143ff28d7f16f40f40",
+    "main_base": "7587d0c768363f200e89250683e7836c867c9b81",
+    "integration": "cde7b7e2e0a68feb5615829755da054d8b8e0c8d",
+    "current_status_correction": "ecd901151e9c6a4b30df75198c7613f1532416b1",
+    "disposition": "Semantic reconciliation plus approved seven table headers; two current-owner decisions explicitly update post27\u201330 scopes. No production change or32+port."
+  }
+}

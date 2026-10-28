@@ -1,0 +1,26 @@
+{
+  "code": "ecd901151e9c6a4b30df75198c7613f1532416b1",
+  "source_trees": [
+    {
+      "target": "alphal00p-docs-cargo-artifacts",
+      "source": "/nix/store/0fckr83mxbamrrcqikzk7svicrql0701-source",
+      "included_files": 1345,
+      "all_included_blobs_equal_frozen_git": true,
+      "source_manifest": "target/wp3-source31/alphal00p-docs-cargo-artifacts-source-manifest.json",
+      "manifest_sha256": "608ff56ffc017528a37f51ae25944cf612ef4eb66603377dcbaa3fa10a579613",
+      "mismatches": [],
+      "unknown": []
+    },
+    {
+      "target": "alphal00p-docs-snapshot-fixture",
+      "source": "/nix/store/8kjyjwgcd85d248gawl910055al379xq-source",
+      "included_files": 2402,
+      "all_included_blobs_equal_frozen_git": true,
+      "source_manifest": "target/wp3-source31/alphal00p-docs-snapshot-fixture-source-manifest.json",
+      "manifest_sha256": "543ed3e40f7ec26854e55eb67b2b73edc6783e17dd78222064d8f8f16ebd04a3",
+      "mismatches": [],
+      "unknown": []
+    }
+  ],
+  "semantics": "All selected producer/documentation files are bound to actual frozen Git blob identities, not merely a short revision or selected examples. Later evidence-tip JSON differences are distinct."
+}

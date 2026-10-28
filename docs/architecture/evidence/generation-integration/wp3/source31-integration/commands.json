@@ -1,0 +1,42 @@
+{
+  "code": "ecd901151e9c6a4b30df75198c7613f1532416b1",
+  "canonical_commands": [
+    [
+      "nix",
+      "build",
+      "--impure",
+      "--no-link",
+      "--max-jobs",
+      "2",
+      "--cores",
+      "2",
+      "git+file:///shared/lcnbr/dev/gammaloop/main?rev=ecd901151e9c6a4b30df75198c7613f1532416b1&shallow=1#packages.x86_64-linux.alphal00p-docs-snapshot-fixture"
+    ],
+    [
+      "nix",
+      "build",
+      "--impure",
+      "--no-link",
+      "--max-jobs",
+      "2",
+      "--cores",
+      "2",
+      "git+file:///shared/lcnbr/dev/gammaloop/main?rev=ecd901151e9c6a4b30df75198c7613f1532416b1&shallow=1#packages.x86_64-linux.alphal00p-docs-pages"
+    ]
+  ],
+  "observed_validation_commands": [
+    "cargo --version",
+    "cargo run --locked --profile ci-optim -p alphal00p-docs-catalogs --features gammaloop-reference,vakint-reference --bin alphal00p-docs-gammaloop-reference -- --check",
+    "cargo run --locked --profile ci-optim -p alphal00p-docs-catalogs --features gammaloop-reference,vakint-reference --bin alphal00p-docs-vakint-reference -- --check",
+    "cargo test --locked --profile ci-optim -p alphal00p-docs-examples",
+    "cargo run --locked --profile ci-optim -p alphal00p-docs-python-exporter --features gammaloop -- gammaloop-python docs/api/python/gammaloop-python.pyi --check",
+    "cargo run --locked --profile ci-optim -p alphal00p-docs-python-exporter --features linnet -- linnet-graph docs/api/python/linnet-graph.pyi --check",
+    "cargo run --locked --profile ci-optim -p alphal00p-docs-python-exporter --features spenso -- spynso3 docs/api/python/spynso3.pyi --check",
+    "cargo run --locked --profile ci-optim -p alphal00p-docs-python-exporter --features vakint -- vakint-community docs/api/python/vakint-community.pyi --check",
+    "cargo run --locked --profile ci-optim -p alphal00p-docs-python-exporter --features feynkit -- feynkit-community docs/api/python/feynkit-community.pyi --check",
+    "cargo test --locked --profile ci-optim -p alphal00p-docs-python-exporter --features gammaloop",
+    "cargo test --locked --profile ci-optim -p alphal00p-docs-python-exporter --features linnet"
+  ],
+  "scope_checker": "Existing importable oracle-registry-audit.py,102scopes/16negative controls; scope-retention.py/origin.py/source-binding.py in retained task scratch.",
+  "Typst": "Pinned Typst0.15.1, --features html --root . --creation-timestamp 0; nine notes eachPDF+HTML. No standalone cold Cargo pipeline, forced-pass, snapshot/oracle-record mode, target/cache override or publication."
+}
