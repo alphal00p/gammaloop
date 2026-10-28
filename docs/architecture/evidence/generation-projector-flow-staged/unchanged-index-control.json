@@ -1,0 +1,10 @@
+{
+  "path": "crates/gammalooprs/src/numerator/aind.rs",
+  "validated_at": "67601ec14af85a6162ffbd488a6196555dadbd0b",
+  "final_source_byte_identical": true,
+  "sha256": "497d895bd587d6cb3fc1c54f9044e8e111b2c0d7f309d1090ce52a3a28f5a959",
+  "command": "target/generation-projector-flow-staged/indices.command",
+  "result": "5 passed; no failed/ignored tests",
+  "producer": "first-runtime-producer.json",
+  "later_changes": "only the independent RQFT oracle and routing-comparison test in graph/parse/tests.rs; production index owner and its tests unchanged"
+}

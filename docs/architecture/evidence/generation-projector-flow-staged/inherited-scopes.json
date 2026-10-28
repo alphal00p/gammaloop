@@ -1,0 +1,221 @@
+{
+  "base": "d48f9d1aedc766eea5cb185ab6029d1f04462043",
+  "mismatches": [
+    {
+      "note": "gammaloop-architecture",
+      "path": "crates/gammaloop-api/src/state.rs",
+      "expected": "5113940a12e8bac5ec042c59db01bd0ecfb05ef0",
+      "actual": "3598dbe299f9a32da1ed8d034706a82959d84abb",
+      "base_actual": "3598dbe299f9a32da1ed8d034706a82959d84abb",
+      "inherited": true
+    },
+    {
+      "note": "gammaloop-architecture",
+      "path": "crates/gammaloop-api/src/commands/integrate.rs",
+      "expected": "0f0ae2c8e593ca91f12be4b4c4e456f8817d7f9b",
+      "actual": "bcce3d43713b42fe428e3b5d89784e18c8d47fa7",
+      "base_actual": "bcce3d43713b42fe428e3b5d89784e18c8d47fa7",
+      "inherited": true
+    },
+    {
+      "note": "gammaloop-architecture",
+      "path": "crates/gammalooprs/src/integrands/process/mod.rs",
+      "expected": "c795c1a404f9a6118501d7b5ee2d5e580e44886c",
+      "actual": "4e93e77570220de9a2247f6a363095d321511181",
+      "base_actual": "4e93e77570220de9a2247f6a363095d321511181",
+      "inherited": true
+    },
+    {
+      "note": "gammaloop-architecture",
+      "path": "crates/gammalooprs/src/observables/mod.rs",
+      "expected": "e0a87225a5073e48c6d82a4d8f39cddac43d1684",
+      "actual": "b672f52f6674d08d11b6cc68ef0621c399386926",
+      "base_actual": "b672f52f6674d08d11b6cc68ef0621c399386926",
+      "inherited": true
+    },
+    {
+      "note": "gammaloop-architecture",
+      "path": "crates/gammaloop-api/src/python.rs",
+      "expected": "adc6974f20de538c6acfb2913aa5c9b16b590617",
+      "actual": "872d2b855d14a4aded443e18df435f899c2bf42a",
+      "base_actual": "872d2b855d14a4aded443e18df435f899c2bf42a",
+      "inherited": true
+    },
+    {
+      "note": "gammaloop-architecture",
+      "path": "crates/feynkit-generator/src/generation.rs",
+      "expected": "b723525194b3a59789d47b1a1a10e2df95c0d83c",
+      "actual": "0495bd293c86f81e8b817913f3e25e1918b62779",
+      "base_actual": "0495bd293c86f81e8b817913f3e25e1918b62779",
+      "inherited": true
+    },
+    {
+      "note": "gammaloop-architecture",
+      "path": "crates/feynkit-model/src/model.rs",
+      "expected": "3887f65c1c670de301495664dd4d4929dd76f60d",
+      "actual": "b04029827b0ecb3c8f23289bf0937e1ea422e176",
+      "base_actual": "b04029827b0ecb3c8f23289bf0937e1ea422e176",
+      "inherited": true
+    },
+    {
+      "note": "gammaloop-architecture",
+      "path": "crates/feynkit-graph/src/lib.rs",
+      "expected": "2d8a36f8ae16bf33adf8ba933a7f58f25f02ba0a",
+      "actual": "03fa811b133f5816415a2b445445ea5a2d87365d",
+      "base_actual": "03fa811b133f5816415a2b445445ea5a2d87365d",
+      "inherited": true
+    },
+    {
+      "note": "gammaloop-architecture",
+      "path": "crates/gammalooprs/src/graph/parse/mod.rs",
+      "expected": "fc058e64317d80978ebfc2ede480a29fd852a8a3",
+      "actual": "missing-or-nonunique-anchor",
+      "base_actual": "missing-or-nonunique-anchor",
+      "inherited": true
+    },
+    {
+      "note": "integration-dashboard",
+      "path": "crates/gammaloop-api/src/commands/integrate.rs",
+      "expected": "0f0ae2c8e593ca91f12be4b4c4e456f8817d7f9b",
+      "actual": "bcce3d43713b42fe428e3b5d89784e18c8d47fa7",
+      "base_actual": "bcce3d43713b42fe428e3b5d89784e18c8d47fa7",
+      "inherited": true
+    },
+    {
+      "note": "integration-dashboard",
+      "path": "crates/gammalooprs/src/integrate/mod.rs",
+      "expected": "d131b0f6a513af1310b647474fac787105610a1b",
+      "actual": "2cbbafcb254b4b7ac042b6ca8dab6682f9a0ce21",
+      "base_actual": "2cbbafcb254b4b7ac042b6ca8dab6682f9a0ce21",
+      "inherited": true
+    },
+    {
+      "note": "uv-renormalization",
+      "path": "crates/gammalooprs/src/uv/orchestrator.rs",
+      "expected": "19e0c07de61017d01b36bfda24f60e48d4b17bfc",
+      "actual": "4acc87a62891dbff0b3ca2cef2e8ab505c1de6d5",
+      "base_actual": "4acc87a62891dbff0b3ca2cef2e8ab505c1de6d5",
+      "inherited": true
+    },
+    {
+      "note": "spenso-symbolica-syntax-and-rewrites",
+      "path": "crates/idenso/src/lib.rs",
+      "expected": "b6b8af1e73031ce2c7dc97185cc31f4a90c63d64",
+      "actual": "820fbf610c4bb06867a7013d0b8631e57704ff7d",
+      "base_actual": "820fbf610c4bb06867a7013d0b8631e57704ff7d",
+      "inherited": true
+    },
+    {
+      "note": "spenso-architecture",
+      "path": "crates/spenso/src/network/mod.rs",
+      "expected": "410491ec4a23db5061510dc830fe9a880b6b6a0a",
+      "actual": "14f66a4d6e62a4fd878c2f52f0bc6ab336cf7f24",
+      "base_actual": "14f66a4d6e62a4fd878c2f52f0bc6ab336cf7f24",
+      "inherited": true
+    },
+    {
+      "note": "idenso-architecture",
+      "path": "crates/idenso/src/lib.rs",
+      "expected": "b6b8af1e73031ce2c7dc97185cc31f4a90c63d64",
+      "actual": "820fbf610c4bb06867a7013d0b8631e57704ff7d",
+      "base_actual": "820fbf610c4bb06867a7013d0b8631e57704ff7d",
+      "inherited": true
+    },
+    {
+      "note": "idenso-architecture",
+      "path": "crates/idenso/src/tensor/mod.rs",
+      "expected": "73043dc6e75efb7d9961f007520c75f29d45d5a8",
+      "actual": "b95ee5f1852b22a03b1fe79bfe4342d3c42e831e",
+      "base_actual": "b95ee5f1852b22a03b1fe79bfe4342d3c42e831e",
+      "inherited": true
+    },
+    {
+      "note": "idenso-architecture",
+      "path": "crates/idenso/src/tensor/contract.rs",
+      "expected": "94e9d8b2efc414ab4457e7f33d9e8ee4a41b439c",
+      "actual": "442fe89c0ec2fc603e7eeb88b73e69ad9e1b7e60",
+      "base_actual": "442fe89c0ec2fc603e7eeb88b73e69ad9e1b7e60",
+      "inherited": true
+    },
+    {
+      "note": "idenso-architecture",
+      "path": "crates/idenso/src/tensor/simplification.rs",
+      "expected": "3a0628ea619e65a4c7e10e270e7a4aa29fd4e07b",
+      "actual": "49ae6d4398bf4decc931f01d09ef49e69f64996f",
+      "base_actual": "49ae6d4398bf4decc931f01d09ef49e69f64996f",
+      "inherited": true
+    },
+    {
+      "note": "idenso-architecture",
+      "path": "crates/idenso/src/tensor/collection/collected.rs",
+      "expected": "de3aeb2b35712816908c6f6490d548e46cb864ba",
+      "actual": "ca8c5cb4f9dd9ee5152cbb94df6c8d919e098c35",
+      "base_actual": "ca8c5cb4f9dd9ee5152cbb94df6c8d919e098c35",
+      "inherited": true
+    },
+    {
+      "note": "idenso-architecture",
+      "path": "crates/idenso/src/tensor/collection.rs",
+      "expected": "fea694882a4b5be3160175636d9ecaeaa1b6ecfe",
+      "actual": "8f078f8c9d4f7fd1fea495180aa1185894b5cfa3",
+      "base_actual": "8f078f8c9d4f7fd1fea495180aa1185894b5cfa3",
+      "inherited": true
+    },
+    {
+      "note": "linnet-architecture",
+      "path": "crates/linnet/src/half_edge.rs",
+      "expected": "ab9af84a52f5a11adfd57083fb87d524b28bdd55",
+      "actual": "cf395f5b3af0a5aa69450792745aa7f568ccd2e3",
+      "base_actual": "cf395f5b3af0a5aa69450792745aa7f568ccd2e3",
+      "inherited": true
+    },
+    {
+      "note": "linnet-architecture",
+      "path": "crates/linnet/src/half_edge/involution.rs",
+      "expected": "cb55dd1e057261356f1f2fdce9808b2252fc55ae",
+      "actual": "2a5162885ac2e05dc8a1ec79d5fec555a9f6ed36",
+      "base_actual": "2a5162885ac2e05dc8a1ec79d5fec555a9f6ed36",
+      "inherited": true
+    },
+    {
+      "note": "linnet-architecture",
+      "path": "crates/linnet/src/half_edge/subgraph.rs",
+      "expected": "61c2d5f958487a63d422201ad7d71a77840f90a7",
+      "actual": "929ee2f716f95ba3a0bf7a9afdb8f8bf2a458765",
+      "base_actual": "929ee2f716f95ba3a0bf7a9afdb8f8bf2a458765",
+      "inherited": true
+    },
+    {
+      "note": "linnet-architecture",
+      "path": "crates/linnet/src/parser/mod.rs",
+      "expected": "075b13acb171934ea04a1ef527db0bd6a9e40025",
+      "actual": "6667c3527c7ae3fa85946116341b8ee78c0e87a8",
+      "base_actual": "6667c3527c7ae3fa85946116341b8ee78c0e87a8",
+      "inherited": true
+    },
+    {
+      "note": "cff-surface-cache-ownership",
+      "path": "crates/feynkit-cff/src/generation.rs",
+      "expected": "89000ab1668f83dfb3b32351e6dbed65e0d5c91e",
+      "actual": "47ea515ff9c91e24d6f6b501da289996a06dfe9a",
+      "base_actual": "47ea515ff9c91e24d6f6b501da289996a06dfe9a",
+      "inherited": true
+    },
+    {
+      "note": "cff-surface-cache-ownership",
+      "path": "crates/feynkit-cff/src/surface.rs",
+      "expected": "e35249fe2ae3d1ed12cd9c5059e7a9f42f56eb51",
+      "actual": "cf07dd60f15885153560f050d552600cfb19034a",
+      "base_actual": "cf07dd60f15885153560f050d552600cfb19034a",
+      "inherited": true
+    },
+    {
+      "note": "feynkit-merge-readiness",
+      "path": "crates/feynkit-generator/src/grouping.rs",
+      "expected": "7c402dd069754864108f236abdf155e9a1ab4f6e",
+      "actual": "3ff919fd9caa2b1f07fab2a89580722e8c5861bf",
+      "base_actual": "3ff919fd9caa2b1f07fab2a89580722e8c5861bf",
+      "inherited": true
+    }
+  ]
+}

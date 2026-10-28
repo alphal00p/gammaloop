@@ -1,0 +1,10 @@
+{
+  "path": "/common/build-cache/lcnbr/64/c10a11de27328a/dev-optim/deps/gammaloop_api-aef8cb31d4027398",
+  "sha256": "52ad7e42ce170c159c1f33eed08ed054b300ce43a38ec7d501d8dd09c6487d4a",
+  "phase": "before benchmark document-parser harness correction",
+  "logs": [
+    "projector-initial.log",
+    "card-current-producer.log"
+  ],
+  "generate_source_sha256": "d4b832a0496331b33fbe47320ffd1c6a840cda80118a1ebc0a37cf422e129832"
+}

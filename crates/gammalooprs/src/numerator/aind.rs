@@ -1,21 +1,14 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use linnet::half_edge::{
-    NodeIndex,
-    involution::{EdgeIndex, Hedge},
-};
-use spenso::{
-    structure::{
-        representation::LibrarySlot,
-        slot::{AbsInd, DummyAind, IsAbstractSlot, ParseableAind, SlotError},
-    },
-    utils::{to_subscript, to_superscript},
-};
-use symbolica::{
-    atom::{Atom, AtomCore, AtomView, Symbol, representation::FunView},
-    coefficient::CoefficientView,
-    function, symbol,
-};
+use linnet::half_edge::NodeIndex;
+use linnet::half_edge::involution::{EdgeIndex, Hedge};
+use spenso::structure::representation::LibrarySlot;
+use spenso::structure::slot::{AbsInd, DummyAind, IsAbstractSlot, ParseableAind, SlotError};
+use spenso::utils::{to_subscript, to_superscript};
+use symbolica::atom::representation::FunView;
+use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
+use symbolica::coefficient::CoefficientView;
+use symbolica::{function, symbol};
 use thiserror::Error;
 
 use crate::utils::GS;
@@ -48,10 +41,14 @@ pub enum Aind {
 }
 
 impl Aind {
-    /// Transport represented GammaLoop half-edge slots into the native UFO frame.
-    /// Scalar literals, momentum owners and other index kinds retain their meaning.
-    pub fn native_hedge_slots(expression: &Atom) -> eyre::Result<Atom> {
-        let mut overflow = false;
+    /// Transport an explicitly compact DOT's represented local slots into the
+    /// model frame. Canonical and finalized runtime artifacts bypass this chart.
+    /// See [`Self::validate_model_projector_slots`] for both input boundaries.
+    ///
+    /// # Errors
+    /// Returns the offending compact slot if its one-based model index overflows.
+    pub fn compact_to_model_hedge_slots(expression: &Atom) -> Result<Atom, AindError> {
+        let mut overflow = None;
         let result = expression.replace_map(|part, _, output| {
             if let Ok(slot) = LibrarySlot::<Self>::try_from(part)
                 && let Self::Hedge(hedge, local) = slot.aind
@@ -62,15 +59,54 @@ impl Aind {
                         .slot::<Self, _>(Self::Hedge(hedge, local))
                         .to_atom();
                 } else {
-                    overflow = true;
+                    overflow = Some(part.to_owned());
                 }
             }
         });
-        eyre::ensure!(
-            !overflow,
-            "compact half-edge index exceeds the native UFO index range"
-        );
-        Ok(result)
+        match overflow {
+            Some(slot) => Err(AindError::CompactSlotOverflow(slot)),
+            None => Ok(result),
+        }
+    }
+
+    /// Validate the one-based local slots of a user-supplied model projector.
+    ///
+    /// This boundary does not change the native index codec: local zero remains
+    /// valid internally, with `hedge(h)` its canonical spelling. Model projectors
+    /// instead use `hedge(h, 1)` for the first slot, as the UFO rules do.
+    ///
+    /// ```
+    /// use eyre::Result;
+    /// use gammalooprs::initialisation;
+    /// use gammalooprs::numerator::aind::Aind;
+    /// use symbolica::parse;
+    /// # fn main() -> Result<()> {
+    /// initialisation::initialise()?;
+    /// let compact = parse!("spenso::mink(4,gammalooprs::hedge(7))");
+    /// assert!(Aind::validate_model_projector_slots(compact.as_view()).is_err());
+    /// let model = Aind::compact_to_model_hedge_slots(&compact)?;
+    /// assert_eq!(model, parse!("spenso::mink(4,gammalooprs::hedge(7,1))"));
+    /// Aind::validate_model_projector_slots(model.as_view())?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # Errors
+    /// Returns the offending represented half-edge slot when its local index is zero.
+    pub fn validate_model_projector_slots(expression: AtomView<'_>) -> Result<(), AindError> {
+        let mut zero_slot = None;
+        expression.visitor(&mut |part| {
+            if let Ok(slot) = LibrarySlot::<Self>::try_from(part)
+                && let Self::Hedge(_, 0) = slot.aind
+            {
+                zero_slot = Some(part.to_owned());
+            }
+            zero_slot.is_none()
+        });
+        match zero_slot {
+            Some(slot) => Err(AindError::ZeroProjectorSlot(slot)),
+            None => Ok(()),
+        }
     }
 }
 
@@ -290,8 +326,16 @@ impl<'a> From<Aind> for symbolica::atom::AtomOrView<'a> {
     }
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, PartialEq, Eq)]
 pub enum AindError {
+    /// Compact-to-model overflow; see [`Aind::validate_model_projector_slots`].
+    #[error("compact half-edge slot {0} exceeds the one-based model index range")]
+    CompactSlotOverflow(Atom),
+    /// A zero local model-projector slot; see [`Aind::validate_model_projector_slots`].
+    #[error(
+        "{0} uses half-edge index 0; model projector indices are hedge(h, k) with k counted from one"
+    )]
+    ZeroProjectorSlot(Atom),
     #[error("Argument is not a natural number")]
     NotNatural,
     #[error("Argument  {0} is not a valid index")]
@@ -397,28 +441,71 @@ impl TryFrom<AtomView<'_>> for Aind {
 
 #[cfg(test)]
 mod tests {
-    use idenso::{
-        CookMode, CookSettings,
-        dirac::AGS,
-        tensor::ContractSettings,
-        tensor::{SymbolicNetParse, SymbolicTensor},
-    };
-    use spenso::{
-        network::parsing::{ParseSettings, ShadowedStructure, StructureFromAtom},
-        structure::TensorStructure,
-    };
-    use symbolica::{
-        atom::{Atom, AtomCore},
-        function, parse_lit, symbol,
-    };
+    use idenso::dirac::AGS;
+    use idenso::tensor::{ContractSettings, SymbolicNetParse, SymbolicTensor};
+    use idenso::{CookMode, CookSettings};
+    use spenso::network::parsing::{ParseSettings, ShadowedStructure, StructureFromAtom};
+    use spenso::structure::TensorStructure;
+    use symbolica::atom::{Atom, AtomCore};
+    use symbolica::{function, parse, parse_lit, symbol};
 
-    use crate::initialisation::initialise;
+    use crate::initialisation;
 
     use super::*;
 
     #[test]
+    fn compact_slot_transport_is_distinct_from_model_projector_validation() {
+        initialisation::initialise().unwrap();
+        let compact = parse!("gammalooprs::ϵ(0,spenso::mink(4,gammalooprs::hedge(7)))");
+        let model = parse!("gammalooprs::ϵ(0,spenso::mink(4,gammalooprs::hedge(7,1)))");
+        assert_eq!(Aind::compact_to_model_hedge_slots(&compact).unwrap(), model);
+        Aind::validate_model_projector_slots(model.as_view()).unwrap();
+        assert!(matches!(
+            Aind::validate_model_projector_slots(compact.as_view()),
+            Err(AindError::ZeroProjectorSlot(_))
+        ));
+        let overflow = parse!("spenso::mink(4,gammalooprs::hedge(7,65535))");
+        assert!(matches!(
+            Aind::compact_to_model_hedge_slots(&overflow),
+            Err(AindError::CompactSlotOverflow(_))
+        ));
+    }
+
+    #[test]
+    fn projector_boundary_preserves_native_zero_serialization() {
+        initialisation::initialise().unwrap();
+        let zero = Aind::Hedge(17, 0);
+        let short = function!(GS.hedgeaind, 17);
+        let explicit_zero = function!(GS.hedgeaind, 17, 0);
+        assert_eq!(zero.to_atom(), short);
+        assert_eq!(Aind::from_view(explicit_zero.as_view()).unwrap(), zero);
+        assert_eq!(Aind::from_view(short.as_view()).unwrap(), zero);
+        for local in [1, 2, u16::MAX] {
+            let expression = function!(
+                symbol!("spenso::mink"),
+                4,
+                function!(GS.hedgeaind, 0, i64::from(local))
+            );
+            Aind::validate_model_projector_slots(expression.as_view()).unwrap();
+        }
+        for zero in [short, explicit_zero] {
+            let expression = function!(symbol!("spenso::mink"), 4, zero);
+            assert!(matches!(
+                Aind::validate_model_projector_slots(expression.as_view()),
+                Err(AindError::ZeroProjectorSlot(_))
+            ));
+        }
+        // A zero-valued owner, scalar coefficient or non-half-edge local index
+        // is outside this boundary and must not be shifted or rejected.
+        Aind::validate_model_projector_slots(
+            parse!("gammalooprs::Q(0,spenso::mink(4,gammalooprs::edge(3)))").as_view(),
+        )
+        .unwrap();
+    }
+
+    #[test]
     fn parses_gammaloop_owned_aind_symbols() {
-        initialise().unwrap();
+        initialisation::initialise().unwrap();
 
         let cases = [
             (Aind::Dummy(111), function!(GS.dummyaind, 111i64)),
@@ -439,7 +526,7 @@ mod tests {
 
     #[test]
     fn parses_indexed_gammaloop_tensors_without_compact_rewrite() {
-        initialise().unwrap();
+        initialisation::initialise().unwrap();
 
         let bis0 = function!(symbol!("spenso::bis"), 4i64, Atom::from(Aind::Hedge(0, 0)));
         let bis1 = function!(symbol!("spenso::bis"), 4i64, Atom::from(Aind::Hedge(1, 0)));
@@ -463,7 +550,7 @@ mod tests {
 
     #[test]
     fn test_structure_parsing() {
-        initialise().unwrap();
+        initialisation::initialise().unwrap();
         let _ = spenso::tensor_symbol!("gammalooprs::tests::index_fixture");
         let expr = parse_lit!(gammalooprs::tests::index_fixture(
             spenso::mink(4, edge(1, 1)),

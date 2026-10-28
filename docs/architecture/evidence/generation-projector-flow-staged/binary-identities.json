@@ -1,0 +1,62 @@
+[
+  {
+    "path": "/common/build-cache/lcnbr/64/c10a11de27328a/dev-optim/deps/gammaloop_api-aef8cb31d4027398",
+    "sha256": "52ad7e42ce170c159c1f33eed08ed054b300ce43a38ec7d501d8dd09c6487d4a",
+    "phase": "before benchmark document-parser harness correction",
+    "logs": [
+      "projector-initial.log",
+      "card-current-producer.log"
+    ],
+    "generate_source_sha256": "d4b832a0496331b33fbe47320ffd1c6a840cda80118a1ebc0a37cf422e129832"
+  },
+  {
+    "path": "/common/build-cache/lcnbr/64/c10a11de27328a/dev-optim/deps/gammalooprs-a941761db6d1e7be",
+    "sha256": "7bf50da4a8ce407bfb1f87fcacbcc53efc688fa6b1b4ffa3e37af35347fbdc64",
+    "phase": "before replacing assumed statement-order ids with authored semantic edge witnesses",
+    "logs": [
+      "indices.log",
+      "graph-source-order-failure.log"
+    ],
+    "parse_test_source_sha256": "f68a010f57a7c670424409e6407eec682c07f81c951cf6ab438df62708185ce3"
+  },
+  {
+    "path": "/common/build-cache/lcnbr/64/c10a11de27328a/dev-optim/deps/feynkit_graph-9714c7f77f2b363d",
+    "sha256": "c5ec4c18de8935122f23c5d51b927a80723b01047142b71a532a8c77c539d2db",
+    "observed_in": "target/generation-projector-flow-staged/dot.log"
+  },
+  {
+    "path": "/common/build-cache/lcnbr/64/c10a11de27328a/dev-optim/deps/gammaloop_api-aef8cb31d4027398",
+    "sha256": "8185c52f38781136ae753996b404215539c461ed0c974408af55e813c3b2dd07",
+    "observed_in": "target/generation-projector-flow-staged/projector.log"
+  },
+  {
+    "path": "/common/build-cache/lcnbr/64/c10a11de27328a/dev-optim/deps/gammalooprs-a941761db6d1e7be",
+    "sha256": "bf0d641e53ec48864192db23038fb4c3797e2d258c6d32f4ef4d456642aa8941",
+    "observed_in": "target/generation-projector-flow-staged/graph-retry.log"
+  },
+  {
+    "path": "/common/build-cache/lcnbr/64/c10a11de27328a/dev-optim/deps/test_feyngen-4a8fd39b9884eb1c",
+    "sha256": "0126989781f257ecda03f35047720f290f490a6e6f27b091a6e4fc4759856cf0",
+    "observed_in": "target/generation-projector-flow-staged/fixture.log"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-projector-flow/target/dev-optim/alphal00p-docs-gammaloop-reference",
+    "sha256": "416490001b1e75ae086db724a0d06c6f9dec0186b384c4a430c54e4b0c671806",
+    "observed_in": "target/generation-projector-flow-staged/reference-check.log"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-projector-flow/target/dev-optim/alphal00p-docs-builder",
+    "sha256": "3c0725ef457400a8c9a7b104b0dafa1232c24496d6dd7aff6139e2a6e2f10dcd",
+    "observed_in": "target/generation-projector-flow-staged/docs.log"
+  },
+  {
+    "path": "/common/build-cache/lcnbr/64/c10a11de27328a/dev-optim/deps/test_runs-48dead76bfe69e20",
+    "sha256": "4c0c85593446c8b15e61eb5f3377f701a8a3fb5659c20132a112f6ff222e7739",
+    "observed_in": "target/generation-projector-flow-staged/reversal.log"
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-projector-flow/target/dev-optim/gammaloop",
+    "sha256": "6f1233c21609951c93f1ac41590b1bec4f9df3c218b08125d1bdb79367f5f99f",
+    "observed_in": "target/generation-projector-flow-staged/schema.log"
+  }
+]

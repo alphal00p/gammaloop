@@ -1688,3 +1688,7 @@ Differential coverage is currently split into:
   logic.
 - Observable accumulation is mergeable across rayon workers and
   distributed batch outputs.
+
+The independent staged sources 22–26 reconciliation is recorded in
+#link("generation-projector-flow-staged.typ")[Staged projector flow and DOT boundaries];
+its controls and receipts require a new independent review before ordered replay.

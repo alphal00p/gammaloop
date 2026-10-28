@@ -6,9 +6,9 @@ commands = [
   '''generate amp g g > h h h / u d c s b QED==3 [{1}]
       --only-diagrams
       --numerator-grouping no_grouping
-      --global-prefactor-projector 'gammalooprs::ϵ(0,spenso::mink(4,gammalooprs::hedge(0)))
-                                     * gammalooprs::ϵ(1,spenso::mink(4,gammalooprs::hedge(1)))
-                                     * (1/8)*spenso::g(spenso::coad(8,gammalooprs::hedge(0)),spenso::coad(8,gammalooprs::hedge(1)))'
+      --global-prefactor-projector 'gammalooprs::ϵ(0,spenso::mink(4,gammalooprs::hedge(0,1)))
+                                     * gammalooprs::ϵ(1,spenso::mink(4,gammalooprs::hedge(1,1)))
+                                     * (1/8)*spenso::g(spenso::coad(8,gammalooprs::hedge(0,1)),spenso::coad(8,gammalooprs::hedge(1,1)))'
       -p gg_hhh -i 1L''',
   "quit",
 ]

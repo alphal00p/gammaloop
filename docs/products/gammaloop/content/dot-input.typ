@@ -330,3 +330,13 @@ For PDF figures, run `just draw` from the directory written by `save dot`. See
 configuration, or #product-link("linnet", label: "Rendering graphs from Python", page: "guides/python-rendering/")
 to build graphs with arbitrary Python data and custom drawing selectors.
 ]
+
+== Explicit conversion of legacy DOT
+
+Earlier GammaLoop exports with `particle_id` and no model fingerprint require
+explicit conversion to compact DOT. Replace each `particle_id` with `particle`
+(the particle name) or `pdg`; remove `vertex_rule_id`, half-edge `ufo_order`,
+`initial_state_connection`, and graph `gammaloop_runtime`. Keep `lmb_id` to retain
+the loop basis. FeynKit matches interactions by particles or explicit `int_id`.
+Current annotated exports retain their model fingerprint, native indices, and
+tensor metadata together. Compact vertex factors use `num`.

@@ -67,3 +67,10 @@ Include the repository tag or commit, the Python distribution version, the `gamm
 the run card, and any relevant settings overrides. This makes a calculation easier to reproduce
 and distinguishes a software change from a configuration change.
 ]
+
+== Projector and DOT input boundaries
+
+User projectors retain one-based model slots and reject represented local zero.
+Legacy DOT model indices require explicit conversion; native annotated exports
+retain their fingerprint and tensor metadata. Scalar-bubble tests select energy
+flow from graph incidence and stored orientation rather than orientation numbers.

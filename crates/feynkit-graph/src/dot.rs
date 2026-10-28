@@ -98,20 +98,6 @@ impl DotDiagram {
         {
             return FeynmanDiagram::from_annotated_dot(model, parsed);
         }
-        // A model particle index is meaningful only under the model fingerprint of the
-        // annotated dialect. Older GammaLoop exports wrote one without it.
-        if let Some((_, edge, _)) = parsed
-            .iter_edges()
-            .find(|(_, _, edge)| edge.data.statements.contains_key("particle_id"))
-        {
-            return Err(DiagramError::InvalidDotAttribute {
-                target: format!("edge {}", edge.0),
-                attribute: "particle_id",
-                value: "a model particle index needs the model_fingerprint of FeynKit's \
-                        annotated DOT; name the particle with `particle` or `pdg`"
-                    .into(),
-            });
-        }
         FeynmanDiagram::from_compact_dot(model, parsed)
     }
 }

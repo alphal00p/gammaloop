@@ -1,0 +1,366 @@
+{
+   "certificate" : "exact fundamental/dual port incidence; no numerator expansion",
+   "graphs" : [
+      {
+         "exact_incidence" : {
+            "hedge_1" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_10" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_11" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_12" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_2" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_5" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_6" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_7" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_8" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_9" : {
+               "dual" : 1,
+               "fundamental" : 1
+            }
+         },
+         "graph" : "qqx_aaa_pentagon"
+      },
+      {
+         "exact_incidence" : {
+            "hedge_1" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_10" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_13" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_14" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_2" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_5" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_6" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_7" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_8" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_9" : {
+               "dual" : 1,
+               "fundamental" : 1
+            }
+         },
+         "graph" : "qqx_aaa_box_A"
+      },
+      {
+         "exact_incidence" : {
+            "hedge_1" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_10" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_11" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_12" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_2" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_5" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_6" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_7" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_8" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_9" : {
+               "dual" : 1,
+               "fundamental" : 1
+            }
+         },
+         "graph" : "qqx_aaa_box_B"
+      },
+      {
+         "exact_incidence" : {
+            "hedge_1" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_10" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_13" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_14" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_2" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_5" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_6" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_7" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_8" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_9" : {
+               "dual" : 1,
+               "fundamental" : 1
+            }
+         },
+         "graph" : "qqx_aaa_tri_A"
+      },
+      {
+         "exact_incidence" : {
+            "hedge_1" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_10" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_13" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_14" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_2" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_5" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_6" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_7" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_8" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_9" : {
+               "dual" : 1,
+               "fundamental" : 1
+            }
+         },
+         "graph" : "qqx_aaa_tri_B"
+      },
+      {
+         "exact_incidence" : {
+            "hedge_1" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_10" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_11" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_12" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_2" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_5" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_6" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_7" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_8" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_9" : {
+               "dual" : 1,
+               "fundamental" : 1
+            }
+         },
+         "graph" : "qqx_aaa_tri_C"
+      },
+      {
+         "exact_incidence" : {
+            "hedge_1" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_10" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_13" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_14" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_2" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_5" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_6" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_7" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_8" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_9" : {
+               "dual" : 1,
+               "fundamental" : 1
+            }
+         },
+         "graph" : "qqx_aaa_bub_A"
+      },
+      {
+         "exact_incidence" : {
+            "hedge_1" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_10" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_13" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_14" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_2" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_5" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_6" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_7" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_8" : {
+               "dual" : 1,
+               "fundamental" : 1
+            },
+            "hedge_9" : {
+               "dual" : 1,
+               "fundamental" : 1
+            }
+         },
+         "graph" : "qqx_aaa_bub_B"
+      }
+   ],
+   "scope" : "exact authored factor incidence in native model-one slots; runtime admission checked separately"
+}

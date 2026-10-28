@@ -1,0 +1,23 @@
+[
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-combined-runtime-review-20261027/review.json",
+    "sha256": "3aa4eb67acfa60cfab6f836e2eb4a846434e945476d84ac01602930b6eb730cf",
+    "candidate": "d48f9d1aedc766eea5cb185ab6029d1f04462043",
+    "verdict": "APPROVE",
+    "scope": "Combined A1+B3 runtime interaction and exact consumer B2 reference certificate only. No whole-candidate/WP3/performance/distribution approval."
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-integration-bindings-20261027/review.json",
+    "sha256": "733ca1d8c8d2587ab266e422eb7c5b095d9ea7603f3228f67eaf71cc8cb4c023",
+    "candidate": "d48f9d1aedc766eea5cb185ab6029d1f04462043",
+    "verdict": "APPROVE",
+    "scope": "Combined C1/C2/B1/E1/E2/E3/E5 contracts, D1-D3/import/notices preservation, E4 provenance and current registry. A1/B3 and exact consumer B2 are the parallel runtime reviewer scope."
+  },
+  {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-projector-flow/target/astra-projector-flow-r1-20261027/review.json",
+    "sha256": "dc46ab00c8067ab4622b9ace27f801f9a99fcd45ed50fc93e181a934db7a4ce6",
+    "candidate": "735d599a665acbce1577b2c40d149c152f01543d",
+    "verdict": "APPROVE",
+    "scope": "Independent preparation only on approved438b; not ordered replay, staged817b, whole candidate, or WP3 approval"
+  }
+]

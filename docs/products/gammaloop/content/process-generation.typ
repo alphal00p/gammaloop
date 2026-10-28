@@ -280,3 +280,9 @@ Contributor-facing ownership and data flow are documented in the
 and the
 #developer-link("uv-renormalization", "uv-renormalization.typ", "UV renormalization architecture").
 ]
+
+A supplied `--global-prefactor-projector` uses model slots: the first local
+index of external owner `h` is `hedge(h, 1)`. The CLI rejects represented local
+zero instead of shifting indices. Native runtime serialization still permits
+local zero, whose canonical spelling is `hedge(h)`. Explicit compact chart
+translation is separate from validation of a model projector.

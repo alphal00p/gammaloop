@@ -1,0 +1,673 @@
+{
+  "schema": 1,
+  "validation_pending": [],
+  "status": "STOP: NEW independent Astra review required before ordered main replay",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-projector-flow",
+  "bookmark": "generation-projector-flow-staged",
+  "receipt_change": "kmqykxvrzvuynxzsmzumvkxzxlkrtvqt",
+  "base": "d48f9d1aedc766eea5cb185ab6029d1f04462043",
+  "code_tip": "0d13655702c2986f2fc7923fd9121278c4439709",
+  "old_approved_preparation": {
+    "commit": "735d599a665acbce1577b2c40d149c152f01543d",
+    "bookmark": "generation-projector-flow",
+    "approval": "target/astra-projector-flow-r1-20261027/review.json",
+    "preserved": true
+  },
+  "sources": [
+    {
+      "source_order": 22,
+      "source_commit": "77dcd12272d0f86dc5309f8d74de94632a771b6e",
+      "old_prepared": "ac0f197cfc0b65cc0422110edec902adad5203ed",
+      "new_commits": [
+        "69e12298c3f438387246a868191af9cafc4d87cc",
+        "8ea3575d56ab88efd534aa5e16327450dddcf9fd"
+      ],
+      "disposition": "physical bubble energy-flow selection; all targets, coordinates, precision and tolerances retained",
+      "files": [
+        "tests/tests/test_runs/test_integrated_uv_cts.rs"
+      ]
+    },
+    {
+      "source_order": 23,
+      "source_commit": "967abd74e1843016d34f5e6f701cd4b7828768b6",
+      "old_prepared": "0e57d421ffc0270aacfb4f2a044ae7c1cd4ca4a4",
+      "new_commits": [
+        "69e12298c3f438387246a868191af9cafc4d87cc"
+      ],
+      "disposition": "exactly eight variance fixes; native model-one indices; retain staged17 metadata removal, nineteen graphs and all physical factors",
+      "files": [
+        "tests/resources/graphs/qqx_aaa_subtracted.dot",
+        "crates/gammalooprs/src/graph/parse/tests.rs"
+      ],
+      "proof": "fixture-reconciliation.json"
+    },
+    {
+      "source_order": 24,
+      "source_commit": "a18babd0f5adb028d4bd0722ce386be93464839d",
+      "old_prepared": "e344428a5a9bd2989e6390b969154606230c2850",
+      "new_commits": [
+        "69e12298c3f438387246a868191af9cafc4d87cc",
+        "cf283f43c7dd1df70304934390d24fd5c0cb2ecf",
+        "74cb8506ab5b9ca7a4ceb86c21cfebb17e50ee01",
+        "67601ec14af85a6162ffbd488a6196555dadbd0b"
+      ],
+      "disposition": "one-based CLI/model projector validation on staged Request/NumeratorOptions; separate explicit compact-zero translation; native local-zero codec unchanged",
+      "files": [
+        "crates/gammaloop-api/src/commands/generate.rs",
+        "crates/gammalooprs/src/numerator/aind.rs",
+        "crates/gammalooprs/src/graph/parse/tests.rs",
+        "benchmarks/performance/gg-hhh-topology.toml",
+        "assets/schemas/runhistory.json",
+        "docs/api/generated/gammaloop-reference.json"
+      ]
+    },
+    {
+      "source_order": 25,
+      "source_commit": "15f2aa1a11380f33325ce283a404753a9836882f",
+      "approved_donor_code": "5e96b3f00a78c850236609527914dce1154f726c",
+      "new_commits": [
+        "69e12298c3f438387246a868191af9cafc4d87cc",
+        "cf283f43c7dd1df70304934390d24fd5c0cb2ecf"
+      ],
+      "disposition": "explicit legacy conversion guidance on shared compact admission, preserving native fingerprint/source-error precedence and direct compact rejection",
+      "files": [
+        "crates/feynkit-graph/src/compact_dot.rs",
+        "crates/feynkit-graph/src/dot.rs",
+        "crates/gammalooprs/src/graph/parse/tests.rs",
+        "docs/products/gammaloop/content/dot-input.typ",
+        "docs/products/gammaloop/content/changelog.typ"
+      ],
+      "excluded": "source36, resource diagnostics, entire cumulative donor branch"
+    },
+    {
+      "source_order": 26,
+      "source_commit": "8cf71575a739976295edb42eae2052d6b5e455ee",
+      "new_commits": [
+        "62dbdffddefb342f345992cb8a867a1464c9c075",
+        "cf283f43c7dd1df70304934390d24fd5c0cb2ecf",
+        "de4b99d435a619e528f674946fddfe166e86daae",
+        "0d13655702c2986f2fc7923fd9121278c4439709"
+      ],
+      "disposition": "exact original fixture patch; pin seven signed native loop bases, including parallel-edge distinctions; full current model-rule/runtime/native round-trip control",
+      "files": [
+        "tests/resources/graphs/uv_tests/rqft_ghG_3l.dot",
+        "crates/gammalooprs/src/graph/parse/tests.rs"
+      ],
+      "proof": "rqft-bases.json"
+    }
+  ],
+  "code_changes": [
+    {
+      "change": "trkqkupqlluutoksplxslknlqoppszuo",
+      "commit": "69e12298c3f438387246a868191af9cafc4d87cc",
+      "description": "reconcile sources 22\u201325 onto staged generation and DOT owners",
+      "files": [
+        "crates/feynkit-graph/src/compact_dot.rs",
+        "crates/feynkit-graph/src/dot.rs",
+        "crates/feynkit-graph/src/lib.rs",
+        "crates/gammaloop-api/src/commands/generate.rs",
+        "crates/gammalooprs/src/graph/parse/tests.rs",
+        "crates/gammalooprs/src/numerator/aind.rs",
+        "docs/architecture/evidence/generation-projector-flow-staged/colour-ports.json",
+        "docs/architecture/evidence/generation-projector-flow-staged/colour-ports.pl",
+        "docs/architecture/evidence/generation-projector-flow-staged/compact-sewn-boundary.json",
+        "docs/architecture/evidence/generation-projector-flow-staged/fixture-audit.py",
+        "docs/architecture/evidence/generation-projector-flow-staged/fixture-encoding.json",
+        "docs/architecture/evidence/generation-projector-flow-staged/fixture-reconciliation.json",
+        "docs/products/gammaloop/content/changelog.typ",
+        "docs/products/gammaloop/content/dot-input.typ",
+        "docs/products/gammaloop/content/process-generation.typ",
+        "tests/resources/graphs/qqx_aaa_subtracted.dot",
+        "tests/tests/test_runs/test_integrated_uv_cts.rs"
+      ]
+    },
+    {
+      "change": "tpukpnrvunoxzrnlzmtznmnpynvlwrkt",
+      "commit": "62dbdffddefb342f345992cb8a867a1464c9c075",
+      "description": "pin explicit RQFT ghost loop bases and certify native routing",
+      "files": [
+        "crates/gammalooprs/src/graph/parse/tests.rs",
+        "tests/resources/graphs/uv_tests/rqft_ghG_3l.dot"
+      ]
+    },
+    {
+      "change": "syuqyrrzlqyvnvqxtnxnzrvroprwsvss",
+      "commit": "cf283f43c7dd1df70304934390d24fd5c0cb2ecf",
+      "description": "complete staged projector caller and native import controls",
+      "files": [
+        "benchmarks/performance/gg-hhh-topology.toml",
+        "crates/feynkit-graph/src/lib.rs",
+        "crates/gammaloop-api/src/commands/generate.rs",
+        "crates/gammalooprs/src/graph/parse/tests.rs"
+      ]
+    },
+    {
+      "change": "prlrvvuzrxrsqluklmmumqxmxqkwqqrl",
+      "commit": "74cb8506ab5b9ca7a4ceb86c21cfebb17e50ee01",
+      "description": "parse the topology card as a TOML document in the boundary control",
+      "files": [
+        "crates/gammaloop-api/src/commands/generate.rs"
+      ]
+    },
+    {
+      "change": "ysstxqzxqnpmvtsvtrvxnpzmyxqvuumo",
+      "commit": "8ea3575d56ab88efd534aa5e16327450dddcf9fd",
+      "description": "keep bubble test imports at their owning module",
+      "files": [
+        "tests/tests/test_runs/test_integrated_uv_cts.rs"
+      ]
+    },
+    {
+      "change": "tmqnyxnznznumywsqtszoonnplutzoql",
+      "commit": "67601ec14af85a6162ffbd488a6196555dadbd0b",
+      "description": "retain the explicit DOT chart type in the sewn control",
+      "files": [
+        "crates/gammalooprs/src/graph/parse/tests.rs"
+      ]
+    },
+    {
+      "change": "xyulqlupukuxxmzkmrmyzvxswtprysso",
+      "commit": "de4b99d435a619e528f674946fddfe166e86daae",
+      "description": "certify authored ghost loop edges in the parsed native chart",
+      "files": [
+        "crates/gammalooprs/src/graph/parse/tests.rs"
+      ]
+    },
+    {
+      "change": "lyormyxnpkzloxsmvotozykpmsprqtmo",
+      "commit": "0d13655702c2986f2fc7923fd9121278c4439709",
+      "description": "compare the full native ghost routing at the runtime boundary",
+      "files": [
+        "crates/gammalooprs/src/graph/parse/tests.rs"
+      ]
+    }
+  ],
+  "generated_metadata": {
+    "proof": "generated-metadata.json",
+    "scope": "projector descriptions plus schema alignment to unchanged approved d48 SpecArgs; no source19\u201321 code replay",
+    "receipt_change": "kmqykxvrzvuynxzsmzumvkxzxlkrtvqt"
+  },
+  "changed_files": [
+    "assets/schemas/runhistory.json",
+    "benchmarks/performance/gg-hhh-topology.toml",
+    "crates/feynkit-graph/src/compact_dot.rs",
+    "crates/feynkit-graph/src/dot.rs",
+    "crates/gammaloop-api/src/commands/generate.rs",
+    "crates/gammalooprs/src/graph/parse/tests.rs",
+    "crates/gammalooprs/src/numerator/aind.rs",
+    "docs/api/generated/gammaloop-reference.json",
+    "docs/architecture/architecture-current.typ",
+    "docs/architecture/evidence/generation-projector-flow-staged/binary-identities.json",
+    "docs/architecture/evidence/generation-projector-flow-staged/bubble-preservation.json",
+    "docs/architecture/evidence/generation-projector-flow-staged/colour-negative.json",
+    "docs/architecture/evidence/generation-projector-flow-staged/colour-ports.json",
+    "docs/architecture/evidence/generation-projector-flow-staged/colour-ports.pl",
+    "docs/architecture/evidence/generation-projector-flow-staged/docs-limit.json",
+    "docs/architecture/evidence/generation-projector-flow-staged/first-runtime-producer.json",
+    "docs/architecture/evidence/generation-projector-flow-staged/fixture-audit.py",
+    "docs/architecture/evidence/generation-projector-flow-staged/fixture-reconciliation.json",
+    "docs/architecture/evidence/generation-projector-flow-staged/generated-audit.py",
+    "docs/architecture/evidence/generation-projector-flow-staged/generated-metadata.json",
+    "docs/architecture/evidence/generation-projector-flow-staged/inherited-scopes.json",
+    "docs/architecture/evidence/generation-projector-flow-staged/initial-api-producer.json",
+    "docs/architecture/evidence/generation-projector-flow-staged/input-approvals.json",
+    "docs/architecture/evidence/generation-projector-flow-staged/integrity.json",
+    "docs/architecture/evidence/generation-projector-flow-staged/protected.json",
+    "docs/architecture/evidence/generation-projector-flow-staged/receipt.json",
+    "docs/architecture/evidence/generation-projector-flow-staged/rqft-audit.py",
+    "docs/architecture/evidence/generation-projector-flow-staged/rqft-bases.json",
+    "docs/architecture/evidence/generation-projector-flow-staged/rqft-chart-triage.json",
+    "docs/architecture/evidence/generation-projector-flow-staged/scope-audit.py",
+    "docs/architecture/evidence/generation-projector-flow-staged/test-inventory.json",
+    "docs/architecture/evidence/generation-projector-flow-staged/title.json",
+    "docs/architecture/evidence/generation-projector-flow-staged/unchanged-index-control.json",
+    "docs/architecture/generation-projector-flow-staged.typ",
+    "docs/developers.toml",
+    "docs/products/gammaloop/content/changelog.typ",
+    "docs/products/gammaloop/content/dot-input.typ",
+    "docs/products/gammaloop/content/process-generation.typ",
+    "tests/resources/graphs/qqx_aaa_subtracted.dot",
+    "tests/resources/graphs/uv_tests/rqft_ghG_3l.dot",
+    "tests/tests/test_runs/test_integrated_uv_cts.rs"
+  ],
+  "validated_source_sha256": {
+    "benchmarks/performance/gg-hhh-topology.toml": "48ae713731e5d5edf7c75b8dfd0eec2ee37cd2cd1c9e3f8fcd004fc41c399c79",
+    "crates/feynkit-graph/src/compact_dot.rs": "def149fa48db4f9d065e9e94372a7f175c316da6e71b90c74d021d550e2912f3",
+    "crates/feynkit-graph/src/dot.rs": "3797ee8e46655398aac49a1bb3a260a072b2e34281cddf5bcd0eabadf26029e4",
+    "crates/gammaloop-api/src/commands/generate.rs": "6d235282c6c1af55201e9d5e2f3696916f0c8f1d8217176a94592dbe9db76aa2",
+    "crates/gammalooprs/src/graph/parse/tests.rs": "c7ea8b858882362d133208dcb7f3722402817d99f20a0bd64468045af13414c8",
+    "crates/gammalooprs/src/numerator/aind.rs": "497d895bd587d6cb3fc1c54f9044e8e111b2c0d7f309d1090ce52a3a28f5a959",
+    "tests/resources/graphs/qqx_aaa_subtracted.dot": "eaf807e0a016e3b3c3904084c15465126278b12929f2962d1827813b77f68edf",
+    "tests/resources/graphs/uv_tests/rqft_ghG_3l.dot": "fd3a6ccef3e69562b73c045c42ef3a4b4393c9d19be40edc5793ab3adfef8f53",
+    "tests/tests/test_runs/test_integrated_uv_cts.rs": "7a2fd75e203a88659b3ea9c292d1f7779dcecaa19af2a0cf04032bb6e9439fa9"
+  },
+  "validation": [
+    {
+      "name": "bubble",
+      "command": "cargo test --locked --profile dev-optim -p gammaloop-integration-tests --test test_runs scalar_bubble_inspect -- --test-threads=2",
+      "exit_code": 0,
+      "test_summaries": [
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 288 filtered out; finished in 0.44s"
+      ],
+      "zero_test_result": false,
+      "phase": "current candidate",
+      "log": "target/generation-projector-flow-staged/bubble.log",
+      "log_sha256": "4ea555e401b959ddc97ede8449ddc4385446787b03d24ff54b90ae7c48b76a87"
+    },
+    {
+      "name": "card-current-producer",
+      "command": "/common/build-cache/lcnbr/64/c10a11de27328a/dev-optim/deps/gammaloop_api-aef8cb31d4027398 --exact commands::generate::tests::topology_card_projector_crosses_the_current_cli_boundary --test-threads=2",
+      "exit_code": 101,
+      "test_summaries": [
+        "test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 439 filtered out; finished in 0.01s"
+      ],
+      "zero_test_result": false,
+      "phase": "before document-parser harness correction",
+      "log": "target/generation-projector-flow-staged/card-current-producer.log",
+      "log_sha256": "3f570fd8f75fe4b161706e838074928bcb6428d30937c0d7ff9ef887584b5c11"
+    },
+    {
+      "name": "card",
+      "command": "/common/build-cache/lcnbr/64/c10a11de27328a/dev-optim/deps/gammaloop_api-aef8cb31d4027398 --exact commands::generate::tests::topology_card_projector_crosses_the_current_cli_boundary --test-threads=2",
+      "exit_code": 0,
+      "test_summaries": [
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 439 filtered out; finished in 0.04s"
+      ],
+      "zero_test_result": false,
+      "phase": "current candidate",
+      "log": "target/generation-projector-flow-staged/card.log",
+      "log_sha256": "f4bd37b47e9fe9f57a7e6c84edbd4a480ca7a0886abe06708a609af43db25d25"
+    },
+    {
+      "name": "clippy",
+      "command": "cargo clippy --locked --profile dev-optim -p feynkit-graph -p gammaloop-api -p gammalooprs -p gammaloop-integration-tests --all-targets -- -D warnings",
+      "exit_code": 0,
+      "test_summaries": [],
+      "zero_test_result": false,
+      "phase": "current candidate",
+      "log": "target/generation-projector-flow-staged/clippy.log",
+      "log_sha256": "53346d318a0203d41f6d86e27a9613b81778235ec0c04c33760b05217b19852e"
+    },
+    {
+      "name": "docs",
+      "command": "cargo run --locked --profile dev-optim -p alphal00p-docs-builder -- check",
+      "exit_code": 1,
+      "test_summaries": [],
+      "zero_test_result": false,
+      "phase": "current candidate",
+      "log": "target/generation-projector-flow-staged/docs.log",
+      "log_sha256": "47005abf03f32e07132b392fc686fdfcfa0cecd6b68cab121cba51435bbb0acc"
+    },
+    {
+      "name": "doctest",
+      "command": "cargo test --locked --profile dev-optim -p gammalooprs --doc validate_model_projector_slots -- --test-threads=2",
+      "exit_code": 0,
+      "test_summaries": [
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.07s"
+      ],
+      "zero_test_result": false,
+      "phase": "current candidate",
+      "log": "target/generation-projector-flow-staged/doctest.log",
+      "log_sha256": "6f4828e78c5398ae7e44630b3ccc3846c800bfd68007f6114a833c38556fed2d"
+    },
+    {
+      "name": "dot-current-producer",
+      "command": "/common/build-cache/lcnbr/64/c10a11de27328a/dev-optim/deps/feynkit_graph-9714c7f77f2b363d dot --test-threads=2",
+      "exit_code": 0,
+      "test_summaries": [
+        "test result: ok. 24 passed; 0 failed; 0 ignored; 0 measured; 171 filtered out; finished in 0.07s"
+      ],
+      "zero_test_result": false,
+      "phase": "current candidate",
+      "log": "target/generation-projector-flow-staged/dot-current-producer.log",
+      "log_sha256": "8a3238bf8677438b22a268f018b60df75742f18d2aca61685399437ba3a28290"
+    },
+    {
+      "name": "dot",
+      "command": "cargo test --locked --profile dev-optim -p feynkit-graph --lib dot -- --test-threads=2",
+      "exit_code": 0,
+      "test_summaries": [
+        "test result: ok. 24 passed; 0 failed; 0 ignored; 0 measured; 171 filtered out; finished in 0.01s"
+      ],
+      "zero_test_result": false,
+      "phase": "current candidate",
+      "log": "target/generation-projector-flow-staged/dot.log",
+      "log_sha256": "859a42364b15f71e3fa8dc767781a7cec214b1a53cdd3102d5c8651b35c3e243"
+    },
+    {
+      "name": "fixture",
+      "command": "cargo test --locked --profile dev-optim -p gammaloop-integration-tests --test test_feyngen graph_count_from_amplitude_load -- --test-threads=2",
+      "exit_code": 0,
+      "test_summaries": [
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 38 filtered out; finished in 0.35s"
+      ],
+      "zero_test_result": false,
+      "phase": "current candidate",
+      "log": "target/generation-projector-flow-staged/fixture.log",
+      "log_sha256": "3da7869709bcdb88360ccdaac06b9724aab83b112831074fa5ec2a709e77e4ea"
+    },
+    {
+      "name": "format",
+      "command": "just fmt -- --check",
+      "exit_code": 0,
+      "test_summaries": [],
+      "zero_test_result": false,
+      "phase": "current candidate",
+      "log": "target/generation-projector-flow-staged/format.log",
+      "log_sha256": "b6e19c16e0d5f97094745b63c78c4f15238111c4de91b081bba774a71abff1e8"
+    },
+    {
+      "name": "generated-audit",
+      "command": "python3 docs/architecture/evidence/generation-projector-flow-staged/generated-audit.py",
+      "exit_code": 0,
+      "test_summaries": [],
+      "zero_test_result": false,
+      "phase": "current candidate",
+      "log": "target/generation-projector-flow-staged/generated-audit.log",
+      "log_sha256": "df83a6b14a532b98d0943106c1757ba8dc59b656216cae4f5bf591df9518b118"
+    },
+    {
+      "name": "graph-retry",
+      "command": "cargo test --locked --profile dev-optim -p gammalooprs --lib graph::parse:: -- --test-threads=2",
+      "exit_code": 0,
+      "test_summaries": [
+        "test result: ok. 56 passed; 0 failed; 0 ignored; 0 measured; 1478 filtered out; finished in 0.57s"
+      ],
+      "zero_test_result": false,
+      "phase": "current candidate",
+      "log": "target/generation-projector-flow-staged/graph-retry.log",
+      "log_sha256": "90e9715ee188beac977c5832661a92d037e46498552cce5d298db0536107a2a3"
+    },
+    {
+      "name": "graph-source-order-failure",
+      "command": "/common/build-cache/lcnbr/64/c10a11de27328a/dev-optim/deps/gammalooprs-a941761db6d1e7be graph::parse:: --test-threads=2",
+      "exit_code": 101,
+      "test_summaries": [
+        "test result: FAILED. 55 passed; 1 failed; 0 ignored; 0 measured; 1478 filtered out; finished in 0.49s"
+      ],
+      "zero_test_result": false,
+      "phase": "before semantic edge-chart oracle correction",
+      "log": "target/generation-projector-flow-staged/graph-source-order-failure.log",
+      "log_sha256": "11d7359e99c6f05b0404ff14266992acb85b6577cba81ada9c517325d5d61c26"
+    },
+    {
+      "name": "graph",
+      "command": "cargo test --locked --profile dev-optim -p gammalooprs --lib graph::parse:: -- --test-threads=2",
+      "exit_code": 101,
+      "test_summaries": [],
+      "zero_test_result": false,
+      "phase": "before explicit DOT type correction; no tests ran",
+      "log": "target/generation-projector-flow-staged/graph.log",
+      "log_sha256": "ef08fabf53c1588181634ff9357ca394aa42be0b5b78ba5daa54a54c158d0ce1"
+    },
+    {
+      "name": "hidden-history",
+      "command": "/common/build-cache/lcnbr/64/c10a11de27328a/dev-optim/deps/feynkit_graph-9714c7f77f2b363d finalization_transports_hidden_scalar_history_in_every_tensor_destination --test-threads=2",
+      "exit_code": 0,
+      "test_summaries": [
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 194 filtered out; finished in 0.00s"
+      ],
+      "zero_test_result": false,
+      "phase": "current candidate",
+      "log": "target/generation-projector-flow-staged/hidden-history.log",
+      "log_sha256": "21f8b97a5785ee6125f7c72758cce3c51399701563081748cd38e3360bd0bdc1"
+    },
+    {
+      "name": "indices",
+      "command": "cargo test --locked --profile dev-optim -p gammalooprs --lib numerator::aind:: -- --test-threads=2",
+      "exit_code": 0,
+      "test_summaries": [
+        "test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 1529 filtered out; finished in 0.08s"
+      ],
+      "zero_test_result": false,
+      "phase": "source-unchanged index-owner control; see unchanged-index-control.json",
+      "log": "target/generation-projector-flow-staged/indices.log",
+      "log_sha256": "dc72e62cb6366b4f761b5abf80257248676520c24d3e1da9ab09344255e03109"
+    },
+    {
+      "name": "kernel",
+      "command": "just check-symbolica-feature-isolation",
+      "exit_code": 0,
+      "test_summaries": [],
+      "zero_test_result": false,
+      "phase": "current candidate",
+      "log": "target/generation-projector-flow-staged/kernel.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "legacy",
+      "command": "cargo test --locked --profile dev-optim -p feynkit-graph --lib legacy_dot_names_the_explicit_conversion -- --test-threads=2",
+      "exit_code": 0,
+      "test_summaries": [
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 195 filtered out; finished in 0.00s"
+      ],
+      "zero_test_result": true,
+      "phase": "current candidate",
+      "log": "target/generation-projector-flow-staged/legacy.log",
+      "log_sha256": "e007d0eed841f326621b628ed9c6f5648c725d386c98496110d409d7baa85168"
+    },
+    {
+      "name": "native-history",
+      "command": "/common/build-cache/lcnbr/64/c10a11de27328a/dev-optim/deps/feynkit_graph-9714c7f77f2b363d numerator_interface::tests:: --test-threads=2",
+      "exit_code": 0,
+      "test_summaries": [
+        "test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 180 filtered out; finished in 0.01s"
+      ],
+      "zero_test_result": false,
+      "phase": "current candidate",
+      "log": "target/generation-projector-flow-staged/native-history.log",
+      "log_sha256": "a6ed96b3f970b2c27210c715de58a3986e68eced7d07dc304851a1ece50a7c41"
+    },
+    {
+      "name": "native-rejection",
+      "command": "/common/build-cache/lcnbr/64/c10a11de27328a/dev-optim/deps/feynkit_graph-9714c7f77f2b363d native_vertex_metadata_does_not_become_compact --test-threads=2",
+      "exit_code": 0,
+      "test_summaries": [
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 194 filtered out; finished in 0.00s"
+      ],
+      "zero_test_result": false,
+      "phase": "current candidate",
+      "log": "target/generation-projector-flow-staged/native-rejection.log",
+      "log_sha256": "697808c6fe2885749829010bcf9aa57bbad64be6b08d10911dd627e93ae610dd"
+    },
+    {
+      "name": "projector-initial",
+      "command": "cargo test --locked --profile dev-optim -p gammaloop-api --lib supplied_projector_keeps_model_hedge_slots_and_rejects_index_zero -- --test-threads=2",
+      "exit_code": 0,
+      "test_summaries": [
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 439 filtered out; finished in 0.05s"
+      ],
+      "zero_test_result": false,
+      "phase": "before document-parser harness correction",
+      "log": "target/generation-projector-flow-staged/projector-initial.log",
+      "log_sha256": "753fdec97427b066a2ca2072eef47706f057072f5e0aa3cd0ce7417fd0c3ddfd"
+    },
+    {
+      "name": "projector",
+      "command": "cargo test --locked --profile dev-optim -p gammaloop-api --lib supplied_projector_keeps_model_hedge_slots_and_rejects_index_zero -- --test-threads=2",
+      "exit_code": 0,
+      "test_summaries": [
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 439 filtered out; finished in 0.05s"
+      ],
+      "zero_test_result": false,
+      "phase": "current candidate",
+      "log": "target/generation-projector-flow-staged/projector.log",
+      "log_sha256": "dfc046dd14070dcba9fa78f423981df26c3a5a3c16ac48e126122784d3e5e78a"
+    },
+    {
+      "name": "reference-check",
+      "command": "cargo run --locked --profile dev-optim -p alphal00p-docs-catalogs --features gammaloop-reference --bin alphal00p-docs-gammaloop-reference -- --check",
+      "exit_code": 0,
+      "test_summaries": [],
+      "zero_test_result": false,
+      "phase": "current candidate",
+      "log": "target/generation-projector-flow-staged/reference-check.log",
+      "log_sha256": "9f8bc0f32178bdb435ae5789055b08ec67a39856fe466f09c3411a2a4702c157"
+    },
+    {
+      "name": "reference",
+      "command": "cargo run --locked --profile dev-optim -p alphal00p-docs-catalogs --features gammaloop-reference --bin alphal00p-docs-gammaloop-reference",
+      "exit_code": 0,
+      "test_summaries": [],
+      "zero_test_result": false,
+      "phase": "current candidate",
+      "log": "target/generation-projector-flow-staged/reference.log",
+      "log_sha256": "03f1ee22b113c1549dd34fc4618fee697f2e456348fd2d61dc92418130acfe41"
+    },
+    {
+      "name": "reversal",
+      "command": "cargo test --locked --profile dev-optim -p gammaloop-integration-tests --test test_runs bubble_energy_source_is_invariant_under_stored_edge_reversal -- --test-threads=2",
+      "exit_code": 0,
+      "test_summaries": [
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 288 filtered out; finished in 0.00s"
+      ],
+      "zero_test_result": false,
+      "phase": "current candidate",
+      "log": "target/generation-projector-flow-staged/reversal.log",
+      "log_sha256": "9e5463c1297600598e1fc57d665a3db415eff902cc9cab5509a73961b5e627fe"
+    },
+    {
+      "name": "schema",
+      "command": "cargo run --locked --profile dev-optim -p gammaloop-api --bin gammaloop -- --read-only-state -s target/generation-projector-flow-staged/schema-state save schema",
+      "exit_code": 0,
+      "test_summaries": [],
+      "zero_test_result": false,
+      "phase": "current candidate",
+      "log": "target/generation-projector-flow-staged/schema.log",
+      "log_sha256": "6cc10488ba26e7784506a15243fa75ffb4c0e7df4abb8aad8f02951816309a35"
+    },
+    {
+      "name": "static-colour",
+      "command": "perl docs/architecture/evidence/generation-projector-flow-staged/colour-ports.pl",
+      "exit_code": 0,
+      "test_summaries": [],
+      "zero_test_result": false,
+      "phase": "current candidate",
+      "log": "target/generation-projector-flow-staged/static-colour.log",
+      "log_sha256": "9247f58c70a7b57beb2868aaae935546b19dd7b55712a1bc58183e059b740903"
+    },
+    {
+      "name": "static-fixture",
+      "command": "python3 docs/architecture/evidence/generation-projector-flow-staged/fixture-audit.py",
+      "exit_code": 0,
+      "test_summaries": [],
+      "zero_test_result": false,
+      "phase": "current candidate",
+      "log": "target/generation-projector-flow-staged/static-fixture.log",
+      "log_sha256": "9dab8992f21731d36a5b988e326b94a8eb1c431628dfcf21144e4dbed43c480c"
+    },
+    {
+      "name": "static-rqft",
+      "command": "python3 docs/architecture/evidence/generation-projector-flow-staged/rqft-audit.py",
+      "exit_code": 0,
+      "test_summaries": [],
+      "zero_test_result": false,
+      "phase": "current candidate",
+      "log": "target/generation-projector-flow-staged/static-rqft.log",
+      "log_sha256": "05d653aa8dafc5c653845e8d9359723cdf33086df4a2909b9218680f5eeaaafc"
+    },
+    {
+      "name": "static-ruff",
+      "command": "/nix/store/sddv779f9zwcm72i0nsa8sgy1zjcl2n4-ruff-0.16.3/bin/ruff format --check docs/architecture/evidence/generation-projector-flow-staged",
+      "exit_code": 0,
+      "test_summaries": [],
+      "zero_test_result": false,
+      "phase": "current candidate",
+      "log": "target/generation-projector-flow-staged/static-ruff.log",
+      "log_sha256": "177f260a5645724013185e4b140c7045cc39e56c0c97b120f5cb23599f85f0de"
+    },
+    {
+      "name": "static-scopes",
+      "command": "python3 docs/architecture/evidence/generation-projector-flow-staged/scope-audit.py",
+      "exit_code": 0,
+      "test_summaries": [],
+      "zero_test_result": false,
+      "phase": "current candidate",
+      "log": "target/generation-projector-flow-staged/static-scopes.log",
+      "log_sha256": "97d3db77670437990be16f13d2de465b81d53ba05868de40132c4cdc279012d3"
+    },
+    {
+      "name": "static-title",
+      "command": "python3 target/generation-projector-flow-staged/title-proof.py",
+      "exit_code": 0,
+      "test_summaries": [],
+      "zero_test_result": false,
+      "phase": "current candidate",
+      "log": "target/generation-projector-flow-staged/static-title.log",
+      "log_sha256": "9d01337a81d1e6aacdb55e232e474b908edf6f8472ce5a23af88f7400963bbf0"
+    },
+    {
+      "name": "static-typst",
+      "command": "typst compile --features html --format html --root . docs/architecture/generation-projector-flow-staged.typ target/generation-projector-flow-staged/note.html",
+      "exit_code": 0,
+      "test_summaries": [],
+      "zero_test_result": false,
+      "phase": "current candidate",
+      "log": "target/generation-projector-flow-staged/static-typst.log",
+      "log_sha256": "d103175d5ac5ba1d2d4afae2e801958a1e0dafae1b43ffe6f1f44f3783a2f3ce"
+    }
+  ],
+  "environment": {
+    "shell": "nix develop /nix/store/wsj4jaj03ijdd3rkq85dkz9rq44k9rqg-nix-shell-env.drv -c",
+    "build_jobs": 2,
+    "test_threads": 2,
+    "target_directory_override": false,
+    "manual_cache_copy": false,
+    "license": "exported value preserved, otherwise silently loaded from current-user config",
+    "identity_log": "target/generation-projector-flow-staged/environment.log"
+  },
+  "ordered_replay": "19\u201321 precede22\u201326. This independent preparation is based only on approved d48; main replay tracker and other workspaces are untouched. Repeat combined controls on ordered main replay after both independent reviews approve.",
+  "preserved_routing_oracle_failure": {
+    "log": "target/generation-projector-flow-staged/graph-source-order-failure.log",
+    "result": "55 parser tests passed; the new source26 control failed because its oracle assumed statement ordinals equal parsed edge ids",
+    "triage": "rqft-chart-triage.json",
+    "fix_commit": "de4b99d435a619e528f674946fddfe166e86daae"
+  },
+  "preserved_compile_failure": {
+    "command": "graph.command",
+    "log": "target/generation-projector-flow-staged/graph.log",
+    "result": "E0283: missing explicit DotGraph default topology in the sewn control; no test body ran",
+    "fix_commit": "67601ec14af85a6162ffbd488a6196555dadbd0b"
+  },
+  "preserved_failure": {
+    "command": "card-current-producer.command",
+    "log": "target/generation-projector-flow-staged/card-current-producer.log",
+    "result": "one test failed because the harness parsed the whole card as a TOML value; fixed by parsing a TOML document Table, retaining complete-command positive and negative assertions",
+    "fix_commit": "74cb8506ab5b9ca7a4ceb86c21cfebb17e50ee01"
+  },
+  "policy": {
+    "graph_numerator_expansion_introduced": false,
+    "legacy_compatibility_types_or_fallback_added": false,
+    "physical_assertions_or_snapshots_weakened": false,
+    "kernel": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+    "kernel_locks_uv_host_subset_unchanged": true,
+    "nixci_enabled": false,
+    "new_rust_policy_departures": []
+  },
+  "limits": [
+    "NEW independent Astra review is required; no main integration, PR, push, publication or upload.",
+    "Full heavy physics and benchmarks are not run; source26 timing claims remain historical, not fresh measurements.",
+    "The7 digest and20 anchor failures are inherited from d48; no blind scope hash refresh.",
+    "Zero-test executions and failed compilations are recorded without pass credit."
+  ],
+  "retained": [
+    "old735 bookmark, note, receipt and raw review artifacts unchanged",
+    "new workspace and named staged bookmark for review/continuation",
+    "target/generation-projector-flow-staged logs, commands, statuses, compiled producers and rendered note",
+    "normal repository/shared build caches"
+  ],
+  "author": "Lucien Huber <im@lcnbr.ch>",
+  "code_tip_change": "lyormyxnpkzloxsmvotozykpmsprqtmo",
+  "test_inventory": "test-inventory.json",
+  "test_summary": {
+    "unique_rust_tests_passed": 107,
+    "doctests_passed": 1,
+    "zero_test_executions_no_pass_credit": [
+      "legacy"
+    ]
+  },
+  "documentation_limit": "docs-limit.json",
+  "validation_result": "owned runtime, static, generation and lint checks pass; full docs check stops at the proven inherited source31 scope failure",
+  "preexisting_build_warnings": "two unchanged vendored Clarabel warnings; relevant-package Clippy -D warnings passes",
+  "active_task_processes": false
+}

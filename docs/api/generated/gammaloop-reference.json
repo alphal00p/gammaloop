@@ -9983,7 +9983,7 @@
           "value_names": [
             "ATOM"
           ],
-          "help": "Global prefactor projector (Symbolica atom string)",
+          "help": "Global prefactor projector (Symbolica atom string). The k-th model index of half-edge h is `hedge(h, k)`, counted from one",
           "required": false,
           "positional": false,
           "index": null,
@@ -11432,7 +11432,7 @@
           "value_names": [
             "ATOM"
           ],
-          "help": "Global prefactor projector (Symbolica atom string)",
+          "help": "Global prefactor projector (Symbolica atom string). The k-th model index of half-edge h is `hedge(h, k)`, counted from one",
           "required": false,
           "positional": false,
           "index": null,

@@ -44,53 +44,58 @@ def check(s, text):
     }
 
 
-reg = tomllib.loads((ROOT / "docs/developers.toml").read_text())
-baseline = tomllib.loads(old("docs/developers.toml"))
-cache = {}
-prior = {}
-for note, s in scopes(baseline):
-    cache.setdefault(s["path"], old(s["path"]))
-    prior[
-        (note["id"], s["path"], s.get("symbol"), s.get("anchor"), s.get("end_anchor"))
-    ] = (s, check(s, cache[s["path"]]))
-rows = []
-for note, s in scopes(reg):
-    p = ROOT / s["path"]
-    result = check(s, p.read_text() if p.exists() else None)
-    key = (note["id"], s["path"], s.get("symbol"), s.get("anchor"), s.get("end_anchor"))
-    before = prior.get(key)
-    inherited = bool(
-        before and before[0]["digest"] == s["digest"] and before[1]["status"] != "valid"
+def main():
+    reg = tomllib.loads((ROOT / "docs/developers.toml").read_text())
+    baseline = tomllib.loads(old("docs/developers.toml"))
+    cache = {}
+    prior = {}
+    for note, s in scopes(baseline):
+        cache.setdefault(s["path"], old(s["path"]))
+        prior[
+            (note["id"], s["path"], s.get("symbol"), s.get("anchor"), s.get("end_anchor"))
+        ] = (s, check(s, cache[s["path"]]))
+    rows = []
+    for note, s in scopes(reg):
+        p = ROOT / s["path"]
+        result = check(s, p.read_text() if p.exists() else None)
+        key = (note["id"], s["path"], s.get("symbol"), s.get("anchor"), s.get("end_anchor"))
+        before = prior.get(key)
+        inherited = bool(
+            before and before[0]["digest"] == s["digest"] and before[1]["status"] != "valid"
+        )
+        rows.append(
+            {
+                "note": note["id"],
+                **s,
+                **result,
+                "inherited_at_438": inherited,
+                "baseline_check": before[1] if before else None,
+            }
+        )
+    result = {
+        "base": BASE,
+        "scopes": rows,
+        "valid": sum(r["status"] == "valid" for r in rows),
+        "inherited_mismatches": [
+            r for r in rows if r["status"] != "valid" and r["inherited_at_438"]
+        ],
+        "new_mismatches": [
+            r for r in rows if r["status"] != "valid" and not r["inherited_at_438"]
+        ],
+        "claim": "Inventory only; not a full documentation pass. Global source31/final scope reconciliation remains pending.",
+    }
+    (OUT / "registry-audit.json").write_text(json.dumps(result, indent=2) + "\n")
+    print(
+        "Valid",
+        result["valid"],
+        "inherited mismatches",
+        len(result["inherited_mismatches"]),
+        "new mismatches",
+        len(result["new_mismatches"]),
     )
-    rows.append(
-        {
-            "note": note["id"],
-            **s,
-            **result,
-            "inherited_at_438": inherited,
-            "baseline_check": before[1] if before else None,
-        }
-    )
-result = {
-    "base": BASE,
-    "scopes": rows,
-    "valid": sum(r["status"] == "valid" for r in rows),
-    "inherited_mismatches": [
-        r for r in rows if r["status"] != "valid" and r["inherited_at_438"]
-    ],
-    "new_mismatches": [
-        r for r in rows if r["status"] != "valid" and not r["inherited_at_438"]
-    ],
-    "claim": "Inventory only; not a full documentation pass. Global source31/final scope reconciliation remains pending.",
-}
-(OUT / "registry-audit.json").write_text(json.dumps(result, indent=2) + "\n")
-print(
-    "Valid",
-    result["valid"],
-    "inherited mismatches",
-    len(result["inherited_mismatches"]),
-    "new mismatches",
-    len(result["new_mismatches"]),
-)
-for r in result["new_mismatches"]:
-    print(r["note"], r["path"], r["status"])
+    for r in result["new_mismatches"]:
+        print(r["note"], r["path"], r["status"])
+
+
+if __name__ == "__main__":
+    main()

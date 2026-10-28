@@ -1,0 +1,39 @@
+{
+  "input": "original source26 fixture, byte-identical; seven explicit bases with21pins",
+  "production_route": [
+    "raw DOT",
+    "Linnet parsed edge chart",
+    "compact import lmb_id selection",
+    "finalization source map",
+    "model-rule application",
+    "native basis and runtime import"
+  ],
+  "first_probe_route": [
+    "raw DOT",
+    "incorrect assumption that textual statement ordinal equals Linnet EdgeIndex",
+    "finalization source-map lookup at the wrong raw indices",
+    "comparison with native basis"
+  ],
+  "last_shared_boundary": "raw DOT",
+  "first_difference": "test oracle before parsed edge ownership; statement ordinal is not the parser edge chart",
+  "smallest_result": {
+    "graph": "d37",
+    "native_selected_ids": [
+      3,
+      6,
+      7
+    ],
+    "incorrect_oracle_ids": [
+      2,
+      6,
+      9
+    ],
+    "parser_suite_other_results": "55 passed; only the new statement-order oracle failed"
+  },
+  "exclusion": "No same-edge/same-chart matrix mismatch was established. Do not attribute unequal edge identities to routing algebra or alter fixture physics.",
+  "corrected_oracle": "exact original source/target names, particle and lmb_id, including the tagged parallel-edge distinction; retain positive unit loop coefficients, zero external coefficients, runtime import and complete native round trip",
+  "failure_log": "target/generation-projector-flow-staged/graph-source-order-failure.log",
+  "fix_commit": "de4b99d435a619e528f674946fddfe166e86daae",
+  "numerator_expansion": false,
+  "fixture_or_snapshot_change": false
+}

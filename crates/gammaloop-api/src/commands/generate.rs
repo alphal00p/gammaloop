@@ -33,6 +33,7 @@ use feynkit_generator::{
 };
 use feynkit_graph::EdgeId;
 use gammalooprs::model::Model;
+use gammalooprs::numerator::aind::{Aind, AindError};
 use gammalooprs::processes::amplitude::Amplitude;
 use gammalooprs::processes::{
     merge_generated_graph_reports, CrossSection, GeneratedGraphReport, GraphGenerationStats,
@@ -309,7 +310,8 @@ pub struct SpecArgs {
     #[arg(long = "graph-prefix", short = 'g')]
     pub graph_prefix: Option<String>,
 
-    /// Global prefactor projector (Symbolica atom string)
+    /// Global prefactor projector (Symbolica atom string). The k-th model index
+    /// of half-edge h is `hedge(h, k)`, counted from one
     #[arg(
         long = "global-prefactor-projector",
         value_name = "ATOM",
@@ -1067,7 +1069,7 @@ pub enum ParseError {
     #[error("{0} requires an inclusive minimum and maximum")]
     InvalidRange(&'static str),
     #[error("invalid external-state projector: {0}")]
-    InvalidProjector(String),
+    InvalidProjector(#[source] AindError),
 }
 
 impl SpecArgs {
@@ -1191,10 +1193,10 @@ pub fn parse_spec_with_model(
         }
     }
     if let Some(projector) = &args.global_prefactor_projector {
-        definition.numerators.projector = Some(
-            gammalooprs::numerator::aind::Aind::native_hedge_slots(&parse!(projector))
-                .map_err(|error| ParseError::InvalidProjector(error.to_string()))?,
-        );
+        let projector = parse!(projector);
+        Aind::validate_model_projector_slots(projector.as_view())
+            .map_err(ParseError::InvalidProjector)?;
+        definition.numerators.projector = Some(projector);
     }
     if let Some(prefactor) = &args.global_prefactor_num {
         definition.numerators.prefactor = parse!(prefactor);
@@ -1235,12 +1237,17 @@ fn build_grouping_option(args: &SpecArgs) -> Grouping {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::command_parser;
     use crate::commands::Commands;
     use crate::Repl;
     use clap::Parser;
+    use feynkit_generator::{NumeratorOptions, Run};
     use gammalooprs::initialisation::test_initialise;
     use gammalooprs::utils::load_generic_model;
+    use spenso::structure::partial::PartialStructureExt;
+    use std::sync::Arc;
     use std::time::Duration;
+    use toml::Table as TomlTable;
 
     #[test]
     fn thermal_xs_generation_is_rejected_before_changing_processes() -> Result<()> {
@@ -1476,28 +1483,103 @@ mod tests {
     }
 
     #[test]
-    fn supplied_projector_preserves_external_owners_and_converts_only_local_slots() {
+    fn topology_card_projector_crosses_the_current_cli_boundary() {
+        let card: TomlTable =
+            include_str!("../../../../benchmarks/performance/gg-hhh-topology.toml")
+                .parse()
+                .unwrap();
+        let command = card["commands"].as_array().unwrap()[2].as_str().unwrap();
+        let arguments = command_parser::split_command_line(command).unwrap();
+        let parsed =
+            Repl::try_parse_from(["gammaloop".to_owned()].into_iter().chain(arguments)).unwrap();
+        let Commands::Generate(Generate {
+            mode: Some(GenerateCmd::Amp(mut args)),
+            ..
+        }) = parsed.command
+        else {
+            panic!("expected the topology measurement's amplitude command")
+        };
         let model = load_generic_model("sm");
-        let mut args = base_args("a > d d~ [{0}]");
-        args.global_prefactor_projector = Some(
-            "gammalooprs::ϵ(0,spenso::mink(4,gammalooprs::hedge(0))) * \
-             spenso::g(spenso::cof(3,gammalooprs::hedge(1)),spenso::cof(3,gammalooprs::hedge(2)))"
-                .into(),
-        );
         let spec = parse_spec_with_model(&args, GenerationType::Amplitude, &model).unwrap();
+        let projector = args.global_prefactor_projector.as_ref().unwrap();
         assert_eq!(
             spec.process_definition.numerators.projector,
-            Some(parse!(
-                "gammalooprs::ϵ(0,spenso::mink(4,gammalooprs::hedge(0,1))) * \
-                 spenso::g(spenso::cof(3,gammalooprs::hedge(1,1)),spenso::cof(3,gammalooprs::hedge(2,1)))"
-            )),
+            Some(parse!(projector))
         );
-        args.global_prefactor_projector =
-            Some("spenso::mink(4,gammalooprs::hedge(0,65535))".into());
+        args.global_prefactor_projector = Some(projector.replace(",1)", ")"));
         assert!(matches!(
             parse_spec_with_model(&args, GenerationType::Amplitude, &model),
-            Err(ParseError::InvalidProjector(_))
+            Err(ParseError::InvalidProjector(AindError::ZeroProjectorSlot(
+                _
+            )))
         ));
+    }
+
+    #[test]
+    fn supplied_projector_keeps_model_hedge_slots_and_rejects_index_zero() {
+        let model = load_generic_model("sm");
+        let mut args = base_args("d d~ > a [{0}]");
+        let projector = "gammalooprs::u(0,spenso::bis(4,gammalooprs::hedge(0,1))) * \
+             gammalooprs::vbar(1,spenso::bis(4,gammalooprs::hedge(1,1))) * \
+             gammalooprs::ϵbar(2,spenso::mink(4,gammalooprs::hedge(2,1))) * \
+             spenso::g(spenso::dind(spenso::cof(3,gammalooprs::hedge(0,1))),spenso::cof(3,gammalooprs::hedge(1,1)))";
+        args.global_prefactor_projector = Some(projector.into());
+        let spec = parse_spec_with_model(&args, GenerationType::Amplitude, &model).unwrap();
+        assert_eq!(
+            spec.process_definition
+                .numerators
+                .projector
+                .as_ref()
+                .unwrap(),
+            &parse!(projector),
+        );
+        for zero in [
+            "gammalooprs::ϵ(0,spenso::mink(4,gammalooprs::hedge(0)))",
+            "gammalooprs::ϵ(0,spenso::mink(4,gammalooprs::hedge(0,0)))",
+            "spenso::g(spenso::dind(spenso::cof(3,gammalooprs::hedge(1,0))),spenso::cof(3,gammalooprs::hedge(2,1)))",
+        ] {
+            args.global_prefactor_projector = Some(zero.into());
+            assert!(matches!(
+                parse_spec_with_model(&args, GenerationType::Amplitude, &model),
+                Err(ParseError::InvalidProjector(AindError::ZeroProjectorSlot(
+                    _
+                )))
+            ));
+        }
+
+        let maximum = "spenso::mink(4,gammalooprs::hedge(0,65535))";
+        args.global_prefactor_projector = Some(maximum.into());
+        let maximum_spec = parse_spec_with_model(&args, GenerationType::Amplitude, &model).unwrap();
+        assert_eq!(
+            maximum_spec.process_definition.numerators.projector,
+            Some(parse!(maximum))
+        );
+
+        // Exercise the actual staged request and numerator owner, rather than a
+        // separately assembled legacy generation configuration.
+        let run = Run::default().threads(1);
+        let prepared = spec
+            .process_definition
+            .request
+            .generate(Arc::new(model), &run)
+            .unwrap();
+        let automatic = prepared.build(&NumeratorOptions::default(), &run).unwrap();
+        let supplied = prepared
+            .build(&spec.process_definition.numerators, &run)
+            .unwrap();
+        assert_eq!(automatic.len(), 1);
+        assert_eq!(supplied.len(), 1);
+        assert_eq!(
+            automatic.get(0).unwrap().numerator().unwrap(),
+            supplied.get(0).unwrap().numerator().unwrap()
+        );
+        let diagram = supplied.get(0).unwrap();
+        let contracted = diagram
+            .numerator()
+            .unwrap()
+            .multiply(diagram.projector())
+            .unwrap();
+        assert!(contracted.structure().logical_slots().is_empty());
     }
 
     #[test]

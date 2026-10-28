@@ -1,0 +1,6 @@
+{
+  "control": "reverse the first authorized variance correction in the current fully native fixture",
+  "exit_code": 255,
+  "diagnostic": "qqx_aaa_pentagon hedge_1 does not have exactly one fundamental and one dual\n",
+  "temporary_fixture_removed": true
+}

@@ -1,0 +1,19 @@
+{
+  "command": "cargo run --locked --profile dev-optim -p alphal00p-docs-builder -- check ",
+  "exit_code": 1,
+  "log": "target/generation-projector-flow-staged/docs.log",
+  "log_sha256": "47005abf03f32e07132b392fc686fdfcfa0cecd6b68cab121cba51435bbb0acc",
+  "first_failure": {
+    "note": "gammaloop-architecture",
+    "path": "crates/gammaloop-api/src/state.rs",
+    "expected": "5113940a12e8bac5ec042c59db01bd0ecfb05ef0",
+    "actual": "3598dbe299f9a32da1ed8d034706a82959d84abb",
+    "base_actual": "3598dbe299f9a32da1ed8d034706a82959d84abb",
+    "inherited": true
+  },
+  "all_inherited": true,
+  "digest_failures": 26,
+  "anchor_failures": 1,
+  "hashes_refreshed": false,
+  "reserved_for": "source31"
+}

@@ -5445,21 +5445,21 @@
           ]
         },
         "filter_selfenergies": {
-          "description": "Include or exclude self-energy topologies; omission uses the generation-mode default.",
+          "description": "Veto self-energy topologies; omission keeps them.",
           "type": [
             "boolean",
             "null"
           ]
         },
         "filter_snails": {
-          "description": "Include or exclude snail topologies; omission uses the generation-mode default.",
+          "description": "Veto snail topologies; omission keeps them.",
           "type": [
             "boolean",
             "null"
           ]
         },
         "filter_tadpoles": {
-          "description": "Include or exclude tadpole topologies; omission uses the generation-mode default.",
+          "description": "Veto tadpole topologies; omission keeps them.",
           "type": [
             "boolean",
             "null"
@@ -5492,7 +5492,7 @@
           ]
         },
         "global_prefactor_projector": {
-          "description": "Global prefactor projector (Symbolica atom string)",
+          "description": "Global prefactor projector (Symbolica atom string). The k-th model index\nof half-edge h is `hedge(h, k)`, counted from one",
           "type": [
             "string",
             "null"
@@ -5523,12 +5523,13 @@
           }
         },
         "max_n_bridges": {
-          "description": "Maximum number of bridges allowed in a generated graph; negative values disable the bound.",
+          "description": "Maximum number of bridges allowed in a generated graph; omission is unrestricted.",
           "type": [
             "integer",
             "null"
           ],
-          "format": "int32"
+          "format": "uint",
+          "minimum": 0
         },
         "n_cut_blobs": {
           "description": "Inclusive minimum and maximum number of cut blobs on either side of a cross-section cut.",
@@ -5562,18 +5563,20 @@
           ],
           "items": {
             "type": "integer",
-            "format": "int32"
+            "format": "uint",
+            "minimum": 0
           }
         },
         "number_of_fermion_loops": {
-          "description": "Number of closed fermion loops, excluding ghosts; negative disables",
+          "description": "Inclusive minimum and maximum number of closed fermion loops, excluding ghosts.",
           "type": [
             "array",
             "null"
           ],
           "items": {
             "type": "integer",
-            "format": "int32"
+            "format": "uint",
+            "minimum": 0
           }
         },
         "number_of_samples_for_numerator_comparisons": {
@@ -5635,28 +5638,28 @@
           ]
         },
         "symmetrize_final_states": {
-          "description": "Identify graphs related by permutations of identical final-state particles.",
+          "description": "Identify amplitude graphs related by permutations of identical final-state particles;\ncross sections reject it, their identical final states being cut edges.",
           "type": [
             "boolean",
             "null"
           ]
         },
         "symmetrize_initial_states": {
-          "description": "Identify graphs related by permutations of identical initial-state particles.",
+          "description": "Identify graphs related by permutations of identical initial-state particles. A cross\nsection keeps one graph per exchange of its two identical beams, weighted by the number\nof graphs it stands for; this assumes observables, selectors and beam helicities\nsymmetric under the exchange, and can raise the integration error at equal sample counts.\nWith left/right symmetrization the weights inherit its deviations and can differ from\nits total too.",
           "type": [
             "boolean",
             "null"
           ]
         },
         "symmetrize_left_right_states": {
-          "description": "Identify cross-section graphs under CP-based left/right exchange; requires CP symmetry.",
+          "description": "Identify cross-section graphs under CP-based left/right exchange; requires CP symmetry.\nFrom two loops on the physical cuts can depend on which side is searched, so the total\ncan differ from the unsymmetrized one.",
           "type": [
             "boolean",
             "null"
           ]
         },
         "tokens": {
-          "description": "Quote-free spec.\n\nGrammar (unquoted): `INITIAL to FINAL [process_options] [generation_options]`\nAlso accepts: `INITIAL > FINAL [ ... ]`\n\nExamples:\n  e+ e- to d d~ g veto u d xs QED^2==2 QCD^2<=4 pert loops=1 fsloops=2 QCD=2\n  e+ e- > { z z, a a } [ {1} {{2}} QCD=2 QED=1 ] / u d | g ghG QED==2 QCD>=2 QCD<=4\n\nNotes:\n- `veto` and `only` are synonyms for `/` and `|`.\n- The `[ ... ]` block holds perturbative spec: `{n}`, `{{n}}`, and orders `QCD=n` with shorthand `QCD`≡1.",
+          "description": "Quote-free spec.\n\nGrammar (unquoted): `INITIAL to FINAL [process_options] [generation_options]`\nAlso accepts: `INITIAL > FINAL [ ... ]`\n\nExamples:\n  e+ e- to d d~ g [ {1} ] veto u d QED^2==4 QCD^2<=4\n  e+ e- > { z z, a a } [ {1} {{2}} QCD=2 QED=1 ] / u d | g ghG QED==2 QCD>=2 QCD<=4\n\nNotes:\n- `veto` and `only` are synonyms for `/` and `|`.\n- The `[ ... ]` block holds perturbative spec: `{n}`, `{{n}}`, and orders `QCD=n` with shorthand `QCD`≡1.",
           "type": "array",
           "items": {
             "type": "string"
@@ -5671,27 +5674,6 @@
           "items": {
             "type": "string"
           }
-        },
-        "veto_only_scaleless_self_energy": {
-          "description": "Veto only self-energy insertions that are scaleless.",
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
-        "veto_only_scaleless_snails": {
-          "description": "Veto only snail insertions that are scaleless.",
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
-        "veto_only_scaleless_tadpoles": {
-          "description": "Veto only tadpoles that are scaleless.",
-          "type": [
-            "boolean",
-            "null"
-          ]
         },
         "veto_self_energy_of_massive_lines": {
           "description": "Veto self-energy insertions on massive propagators.",

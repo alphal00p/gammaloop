@@ -1,9 +1,14 @@
 use super::utils::{assert_complex_approx_eq, assert_complex_approx_eq_precise, decimal_scalar};
 use super::*;
+use eyre::{ensure, eyre};
 use gammaloop_api::commands::evaluate_samples::{EvaluateSamplesPrecise, evaluate_sample_precise};
+use gammaloop_integration_tests::CLIState;
 use gammalooprs::integrands::evaluation::PreciseEvaluationResultOutput;
+use gammalooprs::integrands::process::ProcessIntegrand;
 use gammalooprs::integrands::process::evaluators::EvaluatorMethod;
 use gammalooprs::utils::{ArbPrec, FloatLike, PrecisionUpgradable, f128};
+use linnet::half_edge::involution::{Flow, Hedge, HedgePair, Orientation};
+use linnet::half_edge::subgraph::SubSetLike;
 use ndarray::Array2;
 use symbolica::domains::float::{Float as SymbolicaFloat, Real};
 
@@ -22,15 +27,127 @@ fn bubble_integrated_inspect_f64_target() -> Result<Complex<f64>> {
     ))
 }
 
-fn bubble_local_inspect_target<T>(orientation: usize, m_uv: usize) -> Result<Complex<F<T>>>
+/// Energy flow of both bubble propagators relative to the incoming external
+/// energy p0, which enters at one vertex and leaves at the other.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum BubbleFlow {
+    /// Energy flows towards the incoming vertex: surface 2w + p0.
+    AgainstExternal,
+    /// Energy flows away from the incoming vertex: threshold surface 2w - p0.
+    WithExternal,
+}
+
+impl BubbleFlow {
+    const BOTH: [Self; 2] = [Self::AgainstExternal, Self::WithExternal];
+
+    fn energy_source(pair: HedgePair, orientation: Orientation) -> Option<Hedge> {
+        match (pair, orientation) {
+            (HedgePair::Paired { source, .. }, Orientation::Default) => Some(source),
+            (HedgePair::Paired { sink, .. }, Orientation::Reversed) => Some(sink),
+            _ => None,
+        }
+    }
+
+    /// Visible orientation index of the generated bubble with this energy flow.
+    /// Orientation indices follow the stored edge directions, which depend on
+    /// the generator's frame, so the test selects orientations by their flow.
+    fn orientation(self, cli: &CLIState, process: &str, integrand: &str) -> Result<usize> {
+        let (process_id, integrand_name) = cli.state.find_integrand_ref(
+            Some(&ProcessRef::Unqualified(process.to_string())),
+            Some(&integrand.to_string()),
+        )?;
+        let ProcessIntegrand::Amplitude(amplitude) = cli
+            .state
+            .process_list
+            .get_integrand(process_id, &integrand_name)?
+            .require_generated()?
+        else {
+            return Err(eyre!("the scalar bubble must be an amplitude"));
+        };
+        let [term] = amplitude.data.graph_terms.as_slice() else {
+            return Err(eyre!("the scalar bubble must have one graph"));
+        };
+        let graph = &term.graph.underlying;
+        let incoming_vertex = graph
+            .iter_edges()
+            .find_map(|(pair, _, _)| match pair {
+                HedgePair::Unpaired {
+                    hedge,
+                    flow: Flow::Sink,
+                } => Some(graph.node_id(hedge)),
+                _ => None,
+            })
+            .ok_or_else(|| eyre!("the scalar bubble has no incoming external"))?;
+        let away_from_incoming = matches!(self, Self::WithExternal);
+        let mut matches =
+            term.orientation_filter
+                .included_iter()
+                .enumerate()
+                .filter(|(_, orientation)| {
+                    graph.iter_edges().all(|(pair, edge, _)| match pair {
+                        HedgePair::Paired { .. } => {
+                            let Some(energy_source) =
+                                Self::energy_source(pair, term.orientations[*orientation][edge])
+                            else {
+                                return false;
+                            };
+                            (graph.node_id(energy_source) == incoming_vertex) == away_from_incoming
+                        }
+                        _ => true,
+                    })
+                });
+        let (visible_index, _) = matches
+            .next()
+            .ok_or_else(|| eyre!("no scalar bubble orientation has flow {self:?}"))?;
+        ensure!(
+            matches.next().is_none(),
+            "multiple scalar bubble orientations have flow {self:?}"
+        );
+        Ok(visible_index)
+    }
+}
+
+#[test]
+fn bubble_energy_source_is_invariant_under_stored_edge_reversal() {
+    let pair = HedgePair::Paired {
+        source: Hedge(2),
+        sink: Hedge(3),
+    };
+    let reversed = HedgePair::Paired {
+        source: Hedge(3),
+        sink: Hedge(2),
+    };
+    assert_eq!(
+        BubbleFlow::energy_source(pair, Orientation::Default),
+        Some(Hedge(2))
+    );
+    assert_eq!(
+        BubbleFlow::energy_source(pair, Orientation::Reversed),
+        Some(Hedge(3))
+    );
+    assert_eq!(
+        BubbleFlow::energy_source(pair, Orientation::Default),
+        BubbleFlow::energy_source(reversed, Orientation::Reversed),
+    );
+    assert_eq!(
+        BubbleFlow::energy_source(pair, Orientation::Reversed),
+        BubbleFlow::energy_source(reversed, Orientation::Default),
+    );
+    assert_eq!(
+        BubbleFlow::energy_source(pair, Orientation::Undirected),
+        None
+    );
+}
+
+fn bubble_local_inspect_target<T>(flow: BubbleFlow, m_uv: usize) -> Result<Complex<F<T>>>
 where
     T: FloatLike + From<SymbolicaFloat>,
 {
-    // Historical Arb local target, whose original parameter vector was not recorded:
+    // Historical Arb local target against the external flow, whose original
+    // parameter vector was not recorded:
     // 1.58065707259153789178502163142117068526463969013510333564276531480561962745854241380044043667161360949437009469502210362095446423045005192306907814379082388080206628068736848837078345292618746320848779749755287907430238646092292488091093980397229936469812174411521638680368115422804978273334133533394619e-3
     // The precise API preserves each sampled f64 coordinate's exact binary value
     // before recomputing this spherical linear parameterization in native precision.
-    assert!(orientation < 2);
     let one = decimal_scalar::<T>("1")?;
     let two = decimal_scalar::<T>("2")?;
     let four = decimal_scalar::<T>("4")?;
@@ -42,10 +159,9 @@ where
     let mass = decimal_scalar::<T>(&m_uv.to_string())?;
     let w = (&radius_squared + &four).sqrt();
     let w_uv = (&radius_squared + &mass * &mass).sqrt();
-    let sign = if orientation == 0 {
-        one.clone()
-    } else {
-        -one.clone()
+    let sign = match flow {
+        BubbleFlow::AgainstExternal => one.clone(),
+        BubbleFlow::WithExternal => -one.clone(),
     };
     let pi = F(one.0.PI());
     let jacobian = &four * &pi * &radius_squared / ((&one - &x) * (&one - &x));
@@ -66,8 +182,8 @@ where
 {
     // Historical half-per-orientation Arb addback target:
     // 7.64653662240773309480677686392840290219746984480669154734901768691952015570111012674996544221262052127408967289853050825047370327497584609105765047005207365523919908520241184747302699549322870613657188648439629750071918645085104688836458853591510641295971894891421499189372272150971720917664200220655269e0
-    let mut expected =
-        bubble_local_inspect_target::<T>(0, m_uv)? + bubble_local_inspect_target::<T>(1, m_uv)?;
+    let mut expected = bubble_local_inspect_target::<T>(BubbleFlow::AgainstExternal, m_uv)?
+        + bubble_local_inspect_target::<T>(BubbleFlow::WithExternal, m_uv)?;
     let one = decimal_scalar::<T>("1")?;
     let four = decimal_scalar::<T>("4")?;
     let thirty_two = decimal_scalar::<T>("32")?;
@@ -92,7 +208,7 @@ where
 
 fn bubble_no_integrated_inspect_quad_target() -> Result<Complex<F<f128>>> {
     // Historical local Quad target: 1.58065707259153789178502133686503e-3.
-    bubble_local_inspect_target(0, 20)
+    bubble_local_inspect_target(BubbleFlow::AgainstExternal, 20)
 }
 
 fn bubble_integrated_inspect_quad_target() -> Result<Complex<F<f128>>> {
@@ -342,6 +458,11 @@ mod important {
         cli.run_command(
             "set process -p bubble -i scalar_bubble_below_thres kv sampling.orientations=\"summed\"",
         )?;
+        let against_external = BubbleFlow::AgainstExternal.orientation(
+            &cli,
+            "bubble_no_integrated_UV",
+            "scalar_bubble_below_thres",
+        )?;
 
         set_single_precision_level(
             &mut cli,
@@ -353,7 +474,7 @@ mod important {
             &mut cli,
             "bubble_no_integrated_UV",
             "scalar_bubble_below_thres",
-            vec![0, 0],
+            vec![0, against_external],
         )?;
         assert!(bubble_no_integrated_f64.re.is_finite() && bubble_no_integrated_f64.im.is_finite());
 
@@ -376,7 +497,7 @@ mod important {
             &mut cli,
             "bubble_no_integrated_UV",
             "scalar_bubble_below_thres",
-            vec![0, 0],
+            vec![0, against_external],
             false,
         )?)?;
         assert_complex_approx_eq_precise(
@@ -424,12 +545,12 @@ mod important {
             &mut cli,
             "bubble_no_integrated_UV",
             "scalar_bubble_below_thres",
-            vec![0, 0],
+            vec![0, against_external],
             true,
         )?)?;
         assert_complex_approx_eq_precise(
             &bubble_no_integrated_arb,
-            &bubble_local_inspect_target::<ArbPrec>(0, 20)?,
+            &bubble_local_inspect_target::<ArbPrec>(BubbleFlow::AgainstExternal, 20)?,
             &decimal_scalar("1.0e-60")?,
             "bubble_no_integrated_UV inspect ArbPrec benchmark",
         );
@@ -470,7 +591,9 @@ mod important {
                     "set process -p {process} -i scalar_bubble_below_thres kv general.m_uv={m_uv} general.mu_r={mu_r} general.renormalization_localization_scale={localization_scale}"
                 ))?;
             }
-            for orientation in 0..2 {
+            for flow in BubbleFlow::BOTH {
+                let orientation =
+                    flow.orientation(&cli, "bubble_no_integrated_UV", "scalar_bubble_below_thres")?;
                 let actual = arb_result(precise_inspect_bubble_process(
                     &mut cli,
                     "bubble_no_integrated_UV",
@@ -480,9 +603,9 @@ mod important {
                 )?)?;
                 assert_complex_approx_eq_precise(
                     &actual,
-                    &bubble_local_inspect_target::<ArbPrec>(orientation, m_uv)?,
+                    &bubble_local_inspect_target::<ArbPrec>(flow, m_uv)?,
                     &decimal_scalar("1.0e-60")?,
-                    &format!("local contour {orientation} at m_uv={m_uv}"),
+                    &format!("local contour {flow:?} at m_uv={m_uv}"),
                 );
             }
             let actual = arb_result(precise_inspect_bubble_process(

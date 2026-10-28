@@ -1,0 +1,152 @@
+{
+  "source": "8cf71575a739976295edb42eae2052d6b5e455ee",
+  "source_fixture_byte_identical": true,
+  "physical_preservation": "removing only the 21 lmb_id attributes and three new comment lines reproduces d48 fixture byte-for-byte",
+  "graphs": 78,
+  "pins": {
+    "d37": [
+      {
+        "source": "v3",
+        "target": "v1",
+        "loop_slot": 0,
+        "particle": "g"
+      },
+      {
+        "source": "v4",
+        "target": "v3",
+        "loop_slot": 1,
+        "particle": "g"
+      },
+      {
+        "source": "v5",
+        "target": "v6",
+        "loop_slot": 2,
+        "particle": "ghG"
+      }
+    ],
+    "d42": [
+      {
+        "source": "v3",
+        "target": "v1",
+        "loop_slot": 0,
+        "particle": "ghG"
+      },
+      {
+        "source": "v4",
+        "target": "v3",
+        "loop_slot": 1,
+        "particle": "g"
+      },
+      {
+        "source": "v5",
+        "target": "v6",
+        "loop_slot": 2,
+        "particle": "d"
+      }
+    ],
+    "d43": [
+      {
+        "source": "v3",
+        "target": "v1",
+        "loop_slot": 0,
+        "particle": "ghG"
+      },
+      {
+        "source": "v4",
+        "target": "v3",
+        "loop_slot": 1,
+        "particle": "g"
+      },
+      {
+        "source": "v6",
+        "target": "v5",
+        "loop_slot": 2,
+        "particle": "g"
+      }
+    ],
+    "d44": [
+      {
+        "source": "v3",
+        "target": "v1",
+        "loop_slot": 0,
+        "particle": "ghG"
+      },
+      {
+        "source": "v4",
+        "target": "v3",
+        "loop_slot": 1,
+        "particle": "g"
+      },
+      {
+        "source": "v5",
+        "target": "v6",
+        "loop_slot": 2,
+        "particle": "ghG"
+      }
+    ],
+    "d45": [
+      {
+        "source": "v1",
+        "target": "v4",
+        "loop_slot": 0,
+        "particle": "ghG"
+      },
+      {
+        "source": "v3",
+        "target": "v2",
+        "loop_slot": 1,
+        "particle": "g"
+      },
+      {
+        "source": "v5",
+        "target": "v6",
+        "loop_slot": 2,
+        "particle": "d"
+      }
+    ],
+    "d46": [
+      {
+        "source": "v1",
+        "target": "v4",
+        "loop_slot": 0,
+        "particle": "ghG"
+      },
+      {
+        "source": "v3",
+        "target": "v2",
+        "loop_slot": 1,
+        "particle": "g"
+      },
+      {
+        "source": "v6",
+        "target": "v5",
+        "loop_slot": 2,
+        "particle": "g"
+      }
+    ],
+    "d47": [
+      {
+        "source": "v1",
+        "target": "v4",
+        "loop_slot": 0,
+        "particle": "ghG"
+      },
+      {
+        "source": "v3",
+        "target": "v2",
+        "loop_slot": 1,
+        "particle": "g"
+      },
+      {
+        "source": "v5",
+        "target": "v6",
+        "loop_slot": 2,
+        "particle": "ghG"
+      }
+    ]
+  },
+  "edge_selection_contract": "exact authored source/target/particle and lmb_id identify the selected edge through the current source map; parsed native edge IDs need not equal DOT statement ordinals",
+  "expected_sign": "positive unit loop coefficient, zero external coefficients on each pinned source direction",
+  "before_sha256": "b4a9c0537a3b9853bcd4201ea2ae8ce95ac3d1681e94ab9d822cdb3ed71d1f4e",
+  "after_sha256": "fd3a6ccef3e69562b73c045c42ef3a4b4393c9d19be40edc5793ab3adfef8f53"
+}

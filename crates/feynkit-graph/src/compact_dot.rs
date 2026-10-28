@@ -34,6 +34,23 @@ impl FeynmanDiagram {
         model: Arc<Model>,
         parsed: DotGraph,
     ) -> Result<DotDiagram, DiagramError> {
+        // A model particle index is meaningful only under the model fingerprint of the
+        // annotated dialect. Older GammaLoop exports wrote one without it.
+        if let Some((_, edge, _)) = parsed
+            .iter_edges()
+            .find(|(_, _, edge)| edge.data.statements.contains_key("particle_id"))
+        {
+            return Err(DiagramError::InvalidDotAttribute {
+                target: format!("edge {}", edge.0),
+                attribute: "particle_id",
+                value: "a model particle index needs the model_fingerprint of FeynKit's \
+                        annotated DOT. To convert an older GammaLoop export to compact DOT, \
+                        replace each `particle_id` by `particle` (the particle's name) or `pdg` \
+                        and delete `vertex_rule_id`, `ufo_order`, `initial_state_connection` \
+                        and `gammaloop_runtime`; keep `lmb_id`"
+                    .into(),
+            });
+        }
         let attributes = &parsed.global_data.statements;
         let mut builder = Self::builder(Arc::clone(&model), parsed.global_data.name.clone());
         if let Some(value) = attributes.get("overall_factor") {

@@ -1,0 +1,290 @@
+{
+  "base": "d48f9d1aedc766eea5cb185ab6029d1f04462043",
+  "staged_spec_args_source_unchanged_except_projector_doc": true,
+  "baseline_spec_args_sha256": "b44cc69de1852c8c0b684c286eed68f0f35392d0f0f9eb88c9bde57666c513fe",
+  "outputs": [
+    {
+      "path": "assets/schemas/runhistory.json",
+      "sha256": "bb6d27af0a4cf162138925c3700fd267d9d05496640e97a9208526db8591b9df",
+      "changes": [
+        {
+          "path": [
+            "$defs",
+            "SpecArgs",
+            "properties",
+            "filter_selfenergies",
+            "description"
+          ],
+          "old": "Include or exclude self-energy topologies; omission uses the generation-mode default.",
+          "new": "Veto self-energy topologies; omission keeps them.",
+          "scope": "unchanged approved d48 SpecArgs baseline metadata alignment"
+        },
+        {
+          "path": [
+            "$defs",
+            "SpecArgs",
+            "properties",
+            "filter_snails",
+            "description"
+          ],
+          "old": "Include or exclude snail topologies; omission uses the generation-mode default.",
+          "new": "Veto snail topologies; omission keeps them.",
+          "scope": "unchanged approved d48 SpecArgs baseline metadata alignment"
+        },
+        {
+          "path": [
+            "$defs",
+            "SpecArgs",
+            "properties",
+            "filter_tadpoles",
+            "description"
+          ],
+          "old": "Include or exclude tadpole topologies; omission uses the generation-mode default.",
+          "new": "Veto tadpole topologies; omission keeps them.",
+          "scope": "unchanged approved d48 SpecArgs baseline metadata alignment"
+        },
+        {
+          "path": [
+            "$defs",
+            "SpecArgs",
+            "properties",
+            "global_prefactor_projector",
+            "description"
+          ],
+          "old": "Global prefactor projector (Symbolica atom string)",
+          "new": "Global prefactor projector (Symbolica atom string). The k-th model index\nof half-edge h is `hedge(h, k)`, counted from one",
+          "scope": "source24 projector description"
+        },
+        {
+          "path": [
+            "$defs",
+            "SpecArgs",
+            "properties",
+            "max_n_bridges",
+            "description"
+          ],
+          "old": "Maximum number of bridges allowed in a generated graph; negative values disable the bound.",
+          "new": "Maximum number of bridges allowed in a generated graph; omission is unrestricted.",
+          "scope": "unchanged approved d48 SpecArgs baseline metadata alignment"
+        },
+        {
+          "path": [
+            "$defs",
+            "SpecArgs",
+            "properties",
+            "max_n_bridges",
+            "format"
+          ],
+          "old": "int32",
+          "new": "uint",
+          "scope": "unchanged approved d48 SpecArgs baseline metadata alignment"
+        },
+        {
+          "path": [
+            "$defs",
+            "SpecArgs",
+            "properties",
+            "max_n_bridges",
+            "minimum"
+          ],
+          "old": null,
+          "new": 0,
+          "scope": "unchanged approved d48 SpecArgs baseline metadata alignment"
+        },
+        {
+          "path": [
+            "$defs",
+            "SpecArgs",
+            "properties",
+            "number_of_factorized_loop_subtopologies",
+            "items",
+            "format"
+          ],
+          "old": "int32",
+          "new": "uint",
+          "scope": "unchanged approved d48 SpecArgs baseline metadata alignment"
+        },
+        {
+          "path": [
+            "$defs",
+            "SpecArgs",
+            "properties",
+            "number_of_factorized_loop_subtopologies",
+            "items",
+            "minimum"
+          ],
+          "old": null,
+          "new": 0,
+          "scope": "unchanged approved d48 SpecArgs baseline metadata alignment"
+        },
+        {
+          "path": [
+            "$defs",
+            "SpecArgs",
+            "properties",
+            "number_of_fermion_loops",
+            "description"
+          ],
+          "old": "Number of closed fermion loops, excluding ghosts; negative disables",
+          "new": "Inclusive minimum and maximum number of closed fermion loops, excluding ghosts.",
+          "scope": "unchanged approved d48 SpecArgs baseline metadata alignment"
+        },
+        {
+          "path": [
+            "$defs",
+            "SpecArgs",
+            "properties",
+            "number_of_fermion_loops",
+            "items",
+            "format"
+          ],
+          "old": "int32",
+          "new": "uint",
+          "scope": "unchanged approved d48 SpecArgs baseline metadata alignment"
+        },
+        {
+          "path": [
+            "$defs",
+            "SpecArgs",
+            "properties",
+            "number_of_fermion_loops",
+            "items",
+            "minimum"
+          ],
+          "old": null,
+          "new": 0,
+          "scope": "unchanged approved d48 SpecArgs baseline metadata alignment"
+        },
+        {
+          "path": [
+            "$defs",
+            "SpecArgs",
+            "properties",
+            "symmetrize_final_states",
+            "description"
+          ],
+          "old": "Identify graphs related by permutations of identical final-state particles.",
+          "new": "Identify amplitude graphs related by permutations of identical final-state particles;\ncross sections reject it, their identical final states being cut edges.",
+          "scope": "unchanged approved d48 SpecArgs baseline metadata alignment"
+        },
+        {
+          "path": [
+            "$defs",
+            "SpecArgs",
+            "properties",
+            "symmetrize_initial_states",
+            "description"
+          ],
+          "old": "Identify graphs related by permutations of identical initial-state particles.",
+          "new": "Identify graphs related by permutations of identical initial-state particles. A cross\nsection keeps one graph per exchange of its two identical beams, weighted by the number\nof graphs it stands for; this assumes observables, selectors and beam helicities\nsymmetric under the exchange, and can raise the integration error at equal sample counts.\nWith left/right symmetrization the weights inherit its deviations and can differ from\nits total too.",
+          "scope": "unchanged approved d48 SpecArgs baseline metadata alignment"
+        },
+        {
+          "path": [
+            "$defs",
+            "SpecArgs",
+            "properties",
+            "symmetrize_left_right_states",
+            "description"
+          ],
+          "old": "Identify cross-section graphs under CP-based left/right exchange; requires CP symmetry.",
+          "new": "Identify cross-section graphs under CP-based left/right exchange; requires CP symmetry.\nFrom two loops on the physical cuts can depend on which side is searched, so the total\ncan differ from the unsymmetrized one.",
+          "scope": "unchanged approved d48 SpecArgs baseline metadata alignment"
+        },
+        {
+          "path": [
+            "$defs",
+            "SpecArgs",
+            "properties",
+            "tokens",
+            "description"
+          ],
+          "old": "Quote-free spec.\n\nGrammar (unquoted): `INITIAL to FINAL [process_options] [generation_options]`\nAlso accepts: `INITIAL > FINAL [ ... ]`\n\nExamples:\n  e+ e- to d d~ g veto u d xs QED^2==2 QCD^2<=4 pert loops=1 fsloops=2 QCD=2\n  e+ e- > { z z, a a } [ {1} {{2}} QCD=2 QED=1 ] / u d | g ghG QED==2 QCD>=2 QCD<=4\n\nNotes:\n- `veto` and `only` are synonyms for `/` and `|`.\n- The `[ ... ]` block holds perturbative spec: `{n}`, `{{n}}`, and orders `QCD=n` with shorthand `QCD`≡1.",
+          "new": "Quote-free spec.\n\nGrammar (unquoted): `INITIAL to FINAL [process_options] [generation_options]`\nAlso accepts: `INITIAL > FINAL [ ... ]`\n\nExamples:\n  e+ e- to d d~ g [ {1} ] veto u d QED^2==4 QCD^2<=4\n  e+ e- > { z z, a a } [ {1} {{2}} QCD=2 QED=1 ] / u d | g ghG QED==2 QCD>=2 QCD<=4\n\nNotes:\n- `veto` and `only` are synonyms for `/` and `|`.\n- The `[ ... ]` block holds perturbative spec: `{n}`, `{{n}}`, and orders `QCD=n` with shorthand `QCD`≡1.",
+          "scope": "unchanged approved d48 SpecArgs baseline metadata alignment"
+        },
+        {
+          "path": [
+            "$defs",
+            "SpecArgs",
+            "properties",
+            "veto_only_scaleless_self_energy"
+          ],
+          "old": {
+            "description": "Veto only self-energy insertions that are scaleless.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "new": null,
+          "scope": "unchanged approved d48 SpecArgs baseline metadata alignment"
+        },
+        {
+          "path": [
+            "$defs",
+            "SpecArgs",
+            "properties",
+            "veto_only_scaleless_snails"
+          ],
+          "old": {
+            "description": "Veto only snail insertions that are scaleless.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "new": null,
+          "scope": "unchanged approved d48 SpecArgs baseline metadata alignment"
+        },
+        {
+          "path": [
+            "$defs",
+            "SpecArgs",
+            "properties",
+            "veto_only_scaleless_tadpoles"
+          ],
+          "old": {
+            "description": "Veto only tadpoles that are scaleless.",
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "new": null,
+          "scope": "unchanged approved d48 SpecArgs baseline metadata alignment"
+        }
+      ]
+    },
+    {
+      "path": "docs/api/generated/gammaloop-reference.json",
+      "sha256": "0c0daf0aca1e462618733c18b4448de15b98649ed7c772ae0a42666e6793841c",
+      "changes": [
+        {
+          "path": [
+            "commands",
+            181,
+            "arguments",
+            39,
+            "help"
+          ],
+          "old": "Global prefactor projector (Symbolica atom string)",
+          "new": "Global prefactor projector (Symbolica atom string). The k-th model index of half-edge h is `hedge(h, k)`, counted from one",
+          "scope": "source24 projector description"
+        },
+        {
+          "path": [
+            "commands",
+            182,
+            "arguments",
+            39,
+            "help"
+          ],
+          "old": "Global prefactor projector (Symbolica atom string)",
+          "new": "Global prefactor projector (Symbolica atom string). The k-th model index of half-edge h is `hedge(h, k)`, counted from one",
+          "scope": "source24 projector description"
+        }
+      ]
+    }
+  ]
+}

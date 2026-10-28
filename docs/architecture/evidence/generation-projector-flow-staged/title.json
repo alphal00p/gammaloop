@@ -1,0 +1,9 @@
+{
+  "title": "Staged projector flow and DOT boundaries",
+  "one_level_one_title": true,
+  "registry_matches": true,
+  "leading_h2_matches": true,
+  "typst": "0.15.1",
+  "source_sha256": "0710d33d37ab51da9d9afe2f1f4fd86976e48d9c56db413d9e79a89da81cf114",
+  "html_sha256": "d22f5955e3c808ac8168d8a25ab1904d3db3c001e7c40a9cee1c94b9c2bca67b"
+}

@@ -1,9 +1,17 @@
+use crate::numerator::aind::Aind;
 use color_eyre::Result;
-use feynkit_graph::{DiagramEdge, EdgeEndpoints, EdgeId, VertexId};
+use feynkit_generator::FeynmanDiagramRulesExt;
+use feynkit_graph::routing::MomentumBasis;
+use feynkit_graph::{
+    DiagramEdge, DiagramError, DotDiagram, EdgeEndpoints, EdgeId, FeynmanDiagram, VertexId,
+};
+use idenso::representations::Bispinor;
 use idenso::tensor::inference::TensorInferenceError;
 use linnet::half_edge::NodeIndex;
-use linnet::half_edge::involution::{EdgeIndex, HedgePair};
+use linnet::half_edge::involution::{EdgeIndex, Flow, HedgePair};
 use linnet::half_edge::subgraph::SubSetLike;
+use linnet::num_traits::SignOrZero;
+use linnet::parser::DotGraph;
 use serde_json::Error as JsonError;
 use serde_json::ser;
 use spenso::network::tags::SPENSO_TAG;
@@ -11,6 +19,7 @@ use spenso::structure::abstract_index::{AIND_SYMBOLS, AbstractIndex};
 use spenso::structure::representation::{Minkowski, RepName};
 use spenso::structure::slot::IsAbstractSlot;
 use spenso::tensor_symbol;
+use std::sync::Arc;
 use symbolica::atom::{Atom, AtomCore, FunctionBuilder};
 use symbolica::function;
 use symbolica::parse;
@@ -20,7 +29,7 @@ use typed_index_collections::ti_vec;
 use super::{Graph, NumeratorInterface};
 use crate::dot;
 use crate::graph::parse::{IntoGraph, complete_group_parsing};
-use crate::graph::{FeynmanGraph, GraphGroup};
+use crate::graph::{FeynmanGraph, GraphGroup, GroupId};
 use crate::initialisation::test_initialise;
 use crate::momentum::sample::LoopIndex;
 use crate::processes::DotExportSettings;
@@ -1451,6 +1460,40 @@ fn compact_qcd_import_instantiates_rules_and_retains_explicit_fragments() {
 }
 
 #[test]
+fn native_qqx_aaa_projectors_close_actual_runtime_ports() {
+    test_initialise().unwrap();
+    let model = utils::load_generic_model("sm");
+    let source = include_str!("../../../../../tests/resources/graphs/qqx_aaa_subtracted.dot");
+    let graphs = Graph::from_dot(source, &model).unwrap();
+    assert_eq!(graphs.len(), 19);
+    assert!(
+        graphs
+            .iter()
+            .all(|graph| graph.group_id == Some(GroupId(0)))
+    );
+    assert!(graphs[0].is_group_master);
+    assert!(graphs[1..].iter().all(|graph| !graph.is_group_master));
+    for graph in graphs {
+        // Compose the retained factors only to inspect their actual native port
+        // metadata. No algebraic expansion or component contraction is needed.
+        let numerator = graph
+            .numerator(&graph.full_filter(), &graph.empty_subgraph())
+            .unwrap()
+            .state
+            .expr;
+        let complete = numerator
+            .multiply(graph.global_numerator().unwrap())
+            .unwrap();
+        assert!(
+            complete.structure().logical_slots().is_empty(),
+            "{} retains unmatched native ports: {:?}",
+            graph.name,
+            complete.structure().logical_slots()
+        );
+    }
+}
+
+#[test]
 fn compact_gamma_loop_indices_bind_to_native_rule_ports() {
     test_initialise().unwrap();
     let model = crate::utils::load_generic_model("sm");
@@ -1482,13 +1525,9 @@ fn compact_gamma_loop_indices_bind_to_native_rule_ports() {
 
 #[test]
 fn compact_sewn_projector_uses_the_source_half_edge_chart() {
-    use crate::numerator::aind::Aind;
-    use idenso::representations::Bispinor;
-    use linnet::half_edge::involution::Flow;
-    use symbolica::function;
     test_initialise().unwrap();
-    let model = crate::utils::load_generic_model("sm");
-    let mut source: linnet::parser::DotGraph = linnet::parser::DotGraph::from_string(
+    let model = utils::load_generic_model("sm");
+    let mut source: DotGraph = DotGraph::from_string(
         r#"digraph sewn_top_self_energy {
         final_state="t,g"
         ext[style=invis]
@@ -1507,7 +1546,7 @@ fn compact_sewn_projector_uses_the_source_half_edge_chart() {
         if let HedgePair::Unpaired { hedge, flow } = pair {
             let slot = Bispinor {}
                 .new_rep(4)
-                .to_symbolic([Atom::from(Aind::Hedge(hedge.0 as u16, 1))]);
+                .to_symbolic([Atom::from(Aind::Hedge(u16::try_from(hedge.0).unwrap(), 0))]);
             projector *= function!(
                 if flow == Flow::Sink { GS.u } else { GS.ubar },
                 edge.0,
@@ -1515,6 +1554,7 @@ fn compact_sewn_projector_uses_the_source_half_edge_chart() {
             );
         }
     }
+    let projector = Aind::compact_to_model_hedge_slots(&projector).unwrap();
     source
         .global_data
         .statements
@@ -1522,25 +1562,43 @@ fn compact_sewn_projector_uses_the_source_half_edge_chart() {
     let explicit = Graph::from_dot(&source.debug_dot(), &model)
         .unwrap()
         .remove(0);
-    // An admitted projector orders its ports canonically, the generated one by
-    // construction; the wavefunctions and their slots must agree.
+    // Source-authored and automatic tensors may retain different logical axis
+    // orders. Incidence is the exact indexed expression and its named ports;
+    // certify the complete value in its physical numerator context below.
     assert_eq!(
         explicit.global_prefactor.projector.expression(),
         automatic.global_prefactor.projector.expression(),
         "supplied wavefunctions must follow actual source incidence through sewing"
     );
-    assert_eq!(explicit.loop_momentum_basis, automatic.loop_momentum_basis);
     assert_eq!(
-        explicit
-            .numerator(&explicit.full_filter(), &explicit.empty_subgraph())
-            .unwrap()
-            .get_single_atom()
-            .unwrap(),
-        automatic
-            .numerator(&automatic.full_filter(), &automatic.empty_subgraph())
-            .unwrap()
-            .get_single_atom()
-            .unwrap()
+        explicit.global_prefactor.projector.structure().canonical(),
+        automatic.global_prefactor.projector.structure().canonical(),
+        "supplied projectors must retain native index labels, dimensions and variance"
+    );
+    assert_eq!(explicit.loop_momentum_basis, automatic.loop_momentum_basis);
+    let explicit_numerator = explicit
+        .numerator(&explicit.full_filter(), &explicit.empty_subgraph())
+        .unwrap();
+    let automatic_numerator = automatic
+        .numerator(&automatic.full_filter(), &automatic.empty_subgraph())
+        .unwrap();
+    assert_eq!(
+        explicit_numerator.get_single_atom().unwrap(),
+        automatic_numerator.get_single_atom().unwrap()
+    );
+    let explicit_value = explicit_numerator
+        .state
+        .expr
+        .multiply(explicit.global_numerator().unwrap())
+        .unwrap();
+    let automatic_value = automatic_numerator
+        .state
+        .expr
+        .multiply(automatic.global_numerator().unwrap())
+        .unwrap();
+    assert!(
+        explicit_value.same_value(&automatic_value),
+        "sewn numerator/projector values and all residual logical ports must agree exactly"
     );
 }
 
@@ -2007,4 +2065,162 @@ fn vacuum_tadpoles_keep_all_loop_generators_without_external_legs() {
             .unwrap();
         assert_eq!(reparsed.loop_momentum_basis, *lmb);
     }
+}
+
+#[test]
+fn rqft_ghost_explicit_bases_preserve_signed_native_routing() {
+    test_initialise().unwrap();
+    let model = Arc::new(utils::load_generic_model("sm"));
+    let source = include_str!("../../../../../tests/resources/graphs/uv_tests/rqft_ghG_3l.dot");
+    let diagrams = DotDiagram::from_dot_set(Arc::clone(&model), source).unwrap();
+    assert_eq!(diagrams.len(), 78);
+    // Linnet's edge chart is not DOT statement order. Identify the original
+    // pinned directions by their endpoints and particle, with the authored
+    // lmb_id distinguishing the first of the two parallel gluons in d43/d46.
+    for (name, expected) in [
+        (
+            "d37",
+            [("v3", "v1", "g"), ("v4", "v3", "g"), ("v5", "v6", "ghG")],
+        ),
+        (
+            "d42",
+            [("v3", "v1", "ghG"), ("v4", "v3", "g"), ("v5", "v6", "d")],
+        ),
+        (
+            "d43",
+            [("v3", "v1", "ghG"), ("v4", "v3", "g"), ("v6", "v5", "g")],
+        ),
+        (
+            "d44",
+            [("v3", "v1", "ghG"), ("v4", "v3", "g"), ("v5", "v6", "ghG")],
+        ),
+        (
+            "d45",
+            [("v1", "v4", "ghG"), ("v3", "v2", "g"), ("v5", "v6", "d")],
+        ),
+        (
+            "d46",
+            [("v1", "v4", "ghG"), ("v3", "v2", "g"), ("v6", "v5", "g")],
+        ),
+        (
+            "d47",
+            [("v1", "v4", "ghG"), ("v3", "v2", "g"), ("v5", "v6", "ghG")],
+        ),
+    ] {
+        let dot = diagrams
+            .iter()
+            .find(|dot| dot.diagram.name() == Some(name))
+            .unwrap();
+        let diagram = dot.apply_feynman_rules().unwrap();
+        let selected = &diagram.loop_momentum_basis().loop_edges;
+        assert_eq!(selected.len(), 3, "{name}");
+        for (local, (edge, (source, target, particle))) in selected.iter().zip(expected).enumerate()
+        {
+            let (_, endpoints, data) = diagram.edges().find(|(id, _, _)| id == edge).unwrap();
+            assert_eq!(
+                diagram.vertex(endpoints.source).unwrap().name,
+                source,
+                "{name}: loop {local}"
+            );
+            assert_eq!(
+                diagram.vertex(endpoints.target).unwrap().name,
+                target,
+                "{name}: loop {local}"
+            );
+            assert_eq!(
+                diagram.model().particle_by_id(data.particle).unwrap().name,
+                particle,
+                "{name}: loop {local}"
+            );
+            assert_eq!(
+                dot.attributes.edges[edge.0].get("lmb_id"),
+                Some(&local.to_string()),
+                "{name}: the selected edge must carry its original explicit loop slot"
+            );
+            assert!(dot.source_map.edges().contains(edge));
+            if local == 2 && matches!(name, "d43" | "d46") {
+                assert_eq!(
+                    diagram
+                        .edges()
+                        .filter(|(_, ends, other)| *ends == endpoints
+                            && other.particle == data.particle)
+                        .count(),
+                    2,
+                    "{name}: preserve the parallel-edge distinction"
+                );
+            }
+            let signature = &diagram.loop_momentum_basis().edge_signatures[edge];
+            assert_eq!(signature.loops.len(), 3);
+            for column in 0..3 {
+                assert_eq!(
+                    signature.loops.get(column),
+                    Some(if local == column {
+                        SignOrZero::Plus
+                    } else {
+                        SignOrZero::Zero
+                    }),
+                    "{name}: {edge:?}"
+                );
+            }
+            assert!(
+                signature
+                    .external
+                    .iter()
+                    .all(|sign| sign == SignOrZero::Zero)
+            );
+        }
+        // Exercise the runtime boundary and the fingerprinted native export,
+        // retaining every signed row, factor and graph incidence.
+        let runtime = Graph::from_dot_diagram(dot).unwrap();
+        let transported: MomentumBasis = (&runtime.loop_momentum_basis).into();
+        assert_eq!(
+            transported,
+            diagram
+                .loop_momentum_basis()
+                .to_routing(diagram.underlying())
+        );
+        let exported = diagram.to_dot().unwrap();
+        let imported = FeynmanDiagram::from_dot(Arc::clone(&model), &exported).unwrap();
+        assert_eq!(
+            imported.loop_momentum_basis(),
+            diagram.loop_momentum_basis()
+        );
+        assert_eq!(imported.overall_factor(), diagram.overall_factor());
+        assert_eq!(
+            imported.numerator_prefactor(),
+            diagram.numerator_prefactor()
+        );
+        assert_eq!(imported.projector(), diagram.projector());
+        assert_eq!(imported.to_dot().unwrap(), exported);
+    }
+}
+
+#[test]
+fn legacy_dot_names_the_explicit_conversion() {
+    test_initialise().unwrap();
+    let model = Arc::new(utils::load_generic_model("sm"));
+    let input = r#"digraph { ext [style=invis]; ext -> a [particle_id=0]; a -> ext [particle_id=0]; a -> ext [particle_id=0]; }"#;
+    let Err(DiagramError::InvalidDotAttribute {
+        attribute: "particle_id",
+        value,
+        ..
+    }) = FeynmanDiagram::from_dot(Arc::clone(&model), input)
+    else {
+        panic!("legacy model indices must be rejected with conversion guidance")
+    };
+    assert!(value.contains("replace each `particle_id` by `particle`"));
+    assert!(value.contains("delete `vertex_rule_id`"));
+    assert!(value.contains("keep `lmb_id`"));
+    assert!(matches!(
+        FeynmanDiagram::from_compact_dot(Arc::clone(&model), DotGraph::from_string(input).unwrap()),
+        Err(DiagramError::InvalidDotAttribute {
+            attribute: "particle_id",
+            ..
+        })
+    ));
+    let converted = input.replace("particle_id=0", "particle=g");
+    FeynmanDiagram::from_dot(Arc::clone(&model), &converted)
+        .unwrap()
+        .validate()
+        .unwrap();
 }

@@ -1,0 +1,10 @@
+{
+  "path": "/common/build-cache/lcnbr/64/c10a11de27328a/dev-optim/deps/gammalooprs-a941761db6d1e7be",
+  "sha256": "7bf50da4a8ce407bfb1f87fcacbcc53efc688fa6b1b4ffa3e37af35347fbdc64",
+  "phase": "before replacing assumed statement-order ids with authored semantic edge witnesses",
+  "logs": [
+    "indices.log",
+    "graph-source-order-failure.log"
+  ],
+  "parse_test_source_sha256": "f68a010f57a7c670424409e6407eec682c07f81c951cf6ab438df62708185ce3"
+}
