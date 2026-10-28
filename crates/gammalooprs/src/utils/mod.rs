@@ -305,10 +305,12 @@ pub mod tracing;
 
 #[cfg(test)]
 mod tests {
+    use super::{ApproxEq, ArbPrec, Complex, F, FloatLike, QuadFloat, Real, SamplingFloat};
+    use rug::Float;
+    use symbolica::domains::float::DoubleFloat;
+
     #[test]
     fn complex_phases_compare_across_zero() {
-        use super::{ApproxEq, Complex, F};
-
         let tolerance = F(1e-10);
         let real = Complex::new(F(2.0), F(0.0));
         let below = Complex::new(F(2.0), F(-1e-20));
@@ -321,6 +323,276 @@ mod tests {
         assert!(!off_phase.approx_eq(&real, &tolerance));
         assert!(!real.approx_eq(&off_phase, &tolerance));
         assert!(off_phase.approx_eq_res(&real, &tolerance).is_err());
+    }
+
+    #[test]
+    fn complex_phases_preserve_tight_tolerances_across_zero() {
+        let tolerance = F(1e-18);
+        let real = Complex::new(F(2.0), F(0.0));
+        let below = Complex::new(F(2.0), F(-1e-16));
+        let phase_difference = (-1e-16_f64).atan2(2.0).abs();
+        assert!(phase_difference > tolerance.0);
+
+        let approx_equal = below.approx_eq(&real, &tolerance);
+        let diagnostic = below.approx_eq_res(&real, &tolerance);
+        assert!(
+            !approx_equal && diagnostic.is_err(),
+            "phase difference {phase_difference:e} exceeds tolerance {:e}: approx_eq={approx_equal}, approx_eq_res={diagnostic:?}",
+            tolerance.0
+        );
+    }
+
+    fn check_phase_comparison<T: FloatLike>(
+        lhs: &Complex<F<T>>,
+        rhs: &Complex<F<T>>,
+        tolerance: &F<T>,
+        expected: bool,
+    ) {
+        assert_eq!(
+            lhs.approx_eq(rhs, tolerance),
+            expected,
+            "lhs={lhs:+e}, rhs={rhs:+e}, tolerance={tolerance:+e}"
+        );
+        let diagnostic = lhs.approx_eq_res(rhs, tolerance);
+        assert_eq!(
+            diagnostic.is_ok(),
+            expected,
+            "lhs={lhs:+e}, rhs={rhs:+e}, tolerance={tolerance:+e}: {diagnostic:?}"
+        );
+        if !expected {
+            assert!(
+                diagnostic
+                    .unwrap_err()
+                    .to_string()
+                    .starts_with("Phases are not approximately equal:")
+            );
+        }
+    }
+
+    fn phase_boundary_controls<T: FloatLike>(prototype: &F<T>, exponent: i32, scales: &[i32]) {
+        let one = prototype.one();
+        let zero = prototype.zero();
+        let delta = prototype.from_usize(2).powi(-exponent);
+        let tight = &delta / prototype.from_usize(8);
+        let loose = &delta * prototype.from_usize(8);
+        let positive = Complex::new(one.clone(), zero.clone());
+        let below = Complex::new(one.clone(), -&delta);
+        let above = Complex::new(one.clone(), delta.clone());
+        // For these exact Cartesian sources, delta/2 < atan(delta) < delta.
+        // The factors of eight bound the decision independently of the kernel.
+        for (lhs, rhs) in [(&below, &positive), (&positive, &below)] {
+            check_phase_comparison(lhs, rhs, &tight, false);
+            check_phase_comparison(lhs, rhs, &loose, true);
+        }
+        // Preserve the directional RHS-relative policy: a zero reference uses
+        // absolute tolerance, a negative tiny phase wraps near TAU, and a
+        // positive tiny reference uses its own small phase as the divisor.
+        let asymmetric = &delta / prototype.from_usize(4);
+        check_phase_comparison(&below, &positive, &asymmetric, false);
+        check_phase_comparison(&positive, &below, &asymmetric, true);
+        check_phase_comparison(&above, &positive, &loose, true);
+        check_phase_comparison(&positive, &above, &loose, false);
+        check_phase_comparison(&below, &below, &tight, true);
+        let negative = Complex::new(-&one, zero);
+        let negative_above = Complex::new(-&one, delta.clone());
+        let negative_below = Complex::new(-&one, -&delta);
+        for (lhs, rhs) in [
+            (&negative_above, &negative_below),
+            (&negative_below, &negative_above),
+            (&negative, &negative_above),
+            (&negative_above, &negative),
+        ] {
+            check_phase_comparison(lhs, rhs, &tight, false);
+            check_phase_comparison(lhs, rhs, &loose, true);
+        }
+        for axis in [one.clone(), -&one] {
+            let reference = Complex::new(prototype.zero(), axis.clone());
+            for transverse in [delta.clone(), -&delta] {
+                let displaced = Complex::new(transverse, axis.clone());
+                for (lhs, rhs) in [(&displaced, &reference), (&reference, &displaced)] {
+                    check_phase_comparison(lhs, rhs, &tight, false);
+                    check_phase_comparison(lhs, rhs, &loose, true);
+                }
+            }
+        }
+        // Uniform magnitude changes must not change the phase decision. These
+        // scales keep the inherited (separately tested) norm check finite.
+        for &exponent in scales {
+            let scale = prototype.from_usize(2).powi(exponent);
+            let scaled_axis = Complex::new(scale.clone(), prototype.zero());
+            let scaled_below = Complex::new(scale.clone(), -(&delta * scale));
+            check_phase_comparison(&scaled_below, &scaled_axis, &tight, false);
+            check_phase_comparison(&scaled_below, &scaled_axis, &loose, true);
+        }
+    }
+
+    fn exact_phase_ratio_boundary<T: FloatLike>(prototype: &F<T>) {
+        let one = prototype.one();
+        let negative = Complex::new(-&one, prototype.zero());
+        // An exactly half-pi separation is half the negative-axis reference
+        // phase, but one full positive-y reference phase in the reverse order.
+        let positive_y = Complex::new(prototype.zero(), one.clone());
+        let half = &one / prototype.from_usize(2);
+        let three_quarters = prototype.from_usize(3) / prototype.from_usize(4);
+        check_phase_comparison(&positive_y, &negative, &half, false);
+        check_phase_comparison(&positive_y, &negative, &three_quarters, true);
+        check_phase_comparison(&negative, &positive_y, &three_quarters, false);
+    }
+
+    #[test]
+    fn complex_phase_boundaries_preserve_rhs_scaling_in_binary64() {
+        phase_boundary_controls(&F(0.0_f64), 60, &[-530, -200, 200]);
+        exact_phase_ratio_boundary(&F(0.0_f64));
+    }
+
+    #[test]
+    fn complex_phase_boundaries_preserve_double_double_sources() {
+        phase_boundary_controls(&F::<QuadFloat>::default(), 166, &[-200, 200]);
+    }
+
+    #[test]
+    fn complex_phase_boundaries_reconstruct_fresh_mpfr_sources() {
+        phase_boundary_controls(
+            &F(SamplingFloat::from(Float::with_val(256, 0))),
+            384,
+            &[-2000, 2000],
+        );
+        exact_phase_ratio_boundary(&F(SamplingFloat::from(Float::with_val(256, 0))));
+        // The source's tiny component is beyond binary64's exponent range.
+        phase_boundary_controls(
+            &F(ArbPrec::from(Float::with_val(1000, 0))),
+            1128,
+            &[-2000, 2000],
+        );
+        exact_phase_ratio_boundary(&F(ArbPrec::from(Float::with_val(1000, 0))));
+    }
+
+    #[test]
+    fn complex_phase_scaling_retains_distinct_nearby_directions() {
+        let h = 2.0_f64.powi(-52);
+        let a = 1.5 + h;
+        let lhs = Complex::new(F(a), F(1.5));
+        let rhs = Complex::new(F(1.5 + 2.0 * h), F(a));
+        assert_eq!(lhs.norm().re, rhs.norm().re);
+        // These exact binary64 sources have cross=-h^2 and dot=2*a^2.
+        // The relative phase lies strictly between h^2/16 and h^2;
+        // independent max-component division would erase the distinction.
+        check_phase_comparison(&lhs, &rhs, &F(h * h / 16.0), false);
+        check_phase_comparison(&rhs, &lhs, &F(h * h / 16.0), false);
+        check_phase_comparison(&lhs, &rhs, &F(h * h), true);
+        check_phase_comparison(&rhs, &lhs, &F(h * h), true);
+        check_phase_comparison(&lhs, &lhs, &F(h * h / 16.0), true);
+    }
+
+    #[test]
+    fn complex_phase_scaling_preserves_subnormal_angular_gaps() {
+        let d = f64::from_bits(1);
+        for real in [1.0, 1.25, 1.5, 1.75, 2.0, 3.0] {
+            let reference = Complex::new(F(real), F(0.0));
+            for imaginary in [d, -d, 2.0 * d, -2.0 * d, 3.0 * d, -3.0 * d] {
+                let lhs = Complex::new(F(real), F(imaginary));
+                assert_eq!(lhs.norm().re, reference.norm().re);
+                // The independent native arg on the original source retains
+                // these subnormal gaps; direction-product scaling must too.
+                let phase = imaginary.atan2(real).abs();
+                for tolerance in [d, 2.0 * d, 3.0 * d] {
+                    check_phase_comparison(&lhs, &reference, &F(tolerance), phase < tolerance);
+                }
+            }
+        }
+        let lhs = Complex::new(F(1.0), F(-2.0 * d));
+        let rhs = Complex::new(F(1.0), F(0.0));
+        assert!(!lhs.approx_eq(&rhs, &F(d)));
+        assert!(lhs.approx_eq_res(&rhs, &F(d)).is_err());
+    }
+
+    #[test]
+    fn complex_phase_normalization_preserves_subnormal_nonzero_references() {
+        let d = f64::from_bits(1);
+        let lhs = Complex::new(F(2.0), F(3.0 * d));
+        let rhs = Complex::new(F(2.0), F(2.0 * d));
+        assert_eq!(lhs.norm().re, rhs.norm().re);
+        assert_eq!(lhs.im.0.atan2(lhs.re.0), 2.0 * d);
+        assert_eq!(rhs.im.0.atan2(rhs.re.0), d);
+        check_phase_comparison(&lhs, &rhs, &F(0.25), false);
+        check_phase_comparison(&rhs, &lhs, &F(0.25), false);
+        // atan(k*d/2)-atan(m*d/2) has leading value (k-m)*d/2;
+        // its cubic correction is far below one working ulp of the normalized
+        // result. Compute that ratio from integer coefficients, without first
+        // materializing a subnormal angular difference.
+        for k in 2..=6 {
+            for m in 2..=6 {
+                let lhs = Complex::new(F(2.0), F(f64::from(k) * d));
+                let rhs = Complex::new(F(2.0), F(f64::from(m) * d));
+                let reference_units = rhs.im.0.atan2(2.0) / d;
+                let relative = f64::from(k - m).abs() / (2.0 * reference_units);
+                for tolerance in [0.25, 0.5, 0.75] {
+                    check_phase_comparison(&lhs, &rhs, &F(tolerance), relative < tolerance);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn complex_phase_normalization_preserves_double_double_subnormal_differences() {
+        let scalar = |value: f64| F(QuadFloat::from(DoubleFloat::from(value)));
+        let d = f64::from_bits(1);
+        let n = f64::MIN_POSITIVE;
+        let lhs = Complex::new(scalar(2.0), scalar(n + 6.0 * d));
+        let rhs = Complex::new(scalar(2.0), scalar(n + d));
+        assert_eq!(lhs.norm().re, rhs.norm().re);
+        let one = F::<QuadFloat>::default().one();
+        let tolerance = one.from_usize(9) * one.from_usize(2).powi(-53);
+        // The circular gap is 2.5*d before native angular rounding. Its
+        // RHS-normalized value is near 10*2^-53, above the strict budget;
+        // rounding the angle first would incorrectly compare 8*2^-53.
+        check_phase_comparison(&lhs, &rhs, &tolerance, false);
+        check_phase_comparison(&rhs, &lhs, &tolerance, false);
+    }
+
+    #[test]
+    fn complex_phase_near_perpendicular_double_double_directions_stay_finite() {
+        // Build the native binary64 limbs directly: d=2^-1040 is retained as
+        // a separate double-double limb of 1±d, rather than added in binary64.
+        let d = f64::from_bits(1_u64 << 34);
+        let one = F::<QuadFloat>::default().one();
+        let tolerance = one.from_usize(3) / one.from_usize(4);
+        for sign in [-1.0, 1.0] {
+            for perturbation in [-d, d] {
+                let lhs = Complex::new(one, if sign < 0.0 { -&one } else { one });
+                let rhs = Complex::new(
+                    -&one,
+                    F(QuadFloat::from(DoubleFloat::from_compensated_sum(
+                        sign,
+                        sign * perturbation,
+                    ))),
+                );
+                assert_eq!(lhs.norm().re, rhs.norm().re);
+                // The circular gap is near pi/2. Its RHS-relative size is
+                // near 2/3 above the axis and 2/5 below it, both below 3/4.
+                check_phase_comparison(&lhs, &rhs, &tolerance, true);
+                check_phase_comparison(&rhs, &lhs, &tolerance, sign < 0.0);
+            }
+        }
+    }
+
+    #[test]
+    fn complex_phase_fix_preserves_norm_scaling_and_zero_controls() {
+        let one = Complex::new(F(1.0), F(0.0));
+        let two = Complex::new(F(2.0), F(0.0));
+        assert!(one.approx_eq(&two, &F(0.75)));
+        assert!(!two.approx_eq(&one, &F(0.75)));
+        assert!(
+            two.approx_eq_res(&one, &F(0.75))
+                .unwrap_err()
+                .to_string()
+                .starts_with("Norms are not approximately equal:")
+        );
+        let zero = Complex::new(F(0.0), F(0.0));
+        assert!(zero.approx_eq(&zero, &F(1e-18)));
+        assert!(zero.approx_eq_res(&zero, &F(1e-18)).is_ok());
+        assert!(!zero.approx_eq(&one, &F(1e-18)));
+        assert!(!one.approx_eq(&zero, &F(1e-18)));
     }
 
     #[test]
@@ -1388,6 +1660,11 @@ impl SymFloatLike for QuadFloat {
     #[inline]
     fn set_precision(&mut self, precision: u32) {
         self.0.set_precision(precision);
+    }
+
+    // Preserve the backend's scalar range signal through the wrapper.
+    fn needs_rescaling(&self) -> bool {
+        self.0.needs_rescaling()
     }
 
     #[inline]
@@ -4115,21 +4392,65 @@ impl<T: FloatLike> ApproxEq<F<T>, F<T>> for F<T> {
     }
 }
 
-/// Both phases in [0, 2π), with `lhs` shifted by 2π when that brings it closer to
-/// `rhs`: a phase just below 2π is close to zero.
-fn phases_on_circle<T: FloatLike>(lhs: &Complex<F<T>>, rhs: &Complex<F<T>>) -> (F<T>, F<T>) {
-    let pi = lhs.re.PI();
-    let two_pi = lhs.re.TAU();
-    let rhs = rhs.arg().rem_euclid(&two_pi);
-    let lhs = lhs.arg().rem_euclid(&two_pi);
-    let lhs = if &lhs - &rhs > pi {
-        &lhs - &two_pi
-    } else if &rhs - &lhs > pi {
-        &lhs + &two_pi
-    } else {
-        lhs
-    };
-    (lhs, rhs)
+impl<T: FloatLike> F<T> {
+    // Return the circular difference and its existing RHS-relative comparison
+    // value. Only the reference angle is wrapped: adding a tiny negative
+    // difference to TAU can erase it before the tolerance check.
+    fn phase_differences(lhs: &Complex<Self>, rhs: &Complex<Self>) -> (Self, Self) {
+        // Binary scaling retains the represented directions. Dividing each
+        // vector by an arbitrary maximum can round distinct ratios to equality.
+        // A coarse outward enclosure suffices to choose a bounding binade;
+        // no source component is converted through that enclosure.
+        let scale = |value: &Complex<Self>| {
+            let maximum = value.re.abs().max(value.im.abs());
+            let (lower, _) = maximum.0.mpfr_enclosure(2);
+            let exponent = lower
+                .get_exp()
+                .expect("norm checks admit finite nonzero directions");
+            // Keep roughly half a significand of exponent headroom in each
+            // direction: even a subnormal angular gap then has a normal
+            // determinant, rather than disappearing in products of fractions.
+            let headroom = i32::try_from(maximum.0.get_precision().div_ceil(2))
+                .expect("working precision fits a binary scale exponent");
+            maximum.from_usize(2).powi(headroom + 1 - exponent)
+        };
+        let lhs_scale = scale(lhs);
+        let rhs_scale = scale(rhs);
+        let lhs_re = &lhs.re * &lhs_scale;
+        let lhs_im = &lhs.im * &lhs_scale;
+        let rhs_re = &rhs.re * &rhs_scale;
+        let rhs_im = &rhs.im * &rhs_scale;
+        // Compensate the rounded product in the determinant when nearby
+        // directions cancel; binary scaling keeps both products bounded.
+        let product = &lhs_re * &rhs_im;
+        let product_error = lhs_re.mul_add(&rhs_im, &(-&product));
+        let cross = lhs_im.mul_add(&rhs_re, &(-product)) - product_error;
+        let dot = lhs_re.mul_add(&rhs_re, &(&lhs_im * &rhs_im));
+        // Keep the internal atan2 ratio bounded too: the double-double
+        // backend can overflow when a near-perpendicular dot is subnormal.
+        let difference = if cross.abs() > dot.abs() {
+            let angle = cross.PIHALF() - dot.atan2(&cross.abs());
+            if cross < cross.zero() { -angle } else { angle }
+        } else {
+            cross.atan2(&dot)
+        };
+        let rhs_phase = rhs.arg().rem_euclid(&rhs.re.TAU());
+        let relative = if rhs_phase.is_zero() {
+            difference.clone()
+        } else if dot > dot.zero()
+            && !cross.is_zero()
+            && difference.0.is_finite()
+            && (difference.is_zero() || difference.0.needs_rescaling())
+        {
+            // In this underflow range atan(t)/t rounds to one. Combine the
+            // RHS normalization before rounding the angle: a subnormal (or
+            // unrepresentable) difference can still give a finite ratio.
+            &cross / (&dot * rhs_phase)
+        } else {
+            &difference / rhs_phase
+        };
+        (difference, relative)
+    }
 }
 
 impl<T: FloatLike> ApproxEq<Complex<F<T>>, F<T>> for Complex<F<T>> {
@@ -4139,11 +4460,8 @@ impl<T: FloatLike> ApproxEq<Complex<F<T>>, F<T>> for Complex<F<T>> {
         } else if self.norm().is_zero() || other.norm().is_zero() {
             return true;
         }
-        let (arg_self, arg_other) = phases_on_circle(self, other);
-        if !arg_self.approx_eq(&arg_other, tolerance) {
-            return false;
-        }
-        true
+        let (_, relative_phase) = F::phase_differences(self, other);
+        relative_phase.approx_eq(&relative_phase.zero(), tolerance)
     }
     fn approx_eq_res(&self, other: &Complex<F<T>>, tolerance: &F<T>) -> Result<()> {
         if !self.norm().re.approx_eq(&other.norm().re, tolerance) {
@@ -4157,13 +4475,14 @@ impl<T: FloatLike> ApproxEq<Complex<F<T>>, F<T>> for Complex<F<T>> {
             return Ok(());
         }
 
-        let (arg_self, arg_other) = phases_on_circle(self, other);
-        if !arg_self.approx_eq(&arg_other, tolerance) {
+        let (phase_difference, relative_phase) = F::phase_differences(self, other);
+        if !relative_phase.approx_eq(&relative_phase.zero(), tolerance) {
             return Err(eyre!(
-                "Phases are not approximately equal: \n{:+e} - \n{:+e}= \n{:+e}!=0 with tolerance {:+e}",
-                arg_self,
-                arg_other,
-                &arg_self - &arg_other,
+                "Phases are not approximately equal: \nRHS-relative comparison value {:+e} (rounded circular difference {:+e}) between \n{:+e} and \n{:+e} with tolerance {:+e}",
+                relative_phase,
+                phase_difference,
+                self.arg(),
+                other.arg(),
                 tolerance
             ));
         }
