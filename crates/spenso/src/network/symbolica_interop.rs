@@ -4,7 +4,6 @@ use std::{borrow::Cow, fmt::Display, sync::Arc};
 use std::path::Path;
 
 use ahash::{AHashMap, AHashSet, HashMap};
-#[cfg(feature = "native-code-generation")]
 use eyre::eyre;
 use linnet::{
     half_edge::{NodeIndex, tree::SimpleTraversalTree},
@@ -15,7 +14,9 @@ use symbolica::evaluate::{
     CompileOptions, CompiledCode, CompiledNumber, ExportNumber, ExportSettings, ExportedCode,
 };
 use symbolica::{
-    atom::{Atom, AtomCore, AtomOrView, AtomView, Indeterminate, KeyLookup, Symbol},
+    atom::{
+        Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Indeterminate, KeyLookup, Symbol,
+    },
     coefficient::ConvertToRing,
     domains::{
         EuclideanDomain, InternalOrdering,
@@ -104,6 +105,31 @@ impl<K: std::fmt::Debug + Display, Aind: AbsInd> NetworkGraph<K, Symbol, Aind> {
     /// checked, and `operation` may replace the completed operation. Returning
     /// `None` uses the ordinary native constructor. Returned syntax is never
     /// traversed again. This is an output boundary, not tensor admission.
+    ///
+    /// # Errors
+    /// Returns hook errors, missing stored-leaf expressions, and malformed unary
+    /// operation arities without invoking the operation hook for invalid input.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use linnet::tree::child_vec::ChildVecStore;
+    /// use spenso::network::TensorNetworkError;
+    /// use spenso::network::graph::{NetworkGraph, NetworkNode, NetworkOp};
+    /// use symbolica::atom::{Atom, AtomCore, Symbol};
+    /// let graph = NetworkGraph::<i8, Symbol>::scalar(0).pow(2);
+    /// let tree = graph.expr_tree().cast::<ChildVecStore<()>>();
+    /// let root = graph.graph.node_id(graph.head());
+    /// let result = graph.to_expression_at_with_operation(
+    ///     &tree, root,
+    ///     &mut |_, node| Ok(matches!(node, NetworkNode::Leaf(_)).then(|| Atom::num(3))),
+    ///     &mut |_, operation, children| {
+    ///         Ok(matches!(operation, NetworkOp::Power(_)).then(|| children[0].clone()))
+    ///     },
+    /// )?;
+    /// assert_eq!(result, Atom::num(3));
+    /// # Ok::<(), TensorNetworkError<i8, Symbol>>(())
+    /// ```
     pub fn to_expression_at_with_operation(
         &self,
         tree: &SimpleTraversalTree<ChildVecStore<()>>,
@@ -123,7 +149,7 @@ impl<K: std::fmt::Debug + Display, Aind: AbsInd> NetworkGraph<K, Symbol, Aind> {
         }
         let op = match &self.graph[node] {
             NetworkNode::Leaf(_) => {
-                return Err(TensorNetworkError::Other(eyre::eyre!(
+                return Err(TensorNetworkError::Other(eyre!(
                     "stored occurrence has no expression"
                 )));
             }
@@ -138,7 +164,7 @@ impl<K: std::fmt::Debug + Display, Aind: AbsInd> NetworkGraph<K, Symbol, Aind> {
             NetworkOp::Neg | NetworkOp::Power(_) | NetworkOp::Function(_)
         ) && children.len() != 1
         {
-            return Err(TensorNetworkError::Other(eyre::eyre!(
+            return Err(TensorNetworkError::Other(eyre!(
                 "unary network operation must have exactly one child"
             )));
         }
@@ -150,16 +176,16 @@ impl<K: std::fmt::Debug + Display, Aind: AbsInd> NetworkGraph<K, Symbol, Aind> {
             NetworkOp::Product => Ok(Atom::mul_many(children)),
             NetworkOp::Neg | NetworkOp::Power(_) | NetworkOp::Function(_) => {
                 let [value]: [Atom; 1] = children.try_into().map_err(|_| {
-                    TensorNetworkError::Other(eyre::eyre!(
+                    TensorNetworkError::Other(eyre!(
                         "unary network operation must have exactly one child"
                     ))
                 })?;
                 Ok(match op {
                     NetworkOp::Neg => -value,
                     NetworkOp::Power(power) => value.pow(*power),
-                    NetworkOp::Function(symbol) => symbolica::atom::FunctionBuilder::new(*symbol)
-                        .add_arg(value)
-                        .finish(),
+                    NetworkOp::Function(symbol) => {
+                        FunctionBuilder::new(*symbol).add_arg(value).finish()
+                    }
                     _ => unreachable!(),
                 })
             }
@@ -1059,15 +1085,13 @@ where
 #[cfg(test)]
 mod operation_emission_tests {
     use super::{NetworkGraph, NetworkNode, NetworkOp, TensorNetworkError};
-    use crate::{
-        network::{graph::NetworkLeaf, tags::SPENSO_TAG},
-        structure::abstract_index::AbstractIndex,
-    };
-    use linnet::{half_edge::NodeIndex, tree::child_vec::ChildVecStore};
-    use symbolica::{
-        atom::{Atom, AtomCore, Symbol},
-        function, symbol,
-    };
+    use crate::network::graph::NetworkLeaf;
+    use crate::network::tags::SPENSO_TAG;
+    use crate::structure::abstract_index::AbstractIndex;
+    use linnet::half_edge::NodeIndex;
+    use linnet::tree::child_vec::ChildVecStore;
+    use symbolica::atom::{Atom, AtomCore, FunctionBuilder, Symbol};
+    use symbolica::{function, symbol};
 
     type Graph = NetworkGraph<i8, Symbol, AbstractIndex>;
     type Error = TensorNetworkError<i8, Symbol>;
@@ -1147,9 +1171,7 @@ mod operation_emission_tests {
             .map(|node| leaf(node, &graph.graph[node]).unwrap().unwrap())
             .collect::<Vec<_>>();
         let head = symbol!("operation_emission::ordered_children");
-        let expected = symbolica::atom::FunctionBuilder::new(head)
-            .add_args(&ordered)
-            .finish();
+        let expected = FunctionBuilder::new(head).add_args(&ordered).finish();
         assert_ne!(expected, function!(head, &ordered[1], &ordered[0]));
         let actual = graph
             .to_expression_at_with_operation(
@@ -1159,11 +1181,7 @@ mod operation_emission_tests {
                 &mut |_, operation, children| {
                     assert_eq!(*operation, NetworkOp::Product);
                     assert_eq!(children, ordered);
-                    Ok(Some(
-                        symbolica::atom::FunctionBuilder::new(head)
-                            .add_args(children)
-                            .finish(),
-                    ))
+                    Ok(Some(FunctionBuilder::new(head).add_args(children).finish()))
                 },
             )
             .unwrap();
