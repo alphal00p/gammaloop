@@ -1368,7 +1368,15 @@ mod metric_normalization_tests {
 #[cfg(test)]
 #[allow(clippy::type_complexity)]
 mod test {
+    use symbolica::atom::{NamespacedSymbol, UserData};
+    use symbolica::wrap_symbol;
     use symbolica::{function, parse};
+
+    use crate::iterators::IteratableTensor;
+    use crate::network::library::DummyLibrary;
+    use crate::network::tensor_symmetry::TensorSlotSymmetry;
+    use crate::shadowing::FactorProjector;
+    use crate::structure::slot::IsAbstractSlot;
 
     use crate::{
         network::{
@@ -1397,14 +1405,14 @@ mod test {
     type SelectedNetwork =
         Network<NetworkStore<SelectedComponents, Atom>, ExplicitKey<AbstractIndex>, Symbol>;
 
-    fn selected_component_head(name: &str, kind: crate::shadowing::FactorProjector) -> Symbol {
-        crate::network::tensor_symmetry::TensorSlotSymmetry::new([(kind, vec![1, 3])])
+    fn selected_component_head(name: &str, kind: FactorProjector) -> Symbol {
+        TensorSlotSymmetry::new([(kind, vec![1, 3])])
             .unwrap()
             .register_symbol(
-                symbolica::atom::NamespacedSymbol::parse(name),
+                NamespacedSymbol::parse(name),
                 vec![],
                 vec!["selected_component_tests::physical".into()],
-                symbolica::atom::UserData::None,
+                UserData::None,
             )
             .unwrap()
     }
@@ -1442,10 +1450,6 @@ mod test {
 
     #[test]
     fn selected_slot_registered_components_keep_physical_head_metadata_and_axis_order() {
-        use crate::{
-            iterators::IteratableTensor, network::tensor_symmetry::TensorSlotSymmetry,
-            shadowing::FactorProjector, structure::slot::IsAbstractSlot,
-        };
         let head = selected_component_head(
             "selected_component_tests::antisymmetric",
             FactorProjector::Antisymmetric,
@@ -1513,7 +1517,6 @@ mod test {
 
     #[test]
     fn selected_slot_registered_symmetric_factory_uses_the_original_signature() {
-        use crate::{iterators::IteratableTensor, shadowing::FactorProjector};
         let head = selected_component_head(
             "selected_component_tests::symmetric_factory",
             FactorProjector::Symmetric,
@@ -1541,7 +1544,6 @@ mod test {
 
     #[test]
     fn selected_slot_registered_components_contract_with_registered_spectator_vectors() {
-        use crate::shadowing::FactorProjector;
         let head = selected_component_head(
             "selected_component_tests::contracted",
             FactorProjector::Antisymmetric,
@@ -1611,7 +1613,6 @@ mod test {
 
     #[test]
     fn selected_slot_component_policy_keeps_direct_missing_mismatched_and_dummy_refusals() {
-        use crate::{network::library::DummyLibrary, shadowing::FactorProjector};
         let head = selected_component_head(
             "selected_component_tests::refusals",
             FactorProjector::Antisymmetric,
@@ -1661,7 +1662,6 @@ mod test {
 
     #[test]
     fn selected_slot_component_policy_does_not_follow_universal_ordinary_lookup() {
-        use crate::shadowing::FactorProjector;
         struct OrdinaryUniversal<'a>(&'a SelectedLibrary);
         impl Library<ShadowedStructure<AbstractIndex>> for OrdinaryUniversal<'_> {
             type Key = ExplicitKey<AbstractIndex>;
@@ -1724,7 +1724,6 @@ mod test {
 
     #[test]
     fn selected_slot_component_policy_preserves_validation_and_tensor_word_refusal() {
-        use crate::{network::tensor_symmetry::TensorSlotSymmetry, shadowing::FactorProjector};
         let head = selected_component_head(
             "selected_component_tests::malformed",
             FactorProjector::Antisymmetric,
@@ -1775,10 +1774,10 @@ mod test {
         let word = TensorSlotSymmetry::new([(FactorProjector::Symmetric, vec![0, 1])])
             .unwrap()
             .register_symbol(
-                symbolica::wrap_symbol!("selected_component_tests::word"),
+                wrap_symbol!("selected_component_tests::word"),
                 vec![],
                 vec![SPENSO_TAG.tensor_word.clone()],
-                symbolica::atom::UserData::None,
+                UserData::None,
             )
             .unwrap();
         let value = function!(

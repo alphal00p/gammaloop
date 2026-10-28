@@ -94,6 +94,12 @@ pub trait StructureFromAtom: Sized {
     /// resolution. This is not permission to create a component shadow: the
     /// parser may use it only when the library's selected-slot policy resolves
     /// the complete signature. Direct inference retains its own restrictions.
+    /// See the [lookup policy example](crate::network::library::Library::key_for_selected_slot_structure).
+    ///
+    /// # Errors
+    ///
+    /// Implementations reject malformed selected-slot declarations or signatures;
+    /// unrelated leaves return `None` and retain ordinary parser dispatch.
     fn selected_slot_structure_from_parser<Aind>(
         _state: &ParseState<Aind, AtomView<'_>>,
     ) -> Result<Option<Canonicalized<Self>>, StructureError> {
@@ -887,14 +893,13 @@ impl<Aind: AbsInd + DummyAind + ParseableAind> StructureFromAtom for ShadowedStr
             return Ok(None);
         }
         drop(matcher);
-        if crate::network::tensor_symmetry::TensorSlotSymmetry::from_symbol(symbol)
+        if TensorSlotSymmetry::from_symbol(symbol)
             .map_err(StructureError::ParsingError)?
             .is_none()
         {
             return Ok(None);
         }
-        crate::network::tensor_symmetry::TensorSlotSymmetry::validate_function(function)
-            .map_err(StructureError::ParsingError)?;
+        TensorSlotSymmetry::validate_function(function).map_err(StructureError::ParsingError)?;
         OrderedStructure::<LibraryRep, Aind>::structure_from_parser(state)
             .map(|structure| Some(Self::from_ordered_atom(function.as_view(), structure)))
     }
