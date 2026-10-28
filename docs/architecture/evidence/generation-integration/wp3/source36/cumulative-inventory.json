@@ -1,0 +1,11 @@
+{
+  "frozen_revision": "31387fde705e39ca29c9373e3ae13315a1893406",
+  "count": 1719,
+  "retained_inventory": "target/wp3-source36/cumulative-validation-files.json",
+  "sha256": "929821c1f2ee4eb465bb44a501e6975d2d6f0327f1c8cf23bbdaa25a8796e5c1",
+  "source_rows": 46,
+  "planned_units": 41,
+  "accounted_rows": 37,
+  "accounted_units": 32,
+  "source37": "Already folded into17/18; no separate replay"
+}

@@ -28,5 +28,12 @@
     "No source38+ import and no investigation/change of separate progress/frame/aa-to-ttbar expectation."
   ],
   "retained": "target/wp3-source36: source-aware Cargo JSON/logs, current3test/twofeature identities, real bundle delivery and official Python embedding probes, binaries/generated manifest, packaging evidence, note renders. Original proof/baseline/review artifacts and sources preserved.",
-  "cleanup": "No own background processes remain; no pushes/publication/uploads/shared-cache deletion/target override/manual seeding."
+  "cleanup": "No own background processes remain; no pushes/publication/uploads/shared-cache deletion/target override/manual seeding.",
+  "validation_metadata_commit": "31387fde705e39ca29c9373e3ae13315a1893406",
+  "validation_metadata_change": "ypxktowoluroqulnwszslykvxstztllt",
+  "file_inventory": "files.json",
+  "cumulative_inventory": "cumulative-inventory.json",
+  "resource_payload": "resource-payload.json",
+  "artifacts": "artifacts.json",
+  "source_boundary": "Code and affected rendered inputs frozen at0d3ddb52; runtime/artifact validation metadata frozen at31387fde. Final packet JSON only. No new code/docs-source NAR or full-site output qualified; old a372 site remains a372."
 }

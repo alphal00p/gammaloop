@@ -1,0 +1,113 @@
+{
+  "base": "510d79d94bbaf57aaaa992c641e7496905763324",
+  "frozen_validation_revision": "31387fde705e39ca29c9373e3ae13315a1893406",
+  "count": 20,
+  "files": [
+    {
+      "path": "crates/symbolica-data/src/lib.rs",
+      "deleted": false,
+      "sha256": "c9a5c55204a8cf9528e76462d926be118975399cf208634c4a6d63e0e3167168"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-asset-diagnostics-staged/receipt.json",
+      "deleted": false,
+      "sha256": "5bed11cee34e37fd565ef6d3c1036dc3c1a3574e39de46fae64486d0dc4d344a"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/execution.json",
+      "deleted": false,
+      "sha256": "d88adde33f25c2eb510c56f77ed114974e927dbe896d85d4f9aaccfedb3b9416"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/replay.json",
+      "deleted": false,
+      "sha256": "7890a091da7ca8590224a77c6962e5a492622aa71932d6d2cd682f7bb6c27987"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/source36/artifacts.json",
+      "deleted": false,
+      "sha256": "4fe6064b82823b31c3f02ed5a37d25a14078b796537f1f842e4028454c1ed64d"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/source36/delivery.json",
+      "deleted": false,
+      "sha256": "42efdc9e70d5c75514a24ef384535b9d3b460683db285b4b1715568181af416c"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/source36/integrity.json",
+      "deleted": false,
+      "sha256": "f5bef217cc747b6fca13c54d9352e3cc2f6bb66100f21534555b95c3234b47e8"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/source36/main35-a-review.json",
+      "deleted": false,
+      "sha256": "297a3b44a4f7e8dc74109c7e21764ee660455c6213651896484eb064d2916b96"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/source36/main35-b-review.json",
+      "deleted": false,
+      "sha256": "9bc0b805c618083422fb53a0f54be11ceccd4f8d44983ad94f3b28e264e49017"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/source36/preparation-commands.json",
+      "deleted": false,
+      "sha256": "9029487553a22b467fd699833fbfa08823fa33e4f6f31845580b5bc14a6b9a46"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/source36/preparation-review.json",
+      "deleted": false,
+      "sha256": "2654f3e1e7fbbf49931605f71ba75da89d486e4d6cc7ba86d3cd6e51dbad4887"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/source36/python-owner.json",
+      "deleted": false,
+      "sha256": "cbde8d268013f0c9dc1199d073f8a3094fcf80b65a6a4b2a5e20308796eff6d6"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/source36/receipt.json",
+      "deleted": false,
+      "sha256": "2f03f1fe00cc78300ce3dc5035706ea240cce2b04cdf81f4f90782a37cfab1ca"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/source36/renders.json",
+      "deleted": false,
+      "sha256": "92add96dedff518cf9b4fa0342059bceeffca110cc556243681ecc9a5a896a75"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/source36/resource-payload.json",
+      "deleted": false,
+      "sha256": "13743cb28dde38c1d239b753a0e3423093ca889713195052588df9c19c9d4ff4"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/source36/scope-and-owner.json",
+      "deleted": false,
+      "sha256": "1206a3e4275e07e9eee78ac36cd1b2e635dd496db3ba863d7976926cced55e69"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/source36/validation.json",
+      "deleted": false,
+      "sha256": "769fb5bf264a8d9a48d01ab973b118a673c18b8e88bd1e205f03fbedecd39e13"
+    },
+    {
+      "path": "docs/architecture/generation-asset-diagnostics-staged.typ",
+      "deleted": false,
+      "sha256": "5805e9e24dd637c96118d9aa14aebfc52b0889541c66eb1673a41335796d5efb"
+    },
+    {
+      "path": "docs/architecture/generation-integration-plan.typ",
+      "deleted": false,
+      "sha256": "6bf169bc6e3d1ce6edcad107325a5d0e568857382e46b00ae21a87e7c3ed5510"
+    },
+    {
+      "path": "docs/developers.toml",
+      "deleted": false,
+      "sha256": "461071799c0bbb10c7ad2b98ab7661dbe3169addaa940fb364fd2503b9d2aaed"
+    }
+  ],
+  "subsequent_JSON_packet": [
+    "docs/architecture/evidence/generation-integration/wp3/source36/files.json",
+    "docs/architecture/evidence/generation-integration/wp3/source36/cumulative-inventory.json",
+    "docs/architecture/evidence/generation-integration/wp3/source36/receipt.json"
+  ],
+  "semantics": "Hashes bind explicit frozen validation revision, not current mutable receipts; no self-reference."
+}
