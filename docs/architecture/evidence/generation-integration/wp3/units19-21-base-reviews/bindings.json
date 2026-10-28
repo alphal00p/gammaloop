@@ -1,0 +1,1071 @@
+{
+  "review": "Astra NEW independent integration review: bindings/exporter/drawing-workflow/evidence scope",
+  "verdict": "APPROVE",
+  "candidate": "d48f9d1aedc766eea5cb185ab6029d1f04462043",
+  "change": "pmnstxxwwwkzvyuxyzmsmswtutnkzkmy",
+  "code_commit": "d109e898ecf569eeab1b568ce80462ee6094e58d",
+  "base": "edabf052c5780be6460a9043cb9704e1583a2e4c",
+  "frozen_original": "817b5886a50276efea05ab860d22016e1fb0c203",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-integration-plan",
+  "scope": "Combined C1/C2/B1/E1/E2/E3/E5 contracts, D1-D3/import/notices preservation, E4 provenance and current registry. A1/B3 and exact consumer B2 are the parallel runtime reviewer scope.",
+  "source19_gate": "This scope permits source19 ONLY AFTER the other independent integration review also approves and the coordinator aggregates both. No whole-WP3, general physics, performance or final-distribution certification.",
+  "blocking_findings": [],
+  "nonblocking_findings": [
+    {
+      "id": "wording-1",
+      "severity": "P3",
+      "file": "docs/architecture/evidence/generation-integration/wp3/staged-combined-corrections.json",
+      "line": 122,
+      "summary": "The scope string still says no graph/Python correction even though the final candidate includes the approved cumulative correction.",
+      "required_cleanup": "Replace the stale sentence with the final included scope while retaining no source19+ statement.",
+      "assessment": "Bounded wording issue: exact mapping, graph_gate, code_commit, byte identities, canonical staged note and independently rerun integrated controls make the actual scope unambiguous. Does not block source19."
+    },
+    {
+      "id": "wording-2",
+      "severity": "P3",
+      "file": "docs/architecture/generation-integration-plan.typ",
+      "line": 233,
+      "summary": "Present-tense status still says E4 awaits independent review and code/D lanes remain separate, immediately before the new combined-status paragraph.",
+      "related": [
+        "docs/architecture/generation-integration-wp3-staged.typ:134"
+      ],
+      "required_cleanup": "Date or label these statements as the earlier frozen-candidate state; the later combined sections correctly give approval/integration status.",
+      "assessment": "Conservative stale wording, not a hidden failed gate or an overstated pass."
+    }
+  ],
+  "closure": {
+    "C1": "Live constructors/resolvers, map-derived graphs, traversal and rendering selectors use element_epoch; topology snapshots and mutation guards retain revision. Runtime regression matrices and added map-to-render sequences pass, including stale/foreign refusal.",
+    "C2": "Full817b..4b60161d imported, not alias-only. Single native graph owner with retained NodeSpec/EdgeSpec/HalfEdgeSpec; removed NodeStore/old generate/view names are absent. Theory/Legs/Plan/Diagram retained tests pass. _Key=Hashable|Expression resolves at all24 positions across3 graph copies; bytes, nested tuples, frozenset, stable custom keys, expressions, role inequality, payload identity, all8 error/unhashable positions pass. Expression rendering labels remain separate.",
+    "B1": "18 isolated callbacks pass. Actual terminal callback is GenerationDiagramView, distinct from live DiagramView; exactly4 concrete Particle checks (11,11,13,13).",
+    "E1/E2/E3/E5": "Canonical owners retained; no standalone/PythonModule compatibility owner. Linnet and Gamma exporter --tests features compile;2 Linnet+3 Gamma+1 HEP runtime contract tests pass. Explicit no-default native,python_stubgen feature passes. All6 graph/HEP package/docs/host canonical --check commands pass.",
+    "D1/D2/D3": "All7 correction files exactly match approvedD. Both source-sync helpers, pinned workflow bootstrap/tools and failure propagation preserved.5 integrated packaging controls, both historical negative upgrade controls, corrected idempotence/preservation and injected failures pass.3 actual committed-WASM runtime tests pass. No source38 replacement; shared marks/Tiptoe preserved.",
+    "E4": "1377 historical code hashes match their nominated f264 revision. Mutable execution/replay are excluded and bound separately to817b. Historical receipts remain historical.115 combined artifact hashes, original and correction review copies and frozen code tree are verified. Final graph Python checks are source-matched to d109/d48; earlier A/B/D controls reuse unchanged core/drawing inputs and are not falsely relabeled as new binding validation."
+  },
+  "independent_checks": {
+    "actual_native_python": {
+      "tests": 78,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0
+    },
+    "callbacks": 18,
+    "terminal": {
+      "count": 4,
+      "particle_pdg_codes": [
+        11,
+        11,
+        13,
+        13
+      ],
+      "generation_class": "GenerationDiagramView",
+      "live_class": "DiagramView",
+      "distinct": true
+    },
+    "key_controls": {
+      "retained_tests": {
+        "count": 6,
+        "failures": 0,
+        "errors": 0,
+        "skips": 0
+      },
+      "positive_matrix": [
+        {
+          "kind": "bytes",
+          "api_checks": 3,
+          "role_inequality_checks": 3,
+          "edge_order_and_payload_identity": true,
+          "per_api_callback_census": true
+        },
+        {
+          "kind": "nested_tuple",
+          "api_checks": 3,
+          "role_inequality_checks": 3,
+          "edge_order_and_payload_identity": true,
+          "per_api_callback_census": true
+        },
+        {
+          "kind": "frozenset",
+          "api_checks": 3,
+          "role_inequality_checks": 3,
+          "edge_order_and_payload_identity": true,
+          "per_api_callback_census": true
+        },
+        {
+          "kind": "custom_hashable",
+          "api_checks": 3,
+          "role_inequality_checks": 3,
+          "edge_order_and_payload_identity": true,
+          "per_api_callback_census": true
+        },
+        {
+          "kind": "expression",
+          "api_checks": 3,
+          "role_inequality_checks": 3,
+          "edge_order_and_payload_identity": true,
+          "per_api_callback_census": true
+        }
+      ],
+      "negative_matrix": [
+        {
+          "api": "canonize",
+          "role": "node_key",
+          "original_callback_exception": true,
+          "unhashable_rejected": true
+        },
+        {
+          "api": "canonize",
+          "role": "edge_key",
+          "original_callback_exception": true,
+          "unhashable_rejected": true
+        },
+        {
+          "api": "canonize",
+          "role": "half_edge_key",
+          "original_callback_exception": true,
+          "unhashable_rejected": true
+        },
+        {
+          "api": "is_isomorphic",
+          "role": "node_key",
+          "original_callback_exception": true,
+          "unhashable_rejected": true
+        },
+        {
+          "api": "is_isomorphic",
+          "role": "edge_key",
+          "original_callback_exception": true,
+          "unhashable_rejected": true
+        },
+        {
+          "api": "is_isomorphic",
+          "role": "half_edge_key",
+          "original_callback_exception": true,
+          "unhashable_rejected": true
+        },
+        {
+          "api": "canonize_edges",
+          "role": "edge_key",
+          "original_callback_exception": true,
+          "unhashable_rejected": true
+        },
+        {
+          "api": "canonize_edges",
+          "role": "half_edge_key",
+          "original_callback_exception": true,
+          "unhashable_rejected": true
+        }
+      ],
+      "resolved_type_contract": [
+        {
+          "path": "crates/linnet-py/python/symbolica/community/graph/__init__.pyi",
+          "resolved_callback_positions": [
+            "canonize.edge_key",
+            "canonize.half_edge_key",
+            "canonize.node_key",
+            "canonize_edges.edge_key",
+            "canonize_edges.half_edge_key",
+            "is_isomorphic.edge_key",
+            "is_isomorphic.half_edge_key",
+            "is_isomorphic.node_key"
+          ],
+          "new_contract_passes": true,
+          "parent_contract_fails_same_oracle": true,
+          "rendering_label_type_unchanged": true
+        },
+        {
+          "path": "docs/api/python/linnet-graph.pyi",
+          "resolved_callback_positions": [
+            "canonize.edge_key",
+            "canonize.half_edge_key",
+            "canonize.node_key",
+            "canonize_edges.edge_key",
+            "canonize_edges.half_edge_key",
+            "is_isomorphic.edge_key",
+            "is_isomorphic.half_edge_key",
+            "is_isomorphic.node_key"
+          ],
+          "new_contract_passes": true,
+          "parent_contract_fails_same_oracle": true,
+          "rendering_label_type_unchanged": true
+        },
+        {
+          "path": "examples/notebooks/symbolica-host/python/symbolica/community/graph/__init__.pyi",
+          "resolved_callback_positions": [
+            "canonize.edge_key",
+            "canonize.half_edge_key",
+            "canonize.node_key",
+            "canonize_edges.edge_key",
+            "canonize_edges.half_edge_key",
+            "is_isomorphic.edge_key",
+            "is_isomorphic.half_edge_key",
+            "is_isomorphic.node_key"
+          ],
+          "new_contract_passes": true,
+          "parent_contract_fails_same_oracle": true,
+          "rendering_label_type_unchanged": true
+        }
+      ],
+      "external_static_typechecker": "Not run; resolved generated aliases/annotations using actual native Expression class, not string comparison."
+    },
+    "render_interactions": {
+      "retained_render_tests": 11,
+      "combined_epoch_map_selector_render_cases": [
+        {
+          "mutation": "append_node",
+          "selector_counts": {
+            "node": 3,
+            "edge": 1,
+            "source": 1,
+            "sink": 1
+          },
+          "static_mathml": true,
+          "snapshot_preserved": true
+        },
+        {
+          "mutation": "append_edge",
+          "selector_counts": {
+            "node": 2,
+            "edge": 2,
+            "source": 2,
+            "sink": 1
+          },
+          "static_mathml": true,
+          "snapshot_preserved": true
+        },
+        {
+          "mutation": "orientation",
+          "selector_counts": {
+            "node": 2,
+            "edge": 1,
+            "source": 1,
+            "sink": 1
+          },
+          "static_mathml": true,
+          "snapshot_preserved": true
+        },
+        {
+          "mutation": "reverse",
+          "selector_counts": {
+            "node": 2,
+            "edge": 1,
+            "source": 1,
+            "sink": 1
+          },
+          "static_mathml": true,
+          "snapshot_preserved": true
+        },
+        {
+          "mutation": "reorder_nodes",
+          "selector_counts": {
+            "node": 2,
+            "edge": 1,
+            "source": 1,
+            "sink": 1
+          },
+          "static_mathml": true,
+          "snapshot_preserved": true
+        },
+        {
+          "mutation": "reorder_edges",
+          "selector_counts": {
+            "node": 2,
+            "edge": 1,
+            "source": 1,
+            "sink": 1
+          },
+          "static_mathml": true,
+          "snapshot_preserved": true
+        }
+      ],
+      "measurement": "explicit deterministic external metrics; no browser/widget or final distribution claim"
+    },
+    "runtime_signatures": {
+      "examined": 613,
+      "exact": 607,
+      "intentional_handwritten_contract_differences": 6,
+      "matches_approved_census": true,
+      "details": "runtime-surface.json"
+    },
+    "exporter_contract_tests": 6,
+    "canonical_stub_copies": 6,
+    "packaging": {
+      "passed": 5,
+      "skipped": 0,
+      "scope": "real source recipes/extraction/notice selector plus minimal fixture-wheel metadata/RECORD; no final native wheel install"
+    },
+    "upgrade_and_failure_controls": "both frozen-parent recipes fail the new regression; both corrected recipes preserve/idempotently refresh required bytes; injected42 fails bootstrap and offline test",
+    "committed_wasm_runtime": {
+      "passed": 3,
+      "skipped": 0,
+      "log": "committed-wasm-runtime.log",
+      "scope": "committed sandbox execution only; no final build/provenance certification"
+    },
+    "kernel_isolation": "passed",
+    "hakari": "passed",
+    "source_inventory": {
+      "working_blobs": 3372,
+      "candidate_paths": 57,
+      "imports_exact": 44,
+      "code_hashes": 45,
+      "frozen_code_tree_entries": 3369,
+      "manifest_tuples": 46,
+      "planned_units": 41,
+      "original_review_copies": 6,
+      "correction_review_copies": 6,
+      "svg_hashes": 34,
+      "registry": {
+        "valid": 55,
+        "inherited_pending": 7,
+        "additional_pending": 20,
+        "affected_titles": 5
+      }
+    },
+    "commands": [
+      {
+        "name": "native-python-runtime",
+        "command": [
+          "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/feynkit_py-5e1f27f915ae78c9",
+          "--exact",
+          "tests::standalone_python_pipeline_covers_generation_graphs_cff_and_kinematics",
+          "--test-threads=1",
+          "--nocapture"
+        ],
+        "exit_code": 0,
+        "expected": 1,
+        "passed": true,
+        "seconds": 0.916724817128852
+      },
+      {
+        "name": "render-interactions",
+        "command": [
+          "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/feynkit_py-5e1f27f915ae78c9",
+          "--exact",
+          "tests::standalone_python_pipeline_covers_generation_graphs_cff_and_kinematics",
+          "--test-threads=1",
+          "--nocapture"
+        ],
+        "exit_code": 0,
+        "expected": 1,
+        "passed": true,
+        "seconds": 0.7663325071334839
+      },
+      {
+        "name": "native-keys",
+        "command": [
+          "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/feynkit_py-5e1f27f915ae78c9",
+          "--exact",
+          "tests::standalone_python_pipeline_covers_generation_graphs_cff_and_kinematics",
+          "--test-threads=1",
+          "--nocapture"
+        ],
+        "exit_code": 0,
+        "expected": 1,
+        "passed": true,
+        "seconds": 0.5663851120043546
+      },
+      {
+        "name": "callback-generation-tests-automatic_progress_tracks_marimo_lifecycle",
+        "command": [
+          "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/feynkit_py-5e1f27f915ae78c9",
+          "--exact",
+          "generation::tests::automatic_progress_tracks_marimo_lifecycle",
+          "--test-threads=1"
+        ],
+        "exit_code": 0,
+        "expected": 1,
+        "passed": true,
+        "seconds": 2.171204899903387
+      },
+      {
+        "name": "callback-generation-tests-compact_html_reports_discovery_without_demanding_numerators",
+        "command": [
+          "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/feynkit_py-5e1f27f915ae78c9",
+          "--exact",
+          "generation::tests::compact_html_reports_discovery_without_demanding_numerators",
+          "--test-threads=1"
+        ],
+        "exit_code": 0,
+        "expected": 1,
+        "passed": true,
+        "seconds": 0.11473471880890429
+      },
+      {
+        "name": "callback-generation-tests-display_only_generation_keeps_progress_and_native_regions",
+        "command": [
+          "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/feynkit_py-5e1f27f915ae78c9",
+          "--exact",
+          "generation::tests::display_only_generation_keeps_progress_and_native_regions",
+          "--test-threads=1"
+        ],
+        "exit_code": 0,
+        "expected": 1,
+        "passed": true,
+        "seconds": 0.21498542185872793
+      },
+      {
+        "name": "callback-generation-tests-generation_defaults_leave_numerator_grouping_opt_in",
+        "command": [
+          "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/feynkit_py-5e1f27f915ae78c9",
+          "--exact",
+          "generation::tests::generation_defaults_leave_numerator_grouping_opt_in",
+          "--test-threads=1"
+        ],
+        "exit_code": 0,
+        "expected": 1,
+        "passed": true,
+        "seconds": 0.5662170101422817
+      },
+      {
+        "name": "callback-generation-tests-group_member_wrapper_fits_wasm_allocator_alignment",
+        "command": [
+          "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/feynkit_py-5e1f27f915ae78c9",
+          "--exact",
+          "generation::tests::group_member_wrapper_fits_wasm_allocator_alignment",
+          "--test-threads=1"
+        ],
+        "exit_code": 0,
+        "expected": 1,
+        "passed": true,
+        "seconds": 0.008139837067574263
+      },
+      {
+        "name": "callback-generation-tests-minimal_output_preserves_physics_and_explicit_id_demands",
+        "command": [
+          "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/feynkit_py-5e1f27f915ae78c9",
+          "--exact",
+          "generation::tests::minimal_output_preserves_physics_and_explicit_id_demands",
+          "--test-threads=1"
+        ],
+        "exit_code": 0,
+        "expected": 1,
+        "passed": true,
+        "seconds": 0.6662187620531768
+      },
+      {
+        "name": "callback-generation-tests-process_metadata_and_selectors_are_typed_and_round_trip",
+        "command": [
+          "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/feynkit_py-5e1f27f915ae78c9",
+          "--exact",
+          "generation::tests::process_metadata_and_selectors_are_typed_and_round_trip",
+          "--test-threads=1"
+        ],
+        "exit_code": 0,
+        "expected": 1,
+        "passed": true,
+        "seconds": 0.36533070099540055
+      },
+      {
+        "name": "callback-generation-tests-progress_and_partial_filters_use_the_calling_python_thread",
+        "command": [
+          "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/feynkit_py-5e1f27f915ae78c9",
+          "--exact",
+          "generation::tests::progress_and_partial_filters_use_the_calling_python_thread",
+          "--test-threads=1"
+        ],
+        "exit_code": 0,
+        "expected": 1,
+        "passed": true,
+        "seconds": 1.521691428963095
+      },
+      {
+        "name": "callback-generation-tests-python_flavour_classes_preserve_physics_assignments_and_ranked_fields",
+        "command": [
+          "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/feynkit_py-5e1f27f915ae78c9",
+          "--exact",
+          "generation::tests::python_flavour_classes_preserve_physics_assignments_and_ranked_fields",
+          "--test-threads=1"
+        ],
+        "exit_code": 0,
+        "expected": 1,
+        "passed": true,
+        "seconds": 0.2651877789758146
+      },
+      {
+        "name": "callback-generation-tests-python_signals_interrupt_both_generation_entry_points",
+        "command": [
+          "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/feynkit_py-5e1f27f915ae78c9",
+          "--exact",
+          "generation::tests::python_signals_interrupt_both_generation_entry_points",
+          "--test-threads=1"
+        ],
+        "exit_code": 0,
+        "expected": 1,
+        "passed": true,
+        "seconds": 0.4657064250204712
+      },
+      {
+        "name": "callback-generation-tests-python_typed_hooks_prune_like_rust_hooks",
+        "command": [
+          "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/feynkit_py-5e1f27f915ae78c9",
+          "--exact",
+          "generation::tests::python_typed_hooks_prune_like_rust_hooks",
+          "--test-threads=1"
+        ],
+        "exit_code": 0,
+        "expected": 1,
+        "passed": true,
+        "seconds": 0.41545542795211077
+      },
+      {
+        "name": "callback-generation-tests-request_decorators_preserve_dispatch_gc_and_heredity_contracts",
+        "command": [
+          "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/feynkit_py-5e1f27f915ae78c9",
+          "--exact",
+          "generation::tests::request_decorators_preserve_dispatch_gc_and_heredity_contracts",
+          "--test-threads=1"
+        ],
+        "exit_code": 0,
+        "expected": 1,
+        "passed": true,
+        "seconds": 0.16487556602805853
+      },
+      {
+        "name": "callback-generation-tests-staged_python_amplitude_preserves_squared_pairs_after_selection_and_grouping",
+        "command": [
+          "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/feynkit_py-5e1f27f915ae78c9",
+          "--exact",
+          "generation::tests::staged_python_amplitude_preserves_squared_pairs_after_selection_and_grouping",
+          "--test-threads=1"
+        ],
+        "exit_code": 0,
+        "expected": 1,
+        "passed": true,
+        "seconds": 0.2649730280973017
+      },
+      {
+        "name": "callback-generation-tests-staged_python_selection_uses_run_progress_cancellation_and_errors",
+        "command": [
+          "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/feynkit_py-5e1f27f915ae78c9",
+          "--exact",
+          "generation::tests::staged_python_selection_uses_run_progress_cancellation_and_errors",
+          "--test-threads=1"
+        ],
+        "exit_code": 0,
+        "expected": 1,
+        "passed": true,
+        "seconds": 0.7166410889476538
+      },
+      {
+        "name": "callback-generation-tests-worker_permission_keeps_progress_on_caller_and_preserves_failures_and_gc",
+        "command": [
+          "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/feynkit_py-5e1f27f915ae78c9",
+          "--exact",
+          "generation::tests::worker_permission_keeps_progress_on_caller_and_preserves_failures_and_gc",
+          "--test-threads=1"
+        ],
+        "exit_code": 0,
+        "expected": 1,
+        "passed": true,
+        "seconds": 0.7162343959789723
+      },
+      {
+        "name": "callback-graph-tests-apply_feynman_rules_returns_the_ruled_diagram",
+        "command": [
+          "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/feynkit_py-5e1f27f915ae78c9",
+          "--exact",
+          "graph::tests::apply_feynman_rules_returns_the_ruled_diagram",
+          "--test-threads=1"
+        ],
+        "exit_code": 0,
+        "expected": 1,
+        "passed": true,
+        "seconds": 0.032388875959441066
+      },
+      {
+        "name": "callback-tests-standalone_python_errors_keep_their_public_types_and_module_isolation",
+        "command": [
+          "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/feynkit_py-5e1f27f915ae78c9",
+          "--exact",
+          "tests::standalone_python_errors_keep_their_public_types_and_module_isolation",
+          "--test-threads=1"
+        ],
+        "exit_code": 0,
+        "expected": 1,
+        "passed": true,
+        "seconds": 0.7666230639442801
+      },
+      {
+        "name": "callback-tests-standalone_python_pipeline_covers_generation_graphs_cff_and_kinematics",
+        "command": [
+          "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/feynkit_py-5e1f27f915ae78c9",
+          "--exact",
+          "tests::standalone_python_pipeline_covers_generation_graphs_cff_and_kinematics",
+          "--test-threads=1"
+        ],
+        "exit_code": 0,
+        "expected": 1,
+        "passed": true,
+        "seconds": 0.3654599618166685
+      },
+      {
+        "name": "linnet-check",
+        "command": [
+          "cargo",
+          "check",
+          "--locked",
+          "--profile",
+          "ci-optim",
+          "-p",
+          "alphal00p-docs-python-exporter",
+          "--features",
+          "linnet",
+          "--tests"
+        ],
+        "exit_code": 0,
+        "expected": null,
+        "passed": true,
+        "seconds": 26.96273156814277
+      },
+      {
+        "name": "linnet-tests",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--profile",
+          "ci-optim",
+          "-p",
+          "alphal00p-docs-python-exporter",
+          "--features",
+          "linnet",
+          "--",
+          "tests::linnet_",
+          "--test-threads=1"
+        ],
+        "exit_code": 0,
+        "expected": 2,
+        "passed": true,
+        "seconds": 20.844718784093857
+      },
+      {
+        "name": "gamma-check",
+        "command": [
+          "cargo",
+          "check",
+          "--locked",
+          "--profile",
+          "ci-optim",
+          "-p",
+          "alphal00p-docs-python-exporter",
+          "--features",
+          "gammaloop",
+          "--tests"
+        ],
+        "exit_code": 0,
+        "expected": null,
+        "passed": true,
+        "seconds": 57.043627231847495
+      },
+      {
+        "name": "gamma-tests",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--profile",
+          "ci-optim",
+          "-p",
+          "alphal00p-docs-python-exporter",
+          "--features",
+          "gammaloop",
+          "--",
+          "tests::gammaloop_",
+          "--test-threads=1"
+        ],
+        "exit_code": 0,
+        "expected": 3,
+        "passed": true,
+        "seconds": 73.30516568408348
+      },
+      {
+        "name": "product-native-check",
+        "command": [
+          "cargo",
+          "check",
+          "--locked",
+          "--profile",
+          "ci-optim",
+          "-p",
+          "linnet-py",
+          "--no-default-features",
+          "--features",
+          "native,python_stubgen"
+        ],
+        "exit_code": 0,
+        "expected": null,
+        "passed": true,
+        "seconds": 480.59281552396715
+      },
+      {
+        "name": "hep-reexports",
+        "command": [
+          "cargo",
+          "test",
+          "--locked",
+          "--profile",
+          "ci-optim",
+          "-p",
+          "alphal00p-docs-python-exporter",
+          "--features",
+          "linnet,feynkit",
+          "--",
+          "tests::feynkit_runtime_surface_uses_canonical_shared_reexports",
+          "--exact",
+          "--test-threads=1"
+        ],
+        "exit_code": 0,
+        "expected": 1,
+        "passed": true,
+        "seconds": 425.98539138399065
+      },
+      {
+        "name": "stub-linnet-graph-0",
+        "command": [
+          "cargo",
+          "run",
+          "--locked",
+          "--profile",
+          "ci-optim",
+          "-p",
+          "alphal00p-docs-python-exporter",
+          "--features",
+          "linnet,feynkit",
+          "--",
+          "linnet-graph",
+          "docs/api/python/linnet-graph.pyi",
+          "--check"
+        ],
+        "exit_code": 0,
+        "expected": null,
+        "passed": true,
+        "seconds": 17.372906699078158
+      },
+      {
+        "name": "stub-linnet-graph-1",
+        "command": [
+          "cargo",
+          "run",
+          "--locked",
+          "--profile",
+          "ci-optim",
+          "-p",
+          "alphal00p-docs-python-exporter",
+          "--features",
+          "linnet,feynkit",
+          "--",
+          "linnet-graph",
+          "crates/linnet-py/python/symbolica/community/graph/__init__.pyi",
+          "--check"
+        ],
+        "exit_code": 0,
+        "expected": null,
+        "passed": true,
+        "seconds": 0.5658898749388754
+      },
+      {
+        "name": "stub-linnet-graph-2",
+        "command": [
+          "cargo",
+          "run",
+          "--locked",
+          "--profile",
+          "ci-optim",
+          "-p",
+          "alphal00p-docs-python-exporter",
+          "--features",
+          "linnet,feynkit",
+          "--",
+          "linnet-graph",
+          "examples/notebooks/symbolica-host/python/symbolica/community/graph/__init__.pyi",
+          "--check"
+        ],
+        "exit_code": 0,
+        "expected": null,
+        "passed": true,
+        "seconds": 0.5676952730864286
+      },
+      {
+        "name": "stub-feynkit-community-0",
+        "command": [
+          "cargo",
+          "run",
+          "--locked",
+          "--profile",
+          "ci-optim",
+          "-p",
+          "alphal00p-docs-python-exporter",
+          "--features",
+          "linnet,feynkit",
+          "--",
+          "feynkit-community",
+          "docs/api/python/feynkit-community.pyi",
+          "--check"
+        ],
+        "exit_code": 0,
+        "expected": null,
+        "passed": true,
+        "seconds": 0.6660262339282781
+      },
+      {
+        "name": "stub-feynkit-community-1",
+        "command": [
+          "cargo",
+          "run",
+          "--locked",
+          "--profile",
+          "ci-optim",
+          "-p",
+          "alphal00p-docs-python-exporter",
+          "--features",
+          "linnet,feynkit",
+          "--",
+          "feynkit-community",
+          "crates/feynkit-py/python/symbolica/community/hepkit/__init__.pyi",
+          "--check"
+        ],
+        "exit_code": 0,
+        "expected": null,
+        "passed": true,
+        "seconds": 0.6662372949067503
+      },
+      {
+        "name": "stub-feynkit-community-2",
+        "command": [
+          "cargo",
+          "run",
+          "--locked",
+          "--profile",
+          "ci-optim",
+          "-p",
+          "alphal00p-docs-python-exporter",
+          "--features",
+          "linnet,feynkit",
+          "--",
+          "feynkit-community",
+          "examples/notebooks/symbolica-host/python/symbolica/community/hepkit/__init__.pyi",
+          "--check"
+        ],
+        "exit_code": 0,
+        "expected": null,
+        "passed": true,
+        "seconds": 0.6662544261198491
+      },
+      {
+        "name": "packaging",
+        "command": [
+          "python3",
+          "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-integration-bindings-20261027/packaging.py",
+          "-v"
+        ],
+        "exit_code": 0,
+        "expected": null,
+        "passed": true,
+        "seconds": 34.60676254495047
+      },
+      {
+        "name": "committed-wasm-runtime",
+        "command": [
+          "python3",
+          "crates/linnest/layout/native/test_wasm.py",
+          "-v"
+        ],
+        "exit_code": 0,
+        "expected": 3,
+        "passed": true,
+        "seconds": 0.7158381750341505
+      },
+      {
+        "name": "kernel-isolation",
+        "command": [
+          "just",
+          "check-symbolica-feature-isolation"
+        ],
+        "exit_code": 0,
+        "expected": null,
+        "passed": true,
+        "seconds": 0.7663717209361494
+      },
+      {
+        "name": "hakari",
+        "command": [
+          "cargo",
+          "hakari",
+          "verify"
+        ],
+        "exit_code": 0,
+        "expected": null,
+        "passed": true,
+        "seconds": 0.7666389020159841
+      }
+    ]
+  },
+  "reused_checks": {
+    "103_drawing_controls": "Unchanged Linnest/Kurvst implementations/dependencies after approvedD and after pre-graph1263; combined passing103-test log SHA verified; not rerun here. Combined Python/native-render interactions independently run.",
+    "34_SVG_certification": "All34 committed output SHA values still match historical reproduction receipt; no fresh full SVG reproduction claimed.",
+    "D_clean_Cargo_home_bootstrap": "ApprovedD source/workflow/fixture manifests exactly match; all25 retained D artifact hashes (including clean-cache and failure controls) verified. Fresh5-test run uses normal shared cache; no new clean-runner claim.",
+    "Clippy_and_format": "SHA-verified combined logs for matching scoped source (two inherited Clarabel dependency warnings) reused. No new lint/format invocation, no changed-code Rust policy departure identified.",
+    "full_original_matrix": "817 historical four-loop/SM/fresh registration 1/8/32 checks remain historical; not re-executed or relabeled. Full rebuilt-tip repeat remains required.",
+    "runtime_peer": "A1/B3 and20-diagramB2 certificate are neither duplicated nor independently approved by this scope."
+  },
+  "identity": {
+    "host": {
+      "artifact": {
+        "reason": "compiler-artifact",
+        "package_id": "path+file:///shared/lcnbr/dev/gammaloop/generation-integration-plan/crates/feynkit-py#0.1.0",
+        "manifest_path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/crates/feynkit-py/Cargo.toml",
+        "target": {
+          "kind": [
+            "lib"
+          ],
+          "crate_types": [
+            "lib"
+          ],
+          "name": "feynkit_py",
+          "src_path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/crates/feynkit-py/src/lib.rs",
+          "edition": "2024",
+          "doc": true,
+          "doctest": true,
+          "test": true
+        },
+        "profile": {
+          "opt_level": "2",
+          "debuginfo": 0,
+          "debug_assertions": true,
+          "overflow_checks": true,
+          "test": true
+        },
+        "features": [
+          "default",
+          "native",
+          "python_stubgen",
+          "ufo"
+        ],
+        "filenames": [
+          "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/feynkit_py-5e1f27f915ae78c9"
+        ],
+        "executable": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/feynkit_py-5e1f27f915ae78c9",
+        "fresh": false
+      },
+      "sha256": "733146271a8dc8aeb56280cd71f1f02e197944f52947247cc4209ef254497b10",
+      "recorded_sha256": "733146271a8dc8aeb56280cd71f1f02e197944f52947247cc4209ef254497b10",
+      "matches_recorded": true
+    },
+    "inventory": "audit.json",
+    "additional_provenance": "extra-audit.json",
+    "registry": "registry.json",
+    "nix_shell": "nix-comparison.json",
+    "protected_inputs": "root/Tydenso/host lock kernel1a1829b1, uv, flake, NixCI false, CI graph and shared cache/reference inputs preserved",
+    "metadata_final_delta": [
+      "docs/architecture/evidence/generation-integration/execution.json",
+      "docs/architecture/evidence/generation-integration/wp3/replay.json",
+      "docs/architecture/evidence/generation-integration/wp3/staged-combined-corrections.json",
+      "docs/architecture/evidence/generation-integration/wp3/staged-combined-files.json",
+      "docs/architecture/evidence/generation-integration/wp3/staged-corrections-approved/C-round2.json",
+      "docs/architecture/evidence/generation-integration/wp3/staged-corrections-approved/C-round3.json",
+      "docs/architecture/generation-integration-plan.typ",
+      "docs/architecture/generation-integration-wp3-staged.typ",
+      "docs/developers.toml"
+    ]
+  },
+  "limits_and_pending": [
+    "No source19 or later ports started; approved later22-24/25-36/27-29/46 inputs remain separate. This gate does not require completing future ports first.",
+    "All3 historical frame hash assertions still FAIL. Representation diagnostics are not physics proofs or passing oracles; distinct consumerB2 remains peer scope.",
+    "Source30 compileTimeTest closure still omits request_decorator_contract.py and generation_reports/*.txt. Source31 retains7 inherited+20 additional scope/anchor mismatches and stale Kurvst PDF.",
+    "FullWP3 rebuilt-tip four-loop4664/306@1/8/32, SM3150|-9861/16 plus twozeros@1/8, fullpayload fresh registration order@1/8/32, fivefresh a_ddx, BRST, epem/CoolQM and final numerical/benchmark/memory gates remain pending.",
+    "No whole-parser-suite claim: four existing whole-numerator-expansion helper callers remain omitted, not disabled in repository. No graph numerator expansion, blind expectation refresh or new group-physics change.",
+    "Native registration was exercised through the source-matched existing Rust test host with temporary Python package scaffolding restored. No installed-wheel/Community/Pyodide/browser/optional-widget live-client certificate.",
+    "Rendering checks use explicit deterministic external metrics; no browser measurement claim. Committed WASM executes, but final Linnest data/name provenance, final bundle/manual/SVG reproduction and native/Pyodide/Community wheels remain separate gates.",
+    "Resolved Python typing-object contracts verified; no mypy/pyright run."
+  ],
+  "review_attempts": [
+    "Initial unqualified Python was unavailable; subsequent commands use pinned Nix. Initial current-flake shell realization would rebuild unrelated WASM; only that own realization was interrupted, and the verified retained shell was used. No shared cache deletion or override.",
+    "The scratch audit first searched for the top-level NixCI toggle before a dependency-discovery block; corrected to exact top-level syntax and independently evaluated false.",
+    "One scratch unittest discovery used the wrong directory and selected0 tests and failed closed with exit5; it is excluded from credited checks. The actual committed-WASM file was independently invoked and passed3 tests with0 skips.",
+    "Pure nix eval rejected a local-path import; explicit impure evaluation returned false. These harness diagnostics are not product failures or passes."
+  ],
+  "cleanup": "Read-only review: no tracked edits, reference changes, nested agents, integration, publication or other workspace mutations. Own temporary fixtures removed; useful ignored receipt/probes/logs retained for coordinator continuation. Shared caches and original evidence preserved.",
+  "processes_retained": [],
+  "retained_artifacts": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-integration-bindings-20261027",
+  "artifact_sha256": {
+    "audit.json": "48840c7a9ceef348aaaef2dbb13b7eaa5e7095a769fcfa41a3232058f27bee8b",
+    "audit.log": "11467014bfeec597db87ca6fde2fabcded8c97ecb575ebb32e0de4c669c47812",
+    "audit.py": "2051d9000e2bcf055027bd52fde82a43aab4e1b138ad213978edcb59fb5163f5",
+    "binding-hook/sitecustomize.py": "7913904cf1eea054e687dbb44914547838fa8d988f823c40e3c53c9cdfe46f8e",
+    "bootstrap-failure.log": "e52afd3f08470f74f99769f0667b8f5ec46fe6ea187197e21be6a527090fba3b",
+    "callback-generation-tests-automatic_progress_tracks_marimo_lifecycle.log": "1ff32f7bcf98fd3eecc9d2c65298cdda944e13312ad5d1869ccace3480373e19",
+    "callback-generation-tests-compact_html_reports_discovery_without_demanding_numerators.log": "188fb49a08cbcec1ff4fc345b76c69ec247c6de17d5df6424f9fe6cd2a1d4b33",
+    "callback-generation-tests-display_only_generation_keeps_progress_and_native_regions.log": "6d54578afb4be76d0f504ab77e173a2467a8a0e0a2cbcb4023d6b405af64e7a6",
+    "callback-generation-tests-generation_defaults_leave_numerator_grouping_opt_in.log": "4a6187dbfb841cc47e46cb047b5cf0759d6a9014ffa36eeb8c0c65f9e718c9bd",
+    "callback-generation-tests-group_member_wrapper_fits_wasm_allocator_alignment.log": "9a96bddb11f4ea2aeefb748320981f098c73327e613b6344c072f7fe9e6fbb1f",
+    "callback-generation-tests-minimal_output_preserves_physics_and_explicit_id_demands.log": "20d2194633c541b198e92034060d3a2a8f3e7bf447bde27f7c36244dde5f660a",
+    "callback-generation-tests-process_metadata_and_selectors_are_typed_and_round_trip.log": "44d28bd12e7d55e1729e88519bbb82ddfe2d581bcd9c67b1a6d83927eb17b36b",
+    "callback-generation-tests-progress_and_partial_filters_use_the_calling_python_thread.log": "5552fa0671717cfaf3d78adde961b0d31c815bdb1be93a389ecd8575fd671612",
+    "callback-generation-tests-python_flavour_classes_preserve_physics_assignments_and_ranked_fields.log": "a374defa8e97a32a223557e7c6cae14c80d917ce0d96a763d863d68429fc07e7",
+    "callback-generation-tests-python_signals_interrupt_both_generation_entry_points.log": "5f1afbd67f45bb90959b98786372e56d6331b9158582aa255718c2aaa1a1433c",
+    "callback-generation-tests-python_typed_hooks_prune_like_rust_hooks.log": "26d8339a4368f5aba383c8fb1437fb996e6edb7325fe2a9eaf30803b9b5e2672",
+    "callback-generation-tests-request_decorators_preserve_dispatch_gc_and_heredity_contracts.log": "28617fe616161ee0c88e2b16124ceed22d193e15e6f4f6a04952b0c36b598ef6",
+    "callback-generation-tests-staged_python_amplitude_preserves_squared_pairs_after_selection_and_grouping.log": "97682d50c5270cd61d68759704345bf8aed2b85f4fadab9d6dd95aa75eda238c",
+    "callback-generation-tests-staged_python_selection_uses_run_progress_cancellation_and_errors.log": "833ca7fae84af659c04c7a25902138c47d7dcdb2f7d83d6ab33508ae325c5006",
+    "callback-generation-tests-worker_permission_keeps_progress_on_caller_and_preserves_failures_and_gc.log": "1d14a52045d143693c63789da951bde9c4bb5dacc73c5221e98434eeff488800",
+    "callback-graph-tests-apply_feynman_rules_returns_the_ruled_diagram.log": "030a7ce14b916c4858f7c714799b93978d7efaf8e56fa4c86baa7bb710803589",
+    "callback-tests-standalone_python_errors_keep_their_public_types_and_module_isolation.log": "fb6d47f76711e6273b98b5c39e3d38620ae6ec496958a8505650e3776119d1f3",
+    "callback-tests-standalone_python_pipeline_covers_generation_graphs_cff_and_kinematics.log": "decd565d91d06ee6523471588fff5c4f65c7de2effa56e46ab51404ec0911a05",
+    "checks.json": "582ff86df37966028a84d39152690e28a8a359c7aff7699ce0e465c4a8d70282",
+    "committed-wasm-runtime.log": "0d10cc77d43d5956001219dced17e51df3aefa0901ca4b1e5c5428f0dcc40493",
+    "extra-audit.json": "4946c169eaa02ca80379647fadf23698d74363ed15a7cd68b3f041008b6e04e6",
+    "extra-audit.log": "a841b278c054a53069d056792ed0671b758c6232afee22ececc59741f877bd65",
+    "extra-audit.py": "26eecb8323b853afee15390013177173639ed23962dad2fc5ffd9e25db8e9963",
+    "finish-checks.log": "4a632bcac5ca780cd71d03b9f6f1b5388ce8ff8f586d0079fa9e63232f4c927d",
+    "finish-checks.py": "97bac43dc0d7ab3485384717bc159212d47b1989b1fd2fe514cee3698beb609b",
+    "gamma-check.log": "e2844b4eb81c47e6cdf47b4c6d91104e0c6559c9c0cbf94d3f4226a091191ffb",
+    "gamma-tests.log": "fdd6c56f61973a1969341197eb0fe1d380c5643571c70914ff587f2417b76f42",
+    "hakari.log": "704f7242c6f355e1c07d9f9ae6ea748231571460920e0647e0fad2f515d7c7f3",
+    "hep-reexports.log": "db502383404797009c6fd5c3b3657d78232623b3622abd5c85abddc4c5021199",
+    "host-build.jsonl": "e35ea3f80885f1b6ec061fa5f005fa7b2cef98986bffdea3431e1c4f37368782",
+    "host-build.stderr": "6e3ce2c1a0d7a9b917d0aeadddaef323136c293bb377b8e841d0f05672e879aa",
+    "host-identity.json": "61bf5e08dd94ec39d47548ce4c11f2b9287a5943029d1b247d740ab5feb4920c",
+    "interaction-result.json": "002dfc9e9e63cd40351eb6a8e1f3307e252953e165ffc88e6128215fcfec9ff8",
+    "interaction_probe.py": "fef63a3aa9517d061f89ef530995a2ec6f145b56e3e41c3dd58127a78e919da2",
+    "kernel-isolation.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "key-hook/sitecustomize.py": "2ad1d3cc60345badd77f60a553bd7c209270cd5bcfbff9fb29b973b7b2472f41",
+    "key-probe.py": "6789ec075ae1b7647fcb0d82962231f76a9a7a86d5955ed525f986dd49302f09",
+    "key-python.log": "89929234b8a7fcf6f8c842b90011a2672e059825de5e15ac096eb4c8c97a6129",
+    "linnet-check.log": "6a3e81430242d6c888c37ea1152724f7ecddde2d7c1fc5c3d46b1ce59f911540",
+    "linnet-tests.log": "36f966b9d722319cd4ee129acfecb49afe08619770f767db3fc560a5556037b8",
+    "native-keys.log": "ea588359c48b54f75f581d31d3b6c5e7455791ce42e7abf6b08d52b80e16b755",
+    "native-python-runtime.log": "f1ec44ad232c4ff499ea3a8767535304da17fee67903e28cb10ca9abc17a4998",
+    "nix-comparison.json": "f7e4e03c16596ded23fe385b872fae6a8ef73bcdf0c518d8afe1815a7955e69f",
+    "nix-shells.json": "5e6fef8148d0ede35fd49a6f9c19284532595a7e30e31dfd427f4a1dcb83eade",
+    "offline-failure.log": "966026596ee39d7e41c45a695f07e71bf6add258f99c4e3132efc5cf296cf91d",
+    "packaging.log": "47cbe486be4026e14018f99222692ab7703c21698286bbc65d71c7f9680e20d5",
+    "packaging.py": "da298217e9f844269131c1022ad1a66939ff6be86e3c843f600dc42d55335883",
+    "parent-upgrade-negative.log": "b7a7d2ddf9aea4c612aa9c29c461e66d6137d7691a5f2cd56c4c0320ecf2403b",
+    "probe-result.json": "b3dffd1d683e0102ee7987542be73ed484782a7dcee71582a962387044364139",
+    "product-native-check.log": "737d2f8b00df19851386b3bb3af451dd1074f31ba6e3cca6830ea48df7fd034f",
+    "registry.json": "e4c78db30421fd5aef4f77229ca698a477ab1e0162d9a4cbcc98ae5b6bf5bfad",
+    "registry.log": "bdea1b5d753900456282ffca15bca03226c554bfe4517d681386ffaacc5cb870",
+    "registry.py": "d56afaac6973ffeaa394ed89bfdc9e6704c1de94094c32e8d0aa1ef7d903c1d5",
+    "render-interaction-tests.log": "4e252d55870727f201291193f3f702c6808cc933e0d296f3a8e60acde64083b8",
+    "render-interactions.log": "617593b551ed0e126afc983ffac55b342570b0d56d3f4b1122500fd5de025f85",
+    "retained-python.json": "be41085504e55f09cea597535e093abb3b1dde931052c45960ecd7160d31c193",
+    "retained-python.log": "5f2bb88649033bc71fe730b859bed192b74e86db034b1c4ea450b8fed2fa7ada",
+    "run": "0b36536c6805f6720dd9616ead8703c6da48747a7771ed481f6bde277f2d3e33",
+    "runtime-surface.json": "412aa9d07c6eaa6e2ce3eeb8ef4bafe6d142be53194091ea757096bbbdbccb1f",
+    "runtime_probe.py": "c820f4241626d7b38a1e32826b6ceac9852dcd0c5bf262501370de7104768549",
+    "setup-probes.py": "c822506f2793e7de066c535298a831d857037583528ad8d540306527827aa012",
+    "stub-feynkit-community-0.log": "c62da736a60acda49c87c96794d67765eb6ba16d242617c112b7549b27fb29a5",
+    "stub-feynkit-community-1.log": "60863e80da690728b62ec92931f53dbed732fac4158c2fac0f48a4899d2f6b3d",
+    "stub-feynkit-community-2.log": "3207091e1da265c407ef34169503404b6cca553cc6d77c9bc1bb40e01bd2e26b",
+    "stub-linnet-graph-0.log": "bb64e6a8ae46d86f3a778561202e5b5edd4695098e746b540fd94ca2a4a7ee0f",
+    "stub-linnet-graph-1.log": "477b31cac5c0f2710e27cd5828f2dac3cf1346884a5f3888cb34fab52f32c234",
+    "stub-linnet-graph-2.log": "c92a41c89c91722d2f3cc3018c8c55f82ce3f0e1b2d0ce74b29a2468f5844c6d",
+    "terminal.json": "93cb5bf4e8cd8c11dbbaf3d549b7d8f4ed42e37af32ed940481c58896b487a36",
+    "upgrade-controls.log": "57c0b1a15e70f295f1c371e770d86f7d2712c7796d7084cbf7a6fe782a02c490",
+    "upgrade-controls.py": "1eef314520880950b8c0fc486e042f6228688806a5a8b66e922391241e737a77",
+    "validation-driver.log": "eb69a6d03d71f9b1fa171ecd2383fc835625e716b2ec2bfc85767f975da527cd",
+    "validation-original.py": "8cb03aa745cfb286ec2cac77d47bb5a10b444f8c277d658580a09ac53f11a624",
+    "validation.py": "b3f6c54ba09669c53a5b5af5e7ebf7f09595c11356f3bf5bade3c6d99742b84e",
+    "wasm-runtime.log": "e70fec2825d9bf206d27463a792768195039599cb39bcca66339f47283f84cce",
+    "write-review.py": "58e0eaa7129479bf1ae49dc0b3b7ce1cf61bcb46f4b6af3c2d545c886dd046c3"
+  }
+}

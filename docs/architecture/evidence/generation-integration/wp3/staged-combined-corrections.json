@@ -119,9 +119,9 @@
     "examples/notebooks/symbolica-host/python/symbolica/community/hepkit/__init__.pyi": "965481a91de1044265f1590d4d4e3499b37f366268c96a2c88ca57b478e3696b"
   },
   "provenance": "All cumulative changes from817b applied once onto approved edab; docs registry adds both owner notes without overwriting E4 bookkeeping. Frozen code hashes above do not hash this mutable receipt. Imported lane receipts describe their original revisions and checks, not combined runs.",
-  "scope": "No source19+, no graph/Python correction or later source integration. No new physical expectation except approved exact reference migration.",
+  "scope": "Frozen d48 includes cumulative approved A1/B2/B3/C1/C2/B1/D1-D3/E1-E5 corrections, including graph/Python. No source19+ at that revision; the new19-21 slice is recorded separately.",
   "combined_invariants": "Finalization always uses admitted translate; identity certificate checks expression and ALL retained renamings after index validation/injectivity. Raw admission, shared templates and declared/inferred ports unchanged.",
-  "graph_gate": "Cumulative approved4b60161d integrated; ALL original finding corrections now combined; NEW integration review remains required.",
+  "graph_gate": "Cumulative4b graph/Python integrated at d109 and approved in combined d48; source19 gate released by coordinator.",
   "later_available": {
     "22-24": "735d599a665acbce1577b2c40d149c152f01543d APPROVE; only after21, staged/card reconciliation required",
     "25/36": "c0e9ce68c325f9d597847d68cc4f1c924da29f19",
@@ -1076,7 +1076,7 @@
   ],
   "candidate_bookmark": "generation-integration-corrected-staged",
   "candidate_change": "pmnstxxwwwkzvyuxyzmsmswtutnkzkmy",
-  "review_status": "NEW independent Astra integration review required; all scoped correction branch approvals are preserved, not whole-candidate approval",
+  "review_status": "Both independent integration reviews APPROVE frozen d48 within their assigned scopes; not whole WP3/physics/performance/distribution approval",
   "closed_on_approved_branches": [
     "A1",
     "B1",
@@ -1094,5 +1094,22 @@
     "E5"
   ],
   "processes_retained": [],
-  "retained_artifact_directory": "target/wp3-combined-corrections"
+  "retained_artifact_directory": "target/wp3-combined-corrections",
+  "combined_integration_reviews": {
+    "candidate": "d48f9d1aedc766eea5cb185ab6029d1f04462043",
+    "code_commit": "d109e898ecf569eeab1b568ce80462ee6094e58d",
+    "reviews": {
+      "runtime": {
+        "receipt": "docs/architecture/evidence/generation-integration/wp3/units19-21-base-reviews/runtime.json",
+        "sha256": "3aa4eb67acfa60cfab6f836e2eb4a846434e945476d84ac01602930b6eb730cf",
+        "verdict": "APPROVE assigned integration scope"
+      },
+      "bindings": {
+        "receipt": "docs/architecture/evidence/generation-integration/wp3/units19-21-base-reviews/bindings.json",
+        "sha256": "733ca1d8c8d2587ab266e422eb7c5b095d9ea7603f3228f67eaf71cc8cb4c023",
+        "verdict": "APPROVE assigned integration scope"
+      }
+    },
+    "semantics": "Historical checks retain d48/d109 identities; none are relabeled as fresh source19-21 checks."
+  }
 }

@@ -181,5 +181,28 @@
     "candidate_bookmark": "generation-integration-corrected-staged",
     "candidate_change": "pmnstxxwwwkzvyuxyzmsmswtutnkzkmy"
   },
-  "implementation_code_commit": "d109e898ecf569eeab1b568ce80462ee6094e58d"
+  "implementation_code_commit": "d109e898ecf569eeab1b568ce80462ee6094e58d",
+  "combined_staged_integration_review": {
+    "candidate": "d48f9d1aedc766eea5cb185ab6029d1f04462043",
+    "verdict": "APPROVE both independent assigned scopes",
+    "reviews": {
+      "runtime": {
+        "receipt": "docs/architecture/evidence/generation-integration/wp3/units19-21-base-reviews/runtime.json",
+        "sha256": "3aa4eb67acfa60cfab6f836e2eb4a846434e945476d84ac01602930b6eb730cf",
+        "verdict": "APPROVE assigned integration scope"
+      },
+      "bindings": {
+        "receipt": "docs/architecture/evidence/generation-integration/wp3/units19-21-base-reviews/bindings.json",
+        "sha256": "733ca1d8c8d2587ab266e422eb7c5b095d9ea7603f3228f67eaf71cc8cb4c023",
+        "verdict": "APPROVE assigned integration scope"
+      }
+    },
+    "source19_gate": "Coordinator released19-21 only; NEW Astra review required before22"
+  },
+  "active_slice19_21": {
+    "status": "Implementation in progress",
+    "base": "d48f9d1aedc766eea5cb185ab6029d1f04462043",
+    "source19_code": "4aa4d3d88394fd39be75f460b3ace4bc72a48894",
+    "parallel22_26": "Reconciliation in generation-projector-flow-staged is separate and awaits new review; do not duplicate"
+  }
 }

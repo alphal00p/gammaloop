@@ -230,12 +230,13 @@ own workspace. Bounded: one regression, one bisect, one written verdict.
   original-pair B2 certificate passed on the staged tree with exact original
   fixtures and two explicit test-only presentation-tag bindings. This bounded candidate
   received aggregate REQUEST_CHANGES from all five independent Astra round1
-  reviews at `817b5886`. E4 metadata provenance is corrected separately and
-  awaits NEW independent review; code correction lanes remain separate. Scope D
-  round2 approves isolated `b1061d7` only, available for later integration.
-  Original atomic candidate remains frozen at `817b5886`. Approved cumulative
-  A1, consumer B2/B3 and D1–D3 are combined on approved E4 for NEW independent
-  review, including newly approved cumulative graph/Python `4b60161d`. No source19 starts; WP3 remains incomplete.
+  reviews at frozen `817b5886`. E4 at `edabf052` and all cumulative code
+  corrections were subsequently approved and integrated, including D `b1061d7`
+  and graph/Python `4b60161d`. Both independent combined integration reviews
+  APPROVE frozen `d48f9d1a` / code `d109e898` within their assigned scopes;
+  historical code and validation identities remain unchanged. The coordinator
+  released source19–21 as the next bounded slice. It requires NEW independent
+  Astra review before22; no whole-WP3 or performance/distribution approval is claimed.
   Source38 awaits the reviewed transplant and prerequisites through port36.
   Approved input25/36 and cumulative sampling27–29 remain separate for later
   integration; no benchmark milestone is claimed. Full rebuilt-tip validation

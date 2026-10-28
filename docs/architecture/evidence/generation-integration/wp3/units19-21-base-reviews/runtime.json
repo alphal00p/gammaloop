@@ -1,0 +1,206 @@
+{
+  "reviewer": "Astra NEW independent combined integration runtime scope",
+  "verdict": "APPROVE",
+  "scope": "Combined A1+B3 runtime interaction and exact consumer B2 reference certificate only. No whole-candidate/WP3/performance/distribution approval.",
+  "candidate": "d48f9d1aedc766eea5cb185ab6029d1f04462043",
+  "change": "pmnstxxwwwkzvyuxyzmsmswtutnkzkmy",
+  "base": "edabf052c5780be6460a9043cb9704e1583a2e4c",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-integration-plan",
+  "findings": [],
+  "source19_gate": "This runtime scope permits SOURCE19 AFTER the parallel bindings/build/evidence reviewer also approves the combined candidate. Future WP3 ports/full physics are not prerequisites for this bounded gate and remain pending. No SOURCE19 work performed.",
+  "source_identity": {
+    "tracked_blobs": 3372,
+    "mismatches": [],
+    "approved_A_B_import_files_exact": 12,
+    "registry_reconciliation_outside_this_import_count": true,
+    "ancestry": [
+      "1263f4fdbdffeb48a16a6c835c056e4e99c0d135",
+      "2c2e3c6ae3b9e8a19dbce7411268f938fff113f0",
+      "d109e898ecf569eeab1b568ce80462ee6094e58d",
+      "d48f9d1aedc766eea5cb185ab6029d1f04462043"
+    ],
+    "runtime_binary": {
+      "path": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/gammalooprs-d550f986c4ae73f4",
+      "sha256": "3b6ddfde6ecc6856e91ecb5676e16009379cd7f5cf5342be6df749527ab1fbbb"
+    },
+    "checker_host": {
+      "path": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/feynkit_py-5e1f27f915ae78c9",
+      "sha256": "733146271a8dc8aeb56280cd71f1f02e197944f52947247cc4209ef254497b10"
+    },
+    "native_binary_details": "binaries.json; original-B2 standalone producer in fresh-capture-identity.json",
+    "old_reference_sha256": "b3bfd1e5e8f4635176f86613e9f3a7aa600acfc2cc8dd43cc5794ed987b3206e",
+    "new_reference_sha256": "0e7da593639ea81ab81f733d5ef52f8aa578565648d0a8bb15fb9f6b2e4aa815"
+  },
+  "integration_audit": [
+    {
+      "id": "A1+B3",
+      "locations": [
+        "crates/feynkit-graph/src/finalization.rs:330",
+        "crates/feynkit-graph/src/numerator_interface.rs:214",
+        "crates/feynkit-graph/src/numerator_interface.rs:333",
+        "crates/idenso/src/tensor/inference.rs:1574",
+        "crates/idenso/src/tensor/indexed.rs:65"
+      ],
+      "result": "All five tensor destinations invoke the admitted translator. It validates and collects retained indices before injectivity checks, then permits identity only for an unchanged expression AND every retained renaming. Nonidentity zero history reaches checked with_renamed_indices; runtime indexed conversion preserves proof cells. No scalar/no-visible-head skip or second metadata owner restored. Ten edge/half-edge by destination regression subcases pass on the combined source."
+    },
+    {
+      "id": "B3 runtime policy",
+      "locations": [
+        "crates/gammalooprs/src/graph/parse/from_dot.rs:123",
+        "crates/gammalooprs/src/graph/parse/mod.rs:565",
+        "crates/gammalooprs/src/graph/parse/tests.rs:100",
+        "crates/gammalooprs/src/graph/parse/tests.rs:188"
+      ],
+      "result": "Source admission and omitted rules precede fragment policy; prefactor/projector/vertices/edges reject anonymous ports before aggregate composition, allowing explicit contractions until aggregate external-colour closure. All three port forms x four owners x zero/nonzero plus compact scalar and typed native-source precedence controls pass; no assigned anonymous indices or relaxed original zero assertion."
+    },
+    {
+      "id": "retained owners",
+      "locations": [
+        "crates/feynkit-generator/src/generation.rs:1529",
+        "crates/feynkit-generator/src/generation.rs:2491",
+        "crates/feynkit-generator/src/generation.rs:2688"
+      ],
+      "result": "Raw unspecialized admission precedes conservation/alias cancellation. Dynamic rules admit at their actual owner. Complete metadata precedes shared immutable template publication outside callback locks. Declared/inferred order, scoped/reversible labels, callback loss, hidden dummy capture, cached owner, reversed spin/colour propagators and routing-cache isolation controls pass. Generator/model/numeric owner source unchanged from edab."
+    },
+    {
+      "id": "consumer B2",
+      "locations": [
+        "crates/gammalooprs/src/graph/parse/finalized_reference.rs:123",
+        "crates/gammalooprs/src/graph/parse/finalized_reference.rs:142"
+      ],
+      "result": "Current Rust producer freshly captures all20 native/runtime/actual denominator payloads, exactly equal to approved certificate inputs. Exact source models equal438b/817b; all14 reflected occurrences self-conjugate. Independent checker source exactly equals the approved independently authored checker except its I/O directory and is rerun against this capture on the hash-matched integrated host. Bijections, incidence/UFO slots, literal signed local factors/aggregate/projector/weights, every affine routing row/fixed external shift, both valid trees/loop complements, unit loop Jacobians, cuts/positive-energy endpoints, masses and complete unit-power quadratic denominators pass; all8 corruptions rejected. Six vector diagrams change trees."
+    },
+    {
+      "id": "reference derivation",
+      "result": "Old approved bytes equal438b and817b. Both original certificate and inverse-map/Fraction derivation scripts match their approved artifact hashes and were inspected fully. Current data proposes certified frame/chart choices and serves the final equality check; numerator/fixture expectations derive from immutable old data, not captured new numerators. All14 snapshot field keys are checked. No numerator expansion or numerical-only equivalence used."
+    },
+    {
+      "id": "original GL028/034 B2",
+      "location": "crates/feynkit-generator/src/grouping.rs:4586",
+      "result": "Explicit ignored test passes in actual 4D SU3 with original fixture bytes equal approved f473709c. Color7/3,-2/3 and exact C/gamma/local-loop identity give N28=(7/2)N34. Zero-sample singleton ownership/unit ratios/weights and seeded canonical on/off fallback controls execute. This remains separate from consumer B2 and does not claim a group-physics fix."
+    }
+  ],
+  "independent_checks": {
+    "native": {
+      "run": 55,
+      "passed": 55,
+      "skipped_not_counted": 401
+    },
+    "runtime": {
+      "run": 49,
+      "passed": 49,
+      "skipped_not_counted": 1480
+    },
+    "numeric_boundary": {
+      "passed": 8,
+      "f64_quad_sampling_arb_and_invalid_overflow_controls": true
+    },
+    "explicit_ignored_original_B2": {
+      "passed": 1,
+      "ignored": 0
+    },
+    "distinct_current_Rust_tests": 113,
+    "fresh_reference_capture": {
+      "passed": 1,
+      "duplicate_of_runtime_test": true,
+      "diagrams": 20
+    },
+    "exact_certificate_host": {
+      "passed_host_tests": 1,
+      "diagrams": 20,
+      "tree_changes": 6,
+      "negative_controls_rejected": 8,
+      "not_extra_physics_test_coverage": true
+    },
+    "bare_model_interpretation": "Retained log first reports Numerica explicit missing integer/float backends. feynkit-model has no default feature; native enables integer-gmp/float-mpfr; generator and graph default native selection unifies that backend. The identical actual conservation test passed independently with native feature in current 55-test run.",
+    "executed_commands": "checks.json and proof-identity.json"
+  },
+  "reused_not_newly_executed": {
+    "original_and_correction_receipts": "Read full archived original A/B/C/D/D-round2/E and correction A/B/C-round2/C-round3/D/E4 context; original five-scope review not repeated. C/D/E findings remain owned by parallel reviewer.",
+    "negative_A1_base_probe": "Approved previous independent old-shortcut failure reused; not rerun here.",
+    "proof_logic": "SHA789a3254717e6dc4cc9f2c28132190942f0c16661ae9c8b4961534e177009e99; only I/O folder changed. Current inputs and host identity independently checked; proof and negative controls freshly run.",
+    "static": "17 relevant combined artifact SHA values reverified, including successful scoped Clippy/fmt evidence. No new fmt/Clippy/full docs run. Manual changed-Rust policy audit found no new departure. Two inherited Clarabel warnings persist.",
+    "all_other_count_claims": "Reported139/103/78/18/6 and other overlapping implementer/parallel-review groups are not counted as independent execution here."
+  },
+  "build_identity": {
+    "native_freshness": "All three matched source/package/profile test producers fresh; command0.416s.",
+    "runtime": "Exact default-feature producer rebuilt (58.786s), matching recorded SHA. Nextest subsequently rebuilt after shared-cache dependency feature changes and passed49; no stale intermediate artifact accepted as executable provenance.",
+    "checker_host": "Exact python_stubgen,pyo3/auto-initialize,linnet-py/default producer rebuilt successfully in498s and matches recorded final-source host SHA. Proof executable checksum verified before use and after rebuild; no need to repeat identical-binary proof.",
+    "intermediate_cache": "No claim that historical unversioned rlibs retain their old identity; no target override, manual cache seeding or deletion."
+  },
+  "omissions_and_limits": [
+    "Unchanged helper expands both complete graph numerators; excluded only by exact reviewer command, retained tests are not disabled or credited as passes.",
+    "Excluded parity tests: native_amplitude_runtime_enrichment_preserves_every_graph_coordinate, native_cross_section_runtime_enrichment_preserves_cuts_and_positive_external_flow, native_compton_runtime_enrichment_preserves_sewn_fermions, native_runtime_enrichment_preserves_explicit_loop_order",
+    "Three imported historical assertions remain failures, not reexecuted or claimed passed; old spelling plus omitted metadata recovers digest only, not physics. Distinct consumer reference proof does not certify these.",
+    "Consumer certificate domain: five requests, <=2 vertices, <=1 independent loop, native symbolic quadratic unit-power propagators. No general multiloop proof, widths/custom denominator/prescription proof or blanket hidden-metadata serialization certificate.",
+    "No new four-loop4664/306, SM3150|-9861/16+zeros or 1/8/32 full-payload registration matrix; previous frozen817 evidence remains historical. FullWP3/five fresh a_ddx/BRST/epem/CoolQM and final memory/performance benchmarks remain pending.",
+    "Source30 compile-time closure, source31 seven inherited+20 scopes, final Linnest WASM provenance, Kurvst PDF and actual native/Pyodide/Community distributions remain pending; no source19+ integration or publication."
+  ],
+  "cross_scope_pointers": [
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/staged-combined-corrections.json",
+      "line": 122,
+      "observation": "The scope string still says no graph/Python correction, while mapping/graph_gate and code_commit record final d109 graph/Python integration. Stale intermediate wording; evidence reviewer/coordinator should reconcile it.",
+      "blocking_this_runtime_scope": false
+    }
+  ],
+  "environment": {
+    "nix": "Current workspace nix develop, pinned source/locks; proof shell realization8rxd8y2ayk01j3ccx68f8hk02ndqsfxp. Automatic devshell dependency realization is not a final WASM/distribution certificate.",
+    "cargo_profile": "ci-optim",
+    "cargo_build_jobs": 2,
+    "test_threads": 2,
+    "checker_and_capture_threads": 1,
+    "rayon_threads": 2,
+    "INSTA_UPDATE": "no",
+    "force_pass_flags": "unset",
+    "shared_envrc": "direnv status found none",
+    "license": "Existing exported value preserved or silently loaded from XDG/home Symbolica config; no values in logs or version control."
+  },
+  "cleanup": {
+    "tracked_edits": false,
+    "refs_changed": false,
+    "nested_agents": false,
+    "publication": false,
+    "source19_started": false,
+    "processes_retained": [],
+    "retained": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/astra-combined-runtime-review-20261027",
+    "reason": "Useful independent source/binary identities, exact commands, full boundary inputs, checker/hook, logs and receipt retained for review/continuation. Shared caches and all original evidence preserved."
+  },
+  "artifacts_sha256": {
+    "checker-host-freshness.log": "dbbed2a4d078d795670e0c4ee534a4aaf89909c0bbba371ba5dc3013902d0243",
+    "driver.log": "02722598ea96e0eadc3ae0ee5b04bd1959427b07f4d727db97c4ea2dcb64ae89",
+    "identity.py": "288c845f2b8de4b30fb3223e98caebe0a0767d660dadaf5f4dba9b5acc1f7fba",
+    "identity.json": "a91c4547734f918f1b567a3ed08665d28b798b88360c9a652a3bb8d2730d0981",
+    "run": "3a4892ecdc5c54bf7b1d8d7fd0e68d65214ae39f9f5a41427fbef79838a01bfb",
+    "tracked-inventory.json": "0dd1faf7086ae7283c4b400836d0b57d3bbf03456739655fb7502e71934206b1",
+    "native-freshness.log": "b05d466f9096f80c272529d167c8a7321157746ca9366cd28e72c67ddf6fda5c",
+    "numeric-boundary.log": "52ce87c8e08b882552a70690856ddf51f127b8edc1b7bd200bb6c568b87f086b",
+    "proof.py": "eb789c6dc12109a5b916c4bc00b47f5848ef8b0cce679bb94d393ef367405b9a",
+    "runtime-freshness.log": "a4574e0f0d23fa733408c90d0806779554c5f5af7845e1adebac9400d58c3822",
+    "fresh-reference.log": "44b025df4a513dfb402ad6e9edabaa805f5ba49956c80326a118e9b054fdfabf",
+    "exact-proof.log": "497699bfb12a6ab9faa2733889fb6505ad58366bb95545605a8cf527925a99b7",
+    "binaries.json": "f19e773f72de61e2da9850e1bb327643221fbc24c760b49dab911abb3523ea33",
+    "runtime.json": "d4e800170d505667b076ede00cc67013fda251759076db2c84c9b0571929093e",
+    "proof-driver.log": "75cace8dc51f6e25b20295a309c1838fea2b7b479d0f74f438daabd80620a98c",
+    "original-B2-fixture-identity.json": "6daf146c54fb31618ae6aade29c10abfa7d85dea22131764acc64d02990c4b99",
+    "model-and-reflection-premises.json": "93a049fb91160cd82ec6088855ca5f6021e74c975bc6051d45b173684a60215b",
+    "independent-proof.py": "7bd69f13d29900c2432c73797c92785e9b25265a171c8b6aea3526ed3bade385",
+    "denominators.json": "b7ce3b151ab8598dd1bb510ceade6473fa810ab1c9b762fadbfabe7a103b842d",
+    "independent-proof.json": "4927c2c9067fa0714d459042086fd13f14fb15baf6ee14faff43962ed3458024",
+    "source-audit.json": "6313247cf21f0adccb3419843ed58bc6353dc9ae7268db882c3b6c221a514073",
+    "native.json": "72cc2960d291965e0ddad669d5525c5b8604a481de07e959632d6ed207b4141b",
+    "proof-identity.json": "cb99d0e03a562b33a9ab070d67a58cb8e5589da13690816c015082b2200bc09e",
+    "native-interactions.log": "9ac0033d13c5d75f62eef61301e291b47348fe0d33d93266841f31aafefe789a",
+    "checker-host-freshness.json": "3d932e148caa63126306ed42fff1d091d291de6b3e31b33830f2aacb223ff360",
+    "source-audit.py": "3b87fdf9612dfbe88519dc6fd14a07f1f28cff6531250ad7b74a065adc174e65",
+    "runtime-freshness.json": "27daed089bae4ff4c81cab2ebed4144c2b5951fda9182823be3f506cdc769548",
+    "checks.json": "c3e5371ae45069ce46b36b1e0f3269f6804a3c1e2f1ffb37b30e07b723d7a5df",
+    "fresh-capture-identity.json": "fd7e7218361d274718c82cc27ccf7621649d36e07eebeb64d878609b6de53269",
+    "runtime-interactions.log": "12421efef5693d992cba3c554d98fdd94f19a2614a4525a9e1a2311f4dcb793c",
+    "checks.py": "e448e5599feb91332b35cda00fc714dc06161b77eeba674cff42d7c3f0081b7e",
+    "native-freshness.json": "df536b107bc72d3d7fc14c37f39b8c0633242aa1943d88ba1d3141bc9bd537b1",
+    "original-pair-B2.log": "b67f9d16444287c970057133b9d2c9cc957d95cf07bea73fb5c7d37df4c17272",
+    "boundary-logs/gammaloop-test-3193245.jsonl": "17865d97e6b1f1ef49158582d5b83a18ccb579063e8d2c4bf7a929d50f7f067f",
+    "hook/sitecustomize.py": "bcb5bf9eb00b8bca82ac53209181c7d224db9ebc252ea4fd589ba1d5f79ddbe8"
+  }
+}

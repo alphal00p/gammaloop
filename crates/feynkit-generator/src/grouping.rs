@@ -1803,11 +1803,24 @@ fn compare_atoms(
             }
         })
         .collect_factors();
-    // Cancel only existing common factors. Polynomial conversion would expand
-    // graph numerators, including copies used solely for this comparison.
+    if expression_is_scalar(&ratio, scalar_names) {
+        return Ok(ratio.is_finite().then_some(ratio));
+    }
+    // Completed component samples can place exact numerical content differently
+    // in equivalent colour-sector sums. Pull content only from existing sums
+    // in the quotient, as canonical preparation already does. This neither
+    // distributes a numerator nor changes either admitted operand or its history.
+    let ratio = ratio
+        .replace_map_bottom_up(|part, _, out| {
+            if matches!(part, AtomView::Add(_)) {
+                **out = part.collect_numeric_content();
+            }
+        })
+        .collect_factors();
+    // Polynomial conversion of a graph numerator is deliberately excluded.
     // Dummy indices can be alpha-equivalent across separately prepared graphs;
     // accept an exact quotient only after every tensor head has disappeared.
-    Ok(expression_is_scalar(&ratio, scalar_names).then_some(ratio))
+    Ok((expression_is_scalar(&ratio, scalar_names) && ratio.is_finite()).then_some(ratio))
 }
 
 fn expressions_equal(
@@ -1984,13 +1997,18 @@ mod tests {
     use crate::FeynmanDiagramRulesExt;
     use crate::Process;
     use feynkit_graph as graph_api;
+    use feynkit_graph::NumeratorInterface;
     use feynkit_model::ParameterCard;
+    use idenso::CookSourceFilter;
     use idenso::IndexTooling;
+    use serde::Deserialize;
     use spenso::iterators::IteratableTensor;
     use spenso::network::library::symbolic::ETS;
     use spenso::structure::TensorDataLayout;
     use spenso::structure::TensorStructure;
     use spenso_hep_lib as hep_lib;
+    use std::env;
+    use std::process::Command;
     use std::sync::Arc;
     use std::sync::atomic::AtomicBool;
 
@@ -3559,6 +3577,327 @@ mod tests {
         .unwrap();
         assert_eq!(grouped.groups.len(), 1);
         assert_eq!(grouped.groups[0].members[1].ratio, test_atom("2"));
+    }
+
+    // Frozen DIS19 local factors and signed routes; only legacy particle IDs
+    // were translated to names. The restricted SM keeps the source mass classes.
+    fn sampled_quotient_physical_pair() -> (Arc<Model>, Vec<FeynmanDiagram>) {
+        let mut model = Model::standard_model();
+        let card = ParameterCard::from_path(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../assets/models/json/sm/restrict_default.json"
+        ))
+        .unwrap();
+        model.apply_parameter_card(&card).unwrap();
+        model.simplify_zero_values().unwrap();
+        let model = Arc::new(model);
+        let diagrams = [
+            include_str!("../tests/fixtures/sampled_quotient/GL29.dot"),
+            include_str!("../tests/fixtures/sampled_quotient/GL68.dot"),
+        ]
+        .map(|dot| FeynmanDiagram::from_dot(Arc::clone(&model), dot).unwrap())
+        .to_vec();
+        for diagram in &diagrams {
+            for (_, _, edge) in diagram.edges() {
+                let mass = model.particle_by_id(edge.particle).unwrap().mass;
+                assert_eq!(model.parameter_by_id(mass).unwrap().name, "ZERO");
+            }
+            assert_eq!(
+                evaluate_overall_factor(diagram.overall_factor().as_view()),
+                -Atom::one()
+            );
+        }
+        let [master, candidate] = diagrams.as_slice() else {
+            unreachable!()
+        };
+        assert_eq!(
+            master.loop_momentum_basis(),
+            candidate.loop_momentum_basis()
+        );
+        assert_eq!(master.projector(), candidate.projector());
+        assert_eq!(
+            master.numerator_prefactor(),
+            candidate.numerator_prefactor()
+        );
+        for ((id, vertex), (other_id, other)) in master.vertices().zip(candidate.vertices()) {
+            assert_eq!(id, other_id);
+            let ratio = Atom::num(if id.0 == 0 { -2_i64 } else { 1 });
+            assert_eq!(
+                model
+                    .expand_couplings(other.numerator.expression())
+                    .collect_factors(),
+                (ratio * model.expand_couplings(vertex.numerator.expression())).collect_factors(),
+                "exact local coupling/factor witness at vertex {id:?}",
+            );
+        }
+        for ((id, endpoints, edge), (other_id, other_endpoints, other)) in
+            master.edges().zip(candidate.edges())
+        {
+            assert_eq!((id, endpoints), (other_id, other_endpoints));
+            assert_eq!(edge.numerator, other.numerator);
+        }
+        (model, diagrams)
+    }
+
+    #[test]
+    fn sampled_quotient_groups_physical_local_factors() {
+        const REGISTRATION: &str = "FEYNKIT_QUOTIENT_REGISTRATION";
+        if let Ok(case) = env::var(REGISTRATION) {
+            let (order, threads) = case.split_once(':').unwrap();
+            let threads = threads.parse::<usize>().unwrap();
+            assert!(matches!(order, "forward" | "reverse"));
+            assert!([1, 8, 32].contains(&threads));
+            // #209 preserves valid native Named indices. Deliberately construct
+            // public reversible aliases, and use them in the actual physical inputs.
+            let cooking = CookSettings::indices()
+                .with_source_filter(CookSourceFilter::AnyFunction)
+                .with_mode(CookMode::ReversibleEncoding);
+            let mut labels = (0..18).collect::<Vec<i64>>();
+            if order == "reverse" {
+                labels.reverse();
+            }
+            let mut registered = BTreeMap::new();
+            let mut replacements = Vec::new();
+            for &label in &labels {
+                let payload = function!(symbols::hedge_index(), label, 1);
+                let AtomView::Fun(function) = payload.as_view() else {
+                    unreachable!()
+                };
+                let cooked = cooking.cook_function(function).unwrap();
+                let AtomView::Var(variable) = cooked.as_view() else {
+                    panic!("explicit codec did not create an index symbol")
+                };
+                registered.insert(variable.get_symbol(), label);
+                replacements.push(Replacement::new(payload, cooked));
+            }
+            assert_eq!(registered.values().copied().collect::<Vec<_>>(), labels);
+            let (model, diagrams) = sampled_quotient_physical_pair();
+            let encode = |value: &SymbolicTensor<PartialStructure>| {
+                NumeratorInterface::translate::<DiagramError>(value, |atom| {
+                    Ok(atom.replace_multiple(&replacements))
+                })
+                .unwrap()
+            };
+            let diagrams = diagrams
+                .into_iter()
+                .map(|diagram| {
+                    let vertices = diagram
+                        .vertices()
+                        .map(|(id, vertex)| (id, encode(&vertex.numerator)))
+                        .collect::<Vec<_>>();
+                    let edges = diagram
+                        .edges()
+                        .map(|(id, _, edge)| (id, encode(&edge.numerator)))
+                        .collect::<Vec<_>>();
+                    let prefactor = encode(diagram.numerator_prefactor());
+                    let projector = encode(diagram.projector());
+                    let encoded = diagram
+                        .with_numerator_prefactor(prefactor)
+                        .with_projector(projector)
+                        .with_numerator_fragments(vertices, edges)
+                        .unwrap();
+                    let mut used = BTreeSet::new();
+                    for value in [encoded.numerator().unwrap(), encoded.projector()] {
+                        value.expression().visitor(&mut |part| {
+                            if let AtomView::Var(variable) = part {
+                                let symbol = variable.get_symbol();
+                                if registered.contains_key(&symbol) {
+                                    used.insert(symbol);
+                                }
+                            }
+                            true
+                        });
+                    }
+                    assert_eq!(
+                        used.len(),
+                        labels.len(),
+                        "all18 actual hedge aliases must occur in the physical input"
+                    );
+                    encoded
+                })
+                .collect::<Vec<_>>();
+            let master_numerator = diagrams[0].numerator().unwrap().clone();
+            let options = GraphGroupingOptions {
+                check_canonical_numerator: false,
+                ..Default::default()
+            };
+            let grouped = group_diagrams(
+                diagrams.into_iter().map(DiagramPair::Shared).collect(),
+                &model,
+                &Grouping::UpToScalar(options),
+                true,
+                &Run::default().threads(threads),
+                false,
+                DiagramLabels::default(),
+            )
+            .unwrap();
+            assert_eq!(grouped.groups.len(), 1, "threads={threads}");
+            assert_eq!(grouped.groups[0].members.len(), 2);
+            assert_eq!(grouped.groups[0].members[0].ratio, Atom::one());
+            assert_eq!(grouped.groups[0].members[1].ratio, Atom::num(-2));
+            assert_eq!(
+                evaluate_overall_factor(grouped.diagrams[0].overall_factor().as_view()),
+                Atom::one()
+            );
+            assert_eq!(grouped.diagrams[0].numerator().unwrap(), &master_numerator);
+            return;
+        }
+        for order in ["forward", "reverse"] {
+            for threads in [1, 8, 32] {
+                let case = format!("{order}:{threads}");
+                let output = Command::new(env::current_exe().unwrap())
+                    .args([
+                        "--exact",
+                        "grouping::tests::sampled_quotient_groups_physical_local_factors",
+                        "--nocapture",
+                    ])
+                    .env(REGISTRATION, &case)
+                    .output()
+                    .unwrap();
+                assert!(
+                    output.status.success()
+                        && String::from_utf8_lossy(&output.stdout)
+                            .contains("1 passed; 0 failed; 0 ignored"),
+                    "{case}: {}\n{}\n{}",
+                    output.status,
+                    String::from_utf8_lossy(&output.stdout),
+                    String::from_utf8_lossy(&output.stderr),
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn sampled_quotient_requires_scalar_interfaces_and_all_samples() {
+        #[derive(Deserialize)]
+        struct Sample {
+            expression: String,
+            interface: Option<String>,
+        }
+        let frozen: [Vec<Sample>; 2] = serde_json::from_str(include_str!(
+            "../tests/fixtures/sampled_quotient/prepared_samples.json"
+        ))
+        .unwrap();
+        let [mut master, mut candidate] = frozen.map(|samples| PreparedNumerator {
+            exact: SymbolicTensor::infer(Atom::one()).unwrap(),
+            sample_source: SymbolicTensor::infer(Atom::one()).unwrap(),
+            samples: samples
+                .into_iter()
+                .map(|sample| {
+                    let interface = sample
+                        .interface
+                        .map(|ports| NumeratorInterface::parse(&ports).unwrap());
+                    NumeratorInterface::admit(test_atom(&sample.expression), interface).unwrap()
+                })
+                .collect(),
+        });
+        let scalars = scalar_names(&Model::standard_model());
+        let options = GraphGroupingOptions {
+            check_canonical_numerator: false,
+            ..Default::default()
+        };
+        let scalar_ratio = |candidate: &PreparedNumerator, master: &PreparedNumerator| {
+            compare(
+                candidate,
+                master,
+                ComparisonMode::UpToScalar,
+                &options,
+                &scalars,
+            )
+            .unwrap()
+        };
+        assert_eq!(master.samples.len(), options.number_of_numerical_samples);
+        assert_eq!(scalar_ratio(&candidate, &master), Some(Atom::num(-2)));
+        assert!(
+            compare(
+                &candidate,
+                &master,
+                ComparisonMode::UpToSign,
+                &options,
+                &scalars
+            )
+            .unwrap()
+            .is_none()
+        );
+        let original = candidate.samples.clone();
+        candidate.samples = master
+            .samples
+            .iter()
+            .map(|value| value.with_checked_expression(-value.expression()).unwrap())
+            .collect();
+        assert_eq!(
+            compare(
+                &candidate,
+                &master,
+                ComparisonMode::UpToSign,
+                &options,
+                &scalars
+            )
+            .unwrap(),
+            Some(-Atom::one())
+        );
+
+        // All earlier samples agree: a disagreement only in the final sample
+        // must still reject the proposed common ratio.
+        candidate.samples = original.clone();
+        candidate.samples[4] = candidate.samples[4]
+            .with_checked_expression(3 * candidate.samples[4].expression())
+            .unwrap();
+        assert!(scalar_ratio(&candidate, &master).is_none());
+
+        // Perturb one of the two actual color-basis coefficients independently.
+        candidate.samples = original.clone();
+        let sectors = candidate.samples[0]
+            .coefficient_list(TensorCollectFilter::Reps([
+                ColorAdjoint {}.into(),
+                ColorFundamental {}.into(),
+                ColorSextet {}.into(),
+            ]))
+            .unwrap();
+        assert_eq!(sectors.len(), 2);
+        candidate.samples[0] = candidate.samples[0]
+            .with_checked_expression(candidate.samples[0].expression() + sectors[0].0.expression())
+            .unwrap();
+        assert!(scalar_ratio(&candidate, &master).is_none());
+
+        candidate.samples = original.clone();
+        // Equal zero expressions must retain distinct declared interfaces;
+        // otherwise the finite-sample equality shortcut would accept them.
+        candidate.samples[4] = NumeratorInterface::admit(
+            test_atom("spenso::g(spenso::cof(3,other_a),spenso::dind(spenso::cof(3,other_b)))"),
+            None,
+        )
+        .unwrap()
+        .with_algebra_result(Atom::Zero)
+        .unwrap();
+        master.samples[4] = master.samples[4].with_algebra_result(Atom::Zero).unwrap();
+        assert!(candidate.samples[4].expression().is_zero());
+        assert!(master.samples[4].expression().is_zero());
+        assert!(!InterfaceInference::additive_interfaces_match(
+            candidate.samples[4].structure(),
+            master.samples[4].structure(),
+        ));
+        assert!(scalar_ratio(&candidate, &master).is_none());
+
+        // A zero master sample cannot define a nonzero candidate/master ratio.
+        candidate.samples = original;
+        assert!(scalar_ratio(&candidate, &master).is_none());
+    }
+
+    #[test]
+    fn sampled_quotient_rejects_undefined_ratios() {
+        let scalars = scalar_names(&model());
+        for (candidate, master) in [
+            (Atom::one(), Atom::Zero),
+            (Atom::one() / Atom::Zero, Atom::one()),
+            (Atom::Zero / Atom::Zero, Atom::one()),
+        ] {
+            assert!(
+                compare_atoms(&candidate, &master, ComparisonMode::UpToScalar, &scalars)
+                    .unwrap()
+                    .is_none()
+            );
+        }
     }
 
     #[test]
