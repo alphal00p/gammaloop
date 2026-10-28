@@ -538,6 +538,7 @@
       "crates/feynkit-py/tests/fixtures"
       "crates/feynkit-py/tests/cff_display.py"
       "crates/feynkit-py/tests/browser_display_fixtures.py"
+      "crates/feynkit-py/tests/installed_squared_amplitude_display.py"
       "crates/feynkit-py/tests/installed_wavefunctions.py"
       "crates/feynkit-py/tests/installed_offline_rendering.py"
       "crates/feynkit-py/tests/native_forwarding.py"
