@@ -61,5 +61,11 @@
   "producer_reuse": "Completed Cargo producer NAR and5 ELFs verified. Consumers recompiled in their contexts; producer ELF bytes are not asserted to equal consumer runtime binaries.",
   "preserved": "All production Rust/manifests/locks/uv/assets other than source-matched manual.pdf unchanged against7587.27previous protected refs unchanged. NixCI=false; kernel1a1829b1 unchanged.",
   "retained_artifacts": "target/wp3-source31: exact Nix logs/identities/source+HTML manifests/proof helpers/5producerELF inspection outputs. Prior235proof/baseline/oldreviews untouched.",
-  "cleanup": "No shared cache deletion/overrides/manual Cargo seeding; no other-lane writes or publication; completed own clients cleaned before final handoff."
+  "cleanup": "No shared cache deletion/overrides/manual Cargo seeding; no other-lane writes or publication; completed own clients cleaned before final handoff.",
+  "metadata_snapshot_commit": "d7568e9e91df26aa771bdd5cecbfd67887b9b6ad",
+  "metadata_source_binding": "metadata-source-binding.json",
+  "artifacts": "artifacts.json",
+  "files": "files.json",
+  "integrity": "integrity.json",
+  "processes_retained": []
 }

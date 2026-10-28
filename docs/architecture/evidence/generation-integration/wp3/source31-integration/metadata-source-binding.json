@@ -1,0 +1,85 @@
+{
+  "code": "ecd901151e9c6a4b30df75198c7613f1532416b1",
+  "metadata_revision": "d7568e9e91df26aa771bdd5cecbfd67887b9b6ad",
+  "cargo_derivation_identical_to_completed_producer": true,
+  "cargo_derivation": "/nix/store/7kvm9zxk0vnn4g3szh4grdfq1db85gqm-alphal00p-docs-cargo-0.1.0.drv",
+  "documentation_source": "/nix/store/79yvgh0v2l3kb40yddbjlsacxciww899-source",
+  "documentation_source_nar_hash": "sha256-esrm8m+vVhdS/wPWbARf9NoT1hC0PTwVILL1GaYIJyk=",
+  "documentation_derivation": "/nix/store/axpjs9x00ipvy58gdri7dkddwdqb779z-alphal00p-docs-snapshot-fixture-0.1.0.drv",
+  "documentation_derivation_built": false,
+  "code_documentation_source": "/nix/store/8kjyjwgcd85d248gawl910055al379xq-source",
+  "delta": [
+    {
+      "path": "docs/architecture/evidence/generation-integration/execution.json",
+      "before": "99a5eca9e709b98971ff6f57b025a6f9f73647c9677bc0da99a3f4750efc4a0b",
+      "after": "1da307972acfb0fa5ec63273890db7d79b119ce6145fccafa25e0eb8a8206412"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/replay.json",
+      "before": "ee9c9c190bc38321a1efc51539fce6527caa80cf8a87a32fb4f2f051dcbee643",
+      "after": "8624b0c6b7ec14f5975d4b337ce50ff3c7a7f85f496ce891e38580acb382fca0"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/source31-integration/canonical.json",
+      "before": null,
+      "after": "babf3f276a3dce66a1f57159137c2794ee2d78c8dfb7ab4fda15ce158a203f6b"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/source31-integration/code-inventory.json",
+      "before": null,
+      "after": "0d6fabc37b5f81bd84f27ce0e16fadf0dedf68ff44a8a956dc939cac251fb58a"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/source31-integration/commands.json",
+      "before": null,
+      "after": "648ee3215a7d466bf48e4e08159b9c3463466d8a7b907f03e4a2044d9c6bd646"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/source31-integration/origin.json",
+      "before": null,
+      "after": "cc35b2c14797d7204fd7e4eb190ad7033bab9026893f8bccc09a4854e3e00472"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/source31-integration/producer-binaries.json",
+      "before": null,
+      "after": "ee15feff97c7d44751afe25bcba96e432902855924c7298cd2d7f89957d65a9b"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/source31-integration/receipt.json",
+      "before": "df3dc45cc262dbcccfa90e973ceacc9f32596197e3ebac0dfa58b3c7f4477d57",
+      "after": "179373ff1c5a68fdb121f3518a2c200b74052d46a8968cda46b7569322d0fb26"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/source31-integration/renders.json",
+      "before": null,
+      "after": "7a4fc99001f2d1374a43de5a8264e43dbcfc22682af53eda82b6ba6a6a4e8f5e"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/source31-integration/scope-retention.json",
+      "before": null,
+      "after": "95a7efd66eca6c82ee4543acb1cf032d36a2a5d634b0f5631b381cab6185af8c"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/source31-integration/source-binding.json",
+      "before": null,
+      "after": "73346f9752e312bfa116abcbee6cb79d11f79229265eb76d1ee2858598fc49f0"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/source31-integration/source-mapping.json",
+      "before": null,
+      "after": "1c8094ffaff898b711a832e36199ad8169bada7c128fa476cb610d91450b37f6"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/source31-integration/test-inventory.json",
+      "before": null,
+      "after": "a84d46c0a2a44de8119d866aedcba500c053d289af0058370f0aacb9644148cd"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/source31-integration/validation.json",
+      "before": null,
+      "after": "9630d87e4dd4f6ba80d3c1d1bc71b7159b8c9124974f7356be92d50275061828"
+    }
+  ],
+  "all_non_evidence_inputs_identical": true,
+  "qualification": "Whole docs tree includes evidence JSON. Exact delta is non-rendered evidence JSON only; the unbuilt metadata-tip source/derivation is not relabelled as the frozen code snapshot artifact. Completed Cargo producer exact identity is reusable."
+}

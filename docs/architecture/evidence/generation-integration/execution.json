@@ -573,6 +573,7 @@
       "errors": 3,
       "skipped": 6
     },
-    "code_vs_receipts": "Canonical artifact is codeECD; later evidence JSON is included by documentationSrc and is an explicitly distinct unbuilt source/NAR, not silently relabelled current artifact."
+    "code_vs_receipts": "Canonical artifact is codeECD; later evidence JSON is included by documentationSrc and is an explicitly distinct unbuilt source/NAR, not silently relabelled current artifact.",
+    "metadata_snapshot_commit": "d7568e9e91df26aa771bdd5cecbfd67887b9b6ad"
   }
 }
