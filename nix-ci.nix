@@ -560,7 +560,7 @@
     ];
   };
   dependency-discovery = {
-    enable = false;
+    enable = true;
     synchronous = true;
   };
   deploy = {
