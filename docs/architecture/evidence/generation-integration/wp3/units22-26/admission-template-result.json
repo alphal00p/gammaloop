@@ -1,0 +1,49 @@
+{
+  "source_commit": "2eb0d9db13caed01cb589f869089bc0753ab429b",
+  "unique_tests_passed": 18,
+  "runs": [
+    {
+      "name": "admission-template",
+      "passed": 13,
+      "exit_code": 0,
+      "profile": "ci_gammaloop",
+      "cases": [
+        "generation::tests::template_eligibility_rejects_scoped_and_encoded_open_indices",
+        "generation::tests::zero_template_and_direct_transport_retain_hidden_index_history",
+        "generation::tests::template_transport_retains_declared_order_scoped_labels_and_zero_ports",
+        "generation::tests::interaction_momentum_reduction_rejects_erased_invalid_indices",
+        "generation::tests::callback_rules_are_constructed_in_the_actual_owner_frame",
+        "generation::tests::opaque_scalar_metadata_with_nonindex_slot_payload_keeps_checked_construction",
+        "generation::tests::bundled_rule_ports_preserve_actual_owner_rejection",
+        "generation::tests::interaction_template_cache_retains_dummy_metadata_across_owners",
+        "generation::tests::cancelled_alias_templates_keep_hidden_dummy_labels_and_cached_metadata",
+        "generation::tests::interaction_momentum_reduction_rejects_heterogeneous_summands",
+        "generation::tests::interaction_momentum_reduction_retains_complete_cancellation_metadata",
+        "generation::tests::compact_rule_powers_allocate_independent_dummies_for_each_owner",
+        "generation::tests::interaction_momentum_reduction_public_api_retains_zero_interface"
+      ],
+      "junit": "target/wp3-units22-26/admission-template-junit.xml",
+      "junit_sha256": "2c5d2f57d2bb44f1b518e1d86d67d786ed512fd95609d79102f257d6b6dffbc3",
+      "log": "target/wp3-units22-26/admission-template.log",
+      "log_sha256": "c314b9720ef9c10932b7ada3944f3b62c31ea0f160613c5463b28adb1e5f04de"
+    },
+    {
+      "name": "admission-template-plural",
+      "passed": 5,
+      "exit_code": 0,
+      "profile": "ci_gammaloop",
+      "cases": [
+        "generation::tests::interaction_templates_preserve_rank_when_incident_momenta_cancel",
+        "generation::tests::interaction_templates_reuse_admission_and_localize_shifted_bound_indices",
+        "generation::tests::interaction_templates_use_canonical_named_interfaces_and_actual_owner_values",
+        "generation::tests::propagator_templates_use_canonical_named_interfaces_and_actual_owner_values",
+        "generation::tests::propagator_templates_reuse_reversed_spin_and_color_interfaces"
+      ],
+      "junit": "target/wp3-units22-26/admission-template-plural-junit.xml",
+      "junit_sha256": "1d0b265c939eae53b4f6bb3659686f1b486a859d339b4a28305a4f3e244b7887",
+      "log": "target/wp3-units22-26/admission-template-plural.log",
+      "log_sha256": "00693b6fe581038a77ae68bbdaab280d488e805c436642f3e83993aa43cd0702"
+    }
+  ],
+  "selection_note": "Second disjoint five-test selection covers plural interaction_templates/propagator_templates names absent from first regex; no duplicate pass credit."
+}

@@ -1,0 +1,11 @@
+{
+  "control": "Exact current wrapper loop, false followed by an unreachable true command",
+  "executed_loop_sha256": "83d6f5a38ae41747fb64f73e7b610c5804d45a6186fd00983b3678b12655e293",
+  "nonzero_exit": 1,
+  "later_command_not_run": true,
+  "production_tests_rerun": false,
+  "historical_executed_wrapper": "target/wp3-units22-26/validation-executed.py",
+  "historical_wrapper_sha256": "e8278fc9de0c647359967de0bf009992e36268f9a0005e433f81db376106d0a4",
+  "current_wrapper_sha256": "7abf53c59931fac2f56ecfb24483bfc60384523de694a2c19c958839c64496c5",
+  "semantics": "Completed green validation used the retained original wrapper; every subprocess real exit is independently asserted by finish.py. Current wrapper additionally exits nonzero immediately on failure; its synthetic failure gets no physics-pass credit."
+}

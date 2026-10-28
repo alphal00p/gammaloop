@@ -1,10 +1,10 @@
 {
   "schema": 1,
-  "status": "Combined sources22\u201326 integrated; runtime and policy validation in progress. NEW independent Astra integration review required before27.",
+  "status": "Sources22\u201326 combined candidate validated; STOP for NEW independent Astra review before27. WP3 remains incomplete.",
   "base": "0a38ee4e3e7d16af3978f2c6ccde04dc176dfea9",
   "code_commit": "2eb0d9db13caed01cb589f869089bc0753ab429b",
   "code_change": "mrmyosxmmrrpwmomtvtnurwsuvsmxzpu",
-  "evidence_change": "vorstolpmsuvqtolzyurnpsuzturrlnn",
+  "evidence_change": "klkryukzvmvtslrzupurkqyzuplvltny",
   "candidate_bookmark": "generation-integration-units22-26",
   "sources": "source-mapping.json",
   "approved_preparation": {
@@ -157,7 +157,7 @@
   "kernel": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
   "dependency_changes": false,
   "hakari": "No manifest/feature graph changes; locked manifests and kernel owner checked, no regeneration/relock.",
-  "hash_semantics": "Frozen code hashes bind2eb; current registry bound separately by SHA256 in scope audit. Mutable execution/replay/current receipt are excluded from code-file hashes; inventory lists their paths without self-hashes. Historical preparation integrity bindsf2, not current files.",
+  "hash_semantics": "Frozen code hashes bind2eb; current registry bound separately by SHA256 in scope audit. Mutable execution/replay/current receipt are excluded from code-file hashes; inventory lists their paths without self-hashes. Historical preparation integrity bindsf2, not current files. Registry and notes are explicitly frozen at19907c61; final receipt/execution/replay are a later metadata-only change. All runtime source bindings remain2eb. No self-hashes.",
   "fresh_combined_owner_checks": {
     "result": "combined-owner-result.json",
     "tests_passed": 121,
@@ -165,5 +165,90 @@
     "omitted_helpers": 4,
     "skips_no_credit": 2134
   },
-  "fixture_colour_incidence": "colour-checks.json"
+  "fixture_colour_incidence": "colour-checks.json",
+  "metadata_snapshot_commit": "19907c61153d1a16c6b9f2805ad6b4b79a91f2fa",
+  "registry_snapshot": {
+    "revision": "19907c61153d1a16c6b9f2805ad6b4b79a91f2fa",
+    "path": "docs/developers.toml",
+    "sha256": "fc99f5596162c130ccf16dc5dad891ad3728c6cd678c87da6c29cdba0d83bcab"
+  },
+  "validation": "validation.json",
+  "binary_identities": "binary-identities.json",
+  "admission_template_result": "admission-template-result.json",
+  "fresh_unique_Rust_tests_passed": 147,
+  "fresh_doctests_passed": 1,
+  "validation_pending": [],
+  "processes_retained": [],
+  "retained_artifacts": "target/wp3-units22-26; original235-artifact row proof/baseline and all original reviews retained unchanged for review.",
+  "checks": {
+    "native_API_runtime": 121,
+    "generator_admission_template": 18,
+    "bubble_precision_and_reversal": 2,
+    "sampled_quotients": 5,
+    "original_pair_B2_explicit_ignored": 1,
+    "projector_doctest": 1,
+    "scope_checker_controls": 10,
+    "frozen_checker_false_passes_reproduced_and_rejected": 2,
+    "colour_incidence_positive_graphs": 8,
+    "deliberate_variance_reversal_rejected": true,
+    "schema_regeneration_byte_equal_to_frozen_code": true,
+    "API_reference_check": true,
+    "all_target_Clippy_D_warnings": true,
+    "Rustfmt": true,
+    "kernel_isolation": true,
+    "Typst_note_plan_grouping": true,
+    "global_docs_pass": false
+  },
+  "files": "files.json",
+  "runner_failure_control": "runner-failure-control.json",
+  "cleanup": {
+    "removed_unused_task_editors": [
+      "target/wp3-units22-26/guidance-tail.txt",
+      "target/wp3-units22-26/bookkeeping.py",
+      "target/wp3-units22-26/reconcile-audit.py",
+      "target/wp3-units22-26/finalize-tracking.py"
+    ],
+    "negative_colour_fixture_removed": true,
+    "processes_retained": [],
+    "useful_artifacts": "Completed test logs, source/binary identities, producer scripts and original proofs retained; no shared cache or other workspace cleanup."
+  },
+  "auxiliary_checks": [
+    {
+      "name": "fmt",
+      "command": "cargo fmt --all -- --check",
+      "source_snapshot": "2eb0d9db13caed01cb589f869089bc0753ab429b",
+      "exit_code": 0,
+      "log": "target/wp3-units22-26/fmt.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "runner": "Pinned Nix task runner; completion observed directly. No test-count credit."
+    },
+    {
+      "name": "typst-note",
+      "command": "typst compile --features html --format html --root . docs/architecture/generation-projector-flow-staged.typ target/wp3-units22-26/note.html",
+      "source_snapshot": "19907c61153d1a16c6b9f2805ad6b4b79a91f2fa",
+      "exit_code": 0,
+      "log": "target/wp3-units22-26/typst-note.log",
+      "log_sha256": "d103175d5ac5ba1d2d4afae2e801958a1e0dafae1b43ffe6f1f44f3783a2f3ce",
+      "runner": "Pinned Nix task runner; completion observed directly. No test-count credit."
+    },
+    {
+      "name": "typst-plan",
+      "command": "typst compile --features html --format html --root . docs/architecture/generation-integration-plan.typ target/wp3-units22-26/plan.html",
+      "source_snapshot": "19907c61153d1a16c6b9f2805ad6b4b79a91f2fa",
+      "exit_code": 0,
+      "log": "target/wp3-units22-26/typst-plan.log",
+      "log_sha256": "d103175d5ac5ba1d2d4afae2e801958a1e0dafae1b43ffe6f1f44f3783a2f3ce",
+      "runner": "Pinned Nix task runner; completion observed directly. No test-count credit."
+    },
+    {
+      "name": "typst-grouping",
+      "command": "typst compile --features html --format html --root . docs/architecture/generation-integration-wp3-grouping.typ target/wp3-units22-26/grouping.html",
+      "source_snapshot": "19907c61153d1a16c6b9f2805ad6b4b79a91f2fa",
+      "exit_code": 0,
+      "log": "target/wp3-units22-26/typst-grouping.log",
+      "log_sha256": "d103175d5ac5ba1d2d4afae2e801958a1e0dafae1b43ffe6f1f44f3783a2f3ce",
+      "runner": "Pinned Nix task runner; completion observed directly. No test-count credit."
+    }
+  ],
+  "rust_policy": "Reviewed the six affected Rust file deltas against current mandatory policy: imported names/macros, typed Aind source propagation, existing owners and exact factorized diagnostics. Approved preparation production bytes retained; no policy departure introduced."
 }

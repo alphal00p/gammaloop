@@ -1,0 +1,312 @@
+{
+  "source_commit": "2eb0d9db13caed01cb589f869089bc0753ab429b",
+  "metadata_snapshot_commit": "19907c61153d1a16c6b9f2805ad6b4b79a91f2fa",
+  "artifacts": [
+    {
+      "path": "target/wp3-units22-26/admission-template-junit.xml",
+      "bytes": 2877,
+      "sha256": "2c5d2f57d2bb44f1b518e1d86d67d786ed512fd95609d79102f257d6b6dffbc3"
+    },
+    {
+      "path": "target/wp3-units22-26/admission-template-plural-junit.xml",
+      "bytes": 1342,
+      "sha256": "1d0b265c939eae53b4f6bb3659686f1b486a859d339b4a28305a4f3e244b7887"
+    },
+    {
+      "path": "target/wp3-units22-26/admission-template-plural.log",
+      "bytes": 397,
+      "sha256": "00693b6fe581038a77ae68bbdaab280d488e805c436642f3e83993aa43cd0702"
+    },
+    {
+      "path": "target/wp3-units22-26/admission-template-result.json",
+      "bytes": 2947,
+      "sha256": "fc907ddb730c642d32b96ece771a7a52164a6800abe7ac1b75339f873fc80d07"
+    },
+    {
+      "path": "target/wp3-units22-26/admission-template.log",
+      "bytes": 756,
+      "sha256": "c314b9720ef9c10932b7ada3944f3b62c31ea0f160613c5463b28adb1e5f04de"
+    },
+    {
+      "path": "target/wp3-units22-26/api-reference.log",
+      "bytes": 1870,
+      "sha256": "dc494f97c4882827fd0d311cf7cdff43df57938937d6729db6887b61a1080207"
+    },
+    {
+      "path": "target/wp3-units22-26/approved-cumulative.patch",
+      "bytes": 294312,
+      "sha256": "dca45c3032f1cadb73bd38d451784a295952262531568ec2976d9964c4afeefa"
+    },
+    {
+      "path": "target/wp3-units22-26/audit-before-after.json",
+      "bytes": 655,
+      "sha256": "365e5b18a71e3a587a6f62c798ab8e9b6725fbbbdded11685d72e6ea716cd6b2"
+    },
+    {
+      "path": "target/wp3-units22-26/audit-before-after.py",
+      "bytes": 1625,
+      "sha256": "3ca20a01ea29b1b25fb8c9a2e05252cf19de301e071de8863a088e99d0e37def"
+    },
+    {
+      "path": "target/wp3-units22-26/audit-controls.json",
+      "bytes": 173,
+      "sha256": "747594bb5df819589c0476618f60e1dd3b554fd77b956c631667c02cba2a64a2"
+    },
+    {
+      "path": "target/wp3-units22-26/audit-controls.py",
+      "bytes": 1317,
+      "sha256": "06057013bc0e7ac080fa9e02c3cf529ad38002b455fd0955933ee60f9e745277"
+    },
+    {
+      "path": "target/wp3-units22-26/binary-identities.json",
+      "bytes": 12974,
+      "sha256": "30f9f83c17e8b411183b03a923fca2f933ddef10aebce6fbf1d55ba8fcf0ca67"
+    },
+    {
+      "path": "target/wp3-units22-26/binary-identities.py",
+      "bytes": 1797,
+      "sha256": "fb6a76b23ffd60aa4ff4864f4d072def8534ced11ea5ba81a88a427ec7283f5e"
+    },
+    {
+      "path": "target/wp3-units22-26/bubble-preservation.json",
+      "bytes": 1442,
+      "sha256": "d3d6701b9a8a154f1e047c1e6cf91d25221867b44921c0d2295a772951239df8"
+    },
+    {
+      "path": "target/wp3-units22-26/bubble-reversal.log",
+      "bytes": 1901,
+      "sha256": "e29d4d52a4ce87ee77b3277adcb7191337e5063fa6760a940a6d44caa24a6598"
+    },
+    {
+      "path": "target/wp3-units22-26/bubble.log",
+      "bytes": 15368,
+      "sha256": "befab4f6811b98d5dfbd2b41f32e2e3dd5c2bcdee8b32a2fda6ed92c7e0f2402"
+    },
+    {
+      "path": "target/wp3-units22-26/canonical-owner-equivalence.json",
+      "bytes": 373,
+      "sha256": "c5c496fa8bc2e2fd112fcf81f5560c152c77885e8dfdcf42bf65e62db08c86c9"
+    },
+    {
+      "path": "target/wp3-units22-26/clippy.log",
+      "bytes": 3880,
+      "sha256": "991fb480d76590e4cbaf59b76ebf244d07c67ea08b41b908321009fd6f83b3ab"
+    },
+    {
+      "path": "target/wp3-units22-26/colour-checks.json",
+      "bytes": 505,
+      "sha256": "32960be1f2d603dc4645da26e829d1299e50ba957bf58818e0ec30afe1ee8c4c"
+    },
+    {
+      "path": "target/wp3-units22-26/colour-ports.json",
+      "bytes": 9079,
+      "sha256": "9247f58c70a7b57beb2868aaae935546b19dd7b55712a1bc58183e059b740903"
+    },
+    {
+      "path": "target/wp3-units22-26/combined-owner-inventory.json",
+      "bytes": 395497,
+      "sha256": "836697665ba34b83584e977bd962c927cbf12a4a7b7bc1a8fbb0a5384f6cccd4"
+    },
+    {
+      "path": "target/wp3-units22-26/combined-owner-inventory.log",
+      "bytes": 1460,
+      "sha256": "ad332c88050d06b5811b91c9f5781ae45bcb9010a85d8e3afd891d50b11789d3"
+    },
+    {
+      "path": "target/wp3-units22-26/combined-owner-junit.xml",
+      "bytes": 22706,
+      "sha256": "afda8aa488dc0aab71825693c33580fb7aa13718905166c4fb146c6e68085dae"
+    },
+    {
+      "path": "target/wp3-units22-26/combined-owner-result.json",
+      "bytes": 17791,
+      "sha256": "1d95fc41c5acab3fa0ce0a41d59e0bc85cc5fe33d8a5fb70600ecfcd97cabe22"
+    },
+    {
+      "path": "target/wp3-units22-26/combined-owner-tests.log",
+      "bytes": 2482,
+      "sha256": "c6b646b6e860dece40a582c86ea802b68bada19252c3c6389cf93ac82414d7f7"
+    },
+    {
+      "path": "target/wp3-units22-26/finish.py",
+      "bytes": 7790,
+      "sha256": "daf87240eae8fb3f9bcd5ed0779fb245c204fedf4e58cb8ef77b42a60f34bc2d"
+    },
+    {
+      "path": "target/wp3-units22-26/fixture-audit.py",
+      "bytes": 3684,
+      "sha256": "092d5f28e50fd6815f760b08ccccec562b9dc628e9aa4255d6f74e296f05d6fb"
+    },
+    {
+      "path": "target/wp3-units22-26/fixture-audit.py.log",
+      "bytes": 785,
+      "sha256": "9dab8992f21731d36a5b988e326b94a8eb1c431628dfcf21144e4dbed43c480c"
+    },
+    {
+      "path": "target/wp3-units22-26/fixture-reconciliation.json",
+      "bytes": 701,
+      "sha256": "24cdb92546e921774d6c1e9af96bfcefd67d45a0723354d247dd606ec150e188"
+    },
+    {
+      "path": "target/wp3-units22-26/fmt.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "target/wp3-units22-26/generated-audit.py",
+      "bytes": 3328,
+      "sha256": "8a57993b1457012c2cbceded3c1437fbe85ce9f90794ed25e8f3a7d60f42e617"
+    },
+    {
+      "path": "target/wp3-units22-26/generated-audit.py.log",
+      "bytes": 100,
+      "sha256": "df83a6b14a532b98d0943106c1757ba8dc59b656216cae4f5bf591df9518b118"
+    },
+    {
+      "path": "target/wp3-units22-26/generated-metadata.json",
+      "bytes": 10743,
+      "sha256": "4d4c466006e7faea9a36f7537140c70b04a83a054c735479acd4126d6c33ba27"
+    },
+    {
+      "path": "target/wp3-units22-26/grouping.html",
+      "bytes": 13755,
+      "sha256": "f7122c06a8eb613ee569c7fd00b6ad439518e4a9e3cb6d355cd9e07748a00d40"
+    },
+    {
+      "path": "target/wp3-units22-26/historical-integrity.py",
+      "bytes": 1218,
+      "sha256": "1c6b966e90c5f972eb7681dd1a1c8a1ab8c6411f0e7a424bcaa8b0c5f4639d4a"
+    },
+    {
+      "path": "target/wp3-units22-26/inventory.py",
+      "bytes": 2415,
+      "sha256": "7dd7c2e18f9b35b4b9dc7a035643830b5780b979b8fc26a150c82f77e6c0b626"
+    },
+    {
+      "path": "target/wp3-units22-26/kernel.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "target/wp3-units22-26/live-compile-identities.json",
+      "bytes": 900,
+      "sha256": "ebbe3fd35d2b253e65e517c6ce3855962edade1102bd9125805ba6f15f352906"
+    },
+    {
+      "path": "target/wp3-units22-26/note.html",
+      "bytes": 6513,
+      "sha256": "1cf8950e42472447a04ecba222419c5bd58b3a8daf433cb05678a31bcaa1d061"
+    },
+    {
+      "path": "target/wp3-units22-26/original-pair-b2.log",
+      "bytes": 373,
+      "sha256": "a917581a4766010eccfb326677b7ab31ec0db4246bfa3a5f57fe847951f5c82b"
+    },
+    {
+      "path": "target/wp3-units22-26/plan.html",
+      "bytes": 35680,
+      "sha256": "20e4f32e737c0088ce0093dedca01e2b1e3f27358384a099a8b5cb9d80732bf6"
+    },
+    {
+      "path": "target/wp3-units22-26/projector-doctest.log",
+      "bytes": 2972,
+      "sha256": "3ef5a315011c8d226645ce42a61c483d41a58ef625f7ca673ee47079223c3861"
+    },
+    {
+      "path": "target/wp3-units22-26/quotients.log",
+      "bytes": 3699,
+      "sha256": "657ab176206ea7219e6e3715c42130a0c90f0082b7ffb5b58a15e6ee856d6caf"
+    },
+    {
+      "path": "target/wp3-units22-26/rqft-audit.py",
+      "bytes": 2315,
+      "sha256": "c0ebbb6a61bc4a627e11211e34a642cf25cac4219d1519c0690ea92e971867db"
+    },
+    {
+      "path": "target/wp3-units22-26/rqft-audit.py.log",
+      "bytes": 83,
+      "sha256": "05d653aa8dafc5c653845e8d9359723cdf33086df4a2909b9218680f5eeaaafc"
+    },
+    {
+      "path": "target/wp3-units22-26/rqft-bases.json",
+      "bytes": 3277,
+      "sha256": "554b0483b9ce92e0aa3424b8dcb110e7dcb406f3be01e4375a2b46d6bec488d3"
+    },
+    {
+      "path": "target/wp3-units22-26/schema.log",
+      "bytes": 1600,
+      "sha256": "7eb8a1c286a32af1298350fd239ded6d81a87d44f428e9720a21fac3b8b83ed5"
+    },
+    {
+      "path": "target/wp3-units22-26/scope-audit-final.log",
+      "bytes": 234,
+      "sha256": "f6763f7673aecc31b4699f69ee37cb62869c19c8694038be0b250b7785c23149"
+    },
+    {
+      "path": "target/wp3-units22-26/scope-audit.json",
+      "bytes": 99851,
+      "sha256": "b348f16b781c7856f141815717d41a8ecca313e21c9927b974a47a98f083fef1"
+    },
+    {
+      "path": "target/wp3-units22-26/scope-audit.log",
+      "bytes": 234,
+      "sha256": "f51aaadfbc67fb793b8d1add44a7fa6318d05806ae319dec2f26285cd82bb572"
+    },
+    {
+      "path": "target/wp3-units22-26/static-checks.json",
+      "bytes": 3800,
+      "sha256": "3fa7a7fe5470697174b5a80fae6936bf897cd1eccbeaca8b122c01013cf89e74"
+    },
+    {
+      "path": "target/wp3-units22-26/static-checks.log",
+      "bytes": 77,
+      "sha256": "1adce60a9db9f7dce1cfc6c527c89c936935c1cc785a9b8f6d3a6b1a85a034ca"
+    },
+    {
+      "path": "target/wp3-units22-26/static-checks.py",
+      "bytes": 2055,
+      "sha256": "21db76bcb40ad22351c4851795a2e7584e25f063d7e090b8437755818c24c101"
+    },
+    {
+      "path": "target/wp3-units22-26/typst-grouping.log",
+      "bytes": 250,
+      "sha256": "d103175d5ac5ba1d2d4afae2e801958a1e0dafae1b43ffe6f1f44f3783a2f3ce"
+    },
+    {
+      "path": "target/wp3-units22-26/typst-note.log",
+      "bytes": 250,
+      "sha256": "d103175d5ac5ba1d2d4afae2e801958a1e0dafae1b43ffe6f1f44f3783a2f3ce"
+    },
+    {
+      "path": "target/wp3-units22-26/typst-plan.log",
+      "bytes": 250,
+      "sha256": "d103175d5ac5ba1d2d4afae2e801958a1e0dafae1b43ffe6f1f44f3783a2f3ce"
+    },
+    {
+      "path": "target/wp3-units22-26/validation-driver.log",
+      "bytes": 121,
+      "sha256": "99716d825cb06a3e0cab77e03fb10156cdae0d294607d10abce8b079f19b4d4a"
+    },
+    {
+      "path": "target/wp3-units22-26/validation-executed.py",
+      "bytes": 2168,
+      "sha256": "e8278fc9de0c647359967de0bf009992e36268f9a0005e433f81db376106d0a4"
+    },
+    {
+      "path": "target/wp3-units22-26/validation.json",
+      "bytes": 4935,
+      "sha256": "c40b2711783312343c77e081721ded62c31f549e9949bb0e2bbbb458d593f874"
+    },
+    {
+      "path": "target/wp3-units22-26/validation.py",
+      "bytes": 2198,
+      "sha256": "7abf53c59931fac2f56ecfb24483bfc60384523de694a2c19c958839c64496c5"
+    },
+    {
+      "path": "target/wp3-units22-26/final-integrity.py",
+      "bytes": 4154,
+      "sha256": "866d1ee9a49f35acdf9fe729b3c675206c82b06d00e633125ff35261ccc42a70"
+    }
+  ],
+  "semantics": "Immutable completed producer captures in ignored task directory. Tracked current receipt/replay/execution are excluded; original raw235 proof remains separately archived and unchanged."
+}

@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "status": "WP3 incomplete; ordered sources22\u201326 integrated, combined validation in progress; NEW independent Astra review before27",
+  "status": "Sources22\u201326 combined candidate validated; STOP for NEW independent Astra review before27. WP3 remains incomplete.",
   "fixed_target": {
     "commit": "3f0df2a870806076820786994d4883decec8e9e3",
     "tree": "3c91ba47525c627fbc02d79f5afa1d58aa7c5b66",
@@ -436,7 +436,7 @@
       "planned_unit": "port-22",
       "planned_order": 18,
       "reason": "Retain energy-flow scalar bubble orientation selection and its physical assertions.",
-      "status": "integrated; combined review pending",
+      "status": "Integrated and validated; NEW independent Astra review pending",
       "new_commit": "2eb0d9db13caed01cb589f869089bc0753ab429b",
       "approved_preparation": {
         "candidate": "f2e32c44c986058ede1d7e585b9e2e4fefe1110c",
@@ -456,7 +456,7 @@
       "planned_unit": "port-23",
       "planned_order": 19,
       "reason": "Retain corrected qqx_aaa colour-projector variance; preserve exact fixture physics.",
-      "status": "integrated; combined review pending",
+      "status": "Integrated and validated; NEW independent Astra review pending",
       "new_commit": "2eb0d9db13caed01cb589f869089bc0753ab429b",
       "approved_preparation": {
         "candidate": "f2e32c44c986058ede1d7e585b9e2e4fefe1110c",
@@ -476,7 +476,7 @@
       "planned_unit": "port-24",
       "planned_order": 20,
       "reason": "Preserve projector half-edge slots starting at one; adapt generation command and native index serialization to #209 local-zero convention.",
-      "status": "integrated; combined review pending",
+      "status": "Integrated and validated; NEW independent Astra review pending",
       "new_commit": "2eb0d9db13caed01cb589f869089bc0753ab429b",
       "approved_preparation": {
         "candidate": "f2e32c44c986058ede1d7e585b9e2e4fefe1110c",
@@ -496,7 +496,7 @@
       "planned_unit": "port-25",
       "planned_order": 21,
       "reason": "Retain explicit legacy DOT conversion naming on current parser; no fallback restoring ambiguous legacy import.",
-      "status": "integrated; combined review pending",
+      "status": "Integrated and validated; NEW independent Astra review pending",
       "new_commit": "2eb0d9db13caed01cb589f869089bc0753ab429b",
       "approved_preparation": {
         "candidate": "f2e32c44c986058ede1d7e585b9e2e4fefe1110c",
@@ -516,7 +516,7 @@
       "planned_unit": "port-26",
       "planned_order": 22,
       "reason": "Keep explicit RQFT ghost loop bases; no snapshot/count change is authorized by this disposition.",
-      "status": "integrated; combined review pending",
+      "status": "Integrated and validated; NEW independent Astra review pending",
       "new_commit": "2eb0d9db13caed01cb589f869089bc0753ab429b",
       "approved_preparation": {
         "candidate": "f2e32c44c986058ede1d7e585b9e2e4fefe1110c",
@@ -979,19 +979,22 @@
       "reviewer": "Astra",
       "receipt": "/shared/lcnbr/dev/gammaloop/generation-sampling-fixes/target/astra-p3-review-c8291607/review.json",
       "validation": "178 independent structural tests;36 generating/108 inverse cases; Clippy/fmt/hash/registry passed",
-      "limits": "Weighted numerator sum certifies partition unity, not independent full-evaluator contribution multiplicity; expected scores use returned IDs with catalogue/dedup coverage. Combined sign/numeric08/09/CoolQM/epem/BRST still required."
+      "limits": "Weighted numerator sum certifies partition unity, not independent full-evaluator contribution multiplicity; expected scores use returned IDs with catalogue/dedup coverage. Combined sign/numeric08/09/CoolQM/epem/BRST still required.",
+      "staged_preparation": "Separate generation-sampling-fixes-staged reconciliation; NOT integrated or granted a new approval here."
     },
     "benchmark-preparation": {
       "status": "separate preparation; M-rebuild not claimed"
     },
     "input25-36": {
-      "status": "APPROVED cumulative input available for LATER integration; not replayed in this slice",
+      "status": "Source25 portion integrated via approved staged f2 reconciliation; source36 remains approved for LATER ordered integration",
       "commit": "c0e9ce68c325f9d597847d68cc4f1c924da29f19",
       "source25": "5e96b3f00a78c850236609527914dce1154f726c",
       "source36": "7cf78f1c02088eaed3a951329af650e796494945",
       "reviewer": "Astra round2",
       "review_task": "node:delegated-task:command%3Amcp%3Abfeaf58c-8ff5-4388-83d1-9e288c003374%3Adelegate-task%3Ageneration-import-diagnostics-astra-review-20261027-r2",
-      "limits": "Later combined staged DOT caller reconciliation and focused resource/DOT checks required;8 inherited documentation scope mismatches disclosed"
+      "limits": "Later combined staged DOT caller reconciliation and focused resource/DOT checks required;8 inherited documentation scope mismatches disclosed",
+      "historical_status": "APPROVED cumulative input available for LATER integration; not replayed in this slice",
+      "source25_integration": "wp3/units22-26/receipt.json"
     },
     "color46": {
       "status": "Astra APPROVED standalone cumulative input for LATER integration after source45; not replayed in this slice",
@@ -1006,11 +1009,26 @@
       "limitations": "Inherited cooking same-name/incompatible-tags collision at cook.rs691 reproduced before color algebra (minimal1pass/1fail). Original183pass/11fail/22ignore run remains failing. Seven inherited doc scope drifts unchanged. No full physics/performance/docs claim. Combined staged/color/tensor checks and independent review required after integration; preserve fresh-process registration and metadata/history."
     },
     "projector-flow22-24": {
-      "status": "Independent Sol preparation assigned; not integrated or approved here",
+      "status": "Historical standalone preparation superseded for replay by approved staged f2e32c44; sources22\u201326 now integrated as a combined candidate pending NEW Astra review before27",
       "workspace": "/shared/lcnbr/dev/gammaloop/generation-projector-flow",
       "base": "438b61500da4b32841c64211103e5da6fc4c4a72",
       "scope": "Source22 scalar bubble physical energy-flow orientation;23 qqx_aaa variance;24 projector slot conventions against modern #209 native indices",
-      "gates": "Lane must defer staged API dependencies rather than importing this unreviewed work. Parent replay remains sequential; NEW Astra review required before future integration. Do not duplicate these ports."
+      "gates": "Lane must defer staged API dependencies rather than importing this unreviewed work. Parent replay remains sequential; NEW Astra review required before future integration. Do not duplicate these ports.",
+      "historical_status": "Independent Sol preparation assigned; not integrated or approved here",
+      "ordered_integration": {
+        "code": "2eb0d9db13caed01cb589f869089bc0753ab429b",
+        "receipt": "wp3/units22-26/receipt.json",
+        "staged_input": "f2e32c44c986058ede1d7e585b9e2e4fefe1110c",
+        "preparation_review": "wp3/units22-26/staged22-26-preparation-review.json",
+        "P3": "Implemented with canonical checker and corrected type/origin evidence; combined review pending"
+      }
+    },
+    "test-source-closure30": {
+      "status": "Independent Sol preparation assigned by coordinator; NOT integrated or approved here",
+      "workspace": "/shared/lcnbr/dev/gammaloop/generation-test-source-closure",
+      "base": "0a38ee4e3e7d16af3978f2c6ccde04dc176dfea9",
+      "scope": "Nix compileTimeTest request_decorator_contract.py, Linnet generation_reports/*.txt and affected test-input audit; preserve source21 runtime-card/browser owners",
+      "gate": "Astra review and ordered integration after29; no duplication in22\u201326."
     }
   },
   "slice_review": {
@@ -1044,7 +1062,7 @@
     "limitation": "Seven inherited registry digests remain stale; carried explicitly for source31/final reconciliation."
   },
   "current_slice": {
-    "status": "Integrated sources22\u201326; combined validation in progress, NEW independent Astra review required before27",
+    "status": "Sources22\u201326 combined candidate validated; STOP for NEW independent Astra review before27. WP3 remains incomplete.",
     "source_orders": [
       22,
       23,
@@ -1055,7 +1073,7 @@
     "base": "0a38ee4e3e7d16af3978f2c6ccde04dc176dfea9",
     "code_commit": "2eb0d9db13caed01cb589f869089bc0753ab429b",
     "code_change": "mrmyosxmmrrpwmomtvtnurwsuvsmxzpu",
-    "evidence_change": "vorstolp",
+    "evidence_change": "klkryukzvmvtslrzupurkqyzuplvltny",
     "receipt": "wp3/units22-26/receipt.json",
     "mapping": "wp3/units22-26/source-mapping.json",
     "candidate_bookmark": "generation-integration-units22-26",
@@ -1075,7 +1093,9 @@
       "36": "Resource diagnostics later; source25 portion only integrated here",
       "46": "Approved standalone color-cycles; later after45"
     },
-    "limits": "No fullWP3/physics/performance/distribution approval. Three older frame failures, source30/31, fivea_ddx/BRST/epem/CoolQM/fulltip/finalartifacts/benchmarks remain."
+    "limits": "No fullWP3/physics/performance/distribution approval. Three older frame failures, source30/31, fivea_ddx/BRST/epem/CoolQM/fulltip/finalartifacts/benchmarks remain.",
+    "metadata_snapshot_commit": "19907c61153d1a16c6b9f2805ad6b4b79a91f2fa",
+    "validation_receipt": "wp3/units22-26/validation.json"
   },
   "staged_round1_review": {
     "verdict": "REQUEST_CHANGES",
@@ -1103,7 +1123,7 @@
     "candidate_bookmark": "generation-integration-corrected-staged",
     "candidate_change": "pmnstxxwwwkzvyuxyzmsmswtutnkzkmy"
   },
-  "implementation_change": "vorstolp",
+  "implementation_change": "klkryukzvmvtslrzupurkqyzuplvltny",
   "implementation_code_commit": "2eb0d9db13caed01cb589f869089bc0753ab429b",
   "combined_staged_integration_review": {
     "candidate": "d48f9d1aedc766eea5cb185ab6029d1f04462043",
@@ -1263,7 +1283,7 @@
     "source_receipt": "target/astra-combined19-21-review-ZX4duVm5/review.json"
   },
   "active_slice22_26": {
-    "status": "Integrated sources22\u201326; combined validation in progress, NEW independent Astra review required before27",
+    "status": "Sources22\u201326 combined candidate validated; STOP for NEW independent Astra review before27. WP3 remains incomplete.",
     "source_orders": [
       22,
       23,
@@ -1274,7 +1294,7 @@
     "base": "0a38ee4e3e7d16af3978f2c6ccde04dc176dfea9",
     "code_commit": "2eb0d9db13caed01cb589f869089bc0753ab429b",
     "code_change": "mrmyosxmmrrpwmomtvtnurwsuvsmxzpu",
-    "evidence_change": "vorstolp",
+    "evidence_change": "klkryukzvmvtslrzupurkqyzuplvltny",
     "receipt": "wp3/units22-26/receipt.json",
     "mapping": "wp3/units22-26/source-mapping.json",
     "candidate_bookmark": "generation-integration-units22-26",
@@ -1294,6 +1314,8 @@
       "36": "Resource diagnostics later; source25 portion only integrated here",
       "46": "Approved standalone color-cycles; later after45"
     },
-    "limits": "No fullWP3/physics/performance/distribution approval. Three older frame failures, source30/31, fivea_ddx/BRST/epem/CoolQM/fulltip/finalartifacts/benchmarks remain."
+    "limits": "No fullWP3/physics/performance/distribution approval. Three older frame failures, source30/31, fivea_ddx/BRST/epem/CoolQM/fulltip/finalartifacts/benchmarks remain.",
+    "metadata_snapshot_commit": "19907c61153d1a16c6b9f2805ad6b4b79a91f2fa",
+    "validation_receipt": "wp3/units22-26/validation.json"
   }
 }
