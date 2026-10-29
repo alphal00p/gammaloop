@@ -20,7 +20,9 @@ use crate::structure::representation::{IndexRow, RepresentationClass, Representa
 use crate::structure::slot::{SlotMatch, SlotMatcher};
 use std::borrow::Cow;
 use std::cell::Cell;
+use std::collections::HashMap;
 use std::num::ParseFloatError;
+use std::sync::{Arc, LazyLock, RwLock};
 use symbolica::atom::{Atom, AtomCore, AtomView, Symbol, UserData};
 use symbolica::coefficient::CoefficientView;
 use symbolica::printer::{PrintMode, PrintOptions, PrintState, PrintUserData};
@@ -32,6 +34,52 @@ const MAX_BYTES: usize = 4096;
 const MAX_EXPORT_NODES: usize = 1_000_000;
 const MAX_EXPORT_DEPTH: usize = 256;
 const MAX_EXPORT_BYTES: usize = 16 * 1024 * 1024;
+
+// An interned Symbolica symbol cannot acquire a printer later. Preserve its
+// algebraic identity and consult its imported display label only when drawing.
+static SCALAR_LABELS: LazyLock<RwLock<HashMap<Symbol, Arc<MathMlSubset>>>> =
+    LazyLock::new(|| RwLock::new(HashMap::new()));
+
+/// Set or clear the MathML label for a scalar that was interned without a
+/// printer. Model-owned and user-defined native printers take precedence.
+///
+/// ```
+/// use spenso::network::tags::mathml::{scalar_label, set_scalar_label};
+/// use symbolica::{atom::{Atom, AtomCore}, printer::PrintState, symbol};
+/// use symbolica_notation::MathMlSubset;
+/// let x = symbol!("scalar_label_example::x");
+/// let label = MathMlSubset::parse("<msub><mi>m</mi><mi>e</mi></msub>")?;
+/// set_scalar_label(x, Some(&label));
+/// assert_eq!(scalar_label(Atom::var(x).as_view(), &PrintState::new()), Some(label.to_mathml()));
+/// set_scalar_label(x, None);
+/// # Ok::<(), symbolica_notation::MathMlSubsetError>(())
+/// ```
+pub fn set_scalar_label(symbol: Symbol, label: Option<&MathMlSubset>) {
+    if symbol.get_print_function().is_some() {
+        return;
+    }
+    let mut labels = SCALAR_LABELS.write().unwrap();
+    if let Some(label) = label {
+        labels.insert(symbol, Arc::new(label.clone()));
+    } else {
+        labels.remove(&symbol);
+    }
+}
+
+/// Render a registered scalar label in its expression context.
+/// See [`set_scalar_label`] for registration and an example.
+pub fn scalar_label(atom: AtomView<'_>, state: &PrintState) -> Option<String> {
+    let AtomView::Var(variable) = atom else {
+        return None;
+    };
+    let label = Arc::clone(SCALAR_LABELS.read().unwrap().get(&variable.get_symbol())?);
+    let body = label.to_mathml();
+    Some(if state.in_exp_base && label.needs_power_fence() {
+        group(body)
+    } else {
+        body
+    })
+}
 
 fn fits(atom: AtomView<'_>, remaining: &mut usize, depth: usize) -> bool {
     fn visit(atom: AtomView<'_>, remaining: &mut usize, bytes: &mut usize, depth: usize) -> bool {
@@ -466,6 +514,9 @@ impl<'a> Render<'a> {
 
     fn leaf(&self, atom: AtomView<'_>, state: &PrintState) -> Option<String> {
         let atom = tags::unwrap_tensor_display(atom);
+        if let Some(label) = scalar_label(atom, state) {
+            return self.fragment(label);
+        }
         let symbol = atom.get_symbol()?;
         // Static scalar variables go straight to Symbol::format(), which owns
         // both their callback and native name. A declined callback runs once.

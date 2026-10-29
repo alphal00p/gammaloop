@@ -10,7 +10,7 @@ from one extension cannot leak into another.
 extension objects into a fresh module and compares the inventory's exports,
 class members, callable parameters, and visible defaults with that runtime.
 
-The Spenso and Vakint modules are Symbolica community modules.
+The FeynKit, Spenso, and Vakint modules are Symbolica community modules.
 Spenso includes Idenso algebra as `TensorExpression` methods.
 These stubs document their registered embedding surface; they are not standalone
 Python distributions.
@@ -18,6 +18,8 @@ Python distributions.
 Regenerate each inventory in a separate Cargo invocation:
 
 ```sh
+cargo run --locked -p alphal00p-docs-python-exporter --features feynkit -- \
+  feynkit-community docs/api/python/feynkit-community.pyi
 cargo run --locked -p alphal00p-docs-python-exporter --features gammaloop -- \
   gammaloop-python docs/api/python/gammaloop-python.pyi
 cargo run --locked -p alphal00p-docs-python-exporter --features linnet -- \
@@ -33,6 +35,10 @@ snapshot without rewriting it. `just docs-check` and Nix CI do this for all
 isolated inventories. The Vakint invocation also compares StubInfo
 with the single declaration used by production registration and with the names
 actually installed into a fresh community module.
+
+The FeynKit invocation also checks the registered runtime exports, documentation
+coverage, and example syntax. Its package stub includes the default UFO
+bindings and supplies the documentation's downloadable copy.
 
 Linnet generates the graph package stub and its deterministic `__all__`.
 The documentation links to this packaged file, and the import test compares
