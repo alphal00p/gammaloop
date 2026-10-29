@@ -739,6 +739,8 @@ impl SlotContraction {
                 } else {
                     SlotReplacement::Absent
                 }
+            } else if head.has_tag(&self.tags.tensor_word) {
+                self.replace_linear(argument, source, replacement, chain_like, slots)
             } else if chain_like && head == self.tags.chain && position >= 2 {
                 if let AtomView::Fun(factor) = argument {
                     self.replace_function(factor, source, replacement, false, linear, slots)
