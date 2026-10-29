@@ -1,0 +1,30 @@
+warning: unused import: `super::super::traits::*`
+   --> vendor/clarabel/src/solver/core/solver.rs:470:9
+    |
+470 |     use super::super::traits::*;
+    |         ^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: hiding a lifetime that's elided elsewhere is confusing
+  --> vendor/clarabel/src/solver/core/kktsolvers/direct/quasidef/datamaps.rs:26:39
+   |
+26 |     pub(crate) fn to_sparse_expansion(&self) -> Option<SparseExpansionCone<T>> {
+   |                                       ^^^^^            ^^^^^^^^^^^^^^^^^^^^^^ the same lifetime is hidden here
+   |                                       |
+   |                                       the lifetime is elided here
+   |
+   = help: the same lifetime is referred to in inconsistent ways, making the signature confusing
+   = note: `#[warn(mismatched_lifetime_syntaxes)]` on by default
+help: use `'_` for type paths
+   |
+26 |     pub(crate) fn to_sparse_expansion(&self) -> Option<SparseExpansionCone<'_, T>> {
+   |                                                                            +++
+
+warning: `clarabel` (lib) generated 2 warnings (run `cargo fix --lib -p clarabel` to apply 2 suggestions)
+    Finished `dev-optim` profile [optimized + debuginfo] target(s) in 0.25s
+────────────
+ Nextest run ID ca3adeb0-e287-414e-b004-b1af55de7d0a with nextest profile: default
+    Starting 348 tests across 2 binaries (1 test skipped)
+────────────
+     Summary [   1.957s] 348 tests run: 348 passed, 1 skipped

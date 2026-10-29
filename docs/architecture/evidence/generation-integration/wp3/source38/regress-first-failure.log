@@ -1,0 +1,14 @@
+Traceback (most recent call last):
+  File "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-source38/regress.py", line 11, in <module>
+    dst=T/(name+'.rs');dst.write_bytes(source.read_bytes());binary=T/('new-'+name);cmd=['rustc','--test','--edition=2024',str(dst),'-L','dependency='+str(rlib.parent),'--extern','kurvst='+str(rlib),'-o',str(binary)];c=subprocess.run(cmd,capture_output=True);(T/(name+'-compile.log')).write_bytes(c.stdout+c.stderr);assert c.returncode==0,c.stderr.decode()
+                                                                                                                                                                                                                                                                                                                                  ^^^^^^^^^^^^^^^
+AssertionError: error[E0463]: can't find crate for `kurvst`
+ --> target/wp3-source38/original.rs:1:5
+  |
+1 | use kurvst::marks::{MarkContext, MarkSize, MarkSpec, MarkStrokeStyle};
+  |     ^^^^^^ can't find crate
+
+error: aborting due to 1 previous error
+
+For more information about this error, try `rustc --explain E0463`.
+

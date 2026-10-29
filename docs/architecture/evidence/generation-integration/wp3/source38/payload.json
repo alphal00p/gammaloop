@@ -1,0 +1,18 @@
+{
+  "sdist": {
+    "path": "target/wp3-source38/sdist/gammaloop-0.3.4.tar.gz",
+    "sha256": "8f49abee56ff301f29a8d4e6e351284dd7969a50e23c73758d8910abe81fdd79",
+    "vendor_files": 53,
+    "licenses": [
+      "vendor/kurbo/LICENSE-MIT",
+      "vendor/kurbo/LICENSE-APACHE"
+    ],
+    "qualification": "Actual current source archive; not installation/wheel/Pyodide/RECORD/release certification."
+  },
+  "canonical_negative_controls": 5,
+  "fresh_public_adversarial": {
+    "skinny_triangle_right": 100.00000013411045,
+    "deep_stealth_left": -271950718.24859023,
+    "qualification": "Geometric outline bounds; blank extreme skinny raster crop remains downstream limitation, not visual coverage."
+  }
+}

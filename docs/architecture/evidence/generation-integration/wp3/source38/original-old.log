@@ -1,0 +1,26 @@
+
+running 4 tests
+test ordinary_ninety_percent_notch_is_a_control ... ok
+test full_turn_barb_must_stop_at_rear_axis_crossing ... FAILED
+test positive_area_deep_notch_must_not_paint_past_tip ... FAILED
+test tiny_positive_triangle_must_grow_to_hold_stroke ... FAILED
+
+failures:
+
+failures:
+    full_turn_barb_must_stop_at_rear_axis_crossing
+    positive_area_deep_notch_must_not_paint_past_tip
+    tiny_positive_triangle_must_grow_to_hold_stroke
+
+test result: FAILED. 1 passed; 3 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+thread 'full_turn_barb_must_stop_at_rear_axis_crossing' (284214) panicked at .local/review-mark-geometry-a/regressions.rs:30:5:
+end=0.5 but the drawn circle centered at -5 with radius 4.5 meets the shaft first at -9.5
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+thread 'positive_area_deep_notch_must_not_paint_past_tip' (284216) panicked at .local/review-mark-geometry-a/regressions.rs:19:26:
+front=1.346291201783626; a positive-area dart must grow/inset, not fall back to nominal vertices
+
+thread 'tiny_positive_triangle_must_grow_to_hold_stroke' (284217) panicked at .local/review-mark-geometry-a/regressions.rs:24:26:
+front=1.118033988749895; finite bisection exhaustion must not masquerade as zero area

@@ -1,0 +1,83 @@
+{
+  "schema": 1,
+  "status": "SOURCE38 complete cumulative integration and focused validation; STOP for NEW independent Astra integration review before39. WP3 incomplete.",
+  "author": "Lucien Huber <im@lcnbr.ch>",
+  "base": "100da20603a083d031c31bd4e8c6970fc44dda2f",
+  "original_source": "15dd7e1b188dad112d7887bdc6d769125b2697a1",
+  "approved_preparation": {
+    "tip": "861c19e3e7afc067851b13f3e7548baa923286ee",
+    "runtime": "f35643bae1a67fb6ec0c30151e3624f661cf5f96",
+    "earlier_implementation": "69d730c1276a9ec4e4b65b4a4f41cf3578668fd1",
+    "first_correction": "7940545709071a51d2dd1675ec2c6728ec034833",
+    "prior_evidence": "7da9e92de733f544957f724ababeb87c7684c02e",
+    "reviews": [
+      "geometry-review.json",
+      "artifact-review.json",
+      "attribution-review.json"
+    ],
+    "qualification": "A geometry approved and B technical pass; final attribution review closes sole B-P3. Root coordinator granted narrow lock exception, not a separate user statement."
+  },
+  "integrated_runtime_code": "925f739799572d23f46a762c895ebb85e5bd88d6",
+  "code_change": "xrvnmqsskwulwrrxoptluwlqzyykrxyz",
+  "qualified_metadata_code": "0c65bf7c519764460a15a922340d958a9dfa7429",
+  "qualified_change": "pkvwrqmttmlzrttnsuvxvroprrknuzum",
+  "evidence_change": "xzxqxmvsuzxymykppnpnpzuorvqtktyx",
+  "bookmark": "generation-integration-source38",
+  "mapping": "mapping.json",
+  "inventory": "integrity.json",
+  "artifacts": "artifact-inventory.json",
+  "runtime_qualification": "runtime-source-final.json",
+  "native_binary_identities": "binary-identities.json",
+  "fresh": {
+    "native_geometry_SVG": 348,
+    "native_ignored_seed_regeneration": 1,
+    "kurbo": 188,
+    "clinnet": 46,
+    "clinnet_skips": 0,
+    "old_new_regressions": {
+      "original": 4,
+      "adversarial": 5,
+      "old_exit": 101,
+      "new_exit": 0
+    },
+    "public": "18 generic/4 adversarial/8 original query cases plus public mark fixture; numeric bounds and transport, not extreme raster coverage",
+    "asset_reproduction": "34 website SVGs, timestamp0 manual/3examplePDF,12 light/dark ordinary/boundary gallery outputs byte-exact",
+    "packaging": 5,
+    "WASM_runtime": 3,
+    "scopes": 107,
+    "titles": 66,
+    "canonical_negative_controls": 5,
+    "format": "pass",
+    "affected_root_Clippy": "deny warnings pass",
+    "kernel": "pass",
+    "Hakari_generate_verify": "pass/no tracked delta",
+    "CI_graph_update": "pass/no tracked delta",
+    "root_host_offline_resolution": "pass",
+    "affected_Typst": "current plan and mark note PDF/HTML bundle pass",
+    "actual_sdist": "all53 published vendor source files and both licenses byte-exact; no Tiptoe"
+  },
+  "reused": {
+    "WASM": "Exact Git-pinned final qualified source1455 inputs and identical8iq derivation qualify existing88q package/NAR; all29 payloads verified. Not merely payload equality or ancestor relation.",
+    "producer": "Runtime source/features exact, no cold dependency determinism claim.",
+    "canonical_site": "Prior a372 only, no new full-site qualification.",
+    "independent_math": "Approved preparation mathematics retained only at its exact proof/source bindings; current owners byte-identical."
+  },
+  "reconciliation": "Cumulative466 paths imported. No runtime source adaptation. Main tracker/plan/prose status reconciled; registry exact approved prep bytes.153 ignored historical log files explicitly tracked in qualified metadata commit. Replacement geometry, generated assets, notices retirement and Kurbo patch travel together. Source37 not replayed; no39+.",
+  "failures_and_limits": [
+    "Scratch native probe initially used wrong dependency search path and then wrong Nextest JSON key; no pass credit. Corrected command uses actual normal build-directory; final9 old-fail/new-pass checks pass. Original first failure retained.",
+    "Vendor standalone strict Clippy has unchanged upstream common.rs389 needless_late_init; not claimed pass, no unrelated upstream edits.",
+    "Blank extreme skinny triangle raster crop remains downstream renderer limitation; native/public outline bounds are not visual coverage proof. Existing subnormal/nearparallel conditioning limits remain.",
+    "No final wheels/Pyodide/Community/install/RECORD/coldbuild/full-site/distribution certification; actual sdist source-delivery check is bounded.",
+    "No physics production changes;18scripts/four expansion helpers/fullWP3/five_a_ddx/BRST/physics/performance/memory/benchmarks remain pending. Three older frame rows unchanged; two source19 rows remain certified passing."
+  ],
+  "retained": "target/wp3-source38 logs/probes/native executables/actualsdist/renders retained for review. Shared caches and other workspaces untouched; no background check retained after completion.",
+  "NixCI": false,
+  "final_production_and_test_source_qualification": "contexts-final.json (actual frozen0c65 Git input: production/test derivation source matches925; complete53file vendor patch and both licenses byte-exact).",
+  "retained_preparation_binary_verification": {
+    "count": 11,
+    "receipt": "retained-producer-check.json",
+    "qualification": "Historical identity verification only; fresh MAIN runs use separately hashed6executables.",
+    "binaries": 9,
+    "rlibs": 2
+  }
+}

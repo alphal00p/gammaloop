@@ -1,0 +1,77 @@
+{
+  "current_Cargo_artifact": {
+    "reason": "compiler-artifact",
+    "package_id": "path+file:///shared/lcnbr/dev/gammaloop/generation-integration-plan/crates/kurvst#0.1.0",
+    "manifest_path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/crates/kurvst/Cargo.toml",
+    "target": {
+      "kind": [
+        "cdylib",
+        "rlib"
+      ],
+      "crate_types": [
+        "cdylib",
+        "rlib"
+      ],
+      "name": "kurvst",
+      "src_path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/crates/kurvst/src/lib.rs",
+      "edition": "2024",
+      "doc": true,
+      "doctest": true,
+      "test": true
+    },
+    "profile": {
+      "opt_level": "2",
+      "debuginfo": 2,
+      "debug_assertions": true,
+      "overflow_checks": true,
+      "test": false
+    },
+    "features": [],
+    "filenames": [
+      "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/dev-optim/libkurvst.so",
+      "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/dev-optim/libkurvst.rlib"
+    ],
+    "executable": null,
+    "fresh": true
+  },
+  "current_rlib_sha256": "117f4d3f62408eb7e6d3ffd35b46a5ed004101a368f58c9b211fbe39acf7f623",
+  "results": [
+    {
+      "name": "original",
+      "version": "old",
+      "source_sha256": "f6e1a104cf9f88ac48633f6f3e6e04146becb0ee58b90601b7c32cf5fea69822",
+      "binary": "../generation-drawing-ports/.local/review-mark-geometry-a/regressions",
+      "binary_sha256": "84dc9ac13ac0850b329c82b399bf4b1e5ef50c3611ca76efa97b24854c22173f",
+      "exit": 101,
+      "qualification": "Old failures intentionally reproduced; only current new pass gets pass credit."
+    },
+    {
+      "name": "original",
+      "version": "new",
+      "source_sha256": "f6e1a104cf9f88ac48633f6f3e6e04146becb0ee58b90601b7c32cf5fea69822",
+      "binary": "target/wp3-source38/new-original",
+      "binary_sha256": "23e50e1d19d408bdc84fbf8101128d8fd31555fc06826b9405d0b8239b44dce2",
+      "exit": 0,
+      "qualification": "Old failures intentionally reproduced; only current new pass gets pass credit."
+    },
+    {
+      "name": "adversarial",
+      "version": "old",
+      "source_sha256": "adcd755260ea8118343b8ee1b1a057c20e3a42b81f6360ada49307fc8d11a134",
+      "binary": "../generation-drawing-ports/.local/review-mark-geometry-round2-a-astra/adversarial",
+      "binary_sha256": "7ed4bbf644e79745aff224ced379cd4976944d689f96f463d7b040ec7a29842c",
+      "exit": 101,
+      "qualification": "Old failures intentionally reproduced; only current new pass gets pass credit."
+    },
+    {
+      "name": "adversarial",
+      "version": "new",
+      "source_sha256": "adcd755260ea8118343b8ee1b1a057c20e3a42b81f6360ada49307fc8d11a134",
+      "binary": "target/wp3-source38/new-adversarial",
+      "binary_sha256": "edab62061e6e46c3a0d07480b9ab1fca0990e4f63d90e36f429c7ce9b0d0d30b",
+      "exit": 0,
+      "qualification": "Old failures intentionally reproduced; only current new pass gets pass credit."
+    }
+  ],
+  "source": "Unchanged original4/five-test adversarial sources; actual new main-tree kurvst owner compiled/linked with normal source-aware Cargo caches, no seeding/overrides."
+}

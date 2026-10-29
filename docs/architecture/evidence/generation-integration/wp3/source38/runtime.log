@@ -1,0 +1,8 @@
+test_direct_layout_preserves_pins_and_supplies_physical_carriers (__main__.TypstSeedTests.test_direct_layout_preserves_pins_and_supplies_physical_carriers) ... ok
+test_external_carriers_honor_explicit_node_anchors (__main__.TypstSeedTests.test_external_carriers_honor_explicit_node_anchors) ... ok
+test_geometry_edits_invalidate_carriers_but_styling_preserves_them (__main__.TypstSeedTests.test_geometry_edits_invalidate_carriers_but_styling_preserves_them) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.632s
+
+OK

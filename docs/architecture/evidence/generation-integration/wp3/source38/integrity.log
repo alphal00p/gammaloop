@@ -1,0 +1,7 @@
+fatal: path 'crates/kurvst/typst/LICENSE.tiptoe' does not exist in '0c65bf7c519764460a15a922340d958a9dfa7429'
+fatal: path 'examples/notebooks/symbolica-host/licenses/tiptoe-LICENSE' does not exist in '0c65bf7c519764460a15a922340d958a9dfa7429'
+fatal: path 'crates/kurvst/typst/LICENSE.tiptoe' does not exist in '861c19e3e7afc067851b13f3e7548baa923286ee'
+fatal: path 'crates/kurvst/typst/LICENSE.tiptoe' does not exist in '0c65bf7c519764460a15a922340d958a9dfa7429'
+fatal: path 'examples/notebooks/symbolica-host/licenses/tiptoe-LICENSE' does not exist in '861c19e3e7afc067851b13f3e7548baa923286ee'
+fatal: path 'examples/notebooks/symbolica-host/licenses/tiptoe-LICENSE' does not exist in '0c65bf7c519764460a15a922340d958a9dfa7429'
+{'documentation': 13, 'evidence': 364, 'generated-assets': 30, 'runtime-and-build': 67} 48

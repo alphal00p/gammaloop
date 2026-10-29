@@ -1,0 +1,354 @@
+{
+  "commands": [
+    {
+      "name": "public-adversarial",
+      "command": [
+        "typst",
+        "query",
+        "--root",
+        ".",
+        "target/wp3-source38/adversarial.typ",
+        "<boundary-results>",
+        "--field",
+        "value"
+      ],
+      "exit": 0
+    },
+    {
+      "name": "public-original",
+      "command": [
+        "typst",
+        "query",
+        "--root",
+        ".",
+        "target/wp3-source38/original.typ",
+        "<boundary-results>",
+        "--field",
+        "value"
+      ],
+      "exit": 0
+    },
+    {
+      "name": "public-generic",
+      "command": [
+        "typst",
+        "query",
+        "--root",
+        ".",
+        "target/wp3-source38/generic.typ",
+        "<generic>",
+        "--field",
+        "value"
+      ],
+      "exit": 0
+    },
+    {
+      "name": "public-fixture",
+      "command": [
+        "typst",
+        "compile",
+        "--creation-timestamp",
+        "0",
+        "--root",
+        ".",
+        "crates/kurvst/typst/tests/mark-geometry.typ",
+        "target/wp3-source38/public-fixture.pdf"
+      ],
+      "exit": 0
+    },
+    {
+      "name": "manual",
+      "command": [
+        "typst",
+        "compile",
+        "--features",
+        "html",
+        "--root",
+        ".",
+        "--creation-timestamp",
+        "0",
+        "crates/kurvst/typst/docs/manual.typ",
+        "target/wp3-source38/manual.pdf"
+      ],
+      "exit": 0
+    },
+    {
+      "name": "soft-triangle",
+      "command": [
+        "typst",
+        "compile",
+        "--features",
+        "html",
+        "--root",
+        ".",
+        "--creation-timestamp",
+        "0",
+        "crates/linnest/typst/examples/soft-triangle.typ",
+        "target/wp3-source38/soft-triangle.pdf"
+      ],
+      "exit": 0
+    },
+    {
+      "name": "thrown-out",
+      "command": [
+        "typst",
+        "compile",
+        "--features",
+        "html",
+        "--root",
+        ".",
+        "--creation-timestamp",
+        "0",
+        "crates/linnest/typst/examples/thrown-out.typ",
+        "target/wp3-source38/thrown-out.pdf"
+      ],
+      "exit": 0
+    },
+    {
+      "name": "xbox-sum",
+      "command": [
+        "typst",
+        "compile",
+        "--features",
+        "html",
+        "--root",
+        ".",
+        "--creation-timestamp",
+        "0",
+        "crates/linnest/typst/examples/xbox-sum.typ",
+        "target/wp3-source38/xbox-sum.pdf"
+      ],
+      "exit": 0
+    },
+    {
+      "name": "marks-light-svg",
+      "command": [
+        "typst",
+        "compile",
+        "--root",
+        ".",
+        "--creation-timestamp",
+        "0",
+        "--input",
+        "theme=light",
+        "--format",
+        "svg",
+        "crates/kurvst/typst/examples/marks.typ",
+        "target/wp3-source38/marks-light.svg"
+      ],
+      "exit": 0
+    },
+    {
+      "name": "marks-light-png",
+      "command": [
+        "typst",
+        "compile",
+        "--root",
+        ".",
+        "--creation-timestamp",
+        "0",
+        "--input",
+        "theme=light",
+        "--format",
+        "png",
+        "crates/kurvst/typst/examples/marks.typ",
+        "target/wp3-source38/marks-light.png"
+      ],
+      "exit": 0
+    },
+    {
+      "name": "marks-light-pdf",
+      "command": [
+        "typst",
+        "compile",
+        "--root",
+        ".",
+        "--creation-timestamp",
+        "0",
+        "--input",
+        "theme=light",
+        "--format",
+        "pdf",
+        "crates/kurvst/typst/examples/marks.typ",
+        "target/wp3-source38/marks-light.pdf"
+      ],
+      "exit": 0
+    },
+    {
+      "name": "marks-dark-svg",
+      "command": [
+        "typst",
+        "compile",
+        "--root",
+        ".",
+        "--creation-timestamp",
+        "0",
+        "--input",
+        "theme=dark",
+        "--format",
+        "svg",
+        "crates/kurvst/typst/examples/marks.typ",
+        "target/wp3-source38/marks-dark.svg"
+      ],
+      "exit": 0
+    },
+    {
+      "name": "marks-dark-png",
+      "command": [
+        "typst",
+        "compile",
+        "--root",
+        ".",
+        "--creation-timestamp",
+        "0",
+        "--input",
+        "theme=dark",
+        "--format",
+        "png",
+        "crates/kurvst/typst/examples/marks.typ",
+        "target/wp3-source38/marks-dark.png"
+      ],
+      "exit": 0
+    },
+    {
+      "name": "marks-dark-pdf",
+      "command": [
+        "typst",
+        "compile",
+        "--root",
+        ".",
+        "--creation-timestamp",
+        "0",
+        "--input",
+        "theme=dark",
+        "--format",
+        "pdf",
+        "crates/kurvst/typst/examples/marks.typ",
+        "target/wp3-source38/marks-dark.pdf"
+      ],
+      "exit": 0
+    },
+    {
+      "name": "boundaries-light-svg",
+      "command": [
+        "typst",
+        "compile",
+        "--root",
+        ".",
+        "--creation-timestamp",
+        "0",
+        "--input",
+        "theme=light",
+        "--format",
+        "svg",
+        "crates/kurvst/typst/examples/mark-boundaries.typ",
+        "target/wp3-source38/boundaries-light.svg"
+      ],
+      "exit": 0
+    },
+    {
+      "name": "boundaries-light-png",
+      "command": [
+        "typst",
+        "compile",
+        "--root",
+        ".",
+        "--creation-timestamp",
+        "0",
+        "--input",
+        "theme=light",
+        "--format",
+        "png",
+        "crates/kurvst/typst/examples/mark-boundaries.typ",
+        "target/wp3-source38/boundaries-light.png"
+      ],
+      "exit": 0
+    },
+    {
+      "name": "boundaries-light-pdf",
+      "command": [
+        "typst",
+        "compile",
+        "--root",
+        ".",
+        "--creation-timestamp",
+        "0",
+        "--input",
+        "theme=light",
+        "--format",
+        "pdf",
+        "crates/kurvst/typst/examples/mark-boundaries.typ",
+        "target/wp3-source38/boundaries-light.pdf"
+      ],
+      "exit": 0
+    },
+    {
+      "name": "boundaries-dark-svg",
+      "command": [
+        "typst",
+        "compile",
+        "--root",
+        ".",
+        "--creation-timestamp",
+        "0",
+        "--input",
+        "theme=dark",
+        "--format",
+        "svg",
+        "crates/kurvst/typst/examples/mark-boundaries.typ",
+        "target/wp3-source38/boundaries-dark.svg"
+      ],
+      "exit": 0
+    },
+    {
+      "name": "boundaries-dark-png",
+      "command": [
+        "typst",
+        "compile",
+        "--root",
+        ".",
+        "--creation-timestamp",
+        "0",
+        "--input",
+        "theme=dark",
+        "--format",
+        "png",
+        "crates/kurvst/typst/examples/mark-boundaries.typ",
+        "target/wp3-source38/boundaries-dark.png"
+      ],
+      "exit": 0
+    },
+    {
+      "name": "boundaries-dark-pdf",
+      "command": [
+        "typst",
+        "compile",
+        "--root",
+        ".",
+        "--creation-timestamp",
+        "0",
+        "--input",
+        "theme=dark",
+        "--format",
+        "pdf",
+        "crates/kurvst/typst/examples/mark-boundaries.typ",
+        "target/wp3-source38/boundaries-dark.pdf"
+      ],
+      "exit": 0
+    },
+    {
+      "name": "website-assets",
+      "command": [
+        "bash",
+        "scripts/render-docs-svg-assets.sh",
+        "target/wp3-source38/reproduced"
+      ],
+      "exit": 0
+    }
+  ],
+  "website_SVGs": 34,
+  "manual_and_examples": 4,
+  "gallery_outputs": 12,
+  "all_reproduced": true,
+  "qualification": "Actual current tracked WASMs and native public templates; numeric outline controls tested, but blank skinny triangle raster crop is retained downstream limitation, NOT visual coverage proof. No extreme-renderer guarantee."
+}

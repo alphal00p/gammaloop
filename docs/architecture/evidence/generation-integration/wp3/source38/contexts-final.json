@@ -1,0 +1,9 @@
+{
+  "git_input": "git+file:///shared/lcnbr/dev/gammaloop/main?rev=0c65bf7c519764460a15a922340d958a9dfa7429&shallow=1&allRefs=1",
+  "production": "/nix/store/3alhvknpmfx1sm8dgp6b7ayam1g0737m-source",
+  "test_wrapper": "/nix/store/1yifi488h39qaj242y90w11mp5374skw-nix-ci-artifact-barrier-crate-test-binaries-gammaloop-api.drv",
+  "test_producer": "/nix/store/nlvz9r7yd3fng1w8wxvaxgnk2cn6rl1w-gammaloop-crate-test-binaries-gammaloop-api-5530381da967671b-deps-0.1.0.drv",
+  "test_source": "/nix/store/a90bhaarlb4v58kqfri5riv14fqvkhhj-source",
+  "production_vendor_count": 53,
+  "test_source_vendor_count": 53
+}

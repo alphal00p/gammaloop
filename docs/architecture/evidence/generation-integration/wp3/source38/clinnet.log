@@ -1,0 +1,6 @@
+    Finished `dev-optim` profile [optimized + debuginfo] target(s) in 0.24s
+────────────
+ Nextest run ID c5336874-417a-4a11-b16f-e4bff8dde128 with nextest profile: default
+    Starting 46 tests across 4 binaries
+────────────
+     Summary [ 329.539s] 46 tests run: 46 passed, 0 skipped

@@ -1,0 +1,2444 @@
+{
+  "base": "100da20603a083d031c31bd4e8c6970fc44dda2f",
+  "frozen_qualified_code": "0c65bf7c519764460a15a922340d958a9dfa7429",
+  "runtime_code": "925f739799572d23f46a762c895ebb85e5bd88d6",
+  "approved_preparation": "861c19e3e7afc067851b13f3e7548baa923286ee",
+  "preparation_changed_paths": 466,
+  "runtime_and_selected_source_bytes_match_preparation": true,
+  "intentional_reconciliations": [
+    "docs/architecture/generation-mark-geometry.typ"
+  ],
+  "new_plan_and_main_review_bookkeeping": "Canonical plan and main38 review/archive files additionally update MAIN state; docs/developers.toml remains exact approved preparation bytes.",
+  "inventory": [
+    {
+      "path": "Cargo.lock",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "0d896231393016a4df0ac9a8a2b8eddee545b4a8d62bc87cdfbd1f2e3230a2cd"
+    },
+    {
+      "path": "Cargo.toml",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "bf968d49de81d06aa62e12793cfb6d66b46064d55090c2bb3413f883765e63dd"
+    },
+    {
+      "path": "crates/clinnet/CHANGELOG.typ",
+      "category": "documentation",
+      "sha256_at_frozen_qualified_code": "b5b63610e2eb3561f58b6dd258420772593fdca90c5f068e1cb87c369ac63c48"
+    },
+    {
+      "path": "crates/clinnet/src/lib.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "768a5d33f2524f50d14869f7f3864c71ffe5d4768f89892025a2d61bd15170f6"
+    },
+    {
+      "path": "crates/clinnet/tests/public_typst_behavior.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "fdf700dcd08d0affae623179075f105c93d0ea178fbc5d6a9583b09bbf2d8741"
+    },
+    {
+      "path": "crates/gammaloop-api/src/templates.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "3c2ab4a1971e16631fe0c36eb4d4882f6e680d460b8a4a9f24f5e5b2c264993a"
+    },
+    {
+      "path": "crates/kurvst/src/marks.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "fb945d5e0f4c97a30622b9a5e7d870e0fde4b6d4c5d0daf5a63d3b05ff83c064"
+    },
+    {
+      "path": "crates/kurvst/typst/LICENSE.tiptoe",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": null
+    },
+    {
+      "path": "crates/kurvst/typst/docs/manual.pdf",
+      "category": "generated-assets",
+      "sha256_at_frozen_qualified_code": "4b9adf3fe97d6772b9d5fc2ef634c3bd6721e14185b0282b3a2f2f10154817eb"
+    },
+    {
+      "path": "crates/kurvst/typst/docs/manual.typ",
+      "category": "documentation",
+      "sha256_at_frozen_qualified_code": "8eaa4789741b08635964ba199056f92347339365d3362a3c7692e417ae35bbda"
+    },
+    {
+      "path": "crates/kurvst/typst/examples/mark-boundaries.typ",
+      "category": "documentation",
+      "sha256_at_frozen_qualified_code": "e0a106ca8d0707700f9ef89297bae7be813318291586a3f9019ab5590a6145e0"
+    },
+    {
+      "path": "crates/kurvst/typst/examples/marks.typ",
+      "category": "documentation",
+      "sha256_at_frozen_qualified_code": "7f65442dfdd8b368c50a79c1429b2423616e051f6133c2a059a84e5a91d51002"
+    },
+    {
+      "path": "crates/kurvst/typst/kurvst.wasm",
+      "category": "generated-assets",
+      "sha256_at_frozen_qualified_code": "d10e65de25d32dcc64eb7dac6830a52b2bca23abcc8a5cb8055211961ad71569"
+    },
+    {
+      "path": "crates/kurvst/typst/src/mark.typ",
+      "category": "documentation",
+      "sha256_at_frozen_qualified_code": "a9e3d510e3cdf49539ef6996b6afea4fb67018bee6f4cc3ca9add46c70589ad0"
+    },
+    {
+      "path": "crates/kurvst/typst/tests/mark-geometry.typ",
+      "category": "documentation",
+      "sha256_at_frozen_qualified_code": "12700ab3c61c35b964e93e9a6d00ff4c1aa8c35f0528f80b32e2476019fc1f9b"
+    },
+    {
+      "path": "crates/linnest/typst/examples/soft-triangle.pdf",
+      "category": "generated-assets",
+      "sha256_at_frozen_qualified_code": "f59585af65c33363ba25010da820bc288e8b4ee7e2ea0e716a30ba4139e9a7d2"
+    },
+    {
+      "path": "crates/linnest/typst/examples/thrown-out.pdf",
+      "category": "generated-assets",
+      "sha256_at_frozen_qualified_code": "5a48822462759734e461001383b7bf6300da5f2c1ec14493ae3433229f0db33b"
+    },
+    {
+      "path": "crates/linnest/typst/examples/xbox-sum.pdf",
+      "category": "generated-assets",
+      "sha256_at_frozen_qualified_code": "92cfb13205e5cbd75feea037ab910751ff06640be1ad89ed931261aac13adc3f"
+    },
+    {
+      "path": "crates/linnest/typst/linnest.wasm",
+      "category": "generated-assets",
+      "sha256_at_frozen_qualified_code": "05c310283710ecc6bd2815f1e41aa4254e00d016fd44d7a93a96765d6e0ac7a8"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/execution.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "f5b5be4f64a90286ae0457c08f70970013d0b3b97626fe8e8c73d9a5687187d1"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/asset-inventory.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "1689c08e1f16cff56e14ea51e2e7486b64128337749fa39eb71b77d44be25307"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/assets.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "73ebd3bb3427038ad9a593bb93d0c18f06c52b604ae54fefdcefe26e4f3b1196"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/audit.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "c53f9f8717f4f54bf0f8daaea4124da279322a088b1180486f8b8d3c12804bfb"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/cargo-version.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "9950bbb2d5c3417b1a068f0e81f6d3cac991a363193bdf2a22d447f5acf8b503"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/check-docs.py",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "d5c581f00f956a072adb0567fdf3650953fa0c43cad0690fa1095ac40b6d0a52"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/check-docs.sh",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "cb5282ad7d37afdca8c91af5e5159cded48bb29fe0ca47fed11e889c1da2deb4"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/check-payload.sh",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "1bb54a25ab50c6ea8eeae189dc668e1ad654b26c35d9780b867c42d69cdc3448"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/check-rust.sh",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "7153719b6078b91f3c219dac13d2b4b707b557576ae76a1bf2182f256b44c5e5"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/clinnet.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "ad799e54e39794da25ab706d5a5095ec0851e2fc24aacb3ccb2d0e7947f9217e"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/clippy.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "f9bf73b0f28fa28d25ee5573a6ca2fc34ddb906dd6cd89e38790f670e746ee28"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/derivation.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "1f2d4064d267406d7193cf6c0d0cd89f804c7ea66a496568b70ba2360073fa32"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/diagram-dark.png",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "c1303f9f480bb704b0c51561caacfa84d7470ba3da686270b4ed54bb27ce0384"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/diagram-light.png",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "b1c5cc6e0b3cf5cb52f35aa58b4bcc0e8be320bd9fbf9446abdcb10f3d1a45c0"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/docs-generation-drawing-notices.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "eb994694684c4ff328b7f399e56f9b1aadeb7482c2b599bba8e04951ed3c99dd"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/docs-generation-drawing-ports.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "622f1cb320dde076635ad501293e54f276b531c41930e3d771062a7e7b4d9309"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/docs-generation-mark-geometry.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "0ac31fe5e99e3fcdfbc437620994ab76a6360c35f8af57cf2a8d6c3cd1bc1512"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/docs-kurvst-arrowhead-engine.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "65b491deb0500fbadd5a78d28b0ace176d1a0e48ae303ea8f41ec5396cb7db0e"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/docs-nix-crane-cache-reuse.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e5481491519ecba5992e3cd4d43c38c01502c4eb1c8a3c27ce1c8a2e4c193435"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/environment.sh",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "5f21ad593d8ed6aebd6bf5337382361218a8518ab1f365ec92aa5268c33e8774"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/example-soft-triangle.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/example-thrown-out.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/example-xbox-sum.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/final-artifacts.sh",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "7c12a5a96455c95b74551b0038571668610c5507b851d1fc23f5c5ef4335b9ee"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/format.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "1dadf1b63f3fc19e19b1e9fb9a6c3f7772d8ba250861dcced4346f892ae2fca3"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/generation-drawing-notices-html/index.html",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "36afa697b9acc1f99643309a0999b38f705d1454047c97fccfabecd38e5388ea"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/generation-drawing-notices-wrapper.typ",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "3d8e009af701d4622df621748e8f0fdbd5499a4a457673139661d49e462258de"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/generation-drawing-notices.pdf",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "ae8133a8d02a7817ae4aacc16e020616b60f13feae12900a629026c284c4df7d"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/generation-drawing-ports-html/index.html",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "70c42af6271d4be82c9ac19a988ebfeb9eebae5e85b57e83e2706584c59ca9df"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/generation-drawing-ports-wrapper.typ",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "f20c65abfee4db5a76b63e40e3eb00cd33890027b5d589842251eefc485cbe88"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/generation-drawing-ports.pdf",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "6f26d5e3f190d01e1bb6eadab27cc194309261de5aa811695b3e3819f65ed3f9"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/generation-mark-geometry-final.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/generation-mark-geometry-html-final.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "f6291bee2aca5f6a6694512616225bc21e5352431485b391daf60be2898ee573"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/generation-mark-geometry-html/index.html",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "8479036d3b29782abba47b9874ee8509d0ba5d9e5fcb0b489e6c1661b637275f"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/generation-mark-geometry-wrapper.typ",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "04968950f00c842f0698d7f5b2d7634f2068462a4032a210e40cf9ce10217cb6"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/generation-mark-geometry.pdf",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "da006528cf68c74f07e6b7fa6c0614ef45a90c3e777dda75f84d99f369d20734"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/geometry-native.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "682923eb6b73f3a861e6961757076f922809bab73eb3c1f5d4d469993215a43b"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/html-generation-drawing-notices.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "f6291bee2aca5f6a6694512616225bc21e5352431485b391daf60be2898ee573"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/html-generation-drawing-ports.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "f6291bee2aca5f6a6694512616225bc21e5352431485b391daf60be2898ee573"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/html-generation-mark-geometry.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "f6291bee2aca5f6a6694512616225bc21e5352431485b391daf60be2898ee573"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/html-kurvst-arrowhead-engine.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "f6291bee2aca5f6a6694512616225bc21e5352431485b391daf60be2898ee573"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/html-nix-crane-cache-reuse.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "f6291bee2aca5f6a6694512616225bc21e5352431485b391daf60be2898ee573"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/kernel.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/kurvst-arrowhead-engine-html/index.html",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "6caebc21754293a4bac0cf20c625c5c1f62db90bf4ab4e78cd89207fdba72eb1"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/kurvst-arrowhead-engine-wrapper.typ",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "f37322a063f17f0d6c41e35f865d3b8c15215d6dbe9d1bfaba8d9f9e0d4ba632"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/kurvst-arrowhead-engine.pdf",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "3bff48f179e97914eeac7515d3e7cf7d2224954f378b83ebaeec2927be444733"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/manual.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/marks-dark.pdf",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "9a863a5400de6188b73a1a15b059227a919813083d64e1fae528891e674e4b38"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/marks-dark.png",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "b379dd37d59be5865286c6464954a9572ede2a420d26f4ded5c9395f6fcf798e"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/marks-dark.svg",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "625044189a1eb3aa89dc0e8de72b7f86995d4dea25a1f8fb54709dffeb158645"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/marks-light.pdf",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "cb0162857cc55d3eafa63e26e79be5974e9f33c2ca21c749856a49e5c43e2a25"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/marks-light.png",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "9237790f72188a4430df7556f52d4de2284c7ce2bd1774e3ae91816c0c31ebdc"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/marks-light.svg",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "d10a9d53ab88c4ed228d0731bde5e66b09c9a8893c37a164769a4d9c6259b1e7"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/native-test-binaries.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "546840a3bbf053af60395c6e7313ef2fa7641298c1013adae2757aaf7958a271"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/native-test-binaries.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "09e12593af09552bbb889515fc2b994a32d8f9b7f17f89e4a39bfd21a27f27de"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/nix-crane-cache-reuse-html/index.html",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "aa2ea90cbd1cba018361276c94346a5dbf452c06adba8bf30c274610230383c3"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/nix-crane-cache-reuse-wrapper.typ",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "5e412dbab4648c5a5dc98cb45ff227f4bdc89329244ae864389a45b72db5ef30"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/nix-crane-cache-reuse.pdf",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "5fe84b17e0203f1bbda2cd32585ab31a41d442347de1c93d460afe6d89872f16"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/note-html-reproduced-final.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "f6291bee2aca5f6a6694512616225bc21e5352431485b391daf60be2898ee573"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/note-reproduced-final.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/package.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "288038c3149d695d9cc6dbed85a23b83cc36ab7a958cff463e2458c63d2ba940"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/packaging.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "402f487758c660a409f4a66b5402e3e8fba47904bee3231a04b2058181d649a8"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/prerequisite-review.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "001b902c847bf3592438067a7579e960d6f880ea2d8a7aa74b0caf91891cf7df"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/provenance.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "9d5fab507ea7cded94dc8c129499e31d1e5985fa06802f01ed395c69de9fc042"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/provenance.py",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "ca676cf9676167a853593b95fc4900d8e7d2c840523257abf0281a50264beae0"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/python-format.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "fd2299c9f1c6dc869070883e281051bfe93aacf66c1a3b0069f45b4aa410ca50"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/receipt.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "cd75b3f0d3cda6977856d186bb758a3ca80c8900a467a9582e812815be3b458f"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/registry.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "74eafd7ed8e016a4e30aa506504bf551e785810386d04aa333acc85c35eb5dad"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/registry.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "c6f881d15071828383d831ddb409082f891b68e6d7457f4fb125c8fb15f10cb7"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/render-assets.sh",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "c4f5ffa1939b9dfe6e85b1e0de710611482eebf36bd09081a39363224b50191e"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/render-html.sh",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "5b27daf4db41caba07150fee7e575c956f29bdb778ea8568bc1d5642631768f0"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/reproduce-wasm.sh",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "ba00679cfdddc2c8266b4bdc0a514c3de52059dfbf8fd02e4e6f2632de8ebd0a"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/additional-scale-probes.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e3af07f697de4818352ba198d71bd23abcf03889bcbde2e7185e487a0d16cb6f"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/asset-inventory.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "b2f0c9f3cebe87ba305d60165ebd4fb78f42dd061ad5592e0c3195a4fb88a14a"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/boundaries-dark.pdf",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "ddc98d70216726a5adfcda908b1afe287093f55c86e6926b888c24248f4b3425"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/boundaries-dark.png",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "55c5eb42e1f75e48c70a5d3eee20ad7819f560fb892c97e872406f61622701e6"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/boundaries-dark.svg",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "6ab5a424a1d6c8a59dbbb89dd185e90546b59b788465ca1e3e896e015f5122a1"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/boundaries-light.pdf",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "12fa4f3914d9a46fc065f21d00064561e1a2906f0cc2f87cc529983ff3f9395f"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/boundaries-light.png",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "df16b0fe0e2ad76fba63d88067add6aa164ac1db573970685ad783bc991171a8"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/boundaries-light.svg",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "eca5f8dcdc3dbf5a4b025318878c6d0ff63a55e2c8aa331acc78171e27324f97"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/cargo-version.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "9950bbb2d5c3417b1a068f0e81f6d3cac991a363193bdf2a22d447f5acf8b503"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/check-docs.py",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "8500ed16bfb87f59e8ba6e30dcaa5418e490d159a854354655ce25a8a23fec34"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/check-docs.sh",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "eb4f075119aa16eb758aff3b6c37cdace97226641aa9e085a65a94333a1cbf42"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/check-payload.sh",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e15fb29f0ec974a29f811d0c2bbbbcdac9654cdae6f6edc63295f82d3704d3eb"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/check-rust.sh",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e33e285357ed706df4b870739eb1df51893deee257468140dd2ee79ee6799b48"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/clean-build.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "53c050bf7dfe79af8000a2afecc1e78163b2facdc75da49dbed1c9a0c6d695e2"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/clean-check.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "736569f6deedc180fbdf63d9fc5c943dc9566c8d1b9598d23a3fd954a63ffd03"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/clean-derivation.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "c2f122dc3f2c7692e8578f2a79e230299661f89308650f649a44c508eb41dd00"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/clean-input-proof.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "ce4cf587d24702f79f3e503d7a44f331c22421754e114f3e92726453c2e92ec0"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/clean-package.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "92a3bd04f767158276abd18432409908594746b72f51b3ee5d562f640467553e"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/clean-producer.sh",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "0270d5efd5e389d8c89021e19de41904d02c6e0962793e5bf0f7a781e50c8e3c"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/clean-reproduction.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "d53b3a03d89be88ff37f9303f6ccb8f5e85256f81d5d2a7cfe13936cfb6d2f72"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/clinnet-binaries.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "125c37d5f4f87c8c9bfd93cd72a51939ec9bd59d5e5b57c2d5b294b5683a8408"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/clinnet-binaries.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "901f84fbc65a48996ea296732f8fc9c48722b5e0fa454909371910c1b688131a"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/clinnet.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "83f2e3c3efb59f07615d8acdbcd57f11147ca5978926f4932b95e1f94d440420"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/clippy.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "7fe8e419e55e50a531566a8e53c471c697edb40f2002e339157be1bb6b4d5b47"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/diagram-dark.png",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "c1303f9f480bb704b0c51561caacfa84d7470ba3da686270b4ed54bb27ce0384"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/diagram-light.png",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "b1c5cc6e0b3cf5cb52f35aa58b4bcc0e8be320bd9fbf9446abdcb10f3d1a45c0"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/environment.sh",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "5f21ad593d8ed6aebd6bf5337382361218a8518ab1f365ec92aa5268c33e8774"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/example-soft-triangle.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/example-thrown-out.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/example-xbox-sum.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/final-artifacts.sh",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "5e329f73091d5e89036097aef607946892e9336daaf3e5b5b4557e17de0a36b9"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/format.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "1dadf1b63f3fc19e19b1e9fb9a6c3f7772d8ba250861dcced4346f892ae2fca3"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/frozen-review-producer-sources.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "eed47c7308b6360832c05834639d54082cc3f9b7565cb0feaafa0e32dca0166c"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/gallery-inventory.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "de0d17ac75840af4cabefcc5083f40b44614153c3d270040956efd99a01cfc7c"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/generation-mark-geometry-html/index.html",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "d0cc3b9484f57024068f0516cfb0a3df0562e496e82cf9aa016dac9d77cd21a7"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/generation-mark-geometry-wrapper.typ",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "04968950f00c842f0698d7f5b2d7634f2068462a4032a210e40cf9ce10217cb6"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/generation-mark-geometry.pdf",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "fdb7c2acf8043f5db44e9f8b7d84039edc8f5efe7cb13952b337d477638d0a95"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/geometry-native.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "549e629d70b25620e1572ce91447ff3d892e39c59b6c65f64c2fa752c8194a84"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/html-generation-mark-geometry.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "f6291bee2aca5f6a6694512616225bc21e5352431485b391daf60be2898ee573"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/kernel.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/manual.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/marks-dark.pdf",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "7154592804fd93de182e8f6ecc7522eeeaed4276e812f74f15b04cc43f566227"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/marks-dark.png",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "b379dd37d59be5865286c6464954a9572ede2a420d26f4ded5c9395f6fcf798e"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/marks-dark.svg",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "a92dc11bc522f113f95591825cd0b071d56ed62883982af76c5592943fb53e05"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/marks-light.pdf",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "bf5f928d572b9f3eab4b8261b635223fd871c6c6b0f8d23bf4c8fd8d7b239add"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/marks-light.png",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "9237790f72188a4430df7556f52d4de2284c7ce2bd1774e3ae91816c0c31ebdc"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/marks-light.svg",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "524865e90c436f4bfbffd9432c060ad3ee43dd1439c2bc22b44ca9f15666bc37"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/native-build.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "57465d4a7eaaf149dbad94f97cb04fe391a7feea7313a43ae41b4e45e27dfb46"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/native-probe.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "6e530923e7c7be65ab43735b3b781d2b23e496353773ac33ab869cd3516a0171"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/native-probe.py",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "bd3360a5139eca22f102cf3a4c4985903016c18dc58e7875577f84a0f46133ec"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/native-test-binaries.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "546840a3bbf053af60395c6e7313ef2fa7641298c1013adae2757aaf7958a271"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/native-test-binaries.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "b6ecf9f5c375ab185da802b0957e3aabf5e10c8ae8f9a653cfbddc5ea4d1065f"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/new-boundaries-wasm.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "71bd0d072e7afb5ebd183a46f68d3e75a62f2cd875a17f181e628f8e47b92355"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/new-boundaries-wasm.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "72ae6598a94fd6cec878a42daf3d0563ca5bb5b19b8f54b761995a2d46b1a7b9"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/new-native-binaries.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "903d23a6e5333152605997ba3f3196bd846a60f901c785cd60d00eaf33c87c83"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/new-native-identities.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "477738ce248b713f14a59a44a19fbe4a2b6268f59742a69f6e64e111b0f0517d"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/new-public-fixture.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/new-regressions.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "c4dc70d39f775773353a544e28472c23398fa3f0ae59f694451de41b0fe053ec"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/note-html-reproduction.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "f6291bee2aca5f6a6694512616225bc21e5352431485b391daf60be2898ee573"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/old-boundaries-wasm.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "64e656b47fc9d674b84559c66df4f0de09ce2f10d8f5a95ba764c51ffa5c1fbf"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/old-new-cases.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "4f75103b8ff52bc6cac127923c2cd2ddf8d3e438a0e6d4c3086b96cdc9e53689"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/old-producer-identities.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "9a0278713ed1aec96d0b94453912bf6e9e6af6c4234df0cf981883ed2ee3c423"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/old-public-fixture.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "4b02fcd016e803f2e069c0a8bb7867dd4de0479a20ab073dff7d465fea333f05"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/old-regressions.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "6a8bdff2dad881bb22bf2fb003fc1ed56be0e619ce6b5d0d1ad6dfc855b6f785"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/packaging.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "f56e710c65e418931ef28b6ec521cbe29f6281d46c483d809e8492f70acb36c3"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/provenance.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "b4692c72866720a72cfb47a2414bc6a28e6befb83598118f737b0d31569bc827"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/provenance.py",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "57a76e124475c198042e20da2d688462e292a591228d75289afdad9700d9be78"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/receipt.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "f009fe3018ca9242325b88f605792f20d8b23033792e22790ca065987f0926c1"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/registry.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "1c21e59d66e6864ab01613973ebc9e0ef877e9693ac99cd0b18dad828685b894"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/registry.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "c6f881d15071828383d831ddb409082f891b68e6d7457f4fb125c8fb15f10cb7"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/render-assets.sh",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "82535f9aa3c3e4806f5cd433ed0393ba1250e51483f7102c0be0d31d05668a27"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/render-boundaries.sh",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "d0aabb85e9f4909c679fc5fd0d0e39952111bf0ba2d8c87d31a4a614644c8c32"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/render-html.sh",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "30c705a01581fa4f3d904ae71e1cb3fa91ce73585b141b2ea46e48569a889ebe"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/retained-corrected-store.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "1508753e616f72a370fb42408a46448b5181f011e809ba02263c52e05dde37e2"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/retained-producers.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "2b4a6b07f8b4e84249a41dd42f370c9b8f7cf9e020375fec0abf2cb609d72203"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/retained-round1-store.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "485b4efeabb342d157353f52b71bce06919db15712f4664220d8b31b6cc5d649"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/review-a-verification.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "4da5cc4930008fc5090083481253fdb6f553db8a2735e7836c4c86cd4ca0bb7a"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/review-a.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "be33e87a0a7d13b909649b6d19a71682645444af0eb76560d06c618ea500fac2"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/review-b.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "3dde5a431d9c4c221576b3da38aaf0a1c48b091a38bad6ab467bf091904b6602"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/runtime.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "04d471602d3c55ac71b60d47d65b506d4c1fec5dad5f7f5048b41bc87b5aa919"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/rustc-version.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "778fbc643a806f0dd123c056e66201d7e8a56a61928ec0a33171be8d6c2d5a37"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/typst-version.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "20ad20e86d85d168643624dc3e3388e7cbcc5a8384d17835db3a0ab04c496fba"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/website-assets.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "3757b81634c5214999d42eb1e2fed267cce6f6e2bcbdc138d6ee6210ae5e3913"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/website-reproduction.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/add-tests.py",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "967a09592e5526f9344eab6303d9e99ad2dcddbfe6b10243979401e694907f69"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/asset-inventory.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "39579d6dc478bdc5d86c932b036ab282944b8a06134fb97b2e4590b2915b50f4"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/audit-dependency.py",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "02028b8ea7a778d2a7031db70c8bff482c15dde9bbe2702be41e737e1451d4e2"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/binaries.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "bb288f6c32b5e1843e4fb6c519bfdccddf0a89c0efbee023614a63bce4119d9d"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/binaries.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "1fa8ef26bfdfd1c5fde707d9e36e2b7e158d6f79e659055c2c51c7211400c1d8"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/bind-and-archive.sh",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "9fb9d5c06d071d900da3a8f2e185ef5071a0601b674f6c34c454de9ff2574f69"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/boundaries-dark-pdf.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/boundaries-dark-png.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/boundaries-dark-reproduced.pdf",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "a00fc697c411cfb5798aa179ab7c0e8eb7eabd27fbe65d8ca28771df3347a9da"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/boundaries-dark-reproduced.png",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "a497f0f85b87cc1d49c8af6c3c18f2bf14e862101663504c23eda4c53913b66b"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/boundaries-dark-reproduced.svg",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "9027ab8b8df53f2f9f21e1296692aa1538720fb48c10417731edf2afe93dd8dc"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/boundaries-dark-svg.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/boundaries-dark.pdf",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "a00fc697c411cfb5798aa179ab7c0e8eb7eabd27fbe65d8ca28771df3347a9da"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/boundaries-dark.png",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "a497f0f85b87cc1d49c8af6c3c18f2bf14e862101663504c23eda4c53913b66b"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/boundaries-dark.svg",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "9027ab8b8df53f2f9f21e1296692aa1538720fb48c10417731edf2afe93dd8dc"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/boundaries-light-pdf.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/boundaries-light-png.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/boundaries-light-reproduced.pdf",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "a7cf192d94afb84b4a3ff06fc129f15322db252b6f461728ac4b5d99db4527c0"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/boundaries-light-reproduced.png",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e61ffda81baac35d10ac5740b945b14383b1c31922e5e307b37af19b770b2441"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/boundaries-light-reproduced.svg",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "de11c8192d85938a78481d11aa42fbfee44c9dc0928927155e0505f13dfd8ad3"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/boundaries-light-svg.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/boundaries-light.pdf",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "a7cf192d94afb84b4a3ff06fc129f15322db252b6f461728ac4b5d99db4527c0"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/boundaries-light.png",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e61ffda81baac35d10ac5740b945b14383b1c31922e5e307b37af19b770b2441"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/boundaries-light.svg",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "de11c8192d85938a78481d11aa42fbfee44c9dc0928927155e0505f13dfd8ad3"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/cargo-version.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "9950bbb2d5c3417b1a068f0e81f6d3cac991a363193bdf2a22d447f5acf8b503"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/changed-code-files.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "fc59cc2def5cdab60cd19a6cf584533962cff8e499a2b3ea163b8229d9cc9d5c"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/check-docs.py",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "71602a4b0510ec6bbceedb238d22efb81d9183c6a287a61700e6d03efde1c806"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/check-docs.sh",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "6d06ef74062ca4c8735c7497d101a05a2dfc1e064b1acf04646e1d8d0ebbd02b"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/ci-update.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "527d952a88147d430b423900df2f3d26384d3ad95541c74ce2e4599aaa9eda3e"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/clean-build.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "dad0b2282ab86892352fdcf8562019f6425d20783b39ed596a23c7eb89d68026"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/clean-check.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "b257311a019829030486649482fd180a9db550d809ced2ed0d22d99d51d23c42"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/clean-derivation.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "65591462a592ee7203707423a5673becc17b14e693e58a7e555edbf35220dd4f"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/clean-derivation.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "63fb17a659f13585ae788898e612a294c4bcd430e62452dfed2ec4cd867a1602"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/clean-package.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "ebea55ac794f67459e5eeff88d124f17f6faff71b96e7f0973dc1be8a4289623"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/clean-reproduction.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "737f3681f0d166a70c4a710a515fa73fd94a1dd2dfcedf670cb92c06ec89c170"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/clinnet-binaries.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "0b1f6295837a35be27556acee55e9fc7ea748ee066818b9a71f701a78b879967"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/clinnet-binaries.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "d101dfecc7ac1091af525b072e4d99f524ebe91f1e0a87b470a2f4212335a0ec"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/clinnet-final-fixture.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "80ac81903782e5175885e7441e0fd41535db4c40baf46aeebbec87d4d1f9a0ca"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/clinnet.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "3d42a60f5febb328fd8564762d36ab5f5f053fac74efaa38b042caf007d268ea"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/clippy.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "4cc1145f2d012223227e336b92ed7350e79a0ba4dda98c0b132bc29ad59511b4"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/dependency-audit.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "a27a1aa26c070a290765f924f762bb869fa6a028dd28bc3af2d0a6fc666c8aa7"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/dependency-audit.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e146e70ed599c265b5e7b6173a63933f7ed4b6911920ec759d7ac64165e532ba"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/diagram-dark.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/diagram-dark.png",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "c1303f9f480bb704b0c51561caacfa84d7470ba3da686270b4ed54bb27ce0384"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/diagram-light.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/diagram-light.png",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "b1c5cc6e0b3cf5cb52f35aa58b4bcc0e8be320bd9fbf9446abdcb10f3d1a45c0"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/environment.sh",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "5f21ad593d8ed6aebd6bf5337382361218a8518ab1f365ec92aa5268c33e8774"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/evidence-inventory.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "9fdb4ef1d23ce389f348630b2881750407b0d2c6aa5797325bbc4e6593e23704"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/example-soft-triangle.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/example-thrown-out.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/example-xbox-sum.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/final-payload-bindings.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "ef0cc3cd5cb3f7ca3f646a11fd0e90c6411c99b3f55181454060ccc663451022"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/final-scope.py",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "180f89839fe353905f4a9ad4d81184b6a9c8e7eaa17b64c6af054ba1a61bcb8e"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/final-source-eval.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "63fb17a659f13585ae788898e612a294c4bcd430e62452dfed2ec4cd867a1602"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/final-source-paths.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "97649e9670f6bbbd31103216615f673f33e4b18b46b7ec3c887cb7fa384dc096"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/fix-sdist.py",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "984c1faf8bd09e64ec09147680e3a12c07fd339f483735769610d02ee1eecf2f"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/format.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "1dadf1b63f3fc19e19b1e9fb9a6c3f7772d8ba250861dcced4346f892ae2fca3"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/frozen-producer-sources.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "28f894ab2063654f304c341cc40240dde5c0cbb42b48c7b447744fa496016014"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/gallery-dark-pdf-reproduction.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/gallery-dark-pdf.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/gallery-dark-png-reproduction.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/gallery-dark-png.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/gallery-dark-svg-reproduction.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/gallery-dark-svg.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/gallery-inventory.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "50e940e5e161974a7892017db5c4b602cd45690cc565ac1a8cbad889cbe6263a"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/gallery-light-pdf-reproduction.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/gallery-light-pdf.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/gallery-light-png-reproduction.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/gallery-light-png.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/gallery-light-svg-reproduction.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/gallery-light-svg.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/generation-mark-geometry-wrapper.typ",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "04968950f00c842f0698d7f5b2d7634f2068462a4032a210e40cf9ce10217cb6"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/geometry-native.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "2c86e35abb47e17dde72bb8a0be0b5425cb3b4323970d4b45367f7cdfee3ff2f"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/hakari-generate.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "4508232c1c59fd2cfb83dee6bd9c0d78ab3150b3671f332ac0221c4df78e381a"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/hakari-verify.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "704f7242c6f355e1c07d9f9ae6ea748231571460920e0647e0fad2f515d7c7f3"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/implement.py",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "8d2681788357d0b3107a700221b5aeae46e29846278f5aa5087682b78d0786e0"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/install-and-runtime.sh",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "5553a57081eb23a68f3854a43413ee41a67a72eb1c9cc91ac37421020bf7c383"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/intermediate-0bc/build-source-commit",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "d99f5e6ce254f6d09dc22fb401fc324ba1658c1d1ecc1b191139b3cbecbb6e9c"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/intermediate-0bc/clean-build.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "570ad5774ae052d086212bab1ea39121833bc0ba27cdabb99a51fe7e57294760"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/intermediate-0bc/clean-check.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "c17ae96ebfc464debe7367dca3b404cf41f5fe892ce3eedbc02cf94a76c25c30"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/intermediate-0bc/clean-derivation.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "c8a71bf23627fec7a596e53f01eea325c0c750c25da7f4b40d7a803d6b6e375d"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/intermediate-0bc/clean-flake",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "11b4577d66142612c935b2e0a57f9399c3d3a8f2f0134eb0ba6f3b8a270f5f38"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/intermediate-0bc/clean-package.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "c4903a1ba8b48807d0f1f7a593771c1975df093b3c55f59d5c1af813a5bbff86"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/intermediate-0bc/clean-reproduction.exit",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/intermediate-0bc/clean-reproduction.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "45580f304f7c6412337973026e5cbfddee3617289117c008a07954ed2371bf5c"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/intermediate-0bc/retained-store.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "a9e82d1caa582b6ddc06e16a62439e2f693454f0030b1ab24c4ae1484c0d8d7d"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/kernel.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/kurbo-clippy.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "37f28a2cf1369c7275fdcb5a497a9553188bf480397661517c67f577b7fa375d"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/kurbo.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "9d1ec378db298329baee6e9f98d3c188b21676c7399a5dee51e888cf8356fedd"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/kurbo.patch",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "87b97aa705ab12878f9d7df71b9c59afa4716ee4956e0f761ab91ad86c887e92"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/manual-reproduced.pdf",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "4b9adf3fe97d6772b9d5fc2ef634c3bd6721e14185b0282b3a2f2f10154817eb"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/manual.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/marks-dark-reproduced.pdf",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "7154592804fd93de182e8f6ecc7522eeeaed4276e812f74f15b04cc43f566227"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/marks-dark-reproduced.png",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "b379dd37d59be5865286c6464954a9572ede2a420d26f4ded5c9395f6fcf798e"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/marks-dark-reproduced.svg",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "a92dc11bc522f113f95591825cd0b071d56ed62883982af76c5592943fb53e05"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/marks-dark.pdf",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "7154592804fd93de182e8f6ecc7522eeeaed4276e812f74f15b04cc43f566227"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/marks-dark.png",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "b379dd37d59be5865286c6464954a9572ede2a420d26f4ded5c9395f6fcf798e"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/marks-dark.svg",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "a92dc11bc522f113f95591825cd0b071d56ed62883982af76c5592943fb53e05"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/marks-light-reproduced.pdf",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "bf5f928d572b9f3eab4b8261b635223fd871c6c6b0f8d23bf4c8fd8d7b239add"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/marks-light-reproduced.png",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "9237790f72188a4430df7556f52d4de2284c7ce2bd1774e3ae91816c0c31ebdc"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/marks-light-reproduced.svg",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "524865e90c436f4bfbffd9432c060ad3ee43dd1439c2bc22b44ca9f15666bc37"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/marks-light.pdf",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "bf5f928d572b9f3eab4b8261b635223fd871c6c6b0f8d23bf4c8fd8d7b239add"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/marks-light.png",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "9237790f72188a4430df7556f52d4de2284c7ce2bd1774e3ae91816c0c31ebdc"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/marks-light.svg",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "524865e90c436f4bfbffd9432c060ad3ee43dd1439c2bc22b44ca9f15666bc37"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/native-build.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "27d1d00a000d6a59b67490c9b71ac670f96ad7c752a38e2bc3168a2f5356cdbc"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/native-test-binaries.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "7cd70f4c09d53e2634b742531c8014b76c238ad826028c1cc2108257f1fee6b6"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/native-test-binaries.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "acf5171b54d5410466be0c3f1c9cdc4199b3de9e23930c5734235d31486d82f7"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/new-adversarial.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "1c6340cd4b870640112386e1e5a679ae304edcf54307f235fc4c7a22d31091db"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/new-matrix.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "2446344d8d230184a5052b56421655a627f005f988836e7303e4f2923da6b297"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/new-public-fixture.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/new-public-fixture.pdf",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "47aaa18de43bb5cdcd3a90cb32b284e8d873e8b78631755b7d4772333d33e0a4"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/new-public.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "edab9516cbcd08d607230c6cf5a377b5f5a636ad371fd2dc9542245340220dea"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/new-public.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "2ef6198c8f5334394075eae54fd92ceaaf77f609ffcbd93db8ff3c2ab60a9a91"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/new-regressions.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "73c7a9fd70352898bddd5b5a51f225c5107c6c525bad6b44d8c9d06393f08296"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/note-first-html.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "f6291bee2aca5f6a6694512616225bc21e5352431485b391daf60be2898ee573"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/note-first-html/index.html",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "261002bcc3739e62edb90eb1762b77cae531d06e01867da9c8ab65a6c657ca43"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/note-first.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/note-first.pdf",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "b309f29247276d1821823993db93df33d593855c486f7b40602dbd9f6025b7c0"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/note-reproduced-html.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "f6291bee2aca5f6a6694512616225bc21e5352431485b391daf60be2898ee573"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/note-reproduced.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/note-reproduced.pdf",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "b309f29247276d1821823993db93df33d593855c486f7b40602dbd9f6025b7c0"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/numeric-oracle.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "f5273a04e404745e267d6bbd0809765ff287edd51b9b4fbf6af780a367c14d2b"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/old-identities.txt",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "a5178525945ffdf15a7ad2e80afbd7706ba1d0c7364eca1dc2ec208470fbcbff"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/old-kurbo-producer.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "481a163f4ac292bca0468e5cc0b37a9b2cac1d8adeb3abfb9626e4b93f0c83c4"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/old-native.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "910542a3755629f10240ff356f9aa7eb69b2e8c56008a2d86ed77e0d6323b6ab"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/old-public.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "ba4cc3b1e2d42365539dedb3c84f4d97a7d1bd95a995767aa1c99f7c0ce64f6b"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/oracle.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "a29709cb49fd9651eda89a92622b9b01cd63549b39cebdacb224af4896b4aea1"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/oracle.py",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "f34c37458b909f2ba221789368757e6a9ce8f6b37e463126fdcdd70f61f1180f"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/owner-tests.py",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "ffc975301ed218865ffbb2eb99d5b7eef68750b71f7a9c0afe0f40f298d998d2"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/package-evidence.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/package-evidence.py",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "cb1a4bf5f623d09c9f45a398d8628e1c18af97dc6db0b7097686a82e62f6c6c3"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/packaging-current.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "783c380af732c94e72e3e4bcc0426c595c0963e60cad40d368595d71f7aa4814"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/packaging-final.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "d36cc87fad7825a022be672c9886d9a609b46f67181915211ecac6b995681999"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/packaging.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "39ffabc2e55e22209c0d908c8e3fe2b0998db3a7d23fc993af19f474549332a2"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/probe.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "adc598e4994e62143343496fa1871dfdce64e3cda790761ad70a1f1006275ba2"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/probe.py",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "cdca90d91e8f54533c9f1024a883a6739be5d7a799660f811b8aa43dc3abcc3d"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/provenance.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "53c45b1723f76bc85cff7f8ec5ed6419a33b7cbe0073b3639a6afbb570fc02e3"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/provenance.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "f294a45ef8c5884e367416439fd9e428e6f89e3293cae403aea51e024ba0eb61"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/provenance.py",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "22fb8a29661cb4291810d384a4e3b28dad0694ff25c60b6dae6530eea71f61ee"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/public-comparison.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "63b1b14854fffacfe060b1c36f4f531ddbf622ea783f732005af1c94a253697a"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/public-comparison.py",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "98354ed2e34efbf369675a11f75f2dda19306e2513a194100c1c81a3fd7c0cbc"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/python-format.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "fd2299c9f1c6dc869070883e281051bfe93aacf66c1a3b0069f45b4aa410ca50"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/rebind-final.sh",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "135d23b508b73d1d28fc7a219f8d6dba48e2ef073e553f7ca11577c23f337345"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/receipt.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "dff3d8752de2cbe61d5d7b8b7fec28e143f32754c6a9b1cd667ae4cff6132667"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/regenerate.sh",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "52ef6526b365676b82ee78b03bfa5a6fa22863ae2e60244080086fe0551aff8f"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/registry.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "352604d65b894f9525cc1753238d2f35e47fa040165552555d21cb4e73e7d049"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/registry.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "65c5df09c0e3202ba5522037cd96a30344788eff58bb841a91f6fa7ae8ea9ca0"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/render-all.sh",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "773f52c633efb49b2d57f39fb2b21bccf5f79d03e980b508ba46d616066f488d"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/render-assets.sh",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "7ae17a8ec5d3ee9efb55d9406eed3eb8639ae4aeb1fbc2305671cc627353d6ca"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/render-boundaries.sh",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "7c65e2554c9cb48581d24207fddbfa7f60948a4421d270ff9767f5d960590fab"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/render-note.sh",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "305cdfb34980442c110597f155b90ba913d9a119ef751430e2511f62fd3a99bc"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/retain.py",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "6abc6375ec937263363db2fa82598b79c6d10ee3f5d2d7fb2d36877a7e649365"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/retained-producers.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "cef0d9c5babf5305165a74854c159036aad39dfb45097b77488c5fa2a5c27085"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/review-a-verification.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "73895b17e387ff30b6755763d500fea7949adc76873fabd4d4e8ab08b6715286"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/review-a.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "60dfd109803ce5f3918ee92655b3fcacb9122a993b0abdd6770c4f106c428d68"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/review-b.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "f6571e4385008e1715cee756eed9ed7cce350986c421e4e7615e76dc4f093a25"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/runtime.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "f6d2c92469901378852f02c25abfeeb19a5e36794a3be9690a8b3d3ef99e2881"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/rustc-version.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "2073de5abf149185c2f4d7473dc833bc921b99135560d24ae7b2293f33a9c376"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/sdist-final.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "dc37f836c61f50e642fc5dd4b6d98aa831ad7455322787efa8008836926ca2d5"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/sdist-negative-control.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "906532a97c6255bfac4e4ce0735e4ce958d2698d23eeda2ac80f97f447bd42b1"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/sdist.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "38035449ca8bde591c8e2384067338709eaee140ad57d03fdcf72e5d010e8eca"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/soft-triangle-reproduced.pdf",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "f59585af65c33363ba25010da820bc288e8b4ee7e2ea0e716a30ba4139e9a7d2"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/source-audit.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e5583eb15255f8998d8d4d52576593fe15f631f41b993b37021a0398b3e13175"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/source-audit.py",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "29def3615d097ccce818363750f9c00f91fe40f038f7cefe4a46e31161f3f384"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/source-selection-audit.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "1eeb8d721653ca68b739282926aa537a8b99819f65d6dcd8625497e55f354355"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/start-source-build.sh",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "81864b19c79a58a83fce809dbce728d07898941b375224429486edbf391f7e6b"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/test-source-eval.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "63fb17a659f13585ae788898e612a294c4bcd430e62452dfed2ec4cd867a1602"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/test-source-realize.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "4abcd61dce27e3cc03305fc700a0eaba77b0467f0d3696aa3a6cd0176427ad97"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/thrown-out-reproduced.pdf",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "5a48822462759734e461001383b7bf6300da5f2c1ec14493ae3433229f0db33b"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/typst-version.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "20ad20e86d85d168643624dc3e3388e7cbcc5a8384d17835db3a0ab04c496fba"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/update-registry.py",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "76a6091596d2bf90f1ac27f3bd356d023531f0e68eabeadf6bcaef2293859edf"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/validate-code.sh",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "35bf505a150f66df40ff1dbdb4a6e571f2465e17d4b7be2015f27fd5949c8c34"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/website-assets.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "3757b81634c5214999d42eb1e2fed267cce6f6e2bcbdc138d6ee6210ae5e3913"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/website-reproduction.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/xbox-sum-reproduced.pdf",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "92cfb13205e5cbd75feea037ab910751ff06640be1ad89ed931261aac13adc3f"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round3-attribution/bind.sh",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "2d0d044a8c69a8d5fd361295051859e243b068ad81b5302847177e1fc0e18834"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round3-attribution/binding.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "3365f422b9bbb30b61bb83138d22accdeafbd6383b3c35f2c8cc4411829f6b65"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round3-attribution/check-docs.py",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "f5b4c08852b3b0606478afb8b2204b35e634db70fbbb2b94ab567f8e3d2f5b0a"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round3-attribution/correct.py",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "1a02c053c442ca353ba7895caa4fac8b613249478351ab1362e9f825c06c9665"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round3-attribution/generation-mark-geometry-wrapper.typ",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "04968950f00c842f0698d7f5b2d7634f2068462a4032a210e40cf9ce10217cb6"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round3-attribution/inventory.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "a35462b1a26584acb4dc1c284c9bb2fcdf812f3e57e6ca1e0c6635cc801816cc"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round3-attribution/note-first-html.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "f6291bee2aca5f6a6694512616225bc21e5352431485b391daf60be2898ee573"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round3-attribution/note-first.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round3-attribution/note-html/index.html",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "06fba8ec5ca274c0172c435d67f0a142fea9c0d69c0be537f18edb9017c995ec"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round3-attribution/note.pdf",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "376dabda35155dfda103bea7f7801a83ca7223f4ceb8cb118b39c83c90f81212"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round3-attribution/receipt.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "c699764df51cf842c666e7b04fb76f8dea008eae051ae340b2d5c5105b3849d2"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round3-attribution/registry.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "65c5df09c0e3202ba5522037cd96a30344788eff58bb841a91f6fa7ae8ea9ca0"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round3-attribution/render-note.sh",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "31aa9e7191eb9ba7dd4693d8c9481099fd82a4255db1aa50551495255d96881e"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round3-attribution/round3-a-review.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "70758643a1eca19731cbc412513399839ab42f8131b837146af9dcb527dcd8c7"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round3-attribution/round3-b-review.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "9e3124ec592ed45ea8dfb531d5c6ce8bf5cd18d1e5009a3a8f3a6a6ac3a1bb60"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round3-attribution/runtime-source.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "63fb17a659f13585ae788898e612a294c4bcd430e62452dfed2ec4cd867a1602"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/round3-attribution/verify.py",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "7e5254b4776587d5a916c8b0794a1ea3bb88af77ea54b4c5422cec189798b93c"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/runtime.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "a423afa23eceb083c2068b2888090dc8dd99fb5c389b56fa2c89232a3828e463"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/rustc-version.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "778fbc643a806f0dd123c056e66201d7e8a56a61928ec0a33171be8d6c2d5a37"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/scope-decisions.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "21f1915acbc8fec416c4131a6fd0cbe840cf90184bcf5a9fac8bf99c5bf19473"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/typst-package.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "0e3867527f09583026729da3ffeb133f548df63483d7bb2068ffd77e00541d02"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/typst-path.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "975f070f0b4e9ad881a628c36a2518866b1fa7743cc81199b0acfb3128bc3322"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/typst-version.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "20ad20e86d85d168643624dc3e3388e7cbcc5a8384d17835db3a0ab04c496fba"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/wasm-check.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "7e990067966ccadd5ae276ca2e14ac1dd3bc684a6d823e3b36337dc554bcf4a0"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/wasm-reproduction.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "f1d9d5f74671c82a3416fd50c25e573fab3ef73ef528e737a3b5702b8d9b432e"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/website-assets.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "3757b81634c5214999d42eb1e2fed267cce6f6e2bcbdc138d6ee6210ae5e3913"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/website-reproduction.log",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/replay.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "f4abcf883e212a0720fd976cfb03f7b1e64217ec9a438840f945bce2db6edbd5"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/source38/artifact-review.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "9e3124ec592ed45ea8dfb531d5c6ce8bf5cd18d1e5009a3a8f3a6a6ac3a1bb60"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/source38/attribution-review.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "08ccaa5d509d5503ff5d1a39ba0ed25e345bcffa0753a1d62cae04dbd0911293"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/source38/geometry-review.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "70758643a1eca19731cbc412513399839ab42f8131b837146af9dcb527dcd8c7"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/source38/main36-review.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "001b902c847bf3592438067a7579e960d6f880ea2d8a7aa74b0caf91891cf7df"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/source38/mapping.json",
+      "category": "evidence",
+      "sha256_at_frozen_qualified_code": "d7ba9e63d464e56eb433ea6756d478e18984738ca4999ff3bbf734cbd5eb6f50"
+    },
+    {
+      "path": "docs/architecture/generation-drawing-notices.typ",
+      "category": "documentation",
+      "sha256_at_frozen_qualified_code": "cfb2704f29c536bfb021bb0c64122e9b55fd5430a735d616ed78c2a7f8291847"
+    },
+    {
+      "path": "docs/architecture/generation-drawing-ports.typ",
+      "category": "documentation",
+      "sha256_at_frozen_qualified_code": "22fa09e4541953dfaa84c7b7964b72ebc0d92a9134f33aa00b2bf0eb4ea488cf"
+    },
+    {
+      "path": "docs/architecture/generation-integration-plan.typ",
+      "category": "documentation",
+      "sha256_at_frozen_qualified_code": "f19dcdcf0e575791d760b0839ce740d2f3bebaac2a7c09a16157b831210ac7b4"
+    },
+    {
+      "path": "docs/architecture/generation-mark-geometry.typ",
+      "category": "documentation",
+      "sha256_at_frozen_qualified_code": "614e2ff6dd0f11c3f4308f5d984bc382f5363f184010b29ae2627fec9ac3c011"
+    },
+    {
+      "path": "docs/architecture/kurvst-arrowhead-engine.typ",
+      "category": "documentation",
+      "sha256_at_frozen_qualified_code": "0cdbe48a8533f5e42c369677a14b8536c40d2c7bef1ad9e727fe45d39b5b13d6"
+    },
+    {
+      "path": "docs/architecture/nix-crane-cache-reuse.typ",
+      "category": "documentation",
+      "sha256_at_frozen_qualified_code": "834c82e32f932131029abc2e8d080b0d1179aa036191a872879796f5718ba95e"
+    },
+    {
+      "path": "docs/assets/about-double-triangle-dark.svg",
+      "category": "generated-assets",
+      "sha256_at_frozen_qualified_code": "743ef396b8b2925f5ce31f8e73f5bf824321ccd5dd7366005341e8ce84113bc8"
+    },
+    {
+      "path": "docs/assets/about-double-triangle-light.svg",
+      "category": "generated-assets",
+      "sha256_at_frozen_qualified_code": "59bed8b804c8d5fd96873fa15fafda3eeaf7d448d902d852d8d51c6facc0e743"
+    },
+    {
+      "path": "docs/assets/graphs/portal-graph-aa-2l-gl00-dark.svg",
+      "category": "generated-assets",
+      "sha256_at_frozen_qualified_code": "117144eb86297987e82867cbbb662dc933702fadf270196fa5dd5d6527248276"
+    },
+    {
+      "path": "docs/assets/graphs/portal-graph-aa-2l-gl00-light.svg",
+      "category": "generated-assets",
+      "sha256_at_frozen_qualified_code": "cddab5ac2b1b4ab4f647e7fcdbd2bab16a6661450553ed583defa8f06c40449f"
+    },
+    {
+      "path": "docs/assets/graphs/portal-graph-aa-2l-gl08-dark.svg",
+      "category": "generated-assets",
+      "sha256_at_frozen_qualified_code": "849a20daead42265d46773b48949359aa41e0269ccdb6a7aea4fe22ce5cb7b1b"
+    },
+    {
+      "path": "docs/assets/graphs/portal-graph-aa-2l-gl08-light.svg",
+      "category": "generated-assets",
+      "sha256_at_frozen_qualified_code": "59142f94b1c4d1c0fab05afd2c80543e1ed2b6404fea3bc23c4921c68a144c7e"
+    },
+    {
+      "path": "docs/assets/graphs/portal-graph-aa-3l-gl000-dark.svg",
+      "category": "generated-assets",
+      "sha256_at_frozen_qualified_code": "6a2a656d1fa004ff07484865bcc31aa10c0f2eedc7e0018527e97ea49775617d"
+    },
+    {
+      "path": "docs/assets/graphs/portal-graph-aa-3l-gl000-light.svg",
+      "category": "generated-assets",
+      "sha256_at_frozen_qualified_code": "578133bcaf23d2d023ad217a63fb29690208bb586b7a7b7e142e429f6c97800c"
+    },
+    {
+      "path": "docs/assets/graphs/portal-graph-aa-3l-gl150-dark.svg",
+      "category": "generated-assets",
+      "sha256_at_frozen_qualified_code": "5019c15ff3de8b8dd0e4c938789a7c4b800c348df93a2b5c1f0619809a3a564a"
+    },
+    {
+      "path": "docs/assets/graphs/portal-graph-aa-3l-gl150-light.svg",
+      "category": "generated-assets",
+      "sha256_at_frozen_qualified_code": "256826261da46dcb6e41a06968a8f44b04b74a05ba9f4973342740e4ba7f5600"
+    },
+    {
+      "path": "docs/assets/graphs/portal-graph-aa-3l-gl300-dark.svg",
+      "category": "generated-assets",
+      "sha256_at_frozen_qualified_code": "6ef332a1117e342611935b797f9a215d84dc536558915e18360a9e01251526c5"
+    },
+    {
+      "path": "docs/assets/graphs/portal-graph-aa-3l-gl300-light.svg",
+      "category": "generated-assets",
+      "sha256_at_frozen_qualified_code": "c92f773bf3d61d746e75f3237152e16fb23628ce0ff527f2717ab3fa20942e72"
+    },
+    {
+      "path": "docs/assets/graphs/portal-graph-ad-ad-gluon-dark.svg",
+      "category": "generated-assets",
+      "sha256_at_frozen_qualified_code": "49a3cf650b9062735f617ff08c44c194a4ee7a04d53b6198e923696626992549"
+    },
+    {
+      "path": "docs/assets/graphs/portal-graph-ad-ad-gluon-light.svg",
+      "category": "generated-assets",
+      "sha256_at_frozen_qualified_code": "0ceb501d521e96dfd2b4e28febb68cd6f78dd69af0ff5ac1e08af530b053ca0f"
+    },
+    {
+      "path": "docs/assets/graphs/portal-graph-epem-bbx-dark.svg",
+      "category": "generated-assets",
+      "sha256_at_frozen_qualified_code": "0ddfda7d286acf8f50617f2652e0652f2a96ccf0e4b0b70759e463151b95e7dc"
+    },
+    {
+      "path": "docs/assets/graphs/portal-graph-epem-bbx-light.svg",
+      "category": "generated-assets",
+      "sha256_at_frozen_qualified_code": "110cf9d8ea3b4d498d7fe53ac7ebba6f3da714fd143e4f7966fc59755cd90b89"
+    },
+    {
+      "path": "docs/assets/graphs/portal-graph-epem-ttbar-cut-dark.svg",
+      "category": "generated-assets",
+      "sha256_at_frozen_qualified_code": "3bb12d1a3885a9e7cd39b903a5ef9266730e4aded529bfdbff19da3dd4a66910"
+    },
+    {
+      "path": "docs/assets/graphs/portal-graph-epem-ttbar-cut-light.svg",
+      "category": "generated-assets",
+      "sha256_at_frozen_qualified_code": "31d75bd7d6afe78555793d9321f1dbe7f45b699fd355bd38aba60e89145c5c0a"
+    },
+    {
+      "path": "docs/assets/graphs/portal-graph-gg-hhh-1l-dark.svg",
+      "category": "generated-assets",
+      "sha256_at_frozen_qualified_code": "f05c53cdcae2d7bed3c188c3ae608ca2c914e757c0b789137c990fd67bd8da38"
+    },
+    {
+      "path": "docs/assets/graphs/portal-graph-gg-hhh-1l-light.svg",
+      "category": "generated-assets",
+      "sha256_at_frozen_qualified_code": "98dcd8bba6bb6d4ccdc439588f3ccc049190ca93ebd182fa405586dc2750e59c"
+    },
+    {
+      "path": "docs/assets/graphs/portal-graph-gg-hhh-3l-dark.svg",
+      "category": "generated-assets",
+      "sha256_at_frozen_qualified_code": "1b355493d24c171dd97860716775a2666b4ce60826a072170bde936847891565"
+    },
+    {
+      "path": "docs/assets/graphs/portal-graph-gg-hhh-3l-light.svg",
+      "category": "generated-assets",
+      "sha256_at_frozen_qualified_code": "72cc477667d6464a4883f2e084c252513565852087600a50d3421507def9d3e8"
+    },
+    {
+      "path": "docs/assets/graphs/portal-graph-qq-aaa-pentabox-dark.svg",
+      "category": "generated-assets",
+      "sha256_at_frozen_qualified_code": "1dfc1e3cc36445a979d6bc4042f9a2aa2f3a5ce5bc455ca0aaccaee1afd1422f"
+    },
+    {
+      "path": "docs/assets/graphs/portal-graph-qq-aaa-pentabox-light.svg",
+      "category": "generated-assets",
+      "sha256_at_frozen_qualified_code": "6ec0f9620047e13eddd04b9cda62367f07c7ecd61c9cfeb28997cb4096c36582"
+    },
+    {
+      "path": "docs/developers.toml",
+      "category": "documentation",
+      "sha256_at_frozen_qualified_code": "ccfcf4500fdcccf6a530481065e74b95522096c58654535c42b43064c617c7e2"
+    },
+    {
+      "path": "examples/notebooks/symbolica-host/Cargo.lock",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "2cd05b4adab441a607d0a7f6fb12780c017e28f2cf04f5ea9cc05edae0714d05"
+    },
+    {
+      "path": "examples/notebooks/symbolica-host/Cargo.toml",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "39a2cdd396e129ef8b9c0a1f547d8816eee1db9ba4f46363024f4338c5bece35"
+    },
+    {
+      "path": "examples/notebooks/symbolica-host/licenses/tiptoe-LICENSE",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": null
+    },
+    {
+      "path": "just/drawing.just",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "c95f0536bba4c338e76cdda25511fbfdd1f32b56b7f936847e42ea04ac862f0a"
+    },
+    {
+      "path": "nix/rust-workspace.nix",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "68b98172cafe1311d958e6d6175bccc8e26c177219623e749570be78a8bc3471"
+    },
+    {
+      "path": "pyproject.toml",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "fef6ccc1238349636953d4e9ddec31dd56d52cf6d258a21fca0539e70891f131"
+    },
+    {
+      "path": "tests/packaging/test_drawing_notices.py",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "4c72e78911120164b3370924a62b44435c8d9fd865562a78105798a96ad9d386"
+    },
+    {
+      "path": "vendor/kurbo/.cargo_vcs_info.json",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "4bfe3d4ab606efdb8e558db546ae666decc53fa3caa34865b4f66ffa67449a66"
+    },
+    {
+      "path": "vendor/kurbo/Cargo.lock",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "1f13e8fcd58e548bb2130320c3ed5addb20ff658722d3f20b697c2a6a0b27e90"
+    },
+    {
+      "path": "vendor/kurbo/Cargo.toml",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "3c5b41c42b588b750fbca3109b48438288586c2b22fdda571ea0fc188b6e08b0"
+    },
+    {
+      "path": "vendor/kurbo/Cargo.toml.orig",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "20e9fc1c17fd24b20c7eba09b657f999cc503999b18051dcdf7770e581fab175"
+    },
+    {
+      "path": "vendor/kurbo/LICENSE-APACHE",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "path": "vendor/kurbo/LICENSE-MIT",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "23c23145f6eac25c28cdcc03d38506a5712a9a8cffb5bd5301457f6173ea696e"
+    },
+    {
+      "path": "vendor/kurbo/README.md",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "d731f0edd82b188d9156cfbd909a1fdce6dd7424299b5d9ab540135d20693aab"
+    },
+    {
+      "path": "vendor/kurbo/benches/cubic.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "753d2822c69a8684032a3b4a5f40e3b03ea4b4553cd8aba39fe6afd159711ab9"
+    },
+    {
+      "path": "vendor/kurbo/benches/cubic_arclen.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "93ad92e94f421ef9b7ee60ed3b59909a59554ade76a18279ccacf8bfcd715477"
+    },
+    {
+      "path": "vendor/kurbo/benches/nearest.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "8cbf5ead45bce5ea79d1234f72fae704042162a934228b3af9611cf0932ef5fd"
+    },
+    {
+      "path": "vendor/kurbo/benches/quad_arclen.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "f447a066c32703cbbba14bed66f419841cca1cb83e01ca7511e6f09a5d115e20"
+    },
+    {
+      "path": "vendor/kurbo/benches/quartic.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "3535c44734c559992b3f62077e5d933300777e248251b883b1451457280df1f3"
+    },
+    {
+      "path": "vendor/kurbo/benches/rect_expand.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "496b987a239680b61b2d65b0ab91cbfab55c807cc1831476bcb08129c092f8de"
+    },
+    {
+      "path": "vendor/kurbo/examples/arclen_accuracy.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "7bf354d4d34b42e915e082774d74177209b2997b09ee6972a38cb32dfaf385b2"
+    },
+    {
+      "path": "vendor/kurbo/examples/circle.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "1416fe74c7a82b15b1d2ee4166d09a75cf8cc9ac6744dddc7df338881258ded3"
+    },
+    {
+      "path": "vendor/kurbo/examples/cubic_arclen.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "467bcf52b26e3480ad05dddbd06374ce219df54b7dc1fa7fb96367eed41e1d5b"
+    },
+    {
+      "path": "vendor/kurbo/examples/ellipse.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "22db083067328d2d4f80a2be1ba1cf7e5478950ecde99142563a4cd9fa6dfaca"
+    },
+    {
+      "path": "vendor/kurbo/examples/fit_poly.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "ed1d8adaf2e0adcee445cfd4fd06a110f064455ef382354ec2a99d3450442654"
+    },
+    {
+      "path": "vendor/kurbo/examples/quad_intersect.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "56becf3a522316e1c54eaae7d2d75365fa275bbfc17bb2bf6884d63bf887d88a"
+    },
+    {
+      "path": "vendor/kurbo/examples/simplify.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "7bd3fdcfd60fe9094b9f5da51be4a70061f3df760a62a0ae62e7e8c77f649558"
+    },
+    {
+      "path": "vendor/kurbo/examples/stroke.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "f055edc18fc05c55c2a3f9ad2e3caa6b997e2d9cd7c5781959d752182afe1b90"
+    },
+    {
+      "path": "vendor/kurbo/src/affine.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "7288c89bb5ce16acd7d1b046f189df5855cfafa0454d667fc7b0dc4454fa2663"
+    },
+    {
+      "path": "vendor/kurbo/src/arc.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "f1479f3e54c7e4717424920f128ebfda59ea2984c08b43291411072072eb1475"
+    },
+    {
+      "path": "vendor/kurbo/src/axis.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "6ccf1f4cca904fa43f54d9d71a6511927fdab171a8d00382ab311cd2776ef781"
+    },
+    {
+      "path": "vendor/kurbo/src/bezpath.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "6d9d5769715dfc4c10f90c1de500fca7a2ca35c0d673d2e05d7ddd615a987be4"
+    },
+    {
+      "path": "vendor/kurbo/src/circle.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "434d23a89e13ad22be300c383cdf027e41a9ccfbd8a3f9152c1e97a5ad330491"
+    },
+    {
+      "path": "vendor/kurbo/src/common.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "5d32994b9832dc34738a0d34464d9b2435398404bfd576c838584c301359d062"
+    },
+    {
+      "path": "vendor/kurbo/src/cubicbez.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "de793f84444c55467a4669de64b4a06209f97540362c2da1fe0ad2b2367f5b80"
+    },
+    {
+      "path": "vendor/kurbo/src/ellipse.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "991e9830a32643d2aa5c34c57330323e65f3b15231c80b086eb715b0665fc41d"
+    },
+    {
+      "path": "vendor/kurbo/src/expand.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "f0ef21c91790097498bfacd2cc624f6ac86b32bc2600aa78c57583e46c5d0ae6"
+    },
+    {
+      "path": "vendor/kurbo/src/fit.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "3d7dace4a4452ce6a5eff3186a48f8dc0d0d625029feae78c24017fb5b68695b"
+    },
+    {
+      "path": "vendor/kurbo/src/insets.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "cf6019c2ab0783ede641ef61677b60d4c2cf4f721317024a0944e8c66373dc98"
+    },
+    {
+      "path": "vendor/kurbo/src/interop_euclid.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "bc94da5023b455df685b74cd942d569e1ee5025191c64ff4217f068d845b9418"
+    },
+    {
+      "path": "vendor/kurbo/src/lib.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "f513dc1a758bc061cc2a177fa98a1d566003d6c83e36d3befbc9bbea2e4349e7"
+    },
+    {
+      "path": "vendor/kurbo/src/line.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "66fba2df6d9653aa03adfda457a5059a7cbdd1ae29fa2c2db4ba5aefb1d4db28"
+    },
+    {
+      "path": "vendor/kurbo/src/mindist.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "3f6e98e5cc25395e042bcd3138abd237176034cbddb13d48a11b66f581d724e4"
+    },
+    {
+      "path": "vendor/kurbo/src/moments.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "decf10b9116aacab2bab47c8b331a6a5e3ba16b3c63527710289cedc5df930a0"
+    },
+    {
+      "path": "vendor/kurbo/src/offset.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "8999fdb31334a6c08c260f2ae360aba3b091652e26454b735ea985c99a545cd9"
+    },
+    {
+      "path": "vendor/kurbo/src/param_curve.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "5cac1495643a9cb5f4af7ea618265a9deb87e7f82ee9628fdb46c49fd970a553"
+    },
+    {
+      "path": "vendor/kurbo/src/point.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "4311047b9497b4fbd38022eb62ebaa9771c05e55e1bafb9431f2243949515ca7"
+    },
+    {
+      "path": "vendor/kurbo/src/quadbez.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "37ab1037750d32eed6b3664b250a8c14c78419a1567e790695c0e46544263bbd"
+    },
+    {
+      "path": "vendor/kurbo/src/quadspline.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "cfa129dd52d23a7852be3a1103e8022cc792cb2bd481440d3ebc1221a635e28d"
+    },
+    {
+      "path": "vendor/kurbo/src/rect.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "20c0bca0e79ab1b69321bf5d7e2db618cb4582bb29f47854faa5979a38a9ff2a"
+    },
+    {
+      "path": "vendor/kurbo/src/rounded_rect.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "495d08f409456a97cd8c228f84624383922c4ef01e4d2edf624a40765a12b3c4"
+    },
+    {
+      "path": "vendor/kurbo/src/rounded_rect_radii.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "ac42ee920ff31c6b5524ea9ae22e9da8ad2a8d17572e9ade1c369d827b8004d7"
+    },
+    {
+      "path": "vendor/kurbo/src/shape.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "226a32a1996d298e9587cc921b7cc8644ca6e04b2c740732e0a63ab00d3351ae"
+    },
+    {
+      "path": "vendor/kurbo/src/simplify.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "771fc68a2dd0a00d994906176641bcb17c9351b3d1205e037a78a5893b51a684"
+    },
+    {
+      "path": "vendor/kurbo/src/size.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "645a1f7ba1528b1b10e5881d53019eac428e556c1d9bdea8d3f42ce351c00950"
+    },
+    {
+      "path": "vendor/kurbo/src/stroke.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "4523a0e08fe3ce324986450a83e16a654520951f17c1f132f30f802f0d6768d7"
+    },
+    {
+      "path": "vendor/kurbo/src/svg.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "b403a258614b3e287c3e5210b0745814f08acda92e95696bdddbf50e341fa3be"
+    },
+    {
+      "path": "vendor/kurbo/src/translate_scale.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "8b82eb5f46744cb9a044263e200d79d797270616320337e4230356942ab85f1a"
+    },
+    {
+      "path": "vendor/kurbo/src/triangle.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "27a6cddb109ae36ef55c470261c689d085502ab72a47f3a32ca22e771df7b03e"
+    },
+    {
+      "path": "vendor/kurbo/src/vec2.rs",
+      "category": "runtime-and-build",
+      "sha256_at_frozen_qualified_code": "05b37bf834417a040012fef380aa9eb10925324ea1a07fba3328839a56c9a060"
+    }
+  ],
+  "counts": {
+    "documentation": 13,
+    "evidence": 364,
+    "generated-assets": 30,
+    "runtime-and-build": 67
+  },
+  "protected_refs": {
+    "generation-integration-source-v4": "e0a779808174c64057fecfd062c948b8de8e5c1f",
+    "generation-integration-source-stage1": "f25961e21689ed1a33365430b4566a9a2e9c319a",
+    "generation-integration-source-transplant": "4e00851731541be7de4626b7d1e5274d79b9eea8",
+    "generation-integration-source-upstream": "588148851e3e989ecbb7478279db7d46727e23a8",
+    "generation-integration-source-v2": "d9ff71a6826166e57bf3bba56ffcf8a57ffaf9db",
+    "generation-integration-source-pre-v2": "75b6c7a88fb099f142bcec9227ee614b6fc56376",
+    "generation-integration-source-v3": "dfe6387606e44a96f110c1ce03f52d92824dbdb1",
+    "generation-integration-source-v3-original": "6d207cfce36ab2bb128d92d67cc3da182afb0bb1",
+    "generation-integration-source-m1-source": "9540f5bbf7a96609e69af6983d2bf7325530126d",
+    "generation-integration-plan": "4374f72027b75df9ff95c5c7a725ee75beac27a8",
+    "generation-integration-pre-rebuild": "5226894ee1af61797e6b819d7e801a22bf17bace",
+    "generation-integration-pre-staged": "438b61500da4b32841c64211103e5da6fc4c4a72",
+    "generation-integration-staged-code": "f264028690d117b4b99c320b61b7f2d5d89222d0",
+    "generation-integration-drawing15-16": "8430e701d858b07e40203a25bfc3b1fa61b15f4a",
+    "generation-integration-staged17-18-37": "817b5886a50276efea05ab860d22016e1fb0c203",
+    "generation-staged-evidence-fixes": "edabf052c5780be6460a9043cb9704e1583a2e4c",
+    "generation-integration-corrected-staged": "d48f9d1aedc766eea5cb185ab6029d1f04462043",
+    "generation-integration-source19-code": "4aa4d3d88394fd39be75f460b3ace4bc72a48894",
+    "generation-integration-source20-code": "c75ab826e6eb69c711130803bd54223664c9879a",
+    "generation-integration-source21-code": "82c1eb5b40c4911e59dfc25c9ba1786e282e111c",
+    "generation-integration-units19-21": "df55185059f31bea548a5de27c95828656fbdc52",
+    "generation-integration-units19-21-recertified": "0a38ee4e3e7d16af3978f2c6ccde04dc176dfea9",
+    "generation-integration-units22-26": "a517ca563d78d161cff17fe60e661f80529c9a83",
+    "generation-integration-units22-26-code": "2eb0d9db13caed01cb589f869089bc0753ab429b",
+    "generation-integration-units27-29": "cb585c98a474628ca9c55bb17cf1e680450b8ef9",
+    "generation-integration-units27-29-code": "c2cce079a92c66fd1435a2ad42d86c17e16353be",
+    "generation-integration-source30": "7587d0c768363f200e89250683e7836c867c9b81",
+    "generation-integration-source31-round1": "3a90bc05e1e50fc85b0f7541ef82086a0e2db873",
+    "generation-integration-source31": "191aaf7b77018e377a9e5e4e3b9c88357218aa48",
+    "generation-integration-source31-round2": "191aaf7b77018e377a9e5e4e3b9c88357218aa48",
+    "generation-integration-source31-code": "ecd901151e9c6a4b30df75198c7613f1532416b1",
+    "generation-integration-source31-round2-code": "2f500641ddbf08a57c5420194398aa68e761f41f",
+    "generation-integration-units32-35-code": "2ea39fd3ec164516b8e68775554fa2021998975a",
+    "generation-integration-units32-35-docs-code": "a3729fe5d880f0db5f09d9ce7d0ef592bfc4d161",
+    "generation-integration-units32-35-validation": "783e3281d01134f8fe2e44eab366d0414c63b852",
+    "generation-integration-units32-35": "510d79d94bbaf57aaaa992c641e7496905763324",
+    "generation-integration-source36-code": "0d3ddb5246416427be56c57c91ec1a095037e818",
+    "generation-import-diagnostics": "c0e9ce68c325f9d597847d68cc4f1c924da29f19",
+    "generation-asset-diagnostics-staged": "277d2f8b0051e0a41194b369fa683db550098bbb",
+    "generation-integration-source36": "100da20603a083d031c31bd4e8c6970fc44dda2f",
+    "generation-integration-source38-code": "925f739799572d23f46a762c895ebb85e5bd88d6",
+    "generation-integration-source38-qualified": "0c65bf7c519764460a15a922340d958a9dfa7429",
+    "generation-mark-geometry": "861c19e3e7afc067851b13f3e7548baa923286ee",
+    "generation-mark-geometry-round1": "cc7bc03ab97edade07532a586f5830f933451b07",
+    "generation-mark-geometry-round2": "e426ff5fcbe1487c9bf2cf1ed5aaaa03cabf8722",
+    "generation-mark-geometry-round3": "7da9e92de733f544957f724ababeb87c7684c02e",
+    "generation-mark-geometry-round3-code": "f35643bae1a67fb6ec0c30151e3624f661cf5f96",
+    "generation-mark-geometry-round3-build-input": "0bc96be6c6291bb3731c9f89f507d0b935a4ea3f"
+  },
+  "NixCI": false,
+  "kernel": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+  "ignored_log_import": "Initial runtime commit925 omitted153 historical ignored .log paths. Explicit include-ignored tracking restored them byte-for-byte in0c65 evidence/metadata commit. No source or runtime difference; all original logs historical, not fresh passes.",
+  "self_hash_boundary": "Inventory is frozen0c65 Git blobs, excludes later validation receipts; no mutable receipt hashes used as code identity."
+}

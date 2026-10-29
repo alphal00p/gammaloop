@@ -1,0 +1,66 @@
+{
+  "executables": [
+    {
+      "id": "kurvst",
+      "path": "/common/build-cache/lcnbr/4b/842977226ffc97/dev-optim/deps/kurvst-4420f083be818467",
+      "sha256": "885464afa46f5e07064b0453fa813a3278f066247aea8de0289d8d51b781fbbe",
+      "listed_cases": 119,
+      "ignored": []
+    },
+    {
+      "id": "linnest",
+      "path": "/common/build-cache/lcnbr/4b/842977226ffc97/dev-optim/deps/linnest-497faa96f1e545c4",
+      "sha256": "7ad916ce28ab81caa59e443bc8a9b3b6ab402a4e6a3859f906955d741e88cc9f",
+      "listed_cases": 230,
+      "ignored": [
+        "ec_seed::tests::regenerate_split_seeds"
+      ]
+    },
+    {
+      "id": "clinnet",
+      "path": "/common/build-cache/lcnbr/4b/842977226ffc97/dev-optim/deps/clinnet-ef5848560bd88e11",
+      "sha256": "f5a905db8fe170e39fc496a8babf3f0bd8fc198e1f4f324c009dc1514e1eaf17",
+      "listed_cases": 14,
+      "ignored": []
+    },
+    {
+      "id": "clinnet::kurvst_marks",
+      "path": "/common/build-cache/lcnbr/4b/842977226ffc97/dev-optim/deps/kurvst_marks-3e1afd4d2821fcfa",
+      "sha256": "c83d196844118077627e9cca9e9ece86c3edd073ab9f14a6dc401a41674fa48c",
+      "listed_cases": 2,
+      "ignored": []
+    },
+    {
+      "id": "clinnet::public_typst_behavior",
+      "path": "/common/build-cache/lcnbr/4b/842977226ffc97/dev-optim/deps/public_typst_behavior-2b6a9f9b73212efe",
+      "sha256": "555b34b021227ffc82797ae7eb2f4aaeb05f4369a83b65ce75cc5110d4006773",
+      "listed_cases": 24,
+      "ignored": []
+    },
+    {
+      "id": "clinnet::bin/linnet",
+      "path": "/common/build-cache/lcnbr/4b/842977226ffc97/dev-optim/deps/linnet-46b494d66ab98bb9",
+      "sha256": "97a8b9cea3d4d30c114ece824d88f8aaf4960bb1bef6e11e332ded433b58544f",
+      "listed_cases": 6,
+      "ignored": []
+    }
+  ],
+  "selection": {
+    "root": {
+      "name": "kurbo",
+      "version": "0.13.1",
+      "source": null,
+      "manifest_path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/vendor/kurbo/Cargo.toml",
+      "license": "Apache-2.0 OR MIT"
+    },
+    "host": {
+      "name": "kurbo",
+      "version": "0.13.1",
+      "source": null,
+      "manifest_path": "/shared/lcnbr/dev/gammaloop/generation-integration-plan/vendor/kurbo/Cargo.toml",
+      "license": "Apache-2.0 OR MIT"
+    }
+  },
+  "host_registry_subset": 437,
+  "kernel": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3"
+}
