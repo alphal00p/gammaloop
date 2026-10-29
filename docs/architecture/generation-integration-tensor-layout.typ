@@ -13,9 +13,11 @@ Both borrowed and consuming materializers preserve expression, logical order and
 layout for named, encoded, mixed and anonymous interfaces. The repeated-anonymous
 block input still fails before materialization and is retained as a limit.
 
-Fresh combined validation records 203 affected tensor/HEP passes with 3 ignored,
-17 tensor doctests, exact in-tree and held-out materializer probes, 16 Idenso owner
-controls, 192 color controls plus 2 default-filter controls, and bounded Python,
+Fresh combined validation records 202 distinct top-level affected tensor/HEP
+passes with 3 ignored, plus 17 tensor doctests. The nested vector-registration
+bootstrap reports one additional successful child execution without receiving
+another top-level pass credit. Exact in-tree and held-out materializer probes,
+16 Idenso owner controls, 192 color controls plus 2 default-filter controls, and bounded Python,
 graph and Vakint consumer checks. Source44 physical captures, source46 frame/color
 proofs and the realized source46 Idenso archive are reused only after exact source
 and derivation invariance checks.

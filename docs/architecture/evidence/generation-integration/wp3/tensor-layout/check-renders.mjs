@@ -5,9 +5,9 @@ import { readFileSync } from "node:fs";
 
 const expected = [
   {
-    sourceSha256: "566a90a1648a4e570baa562cb73ece8dff5d7b1001f5ccd4e4d6f80e4c3269d0",
-    htmlSha256: "b376397502c87e3b25e2e2db7c772f59f73f6357f981aed4ca6c598abd5d20fc",
-    paragraph: "Fresh combined validation records 203 affected tensor/HEP passes with 3 ignored, 17 tensor doctests, exact in-tree and held-out materializer probes, 16 Idenso owner controls, 192 color controls plus 2 default-filter controls, and bounded Python, graph and Vakint consumer checks. Source44 physical captures, source46 frame/color proofs and the realized source46 Idenso archive are reused only after exact source and derivation invariance checks.",
+    sourceSha256: "429d65927a7d1999de8b87a7fc2b199cd5882aa5aec947159d9a5e217f7f407e",
+    htmlSha256: "63bc94573a8d08994ac22b42aafc94ca350ca9ea014baddb230e496a8218daff",
+    paragraph: "Fresh combined validation records 202 distinct top-level affected tensor/HEP passes with 3 ignored, plus 17 tensor doctests. The nested vector-registration bootstrap reports one additional successful child execution without receiving another top-level pass credit. Exact in-tree and held-out materializer probes, 16 Idenso owner controls, 192 color controls plus 2 default-filter controls, and bounded Python, graph and Vakint consumer checks. Source44 physical captures, source46 frame/color proofs and the realized source46 Idenso archive are reused only after exact source and derivation invariance checks.",
   },
   {
     sourceSha256: "54cef3a7c7911d71a89133c71e3f7db6ca71e933273307d62c68d0245527d669",

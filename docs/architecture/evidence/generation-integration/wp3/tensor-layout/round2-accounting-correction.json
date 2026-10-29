@@ -1,0 +1,44 @@
+{
+  "schema": 1,
+  "scope": "Evidence-only correction of the affected-consumer top-level test tally; built code and all runtime outcomes are unchanged.",
+  "supersedes_candidate": "3d573dd46f92e1e7c61c33146daefee6e114f7d7",
+  "built_code_source": "b9f788922341e7bde2e801a054423ae70ed7e9ae",
+  "built_code_change": "olwyvkywonuuoszxllzsnovoxktuolzk",
+  "raw_log": {
+    "path": "target/wp3-tensor-layout/affected-consumers.log",
+    "sha256": "bac31cd092deef94f1d7ccf873f7629a6796cf7bb4216c09dc0bd9645e001a5d",
+    "qualification": "Preserved byte-for-byte. Its nested vector-registration child and outer parent each print a one-pass summary for one Cargo target."
+  },
+  "target_boundary_tally": {
+    "script": "docs/architecture/evidence/generation-integration/wp3/tensor-layout/account-cargo-targets.mjs",
+    "script_sha256": "0c18641910fbf4e3cd4d2788f3b05121db81d0a82e46dde1316860dfae0468fd",
+    "output": "target/wp3-tensor-layout-round2/affected-consumers-target-tally.json",
+    "output_sha256": "356f0fb79720ad36fda00b7247ed8d2e0068bc28b889cf96b07667e3643f69d7",
+    "cargo_targets": 12,
+    "outer_passes": 202,
+    "ignored": 3,
+    "failed": 0,
+    "tensor_doctests": 17,
+    "hep_doctests": 0,
+    "separate_bootstrap_child_passes": 1,
+    "rule": "Each Cargo Running header receives exactly its final outer summary. Earlier summaries inside that target boundary remain child evidence and receive no additional top-level credit."
+  },
+  "render": {
+    "source": {"path":"docs/architecture/generation-integration-tensor-layout.typ","sha256":"429d65927a7d1999de8b87a7fc2b199cd5882aa5aec947159d9a5e217f7f407e","frozen_at":"2026-10-29T14:27:16.278919442Z"},
+    "tool": {"path":"/nix/store/wzpxqpc3v2xxah69rqifq5kac67hx36g-typst-0.15.1/bin/typst","sha256":"3c381d7d3e2259f81766ff77a1e6dec18ec4c7b7702b9c51ad34d56432b9633c"},
+    "wrapper": {"path":"target/wp3-tensor-layout-round2/tensor-layout-wrapper.typ","sha256":"de382e7d9965f7c43c455b28b5583d7a6ea05fcdf845bad3db1195ba73a002c3"},
+    "creation_timestamp": 0,
+    "pdf": {"path":"target/wp3-tensor-layout-round2/tensor-layout.pdf","sha256":"62f1d8a4a8ed473fc729cd048a451ef0f827ea766d16743de91f5f1e90d7df25","argv_sha256":"5f94ff97e29ef415047a2f186fb173c712c14f031980d180b0383034c9827dd8","log_sha256":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","exit":0,"created_at":"2026-10-29T14:27:33.021969632Z"},
+    "html": {"path":"target/wp3-tensor-layout-round2/tensor-layout-bundle/index.html","sha256":"63bc94573a8d08994ac22b42aafc94ca350ca9ea014baddb230e496a8218daff","argv_sha256":"63e1e6acbe2c65d09dc0d46d4302a68ef0fe224a6a122fcea9af7ea35f9295a6","log_sha256":"f6291bee2aca5f6a6694512616225bc21e5352431485b391daf60be2898ee573","exit":0,"created_at":"2026-10-29T14:27:33.064969761Z"},
+    "semantic_check": {"script":"docs/architecture/evidence/generation-integration/wp3/tensor-layout/check-renders.mjs","script_sha256":"37a12fca9af4b1339cd75fce30cc60bb7c20c0407bb528af925ca06d0ae064f9","current_exit":0,"current_log_sha256":"f1aac9a817ce2af60002e2c21f7fba2c958d657e2fef8bbff8b46e33c698dfec","stale_203_html_sha256":"b376397502c87e3b25e2e2db7c772f59f73f6357f981aed4ca6c598abd5d20fc","stale_exit":1,"stale_log_sha256":"d3425df2455f36b41054921c1deceb4c829dc6f7d424ee1942f5d41886d6a6da"}
+  },
+  "audit": {
+    "active_203_claims_corrected": [
+      "docs/architecture/generation-integration-tensor-layout.typ",
+      "docs/architecture/evidence/generation-integration/wp3/tensor-layout/receipt.json",
+      "docs/architecture/evidence/generation-integration/wp3/tensor-layout/check-renders.mjs"
+    ],
+    "plan_and_trackers": "Audited; they contain no active 203-count claim and retain the same code/change and review-pending status.",
+    "unchanged": "Rust, Nix, configs, manifests, locks, kernel, vendor, assets, expectations, executables, source46 evidence and all raw logs."
+  }
+}
