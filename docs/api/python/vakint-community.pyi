@@ -386,8 +386,7 @@ class Vakint:
 
     Construct one instance and reuse it. Initialization prepares lower-loop data;
     the five-loop catalogue is attached only after successful artifact loading.
-    Explicit cache operations belong to the depth-first engine and are rejected
-    when this instance selects ordered reduction.
+    Explicit cache operations require `rustred_reduction_strategy="depth_first"`.
     """
     def load_external_data(self, path: builtins.str | os.PathLike | pathlib.Path, max_loop_count: builtins.int) -> None:
         r"""
@@ -401,9 +400,9 @@ class Vakint:
         r"""
         Install all official loop packs through the requested maximum, or load a
         supplied checkout directly. Existing validated installations work offline.
-        Prepared native caches load by default for depth-first reduction. Set
-        `load_prepared_caches=False` to skip them explicitly; ordered reduction
-        always skips them.
+        Prepared native caches load by default only for `depth_first`. Set
+        `load_prepared_caches=False` to skip them explicitly; `ordered` and
+        `depth_first_without_memoization` always skip them.
         """
     def __new__(cls, run_time_decimal_precision: typing.Optional[builtins.int] = None, evaluation_order: typing.Optional[typing.Sequence[VakintEvaluationMethod]] = None, tensor_reduction_method: typing.Optional[builtins.str] = None, epsilon_symbol: typing.Optional[Expression] = None, mu_r_sq_symbol: typing.Optional[Expression] = None, form_exe_path: typing.Optional[builtins.str] = None, python_exe_path: typing.Optional[builtins.str] = None, verify_numerator_identification: typing.Optional[builtins.bool] = None, integral_normalization_factor: typing.Optional[builtins.str] = None, allow_unknown_integrals: typing.Optional[builtins.bool] = None, clean_tmp_dir: typing.Optional[builtins.bool] = None, number_of_terms_in_epsilon_expansion: typing.Optional[builtins.int] = None, use_dot_product_notation: typing.Optional[builtins.bool] = None, temporary_directory: typing.Optional[builtins.str] = None, rustred_artifact_path: typing.Optional[builtins.str] = None, rustred_cache_bytes: typing.Optional[builtins.int] = None, rustred_cache_terms: typing.Optional[builtins.int] = None, rustred_product_cache_bytes: typing.Optional[builtins.int] = None, rustred_product_cache_terms: typing.Optional[builtins.int] = None, rustred_cache_policy: builtins.str = 'evict-lru', rustred_scalar_max_work: typing.Optional[builtins.int] = None, max_process_rss_bytes: typing.Optional[builtins.int] = None, max_elapsed_seconds: typing.Optional[builtins.float] = None, rustred_reduction_strategy: builtins.str = 'depth_first') -> Vakint:
         r"""
@@ -501,9 +500,12 @@ class Vakint:
             loading and lookup. None disables it. Native kernels are checked at
             boundaries, so an external supervisor is needed for a hard deadline.
         rustred_reduction_strategy : str
-            "depth_first" (default) or "ordered". Ordered reduction combines the
-            global integral frontier between checked steps and does not use or
-            produce reduction caches. Official loading skips prepared caches.
+            "depth_first" (default), "depth_first_without_memoization", or "ordered".
+            "depth_first_without_memoization" recomputes repeated descendants;
+            immutable program preparation remains shared. "ordered" combines the
+            global integral frontier between checked steps. Neither alternative
+            uses or produces completed-result caches, including persistent caches;
+            official loading skips prepared caches for both.
         """
     def load_rustred_application(self, path: builtins.str) -> None:
         r"""

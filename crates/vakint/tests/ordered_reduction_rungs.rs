@@ -1,5 +1,5 @@
 #![cfg(feature = "feynkit-ingress")]
-//! Physical graph, tensor, ingress and exact/native numerical engine parity.
+//! Physical graph, tensor, ingress and exact/numerical three-strategy parity.
 
 use ::vakint;
 #[path = "fixtures/qcd_ladder/mod.rs"]
@@ -35,10 +35,31 @@ fn compare(loop_count: usize, projection: fixture::Projection) -> fixture::Resul
         )
     };
     let dfs = run("dfs", RustRedReductionStrategy::DepthFirst)?;
+    let dfs_no_memo = run(
+        "dfs-no-memo",
+        RustRedReductionStrategy::DepthFirstWithoutMemoization,
+    )?;
     let ordered = run("ordered", RustRedReductionStrategy::Ordered)?;
+    fixture::comparison::compare(&dfs, &dfs_no_memo)?;
     fixture::comparison::compare(&dfs, &ordered)?;
+    let results = [&dfs, &dfs_no_memo, &ordered];
+    for (result, memoization) in [(&dfs, true), (&dfs_no_memo, false), (&ordered, false)] {
+        assert_eq!(result.report["intrinsic_memoization"], memoization);
+        assert_eq!(
+            result.report["cache_policy"]["depth_first_intrinsic_memoization"],
+            memoization
+        );
+        assert_eq!(
+            result.report["cache_policy"]["prepared_cache_loaded"],
+            false
+        );
+        assert_eq!(
+            result.report["cache_policy"]["previous_run_cache_restored"],
+            false
+        );
+    }
     #[cfg(feature = "experimental-rustred")]
-    for result in [&dfs, &ordered] {
+    for result in results {
         let timing = &result.report["reduction_math_timing"];
         assert_eq!(timing["scope_id"], "vakint.rustred.reduction-math.v1");
         assert_eq!(timing["complete"], true);
@@ -78,7 +99,7 @@ fn compare(loop_count: usize, projection: fixture::Projection) -> fixture::Resul
             reference["dimension_binding"],
             dfs.report["dimension_binding"]
         );
-        for result in [&dfs, &ordered] {
+        for result in results {
             if let Some(minimum_digits) = reference["minimum_achieved_decimal_precision"].as_u64() {
                 for coefficient in result.report["numerical_reference"]["coefficients"]
                     .as_array()

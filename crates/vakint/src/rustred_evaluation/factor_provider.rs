@@ -9,6 +9,7 @@ use rustred::family::{IntegralFamily, IntegralFamilyLimits, IntegralKey, ScalarP
 use rustred::reduction::terminal_normalization::{
     VacuumFactorProvider, VacuumFactorReduction, VacuumFactorTerm, VacuumFactorWork,
     VacuumProductReductionError, reduce_transported_vacuum_factor,
+    reduce_transported_vacuum_factor_without_memoization,
 };
 use rustred::reduction::{Reducer, ReductionLimits, ReductionStatistics};
 use rustred::sector::{Mask, symmetry};
@@ -25,6 +26,7 @@ use crate::symbols::S;
 pub(super) struct ShippedFactorProvider {
     data: Option<Arc<RustRedData>>,
     closed_families: BTreeMap<usize, Arc<IntegralFamily>>,
+    without_memoization: bool,
 }
 
 impl ShippedFactorProvider {
@@ -32,7 +34,35 @@ impl ShippedFactorProvider {
         Self {
             data: Some(data),
             closed_families: BTreeMap::new(),
+            without_memoization: false,
         }
+    }
+
+    pub(super) fn without_memoization(data: Arc<RustRedData>) -> Self {
+        Self {
+            without_memoization: true,
+            ..Self::with_data(data)
+        }
+    }
+}
+
+fn reduce_closed(
+    artifact: &rustred::foundry::artifact::ClosedArtifact,
+    target: &IntegralKey,
+    limits: ReductionLimits,
+    without_memoization: bool,
+) -> Result<
+    (
+        rustred::reduction::MasterDecomposition,
+        Vec<rustred::algebra::Coefficient>,
+        ReductionStatistics,
+    ),
+    rustred::reduction::ReductionError,
+> {
+    if without_memoization {
+        Reducer::reduce_artifact_unit_mass_guarded_without_memoization(artifact, target, limits)
+    } else {
+        Reducer::reduce_artifact_unit_mass_guarded(artifact, target, limits)
     }
 }
 
@@ -364,48 +394,58 @@ impl VacuumFactorProvider for ShippedFactorProvider {
                 )?;
                 let mut outside_endpoint = None;
                 let mut callback_resource = None;
-                let reduction = reduce_transported_vacuum_factor(
-                    &transport,
-                    target,
-                    Arc::clone(&shared),
-                    Default::default(),
-                    limits,
-                    |key, remaining| {
-                        // Numerator transport can leave the certified entry
-                        // domain even when its positive denominator map fits.
-                        // The generic native callback has a Display boundary.
-                        // Retain its typed operational cause before it becomes
-                        // a diagnostic string, independently of entry coverage.
-                        if let Err(refusal) = snapshot.program().validate_entry(key) {
-                            callback_resource = FactorProviderError::find_resource(&refusal);
-                            if matches!(
+                let without_memoization = self.without_memoization;
+                let evaluate = |key: &IntegralKey, remaining| {
+                    // Numerator transport can leave the certified entry
+                    // domain even when its positive denominator map fits.
+                    // The generic native callback has a Display boundary.
+                    // Retain its typed operational cause before it becomes
+                    // a diagnostic string, independently of entry coverage.
+                    if let Err(refusal) = snapshot.program().validate_entry(key) {
+                        callback_resource = FactorProviderError::find_resource(&refusal);
+                        if matches!(
                                 refusal,
                                 rustred::reduction::ReductionError::OutsideCertifiedRootDomain { .. }
                                     | rustred::reduction::ReductionError::OutsideCertifiedTotalExcessDomain { .. }
                             ) {
                                 outside_endpoint = Some(key.clone());
                             }
-                            return Err(error(refusal));
-                        }
-                        let (reduced, conditions, work) =
-                            match Reducer::reduce_artifact_unit_mass_guarded(
-                                artifact, key, remaining,
-                            ) {
-                                Ok(reduced) => reduced,
-                                Err(refusal) => {
-                                    callback_resource =
-                                        FactorProviderError::find_resource(&refusal);
-                                    return Err(error(refusal));
-                                }
-                            };
-                        Ok::<_, FactorProviderError>(result(
-                            Arc::clone(&shared),
-                            reduced.terms(),
-                            conditions,
-                            work,
-                        ))
-                    },
-                );
+                        return Err(error(refusal));
+                    }
+                    let (reduced, conditions, work) =
+                        match reduce_closed(artifact, key, remaining, without_memoization) {
+                            Ok(reduced) => reduced,
+                            Err(refusal) => {
+                                callback_resource = FactorProviderError::find_resource(&refusal);
+                                return Err(error(refusal));
+                            }
+                        };
+                    Ok::<_, FactorProviderError>(result(
+                        Arc::clone(&shared),
+                        reduced.terms(),
+                        conditions,
+                        work,
+                    ))
+                };
+                let reduction = if without_memoization {
+                    reduce_transported_vacuum_factor_without_memoization(
+                        &transport,
+                        target,
+                        Arc::clone(&shared),
+                        Default::default(),
+                        limits,
+                        evaluate,
+                    )
+                } else {
+                    reduce_transported_vacuum_factor(
+                        &transport,
+                        target,
+                        Arc::clone(&shared),
+                        Default::default(),
+                        limits,
+                        evaluate,
+                    )
+                };
                 if let Some(resource) = callback_resource {
                     return Err(FactorProviderError::Resource(resource));
                 }
@@ -422,7 +462,7 @@ impl VacuumFactorProvider for ShippedFactorProvider {
                 };
             }
             let (reduced, conditions, work) =
-                Reducer::reduce_artifact_unit_mass_guarded(artifact, &mapped, limits)
+                reduce_closed(artifact, &mapped, limits, self.without_memoization)
                     .map_err(error)?;
             return Ok(result(shared, reduced.terms(), conditions, work));
         }
@@ -455,12 +495,48 @@ impl VacuumFactorProvider for ShippedFactorProvider {
                         &mapping,
                         limits,
                     )?;
+                    if self.without_memoization {
+                        let mut callback_failure = None;
+                        let reduction = reduce_transported_vacuum_factor_without_memoization(
+                            &transport,
+                            target,
+                            Arc::clone(&shared),
+                            Default::default(),
+                            limits,
+                            |key, remaining| {
+                                let (reduced, conditions, work) = match native
+                                    .reduce_unit_mass_without_memoization_guarded(key, remaining)
+                                {
+                                    Ok(result) => result,
+                                    Err(error) => {
+                                        callback_failure = Some(error.clone());
+                                        return Err(error);
+                                    }
+                                };
+                                Ok::<_, VacuumProductReductionError>(result(
+                                    Arc::clone(&shared),
+                                    reduced.terms(),
+                                    conditions,
+                                    work,
+                                ))
+                            },
+                        );
+                        // Preserve typed coverage/RAM refusals across the generic
+                        // numerical-algebra helper's Display callback boundary.
+                        if let Some(error) = callback_failure {
+                            return Err(error.into());
+                        }
+                        return reduction.map_err(FactorProviderError::from);
+                    }
                     return native
                         .reduce_transported_unit_mass_guarded(&transport, target, limits)
                         .map_err(FactorProviderError::from);
                 }
-                let (reduced, conditions, work) =
-                    native.reduce_unit_mass_guarded(&mapped, limits)?;
+                let (reduced, conditions, work) = if self.without_memoization {
+                    native.reduce_unit_mass_without_memoization_guarded(&mapped, limits)?
+                } else {
+                    native.reduce_unit_mass_guarded(&mapped, limits)?
+                };
                 return Ok(result(
                     native.family_shared(),
                     reduced.terms(),
@@ -533,6 +609,46 @@ mod tests {
             *direct.0.terms(),
         );
         assert_eq!(recovered.nonzero_conditions, direct.1);
+    }
+
+    #[test]
+    fn lower_provider_without_memoization_recomputes_exact_guarded_results() {
+        crate::Vakint::initialize_vakint_symbols();
+        let mut provider =
+            ShippedFactorProvider::without_memoization(RustRedData::vendored().unwrap());
+        for (loops, powers) in [(1, vec![4]), (2, vec![2, 1, 1])] {
+            let artifact = shipped_family_for_loop_count(loops)
+                .unwrap()
+                .artifact()
+                .unwrap();
+            let family = share_family(artifact.family()).unwrap();
+            let target = IntegralKey::try_new(powers).unwrap();
+            let expected =
+                Reducer::reduce_artifact_unit_mass_guarded(artifact, &target, Default::default())
+                    .unwrap();
+            let mut first_work = None;
+            for _ in 0..2 {
+                let actual = provider
+                    .reduce(Arc::clone(&family), &target, Default::default())
+                    .unwrap();
+                assert_eq!(
+                    actual
+                        .terms
+                        .iter()
+                        .map(|term| (term.integral.clone(), term.coefficient.clone()))
+                        .collect::<BTreeMap<_, _>>(),
+                    *expected.0.terms(),
+                );
+                assert_eq!(actual.nonzero_conditions, expected.1);
+                assert_eq!(actual.work.cache_hits, 0);
+                assert!(actual.work.rule_applications > 0);
+                if let Some(first) = first_work {
+                    assert_eq!(actual.work, first);
+                } else {
+                    first_work = Some(actual.work);
+                }
+            }
+        }
     }
 
     #[test]

@@ -191,12 +191,55 @@ pub fn run(
     directory: &Path,
     options: &RunOptions,
 ) -> Result<CompletedRun> {
+    if prepared.loop_count == 5 && options.strategy != RustRedReductionStrategy::Ordered {
+        return Err("five-loop physical benchmarks permit only ordered reduction; use the preserved historical DFS result for comparison".into());
+    }
     if prepared.loop_count == 5 && options.monitor.enabled() {
         RustRedMonitorScope::run(&options.monitor, |scope| {
             run_scoped(prepared, directory, options, Some(scope))
         })
     } else {
         run_scoped(prepared, directory, options, None)
+    }
+}
+
+#[cfg(test)]
+#[test]
+fn five_loop_benchmarks_reject_both_depth_first_strategies_before_loading() {
+    let prepared = LadderFixture {
+        loop_count: 5,
+        input: Atom::one(),
+        preparation_seconds: 0.0,
+        scalar_terms: 1,
+        contributions: 1,
+        nonzero_conditions: Vec::new(),
+        projection: Projection::ZeroMomentumMetric,
+        timings: super::PreparationTimings::default(),
+        prepared_input: None,
+    };
+    let directory = tempfile::tempdir().unwrap();
+    // An invalid local manifest prevents network access even if this guard
+    // regresses and the loader is accidentally reached.
+    std::fs::write(directory.path().join("manifest.json"), "{}").unwrap();
+    let output = directory.path().join("must-not-create");
+    for strategy in [
+        RustRedReductionStrategy::DepthFirst,
+        RustRedReductionStrategy::DepthFirstWithoutMemoization,
+    ] {
+        let error = run(
+            &prepared,
+            &output,
+            &RunOptions {
+                strategy,
+                artifacts: Some(directory.path().to_owned()),
+                monitor: RustRedMonitorOptions::default(),
+                numerical_reference: false,
+            },
+        )
+        .err()
+        .expect("a five-loop DFS benchmark must fail before any work");
+        assert!(error.to_string().contains("permit only ordered reduction"));
+        assert!(!output.exists());
     }
 }
 
@@ -351,12 +394,14 @@ fn run_scoped(
             serde_json::json!({"scope":"existing lower-loop public Atom API does not expose its internal guard set","preparation":prepared.nonzero_conditions.iter().map(AtomCore::to_canonical_string).collect::<Vec<_>>()})
         }
     };
+    let intrinsic_memoization = options.strategy == RustRedReductionStrategy::DepthFirst;
     let mut report = serde_json::json!({"schema":"vakint.ordered-rung-comparison.v1",
         "loop_count":prepared.loop_count,"gluon_rungs":prepared.loop_count-1,"projection":prepared.projection,
         "strategy":format!("{:?}",options.strategy),"persistent_cache":false,
-        "dfs_request_memoization":"normal native behavior retained; no completed result cache attached",
+        "intrinsic_memoization":intrinsic_memoization,
+        "intrinsic_memoization_scope":"primary depth-first completed-result reuse; DFS-no-memo also bypasses dependency/product result memos, while Ordered checked opaque factorization may use a fresh isolated internal memo",
         "cache_policy":{"prepared_cache_loaded":false,"previous_run_cache_restored":false,
-            "depth_first_intrinsic_memoization":"normal native per-run memoization retained",
+            "depth_first_intrinsic_memoization":intrinsic_memoization,
             "ordered_result_cache":"not supported"},
         "worker_policy":{"owner_preparation_workers":1,
             "scope":"single owner preparation worker required for native timing subtraction"},
@@ -648,7 +693,7 @@ pub fn compare(left: &CompletedRun, right: &CompletedRun) -> Result<()> {
         .expand()
         .is_zero()
     {
-        return Err("ordered and depth-first physical reductions differ exactly".into());
+        return Err("physical reduction strategies differ exactly".into());
     }
     let left = &left.report["numerical_reference"];
     let right = &right.report["numerical_reference"];
@@ -659,16 +704,28 @@ pub fn compare(left: &CompletedRun, right: &CompletedRun) -> Result<()> {
 }
 
 /// Authenticate and compare separate completed processes without repeating IBPs.
-pub fn compare_reports(dfs: &Path, ordered: &Path, destination: &Path) -> Result<()> {
-    let load = |directory: &Path| -> Result<CompletedRun> {
+pub fn compare_reports(
+    dfs: &Path,
+    dfs_no_memo: &Path,
+    ordered: &Path,
+    destination: &Path,
+) -> Result<()> {
+    let load = |directory: &Path, strategy: &str, memoization: bool| -> Result<CompletedRun> {
         let report: serde_json::Value =
             serde_json::from_slice(&std::fs::read(directory.join("report.json"))?)?;
         if report["schema"] != "vakint.ordered-rung-comparison.v1"
             || report["persistent_cache"] != false
             || report["reduction_completed"] != true
+            || report["catalogue_closure"]["closed"] != true
+            || report["catalogue_closure"]["unknown_count"] != 0
+            || report["strategy"] != strategy
+            || report["intrinsic_memoization"] != memoization
+            || report["cache_policy"]["depth_first_intrinsic_memoization"] != memoization
+            || report["cache_policy"]["prepared_cache_loaded"] != false
+            || report["cache_policy"]["previous_run_cache_restored"] != false
         {
             return Err(
-                "comparison requires a completed uncached physical collector report".into(),
+                format!("comparison requires a completed {strategy} report with the declared memoization policy and no loaded prepared or previous-run caches").into(),
             );
         }
         if report["retained"]["file"] != "retained.symbolica" {
@@ -684,24 +741,26 @@ pub fn compare_reports(dfs: &Path, ordered: &Path, destination: &Path) -> Result
         let value = Atom::parse(&String::from_utf8(payload)?, "vakint", Default::default())?;
         Ok(CompletedRun { value, report })
     };
-    let left = load(dfs)?;
-    let right = load(ordered)?;
-    if left.report["strategy"] != "DepthFirst" || right.report["strategy"] != "Ordered" {
-        return Err("provide the depth-first report first and the ordered report second".into());
-    }
-    compare(&left, &right)?;
+    let memoized = load(dfs, "DepthFirst", true)?;
+    let nonmemoized = load(dfs_no_memo, "DepthFirstWithoutMemoization", false)?;
+    let ordered_result = load(ordered, "Ordered", false)?;
+    compare(&memoized, &nonmemoized)?;
+    compare(&memoized, &ordered_result)?;
     let dfs_report = std::fs::canonicalize(dfs.join("report.json"))?;
+    let dfs_no_memo_report = std::fs::canonicalize(dfs_no_memo.join("report.json"))?;
     let ordered_report = std::fs::canonicalize(ordered.join("report.json"))?;
     std::fs::write(
         destination,
         serde_json::to_vec_pretty(&serde_json::json!({
-            "schema":"vakint.ordered-rung-parity.v1","exact_retained_equality":true,
-            "numerical_enclosures_agree":if left.report["numerical_reference"].is_null() { None } else { Some(true) },
-            "input_sha256":left.report["input_sha256"],
+            "schema":"vakint.ordered-rung-parity.v2","exact_retained_equality":true,
+            "numerical_enclosures_agree":if memoized.report["numerical_reference"].is_null() { None } else { Some(true) },
+            "input_sha256":memoized.report["input_sha256"],
             "reports":{
                 "dfs":{"path":dfs_report,"sha256":sha256(&std::fs::read(&dfs_report)?)},
+                "dfs_no_memo":{"path":dfs_no_memo_report,"sha256":sha256(&std::fs::read(&dfs_no_memo_report)?)},
                 "ordered":{"path":ordered_report,"sha256":sha256(&std::fs::read(&ordered_report)?)}},
-            "retained":{"dfs":left.report["retained"]["sha256"],"ordered":right.report["retained"]["sha256"]},
+            "retained":{"dfs":memoized.report["retained"]["sha256"],"dfs_no_memo":nonmemoized.report["retained"]["sha256"],"ordered":ordered_result.report["retained"]["sha256"]},
+            "intrinsic_memoization":{"dfs":true,"dfs_no_memo":false,"ordered":false},
             "equality_scope":"exact retained equality after documented positive-real EulerGamma normalization; exact binary-rational tracked-error overlap when numerical references are present (rigorous bounds only when error quality is Bounded); no claim of identical exceptional-dimensional guard sets",
         "comparison_normalization":"(exp(±EulerGamma))^p = exp(±EulerGamma*p), using only the registered real Euler constant and its positive exponentials",
             "numerical_check":{"minimum_meaningful_digits":64,"point":{"mUV":1,"mu_r_squared":1,"UFO_G":1}}

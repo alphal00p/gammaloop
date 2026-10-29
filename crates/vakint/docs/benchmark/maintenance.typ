@@ -8,16 +8,19 @@
 == Ordered-engine physical rung comparisons
 
 The generic collector #raw("examples/ordered_reduction_rungs.rs") compares
-depth-first and ordered reduction on the same authenticated physical scalar
-input. Both persistent caches remain disabled; DFS retains its normal
-request-local memoization. *All new rung records use MSbar normalization.*
+ordinary DFS, DFS without completed-result memoization/bookkeeping, and Ordered
+on the same authenticated physical scalar input. Prepared/saved caches and
+previous-run result state remain unloaded in every arm. Only ordinary DFS enables
+primary-engine completed-result memoization. Ordered may use a fresh private memo
+inside opaque checked factorization; the no-memo DFS arm bypasses dependent
+result memos too. *All new rung records use MSbar normalization.*
 The adapter rejects new pySecDec records; earlier pySecDec fixtures, goldens
 and measurements remain historical and are never relabeled. See #link("../ordered_reduction.typ")[the engine
 guide] for the scientific fixture, strategy selection and progress semantics.
 
-Through four loops, use #raw("--engine both") for exact and tracked-numerical
-functional parity. Use separate #raw("--engine dfs") and
-#raw("--engine ordered") invocations,
+Through four loops, use #raw("--engine all") for exact and tracked-numerical
+functional parity. Use separate #raw("--engine dfs"),
+#raw("--engine dfs-no-memo") and #raw("--engine ordered") invocations,
 with #raw("--no-monitor"), the same prepared input and normal release executable, for fresh-process
 measurements. Do not promote same-process functional timings or historical
 five-loop baselines into matched fresh-process speedup claims.
@@ -26,7 +29,7 @@ then quadratic, with the saved historical zero-momentum result as reference.
 Every reduction invocation declares its actual #raw("--build-profile").
 
 After separate workers finish, use the same collector with
-#raw("--work-dir OUT --compare-reports DFS_DIRECTORY ORDERED_DIRECTORY") to
+#raw("--work-dir OUT --compare-reports DFS_DIRECTORY DFS_NO_MEMO_DIRECTORY ORDERED_DIRECTORY") to
 authenticate the retained payloads and compare exact expressions and serialized
 numerical centers/error radii. This cheap comparison performs no IBPs or
 numerical reevaluation and writes the bound #raw("parity.json") consumed below.
@@ -50,17 +53,19 @@ replacing the canonical measured JSON and rendering the PDF. All 48 original
 four-loop measurements and their original provenance remain untouched.
 Synthetic adapter tests never supply published timing data.
 
-The owner-produced parity document has this contract:
+New parity receipts bind all three executed arms:
 
 ```json
 {
-  "schema": "vakint.ordered-rung-parity.v1",
+  "schema": "vakint.ordered-rung-parity.v2",
   "input_sha256": "<prepared scalar input digest>",
   "reports": {
     "dfs": {"path": "<report.json>", "sha256": "<digest>"},
+    "dfs_no_memo": {"path": "<no-memo report.json>", "sha256": "<digest>"},
     "ordered": {"path": "<report.json>", "sha256": "<digest>"}
   },
-  "retained": {"dfs": "<result digest>", "ordered": "<result digest>"},
+  "retained": {"dfs": "<result digest>", "dfs_no_memo": "<result digest>", "ordered": "<result digest>"},
+  "intrinsic_memoization": {"dfs": true, "dfs_no_memo": false, "ordered": false},
   "exact_retained_equality": true,
   "numerical_enclosures_agree": null,
   "equality_scope": "<actual exact and numerical checks performed>"
@@ -68,14 +73,27 @@ The owner-produced parity document has this contract:
 ```
 
 Paths resolve relative to the parity file. Numerical equality is #raw("true")
-when both reports contain checked numerical references and #raw("null") when
-neither does. The adapter checks file hashes, payload sizes, input identities,
+when every report contains checked numerical references and #raw("null") when
+none does. The adapter checks file hashes, payload sizes, input identities,
 source/data/normalization agreement, completed catalogue closure, exact
 dimension/evaluated-input bindings and cache exclusion. Numerical comparisons
 share requested precision, effective finite source cap, evaluation point and
 Laurent orders; equivalent exact expressions may expose different source-symbol
 inventories, which are preserved separately. It does not perform
 the symbolic comparison itself or certify the origin of an arbitrary receipt.
+New raw reports retain #raw("vakint.ordered-rung-comparison.v1") and add an
+explicit #raw("intrinsic_memoization") boolean, matching
+#raw("cache_policy.depth_first_intrinsic_memoization"). The expected strategies
+are #raw("DepthFirst"), #raw("DepthFirstWithoutMemoization") and #raw("Ordered").
+The no-memo arm requires the actual dedicated walker, not a zero cache budget,
+zero cache counters or a subtraction estimate. Receipt key #raw("dfs_no_memo")
+maps to CLI/directory #raw("dfs-no-memo").
+The boolean describes the primary engine's completed-result memo, not Ordered's
+isolated auxiliary factorization implementation.
+Existing two-arm version-one records remain as recorded and are not relabeled
+or requalified as no-memo results.
+New appended rows use #raw("vakint.ordered-rung-report.v2") and retain separate
+Ordered/ordinary-DFS and Ordered/DFS-without-memoization ratios.
 
 Without #raw("--protocol PATH"), measured times are diagnostic observations:
 the report publishes no ordered/DFS speed ratio. A protocol supplied by the
@@ -83,7 +101,7 @@ measurement supervisor qualifies the matched fresh-process scope:
 
 ```json
 {
-  "schema": "vakint.ordered-rung-protocol.v1",
+  "schema": "vakint.ordered-rung-protocol.v2",
   "fresh_processes": true,
   "serialized_execution": true,
   "build_profile": "release",
@@ -103,6 +121,12 @@ measurement supervisor qualifies the matched fresh-process scope:
   "samples": [{
     "dfs": {
       "report_sha256": "<digest>", "pid": 123, "start_ticks": 456,
+      "exit_code": 0, "executable_sha256": "<digest>",
+      "launch": {"path": "<guard launch.json>", "sha256": "<digest>"},
+      "completion": {"path": "<guard completion.json>", "sha256": "<digest>"}
+    },
+    "dfs_no_memo": {
+      "report_sha256": "<digest>", "pid": 125, "start_ticks": 458,
       "exit_code": 0, "executable_sha256": "<digest>",
       "launch": {"path": "<guard launch.json>", "sha256": "<digest>"},
       "completion": {"path": "<guard completion.json>", "sha256": "<digest>"}
@@ -145,7 +169,10 @@ used by a diagnostic build; qualified final builds use coherent published pins.
 The adapter rejects invalid supplied protocols instead of silently downgrading
 them to diagnostic records. DEV reports with explicit profile and nullable
 self-hash remain admissible without a performance protocol.
-Use three samples per engine for final comparisons and retain median/range.
+Use three samples per arm for final comparisons and retain median/range.
+Each sample binds three fresh workers and one cheap three-report comparison;
+all nine performance workers run serially. Each arm's boolean policy stays
+fixed across repetitions. No new physical five-loop DFS run is included.
 Release status is not inferred from #raw("debug_assertions=false").
 
 The headline is #raw("reduction_math_seconds"), using fixed scope
@@ -214,6 +241,9 @@ Phases refer to one native request and are not a wall-time percentage.
 The benchmark keeps the existing large colored cells. Its ordered multiplier is
 *ordered net reduction math ÷ DFS net reduction math*; original RustRed/FMFT
 multipliers retain their original meaning.
+Three-arm Ordered cells print both ratios. Their color compares Ordered with
+the faster DFS variant, so green means it beats both baselines; a win over only
+the no-memo arm cannot hide a regression against ordinary DFS.
 An independent historical 40-hour five-loop baseline remains labeled with its
 original source, cache and input cohort. It cannot qualify through this matched
 new-report protocol or silently become a new uncached sample.

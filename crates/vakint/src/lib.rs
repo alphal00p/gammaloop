@@ -2147,8 +2147,10 @@ pub struct VakintSettings {
     pub rustred_resources: ResourceLimits,
     /// Native reduction strategy and operational application/cache allowances.
     /// `reduction_strategy` selects the scalar scheduler at every loop count.
-    /// Ordered requests use no DFS result cache; neither strategy enlarges the
-    /// saved entry domains. Complete factorization remains a checked action.
+    /// Ordered requests use their own frontier; depth-first without memoization
+    /// also recomputes every completed descendant occurrence. Both bypass DFS
+    /// result caches. No strategy enlarges the saved entry domains. Complete
+    /// factorization remains a checked action.
     pub rustred_application_options: rustred_app::SavedApplicationOptions,
     /// Per-call numerator lowering allowances for the saved five-loop lane.
     /// These do not change entry admission, legacy lower-loop programs, or

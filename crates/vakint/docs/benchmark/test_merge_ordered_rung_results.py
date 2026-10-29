@@ -60,7 +60,7 @@ class OrderedReportContractTests(unittest.TestCase):
             "coupling_definitions": {"G": "1"},
             "coefficients": [{"epsilon_power": -1}, {"epsilon_power": 0}],
         }
-        for name in ("dfs", "ordered"):
+        for name in merge.read(self.parity)["reports"]:
             self.update_report(
                 name, lambda row: row.update(numerical_reference=reference)
             )
@@ -139,6 +139,44 @@ class OrderedReportContractTests(unittest.TestCase):
             },
         )
 
+    def triplet(self, name):
+        path = self.pair(name)
+        parity = merge.read(path)
+        parity["schema"] = "vakint.ordered-rung-parity.v2"
+        parity["intrinsic_memoization"] = merge.MEMOIZATION.copy()
+        for arm in ("dfs", "ordered"):
+            report_path = Path(parity["reports"][arm]["path"])
+            raw = merge.read(report_path)
+            raw.pop("dfs_request_memoization")
+            raw["intrinsic_memoization"] = merge.MEMOIZATION[arm]
+            raw["cache_policy"]["depth_first_intrinsic_memoization"] = (
+                merge.MEMOIZATION[arm]
+            )
+            report_path.write_text(json.dumps(raw))
+            parity["reports"][arm] = merge.evidence(report_path)
+        directory = self.root / name / "dfs-no-memo"
+        directory.mkdir()
+        payload = directory / "retained.symbolica"
+        payload.write_text("SYNTHETIC NO-MEMO FILE CONTRACT; NOT A REDUCTION")
+        raw = copy.deepcopy(merge.read(Path(parity["reports"]["dfs"]["path"])))
+        raw.update(
+            strategy="DepthFirstWithoutMemoization",
+            intrinsic_memoization=False,
+            reduction_math_seconds=2,
+        )
+        raw["cache_policy"]["depth_first_intrinsic_memoization"] = False
+        raw["reduction_math_timing"].update(gross_seconds=3)
+        raw["retained"] = {
+            "file": payload.name,
+            "bytes": payload.stat().st_size,
+            "sha256": merge.digest(payload),
+        }
+        report_path = self.write(f"{name}/dfs-no-memo/report.json", raw)
+        parity["reports"]["dfs_no_memo"] = merge.evidence(report_path)
+        parity["retained"]["dfs_no_memo"] = merge.digest(payload)
+        path.write_text(json.dumps(parity))
+        return path
+
     def protocol(self, parity=None):
         parity = merge.read(parity or self.parity)
         binary = self.root / "SYNTHETIC-NOT-AN-EXECUTABLE"
@@ -172,7 +210,7 @@ class OrderedReportContractTests(unittest.TestCase):
             for key in ("RAYON_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS")
         }
         samples = {}
-        for index, name in enumerate(("dfs", "ordered")):
+        for index, name in enumerate(parity["reports"]):
             report = Path(parity["reports"][name]["path"])
             launch = self.write(
                 f"guard/{name}/launch.json",
@@ -188,7 +226,7 @@ class OrderedReportContractTests(unittest.TestCase):
                     "command": [
                         str(binary),
                         "--engine",
-                        name,
+                        name.replace("_", "-"),
                         "--loops",
                         "2",
                         "--projection",
@@ -223,7 +261,9 @@ class OrderedReportContractTests(unittest.TestCase):
         return self.write(
             "protocol.json",
             {
-                "schema": "vakint.ordered-rung-protocol.v1",
+                "schema": "vakint.ordered-rung-protocol.v2"
+                if "dfs_no_memo" in parity["reports"]
+                else "vakint.ordered-rung-protocol.v1",
                 "fresh_processes": True,
                 "serialized_execution": True,
                 "build_profile": "release",
@@ -639,6 +679,64 @@ class OrderedReportContractTests(unittest.TestCase):
         path.write_text(json.dumps(raw))
         with self.assertRaisesRegex(ValueError, "factor identity differs"):
             merge.append(self.base, "test", [], historical_receipts=[path])
+
+    def test_triplet_has_three_actual_arms_and_two_net_math_ratios(self):
+        self.parity = self.triplet("triplet")
+        loaded = merge.load_triplet(self.parity)
+        self.assertEqual(tuple(loaded["reports"]), ("dfs", "dfs_no_memo", "ordered"))
+        result = merge.append(self.base, "three", [self.parity], self.protocol())
+        run = result["ordered_rung_runs"]["three"]
+        self.assertEqual(run["schema"], "vakint.ordered-rung-report.v2")
+        row = run["summary"][0]
+        self.assertEqual(row["ordered_over_dfs"], 0.25)
+        self.assertEqual(row["ordered_over_dfs_no_memo"], 0.5)
+        self.assertFalse(row["intrinsic_memoization"]["dfs_no_memo"])
+        self.assertEqual(
+            row["metrics"]["dfs_no_memo"]["reduction_math_seconds"]["median_seconds"], 2
+        )
+
+    def test_triplet_cannot_label_an_ordinary_dfs_as_no_memo(self):
+        self.parity = self.triplet("wrong-policy")
+        self.update_report("dfs_no_memo", lambda row: row.update(strategy="DepthFirst"))
+        with self.assertRaisesRegex(ValueError, "strategy"):
+            merge.load_triplet(self.parity)
+        self.parity = self.triplet("wrong-bool")
+        self.update_report(
+            "dfs_no_memo", lambda row: row.update(intrinsic_memoization=True)
+        )
+        with self.assertRaisesRegex(ValueError, "memoization"):
+            merge.load_triplet(self.parity)
+
+    def test_triplet_requires_the_no_memo_arm_and_keeps_v1_history(self):
+        original = merge.append(self.base, "original-pair", [self.parity])
+        self.parity = self.triplet("new-three")
+        result = merge.append(original, "new-three", [self.parity])
+        self.assertEqual(
+            result["ordered_rung_runs"]["original-pair"],
+            original["ordered_rung_runs"]["original-pair"],
+        )
+        raw = merge.read(self.parity)
+        del raw["reports"]["dfs_no_memo"]
+        self.parity.write_text(json.dumps(raw))
+        with self.assertRaisesRegex(ValueError, "omits or adds an arm"):
+            merge.load_triplet(self.parity)
+
+    def test_append_does_not_requalify_an_existing_historical_v1_run(self):
+        protocol = self.protocol()
+        original = merge.append(self.base, "old-qualified", [self.parity], protocol)
+        binary = Path(merge.read(protocol)["executable"]["path"])
+        binary.write_text("SYNTHETIC LATER BUILD OVERWROTE THE ORIGINAL TARGET PATH")
+        self.parity = self.triplet("later-triplet")
+        result = merge.append(original, "new-diagnostic", [self.parity])
+        self.assertTrue(
+            result["ordered_rung_runs"]["old-qualified"]["summary"][0][
+                "performance_eligible"
+            ]
+        )
+        self.assertEqual(
+            result["ordered_rung_runs"]["old-qualified"],
+            original["ordered_rung_runs"]["old-qualified"],
+        )
 
     def test_historical_changed_acceptance_or_timing_is_rejected(self):
         path = self.historical_pair()

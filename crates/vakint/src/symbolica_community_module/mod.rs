@@ -128,9 +128,12 @@ fn rustred_cache_policy(
 fn rustred_reduction_strategy(value: &str) -> Result<crate::RustRedReductionStrategy, String> {
     match value {
         "depth_first" => Ok(crate::RustRedReductionStrategy::DepthFirst),
+        "depth_first_without_memoization" => {
+            Ok(crate::RustRedReductionStrategy::DepthFirstWithoutMemoization)
+        }
         "ordered" => Ok(crate::RustRedReductionStrategy::Ordered),
         _ => Err(format!(
-            "unknown rustred_reduction_strategy {value:?}; expected 'depth_first' or 'ordered'"
+            "unknown rustred_reduction_strategy {value:?}; expected 'depth_first', 'depth_first_without_memoization' or 'ordered'"
         )),
     }
 }
@@ -141,8 +144,7 @@ fn rustred_reduction_strategy(value: &str) -> Result<crate::RustRedReductionStra
 ///
 /// Construct one instance and reuse it. Initialization prepares lower-loop data;
 /// the five-loop catalogue is attached only after successful artifact loading.
-/// Explicit cache operations belong to the depth-first engine and are rejected
-/// when this instance selects ordered reduction.
+/// Explicit cache operations require `rustred_reduction_strategy="depth_first"`.
 pub struct VakintWrapper {
     pub vakint: Vakint,
     pub settings: VakintSettings,
@@ -151,10 +153,10 @@ pub struct VakintWrapper {
 impl VakintWrapper {
     fn require_depth_first_cache(&self) -> PyResult<()> {
         if self.settings.rustred_application_options.reduction_strategy
-            == crate::RustRedReductionStrategy::Ordered
+            != crate::RustRedReductionStrategy::DepthFirst
         {
             return Err(exceptions::PyValueError::new_err(
-                "ordered reduction does not support reduction caches; use rustred_reduction_strategy='depth_first' for cache operations",
+                "reduction caches require rustred_reduction_strategy='depth_first'; ordered and depth_first_without_memoization do not use or produce completed-result caches",
             ));
         }
         Ok(())
@@ -849,9 +851,9 @@ impl VakintWrapper {
 
     /// Install all official loop packs through the requested maximum, or load a
     /// supplied checkout directly. Existing validated installations work offline.
-    /// Prepared native caches load by default for depth-first reduction. Set
-    /// `load_prepared_caches=False` to skip them explicitly; ordered reduction
-    /// always skips them.
+    /// Prepared native caches load by default only for `depth_first`. Set
+    /// `load_prepared_caches=False` to skip them explicitly; `ordered` and
+    /// `depth_first_without_memoization` always skip them.
     #[cfg(all(unix, not(target_arch = "wasm32")))]
     #[pyo3(signature = (max_loop_count, version="latest", local_artifacts_path=None, refresh=false, *, load_prepared_caches=true))]
     pub fn load_official_external_data<'py>(
@@ -1001,9 +1003,12 @@ impl VakintWrapper {
     ///     loading and lookup. None disables it. Native kernels are checked at
     ///     boundaries, so an external supervisor is needed for a hard deadline.
     /// rustred_reduction_strategy : str
-    ///     "depth_first" (default) or "ordered". Ordered reduction combines the
-    ///     global integral frontier between checked steps and does not use or
-    ///     produce reduction caches. Official loading skips prepared caches.
+    ///     "depth_first" (default), "depth_first_without_memoization", or "ordered".
+    ///     "depth_first_without_memoization" recomputes repeated descendants;
+    ///     immutable program preparation remains shared. "ordered" combines the
+    ///     global integral frontier between checked steps. Neither alternative
+    ///     uses or produces completed-result caches, including persistent caches;
+    ///     official loading skips prepared caches for both.
     pub fn new(
         run_time_decimal_precision: Option<u32>,
         evaluation_order: Option<Vec<PyRef<VakintEvaluationMethodWrapper>>>,
@@ -2241,27 +2246,44 @@ mod tests {
             crate::RustRedReductionStrategy::DepthFirst
         );
         assert_eq!(
+            rustred_reduction_strategy("depth_first_without_memoization").unwrap(),
+            crate::RustRedReductionStrategy::DepthFirstWithoutMemoization
+        );
+        assert_eq!(
             rustred_reduction_strategy("ordered").unwrap(),
             crate::RustRedReductionStrategy::Ordered
         );
-        for value in ["dfs", "Ordered", "", "automatic"] {
+        for value in [
+            "dfs",
+            "Ordered",
+            "",
+            "automatic",
+            "depth_first_no_memoization",
+            "depth-first-without-memoization",
+        ] {
             let error = rustred_reduction_strategy(value).unwrap_err();
             assert!(error.contains("depth_first"));
+            assert!(error.contains("depth_first_without_memoization"));
             assert!(error.contains("ordered"));
         }
     }
 
     #[test]
-    fn ordered_python_settings_reject_depth_first_cache_operations() {
+    fn cache_free_python_strategies_reject_depth_first_cache_operations() {
         let mut wrapper = VakintWrapper {
             vakint: Vakint::new().unwrap(),
             settings: VakintSettings::default(),
         };
         wrapper.require_depth_first_cache().unwrap();
-        wrapper
-            .settings
-            .rustred_application_options
-            .reduction_strategy = crate::RustRedReductionStrategy::Ordered;
-        assert!(wrapper.require_depth_first_cache().is_err());
+        for strategy in [
+            crate::RustRedReductionStrategy::Ordered,
+            crate::RustRedReductionStrategy::DepthFirstWithoutMemoization,
+        ] {
+            wrapper
+                .settings
+                .rustred_application_options
+                .reduction_strategy = strategy;
+            assert!(wrapper.require_depth_first_cache().is_err());
+        }
     }
 }

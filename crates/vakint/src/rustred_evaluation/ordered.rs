@@ -131,6 +131,73 @@ mod tests {
     }
 
     #[test]
+    fn two_loop_complex_coefficients_agree_with_depth_first() {
+        assert_parity(&[
+            "-8*𝑖/3*topo(I2L(muvsq,2,1,1))",
+            "(2/3+3*𝑖/5)*topo(I2L(muvsq,2,1,1))+(-2/3+7*𝑖/5)*topo(I2L(muvsq,3,1,1))",
+        ]);
+    }
+
+    #[test]
+    fn complex_dimension_numerators_share_channels_across_regulator_aliases() {
+        let engine = Vakint::new().unwrap();
+        let mut ordered_settings = settings(RustRedReductionStrategy::Ordered);
+        ordered_settings.epsilon_symbol = "ordered_carrier_control::epsilon".into();
+        let mut depth_first_settings = ordered_settings.clone();
+        depth_first_settings
+            .rustred_application_options
+            .reduction_strategy = RustRedReductionStrategy::DepthFirst;
+        let directory = tempfile::tempdir().unwrap();
+        for (alias_index, epsilon) in [ordered_settings.epsilon_symbol.as_str(), "vakint::ep"]
+            .into_iter()
+            .enumerate()
+        {
+            let d = format!("(4-2*{epsilon})");
+            let inputs = [
+                format!("({d}+𝑖)/({d}+1)*topo(I2L(1,2,1,1))"),
+                format!("{d}/({d}+1)*topo(I2L(1,2,1,1))+𝑖/({d}+1)*topo(I2L(1,2,1,1))"),
+            ];
+            let mut values = Vec::new();
+            for (form_index, input) in inputs.iter().enumerate() {
+                let input = vakint_parse!(input).unwrap();
+                let snapshot = directory
+                    .path()
+                    .join(format!("{alias_index}-{form_index}.json"));
+                let ordered = engine
+                    .evaluate_with_monitor(
+                        &ordered_settings,
+                        input.as_view(),
+                        &crate::RustRedMonitorOptions {
+                            progress_snapshot: Some(snapshot.clone()),
+                            interval: std::time::Duration::ZERO,
+                            ..Default::default()
+                        },
+                    )
+                    .unwrap();
+                let depth_first = engine
+                    .evaluate_integral(&depth_first_settings, input.as_view())
+                    .unwrap();
+                assert!((&ordered - depth_first).together().expand().is_zero());
+                let document: serde_json::Value =
+                    serde_json::from_reader(std::fs::File::open(snapshot).unwrap()).unwrap();
+                assert_eq!(document["monitor"]["reduction_cohorts"]["total"], 2);
+                values.push(ordered);
+            }
+            assert!((&values[0] - &values[1]).together().expand().is_zero());
+            let original_pole = vakint_parse!(&format!(
+                "(rustred::d+𝑖)*topo(I2L(1,2,1,1))/(rustred::d+2*{epsilon}-4)"
+            ))
+            .unwrap();
+            let error = engine
+                .evaluate_integral(&ordered_settings, original_pole.as_view())
+                .unwrap_err();
+            assert!(matches!(error, VakintError::RustRedEvaluation(
+                RustRedEvaluationError::InvalidMatchedFamily { ref detail }
+            ) if detail.contains("original scalar pole")));
+        }
+    }
+
+    #[test]
     fn three_loop_ordered_and_depth_first_agree() {
         assert_parity(&["topo(I3L(muvsq,2,1,1,1,1,1))"]);
     }
@@ -141,26 +208,29 @@ mod tests {
         let settings = settings(RustRedReductionStrategy::Ordered);
         for mass in ["1", "7/3", "muvsq"] {
             for epsilon in [settings.epsilon_symbol.as_str(), "vakint::ep"] {
-                let input = vakint_parse!(&format!(
-                    "2*({mass})*topo(I1L({mass},8))+(10+2*{})/7*topo(I1L({mass},7))",
-                    epsilon,
-                ))
-                .unwrap();
-                let mut callback = |_: &rustred::solver::CandidateRoutedApplicationEnvelope<'_>| {
-                    Ok(CandidateRoutedObserverControl::Continue)
-                };
-                let mut observer = CandidateRoutedApplicationObserver::new(
-                    CandidateRoutedObservationOptions::default(),
-                    &mut callback,
-                );
-                let result = engine
-                    .evaluate_observed(&settings, input.as_view(), Some(&mut observer), None)
+                for phase in ["1", "𝑖", "-8*𝑖/3", "2/3+3*𝑖/5"] {
+                    let input = vakint_parse!(&format!(
+                        "({phase})*2*({mass})*topo(I1L({mass},8))+({phase})*(10+2*{})/7*topo(I1L({mass},7))",
+                        epsilon,
+                    ))
                     .unwrap();
-                assert!(result.is_zero(), "mass {mass}: {result}");
-                let progress = observer.last_ordered_progress().unwrap();
-                assert_eq!(progress.processed_keys, 1, "mass {mass}");
-                assert!(progress.cancelled_terms > 0, "mass {mass}");
-                assert_eq!(progress.completed_phases, progress.total_phases);
+                    let mut callback =
+                        |_: &rustred::solver::CandidateRoutedApplicationEnvelope<'_>| {
+                            Ok(CandidateRoutedObserverControl::Continue)
+                        };
+                    let mut observer = CandidateRoutedApplicationObserver::new(
+                        CandidateRoutedObservationOptions::default(),
+                        &mut callback,
+                    );
+                    let result = engine
+                        .evaluate_observed(&settings, input.as_view(), Some(&mut observer), None)
+                        .unwrap();
+                    assert!(result.is_zero(), "mass {mass}: {result}");
+                    let progress = observer.last_ordered_progress().unwrap();
+                    assert_eq!(progress.processed_keys, 1, "mass {mass}");
+                    assert!(progress.cancelled_terms > 0, "mass {mass}");
+                    assert_eq!(progress.completed_phases, progress.total_phases);
+                }
             }
         }
     }

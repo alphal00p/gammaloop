@@ -20,6 +20,13 @@ from itertools import pairwise
 from pathlib import Path
 
 MATH_SCOPE = "vakint.rustred.reduction-math.v1"
+PAIR_ARMS = {"dfs": "DepthFirst", "ordered": "Ordered"}
+TRIPLET_ARMS = {
+    "dfs": "DepthFirst",
+    "dfs_no_memo": "DepthFirstWithoutMemoization",
+    "ordered": "Ordered",
+}
+MEMOIZATION = {"dfs": True, "dfs_no_memo": False, "ordered": False}
 
 
 def require(condition, message):
@@ -246,7 +253,16 @@ def source_cap(numerical):
 def validate_protocol(path, pairs):
     """Qualify timing scope, not infer a release profile from debug assertions."""
     raw = read(path)
-    require(raw["schema"] == "vakint.ordered-rung-protocol.v1", "unknown protocol")
+    require(
+        raw["schema"]
+        in ("vakint.ordered-rung-protocol.v1", "vakint.ordered-rung-protocol.v2"),
+        "unknown protocol",
+    )
+    arms = tuple(TRIPLET_ARMS if raw["schema"].endswith(".v2") else PAIR_ARMS)
+    require(
+        all(tuple(pair["reports"]) == arms for pair in pairs),
+        "protocol/comparison arm sets differ",
+    )
     require(
         raw["fresh_processes"] is True
         and raw["serialized_execution"] is True
@@ -298,8 +314,9 @@ def validate_protocol(path, pairs):
     accepted = set()
     windows = []
     for item in raw["samples"]:
-        accepted.add(tuple(item[name]["report_sha256"] for name in ("dfs", "ordered")))
-        for name in ("dfs", "ordered"):
+        require(set(item) == set(arms), "protocol sample omits or adds an arm")
+        accepted.add(tuple(item[name]["report_sha256"] for name in arms))
+        for name in arms:
             process = item[name]
             require(
                 type(process["pid"]) is int
@@ -342,7 +359,7 @@ def validate_protocol(path, pairs):
             )
             require(
                 Path(command[0]).resolve() == Path(raw["executable"]["path"]).resolve()
-                and checked_option(command, "--engine") == name
+                and checked_option(command, "--engine") == name.replace("_", "-")
                 and checked_option(command, "--loops")
                 == str(report["raw"]["loop_count"])
                 and checked_option(command, "--projection") == projection
@@ -371,14 +388,11 @@ def validate_protocol(path, pairs):
     require(len(accepted) == len(raw["samples"]), "duplicate qualified sample")
     for pair in pairs:
         require(
-            (
-                pair["reports"]["dfs"]["evidence"]["sha256"],
-                pair["reports"]["ordered"]["evidence"]["sha256"],
-            )
+            tuple(pair["reports"][name]["evidence"]["sha256"] for name in arms)
             in accepted,
             "protocol does not bind a supplied sample",
         )
-        for item in pair["reports"].values():
+        for name, item in pair["reports"].items():
             require(
                 item["raw"]["monitoring_enabled"] is False,
                 "qualified performance requires monitoring disabled",
@@ -404,8 +418,12 @@ def validate_protocol(path, pairs):
             require(
                 cache.get("prepared_cache_loaded") is False
                 and cache.get("previous_run_cache_restored") is False
-                and isinstance(cache.get("depth_first_intrinsic_memoization"), str)
-                and cache["depth_first_intrinsic_memoization"]
+                and (
+                    cache.get("depth_first_intrinsic_memoization") is MEMOIZATION[name]
+                    if len(arms) == 3
+                    else isinstance(cache.get("depth_first_intrinsic_memoization"), str)
+                    and bool(cache["depth_first_intrinsic_memoization"])
+                )
                 and cache.get("ordered_result_cache") == "not supported",
                 "qualified performance requires an explicit unchanged cache policy",
             )
@@ -423,43 +441,90 @@ def load_pair(path):
         and raw["exact_retained_equality"] is True,
         "missing successful exact parity receipt",
     )
+    return load_reports(path, raw, PAIR_ARMS)
+
+
+def load_triplet(path):
+    """Load three actually executed arms; never derive a no-memo result."""
+    raw = read(path)
+    require(
+        raw["schema"] == "vakint.ordered-rung-parity.v2"
+        and raw["exact_retained_equality"] is True,
+        "missing successful three-arm parity receipt",
+    )
+    require(
+        set(raw["intrinsic_memoization"]) == set(MEMOIZATION)
+        and all(
+            raw["intrinsic_memoization"][name] is expected
+            for name, expected in MEMOIZATION.items()
+        ),
+        "three-arm memoization policy differs",
+    )
+    return load_reports(path, raw, TRIPLET_ARMS)
+
+
+def load_reports(path, raw, strategies):
+    require(
+        set(raw["reports"]) == set(strategies)
+        and set(raw["retained"]) == set(strategies),
+        "comparison omits or adds an arm",
+    )
     reports = {}
-    for name, strategy in (("dfs", "DepthFirst"), ("ordered", "Ordered")):
+    for name, strategy in strategies.items():
         report_path = referenced(raw["reports"][name], path.parent)
         report = validate_report(report_path, strategy)
+        if len(strategies) == 3:
+            cache = report["cache_policy"]
+            require(
+                report["intrinsic_memoization"] is MEMOIZATION[name]
+                and cache["depth_first_intrinsic_memoization"] is MEMOIZATION[name]
+                and cache["prepared_cache_loaded"] is False
+                and cache["previous_run_cache_restored"] is False,
+                "executed arm has the wrong intrinsic memoization or saved-cache policy",
+            )
         require(
             report["input_sha256"] == raw["input_sha256"]
             and report["retained"]["sha256"] == raw["retained"][name],
             "parity receipt does not bind the input/output",
         )
         reports[name] = {"evidence": evidence(report_path), "raw": report}
-    dfs, ordered = (reports[name]["raw"] for name in ("dfs", "ordered"))
-    for key in ("worker_policy", "cache_policy"):
-        require(dfs.get(key) == ordered.get(key), f"paired {key} differs")
-    for key in (
-        "loop_count",
-        "projection",
-        "input_sha256",
-        "evaluated_input_sha256",
-        "dimension_binding",
-        "monitoring_enabled",
-        "data",
-        "normalization",
-        "producer",
-    ):
-        # Same-process/fresh-process mode labels can differ, but the complete
-        # producer document must agree within each actual pair.
-        require(dfs[key] == ordered[key], f"paired {key} differs")
+    dfs = reports["dfs"]["raw"]
     has_numerical = dfs["numerical_reference"] is not None
-    require(
-        has_numerical == (ordered["numerical_reference"] is not None),
-        "only one engine produced a numerical reference",
-    )
     require(
         raw["numerical_enclosures_agree"] is (True if has_numerical else None),
         "numerical parity scope differs from actual references",
     )
-    if has_numerical:
+    for other in tuple(reports)[1:]:
+        ordered = reports[other]["raw"]
+        require(
+            dfs.get("worker_policy") == ordered.get("worker_policy"),
+            "paired worker_policy differs",
+        )
+        if len(strategies) == 2:
+            require(
+                dfs.get("cache_policy") == ordered.get("cache_policy"),
+                "paired cache_policy differs",
+            )
+        for key in (
+            "loop_count",
+            "projection",
+            "input_sha256",
+            "evaluated_input_sha256",
+            "dimension_binding",
+            "monitoring_enabled",
+            "data",
+            "normalization",
+            "producer",
+        ):
+            # Same-process/fresh-process mode labels can differ, but the complete
+            # producer document must agree within each actual pair.
+            require(dfs[key] == ordered[key], f"paired {key} differs")
+        require(
+            has_numerical == (ordered["numerical_reference"] is not None),
+            "only one engine produced a numerical reference",
+        )
+        if not has_numerical:
+            continue
         for key in ("point", "epsilon_range", "coupling_definitions"):
             require(
                 dfs["numerical_reference"][key] == ordered["numerical_reference"][key],
@@ -623,7 +688,20 @@ def load_historical(path):
 
 def append(base, run_id, receipts, protocol=None, historical_receipts=()):
     require(run_id and run_id not in base.get("ordered_rung_runs", {}), "run ID exists")
-    pairs = [load_pair(Path(path).resolve()) for path in receipts]
+    pairs = []
+    for path in receipts:
+        path = Path(path).resolve()
+        loader = (
+            load_triplet
+            if read(path)["schema"] == "vakint.ordered-rung-parity.v2"
+            else load_pair
+        )
+        pairs.append(loader(path))
+    arms = tuple(pairs[0]["reports"]) if pairs else tuple(PAIR_ARMS)
+    require(
+        all(tuple(pair["reports"]) == arms for pair in pairs),
+        "do not mix historical pair and new triplet cohorts",
+    )
     historical = [load_historical(Path(path).resolve()) for path in historical_receipts]
     require(pairs or historical, "at least one checked comparison is required")
     require(
@@ -641,26 +719,29 @@ def append(base, run_id, receipts, protocol=None, historical_receipts=()):
     for (loops, projection, identity), samples in sorted(grouped.items()):
         first = samples[0]["reports"]["dfs"]["raw"]
         for sample in samples[1:]:
-            current = sample["reports"]["dfs"]["raw"]
-            for name in ("producer", "data"):
-                require(current[name] == first[name], f"sample cohort {name} differs")
-            for name in (
-                "worker_policy",
-                "cache_policy",
-                "dfs_request_memoization",
-                "monitoring_enabled",
-            ):
-                require(
-                    current.get(name) == first.get(name),
-                    f"sample cohort {name} differs",
-                )
+            for arm in arms:
+                current = sample["reports"][arm]["raw"]
+                previous = samples[0]["reports"][arm]["raw"]
+                for name in (
+                    "producer",
+                    "data",
+                    "worker_policy",
+                    "cache_policy",
+                    "dfs_request_memoization",
+                    "intrinsic_memoization",
+                    "monitoring_enabled",
+                ):
+                    require(
+                        current.get(name) == previous.get(name),
+                        f"sample cohort {arm} {name} differs",
+                    )
             require(
                 sample["parity"]["raw"]["numerical_enclosures_agree"]
                 is samples[0]["parity"]["raw"]["numerical_enclosures_agree"],
                 "mixed numerical-validation scope in one cohort",
             )
         metrics = {}
-        for name in ("dfs", "ordered"):
+        for name in arms:
             values = [sample["reports"][name]["raw"] for sample in samples]
             math_values = [reduction_math(row) for row in values]
             math_complete = all(value is not None for value in math_values)
@@ -702,8 +783,20 @@ def append(base, run_id, receipts, protocol=None, historical_receipts=()):
                 ],
                 "ordered_progress": [row.get("ordered_progress") for row in values],
             }
-        baseline = metrics["dfs"]["reduction_math_seconds"]
         ordered = metrics["ordered"]["reduction_math_seconds"]
+        ratios = {
+            name: (
+                ordered["median_seconds"]
+                / metrics[name]["reduction_math_seconds"]["median_seconds"]
+                if qualified is not None
+                and ordered is not None
+                and metrics[name]["reduction_math_seconds"] is not None
+                and metrics[name]["reduction_math_seconds"]["median_seconds"] > 0
+                else None
+            )
+            for name in arms
+            if name != "ordered"
+        }
         rows.append(
             {
                 "loop_count": loops,
@@ -712,22 +805,22 @@ def append(base, run_id, receipts, protocol=None, historical_receipts=()):
                 "sample_count": len(samples),
                 "data": first["data"],
                 "producer": first["producer"],
-                "dfs_request_memoization": first["dfs_request_memoization"],
-                "cache_policy": first.get("cache_policy"),
+                "dfs_request_memoization": first.get("dfs_request_memoization"),
+                "intrinsic_memoization": MEMOIZATION.copy() if len(arms) == 3 else None,
+                "cache_policy": {
+                    name: samples[0]["reports"][name]["raw"].get("cache_policy")
+                    for name in arms
+                }
+                if len(arms) == 3
+                else first.get("cache_policy"),
                 "worker_policy": first.get("worker_policy"),
                 "monitoring_enabled": first["monitoring_enabled"],
                 "headline_timing_metric": "reduction_math_seconds",
                 "math_scope_id": MATH_SCOPE,
                 "metrics": metrics,
                 "performance_eligible": qualified is not None,
-                "ordered_over_dfs": (
-                    ordered["median_seconds"] / baseline["median_seconds"]
-                    if qualified is not None
-                    and baseline is not None
-                    and ordered is not None
-                    and baseline["median_seconds"] > 0
-                    else None
-                ),
+                "ordered_over_dfs": ratios["dfs"],
+                "ordered_over_dfs_no_memo": ratios.get("dfs_no_memo"),
                 "exact_retained_equality": True,
                 "numerical_enclosures_agree": samples[0]["parity"]["raw"][
                     "numerical_enclosures_agree"
@@ -737,7 +830,10 @@ def append(base, run_id, receipts, protocol=None, historical_receipts=()):
         )
     result = copy.deepcopy(base)
     result.setdefault("ordered_rung_runs", {})[run_id] = {
-        "schema": "vakint.ordered-rung-report.v1",
+        "schema": "vakint.ordered-rung-report.v2"
+        if len(arms) == 3
+        else "vakint.ordered-rung-report.v1",
+        "arms": list(arms),
         "persistent_caches": False,
         "dfs_request_memoization": "recorded per row from the actual DFS report; persistent caches remain off",
         "headline_timing_scope": "net checked non-overlapping reduction-math spans: request-local reducer/dispatch state, IBP/routing and exact weighted terminal-coefficient assembly/grouping; immutable artifact/program import and measured lazy owner preparation excluded",

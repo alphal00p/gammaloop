@@ -362,7 +362,22 @@ pub(super) fn evaluate(
         matched,
         &programs.descriptors[index].family_fingerprint,
         &data.masters,
-        |target| vakint.cached_candidate_reduction(index, target),
+        |target| {
+            if settings.rustred_application_options.reduction_strategy
+                == crate::RustRedReductionStrategy::DepthFirstWithoutMemoization
+            {
+                program
+                    .native
+                    .reduce_unit_mass_without_memoization(
+                        target,
+                        settings.rustred_application_options.reduction_limits,
+                    )
+                    .map(Some)
+                    .map_err(VakintError::from)
+            } else {
+                vakint.cached_candidate_reduction(index, target)
+            }
+        },
     )
 }
 
@@ -422,8 +437,8 @@ pub(super) fn evaluate_ordered_batch(
                             .max_scalar_product_degree,
                     ),
             );
-            let (spectator, coefficient) =
-                super::numerator::MatchedScalarInput::channel_coefficient(
+            for (spectator, coefficient) in
+                super::numerator::MatchedScalarInput::channel_coefficients(
                     spectator,
                     &coefficient,
                     context,
@@ -431,11 +446,13 @@ pub(super) fn evaluate_ordered_batch(
                         .rustred_application_options
                         .reduction_limits
                         .exact_algebra,
-                )?;
-            channels
-                .entry((index, input.mass_squared.clone(), spectator, exponent))
-                .or_default()
-                .push((term.integral().clone(), coefficient));
+                )?
+            {
+                channels
+                    .entry((index, input.mass_squared.clone(), spectator, exponent))
+                    .or_default()
+                    .push((term.integral().clone(), coefficient));
+            }
         }
     }
     let mut raw = BTreeMap::<Atom, Atom>::new();

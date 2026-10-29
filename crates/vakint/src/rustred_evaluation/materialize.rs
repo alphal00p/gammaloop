@@ -34,6 +34,8 @@ pub(super) fn evaluate(
     // native cache supplies the same typed homogeneity result without creating
     // a second, unused seeded reducer alongside its configured RAM allowance.
     let mut reducer = None;
+    let without_memoization = settings.rustred_application_options.reduction_strategy
+        == crate::RustRedReductionStrategy::DepthFirstWithoutMemoization;
     let mut raw_masters = Atom::Zero;
     for lowered in lowering.terms() {
         let admitted = match snapshot.program().validate_entry(lowered.integral()) {
@@ -49,12 +51,12 @@ pub(super) fn evaluate(
         // engines, alongside IBPs and the old weighted terminal assembly.
         // An attached DFS backend can perform reductions on a cache miss.
         let _math = MathSpan::new();
-        let cached = if admitted {
+        let cached = if admitted && !without_memoization {
             vakint.cached_closed_homogeneous(matched.family, lowered.integral())?
         } else {
             None
         };
-        if admitted && cached.is_none() && reducer.is_none() {
+        if admitted && !without_memoization && cached.is_none() && reducer.is_none() {
             reducer = Some(Reducer::new(artifact).map_err(super::data::failure)?);
         }
         let terms = if !admitted {
@@ -67,6 +69,19 @@ pub(super) fn evaluate(
                 lowered.integral().clone(),
                 artifact.coefficient_context().one(),
             )]
+        } else if without_memoization {
+            let (decomposition, _, _) =
+                Reducer::reduce_artifact_unit_mass_guarded_without_memoization(
+                    artifact,
+                    lowered.integral(),
+                    settings.rustred_application_options.reduction_limits,
+                )
+                .map_err(RustRedEvaluationError::from_native)?;
+            decomposition
+                .terms()
+                .iter()
+                .map(|(key, coefficient)| (key.clone(), coefficient.clone()))
+                .collect()
         } else {
             let decomposition = match cached {
                 Some(decomposition) => decomposition,
@@ -334,8 +349,8 @@ pub(super) fn evaluate_ordered_batch(
                             .max_scalar_product_degree,
                     ),
             );
-            let (spectator, coefficient) =
-                super::numerator::MatchedScalarInput::channel_coefficient(
+            for (spectator, coefficient) in
+                super::numerator::MatchedScalarInput::channel_coefficients(
                     spectator,
                     term.coefficient(),
                     artifact.coefficient_context(),
@@ -343,11 +358,13 @@ pub(super) fn evaluate_ordered_batch(
                         .rustred_application_options
                         .reduction_limits
                         .exact_algebra,
-                )?;
-            channels
-                .entry((matched.mass_squared.clone(), spectator, exponent))
-                .or_default()
-                .push((term.integral().clone(), coefficient));
+                )?
+            {
+                channels
+                    .entry((matched.mass_squared.clone(), spectator, exponent))
+                    .or_default()
+                    .push((term.integral().clone(), coefficient));
+            }
         }
     }
     let cohort_total = channels.len();

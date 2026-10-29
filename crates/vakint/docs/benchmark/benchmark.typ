@@ -1204,8 +1204,10 @@ Refresh and validation contract: #raw("maintenance.typ").]
 #let ordered-id = report.at("selected_ordered_rung_run", default: none)
 #if ordered-id != none {
   let run = report.ordered_rung_runs.at(ordered-id)
-  assert(run.schema == "vakint.ordered-rung-report.v1")
+  assert(run.schema in ("vakint.ordered-rung-report.v1", "vakint.ordered-rung-report.v2"))
   assert(run.persistent_caches == false)
+  let triple = run.schema == "vakint.ordered-rung-report.v2"
+  let arms = if triple { ("dfs", "dfs_no_memo", "ordered") } else { ("dfs", "ordered") }
   let rows = run.summary
   let label(row) = [*#(str(row.loop_count) + "L")* · #if row.projection == "zero-momentum-metric" [zero momentum] else [quadratic]]
   let math-duration(value) = if value >= 1 { timing(value) + " s" } else if value >= 0.001 {
@@ -1213,7 +1215,11 @@ Refresh and validation contract: #raw("maintenance.typ").]
   } else { fixed(value * 1000000, 3) + " µs" }
   let measured-cell(row, engine) = {
     let metric = row.metrics.at(engine).reduction_math_seconds
-    let ratio = row.ordered_over_dfs
+    let memo-ratio = row.ordered_over_dfs
+    let no-memo-ratio = row.at("ordered_over_dfs_no_memo", default: none)
+    let ratio = if triple {
+      if memo-ratio == none or no-memo-ratio == none { none } else { calc.max(memo-ratio, no-memo-ratio) }
+    } else { memo-ratio }
     table.cell(fill: if engine == "ordered" and ratio != none and ratio > 0 { ratio-fill(ratio) } else { pale }, {
       if metric == none {
         text(15pt, weight: "bold")[—]
@@ -1223,9 +1229,13 @@ Refresh and validation contract: #raw("maintenance.typ").]
         text(15pt, weight: "bold")[#math-duration(metric.median_seconds)]
         linebreak()
         text(8pt)[#math-duration(metric.min_seconds)–#math-duration(metric.max_seconds) · n = #row.sample_count]
-        if engine == "ordered" and ratio != none {
+        if engine == "ordered" and memo-ratio != none {
           linebreak()
-          text(10pt, weight: "bold")[×#multiplier(ratio)]
+          text(9pt, weight: "bold")[#if triple [÷ memo ]×#multiplier(memo-ratio)]
+          if triple and no-memo-ratio != none {
+            linebreak()
+            text(9pt, weight: "bold")[÷ no memo ×#multiplier(no-memo-ratio)]
+          }
         }
       }
     })
@@ -1252,29 +1262,29 @@ Refresh and validation contract: #raw("maintenance.typ").]
   ]
   v(0.5em)
   block(fill: pale, inset: 10pt, radius: 4pt, width: 100%)[
-    *Reading guide.* One loop has no vertical gluon rungs. Both engines receive
-    the same authenticated scalar input and retain masters in MSbar. Headline
-    times measure *IBP/routing plus exact weighted terminal-coefficient assembly
-    and grouping*, including request-local reduction state, with measured lazy
-    owner preparation deducted. Immutable artifact/program import, graph/data
-    preparation, matching, initial scalar lowering, MATAD normalization, numerical
-    evaluation and serialization are excluded. Gross math and the preparation
-    deduction remain in the raw record. Qualified multipliers are
-    _ordered ÷ DFS net math time_: green means faster. Without a bound fresh-process release
-    protocol, observations remain diagnostic and have no ratio.
+    *Reading guide.* All arms receive the same authenticated rung input and retain
+    masters in MSbar. Net math includes *IBP/routing, request-local state and exact
+    weighted coefficient assembly/grouping*. Data/program import, graph preparation,
+    matching, initial lowering, normalization, numerics and serialization are excluded;
+    measured lazy owner preparation is deducted. Qualified multipliers are
+    _ordered ÷ DFS net math time_. #if triple [The two DFS arms respectively
+    retain and bypass per-run memoization. Ordered-cell color compares with the
+    faster DFS arm; green means faster than both. Both ratios are printed.] else [Green means faster.]
+    Without a bound fresh-process release protocol, observations are diagnostic
+    and have no ratio. Gross times and preparation deductions remain in the raw record.
   ]
   v(0.4em)
   {
     set text(font: "DejaVu Sans", size: 9pt)
     set par(justify: false)
     table(
-      columns: (1.1fr, 1fr, 1fr, 0.85fr),
+      columns: if triple { (1.1fr, 1fr, 1fr, 1fr, 0.85fr) } else { (1.1fr, 1fr, 1fr, 0.85fr) },
       inset: (x: 9pt, y: 12pt), stroke: 0.4pt + luma(225),
       align: (x, y) => if x == 0 { left + horizon } else { center + horizon },
-      table.header(..([Case], [Depth first], [Ordered], [Validation]).map(body =>
+      table.header(..([Case], ..arms.map(arm => if arm == "dfs" { if triple { [DFS · memo] } else { [Depth first] } } else if arm == "dfs_no_memo" { [DFS · no memo] } else { [Ordered] }), [Validation]).map(body =>
         table.cell(fill: navy, text(fill: white, weight: "bold", body)))),
       ..for row in rows { (
-        label(row), measured-cell(row, "dfs"), measured-cell(row, "ordered"),
+        label(row), ..arms.map(arm => measured-cell(row, arm)),
         [*Exact ✓* #linebreak() #if row.numerical_enclosures_agree == true [Numerical ✓] else [Numerical —]
           #linebreak() #text(7.5pt)[#if row.performance_eligible [Fresh release] else [Diagnostic cohort]]],
       ) },
@@ -1286,18 +1296,19 @@ Refresh and validation contract: #raw("maintenance.typ").]
   table(
     columns: (1.1fr, 1.1fr, 1.1fr, 1.1fr, 0.65fr),
     inset: 7pt, stroke: 0.4pt + luma(225),
-    table.header(..([Case], [Public retained s · DFS / ordered], [Collector s · DFS / ordered], [Peak RSS · DFS / ordered], [Phases]).map(body =>
+    table.header(..([Case], [Public retained s], [Collector s], [Peak RSS], [Phases]).map(body =>
       table.cell(fill: navy, text(fill: white, weight: "bold", size: 8.5pt, body)))),
     ..for row in rows { (
       label(row),
-      [#timing(row.metrics.dfs.public_retained_seconds.median_seconds) / #timing(row.metrics.ordered.public_retained_seconds.median_seconds)],
-      [#timing(row.metrics.dfs.collector_seconds.median_seconds) / #timing(row.metrics.ordered.collector_seconds.median_seconds)],
-      [#peak(row.metrics.dfs.peak_rss_bytes) / #peak(row.metrics.ordered.peak_rss_bytes)],
+      arms.map(arm => timing(row.metrics.at(arm).public_retained_seconds.median_seconds)).join(" / "),
+      arms.map(arm => timing(row.metrics.at(arm).collector_seconds.median_seconds)).join(" / "),
+      arms.map(arm => peak(row.metrics.at(arm).peak_rss_bytes)).join(" / "),
       progress(row),
     ) },
   )
   v(0.2em)
-  text(8pt)[Public retained time includes matching/lowering and finalization;
+  text(8pt)[Values above follow #if triple [DFS memo / DFS no memo / Ordered] else [DFS / Ordered] order.
+  Public retained time includes matching/lowering and finalization;
   it is not substituted for an unavailable math timer. Collector time begins after scalar-input preparation and includes
   numerical-reference generation when requested. RSS is the whole-process
   high-water mark, including earlier stages; a same-process pair shares that
@@ -1306,12 +1317,16 @@ Refresh and validation contract: #raw("maintenance.typ").]
   terminal-substitution timings remain null. No zero duration is imputed.]
   v(0.2em)
   text(8pt)[Prepared caches and previous-run results are not loaded. The actual
-  intrinsic DFS memoization policy is recorded per case; cache-off does not
-  silently change that algorithm. Owner preparation uses one worker so its
+  intrinsic DFS memoization policy is recorded per arm. #if triple [DFS no memo
+  actually bypasses completed-result lookups, insertions and memo bookkeeping;
+  its time is measured directly, never obtained by subtraction.]
+  Ordered's opaque factorization may use an isolated auxiliary memo; its primary
+  frontier has no completed-result cache.
+  Owner preparation uses one worker so its
   measured wall-time deduction is valid. Net math includes necessary terminal
   substitutions/projections and lower-factor reductions, not just the Native kernel.]
   v(0.2em)
-  text(8pt)[Qualified samples disable monitoring in both engines; RAM guarding
+  text(8pt)[Qualified samples disable monitoring in every arm; RAM guarding
   remains independent. Dashboard/snapshot runs retain their observer overhead
   and remain diagnostic, including the large five-loop examples.]
   v(0.35em)

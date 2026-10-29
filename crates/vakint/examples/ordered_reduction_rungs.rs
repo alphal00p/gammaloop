@@ -1,7 +1,7 @@
 //! Compare native massless-quark rung fixtures using identical scalar inputs.
 //! Build with `--release --features feynkit-ingress,experimental-rustred`;
-//! run one engine per fresh process for performance measurements, or
-//! `--engine both` for exact parity. Reduction math and the complete
+//! run one strategy per fresh process for performance measurements, or
+//! `--engine all` for exact three-strategy parity. Reduction math and the complete
 //! retained public call have separate timing scopes.
 
 use ::vakint;
@@ -51,7 +51,7 @@ fn main() -> fixture::Result<()> {
                 engine = Some(
                     arguments
                         .next()
-                        .ok_or("--engine needs dfs, ordered, or both")?,
+                        .ok_or("--engine needs dfs, dfs-no-memo, ordered, or all")?,
                 )
             }
             "--artifacts" => {
@@ -71,10 +71,13 @@ fn main() -> fixture::Result<()> {
             }
             "--compare-reports" => {
                 compare_reports = Some((
+                    PathBuf::from(arguments.next().ok_or(
+                        "--compare-reports needs DFS, DFS-no-memo and ordered report directories",
+                    )?),
                     PathBuf::from(
                         arguments
                             .next()
-                            .ok_or("--compare-reports needs DFS and ordered report directories")?,
+                            .ok_or("--compare-reports needs a DFS-no-memo report directory")?,
                     ),
                     PathBuf::from(
                         arguments
@@ -98,7 +101,7 @@ fn main() -> fixture::Result<()> {
             }
             "--help" => {
                 println!(
-                    "ordered_reduction_rungs --work-dir PATH --build-profile release [--loops N] [--projection zero-momentum|quadratic] [--engine dfs|ordered|both] [--artifacts PATH] [--prepared-input PATH] [--prepare-only] [--no-numerical-reference] [--no-monitor | --monitor] [--progress-snapshot PATH]\nFor completed fresh processes: --work-dir OUT --compare-reports DFS_DIRECTORY ORDERED_DIRECTORY.\nDefault: one loop, zero momentum; both engines through four loops, ordered-only from five loops; tracked numerical reference through four loops. Saved inputs under work-dir/input-LN-projection are authenticated and reused; --prepared-input selects a shared or legacy bundle. Prepared caches remain unloaded. Reduction math is captured with the experimental-rustred feature; the complete retained public call is timed separately. Both timings exclude the subsequent numerical reference. Use --no-monitor for qualified performance comparisons: it disables both dashboard and snapshot callbacks and conflicts with --monitor and --progress-snapshot. Use a release build without profile overrides."
+                    "ordered_reduction_rungs --work-dir PATH --build-profile release [--loops N] [--projection zero-momentum|quadratic] [--engine dfs|dfs-no-memo|ordered|all] [--artifacts PATH] [--prepared-input PATH] [--prepare-only] [--no-numerical-reference] [--no-monitor | --monitor] [--progress-snapshot PATH]\nFor completed fresh processes: --work-dir OUT --compare-reports DFS_DIRECTORY DFS_NO_MEMO_DIRECTORY ORDERED_DIRECTORY.\nDefault: one loop, zero momentum; all three strategies through four loops, ordered only at five loops; tracked numerical reference through four loops. DFS retains its ordinary per-run memo; dfs-no-memo disables that memo and its bookkeeping. Neither restores prepared or previous-run caches. Saved inputs under work-dir/input-LN-projection are authenticated and reused; --prepared-input selects a shared or legacy bundle. Reduction math is captured with the experimental-rustred feature; the complete retained public call is timed separately. Both timings exclude the subsequent numerical reference. Use --no-monitor for qualified performance comparisons: it disables both dashboard and snapshot callbacks and conflicts with --monitor and --progress-snapshot. Use a release build without profile overrides."
                 );
                 return Ok(());
             }
@@ -113,18 +116,26 @@ fn main() -> fixture::Result<()> {
     }
     let engine = engine.unwrap_or_else(|| {
         if loop_count <= 4 {
-            "both".to_owned()
+            "all".to_owned()
         } else {
             "ordered".to_owned()
         }
     });
-    if !["dfs", "ordered", "both"].contains(&engine.as_str()) {
-        return Err("--engine must be dfs, ordered, or both".into());
+    if !["dfs", "dfs-no-memo", "ordered", "all"].contains(&engine.as_str()) {
+        return Err("--engine must be dfs, dfs-no-memo, ordered, or all".into());
+    }
+    if loop_count == 5 && engine != "ordered" {
+        return Err("five-loop physical benchmarks permit only --engine ordered; both DFS variants are excluded".into());
     }
     let work = work.ok_or("--work-dir is required; keep development data under workspace")?;
     std::fs::create_dir_all(&work)?;
-    if let Some((dfs, ordered)) = compare_reports {
-        fixture::comparison::compare_reports(&dfs, &ordered, &work.join("parity.json"))?;
+    if let Some((dfs, dfs_no_memo, ordered)) = compare_reports {
+        fixture::comparison::compare_reports(
+            &dfs,
+            &dfs_no_memo,
+            &ordered,
+            &work.join("parity.json"),
+        )?;
         println!("Authenticated retained and numerical comparisons passed.");
         return Ok(());
     }
@@ -155,9 +166,17 @@ fn main() -> fixture::Result<()> {
     let mut run_directories = Vec::new();
     let strategies = match engine.as_str() {
         "dfs" => vec![("dfs", RustRedReductionStrategy::DepthFirst)],
+        "dfs-no-memo" => vec![(
+            "dfs-no-memo",
+            RustRedReductionStrategy::DepthFirstWithoutMemoization,
+        )],
         "ordered" => vec![("ordered", RustRedReductionStrategy::Ordered)],
         _ => vec![
             ("dfs", RustRedReductionStrategy::DepthFirst),
+            (
+                "dfs-no-memo",
+                RustRedReductionStrategy::DepthFirstWithoutMemoization,
+            ),
             ("ordered", RustRedReductionStrategy::Ordered),
         ],
     };
@@ -199,7 +218,7 @@ fn main() -> fixture::Result<()> {
                     RustRedMonitorDisplay::Off
                 },
                 progress_snapshot: snapshot.as_ref().filter(|_| !no_monitor).map(|path| {
-                    if engine == "both" {
+                    if engine == "all" {
                         path.with_extension(format!("{name}.json"))
                     } else {
                         path.clone()
@@ -225,7 +244,7 @@ fn main() -> fixture::Result<()> {
             "native_runtime_arities":option_env!("RUSTRED_RUNTIME_ARITIES"),
             "allowed_cpus":std::fs::read_to_string("/proc/self/status").ok().and_then(|status| status.lines().find_map(|line| line.strip_prefix("Cpus_allowed_list:").map(|value|value.trim().to_owned()))),
             "profile_contract":"caller must build --release with no profile overrides; debug_assertions is not compiler-profile introspection",
-            "comparison_process":if engine == "both" {"two fresh Vakint instances in one process; use separate invocations for fresh-process timing"} else {"one engine in this process"}});
+            "comparison_process":if engine == "all" {"three fresh Vakint instances in one process; use separate invocations for fresh-process timing"} else {"one engine in this process"}});
         std::fs::write(
             directory.join("report.json"),
             serde_json::to_vec_pretty(&run.report)?,
@@ -244,9 +263,10 @@ fn main() -> fixture::Result<()> {
         }
         run_directories.push(directory);
     }
-    if let [dfs, ordered] = run_directories.as_slice() {
+    if let [dfs, dfs_no_memo, ordered] = run_directories.as_slice() {
         fixture::comparison::compare_reports(
             dfs,
+            dfs_no_memo,
             ordered,
             &work.join(format!("L{loop_count}-{projection_name}-parity.json")),
         )?;

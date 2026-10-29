@@ -78,14 +78,15 @@ slow-test environment controls and provenance requirements.
 
 For ordered/DFS comparisons, use `examples/ordered_reduction_rungs.rs` and the
 append-only `docs/benchmark/merge_ordered_rung_results.py` adapter described in
-the same maintenance contract. Keep persistent caches off for both engines and
-record the actual intrinsic DFS memoization policy explicitly. Same-process `--engine both` establishes
+the same maintenance contract. Keep prepared/saved caches and previous-run
+result state off in all arms. Measure ordinary DFS and the real no-memo/no-
+bookkeeping DFS separately, with Ordered third. Same-process `--engine all` establishes
 functional parity; fresh-process release measurements need the bound protocol
 receipt before reporting a speed ratio. All new rung cases use MSbar; preserve
 earlier pySecDec records as historical cohorts. Headline and ratio use checked
 `reduction_math_seconds` (IBP plus exact weighted assembly/grouping), requiring
 `experimental-rustred`; retain the broader public-call timer separately.
-Qualified fresh-process measurements use `--no-monitor` for both engines;
+Qualified fresh-process measurements use `--no-monitor` for every arm;
 dashboard/snapshot observations remain diagnostic, with RAM guarding independent.
 Never use the old 40-hour public timer as reduction-only time. Preserve unavailable phase times as null
 and all earlier cohorts unchanged. See `docs/ordered_reduction.typ` for phase and

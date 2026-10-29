@@ -48,9 +48,19 @@ engine = Vakint(
 )
 ```
 
-The accepted strings are #raw("depth_first") and #raw("ordered"). Unknown
-values produce an error. Ordinary numerical, symbolic and retained-master
-evaluation retain their existing public interfaces.
+The accepted strings are #raw("depth_first") (the default),
+#raw("depth_first_without_memoization"), and #raw("ordered"). Unknown values
+produce an error. The no-memoization choice, exposed in Rust as
+#raw("RustRedReductionStrategy::DepthFirstWithoutMemoization"), recomputes repeated
+descendants without completed-result memoization, lookup/insertion bookkeeping,
+or persistent caches, including dependent factor reductions. A zero cache budget
+or subtraction of bookkeeping time is not this execution path. Immutable
+program preparation remains shared. Python instances configured with either
+alternative reject explicit cache operations and skip prepared caches during
+official loading. Rust evaluations in these modes never consume attached DFS
+completed-result backings. Ordinary
+numerical, symbolic and retained-master evaluation retain their existing public
+interfaces.
 
 == What is ordered
 
@@ -97,6 +107,14 @@ Equal-looking raw power vectors from different families are insufficient.
 Vakint keeps mass scaling, external factors and normalization in the existing
 owners and batches compatible unit-mass channels together. It does not group
 terms by printed master names or floating-point approximations.
+
+Exact complex rational coefficients use the canonical carriers $1$ and $i$;
+their rational magnitudes enter the native weights. Supported rational
+combinations of native parameters are split in the same way when their
+denominators are real and the native polynomial representation can hold them.
+Other scalar factors remain opaque, including floating coefficients with their
+original precision. This avoids fragmenting compatible frontiers by a numeric
+phase without adding complex poles or changing the input.
 
 The engine reuses checked rule selection, specialization, transports, nonzero
 conditions and descent checks. Conditions from applied identities remain
@@ -188,9 +206,11 @@ frontier or weighted amplitude is written as a completed DFS identity.
 
 Keeping more unfinished contributions visible can increase frontier memory.
 Exact coefficient combination can also cost more than the reductions it avoids.
-The ordered strategy therefore has no universal speedup promise. Comparisons
-must retain normal DFS request memoization and disable persistent caches for
-both engines; cache-enabled historical results are a separate cohort.
+The ordered strategy therefore has no universal speedup promise. New comparisons
+measure three arms directly: ordinary DFS with intrinsic per-run memoization,
+DFS without that memoization/bookkeeping, and Ordered. Prepared/saved caches and
+previous-run reduction state are unloaded in all three arms. Cached historical
+measurements remain separate cohorts.
 
 == Reproducible physical comparisons
 
@@ -209,15 +229,16 @@ From the repository workspace root, for a functional comparison:
 cargo run --locked --release -p vakint \
   --features feynkit-ingress,experimental-rustred --example ordered_reduction_rungs -- \
   --work-dir /absolute/workspace/rung-L1-q0 \
-  --loops 1 --projection zero-momentum --engine both --build-profile release
+  --loops 1 --projection zero-momentum --engine all --build-profile release
 ```
 
-Through four loops, use separate #raw("--engine dfs") and
-#raw("--engine ordered") invocations with fixed affinity, #raw("--no-monitor")
+Through four loops, use separate #raw("--engine dfs"),
+#raw("--engine dfs-no-memo") and #raw("--engine ordered") invocations
+with fixed affinity, #raw("--no-monitor")
 and a release build for qualified fresh-process timing. Declare the actual build with #raw("--build-profile");
 this is a label, not compiler introspection. The
-#raw("--engine both") mode creates fresh engines in one process and is useful
-for exact parity; it is not two fresh-process measurements. Existing report
+#raw("--engine all") mode creates three fresh engines in one process and is useful
+for exact parity; it is not three fresh-process measurements. Existing report
 files are never overwritten. Pass #raw("--artifacts PATH") to select an
 authenticated checkout or installation; explicit four- and five-loop data is
 needed. #raw("--prepare-only") saves input without reduction.
@@ -227,7 +248,8 @@ reference after conversion from its original pySecDec normalization through the
 existing normalization API, before any Laurent truncation. Its raw payload and
 original timing remain unchanged. No new five-loop depth-first run is required.
 
-After separate runs, #raw("--work-dir OUT --compare-reports DFS_DIRECTORY ORDERED_DIRECTORY")
+After separate runs,
+#raw("--work-dir OUT --compare-reports DFS_DIRECTORY DFS_NO_MEMO_DIRECTORY ORDERED_DIRECTORY")
 authenticates their saved payloads and compares exact retained expressions and
 serialized numerical centers/error estimates without reducing again. These are
 mathematical bounds only for components marked #raw("Bounded"). It writes a bound
@@ -257,10 +279,14 @@ times never fall back to that public timer. In particular, the historical
 40-hour public observation supplies no isolated reduction-math duration.
 
 Prepared caches and previous-run result caches remain unloaded for these
-comparisons. The actual intrinsic DFS per-run memoization policy is stated in
-each report; this timing instrumentation does not change it. Data loading and
+comparisons. Each new report states *primary-engine completed-result*
+memoization as a boolean, true only for ordinary DFS. Ordered's opaque checked
+factorization may use a fresh private memo internally; it does not feed a
+reusable ordered-result cache. The no-memo DFS arm disables these dependent
+result memos too. Reusing the common authenticated scalar input is frontend
+preparation, not a reduction-result cache. Data loading and
 the subsequent numerical reference calculation remain separate.
-Qualified comparisons disable monitoring in both engines. Dashboard/snapshot
+Qualified comparisons disable monitoring in every arm. Dashboard/snapshot
 checks, including the large five-loop runs, retain their observer overhead and
 are diagnostic observations; independent RAM guarding remains active.
 For one through four loops the collector chooses the smallest validated finite

@@ -228,6 +228,83 @@ impl<const N: usize> NativeCandidate<N> {
         Ok(result)
     }
 
+    /// Execute the same checked native program without retaining completed
+    /// integral results, including the ordinary candidate session's point map.
+    pub(crate) fn reduce_unit_mass_without_memoization_guarded(
+        &self,
+        target: &IntegralKey,
+        remaining: ReductionLimits,
+    ) -> Result<
+        (
+            CandidateDecomposition,
+            Vec<rustred::algebra::Coefficient>,
+            ReductionStatistics,
+        ),
+        VacuumProductReductionError,
+    > {
+        let result = self
+            .reducer
+            .lock()
+            .map_err(|_| VacuumProductReductionError::Provider {
+                family: self.family.fingerprint().into(),
+                target: target.clone(),
+                message: "candidate reducer lock poisoned".into(),
+            })?
+            .reduce_unit_mass_without_memoization_guarded(target, remaining)
+            .map_err(|error| {
+                if let Some(resource) = crate::RustRedEvaluationError::resource_cause(&error) {
+                    return VacuumProductReductionError::Reduction(
+                        rustred::reduction::ReductionError::Resources(resource.clone()),
+                    );
+                }
+                match error {
+                    rustred::solver::CandidateReductionError::Uncovered { .. }
+                    | rustred::solver::CandidateReductionError::OutsideNumeratorRank { .. } => {
+                        VacuumProductReductionError::UnresolvedFactor {
+                            family: self.family.fingerprint().into(),
+                            target: target.clone(),
+                        }
+                    }
+                    error => VacuumProductReductionError::Provider {
+                        family: self.family.fingerprint().into(),
+                        target: target.clone(),
+                        message: error.to_string(),
+                    },
+                }
+            })?;
+        if !result.0.unresolved().is_empty() {
+            return Err(VacuumProductReductionError::UnresolvedFactor {
+                family: self.family.fingerprint().into(),
+                target: target.clone(),
+            });
+        }
+        Ok(result)
+    }
+
+    pub(crate) fn reduce_unit_mass_without_memoization(
+        &self,
+        target: &IntegralKey,
+        limits: ReductionLimits,
+    ) -> Result<CandidateReduction, crate::RustRedEvaluationError> {
+        let reducer =
+            self.reducer
+                .lock()
+                .map_err(|_| crate::RustRedEvaluationError::Reduction {
+                    detail: "candidate reducer lock poisoned".into(),
+                })?;
+        let (decomposition, _, work) = reducer
+            .reduce_unit_mass_without_memoization_guarded(target, limits)
+            .map_err(crate::RustRedEvaluationError::from_native)?;
+        Ok(CandidateReduction {
+            terms: decomposition
+                .terms()
+                .iter()
+                .map(|(key, coefficient)| (key.clone(), coefficient.to_expression()))
+                .collect(),
+            applied_rules: work.rule_applications(),
+        })
+    }
+
     /// Steer an existing RustRed candidate applier without running discovery.
     ///
     /// The caller may load it with RustRed's candidate-bundle loader. Its

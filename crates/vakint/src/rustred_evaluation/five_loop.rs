@@ -1120,26 +1120,27 @@ impl SavedApplication {
                                 .max_scalar_product_degree,
                         ),
                 );
-                let (spectator, coefficient) =
-                    if settings.rustred_application_options.reduction_strategy
-                        == crate::RustRedReductionStrategy::Ordered
-                    {
-                        MatchedScalarInput::channel_coefficient(
-                            spectator,
-                            term.coefficient(),
-                            family.coefficient_context(),
-                            settings
-                                .rustred_application_options
-                                .reduction_limits
-                                .exact_algebra,
-                        )?
-                    } else {
-                        (spectator, term.coefficient().clone())
-                    };
-                batches
-                    .entry((input.mass_squared.clone(), spectator, exponent))
-                    .or_default()
-                    .push((term.integral().clone(), coefficient));
+                let channels = if settings.rustred_application_options.reduction_strategy
+                    == crate::RustRedReductionStrategy::Ordered
+                {
+                    MatchedScalarInput::channel_coefficients(
+                        spectator,
+                        term.coefficient(),
+                        family.coefficient_context(),
+                        settings
+                            .rustred_application_options
+                            .reduction_limits
+                            .exact_algebra,
+                    )?
+                } else {
+                    vec![(spectator, term.coefficient().clone())]
+                };
+                for (spectator, coefficient) in channels {
+                    batches
+                        .entry((input.mass_squared.clone(), spectator, exponent))
+                        .or_default()
+                        .push((term.integral().clone(), coefficient));
+                }
                 if let Some(progress) = &mut coverage_progress {
                     progress.completed(index + 1);
                 }
@@ -1176,23 +1177,31 @@ impl SavedApplication {
         }
         let mut value = Atom::Zero;
         let mut families = BTreeMap::new();
-        // Factorization is an existing complete checked action. Its internal
-        // memo belongs to this ordered request, never the DFS session.
-        let mut ordered_products = if settings.rustred_application_options.reduction_strategy
-            == crate::RustRedReductionStrategy::Ordered
-        {
+        // Alternative strategies never consume the ordinary DFS product memo.
+        // Ordered retains its approved request-local checked-factorization
+        // primitive; DFS without memoization disables that primitive's completed
+        // factor results as well as the outer Route/Apply result maps.
+        let strategy = settings.rustred_application_options.reduction_strategy;
+        let mut ordered_products = if strategy != crate::RustRedReductionStrategy::DepthFirst {
             let _math = MathSpan::new();
             let anchor = application
                 .output_family_shared(application.family().fingerprint())
                 .ok_or_else(|| failure("saved application has no output family"))?;
-            Some(
-                VacuumProductReducer::try_new(
-                    ShippedFactorProvider::with_data(Arc::clone(&self.data)),
-                    anchor,
-                    settings.rustred_product_limits,
-                )
-                .map_err(native_failure)?,
-            )
+            let reducer =
+                if strategy == crate::RustRedReductionStrategy::DepthFirstWithoutMemoization {
+                    VacuumProductReducer::try_new_without_memoization(
+                        ShippedFactorProvider::without_memoization(Arc::clone(&self.data)),
+                        anchor,
+                        settings.rustred_product_limits,
+                    )
+                } else {
+                    VacuumProductReducer::try_new(
+                        ShippedFactorProvider::with_data(Arc::clone(&self.data)),
+                        anchor,
+                        settings.rustred_product_limits,
+                    )
+                };
+            Some(reducer.map_err(native_failure)?)
         } else {
             None
         };
@@ -1488,8 +1497,8 @@ impl SavedApplication {
             "normalized_retained_output",
             Some(result.value.as_view()),
         );
-        // The ordered product memo is request-owned; the DFS product memo
-        // belongs to the engine and keeps its existing lifetime and policy.
+        // Alternative strategies own their product execution state; the
+        // ordinary DFS product memo keeps its engine lifetime and policy.
         if let Some(products) = ordered_products {
             let _math = MathSpan::new();
             drop(products);

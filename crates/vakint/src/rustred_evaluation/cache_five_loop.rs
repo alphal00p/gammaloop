@@ -346,10 +346,9 @@ impl SavedApplication {
         terms: Vec<(IntegralKey, Coefficient)>,
         observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
     ) -> Result<SavedApplicationReduction, VakintError> {
-        // These packs contain completed DFS Route/Apply records. Ordered
-        // reduction owns a separate request-local frontier and never imports,
-        // queries or captures records through this backing.
-        if prepared.reduction_strategy() == crate::RustRedReductionStrategy::Ordered {
+        // These packs contain completed memoized DFS Route/Apply records.
+        // Both alternative strategies bypass this backing entirely.
+        if prepared.reduction_strategy() != crate::RustRedReductionStrategy::DepthFirst {
             return match observation {
                 Some(observation) => prepared.reduce_routed_linear_combination_with_observation(
                     terms,
