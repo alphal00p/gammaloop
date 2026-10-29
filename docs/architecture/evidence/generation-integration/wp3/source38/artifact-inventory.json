@@ -17,7 +17,7 @@
       "bytes": 1118
     },
     {
-      "path": "adversarial.rs",
+      "path": "adversarial.rs.txt",
       "sha256": "adcd755260ea8118343b8ee1b1a057c20e3a42b81f6360ada49307fc8d11a134",
       "bytes": 3240
     },
@@ -262,7 +262,7 @@
       "bytes": 1285
     },
     {
-      "path": "original.rs",
+      "path": "original.rs.txt",
       "sha256": "f6e1a104cf9f88ac48633f6f3e6e04146becb0ee58b90601b7c32cf5fea69822",
       "bytes": 1823
     },
@@ -440,6 +440,16 @@
       "path": "finalize.py",
       "sha256": "898be2cbafd2a8e716fdae61d0b0130fb98c10e6f86348e5645e97b4d2b8b0c2",
       "bytes": 7725
+    },
+    {
+      "path": "evidence-selection-diagnosis.json",
+      "sha256": "0d4615a7ee4dfb8cad82b6ead6d83ec4495f784cb1fcc162cae02b90d022f816",
+      "bytes": 426
+    },
+    {
+      "path": "qualify-candidate.log",
+      "sha256": "7f20d2f80dd83e109ec2f8f90288095ea1b1e87c4330b4afa8f69378f91d9681",
+      "bytes": 881
     }
   ]
 }

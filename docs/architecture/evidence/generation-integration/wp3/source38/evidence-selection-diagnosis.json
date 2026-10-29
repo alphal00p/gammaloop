@@ -1,0 +1,12 @@
+{
+  "old_count": 1455,
+  "new_count": 1457,
+  "added": [
+    "docs/architecture/evidence/generation-integration/wp3/source38/adversarial.rs",
+    "docs/architecture/evidence/generation-integration/wp3/source38/original.rs"
+  ],
+  "removed": [],
+  "changed": [],
+  "attempted_candidate": "ed80af5444bcc7fecdb162d5a2c649dd985f01ec",
+  "unbuilt_derivation": "/nix/store/b4ncmbj8rld2qy6gq1ksg7cr84gvj3y0-linnest-wasm-0.1.0.drv"
+}

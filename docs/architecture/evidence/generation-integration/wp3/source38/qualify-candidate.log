@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/shared/lcnbr/dev/gammaloop/generation-integration-plan/target/wp3-source38/qualify-candidate.py", line 4, in <module>
+    r=subprocess.run(['nix','eval','--impure','--no-write-lock-file','--raw',uri+'#linnest-wasm.drvPath'],capture_output=True);(T/'runtime-eval.log').write_bytes(r.stderr);assert r.returncode==0,r.stderr.decode();drv=r.stdout.decode();assert drv=='/nix/store/8iq7qvzf38wcw165afivy6ipcw4sdlq9-linnest-wasm-0.1.0.drv',drv
+                                                                                                                                                                                                                                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: /nix/store/b4ncmbj8rld2qy6gq1ksg7cr84gvj3y0-linnest-wasm-0.1.0.drv
