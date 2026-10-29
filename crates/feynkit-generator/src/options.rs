@@ -521,6 +521,9 @@ pub struct Cuts {
     pub amplitude: CutAmplitude,
     pub blobs: Range,
     pub spectators: Range,
+    /// Veto cross-section graphs in which identifying each incoming external
+    /// leg with its outgoing partner creates a tadpole that the unsewn graph
+    /// lacks. `false` keeps them.
     pub sewn_tadpoles: bool,
     pub symmetrize_left_right: bool,
 }

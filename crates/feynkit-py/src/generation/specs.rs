@@ -1100,7 +1100,8 @@ impl PyCuts {
     /// spectators : Range | None
     ///     Allowed spectator count; None is unrestricted.
     /// sewn_tadpoles : bool
-    ///     Allow sewn tadpole contributions.
+    ///     Veto graphs in which sewing each incoming leg to its outgoing partner
+    ///     creates a tadpole; False keeps them.
     /// symmetrize_left_right : bool
     ///     Identify equivalent left-right cut assignments.
     #[new]
@@ -1159,7 +1160,7 @@ impl PyCuts {
         }
     }
 
-    /// Allow sewn tadpole contributions.
+    /// Whether graphs whose initial-state sewing creates a tadpole are vetoed.
     ///
     /// Examples
     /// --------
