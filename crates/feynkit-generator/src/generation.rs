@@ -3520,10 +3520,7 @@ impl Generator {
             .collect::<Vec<_>>();
         let template = self.interaction_template(rule_id, legs)?;
         let numerator = match &*template {
-            NumeratorTemplate::Dynamic => NumeratorInterface::admit(
-                self.interaction_expression(rule_id, instantiation)?,
-                None,
-            )?,
+            NumeratorTemplate::Dynamic => self.interaction_tensor(rule_id, instantiation)?,
             NumeratorTemplate::Admitted { .. } => template.instantiate(instantiation)?,
         }
         // Raw rules declare no axis order. Named interfaces use the same
@@ -3605,8 +3602,7 @@ impl Generator {
                 );
             }
             if supported {
-                let expression = self.interaction_expression(rule_id, &instantiation)?;
-                NumeratorTemplate::admitted(NumeratorInterface::admit(expression, None)?)?
+                NumeratorTemplate::admitted(self.interaction_tensor(rule_id, &instantiation)?)?
             } else {
                 NumeratorTemplate::Dynamic
             }
@@ -3624,13 +3620,16 @@ impl Generator {
         ))
     }
 
-    fn interaction_expression(
+    /// Admit the literal rule before momentum reduction can cancel a tensor
+    /// sector. Checked replacement retains its ports and collision history.
+    fn interaction_tensor(
         &self,
         rule_id: VertexRuleId,
         instantiation: &NumeratorInstantiation<'_>,
-    ) -> Result<Atom, GenerationError> {
+    ) -> Result<SymbolicTensor<PartialStructure>, GenerationError> {
         let rule = self.model.vertex_rule_by_id(rule_id)?;
         let mut terms = Vec::new();
+        let mut reduced_terms = Vec::new();
         for (color_index, color) in rule.color_structures.iter().enumerate() {
             for (lorentz_index, lorentz_name) in rule.lorentz_structures.iter().enumerate() {
                 if let Some(coupling) = rule
@@ -3641,18 +3640,38 @@ impl Generator {
                 {
                     let coupling = self.model.coupling_by_id(*coupling)?;
                     let coupling = Atom::var(symbol!(&format!("UFO::{}", coupling.name)));
-                    let lorentz = &self.model.lorentz_structure_by_id(*lorentz_name)?.structure;
+                    let lorentz = self.model.lorentz_structure_by_id(*lorentz_name)?;
+                    let reduced = lorentz.reduced_by_momentum_conservation();
                     let color = instantiation.instantiate(color, NumeratorSector::Color)?;
-                    let lorentz = instantiation.instantiate(lorentz, NumeratorSector::Spin)?;
-                    terms.push(coupling * color * lorentz);
+                    let common = coupling * color;
+                    let literal =
+                        instantiation.instantiate(&lorentz.structure, NumeratorSector::Spin)?;
+                    if reduced != lorentz.structure {
+                        reduced_terms.push((
+                            terms.len(),
+                            &common * instantiation.instantiate(&reduced, NumeratorSector::Spin)?,
+                        ));
+                    }
+                    terms.push(common * literal);
                 }
             }
         }
-        Ok(if terms.is_empty() {
+        let literal = if terms.is_empty() {
             Atom::one()
         } else {
-            Atom::add_many(terms)
-        })
+            Atom::add_many(&terms)
+        };
+        let tensor = NumeratorInterface::admit(literal, None)?;
+        if reduced_terms.is_empty() {
+            return Ok(tensor);
+        }
+        for (position, reduced) in reduced_terms {
+            terms[position] = reduced;
+        }
+        Ok(NumeratorInterface::with_source_expression(
+            &tensor,
+            Atom::add_many(terms),
+        )?)
     }
 
     fn edge_numerator(
@@ -7512,13 +7531,7 @@ mod tests {
             let actual = generator
                 .interaction_numerator(rule, &instantiation)
                 .unwrap();
-            let expected = NumeratorInterface::admit(
-                generator
-                    .interaction_expression(rule, &instantiation)
-                    .unwrap(),
-                None,
-            )
-            .unwrap();
+            let expected = generator.interaction_tensor(rule, &instantiation).unwrap();
             assert!(actual.same_value(&expected));
             assert_eq!(actual.rank(), 1);
             assert_eq!(
@@ -7663,17 +7676,109 @@ mod tests {
     }
 
     #[test]
+    fn momentum_reduction_preserves_the_literal_tensor_rank() {
+        let mut definition = serde_json::to_value(scalar_model()).unwrap();
+        definition["lorentz_structures"][0]["structure"] =
+            json!("P(idx(2,1),1)+P(idx(2,1),2)+P(idx(2,1),3)");
+        let model = Model::from_json(&definition.to_string()).unwrap();
+        let rule = model.vertex_rule_id("V1").unwrap();
+        let generator = Generator::new(model);
+        let legs = tensor_test_legs();
+        let instantiation = NumeratorInstantiation {
+            owner: NumeratorOwner::Vertex(7),
+            legs: &legs[..3],
+        };
+        let direct = generator.interaction_tensor(rule, &instantiation).unwrap();
+        let cached = generator
+            .interaction_numerator(rule, &instantiation)
+            .unwrap();
+        assert!(direct.is_zero());
+        assert_eq!(direct.rank(), 1);
+        assert_eq!(
+            direct.structure().logical_slots()[0].aind,
+            PartialIndex::Explicit(AbstractIndex::Named(
+                symbols::hedge_index().into(),
+                legs[0].hedge,
+                2,
+            ))
+        );
+        assert!(cached.same_value(&direct));
+    }
+
+    #[test]
+    fn momentum_reduction_cooks_function_valued_source_indices() {
+        let mut definition = serde_json::to_value(scalar_model()).unwrap();
+        definition["lorentz_structures"][0]["structure"] = json!("P(label(1),2)+P(label(1),3)");
+        let model = Model::from_json(&definition.to_string()).unwrap();
+        let rule = model.vertex_rule_id("V1").unwrap();
+        let generator = Generator::new(model);
+        let legs = tensor_test_legs();
+        let instantiation = NumeratorInstantiation {
+            owner: NumeratorOwner::Vertex(7),
+            legs: &legs[..3],
+        };
+        let expected = NumeratorInterface::admit(
+            instantiation
+                .instantiate(&test_atom("-GC1*P(label(1),1)"), NumeratorSector::Spin)
+                .unwrap(),
+            None,
+        )
+        .unwrap();
+        for _ in 0..2 {
+            let actual = generator
+                .interaction_numerator(rule, &instantiation)
+                .unwrap();
+            assert_eq!(actual.rank(), 1);
+            assert!(actual.same_value(&expected));
+        }
+    }
+
+    #[test]
+    fn momentum_reduction_cannot_hide_incompatible_literal_summands() {
+        let mut definition = serde_json::to_value(scalar_model()).unwrap();
+        definition["lorentz_structures"][0]["structure"] =
+            json!("P(idx(2,1),1)+P(idx(2,1),2)+P(idx(2,1),3)+1");
+        let model = Model::from_json(&definition.to_string()).unwrap();
+        let rule = model.vertex_rule_id("V1").unwrap();
+        let generator = Generator::new(model);
+        let legs = tensor_test_legs();
+        let instantiation = NumeratorInstantiation {
+            owner: NumeratorOwner::Vertex(7),
+            legs: &legs[..3],
+        };
+        assert!(
+            generator
+                .interaction_numerator(rule, &instantiation)
+                .is_err()
+        );
+        assert!(generator.numerators.interactions.read().unwrap().is_empty());
+        assert!(
+            generator
+                .numerators
+                .interaction_templates
+                .read()
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[test]
     fn interaction_templates_preserve_rank_when_incident_momenta_cancel() {
         let mut definition = serde_json::to_value(scalar_model()).unwrap();
+        // Balance both pairs independently. At a three-point vertex momentum
+        // conservation would replace P1 + P2 by -P3 before instantiation.
+        definition["lorentz_structures"][0]["spins"] = json!([1, 1, 1, 1]);
+        definition["vertex_rules"][0]["particles"] = json!(["phi", "phi", "phi", "phi"]);
         definition["lorentz_structures"][0]["structure"] = json!("P(idx(2,1),1)+P(idx(2,1),2)");
         let model = Model::from_json(&definition.to_string()).unwrap();
         let rule = model.vertex_rule_id("V1").unwrap();
         let generator = Generator::new(model);
-        let mut legs = tensor_test_legs()[..3].to_vec();
+        let mut legs = tensor_test_legs();
         for leg in &mut legs {
             leg.color = 1;
         }
         legs[1].edge = legs[0].edge;
+        legs[3].edge = legs[2].edge;
         for owner in [4, 9] {
             let instantiation = NumeratorInstantiation {
                 owner: NumeratorOwner::Vertex(owner),
@@ -7799,14 +7904,10 @@ mod tests {
                 let actual = generator
                     .interaction_numerator(rule, &instantiation)
                     .unwrap();
-                let expected = NumeratorInterface::admit(
-                    generator
-                        .interaction_expression(rule, &instantiation)
-                        .unwrap(),
-                    None,
-                )
-                .unwrap()
-                .canonicalize_named_interface();
+                let expected = generator
+                    .interaction_tensor(rule, &instantiation)
+                    .unwrap()
+                    .canonicalize_named_interface();
                 assert_eq!(
                     actual.expression().as_view().get_data(),
                     expected.expression().as_view().get_data(),
@@ -7909,13 +8010,7 @@ mod tests {
                     owner: NumeratorOwner::Vertex(7),
                     legs: &legs,
                 };
-                let expected = NumeratorInterface::admit(
-                    generator
-                        .interaction_expression(rule, &instantiation)
-                        .unwrap(),
-                    None,
-                )
-                .unwrap();
+                let expected = generator.interaction_tensor(rule, &instantiation).unwrap();
                 let actual = generator
                     .interaction_numerator(rule, &instantiation)
                     .unwrap();
@@ -8181,13 +8276,12 @@ mod tests {
             owner: NumeratorOwner::Vertex(7),
             legs: &legs[..3],
         };
-        let expected = NumeratorInterface::admit(
-            generator
-                .interaction_expression(rule, &instantiation)
-                .unwrap(),
-            None,
-        )
-        .unwrap_err();
+        let GenerationError::Diagram(expected) = generator
+            .interaction_tensor(rule, &instantiation)
+            .unwrap_err()
+        else {
+            panic!("expected the existing typed-admission rejection");
+        };
         let actual = generator
             .interaction_numerator(rule, &instantiation)
             .unwrap_err();
@@ -8229,13 +8323,7 @@ mod tests {
                 owner: NumeratorOwner::Vertex(owner),
                 legs: &legs[..3],
             };
-            let expected = NumeratorInterface::admit(
-                generator
-                    .interaction_expression(rule, &instantiation)
-                    .unwrap(),
-                None,
-            )
-            .unwrap();
+            let expected = generator.interaction_tensor(rule, &instantiation).unwrap();
             let actual = generator
                 .interaction_numerator(rule, &instantiation)
                 .unwrap();

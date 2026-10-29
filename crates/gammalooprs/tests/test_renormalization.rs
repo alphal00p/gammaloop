@@ -546,8 +546,8 @@ fn finite_part_ghost_2loop() {
     // F2 (140 -> 132 -> 0) / H = -3/16*ep^-2.
     // F3 (not emitted by GammaLoop) / H = 0.
     // Sum / H = -3/16*ep^-2 + 5/32*ep^-1; native GammaLoop / RQFT = -1.
-    // The corrected ghost-gluon rule reverses all three UUV1 vertices in d1;
-    // each forest term changes sign, while the quoted RQFT coefficients stay fixed.
+    // Relative to the former UUV1 = -P(3,2), the three UUV1 vertices of d1
+    // reverse every forest term, while the quoted RQFT coefficients stay fixed.
     let expected = parse!(
         "(-5𝑖/32*gammalooprs::ε+3𝑖/16)*(spenso::cas(2,spenso::coad(8)))^2
          *spenso::dot(gammalooprs::P(0,spenso::mink(4)),gammalooprs::P(0,spenso::mink(4)))
@@ -804,9 +804,9 @@ fn finite_part_ghost_3loop_developed() {
     //        + pi^2*rat(9/256*ep^-1)
     // F1, F3..F5, F7, F9 = 0
     // sum(Fi)/H = rat(9/128*ep^-3 - 39/256*ep^-2 + 9/128*ep^-1);
-    // Hedge terminals F0={H2y}, F2={GEe}{H2y}, F6={Fyy}{H2y}, and
-    // F8={Fyy}{GEe}{H2y} previously matched them before coupling replacement.
-    // Before correcting UUV1, their common i*GC_10^4*GC_12 became -gs^6.
+    // Hedge terminals {H2y}=F0, {GqO}{H2y}=F2, {Fyy}{H2y}=F6 and
+    // {Fyy}{GqO}{H2y}=F8 match them term by term.
+    // With the former UUV1 = -P(3,2), their common i*GC_10^4*GC_12 became -gs^6.
     // The three corrected ghost-gluon vertices reverse every forest term,
     // so native GammaLoop / RQFT = +1 at the model convention boundary.
     insta::assert_snapshot!(
@@ -816,27 +816,7 @@ fn finite_part_ghost_3loop_developed() {
     let a = amp.graphs[3]
         .renormalization_part(&model, &settings)
         .unwrap();
-    // d4: SM-UFO counterpart of RQFT `ghost_nnlo_4` (RQFT d5).
-    // H = p1.p1*gs^6*ca^3
-    // F0/H = rat(9/32*ep^-2 + 33/64*ep^-1)
-    //        + cl2*sqrt3*rat(-3/4*ep^-1)
-    // F7/H = rat(-27/64*ep^-2 - 45/128*ep^-1)
-    //        + cl2*sqrt3*rat(3/4*ep^-1)
-    // F1..F6, F8..F13 = 0
-    // sum(Fi)/H = rat(-9/64*ep^-2 + 21/128*ep^-1)
-    // RQFT uses the ghost momentum at a ghost-gluon vertex, whereas the SM UFO
-    // now uses the antighost momentum. This still exchanges the mirror pair d4/d5:
-    // Hedge terminals {H2y}=F0 and {Fyy}{H2y}=F7, while the others are zero.
-    // Their historical common i*GC_10^4*GC_12 gave a relative -1.
-    // Correcting the three UUV1 vertices gives native GammaLoop / RQFT = +1.
-    insta::assert_snapshot!(
-       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-9/64+21/128*ε)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-2)"
-    );
-
-    let a = amp.graphs[4]
-        .renormalization_part(&model, &settings)
-        .unwrap();
-    // d5: SM-UFO counterpart of RQFT `ghost_nnlo_3` (RQFT d4).
+    // d4: RQFT `ghost_nnlo_3`.
     // H = p1.p1*gs^6*ca^3
     // F0/H = rat(9/128*ep^-3 + 15/256*ep^-2 + 99/512*ep^-1)
     //        + cl2*sqrt3*rat(-3/32*ep^-1)
@@ -850,11 +830,28 @@ fn finite_part_ghost_3loop_developed() {
     //         + pi^2*rat(9/256*ep^-1)
     // F1..F4, F6, F8..F12 = 0
     // sum(Fi)/H = rat(9/128*ep^-3 - 39/256*ep^-2 + 27/128*ep^-1)
-    // Hedge terminals {H2y}=F0, {GqO}{H2y}=F5, {Fyy}{H2y}=F7, and
-    // {Fyy}{GqO}{H2y}=F13. The mirror mapping and three corrected UUV1
-    // vertices give native GammaLoop / RQFT = +1.
+    // Hedge terminals {H2y}=F0, {Gpo}{H2y}=F5, {Fyy}{H2y}=F7 and
+    // {Fyy}{Gpo}{H2y}=F13; native GammaLoop / RQFT = +1. UUV1 = P(3,2) alone
+    // exchanged d4 with its mirror image d5.
     insta::assert_snapshot!(
        align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-39/256*ε+27/128*ε^2+9/128)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-3)"
+    );
+
+    let a = amp.graphs[4]
+        .renormalization_part(&model, &settings)
+        .unwrap();
+    // d5: RQFT `ghost_nnlo_4`.
+    // H = p1.p1*gs^6*ca^3
+    // F0/H = rat(9/32*ep^-2 + 33/64*ep^-1)
+    //        + cl2*sqrt3*rat(-3/4*ep^-1)
+    // F7/H = rat(-27/64*ep^-2 - 45/128*ep^-1)
+    //        + cl2*sqrt3*rat(3/4*ep^-1)
+    // F1..F6, F8..F13 = 0
+    // sum(Fi)/H = rat(-9/64*ep^-2 + 21/128*ep^-1)
+    // Hedge terminals {H2y}=F0 and {Fyy}{H2y}=F7, while the others are zero;
+    // native GammaLoop / RQFT = +1.
+    insta::assert_snapshot!(
+       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-9/64+21/128*ε)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-2)"
     );
 
     let a = amp.graphs[5]
@@ -959,11 +956,12 @@ fn finite_part_ghost_3loop_developed() {
     );
 }
 
-// RQFT 6ac3a8a56b4e supplies an independent forest for each diagram. The
-// current-UFO replay changes only certified primitive conventions; the exact
+// RQFT 6ac3a8a56b4e supplies an independent forest for each diagram; the exact
 // polynomials below never come from GammaLoop's numerical or symbolic output.
-// Adjacent Fi comments retain the original RQFT convention; each literal uses
-// the independently replayed current-UFO forest sum.
+// Each literal is the sum of its adjacent Fi comments. With the FeynRules
+// UUV1 = P(3,2) + P(3,3), every diagram matches its own RQFT forest, including
+// the mirror pairs (d16, d17), (d20, d22), (d30, d38), (d31, d39), (d32, d40),
+// (d34, d42), (d35, d43) and (d36, d44) that UUV1 = P(3,2) alone exchanged.
 macro_rules! rqft_ghost_reference {
     (@expression $reference:literal) => {
         parse!($reference)
@@ -1001,7 +999,7 @@ macro_rules! rqft_ghost_reference {
             let difference = (aligned - expected).expand();
             assert!(
                 difference.is_zero(),
-                "d{} disagrees with its independent current-UFO forest sum: {}",
+                "d{} disagrees with its independent RQFT forest sum: {}",
                 $diagram,
                 difference.to_plain_string(),
             );
@@ -1329,10 +1327,11 @@ fn finite_part_ghost_3loop_quark_bubble() {
     // F1, F4..F5, F7 = 0
     // sum(Fi)/H = rat(1/12*ep^-3 - 1/12*ep^-2 - 1/12*ep^-1)
     // Independent FORM 5 replay of RQFT 6ac3a8a56b4e, including all eight
-    // forests, reproduces this sum under the current UFO conventions too:
-    // UUV1 uses antighost momentum, GC_10=-G, GC_11=iG and ghosts propagate
-    // with +i. The RQFT 5..10 -> v1..v6 incidence, overall -1 and external
-    // adjoint projector agree; no GammaLoop result defines this reference.
+    // forests, reproduces this sum under the SM UFO conventions too:
+    // GC_10=-G, GC_11=iG and ghosts propagate with +i. The replay used
+    // UUV1 = P(3,2); the FeynRules P(3,2) + P(3,3) leaves this sum unchanged.
+    // The RQFT 5..10 -> v1..v6 incidence, overall -1 and external adjoint
+    // projector agree; no GammaLoop result defines this reference.
     let momentum = function!(GS.external_mom, 0, spenso::mink!(4));
     let epsilon = Atom::var(GS.dim_epsilon);
     let expected = function!(SPENSO_TAG.dot, &momentum, &momentum)
@@ -1462,11 +1461,10 @@ rqft_ghost_reference!(
 //         + pi^2*rat(-1/512*ep^-1)
 // F3, F6..F8, F12..F14 = 0
 // sum(Fi)/H = rat(-1/64*ep^-3 + 1/384*ep^-2 - 17/1536*ep^-1)
-// Current-UFO primitive conventions alter the original RQFT sum above.
 rqft_ghost_reference!(
     finite_part_ghost_3loop_d16,
     16,
-    "gs^6*ca^3*( - 1/64*ep^-3 + 7/384*ep^-2 - 9/512*ep^-1)"
+    "gs^6*ca^3*( - 1/64*ep^-3 + 1/384*ep^-2 - 17/1536*ep^-1)"
 );
 
 // d17: RQFT `ghost_nnlo_16`.
@@ -1492,11 +1490,10 @@ rqft_ghost_reference!(
 //         + pi^2*rat(-1/512*ep^-1)
 // F3, F6..F8, F12..F14 = 0
 // sum(Fi)/H = rat(-1/64*ep^-3 + 7/384*ep^-2 - 9/512*ep^-1)
-// Current-UFO primitive conventions alter the original RQFT sum above.
 rqft_ghost_reference!(
     finite_part_ghost_3loop_d17,
     17,
-    "gs^6*ca^3*( - 1/64*ep^-3 + 1/384*ep^-2 - 17/1536*ep^-1)"
+    "gs^6*ca^3*( - 1/64*ep^-3 + 7/384*ep^-2 - 9/512*ep^-1)"
 );
 
 // d18: RQFT `ghost_nnlo_17`.
@@ -1569,11 +1566,10 @@ rqft_ghost_reference!(
 //         + pi^2*rat(-1/512*ep^-1)
 // F2..F4, F6..F7, F9..F10, F12..F16, F18 = 0
 // sum(Fi)/H = rat(-1/128*ep^-3 + 1/768*ep^-2 - 5/128*ep^-1)
-// Current-UFO primitive conventions alter the original RQFT sum above.
 rqft_ghost_reference!(
     finite_part_ghost_3loop_d20,
     20,
-    "gs^6*ca^3*( - 1/128*ep^-3 + 1/768*ep^-2 - 1/128*ep^-1)"
+    "gs^6*ca^3*( - 1/128*ep^-3 + 1/768*ep^-2 - 5/128*ep^-1)"
 );
 
 // d21: RQFT `ghost_nnlo_20`.
@@ -1618,11 +1614,10 @@ rqft_ghost_reference!(
 //         + pi^2*rat(-1/512*ep^-1)
 // F2..F4, F6..F7, F9..F10, F12..F16, F18 = 0
 // sum(Fi)/H = rat(-1/128*ep^-3 + 1/768*ep^-2 - 1/128*ep^-1)
-// Current-UFO primitive conventions alter the original RQFT sum above.
 rqft_ghost_reference!(
     finite_part_ghost_3loop_d22,
     22,
-    "gs^6*ca^3*( - 1/128*ep^-3 + 1/768*ep^-2 - 5/128*ep^-1)"
+    "gs^6*ca^3*( - 1/128*ep^-3 + 1/768*ep^-2 - 1/128*ep^-1)"
 );
 
 // d23: RQFT `ghost_nnlo_22`.
@@ -1821,11 +1816,10 @@ rqft_ghost_reference!(
 //        + pi^2*rat(1/192*ep^-1)
 // F4, F7 = 0
 // sum(Fi)/H = rat(1/48*ep^-3 - 1/48*ep^-2 - 1/48*ep^-1)
-// Current-UFO primitive conventions alter the original RQFT sum above.
 rqft_ghost_reference!(
     finite_part_ghost_3loop_d30,
     30,
-    "gs^6*ca^2*nf*(1/48*ep^-3 - 1/96*ep^-2 - 5/192*ep^-1)"
+    "gs^6*ca^2*nf*(1/48*ep^-3 - 1/48*ep^-2 - 1/48*ep^-1)"
 );
 
 // d31: RQFT `ghost_nnlo_30`.
@@ -1847,11 +1841,10 @@ rqft_ghost_reference!(
 //        + pi^2*rat(-5/384*ep^-1)
 // F3, F5..F6, F8, F10..F11 = 0
 // sum(Fi)/H = rat(-19/384*ep^-3 + 15/256*ep^-2 + 19/384*ep^-1)
-// Current-UFO primitive conventions alter the original RQFT sum above.
 rqft_ghost_reference!(
     finite_part_ghost_3loop_d31,
     31,
-    "gs^6*ca^3*( - 19/384*ep^-3 + 23/768*ep^-2 + 65/768*ep^-1)"
+    "gs^6*ca^3*( - 19/384*ep^-3 + 15/256*ep^-2 + 19/384*ep^-1)"
 );
 
 // d32: RQFT `ghost_nnlo_31`.
@@ -1871,11 +1864,10 @@ rqft_ghost_reference!(
 // F9/H = rat(-1/48*ep^-2)
 // F3, F5..F6, F8, F10..F11 = 0
 // sum(Fi)/H = rat(-1/384*ep^-3 + 1/256*ep^-2 - 1/384*ep^-1)
-// Current-UFO primitive conventions alter the original RQFT sum above.
 rqft_ghost_reference!(
     finite_part_ghost_3loop_d32,
     32,
-    "gs^6*ca^3*( - 1/384*ep^-3 + 5/768*ep^-2 - 1/256*ep^-1)"
+    "gs^6*ca^3*( - 1/384*ep^-3 + 1/256*ep^-2 - 1/384*ep^-1)"
 );
 
 // d33: RQFT `ghost_nnlo_32`.
@@ -1920,11 +1912,10 @@ rqft_ghost_reference!(
 //        + pi^2*rat(1/64*ep^-1)
 // F4, F7 = 0
 // sum(Fi)/H = rat(1/16*ep^-3 - 5/48*ep^-2 - 1/24*ep^-1)
-// Current-UFO primitive conventions alter the original RQFT sum above.
 rqft_ghost_reference!(
     finite_part_ghost_3loop_d34,
     34,
-    "gs^6*ca^2*nf*(1/12*ep^-3 - 5/48*ep^-2 - 1/192*ep^-1)"
+    "gs^6*ca^2*nf*(1/16*ep^-3 - 5/48*ep^-2 - 1/24*ep^-1)"
 );
 
 // d35: RQFT `ghost_nnlo_34`.
@@ -1946,11 +1937,10 @@ rqft_ghost_reference!(
 //        + pi^2*rat(-5/128*ep^-1)
 // F3, F5..F6, F8, F10..F11 = 0
 // sum(Fi)/H = rat(-19/128*ep^-3 + 211/768*ep^-2 + 11/384*ep^-1)
-// Current-UFO primitive conventions alter the original RQFT sum above.
 rqft_ghost_reference!(
     finite_part_ghost_3loop_d35,
     35,
-    "gs^6*ca^3*( - 79/384*ep^-3 + 81/256*ep^-2 - 31/768*ep^-1)"
+    "gs^6*ca^3*( - 19/128*ep^-3 + 211/768*ep^-2 + 11/384*ep^-1)"
 );
 
 // d36: RQFT `ghost_nnlo_35`.
@@ -1970,11 +1960,10 @@ rqft_ghost_reference!(
 // F9/H = rat(-1/16*ep^-2)
 // F3, F5..F6, F8, F10..F11 = 0
 // sum(Fi)/H = rat(-1/128*ep^-3 + 13/768*ep^-2 - 3/128*ep^-1)
-// Current-UFO primitive conventions alter the original RQFT sum above.
 rqft_ghost_reference!(
     finite_part_ghost_3loop_d36,
     36,
-    "gs^6*ca^3*( - 1/384*ep^-3 + 13/768*ep^-2 - 11/768*ep^-1)"
+    "gs^6*ca^3*( - 1/128*ep^-3 + 13/768*ep^-2 - 3/128*ep^-1)"
 );
 
 // d37: RQFT `ghost_nnlo_36`.
@@ -2019,11 +2008,10 @@ rqft_ghost_reference!(
 //        + pi^2*rat(1/192*ep^-1)
 // F4, F7 = 0
 // sum(Fi)/H = rat(1/48*ep^-3 - 1/96*ep^-2 - 5/192*ep^-1)
-// Current-UFO primitive conventions alter the original RQFT sum above.
 rqft_ghost_reference!(
     finite_part_ghost_3loop_d38,
     38,
-    "gs^6*ca^2*nf*(1/48*ep^-3 - 1/48*ep^-2 - 1/48*ep^-1)"
+    "gs^6*ca^2*nf*(1/48*ep^-3 - 1/96*ep^-2 - 5/192*ep^-1)"
 );
 
 // d39: RQFT `ghost_nnlo_38`.
@@ -2045,11 +2033,10 @@ rqft_ghost_reference!(
 //        + pi^2*rat(-5/384*ep^-1)
 // F3, F5..F6, F8, F10..F11 = 0
 // sum(Fi)/H = rat(-19/384*ep^-3 + 23/768*ep^-2 + 65/768*ep^-1)
-// Current-UFO primitive conventions alter the original RQFT sum above.
 rqft_ghost_reference!(
     finite_part_ghost_3loop_d39,
     39,
-    "gs^6*ca^3*( - 19/384*ep^-3 + 15/256*ep^-2 + 19/384*ep^-1)"
+    "gs^6*ca^3*( - 19/384*ep^-3 + 23/768*ep^-2 + 65/768*ep^-1)"
 );
 
 // d40: RQFT `ghost_nnlo_39`.
@@ -2069,11 +2056,10 @@ rqft_ghost_reference!(
 // F9/H = rat(-1/48*ep^-2)
 // F3, F5..F6, F8, F10..F11 = 0
 // sum(Fi)/H = rat(-1/384*ep^-3 + 5/768*ep^-2 - 1/256*ep^-1)
-// Current-UFO primitive conventions alter the original RQFT sum above.
 rqft_ghost_reference!(
     finite_part_ghost_3loop_d40,
     40,
-    "gs^6*ca^3*( - 1/384*ep^-3 + 1/256*ep^-2 - 1/384*ep^-1)"
+    "gs^6*ca^3*( - 1/384*ep^-3 + 5/768*ep^-2 - 1/256*ep^-1)"
 );
 
 // d41: RQFT `ghost_nnlo_40`.
@@ -2120,11 +2106,10 @@ rqft_ghost_reference!(
 //        + pi^2*rat(1/64*ep^-1)
 // F4, F7 = 0
 // sum(Fi)/H = rat(1/12*ep^-3 - 5/48*ep^-2 - 1/192*ep^-1)
-// Current-UFO primitive conventions alter the original RQFT sum above.
 rqft_ghost_reference!(
     finite_part_ghost_3loop_d42,
     42,
-    "gs^6*ca^2*nf*(1/16*ep^-3 - 5/48*ep^-2 - 1/24*ep^-1)"
+    "gs^6*ca^2*nf*(1/12*ep^-3 - 5/48*ep^-2 - 1/192*ep^-1)"
 );
 
 // d43: RQFT `ghost_nnlo_42`.
@@ -2146,11 +2131,10 @@ rqft_ghost_reference!(
 //        + pi^2*rat(-5/128*ep^-1)
 // F3, F5..F6, F8, F10..F11 = 0
 // sum(Fi)/H = rat(-79/384*ep^-3 + 81/256*ep^-2 - 31/768*ep^-1)
-// Current-UFO primitive conventions alter the original RQFT sum above.
 rqft_ghost_reference!(
     finite_part_ghost_3loop_d43,
     43,
-    "gs^6*ca^3*( - 19/128*ep^-3 + 211/768*ep^-2 + 11/384*ep^-1)"
+    "gs^6*ca^3*( - 79/384*ep^-3 + 81/256*ep^-2 - 31/768*ep^-1)"
 );
 
 // d44: RQFT `ghost_nnlo_43`.
@@ -2170,11 +2154,10 @@ rqft_ghost_reference!(
 // F9/H = rat(-1/16*ep^-2)
 // F3, F5..F6, F8, F10..F11 = 0
 // sum(Fi)/H = rat(-1/384*ep^-3 + 13/768*ep^-2 - 11/768*ep^-1)
-// Current-UFO primitive conventions alter the original RQFT sum above.
 rqft_ghost_reference!(
     finite_part_ghost_3loop_d44,
     44,
-    "gs^6*ca^3*( - 1/128*ep^-3 + 13/768*ep^-2 - 3/128*ep^-1)"
+    "gs^6*ca^3*( - 1/384*ep^-3 + 13/768*ep^-2 - 11/768*ep^-1)"
 );
 
 // d45: RQFT `ghost_nnlo_44`.

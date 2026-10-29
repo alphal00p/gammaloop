@@ -17,9 +17,16 @@ except ImportError:
 
 UUS1 = Lorentz(name="UUS1", spins=[-1, -1, 1], structure="1")
 
-# The derivative in -barc partial D c acts on the antighost after integration
-# by parts. With the declared [ghost, antighost, vector] order it is P2.
-UUV1 = Lorentz(name="UUV1", spins=[-1, -1, 3], structure="P(3,2)")
+# FeynRules form, -P(3,1) with all momenta incoming. The ghost-scalar UUS1
+# vertices fix the slot dictionary: slot 1 (ghX) holds the antighost field and
+# slot 2 (ghY~) the ghost field. For example V_14 [ghWm, ghA~, G+] couples a W
+# antighost to the photon ghost, whereas the photon antighost couples to no
+# scalar because F^A = d.A. The derivative of -barc d.D c thus acts on slot 1.
+# P(3,2) alone differs by the vector momentum P(3,3). It belongs to the opposite
+# dictionary and is consistent only with correspondingly relabelled UUS1 lists.
+# The BRST quartet cuts in gammalooprs' gauge_sewing_tests.rs check both
+# vertex types together.
+UUV1 = Lorentz(name="UUV1", spins=[-1, -1, 3], structure="P(3,2) + P(3,3)")
 
 SSS1 = Lorentz(name="SSS1", spins=[1, 1, 1], structure="1")
 
