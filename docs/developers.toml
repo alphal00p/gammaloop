@@ -21,8 +21,8 @@ kind = "System architecture"
 status = "Implemented"
 lifecycle = "current"
 owner = "unassigned"
-reviewed_at = "2026-10-19"
-review_ref = "64a6addef1e65ba453356538fa977379341c2009"
+reviewed_at = "2026-10-29"
+review_ref = "5c9242a3d23a1bc1aababf18997dc0c068d88451"
 products = ["gammaloop"]
 topics = ["state", "python", "generation", "evaluation", "events", "integration", "persistence"]
 review_triggers = ["crates/gammaloop-api/src/**", "crates/gammaloop-api/python/**", "crates/gammalooprs/src/**", "crates/three-dimensional-reps/src/**"]
@@ -67,7 +67,10 @@ anchor = "load_state_manifest(&save_path)?"
 # expression/evaluator/denominator payloads and main evaluator serialization. The
 # exact-version guard remains before model or Symbolica import. Representation
 # timing partitions and neutral 3D-generation progress labels match the architecture note.
-digest = "47c8b4d0b5e2cfe4555874e1a838c6db4636f0f5"
+# Reviewed 2026-10-29: state20 removes the physical-cut reversal mask; projected
+# E-surface bounds use their own signed boundary and fixed-spectator routing.
+# architecture-current.typ documents the changed layout and regeneration guard.
+digest = "8267f92e55a98a41756903f904516e0d59d01bd6"
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/commands/integrate.rs"
