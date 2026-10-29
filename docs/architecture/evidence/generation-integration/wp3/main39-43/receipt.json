@@ -1,9 +1,16 @@
 {
   "scope": "Ordered MAIN source39\u201343 integration candidate; independent combined Astra review pending before source44; WP3 incomplete",
   "base_main38": "2f46efe7491d5cb9c028aff12ac475e44bef0a92",
+  "manifest": {
+    "source_rows": 46,
+    "planned_units": 41,
+    "accounted_through_source": 43,
+    "accounted_units": 38
+  },
   "built_code_source": "66c2aed45d83b54f55b39bf2fc2f88c2066d6343",
   "built_code_change": "ymkxyqsovlsnotwqtmqzwwrwkvzsklox",
-  "evidence_tip": "Distinct later JJ change; see generation-integration-units39-43 bookmark",
+  "evidence_change": "rvyuvwsmvwztvromvvxonntqtwptoorz",
+  "evidence_tip": "Distinct later JJ change; see generation-integration-units39-43 bookmark after candidate freeze",
   "preparation_base": "191aaf7b77018e377a9e5e4e3b9c88357218aa48",
   "preparation_final": "595a2f4d921a119503db3d5c919b87fcc728a423",
   "source_mapping": [
@@ -540,28 +547,409 @@
     },
     "core-build.log": {
       "path": "target/wp3-units39-43/core-build.log",
-      "bytes": 3561,
-      "sha256": "0019201d51a67dbe8128b5dd9bcbe2a42ea3bccc0387ffd1736da5914636011e"
+      "bytes": 4418,
+      "sha256": "127ae569eee72a226d4f9dd01475de55fe1bbf2e738b82d27f4504a539a055bf"
+    },
+    "cli-build.log": {
+      "path": "target/wp3-units39-43/cli-build.log",
+      "bytes": 3444,
+      "sha256": "c3d388b481dfb8bc3ab34d6c623e73079b8cf7201e068ea077b7c37371af4459"
+    },
+    "four-loop-build.log": {
+      "path": "target/wp3-units39-43/four-loop-build.log",
+      "bytes": 1068,
+      "sha256": "4bee8a1e49d15a638c0db79122b1b6fdd674edfb42ec4f0cfe586d20e9465b7b"
+    },
+    "python-native.log": {
+      "path": "target/wp3-units39-43/python-native.log",
+      "bytes": 830,
+      "sha256": "70cfe1f028b1b75cb9e3e8a2d9c3c7269495fbca013b6b8240be426c8e1a3a74"
+    },
+    "python-native-reuse.log": {
+      "path": "target/wp3-units39-43/python-native-reuse.log",
+      "bytes": 223,
+      "sha256": "f00acd4497f9a912cdfda0ba1c17667d114f80468f60ef2309c0877b1de47c30"
+    },
+    "python-native-final.log": {
+      "path": "target/wp3-units39-43/python-native-final.log",
+      "bytes": 3865,
+      "sha256": "16d1ae2a80bda0ce8e4dda38ebefb0f5776c959ba36f5f3aaf7609512b9c4b8e"
+    },
+    "linnet.log": {
+      "path": "target/wp3-units39-43/linnet.log",
+      "bytes": 2029,
+      "sha256": "a523b85424209dc1e978ad3119446e2503e65bdc41c1c8eb15ef1ca7cb0a580b"
+    },
+    "generator.log": {
+      "path": "target/wp3-units39-43/generator.log",
+      "bytes": 467,
+      "sha256": "e4e42c66abe5a425b3b05b1ebb3c617c57bf4efca46f911fc03c4d6ead7f1b87"
+    },
+    "B2.log": {
+      "path": "target/wp3-units39-43/B2.log",
+      "bytes": 340,
+      "sha256": "3d8e094562d0eca6c79779d8faff5399dc5b813d70a3fe5d8fbffc13e0bcdf97"
+    },
+    "admission.log": {
+      "path": "target/wp3-units39-43/admission.log",
+      "bytes": 992,
+      "sha256": "f2dd8043c632c10d5ecd215dc2946dbb8fc3472f5a611f8311d39190521b9694"
+    },
+    "frames.log": {
+      "path": "target/wp3-units39-43/frames.log",
+      "bytes": 464,
+      "sha256": "694916142b7f3af3978b9590f427511df3084e08c0e4c1a10f2e235c79039f59"
+    },
+    "oracle.log": {
+      "path": "target/wp3-units39-43/oracle.log",
+      "bytes": 345,
+      "sha256": "a6a126aa6d639675a72da780b948b34c9cc385ea0cf5c6c19a84fe7eac700ea9"
+    },
+    "cli.log": {
+      "path": "target/wp3-units39-43/cli.log",
+      "bytes": 2123,
+      "sha256": "d23d4f6ee17820acc134fd8cde49c321354441469b5f7cff5bbc1babdce1b8cc"
+    },
+    "four-loop-1.log": {
+      "path": "target/wp3-units39-43/four-loop-1.log",
+      "bytes": 253567,
+      "sha256": "a0e0148d38cb44f07eccc2cc39c8c24cb8bd0ff80cef21a4f84887a5e912519f"
+    },
+    "four-loop-8.log": {
+      "path": "target/wp3-units39-43/four-loop-8.log",
+      "bytes": 175293,
+      "sha256": "9b10a4e49354cbc42aaf74be5cb1c9378df30a78d21f9b95db0b70bba01b42e1"
+    },
+    "four-loop-32.log": {
+      "path": "target/wp3-units39-43/four-loop-32.log",
+      "bytes": 174365,
+      "sha256": "96939def6f727a36ab572defa4678e37cfbfc126bb2b317dc90c33c99d58ade2"
     },
     "format.log": {
       "path": "target/wp3-units39-43/format.log",
       "bytes": 0,
       "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
+    "format-first.log": {
+      "path": "target/wp3-units39-43/format-first.log",
+      "bytes": 539,
+      "sha256": "645ae84add078ac881958cf3a3467328c78f323f9121e0c4da07be1fff48d9b0"
+    },
     "registry.log": {
       "path": "target/wp3-units39-43/registry.log",
       "bytes": 38,
       "sha256": "0c7d2e02b9c1d0803f61ed560961854f072e32b5214959615bf69c30b854ffdb"
     },
+    "registry-first.log": {
+      "path": "target/wp3-units39-43/registry-first.log",
+      "bytes": 781,
+      "sha256": "b45188c68dca725fbbbb211fe5ca843a9da272039183a0e30308fb97d1377a56"
+    },
+    "note-first-failure.log": {
+      "path": "target/wp3-units39-43/note-first-failure.log",
+      "bytes": 244,
+      "sha256": "004744b95af22ef5e97bf46f89ec21c3e859d508a0025d95183fc358d974fa3d"
+    },
     "wasm-build.log": {
       "path": "target/wp3-units39-43/wasm-build.log",
       "bytes": 523,
       "sha256": "5cd078494610171e3073844148d4e1f59d8fd4bbdd8f1ba7dde325f44ff0cc6d"
+    },
+    "ci-graph.log": {
+      "path": "target/wp3-units39-43/ci-graph.log",
+      "bytes": 764,
+      "sha256": "4023ca39678700904a2cf71be2efda9648a5070b1775ab0c74d06b6239352c41"
+    },
+    "ci-config.log": {
+      "path": "target/wp3-units39-43/ci-config.log",
+      "bytes": 245,
+      "sha256": "9464a53e4daf37cd0daaaeb42f50edc10a5da3ffac6c4f240981125db29d14e8"
+    },
+    "kernel-locks.log": {
+      "path": "target/wp3-units39-43/kernel-locks.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "hakari.log": {
+      "path": "target/wp3-units39-43/hakari.log",
+      "bytes": 47,
+      "sha256": "704f7242c6f355e1c07d9f9ae6ea748231571460920e0647e0fad2f515d7c7f3"
+    },
+    "clippy.log": {
+      "path": "target/wp3-units39-43/clippy.log",
+      "bytes": 16150,
+      "sha256": "e1aea83de45b06ec8408007bec7fcd1d5a02f290126777a007696da27045807f"
     }
   },
+  "nextest_summaries": {
+    "python-native-final.log": "Summary [   3.565s] 45 tests run: 45 passed, 1 skipped",
+    "linnet.log": "Summary [   0.081s] 19 tests run: 19 passed, 483 skipped",
+    "generator.log": "Summary [  13.125s] 64 tests run: 64 passed, 163 skipped",
+    "B2.log": "Summary [   2.612s] 1 test run: 1 passed, 226 skipped",
+    "admission.log": "Summary [   0.048s] 8 tests run: 8 passed, 230 skipped",
+    "frames.log": "Summary [  12.176s] 3 tests run: 3 passed, 180 skipped",
+    "oracle.log": "Summary [ 451.001s] 15 tests run: 15 passed, 168 skipped",
+    "cli.log": "Summary [  20.339s] 2 tests run: 2 passed, 37 skipped"
+  },
+  "documentation_outputs": [
+    {
+      "path": "target/wp3-units39-43/generation-integration-units39-43.pdf",
+      "bytes": 34346,
+      "sha256": "106e52c3d97b66c869d65122a722b6f60c22fe677ab15dd6cf1851a2f5b13ecd"
+    },
+    {
+      "path": "target/wp3-units39-43/generation-integration-units39-43-html/index.html",
+      "bytes": 3602,
+      "sha256": "e5a3b1d05a16b2fc203fa04e490a68aee3bc05cf5ce77dfec28bb56520080223"
+    },
+    {
+      "path": "target/wp3-units39-43/generation-frame-certificate.pdf",
+      "bytes": 38310,
+      "sha256": "2b9d044fab9e257f23f5cf8b7f27f7985a736fd88f2e08c374546ebb3b416a1b"
+    },
+    {
+      "path": "target/wp3-units39-43/generation-frame-certificate-html/index.html",
+      "bytes": 12700,
+      "sha256": "518be57548fd09bba601f058df387e46d3963dad8042994bba8b571d7906d7c8"
+    },
+    {
+      "path": "target/wp3-units39-43/generation-frame-migration.pdf",
+      "bytes": 43800,
+      "sha256": "39fc8defb4167de79d778e45912be10be6288905b94dac9f2141b283a4d9ed38"
+    },
+    {
+      "path": "target/wp3-units39-43/generation-frame-migration-html/index.html",
+      "bytes": 5110,
+      "sha256": "7a2e3024b39f7dfb8cf65afa4d84cd980b734fbc6f12e9a9d6ccdc2aeefe04e7"
+    },
+    {
+      "path": "target/wp3-units39-43/generation-pocket-weight-migration.pdf",
+      "bytes": 38986,
+      "sha256": "fb496e53934b2146719986e00bd49da4a79cdc23823fc68064f574ae0be97d88"
+    },
+    {
+      "path": "target/wp3-units39-43/generation-pocket-weight-migration-html/index.html",
+      "bytes": 4031,
+      "sha256": "2b2102aaa205ea243bcf6f90711c6d7115c68d05fea07c45beb41fa970b27d83"
+    },
+    {
+      "path": "target/wp3-units39-43/generation-integration-plan.pdf",
+      "bytes": 204552,
+      "sha256": "09bc27dcaebc2a301a488e8b99196d1edfa0a6ef8760b469bd2ef922763ea9b1"
+    },
+    {
+      "path": "target/wp3-units39-43/generation-integration-plan-html/index.html",
+      "bytes": 41713,
+      "sha256": "9d9eb632ffa41b548ca30c33c19bfc6627a78486d62b2b49e883b129f4d97634"
+    }
+  ],
+  "build_and_test_scripts": [
+    {
+      "path": "target/wp3-units39-43/build.sh",
+      "bytes": 1411,
+      "sha256": "2c23f655c2259b40a5093a9fa3e68e2f0ec3b7e5affc813232800ef385405e14"
+    },
+    {
+      "path": "target/wp3-units39-43/test-core.sh",
+      "bytes": 2610,
+      "sha256": "79b35dcf9b49db931a7a21124b72cf76367c1613e1d2c467312af61fd5bca3d1"
+    },
+    {
+      "path": "target/wp3-units39-43/test-final.sh",
+      "bytes": 2617,
+      "sha256": "9ca200cf6bd343dd33281f7d8d9028ad1587683811a07028936a964611707de8"
+    },
+    {
+      "path": "target/wp3-units39-43/docs.sh",
+      "bytes": 963,
+      "sha256": "88d3f4eb67bcf2ead292b1507a777d7eb0ea47937616394906cb63d1721219b6"
+    },
+    {
+      "path": "target/wp3-units39-43/wasm-build.sh",
+      "bytes": 360,
+      "sha256": "28446ba0742d864d33fe03b2087f95f1d5903e8c19361fce6ea9a7956e0d23cd"
+    }
+  ],
+  "exact_task_commands": {
+    "build.sh": "set -u\nif [ -z \"${SYMBOLICA_LICENSE:-}\" ]; then export SYMBOLICA_LICENSE=\"$(cat \"${XDG_CONFIG_HOME:-$HOME/.config}/symbolica/license\")\"; fi\nexport CARGO_BUILD_JOBS=2 RAYON_NUM_THREADS=2 INSTA_UPDATE=no\nnix develop /nix/store/b53dxkf559x6hivvnamqs4kzh91d8ar5-nix-shell-env.drv -c bash -c '\nset -eu\ncargo run --locked --profile ci-optim -p alphal00p-docs-python-exporter --features feynkit -- feynkit-community docs/api/python/feynkit-community.pyi > target/wp3-units39-43/stub-generate.log 2>&1\ncp docs/api/python/feynkit-community.pyi crates/feynkit-py/python/symbolica/community/hepkit/__init__.pyi\ncp docs/api/python/feynkit-community.pyi examples/notebooks/symbolica-host/python/symbolica/community/hepkit/__init__.pyi\ncargo nextest list --locked --cargo-profile ci-optim -p feynkit-generator -p linnet -p feynkit-py --message-format json > target/wp3-units39-43/core-binaries.json 2> target/wp3-units39-43/core-build.log\ncargo nextest list --locked --cargo-profile ci-optim -p gammaloop-integration-tests --test test_feyngen --message-format json > target/wp3-units39-43/cli-binaries.json 2> target/wp3-units39-43/cli-build.log\ncargo build --locked --profile ci-optim -p feynkit-generator --example four_loop_numerator --message-format=json > target/wp3-units39-43/four-loop-build.jsonl 2> target/wp3-units39-43/four-loop-build.log\n'\nrc=$?; printf '%s\\n' \"$rc\" > target/wp3-units39-43/build.exit;exit \"$rc\"\n",
+    "test-final.sh": "set -u\nif [ -z \"${SYMBOLICA_LICENSE:-}\" ]; then export SYMBOLICA_LICENSE=\"$(cat \"${XDG_CONFIG_HOME:-$HOME/.config}/symbolica/license\")\"; fi\nexport CARGO_BUILD_JOBS=2 RAYON_NUM_THREADS=2 INSTA_UPDATE=no FEYNKIT_ORACLE_THREADS=1,8,32\nunset INSTA_FORCE_PASS FEYNKIT_ORACLE_RECORD FEYNKIT_ORACLE_DUMP\nnix develop /nix/store/b53dxkf559x6hivvnamqs4kzh91d8ar5-nix-shell-env.drv -c bash -c '\nset -eu\ncargo nextest run --locked --cargo-profile ci-optim -P ci_gammaloop -p feynkit-py --no-fail-fast > target/wp3-units39-43/python-native-final.log 2>&1\ncargo nextest run --locked --cargo-profile ci-optim -P ci_gammaloop -p linnet -E \"test(canon::tests::) | test(terminal_free) | test(pocket)\" --no-fail-fast > target/wp3-units39-43/linnet.log 2>&1\ncargo nextest run --locked --cargo-profile ci-optim -P ci_gammaloop -p feynkit-generator --lib -E \"test(grouping::tests::) | test(canonical) | test(physical_frame) | test(anchored) | test(cut_partitions) | test(terminal)\" --no-fail-fast > target/wp3-units39-43/generator.log 2>&1\ncargo nextest run --locked --cargo-profile ci-optim -P ci_gammaloop -p feynkit-generator --lib --run-ignored only -E \"test(=grouping::tests::vacuum_group28_original_pair_identity)\" > target/wp3-units39-43/B2.log 2>&1\ncargo nextest run --locked --cargo-profile ci-optim -P ci_gammaloop -p feynkit-model -p feynkit-graph -E \"test(/(template|admission|hidden|history|localization|anonymous|nonidentity|collision|raw_rule|gauge_sewing)/)\" --no-fail-fast > target/wp3-units39-43/admission.log 2>&1\ncargo nextest run --locked --cargo-profile ci-optim -P ci_gammaloop -p feynkit-generator --test generation_oracle -E \"test(frames::)\" --no-fail-fast > target/wp3-units39-43/frames.log 2>&1\ncargo nextest run --locked --cargo-profile ci-optim -P ci_gammaloop -p feynkit-generator --test generation_oracle -E \"test(outputs_do_not_depend_on_index_registration_order_) | test(=index_registration_child_failure_propagates) | test(=ym_ggg_zero_color_L3) | test(=xs_qcdqed_addx_canonical_scalar_lr_L3)\" --no-fail-fast > target/wp3-units39-43/oracle.log 2>&1\ncargo nextest run --locked --cargo-profile ci-optim -P ci_full -p gammaloop-integration-tests --test test_feyngen --ignore-default-filter -E \"test(=failing::test_generate_aa_ttx_cross_section_slow_filter) | test(=test_vacuum_amplitude_generation_full_sm_three_loop_filtered)\" --no-fail-fast > target/wp3-units39-43/cli.log 2>&1\nfor threads in 1 8 32; do\n target/ci-optim/examples/four_loop_numerator \"$threads\" - true > \"target/wp3-units39-43/four-loop-$threads.log\" 2>&1\ndone\n'\nrc=$?;printf '%s\\n' \"$rc\" > target/wp3-units39-43/test-final.exit;exit \"$rc\"\n",
+    "docs.sh": "set -eu\nnix develop /nix/store/b53dxkf559x6hivvnamqs4kzh91d8ar5-nix-shell-env.drv -c bash -c '\nset -eu\npython3 target/wp3-units39-43/audit.py > target/wp3-units39-43/registry.log\ncargo fmt --all --check > target/wp3-units39-43/format.log 2>&1\nfor note in generation-integration-units39-43 generation-frame-certificate generation-frame-migration generation-pocket-weight-migration generation-integration-plan; do\n typst compile --features html --root . --creation-timestamp 0 docs/architecture/$note.typ target/wp3-units39-43/$note.pdf > target/wp3-units39-43/$note-pdf.log 2>&1\n printf \"#document(\\\"index.html\\\")[#include \\\"/docs/architecture/%s.typ\\\"]\\n\" \"$note\" > target/wp3-units39-43/$note-wrapper.typ\n typst compile --features html,bundle --format bundle --root . --creation-timestamp 0 target/wp3-units39-43/$note-wrapper.typ target/wp3-units39-43/$note-html > target/wp3-units39-43/$note-html.log 2>&1\ndone\n'\nprintf '0\\n' > target/wp3-units39-43/docs.exit\n",
+    "wasm-build.sh": "set -u\nuri='git+file:///shared/lcnbr/dev/gammaloop/main?rev=66c2aed45d83b54f55b39bf2fc2f88c2066d6343&shallow=1&allRefs=1'\nnix build --no-link --print-out-paths --cores 2 --max-jobs 1 \"$uri#linnest-wasm\" > target/wp3-units39-43/wasm-output.txt 2> target/wp3-units39-43/wasm-build.log\nrc=$?;printf '%s\\n' \"$rc\" > target/wp3-units39-43/wasm-build.exit;exit \"$rc\"\n"
+  },
+  "additional_commands": {
+    "ci-graph": "nix develop /nix/store/b53dxkf559x6hivvnamqs4kzh91d8ar5-nix-shell-env.drv -c just ci-graph-check",
+    "ci-config": "nix build --no-link --print-out-paths .#nix-ci-config; cmp output nix-ci.nix",
+    "kernel-locks": "nix develop /nix/store/b53dxkf559x6hivvnamqs4kzh91d8ar5-nix-shell-env.drv -c just check-symbolica-feature-isolation",
+    "hakari": "nix develop /nix/store/b53dxkf559x6hivvnamqs4kzh91d8ar5-nix-shell-env.drv -c cargo hakari verify",
+    "clippy": "nix develop /nix/store/b53dxkf559x6hivvnamqs4kzh91d8ar5-nix-shell-env.drv -c cargo clippy --locked -p linnet -p feynkit-generator -p feynkit-py --all-targets --profile dev-optim -- --deny warnings"
+  },
+  "build_listing_binary_identities": [
+    {
+      "package": "feynkit-generator",
+      "binary_id": "feynkit-generator",
+      "kind": "lib",
+      "path": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/feynkit_generator-1644fe0d0177baf2",
+      "bytes": 95064944,
+      "sha256": "dc2bab3a3fca8bed6ecbef7ba435b95ce266428de2ccdeed2f2ccb025d1196fe"
+    },
+    {
+      "package": "feynkit-generator",
+      "binary_id": "feynkit-generator::amplitude",
+      "kind": "test",
+      "path": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/amplitude-33e983ffd3a332da",
+      "bytes": 86030040,
+      "sha256": "9aec66534ff92681fd509caea5074c5d44a32119b4d098fb5ed6200828b86067"
+    },
+    {
+      "package": "feynkit-generator",
+      "binary_id": "feynkit-generator::generation_oracle",
+      "kind": "test",
+      "path": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/generation_oracle-be8dece4cddf4cfe",
+      "bytes": 84230352,
+      "sha256": "52cec4a3c5a4d08d65e1edcc86631c835fab9e0c21417deb8fd6f7c693458171"
+    },
+    {
+      "package": "feynkit-generator",
+      "binary_id": "feynkit-generator::momentum_tensor",
+      "kind": "test",
+      "path": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/momentum_tensor-40ee56d92d74bc67",
+      "bytes": 55637976,
+      "sha256": "05a7dff34cc9232989726716110f9c8164bb28837b249892d95af4654e4f3736"
+    },
+    {
+      "package": "feynkit-py",
+      "binary_id": "feynkit-py",
+      "kind": "lib",
+      "path": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/feynkit_py-52d869690d067912",
+      "bytes": 136099240,
+      "sha256": "f926b1d8c4122314b57107b04c3c5fea96740d26f636d9b41213db3da07cb257"
+    },
+    {
+      "package": "feynkit-py",
+      "binary_id": "feynkit-py::cff_display",
+      "kind": "test",
+      "path": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/cff_display-97a151e40e7056a7",
+      "bytes": 135584480,
+      "sha256": "8da99e3a9836b93684de4800e21345cbf0d9bfdefb51afd891bac55c9b69b126"
+    },
+    {
+      "package": "feynkit-py",
+      "binary_id": "feynkit-py::combined_community",
+      "kind": "test",
+      "path": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/combined_community-25a738a57948e5fd",
+      "bytes": 136076000,
+      "sha256": "02b4f034e1ab8ee51984553ddf158d88bd6a3506155b8f73e7ab0d6e6e32d71c"
+    },
+    {
+      "package": "feynkit-py",
+      "binary_id": "feynkit-py::cut_algebra",
+      "kind": "test",
+      "path": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/cut_algebra-d50fb561a3c48ab0",
+      "bytes": 135445584,
+      "sha256": "0a802d17faec2076724f8624e09577d4a200a646cb47c8e904063dbcf1fa31ea"
+    },
+    {
+      "package": "linnet",
+      "binary_id": "linnet",
+      "kind": "lib",
+      "path": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/linnet-4bec9976dedfaf5f",
+      "bytes": 69157176,
+      "sha256": "388eb252d2275be94d8744dcd3caff453b0254d35bdfa67ca040ea37917cfa58"
+    },
+    {
+      "package": "linnet",
+      "binary_id": "linnet::builder_retention",
+      "kind": "test",
+      "path": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/builder_retention-aa0cd53bed5c76bb",
+      "bytes": 53377440,
+      "sha256": "d4e83ad70c7a10758516f827c1e18d1c640407128fce37610e1b5c50d04a1406"
+    },
+    {
+      "package": "linnet",
+      "binary_id": "linnet::dot_corpus",
+      "kind": "test",
+      "path": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/dot_corpus-5c459113cf2b3dbb",
+      "bytes": 55047992,
+      "sha256": "dcf75547198ae512ba0c7142fca319a54b6c7e4fda91d7b09e935a36dd643134"
+    },
+    {
+      "package": "linnet",
+      "binary_id": "linnet::generation_plan",
+      "kind": "test",
+      "path": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/generation_plan-68174b93f8787506",
+      "bytes": 55105928,
+      "sha256": "68df71e669930e2718aad27e1ac905c6ee513d56a75d9ddf4c0ce6f94b0de5fa"
+    },
+    {
+      "package": "linnet",
+      "binary_id": "linnet::generation_report",
+      "kind": "test",
+      "path": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/generation_report-6ca972b495bc0871",
+      "bytes": 53829880,
+      "sha256": "f09e06a4002f1c603f1280069fbadc7e7da6cfc2761d4a0971c54a14b407166b"
+    },
+    {
+      "package": "linnet",
+      "binary_id": "linnet::nauty",
+      "kind": "test",
+      "path": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/nauty-6bef3f6877bbc860",
+      "bytes": 55152744,
+      "sha256": "2ba3c977bab0050636421875d7978957d788c647be1287a0faa8cb4028256bc7"
+    },
+    {
+      "package": "gammaloop-integration-tests",
+      "binary_id": "gammaloop-integration-tests::test_feyngen",
+      "kind": "test",
+      "path": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/test_feyngen-9581d43dfd98ca33",
+      "bytes": 199003720,
+      "sha256": "8015234dfc2fedec6bade2fe285eeb6488211b905b55c53ea2476c804c2cc2b5"
+    }
+  ],
+  "nix_source_and_producer_evidence": {
+    "evaluated_attributes": {
+      "path": "target/wp3-units39-43/check-attrs.json",
+      "bytes": 887,
+      "sha256": "8c098d4d7d86334fa1ac58c44300024521e0b25584dbc657c070cb3100cbf54d"
+    },
+    "current_derivation_graph": {
+      "path": "target/wp3-units39-43/feynkit-nix-derivation.json",
+      "bytes": 5986,
+      "sha256": "9a3a34a78c88164796b582eb063e22cb5c2723ec9075ed4734287c66db1fc216"
+    },
+    "derivation_query_log": {
+      "path": "target/wp3-units39-43/feynkit-nix-derivation.log",
+      "bytes": 245,
+      "sha256": "9464a53e4daf37cd0daaaeb42f50edc10a5da3ffac6c4f240981125db29d14e8"
+    },
+    "qualification": "Current code source 66c2aed4 was evaluated for the selected FeynKit/NixCI and linnest-wasm attributes; historical source38 outputs are not relabelled."
+  },
+  "validated_contracts": {
+    "python_progress": "All 45 feynkit-py tests passed, including deterministic two-drain cancellation suppression, exactly one terminal Done, caller-thread delivery, pending Done preservation, worker join/error precedence, native fixture cancellation and normal/contention controls. The fixture reports its actual retained_count; 10,000 is confined to the synthetic coalescing unit test.",
+    "frames": "Three migrated frame rows passed at FEYNKIT_ORACLE_THREADS=1,8,32; both unchanged source19 controls and fresh registration-order controls passed separately.",
+    "grouping_and_admission": "Generator grouping/finite/terminal selections passed, explicit ignored vacuum_group28_original_pair_identity passed, and model/graph admission/template/history/hidden/localization controls passed.",
+    "terminal_pockets_and_weights": "Native terminal-pocket selections and the two scoped CLI tests passed; the named failing-aa test covers QCD0=-4, QCD1=-40 and approved QCD2=-186. The separate source44 slow row remains -266 and was not selected or changed.",
+    "four_loop": "The current example produced 4664 diagrams and 306 zero numerators at 1, 8 and 32 threads. The scoped SM test retains 3150 | -9861/16 and both original Lorentz-zero graph assertions at 1 and 8 threads.",
+    "parser_omissions": "Four expansion-based parser helpers remain explicitly omitted. No graph numerator was expanded or distributed by this validation."
+  },
   "command_exit": {
+    "build": "0",
+    "ci-graph": "0",
+    "hakari": "0",
+    "test-final": "0",
     "wasm-build": "0",
+    "clippy": "0",
+    "python-native-reuse": "96",
+    "ci-config": "0",
+    "python-native": "2",
+    "kernel-locks": "0",
     "docs": "0"
+  },
+  "resolved_first_failures": {
+    "registry-first.log": "Old source31 bounded registry digest became stale in initial port; reconciled to current unchanged owner span, then audit passed.",
+    "format-first.log": "Module-scope frame import order was unformatted; adjusted and cargo fmt --check passed.",
+    "note-first-failure.log": "Initial Typst imported table header syntax was corrected; all five scoped documents then rendered as PDF and HTML.",
+    "python-native.log": "Attempted Nextest reuse with a Cargo package selector; Nextest rejects this with --binaries-metadata before running tests.",
+    "python-native-reuse.log": "Saved full test listing is not Nextest's binaries-only metadata; the second reuse attempt also ended before running tests. Normal Nextest test-final.sh is authoritative."
   },
   "wasm": {
     "source": "66c2aed45d83b54f55b39bf2fc2f88c2066d6343",
