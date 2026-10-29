@@ -365,7 +365,17 @@ own workspace. Bounded: one regression, one bisect, one written verdict.
   policy remain unchanged. The live sunset probe is archived as `.rs.txt`
   evidence outside Cargo/Nix source selection. Combined qualification is in
   `evidence/generation-integration/wp3/main44-45/receipt.json`. A NEW independent
-  Astra combined review is required before46; WP3 incomplete.
+  Astra round-three A/B APPROVE at `217d61c3`; source46 was released. WP3 remains incomplete.
+
+- #strong[Source46 ordered integration 2026-10-29:]
+  independently approved color-cycle preparation `eca80902` / code `eb173840`
+  is reconciled onto approved MAIN44–45. Current Idenso owners remain authoritative;
+  only reducing adjoint-cycle identities publish a rewrite, with sixteen networks
+  and 17,484 fresh registration-order permutations retained. Combined evidence is
+  recorded in `evidence/generation-integration/wp3/main46/receipt.json`. The inherited
+  TensorReduction declared-layout consumer remains failed and separately owned.
+  A NEW independent Astra combined review is required before the WP3 rebuilt-tip
+  exit matrix; replay completion alone does not complete WP3.
 
 - `jj duplicate` the v4 chain (`kursouxx::kpslpwqz`) onto the WP2 base; do not
   rebase in place, so the 19 live workspaces on older lines stay valid.

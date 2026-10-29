@@ -1,0 +1,99 @@
+{
+  "schema": 1,
+  "scope": "Ordered MAIN source46 color-cycle integration; review candidate only, not WP3 completion",
+  "base_main44_45": "217d61c3b78fb8a21adf5f48aa7f6f65235de614",
+  "built_code_source": "09c88ef5b2eebed113a3f82d87b4b64296beff0c",
+  "built_code_change": "olqyyyntvuprnssplwuwxtmtvwrvwtuy",
+  "evidence_change": "vmzmuvrtnqsvwmoozoknpvryyrutvnmw",
+  "source_mapping": {
+    "order": 46,
+    "original_source": "e0a779808174c64057fecfd062c948b8de8e5c1f",
+    "original_base": "438b61500da4b32841c64211103e5da6fc4c4a72",
+    "original_code": "e29f66dd44bf52454dc91cf8ec917946f5ed6f94",
+    "original_candidate": "2a6ee257165cc1cbd2beb923729d09bab21ecdd3",
+    "prepared_base": "158f4e1f8cdbea4d13b55f7c1fa828f75ab566f9",
+    "prepared_code": "eb173840edf54173110a6e9288ee599691ccf3d3",
+    "prepared_candidate": "eca80902435889580f462d07601d7e0187c47ec7",
+    "integrated_code": "09c88ef5b2eebed113a3f82d87b4b64296beff0c",
+    "reconciliation": "Imported the approved cumulative 16-path delta relative to prepared base158 onto approved MAIN44-45. The three Rust paths are byte-identical to the approved e29 implementation; current Idenso owners remain authoritative. MAIN158-to-217d runtime differences are only the seven source44 expectation literals, and those remain unchanged by this integration."
+  },
+  "approvals": "docs/architecture/evidence/generation-integration/wp3/main46/approval-index.json",
+  "code_inventory": [
+    {"path":"crates/idenso/src/color/simplify.rs","sha256":"73a0b05b405d7ec72adb43e9aeb21e094963f4b4c3a50c77a4750752e6e00144","git_blob":"59f13bd0337c64cf8260f9876988919c0571849e"},
+    {"path":"crates/idenso/src/color/test/label_order.rs","sha256":"efe36ebc795dbdac8e5f6b0b4207a20d60d6c5ddbfbbec39a29ee23275d4f1e7","git_blob":"bcb54b23fdaef8eed259c157be3d6ea1e5e7d469"},
+    {"path":"crates/idenso/src/color/test/mod.rs","sha256":"d6ef94467ae038bcfafc4ecab27f20f8e72cc610830555ad12047f1a5eb674a9","git_blob":"2b37e9c27dc7b7af1a6c83568856cf7f9f5ccc62"}
+  ],
+  "delta_guard": {
+    "paths": 16,
+    "rust_paths": 3,
+    "runtime_or_test_changes_outside_approved_paths": 0,
+    "manifest_lock_vendor_kernel_asset_changes": 0,
+    "source44_literal_changes": 0,
+    "temporary_rust_sources_in_final_tree": 0,
+    "production_observer_overlay_restored": true
+  },
+  "validation": {
+    "isolated_color": {"reviewed_profile_selection":192,"separately_selected_default_filter_controls":24,"fresh_exact_processes":216,"passed":216,"failed":0,"zero_test_selections":0,"fresh_process_per_selection":true,"historical_networks":16,"label_order_permutations":17484,"qualification":"The reviewed Nextest profile identifies 192 selected and 1023 skipped. Fresh source-identical dev-optim execution ran those 192 plus the 24 separately identified default-filter controls as exact processes; ignored skips receive no passing credit. The current Git-pinned ci-optim archive is not execution credit because archive creation exits96 on an unrelated unmatched generation_oracle override."},
+    "combined_consumers": {"selected":24,"passed":23,"failed":1,"expected_failure":"reduction::tests::reduction_keeps_declared_spectator_axes_and_zero_interfaces","qualification":"Inherited reducer-boundary declared-layout loss. Generic named arithmetic intentionally canonicalizes; separate correction is outside source46 and is not waived."},
+    "source44_current": {"scoped_vacuum_cells":{"selected":5,"passed":5,"workers":16},"full_epem":{"selected":1,"exit":101,"target_cell_passed":true,"later_failure_retained":true},"full_slow_aa":{"selected":1,"exit":101,"target_cell_passed":true,"later_failure_retained":true},"full_vacuum":{"selected":1,"exit":101,"corrected_grouped_l2_passed":true,"later_grouped_l3_failure_retained":true},"insta_update":"no"},
+    "current_physical_capture": {"rows":4159,"exact":true,"normalized_sha256":"7df7aac4a48754ac23c6f8dfa0c177cb40d82972f4d12cff2675ee140a3fa747","current_only_mutation_rejected":true,"record":"current-ghost-comparison.json"},
+    "current_internal_frames": {"capture_files":88,"exact_after_capture_path_normalization":true,"normalized_sha256":"d4efa4634b0996bd0d10e6440a4678179e9d6706af17e7e4b4091d7307023361","record":"current-internal-frame-comparison.json"},
+    "shared_process_cook": {"passed":1,"failed":1,"exit":101,"classification":"diagnostic inherited symbol-collision failure; isolated Nextest selections are authoritative and no suppression is applied"},
+    "static": {"fmt":0,"registry":0,"registry_scopes":110,"registry_titles":76,"docs_pdf_and_semantic_html":0,"hakari":0,"kernel":0,"ci_graph":0,"clippy":"Approved prepared source-bound clippy log reused after exact three-blob verification; no fresh broad clippy build is claimed."}
+  },
+  "producer_qualification": {
+    "git_uri": "git+file:///shared/lcnbr/dev/gammaloop/main?rev=09c88ef5b2eebed113a3f82d87b4b64296beff0c&shallow=1&allRefs=1#checks.x86_64-linux.gammaloop-nextest-binaries-spenso",
+    "full_source": {"path":"/nix/store/d9ys9cq3lch3x1wg7bsjz18dmlnzs0sd-source","narHash":"sha256-rwTNSzjSM9Xva1n4Fhnxu8UDFX8PIusRYqA73jNxrlY=","narSize":118959904},
+    "filtered_idenso_source": {"path":"/nix/store/d170x58fkcn4primklw79fajclgh1rqd-source","narHash":"sha256-el2XzEY4ensk2c0t0N6QvFql5BwarWsk0S/p2ihsdEM=","narSize":10983432},
+    "bundle_derivation": "/nix/store/jcgwyqifv1ipgb14xwzl7snvhxnv407r-gammaloop-nextest-binaries-spenso.drv",
+    "idenso_producer_derivation": "/nix/store/gp0qb59x8ja6r33lhpra2kdx1iblcqfz-gammaloop-nextest-binaries-spenso-idenso-0.1.0.drv",
+    "expected_bundle": "/nix/store/sh8gnvg2m6gmjx9f5xy528h2hpswl6fj-gammaloop-nextest-binaries-spenso",
+    "profile": "ci-optim",
+    "features": "idenso/bincode,idenso/native,idenso/reference-cases",
+    "compiler": "/nix/store/c3bpv60f5wgp4pmgsifaykxk214h6463-rust-stable-with-components-2026-09-03",
+    "archive_command": "cargo nextest archive --cargo-profile ci-optim --offline -p idenso --features idenso/bincode,idenso/native,idenso/reference-cases -E 'package(idenso)' --profile ci_gammaloop",
+    "status": "Git-pinned full and filtered sources realized and derivations evaluated. The aggregate bundle and the scoped Idenso archive both fail during Nextest archive creation with exit96 because profile.default.overrides index18 names the absent generation_oracle binary. Compilation reaches Finished ci-optim for Idenso, but neither output path is realized and neither archive is executed.",
+    "records": [
+      {"path":"target/wp3-source46/pinned-flake-metadata.json","sha256":"56d9a315877f4d292c5a2b4a3e73fc84e9df69c0e9f3049fe6866abaf8c1c517","bytes":3576},
+      {"path":"target/wp3-source46/pinned-spenso-derivation.json","sha256":"bc0a17b4d705cad2021cd991d4bd76f747a4f172052dc458b01ad63c36eaafa7","bytes":5045},
+      {"path":"target/wp3-source46/pinned-idenso-producer.json","sha256":"64f98f1dc96b71ec14812953af4ee0057427028b6f3376ec9acac4f592bc216f","bytes":38692},
+      {"path":"target/wp3-source46/pinned-full-source.json","sha256":"9973392d55322b15e781b6faae8a1415f6e0e9594dcaab4e7ff44d226c5ed794","bytes":370},
+      {"path":"target/wp3-source46/pinned-spenso-build.log","sha256":"1b7a8772bb84d486009e90a601c1d2aae6d023e244b0fce44e4a7929faa276f1","bytes":23533,"exit":1,"builder_exit":96},
+      {"path":"target/wp3-source46/pinned-idenso-build.log","sha256":"a7dee8d3ab42c5c398e77e9ead5ea13cb7420e3ad14ee2ae5a040e08270ccced","bytes":4109,"exit":1,"builder_exit":96}
+    ],
+    "execution_distinction": "Fresh isolated color/consumer tests used reviewed dev-optim ELFs whose selected Idenso source and manifests are byte-identical to the current combined source. Source44 integration checks and observers used newly compiled current-linked ci-optim ELFs. Neither class is relabelled as the Git-pinned Nix producer."
+  },
+  "dispatch_negative": {
+    "classification": "Reused immutable approved preparation mutant because simplify.rs, label_order.rs and test/mod.rs blobs are exact. Not rerun on the combined head.",
+    "original_record_sha256": "8c8a2570cc1c8af49e7830ec2591b2ccd59785daf722ad1736b3da87f4f60667",
+    "behavior": "dispatch-disabled closed_chain_ends genuinely fails; enabled exact-source controls pass"
+  },
+  "retained_raw_evidence": [
+    {"path":"target/wp3-source46/color-fresh-results.json","sha256":"48d02ba64838e908b916d4229f286001a5d272c451ac690ae7124e5208d3be00"},
+    {"path":"target/wp3-source46/consumer-fresh-results.json","sha256":"2a61da2b6adca1c177e7226c76acd33d0eae4dad9d357716ee566cc58692ed8d"},
+    {"path":"target/wp3-source46/ghost16-comparison.json","sha256":"723cc3dfc218e802b8b4ee33d82ec6c606321444767d847c301c5a2dee5c6300"},
+    {"path":"target/wp3-source46/frame-analysis/frame.json","sha256":"9f107fea688b54b255cdfe3ba7bf9ae0ffa168c5809580e223875bb24d3c677a"},
+    {"path":"target/wp3-source46/frame-analysis/internal-frame.json","sha256":"4e9ceadcb75c0b7f43528e62cc4a7de3843e6aa5b0eaa27ceb0ff9e683ef6117"},
+    {"path":"target/wp3-source46/integration-binaries.json","sha256":"60493484a435cfccbbc5c6e4287c13190dd6961af328b2bac9fc82912ba9a386"},
+    {"path":"target/wp3-source46/shared-process-cook.log","sha256":"8ba0b75796c6183797d198a6134ee4fac8e56c907befd58fa2e054d3c9666a09"},
+    {"path":"target/wp3-source46/full-epem.log","sha256":"692525362f832f64c0d7f401e88e6c826f2c8705470498b0854a801beaa92e3c"},
+    {"path":"target/wp3-source46/full-aa.log","sha256":"b76ecada2755a442f38d73ca5760377f835acd21b99ee9f5ea8f19c0b680efdf"},
+    {"path":"target/wp3-source46/full-vacuum.log","sha256":"4c62ed4c58ea0da023f9614cf1a0b18340f58ee0f14f399518d5942096dfd3db"}
+  ],
+  "protected_refs": [
+    "generation-integration-units44-45-round3=217d61c3b78fb8a21adf5f48aa7f6f65235de614",
+    "generation-integration-source46-base=217d61c3b78fb8a21adf5f48aa7f6f65235de614",
+    "generation-integration-source46-code=09c88ef5b2eebed113a3f82d87b4b64296beff0c",
+    "generation-color-cycles-staged=eca80902435889580f462d07601d7e0187c47ec7",
+    "generation-color-cycles-staged-round1=1b4309518808f7063ab81416d7db792f4a24a141",
+    "generation-color-cycles=2a6ee257165cc1cbd2beb923729d09bab21ecdd3"
+  ],
+  "limits": [
+    "Source46 remains implemented-awaiting-review; no MAIN46 gate-clear or whole-WP3 claim.",
+    "The tensor preparation lane remains 200 pass, 1 fail, 3 skip; reducer layout restoration is separate work and is not imported.",
+    "The current Git-pinned spenso aggregate and scoped Idenso Nextest archives are not realizable: both exit96 on the unrelated unmatched generation_oracle override at profile.default.overrides index18. No Nix/Nextest policy correction is included in source46.",
+    "All other 25 grouped snapshots, four omitted expansion helpers, 18 unrun scripts and the later rebuilt-tip WP3 exit matrix remain pending.",
+    "No graph-numerator expansion, performance or memory claim, final distribution, full-site, WASM asset, wheel, Pyodide, Community, cold-build, publication, upload or CI enablement.",
+    "NixCI remains false; Main38 Kurbo patch, selection-only locks, notices, common selector and aligned kernel are unchanged."
+  ]
+}

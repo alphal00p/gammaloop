@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "built_code_source": "09c88ef5b2eebed113a3f82d87b4b64296beff0c",
+  "built_code_change": "olqyyyntvuprnssplwuwxtmtvwrvwtuy",
+  "observation": {
+    "capture_files": 88,
+    "observer_elf": "/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/source46_internal_frame_capture-f68431bed91dcfe6",
+    "observer_elf_sha256": "160b02299f20239dae03679d473a093665a8a653411fcc2021aac60240c5795b",
+    "production_source_before_sha256": "6c8ebb4abd42e875742bb1fdfdfa5c6fc0ecff4e9c0c4adff8f49306b4110b21",
+    "production_source_after_sha256": "6c8ebb4abd42e875742bb1fdfdfa5c6fc0ecff4e9c0c4adff8f49306b4110b21",
+    "temporary_observer_removed": true,
+    "final_runtime_restored": true
+  },
+  "comparison": {
+    "frame_json_sha256": "9f107fea688b54b255cdfe3ba7bf9ae0ffa168c5809580e223875bb24d3c677a",
+    "internal_frame_json_sha256": "4e9ceadcb75c0b7f43528e62cc4a7de3843e6aa5b0eaa27ceb0ff9e683ef6117",
+    "current_normalized_sha256": "d4efa4634b0996bd0d10e6440a4678179e9d6706af17e7e4b4091d7307023361",
+    "approved_normalized_sha256": "d4efa4634b0996bd0d10e6440a4678179e9d6706af17e7e4b4091d7307023361",
+    "exact_after_probe_path_normalization": true,
+    "frame_exit": 0,
+    "internal_frame_exit": 0
+  },
+  "qualification": "The current combined-head observer captured the production source-to-comparison-to-representative boundary. The only normalized fields are capture-root path strings; tensors, maps, slots, signed routes, owners and payloads are compared byte-for-byte. No preparation frame is renamed as current evidence."
+}
