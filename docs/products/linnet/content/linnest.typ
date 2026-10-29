@@ -15,7 +15,17 @@ from construction through layout and drawing; the separate
   document.
 ])
 
-#linnest-guide
+// Linnest drawings mark nodes, edges and half-edges with `#linnet-*` inspection
+// links. This site does not yet turn them into inspection controls, so draw the
+// guide's figures without them rather than publish unresolved fragments.
+#[
+  #show link: it => if type(it.dest) == str and it.dest.starts-with("#linnet-") {
+    it.body
+  } else {
+    it
+  }
+  #linnest-guide
+]
 
 == Continue into the API
 

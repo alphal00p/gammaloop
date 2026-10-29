@@ -1,4 +1,5 @@
 #import "crates/linnest/typst/src/impl/draw.typ" as drawing
+#import "crates/linnest/typst/src/lib.typ": graph, draw
 #import "crates/kurvst/typst/src/lib.typ" as curve
 #import "@preview/cetz:0.5.1" as cetz
 
@@ -15,6 +16,34 @@
   pattern-phase: calc.pi / 2,
   pattern-coil-longitudinal-scale: 1.4,
 )
+
+// Resolve label-directed offsets on the full carrier. Choosing a side on each
+// half independently can put its marks on the opposite side from the coil.
+#{
+  let path = curve.cubic((0, 0), (1, 3), (4, -2), (5, 1))
+  let accuracy = 1e-8
+  let total = curve.length(path, accuracy: accuracy)
+  let source = curve.trim(path, end-outset: total * 3 / 4, accuracy: accuracy)
+  let sink = curve.trim(path, start-outset: total / 4, accuracy: accuracy)
+  for label-pos in ((0, 1), (2, 3), (4, -1)) {
+    let offset = curve.layer(path, offset: 0.3, side-point: label-pos, accuracy: accuracy).offset
+    for gap in (0, 0.4) {
+      let automatic = style + (
+        offset: 0.3, offset-side: "label", split-gap: gap,
+        accuracy: accuracy, pattern-accuracy: accuracy,
+      )
+      let fixed = automatic + (offset: offset, offset-side: none)
+      let halves(style) = drawing._split-edge-geometry(
+        source, sink, path, style, style, 0, 0, label-pos, accuracy,
+      )
+      let automatic = halves(automatic)
+      let fixed = halves(fixed)
+      assert.eq(automatic.source, fixed.source)
+      assert.eq(automatic.sink, fixed.sink)
+      assert.eq(automatic.pattern-whole, fixed.pattern-whole)
+    }
+  }
+}
 
 #for (length, wavelength, periods) in ((2.0, 0.4, 4.5), (2.0, 0.43, 4.5), (0.1, 1.0, 0.5)) {
   for amplitude in (-0.15, 0, 0.15) {
@@ -108,6 +137,137 @@
             }
           }
         }
+      }
+    }
+    (ctx: ctx)
+  },)
+})
+
+// The public crossing path must also accept two paints on one continuous coil,
+// retaining the carrier arrow while the crossing removes part of its stroke.
+#for natural in (false, true) {
+  let g = graph.build({
+    graph.node(<a>, pos: graph.pos(x: 0, y: 0))
+    graph.node(<b>, pos: graph.pos(x: 4, y: 0))
+    graph.node(<c>, pos: graph.pos(x: 2, y: -1))
+    graph.node(<d>, pos: graph.pos(x: 2, y: 1))
+    graph.edge(graph.source(<a>), <coil>, graph.sink(<b>), pos: graph.pos(x: 1, y: 0))
+    graph.edge(graph.source(<c>), <over>, graph.sink(<d>), pos: graph.pos(x: 2, y: 0))
+  })
+  let coil = style + (
+    pattern-natural-endpoints: natural,
+    crossing-under: <over>,
+    crossing-gap: 0.4,
+    mark: (end: "straight", scale: 0.5),
+    mark-position: 0.8,
+  )
+  draw(graph.style(g, node-label: none, edge-label: none,
+      node-style: (radius: 0, stroke: none, fill: none)),
+    title: none, node-outset: 0,
+    source-style: edge => if edge.eid == 0 { coil + (stroke: red + 0.5pt) } else { (stroke: black + 0.5pt) },
+    sink-style: edge => if edge.eid == 0 { coil + (stroke: blue + 0.5pt) } else { (stroke: black + 0.5pt) },
+  )
+}
+
+// Colour and gap boundaries must cut the already fitted coil. The reference
+// slices known sample knots, independently of the carrier-window implementation.
+#cetz.canvas({
+  (ctx => {
+    let same-geometry(actual, expected) = {
+      // Arc-length inversion may put a boundary just beyond a sample knot.
+      // Ignore only curve fragments whose entire control polygon is below the
+      // same coordinate tolerance used for the geometry comparison.
+      let nondegenerate(origin, curves) = {
+        let kept = ()
+        for segment in curves {
+          if segment.slice(1).any(p => cetz.vector.dist(origin, p) >= 1e-6) {
+            kept.push(segment)
+          }
+          origin = segment.last()
+        }
+        kept
+      }
+      let paths(elements) = cetz.process.many(ctx, elements.flatten(), compute-bounds: true)
+        .drawables.fold((), (paths, drawable) => paths + drawable.segments)
+      let actual = paths(actual)
+      let expected = paths(expected)
+      assert.eq(actual.len(), expected.len())
+      for ((a-origin, a-closed, a-curves), (b-origin, b-closed, b-curves)) in actual.zip(expected) {
+        assert(cetz.vector.dist(a-origin, b-origin) < 1e-6)
+        assert.eq(a-closed, b-closed)
+        let a-curves = nondegenerate(a-origin, a-curves)
+        let b-curves = nondegenerate(b-origin, b-curves)
+        assert.eq(a-curves.len(), b-curves.len())
+        for (a, b) in a-curves.zip(b-curves) {
+          assert.eq(a.first(), b.first())
+          assert.eq(a.len(), b.len())
+          for (p, q) in a.slice(1).zip(b.slice(1)) {
+            assert(cetz.vector.dist(p, q) < 1e-6)
+          }
+        }
+      }
+    }
+    for path in (
+      curve.line((0, 0), (4, 0)),
+      curve.cubic((0, 0), (1, 3), (4, -2), (5, 1)),
+      curve.cubic((0, 0), (3, 3), (-3, 3), (0, 0)),
+    ) {
+      let accuracy = 1e-8
+      let total = curve.length(path, accuracy: accuracy)
+      let source = curve.trim(path, end-outset: total * 3 / 4, accuracy: accuracy)
+      let sink = curve.trim(path, start-outset: total / 4, accuracy: accuracy)
+      for natural in (false, true) {
+        let style = style + (
+          pattern-wavelength: total / 4,
+          pattern-natural-endpoints: natural,
+          accuracy: accuracy,
+          pattern-accuracy: accuracy,
+        )
+        let fitted = curve.coil(fit-length: total, amplitude: 0.15,
+          wavelength: total / 4, longitudinal-scale: 1.4)
+        let reference = curve.pattern(path,
+          pattern: if natural { fitted } else { "coil" },
+          amplitude: 0.15,
+          wavelength: if natural { total } else { total / 4 },
+          phase: if natural { 0 } else { calc.pi / 2 },
+          samples-per-period: if natural { fitted.points.len() - 1 } else { 16 },
+          coil-longitudinal-scale: 1.4,
+          accuracy: accuracy,
+        )
+        let segments = curve.segments(reference)
+        assert.eq(calc.rem(segments.len(), 8), 0)
+        let eighth = int(segments.len() / 8)
+        let painted(start, end, paint) = curve.to-cetz(
+          curve.path(..segments.slice(start, end).map(curve.from-cubic)),
+          stroke: paint + 0.5pt,
+        )
+        for gap in (0, total / 4) {
+          let source-style = style + (stroke: red + 0.5pt, split-gap: gap)
+          let sink-style = style + (stroke: blue + 0.5pt, split-gap: gap)
+          let halves = drawing._split-edge-geometry(
+            source, sink, path, source-style, sink-style, 0, 0, none, accuracy,
+          )
+          let inset = if gap == 0 { 0 } else { eighth }
+          same-geometry(
+            drawing._pattern-edge-halves(halves, source-style, sink-style),
+            painted(0, 2 * eighth - inset, red)
+              + painted(2 * eighth + inset, segments.len(), blue),
+          )
+        }
+        same-geometry(
+          drawing._cut-path-elements(path, style + (crossing-gap: total / 4), (total / 2,)),
+          painted(0, 3 * eighth, black) + painted(5 * eighth, segments.len(), black),
+        )
+        same-geometry(
+          drawing._cut-path-elements(path, style + (crossing-gap: total / 4), (total / 2,),
+            paint-windows: (
+              (start: 0, end: total / 4, style: style + (stroke: red + 0.5pt)),
+              (start: total / 4, end: total, style: style + (stroke: blue + 0.5pt)),
+            ),
+          ),
+          painted(0, 2 * eighth, red) + painted(2 * eighth, 3 * eighth, blue)
+            + painted(5 * eighth, segments.len(), blue),
+        )
       }
     }
     (ctx: ctx)

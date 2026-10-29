@@ -246,6 +246,7 @@
           "gammaloop-python-module" = nixCiArtifactBarrier "gammaloop-python-module" gammaloop-python-module;
           "gammaloop-ufo-python-runtime" = nextestUfoPython;
           "alphal00p-docs-cargo-artifacts" = alphal00pDocsCargoArtifacts;
+          "alphal00p-docs-svg-assets" = workspace.docsSvgAssets;
           "alphal00p-docs-pages" = alphal00pDocsPages;
           "alphal00p-docs-snapshot-fixture" = alphal00pDocsSnapshotFixture;
           "ci-workspace-graph-json" = guppyWorkspaceGraphJson;

@@ -142,43 +142,17 @@ check: check-symbolica-feature-isolation
 doc:
     cargo doc --workspace --no-deps --locked --profile {{ ci_cargo_profile }}
 
-# Regenerate every SVG used by the website from its committed Typst source.
+# Render the website illustrations and Linnest example into target/docs-svg-assets.
 docs-svg-assets:
     scripts/render-docs-svg-assets.sh
 
-# Fail when any checked-in website SVG is stale relative to its Typst source,
-# Linnest renderer, palette, or real process/test graph data.
+# Compare rendered diagrams and marks with their reviewed snapshots.
 docs-svg-assets-check:
     #!/usr/bin/env bash
     set -euo pipefail
-
-    temp_base=${TMPDIR:-/tmp}
-    check_root=$(mktemp -d "$temp_base/alphal00p-docs-svg.XXXXXX")
-    cleanup() {
-        case "$check_root" in
-            "$temp_base"/alphal00p-docs-svg.*) rm -rf -- "$check_root" ;;
-        esac
-    }
-    trap cleanup EXIT
-
-    scripts/render-docs-svg-assets.sh "$check_root"
-    checked_assets=(
-        docs/assets/graphs/portal-*.svg
-        docs/assets/local-unitarity-*.svg
-        docs/assets/spensologo.svg
-        assets/gammalooplogo*.svg
-    )
-    generated_assets=(
-        "$check_root"/docs/assets/graphs/portal-*.svg
-        "$check_root"/docs/assets/local-unitarity-*.svg
-        "$check_root"/docs/assets/spensologo.svg
-        "$check_root"/assets/gammalooplogo*.svg
-    )
-    [ "${#checked_assets[@]}" -eq 28 ]
-    [ "${#generated_assets[@]}" -eq 28 ]
-    for checked in "${checked_assets[@]}"; do
-        cmp "$checked" "$check_root/$checked"
-    done
+    output=$(mktemp -d)
+    trap 'rm -rf -- "$output"' EXIT
+    bash scripts/render-docs-svg-assets.sh "$output" --check
 
 # Build one product documentation site, or all five sites.
 docs-site PRODUCT="all" CHANNEL="latest" SNAPSHOT_TAG="" OUTPUT="target/alphal00p-docs":

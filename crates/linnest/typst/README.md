@@ -18,3 +18,7 @@ Compile-checked examples live under [`examples/`](examples/).
 
 Contributor policy is in GammaLoop's
 [`CONTRIBUTING.typ`](https://github.com/alphal00p/gammaloop/blob/main/CONTRIBUTING.typ).
+
+Render a PDF from its Typst source in the development shell, for example
+`typst compile --root . crates/linnest/typst/examples/play.typ target/play.pdf`
+from the workspace root. `just docs-svg-assets` also renders this example as SVG.

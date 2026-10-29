@@ -322,3 +322,9 @@ __marimo__/
 
 # The process-budget owner serializes guarded pipelines through this runtime lock.
 /bin/heavy-run.lock
+
+# Generated Linnest examples.
+/crates/linnest/typst/examples/play.svg
+/crates/linnest/typst/examples/soft-triangle.pdf
+/crates/linnest/typst/examples/thrown-out.pdf
+/crates/linnest/typst/examples/xbox-sum.pdf

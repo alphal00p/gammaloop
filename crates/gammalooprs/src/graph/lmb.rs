@@ -1079,7 +1079,7 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
                                 })?;
                                 let cycle_is_circuit = cycle.is_circuit(self);
                                 let cycle_dot = self.dot(&cycle.filter);
-                                SignedCycle::from_cycle(cycle, source, self).ok_or_else(|| {
+                                SignedCycle::from_cycle(&cycle, source, self).ok_or_else(|| {
                                     LmbError::InvalidCycle {
                                         is_circuit: cycle_is_circuit,
                                         cycle_dot,
