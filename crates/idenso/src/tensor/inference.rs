@@ -2795,7 +2795,31 @@ impl InterfaceInference {
     /// Observe local replacement ports without materialization or loss of
     /// encoded open-index owners. Scalar RHS expressions also undergo the
     /// normal syntax checks, including rejection of bare tagged tensor names.
-    pub(crate) fn replacement_interface(atom: AtomView<'_>) -> InferenceResult<PartialStructure> {
+    ///
+    /// Observation does not rebuild the expression or invoke its normalization
+    /// callbacks. Native scalar metadata remains opaque, and encoded open
+    /// owners and axis identities remain explicit in the returned interface.
+    /// A closed interface alone does not certify ordinary commuting algebra.
+    /// Since this observes an expression rather than an established carrier,
+    /// an exact zero has a scalar interface; retain a typed zero's original
+    /// interface separately when checking a transformation.
+    ///
+    /// # Errors
+    /// Rejects invalid tensor syntax, malformed structural ports, incompatible
+    /// summand interfaces, and excessive explicit-index occurrences.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use idenso::tensor::inference::{InterfaceInference, TensorInferenceError};
+    /// use spenso::structure::partial::PartialStructureExt;
+    /// use symbolica::atom::{Atom, AtomCore};
+    /// let expression = Atom::num(7);
+    /// let interface = InterfaceInference::replacement_interface(expression.as_view())?;
+    /// assert!(interface.logical_slots().is_empty());
+    /// # Ok::<(), TensorInferenceError>(())
+    /// ```
+    pub fn replacement_interface(atom: AtomView<'_>) -> InferenceResult<PartialStructure> {
         Self::replacement_observation(atom, &mut SlotMatcher::default())
             .map(|(interface, _)| interface)
     }
@@ -3805,7 +3829,6 @@ impl InterfaceInference {
 
 #[cfg(test)]
 pub(crate) mod tests {
-
     use super::*;
     use crate::shorthands::schoonschip::{Schoonschip, SchoonschipSettings};
     use crate::{CookSettings, test_support};
@@ -3821,6 +3844,7 @@ pub(crate) mod tests {
     mod authoritative_metadata;
     mod auto_axis;
     mod builtin_words;
+    mod replacement_observer;
 
     thread_local! {
         pub(in crate::tensor) static OCCURRENCE_FUNCTION_VISITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
