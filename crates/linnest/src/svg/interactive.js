@@ -196,12 +196,15 @@
       const width = embedded ? box.width : screenWidth;
       layoutWidth = screenWidth;
       const fixedHeight = Number(svg.dataset.linnetViewportHeight) || 0;
-      const overlay = embedded || fixedHeight > 0;
+      /* A hover must not change the iframe's height. Sandboxed notebook
+         frames cannot reserve a scrollbar gutter in their outer document;
+         growing that document can move the target out from under the pointer.
+         Only an explicitly pinned standalone inspector opens below the graph. */
+      const overlay = !pinned || embedded || fixedHeight > 0;
       const panelWidth = overlay ? Math.min(300, width) : width;
       const graphWidth = width;
       /* Keep the graph and caption centered without reserving empty space for
-         an inspector. Standalone details open below, so hovering never moves
-         the target. The camera height follows the bounded initial drawing size. */
+         an inspector. The camera height follows the bounded initial drawing size. */
       const fitWidth = Math.min(1, graphWidth / (box.width * naturalScale));
       const graphHeight = embedded ? box.height : fixedHeight || box.height * naturalScale * fitWidth;
       /* Navigation floats over one corner; it never reserves a canvas row. */
