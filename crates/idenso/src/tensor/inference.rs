@@ -16,7 +16,7 @@ use crate::reference_cases::timing::Phase;
 use crate::representations::{Bispinor, ColorAdjoint, ColorAntiFundamental, ColorFundamental};
 use crate::shorthands::schoonschip::{DotNormalizer, SlotContraction};
 use crate::{CookMode, CookSettings, CookingError, NetworkToolingError};
-use ahash::{AHashMap, AHashSet};
+use ahash::{AHashMap, AHashSet, AHasher};
 use spenso::network::library::symbolic::{ETS, ExplicitKey};
 use spenso::network::parsing::{AtomStructureExt, ParseState, StrictTensorFilter};
 use spenso::network::tags::SPENSO_TAG;
@@ -37,6 +37,7 @@ use spenso::structure::{
     Canonicalized, IndexedStructure, OrderedStructure, StructureError, TensorStructure,
 };
 use std::collections::{HashMap, HashSet};
+use std::hash::BuildHasherDefault;
 use std::mem;
 #[cfg(debug_assertions)]
 use std::slice;
@@ -804,6 +805,27 @@ impl SymbolicTensor<PartialStructure> {
     }
 
     fn infer_with_contractions(atom: Atom) -> InferenceResult<(Self, bool)> {
+        if !InterfaceInference::is_plain_scalar(atom.as_view()) {
+            return Self::admit_with_contractions(atom);
+        }
+        // General admission is the identity on plain scalars. Publish the same
+        // portless interface, empty occurrence history and intrinsic facts.
+        let proven = || OnceLock::from(true);
+        let mut value = Self::from_validated_parts(
+            atom,
+            PartialStructure::from_logical_slots([]),
+            Arc::new(ExplicitIndexOccurrences::default()),
+        );
+        value.proofs.intrinsic = proven();
+        value.proofs.normalized_product = proven();
+        value.proofs.algebra = proven();
+        value.proofs.rewrite = proven();
+        Ok((value, false))
+    }
+
+    /// Lower nested vectors and tensor powers, check signatures, placeholder
+    /// scopes and index multiplicities, and infer the ordered interface.
+    fn admit_with_contractions(atom: Atom) -> InferenceResult<(Self, bool)> {
         let atom = DotNormalizer::nested_vectors(atom.as_view());
         let atom = InterfaceInference::lower_tensor_powers(atom.as_view())?.unwrap_or(atom);
         let mut inference = InterfaceInference {
@@ -2545,12 +2567,14 @@ impl InterfaceInference {
         let occurrences = Self::scoped_occurrences(atom, &mut self.slots)?;
         self.validate_tensor_syntax_after_scopes(atom)?;
         occurrences.validate()?;
-        if self.leaf_inference == LeafInference::Materialize {
-            self.dummies.reserve_indices(atom);
-        }
         // Scalar expressions still pass the same scope and signature checks;
         // Scalar-tagged metadata does not expose tensor ports.
         let interface = if Self::has_structured_syntax(atom) {
+            // Materialization must not allocate a written index as a fresh
+            // one; only tensor syntax reaches it.
+            if self.leaf_inference == LeafInference::Materialize {
+                self.dummies.get_or_insert_default().reserve_indices(atom);
+            }
             self.infer_view(atom)?
         } else {
             PartialStructure::from_logical_slots([])
@@ -2768,16 +2792,22 @@ impl InterfaceInference {
     }
 }
 
+// The caches below are only probed and counted, never iterated, so fixed
+// hash keys cannot affect results and constructing them seeds no hasher.
+type FixedKeys = BuildHasherDefault<AHasher>;
+
 #[derive(Default)]
 pub struct InterfaceInference {
-    reusable_interfaces: AHashMap<Vec<u8>, PartialStructure>,
+    reusable_interfaces: HashMap<Vec<u8>, PartialStructure, FixedKeys>,
     // Shape inference alone does not establish this stronger rewrite proof.
-    proven_leaf_interfaces: AHashSet<Vec<u8>>,
+    proven_leaf_interfaces: HashSet<Vec<u8>, FixedKeys>,
     // A leaf-interface proof can leave scalar metadata opaque; this separate
     // certificate covers every function in a complete normalized subtree.
-    intrinsic_functions: AHashSet<Vec<u8>>,
+    intrinsic_functions: HashSet<Vec<u8>, FixedKeys>,
     slots: SlotMatcher,
-    dummies: ParseState<AbstractIndex>,
+    // Only constructor materialization allocates fresh indices; observation
+    // and scalar admission never create this state.
+    dummies: Option<ParseState<AbstractIndex>>,
     leaf_inference: LeafInference,
 }
 
@@ -2852,7 +2882,9 @@ impl InterfaceInference {
 
     #[cfg(test)]
     fn infer(&mut self, atom: &Atom) -> InferenceResult<PartialStructure> {
-        self.dummies.reserve_indices(atom.as_view());
+        self.dummies
+            .get_or_insert_default()
+            .reserve_indices(atom.as_view());
         self.infer_view(atom.as_view())
     }
 
@@ -3429,7 +3461,7 @@ impl InterfaceInference {
                     return;
                 }
                 if let Ok(representation) = self.slots.parse_representation::<LibraryRep>(value) {
-                    let marker = self.dummies.fresh_index();
+                    let marker = self.dummies.get_or_insert_default().fresh_index();
                     open_markers.insert(marker);
                     **output = representation.slot::<AbstractIndex, _>(marker).to_atom();
                 }
@@ -3529,6 +3561,50 @@ impl InterfaceInference {
                         || projector.get_symbol() == *shadowing::ANTISYM
                         || projector.get_symbol() == *shadowing::CYCLIC
             )
+    }
+
+    /// Whether admission is the identity on `value` and proves a scalar with
+    /// every intrinsic fact. Admission only reacts to symbols carrying a Spenso
+    /// tag (tensor, rank-one, representation, index and broadcast heads), to
+    /// the chain placeholders, to function heads owned by Spenso (brackets,
+    /// dots, chains, traces, scalar wrappers, projectors, index wrappers,
+    /// metrics), and to the callbacks of normalized or evaluated heads.
+    /// Function-free atoms, such as numbers and parameter products, are
+    /// decided by their symbols alone.
+    fn is_plain_scalar(value: AtomView<'_>) -> bool {
+        let tagged = |symbol: Symbol| {
+            symbol
+                .get_tags()
+                .iter()
+                .any(|tag| tag.starts_with("spenso::"))
+        };
+        !value.needs_normalization()
+            && match value {
+                AtomView::Num(_) => true,
+                AtomView::Var(variable) => {
+                    let symbol = variable.get_symbol();
+                    // Chain placeholders are Spenso symbols; the namespace test
+                    // spares every other symbol the placeholder comparison,
+                    // which decodes the variable again.
+                    !tagged(symbol)
+                        && (symbol.get_namespace() != "spenso"
+                            || !Self::is_chain_placeholder(value))
+                }
+                AtomView::Fun(function) => {
+                    let symbol = function.get_symbol();
+                    !tagged(symbol)
+                        && symbol.get_namespace() != "spenso"
+                        && symbol.get_normalization_function().is_none()
+                        && symbol.get_evaluation_info().is_none()
+                        && function.iter().all(Self::is_plain_scalar)
+                }
+                AtomView::Pow(power) => {
+                    let (base, exponent) = power.get_base_exp();
+                    Self::is_plain_scalar(base) && Self::is_plain_scalar(exponent)
+                }
+                AtomView::Mul(product) => product.iter().all(Self::is_plain_scalar),
+                AtomView::Add(sum) => sum.iter().all(Self::is_plain_scalar),
+            }
     }
 
     fn is_unmaterialized_tensor_leaf(value: AtomView<'_>) -> bool {
@@ -3805,7 +3881,6 @@ impl InterfaceInference {
 
 #[cfg(test)]
 pub(crate) mod tests {
-
     use super::*;
     use crate::shorthands::schoonschip::{Schoonschip, SchoonschipSettings};
     use crate::{CookSettings, test_support};
@@ -3821,6 +3896,7 @@ pub(crate) mod tests {
     mod authoritative_metadata;
     mod auto_axis;
     mod builtin_words;
+    mod scalar_admission;
 
     thread_local! {
         pub(in crate::tensor) static OCCURRENCE_FUNCTION_VISITS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
