@@ -5938,6 +5938,7 @@ pub(crate) mod tests {
     use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
     use linnet::half_edge::subgraph::subset::SubSet;
     use linnet::half_edge::subgraph::{ModifySubSet, SubSetLike};
+    use std::collections::BTreeSet;
     use std::sync::OnceLock;
     use symbolica::atom::AtomCore;
     use typed_index_collections::TiVec;
@@ -9051,7 +9052,10 @@ pub(crate) mod tests {
             all_bases: graph.generate_loop_momentum_bases(),
             graph,
         };
-        assert_eq!(setup.antiparallel_edges(), [2].into_iter().collect());
+        assert_eq!(
+            setup.antiparallel_edges(),
+            [2].into_iter().collect::<BTreeSet<_>>()
+        );
     }
 
     #[test]
@@ -9123,7 +9127,10 @@ pub(crate) mod tests {
         setup
             .warm_up_masses(&RuntimeSettings::default(), &model)
             .unwrap();
-        assert_eq!(setup.antiparallel_edges(), [2].into_iter().collect());
+        assert_eq!(
+            setup.antiparallel_edges(),
+            [2].into_iter().collect::<BTreeSet<_>>()
+        );
         let route = |basis: &LoopMomentumBasis, loops: &LoopMomenta<F<f64>>| {
             [EdgeIndex(1), EdgeIndex(2), EdgeIndex(3)].map(|edge| {
                 let signature = &basis.edge_signatures[edge];
