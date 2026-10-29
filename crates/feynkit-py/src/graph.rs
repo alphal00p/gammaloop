@@ -356,19 +356,19 @@ impl PyDiagramEdge {
     ///
     /// Parameters
     /// ----------
-    /// power : int, optional
-    ///     Signed propagator power; defaults to one.
+    /// power : int or None, optional
+    ///     Signed power override; None preserves the stored propagator power.
     /// dimension : Expression or int or None, optional
     ///     Lorentz dimension; defaults to the shared symbolic dimension.
     /// in_lmb : bool, optional
     ///     Route through the diagram's stored loop-momentum basis.
     /// lmb : LoopMomentumBasis or None, optional
     ///     Explicit basis from this diagram, overriding ``in_lmb``.
-    #[pyo3(signature = (*, power=1, dimension=None, in_lmb=false, lmb=None))]
+    #[pyo3(signature = (*, power=None, dimension=None, in_lmb=false, lmb=None))]
     fn denominator_expression(
         &self,
         py: Python<'_>,
-        power: isize,
+        power: Option<isize>,
         dimension: Option<ConvertibleToExpression>,
         in_lmb: bool,
         lmb: Option<&PyLoopMomentumBasis>,
@@ -403,11 +403,25 @@ impl PyDiagramEdge {
         };
         region.denominator_expression(
             py,
-            Some(BTreeMap::from([(self.id, power)])),
+            power.map(|power| BTreeMap::from([(self.id, power)])),
             dimension,
             in_lmb,
             lmb,
         )
+    }
+
+    /// Return the stored positive propagator power from the diagram's integral annotations.
+    ///
+    /// Absent lines are contracted and irreducible numerator factors remain in the numerator.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``DiagramEdge`` class example:
+    ///
+    /// >>> powers = {line.id: line.propagator_power for line in diagram.internal_edges}
+    #[getter]
+    fn propagator_power(&self) -> i32 {
+        self.inner.propagator_power
     }
 
     /// Return this physical edge's symbolic energy component before momentum routing.
@@ -978,7 +992,7 @@ impl PyDiagramCut {
     /// Parameters
     /// ----------
     /// edge_powers : mapping[int, int] or None, optional
-    ///     Positive propagator powers by diagram edge ID; omitted edges have power one.
+    ///     Positive propagator powers by diagram edge ID; omitted edges retain their stored powers.
     /// prescription : int, optional
     ///     Sign of the imaginary prescription, either +1 or -1.
     /// normalization : Expression or None, optional
@@ -986,10 +1000,12 @@ impl PyDiagramCut {
     #[pyo3(signature = (*, edge_powers=None, prescription=1, normalization=None))]
     fn propagators(
         &self,
+        py: Python<'_>,
         edge_powers: Option<BTreeMap<usize, usize>>,
         prescription: i8,
         normalization: Option<ConvertibleToExpression>,
     ) -> PyResult<Vec<PyCutPropagator>> {
+        let diagram = self.diagram.borrow(py);
         let powers = edge_powers.unwrap_or_default();
         let normalization = normalization.map_or_else(
             || -2 * Atom::var(symbolica::atom::Symbol::PI) * Atom::i(),
@@ -1003,7 +1019,12 @@ impl PyDiagramCut {
                 let inner = feynkit_cff::CutPropagator {
                     energy: feynkit_cff::symbols::energy_atom(edge),
                     on_shell_energy: feynkit_cff::symbols::on_shell_atom(edge),
-                    power: powers.get(&half.edge.0).copied().unwrap_or(1),
+                    power: powers.get(&half.edge.0).copied().unwrap_or_else(|| {
+                        usize::try_from(
+                            diagram.inner.underlying()[EdgeIndex(half.edge.0)].propagator_power,
+                        )
+                        .expect("validated diagram propagator powers are positive")
+                    }),
                     orientation: match half.endpoint {
                         DiagramEndpoint::Source => 1,
                         DiagramEndpoint::Target => -1,
@@ -1774,24 +1795,25 @@ submit! {
             def integrate_energy(self, *, method: typing.Literal["cff"], max_orientations: typing.Optional[int] = None, fixed_orientations: typing.Optional[typing.Mapping[int, bool]] = None, contracted_edges: typing.Optional[typing.Sequence[int]] = None, initial_state_edges: typing.Optional[typing.Sequence[int]] = None, numerator: typing.Optional[symbolica.Expression] = None) -> pyo3_stub_gen.RustType["PyCffRepresentation"]:
                 r"""
                 Integrate propagators and an optional CFF numerator over loop energies.
-                
+
                 The measure is :math:`d\ell^0/(2\pi i)` per loop, with contours closed below.
                 Both representations include contour signs and on-shell factors, and share
                 ``gammalooprs::OSE(e)`` for :math:`E_e=\sqrt{\boldsymbol{q}_e^2+m_e^2}`.
                 CFF accepts a polynomial numerator; couplings, graph weights and the spatial measure are separate.
-                
+                Uncontracted internal propagators with stored powers other than one raise ValueError.
+
                 CFF supports subgraph selections and the constraints below. LTD requires a
                 complete ordinary diagram and uses its stored ordered loop-momentum basis.
                 Display either result directly to explore its terms and surfaces in a notebook.
-                
+
                 Examples
                 --------
                 Using the setup in the ``FeynmanDiagram`` class example:
-                
+
                 >>> cff = diagram.integrate_energy(method="cff")
                 >>> ltd = diagram.integrate_energy(method="ltd")
                 >>> expression = cff.to_expression()
-                
+
                 Parameters
                 ----------
                 method : {"cff", "ltd"}
@@ -1815,41 +1837,43 @@ submit! {
                     generalized backend and currently requires an unconstrained complete
                     diagram. Express energy dependence explicitly; loop-basis energies and
                     unevaluated energy-dependent functions are unsupported.
-                
+
                 Returns
                 -------
                 CffRepresentation or LtdRepresentation
                     The selected scalar energy representation, with structured term and
                     surface inspection, expression conversion and notebook display.
-                
+
                 Raises
                 ------
                 ValueError
-                    The method is unknown, or CFF-only options are supplied for LTD.
+                    The method is unknown, CFF-only options are supplied for LTD, or an
+                    uncontracted internal propagator has a stored power other than one.
                 """
 
             @typing.overload
             def integrate_energy(self, *, method: typing.Literal["ltd"]) -> pyo3_stub_gen.RustType["PyLtdRepresentation"]:
                 r"""
                 Integrate propagators and an optional CFF numerator over loop energies.
-                
+
                 The measure is :math:`d\ell^0/(2\pi i)` per loop, with contours closed below.
                 Both representations include contour signs and on-shell factors, and share
                 ``gammalooprs::OSE(e)`` for :math:`E_e=\sqrt{\boldsymbol{q}_e^2+m_e^2}`.
                 CFF accepts a polynomial numerator; couplings, graph weights and the spatial measure are separate.
-                
+                Uncontracted internal propagators with stored powers other than one raise ValueError.
+
                 CFF supports subgraph selections and the constraints below. LTD requires a
                 complete ordinary diagram and uses its stored ordered loop-momentum basis.
                 Display either result directly to explore its terms and surfaces in a notebook.
-                
+
                 Examples
                 --------
                 Using the setup in the ``FeynmanDiagram`` class example:
-                
+
                 >>> cff = diagram.integrate_energy(method="cff")
                 >>> ltd = diagram.integrate_energy(method="ltd")
                 >>> expression = cff.to_expression()
-                
+
                 Parameters
                 ----------
                 method : {"cff", "ltd"}
@@ -1873,17 +1897,18 @@ submit! {
                     generalized backend and currently requires an unconstrained complete
                     diagram. Express energy dependence explicitly; loop-basis energies and
                     unevaluated energy-dependent functions are unsupported.
-                
+
                 Returns
                 -------
                 CffRepresentation or LtdRepresentation
                     The selected scalar energy representation, with structured term and
                     surface inspection, expression conversion and notebook display.
-                
+
                 Raises
                 ------
                 ValueError
-                    The method is unknown, or CFF-only options are supplied for LTD.
+                    The method is unknown, CFF-only options are supplied for LTD, or an
+                    uncontracted internal propagator has a stored power other than one.
                 """
 
 
@@ -3400,7 +3425,7 @@ impl PyFeynmanDiagram {
     /// ----------
     /// A complete diagram defaults to internal propagators; a Subgraph uses its region.
     /// edge_powers : mapping[int, int] or None, optional
-    ///     Signed propagator powers by diagram edge ID; omitted edges have power one.
+    ///     Signed propagator powers by diagram edge ID; omitted edges retain their stored powers.
     /// dimension : Expression or int or None, optional
     ///     Lorentz dimension; defaults to the shared symbolic dimension.
     /// in_lmb : bool, optional
@@ -3627,7 +3652,7 @@ impl PyFeynmanDiagram {
     /// numerator : Expression or TensorExpression or None, optional
     ///     Prepared numerator in edge momenta; None uses the selected local numerator.
     /// edge_powers : mapping[int, int] or None, optional
-    ///     Signed propagator powers by diagram edge ID; omitted edges have power one.
+    ///     Signed propagator powers by diagram edge ID; omitted edges retain their stored powers.
     ///     Zero omits the denominator; negative powers put it in the numerator.
     ///     Entries outside the selected internal edges are ignored.
     #[pyo3(signature = (uv_mass, *, dimension=4, numerator=None, edge_powers=None))]
@@ -3699,7 +3724,7 @@ impl PyFeynmanDiagram {
     /// numerator : Expression or TensorExpression or None, optional
     ///     Prepared numerator in edge momenta; None uses the selected local numerator.
     /// edge_powers : mapping[int, int] or None, optional
-    ///     Signed propagator powers by diagram edge ID; omitted edges have power one.
+    ///     Signed propagator powers by diagram edge ID; omitted edges retain their stored powers.
     ///     Zero omits the denominator; negative powers put it in the numerator.
     ///     Entries outside the selected internal edges are ignored.
     #[pyo3(signature = (uv_mass, *, dimension=4, numerator=None, edge_powers=None))]
@@ -4319,6 +4344,7 @@ impl PyFeynmanDiagram {
     /// Both representations include contour signs and on-shell factors, and share
     /// ``gammalooprs::OSE(e)`` for :math:`E_e=\sqrt{\boldsymbol{q}_e^2+m_e^2}`.
     /// CFF accepts a polynomial numerator; couplings, graph weights and the spatial measure are separate.
+    /// Uncontracted internal propagators with stored powers other than one raise ValueError.
     ///
     /// CFF supports subgraph selections and the constraints below. LTD requires a
     /// complete ordinary diagram and uses its stored ordered loop-momentum basis.
@@ -4365,7 +4391,8 @@ impl PyFeynmanDiagram {
     /// Raises
     /// ------
     /// ValueError
-    ///     The method is unknown, or CFF-only options are supplied for LTD.
+    ///     The method is unknown, CFF-only options are supplied for LTD, or an
+    ///     uncontracted internal propagator has a stored power other than one.
     #[gen_stub(skip)]
     #[pyo3(signature = (*, method, max_orientations=None, fixed_orientations=None, contracted_edges=None, initial_state_edges=None, numerator=None))]
     #[allow(clippy::too_many_arguments)] // Python options remain explicit keyword-only arguments.
@@ -4379,6 +4406,21 @@ impl PyFeynmanDiagram {
         initial_state_edges: Option<Vec<usize>>,
         numerator: Option<ConvertibleToExpression>,
     ) -> PyResult<Py<PyAny>> {
+        for (pair, edge, data) in self.inner.underlying().iter_edges_of(&self.selection()) {
+            if pair.is_paired()
+                && data.data.external.is_none()
+                && !data.data.is_dummy
+                && data.data.propagator_power != 1
+                && contracted_edges
+                    .as_ref()
+                    .is_none_or(|contracted| !contracted.contains(&edge.0))
+            {
+                return Err(PyValueError::new_err(format!(
+                    "energy integration does not support stored propagator power {} on edge {}",
+                    data.data.propagator_power, edge.0,
+                )));
+            }
+        }
         match method {
             "cff" => Py::new(
                 py,

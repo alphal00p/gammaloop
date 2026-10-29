@@ -26,6 +26,10 @@ pub enum CffError {
     SubgraphEndpointOutsideSelection { edge: EdgeId, vertex: VertexId },
     #[error("edge {0} is not an internal edge")]
     NotInternalEdge(EdgeId),
+    #[error(
+        "scalar CFF generation does not support stored propagator power {power} on edge {edge}"
+    )]
+    UnsupportedPropagatorPower { edge: EdgeId, power: i32 },
     #[error("edge {0} does not exist")]
     UnknownEdge(EdgeId),
     #[error("diagram edge {0} connects two external vertices")]
