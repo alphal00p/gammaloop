@@ -80,14 +80,12 @@
     let ancestor = svg.parentElement;
     while (ancestor) {
       if (ancestor.localName === 'iframe') frames.push(ancestor);
-      /* A notebook scrollbar must not change the width used to calculate
-         the graph's height: near the output limit that alternates forever
-         between a wide, overflowing graph and a narrow graph that fits. */
-      if (ancestor.ownerDocument !== document) {
-        const style = ancestor.ownerDocument.defaultView.getComputedStyle(ancestor);
-        if (['auto', 'scroll'].includes(style.overflowY) && style.scrollbarGutter === 'auto') {
-          ancestor.style.scrollbarGutter = 'stable';
-        }
+      /* Reserve notebook scrollbars in both inline and iframe displays.
+         Opening the inspector must not move the hovered target sideways:
+         otherwise pointerout closes it and pointerover immediately reopens it. */
+      const style = ancestor.ownerDocument.defaultView.getComputedStyle(ancestor);
+      if (['auto', 'scroll'].includes(style.overflowY) && style.scrollbarGutter === 'auto') {
+        ancestor.style.scrollbarGutter = 'stable';
       }
       observer.observe(ancestor, { attributes: true, childList: true, attributeFilter: ['class', 'data-theme', 'data-jp-theme-light'] });
       if (ancestor.parentElement) ancestor = ancestor.parentElement;

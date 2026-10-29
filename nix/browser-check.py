@@ -82,6 +82,19 @@ def main():
                 timeout=120,
                 env=environment,
             )
+            subprocess.run(
+                [
+                    sys.executable,
+                    "crates/linnet-render-py/tests/inspector_resize_browser.py",
+                    "--html",
+                    str(output / "chromium-350-a.html"),
+                    "--output",
+                    str(output / "inspector-resize"),
+                ],
+                check=True,
+                timeout=60,
+                env=environment,
+            )
         finally:
             if producer.poll() is None:
                 producer.terminate()
