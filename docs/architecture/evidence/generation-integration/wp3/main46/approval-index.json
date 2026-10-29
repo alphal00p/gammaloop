@@ -9,6 +9,8 @@
     {"scope":"B round1 negative history","path":"/shared/lcnbr/dev/gammaloop/generation-color-cycles/.local/review-color-cycles-staged-b-astra-Ry8y1K/review.json","sha256":"f4feeecb35f5369f6499d27b7f871231647463f73bd709a48163fe81b4e82b80","verdict":"REQUEST_CHANGES"},
     {"scope":"B round2 correction","path":"/shared/lcnbr/dev/gammaloop/generation-color-cycles/.local/review-color-cycles-staged-round2-astra-KRCpWB/review.json","sha256":"6a1244a760bde4af3441758a317d8d0f68db1b78ec994a99effbac66caeea8d9","verdict":"APPROVE"},
     {"scope":"MAIN46 round1 A","path":"/shared/lcnbr/dev/gammaloop/generation-integration-plan/.local/review-main46-a-opus-ia0C2eIQ/review.json","sha256":"7646a2993861a9c6a72fbbd3504f7dd8ffe33684de9d7d73f92333a3d61e3a1a","verdict":"REQUEST_CHANGES"},
-    {"scope":"MAIN46 round1 B","path":"/shared/lcnbr/dev/gammaloop/generation-integration-plan/.local/review-main46-b-opus-sxhn2EnK/review.json","sha256":"da11ea14c515413bc8dabdc1e1d254daa19acadddcd17ff9d5b51ae6c538799f","verdict":"REQUEST_CHANGES"}
+    {"scope":"MAIN46 round1 B","path":"/shared/lcnbr/dev/gammaloop/generation-integration-plan/.local/review-main46-b-opus-sxhn2EnK/review.json","sha256":"da11ea14c515413bc8dabdc1e1d254daa19acadddcd17ff9d5b51ae6c538799f","verdict":"REQUEST_CHANGES"},
+    {"scope":"MAIN46 round2 A replacement","path":"/shared/lcnbr/dev/gammaloop/generation-integration-plan/.local/review-main46-round2-a-opus-replacement-doxwwcgK/review.json","sha256":"7a0006937b8781cf0d31fba0371354d0837dfffe5210da77b714dfcee05594ff","verdict":"REQUEST_CHANGES"},
+    {"scope":"MAIN46 round2 B","path":"/shared/lcnbr/dev/gammaloop/generation-integration-plan/.local/review-main46-round2-b-opus-SnPP8Dho/review.json","sha256":"a4ef410cd0c6db8be4e4cbfd41cebd2f5c20255cb4cd4512bf0dddc470b2890d","verdict":"REQUEST_CHANGES"}
   ]
 }

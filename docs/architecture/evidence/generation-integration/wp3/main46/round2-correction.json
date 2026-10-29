@@ -10,7 +10,7 @@
   ],
   "finding_dispositions": {
     "producer": "CLOSED for candidate: generic Cargo auto-target discovery now includes only immediate child-directory main.rs targets. Corrected Git-pinned scoped Idenso archive realizes and executes.",
-    "accounting": "CLOSED: frozen round1 logs reparse to 194 passes, 22 ignored and 0 failures; zero and ignored-only selections are rejected.",
+    "accounting": "SUPERSEDED by round3: the numerical 194/22 tally is correct, but the round2 legacy parser overstated its guard and reconstructed argv without recording that provenance.",
     "inventory": "CLOSED: 16 imported preparation paths, 24 round1 paths, 25 corrected-code paths and 27 final candidate paths are distinct.",
     "dispatch": "CLOSED: current Opus A counterfactual is bound separately from the limited original438 mutant.",
     "wording": "CLOSED: active source46 records request NEW independent Opus A/B review; historical reviewer records are unchanged."
@@ -26,7 +26,8 @@
     "archiveSha256": "484278ab5e65aead91e92862654b62be3213c24f50272c9c7f49c07287b36bfe",
     "runner": "/nix/store/kwm3g9vh36d9zd171v0nz64fyan1hvfz-cargo-nextest-0.9.143/bin/cargo-nextest",
     "elf": {"path":"target/ci-optim/deps/idenso-e3e3408140242c5e","sha256":"baece4b2a608b45e201ffc774c0c9e8f0ff7c44079f581c294cba87bacfb7b8d"},
-    "features": ["bincode","default","native","reference-cases","wasm"],
+    "selectedFeatures": ["bincode","default","native","reference-cases"],
+    "workspaceMetadataResolveFeatures": ["bincode","default","native","reference-cases","wasm"],
     "compiler": "/nix/store/c3bpv60f5wgp4pmgsifaykxk214h6463-rust-stable-with-components-2026-09-03",
     "buildExit": 0,
     "aggregate": "evaluated only"
@@ -38,8 +39,8 @@
     "ignoredOnlyNegative": {"exit":4,"logSha256":"d92ec6b869432a7de42049e54a36dfa40e734c4f0945435d162b8d64e4438f8e"},
     "runnerQualificationNegatives": ["archive without workspace remap: exit96 missing /build/source", "store-source workspace remap: exit96 read-only run store"]
   },
-  "target_inventory": {"old":127,"new":129,"added":["crates/feynkit-generator/tests/generation_oracle/main.rs","crates/linnet/tests/nauty/main.rs"],"removed":[]},
-  "static": {"nix_parse":0,"fixture":0,"nixfmt":"whole-file check remains inherited failure; no broad mechanical rewrite","hakari":0,"ci_graph":0,"registry":{"scopes":110,"titles":76,"invalid":0},"typst_pdf_html":0,"kernel_locks_vendor_assets_runtime_unchanged":true,"nixci":false},
+  "target_inventory": {"oldTotal":136,"newTotal":138,"oldAutomatic":94,"newAutomatic":96,"added":["crates/feynkit-generator/tests/generation_oracle/main.rs","crates/linnet/tests/nauty/main.rs"],"removed":[],"prior127_129":"Superseded non-canonical postPatch text extraction."},
+  "static": {"nix_parse":0,"fixture":0,"nixfmt":"whole-file check remains inherited failure; no broad mechanical rewrite","hakari":0,"ci_graph":0,"registry":{"scopes":110,"titles":76,"invalid":0},"typst_pdf":0,"plain_html_attempt":"failed: document requires bundle target; no credit","round3_bundle_html":0,"kernel_locks_vendor_assets_runtime_unchanged":true,"nixci":false},
   "candidate_inventory": [
     "crates/idenso/src/color/simplify.rs",
     "crates/idenso/src/color/test/label_order.rs",

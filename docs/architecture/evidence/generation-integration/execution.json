@@ -1,9 +1,9 @@
 {
   "date": "2026-10-29",
   "scope": "WP0, WP1 and WP2 approved; WP3 in progress",
-  "authorization": "Implement the plan, have Astra review at each impl step, and have sol implement",
+  "authorization": "Historical workflow authorization used Sol implementation and Astra review; current and future independent reviews use Opus A/B.",
   "implementer": "Sol",
-  "reviewer": "Astra; new independent WP3 review required",
+  "reviewer": "Independent review required; current and future review preference is Opus A/B",
   "workspace": "/shared/lcnbr/dev/gammaloop/generation-integration-plan",
   "base_commit": "3f0df2a870806076820786994d4883decec8e9e3",
   "plan_commit": "4374f72027b75df9ff95c5c7a725ee75beac27a8",

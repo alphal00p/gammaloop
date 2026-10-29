@@ -374,7 +374,7 @@ own workspace. Bounded: one regression, one bisect, one written verdict.
   and 17,484 fresh registration-order permutations retained. Combined evidence is
   recorded in `evidence/generation-integration/wp3/main46/receipt.json`. The generic
   Nix Cargo-target owner now includes immediate child-directory `main.rs` targets;
-  the corrected Git-pinned Idenso archive realizes and passes192 profile tests plus2
+  the corrected Git-pinned Idenso archive realizes and passes 192 profile tests plus 2
   separately selected default-filter controls. The inherited
   TensorReduction declared-layout consumer remains failed and separately owned.
   A NEW independent Opus A/B review is required before the WP3 rebuilt-tip

@@ -1,0 +1,78 @@
+{
+  "schema": 1,
+  "base_candidate": "6aba82b65d50cd51cd87bbb99c0c37add650d13c",
+  "base_change": "lzpkuvnswozmuwruokuzmnwtvpkmomxn",
+  "built_code_source": "610b83fac3d4bfd7d0a92dd912191062d18a2fbe",
+  "built_code_change": "utsstkpwqqkxuuuxokskrnupnlsyxpxn",
+  "scope": "Evidence/accounting correction only; no Rust, Nix, manifest, lock, expectation, asset or runtime change.",
+  "reviews": [
+    {"scope":"A replacement","path":".local/review-main46-round2-a-opus-replacement-doxwwcgK/review.json","sha256":"7a0006937b8781cf0d31fba0371354d0837dfffe5210da77b714dfcee05594ff","verdict":"REQUEST_CHANGES"},
+    {"scope":"B","path":".local/review-main46-round2-b-opus-SnPP8Dho/review.json","sha256":"a4ef410cd0c6db8be4e4cbfd41cebd2f5c20255cb4cd4512bf0dddc470b2890d","verdict":"REQUEST_CHANGES"},
+    {"scope":"A interrupted history","path":".local/review-main46-round2-a-opus-U74YtcBP","status":"interrupted; not a completed approval"}
+  ],
+  "legacy_accounting": {
+    "script": "docs/architecture/evidence/generation-integration/wp3/main46/account-color-runs.mjs",
+    "result": "target/wp3-source46-round3/color-accounting.json",
+    "result_sha256": "bf76a8210d5a78da8cafef970a216ce2312c041bd0cfe61ab98be7eb2126c68a",
+    "reported_passes": 194,
+    "reported_ignored": 22,
+    "reported_failures": 0,
+    "per_selection_exit_status": null,
+    "argv_provenance": "reconstructed expected argv; historical per-selection argv was not retained",
+    "assurance": "Trusted-log parser for the exact-one legacy contract. It requires the expected test identity, exactly one outer selection and a complete parent result. The known label-order nested form additionally requires both child passes and the terminal parent result. It is not a general authenticated process monitor.",
+    "probes": {"reviewer_mutations":"target/wp3-source46-round3/reviewer-probes.json","reviewer_mutations_sha256":"12fd2e5db92f8cc3bdc83d2aa0786aa7b47571a9f42c273a7589be98a5f172a5","malformed":"target/wp3-source46-round3/malformed-probe.json","malformed_sha256":"8e710deb7f7cf3c91acd091960bc0409ed2bb9cd3b38da0dfbf797b291707966","valid_nested":"the frozen label-order log reports two child passes and a completed parent pass"}
+  },
+  "fresh_archive_negatives": {
+    "elf_sha256": "baece4b2a608b45e201ffc774c0c9e8f0ff7c44079f581c294cba87bacfb7b8d",
+    "zero": {"argv":"target/wp3-source46-round3/zero-negative.argv","argv_sha256":"1fe39209ca7b8a1fcad6042ac9aaaa1a715e31dd3ee66f3b8732a7cf35569c94","exit":4,"log":"target/wp3-source46-round3/zero-negative.log","log_sha256":"1070cef9aefa63f07dc4e55c991315911d69110e7bbb9366d99913590817586e"},
+    "ignored_only": {"argv":"target/wp3-source46-round3/ignored-negative.argv","argv_sha256":"271c8d0f7efb73489b2852913f0f0dc3b83fcc5c531fc299e87af1a3d98fe620","exit":4,"log":"target/wp3-source46-round3/ignored-negative.log","log_sha256":"fee1de126bbbf59d0f4e345e9f46ba64e2f51ed787b52e941f7f24815908bfde"}
+  },
+  "target_inventory": {
+    "old_total": 136,
+    "new_total": 138,
+    "old_automatic": 94,
+    "new_automatic": 96,
+    "added": ["crates/feynkit-generator/tests/generation_oracle/main.rs","crates/linnet/tests/nauty/main.rs"],
+    "removed": [],
+    "authoritative_reproducer": ".local/review-main46-round2-b-opus-SnPP8Dho/targets.nix",
+    "authoritative_reproducer_sha256": "6eef97c707e1acaf5ee2bd7d92f9788ec6b1900fae2d571d8db0d64f4aebddf8",
+    "authoritative_result": ".local/review-main46-round2-b-opus-SnPP8Dho/targets-eval.json",
+    "authoritative_result_sha256": "eb91abc426009eaf78a5ea05e0a740072a6a1120b182e608e05e185709283afb",
+    "sorted_new_paths": "target/wp3-source46-round3/target-inventory-new-sorted.txt",
+    "sorted_new_paths_sha256": "7b2519b66ae63ab100229228fedac201ad7e6316f22a02f067af68f3d184f017",
+    "prior_127_129": "Superseded non-canonical text extraction: three non-target script paths included and twelve top-level tests-member targets omitted."
+  },
+  "features": {
+    "actual_selected": ["bincode","default","native","reference-cases"],
+    "actual_command": "cargo tree --offline -p idenso --features idenso/bincode,idenso/native,idenso/reference-cases -e normal,dev --depth 0 with the producer derivation vendor configuration",
+    "producer_archive_command": "cargo nextest archive --cargo-profile ci-optim --offline -p idenso --features idenso/bincode,idenso/native,idenso/reference-cases -E 'package(idenso)' --profile ci_gammaloop",
+    "workspace_metadata_context": ["bincode","default","native","reference-cases","wasm"],
+    "qualification": "wasm is enabled elsewhere in the workspace metadata resolve and is not part of the selected executed Idenso ELF closure"
+  },
+  "semantic_html": {
+    "tool": "/nix/store/wzpxqpc3v2xxah69rqifq5kac67hx36g-typst-0.15.1/bin/typst",
+    "source46": {"argv":"target/wp3-source46-round3/source46-bundle.argv","wrapper":"target/wp3-source46/generation-integration-source46-wrapper.typ","wrapper_sha256":"bee11650c21058a184eda67325069365137a4c4ba9a4b600064ac5773af5fafc","exit":0,"output":"target/wp3-source46-round3/generation-integration-source46-bundle.html.txt/index.html","output_sha256":"417295f60012f1bd62988278a940bd655e1389486fbb1e3613f56394f69b8de6"},
+    "plan": {"argv":"target/wp3-source46-round3/plan-bundle.argv","wrapper":"target/wp3-source44/generation-integration-plan-wrapper.typ","wrapper_sha256":"3a9deca513708fd960c6b91612311a4799b7b18ecd5de0425f35b17a17ef3103","exit":0,"output":"target/wp3-source46-round3/generation-integration-plan-bundle.html.txt/index.html","output_sha256":"fd5f11c55b247eadad8518bace3d9d35b6b823fb253cd59d5cfe65172f309539"},
+    "plan_pdf": {"argv":"target/wp3-source46-round3/plan-pdf.argv","argv_sha256":"0559a2d42d410ab25f5c9d058c90cbbb0c741812c4755f586ca233acdab2cab5","exit":0,"output":"target/wp3-source46-round3/generation-integration-plan.pdf","output_sha256":"078e16da5911d39a611782142b9255d6863e4f1cdc227d2405fb84d7d4c8dfe1"},
+    "source46_pdf_reused": {"path":".local/review-main46-round2-b-opus-SnPP8Dho/typst/generation-integration-source46.pdf","sha256":"5aa33158218fa1f7f621e55f4f315752bb5cbf87e3318fc2e6d80adeb4ae02a9","qualification":"The source46 Typst note is unchanged in round3; Opus B's successful round2 PDF remains source-exact."},
+    "command_shape": "typst compile --root <workspace> --features html,bundle --format bundle --creation-timestamp 0 <wrapper> <bundle-directory>",
+    "semantic_checks": "DOCTYPE, heading, expected source46/192+2 text and absence of error text pass",
+    "superseded_attempts": "Round2 plain --format html logs contain 'constructing a document is only supported in the bundle target' and receive no pass credit.",
+    "full_docs_limit": "No full-site/docs-check pass; eight inherited inventory entries and scratch inventory issues remain qualified."
+  },
+  "dependency_provenance": {
+    "root": "/nix/store/a7nzhbvih909hsr4bq62zgrwck8xhdc3-gammaloop-crate-test-binaries-idenso-07ca23be421c4700-deps-0.1.0/target.tar.zst",
+    "root_sha256": "3e4b7485643d5da87e187ab52c702be0c60f966b9593412673eb257f3beb019d",
+    "deriver": "/nix/store/w0g0p0pk9m7kfkq6lywk3a65bgzri196-gammaloop-crate-test-binaries-idenso-07ca23be421c4700-deps-0.1.0.drv",
+    "output_nar_hash": "sha256-ao4R8ObiPIk0YKh6SHM8nbw5oZ5UJIHfMysZzF0ysN4=",
+    "depfiles": [{"path":"ci-optim/deps/idenso-e3e3408140242c5e.d","sha256":"79a23b1a3f9e24ff341f1d27795598ae500f3ab826543b21ec0ac97e9b8e6fb9"},{"path":"ci-optim/deps/idenso-22224b8ef74c5332.d","sha256":"9dfdea78209e040c204453cf7dfba77b9184ea0ab48afe21a03b7700bc89a551"}],
+    "deps_stage_elf_sha256": "e9affdb1ff0f1b6314454076f45df2ea09556d0007a696e6ed2101eee700e736",
+    "executed_archive_elf_sha256": "baece4b2a608b45e201ffc774c0c9e8f0ff7c44079f581c294cba87bacfb7b8d",
+    "qualification": "The depfiles and deps-stage ELF are supporting dependency provenance only. They do not bind the different executed archive ELF, whose archive/output/deriver/build trace remains authoritative. No final archive depfile is available or claimed."
+  },
+  "active_review_policy": "Independent review required; current and future focused reviews use new Opus A/B agents. Historical Astra review records remain accurate.",
+  "evidence_source_qualification": {"record":"target/wp3-source46-round3/final-evidence-flake-metadata.json","classification":"Evaluated after freezing the evidence commit; distinct from built code610 and not built or executed. The record remains outside the tracked tree to avoid a circular self-hash."},
+  "inventory": {"imported_preparation_paths":16,"round1_paths":24,"code_paths":25,"round2_paths":27,"current_paths":28,"round3_delta_paths":7,"round3_delta":"target/wp3-source46-round3/correction-inventory.txt","round3_delta_sha256":"0eafcb87a6203ecbfff34f0aba66c076cb67872f1acd62cd9217b401c995e6de","nonself_inventory":"target/wp3-source46-round3/final-inventory-nonself.sha256","nonself_entries":27,"nonself_inventory_sha256":"d667db3008cfe4cacfabc8493005a507964bd467ff816eb24e28a92a17001cb0","qualification":"round3-correction.json is excluded from the hash inventory to avoid a circular self-hash; its own hash is recorded after freeze."},
+  "preserved": ["610b83fac3d4bfd7d0a92dd912191062d18a2fbe code and realized producer","192+2 archive passes","4159-row and 88-frame proofs","current dispatch counterfactual","tensor 200/1/3 and consumer23/1 failure qualification","source44 EXIT101 limits"],
+  "limits": ["No code or producer rebuild.","Aggregate remains evaluated only.","Legacy per-selection exits remain unknown.","No full-site/docs-check pass.","Tensor repair and WP3 exit matrix remain outside scope."]
+}

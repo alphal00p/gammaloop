@@ -4,8 +4,9 @@
   "base_main44_45": "217d61c3b78fb8a21adf5f48aa7f6f65235de614",
   "built_code_source": "610b83fac3d4bfd7d0a92dd912191062d18a2fbe",
   "built_code_change": "utsstkpwqqkxuuuxokskrnupnlsyxpxn",
-  "evidence_change": "lzpkuvnswozmuwruokuzmnwtvpkmomxn",
+  "evidence_change": "owkmmxskzttysxrkyuknvmwsmylznkyy",
   "round2_correction": "docs/architecture/evidence/generation-integration/wp3/main46/round2-correction.json",
+  "round3_correction": "docs/architecture/evidence/generation-integration/wp3/main46/round3-correction.json",
   "source_mapping": {
     "order": 46,
     "original_source": "e0a779808174c64057fecfd062c948b8de8e5c1f",
@@ -28,7 +29,8 @@
     "imported_preparation_paths": 16,
     "round1_total_paths_against_217d": 24,
     "corrected_code_total_paths_against_217d": 25,
-    "final_candidate_total_paths_against_217d": 27,
+    "round2_final_candidate_paths_against_217d": 27,
+    "current_final_candidate_paths_against_217d": 28,
     "rust_paths": 3,
     "runtime_or_test_changes_outside_approved_paths": 0,
     "manifest_lock_vendor_kernel_asset_changes": 0,
@@ -37,13 +39,13 @@
     "production_observer_overlay_restored": true
   },
   "validation": {
-    "isolated_color": {"round1_raw_selections":216,"round1_credited_passes":194,"round1_ignored":22,"round1_failed":0,"reviewed_profile_passes":192,"separately_selected_default_filter_passes":2,"zero_test_selections":0,"historical_networks":16,"label_order_permutations":17484,"round2_archive_profile":{"selected":192,"passed":192,"failed":0,"exit":0},"round2_archive_default_filter_controls":{"selected":2,"passed":2,"failed":0,"exit":0},"round2_archive_negatives":{"zero_selected_exit":4,"ignored_only_exit":4},"superseded_summary":"target/wp3-source46/color-fresh-results.json incorrectly counted ignored-only exits as passes and is preserved unchanged at round1.","corrected_accounting":"target/wp3-source46-round2-color-accounting.json","corrected_accounting_sha256":"f83038bcfbf83c2618cc5dcc6ee8bce1edf27f19861dfc66d75235bdc5bb0a0c","guard":"A run receives pass credit only when selected>0, passed>0, failed=0 and ignored=0."},
+    "isolated_color": {"round1_raw_selections":216,"round1_log_reported_passes":194,"round1_log_reported_ignored":22,"round1_log_reported_failed":0,"round1_per_selection_exit_status":"unknown","round1_argv":"reconstructed expected argv, not historically recorded","reviewed_profile_passes":192,"separately_selected_default_filter_passes":2,"zero_test_selections":0,"historical_networks":16,"label_order_permutations":17484,"round2_archive_profile":{"selected":192,"passed":192,"failed":0,"exit":0},"round2_archive_default_filter_controls":{"selected":2,"passed":2,"failed":0,"exit":0},"round3_archive_negatives":{"zero_selected_exit":4,"ignored_only_exit":4,"argv_recorded":true,"elf":"baece4b2a608b45e201ffc774c0c9e8f0ff7c44079f581c294cba87bacfb7b8d"},"superseded_summary":"target/wp3-source46/color-fresh-results.json incorrectly counted ignored-only exits as passes and is preserved unchanged at round1.","hardened_accounting":"target/wp3-source46-round3/color-accounting.json","hardened_accounting_sha256":"bf76a8210d5a78da8cafef970a216ce2312c041bd0cfe61ab98be7eb2126c68a","guard":"Legacy exact-one logs receive reported-pass classification only with the expected test identity, exactly one outer selection and a complete parent result. The known label-order nested form additionally requires both child passes and the terminal parent result. This is trusted-log parsing, not an authenticated process monitor; historical per-selection exit remains unknown."},
     "combined_consumers": {"selected":24,"passed":23,"failed":1,"expected_failure":"reduction::tests::reduction_keeps_declared_spectator_axes_and_zero_interfaces","qualification":"Inherited reducer-boundary declared-layout loss. Generic named arithmetic intentionally canonicalizes; separate correction is outside source46 and is not waived."},
     "source44_current": {"scoped_vacuum_cells":{"selected":5,"passed":5,"workers":16},"full_epem":{"selected":1,"exit":101,"target_cell_passed":true,"later_failure_retained":true},"full_slow_aa":{"selected":1,"exit":101,"target_cell_passed":true,"later_failure_retained":true},"full_vacuum":{"selected":1,"exit":101,"corrected_grouped_l2_passed":true,"later_grouped_l3_failure_retained":true},"insta_update":"no"},
     "current_physical_capture": {"rows":4159,"exact":true,"normalized_sha256":"7df7aac4a48754ac23c6f8dfa0c177cb40d82972f4d12cff2675ee140a3fa747","current_only_mutation_rejected":true,"record":"current-ghost-comparison.json"},
     "current_internal_frames": {"capture_files":88,"exact_after_capture_path_normalization":true,"normalized_sha256":"d4efa4634b0996bd0d10e6440a4678179e9d6706af17e7e4b4091d7307023361","record":"current-internal-frame-comparison.json"},
     "shared_process_cook": {"passed":1,"failed":1,"exit":101,"classification":"diagnostic inherited symbol-collision failure; isolated Nextest selections are authoritative and no suppression is applied"},
-    "static": {"fmt":0,"registry":0,"registry_scopes":110,"registry_titles":76,"docs_pdf_and_semantic_html":0,"hakari":0,"kernel":0,"ci_graph":0,"nix_parse":0,"target_fixture":0,"nixfmt":"Inherited whole-file formatting failure retained; changed owner is parsed and fixture-qualified without broad rewrite.","clippy":"Approved prepared source-bound clippy log reused after exact three-Rust-blob verification; producer correction changes only Nix metadata ownership."}
+    "static": {"fmt":0,"registry":0,"registry_scopes":110,"registry_titles":76,"pdf":0,"bundle_html_round3":0,"round2_plain_html":"failed and superseded; no credit","full_docs_check":"not passed; inherited eight inventory entries and scratch issues remain","hakari":0,"kernel":0,"ci_graph":0,"nix_parse":0,"target_fixture":0,"nixfmt":"Inherited whole-file formatting failure retained; changed owner is parsed and fixture-qualified without broad rewrite.","clippy":"Approved prepared source-bound clippy log reused after exact three-Rust-blob verification; producer correction changes only Nix metadata ownership."}
   },
   "producer_qualification": {
     "git_uri": "git+file:///shared/lcnbr/dev/gammaloop/main?rev=610b83fac3d4bfd7d0a92dd912191062d18a2fbe&shallow=1&allRefs=1#checks.x86_64-linux.gammaloop-nextest-binaries-spenso",
@@ -57,13 +59,15 @@
     "idenso_elf": {"archive_path":"target/ci-optim/deps/idenso-e3e3408140242c5e","sha256":"baece4b2a608b45e201ffc774c0c9e8f0ff7c44079f581c294cba87bacfb7b8d"},
     "profile": "ci-optim",
     "features": "idenso/bincode,idenso/native,idenso/reference-cases",
-    "resolved_idenso_features": ["bincode","default","native","reference-cases","wasm"],
+    "selected_idenso_features": ["bincode","default","native","reference-cases"],
+    "workspace_metadata_resolve_features": ["bincode","default","native","reference-cases","wasm"],
+    "feature_qualification": "The selected feature closure comes from cargo tree --offline -p idenso with the exact producer feature arguments and normal+dev edges. The five-feature list is workspace-wide cargo-metadata context; wasm is not in the executed Idenso ELF feature closure.",
     "compiler": "/nix/store/c3bpv60f5wgp4pmgsifaykxk214h6463-rust-stable-with-components-2026-09-03",
     "archive_command": "cargo nextest archive --cargo-profile ci-optim --offline -p idenso --features idenso/bincode,idenso/native,idenso/reference-cases -E 'package(idenso)' --profile ci_gammaloop",
     "status": "Git-pinned full and filtered sources realized; corrected scoped Idenso producer and archive realized with exit0 and executed. The aggregate derivation is evaluated only and receives no realization/execution credit.",
-    "target_discovery": {"old_targets":127,"new_targets":129,"added":["crates/feynkit-generator/tests/generation_oracle/main.rs","crates/linnet/tests/nauty/main.rs"],"removed":[],"cargo_metadata_generation_oracle_kind":["test"]},
+    "target_discovery": {"old_total":136,"new_total":138,"old_automatic":94,"new_automatic":96,"added":["crates/feynkit-generator/tests/generation_oracle/main.rs","crates/linnet/tests/nauty/main.rs"],"removed":[],"cargo_metadata_generation_oracle_kind":["test"],"prior_127_129_limit":"Superseded non-canonical postPatch text extraction included three non-target script paths and omitted twelve top-level tests-member targets."},
     "archive_execution": {"workspace_remap":"/shared/lcnbr/dev/gammaloop/generation-integration-plan","profile":{"selected":192,"passed":192,"failed":0,"exit":0,"run_id":"3732707d-7aea-4207-b567-6e63a8011da2"},"default_filter_controls":{"selected":2,"passed":2,"failed":0,"exit":0,"run_id":"163a447d-d51a-4dbc-b587-9d820806d9f4"},"zero_selection_negative":{"exit":4},"ignored_only_negative":{"exit":4}},
-    "dep_info": [{"path":"ci-optim/deps/idenso-e3e3408140242c5e.d","sha256":"79a23b1a3f9e24ff341f1d27795598ae500f3ab826543b21ec0ac97e9b8e6fb9","bytes":11308},{"path":"ci-optim/deps/idenso-22224b8ef74c5332.d","sha256":"9dfdea78209e040c204453cf7dfba77b9184ea0ab48afe21a03b7700bc89a551","bytes":8814}],
+    "dep_info": {"root":"/nix/store/a7nzhbvih909hsr4bq62zgrwck8xhdc3-gammaloop-crate-test-binaries-idenso-07ca23be421c4700-deps-0.1.0/target.tar.zst","root_sha256":"3e4b7485643d5da87e187ab52c702be0c60f966b9593412673eb257f3beb019d","deriver":"/nix/store/w0g0p0pk9m7kfkq6lywk3a65bgzri196-gammaloop-crate-test-binaries-idenso-07ca23be421c4700-deps-0.1.0.drv","records":[{"path":"ci-optim/deps/idenso-e3e3408140242c5e.d","sha256":"79a23b1a3f9e24ff341f1d27795598ae500f3ab826543b21ec0ac97e9b8e6fb9","bytes":11308},{"path":"ci-optim/deps/idenso-22224b8ef74c5332.d","sha256":"9dfdea78209e040c204453cf7dfba77b9184ea0ab48afe21a03b7700bc89a551","bytes":8814}],"qualification":"Deps-stage provenance only. The same-named deps-stage ELF hashes e9affdb1ff0f1b6314454076f45df2ea09556d0007a696e6ed2101eee700e736 and differs from the executed archive ELF baece4b2a608b45e201ffc774c0c9e8f0ff7c44079f581c294cba87bacfb7b8d. No final archive depfile is available or claimed."},
     "round1_failure": "At frozen56fd4640 both aggregate and scoped Idenso archive exited96 because generation_oracle/main.rs was missing from postPatch target discovery. Those logs remain immutable negative evidence.",
     "records": [
       {"path":"target/wp3-source46/pinned-flake-metadata.json","sha256":"56d9a315877f4d292c5a2b4a3e73fc84e9df69c0e9f3049fe6866abaf8c1c517","bytes":3576},
