@@ -1,0 +1,208 @@
+#[test]
+#[ignore]
+fn diagnose_source44_ungrouped_weights() -> Result<()> {
+    let root = get_tests_workspace_path().join("ghost_weight_certificate");
+    for (family, cores, cases) in [
+        (
+            "epem_bbh",
+            None,
+            vec![
+                (
+                    "dd_qcd0",
+                    "xs",
+                    "e+ e- > d d~ | d a e- ghg g QED^2==4 [{{2}}] --filter-zero-color --numerator-grouping no_grouping --filter-selfenergies true --filter-snails true --filter-tadpoles true --n-cut-blobs 1 1 --n-cut-spectators 0 0",
+                    false,
+                ),
+                (
+                    "bbh_qcd0",
+                    "xs",
+                    "e+ e- > b b~ h | d b h a e- ghg g QED^2==6 [{{2}}] --filter-zero-color --numerator-grouping no_grouping --filter-selfenergies true --filter-snails true --filter-tadpoles true --n-cut-blobs 1 1 --n-cut-spectators 0 0",
+                    false,
+                ),
+                (
+                    "bbh_qcd1",
+                    "xs",
+                    "e+ e- > b b~ h | d b h a e- ghg g QED^2==6 [{{3}} QCD=1] --filter-zero-color --numerator-grouping no_grouping --filter-selfenergies true --filter-snails true --filter-tadpoles true --n-cut-blobs 1 1 --n-cut-spectators 0 0",
+                    false,
+                ),
+                (
+                    "bbh_qcd2",
+                    "xs",
+                    "e+ e- > b b~ h | d b h a e- ghg g QED^2==6 [{{4}} QCD=2] --filter-zero-color --numerator-grouping no_grouping --filter-selfenergies true --filter-snails true --filter-tadpoles true --n-cut-blobs 1 1 --n-cut-spectators 0 0",
+                    true,
+                ),
+            ],
+        ),
+        (
+            "slow_aa_ttx",
+            None,
+            vec![
+                (
+                    "qcd0",
+                    "xs",
+                    "a a > t t~ | a t g b ghg QED^2==4 [{{1}} QCD=0] --filter-zero-color --numerator-grouping no_grouping --filter-selfenergies true --filter-snails true --filter-tadpoles true --n-cut-blobs 1 1 --n-cut-spectators 0 0",
+                    false,
+                ),
+                (
+                    "qcd1",
+                    "xs",
+                    "a a > t t~ | a t g b ghg QED^2==4 [{{2}} QCD=1] --filter-zero-color --numerator-grouping no_grouping --filter-selfenergies true --filter-snails true --filter-tadpoles true --n-cut-blobs 1 1 --n-cut-spectators 0 0",
+                    false,
+                ),
+                (
+                    "qcd2",
+                    "xs",
+                    "a a > t t~ | a t g b ghg QED^2==4 [{{3}} QCD=2] --filter-zero-color --numerator-grouping no_grouping --filter-selfenergies true --filter-snails true --filter-tadpoles true --n-cut-blobs 1 1 --n-cut-spectators 0 0",
+                    true,
+                ),
+            ],
+        ),
+        (
+            "vacuum_nonfactorizable",
+            Some(2),
+            vec![
+                (
+                    "l2",
+                    "amp",
+                    "{} > {} | g ghg t u d QED==0 [{2}] --filter-zero-color --numerator-grouping no_grouping --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",
+                    true,
+                ),
+                (
+                    "l3",
+                    "amp",
+                    "{} > {} | g ghg t u d QED==0 [{3}] --filter-zero-color --numerator-grouping no_grouping --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",
+                    true,
+                ),
+                (
+                    "l4",
+                    "amp",
+                    "{} > {} | g ghg t u d QED==0 [{4}] --filter-zero-color --numerator-grouping no_grouping --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",
+                    true,
+                ),
+            ],
+        ),
+    ] {
+        let family_root = root.join(family);
+        let mut cli = get_test_cli(None, family_root.join("state"), Some(family.into()), true)?;
+        cli.run_command("import model sm.json")?;
+        fs::create_dir_all(&family_root)?;
+        let capture = |stage: &str, cli: &CLIState| -> Result<()> {
+            cli.state
+                .model
+                .write_json(family_root.join(format!("{stage}-live-model.json")))?;
+            cli.state.model_parameters.to_file(
+                family_root.join(format!("{stage}-live-parameters.json")),
+                true,
+            )?;
+            fs::write(
+                family_root.join(format!("{stage}-live-settings.json")),
+                serde_json::to_vec_pretty(&json!({
+                    "restriction": cli.state.model.restriction(),
+                    "model_fingerprint": cli.state.model.fingerprint().to_string(),
+                    "cli_settings": cli.cli_settings,
+                    "default_runtime_settings": cli.default_runtime_settings,
+                }))?,
+            )?;
+            Ok(())
+        };
+        capture("post-import", &cli)?;
+        if let Some(cores) = cores {
+            cli.run_command(&format!("set global kv global.n_cores.feyngen={cores}"))?;
+        }
+        capture("pre-generation", &cli)?;
+        let cut_record = |cut: &FinalizedCut| {
+            json!({
+                "left_cut": cut.cut.left.included_iter().map(|hedge| hedge.0).collect::<Vec<_>>(),
+                "right_cut": cut.cut.right.included_iter().map(|hedge| hedge.0).collect::<Vec<_>>(),
+                "left": cut.left.included_iter().map(|hedge| hedge.0).collect::<Vec<_>>(),
+                "right": cut.right.included_iter().map(|hedge| hedge.0).collect::<Vec<_>>()
+            })
+        };
+        let threshold_record = |cut: &FinalizedTopologyThresholdCandidate| {
+            json!({
+                "left_cut": cut.cut.left.included_iter().map(|hedge| hedge.0).collect::<Vec<_>>(),
+                "right_cut": cut.cut.right.included_iter().map(|hedge| hedge.0).collect::<Vec<_>>(),
+                "left": cut.left.included_iter().map(|hedge| hedge.0).collect::<Vec<_>>(),
+                "right": cut.right.included_iter().map(|hedge| hedge.0).collect::<Vec<_>>()
+            })
+        };
+        let run_case = |id: &str, kind: &str, command: &str, cli: &mut CLIState| -> Result<()> {
+            let summary = feyngen_str(cli, kind, command, false)?;
+            let process = &cli.state.process_list.processes[0];
+            fs::write(
+                family_root.join(format!("{id}-process-definition.json")),
+                serde_json::to_vec_pretty(&process.definition)?,
+            )?;
+            let name = process.collection.get_integrand_names()[0];
+            let graphs: Vec<(&Graph, Vec<Value>, Vec<Value>)> = match &process.collection {
+                ProcessCollection::Amplitudes(amps) => amps
+                    .get(name)
+                    .unwrap()
+                    .graphs
+                    .iter()
+                    .map(|item| {
+                        let graph = &item.graph;
+                        (
+                            graph,
+                            graph.finalized_cuts.iter().map(&cut_record).collect(),
+                            graph
+                                .finalized_topology_threshold_candidates
+                                .iter()
+                                .map(&threshold_record)
+                                .collect(),
+                        )
+                    })
+                    .collect(),
+                ProcessCollection::CrossSections(xss) => xss
+                    .get(name)
+                    .unwrap()
+                    .supergraphs
+                    .iter()
+                    .map(|item| {
+                        (
+                            &item.graph,
+                            item.cuts.iter().map(&cut_record).collect(),
+                            item.topology_threshold_candidates
+                                .iter()
+                                .map(&threshold_record)
+                                .collect(),
+                        )
+                    })
+                    .collect(),
+            };
+            let mut witness = File::create(family_root.join(format!("{id}-graph-witness.tsv")))?;
+            writeln!(witness, "{summary}")?;
+            for (index, (graph, cuts, thresholds)) in graphs.into_iter().enumerate() {
+                let initial = json!({
+                    "left": graph.initial_state_cut.left.included_iter().map(|hedge| hedge.0).collect::<Vec<_>>(),
+                    "right": graph.initial_state_cut.right.included_iter().map(|hedge| hedge.0).collect::<Vec<_>>()
+                });
+                writeln!(
+                    witness,
+                    "{index}\t{}\t{}\t{}\t{:?}\t{}\t{}\t{}",
+                    graph.name,
+                    graph.overall_factor,
+                    evaluate_overall_factor(graph.overall_factor.as_view()),
+                    graph.group_id,
+                    initial,
+                    Value::Array(cuts),
+                    Value::Array(thresholds)
+                )?;
+            }
+            cli.run_command(&format!(
+                "save dot {}",
+                family_root.join(format!("{id}-dot")).display()
+            ))?;
+            capture(&format!("{id}-after-generation"), cli)?;
+            Ok(())
+        };
+        for (id, kind, command, toggle_zero_color) in cases {
+            run_case(id, kind, command, &mut cli)?;
+            if toggle_zero_color {
+                let unfiltered = command.replacen("--filter-zero-color ", "", 1);
+                run_case(&format!("{id}-no-zero-filter"), kind, &unfiltered, &mut cli)?;
+            }
+        }
+    }
+    Ok(())
+}

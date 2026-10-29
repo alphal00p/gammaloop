@@ -754,7 +754,10 @@
       "planned_unit": "port-44",
       "planned_order": 39,
       "reason": "Historical refreshed ghost/sunset expectations are provenance, not certification. Port only after WP9 exact correctness justification; unresolved rows remain failing with reasons, not re-recorded.",
-      "status": "pending"
+      "status": "Integrated candidate at8c6d8aff; seven certified literals and current capture bindings recorded; awaiting NEW independent combined A/B review before46",
+      "integration_commit": "8c6d8aff7e7b3da312e30d3daa403b5b90c8cede",
+      "integration_change": "uxrqorwvkuzxyyqzqksvrntllsluqntp",
+      "integration_receipt": "docs/architecture/evidence/generation-integration/wp3/main44-45/receipt.json"
     },
     {
       "commit": "dfe6387606e44a96f110c1ce03f52d92824dbdb1",
@@ -764,7 +767,9 @@
       "planned_unit": "port-45",
       "planned_order": 40,
       "reason": "Historical duplicate aa3 reference alignment is not new validation. Reconcile under WP9 exact standard; no automatic snapshot rewrite.",
-      "status": "pending"
+      "status": "Accounting only: named failing-aa intent already covered by certified c0abf082; no duplicate replay; awaiting the same combined A/B review before46",
+      "covered_by": "c0abf0822fb1c71339892d88113262818e3fe883",
+      "integration_receipt": "docs/architecture/evidence/generation-integration/wp3/main44-45/receipt.json"
     },
     {
       "commit": "e0a779808174c64057fecfd062c948b8de8e5c1f",

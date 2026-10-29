@@ -1,0 +1,88 @@
+include!("test_feyngen.rs");
+
+mod source44_scope {
+    use super::*;
+
+    const ALL_GROUPED_L2: &str = "{} > {} | g ghg t u d QED==0 [{2}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling";
+    const NONFACTOR_GROUPED_L2: &str = "{} > {} | g ghg t u d QED==0 [{2}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1";
+    const NONFACTOR_UNGROUPED_L2: &str = "{} > {} | g ghg t u d QED==0 [{2}] --filter-zero-color --numerator-grouping no_grouping --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1";
+    const NONFACTOR_UNGROUPED_L3: &str = "{} > {} | g ghg t u d QED==0 [{3}] --filter-zero-color --numerator-grouping no_grouping --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1";
+    const NONFACTOR_UNGROUPED_L4: &str = "{} > {} | g ghg t u d QED==0 [{4}] --filter-zero-color --numerator-grouping no_grouping --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1";
+
+    fn observed(case: &str, request: &str) -> Result<String> {
+        let mut cli = get_test_cli(
+            None,
+            get_tests_workspace_path().join(format!("source44_{case}")),
+            Some("feyngen".to_string()),
+            true,
+        )?;
+        cli.run_command("import model sm.json")?;
+        cli.run_command("set global kv global.n_cores.feyngen=16")?;
+        let actual = feyngen_str(&mut cli, "amp", request, false)?;
+        let process = &cli.state.process_list.processes[0];
+        let integrand_names = process.collection.get_integrand_names();
+        assert_eq!(integrand_names.len(), 1);
+        let ProcessCollection::Amplitudes(amplitudes) = &process.collection else {
+            panic!("expected an amplitude process");
+        };
+        let names = amplitudes.get(integrand_names[0]).unwrap();
+        assert!(!names.graphs.is_empty());
+        for entry in &names.graphs {
+            let graph = &entry.graph;
+            println!(
+                "GRAPH {case} {} {:?} {} {}",
+                graph.name,
+                graph.group_id,
+                graph.is_group_master,
+                graph.overall_factor.to_plain_string(),
+            );
+        }
+        println!("ACTUAL {case} {actual}");
+        Ok(actual)
+    }
+
+    #[test]
+    fn all_grouped_l2() -> Result<()> {
+        assert_eq!(
+            observed("all_grouped_l2", ALL_GROUPED_L2)?,
+            "5 | -19/24+Group(2,1,-1/2)+Group(4,1,-1/2) = -43/24"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn nonfactor_grouped_l2() -> Result<()> {
+        assert_eq!(
+            observed("nonfactor_grouped_l2", NONFACTOR_GROUPED_L2)?,
+            "4 | -11/12+Group(2,1,-1/2)+Group(4,1,-1/2) = -23/12"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn nonfactor_ungrouped_l2() -> Result<()> {
+        assert_eq!(
+            observed("nonfactor_ungrouped_l2", NONFACTOR_UNGROUPED_L2)?,
+            "5 | -23/12 = -23/12"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn nonfactor_ungrouped_l3() -> Result<()> {
+        assert_eq!(
+            observed("nonfactor_ungrouped_l3", NONFACTOR_UNGROUPED_L3)?,
+            "30 | -13/12 = -13/12"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn nonfactor_ungrouped_l4() -> Result<()> {
+        assert_eq!(
+            observed("nonfactor_ungrouped_l4", NONFACTOR_UNGROUPED_L4)?,
+            "200 | 457/48 = 457/48"
+        );
+        Ok(())
+    }
+}

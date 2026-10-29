@@ -97,6 +97,12 @@
     "round1": "dfe52ccd829c4bc7a5f9ff40ab0d1d8c2ade833a",
     "partial": "372a94fe6991c58d1fd26c87b29a3470e01f248d"
   },
+  "round2_correction": {
+    "path": "docs/architecture/evidence/generation-integration/wp3/main44-45/round2/receipt.json",
+    "status": "A1/B1 harness source recovered exactly; A2/B2 fresh current captures compare exactly to approved certificate domains with mutation controls; B3 ledger synchronized. NEW independent A/B review required before46.",
+    "production_source": "unchanged 8c6d8aff7e7b3da312e30d3daa403b5b90c8cede",
+    "reviewed_round1": "a30c343a6ac5a77d7e9dcc75181152c32471d472"
+  },
   "limits": [
     "All other25 grouped snapshots remain pending.",
     "No whole slow-function pass, whole WP3, source46, general grouping/physics theorem, performance, memory, full-site, WASM asset, wheel, Pyodide, Community, cold build, upload, publication or CI approval.",

@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "base": "a30c343a6ac5a77d7e9dcc75181152c32471d472",
+  "files": [
+    {"status":"A","path":"docs/architecture/evidence/generation-integration/wp3/main44-45/compare-current-ghost.mjs","sha256":"a79e19e208a90b549f270cbe62a46a5e4d4373d211a3e93970f07cfc25876d97"},
+    {"status":"A","path":"docs/architecture/evidence/generation-integration/wp3/main44-45/compare-current-sunset.mjs","sha256":"be2a84c6540e659bd1b55f968c6e5bb374e6449fbd7038d03fe5b87d75b0b205"},
+    {"status":"M","path":"docs/architecture/evidence/generation-integration/wp3/main44-45/receipt.json","sha256":"de836bc7e4db93380a8726ea22abfcaab5be2a1bdc2b0dc4229586093f4661ac"},
+    {"status":"A","path":"docs/architecture/evidence/generation-integration/wp3/main44-45/round2/current-ghost-comparison.json","sha256":"20d36c13ed5aa154a8829394d7741a1b1849d3e46f43a1e3edac5611adb135b1"},
+    {"status":"A","path":"docs/architecture/evidence/generation-integration/wp3/main44-45/round2/current-sunset-comparison.json","sha256":"9df5fe7315e9611552ecf0b6760ce2aad707047424073c08b0f0c6ce5441b07a"},
+    {"status":"A","path":"docs/architecture/evidence/generation-integration/wp3/main44-45/round2/receipt.json","sha256":"ee344b1788fd448e969d3f0d1545ffc2d23e8a01abec73cb0d63f5f897691d74"},
+    {"status":"A","path":"docs/architecture/evidence/generation-integration/wp3/main44-45/source44_ghost_capture_overlay.rs.txt","sha256":"15752a9611dcb6e08d2c479a0bdb3479575b10b987f7993fc519be53f00333ba"},
+    {"status":"A","path":"docs/architecture/evidence/generation-integration/wp3/main44-45/source44_scoped.rs.txt","sha256":"2348806fd62c24f7785b3ae09fcb37de9e606080c8accbdabb9bea443448ea80"},
+    {"status":"A","path":"docs/architecture/evidence/generation-integration/wp3/main44-45/source44_sunset_capture_overlay.rs.txt","sha256":"108956150d5d4961ba6f617ef436a47a8b2de27e40e93ad151ce10056bbf276b"},
+    {"status":"M","path":"docs/architecture/evidence/generation-integration/wp3/replay.json","sha256":"7962c2fdcdd5fea663015c0936941b30465fa4e532180641ead105d28fb9e933"},
+    {"status":"M","path":"docs/architecture/generation-integration-units44-45.typ","sha256":"a3430f8d74ac58152f2e0955166c548b84c2cca07fd677e04a50d67cafe905cd"},
+    {"status":"M","path":"docs/developers.toml","sha256":"eb796ccceb250943160df9b31a9af8c28530a3a24a41649cde4f6638d07a9a5d"}
+  ],
+  "qualification": "Hashes precede only this inventory addition. Production/test source and all seven literals remain byte-identical to8c6d8aff."
+}

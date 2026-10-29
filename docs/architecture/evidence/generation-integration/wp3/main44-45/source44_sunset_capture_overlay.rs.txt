@@ -1,0 +1,84 @@
+#[test]
+#[ignore]
+fn diagnose_two_loop_vacuum_sunsets() -> Result<()> {
+    let root = get_tests_workspace_path().join("sunset_certificate");
+    fs::create_dir_all(&root)?;
+    let mut cli = get_test_cli(None, root.join("state"), Some("sunset_certificate".into()), true)?;
+    cli.run_command("import model sm.json")?;
+    cli.run_command("set global kv global.n_cores.feyngen=16")?;
+    let capture_state = |stage: &str, cli: &CLIState| -> Result<()> {
+        cli.state.model.write_json(root.join(format!("{stage}-model.json")))?;
+        cli.state.model_parameters.to_file(root.join(format!("{stage}-parameters.json")), true)?;
+        fs::write(root.join(format!("{stage}-settings.json")), serde_json::to_vec_pretty(&json!({
+            "restriction": cli.state.model.restriction(),
+            "model_fingerprint": cli.state.model.fingerprint().to_string(),
+            "cli_settings": cli.cli_settings,
+            "default_runtime_settings": cli.default_runtime_settings,
+        }))?)?;
+        Ok(())
+    };
+    capture_state("post-import", &cli)?;
+    for (filter, extra) in [
+        ("all", ""),
+        ("nonfactorizable", "--max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1"),
+    ] {
+        for (grouping, flag) in [
+            ("raw", "--filter-zero-color --numerator-grouping no_grouping"),
+            ("grouped", "--numerator-grouping group_identical_graphs_up_to_scalar_rescaling"),
+        ] {
+            let label = format!("{filter}-{grouping}");
+            let process = format!("{{}} > {{}} | g ghg t u d QED==0 [{{2}}] {flag} {extra}");
+            let summary = feyngen_str(&mut cli, "amp", &process, false)?;
+            let process = &cli.state.process_list.processes[0];
+            fs::write(root.join(format!("{label}-definition.json")), serde_json::to_vec_pretty(&process.definition)?)?;
+            let name = process.collection.get_integrand_names()[0];
+            let ProcessCollection::Amplitudes(amps) = &process.collection else { unreachable!() };
+            let amp = amps.get(name).unwrap();
+            let mut output = File::create(root.join(format!("{label}-graphs.tsv")))?;
+            writeln!(output, "{summary}")?;
+            for (index, graph) in amp.graphs.iter().enumerate() {
+                let graph = &graph.graph;
+                writeln!(output, "{index}\t{}\t{}\t{}\t{:?}\t{}\t{}", graph.name,
+                    graph.overall_factor,
+                    evaluate_overall_factor(graph.overall_factor.as_view()),
+                    graph.group_id,
+                    graph.is_group_master,
+                    graph.global_prefactor.num.expression().to_plain_string())?;
+            }
+            if grouping == "grouped" {
+                let run = feynkit_generator::Run::default().threads(16);
+                let selected = process.definition.request.generate(Arc::new(cli.state.model.clone()), &run)?
+                    .build(&process.definition.numerators, &run)?
+                    .select(&process.definition.selection, &run)?;
+                let source = selected.diagrams().iter().enumerate().map(|(index, diagram)| json!({
+                    "index": index,
+                    "name": diagram.name(),
+                    "factor": diagram.overall_factor().to_plain_string(),
+                })).collect::<Vec<_>>();
+                fs::write(root.join(format!("{label}-native-source.json")),
+                    serde_json::to_vec_pretty(selected.diagrams())?)?;
+                let grouped = selected.group(&process.definition.grouping, &run)?;
+                for (final_graph, master) in amp.graphs.iter().zip(grouped.diagrams()) {
+                    assert_eq!(final_graph.graph.name, master.name().unwrap());
+                    assert_eq!(&final_graph.graph.overall_factor, master.overall_factor());
+                }
+                let groups = grouped.groups().iter().map(|group| json!({
+                    "master": group.master,
+                    "members": group.members.iter().map(|member| json!({
+                        "source_diagram": member.source_diagram,
+                        "source_name": member.source_identity.as_ref().map(|id| &id.name),
+                        "ratio": member.ratio.to_plain_string(),
+                        "overall_factor": member.overall_factor.to_plain_string(),
+                    })).collect::<Vec<_>>(),
+                })).collect::<Vec<_>>();
+                fs::write(root.join(format!("{label}-native-final.json")),
+                    serde_json::to_vec_pretty(grouped.diagrams())?)?;
+                fs::write(root.join(format!("{label}-native-groups.json")),
+                    serde_json::to_vec_pretty(&json!({"source": source, "groups": groups}))?)?;
+            }
+            cli.run_command(&format!("save dot {}", root.join(format!("{label}-dot")).display()))?;
+            capture_state(&format!("{label}-after"), &cli)?;
+        }
+    }
+    Ok(())
+}

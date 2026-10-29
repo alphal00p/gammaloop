@@ -1,0 +1,32 @@
+{
+  "schema": 1,
+  "exact": true,
+  "comparisons": [
+    {
+      "name": "inputs",
+      "currentPath": "target/wp3-source44/round2-sunset-analysis/inputs.json",
+      "approvedPath": ".local/review-main44-45-b-astra-higL6Z/sunset-inputs.json",
+      "bytes": 4254,
+      "sha256": "0f8a28831afa38d5a0893abeae6f3a95650f3e4eea01af6c77866548972f734d"
+    },
+    {
+      "name": "model",
+      "currentPath": "target/wp3-source44/round2-sunset-analysis/model.json",
+      "approvedPath": ".local/review-main44-45-b-astra-higL6Z/sunset-model.json",
+      "bytes": 6402,
+      "sha256": "48a2b358b08bb3e1761b6d96628c1ee6545c818c6c8c78d16310a406279f5137"
+    },
+    {
+      "name": "join",
+      "currentPath": "target/wp3-source44/round2-sunset-analysis/join.json",
+      "approvedPath": ".local/review-main44-45-b-astra-higL6Z/sunset-join.json",
+      "bytes": 246308,
+      "sha256": "0712c559e996c8e228f4af7fa91311edcdddaef6c22bd36d045d467c234599af"
+    }
+  ],
+  "mutation": {
+    "target": "current all-grouped summary",
+    "frozenPreparationInputUnchanged": true,
+    "rejected": true
+  }
+}

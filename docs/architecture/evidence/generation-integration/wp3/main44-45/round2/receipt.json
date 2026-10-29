@@ -1,0 +1,72 @@
+{
+  "schema": 1,
+  "scope": "Correction of MAIN44–45 review findings A1/B1, A2/B2 and B3; production/test source remains8c6d8aff",
+  "candidate_round1": "a30c343a6ac5a77d7e9dcc75181152c32471d472",
+  "built_code_source": "8c6d8aff7e7b3da312e30d3daa403b5b90c8cede",
+  "built_code_change": "uxrqorwvkuzxyyqzqksvrntllsluqntp",
+  "review_findings": [
+    {"review":"A","path":".local/review-main44-45-scope-a-astra-hmAIu4nT/review.json","sha256":"47cc1bf83b1849390754dd0052d3c101b8edff1131fc100d32f4f499d12a462f"},
+    {"review":"B","path":".local/review-main44-45-b-astra-higL6Z/review.json","sha256":"96a9c6f61d8efe88187693c449c20087681c69d4c235b082453254bbb213061b"}
+  ],
+  "A1_B1_harness": {
+    "archive": "docs/architecture/evidence/generation-integration/wp3/main44-45/source44_scoped.rs.txt",
+    "sha256": "2348806fd62c24f7785b3ae09fcb37de9e606080c8accbdabb9bea443448ea80",
+    "included_source": {"revision":"8c6d8aff7e7b3da312e30d3daa403b5b90c8cede","path":"tests/tests/test_feyngen.rs","sha256":"1032e4f82370ea44532dbd0390483f70c81f55f3b8cdb2af300e7f897db4ca8d"},
+    "build": "Copy archive to tests/tests/source44_scoped.rs; nix develop <pinned shell> -c cargo nextest list --locked --cargo-profile ci-optim -p gammaloop-integration-tests --test source44_scoped --message-format json",
+    "features": "default",
+    "profile": "ci-optim",
+    "elf": {"path":"/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/source44_scoped-dedf9d4e1d69e3f3","sha256":"e12affc0a33304544c101ec58c7fce22f5b311eab38edba445316d01d17a83a9"},
+    "qualification": "Exact original bytes recovered, not reconstructed or superseded. Live Cargo source remains absent. Existing five one-test passes retain their original historical identity."
+  },
+  "A2_B2_current_ghost": {
+    "observer_overlay": {"archive":"docs/architecture/evidence/generation-integration/wp3/main44-45/source44_ghost_capture_overlay.rs.txt","sha256":"15752a9611dcb6e08d2c479a0bdb3479575b10b987f7993fc519be53f00333ba","immutable_full_source":"121ac233d5ab014f4fadefccce702041bbbdf487:tests/tests/test_feyngen.rs","full_source_sha256":"2b54ae424c91044cb8992a02159ddfb302d20279a2bb17abf3affc1a8222cb30"},
+    "elf": {"sha256":"e8fa099c7ae6b306686b44a9a55b10080978d2511d45422911a6819154ee77f8","features":"default","profile":"ci-optim"},
+    "argv": ["diagnose_source44_ungrouped_weights","--exact","--ignored","--nocapture","--test-threads=1"],
+    "policy": "Isolated current capture root; INSTA_UPDATE=no; exact ignored diagnostic only; original imports, lifecycle and 16-worker vacuum policy retained.",
+    "raw_capture": {"path":"target/wp3-source44/round2-current-ghost/ghost_weight_certificate","logSha256":"8d02777592465d87575aeb9c577c53c4133c5cc49cfb81ba517ecc43553a8ad9"},
+    "complete_join": {"path":"target/wp3-source44/round2-analyzer/current-full.json","bytes":46517745,"sha256":"77fa21f0c63558d51937a8046c1eb3accba888ff8fd92cd6907caf61ea26a204"},
+    "summary": {"path":"target/wp3-source44/round2-analyzer/current-summary.json","bytes":61903,"sha256":"8e55c2301355a8919869a87f1ad41db2cf8f8cd4698f9d0ee7c2c3c5d474556d"},
+    "comparison": "docs/architecture/evidence/generation-integration/wp3/main44-45/round2/current-ghost-comparison.json",
+    "result": "4159 current physical rows equal approved full join after capture-root normalization only; complete graph/node/edge/direction/cut/threshold/raw-factor/evaluated-weight memberships included; disposable current weight mutation rejected."
+  },
+  "A2_B2_current_sunset": {
+    "observer_overlay": {"archive":"docs/architecture/evidence/generation-integration/wp3/main44-45/source44_sunset_capture_overlay.rs.txt","sha256":"108956150d5d4961ba6f617ef436a47a8b2de27e40e93ad151ce10056bbf276b","immutable_full_source":"0ac5b580fe73cc97c7b18949cefa1440d9dea9fb:tests/tests/test_feyngen.rs","full_source_sha256":"471e2af3171af92839f8e632f98cc4a85dcfec063c60318c83531f2da4458cfa"},
+    "elf": {"sha256":"4e92153a4c1a1d3f213880fe882cd661ff2c82060bbb0e4484636202fc3f85fb","features":"default","profile":"ci-optim"},
+    "argv": ["diagnose_two_loop_vacuum_sunsets","--exact","--ignored","--nocapture","--test-threads=1"],
+    "raw_capture": {"path":"target/wp3-source44/round2-current-sunset/sunset_certificate","logSha256":"3cec2496d19611468c7862b977e3e8414306337892a6011953aa479a7ebb53c5"},
+    "replay": [
+      {"name":"inputs","path":"target/wp3-source44/round2-sunset-analysis/inputs.json","bytes":4254,"sha256":"0f8a28831afa38d5a0893abeae6f3a95650f3e4eea01af6c77866548972f734d"},
+      {"name":"model","path":"target/wp3-source44/round2-sunset-analysis/model.json","bytes":6402,"sha256":"48a2b358b08bb3e1761b6d96628c1ee6545c818c6c8c78d16310a406279f5137"},
+      {"name":"join","path":"target/wp3-source44/round2-sunset-analysis/join.json","bytes":246308,"sha256":"0712c559e996c8e228f4af7fa91311edcdddaef6c22bd36d045d467c234599af"}
+    ],
+    "comparison": "docs/architecture/evidence/generation-integration/wp3/main44-45/round2/current-sunset-comparison.json",
+    "result": "Current resolved inputs/model/card/settings plus raw/grouped native source, member partition/ratios/master/final tensors, local/aggregate interfaces, global owners and comparison-frame join are byte-identical to approved records; disposable current grouped summary mutation rejected.",
+    "qualification": "Approved source-bound sunset probe ELF runs on current kernel; historical serialized capture replay remains current-kernel execution, not historical-kernel execution."
+  },
+  "B3_ledger": {
+    "source44": "Integrated candidate at8c6 with receipt/code binding; awaiting NEW independent combined A/B review before46.",
+    "source45": "Accounting only, covered by certified c0abf082 named failing-aa; no duplicate replay; receipt linked.",
+    "source46": "Unchanged pending."
+  },
+  "reviewer_reproduction_reused": {
+    "qualification": {"path":".local/review-main44-45-b-astra-higL6Z/reproduction-qualification.json","sha256":"ffdd0e43c166bbdf1bbc1688968cb53de028f7088cd1ca725984bc11a2db5921"},
+    "ghost": {"path":".local/review-main44-45-b-astra-higL6Z/ghost-replay-comparison.json","sha256":"e759bc6eddd503e861afaab67b1ac89ae687d8f55dec43ee68a57297ec88f70e"},
+    "sunset": {"path":".local/review-main44-45-b-astra-higL6Z/sunset-replay-comparison.json","sha256":"f0a9aec2639e772c612f9a4a219053e50c46e2c3ab80e3d3bbaad6d950f02457"}
+  },
+  "preservation": {
+    "productionAndSevenLiterals": "Unchanged from8c6d8aff",
+    "temporaryLiveSources": "Removed after source/ELF binding; no diagnostic .rs remains in Cargo/Nix selection.",
+    "negativeHistory": "All imported failed/zero-test commands remain failures with no pass credit.",
+    "otherGroupedRows": 25,
+    "source46": "pending",
+    "wholeWP3": false
+  },
+  "static": {
+    "jsonAndNodeSyntax": "pass",
+    "registryAndTypst": "pass",
+    "scopedHarnessRustfmt": "pass",
+    "ghostOverlayRustfmt": "pass",
+    "sunsetOverlayRustfmt": "Historical exact executed source reproduces its archived rustfmt diff; preserved without rewriting. Observer compiled and executed successfully. This is not a lint claim for rewritten bytes.",
+    "clippy": "No production source changed; round1 scoped production Clippy exit0 retained. Both capture-only test targets compiled against current libraries and were removed."
+  }
+}

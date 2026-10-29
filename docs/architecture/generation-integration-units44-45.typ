@@ -29,3 +29,16 @@ This bounded integration does not approve the other 25 grouped snapshots,
 source46, whole WP3, general physics, performance, memory, final distributions,
 the full site or publication. A NEW independent combined MAIN44–45 review is
 required before46.
+
+== Round-two current capture qualification
+
+The #link("evidence/generation-integration/wp3/main44-45/round2/receipt.json")[round-two receipt]
+closes the first review's evidence gaps without changing the seven literals or
+production. The exact original five-cell harness is archived and hash-matches
+its retained ELF source. Fresh current-code observers capture all ungrouped
+physical graph/cut/threshold/factor memberships and the grouped raw/native/final
+tensor, owner and comparison-frame records. These current outputs equal the
+approved certificate domains exactly; disposable current-side mutations fail
+both comparisons while frozen preparation inputs remain unchanged. Temporary
+live observer sources are removed after their source, feature, command and ELF
+bindings are recorded. A NEW independent A/B review remains required before46.
