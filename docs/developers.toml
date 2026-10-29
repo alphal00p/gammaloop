@@ -59,6 +59,21 @@ topics = ["generation", "integration", "testing", "BRST"]
 review_triggers = ["crates/gammalooprs/src/integrands/process/mod.rs", "docs/architecture/generation-integration-core-test-inference.typ", "docs/architecture/evidence/generation-integration/wp3/core-test-inference/**"]
 
 [[section.note]]
+id = "generation-integration-core-docs"
+title = "Core fixture and generated evidence integration"
+summary = "Bounded integration of the API compile-time topology fixture owner and generated rendered-evidence documentation owner."
+source = "docs/architecture/generation-integration-core-docs.typ"
+kind = "Integration record"
+status = "Combined candidate · NEW independent review required; WP3 incomplete"
+lifecycle = "investigation"
+owner = "unassigned"
+reviewed_at = "2026-10-29"
+review_ref = "a33052fa166ed1bc34686d7112f3b93e2123424f"
+products = ["gammaloop"]
+topics = ["generation", "integration", "testing", "documentation", "provenance"]
+review_triggers = ["nix/rust-workspace.nix", "crates/alphal00p-docs-builder/**", "docs/generated-rendered-evidence.toml", "docs/developers.toml", "docs/architecture/generation-integration-core-docs.typ", "docs/architecture/evidence/generation-integration/wp3/core-docs/**"]
+
+[[section.note]]
 id = "generation-integration-tensor-layout"
 title = "TensorReduction declared-layout integration"
 summary = "Approved reducer-specific restoration of declared tensor layouts on the cumulative source46 head."

@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "base": {
+    "revision": "aa841fde3195270cc00328a9356dfe523c0d7a85",
+    "review": ".local/review-main-core-binding-round3-opus-20261029T195502Z-3283227/review.json",
+    "review_sha256": "fb3abb02a09b67fd1112279e6b62497a46ca789790332c0a230110c60f513b00"
+  },
+  "api_fixture": {
+    "revision": "a33052fa166ed1bc34686d7112f3b93e2123424f",
+    "review": "../generation-core-api-fixture/.local/review-core-api-fixture-opus-20261029T191010-1857522/review.json",
+    "review_sha256": "92e28366b64f0e5884b2f506602e0cba6459e5294e7843cddb2a2a77a6fd9e0c",
+    "receipt": "../generation-core-api-fixture/target/generation-core-api-fixture/receipt.json",
+    "receipt_sha256": "233c3c4c991caea9960741e4e7ef3d1302488c7fbb1dad85ad52fb61f973c4d8",
+    "bookmark_retention": "../generation-core-api-fixture/target/generation-core-api-fixture/bookmark-review-retention.json",
+    "bookmark_retention_sha256": "b27532e15739394fe744950a97eaa20486b663ce1f7b37fbcf221ddfca22de1b"
+  },
+  "generated_evidence": {
+    "revision": "1049e0c32263d4805d14130435a26e2b5deb5fd7",
+    "review": "../generation-rendered-evidence/.local/review-rendered-evidence-round4-opus-20261029T183451Z/review.json",
+    "review_sha256": "6721dfd9ddc1b1b4bddb5b24b50939e75fee157005c733807e1c4b925532db33",
+    "reconciliation_preflight": "../generation-rendered-evidence/.local/main-reconciliation-preflight-20261029T190000Z/preflight.json",
+    "reconciliation_preflight_sha256": "c9c0d5fca59ac2cad3a1c2ec5767d5d6d884c732c2fa1dc42b4060e3cb9de9ad"
+  },
+  "status": "Both preparations and the cumulative base are independently approved. This index does not approve the combined candidate."
+}

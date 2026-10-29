@@ -731,6 +731,17 @@
     "code_change": "tmxvnovqoxurumoxrwzruptmtqrvooyv",
     "receipt": "docs/architecture/evidence/generation-integration/wp3/core-test-inference/receipt.json",
     "candidate_bookmark": "generation-integration-core-test-inference",
-    "status": "Runtime/producer/3-test scope approved; registry digests remain 110/110. Round3 corrects the before-evidence path and preserves invalid round2 artifact782a with no credit. Awaiting NEW focused Opus review; API fixture blocker and 81 oracle failures remain open."
+    "status": "APPROVED at aa841fde by independent Opus review; runtime/producer/3-test scope and 110/110 registry digests remain bound. Original b9 outcomes remain historical."
+  },
+  "active_core_docs": {
+    "base": "aa841fde3195270cc00328a9356dfe523c0d7a85",
+    "api_preparation": "a33052fa166ed1bc34686d7112f3b93e2123424f",
+    "docs_preparation": "1049e0c32263d4805d14130435a26e2b5deb5fd7",
+    "code_commit": "9b18f329e992ccc642c2cdaa62e934318f55fa76",
+    "code_change": "nqopsyyxssoyslmxrszqroxvowqusywp",
+    "evidence_change": "owyyqwsrmpqlpxksznmslqslkuqvnnqw",
+    "receipt": "docs/architecture/evidence/generation-integration/wp3/core-docs/receipt.json",
+    "candidate_bookmark": "generation-integration-core-docs",
+    "status": "Combined API fixture and generated-evidence candidate; fresh core/docs validation passed, awaiting NEW independent combined review. The 81 oracle rows and broader WP3 gates remain open."
   }
 }

@@ -1,0 +1,161 @@
+{
+  "schema": 1,
+  "scope": "Bounded combined integration of the approved gammaloop-api compile-time topology fixture source owner and generated rendered-evidence documentation owner; review candidate only",
+  "base": "aa841fde3195270cc00328a9356dfe523c0d7a85",
+  "built_code_source": "9b18f329e992ccc642c2cdaa62e934318f55fa76",
+  "built_code_change": "nqopsyyxssoyslmxrszqroxvowqusywp",
+  "evidence_change": "owyyqwsrmpqlpxksznmslqslkuqvnnqw",
+  "candidate_bookmark": "generation-integration-core-docs",
+  "approval_index": "docs/architecture/evidence/generation-integration/wp3/core-docs/approval-index.json",
+  "delta": {
+    "code_paths": 9,
+    "api_source_selection": {
+      "path": "nix/rust-workspace.nix",
+      "owner": "workspacePackageExtraSourceRoots.compileTimeTest.gammaloop-api",
+      "added": "benchmarks/performance/gg-hhh-topology.toml",
+      "fixture_bytes": 851,
+      "fixture_sha256": "e97f2c2b7fae4017ac33019aa9ede76724eaaa28c65d7a19801fc2a30042f1c0",
+      "qualification": "The preparation preflight counted eight single-line include sites. Independent review expanded this to all fifteen include_str!/include_bytes! sites resolving to eleven files plus include_dir!(assets/models/json), and found only this fixture missing."
+    },
+    "documentation_paths": [
+      "CONTRIBUTING.typ",
+      "Cargo.lock",
+      "crates/alphal00p-docs-builder/Cargo.toml",
+      "crates/alphal00p-docs-builder/src/generated_evidence.rs",
+      "crates/alphal00p-docs-builder/src/lib.rs",
+      "crates/alphal00p-docs-builder/src/provenance_tests.rs",
+      "docs/developers.toml",
+      "docs/generated-rendered-evidence.toml"
+    ],
+    "dependency": "Only docs-builder sha2 = 0.10 and its Cargo.lock dependency-list edge; sha2 0.10.9 was already locked. No version, checksum, kernel, workspace-hack, or other lock change.",
+    "registry_reconciliation": "Seven preparation paths are byte-identical. docs/developers.toml preserves MAIN color, tensor, core, evidence, and process-scope owners; adds the missing source46 historical record; changes only two undefined sunset owners to unassigned; and refreshes exactly the two Nix scope digests affected by the one-line source-owner change."
+  },
+  "source": {
+    "uri": "git+file:///shared/lcnbr/dev/gammaloop/main?rev=9b18f329e992ccc642c2cdaa62e934318f55fa76&shallow=1&allRefs=1",
+    "full_source": {
+      "path": "/nix/store/k9dc5m23dw03ldi96f9bvplpdhjii6ds-source",
+      "nar_hash": "sha256-n8d3ZkL93bbvgy8hVv6+/PL5IoZmURRqIB4WqESCfi0=",
+      "classification": "Git-pinned full code source"
+    },
+    "api_filtered_source": {
+      "path": "/nix/store/252nsc32rqc5y4x8fb8kf72aw1zyi3r0-source",
+      "nar_hash": "sha256-pHEa5ZeICx0HvRse11vYsCDmD/whuKR/YzyWymnSzUA=",
+      "fixture_sha256": "e97f2c2b7fae4017ac33019aa9ede76724eaaa28c65d7a19801fc2a30042f1c0"
+    },
+    "gammalooprs_filtered_source": {
+      "path": "/nix/store/hxxshrclnpb9s7zj0slk7ag0f6l6kyqj-source",
+      "nar_hash": "sha256-DLRbox7+6TtkVZsCAkBLWxmurvVNi4wM36rekMGO9b0=",
+      "process_mod_sha256": "2fdacba25abf4f60b41340247a5aaefc155f8177e8314d184e518e576f38af85"
+    },
+    "distinction": "Full repository, package-filtered producer, pages source, and evidence-tip sources are distinct identities. Evaluation is not realization or execution."
+  },
+  "producer": {
+    "core_aggregate_derivation": "/nix/store/vrzrgf9rsgazhkxqblsf6m8qp8a91mkk-gammaloop-nextest-binaries-core.drv",
+    "core_aggregate_output": "/nix/store/5ikcpasd628xz2ay36f1pgdasj5bnv7g-gammaloop-nextest-binaries-core",
+    "api_derivation": "/nix/store/l70r4haqhkg3ixvvrfi0rzrwnj6s4zz5-gammaloop-nextest-binaries-core-gammaloop-api-0.1.0.drv",
+    "api_archive": "/nix/store/fqw32s5smv6cf7zvby7wankkljbyynsg-gammaloop-nextest-binaries-core-gammaloop-api-0.1.0/gammaloop-nextest-core-gammaloop-api.tar.zst",
+    "api_archive_sha256": "08a615108bc509e4d1cdcbd2e7e18c58ac871ba3490a6295764e65f103cbf15f",
+    "api_elf_sha256": "a5a2e22e0e7af51c6fda5d8e9ca91d4cd3bddda359d3945c880dc6b3ae9a0236",
+    "gammalooprs_derivation": "/nix/store/02n8rjsr0fzlwmjlklhfpimxj8i89gzb-gammaloop-nextest-binaries-core-gammalooprs-0.1.0.drv",
+    "gammalooprs_archive": "/nix/store/hymw9ivccl44gl01qfsc5hsgmjff9y8j-gammaloop-nextest-binaries-core-gammalooprs-0.1.0/gammaloop-nextest-core-gammalooprs.tar.zst",
+    "gammalooprs_archive_sha256": "4b66124b8d6e3b2d71ef6f373200b5aefb4172cbcb0a9507080d8297da758fff",
+    "docs_aggregate_derivation": "/nix/store/zx1n58ra14qr5hn8s8yavql25flnchg8-gammaloop-nextest-binaries-docs.drv",
+    "docs_aggregate_output": "/nix/store/db16widaz8lgjb56vy34milf57mb2djv-gammaloop-nextest-binaries-docs",
+    "docs_builder_archive_sha256": "f86838c2960fb15cc09c430271a13565ee7cb79e028123d764a235a8b5f57297",
+    "compiler": "/nix/store/c3bpv60f5wgp4pmgsifaykxk214h6463-rust-stable-with-components-2026-09-03",
+    "profile": "ci-optim / ci_gammaloop",
+    "status": "Core and docs aggregates were realized from the Git-pinned code source. The API and gammalooprs archives were executed; docs-builder validation used the same code in the Nix development environment rather than relabelling archive realization as execution."
+  },
+  "policy": {
+    "profile": "ci_gammaloop",
+    "global_workers": 16,
+    "memory_intensive_max_threads": 2,
+    "timeout_seconds": 240,
+    "nixci_enabled": false,
+    "whole_graph_numerator_expansion": false
+  },
+  "execution": {
+    "core_fast": {
+      "derivation": "/nix/store/dwxfd5mv42yk77lrzklhkmqapl9h1xkl-gammaloop-nextest-core.drv",
+      "output": "/nix/store/9rh36lvsffdkh7422f64y3xdv0wyvx85-gammaloop-nextest-core",
+      "exit": 0,
+      "inventory": 2249,
+      "selected": 2214,
+      "passed": 2214,
+      "failed": 0,
+      "errors": 0,
+      "rust_ignored_no_credit": 19,
+      "default_filter_excluded_no_credit": 16,
+      "packages": {
+        "gammaloop-api": 451,
+        "gammaloop-tracing-filter": 19,
+        "gammaloop-tracing-filter-macros": 0,
+        "gammalooprs": 1587,
+        "three-dimensional-reps": 157
+      }
+    },
+    "topology_exact": {
+      "name": "commands::generate::tests::topology_card_projector_crosses_the_current_cli_boundary",
+      "inventory": 452,
+      "selected": 1,
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0,
+      "exit": 0,
+      "junit_sha256": "261631b4369dfaaef4049854fcf2a260054842c4d0c8c571c3490ec69fb9a471"
+    },
+    "stale_selectors": "Seven exact stale graph::parse::tests::failing names have zero matches in the final archive listings; no pass or skip credit. The no-whole-graph-expansion policy remains independently active."
+  },
+  "documentation_validation": {
+    "library_tests": {"passed": 116, "failed": 0, "ignored": 0, "exit": 0},
+    "canonical_builder": {"exit": 0, "qualification": "Runs through generated evidence, catalogs, references, registry, titles, and all developer scopes on final code."},
+    "registry": {"notes": 80, "unique_ids": 80, "unique_titles": 80, "scopes": 110, "bad": 0, "authoritative_algorithm": "anchor..end_anchor, or whole file without end_anchor, then git hash-object"},
+    "pages_source": {"path": "/nix/store/n3z69s8mgc59ndwg5nm2cdc2lc368jm9-source", "nar_hash": "sha256-KIN9rrmafOx4h3N5mMc4RoEBmXXTxGOZb1k1Suoa7lA=", "status": "evaluated source only; no page/site output realization claim"},
+    "metadata_free_gate": {"positive_exit": 0, "negative_exit": 2, "negative": "task-owned copy with unauthorized-current.html", "path_empty": true},
+    "generated_evidence": "Eight historical HTML artifacts and twenty-five declared binding files are retained. Ignored .local review HTML is excluded by repository membership, not deleted."
+  },
+  "renders": {
+    "tool": "/nix/store/wzpxqpc3v2xxah69rqifq5kac67hx36g-typst-0.15.1/bin/typst",
+    "tool_sha256": "3c381d7d3e2259f81766ff77a1e6dec18ec4c7b7702b9c51ad34d56432b9633c",
+    "creation_timestamp": 0,
+    "note": {"source_sha256":"b15a537cef9eb449384ab9b0811a52f93fa9f806b48806c2227bf11cf12da2cd","wrapper_sha256":"2c2ae2157062f25d12a58df52e4c26bff40a83db4b996532f52fb3dca2a405cf","pdf_sha256":"92af9cf7734307359fbc15aa247ad3597a1e8cc6dfa052bf9b944b227b630950","html_sha256":"1aff8700b324297b9947a8d6e9109033492ae0bdeb3f89f0467123db65d943f1"},
+    "plan": {"source_sha256":"2bcfd0fd9a31f1f1618d26e29eeeed7a0a503315134ee42cc3d443dc8a322885","wrapper_sha256":"3a9deca513708fd960c6b91612311a4799b7b18ecd5de0425f35b17a17ef3103","pdf_sha256":"b68aa61f2644ddc22a3f672dff45094d57b52b376e6764106a01cb83a8d49217","html_sha256":"17476fbd2667abd430c2f90b2948257a84a72165c0afe1ad4a6bb9faaa63c4b8"},
+    "semantic_check": {"script_sha256":"63a6809a5e76acbdf4050b385d27856a410f7d39fe2c7c45019eae68ac869a24","exit":0,"qualification":"Exact current 2,214-test note and plan paragraphs accepted; the frozen historical core-test render is rejected as stale."}
+  },
+  "static": {
+    "cargo_fmt": 0,
+    "docs_builder_clippy_deny_warnings": 0,
+    "hakari_generate_diff": 0,
+    "hakari_verify": 0,
+    "feature_isolation": 0,
+    "ci_graph": 0,
+    "nixfmt": "Inherited whole-file failure; formatting base and candidate copies leaves only the authorized fixture line between normalized files. No broad rewrite."
+  },
+  "history": {
+    "core_test_inference": "Approved at aa841fde; its exact source, producer, and three-test evidence remain immutable.",
+    "exit_matrix": "Original b9 exit-matrix outcomes and manifests remain immutable. New core-fast credit belongs only to code9b18.",
+    "scope_before": "The genuine prior-review before record remains at .local/review-main-core-test-inference-opus-20261029T190454Z-1747112/scopes-004.txt; invalid round2 artifact782a retains no credit."
+  },
+  "raw_evidence": {
+    "root": "target/wp3-core-docs",
+    "runtime_manifest": "target/wp3-core-docs/runtime-artifact-manifest.sha256",
+    "runtime_manifest_entries": 179,
+    "runtime_manifest_sha256": "a334fb7f9ec2346483d8a30b2bf984f564d8b9edad253aeb1f0ba6b4efa16ec3",
+    "qualification": "The compact manifest excludes retained writable source copies and final evidence-tip self-qualification records. Failed attempts remain present and are explicitly classified in failed-attempts.json."
+  },
+  "protected_refs": [
+    "generation-integration-core-docs-base=aa841fde3195270cc00328a9356dfe523c0d7a85",
+    "generation-integration-core-docs-code=9b18f329e992ccc642c2cdaa62e934318f55fa76",
+    "generation-core-api-fixture=a33052fa166ed1bc34686d7112f3b93e2123424f",
+    "generation-rendered-evidence=1049e0c32263d4805d14130435a26e2b5deb5fd7",
+    "generation-integration-core-test-inference=aa841fde3195270cc00328a9356dfe523c0d7a85",
+    "generation-integration-wp3-exit-matrix-round2=ddbee21256bb36bf202b0a8ce12c09207a7c8c14",
+    "generation-integration-source46=79dfeaab77958064bf802bc88db23eb86ac2f8ce"
+  ],
+  "limits": [
+    "Candidate awaits NEW independent combined review.",
+    "The 81 FeynKit oracle-row failures and broader accepted WP3 exit obligations remain open.",
+    "No QED lane, full-site publication, distribution, benchmark, performance, memory, M-rebuild, or WP3 completion claim.",
+    "Final evidence-tip full source may differ from built code9b18; it is not relabelled as the executed producer source."
+  ]
+}

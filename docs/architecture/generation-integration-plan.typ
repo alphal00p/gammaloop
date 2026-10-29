@@ -398,8 +398,20 @@ own workspace. Bounded: one regression, one bisect, one written verdict.
   immutable history. The separate API topology-fixture source omission still
   blocks the aggregate core producer;81 FeynKit rows and the broader WP3 matrix
   remain open. Evidence is in
-  `evidence/generation-integration/wp3/core-test-inference/receipt.json`; a NEW
-  independent Opus integration review is required.
+  `evidence/generation-integration/wp3/core-test-inference/receipt.json`.
+  Independent review approved the cumulative correction at `aa841fde`.
+
+- #strong[Core fixture and generated-evidence integration 2026-10-29:]
+  approved API preparation `a33052fa` adds the single missing compile-time
+  topology fixture to the existing source owner, while approved documentation
+  preparation `1049e0c3` installs the generated-rendered-evidence owner and its
+  already-locked hash dependency. Final Git-pinned core validation passes the
+  exact topology test and 2,214 canonical fast-lane tests; documentation
+  validation passes 116 library tests, the canonical builder, 110 scope
+  digests, and the metadata-free source boundary. Evidence is in
+  `evidence/generation-integration/wp3/core-docs/receipt.json`. This candidate
+  awaits NEW independent combined review; 81 oracle rows and broader WP3 gates
+  remain open.
 
 - `jj duplicate` the v4 chain (`kursouxx::kpslpwqz`) onto the WP2 base; do not
   rebase in place, so the 19 live workspaces on older lines stay valid.
