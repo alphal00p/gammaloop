@@ -115,25 +115,32 @@ def summarize_sample_result(result):
     }}
 
 def summarize_result(result):
+    accumulator = api.observable_accumulator()
+    accumulator.add_sample(result, result.integrator_weight)
+    observables = accumulator.snapshot()
     summary = summarize_sample_result(result)
     summary.update({{
-        "observable_keys": sorted(result.observables.keys()),
+        "observable_keys": sorted(observables.keys()),
         "histogram_bin_counts": {{
-            name: len(hist.bins) for name, hist in result.observables.items()
+            name: len(hist.bins) for name, hist in observables.items()
         }},
     }})
     return summary
 
 def summarize_batch_result(result):
+    accumulator = api.observable_accumulator()
+    for sample in result.samples:
+        accumulator.add_sample(sample, sample.integrator_weight)
+    observables = accumulator.snapshot()
     return {{
         "formatted": str(result),
         "samples": [summarize_sample_result(sample) for sample in result.samples],
-        "observable_keys": sorted(result.observables.keys()),
+        "observable_keys": sorted(observables.keys()),
         "histogram_bin_counts": {{
-            name: len(hist.bins) for name, hist in result.observables.items()
+            name: len(hist.bins) for name, hist in observables.items()
         }},
         "histogram_sample_counts": {{
-            name: hist.sample_count for name, hist in result.observables.items()
+            name: hist.sample_count for name, hist in observables.items()
         }},
     }}
 
@@ -570,7 +577,10 @@ payload = {{
     )?;
 
     let without_events = &payload["without_events"];
-    assert_eq!(without_events["event_groups_len"].as_u64(), Some(0));
+    assert!(
+        without_events["event_groups_len"].as_u64().unwrap() > 0,
+        "configured observables retain a sample payload even without diagnostic event output"
+    );
     assert_eq!(
         without_events["observable_keys"].as_array().map(Vec::len),
         Some(2)
@@ -689,7 +699,22 @@ except Exception as exc:
         "Install numpy in the active Python environment used for the API tests."
     )
 points = np.array([{}, {}], dtype=float)
-batch = summarize_batch_result(api.evaluate_samples(points))
+raw_batch = api.evaluate_samples(points)
+batch = summarize_batch_result(raw_batch)
+left = api.observable_accumulator()
+right = api.observable_accumulator()
+for sample in raw_batch.samples:
+    left.add_sample(sample, 1.0)
+    right.add_sample(sample, -1.0)
+combined = gammaloop.ObservableAccumulator.sum_independent_estimates([left, right])
+for histogram in combined.values():
+    assert histogram["sample_counts"] == [2, 2]
+    assert all(abs(bin["mean"]) < 1e-12 for bin in histogram["bins"])
+left.add_sample(raw_batch.samples[0], 0.0)
+assert all(hist.sample_count == 3 for hist in left.snapshot().values())
+left.merge_in_place(right)
+assert all(hist.sample_count == 5 for hist in left.snapshot().values())
+assert all(hist.sample_count == 2 for hist in right.snapshot().values())
 momentum = summarize_result(api.evaluate_sample({}, momentum_space=True))
 try:
     api.evaluate_sample([0.1, 0.2, 0.3, 0.4], momentum_space=True)

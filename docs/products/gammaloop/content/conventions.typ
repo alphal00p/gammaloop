@@ -97,6 +97,11 @@ multiplicative factor. Its implemented reconstruction is
 
 $ w_"event" = (w_"Original" + sum_i w_"CT,i") w_"FullMultiplicativeFactor". $
 
+Sample-evaluation event weights and `FullMultiplicativeFactor` exclude the outer Monte
+Carlo weight. Observable accumulation receives that weight explicitly, so it can also
+apply a stratum mask and conditional probability without changing the evaluated sample.
+The native integrator's exported event lists include the outer weight.
+
 All groups originating from one Monte Carlo point are combined before one statistical sample
 is committed to a histogram bin. They are correlated contributions, not independent events.
 The #link("guides/events-and-observables/")[events and observables guide] shows the corresponding

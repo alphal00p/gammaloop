@@ -798,7 +798,7 @@ The user-facing contract and worked GL297/GL638 examples live in
     momentum sample carries the combined map/partition factor)
   - the separate `integrator_weight`, i.e. the Monte Carlo/grid weight
     only
-  - grouped accepted events
+  - grouped accepted events with native factors but no outer-grid weight
   - event-processing timing in `evaluation_metadata`
   - generated / accepted event counts in `evaluation_metadata`
   - ordered per-level stability results, each with precision, resolved `three_dimensional_representation`,
@@ -808,9 +808,18 @@ The user-facing contract and worked GL297/GL638 examples live in
   precision-tagged result to both API routes. The ordinary route checks final
   f64 representability of contributions and event weights; the precise Rust
   route keeps the native result without a preliminary f64 reporting pass.
-+ Observable filling happens only from the final stable
-  `EvaluationResult` payload. Unstable branches do not contribute events
-  or observables.
++ Evaluation produces one final stable `EvaluationResult` per input without committing
+  observable statistics. Configured observables retain its complete event-group list.
+  `new_observable_accumulator()` reuses the compiled definitions in an independent reducer.
+  `accumulate_sample(groups, coefficient)` applies the explicit outer weight once and
+  sums correlated fills before squaring. Zero coefficients still count one attempted sample.
+  The native integrator explicitly performs this accumulation after evaluation; numerical
+  caches and stability diagnostics remain attached to the evaluator.
++ Raw snapshots merge independent draws within a population. Summing independent
+  population estimates is a distinct operation: it sums means and variances while keeping
+  sample counts separate. The derived estimates cannot be used as raw checkpoints.
+  Rust and Python continuous/discrete fill helpers share sample-level grouping, including
+  underflow, overflow and empty samples.
 + `havana_integrate` runs iterative Monte Carlo updates, merges
   worker-local observable accumulators, and writes integration
   artifacts.
@@ -1062,7 +1071,7 @@ Each event carries:
 
 - kinematics
 - cut metadata
-- one fully normalized event `weight`
+- one event `weight` with native normalization but no outer sampler weight
 - `additional_weights`
 
 Observable-specific entry reweighting remains internal to the observable
@@ -1088,6 +1097,10 @@ therefore reconstructed as:
 This is populated only when
 `settings.general.store_additional_weights_in_event = true`.
 
+Sample evaluation leaves the outer sampler weight unapplied. Explicit observable
+accumulation receives it as a coefficient; native integration event-list export
+applies it to both the event total and its recorded multiplicative factor.
+
 Directive-enabled events can also retain an addable `threshold_counterterms`
 decomposition. A component ID refers to the graph's static registry, while an
 occurrence identifies its amplitude surface/overlap or local-unitarity overlaps
@@ -1106,7 +1119,7 @@ Serialized event `additional_weights.weights` is a list of `[key, value]` pairs.
 
 === 3.3 Event generation policy
 <33-event-generation-policy>
-Event generation is controlled by three related runtime decisions:
+Event generation is controlled by two related runtime decisions:
 
 - `should_generate_events()`
   - true when `general.generate_events = true`
@@ -1115,19 +1128,15 @@ Event generation is controlled by three related runtime decisions:
 - `should_buffer_generated_events()`
   - true when `general.generate_events = true`
   - or observables exist
-- `should_return_generated_events()`
-  - true only when `general.generate_events = true`
 
 This means:
 
 - `general.generate_events = false`
   - selector-only evaluations still build temporary events for selector
     checks
-  - selector+observable evaluations still build temporary events and
-    buffer accepted identity-rotation events long enough to fill
-    observables
-  - those temporary events are cleared from returned sample results and
-    integration event outputs afterwards
+  - evaluations with observables retain accepted identity-rotation events
+    in the returned sample for later explicit accumulation
+  - selector-only temporary events are not retained
 - `general.generate_events = true`
   - events are built, buffered, and returned even when no selector or
     observable is configured
@@ -1390,7 +1399,8 @@ Differential coverage is currently split into:
     `evaluate_sample(s)`
   - graph/cut grouping and incoming-PDG propagation checks
   - selectors / observables / event-group retention
-  - batch-global observable snapshots for `evaluate_samples`
+  - detached observable accumulation with explicit coefficients
+  - evaluation leaves accumulated statistics unchanged
   - per-sample evaluation metadata
   - x-space vs momentum-space Jacobian behavior
   - minimal-output mode

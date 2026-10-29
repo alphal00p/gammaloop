@@ -105,13 +105,14 @@ connected workflows rather than forty unrelated entry points:
   getters, and
   #link("reference/python/gammaloop-python/SettingsValue/")[`SettingsValue`] to automate
   the same state and commands as the CLI.
-- *Point evaluation:* `evaluate_sample` returns
-  #link("reference/python/gammaloop-python/EvaluationResult/")[`EvaluationResult`], whose
-  `sample` is a
-  #link("reference/python/gammaloop-python/SampleEvaluationResult/")[`SampleEvaluationResult`].
+- *Point evaluation:* `evaluate_sample` returns one
+  #link("reference/python/gammaloop-python/EvaluationResult/")[`EvaluationResult`].
   `evaluate_samples` returns
   #link("reference/python/gammaloop-python/BatchEvaluationResult/")[`BatchEvaluationResult`]
-  with the same sample records and one batch-level observable snapshot.
+  with those same records in `samples` and optional numerical-stability diagnostics.
+  Both retain each sample's observable contribution without accumulating statistics.
+  Create an #link("reference/python/gammaloop-python/ObservableAccumulator/")[`ObservableAccumulator`]
+  with `observable_accumulator()` and add samples with explicit outer coefficients.
 - *Generated-integrand structure:* start at
   #link("reference/python/gammaloop-python/IntegrandInfo/")[`IntegrandInfo`], then follow its
   graph groups into graph, orientation, loop-momentum-basis, cut, and threshold records. These
@@ -335,17 +336,17 @@ When forcing Arb without a configured Arb level, the fallback inherits the first
 level's representation choice.
 
 #link("reference/python/gammaloop-python/GammaLoopAPI/#exports-gammaloopapi-evaluate-sample-method")[`evaluate_sample`]
-returns one sample result and the observable bundle for that one-sample batch.
+returns one sample result with its complete event-group payload.
 #link("reference/python/gammaloop-python/GammaLoopAPI/#exports-gammaloopapi-evaluate-samples-method")[`evaluate_samples`]
-accepts a two-dimensional NumPy array and returns per-sample results plus a batch-global observable
-bundle. Per-sample weights, discrete coordinates, graph names, and orientations must have the same
+accepts a two-dimensional NumPy array and returns one result per row without accumulating
+observable statistics. Per-sample weights, discrete coordinates, graph names, and orientations must have the same
 row count as the input batch when provided. Graph and orientation selection applies only to
 momentum-space evaluation.
 
 Both the ordinary Rust and Python endpoints expose numeric results through an `f64` contract, even
 when `use_arb_prec=True` forces arbitrary-precision internal evaluation. Evaluation may warm the
-integrand and update in-memory caches or observable snapshots, including in a read-only-state
-session. Rust-only callers that must retain the active precision use `evaluate_sample_precise` and
+integrand and update in-memory caches, including in a read-only-state
+session. Observable statistics require explicit accumulation. Rust-only callers that must retain the active precision use `evaluate_sample_precise` and
 `evaluate_samples_precise`.
 
 Point evaluation returns the native contribution including map Jacobians and channel

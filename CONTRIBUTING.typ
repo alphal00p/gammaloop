@@ -1008,9 +1008,12 @@ preferences; they protect behavior that has been easy to regress.
   views. They must remain mergeable and reconstructible back into live histogram
   state. Rust-side helpers already exist for `merge(...)`, `merge_in_place(...)`,
   `rebin(...)`, and reconstruction into accumulator state.
-- `general.generate_events` controls whether events are retained in returned
-  results; observables and selectors may still force temporary event generation
-  internally when this is `false`.
+- Sample-evaluation results retain the full event-group list when observables
+  are configured, without applying the outer sampler weight or accumulating
+  statistics. `general.generate_events` additionally requests diagnostic events
+  when no observables are configured. Selectors may force temporary events.
+  Accumulate each sample explicitly with its complete outer coefficient; a zero
+  coefficient still advances the sample count.
 - `general.store_additional_weights_in_event` controls whether
   `additional_weights` are stored on events. The map is a `BTreeMap` keyed by
   lightweight identifiers such as `Original`,

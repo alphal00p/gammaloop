@@ -441,16 +441,24 @@ max = 4
         "selectors should force internal event generation for amplitudes",
     );
     assert_eq!(metadata.accepted_event_count, 0);
-    assert!(result.observables.histograms.is_empty());
+    assert!(
+        cli.state
+            .process_list
+            .get_integrand_mut(process_id, &integrand_name)?
+            .new_observable_accumulator()?
+            .snapshot_bundle()
+            .histograms
+            .is_empty()
+    );
 
     clean_test(&cli.cli_settings.state.folder);
     Ok(())
 }
 
 #[test]
-fn amplitude_observables_accumulate_without_returning_events() -> Result<()> {
+fn amplitude_observables_retain_payload_for_explicit_accumulation() -> Result<()> {
     let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
-    let test_name = "amplitude_observables_accumulate_without_returning_events";
+    let test_name = "amplitude_observables_retain_payload_for_explicit_accumulation";
     let mut cli = setup_gg_hhh_threshold_amplitude_cli(test_name, None)?;
     cli.run_command(
         r#"set process -p gg_hhh -i 1L kv general.generate_events=false general.store_additional_weights_in_event=false"#,
@@ -517,11 +525,18 @@ domain = { type = "explicit_range", min = 0, max = 64 }
     )?;
 
     let evaluation = result.sample.evaluation;
+    let mut accumulator = cli
+        .state
+        .process_list
+        .get_integrand_mut(process_id, &integrand_name)?
+        .new_observable_accumulator()?;
+    accumulator.accumulate_sample(&evaluation.event_groups, &evaluation.integrator_weight)?;
+    let observables = accumulator.snapshot_bundle();
     let metadata = evaluation
         .evaluation_metadata
         .as_ref()
         .expect("amplitude sample output should include evaluation metadata");
-    assert!(evaluation.event_groups.is_empty());
+    assert!(!evaluation.event_groups.is_empty());
     assert!(
         metadata.generated_event_count > 0,
         "observables should force internal event generation for amplitudes",
@@ -531,7 +546,7 @@ domain = { type = "explicit_range", min = 0, max = 64 }
         "observable processing should accept at least one amplitude event",
     );
 
-    let histogram_names = result.observables.histograms.keys().cloned().collect_vec();
+    let histogram_names = observables.histograms.keys().cloned().collect_vec();
     assert_eq!(
         histogram_names,
         vec![
@@ -541,7 +556,7 @@ domain = { type = "explicit_range", min = 0, max = 64 }
             "sampling_channel_id_hist".to_string(),
         ]
     );
-    for histogram in result.observables.histograms.values() {
+    for histogram in observables.histograms.values() {
         assert_eq!(histogram.sample_count, 1);
     }
 

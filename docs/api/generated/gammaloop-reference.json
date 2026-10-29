@@ -18630,7 +18630,7 @@
     {
       "path": "runtime.general.generate_events",
       "value_type": "boolean",
-      "description": "Return generated events in addition to accumulating integration statistics.",
+      "description": "Request diagnostic events even without configured observables.\nObservable evaluation always retains the complete per-sample contribution.",
       "required": false,
       "default": false,
       "possible_values": []
