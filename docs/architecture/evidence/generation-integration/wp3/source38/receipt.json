@@ -83,6 +83,9 @@
   "evidence_source_selection_correction": {
     "historical_candidate": "ed80af5444bcc7fecdb162d5a2c649dd985f01ec",
     "diagnosis": "evidence-selection-diagnosis.json",
-    "reason": "Two raw archived .rs probes were selected by existing broad Rust input filter:1455->1457, only two additions and zero changed existing inputs. Unbuilt b4nc derivation is not qualified. Archive copies renamed .rs.txt with identical bytes; actual task scratch runnable .rs and fresh binary evidence retained. No production/Nix source-selection policy change. Corrected candidate must select exact original8iq producer again."
+    "reason": "Two raw archived .rs probes were selected by existing broad Rust input filter:1455->1457, only two additions and zero changed existing inputs. Unbuilt b4nc derivation is not qualified. Archive copies renamed .rs.txt with identical bytes; actual task scratch runnable .rs and fresh binary evidence retained. No production/Nix source-selection policy change. Corrected candidate must select exact original8iq producer again.",
+    "corrected_code": "2922400255b32bf63c3cffbdd3f13bb3eba91b1e",
+    "corrected_change": "tsqwuqklkupxztnvnzolworyntzmlrun",
+    "qualification": "runtime-source-corrected.json: actual corrected Git source again selects exact8iq producer,1455 byte-matched inputs and29 payloads; old88q output/NAR qualified. Final receipt metadata remains distinct from corrected qualified code."
   }
 }
