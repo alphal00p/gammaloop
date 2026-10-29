@@ -1,0 +1,85 @@
+"""Coupling expansion preserves tensor ports and its precise Python return type."""
+
+import json
+from typing_extensions import assert_type
+
+from symbolica import E, Expression, S
+from symbolica.community import hepkit as hep
+from symbolica.community.tensor import (
+    Representation,
+    TensorExpression,
+    TensorName,
+    TensorStructure,
+)
+
+model = hep.Model.standard_model()
+coupling = S("UFO::GC_11")
+analytic = model.coupling("GC_11").expression
+assert_type(model.expand_couplings(coupling), Expression)
+plain = model.expand_couplings(coupling)
+assert type(plain) is Expression
+assert plain == analytic
+
+# Deliberately use noncanonical logical port order, including typed zero tensors.
+lorentz = Representation.mink(4)
+vector = TensorName.vector("coupling_test::v")
+ordered = vector(lorentz("nu")) * vector(lorentz("mu"))
+for source in (
+    coupling * ordered,
+    (coupling + 1) * ordered,
+    (coupling - analytic) * ordered,
+    0 * ordered,
+    TensorExpression(coupling),
+    ordered,
+):
+    assert isinstance(source, TensorExpression)
+    before = source.to_expression()
+    result = model.expand_couplings(source)
+    assert_type(result, TensorExpression)
+    assert type(result) is TensorExpression
+    assert result.structure.axes == source.structure.axes
+    assert result.to_expression() == model.expand_couplings(before)
+    assert source.to_expression() == before
+    assert model.expand_couplings(result) == result
+
+cancelled = model.expand_couplings((coupling - analytic) * ordered)
+assert isinstance(cancelled, TensorExpression)
+assert not cancelled and cancelled.rank == 2
+assert model.expand_couplings(coupling * ordered) == analytic * ordered
+
+# A user-defined vanishing coupling must retain the rank of an open tensor too.
+definition = json.loads(model.to_json())
+next(c for c in definition["couplings"] if c["name"] == "GC_11")["expression"] = "0"
+zero_model = hep.Model.from_json(json.dumps(definition))
+zero = zero_model.expand_couplings(coupling * ordered)
+assert isinstance(zero, TensorExpression)
+assert not zero and zero.structure.axes == ordered.structure.axes
+
+# Exercise a factored generated numerator without expanding its local factors.
+diagram = model.process(["e-", "e+"], ["a", "a"]).generate_diagrams(progress=None)[0]
+numerator = diagram.numerator_expression(in_lmb=True)
+expanded = model.expand_couplings(numerator)
+assert expanded.structure.axes == numerator.structure.axes
+assert expanded.to_expression() == model.expand_couplings(numerator.to_expression())
+assert not expanded.to_expression().matches(S("UFO::GC_3"))
+
+# Follow the notebook's weighted numerator through both multiplication orders.
+weight = diagram.overall_factor_expression(evaluate=True)
+assert_type(numerator * weight, TensorExpression)
+assert_type(weight * numerator, TensorExpression)
+for weighted in (numerator * weight, weight * numerator):
+    massless = model.expand_couplings(weighted)
+    assert_type(massless, TensorExpression)
+    collected = massless.with_lorentz_dimension(S("D")).collect_factors()
+    assert_type(collected, TensorExpression)
+    assert_type(collected.structure, TensorStructure)
+    assert type(collected) is TensorExpression
+    assert (
+        collected.structure.axes
+        == numerator.with_lorentz_dimension(S("D")).structure.axes
+    )
+
+assert model.expand_couplings(E("0")) == 0
+print(
+    "Coupling expansion: overloads, coefficients, ordered ports, zeros and diagram passed"
+)

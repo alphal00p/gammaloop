@@ -28,6 +28,7 @@ feynkit-generator = { version = "0.1.0", path = "crates/feynkit-generator/" }
 feynkit-graph = { version = "0.1.0", path = "crates/feynkit-graph/" }
 feynkit-kinematics = { version = "0.1.0", path = "crates/feynkit-kinematics/" }
 feynkit-model = { version = "0.1.0", path = "crates/feynkit-model/" }
+feynkit-py = { version = "0.1.0", path = "crates/feynkit-py/" }
 feynkit-tensor = { version = "0.1.0", path = "crates/feynkit-tensor/" }
 feynkit-ufo = { version = "0.1.0", path = "crates/feynkit-ufo/" }
 gammaloop-api = { path = "crates/gammaloop-api/" }

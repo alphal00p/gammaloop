@@ -206,6 +206,7 @@ docs-notebooks WHEEL PRODUCT="linnet" OUTPUT="target/alphal00p-docs":
 
 # Validate the five-product documentation registry and generated inputs.
 docs-check:
+    cargo run --locked -p alphal00p-docs-python-exporter --features feynkit -- feynkit-community docs/api/python/feynkit-community.pyi --check
     cargo run --locked -p alphal00p-docs-catalogs --features gammaloop-reference --bin alphal00p-docs-gammaloop-reference -- --check
     cargo run --locked -p alphal00p-docs-catalogs --features vakint-reference --bin alphal00p-docs-vakint-reference -- --check
     cargo run --locked -p alphal00p-docs-python-exporter --features gammaloop -- gammaloop-python docs/api/python/gammaloop-python.pyi --check

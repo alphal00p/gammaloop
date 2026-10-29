@@ -1286,7 +1286,7 @@ end_anchor = "documentationRegistry = builtins.fromTOML"
 # No-impact attestation 2026-09-29: the documentation source adds the Kurvst
 # knot-logo example imported by the GammaLoop marks; cache boundaries are
 # unchanged.
-digest = "e858c914cc72e0d6a29b74132cfdf86e664ab28e"
+digest = "dd974527a36e758fe3862fa98747f70c9b31f129"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"
@@ -1320,7 +1320,7 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # Reviewed 2026-10-12: Package source ownership now includes the shared
 # Linnest asset builder used by GammaLoop and Clinnet; the existing per-
 # package filtering boundary is retained.
-digest = "8191d6fe1ef31c054fcb0b5b4bf49f595d9bf21c"
+digest = "bd48b5cc2c4c4aaaea6b094ba4010f53cfe24fca"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"
@@ -1341,7 +1341,7 @@ end_anchor = "\nin\n{\n  inherit"
 # terminal publication boundaries are retained.
 # Reviewed 2026-10-12: documentation validation runs the feature-enabled
 # GammaLoop and Linnet exporter tests; reusable producer inputs are unchanged.
-digest = "191e7a1d7c944821eb395485c0e8ae27f155427d"
+digest = "0be4c6866f645593362a38b6c65679f7ea208653"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"

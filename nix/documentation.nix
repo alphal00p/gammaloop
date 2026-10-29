@@ -187,6 +187,7 @@ let
         (workspaceRoot + "/just")
         (workspaceRoot + "/crates/linnet/Justfile")
         (workspaceRoot + "/tydenso/Justfile")
+        (workspaceRoot + "/crates/feynkit-py/python/symbolica/community/hepkit")
         (workspaceRoot + "/crates/linnet-py/examples/physics_render_settings.py")
         (workspaceRoot + "/crates/linnet-py/examples/layout_stream.py")
         (workspaceRoot + "/crates/linnet-py/examples/rendering_api.py")
@@ -444,6 +445,7 @@ let
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features linnet -- linnet-graph docs/api/python/linnet-graph.pyi --check
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features spenso -- spynso3 docs/api/python/spynso3.pyi --check
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features vakint -- vakint-community docs/api/python/vakint-community.pyi --check
+    cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features feynkit -- feynkit-community docs/api/python/feynkit-community.pyi --check
     cargo test --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features gammaloop
     cargo test --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features linnet
     export UV_OFFLINE=true
