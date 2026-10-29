@@ -1,5 +1,7 @@
 //! Reproducible physical-input comparisons, separate from scalar preparation.
 
+pub mod historical;
+
 use super::super::vakint::{
     AvailablePrecision, ConstantSymbol, EvaluationMethod, EvaluationOrder, LoopNormalizationFactor,
     MasterSymbol, OfficialExternalDataOptions, RustRedEvaluationOptions, RustRedMasterMode,

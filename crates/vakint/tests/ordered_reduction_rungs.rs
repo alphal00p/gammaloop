@@ -222,24 +222,15 @@ fn five_loop_zero_momentum_ordered_matches_saved_depth_first_result() -> fixture
     let expected_path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("examples/data/five_loop_q0/q0-retained.expr");
     let payload = std::fs::read(expected_path)?;
-    use sha2::Digest;
-    assert_eq!(payload.len(), 6_683_821);
-    assert_eq!(
-        format!("{:x}", sha2::Sha256::digest(&payload)),
-        "da909dc0b8f199a9ce46c27368bd2d1c88b277d72e765ab70f9a83680caa1212"
+    let evidence = std::path::PathBuf::from(
+        std::env::var_os("VAKINT_ORDERED_RUN_EVIDENCE")
+            .ok_or("set VAKINT_ORDERED_RUN_EVIDENCE to the completed run directory")?,
     );
-    let expected =
-        symbolica::atom::Atom::parse(&String::from_utf8(payload)?, "vakint", Default::default())?;
-    let (expected, _) =
-        fixture::comparison::convert_historical_retained(&expected, &completed.report)?;
-    use symbolica::atom::AtomCore;
-    assert!(
-        (fixture::comparison::canonical_retained(&completed.value)?
-            - fixture::comparison::canonical_retained(&expected)?)
-        .together()
-        .expand()
-        .is_zero()
-    );
+    fixture::comparison::historical::compare_saved_zero_momentum(
+        &payload,
+        &completed,
+        &evidence,
+    )?;
     Ok(())
 }
 
