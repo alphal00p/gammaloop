@@ -286,7 +286,16 @@ fn cross_section_runtime_graph_subset_is_compact_normalized_and_event_safe() -> 
                 assert_eq!(event.cut_info.graph_group_id, Some(group_id));
                 sum + Complex::new(event.weight.re.0, event.weight.im.0)
             });
-        assert_complex_close(event_sum, selected_effective, "selected event weights");
+        assert_complex_close(
+            event_sum,
+            individual_effective,
+            "selected events exclude the outer graph-grid weight",
+        );
+        assert_complex_close(
+            event_sum * selected_result.integrator_weight.0,
+            selected_effective,
+            "selected event weights with the explicit outer weight",
+        );
     }
     assert_complex_close(
         selected_channel_sum,
