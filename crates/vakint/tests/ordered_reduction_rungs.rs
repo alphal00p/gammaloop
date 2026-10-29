@@ -8,6 +8,17 @@ mod fixture;
 
 use vakint::{RustRedMonitorOptions, RustRedReductionStrategy};
 
+fn golden_precision_target(golden_minimum: u64, selected_request: u64) -> u64 {
+    golden_minimum.min(selected_request)
+}
+
+#[test]
+fn golden_precision_target_respects_the_selected_source_cap() {
+    assert_eq!(golden_precision_target(300, 300), 300);
+    assert_eq!(golden_precision_target(300, 200), 200);
+    assert_eq!(golden_precision_target(200, 300), 200);
+}
+
 fn compare(loop_count: usize, projection: fixture::Projection) -> fixture::Result<()> {
     let directory = tempfile::tempdir()?;
     let input_directory = directory.path().join("input");
@@ -81,6 +92,9 @@ fn compare(loop_count: usize, projection: fixture::Projection) -> fixture::Resul
     let reference = match (loop_count, projection) {
         (1, fixture::Projection::ZeroMomentumMetric) => Some("1L-zero-momentum.json"),
         (1, fixture::Projection::QuadraticTransverse) => Some("1L-quadratic.json"),
+        (2, fixture::Projection::ZeroMomentumMetric) => Some("2L-zero-momentum.json"),
+        (2, fixture::Projection::QuadraticTransverse) => Some("2L-quadratic.json"),
+        (3, fixture::Projection::ZeroMomentumMetric) => Some("3L-zero-momentum.json"),
         _ => None,
     };
     if let Some(reference) = reference {
@@ -101,6 +115,11 @@ fn compare(loop_count: usize, projection: fixture::Projection) -> fixture::Resul
         );
         for result in results {
             if let Some(minimum_digits) = reference["minimum_achieved_decimal_precision"].as_u64() {
+                let requested = result.report["numerical_reference"]["selection"]
+                    ["requested_decimal_precision"]
+                    .as_u64()
+                    .ok_or("completed reference has no selected precision request")?;
+                let minimum_digits = golden_precision_target(minimum_digits, requested);
                 for coefficient in result.report["numerical_reference"]["coefficients"]
                     .as_array()
                     .ok_or("completed reference has no coefficient inventory")?
@@ -180,19 +199,16 @@ fn one_loop_rung_projections_obey_independent_dirac_and_tadpole_identity() -> fi
 }
 
 #[test]
-#[ignore = "sequential physical-fixture qualification: enable after the preceding loop gate passes and the complete comparison measures below fifteen minutes"]
 fn two_loop_zero_momentum_rung_engine_parity() -> fixture::Result<()> {
     compare(2, fixture::Projection::ZeroMomentumMetric)
 }
 
 #[test]
-#[ignore = "sequential physical-fixture qualification: enable after the preceding loop gate passes and the complete comparison measures below fifteen minutes"]
 fn two_loop_quadratic_rung_engine_parity() -> fixture::Result<()> {
     compare(2, fixture::Projection::QuadraticTransverse)
 }
 
 #[test]
-#[ignore = "sequential physical-fixture qualification: enable after the preceding loop gate passes and the complete comparison measures below fifteen minutes"]
 fn three_loop_zero_momentum_rung_engine_parity() -> fixture::Result<()> {
     compare(3, fixture::Projection::ZeroMomentumMetric)
 }

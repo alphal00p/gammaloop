@@ -1,0 +1,218 @@
+{
+  "schema": "vakint.ordered-rung-numerical-reference.v1",
+  "loop_count": 2,
+  "projection": "quadratic-transverse",
+  "normalization": "MSbar",
+  "source_input_sha256": "3cac4446a7c525395a52b36269a503c1b19951212a4239fff96b991f76381744",
+  "evaluated_input_sha256": "0feb8a38e1d08a096dad3b0130f9b137c4efa0cb1efa110d04a8c1fe3e874601",
+  "dimension_binding": {
+    "scope": "exact fixture trace dimension; all public evaluations share this binding",
+    "source": "rustred::{}::d",
+    "target": "-2*vakint::{}::ε+4"
+  },
+  "data": {
+    "manifest_sha256": "028b4e66affca59138c7913c0ee718de6a4d07913e9a88bd905bd5d850e902f2",
+    "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/external-light-profile-v2-20261027",
+    "version": "v0.1.2"
+  },
+  "numerical_reference": {
+    "coefficients": [
+      {
+        "epsilon_power": -2,
+        "imaginary": "4.4557214647067427036253399596869332212794278878638293047604320624885688695971876081043324346914275417844090425782996229551386958259763103531222007436957507046749568026950940296049120507912378823205181737976294930758017192980676334961100285593371222490360128064871925272016303728758882335516025869325901864085795735371482001760684133e-6",
+        "imaginary_absolute_error": "2.1063285338467205072699163943705458977649121377495678946115120986377555166919624065199904934571975120709761513443498205230923334327539740075910748203573712578118234824429097977593094292154020000553290343364253035818040160892823954848935175646394955490159032442251361006756755818666927336458813328699620517235205151691443955937697507e-337",
+        "imaginary_error_exact_rational": "3/14242792383964888162918480513432465216409371640403009729971037612045113415478719007639881209041451055630074000655093473974722206675223109929434400259100512062680086347153555148539548552831624261944567042435944993535084132588196941322891072406503377213352323037077384970994853089450777507879083442634420291861180736024127002634265953304576",
+        "imaginary_error_quality": "Bounded",
+        "imaginary_exact_rational": "31730957871297035603246574319269224769737430599150041741681106015802699849202968867125985429767126594260854952965374324245699765212524303597469165949855101865462884473863592003277827167240553368462381214720827514759387785236554859814632659532352159503726039481255371410393448791825227524382360322144268959163872502966312497900525423/7121396191982444081459240256716232608204685820201504864985518806022556707739359503819940604520725527815037000327546736987361103337611554964717200129550256031340043173576777574269774276415812130972283521217972496767542066294098470661445536203251688606676161518538692485497426544725388753939541721317210145930590368012063501317132976652288",
+        "imaginary_exact_zero": false,
+        "imaginary_significant_digits": 331,
+        "real": "0",
+        "real_absolute_error": "0",
+        "real_error_exact_rational": "0",
+        "real_error_quality": "Bounded",
+        "real_exact_rational": "0",
+        "real_exact_zero": true,
+        "real_significant_digits": null
+      },
+      {
+        "epsilon_power": -1,
+        "imaginary": "5.1983417088245331542295632863014220914926658691744675222205040729033303478633855427883878404733321320818105496746828934476618117969723620786425675343117091554541162698109430345390640592564441960406045360972344085884353391810789057454616999858933092905420149409017246150685687683552029391435363514213552174766761691266729002054131490e-6",
+        "imaginary_absolute_error": "9.8295331579513623672596098403958808562362566428313168415203897936428590778958245637599556361335883896645553729402991624410975560195185453687583491616677325364551762514002457228767773363385426669248688269033180833817520750833178455961697486349843125620742151397173018031531527153778994236807795533931562413764290707893405127709255030e-337",
+        "imaginary_error_exact_rational": "7/7121396191982444081459240256716232608204685820201504864985518806022556707739359503819940604520725527815037000327546736987361103337611554964717200129550256031340043173576777574269774276415812130972283521217972496767542066294098470661445536203251688606676161518538692485497426544725388753939541721317210145930590368012063501317132976652288",
+        "imaginary_error_quality": "Bounded",
+        "imaginary_exact_rational": "4627431356230817692140125421560095278920041962376047753995161293971227061342099626455872875174372628329708013974117088952497882426826460941297586701020535688713337319105107167144683128555914032900763927146787345902410718680330917056300596181801356594293380757683074997349044615474512347305760880312705889878064740015920572610493291/890174523997805510182405032089529076025585727525188108123189850752819588467419937977492575565090690976879625040943342123420137917201444370589650016193782003917505396697097196783721784551976516371535440152246562095942758286762308832680692025406461075834520189817336560687178318090673594242442715164651268241323796001507937664641622081536",
+        "imaginary_exact_zero": false,
+        "imaginary_significant_digits": 330,
+        "real": "0",
+        "real_absolute_error": "0",
+        "real_error_exact_rational": "0",
+        "real_error_quality": "Bounded",
+        "real_exact_rational": "0",
+        "real_exact_zero": true,
+        "real_significant_digits": null
+      },
+      {
+        "epsilon_power": 0,
+        "imaginary": "-3.0052298087817806774936067465679803706445511451434997524766760567552500161163651112106760787685251202813362057987604892381637608161301911184062764787205914519415810271986448170898724060692557276099424659795506624517696361509441316270818100273437623207684929317883130171154363634124997907648832070451668602291354305029520440703047399e-5",
+        "imaginary_absolute_error": "5.1728620353230326697872786757214779854575888886945721401132588459745091815932340754255606531984161299780412975482105792286450252663860596327760009488216561596847968964154607419904960502291319252025473977923490222230997563131323256581671600030793158023098562473843709117793691389870151281364651026842441374260699158533960829922193383e-333",
+        "imaginary_error_exact_rational": "18419/3560698095991222040729620128358116304102342910100752432492759403011278353869679751909970302260362763907518500163773368493680551668805777482358600064775128015670021586788388787134887138207906065486141760608986248383771033147049235330722768101625844303338080759269346242748713272362694376969770860658605072965295184006031750658566488326144",
+        "imaginary_error_quality": "Bounded",
+        "imaginary_exact_rational": "-214014321162907015059629152679811011882445155256805024092853687531727534918458467665412871077832759285819351266108438327656205210156813560247873958068549355074107896185758876156547807123223715963370684061081977854032138355780950254083570052633266815427176416118480512860394268319793064697616384965497090943485737024660147782326083199/7121396191982444081459240256716232608204685820201504864985518806022556707739359503819940604520725527815037000327546736987361103337611554964717200129550256031340043173576777574269774276415812130972283521217972496767542066294098470661445536203251688606676161518538692485497426544725388753939541721317210145930590368012063501317132976652288",
+        "imaginary_exact_zero": false,
+        "imaginary_significant_digits": 327,
+        "real": "0",
+        "real_absolute_error": "0",
+        "real_error_exact_rational": "0",
+        "real_error_quality": "Bounded",
+        "real_exact_rational": "0",
+        "real_exact_zero": true,
+        "real_significant_digits": null
+      }
+    ],
+    "coupling_definitions": "exact expansion through the authenticated native QCD model (GC_11=i*G)",
+    "epsilon_range": "all available poles through epsilon^0; remainder O(epsilon)",
+    "point": {
+      "UFO_G": 1,
+      "mUV": 1,
+      "mu_r_squared": 1
+    },
+    "selection": {
+      "requested_decimal_precision": 300,
+      "selection": "all surviving dependencies arbitrary precision; explicit 300-digit comparison target, not a source maximum",
+      "surviving_dependencies": [
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "𝑒",
+          "source_sha256": "9fc618f12d8374d2dfccf75e3ce454989e34fc0b1a351675f543101e3622a0e5"
+        },
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "𝜋",
+          "source_sha256": "4c1b1e82246d0173024bf1ca8474de481e9aba48c1e2cc7643c38ae25b69b151"
+        },
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "vakint::{}::EulerGamma",
+          "source_sha256": "5f3704513d63e509f4ec88f4fad0c5bd00a7ae3c5e5b1576b0fb17b8499adc33"
+        },
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "vakint::{}::HI(1,0,vakint::{}::om1)",
+          "source_sha256": "51b2480e00c2597df0ad0714d66ca1234facdb78e87b6d7e35e9303e97d7e3e8"
+        }
+      ]
+    },
+    "warnings": []
+  },
+  "minimum_achieved_decimal_precision": 300,
+  "provenance": {
+    "selection": "first Ordered report in the first completed qualified sample; deterministic, not selected by value, precision or performance",
+    "collector_report": {
+      "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L2-quadratic-three-arm-release-01/sample-01/ordered/work/L2-quadratic-ordered/report.json",
+      "bytes": 12829,
+      "sha256": "0bf77bdb7e678a49e5681b46918797674c5943cd80ad34b181c7da2e9c035a7a"
+    },
+    "producer": {
+      "allowed_cpus": "168",
+      "build_profile": "release",
+      "cargo_lock_sha256": "9338911038cac4c53515170535f87f9fabb6bf1004fd75317068c5fd06a9ab13",
+      "commit": "047e5ccd730988edd91ee461c3b665d059b491cf",
+      "comparison_process": "one engine in this process",
+      "debug_assertions": false,
+      "executable_identity_scope": "release: streamed once; DEV: use the supervising original-process launch receipt",
+      "executable_sha256": "7306c9db8b7615673a277ec71c47cd4a36a57e4948db89b63c4a6ff84d12f0fc",
+      "native_runtime_arities": "1,3,6,10,15",
+      "profile_contract": "caller must build --release with no profile overrides; debug_assertions is not compiler-profile introspection"
+    },
+    "qualified_protocol": {
+      "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L2-quadratic-three-arm-release-01/protocol.json",
+      "bytes": 9731,
+      "sha256": "e38114c45c55932875c6d03164416f7b5977a9c1f98a86b2ac61330044981980"
+    },
+    "qualified_summary": {
+      "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L2-quadratic-three-arm-release-01/summary.json",
+      "bytes": 11186,
+      "sha256": "85925cd91f136f8a1924f94e37a9d02952e0522375ec1a3f2787cec975d96d1d"
+    },
+    "all_nine_executed_reports": [
+      {
+        "arm": "dfs",
+        "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L2-quadratic-three-arm-release-01/sample-01/dfs/work/L2-quadratic-dfs/report.json",
+        "bytes": 12326,
+        "sha256": "6cf64543865dba7cd3f7cc551014ef6e357274f699d4f6187b028bbf3a63553d"
+      },
+      {
+        "arm": "dfs_no_memo",
+        "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L2-quadratic-three-arm-release-01/sample-01/dfs_no_memo/work/L2-quadratic-dfs-no-memo/report.json",
+        "bytes": 12345,
+        "sha256": "6e1d15f8b4c555a344cf92fbc0a6f87dff03a8f8a61d84852e2a77ef361ad2de"
+      },
+      {
+        "arm": "ordered",
+        "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L2-quadratic-three-arm-release-01/sample-01/ordered/work/L2-quadratic-ordered/report.json",
+        "bytes": 12829,
+        "sha256": "0bf77bdb7e678a49e5681b46918797674c5943cd80ad34b181c7da2e9c035a7a"
+      },
+      {
+        "arm": "dfs",
+        "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L2-quadratic-three-arm-release-01/sample-02/dfs/work/L2-quadratic-dfs/report.json",
+        "bytes": 12327,
+        "sha256": "3d1cb0f9d5ab9598fc90ad8f456ed2df0e8415261c4bc74d86f23adf07fe33bd"
+      },
+      {
+        "arm": "dfs_no_memo",
+        "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L2-quadratic-three-arm-release-01/sample-02/dfs_no_memo/work/L2-quadratic-dfs-no-memo/report.json",
+        "bytes": 12346,
+        "sha256": "4abeffbed2deff3a28d02cb61f28d3ebdfb62c0930870129f8c8e8fa18f532c8"
+      },
+      {
+        "arm": "ordered",
+        "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L2-quadratic-three-arm-release-01/sample-02/ordered/work/L2-quadratic-ordered/report.json",
+        "bytes": 12828,
+        "sha256": "afb7edf67b0c1d93490ad6963ff61b44171e9ce303cce00b9ff8b75aea768104"
+      },
+      {
+        "arm": "dfs",
+        "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L2-quadratic-three-arm-release-01/sample-03/dfs/work/L2-quadratic-dfs/report.json",
+        "bytes": 12327,
+        "sha256": "38031c670a08de063cabb88a2d9efa49d65e776dd56ded71f0625e2ec6a86657"
+      },
+      {
+        "arm": "dfs_no_memo",
+        "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L2-quadratic-three-arm-release-01/sample-03/dfs_no_memo/work/L2-quadratic-dfs-no-memo/report.json",
+        "bytes": 12345,
+        "sha256": "008164daf401158b80af97711d9e7b8fb7dad521e07466eda87d2f9ebf119cdf"
+      },
+      {
+        "arm": "ordered",
+        "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L2-quadratic-three-arm-release-01/sample-03/ordered/work/L2-quadratic-ordered/report.json",
+        "bytes": 12828,
+        "sha256": "512510d62569a403880f6132da9fa89b1a74dc2028f3998c243b01ebc12e0150"
+      }
+    ],
+    "all_three_exact_parity_receipts": [
+      {
+        "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L2-quadratic-three-arm-release-01/sample-01/comparison/work/parity.json",
+        "bytes": 2129,
+        "sha256": "3b1771b45c139ebc3440639f28204f13db2d20999858c9f485b26e3f57499c47"
+      },
+      {
+        "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L2-quadratic-three-arm-release-01/sample-02/comparison/work/parity.json",
+        "bytes": 2129,
+        "sha256": "ad81697f330db5e1d20f64a8bf8b09595f90b9f013e964a3bc1b459cc3873f7a"
+      },
+      {
+        "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L2-quadratic-three-arm-release-01/sample-03/comparison/work/parity.json",
+        "bytes": 2129,
+        "sha256": "3dbf2e21926d68f754f2ac0a396e21b03e3108ac6bd74f3bae3c97fda1171822"
+      }
+    ],
+    "validation": "all nine completed samples authenticated by the existing strict report/protocol adapter; all 36 report pairs agree using exact binary-rational tracked error radii at every Laurent order; every nonzero component has at least 300 measured digits",
+    "source_capability": "all surviving sources are arbitrary precision; 300 is the explicit comparison target, never a source-data maximum",
+    "comparison_role": "immutable MSbar scientific numerical reference at mUV=mu_r_squared=UFO_G=1; runtime regression accepts scientifically equivalent authenticated data snapshots without demanding identical paths or versions"
+  }
+}

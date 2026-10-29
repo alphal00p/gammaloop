@@ -1,0 +1,218 @@
+{
+  "schema": "vakint.ordered-rung-numerical-reference.v1",
+  "loop_count": 2,
+  "projection": "zero-momentum-metric",
+  "normalization": "MSbar",
+  "source_input_sha256": "c22bab37d05848f173c7c22cddc1d1bdc08c22c14067e597fc879e5c5b449ea6",
+  "evaluated_input_sha256": "d4c6deb2eb4a4f6bb758b877915804733a2c5ef363ed2f5c48e2bdf09065ff02",
+  "dimension_binding": {
+    "scope": "exact fixture trace dimension; all public evaluations share this binding",
+    "source": "rustred::{}::d",
+    "target": "-2*vakint::{}::ε+4"
+  },
+  "data": {
+    "manifest_sha256": "028b4e66affca59138c7913c0ee718de6a4d07913e9a88bd905bd5d850e902f2",
+    "path": "/shared/codex-1/vakint_rustred/workspace/5l-push/external-light-profile-v2-20261027",
+    "version": "v0.1.2"
+  },
+  "numerical_reference": {
+    "coefficients": [
+      {
+        "epsilon_power": -2,
+        "imaginary": "-8.5549852122369459909606527225989117848565015446985522651400295599780522296266002075603182746075408802260653617503352760738662959858745158779946254278958413529759170611745805368414311375191767340553948936914486267055393010522898563125312548339272747181491445884554096522271303159217054084190769669105731579044727811913245443380513535e-4",
+        "imaginary_absolute_error": "4.0441507849857033739582394771914481237086313044791703576541032293844905920485678205183817474378192231762742105811516554043372801908876300945748636550861528149987010862903868116978741040935718401062317459259365828770637108914221993309955537241078314541105342289122613132972971171840500486000921591103271393091593891247572395400379213e-335",
+        "imaginary_error_exact_rational": "9/222543630999451377545601258022382269006396431881297027030797462688204897116854984494373143891272672744219906260235835530855034479300361092647412504048445500979376349174274299195930446137994129092883860038061640523985689571690577208170173006351615268958630047454334140171794579522668398560610678791162817060330949000376984416160405520384",
+        "imaginary_error_quality": "Bounded",
+        "imaginary_exact_rational": "-95192873613891106809739722957807674309212291797450125225043318047408099547608906601377956289301379782782564858896122972737099295637572910792407497849565305596388653421590776009833481501721660105387143644162482544278163355709664579443897978597056478511178118443766114231180346375475682573147080966432806877491617508898937493701576269/111271815499725688772800629011191134503198215940648513515398731344102448558427492247186571945636336372109953130117917765427517239650180546323706252024222750489688174587137149597965223068997064546441930019030820261992844785845288604085086503175807634479315023727167070085897289761334199280305339395581408530165474500188492208080202760192",
+        "imaginary_exact_zero": false,
+        "imaginary_significant_digits": 331,
+        "real": "0",
+        "real_absolute_error": "0",
+        "real_error_exact_rational": "0",
+        "real_error_quality": "Bounded",
+        "real_exact_rational": "0",
+        "real_exact_zero": true,
+        "real_significant_digits": null
+      },
+      {
+        "epsilon_power": -1,
+        "imaginary": "-4.2774926061184729954803263612994558924282507723492761325700147799890261148133001037801591373037704401130326808751676380369331479929372579389973127139479206764879585305872902684207155687595883670276974468457243133527696505261449281562656274169636373590745722942277048261135651579608527042095384834552865789522363905956622721690256768e-4",
+        "imaginary_absolute_error": "1.4603877834670595517071420334302451557836724155063670735973150550555104915730939351871934087969902750358767982654158755626773511800427553119298118754477774054161976144937507931131212042560120533716947971399215438167174511552357942028595055114833835806510262493294276964684684034275736286611443907898403558616408905172734476116803605e-334",
+        "imaginary_error_exact_rational": "65/445087261998902755091202516044764538012792863762594054061594925376409794233709968988746287782545345488439812520471671061710068958600722185294825008096891001958752698348548598391860892275988258185767720076123281047971379143381154416340346012703230537917260094908668280343589159045336797121221357582325634120661898000753968832320811040768",
+        "imaginary_error_quality": "Bounded",
+        "imaginary_exact_rational": "-47596436806945553404869861478903837154606145898725062612521659023704049773804453300688978144650689891391282429448061486368549647818786455396203748924782652798194326710795388004916740750860830052693571822081241272139081677854832289721948989298528239255589059221883057115590173187737841286573540483216403438745808754449468746850788135/111271815499725688772800629011191134503198215940648513515398731344102448558427492247186571945636336372109953130117917765427517239650180546323706252024222750489688174587137149597965223068997064546441930019030820261992844785845288604085086503175807634479315023727167070085897289761334199280305339395581408530165474500188492208080202760192",
+        "imaginary_exact_zero": false,
+        "imaginary_significant_digits": 330,
+        "real": "0",
+        "real_absolute_error": "0",
+        "real_error_exact_rational": "0",
+        "real_error_quality": "Bounded",
+        "real_exact_rational": "0",
+        "real_exact_zero": true,
+        "real_significant_digits": null
+      },
+      {
+        "epsilon_power": 0,
+        "imaginary": "-1.6874208088883680773168829614264985561931348557584277769619481600368768324856781586869121280936458226101883267791127359522279893791981405871058562537442795298826164752637112316240508960965325515286293880923444550389322076166287227963742794464702169383821650604814872062868868728397822170764691092314807748294293458718261743221579879e-5",
+        "imaginary_absolute_error": "2.9811541764663466289953453102772534665754086257453714274163006415891717909506685367447511850857622691544388182345013201805893184620465475401118911076460389770613237530528884098822789330702933435423089528254414977690418416996762313664253120017963465143797763704556503276415052726345499600964925186135091305899537377753754757045213287e-331",
+        "imaginary_error_exact_rational": "1061499/3560698095991222040729620128358116304102342910100752432492759403011278353869679751909970302260362763907518500163773368493680551668805777482358600064775128015670021586788388787134887138207906065486141760608986248383771033147049235330722768101625844303338080759269346242748713272362694376969770860658605072965295184006031750658566488326144",
+        "imaginary_error_quality": "Bounded",
+        "imaginary_exact_rational": "-7510495076680974972896240496416872381063884081709347298462085338886479229972770523229455429842911276373496332110375344687494569205427794197210987734924636178630076170541210736977669240065955012998258482140417147240567916469582661785310647469611261718789168146689908933626438976663875983528421792856651388455680336647235384307032935/445087261998902755091202516044764538012792863762594054061594925376409794233709968988746287782545345488439812520471671061710068958600722185294825008096891001958752698348548598391860892275988258185767720076123281047971379143381154416340346012703230537917260094908668280343589159045336797121221357582325634120661898000753968832320811040768",
+        "imaginary_exact_zero": false,
+        "imaginary_significant_digits": 325,
+        "real": "0",
+        "real_absolute_error": "0",
+        "real_error_exact_rational": "0",
+        "real_error_quality": "Bounded",
+        "real_exact_rational": "0",
+        "real_exact_zero": true,
+        "real_significant_digits": null
+      }
+    ],
+    "coupling_definitions": "exact expansion through the authenticated native QCD model (GC_11=i*G)",
+    "epsilon_range": "all available poles through epsilon^0; remainder O(epsilon)",
+    "point": {
+      "UFO_G": 1,
+      "mUV": 1,
+      "mu_r_squared": 1
+    },
+    "selection": {
+      "requested_decimal_precision": 300,
+      "selection": "all surviving dependencies arbitrary precision; explicit 300-digit comparison target, not a source maximum",
+      "surviving_dependencies": [
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "𝑒",
+          "source_sha256": "9fc618f12d8374d2dfccf75e3ce454989e34fc0b1a351675f543101e3622a0e5"
+        },
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "𝜋",
+          "source_sha256": "4c1b1e82246d0173024bf1ca8474de481e9aba48c1e2cc7643c38ae25b69b151"
+        },
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "vakint::{}::EulerGamma",
+          "source_sha256": "5f3704513d63e509f4ec88f4fad0c5bd00a7ae3c5e5b1576b0fb17b8499adc33"
+        },
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "vakint::{}::HI(1,0,vakint::{}::om1)",
+          "source_sha256": "51b2480e00c2597df0ad0714d66ca1234facdb78e87b6d7e35e9303e97d7e3e8"
+        }
+      ]
+    },
+    "warnings": []
+  },
+  "minimum_achieved_decimal_precision": 300,
+  "provenance": {
+    "selection": "first Ordered report in the first completed qualified sample; deterministic, not selected by value, precision or performance",
+    "collector_report": {
+      "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L2-zero-three-arm-release-01/sample-01/ordered/work/L2-zero-momentum-ordered/report.json",
+      "bytes": 12661,
+      "sha256": "22213cca19d912552f0f03bc4b921689f40d7e7cdd849b00619bdabf01c1e6e1"
+    },
+    "producer": {
+      "allowed_cpus": "168",
+      "build_profile": "release",
+      "cargo_lock_sha256": "9338911038cac4c53515170535f87f9fabb6bf1004fd75317068c5fd06a9ab13",
+      "commit": "047e5ccd730988edd91ee461c3b665d059b491cf",
+      "comparison_process": "one engine in this process",
+      "debug_assertions": false,
+      "executable_identity_scope": "release: streamed once; DEV: use the supervising original-process launch receipt",
+      "executable_sha256": "7306c9db8b7615673a277ec71c47cd4a36a57e4948db89b63c4a6ff84d12f0fc",
+      "native_runtime_arities": "1,3,6,10,15",
+      "profile_contract": "caller must build --release with no profile overrides; debug_assertions is not compiler-profile introspection"
+    },
+    "qualified_protocol": {
+      "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L2-zero-three-arm-release-01/protocol.json",
+      "bytes": 9641,
+      "sha256": "a50e847768e20027ed15198f0c3d4b4df48d46953793ef6c5f46e0109d7528d1"
+    },
+    "qualified_summary": {
+      "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L2-zero-three-arm-release-01/summary.json",
+      "bytes": 10607,
+      "sha256": "b71d7d8662190134ce804d7dd03b88857a41907af9985c636b906491b7023d95"
+    },
+    "all_nine_executed_reports": [
+      {
+        "arm": "dfs",
+        "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L2-zero-three-arm-release-01/sample-01/dfs/work/L2-zero-momentum-dfs/report.json",
+        "bytes": 12160,
+        "sha256": "6b450b6564f0914561fff22a42516ae973d761ab592f2f0f1e0cab82c06bbfd4"
+      },
+      {
+        "arm": "dfs_no_memo",
+        "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L2-zero-three-arm-release-01/sample-01/dfs_no_memo/work/L2-zero-momentum-dfs-no-memo/report.json",
+        "bytes": 12172,
+        "sha256": "a22fa0c6264c9c5dd80a2a95f8463c320821d7031e5cc0e3223fcfff6cee5343"
+      },
+      {
+        "arm": "ordered",
+        "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L2-zero-three-arm-release-01/sample-01/ordered/work/L2-zero-momentum-ordered/report.json",
+        "bytes": 12661,
+        "sha256": "22213cca19d912552f0f03bc4b921689f40d7e7cdd849b00619bdabf01c1e6e1"
+      },
+      {
+        "arm": "dfs",
+        "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L2-zero-three-arm-release-01/sample-02/dfs/work/L2-zero-momentum-dfs/report.json",
+        "bytes": 12153,
+        "sha256": "2a1e7055719b098a1505541d50acefc5819c2b5afd009edfbde4feb1862dddf6"
+      },
+      {
+        "arm": "dfs_no_memo",
+        "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L2-zero-three-arm-release-01/sample-02/dfs_no_memo/work/L2-zero-momentum-dfs-no-memo/report.json",
+        "bytes": 12173,
+        "sha256": "43c4371a0392148603fb707cf1a99a793e7e21aec0b6102d9fb7baef6388de28"
+      },
+      {
+        "arm": "ordered",
+        "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L2-zero-three-arm-release-01/sample-02/ordered/work/L2-zero-momentum-ordered/report.json",
+        "bytes": 12668,
+        "sha256": "7f1a9260ca5f26d936165d73554236ebc4fe4ced9f84373643c88c4ed25c72ad"
+      },
+      {
+        "arm": "dfs",
+        "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L2-zero-three-arm-release-01/sample-03/dfs/work/L2-zero-momentum-dfs/report.json",
+        "bytes": 12153,
+        "sha256": "1d8362cf8b224e14aee32131310bb0ba1cd13b4e799083581015f2c1d3fcfda1"
+      },
+      {
+        "arm": "dfs_no_memo",
+        "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L2-zero-three-arm-release-01/sample-03/dfs_no_memo/work/L2-zero-momentum-dfs-no-memo/report.json",
+        "bytes": 12167,
+        "sha256": "8570924531b9c46160ef15c6774ab5d30229884caa89cecca98b8f765c442151"
+      },
+      {
+        "arm": "ordered",
+        "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L2-zero-three-arm-release-01/sample-03/ordered/work/L2-zero-momentum-ordered/report.json",
+        "bytes": 12661,
+        "sha256": "24d634b428cf1fb5cdcf0d0e7e4a269a1ed21c39957c931e174ab5eb0b8b5a68"
+      }
+    ],
+    "all_three_exact_parity_receipts": [
+      {
+        "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L2-zero-three-arm-release-01/sample-01/comparison/work/parity.json",
+        "bytes": 2126,
+        "sha256": "b35434e852885a702ea858d48bab7d30e3c7cdcee1973ca524b2fe6757349aae"
+      },
+      {
+        "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L2-zero-three-arm-release-01/sample-02/comparison/work/parity.json",
+        "bytes": 2126,
+        "sha256": "dc73c1e2ee0f606aba7a3a33545747b5ffeb07c868b900c6a9994d7bc5ae67ed"
+      },
+      {
+        "path": "/shared/codex-1/vakint_rustred/workspace/ordered-reduction-implementation-20261029/validation/rungs/L2-zero-three-arm-release-01/sample-03/comparison/work/parity.json",
+        "bytes": 2126,
+        "sha256": "de9da3bad76eca596737faf0fa33ceaa7362c5aeacdd35afc0f95147c14dfdc2"
+      }
+    ],
+    "validation": "all nine completed samples authenticated by the existing strict report/protocol adapter; all 36 report pairs agree using exact binary-rational tracked error radii at every Laurent order; every nonzero component has at least 300 measured digits",
+    "source_capability": "all surviving sources are arbitrary precision; 300 is the explicit comparison target, never a source-data maximum",
+    "comparison_role": "immutable MSbar scientific numerical reference at mUV=mu_r_squared=UFO_G=1; runtime regression accepts scientifically equivalent authenticated data snapshots without demanding identical paths or versions"
+  }
+}
