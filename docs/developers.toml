@@ -204,7 +204,9 @@ anchor = "pub fn generate("
 # NumeratorInterface, preserving hidden zero history through the same owner as
 # graph translation. Generic callback errors retain their original Rust types.
 # Generation/cache admission and axis-order ownership remain as documented; new regressions compare direct and template transport.
-digest = "c6353d34dcf95aa6006928573b87db2f24f53ba9"
+# Reviewed 2026-10-28: Raw rule factors use the source codec order after checked
+# template localization, retaining current cache and actual-owner boundaries.
+digest = "13c991270af37cc4d9f972b9e6eccdab43420bd1"
 
 [[section.note.scope]]
 path = "crates/feynkit-model/src/model.rs"
@@ -268,7 +270,9 @@ anchor = "pub struct FeynmanDiagram {"
 # validation, prefactor replacement and topology/routing ownership are retained.
 # Reviewed 2026-10-23: Cooking, index and slot causes remain typed in DiagramError; scene configuration has a distinct diagnostic. Retained tensor and serialization ownership remain unchanged.
 # No-impact attestation 2026-10-23: boxed tensor error sources preserve graph ownership and error semantics.
-digest = "2cbc7e6e672b92c090ee9052f5bf062fbf3f8bfa"
+# Reviewed 2026-10-28: Source-canonical aggregate ports use native history-preserving
+# permutations; declared label permutations admit exact ranked-zero differences.
+digest = "bd6d3582fedc552871a0e81a9fc64533b36f7eec"
 
 [[section.note.scope]]
 path = "crates/feynkit-tensor/src/lib.rs"
