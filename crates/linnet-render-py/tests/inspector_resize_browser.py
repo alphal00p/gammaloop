@@ -79,7 +79,13 @@ def main():
                 ignore_default_args=["--hide-scrollbars"],
             )
             try:
-                for mode in ("inline", "iframe", "shadow-iframe", "late-scroll"):
+                for mode in (
+                    "inline",
+                    "iframe",
+                    "shadow-iframe",
+                    "late-scroll",
+                    "opaque-iframe",
+                ):
                     for theme in ("light", "dark"):
                         for width in (590, 350):
                             page = browser.new_page(
@@ -117,26 +123,51 @@ def main():
                                     "wrapper => host.attachShadow({mode:'open'}).innerHTML = wrapper",
                                     wrapper,
                                 )
+                            if mode == "opaque-iframe":
+                                # A custom notebook can sandbox its frame without
+                                # allow-same-origin. Only the host can size it;
+                                # graph code cannot reserve the outer gutter.
+                                page.evaluate(
+                                    r"""({html,color}) => {
+                                  const frame = document.createElement('iframe');
+                                  frame.sandbox = 'allow-scripts';
+                                  frame.style.cssText = 'display:block;width:100%;border:0';
+                                  addEventListener('message', event => {
+                                    if (event.source === frame.contentWindow && event.data.height)
+                                      frame.style.height = `${event.data.height}px`;
+                                  });
+                                  frame.srcdoc = `<style>html{overflow:hidden}body{margin:0;color:${color}}</style>`
+                                    + html + `<script>new ResizeObserver(() => {
+                                      const range=document.createRange();range.selectNodeContents(document.body);
+                                      parent.postMessage({height:Math.ceil(range.getBoundingClientRect().bottom+scrollY)},'*');
+                                    }).observe(document.body);<\/script>`;
+                                  host.append(frame);
+                                }""",
+                                    {"html": html, "color": color},
+                                )
                             owner = page
                             if mode != "inline":
-                                page.wait_for_function(
-                                    "(host.shadowRoot || host).querySelector('iframe[data-linnet-ready]')"
-                                )
+                                if mode != "opaque-iframe":
+                                    page.wait_for_function(
+                                        "(host.shadowRoot || host).querySelector('iframe[data-linnet-ready]')"
+                                    )
                                 owner = (
                                     page.locator("#host iframe")
                                     .element_handle()
                                     .content_frame()
                                 )
+                                owner.wait_for_selector(".linnet-toolbar")
                             owner.evaluate("document.fonts.ready")
                             owner.evaluate(
                                 "() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))"
                             )
-                            assert (
-                                owner.locator(
-                                    "svg[data-linnet-interactive]"
-                                ).get_attribute("data-theme")
-                                == theme
-                            )
+                            if mode != "opaque-iframe":
+                                assert (
+                                    owner.locator(
+                                        "svg[data-linnet-interactive]"
+                                    ).get_attribute("data-theme")
+                                    == theme
+                                )
                             host = page.locator("#host")
                             host.evaluate(
                                 "e => e.style.maxHeight = `${e.scrollHeight + 4}px`"
@@ -149,19 +180,20 @@ def main():
                             target = owner.locator('[data-linnet-kind="node"]').first
                             panel = owner.locator(".linnet-inspector")
                             initial_width = host.evaluate("e => e.clientWidth")
+                            initial_height = host.evaluate("e => e.scrollHeight")
                             initial_target = target.bounding_box()
+                            local_target = target.evaluate(
+                                "e => {const {x,y,width,height}=e.getBoundingClientRect();return {x,y,width,height}}"
+                            )
                             # Record before the pointer enters. Waiting for the
                             # inspector's final height misses single-frame jumps.
-                            page.evaluate("""() => {
+                            owner.evaluate("""() => {
                               window.hoverFrames = [];
-                              const iframe=(host.shadowRoot||host).querySelector('iframe');
-                              const document=iframe?.contentDocument||window.document;
                               const target=document.querySelector('[data-linnet-kind="node"]');
                               const sample=()=>{
                                 const box=target.getBoundingClientRect();
-                                const offset=iframe?.getBoundingClientRect()||{x:0,y:0};
-                                hoverFrames.push({width:host.clientWidth,target:{
-                                  x:box.x+offset.x,y:box.y+offset.y,
+                                hoverFrames.push({width:document.documentElement.clientWidth,target:{
+                                  x:box.x,y:box.y,
                                   width:box.width,height:box.height}});
                                 if(hoverFrames.length<24) requestAnimationFrame(sample);
                               };
@@ -171,21 +203,27 @@ def main():
                                 initial_target["x"] + initial_target["width"] / 2,
                                 initial_target["y"] + initial_target["height"] / 2,
                             )
-                            page.wait_for_function(
-                                "host.scrollHeight > host.clientHeight"
-                            )
-                            page.wait_for_function("hoverFrames.length === 24")
-                            frames = page.evaluate("hoverFrames")
+                            owner.wait_for_function("hoverFrames.length === 24")
+                            frames = owner.evaluate("hoverFrames")
                             widths = [frame["width"] for frame in frames]
-                            assert widths == [initial_width] * len(widths), widths
+                            assert widths == [widths[0]] * len(widths), widths
+                            assert host.evaluate("e => e.clientWidth") == initial_width
+                            assert (
+                                host.evaluate("e => e.scrollHeight") == initial_height
+                            )
                             assert all(
                                 abs(frame["target"][key] - value) < 0.05
                                 for frame in frames
-                                for key, value in initial_target.items()
+                                for key, value in local_target.items()
                             ), (mode, theme, width, initial_target, frames)
-                            assert initial_width < width, (
-                                "Real scrollbar gutter required"
-                            )
+                            if mode == "opaque-iframe":
+                                assert initial_width == width, (
+                                    "The frame cannot reach the host"
+                                )
+                            else:
+                                assert initial_width < width, (
+                                    "Real scrollbar gutter required"
+                                )
                             assert all(
                                 abs(value - initial_target[key]) < 0.05
                                 for key, value in target.bounding_box().items()
@@ -197,15 +235,32 @@ def main():
                                 target.bounding_box(),
                             )
                             assert panel.is_visible()
+                            page.locator("#host").screenshot(
+                                path=str(
+                                    args.output / f"{mode}-{theme}-{width}-hover.png"
+                                )
+                            )
                             target.dispatch_event("click")
                             page.mouse.move(1090, 890)
                             assert "Pinned" in panel.inner_text()
+                            page.wait_for_function(
+                                "host.scrollHeight > host.clientHeight"
+                            )
                             owner.get_by_role(
                                 "button", name="Close graph details"
                             ).dispatch_event("click")
-                            assert not panel.is_visible()
+                            panel.wait_for(state="hidden")
                             owner.evaluate(
                                 "() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))"
+                            )
+                            # Closing a pinned inspector can remove an outer
+                            # scrollbar across a postMessage/ResizeObserver turn.
+                            owner.wait_for_function(
+                                """expected => {
+                              const box=document.querySelector('[data-linnet-kind="node"]').getBoundingClientRect();
+                              return Object.entries(expected).every(([key,value])=>Math.abs(box[key]-value)<.05);
+                            }""",
+                                arg=local_target,
                             )
                             assert host.evaluate("e => e.clientWidth") == initial_width
                             assert all(
