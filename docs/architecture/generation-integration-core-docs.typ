@@ -27,8 +27,9 @@ Hakari, feature isolation, and the CI graph check. The Git-pinned docs-pages
 source is evaluated rather than published. With an empty #raw("PATH"), its
 metadata-free prose/evidence boundary accepts the qualified source and rejects a
 task-owned copy containing one unauthorized HTML file. The eight historical
-rendered HTML artifacts and all twenty-five declared source, receipt, and tool
-bindings are preserved; ignored review scratch is excluded by repository
+rendered HTML artifacts and all twenty-two distinct binding files are preserved.
+Those files occupy twenty-four canonical artifact, source, receipt, and tool role
+slots; ignored review scratch is excluded by repository
 membership rather than deletion.
 
 This is an integration record, not a broad documentation-owner approval. The

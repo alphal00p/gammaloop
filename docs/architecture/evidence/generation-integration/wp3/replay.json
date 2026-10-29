@@ -1663,9 +1663,9 @@
     "docs_preparation": "1049e0c32263d4805d14130435a26e2b5deb5fd7",
     "code_commit": "9b18f329e992ccc642c2cdaa62e934318f55fa76",
     "code_change": "nqopsyyxssoyslmxrszqroxvowqusywp",
-    "evidence_change": "owyyqwsrmpqlpxksznmslqslkuqvnnqw",
+    "evidence_change": "zturtlpykppzpkzlwqsmnrklllptosll",
     "receipt": "docs/architecture/evidence/generation-integration/wp3/core-docs/receipt.json",
     "candidate_bookmark": "generation-integration-core-docs",
-    "status": "Implemented and freshly validated on the combined head; awaiting NEW independent review. No QED replay, WP3 completion, or M-rebuild claim."
+    "status": "Round2 evidence-only correction candidate with unchanged code9b18: final stage pointers and22-file/24-role inventory corrected; awaiting NEW focused review. No QED replay, WP3 completion, or M-rebuild claim."
   }
 }

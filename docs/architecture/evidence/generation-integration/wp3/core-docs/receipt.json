@@ -4,11 +4,18 @@
   "base": "aa841fde3195270cc00328a9356dfe523c0d7a85",
   "built_code_source": "9b18f329e992ccc642c2cdaa62e934318f55fa76",
   "built_code_change": "nqopsyyxssoyslmxrszqroxvowqusywp",
-  "evidence_change": "owyyqwsrmpqlpxksznmslqslkuqvnnqw",
+  "evidence_change": "zturtlpykppzpkzlwqsmnrklllptosll",
   "candidate_bookmark": "generation-integration-core-docs",
   "approval_index": "docs/architecture/evidence/generation-integration/wp3/core-docs/approval-index.json",
+  "round2_correction": "docs/architecture/evidence/generation-integration/wp3/core-docs/round2-evidence-correction.json",
+  "round2_validator": "docs/architecture/evidence/generation-integration/wp3/core-docs/validate-round2.py",
   "delta": {
     "code_paths": 9,
+    "round1_evidence_paths": 7,
+    "round1_overlap": ["docs/developers.toml"],
+    "round1_distinct_paths": 15,
+    "round2_correction_paths": 7,
+    "cumulative_distinct_paths": 17,
     "api_source_selection": {
       "path": "nix/rust-workspace.nix",
       "owner": "workspacePackageExtraSourceRoots.compileTimeTest.gammaloop-api",
@@ -110,17 +117,21 @@
     "library_tests": {"passed": 116, "failed": 0, "ignored": 0, "exit": 0},
     "canonical_builder": {"exit": 0, "qualification": "Runs through generated evidence, catalogs, references, registry, titles, and all developer scopes on final code."},
     "registry": {"notes": 80, "unique_ids": 80, "unique_titles": 80, "scopes": 110, "bad": 0, "authoritative_algorithm": "anchor..end_anchor, or whole file without end_anchor, then git hash-object"},
-    "pages_source": {"path": "/nix/store/n3z69s8mgc59ndwg5nm2cdc2lc368jm9-source", "nar_hash": "sha256-KIN9rrmafOx4h3N5mMc4RoEBmXXTxGOZb1k1Suoa7lA=", "status": "evaluated source only; no page/site output realization claim"},
-    "metadata_free_gate": {"positive_exit": 0, "negative_exit": 2, "negative": "task-owned copy with unauthorized-current.html", "path_empty": true},
-    "generated_evidence": "Eight historical HTML artifacts and twenty-five declared binding files are retained. Ignored .local review HTML is excluded by repository membership, not deleted."
+    "stage_table": {
+      "code_9b18": {"pages_source":"/nix/store/n3z69s8mgc59ndwg5nm2cdc2lc368jm9-source","nar_hash":"sha256-KIN9rrmafOx4h3N5mMc4RoEBmXXTxGOZb1k1Suoa7lA=","evaluation_exit":0,"docs_check_exit":0,"classification":"successful code-stage evaluation/check only; ignored eval-cache warning; no site realization"},
+      "intermediate_3f14": {"pages_source":"/nix/store/rq2sf8iv7aknnpcc8lxhpssivs3wlyvv-source","nar_hash":"sha256-lWtbIbBuyw565CaRGoGSvfGw2/afUHJtZMfHuilkhPg=","evaluation_exit":0,"docs_check_exit":0,"classification":"successful but superseded intermediate evidence-tip qualification; no final credit"},
+      "round1_final_8f874": {"pages_source":"/nix/store/vvlqfaqqpgwl312cgwcc0mqnxyrg275f-source","nar_hash":"sha256-CIUYnyg1zjkAPTfplnte1x6D+tne+uJWjwX+NYAvqr0=","full_source":"/nix/store/ij2dsgi96k7mrkh8m1fr7pp92690200f-source","full_nar_hash":"sha256-I9NFgvZGBdi3wngB+lIvdtYdFk3Z7BKaa2d37SDlCrU=","evaluation_exit":0,"docs_check_exit":0,"classification":"successful final round1 qualification; evaluation/check only"},
+      "current_corrected": {"record":"target/wp3-core-docs-round2/current-stage.json","classification":"authoritative corrected-candidate source evaluation, empty-PATH gate and canonical docs check"}
+    },
+    "generated_evidence": {"artifacts":8,"role_slots":24,"distinct_binding_files":22,"qualification":"Canonical TOML derives8 artifact roles,5 source roles,4 artifact-owner roles,4 source-owner roles and3 tool-owner roles. Two owner paths serve multiple roles, so24 path-role slots collapse to22 distinct files. Ignored .local review HTML remains excluded by repository membership, not deletion."}
   },
   "renders": {
     "tool": "/nix/store/wzpxqpc3v2xxah69rqifq5kac67hx36g-typst-0.15.1/bin/typst",
     "tool_sha256": "3c381d7d3e2259f81766ff77a1e6dec18ec4c7b7702b9c51ad34d56432b9633c",
     "creation_timestamp": 0,
-    "note": {"source_sha256":"b15a537cef9eb449384ab9b0811a52f93fa9f806b48806c2227bf11cf12da2cd","wrapper_sha256":"2c2ae2157062f25d12a58df52e4c26bff40a83db4b996532f52fb3dca2a405cf","pdf_sha256":"92af9cf7734307359fbc15aa247ad3597a1e8cc6dfa052bf9b944b227b630950","html_sha256":"1aff8700b324297b9947a8d6e9109033492ae0bdeb3f89f0467123db65d943f1"},
+    "note": {"source_sha256":"6633ed76de4b8f2d5c80822137f0268d15e998d31d27ffa26afe332eeadf22ad","wrapper_sha256":"2c2ae2157062f25d12a58df52e4c26bff40a83db4b996532f52fb3dca2a405cf","pdf_sha256":"e897518e959c389d05f7f1ae593f78ae49ca394d8e462cf996f02d61e2b1ea72","html_sha256":"bd3a5ef93c54d620d58d07df8031befedfb35a98170c6b551d16915a616ad9b0"},
     "plan": {"source_sha256":"2bcfd0fd9a31f1f1618d26e29eeeed7a0a503315134ee42cc3d443dc8a322885","wrapper_sha256":"3a9deca513708fd960c6b91612311a4799b7b18ecd5de0425f35b17a17ef3103","pdf_sha256":"b68aa61f2644ddc22a3f672dff45094d57b52b376e6764106a01cb83a8d49217","html_sha256":"17476fbd2667abd430c2f90b2948257a84a72165c0afe1ad4a6bb9faaa63c4b8"},
-    "semantic_check": {"script_sha256":"63a6809a5e76acbdf4050b385d27856a410f7d39fe2c7c45019eae68ac869a24","exit":0,"qualification":"Exact current 2,214-test note and plan paragraphs accepted; the frozen historical core-test render is rejected as stale."}
+    "semantic_check": {"script_sha256":"5b78ab289d30fdf05302f87afc1d64477b2160af7dcc30e2482403101e5e3850","exit":0,"qualification":"Round2 checker accepts the current22-file/24-role note and rejects the frozen25-file round1 render; plan render is hash-qualified reused because plan prose is unchanged."}
   },
   "static": {
     "cargo_fmt": 0,
@@ -141,8 +152,9 @@
     "runtime_manifest": "target/wp3-core-docs/runtime-artifact-manifest.sha256",
     "runtime_manifest_entries": 179,
     "runtime_manifest_sha256": "a334fb7f9ec2346483d8a30b2bf984f564d8b9edad253aeb1f0ba6b4efa16ec3",
-    "qualification": "The compact manifest excludes retained writable source copies and final evidence-tip self-qualification records. Failed attempts remain present and are explicitly classified in failed-attempts.json."
+    "qualification": "Frozen round1 manifest retained byte-exact as historical. Its failed-attempts.json contains two inaccurate current-qualification statements and receives no active stage-classification credit; round2-evidence-correction.json supersedes them without rewriting the original bytes."
   },
+  "round2_evidence": {"root":"target/wp3-core-docs-round2","manifest":"target/wp3-core-docs-round2/manifest.sha256","manifest_entries":51,"manifest_sha256":"944c4f44c15441ec46d0650fb6da0a867091ea9a80beecec18f03662e4658679","validator_exit":0,"post_freeze_supplement":"target/wp3-core-docs-round2/final-supplement.sha256","qualification":"The51-entry nonself manifest excludes this receipt and post-freeze current-stage records. The final supplement is generated only after the candidate revision freezes, avoiding a circular self-hash; its hash is reported with the review candidate."},
   "protected_refs": [
     "generation-integration-core-docs-base=aa841fde3195270cc00328a9356dfe523c0d7a85",
     "generation-integration-core-docs-code=9b18f329e992ccc642c2cdaa62e934318f55fa76",
@@ -153,7 +165,7 @@
     "generation-integration-source46=79dfeaab77958064bf802bc88db23eb86ac2f8ce"
   ],
   "limits": [
-    "Candidate awaits NEW independent combined review.",
+    "Corrected candidate awaits NEW focused independent review; round1 review findings are evidence-only and runtime/docs pass scopes remain retained.",
     "The 81 FeynKit oracle-row failures and broader accepted WP3 exit obligations remain open.",
     "No QED lane, full-site publication, distribution, benchmark, performance, memory, M-rebuild, or WP3 completion claim.",
     "Final evidence-tip full source may differ from built code9b18; it is not relabelled as the executed producer source."

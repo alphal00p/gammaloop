@@ -1,0 +1,77 @@
+{
+  "schema": 1,
+  "scope": "Evidence-only correction of MAIN core/docs stage classification, binding inventory, and distinct-path accounting",
+  "round1_candidate": "8f874aa727f3a5e702d3a4b1c30f7798bb0d33d3",
+  "built_code_source": "9b18f329e992ccc642c2cdaa62e934318f55fa76",
+  "evidence_change": "zturtlpykppzpkzlwqsmnrklllptosll",
+  "reviews": [
+    {"scope":"A","path":".local/review-main-core-docs-a-opus-20261029T220240Z-2323285/review.json","sha256":"93932805268e4b5b1da421730b2b75e3c0db54a4bf558cd7bc64cb438e285b81","verdict":"REQUEST_CHANGES","finding":"A1 evidence classification only"},
+    {"scope":"B","path":".local/review-main-core-docs-b-opus-20261029T220358Z-2333025/review.json","sha256":"d4e6d404dfa4e766b4b8bd36035e30f4eddd6f7e569b2e6155ac1e57b136f3a5","verdict":"REQUEST_CHANGES","findings":["R1 stage classification","R2 final docs-check pointer","R3 binding count"]}
+  ],
+  "frozen_round1_evidence": {
+    "failed_attempts": {"path":"target/wp3-core-docs/failed-attempts.json","sha256":"343dcf5b8b97dbf6a9ea882fed460b8ef7e46df70a381ae489f330cb8146d8b5","classification":"preserved byte-exact; its pages-source and docs-check correction statements are superseded and receive no active qualification"},
+    "runtime_manifest": {"path":"target/wp3-core-docs/runtime-artifact-manifest.sha256","entries":179,"sha256":"a334fb7f9ec2346483d8a30b2bf984f564d8b9edad253aeb1f0ba6b4efa16ec3","classification":"preserved historical round1 manifest"},
+    "final_supplement": {"path":"target/wp3-core-docs/final-evidence-supplement.sha256","entries":20,"sha256":"5be90a230ca664e0833f9000266345357e4f12f80fc4642d98c108e03be2c5fa","classification":"preserved historical supplement for8f874"}
+  },
+  "path_inventory": {
+    "round1_from_base": {"code_paths":9,"evidence_paths":7,"overlap":["docs/developers.toml"],"distinct_paths":15},
+    "round2_correction": {"paths":7},
+    "cumulative_from_base": {"distinct_paths":17}
+  },
+  "stage_table": {
+    "code": {
+      "revision":"9b18f329e992ccc642c2cdaa62e934318f55fa76",
+      "full_source":{"path":"/nix/store/k9dc5m23dw03ldi96f9bvplpdhjii6ds-source","nar_hash":"sha256-n8d3ZkL93bbvgy8hVv6+/PL5IoZmURRqIB4WqESCfi0="},
+      "pages_source":{"path":"/nix/store/n3z69s8mgc59ndwg5nm2cdc2lc368jm9-source","nar_hash":"sha256-KIN9rrmafOx4h3N5mMc4RoEBmXXTxGOZb1k1Suoa7lA=","path_record":"target/wp3-core-docs/pages-source-path.txt","exit_record":"target/wp3-core-docs/pages-source-eval.exit","log_record":"target/wp3-core-docs/pages-source-eval.log","exit":0,"classification":"successful evaluation only; ignored SQLite eval-cache warning; no site build or execution","argv_provenance":"original argv file not retained; exact Git-pinned command independently reproduced in both round1 reviews"},
+      "docs_check":{"argv":"target/wp3-core-docs/docs-check.argv","exit_record":"target/wp3-core-docs/docs-check.exit","exit":0,"cwd_provenance":"devshell pinned to code revision; Cargo cwd was the task workspace and is qualified only by retained tracked-byte parity, not called immutable-source execution"},
+      "metadata_free_gate":{"argv":"target/wp3-core-docs/pages-gate-positive.argv","exit_record":"target/wp3-core-docs/pages-gate-positive.exit","exit":0,"classification":"code-stage source gate"}
+    },
+    "intermediate_round1": {
+      "revision":"3f14fbe02c3b91a59243f1a16abfed58235d465a",
+      "pages_source":{"path":"/nix/store/rq2sf8iv7aknnpcc8lxhpssivs3wlyvv-source","nar_hash":"sha256-lWtbIbBuyw565CaRGoGSvfGw2/afUHJtZMfHuilkhPg=","path_record":"target/wp3-core-docs/pages-source-final-path.txt","exit_record":"target/wp3-core-docs/pages-source-final-eval.exit","exit":0},
+      "docs_check":{"argv":"target/wp3-core-docs/docs-check-evidence.argv","exit_record":"target/wp3-core-docs/docs-check-evidence.exit","exit":0},
+      "metadata_free_gate":{"argv":"target/wp3-core-docs/pages-gate-final-positive.argv","exit_record":"target/wp3-core-docs/pages-gate-final-positive.exit","exit":0},
+      "classification":"successful intermediate evaluation/check, superseded by8f874 and not final-tree credit"
+    },
+    "round1_final": {
+      "revision":"8f874aa727f3a5e702d3a4b1c30f7798bb0d33d3",
+      "full_source":{"path":"/nix/store/ij2dsgi96k7mrkh8m1fr7pp92690200f-source","nar_hash":"sha256-I9NFgvZGBdi3wngB+lIvdtYdFk3Z7BKaa2d37SDlCrU=","metadata_record":"target/wp3-core-docs/final-flake-metadata.json"},
+      "pages_source":{"path":"/nix/store/vvlqfaqqpgwl312cgwcc0mqnxyrg275f-source","nar_hash":"sha256-CIUYnyg1zjkAPTfplnte1x6D+tne+uJWjwX+NYAvqr0=","path_record":"target/wp3-core-docs/pages-source-final-round2-path.txt","exit_record":"target/wp3-core-docs/pages-source-final-round2-eval.exit","exit":0,"argv_provenance":"original argv file not retained; exact Git-pinned command independently reproduced in both round1 reviews"},
+      "docs_check":{"argv":"target/wp3-core-docs/docs-check-evidence-round2.argv","exit_record":"target/wp3-core-docs/docs-check-evidence-round2.exit","exit":0},
+      "metadata_free_gate":{"positive_exit_record":"target/wp3-core-docs/pages-gate-final-round2-positive.exit","positive_exit":0,"negative_exit_record":"target/wp3-core-docs/pages-gate-final-round2-negative.exit","negative_exit":2,"argv_provenance":"round1 argv files were not retained; reviewer reproduction is separately bound"},
+      "classification":"successful final qualification for frozen round1 candidate8f874; evaluation/check only, no site realization"
+    },
+    "failed_local_check": {
+      "exit_record":"target/wp3-core-docs/docs-check-final.exit",
+      "log_record":"target/wp3-core-docs/docs-check-final.log",
+      "exit":1,
+      "classification":"interrupted task-owned local-flake attempt; no validation credit"
+    },
+    "current_final": {
+      "record":"target/wp3-core-docs-round2/current-stage.json",
+      "classification":"authoritative corrected-candidate evaluation and canonical docs qualification; evaluation/check only"
+    }
+  },
+  "generated_evidence_inventory": {
+    "manifest":"docs/generated-rendered-evidence.toml",
+    "artifacts":8,
+    "role_counts":{"artifact":8,"source":5,"artifact_owner":4,"source_owner":4,"tool_owner":3},
+    "role_slots":24,
+    "distinct_binding_files":22,
+    "roles": {
+      "artifact":["docs/architecture/evidence/generation-integration/mark-geometry/generation-drawing-notices-html/index.html","docs/architecture/evidence/generation-integration/mark-geometry/generation-drawing-ports-html/index.html","docs/architecture/evidence/generation-integration/mark-geometry/generation-mark-geometry-html/index.html","docs/architecture/evidence/generation-integration/mark-geometry/kurvst-arrowhead-engine-html/index.html","docs/architecture/evidence/generation-integration/mark-geometry/nix-crane-cache-reuse-html/index.html","docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/generation-mark-geometry-html/index.html","docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/note-first-html/index.html","docs/architecture/evidence/generation-integration/mark-geometry/round3-attribution/note-html/index.html"],
+      "source":["docs/architecture/generation-drawing-notices.typ","docs/architecture/generation-drawing-ports.typ","docs/architecture/generation-mark-geometry.typ","docs/architecture/kurvst-arrowhead-engine.typ","docs/architecture/nix-crane-cache-reuse.typ"],
+      "artifact_owner":["docs/architecture/evidence/generation-integration/mark-geometry/receipt.json","docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/receipt.json","docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/evidence-inventory.json","docs/architecture/evidence/generation-integration/mark-geometry/round3-attribution/inventory.json"],
+      "source_owner":["docs/architecture/evidence/generation-integration/mark-geometry/receipt.json","docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/receipt.json","docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/receipt.json","docs/architecture/evidence/generation-integration/mark-geometry/round3-attribution/receipt.json"],
+      "tool_owner":["docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/typst-version.log","docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/typst-version.log","docs/architecture/evidence/generation-integration/mark-geometry/typst-version.log"]
+    },
+    "qualification":"24 deduplicated path-role slots collapse to22 distinct files because two owner paths serve in more than one role; the eight HTML artifacts are included in both counts and remain separately identified"
+  },
+  "dispositions": {
+    "A1_R1":"closed by byte-derived code/intermediate/round1/current stage table; original successful code evaluation is credited as evaluation only",
+    "B_R2":"closed by binding final round1 docs check to docs-check-evidence-round2 and marking3f14 records superseded",
+    "B_R3":"closed by deriving8 artifacts,24 role slots and22 distinct binding files from the canonical TOML",
+    "inventory":"closed at15 distinct round1 paths, not the invalid9+7 arithmetic sum"
+  },
+  "limits":["No runtime or producer rerun/rebuild credit","No license-bearing Nix runtime-check derivation created","No QED, WP3 completion, site realization, publication, performance or memory claim"]
+}

@@ -21,5 +21,9 @@
     "reconciliation_preflight": "../generation-rendered-evidence/.local/main-reconciliation-preflight-20261029T190000Z/preflight.json",
     "reconciliation_preflight_sha256": "c9c0d5fca59ac2cad3a1c2ec5767d5d6d884c732c2fa1dc42b4060e3cb9de9ad"
   },
-  "status": "Both preparations and the cumulative base are independently approved. This index does not approve the combined candidate."
+  "round1_combined_reviews": [
+    {"scope":"A","path":".local/review-main-core-docs-a-opus-20261029T220240Z-2323285/review.json","sha256":"93932805268e4b5b1da421730b2b75e3c0db54a4bf558cd7bc64cb438e285b81","verdict":"REQUEST_CHANGES","qualification":"runtime/source/producer/API scope passed; evidence classification correction only"},
+    {"scope":"B","path":".local/review-main-core-docs-b-opus-20261029T220358Z-2333025/review.json","sha256":"d4e6d404dfa4e766b4b8bd36035e30f4eddd6f7e569b2e6155ac1e57b136f3a5","verdict":"REQUEST_CHANGES","qualification":"registry/docs owner/gates passed; stage pointers and binding count correction only"}
+  ],
+  "status": "Both preparations and the cumulative base are independently approved. Round1 combined reviews preserve their runtime/docs passes but request this evidence-only correction; this index does not approve the corrected candidate."
 }

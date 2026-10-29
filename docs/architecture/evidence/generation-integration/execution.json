@@ -739,9 +739,9 @@
     "docs_preparation": "1049e0c32263d4805d14130435a26e2b5deb5fd7",
     "code_commit": "9b18f329e992ccc642c2cdaa62e934318f55fa76",
     "code_change": "nqopsyyxssoyslmxrszqroxvowqusywp",
-    "evidence_change": "owyyqwsrmpqlpxksznmslqslkuqvnnqw",
+    "evidence_change": "zturtlpykppzpkzlwqsmnrklllptosll",
     "receipt": "docs/architecture/evidence/generation-integration/wp3/core-docs/receipt.json",
     "candidate_bookmark": "generation-integration-core-docs",
-    "status": "Combined API fixture and generated-evidence candidate; fresh core/docs validation passed, awaiting NEW independent combined review. The 81 oracle rows and broader WP3 gates remain open."
+    "status": "Round2 evidence-only correction candidate: runtime/docs gates retained, stage chronology and22-file/24-role binding inventory corrected; awaiting NEW focused independent review. The81 oracle rows and broader WP3 gates remain open."
   }
 }
