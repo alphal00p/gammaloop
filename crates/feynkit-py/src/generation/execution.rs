@@ -1,24 +1,142 @@
 use super::{PyGenerationProgress, PyParticle, PyRequest, PyRun, error};
 use crate::progress::MarimoProgress;
 use feynkit_generator::{
-    ExternalLabel, GenerationControl, GenerationError, GenerationProgress, Request, Run, Stage,
+    CancellationToken, ExternalLabel, GenerationControl, GenerationError, GenerationProgress,
+    Request, Run, Stage,
 };
 use feynkit_model::{Model, ParticleId};
 #[cfg(not(target_arch = "wasm32"))]
 use linnet::half_edge::generate::batch::Hook;
 use linnet::half_edge::generate::batch::{Reply, Request as BatchRequest};
 use linnet_py::{CancelCheck, GenerationCallbacks};
-use pyo3::exceptions::PyTypeError;
+use pyo3::exceptions::{PyRuntimeError, PyTypeError};
 use pyo3::prelude::Py;
+use pyo3::prelude::PyAny;
 use pyo3::prelude::PyAnyMethods;
 use pyo3::prelude::PyResult;
 use pyo3::prelude::Python;
 use pyo3::types::PyTuple;
-use std::collections::VecDeque;
+use std::mem;
 use std::ops::ControlFlow;
+use std::panic;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{self, RecvTimeoutError, SyncSender};
 use std::sync::{Arc, Mutex};
+use std::thread;
 use std::time::{Duration, Instant};
+
+/// Python receives at most one snapshot per stage in each interval.
+const PROGRESS_INTERVAL: Duration = Duration::from_millis(150);
+
+/// Native snapshots awaiting Python, ordered by the first occurrence of each stage since delivery.
+/// Streaming generation can switch stage after every diagram, so consecutive-only coalescing
+/// would still deliver every switch.
+#[derive(Default)]
+struct PendingProgress {
+    snapshots: Vec<GenerationProgress>,
+    delivered: Option<Instant>,
+}
+
+impl PendingProgress {
+    fn record(&mut self, snapshot: GenerationProgress) {
+        match self
+            .snapshots
+            .iter_mut()
+            .find(|p| p.stage == snapshot.stage)
+        {
+            Some(pending) => *pending = snapshot,
+            None => self.snapshots.push(snapshot),
+        }
+    }
+
+    fn take(&mut self, force: bool, now: Instant) -> Vec<GenerationProgress> {
+        let throttled = self
+            .delivered
+            .is_some_and(|last| now.duration_since(last) < PROGRESS_INTERVAL);
+        if self.snapshots.is_empty() || (throttled && !force) {
+            return Vec::new();
+        }
+        self.delivered = Some(now);
+        mem::take(&mut self.snapshots)
+    }
+}
+
+/// One execution's caller-thread delivery state. The native worker only records snapshots
+/// in `pending`; this method remains the sole path that invokes Python progress callbacks.
+struct ProgressDelivery {
+    pending: Arc<Mutex<PendingProgress>>,
+    display: Option<Arc<Mutex<MarimoProgress>>>,
+    progress: Option<Py<PyAny>>,
+    progress_token: CancellationToken,
+    started: Instant,
+    callback_cancelled: AtomicBool,
+}
+
+impl ProgressDelivery {
+    fn deliver(&self, force: bool) -> PyResult<()> {
+        let updates = self.pending.lock().unwrap().take(force, Instant::now());
+        if !updates.is_empty() {
+            Python::attach(|py| -> PyResult<()> {
+                for inner in updates {
+                    if self.callback_cancelled.load(Ordering::Relaxed) && inner.stage != Stage::Done
+                    {
+                        continue;
+                    }
+                    if let Some(display) = &self.display {
+                        let title = match inner.stage {
+                            Stage::Skeletons => "Enumerating skeletons",
+                            Stage::Dressing => "Assigning interactions",
+                            Stage::Prepare => "Preparing physical diagrams",
+                            Stage::Numerators => "Constructing numerators",
+                            Stage::Selection => "Selecting diagrams",
+                            Stage::ZeroColor => "Filtering zero-color diagrams",
+                            Stage::GroupingPreparation => "Preparing numerators for grouping",
+                            Stage::GroupingSamples => "Sampling numerators for grouping",
+                            Stage::GroupingComparison => "Comparing numerators",
+                            Stage::Grouping => "Finalizing diagram groups",
+                            Stage::Done if self.progress_token.is_cancelled() => {
+                                "Diagram generation cancelled"
+                            }
+                            Stage::Done => "Diagram generation complete",
+                        };
+                        let counts = match (inner.stage, &inner.total) {
+                            (Stage::Done, _) => format!("{} diagrams retained", inner.completed),
+                            (_, Some(total)) => format!("{} / {total} processed", inner.completed),
+                            (_, None) => format!("{} processed", inner.completed),
+                        };
+                        let counts = if inner.zero_numerator_count.bits() > 0 {
+                            format!(
+                                "{counts} · {} zero graphs filtered",
+                                inner.zero_numerator_count
+                            )
+                        } else {
+                            counts
+                        };
+                        let subtitle = format!(
+                            "{counts} · {:.1}s elapsed",
+                            self.started.elapsed().as_secs_f64()
+                        );
+                        display.lock().unwrap().update(py, title, &subtitle)?;
+                    }
+                    if let Some(callback) = &self.progress {
+                        let reply = callback.call1(py, (PyGenerationProgress { inner },))?;
+                        if !reply.is_none(py)
+                            && !reply.extract::<bool>(py).map_err(|_| {
+                                PyTypeError::new_err("progress must return None or bool")
+                            })?
+                        {
+                            self.callback_cancelled.store(true, Ordering::Relaxed);
+                            self.progress_token.cancel();
+                            // A callback False suppresses later work batches, but not Done.
+                        }
+                    }
+                }
+                Ok(())
+            })?;
+        }
+        Ok(())
+    }
+}
 
 /// Run generation with callbacks and signals on the calling Python thread.
 pub(super) fn execute<T: Send>(
@@ -82,101 +200,20 @@ pub(super) fn execute<T: Send>(
     } else {
         None
     };
-    let display = marimo_progress.clone();
-    let started = Instant::now();
     let interruption = Arc::new(Mutex::new(None));
-    let snapshots = Arc::new(Mutex::new(VecDeque::<GenerationProgress>::new()));
-    let delivery = Mutex::new((Instant::now(), None));
-    let pending = snapshots.clone();
-    let has_progress = progress.is_some() || display.is_some();
-    let progress_token = run.cancellation().clone();
-    let deliver_progress = Arc::new(move |force: bool| -> PyResult<()> {
-        let mut pending = pending.lock().unwrap();
-        let mut delivery = delivery.lock().unwrap();
-        let changed = pending.front().is_some_and(|p| Some(p.stage) != delivery.1);
-        let finished = pending
-            .back()
-            .is_some_and(|p| p.total.as_ref() == Some(&p.completed));
-        if !force
-            && !changed
-            && !finished
-            && pending.len() < 2
-            && delivery.0.elapsed() < Duration::from_millis(150)
-        {
-            return Ok(());
-        }
-        let updates = std::mem::take(&mut *pending);
-        if let Some(last) = updates.back() {
-            *delivery = (Instant::now(), Some(last.stage));
-        }
-        drop(pending);
-        drop(delivery);
-        if has_progress {
-            Python::attach(|py| -> PyResult<()> {
-                for inner in updates {
-                    if let Some(display) = &display {
-                        let title = match inner.stage {
-                            Stage::Skeletons => "Enumerating skeletons",
-                            Stage::Dressing => "Assigning interactions",
-                            Stage::Prepare => "Preparing physical diagrams",
-                            Stage::Numerators => "Constructing numerators",
-                            Stage::Selection => "Selecting diagrams",
-                            Stage::ZeroColor => "Filtering zero-color diagrams",
-                            Stage::GroupingPreparation => "Preparing numerators for grouping",
-                            Stage::GroupingSamples => "Sampling numerators for grouping",
-                            Stage::GroupingComparison => "Comparing numerators",
-                            Stage::Grouping => "Finalizing diagram groups",
-                            Stage::Done if progress_token.is_cancelled() => {
-                                "Diagram generation cancelled"
-                            }
-                            Stage::Done => "Diagram generation complete",
-                        };
-                        let counts = match (inner.stage, &inner.total) {
-                            (Stage::Done, _) => format!("{} diagrams retained", inner.completed),
-                            (_, Some(total)) => format!("{} / {total} processed", inner.completed),
-                            (_, None) => format!("{} processed", inner.completed),
-                        };
-                        let counts = if inner.zero_numerator_count.bits() > 0 {
-                            format!(
-                                "{counts} · {} zero graphs filtered",
-                                inner.zero_numerator_count
-                            )
-                        } else {
-                            counts
-                        };
-                        let subtitle =
-                            format!("{counts} · {:.1}s elapsed", started.elapsed().as_secs_f64());
-                        display.lock().unwrap().update(
-                            py,
-                            title,
-                            &subtitle,
-                            (&inner.completed).try_into().unwrap_or(usize::MAX),
-                            inner
-                                .total
-                                .as_ref()
-                                .map(|n| n.try_into().unwrap_or(usize::MAX)),
-                        )?;
-                    }
-                    if let Some(callback) = &progress {
-                        let reply = callback.call1(py, (PyGenerationProgress { inner },))?;
-                        if !reply.is_none(py)
-                            && !reply.extract::<bool>(py).map_err(|_| {
-                                PyTypeError::new_err("progress must return None or bool")
-                            })?
-                        {
-                            progress_token.cancel();
-                            break;
-                        }
-                    }
-                }
-                Ok(())
-            })?;
-        }
-        Ok(())
+    let snapshots = Arc::new(Mutex::new(PendingProgress::default()));
+    let has_progress = progress.is_some() || marimo_progress.is_some();
+    let deliver_progress = Arc::new(ProgressDelivery {
+        pending: snapshots.clone(),
+        display: marimo_progress.clone(),
+        progress,
+        progress_token: run.cancellation().clone(),
+        started: Instant::now(),
+        callback_cancelled: AtomicBool::new(false),
     });
     #[cfg(not(target_arch = "wasm32"))]
     let (progress_notifications, progress_receiver) =
-        std::sync::mpsc::sync_channel::<std::sync::mpsc::SyncSender<GenerationControl>>(1);
+        mpsc::sync_channel::<SyncSender<GenerationControl>>(1);
     #[cfg(not(target_arch = "wasm32"))]
     let progress_cancellation = run.cancellation().clone();
     if has_progress {
@@ -188,19 +225,10 @@ pub(super) fn execute<T: Send>(
             let synchronize = snapshot.stage == Stage::Done
                 || (matches!(snapshot.stage, Stage::Numerators | Stage::Selection)
                     && snapshot.completed.bits() == 0);
-            let mut pending = snapshots.lock().unwrap();
-            if pending
-                .back()
-                .is_some_and(|last| last.stage == snapshot.stage)
-            {
-                *pending.back_mut().unwrap() = snapshot;
-            } else {
-                pending.push_back(snapshot);
-            }
-            drop(pending);
+            snapshots.lock().unwrap().record(snapshot);
             #[cfg(not(target_arch = "wasm32"))]
             if synchronize {
-                let (reply, response) = std::sync::mpsc::sync_channel(1);
+                let (reply, response) = mpsc::sync_channel(1);
                 if progress_notifications.send(reply).is_err() {
                     return GenerationControl::Cancel;
                 }
@@ -208,7 +236,7 @@ pub(super) fn execute<T: Send>(
             }
             #[cfg(target_arch = "wasm32")]
             if error.lock().unwrap().is_none() {
-                let result = deliver(synchronize);
+                let result = deliver.deliver(synchronize);
                 if let Err(exception) = result {
                     *error.lock().unwrap() = Some(exception);
                     return GenerationControl::Cancel;
@@ -269,11 +297,11 @@ pub(super) fn execute<T: Send>(
         };
     #[cfg(not(target_arch = "wasm32"))]
     let result = {
-        let (requests, receiver) = std::sync::mpsc::sync_channel(1);
+        let (requests, receiver) = mpsc::sync_channel(1);
         if has_hooks {
             request = request.map(|request| {
                 request.deferred_hooks(mask, move |batch| {
-                    let (reply, response) = std::sync::mpsc::sync_channel(1);
+                    let (reply, response) = mpsc::sync_channel(1);
                     if requests.send((batch, reply)).is_err() {
                         return ControlFlow::Break(());
                     }
@@ -284,15 +312,14 @@ pub(super) fn execute<T: Send>(
         let interruption = interruption.clone();
         let deliver_progress = deliver_progress.clone();
         py.detach(move || {
-            std::thread::scope(|scope| {
+            thread::scope(|scope| {
                 // At most one callback worker belongs to this execution. The native
                 // Request retains only channel handles; no Python references escape in a set.
                 type Work = (
                     Vec<BatchRequest<ParticleId, ExternalLabel>>,
-                    std::sync::mpsc::SyncSender<PyResult<Option<Vec<Reply>>>>,
+                    SyncSender<PyResult<Option<Vec<Reply>>>>,
                 );
-                let (callback_requests, callback_receiver) =
-                    std::sync::mpsc::sync_channel::<Work>(1);
+                let (callback_requests, callback_receiver) = mpsc::sync_channel::<Work>(1);
                 let callback_worker = has_worker_hooks.then(|| {
                     let apply_batch = &apply_batch;
                     scope.spawn(move || {
@@ -310,7 +337,7 @@ pub(super) fn execute<T: Send>(
                         let result = Python::attach(|py| {
                             let result = py
                                 .check_signals()
-                                .and_then(|()| deliver_progress(progress_reply.is_some()));
+                                .and_then(|()| deliver_progress.deliver(progress_reply.is_some()));
                             // Publish cancellation before releasing the GIL to the predicate
                             // worker, so it cannot start another callback after a signal.
                             if result.is_err() {
@@ -347,32 +374,28 @@ pub(super) fn execute<T: Send>(
                                 while let Some(first) = pending.next() {
                                     let use_worker = on_worker(first.hook());
                                     let mut batch = vec![first];
-                                    while let Some(next) = pending
-                                        .next_if(|next| on_worker(next.hook()) == use_worker)
+                                    while let Some(next) =
+                                        pending.next_if(|next| on_worker(next.hook()) == use_worker)
                                     {
                                         batch.push(next);
                                     }
                                     let reply = if use_worker {
-                                        let (done, response) = std::sync::mpsc::sync_channel(1);
+                                        let (done, response) = mpsc::sync_channel(1);
                                         if callback_requests.send((batch, done)).is_err() {
-                                            Err(pyo3::exceptions::PyRuntimeError::new_err(
-                                                "callback worker stopped",
-                                            ))
+                                            Err(PyRuntimeError::new_err("callback worker stopped"))
                                         } else {
                                             loop {
-                                                match response.recv_timeout(Duration::from_millis(25)) {
+                                                match response
+                                                    .recv_timeout(Duration::from_millis(25))
+                                                {
                                                     Ok(result) => break result,
-                                                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                                                    Err(RecvTimeoutError::Timeout) => {
                                                         service_caller()
                                                     }
-                                                    Err(
-                                                        std::sync::mpsc::RecvTimeoutError::Disconnected,
-                                                    ) => {
-                                                        break Err(
-                                                            pyo3::exceptions::PyRuntimeError::new_err(
-                                                                "callback worker stopped",
-                                                            ),
-                                                        );
+                                                    Err(RecvTimeoutError::Disconnected) => {
+                                                        break Err(PyRuntimeError::new_err(
+                                                            "callback worker stopped",
+                                                        ));
                                                     }
                                                 }
                                             }
@@ -404,7 +427,7 @@ pub(super) fn execute<T: Send>(
                 if let Some(callback_worker) = callback_worker {
                     callback_worker
                         .join()
-                        .unwrap_or_else(|panic| std::panic::resume_unwind(panic));
+                        .unwrap_or_else(|panic| panic::resume_unwind(panic));
                 }
                 // Native heredity diagnostics panic; keep that failure inside this binding.
                 worker.join()
@@ -439,13 +462,13 @@ pub(super) fn execute<T: Send>(
                 })
             });
         }
-        py.detach(|| std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| work(request, run))))
+        py.detach(|| panic::catch_unwind(panic::AssertUnwindSafe(|| work(request, run))))
     };
     let result = (|| {
         if let Some(error) = interruption.lock().unwrap().take() {
             return Err(error);
         }
-        deliver_progress(true)?;
+        deliver_progress.deliver(true)?;
         py.check_signals()?;
         result
             .map_err(|panic| {
@@ -465,4 +488,125 @@ pub(super) fn execute<T: Send>(
             .finish(py, result.as_ref().err(), "Diagram generation stopped")?;
     }
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use std::ffi::CString;
+
+    use super::*;
+    use pyo3::prelude::PyDictMethods;
+    use pyo3::types::{PyDict, PyModule};
+
+    #[test]
+    fn callback_cancellation_suppresses_a_later_drained_batch() {
+        Python::initialize();
+        Python::attach(|py| {
+            let module = PyModule::new(py, "symbolica.community.hepkit").unwrap();
+            crate::initialize_feynkit(&module).unwrap();
+            let locals = PyDict::new(py);
+            locals.set_item("fk", &module).unwrap();
+            py.run(
+                &CString::new(
+                    r#"
+import threading
+caller = threading.get_ident()
+seen = []
+def progress(update):
+    assert threading.get_ident() == caller
+    seen.append((update.stage, update.completed))
+    return False if update.stage == fk.Stage.Skeletons else None
+"#,
+                )
+                .unwrap(),
+                Some(&locals),
+                Some(&locals),
+            )
+            .unwrap();
+            let callback = locals.get_item("progress").unwrap().unwrap().unbind();
+            let token = CancellationToken::new();
+            let pending = Arc::new(Mutex::new(PendingProgress::default()));
+            let delivery = ProgressDelivery {
+                pending: Arc::clone(&pending),
+                display: None,
+                progress: Some(callback),
+                progress_token: token.clone(),
+                started: Instant::now(),
+                callback_cancelled: AtomicBool::new(false),
+            };
+            let (ready_sender, ready_receiver) = mpsc::sync_channel(0);
+            let (continue_sender, continue_receiver) = mpsc::sync_channel(0);
+            let worker = thread::spawn(move || {
+                let snapshot = |stage, completed: u8| GenerationProgress {
+                    stage,
+                    completed: completed.into(),
+                    total: None,
+                    zero_numerator_count: 0u8.into(),
+                };
+                pending
+                    .lock()
+                    .unwrap()
+                    .record(snapshot(Stage::Skeletons, 1));
+                ready_sender.send(()).unwrap();
+                continue_receiver.recv().unwrap();
+                let mut pending = pending.lock().unwrap();
+                pending.record(snapshot(Stage::Dressing, 2));
+                pending.record(snapshot(Stage::Prepare, 2));
+                pending.record(snapshot(Stage::Done, 2));
+                drop(pending);
+                ready_sender.send(()).unwrap();
+            });
+            ready_receiver.recv().unwrap();
+            delivery.deliver(false).unwrap();
+            assert!(token.is_cancelled());
+            continue_sender.send(()).unwrap();
+            ready_receiver.recv().unwrap();
+            delivery.deliver(true).unwrap();
+            worker.join().unwrap();
+            delivery.deliver(true).unwrap();
+            py.run(
+                &CString::new("assert seen == [(fk.Stage.Skeletons, 1), (fk.Stage.Done, 2)], seen")
+                    .unwrap(),
+                Some(&locals),
+                Some(&locals),
+            )
+            .unwrap();
+        });
+    }
+
+    #[test]
+    fn alternating_stages_reach_python_once_per_stage_and_interval() {
+        let snapshot = |stage, completed: u32| GenerationProgress {
+            stage,
+            completed: completed.into(),
+            total: None,
+            zero_numerator_count: 0u8.into(),
+        };
+        let start = Instant::now();
+        let mut pending = PendingProgress::default();
+        let mut delivered = Vec::new();
+        // One thread dresses and prepares every diagram in its own batch: 20,000 native stage
+        // switches over 1.5 s, polled after each diagram.
+        for diagram in 1..=10_000u32 {
+            pending.record(snapshot(Stage::Dressing, diagram));
+            pending.record(snapshot(Stage::Prepare, diagram));
+            let now = start + PROGRESS_INTERVAL * diagram / 1_000;
+            delivered.extend(pending.take(false, now));
+        }
+        pending.record(snapshot(Stage::Done, 10_000));
+        delivered.extend(pending.take(true, start + PROGRESS_INTERVAL * 10));
+        // The first poll, every later interval and the forced finish deliver both stages once.
+        let mut stages = [Stage::Dressing, Stage::Prepare].repeat(11);
+        stages.push(Stage::Done);
+        assert_eq!(
+            delivered.iter().map(|p| p.stage).collect::<Vec<_>>(),
+            stages
+        );
+        // Each delivery carries the latest snapshot, so the final counts are exact.
+        assert!(
+            delivered[20..]
+                .iter()
+                .all(|p| p.completed == 10_000u32.into())
+        );
+    }
 }

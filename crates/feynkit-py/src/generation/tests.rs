@@ -83,14 +83,9 @@ for via_model in (True, False):
         visible = []
         marimo.output._output.flush.side_effect = lambda: visible.append(indicator.update.call_args.args[-2])
         result = generate()
-        marimo.status.spinner.assert_called()
-        marimo.status.progress_bar.assert_called()
-        for call in marimo.status.progress_bar.call_args_list:
-            assert call.kwargs["total"] > 0
-            assert call.kwargs["remove_on_exit"] is True
-            assert call.kwargs["show_eta"] is False
-            assert call.kwargs["show_rate"] is False
-        context.__enter__.assert_called()
+        # One spinner per operation (generate, build, group); stage changes reuse it.
+        assert marimo.status.spinner.call_count == context.__enter__.call_count == 3
+        marimo.status.progress_bar.assert_not_called()
         context.__exit__.assert_called_with(None, None, None)
         assert context.__exit__.call_count == context.__enter__.call_count
         titles = list(dict.fromkeys(call.args[-2] for call in indicator.update.call_args_list))
@@ -440,6 +435,147 @@ filtered = request(select=lambda view: True).generate().build()
 assert filtered.report.completed and len(filtered) == len(result)
 "#,
         )
+        .unwrap();
+        py.run(&code, Some(&locals), Some(&locals)).unwrap();
+    });
+}
+
+#[test]
+fn streaming_progress_reaches_python_once_per_stage_and_interval() {
+    Python::initialize();
+    Python::attach(|py| {
+        let module = PyModule::new(py, "symbolica.community.hepkit").unwrap();
+        crate::initialize_feynkit(&module).unwrap();
+        let locals = PyDict::new(py);
+        locals.set_item("fk", &module).unwrap();
+        let code = CString::new(
+            r#"
+import time
+
+request = fk.Model.qcd().process(["u", "u~"], ["g", "g"]).amplitude(loops=fk.Loops.total(2))
+updates = []
+start = time.monotonic()
+compact = request.generate(run=fk.Run(threads=1, progress=updates.append))
+elapsed = time.monotonic() - start
+# One thread prepares every diagram in its own batch, so native snapshots switch
+# between dressing and preparation at least twice per diagram.
+assert compact.report.completed and len(compact) > 1000
+switches = sum(a.stage != b.stage for a, b in zip(updates, updates[1:]))
+# Each delivery carries at most the three streaming stages; Done is the last.
+assert switches <= 3 * (elapsed / 0.15 + 2), (switches, elapsed, len(compact))
+assert updates[-1].stage == fk.Stage.Done
+"#,
+        )
+        .unwrap();
+        py.run(&code, Some(&locals), Some(&locals)).unwrap();
+    });
+}
+
+#[test]
+fn progress_cancellation_delivers_terminal_once_on_the_calling_thread() {
+    Python::initialize();
+    Python::attach(|py| {
+        let module = PyModule::new(py, "symbolica.community.hepkit").unwrap();
+        crate::initialize_feynkit(&module).unwrap();
+        let locals = PyDict::new(py);
+        locals.set_item("fk", &module).unwrap();
+        let code = CString::new(
+            r#"
+import threading
+import time
+
+request = fk.Model.qed().process(['e-', 'e+'], ['a', 'a']).amplitude(loops=fk.Loops.total(0))
+built = request.generate().build()
+caller = threading.get_ident()
+
+for stop_stage in (fk.Stage.Selection, fk.Stage.Prepare):
+    for mode in ('callback', 'token'):
+        token = fk.CancellationToken()
+        observed = []
+        def progress(update):
+            assert threading.get_ident() == caller
+            observed.append((update.stage, update.completed))
+            if stop_stage == fk.Stage.Prepare and update.stage == fk.Stage.Skeletons:
+                # Let native generation enqueue its final batch before the caller drains it.
+                time.sleep(0.1)
+            if update.stage == stop_stage:
+                if mode == 'callback':
+                    return False
+                token.cancel()
+            return None
+
+        run = fk.Run(threads=1, progress=progress, cancellation=token)
+        if stop_stage == fk.Stage.Selection:
+            result = built.select(fk.Selection(), run=run)
+            assert observed == [(fk.Stage.Selection, 0), (fk.Stage.Done, 0)]
+        else:
+            result = request.generate(run=run)
+            assert observed == [(fk.Stage.Skeletons, 2), (fk.Stage.Dressing, 2),
+                                (fk.Stage.Prepare, 2), (fk.Stage.Done, 2)]
+        assert not result.report.completed
+        assert sum(stage == fk.Stage.Done for stage, _ in observed) == 1, observed
+        assert observed[-1][0] == fk.Stage.Done
+        delivered = len(observed)
+        time.sleep(0.02)
+        assert len(observed) == delivered
+
+# An exception still wins over an already queued Done and retains the same object.
+expected = RuntimeError('progress failed')
+observed = []
+def fail(update):
+    observed.append(update.stage)
+    if update.stage == fk.Stage.Skeletons:
+        time.sleep(0.1)
+    if update.stage == fk.Stage.Prepare:
+        raise expected
+try:
+    request.generate(run=fk.Run(threads=1, progress=fail))
+except RuntimeError as error:
+    assert error is expected
+else:
+    raise AssertionError('callback exception was lost')
+assert fk.Stage.Done not in observed
+delivered = len(observed)
+time.sleep(0.02)
+assert len(observed) == delivered
+
+# A terminal callback exception after False takes precedence over cancellation.
+expected = RuntimeError('terminal progress failed')
+observed = []
+def cancel_then_fail(update):
+    observed.append(update.stage)
+    if update.stage == fk.Stage.Skeletons:
+        time.sleep(0.1)
+    if update.stage == fk.Stage.Prepare:
+        return False
+    if update.stage == fk.Stage.Done:
+        raise expected
+    return None
+try:
+    request.generate(run=fk.Run(threads=1, progress=cancel_then_fail))
+except RuntimeError as error:
+    assert error is expected
+else:
+    raise AssertionError('terminal callback exception was lost')
+assert observed.count(fk.Stage.Done) == 1
+"#,
+        )
+        .unwrap();
+        py.run(&code, Some(&locals), Some(&locals)).unwrap();
+    });
+}
+
+#[test]
+fn progress_callback_cancellation_suppresses_later_native_batches() {
+    Python::initialize();
+    Python::attach(|py| {
+        let module = PyModule::new(py, "symbolica.community.hepkit").unwrap();
+        crate::initialize_feynkit(&module).unwrap();
+        let locals = PyDict::new(py);
+        locals.set_item("fk", &module).unwrap();
+        let code = CString::new(include_str!(
+            "../../tests/fixtures/progress_cross_batch_cancel.py"
+        ))
         .unwrap();
         py.run(&code, Some(&locals), Some(&locals)).unwrap();
     });

@@ -151,14 +151,13 @@ assert all(
     for before, after in zip(filter_updates, filter_updates[1:])
 )
 
-# Notebook progress displays the live zero count and closes every indicator.
+# Notebook progress shows the live zero count in one spinner and closes it.
 context = MagicMock()
 indicator = context.__enter__.return_value
 marimo = SimpleNamespace(
     running_in_notebook=lambda: True,
     status=SimpleNamespace(
         spinner=MagicMock(return_value=context),
-        progress_bar=MagicMock(return_value=context),
     ),
     output=SimpleNamespace(_output=SimpleNamespace(flush=MagicMock())),
 )
@@ -174,7 +173,7 @@ filter_subtitles = [
 ]
 assert filter_subtitles
 assert f"{len(unfiltered_zeroes)} zero graphs filtered" in filter_subtitles[-1]
-assert context.__exit__.call_count == context.__enter__.call_count
+assert context.__enter__.call_count == context.__exit__.call_count == 1
 context.__exit__.assert_called_with(None, None, None)
 
 cancel = hep.CancellationToken()

@@ -169,9 +169,9 @@ independent runs.
 
 Progress is disabled by default. Pass `fk.Run(progress="auto")` for a Marimo status display
 or `fk.Run(progress=callback)` for custom reporting. Automatic progress checks
-`marimo.running_in_notebook()` and stays quiet outside a running notebook. Known totals use
-a progress bar; unknown or empty totals use a spinner. The display closes on completion,
-cancellation, or error.
+`marimo.running_in_notebook()` and stays quiet outside a running notebook. Each operation
+shows one spinner: its title names the current stage and its subtitle gives the stage's
+counts. The display closes on completion, cancellation, or error.
 
 A custom callback receives an immutable `GenerationProgress` with typed `Stage`, exact
 `completed`, optional `total`, and `zero_numerator_count` values. Return `True` to continue
@@ -185,8 +185,10 @@ The grouping preparation, sample, and comparison phases count processed input di
 `Done` reports retained output. Check the result's completion flag to distinguish cancellation.
 
 Native workers publish snapshots; Python callbacks run on the thread invoking the operation,
-including browser kernels. Marimo updates retain the calling cell context. Output flushing
-alone does not yield to the browser for painting.
+including browser kernels. Python receives the latest snapshot of each stage at most every
+150 ms, so alternating stages cost a bounded number of callbacks; `Done` and the start of
+numerator construction or selection arrive immediately. Marimo updates retain the calling
+cell context. Output flushing alone does not yield to the browser for painting.
 
 // docs-example: compile
 ```python

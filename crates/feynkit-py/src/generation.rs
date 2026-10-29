@@ -1404,7 +1404,8 @@ impl PyRun {
     /// cancellation : CancellationToken or None, optional
     ///     Shared cancellation flag; None creates an execution control token.
     /// progress : callable, str or None, optional
-    ///     Calling-thread progress observer, "auto" for notebook display, or None.
+    ///     Calling-thread observer of each stage's latest snapshot, at most every 150 ms;
+    ///     "auto" for notebook display, or None.
     /// thread_safe : bool, optional
     ///     Opt into one reused predicate worker; Graph snapshots require False.
     #[new]
