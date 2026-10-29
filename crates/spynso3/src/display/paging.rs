@@ -113,6 +113,9 @@ pub(super) fn html(
                 .multiplication_operator('·')
                 .num_exp_as_superscript(true),
             Some(Box::new(move |py, view, _, state| {
+                if let Some(label) = mathml::scalar_label(view, state) {
+                    return Ok(Some(label));
+                }
                 if !TensorLeaves::semantic(view) {
                     return Ok(None);
                 }
@@ -276,6 +279,9 @@ impl TensorLeaves {
     ) -> Option<String> {
         if !fits(view, &mut { MAX_LEAF_NODES }, 0, MAX_LEAF_BYTES, usize::MAX) {
             return None;
+        }
+        if let Some(label) = mathml::scalar_label(view, state) {
+            return Some(label);
         }
         // Arithmetic and ordinary calls belong to Symbolica. Only semantic
         // tensor leaves enter the scoped semantic printer.

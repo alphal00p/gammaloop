@@ -36,6 +36,7 @@ workspace-members = [
     "feynkit-cff",
     "feynkit-generator",
     "feynkit-graph",
+    "feynkit-py",
     "feynkit-tensor",
     "idenso",
     # These reusable crates expose a mutually exclusive `wasm` feature for
