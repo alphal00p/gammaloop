@@ -31,7 +31,11 @@ let
 
   docsTypst = typst015.withPackages (
     typstPackages: with typstPackages; [
-      cetz_0_5_1
+      # Linnest's marker batching uses the same reviewed CeTZ extension as
+      # the embedded renderer and Python wheels.
+      (cetz_0_5_1.overrideAttrs (_: {
+        src = workspaceRoot + "/vendor/typst-packages/preview/cetz/0.5.1";
+      }))
       mitex_0_2_6
       tidy_0_4_3
     ]
@@ -56,6 +60,58 @@ let
   ]);
 
   docsFontPath = "${docsPkgs.roboto}/share/fonts/truetype";
+
+  docsGraphSources = map (path: workspaceRoot + "/${path}") [
+    "examples/cli/aa_aa/2L/graphs/GL00.dot"
+    "examples/cli/aa_aa/2L/graphs/GL08.dot"
+    "examples/cli/aa_aa/3L/graphs/processes/amplitudes/aa_aa/3L/GL000.dot"
+    "examples/cli/aa_aa/3L/graphs/processes/amplitudes/aa_aa/3L/GL150.dot"
+    "examples/cli/aa_aa/3L/graphs/processes/amplitudes/aa_aa/3L/GL300.dot"
+    "examples/cli/gg_hhh/3L/3L_graph.dot"
+    "tests/resources/graphs/double_triangle.dot"
+    "tests/resources/graphs/epemttbar.dot"
+    "tests/resources/graphs/gghhh.dot"
+    "tests/resources/graphs/qqx_aaa_pentabox_user_numerator.dot"
+    "tests/resources/graphs/uv_tests/ad_ad_1L_gluon.dot"
+    "tests/resources/graphs/uv_tests/epem_a_bbx.dot"
+  ];
+
+  docsSvgAssets = pkgs.runCommand "alphal00p-docs-svg-assets" {
+    nativeBuildInputs = [ docsTypst ];
+    TYPST_FONT_PATHS = docsFontPath;
+    TYPST_PACKAGE_CACHE_PATH = "${docsTypst}/lib/typst/packages";
+    src = lib.fileset.toSource {
+      root = workspaceRoot;
+      fileset = lib.fileset.unions (docsGraphSources ++ map (path: workspaceRoot + "/${path}") [
+        "scripts/render-docs-svg-assets.sh"
+        "docs/assets/graph-svgs.sha256"
+        "docs/assets/typst"
+        "assets/embedded/drawing/templates"
+        "crates/kurvst/typst/src"
+        "crates/kurvst/typst/examples/knot-logo.typ"
+        "crates/linnest/typst/src"
+        "crates/linnest/typst/examples/play.typ"
+        "crates/linnest/typst/examples/draw-raw-dot.typ"
+        "docs/assets/about-local-unitarity-equation-dark.svg"
+        "docs/assets/about-local-unitarity-equation-light.svg"
+        "docs/assets/local-unitarity-dark.svg"
+        "docs/assets/local-unitarity-light.svg"
+        "docs/assets/gammaloop-construction-dark.svg"
+        "docs/assets/gammaloop-construction-light.svg"
+        "docs/assets/spensologo.svg"
+        "assets/gammalooplogo.svg"
+        "assets/gammalooplogo-dark.svg"
+        "assets/gammalooplogo-light.svg"
+        "crates/kurvst/typst/kurvst.wasm"
+        "crates/linnest/typst/linnest.wasm"
+        "crates/linnest/typst/ec-layout.wasm"
+      ]);
+    };
+  } ''
+    cp -R "$src"/. .
+    chmod -R u+w .
+    bash scripts/render-docs-svg-assets.sh "$out" --check
+  '';
 
   repositoryDocumentationSources = lib.fileset.fileFilter (
     file:
@@ -99,6 +155,7 @@ let
     root = workspaceRoot;
     fileset = lib.fileset.unions (
       documentationDeveloperScopeSources
+      ++ docsGraphSources
       ++ [
         cargoSources
         nonCargoBuildSources
@@ -110,11 +167,6 @@ let
         (workspaceRoot + "/crates/kurvst/typst/examples/knot-logo.typ")
         (workspaceRoot + "/scripts/update-docs-pages.sh")
         (workspaceRoot + "/examples/api/python")
-        (workspaceRoot + "/examples/cli/aa_aa/2L/graphs/GL00.dot")
-        (workspaceRoot + "/examples/cli/aa_aa/2L/graphs/GL08.dot")
-        (workspaceRoot + "/examples/cli/aa_aa/3L/graphs/processes/amplitudes/aa_aa/3L/GL000.dot")
-        (workspaceRoot + "/examples/cli/aa_aa/3L/graphs/processes/amplitudes/aa_aa/3L/GL150.dot")
-        (workspaceRoot + "/examples/cli/aa_aa/3L/graphs/processes/amplitudes/aa_aa/3L/GL300.dot")
         (workspaceRoot + "/examples/cli/aa_aa/3L/aa_aa_generation_timings.csv")
         (
           workspaceRoot
@@ -123,17 +175,10 @@ let
         (workspaceRoot + "/examples/cli/BNL/profiling/bnl_scalar_alias_captures.ansi.txt")
         (workspaceRoot + "/examples/cli/epem_a_ttxh/NNLO/graphs/GL297.dot")
         (workspaceRoot + "/examples/cli/epem_a_ttxh/NNLO/graphs/GL638.dot")
-        (workspaceRoot + "/examples/cli/gg_hhh/3L/3L_graph.dot")
-        (workspaceRoot + "/tests/resources/graphs/double_triangle.dot")
-        (workspaceRoot + "/tests/resources/graphs/gghhh.dot")
         (workspaceRoot + "/tests/resources/graphs/massive_kite.dot")
-        (workspaceRoot + "/tests/resources/graphs/qqx_aaa_pentabox_user_numerator.dot")
         (workspaceRoot + "/tests/resources/graphs/raised_cut_numerator_cancellation.dot")
-        (workspaceRoot + "/tests/resources/graphs/uv_tests/ad_ad_1L_gluon.dot")
-        (workspaceRoot + "/tests/resources/graphs/uv_tests/epem_a_bbx.dot")
         (workspaceRoot + "/tests/resources/graphs/uv_tests/scalar_cubic_exact_uv_rewrite.dot")
         (workspaceRoot + "/tests/resources/graphs/uv_tests/scalar_mirrored_cubic_exact_uv_rewrite.dot")
-        (workspaceRoot + "/tests/resources/graphs/epemttbar.dot")
         (workspaceRoot + "/pyproject.toml")
         (workspaceRoot + "/crates/linnet-py/pyproject.toml")
         (workspaceRoot + "/crates/linnet-py/uv.lock")
@@ -325,6 +370,7 @@ let
   );
 
   alphal00pDocsDerivationArgs = alphal00pDocsRealCargoArgs // {
+    ALPHAL00P_DOCS_SVG_ROOT = docsSvgAssets;
     cargoArtifacts = alphal00pDocsCargoArtifacts;
     src = documentationSrc;
     nativeBuildInputs = (alphal00pDocsCargoArgs.nativeBuildInputs or [ ]) ++ [
@@ -409,29 +455,6 @@ let
       crates/linnet-py/tests/test_wasm.py \
       crates/linnet-py/tests/test_streaming.py
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-builder -- check
-    svg_assets="$TMPDIR/alphal00p-svg-assets"
-    bash scripts/render-docs-svg-assets.sh "$svg_assets"
-    checked_assets=(
-      docs/assets/about-*.svg
-      docs/assets/graphs/portal-*.svg
-      docs/assets/local-unitarity-*.svg
-      docs/assets/gammaloop-construction-*.svg
-      docs/assets/spensologo.svg
-      assets/gammalooplogo*.svg
-    )
-    generated_assets=(
-      "$svg_assets"/docs/assets/about-*.svg
-      "$svg_assets"/docs/assets/graphs/portal-*.svg
-      "$svg_assets"/docs/assets/local-unitarity-*.svg
-      "$svg_assets"/docs/assets/gammaloop-construction-*.svg
-      "$svg_assets"/docs/assets/spensologo.svg
-      "$svg_assets"/assets/gammalooplogo*.svg
-    )
-    test "''${#checked_assets[@]}" -eq 34
-    test "''${#generated_assets[@]}" -eq 34
-    for checked_asset in "''${checked_assets[@]}"; do
-      cmp "$checked_asset" "$svg_assets/$checked_asset"
-    done
   '';
 
   alphal00pDocsDeveloperAssertions = output: ''
@@ -671,6 +694,7 @@ let
 in
 {
   inherit
+    docsSvgAssets
     docsTypst
     docsFontPath
     linnetPython

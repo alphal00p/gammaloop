@@ -76,6 +76,10 @@ walkdir = "2.5.0"
 
 which = "8.0.0"
 
+[patch.crates-io]
+# Typst plugins have no JavaScript clock; retain infinite-time Clarabel solves.
+clarabel = { path = "vendor/clarabel" }
+
 [profile.bench]
 opt-level = 3
 lto = "fat"

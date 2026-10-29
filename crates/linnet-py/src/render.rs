@@ -245,6 +245,7 @@ fn topology_endpoint(graph: &PyHedgeGraph, hedge: Hedge) -> TypstEndpointSpec {
         data: None,
         port_label: None,
         compass: None,
+        route_points: Vec::new(),
         in_subgraph: false,
     }
 }

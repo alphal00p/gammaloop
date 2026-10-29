@@ -10,7 +10,7 @@ if [[ -n ${1-} ]]; then
         *) output_root="$invocation_dir/$1" ;;
     esac
 else
-    output_root=$repo_root
+    output_root="$repo_root/target/docs-svg-assets"
 fi
 
 mkdir -p "$output_root"
@@ -53,6 +53,9 @@ queue_render() {
 }
 
 pids=()
+queue_render \
+    crates/linnest/typst/examples/play.typ \
+    "$output_root/crates/linnest/typst/examples/play.svg"
 graph_sources=(docs/assets/typst/portal-graphs/graphs/portal-graph-*.typ)
 test "${#graph_sources[@]}" -eq 11
 for source in "${graph_sources[@]}"; do
@@ -118,3 +121,15 @@ generated=(
     "$output_root"/assets/gammalooplogo*.svg
 )
 test "${#generated[@]}" -eq 34
+
+if [[ ${2-} == --check ]]; then
+    (
+        cd "$output_root"
+        sha256sum --check "$repo_root/docs/assets/graph-svgs.sha256"
+        for asset in docs/assets/about-local-unitarity-equation-*.svg \
+            docs/assets/local-unitarity-*.svg docs/assets/gammaloop-construction-*.svg \
+            docs/assets/spensologo.svg assets/gammalooplogo*.svg; do
+            cmp "$asset" "$repo_root/$asset"
+        done
+    )
+fi

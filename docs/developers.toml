@@ -793,7 +793,7 @@ anchor = "pub struct Involution<E = EdgeIndex> {"
 # public involution invariants and terminology without changing behavior.
 # The 2026-08-27 serializer fix quotes endpoint statements without changing
 # graph invariants.
-digest = "2c3b0f19a5d4a991b493c75e3b0bb3294be302d6"
+digest = "cb55dd1e057261356f1f2fdce9808b2252fc55ae"
 
 [[section.note.scope]]
 path = "crates/linnet/src/half_edge/subgraph.rs"
@@ -801,7 +801,7 @@ symbol = "linnet::half_edge::subgraph::SubGraphLike"
 anchor = "pub trait SubGraphLike: SubSetLike<Hedge> + Inclusion<HedgePair> {"
 # Reviewed 2026-09-24: the existing subset printer can be restored from its
 # label, as documented in linnet-architecture.typ; topology ownership is unchanged.
-digest = "1a5c8409404365debe91a930a4c464b4e0a5c327"
+digest = "61c2d5f958487a63d422201ad7d71a77840f90a7"
 
 [[section.note.scope]]
 # Documentation-impact attestation 2026-08-21: malformed DOT endpoint,
@@ -821,7 +821,7 @@ anchor = "pub struct DotGraph<N: NodeStorage<NodeData = DotVertexData> = Default
 # deprecated iterator in label decoding; the even-length guard and parsing
 # behavior are unchanged.
 # Reviewed 2026-09-23: DOT interchange documents preserved literal whitespace inside multiline global attributes.
-digest = "075b13acb171934ea04a1ef527db0bd6a9e40025"
+digest = "e45cb29178dfd0ea2a88199de6de2f5527763d33"
 
 [[section.note]]
 id = "vakint-architecture"
@@ -1267,7 +1267,7 @@ end_anchor = "documentationRegistry = builtins.fromTOML"
 # No-impact attestation 2026-09-29: the documentation source adds the Kurvst
 # knot-logo example imported by the GammaLoop marks; cache boundaries are
 # unchanged.
-digest = "96e7ae9bce54597531106e299032704ef3b8a906"
+digest = "d708625460bb56d215bac269d7a065d2f6411acd"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"
@@ -1298,7 +1298,7 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # Reviewed 2026-10-12: Package source ownership now includes the shared
 # Linnest asset builder used by GammaLoop and Clinnet; the existing per-
 # package filtering boundary is retained.
-digest = "c8ad5fa96fc5307243c6f02896abcf3a934daef0"
+digest = "a29ad4069c365d75c6b74c1aa63700d5f5ac2704"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"
@@ -1319,7 +1319,7 @@ end_anchor = "\nin\n{\n  inherit"
 # terminal publication boundaries are retained.
 # Reviewed 2026-10-12: documentation validation runs the feature-enabled
 # GammaLoop and Linnet exporter tests; reusable producer inputs are unchanged.
-digest = "6d17c6abcbea74e222f6adaf0f3a74f4eaac309d"
+digest = "1bd156d545ec772453e72d1c1a53346e0cd91b34"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"

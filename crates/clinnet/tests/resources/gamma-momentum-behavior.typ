@@ -3,6 +3,14 @@
 #import "gamma-layout-core.typ": autogen-external-edge-fields
 #set page(width: auto, height: auto, margin: 0pt)
 
+#assert.eq(physics.momentum-arrow-defaults.offset, 0.35)
+#assert.eq(physics.momentum-arrow-defaults.length, 1.4)
+#assert.eq(physics.momentum-arrow-defaults.ratio, 0.5)
+#assert.eq(physics.coil.pattern-natural-endpoints, true)
+#assert.eq(physics.coil.pattern-amplitude, 0.15)
+#assert.eq(physics.coil.pattern-wavelength, 0.45)
+#assert.eq(physics.coil.pattern-coil-longitudinal-scale, 1.4)
+
 #context {
   let mode = sys.inputs.at("momentum-case", default: "short")
   let outside = mode.starts-with("outside-")
@@ -47,6 +55,9 @@
     )),
     momentum-arrows: mode != "ordinary" and not mode.ends-with("-ordinary"),
     show-momentum: true,
+    // Keep this geometry probe independent of the public default offset and gap.
+    momentum-arrow-offset: 0.62,
+    momentum-label-gap: 0.45,
     momentum-arrow-length: if mode.ends-with("long") { 2.4 } else { 0.6 },
     momentum-arrow-shift: if mode == "arrow-shift" { 1 }
       else if outside and mode != "outside-incoming-shift" { 0 } else { 0.5 },
@@ -55,9 +66,6 @@
       else if mode == "label-default" or outside { auto } else { 0.5 },
     momentum-label-anchor: if mode == "anchor-center" { "center" }
       else if mode == "outside-outgoing-anchor" { "west" } else { auto },
-    // Pinned so the SVG probes do not depend on the style's defaults.
-    momentum-arrow-offset: 0.62,
-    momentum-label-gap: 0.45,
     momentum-arrow-side: if mode == "right" { "right" } else { "left" },
     momentum-arrow-stroke: (paint: red, thickness: 0.4pt, cap: "round"),
     momentum-arrow-mark: if mode == "no-mark" { none }

@@ -1,6 +1,6 @@
 # Documentation image provenance
 
-The portraits below are size-optimized WebP derivatives of public professional profile images. Every SVG used by the website is generated from editable Typst under `docs/assets/typst/`, with graph layout shared from GammaLoop's `assets/embedded/drawing/templates/layout-core.typ`; run `nix develop --command just docs-svg-assets` after changing them.
+The portraits below are size-optimized WebP derivatives of public professional profile images. Every SVG used by the website is generated from editable Typst under `docs/assets/typst/`, with graph layout shared from GammaLoop's `assets/embedded/drawing/templates/layout-core.typ`; the site builder renders the diagrams for each release. Run `just docs-svg-assets` in the development shell to render locally under `target/docs-svg-assets/`. `just docs-svg-assets-check` compares rendered graphs with `graph-svgs.sha256` and the ten small checked-in marks.
 
 `STIXTwoMath-Regular.woff2` is the unmodified STIX Two Math 2.13 webfont from the [official STIX Fonts release](https://github.com/stipub/stixfonts/releases/tag/v2.13). It is distributed under the SIL Open Font License 1.1 in `STIX-Two-OFL.txt` and is bundled so MathML renders consistently without relying on a system font.
 

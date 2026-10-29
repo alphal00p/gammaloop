@@ -1,8 +1,10 @@
 use super::{
     hedgevec::SmartEdgeVec,
-    involution::{Flow, Hedge, HedgeVec, Involution, Orientation},
+    involution::{
+        EdgeData, Flow, Hedge, HedgePair, HedgeVec, Involution, InvolutionError, Orientation,
+    },
     nodestore::NodeStorageOps,
-    subgraph::BaseSubgraph,
+    subgraph::{BaseSubgraph, ModifySubSet, SuBitGraph, SubSetLike},
     swap::Swap,
     HedgeGraph, NoData, NodeIndex,
 };
@@ -138,6 +140,57 @@ impl<E, V, H> HedgeGraphBuilder<E, V, H> {
         }
     }
 
+    /// Retain nodes in the requested order, preserving each node's hedge order.
+    ///
+    /// This compacts construction state before a node store is built. Edges
+    /// crossing the retained boundary become dangling with their existing flow
+    /// and orientation, as in [`Involution::delete`]. The returned map translates
+    /// old hedge IDs to new IDs; omitted hedges map to `None`.
+    ///
+    /// # Panics
+    /// Panics if a requested node is out of range or appears more than once.
+    pub fn retain_nodes_in_order(mut self, order: &[NodeIndex]) -> (Self, HedgeVec<Option<Hedge>>) {
+        let mut used = vec![false; self.nodes.len()];
+        let mut hedges = Vec::new();
+        for &node in order {
+            assert!(!used[node.0], "retained nodes must be unique");
+            used[node.0] = true;
+            hedges.extend_from_slice(&self.nodes[node.0].hedges);
+        }
+        let len = self.involution.len().0;
+        let mut mapping: HedgeVec<_> = std::iter::repeat_n(None, len).collect();
+        let mut at = (0..len).collect::<Vec<_>>();
+        let mut positions = at.clone();
+        for (position, &hedge) in hedges.iter().enumerate() {
+            mapping[hedge] = Some(Hedge(position));
+            let from = positions[hedge.0];
+            if from != position {
+                self.involution.swap(Hedge(position), Hedge(from));
+                self.hedge_data.swap(Hedge(position), Hedge(from));
+                positions.swap(at[position], at[from]);
+                at.swap(position, from);
+            }
+        }
+        let mut discarded = SuBitGraph::empty(len);
+        for index in hedges.len()..len {
+            discarded.add(Hedge(index));
+        }
+        self.involution.delete(&discarded);
+        self.hedge_data.truncate(hedges.len());
+        let mut nodes = self.nodes.into_iter().map(Some).collect::<Vec<_>>();
+        self.nodes = order
+            .iter()
+            .map(|node| {
+                let mut node = nodes[node.0].take().expect("unique retained node");
+                for hedge in &mut node.hedges {
+                    *hedge = mapping[*hedge].expect("retained node hedge");
+                }
+                node
+            })
+            .collect();
+        (self, mapping)
+    }
+
     pub fn build<N: NodeStorageOps<NodeData = V>>(self) -> HedgeGraph<E, V, H, N> {
         self.into()
     }
@@ -153,6 +206,22 @@ impl<E, V, H> HedgeGraphBuilder<E, V, H> {
             edge_store: SmartEdgeVec::new(self.involution),
             hedge_data: self.hedge_data,
         }
+    }
+
+    /// Connect two dangling hedges before materializing edge storage.
+    ///
+    /// Node incidence and hedge payloads keep their order. Merge ordering and
+    /// invalid-input behavior are owned by [`Involution::connect_identities`].
+    pub fn connect_identities(
+        &mut self,
+        source: Hedge,
+        sink: Hedge,
+        merge: impl FnOnce(Flow, EdgeData<E>, Flow, EdgeData<E>) -> (Flow, EdgeData<E>),
+    ) -> Result<HedgePair, InvolutionError>
+    where
+        E: Clone,
+    {
+        self.involution.connect_identities(source, sink, merge)
     }
 
     pub fn add_node(&mut self, data: V) -> NodeIndex {

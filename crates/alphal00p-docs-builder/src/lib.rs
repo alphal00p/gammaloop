@@ -12,6 +12,11 @@ mod provenance_tests;
 #[cfg(feature = "watch")]
 pub use watch::WatchRequest;
 
+use std::fs::File;
+use std::io::{Error as IoError, ErrorKind};
+use std::process::ExitStatus;
+use std::thread;
+use std::time::Duration;
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     env, fs,
@@ -19,6 +24,7 @@ use std::{
     ops::Range,
     path::{Component, Path, PathBuf},
     process::{Command, Stdio},
+    sync::{Arc, OnceLock},
 };
 
 use alphal00p_docs_schema::{
@@ -36,7 +42,7 @@ use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tempfile::{Builder as TempDirBuilder, TempDir};
+use tempfile::{Builder as TempDirBuilder, TempDir, TempPath};
 use typst_render::{CliTypstRenderer, TypstRenderJob, TypstRenderer};
 use walkdir::WalkDir;
 
@@ -633,6 +639,7 @@ struct LeadingDeveloperTitle {
 #[derive(Clone)]
 pub struct SiteBuilder {
     root: PathBuf,
+    rendered_svgs: OnceLock<Arc<TempDir>>,
     documented_commit: Option<String>,
     documented_timestamp: Option<u64>,
     watching: bool,
@@ -702,6 +709,7 @@ impl SiteBuilder {
             .unwrap_or_else(|| root.join("docs/api"));
         Ok(Self {
             root,
+            rendered_svgs: OnceLock::new(),
             documented_commit: None,
             documented_timestamp: None,
             watching: false,
@@ -1302,12 +1310,6 @@ impl SiteBuilder {
                     .join(format!("portal-graph-{graph}.typ")),
             )?;
         }
-        for graph in portal_graph_assets(&self.portal.graphs) {
-            self.require_file(&Path::new("docs/assets/graphs").join(&graph))?;
-        }
-        for asset in about_assets() {
-            self.require_file(&Path::new("docs/assets").join(&asset))?;
-        }
         self.require_file(Path::new("docs/assets/spensologo.svg"))?;
         self.require_file(Path::new("assets/gammalooplogo-light.svg"))?;
         self.require_file(Path::new("assets/gammalooplogo-dark.svg"))?;
@@ -1774,6 +1776,18 @@ impl SiteBuilder {
                 source.display(),
                 typst.display()
             );
+            // Vendored metadata and executable HTML interfaces keep their upstream formats.
+            if matches!(
+                source.to_str(),
+                Some(
+                    "vendor/clarabel/CHANGELOG.md"
+                        | "vendor/clarabel/LICENSE.md"
+                        | "vendor/clarabel/html/rustdocs-header.html"
+                        | "examples/layout/impred/playground.html"
+                )
+            ) {
+                continue;
+            }
             if !matches!(
                 source.file_name().and_then(|name| name.to_str()),
                 Some("AGENTS.md" | "README.md")
@@ -2074,7 +2088,7 @@ impl SiteBuilder {
             .tempdir_in(&staging_root)?;
         let site = staging.path().join("site");
         fs::create_dir_all(&site)?;
-        self.write_site_assets(&site)?;
+        self.write_site_assets(&site, options.include_typst)?;
 
         let metadata = self.metadata(product, options.channel, options.tag, &channel_path)?;
         fs::write(
@@ -2243,7 +2257,30 @@ impl SiteBuilder {
         })
     }
 
-    fn write_site_assets(&self, destination: &Path) -> Result<()> {
+    fn svg_asset_root(&self) -> Result<PathBuf> {
+        if let Some(root) = env::var_os("ALPHAL00P_DOCS_SVG_ROOT") {
+            return Ok(PathBuf::from(root).join("docs/assets"));
+        }
+        // Share one private render among the products in this build or watch generation.
+        let rendered = if let Some(rendered) = self.rendered_svgs.get() {
+            rendered
+        } else {
+            let rendered = tempfile::tempdir()?;
+            let status = Command::new("bash")
+                .arg(self.root.join("scripts/render-docs-svg-assets.sh"))
+                .arg(rendered.path())
+                .status()
+                .wrap_err("failed to run the documentation SVG renderer")?;
+            ensure!(
+                status.success(),
+                "documentation SVG renderer failed: {status}"
+            );
+            self.rendered_svgs.get_or_init(|| Arc::new(rendered))
+        };
+        Ok(rendered.path().join("docs/assets"))
+    }
+
+    fn write_site_assets(&self, destination: &Path, include_typst: bool) -> Result<()> {
         let assets = destination.join("assets");
         fs::create_dir_all(&assets)?;
         for (source, name) in [
@@ -2289,6 +2326,11 @@ impl SiteBuilder {
             fs::copy(self.root.join(source), target)
                 .wrap_err_with(|| format!("failed to copy documentation asset {source}"))?;
         }
+        // A metadata-only product preview has no illustrated About pages.
+        if !include_typst && env::var_os("ALPHAL00P_DOCS_SVG_ROOT").is_none() {
+            return Ok(());
+        }
+        let svg_root = self.svg_asset_root()?;
         for asset in about_assets() {
             let target = assets.join(&asset);
             match fs::remove_file(&target) {
@@ -2296,7 +2338,7 @@ impl SiteBuilder {
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
                 Err(error) => return Err(error.into()),
             }
-            fs::copy(self.root.join("docs/assets").join(&asset), target)
+            fs::copy(svg_root.join(&asset), target)
                 .wrap_err_with(|| format!("failed to copy About asset {asset}"))?;
         }
         Ok(())
@@ -2305,12 +2347,10 @@ impl SiteBuilder {
     fn write_portal_assets(&self, destination: &Path) -> Result<()> {
         let graphs = destination.join("assets/graphs");
         fs::create_dir_all(&graphs)?;
+        let svg_graphs = self.svg_asset_root()?.join("graphs");
         for graph in portal_graph_assets(&self.portal.graphs) {
-            fs::copy(
-                self.root.join("docs/assets/graphs").join(&graph),
-                graphs.join(&graph),
-            )
-            .wrap_err_with(|| format!("failed to copy portal graph {graph}"))?;
+            fs::copy(svg_graphs.join(&graph), graphs.join(&graph))
+                .wrap_err_with(|| format!("failed to copy portal graph {graph}"))?;
         }
         let people = destination.join("assets/people");
         fs::create_dir_all(&people)?;
@@ -2568,19 +2608,10 @@ impl SiteBuilder {
                 bail!("unsupported component catalog language {language:?}");
             }
         };
-        let mut command = Command::new(env::var_os("CARGO").unwrap_or_else(|| "cargo".into()));
-        command
-            .current_dir(&self.root)
-            .args(["run", "--locked", "--quiet"]);
-        if let Some(profile) = env::var_os("ALPHAL00P_DOCS_CARGO_PROFILE") {
-            command.arg("--profile").arg(profile);
-        }
-        command.args([
-            "-p",
-            "alphal00p-docs-catalogs",
-            "--bin",
-            "alphal00p-docs-catalogs",
-            "--",
+        // Execute a private copy: another Cargo may replace the shared binary meanwhile.
+        let exporter = self.catalog_exporter()?;
+        let mut command = Command::new(&exporter);
+        command.current_dir(&self.root).args([
             "--product",
             &product.id,
             "--product-title",
@@ -2617,10 +2648,8 @@ impl SiteBuilder {
                 .arg("--source-file")
                 .arg(format!("docs/api/python/{}.pyi", component.id));
         }
-        let status = command
-            .arg("--output")
-            .arg(output)
-            .status()
+        command.arg("--output").arg(output);
+        let status = Self::status_of_private_executable(&mut command)
             .wrap_err_with(|| format!("failed to launch catalog exporter {}", component.id))?;
         ensure!(
             status.success(),
@@ -2628,6 +2657,93 @@ impl SiteBuilder {
             component.id
         );
         Ok(())
+    }
+
+    /// Builds the isolated catalog exporter and returns a private copy of it.
+    ///
+    /// Cargo refreshes the exporter in the shared target directory on every
+    /// build, even when it is up to date, so concurrent runs (parallel tests or
+    /// builders) must not execute that binary directly. Building and copying
+    /// happen under an exclusive lock on the target directory; the caller
+    /// executes the copy after the lock is released. The copy is removed when
+    /// the returned path drops.
+    fn catalog_exporter(&self) -> Result<TempPath> {
+        let target = env::var_os("CARGO_TARGET_DIR").map_or_else(
+            || self.root.join("target"),
+            |directory| self.root.join(directory),
+        );
+        fs::create_dir_all(&target)?;
+        let lock_path = target.join("alphal00p-docs-catalogs.lock");
+        let lock = File::options()
+            .create(true)
+            .truncate(false)
+            .write(true)
+            .open(&lock_path)
+            .wrap_err_with(|| format!("failed to open exporter lock {}", lock_path.display()))?;
+        lock.lock()
+            .wrap_err_with(|| format!("failed to lock exporter {}", lock_path.display()))?;
+        let mut command = Command::new(env::var_os("CARGO").unwrap_or_else(|| "cargo".into()));
+        command.current_dir(&self.root).args([
+            "build",
+            "--locked",
+            "--quiet",
+            "--message-format=json-render-diagnostics",
+        ]);
+        if let Some(profile) = env::var_os("ALPHAL00P_DOCS_CARGO_PROFILE") {
+            command.arg("--profile").arg(profile);
+        }
+        let build = command
+            .args([
+                "-p",
+                "alphal00p-docs-catalogs",
+                "--bin",
+                "alphal00p-docs-catalogs",
+            ])
+            .stderr(Stdio::inherit())
+            .output()
+            .wrap_err("failed to launch the catalog exporter build")?;
+        ensure!(build.status.success(), "the catalog exporter build failed");
+        let executable = String::from_utf8(build.stdout)?
+            .lines()
+            .filter_map(|line| serde_json::from_str::<Value>(line).ok())
+            .filter(|message| {
+                message["reason"] == "compiler-artifact"
+                    && message["target"]["name"] == "alphal00p-docs-catalogs"
+            })
+            .find_map(|message| message["executable"].as_str().map(PathBuf::from))
+            .context("Cargo reported no catalog exporter executable")?;
+        let private = executable
+            .parent()
+            .context("catalog exporter has no parent directory")?
+            .join("alphal00p-docs-catalogs-exec");
+        fs::create_dir_all(&private)?;
+        // Close the temporary file before copying so that no writable handle remains.
+        let copy = TempDirBuilder::new()
+            .prefix("alphal00p-docs-catalogs-")
+            .tempfile_in(&private)?
+            .into_temp_path();
+        fs::copy(&executable, &copy).wrap_err_with(|| {
+            format!("failed to copy catalog exporter {}", executable.display())
+        })?;
+        drop(lock);
+        Ok(copy)
+    }
+
+    /// Runs a freshly written private executable.
+    ///
+    /// A concurrent fork in this process can briefly inherit the descriptor that
+    /// wrote the copy, so the kernel may report the file as busy for a moment.
+    fn status_of_private_executable(command: &mut Command) -> Result<ExitStatus, IoError> {
+        let mut attempts = 0;
+        loop {
+            match command.status() {
+                Err(error) if error.kind() == ErrorKind::ExecutableFileBusy && attempts < 50 => {
+                    attempts += 1;
+                    thread::sleep(Duration::from_millis(10));
+                }
+                result => return result,
+            }
+        }
     }
 
     fn catalog_reference_typst(
@@ -3200,6 +3316,23 @@ impl SiteBuilder {
         metadata: &SnapshotMetadata<'_>,
         site: &Path,
     ) -> Result<()> {
+        for page in &product.pages {
+            let destination = site.join(&page.route).join("index.html");
+            if page.route.is_empty() || destination.is_file() {
+                continue;
+            }
+            let published = format!("{PUBLISHED_DOCS_ROOT}{}{}", metadata.route, page.route);
+            let body = format!(
+                "<p>{}</p><p><a href=\"{}\">Read the published page</a></p>",
+                escape_html(&page.summary),
+                escape_html(&published),
+            );
+            fs::create_dir_all(site.join(&page.route))?;
+            fs::write(
+                destination,
+                reference_page(&product.title, &page.title, &body),
+            )?;
+        }
         let versions = metadata
             .components
             .iter()
@@ -3551,6 +3684,25 @@ impl SiteBuilder {
             escape_html(&docs_root),
             escape_html(&metadata.git_commit.chars().take(12).collect::<String>()),
         );
+        let html = if scope == BuildScope::ProductPreview && !site.join("manual.pdf").is_file() {
+            let published = format!("{PUBLISHED_DOCS_ROOT}{}", metadata.route);
+            let mut html = html.replace(
+                &format!("href=\"{docs_root}manual.pdf\""),
+                &format!("href=\"{published}manual.pdf\""),
+            );
+            // Authored section anchors exist only in the typeset chapters.
+            for route in product.pages.iter().map(|page| &page.route) {
+                if !route.is_empty() {
+                    let chapter = format!("href=\"{docs_root}{route}#");
+                    if html.contains(&chapter) {
+                        html = html.replace(&chapter, &format!("href=\"{published}{route}#"));
+                    }
+                }
+            }
+            html
+        } else {
+            html
+        };
         fs::write(path, html)?;
         Ok(())
     }
@@ -4278,7 +4430,7 @@ impl SiteBuilder {
             .tempdir_in(&staging_root)?;
         let developer_root = staging.path().join("developers");
         fs::create_dir_all(&developer_root)?;
-        self.write_site_assets(&developer_root)?;
+        self.write_site_assets(&developer_root, include_typst)?;
 
         let commit = self.git_commit()?;
         ensure!(
@@ -4665,7 +4817,7 @@ impl SiteBuilder {
         dependency_output: Option<&Path>,
         renderer: &mut dyn TypstRenderer,
     ) -> Result<()> {
-        self.write_site_assets(output)?;
+        self.write_site_assets(output, true)?;
         self.write_portal_assets(output)?;
 
         let target = self.root.join("target");
@@ -12255,13 +12407,13 @@ mod tests {
     fn site_assets_replace_read_only_generated_files() {
         let builder = SiteBuilder::discover().unwrap();
         let output = tempfile::tempdir().unwrap();
-        builder.write_site_assets(output.path()).unwrap();
+        builder.write_site_assets(output.path(), true).unwrap();
         let font = output.path().join("assets/STIXTwoMath-Regular.woff2");
         let mut permissions = fs::metadata(&font).unwrap().permissions();
         permissions.set_readonly(true);
         fs::set_permissions(&font, permissions).unwrap();
 
-        builder.write_site_assets(output.path()).unwrap();
+        builder.write_site_assets(output.path(), true).unwrap();
 
         assert_eq!(
             fs::read(font).unwrap(),
@@ -12504,7 +12656,7 @@ mod tests {
         for product in &builder.registry.product {
             let site = output.path().join(&product.id);
             fs::create_dir_all(&site).unwrap();
-            builder.write_site_assets(&site).unwrap();
+            builder.write_site_assets(&site, true).unwrap();
             let catalogs = generated_component_catalogs(&builder, product);
             builder
                 .write_component_catalogs(product, &site, catalogs.path())

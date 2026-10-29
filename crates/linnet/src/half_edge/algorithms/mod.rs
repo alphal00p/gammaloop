@@ -52,6 +52,7 @@ impl DirectionBasis {
     }
 }
 
+pub mod strongly_connected;
 pub mod topological_order;
 pub mod trace_unfold;
 pub mod transitive_ops;
