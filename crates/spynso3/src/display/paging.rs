@@ -12,7 +12,6 @@ use spenso::network::tags::mathml;
 use spenso::network::tags::mathml::ExportError;
 use spenso::structure::abstract_index::AIND_SYMBOLS;
 use spenso::structure::partial::{PartialStructure, PartialStructureExt};
-use spenso::structure::representation::RepresentationMetadata;
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -318,87 +317,46 @@ impl TensorLeaves {
         } else {
             value.presentation_fragment(view)
         };
-        let mut aliases = IndexAliases::for_atom(&atom, &self.settings.index_style);
         // Reserve the public free ports without walking the original expression.
         let mut bundle = FunctionBuilder::new(AIND_SYMBOLS.aind).add_arg(&atom);
         for slot in value.structure().logical_slots() {
             bundle = bundle.add_arg(composition::port_atom(slot));
         }
-        let discovered = IndexAliases::for_atom(&bundle.finish(), &self.settings.index_style);
-        for (representation, labels) in &discovered.reserved_labels {
+        // Resolve base labels before decorating scoped indices. Reallocating each
+        // leaf independently can call two different bases a′, then discard the
+        // second alias because scoped displays have no numeric palette position.
+        let mut aliases = IndexAliases::for_atom_with_aliases(
+            &bundle.finish(),
+            &self.settings.index_style,
+            &self.aliases,
+        );
+        for (representation, labels) in &aliases.reserved_labels {
             self.aliases
                 .reserved_labels
                 .entry(*representation)
                 .or_default()
                 .extend(labels.iter().cloned());
         }
-        for (key, (mut position, mut display)) in discovered.entries {
-            if let Some(existing) = self.aliases.entries.get(&key) {
-                if discovered
+        aliases.entries.retain(|key, alias| {
+            if let Some(existing) = self.aliases.entries.get(key) {
+                // A later explicit label must not acquire an earlier generated
+                // alias. Preserve the source spelling in that unusual case.
+                return !aliases
                     .reserved_labels
                     .get(&key.0)
-                    .is_some_and(|labels| labels.contains(&IndexAliases::label_key(&existing.1)))
-                {
-                    // An explicit internal label may first appear on a later
-                    // page. Keep it distinct by retaining this index's source
-                    // spelling here, without renaming already displayed parts.
-                    aliases.entries.remove(&key);
-                    continue;
-                }
-                if let Some(alias) = aliases.entries.get_mut(&key) {
-                    *alias = existing.clone();
-                }
-                continue;
+                    .is_some_and(|labels| labels.contains(&IndexAliases::label_key(&existing.1)));
             }
-            let mut retain = self.aliases.entries.len() < MAX_ALIASES;
-            if self.settings.index_style == "alphabet" {
-                let metadata = RepresentationMetadata::from_symbol(key.0);
-                while retain {
-                    let label = IndexAliases::label_key(&display);
-                    if !self
-                        .aliases
-                        .reserved_labels
-                        .get(&key.0)
-                        .is_some_and(|used| used.contains(&label))
-                        && !discovered
-                            .reserved_labels
-                            .get(&key.0)
-                            .is_some_and(|used| used.contains(&label))
-                    {
-                        break;
-                    }
-                    let Some(next_position) = position.and_then(|p| p.checked_add(1)) else {
-                        retain = false;
-                        break;
-                    };
-                    let Some(next) = metadata
-                        .as_ref()
-                        .and_then(|metadata| metadata.index_palette.resolve(next_position))
-                    else {
-                        retain = false;
-                        break;
-                    };
-                    position = Some(next_position);
-                    display = next;
-                }
+            if self.aliases.entries.len() >= MAX_ALIASES {
+                return false;
             }
-            if retain {
-                self.aliases
-                    .reserved_labels
-                    .entry(key.0)
-                    .or_default()
-                    .insert(IndexAliases::label_key(&display));
-                let alias = (position, display);
-                if let Some(local) = aliases.entries.get_mut(&key) {
-                    *local = alias.clone();
-                }
-                self.aliases.entries.insert(key, alias);
-            } else {
-                // Keep established names stable. New keys retain their source
-                // spelling once the bounded viewer alias inventory is full.
-                aliases.entries.remove(&key);
-            }
-        }
+            self.aliases
+                .reserved_labels
+                .entry(key.0)
+                .or_default()
+                .insert(IndexAliases::label_key(&alias.1));
+            self.aliases.entries.insert(key.clone(), alias.clone());
+            true
+        });
         let options = self.settings.mathml_options();
         // Aliases remain borrowed viewer state, rather than serialized options
         // or symbols inserted into the expression being paged.

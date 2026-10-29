@@ -35,10 +35,18 @@
     let resizeFrame = () => {};
     const frames = [];
 
+    /* Notebook components can put their iframe inside a shadow root or slot.
+       Follow that rendered ancestry to reach the actual theme/scroll owner. */
+    const parent = element => {
+      const container = element.assignedSlot || element.parentElement || element.getRootNode().host;
+      if (container) return container;
+      try { return element.ownerDocument.defaultView.frameElement; }
+      catch (_) { return null; }
+    };
     const theme = () => {
       /* Marimo executes scripted HTML in an iframe. Read its notebook theme
          when accessible; standalone SVGs retain the system color preference. */
-      let element = svg.parentElement;
+      let element = parent(svg);
       while (element) {
         const explicit = element.getAttribute('data-theme');
         const jupyter = element.getAttribute('data-jp-theme-light');
@@ -46,19 +54,25 @@
         if (jupyter !== null) return jupyter === 'true' ? 'light' : 'dark';
         if (element.classList.contains('dark')) return 'dark';
         if (element.classList.contains('light')) return 'light';
-        if (element.parentElement) element = element.parentElement;
-        else {
-          try { element = element.ownerDocument.defaultView.frameElement; }
-          catch (_) { element = null; }
-        }
+        element = parent(element);
       }
       return null;
     };
-    const syncTheme = () => {
+    const syncHost = () => {
       if (!svg.isConnected || frames.some(frame => !frame.isConnected)) {
         observer.disconnect();
         if (resize) resize.disconnect();
         return;
+      }
+      for (let ancestor = parent(svg); ancestor; ancestor = parent(ancestor)) {
+        /* Reserve notebook scrollbars in both inline and iframe displays.
+           Opening the inspector must not move the hovered target sideways:
+           otherwise pointerout closes it and pointerover immediately reopens it.
+           Hosts may enable scrolling after mounting, or replace inline styles. */
+        const style = ancestor.ownerDocument.defaultView.getComputedStyle(ancestor);
+        if (['auto', 'scroll'].includes(style.overflowY) && style.scrollbarGutter === 'auto') {
+          ancestor.style.scrollbarGutter = 'stable';
+        }
       }
       const value = theme();
       if (value) svg.setAttribute('data-theme', value);
@@ -67,32 +81,22 @@
         const frame = window.frameElement;
         if (frame && frame.parentElement && document.body) {
           const style = frame.ownerDocument.defaultView.getComputedStyle(frame.parentElement);
-          document.body.style.color = style.color;
-          document.body.style.fontFamily = style.fontFamily;
+          if (document.body.style.color !== style.color) document.body.style.color = style.color;
+          if (document.body.style.fontFamily !== style.fontFamily) document.body.style.fontFamily = style.fontFamily;
           /* Browsers paint an opaque canvas when an iframe's declared scheme
              differs from its document, even when both backgrounds are transparent. */
-          document.documentElement.style.colorScheme = frame.ownerDocument.defaultView.getComputedStyle(frame).colorScheme;
+          const scheme = frame.ownerDocument.defaultView.getComputedStyle(frame).colorScheme;
+          if (document.documentElement.style.colorScheme !== scheme) document.documentElement.style.colorScheme = scheme;
         }
       } catch (_) { /* Cross-origin embeddings retain their own text styling. */ }
     };
-    const observer = new MutationObserver(syncTheme);
-    syncTheme();
-    let ancestor = svg.parentElement;
+    const observer = new MutationObserver(syncHost);
+    syncHost();
+    let ancestor = parent(svg);
     while (ancestor) {
       if (ancestor.localName === 'iframe') frames.push(ancestor);
-      /* Reserve notebook scrollbars in both inline and iframe displays.
-         Opening the inspector must not move the hovered target sideways:
-         otherwise pointerout closes it and pointerover immediately reopens it. */
-      const style = ancestor.ownerDocument.defaultView.getComputedStyle(ancestor);
-      if (['auto', 'scroll'].includes(style.overflowY) && style.scrollbarGutter === 'auto') {
-        ancestor.style.scrollbarGutter = 'stable';
-      }
-      observer.observe(ancestor, { attributes: true, childList: true, attributeFilter: ['class', 'data-theme', 'data-jp-theme-light'] });
-      if (ancestor.parentElement) ancestor = ancestor.parentElement;
-      else {
-        try { ancestor = ancestor.ownerDocument.defaultView.frameElement; }
-        catch (_) { ancestor = null; }
-      }
+      observer.observe(ancestor, { attributes: true, childList: true, attributeFilter: ['class', 'style', 'data-theme', 'data-jp-theme-light'] });
+      ancestor = parent(ancestor);
     }
     try {
       const frame = window.frameElement;
