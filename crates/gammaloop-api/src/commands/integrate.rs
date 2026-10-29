@@ -52,7 +52,8 @@ use gammalooprs::{
     utils::F,
 };
 use itertools::{izip, Itertools};
-use ratatui::{backend::CrosstermBackend, Terminal};
+use ratatui::backend::CrosstermBackend;
+use ratatui::{Terminal, TerminalOptions, Viewport};
 use symbolica::numerical_integration::Grid;
 use tracing::{info, warn};
 
@@ -169,6 +170,11 @@ pub struct Integrate {
     #[arg(long = "renderer", default_value = "ratatui")]
     pub renderer: RendererOption,
 
+    /// Keep the dashboard inline with the given height, for example
+    /// `integrate --renderer ratatui --ratatui-inline-height 32`.
+    #[arg(long = "ratatui-inline-height", value_name = "LINES", value_parser = clap::value_parser!(u16).range(1..))]
+    pub ratatui_inline_height: Option<u16>,
+
     /// Evaluate each iteration in per-core batches of this size
     #[arg(long = "batch-size")]
     pub batch_size: Option<usize>,
@@ -249,6 +255,7 @@ impl Default for Integrate {
             no_stream_iterations: false,
             no_stream_updates: false,
             renderer: RendererOption::Ratatui,
+            ratatui_inline_height: None,
             batch_size: None,
             batch_timing: 5.0,
             min_time_between_status_updates: 0.0,
@@ -456,19 +463,39 @@ enum DashboardCommand {
     Shutdown(mpsc::SyncSender<Result<()>>),
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RatatuiTerminalMode {
+    Fullscreen,
+    Inline(u16),
+}
+
 struct RatatuiTerminal {
     terminal: Terminal<CrosstermBackend<io::Stderr>>,
+    mode: RatatuiTerminalMode,
 }
 
 impl RatatuiTerminal {
-    fn enter() -> Result<Self> {
+    fn enter(mode: RatatuiTerminalMode) -> Result<Self> {
         enable_raw_mode()?;
         let mut stderr = io::stderr();
-        execute!(stderr, EnterAlternateScreen, Hide)?;
         let backend = CrosstermBackend::new(io::stderr());
-        let mut terminal = Terminal::new(backend)?;
+        let mut terminal = match mode {
+            RatatuiTerminalMode::Fullscreen => {
+                execute!(stderr, EnterAlternateScreen, Hide)?;
+                Terminal::new(backend)?
+            }
+            RatatuiTerminalMode::Inline(height) => {
+                execute!(stderr, Hide)?;
+                Terminal::with_options(
+                    backend,
+                    TerminalOptions {
+                        viewport: Viewport::Inline(height),
+                    },
+                )?
+            }
+        };
         terminal.clear()?;
-        Ok(Self { terminal })
+        Ok(Self { terminal, mode })
     }
 
     fn draw(&mut self, dashboard: &RatatuiDashboardState) -> Result<()> {
@@ -478,7 +505,14 @@ impl RatatuiTerminal {
 
     fn leave(mut self) -> Result<()> {
         self.terminal.clear()?;
-        execute!(self.terminal.backend_mut(), Show, LeaveAlternateScreen)?;
+        match self.mode {
+            RatatuiTerminalMode::Fullscreen => {
+                execute!(self.terminal.backend_mut(), Show, LeaveAlternateScreen)?;
+            }
+            RatatuiTerminalMode::Inline(_) => {
+                execute!(self.terminal.backend_mut(), Show)?;
+            }
+        }
         disable_raw_mode()?;
         Ok(())
     }
@@ -490,9 +524,12 @@ struct RatatuiStreamRenderer {
 }
 
 impl RatatuiStreamRenderer {
-    fn new() -> Self {
+    fn new(inline_height: Option<u16>) -> Self {
         let (sender, receiver) = mpsc::channel();
-        let handle = thread::spawn(move || dashboard_event_loop(receiver));
+        let terminal_mode = inline_height
+            .map(RatatuiTerminalMode::Inline)
+            .unwrap_or(RatatuiTerminalMode::Fullscreen);
+        let handle = thread::spawn(move || dashboard_event_loop(receiver, terminal_mode));
         Self {
             sender,
             handle: Some(handle),
@@ -547,10 +584,12 @@ enum StreamRenderer {
 }
 
 impl StreamRenderer {
-    fn new(renderer: RendererOption) -> Self {
+    fn new(renderer: RendererOption, ratatui_inline_height: Option<u16>) -> Self {
         match renderer {
             RendererOption::Tabled => Self::Tabled(TabledStreamRenderer::new()),
-            RendererOption::Ratatui => Self::Ratatui(RatatuiStreamRenderer::new()),
+            RendererOption::Ratatui => {
+                Self::Ratatui(RatatuiStreamRenderer::new(ratatui_inline_height))
+            }
         }
     }
 
@@ -587,6 +626,7 @@ struct StreamingDisplayController {
 impl StreamingDisplayController {
     fn new(
         renderer_kind: RendererOption,
+        ratatui_inline_height: Option<u16>,
         stream_updates: bool,
         stream_iterations: bool,
         tabled_options: TabledRenderOptions,
@@ -597,7 +637,7 @@ impl StreamingDisplayController {
             stream_iterations,
             tabled_options,
             renderer: (stream_updates || stream_iterations)
-                .then(|| StreamRenderer::new(renderer_kind)),
+                .then(|| StreamRenderer::new(renderer_kind, ratatui_inline_height)),
         }
     }
 
@@ -796,7 +836,10 @@ fn tabled_control_event_loop(
     result
 }
 
-fn dashboard_event_loop(receiver: mpsc::Receiver<DashboardCommand>) -> Result<()> {
+fn dashboard_event_loop(
+    receiver: mpsc::Receiver<DashboardCommand>,
+    terminal_mode: RatatuiTerminalMode,
+) -> Result<()> {
     let mut dashboard = RatatuiDashboardState::new();
     let mut terminal = None;
     let mut dirty = false;
@@ -806,7 +849,7 @@ fn dashboard_event_loop(receiver: mpsc::Receiver<DashboardCommand>) -> Result<()
             Ok(DashboardCommand::Update(update)) => {
                 dashboard.update(*update);
                 if terminal.is_none() {
-                    terminal = Some(RatatuiTerminal::enter()?);
+                    terminal = Some(RatatuiTerminal::enter(terminal_mode)?);
                 }
                 dirty = true;
             }
@@ -1959,6 +2002,7 @@ impl Integrate {
         let stream_renderer_kind = self.renderer;
         let mut stream_controller = StreamingDisplayController::new(
             stream_renderer_kind,
+            self.ratatui_inline_height,
             stream_updates,
             stream_iterations,
             tabled_options,
@@ -2030,6 +2074,7 @@ mod tests {
         ContributionSortOption, DashboardKeyAction, RendererOption, ShowPhaseOption,
         StreamingDisplayController, TabledKeyAction,
     };
+    use crate::state::RunHistory;
     use crate::{
         state::{CommandHistory, ProcessRef, State},
         CLISettings, Commands, SessionSettings, StateSettings,
@@ -2055,7 +2100,7 @@ mod tests {
     fn non_streamed_panics_resume_the_original_payload() {
         for renderer in [RendererOption::Tabled, RendererOption::Ratatui] {
             let mut controller =
-                StreamingDisplayController::new(renderer, false, false, Default::default());
+                StreamingDisplayController::new(renderer, None, false, false, Default::default());
             let payload = Box::new(vec![1_u8, 2, 3]);
             let address = payload.as_ref() as *const Vec<u8>;
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -2083,6 +2128,7 @@ mod tests {
                 ] {
                     let mut controller = StreamingDisplayController::new(
                         renderer,
+                        None,
                         updates,
                         iterations,
                         Default::default(),
@@ -2371,6 +2417,24 @@ mod tests {
         assert!(unknown
             .validate_reference_config(&unknown.reference_gaussians)
             .is_err());
+    }
+
+    #[test]
+    fn clap_parses_inline_dashboard_height_and_rejects_zero() {
+        let command = CommandHistory::from_raw_string(
+            "integrate --renderer ratatui --ratatui-inline-height 32",
+        )
+        .unwrap();
+        let Commands::Integrate(settings) = command.command else {
+            panic!("expected integrate command");
+        };
+        assert_eq!(settings.renderer, RendererOption::Ratatui);
+        assert_eq!(settings.ratatui_inline_height, Some(32));
+        assert_eq!(Integrate::default().ratatui_inline_height, None);
+        assert!(CommandHistory::from_raw_string("integrate --ratatui-inline-height 0").is_err());
+        let card = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../examples/cli/scalar_topologies/multi_scalar_integrands.toml");
+        RunHistory::load(card).unwrap();
     }
 
     #[test]

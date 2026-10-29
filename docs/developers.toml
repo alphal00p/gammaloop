@@ -90,7 +90,9 @@ anchor = "fn default_workspace_path(&self"
 # Reviewed 2026-10-14: only streamed integrations convert panics into command
 # errors; non-streamed runs preserve ordinary unwinding and the original report.
 # The dashboard note records this; workspace and persistence contracts are unchanged.
-digest = "0bdb5ccde10675a71a3fa52ed6c8d7da36d71bfa"
+# Reviewed 2026-10-28: optional inline viewport and mode-specific terminal cleanup
+# are documented in ratatui-integration-dashboard.typ; workspace persistence is unchanged.
+digest = "d635e860198539fb15724339bfa832638cce205a"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/integrands/evaluation.rs"
@@ -276,7 +278,7 @@ review_triggers = ["crates/gammaloop-api/src/commands/integrate.rs", "crates/gam
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/commands/integrate.rs"
 symbol = "gammaloop_api::commands::integrate::dashboard_event_loop"
-anchor = "fn dashboard_event_loop(receiver"
+anchor = "fn dashboard_event_loop("
 # Reviewed 2026-09-14: only grid constructors in test fixtures changed;
 # status flow, renderer ownership, and terminal lifecycle are unchanged.
 # Reviewed 2026-09-17: Documented stability medians, interrupted diagnostic previews, version-checked resume, and read-only output paths; completed-iteration checkpoint ownership is preserved.
@@ -290,7 +292,9 @@ anchor = "fn dashboard_event_loop(receiver"
 # Reviewed 2026-10-14: ratatui-integration-dashboard.typ distinguishes streamed
 # recovery from non-streamed unwinding; renderer cleanup and event-loop ownership
 # are unchanged. Regression tests cover both paths and late streamed panics.
-digest = "0bdb5ccde10675a71a3fa52ed6c8d7da36d71bfa"
+# Reviewed 2026-10-28: optional inline viewport and mode-specific terminal cleanup
+# are documented in ratatui-integration-dashboard.typ; workspace persistence is unchanged.
+digest = "d635e860198539fb15724339bfa832638cce205a"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/integrate/render_ratatui.rs"

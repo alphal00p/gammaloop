@@ -2547,6 +2547,16 @@
             "$ref": "#/$defs/ProcessRef"
           }
         },
+        "ratatui_inline_height": {
+          "description": "Keep the dashboard inline with the given height, for example\n`integrate --renderer ratatui --ratatui-inline-height 32`.",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        },
         "reference_gaussian": {
           "description": "Integrate a Gaussian acceptance target, e.g. '{\"width\":300}' or\n`'{\"width\":300,\"center\":[1,2,3]}'`. Re is normalization; Im is the raw\nsecond moment divided by its known expectation (both targets are one).\nOmitted/empty center means centered. Omission requests physics; repeat\nthe same descriptor when resuming a reference workspace.",
           "anyOf": [

@@ -8455,6 +8455,36 @@
           ]
         },
         {
+          "id": "ratatui_inline_height",
+          "long": "ratatui-inline-height",
+          "short": null,
+          "aliases": [],
+          "action": "set",
+          "arity": {
+            "min": 1,
+            "max": 1
+          },
+          "takes_values": true,
+          "value_required": true,
+          "value_names": [
+            "LINES"
+          ],
+          "help": "Keep the dashboard inline with the given height, for example `integrate --renderer ratatui --ratatui-inline-height 32`",
+          "required": false,
+          "positional": false,
+          "index": null,
+          "hidden": false,
+          "global": false,
+          "inherited": false,
+          "exclusive": false,
+          "require_equals": false,
+          "value_delimiter": null,
+          "value_terminator": null,
+          "conflicts_with": [],
+          "defaults": [],
+          "possible_values": []
+        },
+        {
           "id": "batch_size",
           "long": "batch-size",
           "short": null,

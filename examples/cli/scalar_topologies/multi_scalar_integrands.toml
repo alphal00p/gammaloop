@@ -120,8 +120,8 @@ commands = [
 #	[sampling]
 #	graphs = "summed"
 #	orientations = "summed"
-#	lmb_multichanneling = false
-#	lmb_channels = "summed"
+#	sampling_multichanneling = false
+#	sampling_channels = "summed"
 #	coordinate_system = "spherical"
 #	mapping = "linear"
 #	b = 1.0
@@ -132,8 +132,8 @@ commands = [
 #	[sampling]
 #	graphs = "monte_carlo"
 #	orientations = "summed"
-#	lmb_multichanneling = false
-#	lmb_channels = "summed"
+#	sampling_multichanneling = false
+#	sampling_channels = "summed"
 #	coordinate_system = "tropical"
 #    '""",
 
@@ -142,8 +142,8 @@ commands = [
 #	[sampling]
 #	graphs = "monte_carlo"
 #	orientations = "summed"
-#	lmb_multichanneling = true
-#	lmb_channels = "summed"
+#	sampling_multichanneling = true
+#	sampling_channels = "summed"
 #	coordinate_system = "spherical"
 #	mapping = "linear"
 #	b = 1.0
@@ -154,8 +154,8 @@ commands = [
 #	[sampling]
 #	graphs = "monte_carlo"
 #	orientations = "summed"
-#	lmb_multichanneling = true
-#	lmb_channels = "monte_carlo"
+#	sampling_multichanneling = true
+#	sampling_channels = "monte_carlo"
 #	coordinate_system = "spherical"
 #	mapping = "linear"
 #	b = 1.0
@@ -166,8 +166,8 @@ commands = [
 #	[sampling]
 #	graphs = "monte_carlo"
 #	orientations = "monte_carlo"
-#	lmb_multichanneling = true
-#	lmb_channels = "monte_carlo"
+#	sampling_multichanneling = true
+#	sampling_channels = "monte_carlo"
 #	coordinate_system = "spherical"
 #	mapping = "linear"
 #	b = 1.0
@@ -206,6 +206,7 @@ commands = [
 	"""integrate --process box -i scalar_box_below_thres --n-cores 1
 	             --target 0.0 6.626887713315055e-05
 				 --renderer ratatui
+                 --ratatui-inline-height 32
                  --restart
     """,
 
@@ -245,8 +246,8 @@ commands = [
     [sampling]
     graphs = "monte_carlo"
     orientations = "monte_carlo"
-    lmb_multichanneling = true
-    lmb_channels = "summed"
+    sampling_multichanneling = true
+    sampling_channels = "summed"
     coordinate_system = "spherical"
     mapping = "linear"
     b = 1.0
@@ -256,8 +257,8 @@ commands = [
     [sampling]
     graphs = "monte_carlo"
     orientations = "monte_carlo"
-    lmb_multichanneling = true
-    lmb_channels = "summed"
+    sampling_multichanneling = true
+    sampling_channels = "summed"
     coordinate_system = "spherical"
     mapping = "linear"
     b = 1.0
@@ -279,6 +280,7 @@ commands = [
 	"""integrate -p box -i scalar_box_above_thres -p box -i scalar_box_below_thres --n-cores 5
                  --target box@scalar_box_above_thres=-7.410964890068131e-5,7.841453335814232e-6 box@scalar_box_below_thres=0.0,6.626887713315055e-05
 				 --renderer ratatui
+                 --ratatui-inline-height 52
 				 --batch-size 10000
 				 --show-phase both
 				 --show-max-weight-info
@@ -291,8 +293,8 @@ commands = [
 [default_runtime_settings.sampling]
 graphs = "summed"
 orientations = "summed"
-lmb_multichanneling = false
-lmb_channels = "summed"
+sampling_multichanneling = false
+sampling_channels = "summed"
 coordinate_system = "spherical"
 mapping = "linear"
 b = 1.0
