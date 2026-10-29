@@ -685,7 +685,7 @@
       "planned_unit": "port-38",
       "planned_order": 33,
       "reason": "Retain first-principles mark geometry, with source/license audit in WP11; reproduce generated assets there rather than copying historical binaries.",
-      "status": "Complete cumulative source38 integrated; combined checks recorded separately; NEW independent Astra integration review required before39. WP3 incomplete.",
+      "status": "APPROVED by both independent MAIN38 reviewers at2f46efe7; releases39 only. Historical validation remains bound to source38; WP3 incomplete.",
       "new_commit": "925f739799572d23f46a762c895ebb85e5bd88d6",
       "new_change": "xrvnmqsskwulwrrxoptluwlqzyykrxyz",
       "receipt": "docs/architecture/evidence/generation-integration/wp3/source38/receipt.json",

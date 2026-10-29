@@ -1,0 +1,581 @@
+{
+  "scope": "Ordered MAIN source39\u201343 integration candidate; independent combined Astra review pending before source44; WP3 incomplete",
+  "base_main38": "2f46efe7491d5cb9c028aff12ac475e44bef0a92",
+  "built_code_source": "66c2aed45d83b54f55b39bf2fc2f88c2066d6343",
+  "built_code_change": "ymkxyqsovlsnotwqtmqzwwrwkvzsklox",
+  "evidence_tip": "Distinct later JJ change; see generation-integration-units39-43 bookmark",
+  "preparation_base": "191aaf7b77018e377a9e5e4e3b9c88357218aa48",
+  "preparation_final": "595a2f4d921a119503db3d5c919b87fcc728a423",
+  "source_mapping": [
+    {
+      "order": 39,
+      "prepared_from": "191aaf7b77018e377a9e5e4e3b9c88357218aa48",
+      "prepared_through": "f34edfd3dc6ea02a310c290cbd1e594bfb276b1c",
+      "commit": "9fa2b9fd7022b980d891281fa63bc04cbda0ddcc",
+      "change": "sostlulzuyoxprlxumyqprsrqxkonyuk",
+      "original_source": "854c4a7a4ac22ef6987e9446092560a3363f5d77"
+    },
+    {
+      "order": 40,
+      "prepared_from": "f34edfd3dc6ea02a310c290cbd1e594bfb276b1c",
+      "prepared_through": "236061b45c2669eaea6bd35aaaaf0400dd67bf1a",
+      "commit": "ed2857cfc36200d7e9b004c9ed202dfd068ec691",
+      "change": "tmvuknlmoxwxsqmzqvlkkvpswoytvqnn",
+      "original_source": "f6c29e4b324692e8fa185ac356dc66e1b1edd783"
+    },
+    {
+      "order": 41,
+      "prepared_from": "236061b45c2669eaea6bd35aaaaf0400dd67bf1a",
+      "prepared_through": "53dc17d57d57dc00db47d7faa9dd0a0abb7e1f34",
+      "commit": "e449e3c2d12c48215915a3365e864e544d0fbf4c",
+      "change": "yxowxpuopnkulsnsnukzrsqruryrvzrs",
+      "original_source": "b69de4327cf27e8ba275300ab02d7151f472f047"
+    },
+    {
+      "order": 42,
+      "prepared_from": "53dc17d57d57dc00db47d7faa9dd0a0abb7e1f34",
+      "prepared_through": "595a2f4d921a119503db3d5c919b87fcc728a423",
+      "commit": "57b896bd20335af0008b283aded4566cea016544",
+      "change": "plumzssxqwwuwtzkorqxsrnyyqquusms",
+      "original_source": "40c126b1ff91a0c8c95480cacc8f5ba3ee0f1309"
+    },
+    {
+      "label": "integrate source43 terminal pocket cut regressions",
+      "prepared_from": "685288ce5696dc640f188ae467576de87e74c2f3",
+      "prepared_through": "595a2f4d921a119503db3d5c919b87fcc728a423",
+      "commit": "038079d8f78a003e3103a583ee1cf043944f66d3",
+      "change": "zqvxpoxlxzzqwuyssuqwmlklvzvxtqkx",
+      "order": 43,
+      "original_source": "74fcd8e57e9fe256d4bc34b5d8ad93c97fc28848"
+    },
+    {
+      "label": "integrate certified frame evidence and three native numerator digests",
+      "prepared_from": "59b57cead76e576fa9f23e3996f5614de939fe35",
+      "prepared_through": "a350d44c99477aa6c9dd3e23a605b3ab08ce2746",
+      "commit": "a9b23d72bdbfab9e6e7c2753613de146b19ed8fa",
+      "change": "zklvrswsyrnorytrwwqnzlzomykmllup",
+      "adaptation": "Module-scope FeynmanDiagram import closes migration-review P3; semantics unchanged."
+    },
+    {
+      "label": "integrate certified named top pair QCD2 weight migration",
+      "prepared_from": "309631912ff5693ab38df4c748e5edfa3f94cd00^",
+      "prepared_through": "309631912ff5693ab38df4c748e5edfa3f94cd00",
+      "commit": "c0abf0822fb1c71339892d88113262818e3fe883",
+      "change": "zwppomokmukxluntxxukppvqvpztskys"
+    }
+  ],
+  "reconciliation": [
+    "Current canonical exporter regenerated three matched stub copies; no old prepared stubs overwrite later APIs.",
+    "Current native canonical labeller owns compact physical-node frame; staged admission and transport owners remain intact.",
+    "Source43 contributes terminal-pocket regressions; current all_cuts production already contains algorithm.",
+    "Three exact certified frame numerator digests and one named QCD2 weight are approved test migrations only. The separate source44 slow row remains untouched.",
+    "Historical source39 WASM excluded; fresh current-source WASM derivation was built separately."
+  ],
+  "approvals": [
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main39-43/approval-index.json",
+      "bytes": 3127,
+      "sha256": "dfeb471f74c7bbc0af2ec1395fa33ab16cd32e29ef4e1b57badf76b1ef5cad5a"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main39-43/frame-certificate-a.json",
+      "bytes": 7852,
+      "sha256": "e3e9ae201bf8d1590fb8b58cada4785a7327d4f346cfbd7ada92fbfd5e56a1a5"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main39-43/frame-certificate-b.json",
+      "bytes": 9991,
+      "sha256": "be92752b4ceac6f8ce6991c36309ec75424ab810a4b2d8e50167745de7c94374"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main39-43/frame-migration.json",
+      "bytes": 14944,
+      "sha256": "0299039eee57fe3ba0411c946ec7ccb384756a0684090984ab92ec250e1bfe3a"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main39-43/main38-a.json",
+      "bytes": 24311,
+      "sha256": "ff283e184b7097ec6afe5c9f87e104065808bd531bb2b4a72470ea4e108e7b51"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main39-43/main38-b.json",
+      "bytes": 29816,
+      "sha256": "d046d3400b02b595ca4a18a30645ea04f44e6b9130668eb8c0fdd9b0e9b2fd00"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main39-43/preparation-a.json",
+      "bytes": 34236,
+      "sha256": "dc4093c671d7fd08d3427da8d34fc8e178304e731cd5f58fd362ce81c4363672"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main39-43/preparation-b-r4.json",
+      "bytes": 62624,
+      "sha256": "6529e965dcb728f025a6c993cf038ea14c314ba1dfd83186a0be49514730deb0"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main39-43/weight-certificate-a.json",
+      "bytes": 30488,
+      "sha256": "c209f30fad0bf9a624851b284ccad2e4cd629fd67d5338ca563b310674791a78"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main39-43/weight-certificate-b.json",
+      "bytes": 46758,
+      "sha256": "89715339a8572c8dd0e23b5e9bb518422fdec5ecfe88b7b560c83f3c29f67254"
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main39-43/weight-migration.json",
+      "bytes": 19347,
+      "sha256": "b2e828d2d3825652d9e747b0dcf2dbe0ff8545e55a5defa6546a1c0acd40a2e5"
+    }
+  ],
+  "code_and_evidence_inventory": [
+    {
+      "status": "M",
+      "path": "benchmarks/performance/gg-hhh-topology.toml",
+      "bytes": 851,
+      "sha256": "e97f2c2b7fae4017ac33019aa9ede76724eaaa28c65d7a19801fc2a30042f1c0"
+    },
+    {
+      "status": "M",
+      "path": "crates/feynkit-generator/src/generation.rs",
+      "bytes": 455743,
+      "sha256": "0e6f4a83632be8fc13633a66a7fc3ba68819b49e78fcbf26363dd0f5469c4042"
+    },
+    {
+      "status": "M",
+      "path": "crates/feynkit-generator/src/options.rs",
+      "bytes": 46051,
+      "sha256": "29f4a1d1b863a9980143f865b9dd52f60420b55e454d3dd2326001abfb0f23c6"
+    },
+    {
+      "status": "A",
+      "path": "crates/feynkit-generator/tests/generation_oracle/frame_certificate.rs",
+      "bytes": 2606,
+      "sha256": "09db7e9b990a2992c0fec1b0a105d9d4ff0b0782e518ba2af96498f724052845"
+    },
+    {
+      "status": "M",
+      "path": "crates/feynkit-generator/tests/generation_oracle/frames.rs",
+      "bytes": 9885,
+      "sha256": "790ae305010fd13614506e8d9ffb758cd5506abb38e77a0c6173f2a3bb658e1f"
+    },
+    {
+      "status": "M",
+      "path": "crates/feynkit-generator/tests/generation_oracle/main.rs",
+      "bytes": 77616,
+      "sha256": "499b49e4d5b58f9796e79e8393399ddc5e3fee24062fe36ae590dffd7bd18aa8"
+    },
+    {
+      "status": "M",
+      "path": "crates/feynkit-py/python/symbolica/community/hepkit/__init__.pyi",
+      "bytes": 490623,
+      "sha256": "bf9d4ce3f4b5f3871c39164d3c11db248123eecd8a1939a845ad7569da4de92f"
+    },
+    {
+      "status": "M",
+      "path": "crates/feynkit-py/src/generation.rs",
+      "bytes": 51194,
+      "sha256": "f1745d7be39fddc6c3eaf538a7e2c714a95b32e6f6cf73c544b5ed7d885677e9"
+    },
+    {
+      "status": "M",
+      "path": "crates/feynkit-py/src/generation/execution.rs",
+      "bytes": 27775,
+      "sha256": "0a396e901e57ee71d0e5f7fe954e14e19bfaa136ef0797403c344ec523061bac"
+    },
+    {
+      "status": "M",
+      "path": "crates/feynkit-py/src/generation/specs.rs",
+      "bytes": 55935,
+      "sha256": "bfbefa77e4355c5df12c453a97c47db87d1882838a9ffb34ebcc39645788550a"
+    },
+    {
+      "status": "M",
+      "path": "crates/feynkit-py/src/generation/tests.rs",
+      "bytes": 62059,
+      "sha256": "e41543379734772abefe5570323e9586d8afb8ebfa853f0ec19d7dd0049c0dd7"
+    },
+    {
+      "status": "M",
+      "path": "crates/feynkit-py/src/progress.rs",
+      "bytes": 6879,
+      "sha256": "345cdbc901a17c033de7c6fa1ae17ab407e16282bc5b88b67e6252036d9437c0"
+    },
+    {
+      "status": "A",
+      "path": "crates/feynkit-py/tests/fixtures/progress_cross_batch_cancel.py",
+      "bytes": 1354,
+      "sha256": "f289185c07d17d5fa1c06f53b064126373e48a1055c71f5aa227c547df6ae4e8"
+    },
+    {
+      "status": "M",
+      "path": "crates/feynkit-py/tests/installed_process.py",
+      "bytes": 11359,
+      "sha256": "63ccf0f02929af9cb6155abbc2b8e6740e9b28c3cce9cb16531f2b0519f38213"
+    },
+    {
+      "status": "M",
+      "path": "crates/linnet/src/half_edge/canon.rs",
+      "bytes": 29799,
+      "sha256": "6eb7d696db966d365d6f9d6327e813e0f9f30e309285a915aacc8d608b2bbeb8"
+    },
+    {
+      "status": "M",
+      "path": "crates/linnet/src/half_edge/canon/tests.rs",
+      "bytes": 51435,
+      "sha256": "2a60b7a57793b50f519d69a3abb126050165738298e936fcb826e859853b900e"
+    },
+    {
+      "status": "M",
+      "path": "crates/linnet/src/half_edge/tests.rs",
+      "bytes": 83412,
+      "sha256": "cacb28947a466dfef34c0e2e3442293d486d41b2742ceefe3e9e23cda7a9fdb4"
+    },
+    {
+      "status": "M",
+      "path": "docs/api/python/feynkit-community.pyi",
+      "bytes": 490623,
+      "sha256": "bf9d4ce3f4b5f3871c39164d3c11db248123eecd8a1939a845ad7569da4de92f"
+    },
+    {
+      "status": "A",
+      "path": "docs/architecture/evidence/generation-frame-certificate/certificate.json",
+      "bytes": 74617,
+      "sha256": "d146336ccdeb926e295a60b4a602326207a6efb6fbd3284b402b64121ea6ce58"
+    },
+    {
+      "status": "A",
+      "path": "docs/architecture/evidence/generation-frame-certificate/diagnosis.json",
+      "bytes": 12386,
+      "sha256": "c65a2f216903821d7d50fbe6c96df1cbb955e172d03499a883a1a1f624a09609"
+    },
+    {
+      "status": "A",
+      "path": "docs/architecture/evidence/generation-frame-certificate/scripts/axis_and_frame_proof.py",
+      "bytes": 7124,
+      "sha256": "1eb1a4176ef883abb367abcdf006203414a0938c928880be593dfb256f0ed8b8"
+    },
+    {
+      "status": "A",
+      "path": "docs/architecture/evidence/generation-frame-certificate/scripts/build_certificate.py",
+      "bytes": 20187,
+      "sha256": "cb408ab618b6ed4d8175de47821df1b5850bd68702555bbfababbdd93daf9b94"
+    },
+    {
+      "status": "A",
+      "path": "docs/architecture/evidence/generation-frame-certificate/scripts/corruption_controls.py",
+      "bytes": 10495,
+      "sha256": "0bc1c6b566c0445a22da195bb45e66db0a7f47d38efea56921aceb0d1cfc6e06"
+    },
+    {
+      "status": "A",
+      "path": "docs/architecture/evidence/generation-frame-certificate/scripts/cut_sign_provenance.py",
+      "bytes": 6070,
+      "sha256": "a114a97af2cd3e316a604786ba8d64627b563f39bba2b5eb6ba8444b0384e2c8"
+    },
+    {
+      "status": "A",
+      "path": "docs/architecture/evidence/generation-frame-certificate/scripts/full_key_join.py",
+      "bytes": 7368,
+      "sha256": "ef9e988f5b1e002000d80afbfa9efd1eafc0db019fa4ed005e3515ed1a553cb4"
+    },
+    {
+      "status": "A",
+      "path": "docs/architecture/evidence/generation-frame-certificate/scripts/generated_map_proof.py",
+      "bytes": 5124,
+      "sha256": "df491db07c146f25cd689937722c3099f06b8c507c0484a6d46121d8e5e0ed25"
+    },
+    {
+      "status": "A",
+      "path": "docs/architecture/evidence/generation-frame-certificate/scripts/member_denominators.py",
+      "bytes": 3658,
+      "sha256": "20ec211103768a1542a12e642fee2c83ceb7fec13989f057203cbad5e93084a2"
+    },
+    {
+      "status": "A",
+      "path": "docs/architecture/evidence/generation-frame-certificate/scripts/member_proof.py",
+      "bytes": 5543,
+      "sha256": "86f5604964547507730ec370f8e85115567dd27b05a07fb54f46b7091fa8ff55"
+    },
+    {
+      "status": "A",
+      "path": "docs/architecture/evidence/generation-frame-certificate/scripts/model_binding.py",
+      "bytes": 7060,
+      "sha256": "6c58d6e335092e7142642f26881574f0c9505c5cc655308cd7b2308d0fca158d"
+    },
+    {
+      "status": "A",
+      "path": "docs/architecture/evidence/generation-frame-certificate/scripts/pair_expression_proof.py",
+      "bytes": 3595,
+      "sha256": "668e39a0938ecc61513f39d0b39e1c7a9bb5bc1de0730b65afaa9e8fdbe42eda"
+    },
+    {
+      "status": "A",
+      "path": "docs/architecture/evidence/generation-frame-certificate/scripts/prefactor_proof.py",
+      "bytes": 8285,
+      "sha256": "8e7c1e88c3cfdd36958cc23d26c3e02085359bd41863514221d7a6707a6ff06b"
+    },
+    {
+      "status": "A",
+      "path": "docs/architecture/evidence/generation-frame-certificate/scripts/routing_proof.py",
+      "bytes": 8894,
+      "sha256": "3c92204369db0315df736300f75ac3e4d7b7550f9766f266e4b71e4033f508ad"
+    },
+    {
+      "status": "A",
+      "path": "docs/architecture/evidence/generation-frame-migration/receipt.json",
+      "bytes": 8284,
+      "sha256": "69d7c33a8b097f12e79fdf576bb952b7c0da9817f5e9536a6d954c16894182bd"
+    },
+    {
+      "status": "M",
+      "path": "docs/architecture/evidence/generation-integration/execution.json",
+      "bytes": 40746,
+      "sha256": "7f5ff813b7decfb7571bc8cbd99370ea8589e6d247051d9a6eeab5654fe40e27"
+    },
+    {
+      "status": "A",
+      "path": "docs/architecture/evidence/generation-integration/wp3/main39-43/approval-index.json",
+      "bytes": 3127,
+      "sha256": "dfeb471f74c7bbc0af2ec1395fa33ab16cd32e29ef4e1b57badf76b1ef5cad5a"
+    },
+    {
+      "status": "A",
+      "path": "docs/architecture/evidence/generation-integration/wp3/main39-43/frame-certificate-a.json",
+      "bytes": 7852,
+      "sha256": "e3e9ae201bf8d1590fb8b58cada4785a7327d4f346cfbd7ada92fbfd5e56a1a5"
+    },
+    {
+      "status": "A",
+      "path": "docs/architecture/evidence/generation-integration/wp3/main39-43/frame-certificate-b.json",
+      "bytes": 9991,
+      "sha256": "be92752b4ceac6f8ce6991c36309ec75424ab810a4b2d8e50167745de7c94374"
+    },
+    {
+      "status": "A",
+      "path": "docs/architecture/evidence/generation-integration/wp3/main39-43/frame-migration.json",
+      "bytes": 14944,
+      "sha256": "0299039eee57fe3ba0411c946ec7ccb384756a0684090984ab92ec250e1bfe3a"
+    },
+    {
+      "status": "A",
+      "path": "docs/architecture/evidence/generation-integration/wp3/main39-43/main38-a.json",
+      "bytes": 24311,
+      "sha256": "ff283e184b7097ec6afe5c9f87e104065808bd531bb2b4a72470ea4e108e7b51"
+    },
+    {
+      "status": "A",
+      "path": "docs/architecture/evidence/generation-integration/wp3/main39-43/main38-b.json",
+      "bytes": 29816,
+      "sha256": "d046d3400b02b595ca4a18a30645ea04f44e6b9130668eb8c0fdd9b0e9b2fd00"
+    },
+    {
+      "status": "A",
+      "path": "docs/architecture/evidence/generation-integration/wp3/main39-43/preparation-a.json",
+      "bytes": 34236,
+      "sha256": "dc4093c671d7fd08d3427da8d34fc8e178304e731cd5f58fd362ce81c4363672"
+    },
+    {
+      "status": "A",
+      "path": "docs/architecture/evidence/generation-integration/wp3/main39-43/preparation-b-r4.json",
+      "bytes": 62624,
+      "sha256": "6529e965dcb728f025a6c993cf038ea14c314ba1dfd83186a0be49514730deb0"
+    },
+    {
+      "status": "A",
+      "path": "docs/architecture/evidence/generation-integration/wp3/main39-43/weight-certificate-a.json",
+      "bytes": 30488,
+      "sha256": "c209f30fad0bf9a624851b284ccad2e4cd629fd67d5338ca563b310674791a78"
+    },
+    {
+      "status": "A",
+      "path": "docs/architecture/evidence/generation-integration/wp3/main39-43/weight-certificate-b.json",
+      "bytes": 46758,
+      "sha256": "89715339a8572c8dd0e23b5e9bb518422fdec5ecfe88b7b560c83f3c29f67254"
+    },
+    {
+      "status": "A",
+      "path": "docs/architecture/evidence/generation-integration/wp3/main39-43/weight-migration.json",
+      "bytes": 19347,
+      "sha256": "b2e828d2d3825652d9e747b0dcf2dbe0ff8545e55a5defa6546a1c0acd40a2e5"
+    },
+    {
+      "status": "A",
+      "path": "docs/architecture/evidence/generation-integration/wp3/pocket-weight-diagnosis/diagnosis.json",
+      "bytes": 24301,
+      "sha256": "838eb89a349234e019770d4e18a6a5e4ea8a3ad994ed58f1272d88099b1772c8"
+    },
+    {
+      "status": "A",
+      "path": "docs/architecture/evidence/generation-integration/wp3/pocket-weight-diagnosis/live-import-provenance.json",
+      "bytes": 15323,
+      "sha256": "e3f1f42421dc2c1c2d11a4c7817d354b5de5fd20c4d47de6e33bf3252982c080"
+    },
+    {
+      "status": "A",
+      "path": "docs/architecture/evidence/generation-integration/wp3/pocket-weight-migration/migration.json",
+      "bytes": 10580,
+      "sha256": "141aca4a71d128682da6fdebe67302327fd18cc2b09ece8e1b285db87e02eccc"
+    },
+    {
+      "status": "A",
+      "path": "docs/architecture/evidence/generation-integration/wp3/pocket-weight-migration/validate-migration.mjs",
+      "bytes": 7336,
+      "sha256": "3d97c625e975e6614d831185625d2bd53146ed01064e42db0f3e8122c9e77330"
+    },
+    {
+      "status": "M",
+      "path": "docs/architecture/evidence/generation-integration/wp3/replay.json",
+      "bytes": 97508,
+      "sha256": "50b0a54d1e638ef269ae7ac8b7620899bb94e2d1f12c111d95e2010d85edb379"
+    },
+    {
+      "status": "A",
+      "path": "docs/architecture/evidence/generation-integration/wp3/sources39-43-preparation.json",
+      "bytes": 9899,
+      "sha256": "13b27f6a9d1710231cee9a2a6125493249494cca6fe5f9ecf03cbf0af4a9adb4"
+    },
+    {
+      "status": "A",
+      "path": "docs/architecture/evidence/generation-integration/wp3/sources39-43-round2.json",
+      "bytes": 5256,
+      "sha256": "23505c288985abc200bbbd3035a34a714a077a3394da57fbed5ec3bd6ff470bf"
+    },
+    {
+      "status": "A",
+      "path": "docs/architecture/evidence/generation-integration/wp3/sources39-43-round3.json",
+      "bytes": 6026,
+      "sha256": "eb5bd1579a93d3520fbd895a59ce9cc557315b70282d3f7bbe5c680e72c1396f"
+    },
+    {
+      "status": "A",
+      "path": "docs/architecture/evidence/generation-integration/wp3/sources39-43-round4.json",
+      "bytes": 6301,
+      "sha256": "0740ab30821c2c1458cba25423e7189781c01174d4f3bda0f61ebbf8bf804544"
+    },
+    {
+      "status": "A",
+      "path": "docs/architecture/generation-frame-certificate.typ",
+      "bytes": 12424,
+      "sha256": "d365143dc176092eb82dad23b23d4a49286fec1169c34f3c3d03eed22982bbdb"
+    },
+    {
+      "status": "A",
+      "path": "docs/architecture/generation-frame-migration.typ",
+      "bytes": 4540,
+      "sha256": "b4e0c53cfbe28379c678c25aec0ae1b18d76193bfa69473ff708b648eff38d9a"
+    },
+    {
+      "status": "M",
+      "path": "docs/architecture/generation-integration-plan.typ",
+      "bytes": 36239,
+      "sha256": "7b9cdbfb1adb848004ee58e59330a9777c0b87329e60fb8c05e15cdebd7dd6a5"
+    },
+    {
+      "status": "A",
+      "path": "docs/architecture/generation-integration-units39-43.typ",
+      "bytes": 3317,
+      "sha256": "b75832a7c755cb096599fed0c3f458c170b700a4400a08bcf43411205cc17c9e"
+    },
+    {
+      "status": "A",
+      "path": "docs/architecture/generation-pocket-weight-migration.typ",
+      "bytes": 3539,
+      "sha256": "ad43a9273743985a4280e10eaf31635f47642ab3adf2f06a1180e364d57a01c1"
+    },
+    {
+      "status": "M",
+      "path": "docs/developers.toml",
+      "bytes": 178494,
+      "sha256": "6a924e9cbea4900c982fe724a5aec4a3ebe359abfab383158b746aa0570e6b84"
+    },
+    {
+      "status": "M",
+      "path": "docs/products/feynkit/content/tutorial.typ",
+      "bytes": 41631,
+      "sha256": "d146006fc3388d426a60184b50b04707b7317ae9c79777b620257caf7572a4a4"
+    },
+    {
+      "status": "M",
+      "path": "examples/cli/epem_a_ddx/NLO/epem_a_ddx_NLO.toml",
+      "bytes": 12380,
+      "sha256": "895e198d30a9da36f8e72230180a2f2b81c506e97f4bb916096e01c151386372"
+    },
+    {
+      "status": "M",
+      "path": "examples/cli/epem_a_ttxh/NLO/epem_a_tth_NLO.toml",
+      "bytes": 14821,
+      "sha256": "f751142d023c13684be5c8534ce51d8e132119b1559aea28b396589b8f82a72f"
+    },
+    {
+      "status": "M",
+      "path": "examples/cli/epem_a_ttxh/NNLO/epem_a_tth_NNLO.toml",
+      "bytes": 14882,
+      "sha256": "f0704d593fed5a51cba16f31e152eb0666573f747b44167a9d0ba9631584de28"
+    },
+    {
+      "status": "M",
+      "path": "examples/cli/epem_a_ttxh/NNLO_user_experiment/epem_a_tth_NNLO.toml",
+      "bytes": 17335,
+      "sha256": "7a881376dbe8ca18a5f6a33b7b3636b0c38d3ba944071b36b4c173aa41ee18f5"
+    },
+    {
+      "status": "M",
+      "path": "examples/notebooks/symbolica-host/python/symbolica/community/hepkit/__init__.pyi",
+      "bytes": 490623,
+      "sha256": "bf9d4ce3f4b5f3871c39164d3c11db248123eecd8a1939a845ad7569da4de92f"
+    },
+    {
+      "status": "M",
+      "path": "tests/tests/test_feyngen.rs",
+      "bytes": 1177487,
+      "sha256": "7799516c00ef7bd7d28d30138ffe8847f647630706f28adc63264220a060a2b4"
+    }
+  ],
+  "validation": {
+    "stub-generate.log": {
+      "path": "target/wp3-units39-43/stub-generate.log",
+      "bytes": 5226,
+      "sha256": "5fb8da307ff6125e137dd29afc8ff945e8a00e403d844c34c4d5370a2d996c08"
+    },
+    "core-build.log": {
+      "path": "target/wp3-units39-43/core-build.log",
+      "bytes": 3561,
+      "sha256": "0019201d51a67dbe8128b5dd9bcbe2a42ea3bccc0387ffd1736da5914636011e"
+    },
+    "format.log": {
+      "path": "target/wp3-units39-43/format.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "registry.log": {
+      "path": "target/wp3-units39-43/registry.log",
+      "bytes": 38,
+      "sha256": "0c7d2e02b9c1d0803f61ed560961854f072e32b5214959615bf69c30b854ffdb"
+    },
+    "wasm-build.log": {
+      "path": "target/wp3-units39-43/wasm-build.log",
+      "bytes": 523,
+      "sha256": "5cd078494610171e3073844148d4e1f59d8fd4bbdd8f1ba7dde325f44ff0cc6d"
+    }
+  },
+  "command_exit": {
+    "wasm-build": "0",
+    "docs": "0"
+  },
+  "wasm": {
+    "source": "66c2aed45d83b54f55b39bf2fc2f88c2066d6343",
+    "derivation": "/nix/store/7z0vhlxvd468jqgns5mbphjvl4yz54zq-linnest-wasm-0.1.0.drv",
+    "output": "/nix/store/qgi30wzaxkcrjpm7wdk4bfnmdia6y3rz-linnest-wasm-0.1.0",
+    "narHash": "sha256-Sv4djBn1hZvjcXcB4DxiFG3Fqt9Aef41S2Cf6aVwSmw=",
+    "narSize": 12593952,
+    "historical_source38_package": "Separate source1455/8iq/88q qualification remains bound to MAIN38 only."
+  },
+  "limits": [
+    "Only named failing aa QCD2 row is covered early; source44 other rows and grouped sunsets pending.",
+    "Only D65 helper executed in both kernels; remaining frame-key proof is structural over qualified captures.",
+    "Four expansion-based parser helpers explicitly omitted; graph numerators never distributed.",
+    "No full WP3, source44/46, BRST, five_a_ddx, benchmark, memory, distribution, upload, push, publication, or CI approval.",
+    "Blank extreme raster crop and standalone vendored Kurbo Clippy warning remain bounded downstream limits."
+  ]
+}
