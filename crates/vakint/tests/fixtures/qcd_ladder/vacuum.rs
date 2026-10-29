@@ -18,6 +18,7 @@ pub(super) struct Vacuum {
 
 impl Vacuum {
     pub fn new(source: &FeynmanDiagram, dimension: &Atom) -> Result<Self> {
+        let loop_count = source.loop_count();
         let rows = loop_rows(source);
         let attachments = source
             .edges()
@@ -32,7 +33,37 @@ impl Vacuum {
         }
         let mut removed = BTreeSet::new();
         let mut records = Vec::new();
-        for vertex in &attachments {
+        // With no rung, both current insertions belong to the same two-line
+        // bubble. Collapse them together to one dotted self-loop; independently
+        // collapsing both insertions would remove every vacuum vertex.
+        let retained_attachment = if loop_count == 1 {
+            let internal = source
+                .edges()
+                .filter(|(_, ends, _)| !is_external_edge(source, *ends))
+                .collect::<Vec<_>>();
+            let [left, right] = internal.as_slice() else {
+                return Err("the zero-rung source is not a two-propagator bubble".into());
+            };
+            let p = &rows[&left.0];
+            let q = &rows[&right.0];
+            if !(p - q).expand().is_zero() && !(p + q).expand().is_zero() {
+                return Err("the zero-rung propagators differ at zero external momentum".into());
+            }
+            let vertex = *attachments.first().expect("two attachments checked");
+            records.push((
+                vertex,
+                vertex,
+                Line {
+                    momentum: p.clone(),
+                    original_edges: vec![left.0, right.0],
+                },
+            ));
+            removed.extend([left.0, right.0]);
+            Some(vertex)
+        } else {
+            None
+        };
+        for vertex in attachments.iter().filter(|_| loop_count > 1) {
             let adjacent = source
                 .edges()
                 .filter(|(_, ends, _)| {
@@ -92,19 +123,27 @@ impl Vacuum {
                 ));
             }
         }
-        if records.len() != 12
+        let expected_incidence_edges = if loop_count == 1 {
+            1
+        } else {
+            3 * loop_count - 3
+        };
+        let expected_insertion_dots = if loop_count == 1 { 1 } else { 2 };
+        if records.len() != expected_incidence_edges
             || records
                 .iter()
                 .filter(|r| r.2.original_edges.len() == 2)
                 .count()
-                != 2
+                != expected_insertion_dots
             || records
                 .iter()
                 .map(|r| r.2.original_edges.len())
                 .sum::<usize>()
-                != 14
+                != 3 * loop_count - 1
         {
-            return Err("vacuum topology must retain twelve incidence edges with two insertion dots and total power fourteen".into());
+            return Err(
+                "vacuum topology failed its loop-dependent incidence and total-power census".into(),
+            );
         }
         let model = Model::from_json(include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
@@ -116,7 +155,7 @@ impl Vacuum {
         let mut builder = FeynmanDiagram::builder(model, "projected_qcd_ladder_vacuum");
         let vertices = source
             .vertices()
-            .filter(|(id, _)| !attachments.contains(id))
+            .filter(|(id, _)| !attachments.contains(id) || Some(*id) == retained_attachment)
             .map(|(id, _)| {
                 (
                     id,
@@ -139,10 +178,10 @@ impl Vacuum {
             }
         }
         let diagram = builder.build()?;
-        if diagram.loop_count() != 5 {
+        if diagram.loop_count() != loop_count {
             return Err("amputation/collapse changed physical loop count".into());
         }
-        let loops = (0..5)
+        let loops = (0..loop_count)
             .map(|axis| symbols::loop_momentum().call(axis))
             .collect::<Vec<_>>();
         let kin = Kinematics::in_dimension(dimension)?.with_momenta(loops.clone())?;
@@ -186,10 +225,9 @@ impl Vacuum {
         let mapping = source_family
             .mapping_to(&family, &images)?
             .ok_or("native all-row/unit-measure vacuum transport verification failed")?;
-        if mapping.denominator_map() != (0..12).collect::<Vec<_>>() {
+        if mapping.denominator_map() != (0..records.len()).collect::<Vec<_>>() {
             return Err(
-                "the verified map did not preserve the declared twelve physical line identities"
-                    .into(),
+                "the verified map did not preserve the declared physical line identities".into(),
             );
         }
         Ok(Self {
@@ -209,8 +247,7 @@ impl Vacuum {
     }
 
     /// Count exact quadratic forms independently of graph-edge incidence.
-    /// The symmetric ladder has three more coincident pairs away from the
-    /// external insertions: native ingress must combine all five fermion pairs.
+    /// Native ingress must combine every coincident fermion pair.
     pub fn validate_initial_ingress(&self, evidence: &Path) -> Result<()> {
         let initial = self
             .lines
@@ -223,8 +260,15 @@ impl Vacuum {
         }
         let mut expected = forms.values().copied().collect::<Vec<_>>();
         expected.sort();
-        if forms.len() != 9 || expected != [1, 1, 1, 1, 2, 2, 2, 2, 2] {
-            return Err("native quadratic-form census is not four gluon lines and five doubled fermion lines".into());
+        let loop_count = self.diagram.loop_count();
+        let expected_powers = std::iter::repeat_n(1, loop_count - 1)
+            .chain(std::iter::repeat_n(2, loop_count))
+            .collect::<Vec<_>>();
+        if forms.len() != 2 * loop_count - 1 || expected != expected_powers {
+            return Err(
+                "native quadratic-form census does not match gluon rungs and doubled fermion lines"
+                    .into(),
+            );
         }
         let marker = Atom::var(symbol!("qcd_ladder_control::retained_numerator"));
         let input = self.input(&marker, &initial)?;
@@ -260,15 +304,17 @@ impl Vacuum {
                 .entry(record[&right].clone())
                 .or_insert_with(|| graph.add_node(()));
             graph.add_edge(source, target, false, ())?;
-            powers.push(i64::try_from(record[&power].as_view())?);
+            powers.push(i32::try_from(i64::try_from(record[&power].as_view())?)?);
         }
         powers.sort();
-        if records.len() != 9
-            || powers != [1, 1, 1, 1, 2, 2, 2, 2, 2]
+        if records.len() != 2 * loop_count - 1
+            || powers != expected_powers
             || !graph.is_connected()
-            || graph.num_loops() != 5
+            || graph.num_loops() != loop_count
         {
-            return Err("native repeated-denominator coalescing changed the five-loop/nine-propagator scalar graph".into());
+            return Err(
+                "native repeated-denominator coalescing changed the physical scalar graph".into(),
+            );
         }
         // Even an exactly cancellable numerator factor stays in the numerator
         // at this boundary. Only equal denominator forms are coalesced.
@@ -298,7 +344,18 @@ impl Vacuum {
         }
         std::fs::write(
             evidence.join("native-vacuum-counts.txt"),
-            "Original: 14 internal edges, 10 vertices, 5 loops.\nAfter external insertion collapse: 12 incidence edges, 8 vertices, two insertion dots, A=14.\nExact native quadratic forms: 9 distinct (five fermion forms of power2, four gluon forms of power1).\nNative ingress: 9 propagators, 5 vertices, 5 loops, numerator retained exactly, A=14.\n",
+            format!(
+                "Original: {} internal edges, {} vertices, {loop_count} loops.\nAfter external insertion collapse: {} incidence edges, {} vertices, A={}.\nExact native quadratic forms: {} distinct ({} fermion forms of power2, {} gluon forms of power1).\nNative ingress: {} propagators, {loop_count} loops, numerator retained exactly.\n",
+                3 * loop_count - 1,
+                2 * loop_count,
+                self.lines.len(),
+                self.diagram.vertices().count(),
+                3 * loop_count - 1,
+                forms.len(),
+                loop_count,
+                loop_count - 1,
+                records.len(),
+            ),
         )?;
         Ok(())
     }

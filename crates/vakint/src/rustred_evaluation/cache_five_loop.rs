@@ -346,6 +346,21 @@ impl SavedApplication {
         terms: Vec<(IntegralKey, Coefficient)>,
         observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
     ) -> Result<SavedApplicationReduction, VakintError> {
+        // These packs contain completed DFS Route/Apply records. Ordered
+        // reduction owns a separate request-local frontier and never imports,
+        // queries or captures records through this backing.
+        if prepared.reduction_strategy() == crate::RustRedReductionStrategy::Ordered {
+            return match observation {
+                Some(observation) => prepared.reduce_routed_linear_combination_with_observation(
+                    terms,
+                    observation,
+                    None,
+                ),
+                None => prepared.reduce_routed_linear_combination(terms),
+            }
+            .map_err(operation)
+            .map_err(Into::into);
+        }
         if log::log_enabled!(target: "vakint::cache_workload", log::Level::Debug) {
             let roots = terms
                 .iter()

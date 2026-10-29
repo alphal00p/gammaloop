@@ -28,6 +28,182 @@ fn row<'a>(rows: &'a [(String, String)], label: &str) -> &'a str {
 }
 
 #[test]
+fn ordered_progress_exposes_phase_and_cancellation_scopes_without_time_percent() {
+    use rustred::solver::CandidateOrderedPhaseKind;
+    let mut state = MonitorState::default();
+    let mut sample = snapshot(10, 9, 8, 1);
+    sample.native_epoch = 2;
+    sample.ordered = Some(OrderedReductionSample {
+        counts: CandidateOrderedReductionProgress {
+            completed_phases: 3,
+            total_phases: 12,
+            phase_kind: CandidateOrderedPhaseKind::Reduction,
+            active_support: Some(6),
+            owner_index: Some(2),
+            input_keys: 7,
+            frontier_keys: 13,
+            peak_frontier_keys: 29,
+            terminal_keys: 4,
+            frontier_coefficient_monomials: 41,
+            peak_frontier_coefficient_monomials: 127,
+            terminal_coefficient_monomials: 17,
+            peak_terminal_coefficient_monomials: 53,
+            emitted_terms: 73,
+            merged_terms: 17,
+            cancelled_terms: 11,
+            terminal_merges: 2,
+            terminal_cancellations: 1,
+            processed_keys: 19,
+        },
+        native_epoch: 2,
+        family_fingerprint: "ordered-family".into(),
+        sampled_at: Duration::from_secs(8),
+    });
+    state.observe(sample, Duration::from_secs(10));
+    let view = state.view(Duration::from_secs(13));
+    assert_eq!(
+        row(&view.overview, "Ordered phases completed / total"),
+        "3 / 12 · fixed schedule; not time fraction"
+    );
+    assert_eq!(
+        row(&view.overview, "Ordered topology stage"),
+        "Reduction · support 6 · owner 2"
+    );
+    assert!(row(&view.overview, "Ordered phase scope").contains("request 2"));
+    assert!(
+        !view
+            .overview
+            .iter()
+            .any(|(label, _)| label == "Native roots at frontier census")
+    );
+    assert_eq!(
+        row(&view.frontier, "Input / current / peak frontier keys"),
+        "7 / 13 / 29"
+    );
+    assert_eq!(
+        row(
+            &view.frontier,
+            "Frontier nonzero merges / exact cancellations"
+        ),
+        "17 / 11"
+    );
+    assert_eq!(
+        row(
+            &view.frontier,
+            "Terminal nonzero merges / exact cancellations"
+        ),
+        "2 / 1"
+    );
+    assert_eq!(row(&view.complexity, "Ordered frontier census age"), "5.0s");
+    assert_eq!(
+        row(
+            &view.complexity,
+            "Frontier coefficient monomials (current / peak)"
+        ),
+        "41 / 127 · num+den proxy; not bytes"
+    );
+    assert_eq!(
+        row(
+            &view.complexity,
+            "Terminal coefficient monomials (current / peak)"
+        ),
+        "17 / 53 · num+den proxy; not bytes"
+    );
+    assert!(!view.estimates.iter().any(|(name, _)| name.ends_with("ETA")));
+    let document = state.presentation(Duration::from_secs(13));
+    assert_eq!(document["ordered_reduction"]["native_request"], 2);
+    assert_eq!(document["ordered_reduction"]["sample_age_seconds"], 5.0);
+    assert_eq!(document["ordered_reduction"]["frontier_keys"], 13);
+    assert_eq!(
+        document["ordered_reduction"]["frontier_coefficient_monomials"],
+        41
+    );
+    assert_eq!(
+        document["ordered_reduction"]["peak_frontier_coefficient_monomials"],
+        127
+    );
+    assert_eq!(
+        document["ordered_reduction"]["terminal_coefficient_monomials"],
+        17
+    );
+    assert_eq!(
+        document["ordered_reduction"]["peak_terminal_coefficient_monomials"],
+        53
+    );
+    assert_eq!(
+        document["ordered_reduction"]["phase_fraction_is_time_fraction"],
+        false
+    );
+}
+
+#[test]
+fn ordered_batch_metadata_round_trips_and_stays_live_across_frozen_native_phases() {
+    let mut state = MonitorState::default();
+    let mut initial = snapshot(10, 8, 5, 0);
+    initial.ordered_batches = Some(CallerWork {
+        phase: "1L / Retain".into(),
+        completed: 0,
+        total: 2,
+        unit: "ordered batches completed".into(),
+        sampled_at: Duration::from_secs(10),
+    });
+    initial.reduction_cohorts = Some(CallerWork {
+        phase: "current collected ordered batch".into(),
+        completed: 1,
+        total: 2,
+        unit: "compatible scalar cohorts completed".into(),
+        sampled_at: Duration::from_secs(10),
+    });
+    state.observe(initial, Duration::from_secs(10));
+    state.apply(UiAction::ToggleFreeze, Duration::from_secs(10));
+    state.latest.ordered_batches.as_mut().unwrap().completed = 1;
+    state.latest.ordered_batches.as_mut().unwrap().phase = "2L / Retain".into();
+    state.latest.reduction_cohorts.as_mut().unwrap().completed = 1;
+    state.latest.reduction_cohorts.as_mut().unwrap().total = 3;
+    let view = state.view(Duration::from_secs(15));
+    assert!(view.frozen);
+    assert_eq!(
+        row(&view.overview, "Ordered batches completed / total"),
+        "1 / 2 · 2L / Retain"
+    );
+    assert_eq!(
+        row(&view.overview, "Compatible cohorts completed / total"),
+        "1 / 3 · current collected batch"
+    );
+    assert_eq!(
+        row(&view.frontier, "Completed unique identities (not closure)"),
+        "5"
+    );
+    let encoded = serde_json::to_string(&state.presentation(Duration::from_secs(15))).unwrap();
+    let decoded: serde_json::Value = serde_json::from_str(&encoded).unwrap();
+    assert_eq!(decoded["ordered_batches"]["completed"], 1);
+    assert_eq!(decoded["ordered_batches"]["total"], 2);
+    assert_eq!(decoded["ordered_batches"]["label"], "2L / Retain");
+    assert_eq!(decoded["reduction_cohorts"]["completed"], 1);
+    assert_eq!(decoded["reduction_cohorts"]["total"], 3);
+    assert_eq!(
+        decoded["reduction_cohorts"]["fraction_is_time_fraction"],
+        false
+    );
+    let decoded_view: MonitorView = serde_json::from_value(decoded["view"].clone()).unwrap();
+    assert_eq!(
+        row(
+            &decoded_view.overview,
+            "Compatible cohorts completed / total"
+        ),
+        "1 / 3 · current collected batch"
+    );
+    state.latest.reduction_cohorts = None;
+    assert!(
+        !state
+            .view(Duration::from_secs(16))
+            .overview
+            .iter()
+            .any(|(label, _)| label == "Compatible cohorts completed / total")
+    );
+}
+
+#[test]
 fn proc_memory_preserves_process_peak_and_host_usable_unused_scopes() {
     let resources = ResourceUsage::from_proc(
         "Name:\tfixture\nVmRSS:\t17 kB\nVmHWM:\t29 kB\n",

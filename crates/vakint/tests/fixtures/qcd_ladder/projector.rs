@@ -1,5 +1,5 @@
 //! Native auxiliary angular projector for the quadratic gluon two-point term.
-//! The direction of q is averaged at fixed q²; q is NOT a sixth physical loop.
+//! The direction of q is averaged at fixed q²; q is not an additional physical loop.
 
 use super::*;
 use feynkit_tensor::TensorReducer;

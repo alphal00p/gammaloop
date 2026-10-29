@@ -156,38 +156,15 @@ fn prepare_matched_candidate_integral(
     reducer: &dyn CandidateScalarReduction,
     settings: &VakintSettings,
 ) -> Result<Vec<PreparedCandidateIntegral>, VakintError> {
-    let integral = matched.canonical_topology.get_integral();
-    if integral.n_loops != 4 {
-        return Err(candidate_error(
-            "experimental FMFT finalization requires four loops",
-        ));
-    }
-    let input = super::numerator::MatchedScalarInput::prepare(
+    let input = prepare_matched_candidate_input(
         numerator,
         matched,
-        reducer.parent_momenta(),
-        &(0..integral.n_props).collect::<Vec<_>>(),
-        reducer.index_count(),
+        reducer,
         settings,
         super::numerator::ScalarNumeratorForm::ExpandedPolynomial,
     )?;
-    let scalar_numerator = input.numerator;
-    let family_numerator = (1..=integral.n_loops).fold(scalar_numerator, |value, axis| {
-        value
-            .replace(function!(S.k, Atom::num(axis)).to_pattern())
-            .with(
-                vk_parse!(format!("k{axis}"))
-                    .expect("family loop label parses")
-                    .to_pattern(),
-            )
-    });
-    if family_numerator.contains_symbol(S.k) {
-        return Err(candidate_error(
-            "parent-routed numerator retains loop-vector components; tensor preprocessing must produce scalar products",
-        ));
-    }
     let lowered = reducer
-        .lower_scalar_numerator(&family_numerator, &input.target)
+        .lower_scalar_numerator(&input.numerator, &input.target)
         .map_err(candidate_error)?;
     if lowered.is_empty() {
         return Err(candidate_error(
@@ -205,6 +182,47 @@ fn prepare_matched_candidate_integral(
             common_mass_squared_power: term.common_mass_squared_power,
         })
         .collect())
+}
+
+pub(super) fn prepare_matched_candidate_input(
+    numerator: AtomView,
+    matched: &ReplacementRules,
+    reducer: &dyn CandidateScalarReduction,
+    settings: &VakintSettings,
+    form: super::numerator::ScalarNumeratorForm,
+) -> Result<super::numerator::MatchedScalarInput, VakintError> {
+    let integral = matched.canonical_topology.get_integral();
+    if integral.n_loops != 4 {
+        return Err(candidate_error(
+            "experimental FMFT finalization requires four loops",
+        ));
+    }
+    let mut input = super::numerator::MatchedScalarInput::prepare(
+        numerator,
+        matched,
+        reducer.parent_momenta(),
+        &(0..integral.n_props).collect::<Vec<_>>(),
+        reducer.index_count(),
+        settings,
+        form,
+    )?;
+    let scalar_numerator = input.numerator.clone();
+    let family_numerator = (1..=integral.n_loops).fold(scalar_numerator, |value, axis| {
+        value
+            .replace(function!(S.k, Atom::num(axis)).to_pattern())
+            .with(
+                vk_parse!(format!("k{axis}"))
+                    .expect("family loop label parses")
+                    .to_pattern(),
+            )
+    });
+    if family_numerator.contains_symbol(S.k) {
+        return Err(candidate_error(
+            "parent-routed numerator retains loop-vector components; tensor preprocessing must produce scalar products",
+        ));
+    }
+    input.numerator = family_numerator;
+    Ok(input)
 }
 
 /// Unsealed-program adapter with an explicit offline FMFT terminal catalog.

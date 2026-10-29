@@ -16,7 +16,7 @@ use rustred::solver::{
     CandidateDecomposition, CandidateReducer, IntegralOrder, SectorConfig, SectorExecutor,
     SectorSolveOptions, SourceSystem,
 };
-use symbolica::atom::Atom;
+use symbolica::atom::{Atom, AtomCore};
 
 use super::{CandidateReduction, CandidateScalarReduction};
 use crate::symbols::S;
@@ -34,6 +34,95 @@ pub struct NativeCandidate<const N: usize> {
 }
 
 impl<const N: usize> NativeCandidate<N> {
+    pub(in crate::rustred_evaluation) fn lower_weighted_scalar_numerator(
+        &self,
+        input: &crate::rustred_evaluation::numerator::MatchedScalarInput,
+        settings: &crate::VakintSettings,
+    ) -> Result<
+        rustred::scalar_numerator::WeightedScalarNumeratorLowering,
+        crate::RustRedEvaluationError,
+    > {
+        let momenta = self
+            .family
+            .loop_momenta()
+            .iter()
+            .map(|label| {
+                vakint_parse!(label.as_str()).map_err(crate::rustred_evaluation::data::failure)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let scalar = rustred::scalar_numerator::FamilyScalarNumeratorService::try_new(
+            &self.family,
+            S.dot,
+            momenta,
+            settings.rustred_scalar_numerator_limits,
+        )
+        .map_err(crate::RustRedEvaluationError::from_native)?;
+        let epsilon = Atom::var(crate::utils::vakint_macros::vk_symbol!(
+            settings.epsilon_symbol.as_str()
+        ));
+        let physical_dimension = Atom::num(4) - Atom::num(2) * &epsilon;
+        drop(input.input_conditions_after_mapping(&scalar, |condition| {
+            condition
+                .replace(vakint_parse!("ep").unwrap().to_pattern())
+                .with(epsilon.to_pattern())
+                .replace(self.dimension.to_pattern())
+                .with(physical_dimension.to_pattern())
+        })?);
+        let numerator = input
+            .numerator
+            .replace(vakint_parse!("ep").unwrap().to_pattern())
+            .with(epsilon.to_pattern());
+        let numerator =
+            crate::rustred_evaluation::numerator::MatchedScalarInput::numerator_in_family_dimension(
+                numerator.as_view(),
+                settings,
+                &self.dimension,
+            );
+        scalar
+            .lower_weighted(&numerator, &input.target, &input.mass_squared)
+            .map_err(crate::RustRedEvaluationError::from_native)
+    }
+
+    /// Request-local global reduction; never reads or fills the DFS point cache.
+    pub(crate) fn reduce_linear_combination_ordered(
+        &self,
+        terms: Vec<(IntegralKey, rustred::algebra::Coefficient)>,
+        limits: ReductionLimits,
+        observation: Option<&mut rustred::solver::CandidateRoutedApplicationObserver<'_>>,
+    ) -> Result<rustred::solver::CandidateOrderedReduction, crate::RustRedEvaluationError> {
+        let reducer = self
+            .reducer
+            .lock()
+            .map_err(|_| crate::RustRedEvaluationError::Reduction {
+                detail: "candidate reducer lock poisoned".into(),
+            })?
+            .fork_empty_with_limits(limits);
+        match observation {
+            Some(observer) => {
+                observer.clear_native_summary();
+                let mut envelope = rustred::solver::CandidateRoutedApplicationEnvelope::new(
+                    rustred::solver::CandidateRoutedApplicationEvent::ActivityStarted,
+                    self.family.fingerprint(),
+                );
+                envelope.caller_phase = Some("entry_admission");
+                observer.emit(envelope);
+                reducer.reduce_linear_combination_ordered_with_observation(
+                    terms,
+                    &mut |progress, current| {
+                        observer.emit_ordered_progress(
+                            self.family.fingerprint(),
+                            *progress,
+                            current,
+                        );
+                        Ok(())
+                    },
+                )
+            }
+            None => reducer.reduce_linear_combination_ordered(terms),
+        }
+        .map_err(crate::RustRedEvaluationError::from_native)
+    }
+
     pub(crate) fn preserve_unresolved(&mut self) -> Result<(), String> {
         self.reducer
             .get_mut()
@@ -64,22 +153,23 @@ impl<const N: usize> NativeCandidate<N> {
         Arc::clone(&self.family)
     }
 
-    /// One scoped transported batch; RustRed retains and budgets shared DAG
-    /// nodes between endpoints, then clears them at both call boundaries.
+    /// One scoped transported batch over a fresh native program fork. Its
+    /// internal memo never reads or clears the ordinary DFS session's state.
     pub(crate) fn reduce_transported_unit_mass_guarded(
         &self,
         transport: &rustred::sector::symmetry::integral_transport::Prepared,
         target: &IntegralKey,
         limits: ReductionLimits,
     ) -> Result<VacuumFactorReduction, VacuumProductReductionError> {
-        let mut reducer =
-            self.reducer
-                .lock()
-                .map_err(|_| VacuumProductReductionError::Provider {
-                    family: self.family.fingerprint().into(),
-                    target: target.clone(),
-                    message: "candidate reducer lock poisoned".into(),
-                })?;
+        let mut reducer = self
+            .reducer
+            .lock()
+            .map_err(|_| VacuumProductReductionError::Provider {
+                family: self.family.fingerprint().into(),
+                target: target.clone(),
+                message: "candidate reducer lock poisoned".into(),
+            })?
+            .fork_empty();
         reduce_transported_candidate_factor(
             &mut reducer,
             transport,
@@ -102,21 +192,15 @@ impl<const N: usize> NativeCandidate<N> {
         ),
         VacuumProductReductionError,
     > {
-        let mut reducer =
-            self.reducer
-                .lock()
-                .map_err(|_| VacuumProductReductionError::Provider {
-                    family: self.family.fingerprint().into(),
-                    target: target.clone(),
-                    message: "candidate reducer lock poisoned".into(),
-                })?;
-        reducer
-            .clear_cache()
-            .map_err(|error| VacuumProductReductionError::Provider {
+        let mut reducer = self
+            .reducer
+            .lock()
+            .map_err(|_| VacuumProductReductionError::Provider {
                 family: self.family.fingerprint().into(),
                 target: target.clone(),
-                message: error.to_string(),
-            })?;
+                message: "candidate reducer lock poisoned".into(),
+            })?
+            .fork_empty();
         let result =
             reducer
                 .reduce_unit_mass_guarded(target, remaining)
@@ -134,13 +218,6 @@ impl<const N: usize> NativeCandidate<N> {
                         message: error.to_string(),
                     },
                 });
-        reducer
-            .clear_cache()
-            .map_err(|error| VacuumProductReductionError::Provider {
-                family: self.family.fingerprint().into(),
-                target: target.clone(),
-                message: error.to_string(),
-            })?;
         let result = result?;
         if !result.0.unresolved().is_empty() {
             return Err(VacuumProductReductionError::UnresolvedFactor {
@@ -451,6 +528,111 @@ impl<const N: usize> CandidateScalarReduction for NativeCandidate<N> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn terminal_only_candidate() -> (NativeCandidate<1>, IntegralKey) {
+        use rustred::input::{Compiler, Limits, LoweringLimits, TextProject, TextPropagator};
+        use rustred::solver::{Integral, SectorSolution, SectorStats};
+
+        crate::Vakint::initialize_vakint_symbols();
+        let family = Arc::new(
+            Compiler::new(Limits::default())
+                .unwrap()
+                .compile_text(TextProject {
+                    name: None,
+                    parameters: None,
+                    loop_momenta: vec!["k1".into()],
+                    external_momenta: Vec::new(),
+                    dimension: "d".into(),
+                    propagators: vec![TextPropagator {
+                        id: "D1".into(),
+                        expression: "k1^2-1".into(),
+                        target_power: 1,
+                        power_shift: None,
+                    }],
+                    external_gram: Vec::new(),
+                    numerator: None,
+                })
+                .unwrap()
+                .into_lowered(LoweringLimits::default())
+                .unwrap()
+                .into_family(),
+        );
+        let solution = SectorSolution {
+            order: IntegralOrder::new([true], [false]),
+            max_numerator_rank: None,
+            finite_case_policy: Default::default(),
+            rules: Vec::new(),
+            finite_residuals: vec![Integral::numeric([1]).unwrap()],
+            stats: SectorStats::default(),
+        };
+        let reducer = CandidateReducer::try_new(
+            &family,
+            [true],
+            OrderingPolicy::SpiredUncutV1,
+            [([true], solution)],
+            Vec::new(),
+            ReductionLimits::default(),
+        )
+        .unwrap();
+        let native =
+            NativeCandidate::from_reducer(family, vec![vakint_parse!("k(1)").unwrap()], reducer)
+                .unwrap();
+        (native, IntegralKey::try_new([1]).unwrap())
+    }
+
+    #[test]
+    fn ordered_candidate_uses_request_limits_without_changing_depth_first_state() {
+        let (native, key) = terminal_only_candidate();
+        let coefficient = native.family.coefficient_context().one();
+        let before = native.cache_test_statistics();
+        let strict = ReductionLimits {
+            max_pending_frames: 0,
+            ..Default::default()
+        }
+        .with_diagnostics();
+        let error = native
+            .reduce_linear_combination_ordered(
+                vec![(key.clone(), coefficient.clone())],
+                strict,
+                None,
+            )
+            .unwrap_err();
+        assert!(error.to_string().contains("pending"), "{error}");
+        assert_eq!(native.cache_test_statistics(), before);
+        let result = native
+            .reduce_linear_combination_ordered(
+                vec![(key.clone(), coefficient.clone())],
+                ReductionLimits::default(),
+                None,
+            )
+            .unwrap();
+        assert_eq!(
+            result.terms(),
+            &std::collections::BTreeMap::from([(key, coefficient)])
+        );
+        assert_eq!(native.cache_test_statistics(), before);
+    }
+
+    #[test]
+    fn ordered_candidate_scans_original_poles_before_regulator_aliases() {
+        let (native, key) = terminal_only_candidate();
+        let settings = crate::VakintSettings::default();
+        for epsilon in [settings.epsilon_symbol.as_str(), "vakint::ep"] {
+            let input = crate::rustred_evaluation::numerator::MatchedScalarInput {
+                target: key.clone(),
+                mass_squared: Atom::one(),
+                numerator: vakint_parse!(&format!("1/(rustred::d+2*{epsilon}-4)")).unwrap(),
+            };
+            let error = native
+                .lower_weighted_scalar_numerator(&input, &settings)
+                .unwrap_err();
+            assert!(
+                matches!(error, crate::RustRedEvaluationError::InvalidMatchedFamily { ref detail }
+                if detail.contains("original scalar pole")),
+                "{error}"
+            );
+        }
+    }
 
     #[test]
     fn candidate_binding_installs_aliases_without_changing_raw_catalog_keys() {

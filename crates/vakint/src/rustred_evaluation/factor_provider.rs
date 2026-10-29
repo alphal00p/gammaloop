@@ -19,8 +19,8 @@ use symbolica::utils::resources::{self, ResourceLimitError, ResourceLimits};
 use super::{artifact::shipped_family_for_loop_count, data::RustRedData};
 use crate::symbols::S;
 
-/// Only immutable family preparation is retained here. Scoped native caches are
-/// cleared at both call boundaries; the enclosing RustRed session owns reuse.
+/// Only immutable family preparation is retained here. Guarded native actions
+/// use fresh request state; the enclosing product-reduction session owns reuse.
 #[derive(Default)]
 pub(super) struct ShippedFactorProvider {
     data: Option<Arc<RustRedData>>,

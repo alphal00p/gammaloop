@@ -1,10 +1,44 @@
 //! Combine scalar spectators with their integer common-mass scaling before IBP.
 
-use super::SavedApplication;
+use super::numerator::MatchedScalarInput;
+use rustred::algebra::{Coefficient, CoefficientContext, ExactAlgebraLimits};
 use symbolica::atom::{Atom, AtomCore, AtomView};
 use symbolica::coefficient::CoefficientView;
+use symbolica::prelude::{Q, Z};
 
-impl SavedApplication {
+impl MatchedScalarInput {
+    /// Numeric common-mass shifts belong in the native weight, not in the
+    /// spectator identity. Keeping e.g. 3/7 as a distinct channel would prevent
+    /// cancellation against the same integral carrying spectator one.
+    pub(super) fn channel_coefficient(
+        spectator: Atom,
+        coefficient: &Coefficient,
+        context: &CoefficientContext,
+        limits: ExactAlgebraLimits,
+    ) -> Result<(Atom, Coefficient), super::RustRedEvaluationError> {
+        let factors = match spectator.as_view() {
+            AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
+            view => vec![view],
+        };
+        let mut scalar = Atom::one();
+        let mut weight = coefficient.clone();
+        for factor in factors {
+            if let AtomView::Num(number) = factor
+                && !matches!(number.get_coeff_view(), CoefficientView::Float(..))
+            {
+                let rational = factor
+                    .try_to_rational_polynomial(&Q, &Z, Some(context.one().get_variables().clone()))
+                    .map_err(super::data::failure)?;
+                weight = context
+                    .try_mul(&weight, &rational, limits)
+                    .map_err(super::RustRedEvaluationError::from_native)?;
+            } else {
+                scalar *= factor.to_owned();
+            }
+        }
+        Ok((scalar, weight))
+    }
+
     pub(super) fn mass_channel(
         spectator: &Atom,
         mass_squared: &Atom,
@@ -52,12 +86,29 @@ mod tests {
     use std::collections::BTreeMap;
     use symbolica::{domains::rational::Rational, parse};
 
+    #[test]
+    fn nonunit_numeric_mass_shifts_do_not_fragment_ordered_channels() {
+        let context = CoefficientContext::try_new(["d"]).unwrap();
+        let (spectator, exponent) =
+            MatchedScalarInput::mass_channel(&parse!("x"), &parse!("7/3"), -6, -5, None);
+        let (spectator, coefficient) = MatchedScalarInput::channel_coefficient(
+            spectator,
+            &context.one(),
+            &context,
+            ExactAlgebraLimits::default(),
+        )
+        .unwrap();
+        assert_eq!(spectator, parse!("x"));
+        assert_eq!(exponent, -5);
+        assert_eq!(coefficient.to_expression(), parse!("3/7"));
+    }
+
     fn channel_sum(mass: &Atom, rows: &[(i64, Atom, Atom)]) -> (Atom, usize) {
         let mut channels = BTreeMap::<(Atom, i64), Atom>::new();
         let anchor = -rows[0].0;
         for (degree, spectator, value) in rows {
             let channel =
-                SavedApplication::mass_channel(spectator, mass, -*degree, anchor, Some(512));
+                MatchedScalarInput::mass_channel(spectator, mass, -*degree, anchor, Some(512));
             *channels.entry(channel).or_insert(Atom::Zero) += value;
         }
         let n = channels.len();
@@ -136,12 +187,12 @@ mod tests {
     fn compound_powers_stay_compact_and_staged_sources_are_not_evaluated() {
         let mass = parse!("x^2+y^2");
         let channel =
-            SavedApplication::mass_channel(&mass.clone().pow(500), &mass, -510, 0, Some(512));
+            MatchedScalarInput::mass_channel(&mass.clone().pow(500), &mass, -510, 0, Some(512));
         assert_eq!(channel, (mass.pow(-10), 0));
         let source = parse!("source_float(17)");
         let mass = parse!("mu");
         assert_eq!(
-            SavedApplication::mass_channel(
+            MatchedScalarInput::mass_channel(
                 &(&source * mass.clone().pow(2)),
                 &mass,
                 -12,
@@ -160,7 +211,7 @@ mod tests {
             (-12, -10, 1),
         ] {
             assert_eq!(
-                SavedApplication::mass_channel(
+                MatchedScalarInput::mass_channel(
                     &source,
                     &numeric_mass,
                     exponent,
@@ -179,15 +230,15 @@ mod tests {
         let exponent = -1_000_000_000_000_i64;
         let expected = (&source * mass.clone().pow(exponent), 0);
         assert_eq!(
-            SavedApplication::mass_channel(&source, &mass, exponent, 0, None),
+            MatchedScalarInput::mass_channel(&source, &mass, exponent, 0, None),
             expected
         );
         assert_eq!(
-            SavedApplication::mass_channel(&source, &mass, exponent, 0, Some(6)),
+            MatchedScalarInput::mass_channel(&source, &mass, exponent, 0, Some(6)),
             (source.clone(), exponent)
         );
         assert_eq!(
-            SavedApplication::mass_channel(&source, &mass, i64::MIN, i64::MAX, None),
+            MatchedScalarInput::mass_channel(&source, &mass, i64::MIN, i64::MAX, None),
             (source, i64::MIN)
         );
     }
@@ -207,7 +258,7 @@ mod tests {
             let original = (spectator.clone(), -12);
             for diagnostic_max_degree in [None, Some(6)] {
                 assert_eq!(
-                    SavedApplication::mass_channel(
+                    MatchedScalarInput::mass_channel(
                         &spectator,
                         &mass,
                         -12,

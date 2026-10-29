@@ -35,6 +35,7 @@ pub use precision::{
     AvailablePrecision, CoefficientPrecision, ComponentPrecision, ErrorQuality,
     NumericalCoefficient, NumericalEvaluationResult, PrecisionSource, PrecisionWarning,
 };
+pub use rustred::reduction::ReductionStrategy as RustRedReductionStrategy;
 pub use rustred::scalar_numerator::ScalarNumeratorLimits as RustRedScalarNumeratorLimits;
 use rustred::solver::CandidateRoutedApplicationObserver;
 pub use rustred::solver::{
@@ -51,7 +52,7 @@ pub use rustred_evaluation::cache::{
 #[cfg(all(unix, not(target_arch = "wasm32")))]
 pub use rustred_evaluation::cache::{RustRedCacheTransferOptions, RustRedCacheTransferReport};
 pub use rustred_evaluation::five_loop::{RustRedSymbolicEvaluation, RustRedWitnessCacheStatistics};
-use rustred_evaluation::monitor::MonitorContext;
+use rustred_evaluation::monitor::{CallerProgress, MonitorContext};
 pub use rustred_evaluation::monitor::{
     RustRedMonitorDisplay, RustRedMonitorOptions, RustRedMonitorScope, RustRedMonitorWork,
     RustRedSnapshotViewer,
@@ -2143,7 +2144,10 @@ pub struct VakintSettings {
     /// Absent ceilings impose no restriction. Opaque external calls can only
     /// be checked at their boundaries; hard deadlines require a supervisor.
     pub rustred_resources: ResourceLimits,
-    /// Operational application/cache allowances; these never enlarge saved entry domains.
+    /// Native reduction strategy and operational application/cache allowances.
+    /// `reduction_strategy` selects the scalar scheduler at every loop count.
+    /// Ordered requests use no DFS result cache; neither strategy enlarges the
+    /// saved entry domains. Complete factorization remains a checked action.
     pub rustred_application_options: rustred_app::SavedApplicationOptions,
     /// Per-call numerator lowering allowances for the saved five-loop lane.
     /// These do not change entry admission, legacy lower-loop programs, or
@@ -2552,13 +2556,12 @@ impl VakintTerm {
         })
     }
 
-    fn reduce_integral(
+    fn prepare_integral_specs(
         &mut self,
         vakint: &Vakint,
         settings: &VakintSettings,
-        source_id: usize,
         mut observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
-    ) -> Result<IntegralEvaluation, VakintError> {
+    ) -> Result<ReplacementRules, VakintError> {
         MonitorContext::native_phase(observation.as_deref_mut(), "topology_matching", None);
         self.stage_numerical_inputs(vakint, settings)?;
         let mut integral_specs = if let Some(replacement_rules) =
@@ -2584,7 +2587,7 @@ impl VakintTerm {
         let scalar_five_loop =
             matches!(integral_specs.canonical_topology, Topology::FiveLoop(_)) && scalar_rustred;
         if scalar_five_loop {
-            MonitorContext::native_phase(observation.as_deref_mut(), "routing_verification", None);
+            MonitorContext::native_phase(observation, "routing_verification", None);
             integral_specs = vakint
                 .match_rustred_input(settings, self.integral.as_view(), self.numerator.as_view())?
                 .unwrap_or(integral_specs);
@@ -2596,6 +2599,19 @@ impl VakintTerm {
         } else {
             self.apply_numerator_replacement_rules(&integral_specs, settings)?;
         }
+
+        Ok(integral_specs)
+    }
+
+    fn reduce_integral(
+        &mut self,
+        vakint: &Vakint,
+        settings: &VakintSettings,
+        source_id: usize,
+        mut observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
+    ) -> Result<IntegralEvaluation, VakintError> {
+        let integral_specs =
+            self.prepare_integral_specs(vakint, settings, observation.as_deref_mut())?;
 
         for evaluation_approach in &settings.evaluation_order.0 {
             if evaluation_approach.supports(settings, &integral_specs.canonical_topology) {
@@ -4406,7 +4422,7 @@ impl VakintExpression {
         vakint: &Vakint,
         settings: &VakintSettings,
     ) -> Result<(), VakintError> {
-        self.evaluate_integral_observed(vakint, settings, None)
+        self.evaluate_integral_observed(vakint, settings, None, None)
     }
 
     fn evaluate_integral_observed(
@@ -4414,6 +4430,7 @@ impl VakintExpression {
         vakint: &Vakint,
         settings: &VakintSettings,
         mut observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
+        progress: Option<&CallerProgress>,
     ) -> Result<(), VakintError> {
         settings.with_resource_budget(|| {
             MonitorContext::native_phase(observation.as_deref_mut(), "integral_reduction", None);
@@ -4421,14 +4438,66 @@ impl VakintExpression {
             let mut numerical = Atom::Zero;
             let mut numerical_vectors = std::collections::BTreeSet::new();
             let mut reductions = BTreeMap::new();
+            let mut ordered = BTreeMap::<
+                (usize, RustRedMasterMode),
+                Vec<rustred_evaluation::MatchedContribution>,
+            >::new();
             for (source_id, term) in self.0.iter_mut().enumerate() {
                 resources::checkpoint()?;
-                match term.reduce_integral(
-                    vakint,
-                    settings,
-                    source_id,
-                    observation.as_deref_mut(),
-                )? {
+                let stage = if settings.rustred_application_options.reduction_strategy
+                    == RustRedReductionStrategy::Ordered
+                {
+                    let matched =
+                        term.prepare_integral_specs(vakint, settings, observation.as_deref_mut())?;
+                    let method = settings
+                        .evaluation_order
+                        .0
+                        .iter()
+                        .find(|method| method.supports(settings, &matched.canonical_topology))
+                        .ok_or_else(|| {
+                            VakintError::NoEvaluationMethodFound(
+                                term.integral.to_string(),
+                                settings.number_of_terms_in_epsilon_expansion
+                                    - matched.canonical_topology.get_integral().n_loops as i64
+                                    - 1,
+                            )
+                        })?;
+                    if let EvaluationMethod::RustRed(options) = method {
+                        let key = (
+                            matched.canonical_topology.get_integral().n_loops,
+                            options.master_mode,
+                        );
+                        ordered.entry(key).or_default().push(
+                            rustred_evaluation::MatchedContribution {
+                                numerator: term.numerator.clone(),
+                                matched,
+                            },
+                        );
+                        let (_, vectors) = reductions
+                            .entry(key)
+                            .or_insert_with(|| (Atom::Zero, std::collections::BTreeSet::new()));
+                        vectors.extend(term.vectors.iter().cloned());
+                        continue;
+                    }
+                    term.numerator = simplify_real(
+                        method
+                            .reduce_integral(
+                                vakint,
+                                settings,
+                                term.numerator.as_view(),
+                                &matched,
+                                source_id,
+                            )?
+                            .as_view(),
+                    );
+                    term.integral = Atom::one();
+                    IntegralEvaluation::Complete {
+                        numerical: method.numerical_output(),
+                    }
+                } else {
+                    term.reduce_integral(vakint, settings, source_id, observation.as_deref_mut())?
+                };
+                match stage {
                     IntegralEvaluation::Complete { numerical: true } => {
                         numerical += &term.numerator;
                         numerical_vectors.extend(term.vectors.iter().cloned());
@@ -4447,6 +4516,36 @@ impl VakintExpression {
                         vectors.extend(term.vectors.iter().cloned());
                     }
                 }
+            }
+            let batch_total = ordered.len();
+            for (batch_index, (key, contributions)) in ordered.into_iter().enumerate() {
+                if let Some(progress) = progress {
+                    progress.ordered_batch(
+                        batch_index,
+                        batch_total,
+                        &format!("{}L / {:?}", key.0, key.1),
+                    );
+                }
+                MonitorContext::native_phase(
+                    observation.as_deref_mut(),
+                    "ordered_batch_preparation",
+                    None,
+                );
+                let raw = vakint.rustred_reduce_ordered(
+                    settings,
+                    contributions,
+                    observation.as_deref_mut(),
+                    progress,
+                )?;
+                reductions
+                    .get_mut(&key)
+                    .expect("ordered group retains its metadata")
+                    .0 += raw;
+            }
+            if batch_total != 0
+                && let Some(progress) = progress
+            {
+                progress.ordered_batch(batch_total, batch_total, "all ordered batches");
             }
             for ((loop_count, mode), (raw, vectors)) in reductions {
                 MonitorContext::native_phase(
@@ -7083,7 +7182,7 @@ Evaluated (n_loops=1, mu_r=1) :
         settings: &VakintSettings,
         input: AtomView,
     ) -> Result<Atom, VakintError> {
-        self.evaluate_observed(settings, input, None)
+        self.evaluate_observed(settings, input, None, None)
     }
 
     /// Evaluate through the ordinary backend and finalization path with per-call diagnostics.
@@ -7093,8 +7192,8 @@ Evaluated (n_loops=1, mu_r=1) :
         input: AtomView,
         monitor: &RustRedMonitorOptions,
     ) -> Result<Atom, VakintError> {
-        MonitorContext::run(monitor, |observation, _progress| {
-            self.evaluate_observed(settings, input, observation)
+        MonitorContext::run(monitor, |observation, progress| {
+            self.evaluate_observed(settings, input, observation, progress)
         })
     }
 
@@ -7103,6 +7202,7 @@ Evaluated (n_loops=1, mu_r=1) :
         settings: &VakintSettings,
         input: AtomView,
         mut observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
+        progress: Option<&CallerProgress>,
     ) -> Result<Atom, VakintError> {
         settings.with_resource_budget(|| {
             MonitorContext::native_phase(
@@ -7121,7 +7221,12 @@ Evaluated (n_loops=1, mu_r=1) :
                 resources::checkpoint()?;
                 term.tensor_reduce_for_evaluation(self, settings)?;
             }
-            vakint_expr.evaluate_integral_observed(self, settings, observation.as_deref_mut())?;
+            vakint_expr.evaluate_integral_observed(
+                self,
+                settings,
+                observation.as_deref_mut(),
+                progress,
+            )?;
             let result: Atom = vakint_expr.into();
             MonitorContext::native_phase(observation, "evaluation_output", Some(result.as_view()));
             Ok(result)

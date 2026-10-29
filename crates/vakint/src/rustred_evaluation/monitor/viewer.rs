@@ -107,6 +107,14 @@ struct PublishedView {
     resources: Option<ResourceUsage>,
     #[serde(default)]
     native_collection: Option<NativeCollectionSample>,
+    #[serde(default)]
+    ordered_reduction: Option<OrderedCensusAge>,
+}
+
+#[cfg(feature = "progress-tui")]
+#[derive(Clone, serde::Deserialize)]
+struct OrderedCensusAge {
+    sample_age_seconds: Option<f64>,
 }
 
 #[cfg(feature = "progress-tui")]
@@ -289,7 +297,19 @@ impl SnapshotReader {
 
 #[cfg(feature = "progress-tui")]
 impl PublishedView {
+    fn ordered_census_age(&self, publication_age: Option<Duration>) -> Option<Duration> {
+        self.ordered_reduction
+            .as_ref()?
+            .sample_age_seconds
+            .and_then(|age| Duration::try_from_secs_f64(age).ok())
+            .zip(publication_age)
+            .map(|(age, publication)| age.saturating_add(publication))
+    }
+
     fn collection_rows(&self, publication_age: Option<Duration>) -> Vec<(String, String)> {
+        if self.ordered_reduction.is_some() && self.native_collection.is_none() {
+            return Vec::new();
+        }
         let mut sample = self.native_collection.clone().unwrap_or_default();
         sample.sample_age_seconds = sample
             .sample_age_seconds
@@ -532,6 +552,7 @@ impl ActiveViewer {
                 native_document_age_seconds: None,
                 resources: None,
                 native_collection: None,
+                ordered_reduction: None,
             }),
             received_at: Instant::now(),
             publication_age: None,
@@ -709,6 +730,37 @@ impl ActiveViewer {
         view.overview
             .retain(|(label, _)| !collection_rows.iter().any(|(live, _)| label == live));
         view.overview.extend(collection_rows);
+        // Batch/cohort counters belong to the caller job, so they remain live
+        // while the user freezes native panels, including when a new batch
+        // clears the previous batch's cohort census.
+        view.overview.retain(|(label, _)| {
+            !matches!(
+                label.as_str(),
+                "Ordered batches completed / total" | "Compatible cohorts completed / total"
+            )
+        });
+        let batch_rows = self
+            .latest
+            .view
+            .overview
+            .iter()
+            .filter(|(label, _)| {
+                matches!(
+                    label.as_str(),
+                    "Ordered batches completed / total" | "Compatible cohorts completed / total"
+                )
+            })
+            .cloned();
+        let insertion = view.overview.len().min(3);
+        view.overview.splice(insertion..insertion, batch_rows);
+        if self.frozen.is_none()
+            && let Some((_, value)) = view
+                .complexity
+                .iter_mut()
+                .find(|(label, _)| label == "Ordered frontier census age")
+        {
+            *value = seconds(self.latest.ordered_census_age(publication_age));
+        }
         for (label, value) in &self.latest.view.overview {
             if matches!(
                 label.as_str(),
@@ -896,6 +948,23 @@ mod tests {
                 .iter()
                 .all(|(_, value)| value.contains("unknown"))
         );
+    }
+
+    #[test]
+    fn ordered_census_age_advances_on_attachment_without_changing_counters() {
+        let mut document = snapshot(42, 10.0);
+        document["monitor"]["ordered_reduction"] = serde_json::json!({
+            "completed_phases":3, "total_phases":12,
+            "sample_age_seconds":2.0
+        });
+        let envelope: SnapshotEnvelope = serde_json::from_value(document).unwrap();
+        let published = envelope.monitor.unwrap();
+        assert_eq!(
+            published.ordered_census_age(Some(Duration::from_secs(36))),
+            Some(Duration::from_secs(38))
+        );
+        assert!(published.ordered_census_age(None).is_none());
+        assert_eq!(published.native_quantitative_sample_age_seconds, Some(0.0));
     }
 
     #[test]

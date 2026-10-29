@@ -29,6 +29,45 @@ pub(super) struct MatchedScalarInput {
 }
 
 impl MatchedScalarInput {
+    /// Validate the received rational domain before a dimension or regulator
+    /// identification can remove a visible pole by algebraic cancellation.
+    pub(super) fn input_conditions_after_mapping(
+        &self,
+        scalar: &rustred::scalar_numerator::FamilyScalarNumeratorService<'_>,
+        mut map: impl FnMut(AtomView) -> Atom,
+    ) -> Result<Vec<Atom>, RustRedEvaluationError> {
+        scalar
+            .input_nonzero_conditions(&self.numerator, &self.mass_squared)
+            .map_err(RustRedEvaluationError::from_native)?
+            .into_iter()
+            .map(|original| {
+                let condition = map(original.as_view());
+                if super::combine_exact(condition.clone()).is_zero() {
+                    Err(RustRedEvaluationError::InvalidMatchedFamily {
+                        detail: format!(
+                            "original scalar pole {original} vanishes under d=4-2*epsilon"
+                        ),
+                    })
+                } else {
+                    Ok(condition)
+                }
+            })
+            .collect()
+    }
+
+    /// Keep the regulator in the native coefficient field before grouping.
+    /// Otherwise equivalent d- and epsilon-dependent weights become different
+    /// scalar-spectator channels and cannot cancel on the native frontier.
+    pub(super) fn numerator_in_family_dimension(
+        numerator: AtomView,
+        settings: &VakintSettings,
+        dimension: &Atom,
+    ) -> Atom {
+        numerator
+            .replace(Atom::var(vk_symbol!(settings.epsilon_symbol.as_str())).to_pattern())
+            .with(((Atom::num(4) - dimension) / Atom::num(2)).to_pattern())
+    }
+
     pub fn prepare(
         numerator: AtomView,
         matched: &ReplacementRules,
@@ -148,6 +187,27 @@ mod tests {
     use rustred::algebra::CoefficientContext;
     use rustred::family::{AffineDenominator, IntegralFamily};
     use rustred::scalar_numerator::FamilyScalarNumeratorService;
+
+    #[test]
+    fn regulator_weights_share_the_native_dimension_before_ordered_grouping() {
+        Vakint::initialize_vakint_symbols();
+        let settings = VakintSettings {
+            epsilon_symbol: "my_epsilon".into(),
+            ..Default::default()
+        };
+        let dimension = CoefficientContext::try_new(["d"])
+            .unwrap()
+            .parameter("d")
+            .unwrap()
+            .to_expression();
+        let input = vk_parse!("4-2*my_epsilon-rustred::d").unwrap();
+        let output = MatchedScalarInput::numerator_in_family_dimension(
+            input.as_view(),
+            &settings,
+            &dimension,
+        );
+        assert!(output.expand().is_zero());
+    }
 
     fn indexed_variants(scalar: &Atom) -> Vec<Atom> {
         let indexed = Vakint::convert_from_dot_notation(scalar.as_view());

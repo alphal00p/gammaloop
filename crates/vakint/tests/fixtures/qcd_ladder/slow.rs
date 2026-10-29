@@ -119,10 +119,13 @@ fn qcd_ladder_quadratic_transverse_projection_and_saved_application() -> fixture
                 master_mode: vakint::RustRedMasterMode::Retain,
             },
         )]),
+        integral_normalization_factor: crate::LoopNormalizationFactor::MSbar,
         form_exe_path: "/qcd-ladder-must-not-use-form".into(),
         use_dot_product_notation: true,
         ..Default::default()
     };
+    settings.rustred_application_options.reduction_strategy =
+        crate::RustRedReductionStrategy::Ordered;
     let vakint = Vakint::new()?.with_rustred_application(&mut settings, artifact)?;
     let application = vakint.saved_application(&settings)?;
     let mut expression = VakintExpression::try_from(prepared_input.input.as_view())?;

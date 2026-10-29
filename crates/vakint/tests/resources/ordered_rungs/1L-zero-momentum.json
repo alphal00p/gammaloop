@@ -1,0 +1,111 @@
+{
+  "schema": "vakint.ordered-rung-numerical-reference.v1",
+  "loop_count": 1,
+  "projection": "zero-momentum-metric",
+  "normalization": "MSbar",
+  "source_input_sha256": "12a19f0fe74a5a82f013dcb78f43cf590ad805a4a2d5a6fc44c64a6e26f3f626",
+  "evaluated_input_sha256": "76cb25a5fd5026652eab15dad6662f4cabf3778737665a5a16724d32b7c92593",
+  "dimension_binding": {
+    "scope": "exact fixture trace dimension; all public evaluations share this binding",
+    "source": "rustred::{}::d",
+    "target": "-2*vakint::{}::ε+4"
+  },
+  "data": {
+    "manifest_sha256": "a7b0311167b7e4260bfaa4d5cca635027f50c49ea31a8af3a8c0e70e83cbba6a",
+    "source": "vendored offline 1L–3L runtime registry",
+    "version": "v0.1.2"
+  },
+  "numerical_reference": {
+    "coefficients": [
+      {
+        "epsilon_power": -1,
+        "imaginary": "4.0528473456935108577551785283891055561743509868898619538243612757669248384894176476483709570248735045448897771274287832672291440394434031627734753932059970554475054108246435939770581238183178479945435366303607369930433844102986759843014657498083407698302051115878776152594147876383134741054754282090255149458959112913050538597338418e-1",
+        "imaginary_absolute_error": "6.9020173397089337582220620410734047977960640929777840770630028448161972770962224136847048489605448075541746527251654918900689581924482220280744339713470341375977831872689268252977051376530292737813021797135984347768553999213605535248990783558106990150153117506769259746940537466607787496108239515482916510876320241062523554816647189e-333",
+        "imaginary_error_exact_rational": "3/434655529295803471768752457074965369153118031018158255919526294312900189681357391590572546662641938953554504414523116271201239217383517759076977546969620119100344431981004490617051652613269783384538789136839141648409549944708158609707369153030498572184824311434246367523036288130211715938692732013989877070958884766361297687813292032",
+        "imaginary_error_quality": "Bounded",
+        "imaginary_exact_rational": "176159250819750514914973464479821530852459081265969548507621773873042430756676936837687934147490772826811969466086662164883375559909085672471863145092155112516280836925017614919164875792311459953002999059852863710914167422198607106617247340159769339959857178281878818315112639540111641493593989731934040548998128597908839868674455071/434655529295803471768752457074965369153118031018158255919526294312900189681357391590572546662641938953554504414523116271201239217383517759076977546969620119100344431981004490617051652613269783384538789136839141648409549944708158609707369153030498572184824311434246367523036288130211715938692732013989877070958884766361297687813292032",
+        "imaginary_exact_zero": false,
+        "imaginary_significant_digits": 331,
+        "real": "0",
+        "real_absolute_error": "0",
+        "real_error_exact_rational": "0",
+        "real_error_quality": "Bounded",
+        "real_exact_rational": "0",
+        "real_exact_zero": true,
+        "real_significant_digits": null
+      },
+      {
+        "epsilon_power": 0,
+        "imaginary": "-2.0264236728467554288775892641945527780871754934449309769121806378834624192447088238241854785124367522724448885637143916336145720197217015813867376966029985277237527054123217969885290619091589239972717683151803684965216922051493379921507328749041703849151025557939388076297073938191567370527377141045127574729479556456525269298669209e-1",
+        "imaginary_absolute_error": "2.8758405582120557325925258504472519990816933720740766987762511853400821987900926723686270204002270031475727719688189549541953992468534258450310141547279308906657429946953861772073771406887621974088759082139993478236897499672335639687079493149211245895897132294487191561225223944419911456711766464784548546198466767109384814506936329e-332",
+        "imaginary_error_exact_rational": "25/869311058591606943537504914149930738306236062036316511839052588625800379362714783181145093325283877907109008829046232542402478434767035518153955093939240238200688863962008981234103305226539566769077578273678283296819099889416317219414738306060997144369648622868492735046072576260423431877385464027979754141917769532722595375626584064",
+        "imaginary_error_quality": "Bounded",
+        "imaginary_exact_rational": "-88079625409875257457486732239910765426229540632984774253810886936521215378338468418843967073745386413405984733043331082441687779954542836235931572546077556258140418462508807459582437896155729976501499529926431855457083711099303553308623670079884669979928589140939409157556319770055820746796994865967020274499064298954419934337227535/434655529295803471768752457074965369153118031018158255919526294312900189681357391590572546662641938953554504414523116271201239217383517759076977546969620119100344431981004490617051652613269783384538789136839141648409549944708158609707369153030498572184824311434246367523036288130211715938692732013989877070958884766361297687813292032",
+        "imaginary_exact_zero": false,
+        "imaginary_significant_digits": 330,
+        "real": "0",
+        "real_absolute_error": "0",
+        "real_error_exact_rational": "0",
+        "real_error_quality": "Bounded",
+        "real_exact_rational": "0",
+        "real_exact_zero": true,
+        "real_significant_digits": null
+      }
+    ],
+    "coupling_definitions": "exact expansion through the authenticated native QCD model (GC_11=i*G)",
+    "epsilon_range": "all available poles through epsilon^0; remainder O(epsilon)",
+    "point": {
+      "UFO_G": 1,
+      "mUV": 1,
+      "mu_r_squared": 1
+    },
+    "scope": "separate Symbolic-mode public evaluation plus tracked substitution; excluded from retained comparison time",
+    "selection": {
+      "requested_decimal_precision": 300,
+      "selection": "all surviving dependencies arbitrary precision; explicit 300-digit comparison target, not a source maximum",
+      "surviving_dependencies": [
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "𝑒",
+          "source_sha256": "9fc618f12d8374d2dfccf75e3ce454989e34fc0b1a351675f543101e3622a0e5"
+        },
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "𝜋",
+          "source_sha256": "4c1b1e82246d0173024bf1ca8474de481e9aba48c1e2cc7643c38ae25b69b151"
+        },
+        {
+          "available_precision": "ArbitraryPrecision",
+          "data_version": "exact-definition",
+          "identity": "vakint::{}::EulerGamma",
+          "source_sha256": "5f3704513d63e509f4ec88f4fad0c5bd00a7ae3c5e5b1576b0fb17b8499adc33"
+        }
+      ]
+    },
+    "warnings": []
+  },
+  "independent_unit_point_formula": "i*(4/epsilon-2)/pi^2 + O(epsilon)",
+  "provenance": {
+    "collector_report_sha256": "ece5ed95c0d04477f3d29803469e30b1dbd8b0f50e5ec253ea842d9226b06b48",
+    "producer": {
+      "allowed_cpus": "164",
+      "build_profile": "dev",
+      "cargo_lock_sha256": "0a6c2b5c9db6db737ddc0e90de8cce106c04fca2413df5306a1ad925383b5a8b",
+      "commit": "469caa48ac4d0e9cb4e4bafb2a440807b49baf11",
+      "comparison_process": "two fresh Vakint instances in one process; use separate invocations for fresh-process timing",
+      "debug_assertions": true,
+      "executable_identity_scope": "release: streamed once; DEV: use the supervising original-process launch receipt",
+      "executable_sha256": null,
+      "native_runtime_arities": "1,3,6,10,15",
+      "profile_contract": "caller must build --release with no profile overrides; debug_assertions is not compiler-profile introspection"
+    },
+    "independent_validation_receipt": "one-loop-msbar-scientific-gate.json",
+    "independent_validation_receipt_sha256": "2572a46aa8446d9b8b53ece269e4a0e288fbe282f60615b87dccc1114ba1e272",
+    "method": "independent exact Clifford/projector and tadpole rational identities; independent stdlib Fraction Machin-pi alternating-series interval; no Symbolica or RustRed numerical oracle",
+    "retained_dfs_ordered_equality": "verified after the positive-real exp(±EulerGamma) power identity; raw retained payloads remain unchanged",
+    "comparison_role": "immutable MSbar scientific reference at the unit physical point; not a performance measurement; source snapshot records provenance and is not a required data-version match"
+  },
+  "minimum_achieved_decimal_precision": 300
+}

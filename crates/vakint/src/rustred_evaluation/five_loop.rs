@@ -33,7 +33,7 @@ use sha2::{Digest, Sha256};
 use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
 
 use super::{
-    RustRedEvaluationError, factor_projection,
+    MatchedContribution, RustRedEvaluationError, factor_projection,
     factor_provider::ShippedFactorProvider,
     numerator::{MatchedScalarInput, ScalarNumeratorForm},
 };
@@ -45,7 +45,6 @@ use crate::{
 
 static PARENTS: LazyLock<Vec<ParentDescriptor>> = LazyLock::new(descriptors);
 
-mod mass_channels;
 #[path = "five_loop/witness_cache.rs"]
 mod witness_cache;
 pub use witness_cache::RustRedWitnessCacheStatistics;
@@ -124,6 +123,7 @@ pub(crate) struct SavedApplication {
     products: SavedApplicationProductStatistics,
     product_charts: SavedApplicationProductChartStatistics,
     product_reducer: Mutex<VacuumProductReducer<ShippedFactorProvider>>,
+    data: Arc<super::data::RustRedData>,
     witnesses: Mutex<WitnessCache>,
 }
 
@@ -411,7 +411,12 @@ impl Vakint {
         if let Some(root) = root
             && !data.matches_directory(&root, 5)?
         {
-            self.load_external_data(root, 5)?;
+            self.load_external_data_with_prepared_caches(
+                root,
+                5,
+                configured.rustred_application_options.reduction_strategy
+                    == crate::RustRedReductionStrategy::DepthFirst,
+            )?;
         }
         self.saved_application(&configured)?;
         *settings = configured;
@@ -436,6 +441,9 @@ impl Vakint {
             .ok_or(RustRedEvaluationError::SavedApplicationUnavailable)?;
         let path = path.canonicalize().map_err(failure)?;
         let mut options = settings.rustred_application_options;
+        // Strategy changes do not change immutable tables or the DFS cache
+        // namespace. Select the request engine under the prepared-owner lock.
+        options.reduction_strategy = crate::RustRedReductionStrategy::DepthFirst;
         options.unresolved_policy = rustred::solver::UnresolvedPolicy::Preserve;
         let mut loaded = self.rustred_application.lock().map_err(failure)?;
         if loaded.as_ref().is_none_or(|current| {
@@ -685,6 +693,11 @@ impl Vakint {
         progress: Option<&super::monitor::CallerProgress>,
     ) -> Result<RustRedSymbolicEvaluation, VakintError> {
         settings.with_resource_budget(|| {
+            let ordered = settings.rustred_application_options.reduction_strategy
+                == crate::RustRedReductionStrategy::Ordered;
+            if ordered && let Some(progress) = progress {
+                progress.ordered_batch(0, 1, "5L / Retain");
+            }
             let setup_started = std::time::Instant::now();
             MonitorContext::native_phase(observation.as_deref_mut(), "saved_application_preparation", Some(input));
             self.validate_settings(settings)?;
@@ -710,6 +723,7 @@ impl Vakint {
             let mut value = Atom::Zero;
             let mut conditions = BTreeSet::new();
             let mut families = BTreeMap::new();
+            let mut ordered_contributions = Vec::new();
             let split_started = std::time::Instant::now();
             let expression = Atom::from(expression);
             MonitorContext::native_phase(observation.as_deref_mut(), "scalar_input", Some(expression.as_view()));
@@ -730,6 +744,15 @@ impl Vakint {
                 term.apply_scalar_numerator_replacement_rules(&matched, settings)?;
                 log::debug!(target: "vakint::saved_application", "phase=numerator_replacement elapsed_seconds={:.6}", replacement_started.elapsed().as_secs_f64());
                 log::debug!(target: "vakint::five_loop_match", "phase=symbolic_candidate_numerator numerator={}", term.numerator);
+                if settings.rustred_application_options.reduction_strategy
+                    == crate::RustRedReductionStrategy::Ordered
+                {
+                    ordered_contributions.push(MatchedContribution {
+                        numerator: term.numerator,
+                        matched,
+                    });
+                    continue;
+                }
                 // This parent span includes callee cleanup. Its recorded
                 // subphases must not be added to it as disjoint durations.
                 let detailed_started = std::time::Instant::now();
@@ -743,6 +766,22 @@ impl Vakint {
                 conditions.extend(result.nonzero_conditions);
                 families.extend(result.families);
                 log::debug!(target: "vakint::saved_application", "phase=caller_result_merge elapsed_seconds={:.6}", merge_started.elapsed().as_secs_f64());
+            }
+            if !ordered_contributions.is_empty() {
+                let result = application.evaluate_ordered_batch(
+                    &tensor_settings,
+                    &ordered_contributions,
+                    observation.as_deref_mut(),
+                    progress,
+                )?;
+                value += result.value;
+                conditions.extend(result.nonzero_conditions);
+                families.extend(result.families);
+            } else if ordered && let Some(progress) = progress {
+                progress.cohorts(0, 0);
+            }
+            if ordered && let Some(progress) = progress {
+                progress.ordered_batch(1, 1, "5L / Retain");
             }
             // The catalogue's own exact-combination and classification spans
             // are children of this complete finalization call.
@@ -861,7 +900,7 @@ impl SavedApplication {
             .ok_or_else(|| failure("saved application does not expose its authenticated family"))?;
         let data_version = data.masters.version.clone();
         let product_reducer = VacuumProductReducer::try_new(
-            ShippedFactorProvider::with_data(data),
+            ShippedFactorProvider::with_data(Arc::clone(&data)),
             anchor,
             product_limits,
         )
@@ -875,6 +914,7 @@ impl SavedApplication {
             products,
             product_charts,
             product_reducer: Mutex::new(product_reducer),
+            data,
             witnesses: Mutex::new(WitnessCache::default()),
         })
     }
@@ -936,26 +976,45 @@ impl SavedApplication {
         settings: &VakintSettings,
         numerator: AtomView,
         matched: &ReplacementRules,
+        observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
+        progress: Option<&super::monitor::CallerProgress>,
+    ) -> Result<RustRedSymbolicEvaluation, VakintError> {
+        self.evaluate_matched_batch(
+            settings,
+            &[MatchedContribution {
+                numerator: numerator.to_owned(),
+                matched: matched.clone(),
+            }],
+            observation,
+            progress,
+        )
+    }
+
+    pub(super) fn evaluate_ordered_batch(
+        &self,
+        settings: &VakintSettings,
+        contributions: &[MatchedContribution],
+        observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
+        progress: Option<&super::monitor::CallerProgress>,
+    ) -> Result<RustRedSymbolicEvaluation, VakintError> {
+        self.evaluate_matched_batch(settings, contributions, observation, progress)
+    }
+
+    fn evaluate_matched_batch(
+        &self,
+        settings: &VakintSettings,
+        contributions: &[MatchedContribution],
         mut observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
         progress: Option<&super::monitor::CallerProgress>,
     ) -> Result<RustRedSymbolicEvaluation, VakintError> {
         MonitorContext::native_phase(observation.as_deref_mut(), "scalar_lowering", None);
-        let lowering_started = std::time::Instant::now();
-        let descriptor = select(&matched.canonical_topology)?;
-        let input = MatchedScalarInput::prepare(
-            numerator,
-            matched,
-            &descriptor.momenta,
-            descriptor.physical_slots,
-            15,
-            settings,
-            ScalarNumeratorForm::PreserveProducts,
-        )?;
-        log::debug!(target: "vakint::five_loop_match", "phase=symbolic_parent_numerator numerator={}", input.numerator);
         let mut application = self.prepared.lock().map_err(failure)?;
+        application.set_reduction_strategy(settings.rustred_application_options.reduction_strategy);
         let family = application.family();
         let loop_count = family.loop_count();
         let dimension = family.dimension().to_expression();
+        let epsilon = Atom::var(vk_symbol!(settings.epsilon_symbol.as_str()));
+        let physical_dimension = Atom::num(4) - Atom::num(2) * &epsilon;
         let scalar = FamilyScalarNumeratorService::try_new(
             family,
             S.dot,
@@ -963,72 +1022,142 @@ impl SavedApplication {
             settings.rustred_scalar_numerator_limits,
         )
         .map_err(native_failure)?;
-        let lowering = scalar
-            .lower_weighted(&input.numerator, &input.target, &input.mass_squared)
-            .map_err(native_failure)?;
-        log::debug!(target: "vakint::saved_application", "phase=parent_transport_and_scalar_lowering elapsed_seconds={:.6}", lowering_started.elapsed().as_secs_f64());
-        log::debug!(target: "vakint::saved_application",
-            "phase=scalar_lowered target={:?} lowered_count={} lowered_keys_prefix={:?}",
-            input.target.powers(), lowering.terms().len(),
-            lowering.terms().iter().take(8).map(|term| term.integral().powers()).collect::<Vec<_>>());
-        let batching_started = std::time::Instant::now();
-        MonitorContext::native_phase(
-            observation.as_deref_mut(),
-            "coverage_mass_batching",
-            Some(input.numerator.as_view()),
-        );
-        let mut coverage_progress = progress.map(|owner| {
+        let mut batches = BTreeMap::<(Atom, Atom, i64), Vec<(IntegralKey, Coefficient)>>::new();
+        let mut uncovered = BTreeSet::new();
+        let mut conditions = BTreeSet::new();
+        let mut mass_exponent_origins = BTreeMap::<Atom, i64>::new();
+        let mut symbolic_masses = BTreeSet::new();
+        let mut input_progress = progress.map(|owner| {
             owner.phase(
-                "coverage_mass_batching",
-                lowering.terms().len(),
-                "lowered keys checked",
+                "matched_input_batching",
+                contributions.len(),
+                "matched contributions lowered",
             )
         });
-        let mut batches = BTreeMap::<(Atom, i64), Vec<(IntegralKey, Coefficient)>>::new();
-        let mut uncovered = BTreeSet::new();
-        let mut mass_exponent_origin = None;
-        for (index, term) in lowering.terms().iter().enumerate() {
-            if !application
-                .routed_entry_is_admitted(term.integral())
-                .map_err(native_failure)?
+        for (input_index, contribution) in contributions.iter().enumerate() {
+            let lowering_started = std::time::Instant::now();
+            let descriptor = select(&contribution.matched.canonical_topology)?;
+            let mut input = MatchedScalarInput::prepare(
+                contribution.numerator.as_view(),
+                &contribution.matched,
+                &descriptor.momenta,
+                descriptor.physical_slots,
+                15,
+                settings,
+                ScalarNumeratorForm::PreserveProducts,
+            )?;
+            if settings.rustred_application_options.reduction_strategy
+                == crate::RustRedReductionStrategy::Ordered
             {
-                uncovered.insert(term.integral().clone());
+                // Preserve the received rational domain before identifying
+                // epsilon with (4-d)/2 can remove a denominator algebraically.
+                conditions.extend(input.input_conditions_after_mapping(&scalar, |condition| {
+                    condition
+                        .replace(dimension.to_pattern())
+                        .with(physical_dimension.to_pattern())
+                })?);
+                input.numerator = MatchedScalarInput::numerator_in_family_dimension(
+                    input.numerator.as_view(),
+                    settings,
+                    &dimension,
+                );
             }
-            // Unit-mass output masters include their full integration measure.
-            // RustRed has already combined numerator mass factors and scalar
-            // weights before admission. Each remaining key scales as
-            // (m²)^(Ld/2-sum(a)); no expanded zero endpoint is admitted alone.
-            let exponent = term
-                .integral()
-                .powers()
-                .iter()
-                .try_fold(0i128, |sum, power| sum.checked_sub(i128::from(*power)))
-                .ok_or_else(|| failure("saved application mass exponent overflow"))?;
-            let exponent = i64::try_from(exponent)
-                .map_err(|_| RustRedEvaluationError::MassExponentOverflow { exponent })?;
-            let anchor = *mass_exponent_origin.get_or_insert(exponent);
-            let channel = Self::mass_channel(
-                term.scalar_spectator(),
-                &input.mass_squared,
-                exponent,
-                anchor,
-                settings
-                    .rustred_scalar_numerator_limits
-                    .diagnostics_enabled
-                    .then_some(
-                        settings
-                            .rustred_scalar_numerator_limits
-                            .max_scalar_product_degree,
-                    ),
+            let lowering = scalar
+                .lower_weighted(&input.numerator, &input.target, &input.mass_squared)
+                .map_err(native_failure)?;
+            log::debug!(target: "vakint::saved_application",
+                "phase=parent_transport_and_scalar_lowering elapsed_seconds={:.6} lowered_count={}",
+                lowering_started.elapsed().as_secs_f64(), lowering.terms().len());
+            MonitorContext::native_phase(
+                observation.as_deref_mut(),
+                "coverage_mass_batching",
+                Some(input.numerator.as_view()),
             );
-            batches
-                .entry(channel)
-                .or_default()
-                .push((term.integral().clone(), term.coefficient().clone()));
-            if let Some(progress) = &mut coverage_progress {
-                progress.completed(index + 1);
+            let batching_started = std::time::Instant::now();
+            let mut coverage_progress = progress.map(|owner| {
+                owner.phase(
+                    "coverage_mass_batching",
+                    lowering.terms().len(),
+                    "lowered keys checked",
+                )
+            });
+            for (index, term) in lowering.terms().iter().enumerate() {
+                if !application
+                    .routed_entry_is_admitted(term.integral())
+                    .map_err(native_failure)?
+                {
+                    uncovered.insert(term.integral().clone());
+                }
+                let exponent = term
+                    .integral()
+                    .powers()
+                    .iter()
+                    .try_fold(0i128, |sum, power| sum.checked_sub(i128::from(*power)))
+                    .ok_or_else(|| failure("saved application mass exponent overflow"))?;
+                let exponent = i64::try_from(exponent)
+                    .map_err(|_| RustRedEvaluationError::MassExponentOverflow { exponent })?;
+                let anchor = *mass_exponent_origins
+                    .entry(input.mass_squared.clone())
+                    .or_insert(exponent);
+                let (spectator, exponent) = MatchedScalarInput::mass_channel(
+                    term.scalar_spectator(),
+                    &input.mass_squared,
+                    exponent,
+                    anchor,
+                    settings
+                        .rustred_scalar_numerator_limits
+                        .diagnostics_enabled
+                        .then_some(
+                            settings
+                                .rustred_scalar_numerator_limits
+                                .max_scalar_product_degree,
+                        ),
+                );
+                let (spectator, coefficient) =
+                    if settings.rustred_application_options.reduction_strategy
+                        == crate::RustRedReductionStrategy::Ordered
+                    {
+                        MatchedScalarInput::channel_coefficient(
+                            spectator,
+                            term.coefficient(),
+                            family.coefficient_context(),
+                            settings
+                                .rustred_application_options
+                                .reduction_limits
+                                .exact_algebra,
+                        )?
+                    } else {
+                        (spectator, term.coefficient().clone())
+                    };
+                batches
+                    .entry((input.mass_squared.clone(), spectator, exponent))
+                    .or_default()
+                    .push((term.integral().clone(), coefficient));
+                if let Some(progress) = &mut coverage_progress {
+                    progress.completed(index + 1);
+                }
+            }
+            log::debug!(target: "vakint::saved_application", "phase=coverage_mass_batching elapsed_seconds={:.6}", batching_started.elapsed().as_secs_f64());
+            let lowering_guards_started = std::time::Instant::now();
+            MonitorContext::native_phase(
+                observation.as_deref_mut(),
+                "lowering_guard_materialization",
+                None,
+            );
+            conditions.extend(lowering.nonzero_conditions().iter().map(|condition| {
+                condition
+                    .replace(dimension.to_pattern())
+                    .with(physical_dimension.to_pattern())
+            }));
+            log::debug!(target: "vakint::saved_application", "phase=lowering_guard_materialization elapsed_seconds={:.6}", lowering_guards_started.elapsed().as_secs_f64());
+            if !matches!(input.mass_squared.as_view(), AtomView::Num(_)) {
+                symbolic_masses.insert(input.mass_squared);
+            }
+            if let Some(progress) = &mut input_progress {
+                progress.completed(input_index + 1);
             }
         }
+        drop(scalar);
         if let Some(first) = uncovered.first() {
             log::warn!(
                 "RustRed 5L: {} scalar key(s) produced by numerator lowering are outside the recorded shifted-index entry predicates (data {}); reduction will be attempted, but complete reduction to the known masters is not guaranteed. First common-family powers: {:?}",
@@ -1038,31 +1167,41 @@ impl SavedApplication {
             );
             log::debug!(target: "vakint::five_loop_match", "phase=outside_coverage data={} keys={uncovered:?}; index convention: product_i D_i^(-a_i), D_i=q_i^2-M^2; negative a_i encode numerator powers, not the original physical dot-product rank", self.data_version);
         }
-        let epsilon = Atom::var(vk_symbol!(settings.epsilon_symbol.as_str()));
-        let physical_dimension = Atom::num(4) - Atom::num(2) * &epsilon;
         let mut value = Atom::Zero;
-        log::debug!(target: "vakint::saved_application", "phase=coverage_mass_batching elapsed_seconds={:.6}", batching_started.elapsed().as_secs_f64());
-        // Caller-owned scalar and mass poles remain conditions even when their
-        // weighted integral cancels. They are separate from saved-program
-        // guards, whose authenticated coefficient context is d-only.
-        let lowering_guards_started = std::time::Instant::now();
-        MonitorContext::native_phase(
-            observation.as_deref_mut(),
-            "lowering_guard_materialization",
-            None,
-        );
-        let mut conditions = lowering
-            .nonzero_conditions()
-            .iter()
-            .map(|condition| {
-                condition
-                    .replace(dimension.to_pattern())
-                    .with(physical_dimension.to_pattern())
-            })
-            .collect::<BTreeSet<_>>();
-        log::debug!(target: "vakint::saved_application", "phase=lowering_guard_materialization elapsed_seconds={:.6}", lowering_guards_started.elapsed().as_secs_f64());
         let mut families = BTreeMap::new();
-        for ((spectator, exponent), terms) in batches {
+        // Factorization is an existing complete checked action. Its internal
+        // memo belongs to this ordered request, never the DFS session.
+        let mut ordered_products = if settings.rustred_application_options.reduction_strategy
+            == crate::RustRedReductionStrategy::Ordered
+        {
+            let anchor = application
+                .output_family_shared(application.family().fingerprint())
+                .ok_or_else(|| failure("saved application has no output family"))?;
+            Some(
+                VacuumProductReducer::try_new(
+                    ShippedFactorProvider::with_data(Arc::clone(&self.data)),
+                    anchor,
+                    settings.rustred_product_limits,
+                )
+                .map_err(native_failure)?,
+            )
+        } else {
+            None
+        };
+        let cohort_total = batches.len();
+        let cohort_progress = progress.filter(|_| {
+            settings.rustred_application_options.reduction_strategy
+                == crate::RustRedReductionStrategy::Ordered
+        });
+        for (cohort_index, ((mass_squared, spectator, exponent), terms)) in
+            batches.into_iter().enumerate()
+        {
+            if let Some(progress) = cohort_progress {
+                progress.cohorts(cohort_index, cohort_total);
+            }
+            let spectator = spectator
+                .replace(dimension.to_pattern())
+                .with(physical_dimension.to_pattern());
             let mut cleanup = RetainedBatchCleanup::default();
             let application_started = std::time::Instant::now();
             MonitorContext::native_phase(
@@ -1158,11 +1297,14 @@ impl SavedApplication {
                 "lower_factor_normalization_unobserved",
                 None,
             );
-            let normalized = self
-                .product_reducer
-                .lock()
-                .map_err(failure)?
-                .reduce_products(products, product_conditions);
+            let normalized = match ordered_products.as_mut() {
+                Some(reducer) => reducer.reduce_products(products, product_conditions),
+                None => self
+                    .product_reducer
+                    .lock()
+                    .map_err(failure)?
+                    .reduce_products(products, product_conditions),
+            };
             let normalized = match normalized {
                 Ok(normalized) => normalized,
                 Err(rustred::reduction::terminal_normalization::VacuumProductReductionError::UnresolvedFactor { family, target }) => {
@@ -1184,7 +1326,7 @@ impl SavedApplication {
                         conditions.insert(condition.replace(dimension.to_pattern()).with(physical_dimension.to_pattern()));
                     }
                     let mass_power = Atom::num((loop_count as i64, 2)) * &physical_dimension + Atom::num(exponent);
-                    value += original * spectator * input.mass_squared.clone().pow(mass_power);
+                    value += original * spectator * mass_squared.clone().pow(mass_power);
                     log::debug!(target: "vakint::saved_application", "phase=unprojected_terminal_materialization elapsed_seconds={:.6}", fallback_started.elapsed().as_secs_f64());
                     MonitorContext::native_phase(observation.as_deref_mut(), "retained_batch_cleanup", None);
                     cleanup.arm();
@@ -1275,7 +1417,7 @@ impl SavedApplication {
             );
             let mass_power =
                 Atom::num((loop_count as i64, 2)) * &physical_dimension + Atom::num(exponent);
-            value += contribution * spectator * input.mass_squared.clone().pow(mass_power);
+            value += contribution * spectator * mass_squared.clone().pow(mass_power);
             log::debug!(target: "vakint::saved_application", "phase=retained_batch_mass_assembly elapsed_seconds={:.6}", mass_started.elapsed().as_secs_f64());
             MonitorContext::native_phase(
                 observation.as_deref_mut(),
@@ -1284,9 +1426,10 @@ impl SavedApplication {
             );
             cleanup.arm();
         }
-        if !matches!(input.mass_squared.as_view(), AtomView::Num(_)) {
-            conditions.insert(input.mass_squared);
+        if let Some(progress) = cohort_progress {
+            progress.cohorts(cohort_total, cohort_total);
         }
+        conditions.extend(symbolic_masses);
         let normalization_started = std::time::Instant::now();
         MonitorContext::native_phase(
             observation.as_deref_mut(),

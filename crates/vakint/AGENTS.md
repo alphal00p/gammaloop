@@ -75,3 +75,13 @@ it across fresh uncached/cached processes. Keep native preparation timing separa
 from repeated reduction timing. `--fresh-prepare --prepare-only` in a new work
 directory validates generation independently. See the maintenance contract for
 slow-test environment controls and provenance requirements.
+
+For ordered/DFS comparisons, use `examples/ordered_reduction_rungs.rs` and the
+append-only `docs/benchmark/merge_ordered_rung_results.py` adapter described in
+the same maintenance contract. Keep persistent caches off for both engines and
+normal DFS request memoization on. Same-process `--engine both` establishes
+functional parity; fresh-process release measurements need the bound protocol
+receipt before reporting a speed ratio. All new rung cases use MSbar; preserve
+earlier pySecDec records as historical cohorts. Preserve unavailable phase times as null
+and all earlier cohorts unchanged. See `docs/ordered_reduction.typ` for phase and
+grouping-counter semantics.

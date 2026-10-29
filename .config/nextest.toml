@@ -21,6 +21,14 @@ status-level = "fail"
 final-status-level = "fail"
 
 [[profile.default.overrides]]
+# Enable physical rung comparisons only after the complete 1L–4L case qualifies
+# below fifteen minutes. Ignored five-loop controls use separate supervision.
+filter = "binary(ordered_reduction_rungs) and not test(/^five_loop_/)"
+slow-timeout = { period = "60s", terminate-after = 15 }
+retries = 0
+test-group = "ordered-rung-comparisons"
+
+[[profile.default.overrides]]
 # Five-loop closure pairs are selected below 240s and must finish within five minutes.
 filter = "binary(rustred_five_loop_closure_tests) or test(/^rustred_evaluation::five_loop::partial_acceptance::/)"
 slow-timeout = { period = "60s", terminate-after = 5 }
@@ -77,6 +85,12 @@ final-status-level = "fail"
 path = "junit.xml"
 
 [[profile.ci.overrides]]
+filter = "binary(ordered_reduction_rungs) and not test(/^five_loop_/)"
+slow-timeout = { period = "60s", terminate-after = 15 }
+retries = 0
+test-group = "ordered-rung-comparisons"
+
+[[profile.ci.overrides]]
 filter = "binary(rustred_five_loop_closure_tests) or test(/^rustred_evaluation::five_loop::partial_acceptance::/)"
 slow-timeout = { period = "60s", terminate-after = 5 }
 retries = 0
@@ -88,6 +102,13 @@ default-filter = "not test(/(^|::)(slow|failing)::/) or test(/^rustred_evaluatio
 
 [profile.ci_gammaloop.junit]
 path = "junit.xml"
+
+[[profile.ci_gammaloop.overrides]]
+# Retain shared Vakint license serialization while allowing qualified rung cases.
+filter = "binary(ordered_reduction_rungs) and not test(/^five_loop_/)"
+slow-timeout = { period = "60s", terminate-after = 15 }
+retries = 0
+test-group = "symbolica-singleton"
 
 [[profile.ci_gammaloop.overrides]]
 filter = "binary(rustred_five_loop_closure_tests) or test(/^rustred_evaluation::five_loop::partial_acceptance::/)"
@@ -139,6 +160,8 @@ test-group = "five-loop-reduction"
 [test-groups]
 # Keep five-loop native programs from competing for memory and their time budget.
 five-loop-reduction = { max-threads = 1 }
+# Keep qualified physical engine comparisons from competing with each other.
+ordered-rung-comparisons = { max-threads = 1 }
 # Group integration tests that might be slow - allow some parallelism
 integration = { max-threads = 2 }
 # Group tests that use a lot of memory - limit but don't serialize completely

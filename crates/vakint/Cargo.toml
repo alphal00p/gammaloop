@@ -93,3 +93,7 @@ required-features = ["feynkit-ingress"]
 [[example]]
 name = "five_loop_qcd_ladder"
 required-features = ["feynkit-ingress"]
+
+[[example]]
+name = "ordered_reduction_rungs"
+required-features = ["feynkit-ingress"]

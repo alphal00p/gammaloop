@@ -380,7 +380,8 @@ impl Vakint {
         .map_err(Into::into)
     }
 
-    /// Explicitly attach a trusted-generated read-only cache bundle. Existing
+    /// Explicitly attach a trusted-generated read-only DFS cache bundle. Ordered
+    /// requests never consume or populate this separate cache namespace. Existing
     /// configured RAM/native limits are preserved unless options override them.
     /// Misses may fill native RAM; ordinary evaluation never modifies the pack.
     pub fn load_cache(

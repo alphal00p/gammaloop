@@ -1198,3 +1198,205 @@ Refresh and validation contract: #raw("maintenance.typ").]
   All historical records and raw phase arrays remain in #raw("data/results.json").
   The 640 declared five-loop masters remain uncomputed; no master values were evaluated.]
 }
+
+// Ordered-engine records are an independent cohort. The adapter never changes
+// the historical four-loop FORM/cache measurements above.
+#let ordered-id = report.at("selected_ordered_rung_run", default: none)
+#if ordered-id != none {
+  let run = report.ordered_rung_runs.at(ordered-id)
+  assert(run.schema == "vakint.ordered-rung-report.v1")
+  assert(run.persistent_caches == false)
+  let rows = run.summary
+  let label(row) = [*#(str(row.loop_count) + "L")* · #if row.projection == "zero-momentum-metric" [zero momentum] else [quadratic]]
+  let measured-cell(row, engine) = {
+    let metric = row.metrics.at(engine).public_retained_seconds
+    let ratio = row.ordered_over_dfs
+    table.cell(fill: if engine == "ordered" and ratio != none and ratio > 0 { ratio-fill(ratio) } else { pale }, {
+      text(15pt, weight: "bold")[#timing(metric.median_seconds) s]
+      linebreak()
+      text(8pt)[#timing(metric.min_seconds)–#timing(metric.max_seconds) s · n = #row.sample_count]
+      if engine == "ordered" and ratio != none {
+        linebreak()
+        text(10pt, weight: "bold")[×#multiplier(ratio)]
+      }
+    })
+  }
+  let peak(values) = {
+    let known = values.filter(value => value != none)
+    if known.len() == 0 { [—] } else { [#fixed(calc.max(..known) / calc.pow(1024, 3), 2) GiB] }
+  }
+  let last-progress(row) = {
+    let samples = row.metrics.ordered.ordered_progress.filter(value => value != none)
+    if samples.len() == 0 { none } else { samples.last() }
+  }
+  let progress(row) = {
+    let sample = last-progress(row)
+    if sample == none { [—] } else { [#sample.completed_phases / #sample.total_phases] }
+  }
+  if rows.len() > 0 {
+  pagebreak()
+  set text(fill: black, size: 10pt)
+  align(center)[
+    #text(22pt, weight: "bold", fill: navy)[Ordered reduction · physical rung fixtures]
+    #v(0.2em)
+    #text(11.5pt, fill: luma(80))[Exact engine parity · persistent caches disabled]
+  ]
+  v(0.5em)
+  block(fill: pale, inset: 10pt, radius: 4pt, width: 100%)[
+    *Reading guide.* One loop has no vertical gluon rungs. Both engines receive
+    the same authenticated scalar input and retain masters in MSbar. Times cover the
+    *public retained call*: routing, scalar lowering and finalization are
+    included; data loading and later numerical-reference evaluation are excluded.
+    DFS retains normal request memoization. Qualified multipliers are
+    _ordered ÷ DFS_: green means faster. Without a bound fresh-process release
+    protocol, observations remain diagnostic and have no ratio.
+  ]
+  v(0.4em)
+  {
+    set text(font: "DejaVu Sans", size: 9pt)
+    set par(justify: false)
+    table(
+      columns: (1.1fr, 1fr, 1fr, 0.85fr),
+      inset: (x: 9pt, y: 12pt), stroke: 0.4pt + luma(225),
+      align: (x, y) => if x == 0 { left + horizon } else { center + horizon },
+      table.header(..([Case], [Depth first], [Ordered], [Validation]).map(body =>
+        table.cell(fill: navy, text(fill: white, weight: "bold", body)))),
+      ..for row in rows { (
+        label(row), measured-cell(row, "dfs"), measured-cell(row, "ordered"),
+        [*Exact ✓* #linebreak() #if row.numerical_enclosures_agree == true [Numerical ✓] else [Numerical —]
+          #linebreak() #text(7.5pt)[#if row.performance_eligible [Fresh release] else [Diagnostic cohort]]],
+      ) },
+    )
+  }
+  v(0.5em)
+  text(12pt, weight: "bold", fill: navy)[Collector and memory scope]
+  v(0.2em)
+  table(
+    columns: (1.1fr, 1.2fr, 1.2fr, 0.65fr),
+    inset: 7pt, stroke: 0.4pt + luma(225),
+    table.header(..([Case], [Collector s · DFS / ordered], [Peak RSS · DFS / ordered], [Phases]).map(body =>
+      table.cell(fill: navy, text(fill: white, weight: "bold", size: 8.5pt, body)))),
+    ..for row in rows { (
+      label(row),
+      [#timing(row.metrics.dfs.collector_seconds.median_seconds) / #timing(row.metrics.ordered.collector_seconds.median_seconds)],
+      [#peak(row.metrics.dfs.peak_rss_bytes) / #peak(row.metrics.ordered.peak_rss_bytes)],
+      progress(row),
+    ) },
+  )
+  v(0.2em)
+  text(8pt)[Collector time begins after scalar-input preparation and includes
+  numerical-reference generation when requested. RSS is the whole-process
+  high-water mark, including earlier stages; a same-process pair shares that
+  history. Phases refer to the last recorded native request, not all public-call
+  channels. A dash means unavailable; isolated pure-IBP, routing/lowering and
+  terminal-substitution timings remain null. No zero duration is imputed.]
+  v(0.35em)
+  text(12pt, weight: "bold", fill: navy)[Ordered frontier and grouping]
+  v(0.2em)
+  table(
+    columns: (1.1fr, 1fr, 1fr, 1fr),
+    inset: 7pt, stroke: 0.4pt + luma(225),
+    table.header(..([Case], [Input / peak / final keys], [Processed / emitted], [Merges / cancellations]).map(body =>
+      table.cell(fill: navy, text(fill: white, weight: "bold", size: 8.5pt, body)))),
+    ..for row in rows {
+      let sample = last-progress(row)
+      (
+        label(row),
+        if sample == none { [—] } else { [#sample.input_keys / #sample.peak_frontier_keys / #sample.frontier_keys] },
+        if sample == none { [—] } else { [#sample.processed_keys / #sample.emitted_terms] },
+        if sample == none { [—] } else { [#sample.merged_terms / #sample.cancelled_terms] },
+      )
+    },
+  )
+  v(0.2em)
+  text(8pt)[Counters describe the last recorded native request of the last sample,
+  not a public-call sum. Keys are pending operational identities; emitted terms
+  are pre-global-grouping events. Merge/cancellation counts exclude input and
+  intra-rule grouping and do not measure CPU time saved. A dash is unmeasured.]
+  v(0.35em)
+  text(9pt)[*Correctness.* Exact retained expressions agree. Numerical checks,
+  where present, compare tracked component errors at unit UV mass,
+  renormalization scale and coupling. The source-selected requested precision,
+  achieved digits, warnings, data identity and payload hashes remain in each
+  raw record. Error estimates are mathematical bounds only when their recorded
+  quality is Bounded. Five-loop catalogue masters are uncomputed.]
+  v(0.2em)
+  {
+    let producer = rows.first().producer
+    let sources = if run.protocol == none { none } else { run.protocol.raw.sources }
+    text(8pt)[Source: #if producer.commit == none [—] else { raw(producer.commit.slice(0, 12)) };
+    Cargo lock: #raw(producer.cargo_lock_sha256.slice(0, 12)).
+    Native / kernel: #if sources == none [— / —] else [#raw(sources.native_revision.slice(0, 12)) / #raw(sources.kernel_revision.slice(0, 12))].
+    Data: #rows.map(row => row.data.at("version", default: "vendored registry")).dedup().join(", ").
+    Full source-tree and manifest identities are preserved in the raw records.]
+  }
+  v(0.2em)
+  text(8pt, fill: luma(100))[Run: #raw(ordered-id). Source/data/protocol and every
+  raw sample: #raw("data/results.json") → #raw("ordered_rung_runs").
+  Refresh: #raw("merge_ordered_rung_results.py"); details in
+  #link("maintenance.typ")[the maintenance contract] and
+  #link("../ordered_reduction.typ")[the ordered-engine guide].
+  Historical FORM, DFS and cache cohorts above remain unchanged.]
+  }
+  for entry in run.at("historical_comparisons", default: ()) {
+    assert(entry.performance_eligible == false)
+    assert(entry.ordered_over_dfs == none)
+    let old = entry.historical
+    let current = entry.ordered.report.raw
+    pagebreak()
+    set text(fill: black, size: 10pt)
+    align(center)[
+      #text(22pt, weight: "bold", fill: navy)[Five-loop ordered reduction]
+      #v(0.2em)
+      #text(11.5pt, fill: luma(80))[Zero momentum · historical reference in a separate cohort]
+    ]
+    v(0.5em)
+    block(fill: pale, inset: 10pt, radius: 4pt, width: 100%)[
+      The new MSbar retained expression agrees exactly with the converted
+      historical result for the authenticated scalar input. The earlier
+      pySecDec observation used optimized DFS with
+      running-cache capture enabled; the new ordered observation attaches no
+      reduction cache. These are separate source/execution cohorts, each with
+      one observation. *No matched or causal speed ratio is reported.*
+    ]
+    v(0.45em)
+    table(
+      columns: (1.1fr, 1fr, 1fr),
+      inset: (x: 10pt, y: 16pt), stroke: 0.4pt + luma(225),
+      align: center + horizon,
+      table.header(..([Historical DFS · pySecDec], [Ordered · MSbar], [Validation]).map(body =>
+        table.cell(fill: navy, text(fill: white, weight: "bold", body)))),
+      table.cell(fill: pale, [#text(18pt, weight: "bold")[#timing(old.public_retained_seconds) s]
+        #linebreak() n = 1 · historical capture]),
+      table.cell(fill: pale, [#text(18pt, weight: "bold")[#timing(entry.ordered.public_retained_seconds) s]
+        #linebreak() n = 1 · ordered cache off]),
+      [*Converted exact ✓* #linebreak() Ratio — #linebreak() Numerical —],
+    )
+    v(0.4em)
+    text(9pt)[*Historical scope.* #old.scope It closed on #old.master_count
+    declared individual masters. This is the saved public-pipeline reference,
+    separate from the earlier 63-master Native-only cohort.]
+    v(0.3em)
+    text(9pt)[*Normalization proof.* The immutable old payload is converted with
+    #raw(entry.historical.normalization_conversion.api), using its exact
+    target/source factor and recorded dimension binding before Laurent truncation.
+    The converted payload and factor hashes are bound by the equality receipt;
+    the old raw result is preserved.]
+    v(0.3em)
+    text(9pt)[*New observation.* Data loading: #timing(current.loading_seconds) s;
+    collector: #timing(current.completed_seconds) s. Collector time starts after
+    scalar preparation. Pure IBP and other isolated phases are unmeasured;
+    no zero durations are imputed. Five-loop masters remain uncomputed.]
+    v(0.3em)
+    text(8pt)[Old source: #raw(old.report.raw.source_commit.slice(0, 12));
+    new source: #if current.producer.commit == none [—] else { raw(current.producer.commit.slice(0, 12)) }.
+    Old manifest: #raw(old.acceptance.raw.origin.data_manifest_sha256.slice(0, 12));
+    new data: #raw(current.data.at("version", default: "recorded in raw report")).
+    Equality checks do not imply identical exceptional-dimensional guard sets.]
+    v(0.3em)
+    text(8pt, fill: luma(100))[Bound acceptance, reports and result payloads:
+    #raw("data/results.json") → #raw("ordered_rung_runs") → #raw(ordered-id).
+    All historical records and their original cache/provenance identities remain
+    unchanged. The new observation is not promoted to a repeated benchmark.]
+  }
+}

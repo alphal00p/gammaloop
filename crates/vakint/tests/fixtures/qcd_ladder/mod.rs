@@ -1,6 +1,10 @@
 //! Prepare the massless QCD numerator from native model rules, or reuse its verified scalar input.
 //! The transverse quadratic coefficient is not a complete beta function.
 
+// The fixture is also included by the original 5L collector and library unit
+// tests, which do not invoke the generic comparison driver.
+#[allow(dead_code)]
+pub mod comparison;
 mod physical;
 mod prepared;
 mod projector;
@@ -58,10 +62,10 @@ pub enum Projection {
 }
 
 impl Projection {
-    pub fn unlowered_degree(self) -> i32 {
+    pub fn degree(self, loop_count: usize) -> i32 {
         match self {
-            Self::QuadraticTransverse => 10,
-            Self::ZeroMomentumMetric => 9,
+            Self::QuadraticTransverse => 2 * loop_count as i32,
+            Self::ZeroMomentumMetric => 2 * loop_count as i32 - 1,
         }
     }
 }
@@ -77,6 +81,7 @@ pub struct PreparationTimings {
 }
 
 pub struct LadderFixture {
+    pub loop_count: usize,
     pub input: Atom,
     pub preparation_seconds: f64,
     pub scalar_terms: usize,
@@ -172,7 +177,10 @@ fn compact_rail_basis(diagram: FeynmanDiagram, target: &FeynmanDiagram) -> Resul
         .vertices()
         .map(|(id, vertex)| (vertex.name.as_str(), target_labels[&id]))
         .collect::<BTreeMap<_, _>>();
-    let rail = ["left", "t1", "t2", "t3", "t4", "right"];
+    let rail = std::iter::once("left".to_owned())
+        .chain((1..target.loop_count()).map(|rung| format!("t{rung}")))
+        .chain(["right".to_owned()])
+        .collect::<Vec<_>>();
     let chords = rail
         .windows(2)
         .map(|pair| {
@@ -196,12 +204,13 @@ fn compact_rail_basis(diagram: FeynmanDiagram, target: &FeynmanDiagram) -> Resul
                     } else {
                         (left, right)
                     };
-                    (left == named[pair[0]] && right == named[pair[1]]).then_some(id)
+                    (left == named[pair[0].as_str()] && right == named[pair[1].as_str()])
+                        .then_some(id)
                 })
                 .ok_or_else(|| "native target witness did not identify a fermion rail edge".into())
         })
         .collect::<Result<Vec<_>>>()?;
-    // Native spanning-tree validation proves these five compact p_i are loop
+    // Native spanning-tree validation proves these compact p_i are loop
     // coordinates. Dirac algebra then precedes expansion into k-l1-... form.
     Ok(diagram.with_loop_momentum_edges(&chords)?)
 }
@@ -233,7 +242,36 @@ fn generated_shape(graph: &Graph<NodeColor, EdgeColor>, model: &Model) -> Shape 
     result.canonize().graph
 }
 
+fn ladder_target(loop_count: usize) -> Result<String> {
+    if loop_count == 0 {
+        return Err("a quark-loop ladder requires at least one loop".into());
+    }
+    let rungs = loop_count - 1;
+    let mut dot = String::from(
+        "digraph massless_quark_ladder_self_energy {\n incoming [style=invis];\n outgoing [style=invis];\n incoming -> left [particle=\"g\"];\n right -> outgoing [particle=\"g\"];\n",
+    );
+    let rail = std::iter::once("left".to_owned())
+        .chain((1..=rungs).map(|rung| format!("t{rung}")))
+        .chain(["right".to_owned()])
+        .chain((1..=rungs).rev().map(|rung| format!("b{rung}")))
+        .chain(["left".to_owned()])
+        .collect::<Vec<_>>();
+    for pair in rail.windows(2) {
+        dot.push_str(&format!(" {} -> {} [particle=\"d\"];\n", pair[0], pair[1]));
+    }
+    for rung in 1..=rungs {
+        dot.push_str(&format!(" t{rung} -> b{rung} [particle=\"g\"];\n"));
+    }
+    dot.push_str("}\n");
+    Ok(dot)
+}
+
+#[cfg(test)]
 fn dressed_diagram() -> Result<feynkit_generator::GenerationResult> {
+    dressed_diagram_at_loop_count(5)
+}
+
+fn dressed_diagram_at_loop_count(loop_count: usize) -> Result<feynkit_generator::GenerationResult> {
     let model = Arc::new(
         Model::from_json(include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
@@ -241,9 +279,21 @@ fn dressed_diagram() -> Result<feynkit_generator::GenerationResult> {
         )))
         .expect("valid qcd fixture"),
     );
-    let target = FeynmanDiagram::from_dot(Arc::clone(&model), include_str!("ladder.dot"))?;
-    if target.loop_count() != 5 || target.edges().count() != 16 || target.vertices().count() != 10 {
-        return Err("the source QCD ladder must have ten vertices, fourteen internal lines, and two external legs".into());
+    let target = FeynmanDiagram::from_dot(Arc::clone(&model), &ladder_target(loop_count)?)?;
+    if target.loop_count() != loop_count
+        || target.edges().count() != 3 * loop_count + 1
+        || target.vertices().count() != 2 * loop_count
+    {
+        return Err("the source QCD ladder has an inconsistent native incidence census".into());
+    }
+    if loop_count == 5
+        && diagram_shape(&target)?
+            != diagram_shape(&FeynmanDiagram::from_dot(
+                Arc::clone(&model),
+                include_str!("ladder.dot"),
+            )?)?
+    {
+        return Err("parameterization changed the original four-rung source".into());
     }
     let shape = diagram_shape(&target)?;
     let mut ddg = vec![
@@ -267,20 +317,21 @@ fn dressed_diagram() -> Result<feynkit_generator::GenerationResult> {
     }
     let filter_model = Arc::clone(&model);
     let options = GenerationOptions::default()
-        .with_loop_count(5, 5)?
-        .max_vertices(10)
+        .with_loop_count(loop_count, loop_count)?
+        .max_vertices(2 * loop_count)
         .threads(1)
         .with_graph_filter(GenerationFilter::VertexAllow(rules))
         .with_graph_filter(GenerationFilter::FermionLoopCountRange((1, 1)))
         .filter(move |graph, completed| {
-            if graph.nodes().len() > 12 || graph.edges().len() > 16 {
+            if graph.nodes().len() > 2 * loop_count + 2 || graph.edges().len() > 3 * loop_count + 1
+            {
                 return false;
             }
             if completed != graph.nodes().len() {
                 return true;
             }
-            graph.nodes().len() == 12
-                && graph.edges().len() == 16
+            graph.nodes().len() == 2 * loop_count + 2
+                && graph.edges().len() == 3 * loop_count + 1
                 && generated_shape(graph, &filter_model) == shape
         });
     let mut generated = Process::new(["g"], ["g"]).generate_diagrams(model, &options)?;
@@ -304,9 +355,16 @@ fn dressed_diagram() -> Result<feynkit_generator::GenerationResult> {
 
 /// Native graph/rule preparation without committing to an external projector.
 pub fn dress(evidence: &Path) -> Result<feynkit_generator::GenerationResult> {
+    dress_at_loop_count(evidence, 5)
+}
+
+pub fn dress_at_loop_count(
+    evidence: &Path,
+    loop_count: usize,
+) -> Result<feynkit_generator::GenerationResult> {
     std::fs::create_dir_all(evidence)?;
     Vakint::initialize_vakint_symbols();
-    let generated = dressed_diagram()?;
+    let generated = dressed_diagram_at_loop_count(loop_count)?;
     let diagram = &generated.diagrams[0];
     if diagram.numerator().expression().is_one()
         || diagram
@@ -366,7 +424,7 @@ fn assert_lorentz_dimension(expression: &Atom, dimension: &Atom) -> Result<()> {
 }
 
 fn loop_rows(diagram: &FeynmanDiagram) -> BTreeMap<EdgeId, Atom> {
-    let loops = (0..5)
+    let loops = (0..diagram.loop_count())
         .map(|axis| symbols::loop_momentum().call(axis))
         .collect::<Vec<_>>();
     diagram
@@ -387,10 +445,18 @@ fn loop_rows(diagram: &FeynmanDiagram) -> BTreeMap<EdgeId, Atom> {
 }
 
 pub fn prepare(evidence: &Path, projection: Projection) -> Result<LadderFixture> {
+    prepare_at_loop_count(evidence, projection, 5)
+}
+
+pub fn prepare_at_loop_count(
+    evidence: &Path,
+    projection: Projection,
+    loop_count: usize,
+) -> Result<LadderFixture> {
     let started = Instant::now();
     std::fs::create_dir_all(evidence)?;
     Vakint::initialize_vakint_symbols();
-    let generated = dress(evidence)?;
+    let generated = dress_at_loop_count(evidence, loop_count)?;
     let mut timings = PreparationTimings {
         graph_generation_seconds: started.elapsed().as_secs_f64(),
         ..Default::default()
@@ -412,8 +478,8 @@ pub fn prepare(evidence: &Path, projection: Projection) -> Result<LadderFixture>
         let total_power = contribution.powers.iter().sum::<i32>();
         inventory.push_str(&format!(
             "{index} {total_power} {} {} {:?}\n",
-            total_power - projection.unlowered_degree(),
-            projection.unlowered_degree(),
+            total_power - projection.degree(loop_count),
+            projection.degree(loop_count),
             contribution.powers
         ));
         let routed_numerator = projected.vacuum.mapping.apply(&contribution.numerator);
@@ -452,27 +518,39 @@ pub fn prepare(evidence: &Path, projection: Projection) -> Result<LadderFixture>
             .collect::<Vec<_>>()
             .join("\n"),
     )?;
+    let projection_convention = match projection {
+        Projection::QuadraticTransverse => {
+            "Complete homogeneous quadratic Taylor coefficient of numerator AND denominators.\nTransverse contraction delta_ab*(g_munu-q_mu*q_nu/q^2)/[8*(d-1)*q^2]; normalized auxiliary angular average at fixed q^2.\n"
+        }
+        Projection::ZeroMomentumMetric => {
+            "Both external current vertices retained; unaveraged g_munu*delta_ab contraction at q=0.\nNo transverse projector, no division by 8(d-1), and no auxiliary angular integration.\n"
+        }
+    };
     std::fs::write(
         evidence.join("conventions.txt"),
-        "Native GammaLoop/FeynKit model-rule generation; bare DOT does not dress its numerator.\nMassless down-quark, Feynman gauge, fixed SU(3), tr_Dirac(1)=4, all Lorentz tags d.\nHomogeneous quadratic Taylor coefficient of numerator AND denominators.\nTransverse contraction delta_ab*(g_munu-q_mu*q_nu/q^2)/[8*(d-1)*q^2]; NOT the q=0 masslike trace and NOT a complete beta function.\nAuxiliary angular q average is normalized at fixed q^2: no sixth physical loop.\nL=5, twelve incidence edges after two insertion collapses; nine distinct denominator forms with five fermion dots after native duplicate coalescing; initial A=14; Taylor terms have A=14..16 and unlowered A-r_mom=10.\nCommon UV mass is inserted only into final denominators; original slash numerators remain massless.\nFresh preparation validates the native physical construction; verified saved scalar inputs allow separate IBP-only tests.\n",
+        format!(
+            "Native model-rule-generated massless QCD quark loop with {} gluon rungs; fixed SU(3), tr_Dirac(1)=4, generic Lorentz dimension d.\n{projection_convention}L={loop_count}, original A={}, {} vacuum incidence edges, {} distinct quadratic forms.\nUnlowered D_source=A-r_mom={}; omega_UV(d=4)={}.\nCommon UV mass inserted only into denominators; original slash numerators remain massless.\nNot a complete beta function. Verified saved scalar inputs separate preparation from IBP timing.\n",
+            loop_count - 1,
+            3 * loop_count - 1,
+            projected.vacuum.lines.len(),
+            2 * loop_count - 1,
+            projection.degree(loop_count),
+            4 * loop_count as i32 - 2 * projection.degree(loop_count),
+        ),
     )?;
-    if matches!(projection, Projection::ZeroMomentumMetric) {
-        std::fs::write(
-            evidence.join("conventions.txt"),
-            "Native massless QCD four-rung quark loop, fixed SU(3), tr_Dirac(1)=4, generic Lorentz dimension d.\nBoth external current vertices retained; unaveraged g_munu*delta_ab contraction at q=0.\nNo transverse projector, no division by 8(d-1), and no auxiliary angular integration.\nCommon UV mass inserted only into denominators; original slash numerators remain massless.\nFive loops, twelve vacuum incidence edges, nine distinct quadratics; unlowered A=14,r_mom=5,D_source=9; omega_UV(d=4)=2.\n",
-        )?;
-    }
     timings.ingress_seconds = ingress_started.elapsed().as_secs_f64();
     timings.total_seconds = started.elapsed().as_secs_f64();
     std::fs::write(
         evidence.join("preparation.json"),
         serde_json::to_vec_pretty(&serde_json::json!({
-            "projection": projection, "timings": timings, "scalar_terms": scalar_terms,
-            "contributions": projected.contributions.len(), "unlowered_A_minus_r_mom": projection.unlowered_degree(),
+            "projection": projection, "loop_count": loop_count, "gluon_rungs": loop_count - 1,
+            "timings": timings, "scalar_terms": scalar_terms,
+            "contributions": projected.contributions.len(), "unlowered_A_minus_r_mom": projection.degree(loop_count),
             "fresh_native_preparation": true,
         }))?,
     )?;
     Ok(LadderFixture {
+        loop_count,
         input,
         preparation_seconds: started.elapsed().as_secs_f64(),
         scalar_terms,
@@ -482,4 +560,28 @@ pub fn prepare(evidence: &Path, projection: Projection) -> Result<LadderFixture>
         timings,
         prepared_input: None,
     })
+}
+
+#[cfg(test)]
+#[test]
+fn parameterized_ladder_has_one_fermion_cycle_and_expected_incidence() -> Result<()> {
+    let model = Arc::new(Model::from_json(include_str!("../qcd.json"))?);
+    for loop_count in 1..=5 {
+        let target = FeynmanDiagram::from_dot(Arc::clone(&model), &ladder_target(loop_count)?)?;
+        assert_eq!(target.loop_count(), loop_count);
+        assert_eq!(target.vertices().count(), 2 * loop_count);
+        assert_eq!(target.edges().count(), 3 * loop_count + 1);
+        assert_eq!(
+            target
+                .edges()
+                .filter(|(_, _, edge)| edge.external.is_none())
+                .count(),
+            3 * loop_count - 1
+        );
+    }
+    let original = FeynmanDiagram::from_dot(Arc::clone(&model), include_str!("ladder.dot"))?;
+    let parameterized = FeynmanDiagram::from_dot(model, &ladder_target(5)?)?;
+    assert_eq!(diagram_shape(&original)?, diagram_shape(&parameterized)?);
+    assert!(ladder_target(0).is_err());
+    Ok(())
 }

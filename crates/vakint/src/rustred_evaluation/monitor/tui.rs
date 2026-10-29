@@ -282,12 +282,25 @@ fn metric_style(label: &str, value: &str, no_color: bool) -> Style {
             _ => Color::Gray,
         },
         "Current canonical native key" | "Caller Atom bytes / stored summands" => ACCENT_MAGENTA,
-        "Current canonical R / A / D" | "Elapsed at observation" => ACCENT_CYAN,
+        "Current canonical R / A / D"
+        | "Elapsed at observation"
+        | "Ordered topology stage"
+        | "Ordered phases completed / total"
+        | "Ordered batches completed / total" => ACCENT_CYAN,
+        "Compatible cohorts completed / total" => ACCENT_GREEN,
+        "Frontier coefficient monomials (current / peak)"
+        | "Terminal coefficient monomials (current / peak)" => ACCENT_BLUE,
+        "Processed operational keys"
+        | "Frontier nonzero merges / exact cancellations"
+        | "Terminal nonzero merges / exact cancellations" => ACCENT_GREEN,
         "Roots collected / selected" | "Completed unique identities (not closure)" => ACCENT_GREEN,
         "Active unique identities"
         | "Pending operational frames"
         | "Pending unique identities"
         | "Native root output terms (sampled)"
+        | "Input / current / peak frontier keys"
+        | "Checked RHS contributions before grouping"
+        | "Terminal output keys"
         | "Native unstarted roots / output keys"
         | "Native deferred maps / child occurrences" => ACCENT_AMBER,
         "Process RSS / peak" | "Host MemAvailable / MemFree" | "Host MemTotal" => ACCENT_BLUE,
@@ -553,6 +566,47 @@ mod tests {
         assert!(rows[2].contains("active phase 36.0s"));
         assert!(!rows[2].contains("RSS"));
         assert!(rows[3].contains("RSS 12 MiB / host available 400 GiB"));
+    }
+
+    #[test]
+    fn ordered_phase_position_and_grouping_counters_are_visible_in_existing_panels() {
+        use rustred::solver::CandidateOrderedReductionProgress;
+        let mut state = MonitorState::default();
+        state.latest.ordered = Some(super::super::OrderedReductionSample {
+            counts: CandidateOrderedReductionProgress {
+                completed_phases: 3,
+                total_phases: 12,
+                active_support: Some(6),
+                input_keys: 7,
+                frontier_keys: 13,
+                peak_frontier_keys: 29,
+                merged_terms: 17,
+                cancelled_terms: 11,
+                frontier_coefficient_monomials: 41,
+                peak_frontier_coefficient_monomials: 127,
+                terminal_coefficient_monomials: 17,
+                peak_terminal_coefficient_monomials: 53,
+                ..Default::default()
+            },
+            native_epoch: 2,
+            family_fingerprint: "ordered-fixture".into(),
+            sampled_at: Duration::ZERO,
+        });
+        let rendered = text(&render(&state.view(Duration::ZERO), 220, 80, false));
+        for expected in [
+            "Ordered phases completed / total: 3 / 12",
+            "support 6",
+            "Input / current / peak frontier keys: 7 / 13 / 29",
+            "Frontier nonzero merges / exact cancellations: 17 / 11",
+            "Frontier coefficient monomials (current / peak): 41 / 127",
+            "Terminal coefficient monomials (current / peak): 17 / 53",
+            "no time ETA",
+        ] {
+            assert!(
+                rendered.contains(expected),
+                "missing {expected}: {rendered}"
+            );
+        }
     }
 
     #[test]

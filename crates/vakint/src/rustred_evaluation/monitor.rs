@@ -1,6 +1,6 @@
 //! Presentation of native and caller work; never a reduction or cache owner.
 
-use rustred::solver::CandidateRoutedStoredState;
+use rustred::solver::{CandidateOrderedReductionProgress, CandidateRoutedStoredState};
 use std::{
     collections::VecDeque,
     io::{self, Write},
@@ -235,12 +235,15 @@ pub(super) struct DisplaySnapshot {
     pub quantitative_sample_sequence: u64,
     pub native_collection: Option<NativeCollectionSample>,
     pub native_collection_sample_at: Option<Duration>,
+    pub ordered: Option<OrderedReductionSample>,
     pub sequence: u64,
     pub elapsed: Duration,
     pub phase: String,
     pub phase_started_at: Duration,
     pub native_work_active: bool,
     pub caller_work: Option<CallerWork>,
+    pub ordered_batches: Option<CallerWork>,
+    pub reduction_cohorts: Option<CallerWork>,
     pub status: MonitorStatus,
     pub request_finished: bool,
     pub unique_entered: u64,
@@ -354,6 +357,89 @@ pub(super) struct CallerExpressionSample {
     pub stored_summands: Option<usize>,
     pub phase: String,
     pub sampled_at: Duration,
+}
+
+/// One exact native frontier census, separate from caller expressions and from
+/// previous requests in a monitor spanning a complete job.
+#[derive(Clone, Debug)]
+pub(super) struct OrderedReductionSample {
+    pub counts: CandidateOrderedReductionProgress,
+    pub native_epoch: u64,
+    pub family_fingerprint: String,
+    pub sampled_at: Duration,
+}
+
+impl OrderedReductionSample {
+    fn overview_rows(&self) -> Vec<(String, String)> {
+        vec![
+            (
+                "Ordered phases completed / total".into(),
+                format!(
+                    "{} / {} · fixed schedule; not time fraction",
+                    self.counts.completed_phases, self.counts.total_phases
+                ),
+            ),
+            (
+                "Ordered topology stage".into(),
+                if self.counts.completed_phases == self.counts.total_phases {
+                    "Complete · no active topology".into()
+                } else {
+                    format!(
+                        "{:?} · support {} · owner {}",
+                        self.counts.phase_kind,
+                        self.counts
+                            .active_support
+                            .map_or_else(|| "none".into(), |s| s.to_string()),
+                        self.counts
+                            .owner_index
+                            .map_or_else(|| "none".into(), |i| i.to_string())
+                    )
+                },
+            ),
+            (
+                "Ordered phase scope".into(),
+                format!(
+                    "native request {} · local phases restart for each request",
+                    self.native_epoch
+                ),
+            ),
+        ]
+    }
+
+    fn frontier_rows(&self) -> Vec<(String, String)> {
+        let c = self.counts;
+        vec![
+            (
+                "Input / current / peak frontier keys".into(),
+                format!(
+                    "{} / {} / {}",
+                    c.input_keys, c.frontier_keys, c.peak_frontier_keys
+                ),
+            ),
+            (
+                "Processed operational keys".into(),
+                c.processed_keys.to_string(),
+            ),
+            (
+                "Checked RHS contributions before grouping".into(),
+                c.emitted_terms.to_string(),
+            ),
+            (
+                "Frontier nonzero merges / exact cancellations".into(),
+                format!("{} / {}", c.merged_terms, c.cancelled_terms),
+            ),
+            ("Terminal output keys".into(), c.terminal_keys.to_string()),
+            (
+                "Terminal nonzero merges / exact cancellations".into(),
+                format!("{} / {}", c.terminal_merges, c.terminal_cancellations),
+            ),
+            (
+                "Grouping counter scope".into(),
+                "global same-identity merges; excludes input/intra-rule grouping; not time saved"
+                    .into(),
+            ),
+        ]
+    }
 }
 
 /// OS observations, independent of native progress or coefficient payloads.
@@ -639,7 +725,32 @@ impl MonitorState {
     /// Only the nested visual view freezes. Machine-readable state stays live.
     pub(super) fn presentation(&self, now: Duration) -> serde_json::Value {
         let live = self.live_view(now);
-        serde_json::json!({
+        let ordered_reduction = self.latest.ordered.as_ref().map(|sample| {
+            let c = sample.counts;
+            serde_json::json!({
+                "scope":"one native request; Route/Apply identities are distinct",
+                "native_request":sample.native_epoch,
+                "family_fingerprint":sample.family_fingerprint,
+                "sample_age_seconds":self.observation_age(sample.sampled_at, now).as_secs_f64(),
+                "completed_phases":c.completed_phases, "total_phases":c.total_phases,
+                "phase_kind":format!("{:?}", c.phase_kind),
+                "active_support":c.active_support, "owner_index":c.owner_index,
+                "input_keys":c.input_keys, "frontier_keys":c.frontier_keys,
+                "peak_frontier_keys":c.peak_frontier_keys, "terminal_keys":c.terminal_keys,
+                "frontier_coefficient_monomials":c.frontier_coefficient_monomials,
+                "peak_frontier_coefficient_monomials":c.peak_frontier_coefficient_monomials,
+                "terminal_coefficient_monomials":c.terminal_coefficient_monomials,
+                "peak_terminal_coefficient_monomials":c.peak_terminal_coefficient_monomials,
+                "coefficient_monomials_scope":"materialized numerator+denominator monomials; excludes guards, scratch, keys, Atom encoding and bytes/RSS",
+                "emitted_terms":c.emitted_terms, "merged_terms":c.merged_terms,
+                "cancelled_terms":c.cancelled_terms, "terminal_merges":c.terminal_merges,
+                "terminal_cancellations":c.terminal_cancellations,
+                "processed_keys":c.processed_keys,
+                "grouping_scope":"global frontier/output; excludes input and intra-rule coalescing",
+                "phase_fraction_is_time_fraction":false,
+            })
+        });
+        let mut document = serde_json::json!({
             "scope_kind": match self.latest.scope_kind { ScopeKind::Api => "api", ScopeKind::Job => "job" },
             "api_status": format!("{:?}", self.latest.api_status),
             "job_finished": (self.latest.scope_kind == ScopeKind::Job).then_some(self.latest.request_finished),
@@ -676,7 +787,27 @@ impl MonitorState {
             })),
             "estimates": live.estimates,
             "view": self.view(now),
-        })
+        });
+        document["ordered_reduction"] = ordered_reduction.unwrap_or(serde_json::Value::Null);
+        document["ordered_batches"] = self.latest.ordered_batches.as_ref().map_or(
+            serde_json::Value::Null,
+            |work| serde_json::json!({
+                "scope":"ordered loop/mode batches in this evaluation; excludes other backends and finalization",
+                "label":work.phase, "completed":work.completed, "total":work.total,
+                "sample_age_seconds":now.saturating_sub(work.sampled_at).as_secs_f64(),
+                "fraction_is_time_fraction":false,
+            }),
+        );
+        document["reduction_cohorts"] = self.latest.reduction_cohorts.as_ref().map_or(
+            serde_json::Value::Null,
+            |work| serde_json::json!({
+                "scope":"compatible family, mass and spectator carriers within the current collected ordered batch",
+                "completed":work.completed, "total":work.total,
+                "sample_age_seconds":now.saturating_sub(work.sampled_at).as_secs_f64(),
+                "fraction_is_time_fraction":false,
+            }),
+        );
+        document
     }
 
     pub(super) fn live_resources(&self, now: Duration) -> ResourceUsage {
@@ -796,6 +927,26 @@ impl MonitorState {
         let mut view = self.frozen.clone().unwrap_or_else(|| live.clone());
         // Freezing native panels never freezes liveness, resources or estimates.
         if self.frozen.is_some() {
+            let batch_rows = live
+                .overview
+                .iter()
+                .filter(|(label, _)| {
+                    matches!(
+                        label.as_str(),
+                        "Ordered batches completed / total"
+                            | "Compatible cohorts completed / total"
+                    )
+                })
+                .cloned()
+                .collect::<Vec<_>>();
+            view.overview.retain(|(label, _)| {
+                !matches!(
+                    label.as_str(),
+                    "Ordered batches completed / total" | "Compatible cohorts completed / total"
+                )
+            });
+            let insertion = view.overview.len().min(3);
+            view.overview.splice(insertion..insertion, batch_rows);
             view.subtitle = live.subtitle;
             view.status = live.status;
             view.estimates = live.estimates;
@@ -1017,8 +1168,83 @@ impl MonitorState {
             path: snapshot.path.clone(),
             events: snapshot.events.clone(),
         };
-        view.overview
-            .extend(self.live_collection(now).unwrap_or_default().rows());
+        if snapshot.ordered.is_none() || snapshot.native_collection.is_some() {
+            view.overview
+                .extend(self.live_collection(now).unwrap_or_default().rows());
+        }
+        if let Some(ordered) = &snapshot.ordered {
+            view.overview.retain(|(label, _)| {
+                !matches!(
+                    label.as_str(),
+                    "Native roots at frontier census" | "Native root output terms (sampled)"
+                )
+            });
+            view.overview.splice(3..3, ordered.overview_rows());
+            view.frontier = ordered.frontier_rows();
+            view.cache.push((
+                "Reduction-result cache".into(),
+                "disabled for ordered engine".into(),
+            ));
+            view.complexity.insert(
+                0,
+                (
+                    "Ordered frontier census age".into(),
+                    seconds(self.observation_age(ordered.sampled_at, now)),
+                ),
+            );
+            view.complexity.insert(
+                1,
+                (
+                    "Topology complexity convention".into(),
+                    "support = distinct positive denominator slots; dots and graph edges differ"
+                        .into(),
+                ),
+            );
+            let counts = ordered.counts;
+            view.complexity.splice(
+                2..2,
+                [
+                    (
+                        "Frontier coefficient monomials (current / peak)".into(),
+                        format!(
+                            "{} / {} · num+den proxy; not bytes",
+                            counts.frontier_coefficient_monomials,
+                            counts.peak_frontier_coefficient_monomials
+                        ),
+                    ),
+                    (
+                        "Terminal coefficient monomials (current / peak)".into(),
+                        format!(
+                            "{} / {} · num+den proxy; not bytes",
+                            counts.terminal_coefficient_monomials,
+                            counts.peak_terminal_coefficient_monomials
+                        ),
+                    ),
+                ],
+            );
+            view.estimates = vec![(
+                "Ordered schedule progress".into(),
+                "Phase completion is monotone within this request; phase costs differ; no time ETA"
+                    .into(),
+            )];
+        }
+        let mut batch_rows = Vec::new();
+        if let Some(work) = &snapshot.ordered_batches {
+            batch_rows.push((
+                "Ordered batches completed / total".into(),
+                format!("{} / {} · {}", work.completed, work.total, work.phase),
+            ));
+        }
+        if let Some(work) = &snapshot.reduction_cohorts {
+            batch_rows.push((
+                "Compatible cohorts completed / total".into(),
+                format!(
+                    "{} / {} · current collected batch",
+                    work.completed, work.total
+                ),
+            ));
+        }
+        view.overview.splice(3..3, batch_rows);
         view
     }
 
@@ -1064,7 +1290,11 @@ impl MonitorState {
             ),
             (
                 "Symbolic size conventions".into(),
-                "Stored partitions overlap; no combined global expression. Atom bytes exclude symbol metadata; Native coefficient bytes are clone bounds.".into(),
+                if self.latest.ordered.is_some() {
+                    "Ordered keys are coalesced within this request; frontier/output are separate. Key counts exclude coefficient monomials; Atom bytes exclude symbol metadata."
+                } else {
+                    "Stored partitions overlap; no combined global expression. Atom bytes exclude symbol metadata; Native coefficient bytes are clone bounds."
+                }.into(),
             ),
         ]
     }

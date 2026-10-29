@@ -642,8 +642,17 @@ impl Vakint {
         path: impl AsRef<Path>,
         max_loop_count: usize,
     ) -> Result<(), VakintError> {
+        self.load_external_data_with_prepared_caches(path, max_loop_count, true)
+    }
+
+    pub(crate) fn load_external_data_with_prepared_caches(
+        &mut self,
+        path: impl AsRef<Path>,
+        max_loop_count: usize,
+        load_prepared_caches: bool,
+    ) -> Result<(), VakintError> {
         let data = RustRedData::from_directory(path.as_ref(), "latest", max_loop_count)?;
-        self.activate_external_data(data, true)
+        self.activate_external_data(data, load_prepared_caches)
     }
 
     /// Load native IBPs from a local pack or a sealed 1L–3L rules file. A bare
@@ -654,9 +663,22 @@ impl Vakint {
         loop_count: usize,
         path: impl AsRef<Path>,
     ) -> Result<(), VakintError> {
+        self.load_rustred_artifacts_with_prepared_caches(loop_count, path, true)
+    }
+
+    pub(crate) fn load_rustred_artifacts_with_prepared_caches(
+        &mut self,
+        loop_count: usize,
+        path: impl AsRef<Path>,
+        load_prepared_caches: bool,
+    ) -> Result<(), VakintError> {
         let path = path.as_ref();
         if let Some(root) = RustRedData::release_root(path)? {
-            return self.load_external_data(root, loop_count);
+            return self.load_external_data_with_prepared_caches(
+                root,
+                loop_count,
+                load_prepared_caches,
+            );
         }
         let family = super::artifact::shipped_family_for_loop_count(loop_count)
             .ok_or_else(|| failure("4L/5L IBPs require a local external-data pack; the explicit saved-application API also accepts a bare 5L application"))?;
@@ -696,7 +718,7 @@ impl Vakint {
         data.lower.insert(loop_count, snapshot);
         data.runtime_cache_snapshots.remove(&loop_count);
         data.version = format!("local-{}", &digest[..16]);
-        self.activate_external_data(Arc::new(data), true)
+        self.activate_external_data(Arc::new(data), load_prepared_caches)
     }
 
     pub(super) fn activate_external_data(

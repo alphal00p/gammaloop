@@ -5,6 +5,224 @@
 
 = Benchmark report maintenance
 
+== Ordered-engine physical rung comparisons
+
+The generic collector #raw("examples/ordered_reduction_rungs.rs") compares
+depth-first and ordered reduction on the same authenticated physical scalar
+input. Both persistent caches remain disabled; DFS retains its normal
+request-local memoization. *All new rung records use MSbar normalization.*
+The adapter rejects new pySecDec records; earlier pySecDec fixtures, goldens
+and measurements remain historical and are never relabeled. See #link("../ordered_reduction.typ")[the engine
+guide] for the scientific fixture, strategy selection and progress semantics.
+
+Through four loops, use #raw("--engine both") for exact and tracked-numerical
+functional parity. Use separate #raw("--engine dfs") and
+#raw("--engine ordered") invocations,
+with the same prepared input and normal release executable, for fresh-process
+measurements. Do not promote same-process functional timings or historical
+five-loop baselines into matched fresh-process speedup claims.
+Five-loop physical runs use ordered reduction only, first zero momentum and
+then quadratic, with the saved historical zero-momentum result as reference.
+Every reduction invocation declares its actual #raw("--build-profile").
+
+After separate workers finish, use the same collector with
+#raw("--work-dir OUT --compare-reports DFS_DIRECTORY ORDERED_DIRECTORY") to
+authenticate the retained payloads and compare exact expressions and serialized
+numerical centers/error radii. This cheap comparison performs no IBPs or
+numerical reevaluation and writes the bound #raw("parity.json") consumed below.
+
+The adapter #raw("merge_ordered_rung_results.py") consumes bound parity receipts:
+
+```sh
+python3 crates/vakint/docs/benchmark/merge_ordered_rung_results.py \
+  --base crates/vakint/docs/benchmark/data/results.json \
+  --id ordered-rungs-RECORD-ID \
+  --parity /absolute/workspace/L1-q0-parity.json \
+  --parity /absolute/workspace/L1-quadratic-parity.json \
+  --output /absolute/workspace/benchmark-with-ordered.json \
+  --select-current
+```
+
+It writes a *new* file, appending under #raw("ordered_rung_runs"). Selecting
+the run sets #raw("selected_ordered_rung_run") without changing the historical
+four-loop, five-loop, ingress or cache selections. Review the output before
+replacing the canonical measured JSON and rendering the PDF. All 48 original
+four-loop measurements and their original provenance remain untouched.
+Synthetic adapter tests never supply published timing data.
+
+The owner-produced parity document has this contract:
+
+```json
+{
+  "schema": "vakint.ordered-rung-parity.v1",
+  "input_sha256": "<prepared scalar input digest>",
+  "reports": {
+    "dfs": {"path": "<report.json>", "sha256": "<digest>"},
+    "ordered": {"path": "<report.json>", "sha256": "<digest>"}
+  },
+  "retained": {"dfs": "<result digest>", "ordered": "<result digest>"},
+  "exact_retained_equality": true,
+  "numerical_enclosures_agree": null,
+  "equality_scope": "<actual exact and numerical checks performed>"
+}
+```
+
+Paths resolve relative to the parity file. Numerical equality is #raw("true")
+when both reports contain checked numerical references and #raw("null") when
+neither does. The adapter checks file hashes, payload sizes, input identities,
+source/data/normalization agreement, completed catalogue closure, exact
+dimension/evaluated-input bindings and cache exclusion. Numerical comparisons
+share requested precision, effective finite source cap, evaluation point and
+Laurent orders; equivalent exact expressions may expose different source-symbol
+inventories, which are preserved separately. It does not perform
+the symbolic comparison itself or certify the origin of an arbitrary receipt.
+
+Without #raw("--protocol PATH"), measured times are diagnostic observations:
+the report publishes no ordered/DFS speed ratio. A protocol supplied by the
+measurement supervisor qualifies the matched fresh-process scope:
+
+```json
+{
+  "schema": "vakint.ordered-rung-protocol.v1",
+  "fresh_processes": true,
+  "serialized_execution": true,
+  "build_profile": "release",
+  "profile_overrides": false,
+  "cpu_affinity": "<fixed worker affinity>",
+  "thread_environment": {"RAYON_NUM_THREADS": "1", "OMP_NUM_THREADS": "1", "MKL_NUM_THREADS": "1"},
+  "executable": {"path": "<release ELF>", "sha256": "<digest>"},
+  "build_receipt": {"path": "<closed build receipt>", "sha256": "<digest>"},
+  "sources": {
+    "main_revision": "<40 hexadecimal digits>",
+    "main_source_tree_sha256": "<64 hexadecimal digits>",
+    "native_revision": "<40 hexadecimal digits>",
+    "native_source_tree_sha256": "<64 hexadecimal digits>",
+    "kernel_revision": "<40 hexadecimal digits>",
+    "cargo_lock_sha256": "<64 hexadecimal digits>"
+  },
+  "samples": [{
+    "dfs": {
+      "report_sha256": "<digest>", "pid": 123, "start_ticks": 456,
+      "exit_code": 0, "executable_sha256": "<digest>",
+      "launch": {"path": "<guard launch.json>", "sha256": "<digest>"},
+      "completion": {"path": "<guard completion.json>", "sha256": "<digest>"}
+    },
+    "ordered": {
+      "report_sha256": "<digest>", "pid": 124, "start_ticks": 457,
+      "exit_code": 0, "executable_sha256": "<digest>",
+      "launch": {"path": "<guard launch.json>", "sha256": "<digest>"},
+      "completion": {"path": "<guard completion.json>", "sha256": "<digest>"}
+    }
+  }]
+}
+```
+
+The numeric process identifiers above illustrate a file schema, not real
+measurements. Every supplied sample must bind a distinct successful original
+worker, the same release executable and the matching producer identity.
+The adapter checks bound #raw("run_guarded.py") launch/completion receipts for
+the original worker identity, successful unsignaled exit, matching engine/case/
+profile command, affinity, threads and executable, and non-overlapping UTC
+windows. The supervisor owns the actual build and source-snapshot verification.
+The closed build receipt has the following contract:
+
+```json
+{
+  "schema": "vakint.ordered-rung-build.v1",
+  "success": true,
+  "build_profile": "release",
+  "profile_overrides": false,
+  "command": ["cargo", "build", "--locked", "--release", "<other actual arguments>"],
+  "build_log": {"path": "<actual build log>", "sha256": "<digest>"},
+  "executable": {"path": "<same ELF>", "sha256": "<same digest>"},
+  "sources": {"<same source fields as the protocol>": "<same identities>"}
+}
+```
+
+The executable and source objects must match the protocol exactly. Record every
+actual argument separately in #raw("command"), including any local configuration
+used by a diagnostic build; qualified final builds use coherent published pins.
+The adapter rejects invalid supplied protocols instead of silently downgrading
+them to diagnostic records. DEV reports with explicit profile and nullable
+self-hash remain admissible without a performance protocol.
+Use three samples per engine for final comparisons and retain median/range.
+Release status is not inferred from #raw("debug_assertions=false").
+
+Report #raw("retained_reduction_seconds") as *public retained evaluation*,
+including routing, lowering and finalization. It is not pure IBP time. Loading
+is separate; #raw("completed_seconds") starts after scalar preparation and
+includes subsequent numerical reference generation when enabled. Whole-process
+peak RSS includes earlier stages, including previous engines in a same-process
+functional pair. Unavailable pure-IBP, isolated routing/lowering, terminal
+substitution and ordered-progress observations remain #raw("null"), never zero.
+Phases refer to one native request and are not a wall-time percentage.
+
+The benchmark keeps the existing large colored cells. Its ordered multiplier is
+*ordered ÷ DFS*; original RustRed/FMFT multipliers retain their original meaning.
+An independent historical 40-hour five-loop baseline remains labeled with its
+original source, cache and input cohort. It cannot qualify through this matched
+new-report protocol or silently become a new uncached sample.
+
+For a completed new ordered zero-momentum run, use
+#raw("--historical-parity PATH") to append a separate historical comparison.
+This option may be supplied without #raw("--parity"); it never qualifies for
+a fresh-process protocol or a speed ratio. Its owner-produced receipt binds:
+
+```json
+{
+  "schema": "vakint.ordered-rung-historical-parity.v1",
+  "exact_retained_equality": true,
+  "input_sha256": "<identical authenticated scalar input>",
+  "historical": {
+    "acceptance": {"path": "<old parent acceptance>", "sha256": "<digest>"},
+    "report": {"path": "<old benchmark.json>", "sha256": "<digest>"},
+    "retained": {"path": "<old result.symbolica>", "sha256": "<digest>"},
+    "definition": {"path": "<legacy-definition-identity.json>", "sha256": "<digest>"}
+  },
+  "ordered_report": {"path": "<completed new report.json>", "sha256": "<digest>"},
+  "normalization_conversion": {
+    "schema": "vakint.ordered-rung-normalization-conversion.v1",
+    "source_normalization": "pySecDec", "target_normalization": "MSbar",
+    "api": "VakintSettings::get_integral_normalization_factor_atom",
+    "ratio_identity": "N_target/N_source", "loop_count": 5,
+    "epsilon_symbol": "<configured epsilon>", "mu_r_sq_symbol": "<configured scale>",
+    "dimension_binding": {"<same fields as the new report>": "<same values>"},
+    "factor": {"canonical_expression": "<exact API-derived Atom>", "sha256": "<UTF8 digest>"},
+    "source_retained_sha256": "<old raw digest>",
+    "target_report_sha256": "<new report digest>",
+    "converted_retained": {"path": "<separate converted payload>", "bytes": 123, "sha256": "<digest>"},
+    "exact_conversion_verified": true,
+    "applied_before_laurent_truncation": true
+  },
+  "retained": {
+    "historical": "<old raw digest>", "historical_converted": "<converted digest>",
+    "ordered": "<new MSbar result digest>"
+  },
+  "equality_scope": "<actual exact comparison performed>"
+}
+```
+
+The adapter checks the old report/result against its accepted hashes, byte
+lengths, catalogue closure and recorded public-call duration, then checks the
+new ordered report's input, projection and MSbar normalization. It additionally
+binds the historical pySecDec definition, API-derived exact target/source factor,
+dimension binding and separate converted historical payload. Apply the full
+factor before any Laurent truncation; never compare differently normalized raw
+results or alter the original old payload. The existing normalization API owns
+all factors, phases and scale dependence; the adapter performs no handwritten
+normalization algebra. The exact
+comparator still owns mathematical equality; merely constructing this receipt
+does not perform it. No incomplete ordered result can be published through this
+path. The accepted 55-master public-pipeline reference remains distinct from
+the earlier 63-master Native-only result. The historical baseline used running
+cache capture and concurrent engineering jobs; it is retained as one historical
+observation, not a new matched no-cache sample. The adapter never opens native
+cache payloads or the large historical guard export.
+
+Run the lightweight adapter contract checks from the benchmark directory with
+#raw("python3 -m unittest test_merge_ordered_rung_results.py"). These checks
+use synthetic temporary files and do not run reductions.
+
 The four-loop collector and refresh command remain in
 #link("../../AGENTS.md")[Vakint's contribution instructions]. Preserve every
 historical root field, raw sample, source identity and selected four-loop run.

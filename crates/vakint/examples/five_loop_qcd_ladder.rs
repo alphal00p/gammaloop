@@ -626,6 +626,7 @@ fn main() -> fixture::Result<()> {
                     master_mode: RustRedMasterMode::Retain,
                 },
             )]),
+            integral_normalization_factor: vakint::LoopNormalizationFactor::MSbar,
             form_exe_path: "/qcd-ladder-must-not-use-form".into(),
             use_dot_product_notation: true,
             ..Default::default()

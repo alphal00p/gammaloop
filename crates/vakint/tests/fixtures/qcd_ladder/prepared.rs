@@ -4,15 +4,23 @@ use super::{
     LadderFixture, PREPARED_INPUT_MANIFEST, PreparationTimings, Projection, Result, Vakint,
 };
 use sha2::{Digest, Sha256};
-use std::{collections::BTreeMap, path::Path};
+use std::{collections::BTreeMap, io::Read, path::Path};
 use symbolica::atom::{Atom, AtomCore};
 
 const INPUT_FILE: &str = "vakint-input.symbolica";
 const CONDITIONS_FILE: &str = "projector-conditions.symbolica";
-const SCHEMA: &str = "vakint.qcd-ladder.prepared-input.v1";
+const SCHEMA: &str = "vakint.qcd-ladder.prepared-input.v2";
 // Bump this definition when changing physical conventions. The source binding
 // also covers native generation/assembly in mod.rs, excluding persistence IO.
-const DEFINITION: &str = "massless-qcd-four-rung-native-uv-v1";
+const DEFINITION: &str = "massless-qcd-rung-family-native-uv-v2";
+
+fn five_loops() -> usize {
+    5
+}
+
+fn is_five_loops(value: &usize) -> bool {
+    *value == 5
+}
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -27,6 +35,25 @@ impl PreparedFile {
             bytes: bytes.len() as u64,
             sha256: format!("{:x}", Sha256::digest(bytes)),
         }
+    }
+
+    fn from_file(path: &Path) -> std::io::Result<Self> {
+        let mut file = std::fs::File::open(path)?;
+        let mut digest = Sha256::new();
+        let mut buffer = [0_u8; 65_536];
+        let mut bytes = 0_u64;
+        loop {
+            let count = file.read(&mut buffer)?;
+            if count == 0 {
+                break;
+            }
+            digest.update(&buffer[..count]);
+            bytes += count as u64;
+        }
+        Ok(Self {
+            bytes,
+            sha256: format!("{:x}", digest.finalize()),
+        })
     }
 
     fn is_present_regular(directory: &Path, filename: &str) -> Result<bool> {
@@ -68,13 +95,16 @@ pub struct PreparedInputProducer {
 
 /// Self-contained identity and provenance of one complete scalar fixture.
 ///
-/// The six scientific sources must match the current fixture. `mod.rs` is also
-/// recorded, but its persistence/reporting changes do not alter that definition.
+/// Scientific sources match this loop family, or the exact delivered four-rung
+/// v1 identity. `mod.rs` also records producer provenance; persistence/reporting
+/// changes do not alter the physical definition.
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct PreparedInputManifest {
     pub schema: String,
     pub definition: String,
+    #[serde(default = "five_loops", skip_serializing_if = "is_five_loops")]
+    pub loop_count: usize,
     pub projection: Projection,
     pub scientific_sources_sha256: BTreeMap<String, String>,
     pub scientific_assembly_sha256: String,
@@ -89,6 +119,40 @@ pub struct PreparedInputManifest {
 }
 
 impl PreparedInputManifest {
+    /// Exact identity of the delivered four-rung definition, before its purely
+    /// loop-count parameterization. Never accept arbitrary stale source hashes.
+    fn legacy_scientific_sources() -> BTreeMap<String, String> {
+        [
+            (
+                "physical.rs",
+                "754b9a5b2b0b9701fc666c29ce6728229d78ace9cb10948033c17d9e42275436",
+            ),
+            (
+                "projector.rs",
+                "bbd9a9a8ce08e0c29a632c74586f7b51dc04cc2d1ed8802a6ef6a43bdbf5a53d",
+            ),
+            (
+                "vacuum.rs",
+                "05cdaa106c6f27fa16ea7c473f4a83ac0c4e7100eba9cc58ee4358e95aedb905",
+            ),
+            (
+                "ladder.dot",
+                "990490ae32441fcbc279390b97aedf433d226a7b4986faea1eaf87e15ca79ece",
+            ),
+            (
+                "qcd.json",
+                "229179d56fec310801f9db3d5697d6f3947b6a3c112d9b856ba0fe6fc1fe6a3b",
+            ),
+            (
+                "phi3.json",
+                "5e7b76223b63752eac1200744ee945be2bc9b125890b1430271faea9917b1dd3",
+            ),
+        ]
+        .into_iter()
+        .map(|(name, hash)| (name.to_owned(), hash.to_owned()))
+        .collect()
+    }
+
     fn scientific_sources() -> BTreeMap<String, String> {
         [
             ("physical.rs", include_bytes!("physical.rs").as_slice()),
@@ -149,15 +213,30 @@ impl PreparedInputManifest {
         .sha256
     }
 
-    fn validate(&self, expected_projection: Projection) -> Result<()> {
-        if self.schema != SCHEMA || self.definition != DEFINITION {
+    fn validate(&self, expected_projection: Projection, expected_loop_count: usize) -> Result<()> {
+        let legacy = self.schema == "vakint.qcd-ladder.prepared-input.v1"
+            && self.definition == "massless-qcd-four-rung-native-uv-v1"
+            && self.loop_count == 5;
+        if !legacy && (self.schema != SCHEMA || self.definition != DEFINITION) {
             return Err("unrecognized QCD ladder prepared-input schema or definition".into());
+        }
+        if self.loop_count == 0 || self.loop_count != expected_loop_count {
+            return Err("prepared input does not use the requested QCD ladder loop count".into());
         }
         if self.projection != expected_projection {
             return Err("prepared input does not use the requested QCD ladder projection".into());
         }
-        if self.scientific_sources_sha256 != Self::scientific_sources()
-            || self.scientific_assembly_sha256 != Self::scientific_assembly()
+        let sources = if legacy {
+            Self::legacy_scientific_sources()
+        } else {
+            Self::scientific_sources()
+        };
+        let assembly = if legacy {
+            "16be3edc83d1cfad237e7762269bc02d2335e21173b01ee881b5c5834b4aa7e9".to_owned()
+        } else {
+            Self::scientific_assembly()
+        };
+        if self.scientific_sources_sha256 != sources || self.scientific_assembly_sha256 != assembly
         {
             return Err(
                 "prepared input scientific source definition does not match this fixture".into(),
@@ -172,12 +251,12 @@ impl PreparedInputManifest {
         {
             return Err("prepared input producer source inventory is inconsistent".into());
         }
-        let contributions = match self.projection {
-            Projection::QuadraticTransverse => 21,
-            Projection::ZeroMomentumMetric => 1,
-        };
-        if self.contributions != contributions
-            || self.scalar_terms < contributions
+        if self.contributions == 0
+            || (self.projection == Projection::ZeroMomentumMetric && self.contributions != 1)
+            || (self.loop_count == 5
+                && self.projection == Projection::QuadraticTransverse
+                && self.contributions != 21)
+            || self.scalar_terms < self.contributions
             || self.input.bytes == 0
         {
             return Err("prepared input is missing complete QCD ladder contributions".into());
@@ -235,12 +314,20 @@ impl LadderFixture {
     /// Reuse a complete, checked scalar input without graph, trace or Taylor work.
     /// Corrupt or stale data is an error; callers must never silently regenerate it.
     pub fn load_prepared(directory: &Path, expected_projection: Projection) -> Result<Self> {
+        Self::load_prepared_at_loop_count(directory, expected_projection, 5)
+    }
+
+    pub fn load_prepared_at_loop_count(
+        directory: &Path,
+        expected_projection: Projection,
+        expected_loop_count: usize,
+    ) -> Result<Self> {
         if !PreparedFile::is_present_regular(directory, PREPARED_INPUT_MANIFEST)? {
             return Err("QCD ladder prepared-input manifest is missing".into());
         }
         let manifest: PreparedInputManifest =
             serde_json::from_slice(&std::fs::read(directory.join(PREPARED_INPUT_MANIFEST))?)?;
-        manifest.validate(expected_projection)?;
+        manifest.validate(expected_projection, expected_loop_count)?;
         let input_text = manifest.input.read(directory, INPUT_FILE)?;
         let conditions_text = manifest
             .nonzero_conditions_file
@@ -268,6 +355,7 @@ impl LadderFixture {
             return Err("prepared input condition lost its canonical symbolic identity".into());
         }
         Ok(Self {
+            loop_count: manifest.loop_count,
             input,
             preparation_seconds: manifest.preparation_seconds,
             scalar_terms: manifest.scalar_terms,
@@ -300,15 +388,21 @@ impl LadderFixture {
             PreparedInputManifest {
                 schema: SCHEMA.to_owned(),
                 definition: DEFINITION.to_owned(),
+                loop_count: self.loop_count,
                 projection: self.projection,
                 scientific_sources_sha256: PreparedInputManifest::scientific_sources(),
                 scientific_assembly_sha256: PreparedInputManifest::scientific_assembly(),
                 producer: PreparedInputProducer {
                     fixture_sources_sha256: sources,
                     source_commit: None,
-                    executable_sha256: Some(
-                        PreparedFile::from_bytes(&std::fs::read(std::env::current_exe()?)?).sha256,
-                    ),
+                    // A debug executable can contain gigabytes of DWARF.
+                    // Its supervising test/build receipt owns that identity;
+                    // scientific source hashes still bind every fresh bundle.
+                    executable_sha256: if cfg!(debug_assertions) {
+                        None
+                    } else {
+                        Some(PreparedFile::from_file(&std::env::current_exe()?)?.sha256)
+                    },
                 },
                 input: PreparedFile::from_bytes(input.as_bytes()),
                 nonzero_conditions_file: PreparedFile::from_bytes(conditions_text.as_bytes()),
@@ -319,7 +413,7 @@ impl LadderFixture {
                 timings: self.timings.clone(),
             }
         };
-        manifest.validate(self.projection)?;
+        manifest.validate(self.projection, self.loop_count)?;
         if manifest.input.sha256 != PreparedFile::from_bytes(input.as_bytes()).sha256
             || manifest.nonzero_conditions_file.sha256
                 != PreparedFile::from_bytes(conditions_text.as_bytes()).sha256
@@ -328,7 +422,8 @@ impl LadderFixture {
         }
         let manifest_path = directory.join(PREPARED_INPUT_MANIFEST);
         if PreparedFile::is_present_regular(directory, PREPARED_INPUT_MANIFEST)? {
-            let previous = Self::load_prepared(directory, self.projection)?;
+            let previous =
+                Self::load_prepared_at_loop_count(directory, self.projection, self.loop_count)?;
             if previous.input != self.input
                 || previous.nonzero_conditions != self.nonzero_conditions
             {
@@ -375,6 +470,7 @@ mod tests {
     fn fixture() -> LadderFixture {
         Vakint::initialize_vakint_symbols();
         LadderFixture {
+            loop_count: 5,
             input: Atom::parse(
                 "1+qcd_ladder_control::{}::x",
                 "qcd_ladder",
@@ -456,6 +552,46 @@ mod tests {
                 .unwrap()
                 .input
                 .sha256
+        );
+    }
+
+    #[test]
+    fn prepared_scalar_loop_count_is_part_of_its_identity() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut original = fixture();
+        original.loop_count = 1;
+        original.save_prepared(directory.path()).unwrap();
+        assert!(LadderFixture::load_prepared(directory.path(), original.projection).is_err());
+        let loaded =
+            LadderFixture::load_prepared_at_loop_count(directory.path(), original.projection, 1)
+                .unwrap();
+        assert_eq!(loaded.loop_count, 1);
+        assert_eq!(loaded.input, original.input);
+    }
+
+    #[test]
+    fn delivered_five_loop_prepared_identity_remains_readable() {
+        let directory = tempfile::tempdir().unwrap();
+        let original = fixture();
+        original.save_prepared(directory.path()).unwrap();
+        edit_manifest(directory.path(), |manifest| {
+            manifest["schema"] = "vakint.qcd-ladder.prepared-input.v1".into();
+            manifest["definition"] = "massless-qcd-four-rung-native-uv-v1".into();
+            manifest["scientific_sources_sha256"] =
+                serde_json::to_value(PreparedInputManifest::legacy_scientific_sources()).unwrap();
+            manifest["scientific_assembly_sha256"] =
+                "16be3edc83d1cfad237e7762269bc02d2335e21173b01ee881b5c5834b4aa7e9".into();
+            let producer = manifest["producer"]["fixture_sources_sha256"]["mod.rs"].clone();
+            manifest["producer"]["fixture_sources_sha256"] =
+                manifest["scientific_sources_sha256"].clone();
+            manifest["producer"]["fixture_sources_sha256"]["mod.rs"] = producer;
+        });
+        let loaded = LadderFixture::load_prepared(directory.path(), original.projection).unwrap();
+        assert_eq!(loaded.input, original.input);
+        assert_eq!(loaded.loop_count, 5);
+        assert!(
+            LadderFixture::load_prepared_at_loop_count(directory.path(), original.projection, 4)
+                .is_err()
         );
     }
 

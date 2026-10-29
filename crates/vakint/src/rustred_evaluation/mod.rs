@@ -23,10 +23,12 @@ mod factor_projection;
 mod factor_provider;
 pub(crate) mod five_loop;
 mod four_loop;
+mod mass_channels;
 mod matching;
 mod materialize;
 pub(crate) mod monitor;
 mod numerator;
+mod ordered;
 #[cfg(test)]
 mod terminal;
 
@@ -48,6 +50,13 @@ use thiserror::Error;
 use crate::{ReplacementRules, Topology, Vakint, VakintError, VakintSettings};
 
 use matching::MatchedScalarFamily;
+
+/// One contribution after the shared topology witness and numerator routing.
+/// Ordered reduction batches all contributions before expanding any integral.
+pub(crate) struct MatchedContribution {
+    pub(crate) numerator: Atom,
+    pub(crate) matched: ReplacementRules,
+}
 
 /// How the final RustRed masters are represented.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
@@ -149,6 +158,15 @@ pub enum RustRedEvaluationError {
 }
 
 impl RustRedEvaluationError {
+    pub(super) fn from_native(error: impl std::error::Error + 'static) -> Self {
+        match Self::resource_cause(&error) {
+            Some(resource) => Self::ResourceLimit(resource.clone()),
+            None => Self::Reduction {
+                detail: error.to_string(),
+            },
+        }
+    }
+
     pub(super) fn resource_cause<'a>(
         error: &'a (dyn std::error::Error + 'static),
     ) -> Option<&'a symbolica::utils::resources::ResourceLimitError> {
@@ -254,6 +272,19 @@ impl Vakint {
         integral_specs: &ReplacementRules,
         mut observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
     ) -> Result<Atom, VakintError> {
+        if settings.rustred_application_options.reduction_strategy
+            == crate::RustRedReductionStrategy::Ordered
+        {
+            return self.rustred_reduce_ordered(
+                settings,
+                vec![MatchedContribution {
+                    numerator: numerator.to_owned(),
+                    matched: integral_specs.clone(),
+                }],
+                observation,
+                None,
+            );
+        }
         // Raw contributions must combine before the public notation is restored.
         let mut scalar_settings = settings.clone();
         scalar_settings.use_dot_product_notation = true;

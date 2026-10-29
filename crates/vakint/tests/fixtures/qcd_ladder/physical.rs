@@ -122,6 +122,7 @@ pub(super) fn prepare(
         return Err("native amputated source requires one completely generated diagram".into());
     }
     let diagram = &generated.diagrams[0];
+    let loop_count = diagram.loop_count();
     let (numerator, legs) = amputated_source(diagram, d)?;
     let mut fermions = 0;
     let mut gluons = 0;
@@ -142,10 +143,8 @@ pub(super) fn prepare(
             _ => return Err("unexpected internal species".into()),
         }
     }
-    if (fermions, gluons) != (10, 4) {
-        return Err(
-            "native source does not have ten massless fermions and four gluon rungs".into(),
-        );
+    if (fermions, gluons) != (2 * loop_count, loop_count - 1) {
+        return Err("native source has an inconsistent massless fermion/rung census".into());
     }
     let vacuum = Vacuum::new(diagram, d)?;
     let q = spenso::vector_symbol!("qcd_ladder::q");
@@ -230,7 +229,7 @@ pub(super) fn prepare(
             .collect::<Vec<_>>();
         let numerator = metric_coefficients.remove(0)
             * evaluate_overall_factor(diagram.overall_factor().as_view());
-        validate_homogeneity(&numerator, 5)?;
+        validate_homogeneity(&numerator, loop_count as i32)?;
         std::fs::write(
             evidence.join("projected-numerator-000.symbolica"),
             numerator.to_canonical_string(),
@@ -242,10 +241,10 @@ pub(super) fn prepare(
         });
     }
     let taylor_started = Instant::now();
-    let inverses = (0..12)
+    let inverses = (0..vacuum.lines.len())
         .map(|slot| Atom::var(symbol!(&format!("qcd_ladder::inverse_{slot}"))))
         .collect::<Vec<_>>();
-    let loops = (0..5)
+    let loops = (0..loop_count)
         .map(|axis| symbols::loop_momentum().call(axis))
         .collect::<Vec<_>>();
     let kin =
@@ -301,7 +300,9 @@ pub(super) fn prepare(
     let mut conditions = BTreeSet::new();
     let mut contributions = Vec::new();
     for (index, (powers, (metric, longitudinal))) in groups.into_iter().enumerate() {
-        if powers.len() != 12 || powers.iter().sum::<i32>() < 14 || powers.iter().sum::<i32>() > 16
+        let initial_power = (3 * loop_count - 1) as i32;
+        if powers.len() != vacuum.lines.len()
+            || !(initial_power..=initial_power + 2).contains(&powers.iter().sum::<i32>())
         {
             return Err(
                 "quadratic Taylor coefficient has invalid raised-propagator bookkeeping".into(),
@@ -318,7 +319,7 @@ pub(super) fn prepare(
             continue;
         }
         assert_lorentz_dimension(&numerator, d)?;
-        let rank = powers.iter().sum::<i32>() - 10;
+        let rank = powers.iter().sum::<i32>() - Projection::QuadraticTransverse.degree(loop_count);
         validate_homogeneity(&numerator, rank)?;
         let numerator = numerator.collect_factors();
         std::fs::write(

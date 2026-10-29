@@ -681,7 +681,7 @@ impl CampaignCensus<'_> {
                 .map_err(|_| RustRedEvaluationError::MassExponentOverflow { exponent })?;
             if self.physical.is_none() {
                 let anchor = *origin.get_or_insert(exponent);
-                let channel = SavedApplication::mass_channel(
+                let channel = MatchedScalarInput::mass_channel(
                     lowered_term.scalar_spectator(),
                     &input.mass_squared,
                     exponent,

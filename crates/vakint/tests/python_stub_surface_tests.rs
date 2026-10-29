@@ -7,6 +7,11 @@ fn graph_adapter_and_rich_output_are_present_in_valid_python_stubs() {
     Python::initialize();
     let info = vakint::stub_info().expect("build Python stub inventory");
     let module = &info.modules["symbolica.community.hepkit.vakint"];
+    assert!(
+        module
+            .to_string()
+            .contains("rustred_reduction_strategy: builtins.str = 'depth_first'")
+    );
     let graph_adapter = &module.function["integral_from_diagram"];
     assert_eq!(graph_adapter.len(), 1);
     assert_eq!(graph_adapter[0].r#return.name, "VakintExpression");

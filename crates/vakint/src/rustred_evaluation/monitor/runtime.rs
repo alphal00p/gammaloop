@@ -23,8 +23,8 @@ use symbolica::atom::AtomView;
 
 use super::{
     ApiStatus, CallerExpressionSample, DisplaySnapshot, FrontierCount, MonitorState, MonitorStatus,
-    NativeCollectionSample, RustRedMonitorDisplay, RustRedMonitorOptions, ScopeKind,
-    StoredStateSample,
+    NativeCollectionSample, OrderedReductionSample, RustRedMonitorDisplay, RustRedMonitorOptions,
+    ScopeKind, StoredStateSample,
 };
 use crate::VakintError;
 
@@ -192,6 +192,52 @@ pub(crate) struct CallerProgress {
 }
 
 impl CallerProgress {
+    /// Outer loop/mode groups have a known total before ordered dispatch. This
+    /// counter survives nested activities and never changes native clocks.
+    pub(crate) fn ordered_batch(&self, completed: usize, total: usize, scope: &str) {
+        if completed > total || !self.handle.shared.active.load(Ordering::Relaxed) {
+            return;
+        }
+        let mut pending = self.handle.shared.pending();
+        pending.display.ordered_batches = Some(super::CallerWork {
+            phase: scope.to_owned(),
+            completed,
+            total,
+            unit: "ordered batches completed".into(),
+            sampled_at: self.handle.shared.started.elapsed(),
+        });
+        if completed < total {
+            pending.display.reduction_cohorts = None;
+            pending.display.ordered = None;
+        }
+        pending.dirty = true;
+        drop(pending);
+        let _ = self.handle.wake.try_send(());
+    }
+
+    /// Completion of compatible scalar carriers within the current collected
+    /// batch. Publish at iteration entry and after the loop, so prior locals
+    /// have actually dropped and errors never announce unfinished cohorts.
+    pub(crate) fn cohorts(&self, completed: usize, total: usize) {
+        if completed > total || !self.handle.shared.active.load(Ordering::Relaxed) {
+            return;
+        }
+        let mut pending = self.handle.shared.pending();
+        pending.display.reduction_cohorts = Some(super::CallerWork {
+            phase: "current collected ordered batch".into(),
+            completed,
+            total,
+            unit: "compatible scalar cohorts completed".into(),
+            sampled_at: self.handle.shared.started.elapsed(),
+        });
+        if completed < total {
+            pending.display.ordered = None;
+        }
+        pending.dirty = true;
+        drop(pending);
+        let _ = self.handle.wake.try_send(());
+    }
+
     pub(crate) fn phase(&self, phase: &str, total: usize, unit: &str) -> CallerPhase<'_> {
         let mut progress = CallerPhase {
             owner: self,
@@ -352,6 +398,11 @@ impl RustRedMonitorScope<'_, '_> {
         if let Some(handle) = &self.handle {
             let mut pending = handle.shared.pending();
             pending.display.api_status = status;
+            if status == ApiStatus::Running {
+                pending.display.ordered_batches = None;
+                pending.display.reduction_cohorts = None;
+                pending.display.ordered = None;
+            }
             pending.dirty = true;
             drop(pending);
             let _ = handle.wake.try_send(());
@@ -794,6 +845,9 @@ fn worker_with_publisher(
                 state.observe(display, shared.started.elapsed());
             } else {
                 state.latest.caller_work = display.caller_work;
+                state.latest.ordered_batches = display.ordered_batches;
+                state.latest.reduction_cohorts = display.reduction_cohorts;
+                state.latest.ordered = display.ordered;
                 state.latest.api_status = display.api_status;
             }
             if let Some(document) = document {
@@ -903,6 +957,17 @@ fn worker_with_publisher(
 
 fn work_label(work: CandidateRoutedWorkRef<'_>) -> String {
     let key = work.target();
+    let powers = powers_label(key);
+    match work {
+        CandidateRoutedWorkRef::Route(_) => format!("Route [{powers}]"),
+        CandidateRoutedWorkRef::Apply { owner_sector, .. } => format!(
+            "Apply owner {:?} [{powers}]",
+            &owner_sector[..owner_sector.len().min(15)]
+        ),
+    }
+}
+
+fn powers_label(key: &rustred::family::IntegralKey) -> String {
     let mut powers = key
         .powers()
         .iter()
@@ -913,13 +978,7 @@ fn work_label(work: CandidateRoutedWorkRef<'_>) -> String {
     if key.powers().len() > 15 {
         powers.push_str(",… (display truncated)");
     }
-    match work {
-        CandidateRoutedWorkRef::Route(_) => format!("Route [{powers}]"),
-        CandidateRoutedWorkRef::Apply { owner_sector, .. } => format!(
-            "Apply owner {:?} [{powers}]",
-            &owner_sector[..owner_sector.len().min(15)]
-        ),
-    }
+    powers
 }
 
 fn update_display(pending: &mut Pending, envelope: &Envelope<'_>, detail: bool, initial: bool) {
@@ -930,16 +989,20 @@ fn update_display(pending: &mut Pending, envelope: &Envelope<'_>, detail: bool, 
     // frontier census is sampled. Caller/saved phases have no current native key.
     display.current_key = None;
     display.current_degrees = None;
-    if envelope.activity != Activity::Caller
-        && envelope.caller_phase.is_none()
-        && let Some((work, degrees)) = envelope.current.zip(envelope.degrees)
-    {
-        display.current_key = Some(work_label(work));
-        display.current_degrees = Some((
-            degrees.numerator_rank,
-            degrees.positive_power_sum,
-            degrees.power_difference,
-        ));
+    if envelope.activity != Activity::Caller && envelope.caller_phase.is_none() {
+        let label = envelope.current.map(work_label).or_else(|| {
+            envelope
+                .ordered_current
+                .map(|key| format!("Ordered [{}]", powers_label(key)))
+        });
+        if let Some((label, degrees)) = label.zip(envelope.degrees) {
+            display.current_key = Some(label);
+            display.current_degrees = Some((
+                degrees.numerator_rank,
+                degrees.positive_power_sum,
+                degrees.power_difference,
+            ));
+        }
     }
     if let Some(age) = envelope.native_summary_age {
         display.native_observed_at = Some(envelope.elapsed.saturating_sub(age));
@@ -990,6 +1053,7 @@ fn update_display(pending: &mut Pending, envelope: &Envelope<'_>, detail: bool, 
         display.stored_state = None;
         display.native_collection = None;
         display.native_collection_sample_at = None;
+        display.ordered = None;
     }
     if admission_start {
         display.native_observed_at = None;
@@ -1059,6 +1123,19 @@ fn update_display(pending: &mut Pending, envelope: &Envelope<'_>, detail: bool, 
         // boundary. A forwarded saved/caller summary never refreshes this age.
         display.stored_state = Some(StoredStateSample {
             counts,
+            family_fingerprint: envelope.family_fingerprint.to_owned(),
+            sampled_at: envelope.elapsed,
+        });
+    }
+    if envelope.activity != Activity::Caller
+        && envelope.caller_phase.is_none()
+        && let Some(counts) = envelope.ordered
+    {
+        // Sample the O(1) counters themselves. Saved terminal forwarding must
+        // retain the genuine native census time and request identity.
+        display.ordered = Some(OrderedReductionSample {
+            counts,
+            native_epoch: display.native_epoch,
             family_fingerprint: envelope.family_fingerprint.to_owned(),
             sampled_at: envelope.elapsed,
         });
@@ -1738,6 +1815,199 @@ impl GuardBinding<'_> {
 #[cfg(all(test, unix, not(target_arch = "wasm32")))]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ordered_batch_counters_survive_nested_phases_and_failures_without_native_clock_updates() {
+        let shared = Arc::new(Shared::scoped(ScopeKind::Job));
+        let (wake, _receiver) = mpsc::sync_channel(1);
+        let handle = MonitorHandle {
+            shared: Arc::clone(&shared),
+            wake,
+            interval: Duration::from_secs(1),
+        };
+        let progress = CallerProgress {
+            handle: handle.clone(),
+        };
+        let native_sample = || OrderedReductionSample {
+            counts: rustred::solver::CandidateOrderedReductionProgress {
+                completed_phases: 5,
+                total_phases: 5,
+                ..Default::default()
+            },
+            native_epoch: 1,
+            family_fingerprint: "previous-native-family".into(),
+            sampled_at: Duration::from_secs(10),
+        };
+        {
+            let mut pending = shared.pending();
+            pending.display.sequence = 7;
+            pending.display.elapsed = Duration::from_secs(10);
+            pending.display.native_observed_at = Some(Duration::from_secs(10));
+            pending.display.quantitative_sample_at = Some(Duration::from_secs(10));
+            pending.display.quantitative_sample_sequence = 7;
+            pending.display.ordered = Some(native_sample());
+        }
+        progress.ordered_batch(0, 2, "1L / Retain");
+        progress.cohorts(0, 2);
+        {
+            let pending = shared.pending();
+            assert_eq!(pending.display.sequence, 7);
+            assert_eq!(pending.display.elapsed, Duration::from_secs(10));
+            assert_eq!(
+                pending.display.native_observed_at,
+                Some(Duration::from_secs(10))
+            );
+            assert_eq!(pending.display.quantitative_sample_sequence, 7);
+            assert!(pending.display.ordered.is_none());
+            assert!(!pending.native_dirty);
+        }
+        let mut nested = Envelope::new(Event::CallerProgress, "");
+        nested.activity = Activity::Caller;
+        nested.caller_phase = Some("retained_coefficient_materialization");
+        nested.elapsed = Duration::from_secs(11);
+        update_display(&mut shared.pending(), &nested, true, false);
+        shared.pending().display.ordered = Some(native_sample());
+        progress.cohorts(1, 2);
+        assert!(shared.pending().display.ordered.is_none());
+        nested = Envelope::new(Event::ActivityStarted, "next-native-family");
+        nested.caller_phase = Some("entry_admission");
+        nested.elapsed = Duration::from_secs(12);
+        update_display(&mut shared.pending(), &nested, true, false);
+        assert_eq!(
+            shared
+                .pending()
+                .display
+                .reduction_cohorts
+                .as_ref()
+                .unwrap()
+                .completed,
+            1
+        );
+        assert_eq!(
+            shared
+                .pending()
+                .display
+                .ordered_batches
+                .as_ref()
+                .unwrap()
+                .completed,
+            0
+        );
+        shared.pending().display.ordered = Some(native_sample());
+        progress.cohorts(2, 2);
+        assert!(shared.pending().display.ordered.is_some());
+        progress.ordered_batch(1, 2, "2L / Retain");
+        assert!(shared.pending().display.reduction_cohorts.is_none());
+        assert!(shared.pending().display.ordered.is_none());
+
+        let failure = (|| -> Result<(), ()> {
+            for index in 0..3 {
+                progress.cohorts(index, 3);
+                if index == 1 {
+                    return Err(());
+                }
+            }
+            progress.cohorts(3, 3);
+            Ok(())
+        })();
+        assert!(failure.is_err());
+        {
+            let pending = shared.pending();
+            let outer = pending.display.ordered_batches.as_ref().unwrap();
+            let cohorts = pending.display.reduction_cohorts.as_ref().unwrap();
+            assert_eq!((outer.completed, outer.total), (1, 2));
+            assert_eq!((cohorts.completed, cohorts.total), (1, 3));
+        }
+        let scope = RustRedMonitorScope {
+            observation: None,
+            progress: Some(&progress),
+            handle: Some(handle),
+            _caller_thread: std::marker::PhantomData,
+        };
+        scope.api_status(ApiStatus::Failed);
+        assert_eq!(
+            shared
+                .pending()
+                .display
+                .reduction_cohorts
+                .as_ref()
+                .unwrap()
+                .completed,
+            1
+        );
+        scope.api_status(ApiStatus::Running);
+        assert!(shared.pending().display.ordered_batches.is_none());
+        assert!(shared.pending().display.reduction_cohorts.is_none());
+        assert!(shared.pending().display.ordered.is_none());
+        progress.ordered_batch(0, 1, "1L / Retain");
+        progress.cohorts(0, 1);
+        shared.pending().display.ordered = Some(native_sample());
+        progress.cohorts(1, 1);
+        progress.ordered_batch(1, 1, "1L / Retain");
+        assert_eq!(
+            shared
+                .pending()
+                .display
+                .ordered
+                .as_ref()
+                .unwrap()
+                .counts
+                .completed_phases,
+            5
+        );
+    }
+
+    #[test]
+    fn ordered_census_keeps_its_native_age_and_explicit_request_epoch() {
+        use rustred::{
+            family::IntegralKey,
+            solver::{CandidateOrderedReductionProgress, CandidateRoutedKeyDegrees},
+        };
+        let mut pending = Pending::default();
+        let key = IntegralKey::try_new([2, -1]).unwrap();
+        let mut envelope = Envelope::new(Event::ActivityStarted, "ordered-first");
+        envelope.caller_phase = Some("entry_admission");
+        envelope.elapsed = Duration::from_secs(1);
+        update_display(&mut pending, &envelope, true, false);
+        let first_epoch = pending.display.native_epoch;
+
+        envelope = Envelope::new(Event::Snapshot, "ordered-first");
+        envelope.elapsed = Duration::from_secs(3);
+        envelope.ordered_current = Some(&key);
+        envelope.degrees = Some(CandidateRoutedKeyDegrees::from_key(&key));
+        envelope.ordered = Some(CandidateOrderedReductionProgress {
+            completed_phases: 2,
+            total_phases: 9,
+            frontier_keys: 13,
+            ..Default::default()
+        });
+        update_display(&mut pending, &envelope, false, false);
+        let sample = pending.display.ordered.as_ref().unwrap();
+        assert_eq!(sample.sampled_at, Duration::from_secs(3));
+        assert_eq!(sample.native_epoch, first_epoch);
+        assert_eq!(
+            pending.display.current_key.as_deref(),
+            Some("Ordered [2,-1]")
+        );
+        assert_eq!(pending.display.current_degrees, Some((1, 2, 1)));
+
+        envelope.activity = Activity::TerminalSubstitution;
+        envelope.caller_phase = Some("terminal_substitution");
+        envelope.elapsed = Duration::from_secs(8);
+        update_display(&mut pending, &envelope, true, false);
+        assert_eq!(
+            pending.display.ordered.as_ref().unwrap().sampled_at,
+            Duration::from_secs(3)
+        );
+
+        envelope = Envelope::new(Event::ActivityStarted, "ordered-second");
+        envelope.caller_phase = Some("entry_admission");
+        envelope.elapsed = Duration::from_secs(9);
+        update_display(&mut pending, &envelope, true, false);
+        assert!(pending.display.ordered.is_none());
+        assert!(pending.display.native_epoch > first_epoch);
+        assert!(!pending.display.request_finished);
+    }
 
     #[test]
     fn caller_atom_sizes_read_existing_representation_and_detachment_stops_delivery() {

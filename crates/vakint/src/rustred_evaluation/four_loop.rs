@@ -7,7 +7,7 @@
 //! Native Symbolica programs are trusted, build-time embedded data from the
 //! pinned RustRed/Symbolica stack, not a public untrusted-file input boundary.
 
-use std::sync::Arc;
+use std::{collections::BTreeMap, sync::Arc};
 pub(super) mod cache;
 
 use rustred::input::{Compiler, Limits, LoweringLimits, TextProject, TextPropagator};
@@ -16,6 +16,7 @@ use rustred::reduction::ReductionLimits;
 use rustred_app::{
     CandidateBundleLimits, MAX_CANDIDATE_BUNDLE_BYTES, load_generated_candidate_bundle,
 };
+use symbolica::atom::AtomCore;
 use symbolica::atom::{Atom, AtomView};
 use symbolica::function;
 
@@ -362,6 +363,132 @@ pub(super) fn evaluate(
         &data.masters,
         |target| vakint.cached_candidate_reduction(index, target),
     )
+}
+
+pub(super) fn evaluate_ordered_batch(
+    vakint: &Vakint,
+    settings: &VakintSettings,
+    contributions: &[super::MatchedContribution],
+    mut observation: Option<&mut rustred::solver::CandidateRoutedApplicationObserver<'_>>,
+    progress: Option<&super::monitor::CallerProgress>,
+) -> Result<Atom, VakintError> {
+    let data = vakint.four_loop_data()?;
+    let programs = data.four_loop.as_ref().unwrap();
+    let mut channels = BTreeMap::<
+        (usize, Atom, Atom, i64),
+        Vec<(rustred::family::IntegralKey, rustred::algebra::Coefficient)>,
+    >::new();
+    let mut anchors = BTreeMap::<(usize, Atom), i64>::new();
+    for contribution in contributions {
+        let index = select(programs, &contribution.matched.canonical_topology)?;
+        let program = &programs.programs[index];
+        let family = program.native.family_shared();
+        let input = super::experimental::prepare_matched_candidate_input(
+            contribution.numerator.as_view(),
+            &contribution.matched,
+            program.native.as_ref(),
+            settings,
+            super::numerator::ScalarNumeratorForm::PreserveProducts,
+        )?;
+        let lowering = program
+            .native
+            .lower_weighted_scalar_numerator(&input, settings)?;
+        let context = family.coefficient_context();
+        for term in lowering.terms() {
+            let coefficient = term.coefficient().clone();
+            let exponent = term
+                .integral()
+                .powers()
+                .iter()
+                .try_fold(8i128, |sum, power| sum.checked_sub(i128::from(*power)))
+                .and_then(|sum| sum.checked_add(i128::from(term.common_mass_squared_power())))
+                .and_then(|sum| i64::try_from(sum).ok())
+                .ok_or_else(|| super::data::failure("four-loop master mass exponent overflow"))?;
+            let anchor = *anchors
+                .entry((index, input.mass_squared.clone()))
+                .or_insert(exponent);
+            let (spectator, exponent) = super::numerator::MatchedScalarInput::mass_channel(
+                term.scalar_spectator(),
+                &input.mass_squared,
+                exponent,
+                anchor,
+                settings
+                    .rustred_scalar_numerator_limits
+                    .diagnostics_enabled
+                    .then_some(
+                        settings
+                            .rustred_scalar_numerator_limits
+                            .max_scalar_product_degree,
+                    ),
+            );
+            let (spectator, coefficient) =
+                super::numerator::MatchedScalarInput::channel_coefficient(
+                    spectator,
+                    &coefficient,
+                    context,
+                    settings
+                        .rustred_application_options
+                        .reduction_limits
+                        .exact_algebra,
+                )?;
+            channels
+                .entry((index, input.mass_squared.clone(), spectator, exponent))
+                .or_default()
+                .push((term.integral().clone(), coefficient));
+        }
+    }
+    let mut raw = BTreeMap::<Atom, Atom>::new();
+    let dimension = crate::utils::vakint_macros::vk_parse!("4-2*ep").unwrap();
+    let cohort_total = channels.len();
+    for (cohort_index, ((index, mass, spectator, exponent), terms)) in
+        channels.into_iter().enumerate()
+    {
+        if let Some(progress) = progress {
+            progress.cohorts(cohort_index, cohort_total);
+        }
+        let program = &programs.programs[index];
+        let reduced = program.native.reduce_linear_combination_ordered(
+            terms,
+            settings.rustred_application_options.reduction_limits,
+            observation.as_deref_mut(),
+        )?;
+        let family = program.native.family_shared();
+        let family_dimension = family.dimension().to_expression();
+        let masters = reduced
+            .terms()
+            .iter()
+            .map(|(master, coefficient)| {
+                coefficient
+                    .to_expression()
+                    .replace(family_dimension.to_pattern())
+                    .with(dimension.to_pattern())
+                    * data.masters.symbol(family.fingerprint(), master.powers())
+            })
+            .sum::<Atom>();
+        let spectator = spectator
+            .replace(family_dimension.to_pattern())
+            .with(dimension.to_pattern());
+        *raw.entry(mass.clone()).or_insert(Atom::Zero) += masters * spectator * mass.pow(exponent);
+    }
+    if let Some(progress) = progress {
+        progress.cohorts(cohort_total, cohort_total);
+    }
+    let mut value = Atom::Zero;
+    for (mass, raw) in raw {
+        value += crate::matad::MATAD::with_settings(settings.clone()).finalize_reduced_masters(
+            super::combine_exact(raw),
+            4,
+            None,
+            &mass,
+            &crate::MATADOptions {
+                expand_masters: false,
+                susbstitute_masters: false,
+                substitute_hpls: false,
+                direct_numerical_substition: false,
+            },
+        )?;
+    }
+    Ok(value)
 }
 
 #[cfg(test)]

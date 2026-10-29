@@ -125,18 +125,41 @@ fn rustred_cache_policy(
     }
 }
 
+fn rustred_reduction_strategy(value: &str) -> Result<crate::RustRedReductionStrategy, String> {
+    match value {
+        "depth_first" => Ok(crate::RustRedReductionStrategy::DepthFirst),
+        "ordered" => Ok(crate::RustRedReductionStrategy::Ordered),
+        _ => Err(format!(
+            "unknown rustred_reduction_strategy {value:?}; expected 'depth_first' or 'ordered'"
+        )),
+    }
+}
+
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(name = "Vakint", module = "symbolica.community.hepkit.vakint")]
 /// Vakint engine and settings used for matching, reduction, and evaluation.
 ///
 /// Construct one instance and reuse it. Initialization prepares lower-loop data;
 /// the five-loop catalogue is attached only after successful artifact loading.
+/// Explicit cache operations belong to the depth-first engine and are rejected
+/// when this instance selects ordered reduction.
 pub struct VakintWrapper {
     pub vakint: Vakint,
     pub settings: VakintSettings,
 }
 
 impl VakintWrapper {
+    fn require_depth_first_cache(&self) -> PyResult<()> {
+        if self.settings.rustred_application_options.reduction_strategy
+            == crate::RustRedReductionStrategy::Ordered
+        {
+            return Err(exceptions::PyValueError::new_err(
+                "ordered reduction does not support reduction caches; use rustred_reduction_strategy='depth_first' for cache operations",
+            ));
+        }
+        Ok(())
+    }
+
     /// Stage publication separately from the current wrapper's mutable application slot.
     fn staged_engine(&self) -> PyResult<Vakint> {
         let loaded = self
@@ -789,7 +812,12 @@ impl VakintWrapper {
         let staged = resources::run(self.settings.rustred_resources, || {
             let mut staged = self.staged_engine()?;
             staged
-                .load_external_data(path, max_loop_count)
+                .load_external_data_with_prepared_caches(
+                    path,
+                    max_loop_count,
+                    self.settings.rustred_application_options.reduction_strategy
+                        == crate::RustRedReductionStrategy::DepthFirst,
+                )
                 .map_err(vakint_to_python_error)?;
             Ok(staged)
         })?;
@@ -806,7 +834,12 @@ impl VakintWrapper {
         let staged = resources::run(self.settings.rustred_resources, || {
             let mut staged = self.staged_engine()?;
             staged
-                .load_rustred_artifacts(loop_count, path)
+                .load_rustred_artifacts_with_prepared_caches(
+                    loop_count,
+                    path,
+                    self.settings.rustred_application_options.reduction_strategy
+                        == crate::RustRedReductionStrategy::DepthFirst,
+                )
                 .map_err(vakint_to_python_error)?;
             Ok(staged)
         })?;
@@ -816,8 +849,9 @@ impl VakintWrapper {
 
     /// Install all official loop packs through the requested maximum, or load a
     /// supplied checkout directly. Existing validated installations work offline.
-    /// Prepared native caches load by default. Set `load_prepared_caches=False`
-    /// to activate the same validated loop packs without importing their caches.
+    /// Prepared native caches load by default for depth-first reduction. Set
+    /// `load_prepared_caches=False` to skip them explicitly; ordered reduction
+    /// always skips them.
     #[cfg(all(unix, not(target_arch = "wasm32")))]
     #[pyo3(signature = (max_loop_count, version="latest", local_artifacts_path=None, refresh=false, *, load_prepared_caches=true))]
     pub fn load_official_external_data<'py>(
@@ -829,6 +863,9 @@ impl VakintWrapper {
         refresh: bool,
         load_prepared_caches: bool,
     ) -> PyResult<Bound<'py, PyDict>> {
+        let load_prepared_caches = load_prepared_caches
+            && self.settings.rustred_application_options.reduction_strategy
+                == crate::RustRedReductionStrategy::DepthFirst;
         let (staged, result) = resources::run(self.settings.rustred_resources, || {
             let mut staged = self.staged_engine()?;
             let report = staged
@@ -867,7 +904,7 @@ impl VakintWrapper {
         Ok(result)
     }
 
-    #[pyo3(signature = (run_time_decimal_precision = None, evaluation_order = None, tensor_reduction_method = None, epsilon_symbol = None, mu_r_sq_symbol = None, form_exe_path = None, python_exe_path = None, verify_numerator_identification = None, integral_normalization_factor = None, allow_unknown_integrals = None, clean_tmp_dir = None, number_of_terms_in_epsilon_expansion = None, use_dot_product_notation = None, temporary_directory = None, rustred_artifact_path = None, rustred_cache_bytes = None, rustred_cache_terms = None, rustred_product_cache_bytes = None, rustred_product_cache_terms = None, rustred_cache_policy = "evict-lru", rustred_scalar_max_work = None, max_process_rss_bytes = None, max_elapsed_seconds = None))]
+    #[pyo3(signature = (run_time_decimal_precision = None, evaluation_order = None, tensor_reduction_method = None, epsilon_symbol = None, mu_r_sq_symbol = None, form_exe_path = None, python_exe_path = None, verify_numerator_identification = None, integral_normalization_factor = None, allow_unknown_integrals = None, clean_tmp_dir = None, number_of_terms_in_epsilon_expansion = None, use_dot_product_notation = None, temporary_directory = None, rustred_artifact_path = None, rustred_cache_bytes = None, rustred_cache_terms = None, rustred_product_cache_bytes = None, rustred_product_cache_terms = None, rustred_cache_policy = "evict-lru", rustred_scalar_max_work = None, max_process_rss_bytes = None, max_elapsed_seconds = None, rustred_reduction_strategy = "depth_first"))]
     #[allow(clippy::too_many_arguments)]
     #[new]
     /// Create a new Vakint instance, specifying details of the evaluation stack. Note that the same instance can be recycled across multiple evaluations.
@@ -963,6 +1000,10 @@ impl VakintWrapper {
     ///     Cooperative elapsed-time ceiling per public operation, including data
     ///     loading and lookup. None disables it. Native kernels are checked at
     ///     boundaries, so an external supervisor is needed for a hard deadline.
+    /// rustred_reduction_strategy : str
+    ///     "depth_first" (default) or "ordered". Ordered reduction combines the
+    ///     global integral frontier between checked steps and does not use or
+    ///     produce reduction caches. Official loading skips prepared caches.
     pub fn new(
         run_time_decimal_precision: Option<u32>,
         evaluation_order: Option<Vec<PyRef<VakintEvaluationMethodWrapper>>>,
@@ -987,11 +1028,14 @@ impl VakintWrapper {
         rustred_scalar_max_work: Option<usize>,
         max_process_rss_bytes: Option<u64>,
         max_elapsed_seconds: Option<f64>,
+        rustred_reduction_strategy: &str,
     ) -> PyResult<VakintWrapper> {
         let rustred_resources = resources::limits(max_process_rss_bytes, max_elapsed_seconds)?;
         resources::run(rustred_resources, || {
             let mut rustred_application_options = rustred_app::SavedApplicationOptions {
                 cache_policy: self::rustred_cache_policy(rustred_cache_policy)
+                    .map_err(exceptions::PyValueError::new_err)?,
+                reduction_strategy: self::rustred_reduction_strategy(rustred_reduction_strategy)
                     .map_err(exceptions::PyValueError::new_err)?,
                 ..Default::default()
             };
@@ -1130,6 +1174,7 @@ impl VakintWrapper {
     /// `recomputed_nodes` counts repeated cache misses within a single request;
     /// no unbounded cross-request history is retained.
     pub fn rustred_application_cache_statistics(&self) -> PyResult<HashMap<String, usize>> {
+        self.require_depth_first_cache()?;
         resources::run(self.settings.rustred_resources, || {
             let cache = self
                 .vakint
@@ -1159,6 +1204,7 @@ impl VakintWrapper {
     /// Clear saved-rule and lower-factor memoization without changing the
     /// admitted scope. Cumulative work/eviction counters are not reset.
     pub fn clear_rustred_application_cache(&self) -> PyResult<()> {
+        self.require_depth_first_cache()?;
         resources::run_committing(self.settings.rustred_resources, || {
             self.vakint
                 .clear_rustred_application_cache()
@@ -1217,6 +1263,7 @@ impl VakintWrapper {
         progress_snapshot: Option<PathBuf>,
         cache_hit_diagnostic: bool,
     ) -> PyResult<Py<PyDict>> {
+        self.require_depth_first_cache()?;
         resources::run_committing(self.settings.rustred_resources, || {
             cache::check_loops(n_loops)?;
             let monitor = cache::monitor_options(
@@ -1288,6 +1335,7 @@ impl VakintWrapper {
         file_options: Option<PyRef<'_, cache::CacheFileOptionsWrapper>>,
         file_identity: Option<PyRef<'_, cache::CacheFileIdentityWrapper>>,
     ) -> PyResult<()> {
+        self.require_depth_first_cache()?;
         resources::run_committing(self.settings.rustred_resources, || {
             cache::check_loops(n_loops)?;
             let mut options = crate::RustRedCacheLoadOptions {
@@ -1354,6 +1402,7 @@ impl VakintWrapper {
         checkpoint_interval_seconds: Option<f64>,
         file_options: Option<PyRef<'_, cache::CacheFileOptionsWrapper>>,
     ) -> PyResult<cache::RunningCacheControlWrapper> {
+        self.require_depth_first_cache()?;
         resources::run_committing(self.settings.rustred_resources, || {
             cache::check_loops(n_loops)?;
             let mut options = cache::running_options(
@@ -1402,6 +1451,7 @@ impl VakintWrapper {
         checkpoint_interval_seconds: Option<f64>,
         file_options: Option<PyRef<'_, cache::CacheFileOptionsWrapper>>,
     ) -> PyResult<cache::RunningCacheControlWrapper> {
+        self.require_depth_first_cache()?;
         resources::run_committing(self.settings.rustred_resources, || {
             cache::check_loops(n_loops)?;
             let mut options = cache::running_options(
@@ -1441,6 +1491,7 @@ impl VakintWrapper {
         disk_bytes: Option<u64>,
         file_options: Option<PyRef<'_, cache::CacheFileOptionsWrapper>>,
     ) -> PyResult<()> {
+        self.require_depth_first_cache()?;
         resources::run_committing(self.settings.rustred_resources, || {
             cache::check_loops(n_loops)?;
             let mut options = cache::running_options(
@@ -1456,6 +1507,7 @@ impl VakintWrapper {
     /// Flush accepted native records and return the acknowledged durable report.
     /// A flush failure is an error; pending records must not be reported saved.
     pub fn save_running_cache(&self, py: Python<'_>, n_loops: usize) -> PyResult<Py<PyDict>> {
+        self.require_depth_first_cache()?;
         resources::run_committing(self.settings.rustred_resources, || {
             cache::check_loops(n_loops)?;
             let engine = self.vakint.clone();
@@ -1474,6 +1526,7 @@ impl VakintWrapper {
         n_loops: usize,
         sidecar_path: PathBuf,
     ) -> PyResult<Py<PyDict>> {
+        self.require_depth_first_cache()?;
         resources::run_committing(self.settings.rustred_resources, || {
             cache::check_loops(n_loops)?;
             let engine = self.vakint.clone();
@@ -1501,6 +1554,7 @@ impl VakintWrapper {
         resume: bool,
         file_options: Option<PyRef<'_, cache::CacheFileOptionsWrapper>>,
     ) -> PyResult<Py<PyDict>> {
+        self.require_depth_first_cache()?;
         resources::run_committing(self.settings.rustred_resources, || {
             cache::check_loops(n_loops)?;
             let mode = cache::save_mode(mode)?;
@@ -1538,6 +1592,7 @@ impl VakintWrapper {
         max_temporary_bytes: Option<u64>,
         disk_bytes: Option<u64>,
     ) -> PyResult<Py<PyDict>> {
+        self.require_depth_first_cache()?;
         resources::run_committing(self.settings.rustred_resources, || {
             cache::check_loops(n_loops)?;
             let options = cache::transfer_options(
@@ -1581,6 +1636,7 @@ impl VakintWrapper {
         disk_bytes: Option<u64>,
         timeout_seconds: Option<f64>,
     ) -> PyResult<Py<PyDict>> {
+        self.require_depth_first_cache()?;
         resources::run_committing(self.settings.rustred_resources, || {
             cache::check_loops(n_loops)?;
             let options = cache::transfer_options(
@@ -1605,6 +1661,7 @@ impl VakintWrapper {
     /// Clear only the attached native RAM cache; preserve its read-only files
     /// and cumulative counters. No program is loaded for an empty attachment.
     pub fn clear_cache(&self, py: Python<'_>, n_loops: usize) -> PyResult<()> {
+        self.require_depth_first_cache()?;
         resources::run_committing(self.settings.rustred_resources, || {
             cache::check_loops(n_loops)?;
             let engine = self.vakint.clone();
@@ -1616,6 +1673,7 @@ impl VakintWrapper {
     /// Detach persistent backing and clear resident reduction records.
     /// The loaded reduction campaign remains available for uncached evaluation.
     pub fn detach_cache(&self, py: Python<'_>, n_loops: usize) -> PyResult<()> {
+        self.require_depth_first_cache()?;
         resources::run_committing(self.settings.rustred_resources, || {
             cache::check_loops(n_loops)?;
             let engine = self.vakint.clone();
@@ -1627,6 +1685,7 @@ impl VakintWrapper {
     /// Return aggregate and exact-namespace cache telemetry. Coefficient payload
     /// and I/O buffers are separate; neither is a measurement of process RSS.
     pub fn cache_statistics(&self, py: Python<'_>, n_loops: usize) -> PyResult<Py<PyDict>> {
+        self.require_depth_first_cache()?;
         resources::run(self.settings.rustred_resources, || {
             cache::check_loops(n_loops)?;
             let engine = self.vakint.clone();
@@ -2173,5 +2232,36 @@ mod tests {
             CandidateRoutedCachePolicy::EvictAgedLeastFrequentlyUsed
         );
         assert!(rustred_cache_policy("unbounded").is_err());
+    }
+
+    #[test]
+    fn python_reduction_strategy_values_are_explicit_and_validated() {
+        assert_eq!(
+            rustred_reduction_strategy("depth_first").unwrap(),
+            crate::RustRedReductionStrategy::DepthFirst
+        );
+        assert_eq!(
+            rustred_reduction_strategy("ordered").unwrap(),
+            crate::RustRedReductionStrategy::Ordered
+        );
+        for value in ["dfs", "Ordered", "", "automatic"] {
+            let error = rustred_reduction_strategy(value).unwrap_err();
+            assert!(error.contains("depth_first"));
+            assert!(error.contains("ordered"));
+        }
+    }
+
+    #[test]
+    fn ordered_python_settings_reject_depth_first_cache_operations() {
+        let mut wrapper = VakintWrapper {
+            vakint: Vakint::new().unwrap(),
+            settings: VakintSettings::default(),
+        };
+        wrapper.require_depth_first_cache().unwrap();
+        wrapper
+            .settings
+            .rustred_application_options
+            .reduction_strategy = crate::RustRedReductionStrategy::Ordered;
+        assert!(wrapper.require_depth_first_cache().is_err());
     }
 }
