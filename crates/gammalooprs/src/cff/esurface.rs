@@ -1,4 +1,6 @@
+use std::collections::VecDeque;
 use std::fmt::Display;
+use std::mem;
 
 use bincode_trait_derive::{Decode, Encode};
 use derive_more::{From, Into};
@@ -6,7 +8,7 @@ use eyre::eyre;
 use itertools::Itertools;
 use linnet::half_edge::HedgeGraph;
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Flow, HedgePair};
-use linnet::half_edge::subgraph::OrientedCut;
+use linnet::half_edge::subgraph::{Inclusion, ModifySubSet, OrientedCut, SuBitGraph};
 use ref_ops::RefNeg;
 use rug::{Float, float::Round};
 use serde::{Deserialize, Serialize};
@@ -16,6 +18,7 @@ use symbolica::domains::dual::HyperDual;
 use symbolica::domains::float::{FloatLike as SymFloatLike, Real};
 use symbolica::id::Replacement;
 use symbolica::{function, parse};
+use thiserror::Error;
 use tracing::debug;
 use typed_index_collections::TiVec;
 
@@ -58,6 +61,32 @@ pub struct Esurface {
     pub vertex_set: VertexSet,
     //#[bincode(with_serde)]
     //pub subspace_graph: InternalSubGraph,
+}
+
+/// An exact surface-support failure; raising numeric precision cannot repair it.
+#[derive(Debug, Error)]
+pub(crate) enum EsurfaceBoundaryError {
+    #[error("E-surface {energies:?} is not a separating boundary in graph '{graph}'")]
+    NonSeparating {
+        graph: String,
+        energies: Vec<EdgeIndex>,
+    },
+    #[error("E-surface energy edge {edge} is not internal to graph '{graph}'")]
+    NonInternalEnergy { graph: String, edge: EdgeIndex },
+    #[error("E-surface {energies:?} spans independently oriented components in graph '{graph}'")]
+    DisconnectedSupport {
+        graph: String,
+        energies: Vec<EdgeIndex>,
+    },
+    #[error(
+        "E-surface {energies:?} in graph '{graph}' has boundary route {route:?}, incompatible with external shift {shift:?}"
+    )]
+    UnbalancedShift {
+        graph: String,
+        energies: Vec<EdgeIndex>,
+        route: Vec<i64>,
+        shift: Vec<i64>,
+    },
 }
 
 // Edge identity, radial velocity, constant spatial offset, and mass.
@@ -694,6 +723,127 @@ impl PartialEq for Esurface {
 impl Eq for Esurface {}
 
 impl Esurface {
+    /// Recover this equation's oriented boundary and certify its full routing.
+    /// The energy support must lie in one physical connected component: each
+    /// component otherwise has an independent boundary reversal. The physical
+    /// cut hosting a counterterm can orient spectator edges differently.
+    fn oriented_boundary(&self, graph: &Graph) -> Result<OrientedCut, EsurfaceBoundaryError> {
+        let initial_edges = graph.initial_state_cut.as_subgraph();
+        let mut sides = vec![None; graph.underlying.n_nodes()];
+        let mut components = vec![usize::MAX; sides.len()];
+        let mut pending = VecDeque::new();
+        for (root, _, _) in graph.underlying.iter_nodes() {
+            if sides[root.0].is_some() {
+                continue;
+            }
+            sides[root.0] = Some(false);
+            components[root.0] = root.0;
+            pending.push_back(root);
+            while let Some(node) = pending.pop_front() {
+                let side = sides[node.0].expect("queued vertices have an assigned cut side");
+                for hedge in graph.underlying.iter_crown(node) {
+                    if initial_edges.includes(&hedge) {
+                        continue;
+                    }
+                    let opposite = graph.underlying.inv(hedge);
+                    if opposite == hedge {
+                        continue;
+                    }
+                    let edge = graph.underlying[&hedge];
+                    let neighbor = graph.underlying.node_id(opposite);
+                    let neighbor_side = side ^ self.energies.contains(&edge);
+                    match sides[neighbor.0] {
+                        Some(assigned) if assigned != neighbor_side => {
+                            return Err(EsurfaceBoundaryError::NonSeparating {
+                                graph: graph.name.clone(),
+                                energies: self.energies.clone(),
+                            });
+                        }
+                        Some(_) => {}
+                        None => {
+                            sides[neighbor.0] = Some(neighbor_side);
+                            components[neighbor.0] = root.0;
+                            pending.push_back(neighbor);
+                        }
+                    }
+                }
+            }
+        }
+
+        let mut energy_component = None;
+        let mut left: SuBitGraph = graph.empty_subgraph();
+        for (pair, edge, _) in graph.underlying.iter_edges() {
+            if !self.energies.contains(&edge) {
+                continue;
+            }
+            let HedgePair::Paired { source, sink } = pair else {
+                return Err(EsurfaceBoundaryError::NonInternalEnergy {
+                    graph: graph.name.clone(),
+                    edge,
+                });
+            };
+            if initial_edges.includes(&pair) {
+                return Err(EsurfaceBoundaryError::NonInternalEnergy {
+                    graph: graph.name.clone(),
+                    edge,
+                });
+            }
+            let node = graph.underlying.node_id(source);
+            let component = components[node.0];
+            if energy_component.is_some_and(|prior| prior != component) {
+                return Err(EsurfaceBoundaryError::DisconnectedSupport {
+                    graph: graph.name.clone(),
+                    energies: self.energies.clone(),
+                });
+            }
+            energy_component = Some(component);
+            let source_side = sides[node.0].expect("every graph vertex has an assigned cut side");
+            left.add(if source_side { source } else { sink });
+        }
+        let mut boundary = OrientedCut::from_underlying_strict(left, &graph.underlying)
+            .expect("one half-edge per paired energy edge defines an oriented boundary");
+
+        let lmb = &graph.loop_momentum_basis;
+        let mut route = vec![0_i64; lmb.loop_edges.len() + lmb.ext_edges.len()];
+        for (flow, edge, _) in boundary.iter_edges_flow(&graph.underlying) {
+            let sign = if flow == Flow::Source { 1 } else { -1 };
+            let signature = &lmb.edge_signatures[edge];
+            for (index, coefficient) in signature.internal.iter().enumerate() {
+                route[index] += sign * i64::from(i8::from(*coefficient));
+            }
+            for (index, coefficient) in signature.external.iter().enumerate() {
+                route[lmb.loop_edges.len() + index] += sign * i64::from(i8::from(*coefficient));
+            }
+        }
+        let mut shift = vec![0_i64; route.len()];
+        for (edge, coefficient) in &self.external_shift {
+            for (index, sign) in lmb.edge_signatures[*edge].external.iter().enumerate() {
+                shift[lmb.loop_edges.len() + index] += coefficient * i64::from(i8::from(*sign));
+            }
+        }
+        if route
+            .iter()
+            .zip(&shift)
+            .all(|(route, shift)| route + shift == 0)
+        {
+            return Ok(boundary);
+        }
+        if route
+            .iter()
+            .zip(&shift)
+            .all(|(route, shift)| route - shift == 0)
+        {
+            mem::swap(&mut boundary.left, &mut boundary.right);
+            return Ok(boundary);
+        }
+        Err(EsurfaceBoundaryError::UnbalancedShift {
+            graph: graph.name.clone(),
+            energies: self.energies.clone(),
+            route,
+            shift,
+        })
+    }
+
     /// Match two energy sums on one active spatial momentum. Their shared
     /// energy is identified by a single sign of the full internal routing,
     /// exact external spatial shift and mass expression, never by edge identity
@@ -1677,6 +1827,10 @@ impl Esurface {
     #[allow(clippy::too_many_arguments)]
     /// Classify a surface in an active loop-momentum subspace. Pinched and
     /// non-existing surfaces remain distinct and are never subtraction targets.
+    ///
+    /// # Errors
+    /// Returns a structural error when fixed energies require a boundary that
+    /// cannot be certified from this surface's topology and exact routing.
     pub(crate) fn classify_existence_subspace<T: FloatLike>(
         &self,
         loop_moms: &LoopMomenta<F<T>>,
@@ -1685,17 +1839,16 @@ impl Esurface {
         all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
         graph: &Graph,
         real_mass_vector: &EdgeVec<F<T>>,
-        reversed_edges: &[EdgeIndex],
         e_cm: &F<T>,
         normalized_margin_tolerance: &F<T>,
-    ) -> EsurfaceExistence<T> {
+    ) -> Result<EsurfaceExistence<T>, EsurfaceBoundaryError> {
         //todo!("refactor for subspaces");
         if self.external_shift.is_empty() {
             debug!("esurface has no external shift, cannot exist");
-            return EsurfaceExistence::NonExisting {
+            return Ok(EsurfaceExistence::NonExisting {
                 normalized_margin: None,
                 reason: NonExistingEsurfaceReason::NoExternalShift,
-            };
+            });
         }
 
         let shift_part = self.compute_shift_part_from_momenta_in_subspace(
@@ -1713,17 +1866,17 @@ impl Esurface {
             debug!(
                 "esurface has no radial energy in this subspace, cannot bound a threshold region"
             );
-            return EsurfaceExistence::NonExisting {
+            return Ok(EsurfaceExistence::NonExisting {
                 normalized_margin: None,
                 reason: NonExistingEsurfaceReason::NoRadialDependence,
-            };
+            });
         }
 
         let lmb = subspace.get_lmb(all_lmbs);
         let mass_sum: F<T> = subspace_energy_indices
             .iter()
             .map(|&index| &real_mass_vector[index])
-            .fold(F::from_f64(0.0), |acc, x| acc + x);
+            .fold(e_cm.zero(), |acc, x| acc + x);
 
         let zero_vector = ThreeMomentum::new(e_cm.zero(), e_cm.zero(), e_cm.zero());
 
@@ -1732,32 +1885,39 @@ impl Esurface {
             .iter()
             .map(|(index, sign)| {
                 let external_signature = &lmb.edge_signatures[*index].external;
-                compute_shift_part(external_signature, external_moms).spatial
-                    * F::from_f64(*sign as f64)
+                compute_shift_part(external_signature, external_moms).spatial * e_cm.from_i64(*sign)
             })
             .reduce(|acc, x| acc + x)
             .unwrap_or_else(|| zero_vector.clone());
 
-        let other_part = subspace
+        let fixed_energies = subspace
             .does_not_contain(&self.energies, graph)
-            .map(|index| {
-                let signature = &lmb.edge_signatures[index];
-                let sign = if reversed_edges.contains(&index) {
-                    -F::from_f64(1.0)
-                } else {
-                    F::from_f64(1.0)
-                };
-
-                signature.compute_momentum(
-                    loop_moms,
-                    &external_moms
-                        .iter()
-                        .map(|mom| mom.spatial.clone())
-                        .collect::<TiVec<ExternalIndex, _>>(),
-                ) * sign
-            })
-            .reduce(|acc, x| acc + x)
-            .unwrap_or_else(|| zero_vector.clone());
+            .collect_vec();
+        let other_part = if fixed_energies.is_empty() {
+            zero_vector.clone()
+        } else {
+            let boundary = self.oriented_boundary(graph)?;
+            let spatial_externals: ExternalThreeMomenta<F<T>> = external_moms
+                .iter()
+                .map(|mom| mom.spatial.clone())
+                .collect();
+            fixed_energies
+                .into_iter()
+                .map(|index| {
+                    let signature = &lmb.edge_signatures[index];
+                    let momentum = signature.compute_momentum(loop_moms, &spatial_externals);
+                    let (flow, _, _) = boundary
+                        .iter_edges_flow(&graph.underlying)
+                        .find(|(_, edge, _)| *edge == index)
+                        .expect("every surface energy belongs to its certified boundary");
+                    match flow {
+                        Flow::Source => momentum,
+                        Flow::Sink => -momentum,
+                    }
+                })
+                .reduce(|acc, x| acc + x)
+                .expect("the fixed-energy list is nonempty")
+        };
 
         let shift_vector_sq = (&graph_vector + &other_part).norm_squared();
         let invariant_margin = &shift_part * &shift_part - &shift_vector_sq - &mass_sum * &mass_sum;
@@ -1779,7 +1939,7 @@ impl Esurface {
             );
         }
 
-        classification
+        Ok(classification)
     }
 
     #[inline]
@@ -2674,25 +2834,32 @@ impl Graph {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+    use std::path::Path;
+
+    use eyre::Report;
     use itertools::Itertools;
     use linnet::half_edge::HedgeGraph;
     use linnet::half_edge::builder::HedgeGraphBuilder;
-    use linnet::half_edge::involution::{EdgeIndex, Flow, Orientation};
+    use linnet::half_edge::involution::{EdgeIndex, Flow, HedgePair, Orientation};
     use linnet::half_edge::nodestore::NodeStorageVec;
-    use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
+    use linnet::half_edge::subgraph::{Inclusion, SuBitGraph, SubGraphLike, SubSetLike};
     use symbolica::atom::{Atom, AtomCore};
     use symbolica::parse;
 
     use crate::cff::VertexSet;
+    use crate::graph::FeynmanGraph;
     use crate::graph::{Graph, LmbIndex, LoopMomentumBasis, parse::from_dot::IntoGraph};
     use crate::initialisation::test_initialise;
     use crate::integrands::process::SamplingMapAffine;
+    use crate::momentum::sample::ExternalThreeMomenta;
     use crate::momentum::{
         FourMomentum, ThreeMomentum,
         sample::{ExternalFourMomenta, LoopMomenta, SubspaceData},
         signature::LoopExtSignature,
     };
-    use crate::processes::CrossSectionCut;
+    use crate::processes::{CrossSectionCut, CrossSectionGraph};
+    use crate::utils;
     use crate::{
         cff::{esurface::Esurface, generation::ShiftRewrite},
         dot,
@@ -2708,7 +2875,9 @@ mod tests {
     };
     use typed_index_collections::ti_vec;
 
-    use super::{EsurfaceExistence, add_external_shifts};
+    use super::{
+        EsurfaceBoundaryError, EsurfaceExistence, SamplingEvaluationError, add_external_shifts,
+    };
 
     #[test]
     fn canonical_ray_embedding_preserves_ordered_occurrences_and_native_coefficients() {
@@ -4398,6 +4567,553 @@ mod tests {
                     "existence changed for shift factor {shift_factor} and margin factor {margin_factor}",
                 );
             }
+        }
+    }
+
+    /// Run the compiled test binary from the repository root:
+    /// ```text
+    /// <gammalooprs-test-binary> --ignored --exact \
+    ///   cff::esurface::tests::nnlo_example_topological_boundaries_survive_initial_state_sewing \
+    ///   --nocapture
+    /// ```
+    #[test]
+    #[ignore = "audit the complete NNLO example; run this binary from the repository root"]
+    fn nnlo_example_topological_boundaries_survive_initial_state_sewing() {
+        test_initialise().unwrap();
+        let model = utils::load_generic_model("sm");
+        let directory = Path::new("examples/cli/epem_a_ttxh/NNLO/graphs");
+        let mut paths = fs::read_dir(directory)
+            .expect("run the NNLO boundary audit from the repository root")
+            .map(|entry| entry.unwrap().path())
+            .filter(|path| path.extension().is_some_and(|extension| extension == "dot"))
+            .collect_vec();
+        paths.sort();
+        assert!(
+            !paths.is_empty(),
+            "the NNLO graph inventory must be present"
+        );
+        let mut boundary_count = 0;
+        for path in &paths {
+            let graph: Graph = fs::read_to_string(path)
+                .unwrap()
+                .into_graph(&model)
+                .unwrap();
+            let (source, target) = graph.get_source_and_target();
+            for (left, cut, right) in
+                graph.all_st_cuts_for_cs(source, target, &graph.get_initial_state_tree())
+            {
+                if cut.nedges(&graph) <= 1 {
+                    continue;
+                }
+                let surface = Esurface::new_from_cut_left(
+                    &graph.underlying,
+                    &CrossSectionCut { left, cut, right },
+                    Some(&graph.initial_state_cut),
+                );
+                surface.oriented_boundary(&graph).unwrap_or_else(|error| {
+                    panic!("{}: {error}", path.display());
+                });
+                boundary_count += 1;
+            }
+        }
+        println!(
+            "Certified {boundary_count} topological boundaries on {} sewn NNLO graphs",
+            paths.len(),
+        );
+    }
+
+    #[test]
+    fn surface_boundary_excludes_both_halves_of_sewn_initial_edges() {
+        test_initialise().unwrap();
+        let model = utils::load_generic_model("sm");
+        let graph: Graph =
+            include_str!("../../../../tests/resources/graphs/ir_safe_thresholds/GL562.dot")
+                .into_graph(&model)
+                .unwrap();
+        let initial_edges = graph.initial_state_cut.as_subgraph();
+        let mut sewn_initial_count = 0;
+        for (pair, _, _) in graph.underlying.iter_edges() {
+            if !initial_edges.includes(&pair) {
+                continue;
+            }
+            let HedgePair::Paired { source, sink } = pair else {
+                panic!("initial-state legs must have been sewn into paired edges");
+            };
+            assert_ne!(
+                graph.initial_state_cut.includes(&source),
+                graph.initial_state_cut.includes(&sink),
+                "an oriented cut includes only one half of a sewn edge",
+            );
+            assert!(initial_edges.includes(&source) && initial_edges.includes(&sink));
+            sewn_initial_count += 1;
+        }
+        assert_eq!(sewn_initial_count, 2);
+
+        let surface = Esurface {
+            energies: [4, 10, 12, 14].map(EdgeIndex).into(),
+            external_shift: vec![(EdgeIndex(0), -1), (EdgeIndex(1), -1)],
+            vertex_set: VertexSet::dummy(),
+        };
+        let boundary = surface.oriented_boundary(&graph).unwrap();
+        for (flow, edge, _) in boundary.iter_edges_flow(&graph.underlying) {
+            assert_eq!(
+                flow == Flow::Source,
+                [EdgeIndex(4), EdgeIndex(12)].contains(&edge),
+                "incorrect sign on GL562 threshold edge {edge}",
+            );
+        }
+    }
+
+    #[test]
+    fn surface_boundary_rejects_independent_component_orientations() {
+        test_initialise().unwrap();
+        let graph: Graph = dot!(digraph disconnected_boundary {
+            incoming_a [style=invis]
+            outgoing_a [style=invis]
+            incoming_b [style=invis]
+            outgoing_b [style=invis]
+            node [num=1]
+            edge [num=1 mass=1]
+            incoming_a -> A [id=0 mass=0]
+            B -> outgoing_a [id=1 mass=0]
+            A -> B [id=2 lmb_id=0]
+            A -> B [id=3]
+            incoming_b -> C [id=4 mass=0]
+            D -> outgoing_b [id=5 mass=0]
+            C -> D [id=6 lmb_id=1]
+            C -> D [id=7]
+        })
+        .unwrap();
+        let surface = Esurface {
+            energies: [2, 3, 6, 7].map(EdgeIndex).into(),
+            external_shift: vec![(EdgeIndex(0), -1), (EdgeIndex(4), -1)],
+            vertex_set: VertexSet::dummy(),
+        };
+        assert!(matches!(
+            surface.oriented_boundary(&graph),
+            Err(EsurfaceBoundaryError::DisconnectedSupport { .. }),
+        ));
+    }
+
+    #[test]
+    fn projected_gl280_threshold_uses_its_own_signed_boundary() {
+        test_initialise().unwrap();
+        let model = utils::load_generic_model("sm");
+        let graph: Graph =
+            include_str!("../../../../tests/resources/graphs/ir_safe_thresholds/GL280.dot")
+                .into_graph(&model)
+                .unwrap();
+        let mut cross_section = CrossSectionGraph::new(graph.clone());
+        cross_section.build_lmbs().unwrap();
+        let production_lmbs = cross_section.derived_data.lmbs.as_ref().unwrap();
+        let masses = graph.get_real_mass_vector::<f64>(&model);
+        let invalid = Esurface {
+            energies: [5, 9, 13].map(EdgeIndex).into(),
+            external_shift: vec![(EdgeIndex(0), -1), (EdgeIndex(1), -1)],
+            vertex_set: VertexSet::dummy(),
+        };
+        let error = invalid.oriented_boundary(&graph).unwrap_err();
+        assert!(matches!(
+            &error,
+            EsurfaceBoundaryError::NonSeparating { .. }
+        ));
+        let error: Report = error.into();
+        assert!(error.downcast_ref::<SamplingEvaluationError>().is_none());
+        assert!(error.downcast_ref::<EsurfaceBoundaryError>().is_some());
+        let point = [
+            [-4.731473194719612, 6.308630926292807, 257.1380514480527],
+            [57.0, -31.0, 89.0],
+            [-140.22095511751874, 186.961273490025, 311.60212248337507],
+            [72.97175339348193, -80.64567119130925, -82.36278531884878],
+        ]
+        .map(|[x, y, z]| ThreeMomentum::new(F(x), F(y), F(z)));
+        // Directed energies are fixed by the simultaneous physical host and
+        // threshold cuts. Their linear routing therefore survives a Lorentz boost.
+        let energies = [
+            (point[0].norm_squared() + F(173.0).square()).sqrt(),
+            (point[1].norm_squared() + F(173.0).square()).sqrt(),
+            -(point[2].norm_squared() + F(173.0).square()).sqrt(),
+            -point[3].norm(),
+        ];
+        let base_loops = LoopMomenta::from_iter(point);
+        let base_externals = ExternalFourMomenta::from_iter([
+            FourMomentum::from_args(F(500.0), F(0.0), F(0.0), F(500.0)),
+            FourMomentum::from_args(F(500.0), F(0.0), F(0.0), F(-500.0)),
+        ]);
+        for edges in [vec![2, 4, 9], vec![5, 9, 13, 14]] {
+            let surface = Esurface {
+                energies: edges.iter().copied().map(EdgeIndex).collect(),
+                external_shift: vec![(EdgeIndex(0), -1), (EdgeIndex(1), -1)],
+                vertex_set: VertexSet::dummy(),
+            };
+            let eta = surface.compute_from_momenta(
+                &graph.loop_momentum_basis,
+                &masses,
+                &base_loops,
+                &base_externals,
+            );
+            assert!(eta.abs() < F(1.0e-9), "GL280 shell {edges:?}: eta={eta}");
+        }
+        let signature = &graph.loop_momentum_basis.edge_signatures[EdgeIndex(14)];
+        let directed_time = signature
+            .internal
+            .iter()
+            .zip(energies)
+            .map(|(sign, energy)| energy * energy.from_i64(i64::from(i8::from(*sign))))
+            .chain(
+                signature
+                    .external
+                    .iter()
+                    .map(|sign| F(500.0) * F(500.0).from_i64(i64::from(i8::from(*sign)))),
+            )
+            .fold(F(0.0), |sum, value| sum + value);
+        let spatial_externals: ExternalThreeMomenta<F<f64>> =
+            base_externals.iter().map(|beam| beam.spatial).collect();
+        let q14 = signature.compute_momentum(&base_loops, &spatial_externals);
+        assert!(
+            (directed_time + q14.norm()).abs() < F(1.0e-9),
+            "GL280 q14 must have its negative on-shell temporal component: time={directed_time}, norm={}",
+            q14.norm(),
+        );
+        let boost = |energy: F<f64>, momentum: ThreeMomentum<F<f64>>| {
+            FourMomentum::from_args(
+                (F(5.0) * energy + F(3.0) * momentum.px) / F(4.0),
+                (F(3.0) * energy + F(5.0) * momentum.px) / F(4.0),
+                momentum.py,
+                momentum.pz,
+            )
+        };
+        let e_cm = F(1000.0);
+        let mut reference_margin = None;
+        for boosted in [false, true] {
+            let native = point.iter().zip(energies).map(|(&momentum, energy)| {
+                if boosted {
+                    boost(energy, momentum).spatial
+                } else {
+                    momentum
+                }
+            });
+            let native: LoopMomenta<F<f64>> = LoopMomenta::from_iter(native);
+            let beams = [F(500.0), F(-500.0)].map(|z| {
+                let momentum = ThreeMomentum::new(F(0.0), F(0.0), z);
+                if boosted {
+                    boost(F(500.0), momentum)
+                } else {
+                    FourMomentum::from_args(F(500.0), momentum.px, momentum.py, momentum.pz)
+                }
+            });
+            for reversed in [false, true] {
+                let external_moms = ExternalFourMomenta::from_iter(
+                    beams
+                        .iter()
+                        .map(|beam| if reversed { -beam } else { *beam }),
+                );
+                let spatial_externals: ExternalThreeMomenta<F<f64>> =
+                    external_moms.iter().map(|beam| beam.spatial).collect();
+                let native = LoopMomenta::from_iter(
+                    native
+                        .iter()
+                        .map(|momentum| if reversed { -momentum } else { *momentum }),
+                );
+                let surface = Esurface {
+                    energies: [5, 9, 13, 14].map(EdgeIndex).into(),
+                    external_shift: vec![
+                        (EdgeIndex(0), if reversed { 1 } else { -1 }),
+                        (EdgeIndex(1), if reversed { 1 } else { -1 }),
+                    ],
+                    // General CFF surfaces need not carry a topology vertex set.
+                    vertex_set: VertexSet::dummy(),
+                };
+                let boundary = surface.oriented_boundary(&graph).unwrap();
+                for (flow, edge, _) in boundary.iter_edges_flow(&graph.underlying) {
+                    let expected = (edge == EdgeIndex(5)) != reversed;
+                    assert_eq!(flow == Flow::Source, expected);
+                }
+                for edges in [vec![2, 4, 9], vec![5, 9, 13, 14]] {
+                    let shell = Esurface {
+                        energies: edges.iter().copied().map(EdgeIndex).collect(),
+                        external_shift: surface.external_shift.clone(),
+                        vertex_set: VertexSet::dummy(),
+                    };
+                    let eta = shell.compute_from_momenta(
+                        &graph.loop_momentum_basis,
+                        &masses,
+                        &native,
+                        &external_moms,
+                    );
+                    assert!(
+                        eta.abs() < F(1.0e-9),
+                        "GL280 transformed shell {edges:?}: boost={boosted}, reversed={reversed}, eta={eta}",
+                    );
+                }
+                for parent in [[2, 3, 5, 12], [2, 5, 9, 12]] {
+                    let parent = parent.map(EdgeIndex);
+                    let lmbs = ti_vec![
+                        production_lmbs
+                            .iter()
+                            .find(|lmb| {
+                                lmb.loop_edges.len() == parent.len()
+                                    && parent.iter().all(|edge| lmb.loop_edges.contains(edge))
+                            })
+                            .expect("production must generate the requested physical parent")
+                            .clone()
+                    ];
+                    let lmb_id = LmbIndex::from(0);
+                    let lmb = &lmbs[lmb_id];
+                    assert_eq!(lmb.loop_edges.len(), 4, "parent={parent:?}");
+                    assert_eq!(lmb.ext_edges.len(), 2, "parent={parent:?}");
+                    assert_eq!(lmb.ext_edges, graph.loop_momentum_basis.ext_edges);
+                    let subspace = SubspaceData::new_from_parent_basis_edges(
+                        &[EdgeIndex(5)],
+                        &graph.full_filter(),
+                        lmb_id,
+                        &graph,
+                        &lmbs,
+                    )
+                    .unwrap();
+                    let loops = LoopMomenta::from_iter(lmb.loop_edges.iter().map(|edge| {
+                        graph.loop_momentum_basis.edge_signatures[*edge]
+                            .compute_momentum(&native, &spatial_externals)
+                    }));
+                    let classification = surface
+                        .classify_existence_subspace(
+                            &loops,
+                            &external_moms,
+                            &subspace,
+                            &lmbs,
+                            &graph,
+                            &masses,
+                            &e_cm,
+                            &F(DEFAULT_ESURFACE_EXISTENCE_THRESHOLD),
+                        )
+                        .unwrap();
+                    let active = subspace.iter_lmb_indices().next().unwrap();
+                    let mut center = loops.clone();
+                    center[active] = ThreeMomentum::new(F(0.0), F(0.0), F(0.0));
+                    let offset = -lmb.edge_signatures[EdgeIndex(13)]
+                        .compute_momentum(&center, &spatial_externals);
+                    center[active] = offset;
+                    let available = -surface.compute_shift_part_from_momenta_in_subspace(
+                        &loops,
+                        &external_moms,
+                        &subspace,
+                        &lmbs,
+                        &graph,
+                        &masses,
+                    );
+                    let invariant =
+                        available.square() - offset.norm_squared() - masses[EdgeIndex(5)].square();
+                    println!(
+                        "GL280 parent={parent:?} boost={boosted} reversed={reversed} loops={:?} external={:?} mass={} shift={} fixed_vector={offset:?} invariant={} status={}",
+                        lmb.loop_edges,
+                        lmb.ext_edges,
+                        masses[EdgeIndex(5)],
+                        -available,
+                        invariant,
+                        classification.label(),
+                    );
+                    assert!(
+                        classification.is_existing(),
+                        "parent={parent:?}, boost={boosted}, reversed={reversed}, shift={}, offset={offset:?}, invariant={invariant}, classification={classification:?}",
+                        -available,
+                    );
+                    let margin = *classification.normalized_margin().unwrap();
+                    assert!(margin > F(0.05) && margin < F(0.06));
+                    let reference = *reference_margin.get_or_insert(margin);
+                    assert!((margin - reference).abs() < F(1.0e-10));
+
+                    assert!(
+                        surface.compute_from_momenta(lmb, &masses, &center, &external_moms)
+                            < F(-1.0),
+                    );
+                    if !boosted && !reversed {
+                        let fixed_energy = e_cm - available;
+                        let minimum =
+                            (offset.norm_squared() + masses[EdgeIndex(5)].square()).sqrt();
+                        for (delta, expected) in [
+                            (F(-1.0), "non_existing"),
+                            (F(0.0), "pinched"),
+                            (F(1.0), "existing"),
+                        ] {
+                            let energy = (fixed_energy + minimum + delta) / F(2.0);
+                            let beams = ExternalFourMomenta::from_iter([
+                                FourMomentum::from_args(energy, F(0.0), F(0.0), energy),
+                                FourMomentum::from_args(energy, F(0.0), F(0.0), -energy),
+                            ]);
+                            let status = surface
+                                .classify_existence_subspace(
+                                    &loops,
+                                    &beams,
+                                    &subspace,
+                                    &lmbs,
+                                    &graph,
+                                    &masses,
+                                    &e_cm,
+                                    &F(DEFAULT_ESURFACE_EXISTENCE_THRESHOLD),
+                                )
+                                .unwrap();
+                            assert_eq!(status.label(), expected);
+                        }
+                    }
+                    for direction in [F(-1.0), F(1.0)] {
+                        let radius = invariant / (F(2.0) * (available + direction * offset.px));
+                        assert!(radius > F(0.0));
+                        let mut root = center.clone();
+                        root[active].px += direction * radius;
+                        assert!(
+                            surface
+                                .compute_from_momenta(lmb, &masses, &root, &external_moms)
+                                .abs()
+                                < F(1.0e-9),
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn projected_gl358_threshold_distinguishes_open_pinched_and_closed_fibres() {
+        test_initialise().unwrap();
+        let model = utils::load_generic_model("sm");
+        let graph: Graph =
+            include_str!("../../../../tests/resources/graphs/ir_safe_thresholds/GL358.dot")
+                .into_graph(&model)
+                .unwrap();
+        let mut cross_section = CrossSectionGraph::new(graph.clone());
+        cross_section.build_lmbs().unwrap();
+        let masses = graph.get_real_mass_vector::<f64>(&model);
+        let parent = [3, 6, 7, 11].map(EdgeIndex);
+        let lmbs = ti_vec![
+            cross_section
+                .derived_data
+                .lmbs
+                .as_ref()
+                .unwrap()
+                .iter()
+                .find(|lmb| {
+                    lmb.loop_edges.len() == parent.len()
+                        && parent.iter().all(|edge| lmb.loop_edges.contains(edge))
+                })
+                .expect("production must generate the requested physical parent")
+                .clone()
+        ];
+        let lmb_id = LmbIndex::from(0);
+        let lmb = &lmbs[lmb_id];
+        assert_eq!(lmb.loop_edges.len(), 4);
+        assert_eq!(lmb.ext_edges.len(), 2);
+        assert_eq!(lmb.ext_edges, graph.loop_momentum_basis.ext_edges);
+        let subspace = SubspaceData::new_from_parent_basis_edges(
+            &[EdgeIndex(3)],
+            &graph.full_filter(),
+            lmb_id,
+            &graph,
+            &lmbs,
+        )
+        .unwrap();
+        let external_moms = ExternalFourMomenta::from_iter([
+            FourMomentum::from_args(F(500.0), F(0.0), F(0.0), F(500.0)),
+            FourMomentum::from_args(F(500.0), F(0.0), F(0.0), F(-500.0)),
+        ]);
+        let spatial_externals: ExternalThreeMomenta<F<f64>> =
+            external_moms.iter().map(|p| p.spatial).collect();
+        let surface = Esurface {
+            energies: [3, 6, 12, 13].map(EdgeIndex).into(),
+            external_shift: vec![(EdgeIndex(0), -1), (EdgeIndex(1), -1)],
+            vertex_set: VertexSet::dummy(),
+        };
+        // Three points already rescaled on physical host [2,6,7]. The old
+        // host-oriented invariant admitted the closed side and failed center finding.
+        for (point, expected) in [
+            (
+                [
+                    239.41681001042383,
+                    -114.46145845228274,
+                    129.29264510269138,
+                    239.4167273843055,
+                    -114.46178575901338,
+                    129.2926253365453,
+                    95.59905078888387,
+                    -225.95843361500184,
+                    -121.37915228406406,
+                    342.0091274491519,
+                    101.42159085418247,
+                    134.8239582852383,
+                ],
+                "existing",
+            ),
+            (
+                [
+                    239.41676577049503,
+                    -114.46119915654612,
+                    129.2927988212799,
+                    239.41676577049503,
+                    -114.46119915654612,
+                    129.2927988212799,
+                    95.59919031992825,
+                    -225.9582666603062,
+                    -121.37910999326795,
+                    342.0093104427367,
+                    101.42231992498913,
+                    134.82413188309832,
+                ],
+                "pinched",
+            ),
+            (
+                [
+                    239.41672153007048,
+                    -114.46093986071739,
+                    129.2929525394926,
+                    239.41680415613854,
+                    -114.4606125541859,
+                    129.29297230562662,
+                    95.59932985067904,
+                    -225.95809970521887,
+                    -121.37906770223259,
+                    342.00949343546347,
+                    101.42304899513076,
+                    134.82430548055834,
+                ],
+                "non_existing",
+            ),
+        ] {
+            let loops = LoopMomenta::from_iter(lmb.loop_edges.iter().map(|edge| {
+                let index = parent.iter().position(|parent| parent == edge).unwrap();
+                let [x, y, z] = point.as_chunks::<3>().0[index];
+                ThreeMomentum::new(F(x), F(y), F(z))
+            }));
+            let status = surface
+                .classify_existence_subspace(
+                    &loops,
+                    &external_moms,
+                    &subspace,
+                    &lmbs,
+                    &graph,
+                    &masses,
+                    &F(1000.0),
+                    &F(DEFAULT_ESURFACE_EXISTENCE_THRESHOLD),
+                )
+                .unwrap();
+            assert_eq!(
+                status.label(),
+                expected,
+                "parent={parent:?}, loops={:?}, externals={:?}, classification={status:?}",
+                lmb.loop_edges,
+                lmb.ext_edges,
+            );
+            let x = lmb.edge_signatures[EdgeIndex(6)].compute_momentum(&loops, &spatial_externals);
+            let d = lmb.edge_signatures[EdgeIndex(12)].compute_momentum(&loops, &spatial_externals);
+            let minimum = ((x + d).norm_squared() + F(173.0).square()).sqrt()
+                + (x.norm_squared() + F(173.0).square()).sqrt()
+                + d.norm()
+                - F(1000.0);
+            let mut center = loops.clone();
+            center[subspace.iter_lmb_indices().next().unwrap()] = x + d;
+            assert!(
+                (surface.compute_from_momenta(lmb, &masses, &center, &external_moms) - minimum)
+                    .abs()
+                    < F(1.0e-10),
+            );
         }
     }
 

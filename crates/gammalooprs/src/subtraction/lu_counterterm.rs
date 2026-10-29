@@ -4,7 +4,7 @@ use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use eyre::{Context, eyre};
 use itertools::Itertools;
-use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
+use linnet::half_edge::involution::{EdgeVec, Orientation};
 use smallvec::{SmallVec, smallvec};
 use spenso::algebra::{algebraic_traits::IsZero, complex::Complex};
 use symbolica::domains::{
@@ -1683,7 +1683,6 @@ impl LUCounterTerm {
         cut_samples: &[(CutGroupId, &MomentumSample<T>)],
         graph: &Graph,
         masses: &EdgeVec<F<T>>,
-        reversed_edges: &TiVec<CutGroupId, Vec<EdgeIndex>>,
         all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
         settings: &RuntimeSettings,
         probe_rotation: &Rotation,
@@ -1771,10 +1770,9 @@ impl LUCounterTerm {
                             all_lmbs,
                             graph,
                             masses,
-                            &reversed_edges[cut_group_id],
                             &e_cm,
                             &existence_threshold,
-                        )
+                        )?
                         .is_existing()
                     {
                         continue;
@@ -2002,7 +2000,6 @@ impl LUCounterTerm {
         &mut self,
         kinematic_point: &LUCTKinematicPoint<T>,
         cut_group_id: CutGroupId,
-        _reversed_edges: &[EdgeIndex],
         all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
         graph: &Graph,
         masses: &EdgeVec<F<T>>,
