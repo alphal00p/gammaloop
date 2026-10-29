@@ -392,103 +392,109 @@
 <a href=#391 id=391 data-nosnippet>391</a>        .unwrap();
 <a href=#392 id=392 data-nosnippet>392</a>        <span class="kw">let </span><span class="kw-2">mut </span>spec: ThresholdCountertermSpec =
 <a href=#393 id=393 data-nosnippet>393</a>            toml::from_str(<span class="kw-2">&amp;</span>graph.global_data.statements[<span class="string">"threshold_counterterms"</span>]).unwrap();
-<a href=#394 id=394 data-nosnippet>394</a>        <span class="kw">let </span>variant = <span class="kw-2">&amp;mut </span>spec.cuts[<span class="number">0</span>].thresholds[<span class="number">0</span>].counterterms[<span class="number">0</span>];
-<a href=#395 id=395 data-nosnippet>395</a>        variant.name = <span class="prelude-val">Some</span>(<span class="string">"quoted \"variant\" λ\\line\nend\\"</span>.into());
-<a href=#396 id=396 data-nosnippet>396</a>        variant
-<a href=#397 id=397 data-nosnippet>397</a>            .multiplier
-<a href=#398 id=398 data-nosnippet>398</a>            .as_mut()
-<a href=#399 id=399 data-nosnippet>399</a>            .unwrap()
-<a href=#400 id=400 data-nosnippet>400</a>            .function_map
-<a href=#401 id=401 data-nosnippet>401</a>            .insert(<span class="string">"wQ()"</span>.into(), <span class="string">"local_override()"</span>.into());
-<a href=#402 id=402 data-nosnippet>402</a>        <span class="kw">let </span>attribute = render_toml(<span class="kw-2">&amp;</span>spec).unwrap();
-<a href=#403 id=403 data-nosnippet>403</a>        <span class="macro">assert!</span>(attribute.starts_with(<span class="string">"threshold_counterterms = \"\n"</span>));
-<a href=#404 id=404 data-nosnippet>404</a>        <span class="macro">assert!</span>(!attribute.contains(<span class="string">'\u{1b}'</span>));
-<a href=#405 id=405 data-nosnippet>405</a>        <span class="macro">assert!</span>(attribute.contains(<span class="string">"disable = false"</span>));
-<a href=#406 id=406 data-nosnippet>406</a>        <span class="macro">assert!</span>(attribute.contains(<span class="string">"symmetrize = false"</span>));
-<a href=#407 id=407 data-nosnippet>407</a>        <span class="macro">assert!</span>(attribute.contains(<span class="string">"opaque_derivatives = true"</span>));
-<a href=#408 id=408 data-nosnippet>408</a>        <span class="macro">assert!</span>(attribute.contains(<span class="string">"parent_lmb = [3, 6, 7, 10]"</span>));
-<a href=#409 id=409 data-nosnippet>409</a>        <span class="kw">let </span>reparsed: DotGraph =
-<a href=#410 id=410 data-nosnippet>410</a>            DotGraph::from_string(<span class="macro">format!</span>(<span class="string">"digraph G {{\n{attribute}\n}}"</span>)).unwrap();
-<a href=#411 id=411 data-nosnippet>411</a>        <span class="kw">let </span>roundtrip: ThresholdCountertermSpec =
-<a href=#412 id=412 data-nosnippet>412</a>            toml::from_str(<span class="kw-2">&amp;</span>reparsed.global_data.statements[<span class="string">"threshold_counterterms"</span>]).unwrap();
-<a href=#413 id=413 data-nosnippet>413</a>        <span class="macro">assert_eq!</span>(roundtrip, spec);
-<a href=#414 id=414 data-nosnippet>414</a>        <span class="macro">assert_eq!</span>(roundtrip.function_map[<span class="string">"wQ()"</span>], <span class="string">"P(0,cind(0))+P(1,cind(0))"</span>);
-<a href=#415 id=415 data-nosnippet>415</a>    }
-<a href=#416 id=416 data-nosnippet>416</a>
-<a href=#417 id=417 data-nosnippet>417</a>    <span class="attr">#[test]
-<a href=#418 id=418 data-nosnippet>418</a>    </span><span class="kw">fn </span>threshold_pretty_preserves_gl638_definitions_and_dormant_variants() {
-<a href=#419 id=419 data-nosnippet>419</a>        <span class="kw">let </span>graph: DotGraph = DotGraph::from_string(<span class="macro">include_str!</span>(
-<a href=#420 id=420 data-nosnippet>420</a>            <span class="string">"../../../../../examples/cli/epem_a_ttxh/NNLO/graphs/GL638.dot"
-<a href=#421 id=421 data-nosnippet>421</a>        </span>))
-<a href=#422 id=422 data-nosnippet>422</a>        .unwrap();
-<a href=#423 id=423 data-nosnippet>423</a>        <span class="kw">let </span>spec: ThresholdCountertermSpec =
-<a href=#424 id=424 data-nosnippet>424</a>            toml::from_str(<span class="kw-2">&amp;</span>graph.global_data.statements[<span class="string">"threshold_counterterms"</span>]).unwrap();
-<a href=#425 id=425 data-nosnippet>425</a>        <span class="kw">let </span>report = render_pretty(<span class="string">"GL638"</span>, <span class="kw-2">&amp;</span>spec, <span class="prelude-val">None</span>).unwrap();
-<a href=#426 id=426 data-nosnippet>426</a>        <span class="kw">let </span>report = console::strip_ansi_codes(<span class="kw-2">&amp;</span>report);
-<a href=#427 id=427 data-nosnippet>427</a>        <span class="macro">assert!</span>(report.contains(<span class="string">"GL638"</span>));
-<a href=#428 id=428 data-nosnippet>428</a>        <span class="macro">assert!</span>(report.contains(<span class="string">"disabled during generation"</span>));
-<a href=#429 id=429 data-nosnippet>429</a>        <span class="macro">assert!</span>(report.contains(<span class="string">"shared_1l"</span>));
-<a href=#430 id=430 data-nosnippet>430</a>        <span class="macro">assert!</span>(report.contains(<span class="string">"native_2l"</span>));
-<a href=#431 id=431 data-nosnippet>431</a>        <span class="macro">assert!</span>(report.contains(<span class="string">"parent: [3, 6, 7, 10]"</span>));
-<a href=#432 id=432 data-nosnippet>432</a>        <span class="macro">assert!</span>(report.contains(<span class="string">"skipped / unresolved"</span>));
-<a href=#433 id=433 data-nosnippet>433</a>        <span class="macro">assert!</span>(report.contains(<span class="string">"WHc()"</span>));
-<a href=#434 id=434 data-nosnippet>434</a>        <span class="macro">assert!</span>(report.contains(<span class="string">"Solve basis / signed cycles"</span>));
-<a href=#435 id=435 data-nosnippet>435</a>        <span class="macro">assert!</span>(report.contains(<span class="string">"varying basis momentum e3"</span>));
-<a href=#436 id=436 data-nosnippet>436</a>        <span class="macro">assert!</span>(report.contains(<span class="string">"Signs follow edge orientation"</span>));
-<a href=#437 id=437 data-nosnippet>437</a>        <span class="macro">assert_eq!</span>(report.matches(<span class="string">"Shared function definitions"</span>).count(), <span class="number">1</span>);
-<a href=#438 id=438 data-nosnippet>438</a>        <span class="macro">assert!</span>(
-<a href=#439 id=439 data-nosnippet>439</a>            report
-<a href=#440 id=440 data-nosnippet>440</a>                .lines()
-<a href=#441 id=441 data-nosnippet>441</a>                .all(|line| console::measure_text_width(line) &lt;= <span class="number">150</span>),
-<a href=#442 id=442 data-nosnippet>442</a>            <span class="string">"{report}"
-<a href=#443 id=443 data-nosnippet>443</a>        </span>);
-<a href=#444 id=444 data-nosnippet>444</a>    }
-<a href=#445 id=445 data-nosnippet>445</a>
-<a href=#446 id=446 data-nosnippet>446</a>    <span class="attr">#[test]
-<a href=#447 id=447 data-nosnippet>447</a>    </span><span class="kw">fn </span>empty_enabled_thresholds_are_distinct_from_disabled_generation() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
-<a href=#448 id=448 data-nosnippet>448</a>        <span class="kw">use </span>gammalooprs::{initialisation::test_initialise, utils::load_generic_model};
-<a href=#449 id=449 data-nosnippet>449</a>
-<a href=#450 id=450 data-nosnippet>450</a>        test_initialise()<span class="question-mark">?</span>;
-<a href=#451 id=451 data-nosnippet>451</a>        <span class="kw">let </span>spec = ThresholdCountertermSpec::default();
-<a href=#452 id=452 data-nosnippet>452</a>        <span class="kw">let </span>resolved = ResolvedThresholdCounterterms {
-<a href=#453 id=453 data-nosnippet>453</a>            legacy_equivalent: <span class="bool-val">true</span>,
-<a href=#454 id=454 data-nosnippet>454</a>            variants: TiVec::new(),
-<a href=#455 id=455 data-nosnippet>455</a>            cross_section_cut_groups: TiVec::new(),
-<a href=#456 id=456 data-nosnippet>456</a>        };
-<a href=#457 id=457 data-nosnippet>457</a>        <span class="kw">let </span>lmbs = TiVec::new();
-<a href=#458 id=458 data-nosnippet>458</a>        <span class="kw">let </span>enabled = render_pretty(<span class="string">"empty"</span>, <span class="kw-2">&amp;</span>spec, <span class="prelude-val">Some</span>((<span class="kw-2">&amp;</span>resolved, <span class="kw-2">&amp;</span>lmbs))).unwrap();
-<a href=#459 id=459 data-nosnippet>459</a>        <span class="macro">assert!</span>(enabled.contains(<span class="string">"0 generated threshold associations"</span>));
-<a href=#460 id=460 data-nosnippet>460</a>        <span class="macro">assert!</span>(!enabled.contains(<span class="string">"disabled during generation"</span>));
-<a href=#461 id=461 data-nosnippet>461</a>        <span class="kw">let </span>disabled = render_pretty(<span class="string">"empty"</span>, <span class="kw-2">&amp;</span>spec, <span class="prelude-val">None</span>).unwrap();
-<a href=#462 id=462 data-nosnippet>462</a>        <span class="macro">assert!</span>(disabled.contains(<span class="string">"disabled during generation"</span>));
-<a href=#463 id=463 data-nosnippet>463</a>        <span class="kw">let </span>attribute = render_toml(<span class="kw-2">&amp;</span>spec).unwrap();
-<a href=#464 id=464 data-nosnippet>464</a>        <span class="macro">assert!</span>(attribute.contains(<span class="string">"cuts = []"</span>));
-<a href=#465 id=465 data-nosnippet>465</a>
-<a href=#466 id=466 data-nosnippet>466</a>        <span class="kw">let </span>model = load_generic_model(<span class="string">"scalars"</span>);
-<a href=#467 id=467 data-nosnippet>467</a>        <span class="kw">let </span>graph = Graph::from_string(
-<a href=#468 id=468 data-nosnippet>468</a>            <span class="macro">include_str!</span>(<span class="string">"../../../../../tests/resources/graphs/scalar_bubble.dot"</span>),
-<a href=#469 id=469 data-nosnippet>469</a>            <span class="kw-2">&amp;</span>model,
-<a href=#470 id=470 data-nosnippet>470</a>        )<span class="question-mark">?
-<a href=#471 id=471 data-nosnippet>471</a>        </span>.remove(<span class="number">0</span>);
-<a href=#472 id=472 data-nosnippet>472</a>        <span class="kw">let </span>lmbs = TiVec::from(<span class="macro">vec!</span>[graph.loop_momentum_basis.clone()]);
-<a href=#473 id=473 data-nosnippet>473</a>        <span class="kw">let </span>before = graph.threshold_counterterms.clone();
-<a href=#474 id=474 data-nosnippet>474</a>        <span class="kw">let </span>enabled = render_graph(
-<a href=#475 id=475 data-nosnippet>475</a>            <span class="kw-2">&amp;</span>graph,
-<a href=#476 id=476 data-nosnippet>476</a>            <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>resolved),
-<a href=#477 id=477 data-nosnippet>477</a>            <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>lmbs),
-<a href=#478 id=478 data-nosnippet>478</a>            MetadataDisplayFormat::Toml,
-<a href=#479 id=479 data-nosnippet>479</a>        )<span class="question-mark">?</span>;
-<a href=#480 id=480 data-nosnippet>480</a>        <span class="macro">assert_eq!</span>(enabled, attribute);
-<a href=#481 id=481 data-nosnippet>481</a>        <span class="kw">let </span>disabled =
-<a href=#482 id=482 data-nosnippet>482</a>            render_graph(<span class="kw-2">&amp;</span>graph, <span class="prelude-val">None</span>, <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>lmbs), MetadataDisplayFormat::Toml).unwrap_err();
-<a href=#483 id=483 data-nosnippet>483</a>        <span class="macro">assert!</span>(disabled.to_string().contains(<span class="string">"disabled during generation"</span>));
-<a href=#484 id=484 data-nosnippet>484</a>        <span class="kw">let </span>missing_lmbs =
-<a href=#485 id=485 data-nosnippet>485</a>            render_graph(<span class="kw-2">&amp;</span>graph, <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>resolved), <span class="prelude-val">None</span>, MetadataDisplayFormat::Toml).unwrap_err();
-<a href=#486 id=486 data-nosnippet>486</a>        <span class="macro">assert!</span>(missing_lmbs
-<a href=#487 id=487 data-nosnippet>487</a>            .to_string()
-<a href=#488 id=488 data-nosnippet>488</a>            .contains(<span class="string">"without its generation LMBs"</span>));
-<a href=#489 id=489 data-nosnippet>489</a>        <span class="macro">assert_eq!</span>(graph.threshold_counterterms, before);
-<a href=#490 id=490 data-nosnippet>490</a>        <span class="prelude-val">Ok</span>(())
-<a href=#491 id=491 data-nosnippet>491</a>    }
-<a href=#492 id=492 data-nosnippet>492</a>}
+<a href=#394 id=394 data-nosnippet>394</a>        <span class="kw">let </span>variant = spec
+<a href=#395 id=395 data-nosnippet>395</a>            .cuts
+<a href=#396 id=396 data-nosnippet>396</a>            .iter_mut()
+<a href=#397 id=397 data-nosnippet>397</a>            .flat_map(|cut| <span class="kw-2">&amp;mut </span>cut.thresholds)
+<a href=#398 id=398 data-nosnippet>398</a>            .flat_map(|threshold| <span class="kw-2">&amp;mut </span>threshold.counterterms)
+<a href=#399 id=399 data-nosnippet>399</a>            .find(|variant| variant.multiplier.is_some())
+<a href=#400 id=400 data-nosnippet>400</a>            .expect(<span class="string">"the GL638 fixture must retain a weighted threshold variant"</span>);
+<a href=#401 id=401 data-nosnippet>401</a>        variant.name = <span class="prelude-val">Some</span>(<span class="string">"quoted \"variant\" λ\\line\nend\\"</span>.into());
+<a href=#402 id=402 data-nosnippet>402</a>        variant
+<a href=#403 id=403 data-nosnippet>403</a>            .multiplier
+<a href=#404 id=404 data-nosnippet>404</a>            .as_mut()
+<a href=#405 id=405 data-nosnippet>405</a>            .unwrap()
+<a href=#406 id=406 data-nosnippet>406</a>            .function_map
+<a href=#407 id=407 data-nosnippet>407</a>            .insert(<span class="string">"wQ()"</span>.into(), <span class="string">"local_override()"</span>.into());
+<a href=#408 id=408 data-nosnippet>408</a>        <span class="kw">let </span>attribute = render_toml(<span class="kw-2">&amp;</span>spec).unwrap();
+<a href=#409 id=409 data-nosnippet>409</a>        <span class="macro">assert!</span>(attribute.starts_with(<span class="string">"threshold_counterterms = \"\n"</span>));
+<a href=#410 id=410 data-nosnippet>410</a>        <span class="macro">assert!</span>(!attribute.contains(<span class="string">'\u{1b}'</span>));
+<a href=#411 id=411 data-nosnippet>411</a>        <span class="macro">assert!</span>(attribute.contains(<span class="string">"disable = false"</span>));
+<a href=#412 id=412 data-nosnippet>412</a>        <span class="macro">assert!</span>(attribute.contains(<span class="string">"symmetrize = false"</span>));
+<a href=#413 id=413 data-nosnippet>413</a>        <span class="macro">assert!</span>(attribute.contains(<span class="string">"opaque_derivatives = true"</span>));
+<a href=#414 id=414 data-nosnippet>414</a>        <span class="macro">assert!</span>(attribute.contains(<span class="string">"parent_lmb = [3, 6, 7, 10]"</span>));
+<a href=#415 id=415 data-nosnippet>415</a>        <span class="kw">let </span>reparsed: DotGraph =
+<a href=#416 id=416 data-nosnippet>416</a>            DotGraph::from_string(<span class="macro">format!</span>(<span class="string">"digraph G {{\n{attribute}\n}}"</span>)).unwrap();
+<a href=#417 id=417 data-nosnippet>417</a>        <span class="kw">let </span>roundtrip: ThresholdCountertermSpec =
+<a href=#418 id=418 data-nosnippet>418</a>            toml::from_str(<span class="kw-2">&amp;</span>reparsed.global_data.statements[<span class="string">"threshold_counterterms"</span>]).unwrap();
+<a href=#419 id=419 data-nosnippet>419</a>        <span class="macro">assert_eq!</span>(roundtrip, spec);
+<a href=#420 id=420 data-nosnippet>420</a>        <span class="macro">assert_eq!</span>(roundtrip.function_map[<span class="string">"wQ()"</span>], <span class="string">"P(0,cind(0))+P(1,cind(0))"</span>);
+<a href=#421 id=421 data-nosnippet>421</a>    }
+<a href=#422 id=422 data-nosnippet>422</a>
+<a href=#423 id=423 data-nosnippet>423</a>    <span class="attr">#[test]
+<a href=#424 id=424 data-nosnippet>424</a>    </span><span class="kw">fn </span>threshold_pretty_preserves_gl638_definitions_and_dormant_variants() {
+<a href=#425 id=425 data-nosnippet>425</a>        <span class="kw">let </span>graph: DotGraph = DotGraph::from_string(<span class="macro">include_str!</span>(
+<a href=#426 id=426 data-nosnippet>426</a>            <span class="string">"../../../../../examples/cli/epem_a_ttxh/NNLO/graphs/GL638.dot"
+<a href=#427 id=427 data-nosnippet>427</a>        </span>))
+<a href=#428 id=428 data-nosnippet>428</a>        .unwrap();
+<a href=#429 id=429 data-nosnippet>429</a>        <span class="kw">let </span>spec: ThresholdCountertermSpec =
+<a href=#430 id=430 data-nosnippet>430</a>            toml::from_str(<span class="kw-2">&amp;</span>graph.global_data.statements[<span class="string">"threshold_counterterms"</span>]).unwrap();
+<a href=#431 id=431 data-nosnippet>431</a>        <span class="kw">let </span>report = render_pretty(<span class="string">"GL638"</span>, <span class="kw-2">&amp;</span>spec, <span class="prelude-val">None</span>).unwrap();
+<a href=#432 id=432 data-nosnippet>432</a>        <span class="kw">let </span>report = console::strip_ansi_codes(<span class="kw-2">&amp;</span>report);
+<a href=#433 id=433 data-nosnippet>433</a>        <span class="macro">assert!</span>(report.contains(<span class="string">"GL638"</span>));
+<a href=#434 id=434 data-nosnippet>434</a>        <span class="macro">assert!</span>(report.contains(<span class="string">"disabled during generation"</span>));
+<a href=#435 id=435 data-nosnippet>435</a>        <span class="macro">assert!</span>(report.contains(<span class="string">"shared_1l"</span>));
+<a href=#436 id=436 data-nosnippet>436</a>        <span class="macro">assert!</span>(report.contains(<span class="string">"native_2l"</span>));
+<a href=#437 id=437 data-nosnippet>437</a>        <span class="macro">assert!</span>(report.contains(<span class="string">"parent: [3, 6, 7, 10]"</span>));
+<a href=#438 id=438 data-nosnippet>438</a>        <span class="macro">assert!</span>(report.contains(<span class="string">"skipped / unresolved"</span>));
+<a href=#439 id=439 data-nosnippet>439</a>        <span class="macro">assert!</span>(report.contains(<span class="string">"WHc()"</span>));
+<a href=#440 id=440 data-nosnippet>440</a>        <span class="macro">assert!</span>(report.contains(<span class="string">"Solve basis / signed cycles"</span>));
+<a href=#441 id=441 data-nosnippet>441</a>        <span class="macro">assert!</span>(report.contains(<span class="string">"varying basis momentum e3"</span>));
+<a href=#442 id=442 data-nosnippet>442</a>        <span class="macro">assert!</span>(report.contains(<span class="string">"Signs follow edge orientation"</span>));
+<a href=#443 id=443 data-nosnippet>443</a>        <span class="macro">assert_eq!</span>(report.matches(<span class="string">"Shared function definitions"</span>).count(), <span class="number">1</span>);
+<a href=#444 id=444 data-nosnippet>444</a>        <span class="macro">assert!</span>(
+<a href=#445 id=445 data-nosnippet>445</a>            report
+<a href=#446 id=446 data-nosnippet>446</a>                .lines()
+<a href=#447 id=447 data-nosnippet>447</a>                .all(|line| console::measure_text_width(line) &lt;= <span class="number">150</span>),
+<a href=#448 id=448 data-nosnippet>448</a>            <span class="string">"{report}"
+<a href=#449 id=449 data-nosnippet>449</a>        </span>);
+<a href=#450 id=450 data-nosnippet>450</a>    }
+<a href=#451 id=451 data-nosnippet>451</a>
+<a href=#452 id=452 data-nosnippet>452</a>    <span class="attr">#[test]
+<a href=#453 id=453 data-nosnippet>453</a>    </span><span class="kw">fn </span>empty_enabled_thresholds_are_distinct_from_disabled_generation() -&gt; <span class="prelude-ty">Result</span>&lt;()&gt; {
+<a href=#454 id=454 data-nosnippet>454</a>        <span class="kw">use </span>gammalooprs::{initialisation::test_initialise, utils::load_generic_model};
+<a href=#455 id=455 data-nosnippet>455</a>
+<a href=#456 id=456 data-nosnippet>456</a>        test_initialise()<span class="question-mark">?</span>;
+<a href=#457 id=457 data-nosnippet>457</a>        <span class="kw">let </span>spec = ThresholdCountertermSpec::default();
+<a href=#458 id=458 data-nosnippet>458</a>        <span class="kw">let </span>resolved = ResolvedThresholdCounterterms {
+<a href=#459 id=459 data-nosnippet>459</a>            legacy_equivalent: <span class="bool-val">true</span>,
+<a href=#460 id=460 data-nosnippet>460</a>            variants: TiVec::new(),
+<a href=#461 id=461 data-nosnippet>461</a>            cross_section_cut_groups: TiVec::new(),
+<a href=#462 id=462 data-nosnippet>462</a>        };
+<a href=#463 id=463 data-nosnippet>463</a>        <span class="kw">let </span>lmbs = TiVec::new();
+<a href=#464 id=464 data-nosnippet>464</a>        <span class="kw">let </span>enabled = render_pretty(<span class="string">"empty"</span>, <span class="kw-2">&amp;</span>spec, <span class="prelude-val">Some</span>((<span class="kw-2">&amp;</span>resolved, <span class="kw-2">&amp;</span>lmbs))).unwrap();
+<a href=#465 id=465 data-nosnippet>465</a>        <span class="macro">assert!</span>(enabled.contains(<span class="string">"0 generated threshold associations"</span>));
+<a href=#466 id=466 data-nosnippet>466</a>        <span class="macro">assert!</span>(!enabled.contains(<span class="string">"disabled during generation"</span>));
+<a href=#467 id=467 data-nosnippet>467</a>        <span class="kw">let </span>disabled = render_pretty(<span class="string">"empty"</span>, <span class="kw-2">&amp;</span>spec, <span class="prelude-val">None</span>).unwrap();
+<a href=#468 id=468 data-nosnippet>468</a>        <span class="macro">assert!</span>(disabled.contains(<span class="string">"disabled during generation"</span>));
+<a href=#469 id=469 data-nosnippet>469</a>        <span class="kw">let </span>attribute = render_toml(<span class="kw-2">&amp;</span>spec).unwrap();
+<a href=#470 id=470 data-nosnippet>470</a>        <span class="macro">assert!</span>(attribute.contains(<span class="string">"cuts = []"</span>));
+<a href=#471 id=471 data-nosnippet>471</a>
+<a href=#472 id=472 data-nosnippet>472</a>        <span class="kw">let </span>model = load_generic_model(<span class="string">"scalars"</span>);
+<a href=#473 id=473 data-nosnippet>473</a>        <span class="kw">let </span>graph = Graph::from_string(
+<a href=#474 id=474 data-nosnippet>474</a>            <span class="macro">include_str!</span>(<span class="string">"../../../../../tests/resources/graphs/scalar_bubble.dot"</span>),
+<a href=#475 id=475 data-nosnippet>475</a>            <span class="kw-2">&amp;</span>model,
+<a href=#476 id=476 data-nosnippet>476</a>        )<span class="question-mark">?
+<a href=#477 id=477 data-nosnippet>477</a>        </span>.remove(<span class="number">0</span>);
+<a href=#478 id=478 data-nosnippet>478</a>        <span class="kw">let </span>lmbs = TiVec::from(<span class="macro">vec!</span>[graph.loop_momentum_basis.clone()]);
+<a href=#479 id=479 data-nosnippet>479</a>        <span class="kw">let </span>before = graph.threshold_counterterms.clone();
+<a href=#480 id=480 data-nosnippet>480</a>        <span class="kw">let </span>enabled = render_graph(
+<a href=#481 id=481 data-nosnippet>481</a>            <span class="kw-2">&amp;</span>graph,
+<a href=#482 id=482 data-nosnippet>482</a>            <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>resolved),
+<a href=#483 id=483 data-nosnippet>483</a>            <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>lmbs),
+<a href=#484 id=484 data-nosnippet>484</a>            MetadataDisplayFormat::Toml,
+<a href=#485 id=485 data-nosnippet>485</a>        )<span class="question-mark">?</span>;
+<a href=#486 id=486 data-nosnippet>486</a>        <span class="macro">assert_eq!</span>(enabled, attribute);
+<a href=#487 id=487 data-nosnippet>487</a>        <span class="kw">let </span>disabled =
+<a href=#488 id=488 data-nosnippet>488</a>            render_graph(<span class="kw-2">&amp;</span>graph, <span class="prelude-val">None</span>, <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>lmbs), MetadataDisplayFormat::Toml).unwrap_err();
+<a href=#489 id=489 data-nosnippet>489</a>        <span class="macro">assert!</span>(disabled.to_string().contains(<span class="string">"disabled during generation"</span>));
+<a href=#490 id=490 data-nosnippet>490</a>        <span class="kw">let </span>missing_lmbs =
+<a href=#491 id=491 data-nosnippet>491</a>            render_graph(<span class="kw-2">&amp;</span>graph, <span class="prelude-val">Some</span>(<span class="kw-2">&amp;</span>resolved), <span class="prelude-val">None</span>, MetadataDisplayFormat::Toml).unwrap_err();
+<a href=#492 id=492 data-nosnippet>492</a>        <span class="macro">assert!</span>(missing_lmbs
+<a href=#493 id=493 data-nosnippet>493</a>            .to_string()
+<a href=#494 id=494 data-nosnippet>494</a>            .contains(<span class="string">"without its generation LMBs"</span>));
+<a href=#495 id=495 data-nosnippet>495</a>        <span class="macro">assert_eq!</span>(graph.threshold_counterterms, before);
+<a href=#496 id=496 data-nosnippet>496</a>        <span class="prelude-val">Ok</span>(())
+<a href=#497 id=497 data-nosnippet>497</a>    }
+<a href=#498 id=498 data-nosnippet>498</a>}
 </code></pre></div></section></main></body></html>
