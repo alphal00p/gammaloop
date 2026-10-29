@@ -924,8 +924,8 @@
     "local_checkout_qualification": "This local-checkout evaluation includes three ignored vendor/kurbo/target files and is not the exact Git-pinned code66 or dfe52 producer identity. It evaluated derivations only; its listed bundle and generator outputs are not realized or executed.",
     "git_pinned_correction": {
       "path": "docs/architecture/evidence/generation-integration/wp3/main39-43/producer-metadata-correction.json",
-      "bytes": 6706,
-      "sha256": "ba2a1bc0e051c5af955b703a2f7e825f5bd30122a703af10cf3ea46c04dccc87"
+      "bytes": 6956,
+      "sha256": "0601a9a9b0cf79e8898ede9d084df6be5696ec924fd0c9681d2c89f927d82af6"
     },
     "qualification": "Independent Git-pinned evaluations bind code66 and reviewed dfe52 to distinct full-source NARs and identical filtered FeynKit producer graphs. Exact URIs, bundle/generator derivations, filtered source identity and evaluation-versus-execution classification are in the correction record. The separately qualified WASM evidence is unchanged."
   },

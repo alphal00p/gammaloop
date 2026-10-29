@@ -28,6 +28,11 @@
     "derivation_graph_sha256": "9a3a34a78c88164796b582eb063e22cb5c2723ec9075ed4734287c66db1fc216",
     "query_log": "target/wp3-units39-43/feynkit-nix-derivation.log",
     "query_log_sha256": "9464a53e4daf37cd0daaaeb42f50edc10a5da3ffac6c4f240981125db29d14e8",
+    "generator_record": {
+      "path": "target/review-main39-43-scope-a-astra-20261029-JIyGrj/generator-producer-derivation.json",
+      "bytes": 38801,
+      "sha256": "688d688e48b87e918d0ab3563fa39c8cada7a708fa20ed07d95f15e0ffa09044"
+    },
     "bundle_derivation": "/nix/store/y1ivy8wknsagcwq35kb7chjvlha0rg18-gammaloop-nextest-binaries-feynkit.drv",
     "bundle_output": "/nix/store/38y7vk8hm961sxiqm30z2rnszcki4d24-gammaloop-nextest-binaries-feynkit",
     "generator_derivation": "/nix/store/dz6ngj4mpybf08l7iqy6v6vsw7aswh8a-gammaloop-nextest-binaries-feynkit-feynkit-generator-0.1.0.drv",
@@ -68,8 +73,8 @@
         "sha256": "37deabdc39bed66c297a1f1ea7eb641db0c5a37145d81109ead7d25b60d580e0"
       },
       "generator_record": {
-        "path": "target/review-main39-43-scope-a-astra-20261029-JIyGrj/generator-producer-derivation.json",
-        "sha256": "688d688e48b87e918d0ab3563fa39c8cada7a708fa20ed07d95f15e0ffa09044"
+        "path": "target/review-main39-43-scope-a-astra-20261029-JIyGrj/final-generator-producer-derivation.json",
+        "sha256": "ba97e4f38280d41eac5257506d7d3db5b62b21843d5449d72d9ab0b5943ad7dd"
       }
     },
     "reviewed_final": {
