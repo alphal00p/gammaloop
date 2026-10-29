@@ -610,9 +610,9 @@
     "validation_metadata_commit": "783e3281d01134f8fe2e44eab366d0414c63b852",
     "source_binding": "docs/architecture/evidence/generation-integration/wp3/main32-35/metadata-source.json"
   },
-  "current_implementation_code_commit": "66c2aed45d83b54f55b39bf2fc2f88c2066d6343",
+  "current_implementation_code_commit": "8c6d8aff7e7b3da312e30d3daa403b5b90c8cede",
   "current_documentation_code_commit": "a3729fe5d880f0db5f09d9ce7d0ef592bfc4d161",
-  "current_implementation_change": "ymkxyqsovlsnotwqtmqzwwrwkvzsklox",
+  "current_implementation_change": "uxrqorwvkuzxyyqzqksvrntllsluqntp",
   "main32_35_review": {
     "candidate": "510d79d94bbaf57aaaa992c641e7496905763324",
     "verdict": "APPROVE",
@@ -667,7 +667,7 @@
     "approved_preparation": "595a2f4d921a119503db3d5c919b87fcc728a423",
     "receipt": "docs/architecture/evidence/generation-integration/wp3/main39-43/receipt.json",
     "candidate_bookmark": "generation-integration-units39-43",
-    "status": "Integrated39\u201343 with combined source/features/producer validation recorded; awaiting NEW independent Astra combined review before44. WP3 incomplete.",
+    "status": "APPROVED at158f4e1f by independent runtime and focused metadata reviews; releases44 only. WP3 incomplete.",
     "source43_algorithm": "No replay: current all_cuts production already satisfies terminal-pocket closure; original regression strengthened.",
     "source45_later_accounting": "Only named failing aa QCD2 single-row intent is covered early under explicit approval. Source45 remains later ordered accounting; do not duplicate.",
     "accounted_source_rows": 43,
@@ -680,5 +680,19 @@
       "docs/architecture/evidence/generation-integration/wp3/main39-43/main38-a.json",
       "docs/architecture/evidence/generation-integration/wp3/main39-43/main38-b.json"
     ]
+  },
+  "active_slice44_45": {
+    "base": "158f4e1f8cdbea4d13b55f7c1fa828f75ab566f9",
+    "source_order": [44, 45],
+    "source44": "087bda82ce5a14dab092776ea470e66278dda12d",
+    "source45": "dfe6387606e44a96f110c1ce03f52d92824dbdb1",
+    "code_commit": "8c6d8aff7e7b3da312e30d3daa403b5b90c8cede",
+    "code_change": "uxrqorwvkuzxyyqzqksvrntllsluqntp",
+    "receipt": "docs/architecture/evidence/generation-integration/wp3/main44-45/receipt.json",
+    "candidate_bookmark": "generation-integration-units44-45",
+    "status": "Seven source44 rows integrated and source45 accounted; combined validation recorded; awaiting NEW independent Astra review before46. WP3 incomplete.",
+    "source45_accounting": "Covered by earlier certified named failing-aa migration c0abf082; no duplicate edit.",
+    "accounted_source_rows": 45,
+    "accounted_planned_units": 40
   }
 }

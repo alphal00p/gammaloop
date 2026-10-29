@@ -93,11 +93,11 @@ title = "Ordered canonical frames and generation progress integration"
 summary = "Current MAIN39–43 canonical frames, progress lifecycle, terminal-pocket coverage and specifically certified test migrations."
 source = "docs/architecture/generation-integration-units39-43.typ"
 kind = "Implementation record"
-status = "Combined candidate; NEW independent Astra review before44"
+status = "Approved at 158f4e1f; released ordered source44 reconciliation"
 lifecycle = "investigation"
 owner = "unassigned"
 reviewed_at = "2026-10-29"
-review_ref = "2f46efe7491d5cb9c028aff12ac475e44bef0a92"
+review_ref = "158f4e1f8cdbea4d13b55f7c1fa828f75ab566f9"
 products = ["gammaloop", "feynkit", "linnet"]
 topics = ["generation", "canonicalization", "progress", "validation"]
 
@@ -120,7 +120,7 @@ path = "tests/tests/test_feyngen.rs"
 symbol = "named certified QCD2 row and current physical CLI controls"
 anchor = "fn feyngen_str("
 # Reviewed intent preserved through current staged/interop/input owners; no changed physical conventions.
-digest = "8e467698064d628e8a9038559997af20b4306e67"
+digest = "35431963b1bc751b00a7a1bb1e834faa815c0f50"
 
 [[section.note]]
 id = "generation-frame-certificate"

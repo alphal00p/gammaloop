@@ -1,0 +1,105 @@
+{
+  "schema": 1,
+  "scope": "Ordered MAIN source44 seven-row reconciliation and source45 accounting; NEW independent Astra combined review required before46; WP3 incomplete",
+  "base_main39_43": "158f4e1f8cdbea4d13b55f7c1fa828f75ab566f9",
+  "built_code_source": "8c6d8aff7e7b3da312e30d3daa403b5b90c8cede",
+  "built_code_change": "uxrqorwvkuzxyyqzqksvrntllsluqntp",
+  "evidence_change": "kvytvwsvvlpzkknplxrmxowuyzzoznsm",
+  "manifest": {
+    "source_rows": 46,
+    "planned_units": 41,
+    "accounted_through_source": 45,
+    "accounted_units": 40
+  },
+  "source_mapping": [
+    {
+      "order": 44,
+      "original_source": "087bda82ce5a14dab092776ea470e66278dda12d",
+      "integrated_commit": "8c6d8aff7e7b3da312e30d3daa403b5b90c8cede",
+      "ungrouped_migration": "7a9f24095862a1edd98fd929800fa6665c65f16b",
+      "ungrouped_certificate": "121ac233d5ab014f4fadefccce702041bbbdf487",
+      "grouped_migration": "6d982cb76090a123bce1f3a5da3cbd3040184e98",
+      "grouped_certificate": "9ede0c12fd0bd70458d10eeaaf636cb51c39543a",
+      "reconciliation": "Seven literal intents integrated. Historical grouped labels3/4 and2/3 and its enumeration comment are rejected; approved current physical sources2/4, unit ratios, GL4 master and MAIN closed-ghost-loop explanation retained."
+    },
+    {
+      "order": 45,
+      "original_source": "dfe6387606e44a96f110c1ce03f52d92824dbdb1",
+      "covered_by_integrated_commit": "c0abf0822fb1c71339892d88113262818e3fe883",
+      "approved_donor": "309631912ff5693ab38df4c748e5edfa3f94cd00",
+      "reconciliation": "Accounting only for named failing::test_generate_aa_ttx_cross_section_slow_filter; no duplicate edit. Source44's distinct slow:: row is migrated once in the seven-row delta."
+    }
+  ],
+  "rows": [
+    {"id":"ungrouped_epem_qcd2","old":"594 | -261 = -261","new":"594 | -201 = -201","full_function":"target passes; later unchanged grouped row7 fails"},
+    {"id":"ungrouped_slow_aa_qcd2","old":"874 | -266 = -266","new":"874 | -186 = -186","full_function":"target passes; later unchanged grouped row4 fails"},
+    {"id":"grouped_all_l2","old":"5 | -19/24+Group(0,1,-1/2)+Group(5,1,-1/2) = -43/24","new":"5 | -19/24+Group(2,1,-1/2)+Group(4,1,-1/2) = -43/24","full_function":"passes; later unchanged grouped L3 fails"},
+    {"id":"ungrouped_nonfactor_l2","old":"5 | -11/12 = -11/12","new":"5 | -23/12 = -23/12","qualification":"scoped current-code pass"},
+    {"id":"grouped_nonfactor_l2","old":"4 | 1/12+Group(0,1,-1/2)+Group(4,1,-1/2) = -11/12","new":"4 | -11/12+Group(2,1,-1/2)+Group(4,1,-1/2) = -23/12","qualification":"scoped current-code pass"},
+    {"id":"ungrouped_nonfactor_l3","old":"30 | -17/12 = -17/12","new":"30 | -13/12 = -13/12","qualification":"scoped current-code pass"},
+    {"id":"ungrouped_nonfactor_l4","old":"200 | -199/48 = -199/48","new":"200 | 457/48 = 457/48","qualification":"scoped current-code pass"}
+  ],
+  "approvals": {
+    "index": {
+      "path": "docs/architecture/evidence/generation-integration/wp3/main44-45/approval-index.json",
+      "bytes": 2627,
+      "sha256": "021f57879bf67878026800e010d8f29f444bb5a4c520ef4eab02713d892822f6"
+    },
+    "round1_grouped_zero_test_commands": "Preserved historical negative evidence only; no pass/failure credit.",
+    "round2_grouped_review": "APPROVE; M1 closed with one selected/failed test and exit101 commands plus20 malformed-evidence rejections."
+  },
+  "code_inventory": {
+    "path": "docs/architecture/evidence/generation-integration/wp3/main44-45/code-inventory.json",
+    "bytes": 16359,
+    "sha256": "f7e7493f0fecaac72394dd2afaa2904a1b2d0638efbec76cb916218fe122a4d1",
+    "binding": "Exact base158-to-built-code inventory. Later tracker and receipt files belong to the evidence tip, not this historical code inventory."
+  },
+  "source_and_elf": {
+    "old_main39_43_test_source": {"bytes":1177487,"sha256":"7799516c00ef7bd7d28d30138ffe8847f647630706f28adc63264220a060a2b4"},
+    "old_main39_43_elf": {"bytes":199003720,"sha256":"8015234dfc2fedec6bade2fe285eeb6488211b905b55c53ea2476c804c2cc2b5","classification":"Previously executed approved ELF; not relabelled current."},
+    "new_test_source": {"path":"tests/tests/test_feyngen.rs","bytes":1177487,"sha256":"1032e4f82370ea44532dbd0390483f70c81f55f3b8cdb2af300e7f897db4ca8d"},
+    "new_production_elf": {"path":"/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/test_feyngen-9581d43dfd98ca33","bytes":199003720,"sha256":"bbdafc1fb5b97176710234594ef46d93b308d9102f35a9d39645b0599a22acf6","features":"default","profile":"ci-optim","classification":"Built once after all seven literals."},
+    "scoped_harness_source": {"sha256":"2348806fd62c24f7785b3ae09fcb37de9e606080c8accbdabb9bea443448ea80","classification":"Temporary exact-current include plus five narrow vacuum cells; removed after compilation."},
+    "scoped_harness_elf": {"path":"/common/build-cache/lcnbr/4b/842977226ffc97/ci-optim/deps/source44_scoped-dedf9d4e1d69e3f3","sha256":"e12affc0a33304544c101ec58c7fce22f5b311eab38edba445316d01d17a83a9","classification":"Necessary scoped harness only; not runtime input."}
+  },
+  "git_pinned_nix": {
+    "uri": "git+file:///shared/lcnbr/dev/gammaloop/main?rev=8c6d8aff7e7b3da312e30d3daa403b5b90c8cede&shallow=1&allRefs=1#checks.x86_64-linux.gammaloop-nextest-binaries-integration",
+    "full_source": {"path":"/nix/store/jxbdx7pavrkvif4pjj6l5k21pc6729rz-source","narHash":"sha256-StD2UO6bNYpFk58X7NbG+bRANHPAxXsq48DhEKIJuhA=","narSize":118795544},
+    "evaluated_derivation": "/nix/store/z1nijaiv121w2x7z3xlc3xc7347yz7pl-gammaloop-nextest-binaries-integration.drv",
+    "derivation_record": {"path":"target/wp3-source44/pinned-integration-derivation.json","bytes":2329,"sha256":"6c240375327af29c2adcd27f25a1d9c0dcedb61c164af6a9f0a532e13f12d9ea"},
+    "classification": "Git-pinned derivation evaluated only; not built or executed. Local Cargo ELF execution is recorded separately. Existing local FeynKit query with three ignored Kurbo target extras remains separately classified in the MAIN39-43 receipt."
+  },
+  "validation": {
+    "build": "one production ELF build exit0; one necessary scoped harness build exit0",
+    "scoped_cells": "5/5 passed, one real test each, INSTA_UPDATE=no, actual nonzero graph observations; grouped GL4 carries sources2/4 with unit ratios",
+    "full_functions": [
+      {"test":"slow::test_generate_epem_a_qqh","selected":1,"exit":101,"later_failure":"generate_epem_a_qqh-7 line2041"},
+      {"test":"slow::test_generate_aa_ttx_cross_section","selected":1,"exit":101,"later_failure":"generate_aa_ttx_cross_section-4 line2069"},
+      {"test":"slow::test_vacuum_amplitude_generation","selected":1,"exit":101,"later_failure":"vacuum_amplitude_generation-4 grouped L3 line2095"}
+    ],
+    "static": {"fmt":0,"clippy":0,"registry":0,"registry_scopes":110,"registry_titles":75,"docs_pdf_html":5,"node_syntax":0,"hakari":0,"kernel_locks":0,"ci_graph":0},
+    "certificate_replay_limits": [
+      "Imported ghost validators dereference mutable sibling paths or absent raw target captures; direct current-workspace invocations failed and are retained, not credited.",
+      "Sunset verify-receipt requires explicit historical/current captures, proof directory and receipt arguments; no argument-free pass is claimed.",
+      "Approved certificate math is reused only after exact approval/receipt/source hashes and fresh combined owner observations; current-kernel replay is not historical-kernel execution."
+    ]
+  },
+  "sunset_probe": {
+    "archive": "docs/architecture/evidence/generation-integration/wp3/sunset-certificate/sunset_live_rule_probe.rs.txt",
+    "sha256": "3a3eabcf4bd4eef482e84489116dac04c38b7af20ece6f8e9fb99ff0838ac454",
+    "classification": "Evidence-only archive outside Cargo/Nix Rust source selection. No serde_json/arbitrary_precision manifest change. Reproduction copies to a temporary example and explicitly enables that existing dependency feature; new source/ELF hashes are required."
+  },
+  "protected_refs": {
+    "main39_43": "158f4e1f8cdbea4d13b55f7c1fa828f75ab566f9",
+    "main44_45_code": "8c6d8aff7e7b3da312e30d3daa403b5b90c8cede",
+    "code66": "66c2aed45d83b54f55b39bf2fc2f88c2066d6343",
+    "round2_metadata": "8d95c3f83abc3861e3de836e5f6c7a3581d9f61d",
+    "round1": "dfe52ccd829c4bc7a5f9ff40ab0d1d8c2ade833a",
+    "partial": "372a94fe6991c58d1fd26c87b29a3470e01f248d"
+  },
+  "limits": [
+    "All other25 grouped snapshots remain pending.",
+    "No whole slow-function pass, whole WP3, source46, general grouping/physics theorem, performance, memory, full-site, WASM asset, wheel, Pyodide, Community, cold build, upload, publication or CI approval.",
+    "Main38 Kurbo patch, selection-only locks, notices, common selector, kernel alignment and NixCI=false are unchanged."
+  ]
+}

@@ -350,9 +350,22 @@ own workspace. Bounded: one regression, one bisect, one written verdict.
   Source43 strengthens terminal-pocket tests; no cut algorithm is replayed.
   Three frame numerator digests and the named failing aa QCD2 weight migrate
   only under separately approved exact certificates. No production physics fix.
-  Source44 slow/grouped rows remain untouched. Current qualification is in
+  Source44 slow/grouped rows were untouched by that slice. Qualification is in
   `evidence/generation-integration/wp3/main39-43/receipt.json`.
-  NEW independent Astra combined review is required before44; WP3 incomplete.
+  Independent MAIN39–43 runtime and focused metadata reviews APPROVE at
+  `158f4e1f`; source44 was released. WP3 remains incomplete.
+
+- #strong[Sources44–45 ordered integration 2026-10-29:]
+  exactly five approved ungrouped and two approved grouped source44 literals
+  are reconciled onto MAIN39–43. Current grouped source occurrences are2/4;
+  obsolete historical3/4 and2/3 labels are not replayed. Source45 is accounted
+  through the already integrated named failing-aa migration `c0abf082`; the
+  distinct source44 slow-aa row is changed once here. Production, requests,
+  models, cards, filters, workers, seeds, samples, manifests, locks and Nix
+  policy remain unchanged. The live sunset probe is archived as `.rs.txt`
+  evidence outside Cargo/Nix source selection. Combined qualification is in
+  `evidence/generation-integration/wp3/main44-45/receipt.json`. A NEW independent
+  Astra combined review is required before46; WP3 incomplete.
 
 - `jj duplicate` the v4 chain (`kursouxx::kpslpwqz`) onto the WP2 base; do not
   rebase in place, so the 19 live workspaces on older lines stay valid.
