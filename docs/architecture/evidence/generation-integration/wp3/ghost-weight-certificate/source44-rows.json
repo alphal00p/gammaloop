@@ -1,0 +1,101 @@
+{
+  "schema": 1,
+  "sources": {
+    "source43": "74fcd8e57e9fe256d4bc34b5d8ad93c97fc28848",
+    "source44": "087bda82ce5a14dab092776ea470e66278dda12d"
+  },
+  "source44_parent": "74fcd8e57e9fe256d4bc34b5d8ad93c97fc28848",
+  "scope": "five ungrouped rows only; two grouped sunset rows and 25 other grouped rows excluded",
+  "cases": [
+    {
+      "id": "epem_bbh_qcd2",
+      "qualified_test": "slow::test_generate_epem_a_qqh",
+      "generation_type": "xs",
+      "exact_process_fragment": "e+ e- > b b~ h | d b h a e- ghg g QED^2==6 [{{4}} QCD=2] --filter-zero-color --numerator-grouping no_grouping --filter-selfenergies true --filter-snails true --filter-tadpoles true --n-cut-blobs 1 1 --n-cut-spectators 0 0",
+      "source43": {
+        "line": 2005,
+        "expected": "594 | -261 = -261"
+      },
+      "source44": {
+        "line": 2005,
+        "expected": "594 | -201 = -201"
+      },
+      "current": {
+        "line": 2334,
+        "expected": "594 | -261 = -261"
+      }
+    },
+    {
+      "id": "slow_aa_ttx_qcd2",
+      "qualified_test": "slow::test_generate_aa_ttx_cross_section",
+      "generation_type": "xs",
+      "exact_process_fragment": "a a > t t~ | a t g b ghg QED^2==4 [{{3}} QCD=2] --filter-zero-color --numerator-grouping no_grouping --filter-selfenergies true --filter-snails true --filter-tadpoles true --n-cut-blobs 1 1 --n-cut-spectators 0 0",
+      "source43": {
+        "line": 2037,
+        "expected": "874 | -266 = -266"
+      },
+      "source44": {
+        "line": 2037,
+        "expected": "874 | -186 = -186"
+      },
+      "current": {
+        "line": 2366,
+        "expected": "874 | -266 = -266"
+      }
+    },
+    {
+      "id": "vacuum_nonfactorizable_l2",
+      "qualified_test": "slow::test_vacuum_amplitude_generation",
+      "generation_type": "amp",
+      "exact_process_fragment": "{} > {} | g ghg t u d QED==0 [{2}] --filter-zero-color --numerator-grouping no_grouping --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",
+      "source43": {
+        "line": 2073,
+        "expected": "5 | -11/12 = -11/12"
+      },
+      "source44": {
+        "line": 2073,
+        "expected": "5 | -23/12 = -23/12"
+      },
+      "current": {
+        "line": 2402,
+        "expected": "5 | -11/12 = -11/12"
+      }
+    },
+    {
+      "id": "vacuum_nonfactorizable_l3",
+      "qualified_test": "slow::test_vacuum_amplitude_generation",
+      "generation_type": "amp",
+      "exact_process_fragment": "{} > {} | g ghg t u d QED==0 [{3}] --filter-zero-color --numerator-grouping no_grouping --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",
+      "source43": {
+        "line": 2075,
+        "expected": "30 | -17/12 = -17/12"
+      },
+      "source44": {
+        "line": 2075,
+        "expected": "30 | -13/12 = -13/12"
+      },
+      "current": {
+        "line": 2404,
+        "expected": "30 | -17/12 = -17/12"
+      }
+    },
+    {
+      "id": "vacuum_nonfactorizable_l4",
+      "qualified_test": "slow::test_vacuum_amplitude_generation",
+      "generation_type": "amp",
+      "exact_process_fragment": "{} > {} | g ghg t u d QED==0 [{4}] --filter-zero-color --numerator-grouping no_grouping --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",
+      "source43": {
+        "line": 2078,
+        "expected": "200 | -199/48 = -199/48"
+      },
+      "source44": {
+        "line": 2078,
+        "expected": "200 | 457/48 = 457/48"
+      },
+      "current": {
+        "line": 2407,
+        "expected": "200 | -199/48 = -199/48"
+      }
+    }
+  ]
+}

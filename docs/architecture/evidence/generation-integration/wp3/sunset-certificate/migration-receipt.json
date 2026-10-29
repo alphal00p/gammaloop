@@ -1,0 +1,483 @@
+{
+  "schema": 2,
+  "status": "full-command receipt correction candidate; STOP for new independent focused Astra review",
+  "owner": {
+    "name": "Lucien Huber",
+    "email": "im@lcnbr.ch"
+  },
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate",
+  "changeId": "wonnsqrpmkoxooolznvrkotwxnsurluo",
+  "bookmark": "generation-sunset-migration",
+  "partialReference": "generation-sunset-migration-partial-resume",
+  "authorization": {
+    "approvedCertificate": "9ede0c12fd0bd70458d10eeaaf636cb51c39543a",
+    "review": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-review-combined-round5-NGQS7n/review.json",
+      "bytes": 45350,
+      "sha256": "5ec4ca228fdc12d0fe6cbace36aa1feab87ce0adabfc9125a83c3fe21bfed76d"
+    },
+    "commands": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-review-combined-round5-NGQS7n/commands.json",
+      "bytes": 25149,
+      "sha256": "5cf885b8104fb387cf897f9a61da1baf7e3d37ca38fadb43eb941eddc9925f25"
+    },
+    "verdict": "APPROVE_CERTIFICATE",
+    "source43": "74fcd8e57e9fe256d4bc34b5d8ad93c97fc28848",
+    "source43Kernel": "c78cffc20f318df1fce50539a587cbe8ffc717c0",
+    "currentPhysicalBase": "59b57cead76e576fa9f23e3996f5614de939fe35",
+    "currentKernel": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+    "migrationRound1": "a202e83bc94954d4d1f900b4518febce7338b2f1",
+    "focusedReview": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-migration-astra-review-M9ve1U/review.json",
+      "bytes": 26921,
+      "sha256": "d7285534a6fd8269684a3e3b9cd4529725577572ec265f4d1a5f5592154ebf25"
+    },
+    "focusedReviewCommands": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-migration-astra-review-M9ve1U/commands.json",
+      "bytes": 12015,
+      "sha256": "7c6155b7fa340e412e12dedb1e6f961a3bb268b200eaf70d83ec73bcbd740010"
+    },
+    "finding": "M1: --ignored selected zero tests in both recorded full-function command strings"
+  },
+  "source": {
+    "old": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/migration/test_feyngen-round5.rs",
+      "bytes": 1177487,
+      "sha256": "273fa2a431a7ce970e6984772e2b4e0622cd8be9694c6edaf9b73fee1766785d"
+    },
+    "migrated": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/tests/tests/test_feyngen.rs",
+      "bytes": 1177489,
+      "sha256": "6fede79f720d14314cba854020bdadcb5e5b0905fd59ef98fe96b2baa345c486"
+    },
+    "exactTwoLiteralDelta": true,
+    "changes": [
+      {
+        "cell": "all grouped two-loop",
+        "request": "{} > {} | g ghg t u d QED==0 [{2}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",
+        "old": "5 | -19/24+Group(0,1,-1/2)+Group(5,1,-1/2) = -43/24",
+        "migrated": "5 | -19/24+Group(2,1,-1/2)+Group(4,1,-1/2) = -43/24",
+        "oldResult": {
+          "exit": 101,
+          "executed": 1,
+          "status": "genuine assertion failure"
+        },
+        "migratedResult": {
+          "exit": 0,
+          "executed": 1,
+          "status": "pass"
+        }
+      },
+      {
+        "cell": "nonfactorizable grouped two-loop",
+        "request": "{} > {} | g ghg t u d QED==0 [{2}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",
+        "old": "4 | 1/12+Group(0,1,-1/2)+Group(4,1,-1/2) = -11/12",
+        "migrated": "4 | -11/12+Group(2,1,-1/2)+Group(4,1,-1/2) = -23/12",
+        "oldResult": {
+          "exit": 101,
+          "executed": 1,
+          "status": "genuine assertion failure"
+        },
+        "migratedResult": {
+          "exit": 0,
+          "executed": 1,
+          "status": "pass"
+        }
+      }
+    ],
+    "untouched": {
+      "ungroupedSource44Rows": "all five remain at their approved-parent literals; not imported here",
+      "otherGroupedRows": "unchanged",
+      "requestsModelsCardsWorkersSeedSamplesFiltersCountsProduction": "unchanged",
+      "physicalCode": "unchanged"
+    }
+  },
+  "builds": {
+    "profile": "ci-optim",
+    "package": "gammaloop-integration-tests@0.1.0",
+    "features": [
+      "default"
+    ],
+    "normalSharedCache": true,
+    "oldProducer": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/migration/binaries/current-diagnostic-test_feyngen-round5",
+      "bytes": 199653240,
+      "sha256": "ada5c1c77ce8c8fe42ab2c4aad4c982f7e3f55503a217992455d3d5a83d316dd"
+    },
+    "finalProducer": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/migration/binaries/final-test_feyngen",
+      "bytes": 198995712,
+      "sha256": "fe0f8338e2bca1842dc5c0e05ce8fa136a22fe103fa79cae36d653e2bef53a88"
+    },
+    "scopedProducer": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/migration/binaries/scoped-test_feyngen",
+      "bytes": 199106768,
+      "sha256": "af45271dcdfaec0c23f94ca5662e40f8033e9b8a3c1293abd6359a29e383ac79"
+    },
+    "finalBinding": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/migration/final-build-binding.json",
+      "bytes": 339,
+      "sha256": "ee1b738507a9dbfaf49c0751d06bed19be3bc29c2d70a5d45bdfaf59b3430cdb"
+    },
+    "scopedBinding": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/migration/harness-build-binding.json",
+      "bytes": 419,
+      "sha256": "d51fd94cc40680dd1a47bb26727a16882a0689b0b7c53caa9d911dbb147f4888"
+    },
+    "scopedSource": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/migration/harness-scoped.rs",
+      "bytes": 2512,
+      "sha256": "2554a1ac99179b22efeed13b0cb360090c2dc793fd585036a018906b1d41d535"
+    },
+    "commands": {
+      "final": "cargo test --locked -p gammaloop-integration-tests --test test_feyngen --profile ci-optim --no-run --message-format=json-render-diagnostics",
+      "scoped": "cargo test --locked -p gammaloop-integration-tests --test sunset_migration_scoped --profile ci-optim --no-run --message-format=json-render-diagnostics",
+      "environment": "nix develop; privately preserved or loaded SYMBOLICA_LICENSE; normal shared target/cache"
+    }
+  },
+  "validation": {
+    "recording": "INSTA_UPDATE=no",
+    "commands": {
+      "oldFull": [
+        "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/migration/binaries/current-diagnostic-test_feyngen-round5",
+        "slow::test_vacuum_amplitude_generation",
+        "--exact",
+        "--nocapture"
+      ],
+      "finalFull": [
+        "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/migration/binaries/final-test_feyngen",
+        "slow::test_vacuum_amplitude_generation",
+        "--exact",
+        "--nocapture"
+      ],
+      "scoped": "run-scoped.sh invokes scoped-test_feyngen migration_scope::{all_old,all_new,nonfactorizable_old,nonfactorizable_new} --exact --nocapture"
+    },
+    "fullCommandCorrection": {
+      "results": [
+        {
+          "name": "old-full-corrected",
+          "command": [
+            "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/migration/binaries/current-diagnostic-test_feyngen-round5",
+            "slow::test_vacuum_amplitude_generation",
+            "--exact",
+            "--nocapture"
+          ],
+          "flags": [
+            "--exact",
+            "--nocapture"
+          ],
+          "forbiddenFlags": [
+            "--ignored"
+          ],
+          "started": "2026-10-29T04:09:22.905Z",
+          "finished": "2026-10-29T04:09:23.277Z",
+          "exit": 101,
+          "signal": null,
+          "selected": 1,
+          "failed": 1,
+          "passed": 0,
+          "recording": "INSTA_UPDATE=no",
+          "stateRoot": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/migration/full-command-correction/states/old-full-corrected",
+          "binary": {
+            "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/migration/binaries/current-diagnostic-test_feyngen-round5",
+            "bytes": 199653240,
+            "sha256": "ada5c1c77ce8c8fe42ab2c4aad4c982f7e3f55503a217992455d3d5a83d316dd"
+          },
+          "log": {
+            "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/migration/full-command-correction/old-full-corrected.log",
+            "bytes": 3761,
+            "sha256": "f3d53dee0142f965e03fd4d5bc75b257378933ddd944e4d1dc6284e7beae52ad"
+          },
+          "boundary": "old all-grouped two-loop assertion"
+        },
+        {
+          "name": "final-full-corrected",
+          "command": [
+            "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/migration/binaries/final-test_feyngen",
+            "slow::test_vacuum_amplitude_generation",
+            "--exact",
+            "--nocapture"
+          ],
+          "flags": [
+            "--exact",
+            "--nocapture"
+          ],
+          "forbiddenFlags": [
+            "--ignored"
+          ],
+          "started": "2026-10-29T04:09:24.113Z",
+          "finished": "2026-10-29T04:09:24.996Z",
+          "exit": 101,
+          "signal": null,
+          "selected": 1,
+          "failed": 1,
+          "passed": 0,
+          "recording": "INSTA_UPDATE=no",
+          "stateRoot": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/migration/full-command-correction/states/final-full-corrected",
+          "binary": {
+            "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/migration/binaries/final-test_feyngen",
+            "bytes": 198995712,
+            "sha256": "fe0f8338e2bca1842dc5c0e05ce8fa136a22fe103fa79cae36d653e2bef53a88"
+          },
+          "log": {
+            "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/migration/full-command-correction/final-full-corrected.log",
+            "bytes": 5533,
+            "sha256": "bd89065020017ff61d5ae5b0abf45575c0d464607298e85170e0e88d88bb86ed"
+          },
+          "boundary": "unchanged three-loop grouped assertion at test_feyngen.rs:2095"
+        }
+      ],
+      "binding": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/migration/full-command-correction/commands-results.json",
+        "bytes": 3079,
+        "sha256": "8310c5cc57df835294fe645fa2976a825512d034e744e45df20a29887b2796b8"
+      },
+      "runner": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/migration/full-command-correction/run-full.mjs",
+        "bytes": 3134,
+        "sha256": "39c4366391cc7bf54cafee7b7a2be4dd9e3a10e2f381a7aac5ed9da326cf8f42"
+      },
+      "runnerLog": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/migration/full-command-correction/run-full.log",
+        "bytes": 66,
+        "sha256": "526261f4f28b7d94cdc79b1288d23c9280f26c3d64116152b278bf52cb95f34c"
+      },
+      "focusedGuard": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/migration/full-command-correction/guard.json",
+        "bytes": 1546,
+        "sha256": "350745e3c6a016649bd44031ea7522b343d80acaf9ccd08c5f4a3f7bae8ec138"
+      },
+      "focusedGuardScript": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/migration/full-command-correction/guard.mjs",
+        "bytes": 2621,
+        "sha256": "5adb7f1db02fe032bf06f058b40c6cb2a6b1d8fef30317c171d1ec42dab9020e"
+      },
+      "invariant": "each full command must select exactly one test, fail exactly one test, exit 101, and omit --ignored"
+    },
+    "negativeControl": {
+      "qualification": "round-1 --ignored commands selected zero tests and receive no pass or assertion-failure credit",
+      "preservedRound1": "generation-sunset-migration-round1 at a202e83bc94954d4d1f900b4518febce7338b2f1",
+      "reviewOldLog": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-migration-astra-review-M9ve1U/old-full.log",
+        "bytes": 115,
+        "sha256": "ba13d0d604baa609b5ba348ce36e27dc4b90793ea1f4b77990b3101967c93400"
+      },
+      "reviewFinalStdout": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-migration-astra-review-M9ve1U/final-full-receipt-command.stdout",
+        "bytes": 114,
+        "sha256": "04d6d18c3b726becb60256452f23c2936c8f180e938ff6e9f0c08ef27766c293"
+      },
+      "reviewResults": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-migration-astra-review-M9ve1U/full-test-results.json",
+        "bytes": 1227,
+        "sha256": "2704a32519c5a104ea3dc30aa4cf70679dedac42f538c0d8ab756734a20675f4"
+      }
+    },
+    "oldFull": {
+      "exit": 101,
+      "selected": 1,
+      "failed": 1,
+      "reached": "original all-grouped two-loop cell",
+      "status": "expected assertion failure"
+    },
+    "finalFull": {
+      "exit": 101,
+      "selected": 1,
+      "failed": 1,
+      "reached": "migrated all-grouped two-loop cell passed; stopped at unchanged three-loop grouped snapshot on test_feyngen.rs:2095",
+      "limitation": "did not reach either nonfactorizable two-loop row and is not a whole-test pass"
+    },
+    "scoped": {
+      "sourceMode": "verbatim include of final test_feyngen.rs plus four narrow tests using existing feyngen_str",
+      "setup": "sm.json import; 16 feyngen workers; original helper generation command and policies",
+      "interpretation": "the second-row scoped pass proves its exact assertion only, not pristine full-function reachability"
+    },
+    "documentation": [
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/migration/full-command-correction/note.pdf",
+        "bytes": 36343,
+        "sha256": "7e5a62c3cb8ed0d8523a99e71d14c1334ddc532473c7c4be9fcc3a021b654613"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/migration/full-command-correction/note.html",
+        "bytes": 4069,
+        "sha256": "a62c27eaf53a586775cc1a2ee2ec18d6b6b1dbe5b8a418201682b1526d38a892"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/migration/full-command-correction/title-audit.json",
+        "bytes": 159,
+        "sha256": "81453b8142b532aeaf43baff7dd292f0721285c8de1a4a7809209f5a1d1ecba7"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/migration/full-command-correction/docs.log",
+        "bytes": 10167,
+        "sha256": "349c2db9e99c01a538d8d1f01d67c88731d03eba1436f983665ab2690171c508"
+      }
+    ],
+    "logs": [
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/migration/old-full.log",
+        "bytes": 4320,
+        "sha256": "929ece98a841abd91e069054a4e0893553871e7de9e3f853986dec008ac53942"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/migration/final-full.log",
+        "bytes": 5778,
+        "sha256": "8c6c6c530ad2bd4a6e77a57ceeffe5593bc9db7789ad20d7a7e4acedd99aca6c"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/migration/all_old.log",
+        "bytes": 2632,
+        "sha256": "0f32547e5bbb7206da424120dfa80634f9f1b438a2b720b0fedbd3b041a2dfb4"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/migration/all_new.log",
+        "bytes": 2143,
+        "sha256": "5e5cb339445dfd68abbd67996c489c263c778fb8bcbe4b79b852137243d81ff3"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/migration/nonfactorizable_old.log",
+        "bytes": 2647,
+        "sha256": "c5217c19cdc4efba2f486f5725734922bfb580098c8c9786fbb29215d9bd1213"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/migration/nonfactorizable_new.log",
+        "bytes": 2148,
+        "sha256": "675100dad5ad5f07d9d99c28e8d8f553026af91ceca0b70e606fa27167ac1eb1"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/migration/final-build.log",
+        "bytes": 1086,
+        "sha256": "fd6dafb9aac7d2246406b2b17473ea3142991b7678e6f00801c9afeaf6264034"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/migration/harness-build.log",
+        "bytes": 737,
+        "sha256": "69feb2493de6594f1e54fe97f208c45a722d3dee526a7a705043454a63abf1c0"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/migration/harness-rustfmt.log",
+        "bytes": 559,
+        "sha256": "e461563ba58fc11bd88d1bbea4e62eba695810fe674d57f829caf4569fabb347"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/migration/harness-static.log",
+        "bytes": 2338,
+        "sha256": "94dada5957c0456ad8f8f6809527f8b049c45a9aaa9d92e07d6948a2ccd60791"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/migration/certificate-replay.log",
+        "bytes": 614,
+        "sha256": "ad21dcda61e7060046fbcd18c587a893846f8e7bba6822755314821e92532d06"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/migration/guard.log",
+        "bytes": 115,
+        "sha256": "4ef770463355f982923dacd6c629f7731f075b4da3e8897daeb28c349753576a"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/migration/docs-final.log",
+        "bytes": 10167,
+        "sha256": "e8831b9cf95e87e6f1c8c133a43470c7afd65a1569d3b2290d72722ee5827dcc"
+      }
+    ]
+  },
+  "certifiedBinding": {
+    "members": [
+      {
+        "sourceOccurrence": 2,
+        "ratio": 1
+      },
+      {
+        "sourceOccurrence": 4,
+        "ratio": 1
+      }
+    ],
+    "master": "GL4",
+    "weights": [
+      "-1/2",
+      "-1/2"
+    ],
+    "all": {
+      "raw": 6,
+      "final": 5,
+      "total": "-43/24"
+    },
+    "nonfactorizable": {
+      "raw": 5,
+      "final": 4,
+      "total": "-23/12"
+    },
+    "numeratorExpansion": "none; graph numerator remains factorized",
+    "proofReplay": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/migration/certificate-replay.json",
+      "bytes": 1855,
+      "sha256": "429439213d5856a4efedc855d288227754b61525518b393646824049a86aaf12"
+    },
+    "guard": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/migration/guard.json",
+      "bytes": 3086,
+      "sha256": "713b58aa7e26b9d8fceaf07983c41f96d6859309f5491e2f27a22b15d407aeb8"
+    },
+    "reuseQualification": "certificate math and captures reused only after exact final-source/hash/producer and preservation binding",
+    "historicalQualification": "current-kernel replay of historical captures is not historical-kernel execution"
+  },
+  "checks": {
+    "fresh": [
+      "corrected old/final exact original named test executions with recording disabled; one selected failure and exit 101 each",
+      "four scoped old-fail/new-pass executions",
+      "scoped rustfmt check",
+      "scoped Cargo check/Clippy compilation (two unrelated vendored Clarabel warnings)",
+      "certificate replay and frozen-artifact guard"
+    ],
+    "reused": "approved certificate proof and retained source43/current captures after hash verification"
+  },
+  "preserved": {
+    "references": {
+      "generation-sunset-certificate": "6732cfbb59099e23c315665440dbdae67a3944d4",
+      "generation-sunset-certificate-round1": "6732cfbb59099e23c315665440dbdae67a3944d4",
+      "generation-sunset-certificate-round2": "6aa6d311432d64b68e9208d3db0326aafbb080a3",
+      "generation-sunset-certificate-round3": "30d4906436d9f62db22b621cd717c91f6a845d2e",
+      "generation-sunset-certificate-resumed-partial": "5a8c974714077056f85f0d251ddede2b818c49b5",
+      "generation-sunset-certificate-round4": "19d2ef715d05bec8b1c4ec09c7583cb710346e9f",
+      "generation-sunset-certificate-approved": "9ede0c12fd0bd70458d10eeaaf636cb51c39543a",
+      "generation-sunset-certificate-round5": "9ede0c12fd0bd70458d10eeaaf636cb51c39543a",
+      "generation-sunset-historical-source43": "74fcd8e57e9fe256d4bc34b5d8ad93c97fc28848",
+      "generation-sunset-migration-partial-resume": "6653cdf7c9e697e8fe6d538e8abb1ba4a40f636b",
+      "generation-sunset-migration-round1": "a202e83bc94954d4d1f900b4518febce7338b2f1"
+    },
+    "receipts": [
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/docs/architecture/evidence/generation-integration/wp3/sunset-certificate/receipt.json",
+        "bytes": 105567,
+        "sha256": "a06c92fcb6ebf9d4d58e3f100f91c4effa26b8b2ce1cb87eb8b892584e48939a"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/docs/architecture/evidence/generation-integration/wp3/sunset-certificate/receipt-round2.json",
+        "bytes": 234813,
+        "sha256": "db693a5a1282705d21012ef7103ff7ac0bb46fa988e7317d1010ff3a0390764a"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/docs/architecture/evidence/generation-integration/wp3/sunset-certificate/receipt-round3.json",
+        "bytes": 388744,
+        "sha256": "e5a817829300bff70723ecd060702732155acfd88ee82cb3d5ef9574b76bb844"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/docs/architecture/evidence/generation-integration/wp3/sunset-certificate/receipt-round4.json",
+        "bytes": 26359,
+        "sha256": "7e040fd3cc4b7d85145cb2ada011068ba24899691416bd75d3d9f12294c9bc70"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/docs/architecture/evidence/generation-integration/wp3/sunset-certificate/receipt-round5.json",
+        "bytes": 25232,
+        "sha256": "e6d327c64eb0aead7ac2471f424bb752d434be260bcdfc8cc5b3b48cfc743dbf"
+      }
+    ],
+    "protectedFiles": [
+      "Cargo.lock",
+      "flake.lock",
+      "nix-ci.nix"
+    ],
+    "artifacts": "all certificate captures, proof outputs, probe ELFs, review directories, migration sources, ELFs, commands and logs retained"
+  }
+}

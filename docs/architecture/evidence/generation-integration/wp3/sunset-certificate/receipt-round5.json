@@ -1,0 +1,484 @@
+{
+  "schema": 5,
+  "status": "bounded correction candidate; STOP for new independent Astra review",
+  "owner": {
+    "name": "Lucien Huber",
+    "email": "im@lcnbr.ch"
+  },
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate",
+  "changeId": "zrlnsssqvwtpwvtltplxxxxpyyrzylnx",
+  "bookmark": "generation-sunset-certificate-round5",
+  "frozenRound4": "19d2ef715d05bec8b1c4ec09c7583cb710346e9f",
+  "priorReceipts": [
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/docs/architecture/evidence/generation-integration/wp3/sunset-certificate/receipt.json",
+      "bytes": 105567,
+      "sha256": "a06c92fcb6ebf9d4d58e3f100f91c4effa26b8b2ce1cb87eb8b892584e48939a"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/docs/architecture/evidence/generation-integration/wp3/sunset-certificate/receipt-round2.json",
+      "bytes": 234813,
+      "sha256": "db693a5a1282705d21012ef7103ff7ac0bb46fa988e7317d1010ff3a0390764a"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/docs/architecture/evidence/generation-integration/wp3/sunset-certificate/receipt-round3.json",
+      "bytes": 388744,
+      "sha256": "e5a817829300bff70723ecd060702732155acfd88ee82cb3d5ef9574b76bb844"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/docs/architecture/evidence/generation-integration/wp3/sunset-certificate/receipt-round4.json",
+      "bytes": 26359,
+      "sha256": "7e040fd3cc4b7d85145cb2ada011068ba24899691416bd75d3d9f12294c9bc70"
+    }
+  ],
+  "review": [
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-review-combined-round4-j3q756/review.json",
+      "bytes": 127061,
+      "sha256": "8c87622be38569ba37568e74ac84d8765dc575711eb07caae38b005b65edc20a"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-review-combined-round4-j3q756/reproduce-round4.mjs",
+      "bytes": 4825,
+      "sha256": "b630f94108475b46152cd5af2acaa72a9a7c0b1ee86d622df53e052aa794afc9"
+    }
+  ],
+  "guard": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/round5/guard-round5.json",
+    "bytes": 3769,
+    "sha256": "1f52fb6fb71d3628abe0c96349559223c9c67f362afd19fb98b1562cbcb9ab64"
+  },
+  "preservedReferences": {
+    "generation-sunset-certificate": "6732cfbb59099e23c315665440dbdae67a3944d4",
+    "generation-sunset-certificate-round1": "6732cfbb59099e23c315665440dbdae67a3944d4",
+    "generation-sunset-certificate-round2": "6aa6d311432d64b68e9208d3db0326aafbb080a3",
+    "generation-sunset-certificate-round3": "30d4906436d9f62db22b621cd717c91f6a845d2e",
+    "generation-sunset-certificate-resumed-partial": "5a8c974714077056f85f0d251ddede2b818c49b5",
+    "generation-sunset-historical-source43": "74fcd8e57e9fe256d4bc34b5d8ad93c97fc28848",
+    "generation-sunset-certificate-round4": "19d2ef715d05bec8b1c4ec09c7583cb710346e9f"
+  },
+  "changed": [
+    "crates/feynkit-generator/examples/sunset_live_rule_probe.rs",
+    "docs/architecture/evidence/generation-integration/wp3/sunset-certificate/join.mjs",
+    "docs/architecture/evidence/generation-integration/wp3/sunset-certificate/receipt-round5.json",
+    "docs/architecture/evidence/generation-integration/wp3/sunset-certificate/receipt-round5.mjs",
+    "docs/architecture/evidence/generation-integration/wp3/sunset-certificate/round5-controls.mjs",
+    "docs/architecture/generation-sunset-certificate.typ"
+  ],
+  "nonReceiptStats": "...kit-generator/examples/sunset_live_rule_probe.rs |  46 +++++--\n...tion-integration/wp3/sunset-certificate/join.mjs |  42 ++++---\n...ration/wp3/sunset-certificate/receipt-round5.mjs | 132 ++++++++++++++++++++++\n...ation/wp3/sunset-certificate/round5-controls.mjs | 102 +++++++++++++++++\ndocs/architecture/generation-sunset-certificate.typ |   8 +\n5 files changed, 304 insertions(+), 26 deletions(-)",
+  "sourceScripts": [
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/docs/architecture/evidence/generation-integration/wp3/sunset-certificate/factor.mjs",
+      "bytes": 7591,
+      "sha256": "e1e7fc1bdacd362af49cb65736f3cdc85482510c828db2c1f9c69c3791aa8ef0"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/docs/architecture/evidence/generation-integration/wp3/sunset-certificate/frame.mjs",
+      "bytes": 4583,
+      "sha256": "8e2714fc5b69e1fdcf06dc774e0b6b396d776d6b0fde558aab1f79ccc902671b"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/docs/architecture/evidence/generation-integration/wp3/sunset-certificate/inputs.mjs",
+      "bytes": 5842,
+      "sha256": "b17674e082ebe9f62ac4ffceb9a43710e812b1b93bd4dfe6a92383131f066802"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/docs/architecture/evidence/generation-integration/wp3/sunset-certificate/internal-frame.mjs",
+      "bytes": 20006,
+      "sha256": "f399a84cb46446b462c9d81c51222d1cd101f46c83c704f985a59b4c713618b0"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/docs/architecture/evidence/generation-integration/wp3/sunset-certificate/internal-mutations.mjs",
+      "bytes": 3808,
+      "sha256": "cd4d2391d16a8ce4d6078e14ab9dc5ed7c06fdaccadf1853d09bee2e6ec83705"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/docs/architecture/evidence/generation-integration/wp3/sunset-certificate/join.mjs",
+      "bytes": 34308,
+      "sha256": "6371862444f684e227385514f10b67fa5712859fde89aa0dac83915de28301c8"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/docs/architecture/evidence/generation-integration/wp3/sunset-certificate/live-rule.mjs",
+      "bytes": 4943,
+      "sha256": "abdd41d84ff1dc3d41ef891c5e4208c77b9ada1a77c006405c7031d8fd975a90"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/docs/architecture/evidence/generation-integration/wp3/sunset-certificate/lossless-json.mjs",
+      "bytes": 745,
+      "sha256": "f388d9da11d9d5eba32c2b6a935ef88cf4353de1c57d418c584f9f4348f987d8"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/docs/architecture/evidence/generation-integration/wp3/sunset-certificate/model.mjs",
+      "bytes": 3959,
+      "sha256": "fea7411154219dd33b21dbab1e9fb4cf2838a99ffc9f94fc7c09e864b21d8ab1"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/docs/architecture/evidence/generation-integration/wp3/sunset-certificate/mutations.mjs",
+      "bytes": 9788,
+      "sha256": "78b9bd86132939c823614a25ac3ca8c9986707b66b8d9791d584dca179dfcd4c"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/docs/architecture/evidence/generation-integration/wp3/sunset-certificate/positive.mjs",
+      "bytes": 2487,
+      "sha256": "b55737da5003372e7def9a21a7dd99d484e43e97c9240759ca93eabad0d0b0a9"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/docs/architecture/evidence/generation-integration/wp3/sunset-certificate/receipt-round2.mjs",
+      "bytes": 13684,
+      "sha256": "915fb7031dce13e02d4e966e737013c3fcbcc06f2a88fc8003977134995c3bdb"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/docs/architecture/evidence/generation-integration/wp3/sunset-certificate/receipt-round3.mjs",
+      "bytes": 8674,
+      "sha256": "f6f288dcb3cbfc261123c287fcb8b4577a7ace02ad474512cc27ee08d46c4a09"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/docs/architecture/evidence/generation-integration/wp3/sunset-certificate/receipt-round4.mjs",
+      "bytes": 8984,
+      "sha256": "e6ebd422d68b3d1da1c62d8eb93ed556f011296f9fd10ff8859effec3a837821"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/docs/architecture/evidence/generation-integration/wp3/sunset-certificate/receipt-round5.mjs",
+      "bytes": 8724,
+      "sha256": "dc8560374174b4fe13ae6a4ae6abd8b79a07cc800a39b270ed2e3e5085286c98"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/docs/architecture/evidence/generation-integration/wp3/sunset-certificate/receipt.mjs",
+      "bytes": 11346,
+      "sha256": "01e43aad78f2d4793522c08c29003b28c9cdf7d6b8033d943eb54906ff4b54eb"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/docs/architecture/evidence/generation-integration/wp3/sunset-certificate/round2-controls.mjs",
+      "bytes": 5369,
+      "sha256": "f45faa3ec487cbaca467b36a530048f34c8c886eb76e29629d40eb2bfca51dcf"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/docs/architecture/evidence/generation-integration/wp3/sunset-certificate/round3-controls.mjs",
+      "bytes": 6131,
+      "sha256": "7ec536138186973b5b74f96e0dbf187a40090122aa32ab1fee06cf30d01a511f"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/docs/architecture/evidence/generation-integration/wp3/sunset-certificate/round4-controls.mjs",
+      "bytes": 5318,
+      "sha256": "d391c1cda0153080b557f54c7efb876c87c5a59cacb8608a17251d0fb6e4b352"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/docs/architecture/evidence/generation-integration/wp3/sunset-certificate/round5-controls.mjs",
+      "bytes": 5217,
+      "sha256": "fcfef11c3ff293be1e7809c95504fbf312433a3ea8ce3c01d740d6e25b40a953"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/docs/architecture/evidence/generation-integration/wp3/sunset-certificate/scalar-differential.mjs",
+      "bytes": 3099,
+      "sha256": "4bc49b8205b80ddaa1ae05757e1b83297ae127c9f1e83c97e7683ef1807331f2"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/docs/architecture/evidence/generation-integration/wp3/sunset-certificate/tensor-product.mjs",
+      "bytes": 5307,
+      "sha256": "fad4533ded69d598c9c49abd6817131fd3a2a9126159eff82fd77f94fafcdefb"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/docs/architecture/evidence/generation-integration/wp3/sunset-certificate/verify-receipt.mjs",
+      "bytes": 1143,
+      "sha256": "c83649bd8144ec9f331396baabe412c372d384d345a3d2830de1209bdba06327"
+    }
+  ],
+  "probe": {
+    "source": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/crates/feynkit-generator/examples/sunset_live_rule_probe.rs",
+      "bytes": 12658,
+      "sha256": "3a3eabcf4bd4eef482e84489116dac04c38b7af20ece6f8e9fb99ff0838ac454"
+    },
+    "manifest": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/crates/feynkit-generator/Cargo.toml",
+      "bytes": 1569,
+      "sha256": "62d6dc5cd774c7e7b3c13e9c497687d00b525e5b4df438bc06b032068867fbd5"
+    },
+    "binary": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/round5/binaries/sunset-live-rule-probe",
+      "bytes": 713547600,
+      "sha256": "bc84b1eea1d0c27f4e3bc7f37ac1f85f4c7a1dadf5dcd893cd0ee393a5b11dc2"
+    },
+    "oldSource": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/round5/sunset-live-rule-probe-round4.rs",
+      "bytes": 11562,
+      "sha256": "d52fdfbc67e39e5ec69b39793106463a8087edba818df170076afcbf71a84884"
+    },
+    "oldBinary": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/round5/binaries/sunset-live-rule-probe-round4",
+      "bytes": 713416688,
+      "sha256": "d35c9bef72f6546cb24b1271600dded51550463f01e5b08b40e73629b1042dc7"
+    },
+    "sourceClosure": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/round5/source-closure.json",
+      "bytes": 71951,
+      "sha256": "5774414f8443af1445c8668103694b6daac8b337620bc9343f62faa976f6c326"
+    },
+    "features": "[\"default\", \"native\"]",
+    "currentKernel": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+    "observations": {
+      "sourceFinal": 40,
+      "comparisonRepresentative": 132,
+      "total": 172
+    }
+  },
+  "proof": [
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/round5/inputs.json",
+      "bytes": 4254,
+      "sha256": "0f8a28831afa38d5a0893abeae6f3a95650f3e4eea01af6c77866548972f734d"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/round5/model.json",
+      "bytes": 6402,
+      "sha256": "48a2b358b08bb3e1761b6d96628c1ee6545c818c6c8c78d16310a406279f5137"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/round5/join.json",
+      "bytes": 246304,
+      "sha256": "d205091ac051ebc67be0c08883765e6018151c327a8f670dc9ddfff742a404a5"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/round5/frame.json",
+      "bytes": 41436,
+      "sha256": "9f107fea688b54b255cdfe3ba7bf9ae0ffa168c5809580e223875bb24d3c677a"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/round5/internal-frame.json",
+      "bytes": 39187,
+      "sha256": "708644dd633df87cf754e991058e8ad20fcc78e12af062f6d08a4fc24177b447"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/round5/scalar-differential.json",
+      "bytes": 7898,
+      "sha256": "5718ab8aecc89e0c5c330b422e5875e10df065d145ed862220cbeda9a6fd6af9"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/round5/mutations.json",
+      "bytes": 3572,
+      "sha256": "8623d2da9b41b5c66b28ba5e9ec21c90f5825c352f3d8b2febd1d9331afa9d43"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/round5/internal-mutations.json",
+      "bytes": 1070,
+      "sha256": "be605456832133fec3a80bca01bff52530d3ca73c9d1cd8e02f842710efe8c24"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/round5/chain-controls.json",
+      "bytes": 12179,
+      "sha256": "45b8a0e0264a6963644e50dc28061d7a597ad3b90a4d96ac85fb55837e0ab9ab"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/round5/correction-controls.json",
+      "bytes": 22055,
+      "sha256": "88295d9b7ee6168cd4b0c19d871d39a9e9a59d86b52af8181a37be1d3198be79"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/round5/round4-controls.json",
+      "bytes": 9822,
+      "sha256": "e8141ea47b87e69d048fed4a113d82d5d29fb013f41b836577562d6495609f0f"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/round5/round5-controls.json",
+      "bytes": 10340,
+      "sha256": "ce5bb88b7945ae0fd3458d4614f215c8435aebc3160b6f4389492981a0af636a"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/round5/positive.json",
+      "bytes": 1855,
+      "sha256": "429439213d5856a4efedc855d288227754b61525518b393646824049a86aaf12"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/round5/review-seven/results.json",
+      "bytes": 42115,
+      "sha256": "7f8070dc2ae8ee7af1fdf746d9de96e640113ca4f837f8501f6906582fd7b467"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/round5/frozen-seven/results.json",
+      "bytes": 32476,
+      "sha256": "11cd165a97451c966edddd8a02de8e90e77e50dccc0f7050086687200c08697c"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/round5/local-owner-observations.json",
+      "bytes": 9543,
+      "sha256": "dcafbd6eea4609fc65734968e70e3ae21ac31b8473d8f48de33a90a6225e8187"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/round5/source-closure.json",
+      "bytes": 71951,
+      "sha256": "5774414f8443af1445c8668103694b6daac8b337620bc9343f62faa976f6c326"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/round5/archive-round4.json",
+      "bytes": 1933,
+      "sha256": "5fd22304cfe02bc088df76cccb4998d0d017c117b8a0872942b239c89da150d7"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/round5/guard-round5.json",
+      "bytes": 3769,
+      "sha256": "1f52fb6fb71d3628abe0c96349559223c9c67f362afd19fb98b1562cbcb9ab64"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/round5/title-audit.json",
+      "bytes": 238,
+      "sha256": "1f631425dd5d78f12a02aa25ed2c452e4850706b11678972f9a3888648650b96"
+    }
+  ],
+  "commands": [
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/round5/check-proof.sh",
+      "bytes": 1542,
+      "sha256": "d5ac5776c74cc48588cd7e6744534d0cf5c49fd56ab006ed9bc5364365725635"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/round5/docs-check.sh",
+      "bytes": 1899,
+      "sha256": "341d02e42e023f1ace06d4ac6cc57bf8e03279aedc6ce3a4026fef3bd6cca905"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/round5/source-closure.mjs",
+      "bytes": 3226,
+      "sha256": "a980848be2c08e553c52325ee2e2bba8c578f94816f91b30bb41b336dd975592"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/round5/archive-round4.mjs",
+      "bytes": 2348,
+      "sha256": "f5cac22e5b38622496a571ce3e1b438f8927e3cf68391d07f702115c2d08625d"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/round5/guard-round5.mjs",
+      "bytes": 3946,
+      "sha256": "3c7d95ebea89d2966564f1a9648003e2e519811a63afe257c44f7ca74673b94d"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/round5/local-owner-observations.mjs",
+      "bytes": 2603,
+      "sha256": "e85ed98665edb93e443a6be4414279e0655331ba58dd928f4b784ab93669d081"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/round5/frozen-reproduce-round4.mjs",
+      "bytes": 4810,
+      "sha256": "66bc1b7b5b1b755302708650afea5f74817b339837f129da285bb9c882a5f31f"
+    }
+  ],
+  "logs": [
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/round5/build.log",
+      "bytes": 755,
+      "sha256": "9d39ba92fb3117a1e58db497830d781bb8b38edf1c940e8489673056dc3caa6b"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/round5/check-proof.log",
+      "bytes": 1112,
+      "sha256": "3938ac387b6e373f8bfd67a2d88a2fa786de35fe5a6e1b2258cc52be295f4837"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/round5/clippy.log",
+      "bytes": 195,
+      "sha256": "a290bbc784cd7bae8e03bb7633df33a5fb4ee15beed2b210906a0c121c960cc2"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/round5/rustfmt.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/round5/review-seven.log",
+      "bytes": 467,
+      "sha256": "5538773c88377c196307ff12749c265be5758408f81f35772383a4d1e8935ea6"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/round5/frozen-seven.log",
+      "bytes": 460,
+      "sha256": "0917b0b593988609c4bf56e5597831545b8ee88cc4e7337bddedff28743cd346"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/round5/round5-controls.log",
+      "bytes": 57,
+      "sha256": "7e499b3213d7c0866185c2c26aac3944294f4f5724ee0b67accf306a7ae1272a"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/round5/source-closure.log",
+      "bytes": 92,
+      "sha256": "ca28a1592d656c270eee155748c8cdd623cc2efc89fcc80c6fcd22b7314df8fe"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/round5/archive-round4.log",
+      "bytes": 54,
+      "sha256": "589873cd0d83660c3ffd142fe325aa1130c6d6ab7e503a7b6ffc280bc9c4b6ba"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/round5/guard-round5.log",
+      "bytes": 82,
+      "sha256": "5f7ae6b35222bb5afc778f3154ea62936384c021860bacbe4b7e16559f23e058"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/round5/docs-check.log",
+      "bytes": 10258,
+      "sha256": "5174a59be239dfe748adfb509fcd89b7479f73c5af077eb38b17134f721c8082"
+    }
+  ],
+  "documentation": [
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/docs/architecture/generation-sunset-certificate.typ",
+      "bytes": 28632,
+      "sha256": "ba96f26fa52483f3001f135f929e4225a64450b061bf00dd696f8b22702e4e52"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/docs/developers.toml",
+      "bytes": 171220,
+      "sha256": "fefe89ff2be0dd84c3ecaa71147c1c6489cd3aa52b409928dc0b2ed1ad76a3da"
+    }
+  ],
+  "renders": [
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/round5/note.html",
+      "bytes": 30716,
+      "sha256": "34a3bb9c236758584e3bc17ebef68a3394b3835df98c3c87fc066c5afe277aca"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/round5/note.pdf",
+      "bytes": 101960,
+      "sha256": "b477e20237ab8bcd0bd26ec9363fe141b5141d45c9feff33c349919779a904f7"
+    }
+  ],
+  "corrections": {
+    "parsedOwners": "Linnet parsed HedgePair source/sink and node-owner IDs bind the actual DOT edges to native half_edge_order. Display port labels are retained only as labels.",
+    "parsedInterfaces": "The same Rust NumeratorInterface::parse handles each effective global/local declaration exactly once; absent metadata is distinct from present valid arrays, and present malformed/null declarations reject.",
+    "oldAcceptNewReject": [
+      "mirrored-exponent-port-labels",
+      "one-sided-exponent-port-labels",
+      "mirrored-hex-port-labels",
+      "extra-escaped-vertex-interface",
+      "extra-escaped-edge-interface",
+      "explicit-null-vertex-interface-source43",
+      "explicit-null-edge-interface-source43"
+    ],
+    "positiveControls": [
+      "positive-quoted-decimal-ports",
+      "positive-edge-statement-order"
+    ],
+    "extraNegativeControls": [
+      "mirrored-null-vertex-interface",
+      "mirrored-null-edge-interface",
+      "one-sided-extra-escaped-vertex-interface",
+      "one-sided-extra-escaped-edge-interface"
+    ],
+    "directOwnerObservations": 14
+  },
+  "validation": {
+    "fresh": "Seven exact SHA-free old/new full-pipeline differentials, fourteen direct production parser observations, ten proof replays, 22 outer/eight internal mutations, round2/round3/round4/round5 controls, 172 live-rule observations, pinned fmt/Clippy, Node syntax, scoped Typst/title/registry, complete prior-file guard.",
+    "reused": "Frozen original source43/current producer captures and five ELFs, prior independent math and original assertion controls. No generation producer rerun or historical-kernel replay.",
+    "attempts": [
+      "The first direct parser-observation invocation lacked SYMBOLICA_LICENSE and could not parse its stdout. The licensed run completed; the diagnostic source and seven-case proof were unchanged.",
+      "The initial observation expectation treated an unmodified historical extra-escape specimen as mutated. The corrected fourteen-file inventory records each route separately."
+    ],
+    "originalAssertions": "Both unchanged test functions exit 101 at the first grouped label assertion; the pristine nonfactorizable assertion is not reached."
+  },
+  "limits": [
+    "No grouped expectation, snapshot, production grouping, lock, kernel, NixCI or main integration edit.",
+    "Source43 capture replay on the current kernel is not historical-kernel execution.",
+    "No whole-graph numerator expansion, hidden HEP/Dirac preparation, private cache history, general physics or whole pristine-test pass claim.",
+    "No migration before a new independent Astra correction review."
+  ]
+}

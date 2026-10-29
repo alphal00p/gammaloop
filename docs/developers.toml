@@ -13,6 +13,81 @@ title = "Implemented architecture"
 summary = "How the current runtime, physics layers, parsers, and symbolic engines are organized."
 
 [[section.note]]
+id = "generation-integration-units44-45"
+title = "Certified source44 generation weights and source45 accounting"
+summary = "Seven certified source44 expectation reconciliations and accounting for the already-integrated source45 named row."
+source = "docs/architecture/generation-integration-units44-45.typ"
+kind = "Implementation record"
+status = "Combined candidate · NEW independent Astra review before46"
+lifecycle = "investigation"
+owner = "unassigned"
+reviewed_at = "2026-10-29"
+review_ref = "158f4e1f8cdbea4d13b55f7c1fa828f75ab566f9"
+products = ["gammaloop", "feynkit"]
+topics = ["generation", "weights", "grouping", "validation"]
+review_triggers = ["tests/tests/test_feyngen.rs", "docs/architecture/generation-integration-units44-45.typ", "docs/architecture/evidence/generation-integration/wp3/main44-45/**"]
+
+[[section.note]]
+id = "generation-ghost-weight-certificate"
+title = "Five ungrouped source44 generation-weight certificates"
+summary = "Approved exact five-row source44 scalar-weight certificate with physical graph, cut, factor and membership bindings."
+source = "docs/architecture/generation-ghost-weight-certificate.typ"
+kind = "Investigation record"
+status = "Approved certificate · independent combined Astra round 3"
+lifecycle = "investigation"
+owner = "unassigned"
+reviewed_at = "2026-10-29"
+review_ref = "121ac233d5ab014f4fadefccce702041bbbdf487"
+products = ["feynkit", "gammaloop"]
+topics = ["generation", "weights", "testing", "integration"]
+review_triggers = ["tests/tests/test_feyngen.rs", "docs/architecture/evidence/generation-integration/wp3/ghost-weight-certificate/**", "Cargo.lock"]
+
+[[section.note]]
+id = "generation-ghost-weight-migration"
+title = "Five certified ungrouped source44 snapshot migrations"
+summary = "Five approved source44 ungrouped literals with scoped old-fail/new-pass and preserved physical captures."
+source = "docs/architecture/generation-ghost-weight-migration.typ"
+kind = "Execution record"
+status = "Approved migration · integrated in MAIN44–45 candidate"
+lifecycle = "investigation"
+owner = "unassigned"
+reviewed_at = "2026-10-29"
+review_ref = "7a9f24095862a1edd98fd929800fa6665c65f16b"
+products = ["feynkit", "gammaloop"]
+topics = ["generation", "weights", "testing", "integration"]
+review_triggers = ["tests/tests/test_feyngen.rs", "docs/architecture/evidence/generation-integration/wp3/ghost-weight-migration/**"]
+
+[[section.note]]
+id = "generation-sunset-certificate"
+title = "Two-loop vacuum sunset preparation certificate"
+summary = "Approved bounded source43/current physical-member, scalar-weight, local-tensor and signed-frame proof for two grouped vacuum rows."
+source = "docs/architecture/generation-sunset-certificate.typ"
+kind = "Correctness investigation"
+status = "Bounded certificate approved at 9ede0c12 for two-row expectation migration"
+lifecycle = "investigation"
+owner = "lucien-huber"
+reviewed_at = "2026-10-29"
+review_ref = "9ede0c12fd0bd70458d10eeaaf636cb51c39543a"
+products = ["feynkit", "gammaloop"]
+topics = ["generation", "grouping", "weights", "validation"]
+review_triggers = ["docs/architecture/evidence/generation-integration/wp3/sunset-certificate/**", "tests/tests/test_feyngen.rs"]
+
+[[section.note]]
+id = "generation-sunset-migration"
+title = "Two-loop vacuum sunset grouped expectation migration"
+summary = "Two approved grouped two-loop literals with corrected one-test full-function commands and scoped second-cell qualification."
+source = "docs/architecture/generation-sunset-migration.typ"
+kind = "Correctness investigation"
+status = "Approved migration · integrated in MAIN44–45 candidate"
+lifecycle = "investigation"
+owner = "lucien-huber"
+reviewed_at = "2026-10-29"
+review_ref = "6d982cb76090a123bce1f3a5da3cbd3040184e98"
+products = ["feynkit", "gammaloop"]
+topics = ["generation", "grouping", "weights", "validation"]
+review_triggers = ["tests/tests/test_feyngen.rs", "docs/architecture/generation-sunset-migration.typ", "docs/architecture/evidence/generation-integration/wp3/sunset-certificate/migration-receipt.json"]
+
+[[section.note]]
 id = "generation-integration-units39-43"
 title = "Ordered canonical frames and generation progress integration"
 summary = "Current MAIN39–43 canonical frames, progress lifecycle, terminal-pocket coverage and specifically certified test migrations."

@@ -1,0 +1,857 @@
+{
+  "schema": 1,
+  "status": "prepared five-literal migration; NEW independent Astra migration/test review required",
+  "author": "Lucien Huber <im@lcnbr.ch>",
+  "parent": "121ac233d5ab014f4fadefccce702041bbbdf487",
+  "jjChange": "qouoqyzw",
+  "bookmarks": {
+    "approvedCertificate": "generation-ghost-weight-certificate-approved",
+    "certificate": "generation-ghost-weight-certificate",
+    "migration": "generation-ghost-weight-migration",
+    "approvedNamedAaMigration": "generation-pocket-weight-diagnosis-approved-migration",
+    "priorCertificate": "generation-pocket-weight-diagnosis-approved-certificate"
+  },
+  "approval": {
+    "path": "target/ghost-weight-certificate/review-astra-round3-combined-5LJwn8/review.json",
+    "sha256": "0b6cd82de5010fb58ba391f8e5af536536c9c1fdd4d22deb72bcb9d78eccc8ef"
+  },
+  "receiptSources": {
+    "generator": {
+      "path": "docs/architecture/evidence/generation-integration/wp3/ghost-weight-migration/make-receipt.mjs",
+      "sha256": "252534d8765c3caf420a45b20d830b75be9fe488ebcab276e7c8b641f49a6b25"
+    },
+    "validator": {
+      "path": "docs/architecture/evidence/generation-integration/wp3/ghost-weight-migration/validate-receipt.mjs",
+      "sha256": "b16bc6c54776d7059bcd323537f84ea66f476482bd6051ab25c514032d16306c"
+    }
+  },
+  "sourceAndFeatureIdentity": {
+    "approvedSourceRef": "generation-ghost-weight-certificate-approved",
+    "approvedTestSourceSha256": "2b54ae424c91044cb8992a02159ddfb302d20279a2bb17abf3affc1a8222cb30",
+    "migratedTestSource": {
+      "path": "tests/tests/test_feyngen.rs",
+      "sha256": "0658946a3272eb1f4290f88b842dc6d60cadae1717ca2e5b38f1e10fdf19afdb"
+    },
+    "frozenPhysicsParent": "59b57cead76e576fa9f23e3996f5614de939fe35",
+    "source43Historical": "74fcd8e57e9fe256d4bc34b5d8ad93c97fc28848",
+    "currentKernel": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+    "source43Kernel": "c78cffc20f318df1fce50539a587cbe8ffc717c0",
+    "cargoLock": {
+      "path": "Cargo.lock",
+      "sha256": "def8dd7be5f208f4a290a4556081f7a63d10a5ae070c5df1808c1d350fa6161e"
+    },
+    "flakeLock": {
+      "path": "flake.lock",
+      "sha256": "e10c5893b513d4c7120d841b47fbfddffb3ac4f1f5cb46a18c0f7542cbde8534"
+    },
+    "model": {
+      "path": "assets/models/json/sm/sm.json",
+      "sha256": "a0193ae09a6f920c8fcfbe8231c6a70e820b82b573257e07c216bdcd8e57acd9"
+    },
+    "cargoFeatures": "Cargo defaults; ci-optim profile; no feature override",
+    "finalBuildCommand": "nix develop -c cargo test --locked -p gammaloop-integration-tests --test test_feyngen --profile ci-optim --no-run -j 2",
+    "normalCargoProducer": "/common/build-cache/lcnbr/9c/5e5e2f7a370b0f/ci-optim/deps/test_feyngen-9581d43dfd98ca33",
+    "oldImmutableBinary": {
+      "path": "target/ghost-weight-certificate/migration/old-literals-test_feyngen",
+      "sha256": "fc4cccfde6411b2036b20a3c0e58189618f667e4b696aba50da5faed5c66d948"
+    },
+    "newImmutableBinary": {
+      "path": "target/ghost-weight-certificate/migration/new-literals-test_feyngen",
+      "sha256": "811bc93ca99e97497cf7b0397fed9418761886e8b449b3b2602b480e62631da3"
+    },
+    "finalCargoBuildLog": {
+      "path": "target/ghost-weight-certificate/migration/final-cargo-build.log",
+      "sha256": "d2bbcaa328c65333eb78bba6de99e3d72d4b73f505f93d7e9da6bdbfbbb63aa9"
+    },
+    "finalTargetedClippyLog": {
+      "path": "target/ghost-weight-certificate/migration/final-clippy.log",
+      "sha256": "2bbbe146a81b9618b9bc5a054862aa62acfeaea52c429698f17e7a55a198dfed"
+    },
+    "pinnedSourceChecksLog": {
+      "path": "target/ghost-weight-certificate/migration/source-checks.log",
+      "sha256": "c7f6353870f9c3fa4c41ae798ca68c5c58c943cf9ce4cc6d42e37d9882bd6f59"
+    }
+  },
+  "literalMigration": {
+    "rows": [
+      {
+        "id": "epem_bbh_qcd2",
+        "qualifiedTest": "slow::test_generate_epem_a_qqh",
+        "line": 2334,
+        "originalLiteral": "594 | -261 = -261",
+        "migratedLiteral": "594 | -201 = -201",
+        "command": "e+ e- > b b~ h | d b h a e- ghg g QED^2==6 [{{4}} QCD=2] --filter-zero-color --numerator-grouping no_grouping --filter-selfenergies true --filter-snails true --filter-tadpoles true --n-cut-blobs 1 1 --n-cut-spectators 0 0",
+        "originalLineSha256": "b3cb6ec71db5e7871d7ca35396d69b569ca3db0d51a880c6a2c92ca7795584af",
+        "migratedLineSha256": "62a0d9f9153cac3277d799001534988fa9ebf904e1ca0e3ec96a6097eb9e4cbf",
+        "result": {
+          "old": {
+            "path": "target/ghost-weight-certificate/migration/old-epem.log",
+            "sha256": "efb0239798158f0383d83e58827b7e25f0e672e06e6ed3a41c85723e5cfe6225",
+            "exitCode": 101,
+            "target": "failed",
+            "testCount": {
+              "passed": 0,
+              "failed": 1
+            }
+          },
+          "new": {
+            "path": "target/ghost-weight-certificate/migration/new-epem.log",
+            "sha256": "649a6f408580ee31cf8930aacef8bf463fa3cb3d556610801ebfa2de23fe1258",
+            "exitCode": 101,
+            "target": "passed; subsequent unchanged grouped row failed",
+            "laterFailure": "generate_epem_a_qqh-7",
+            "testCount": {
+              "passed": 0,
+              "failed": 1
+            }
+          }
+        }
+      },
+      {
+        "id": "slow_aa_ttx_qcd2",
+        "qualifiedTest": "slow::test_generate_aa_ttx_cross_section",
+        "line": 2366,
+        "originalLiteral": "874 | -266 = -266",
+        "migratedLiteral": "874 | -186 = -186",
+        "command": "a a > t t~ | a t g b ghg QED^2==4 [{{3}} QCD=2] --filter-zero-color --numerator-grouping no_grouping --filter-selfenergies true --filter-snails true --filter-tadpoles true --n-cut-blobs 1 1 --n-cut-spectators 0 0",
+        "originalLineSha256": "eb6d5167097b6b266c577642942c43e87dcf40f879fd5e0a75ad9bd2e7918b43",
+        "migratedLineSha256": "8d64681d9120a8fa1af47406777beb0370a17786e768d6d14643f14ba9f0740b",
+        "result": {
+          "old": {
+            "path": "target/ghost-weight-certificate/migration/old-aa.log",
+            "sha256": "918fc96be5ea6c3dae0039d4f883b7737e5d552228ad400ec633b884b9cb36a6",
+            "exitCode": 101,
+            "target": "failed",
+            "testCount": {
+              "passed": 0,
+              "failed": 1
+            }
+          },
+          "new": {
+            "path": "target/ghost-weight-certificate/migration/new-aa.log",
+            "sha256": "f1e0bf61c12a9f2c6c42441ad3483838db9963fb92fb44af0210340dccbe4fa8",
+            "exitCode": 101,
+            "target": "passed; subsequent unchanged grouped row failed",
+            "laterFailure": "generate_aa_ttx_cross_section-4",
+            "testCount": {
+              "passed": 0,
+              "failed": 1
+            }
+          }
+        }
+      },
+      {
+        "id": "vacuum_nonfactorizable_l2",
+        "qualifiedTest": "slow::test_vacuum_amplitude_generation",
+        "line": 2402,
+        "originalLiteral": "5 | -11/12 = -11/12",
+        "migratedLiteral": "5 | -23/12 = -23/12",
+        "command": "{} > {} | g ghg t u d QED==0 [{2}] --filter-zero-color --numerator-grouping no_grouping --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",
+        "originalLineSha256": "fc84e2a190291f7028fac6ffe119d60a947006c26cd909182b34ab5c61c624b2",
+        "migratedLineSha256": "c6624c1a7f7b3841f28f2af23eedf73101c2c47878b95179d199aafd610965d8",
+        "result": {
+          "old": {
+            "path": "target/ghost-weight-certificate/migration/vacuum-old-l2.log",
+            "sha256": "3df9f967a53bdb062c82a3e47464232c3e2b7564c1f0ccf6d95ae55d93f6a74b",
+            "exitCode": 101,
+            "target": "failed at old literal",
+            "testCount": {
+              "passed": 0,
+              "failed": 1
+            }
+          },
+          "new": {
+            "path": "target/ghost-weight-certificate/migration/vacuum-new-l2.log",
+            "sha256": "79fb3dc25ef2c2204c77842bcc34440c2a997d1fa4ac51be3a5e27c40b8905cb",
+            "exitCode": 0,
+            "target": "passed",
+            "testCount": {
+              "passed": 1,
+              "failed": 0
+            }
+          }
+        }
+      },
+      {
+        "id": "vacuum_nonfactorizable_l3",
+        "qualifiedTest": "slow::test_vacuum_amplitude_generation",
+        "line": 2404,
+        "originalLiteral": "30 | -17/12 = -17/12",
+        "migratedLiteral": "30 | -13/12 = -13/12",
+        "command": "{} > {} | g ghg t u d QED==0 [{3}] --filter-zero-color --numerator-grouping no_grouping --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",
+        "originalLineSha256": "b9b38e2b113384bb3036a0562c8e2b99bbcf4ce363f8cb420d483cbc85818419",
+        "migratedLineSha256": "e6d874669ed073916fdfacdce24f0245ba27179452bab5742b1ce967685b2c51",
+        "result": {
+          "old": {
+            "path": "target/ghost-weight-certificate/migration/vacuum-old-l3.log",
+            "sha256": "203b9351ea54465721d2cde54c28ade8238ace0c4bffe0e9b91a1d50e8969a5f",
+            "exitCode": 101,
+            "target": "failed at old literal",
+            "testCount": {
+              "passed": 0,
+              "failed": 1
+            }
+          },
+          "new": {
+            "path": "target/ghost-weight-certificate/migration/vacuum-new-l3.log",
+            "sha256": "4eafdd6b2cbe0b6bd83b4a9700a0de9052b538d44b28d7c12c52a62d1cf9534c",
+            "exitCode": 0,
+            "target": "passed",
+            "testCount": {
+              "passed": 1,
+              "failed": 0
+            }
+          }
+        }
+      },
+      {
+        "id": "vacuum_nonfactorizable_l4",
+        "qualifiedTest": "slow::test_vacuum_amplitude_generation",
+        "line": 2407,
+        "originalLiteral": "200 | -199/48 = -199/48",
+        "migratedLiteral": "200 | 457/48 = 457/48",
+        "command": "{} > {} | g ghg t u d QED==0 [{4}] --filter-zero-color --numerator-grouping no_grouping --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",
+        "originalLineSha256": "a30e487c929874168b010cc5be45b7ba106976e7b90563af2b63e4f70462dd4a",
+        "migratedLineSha256": "5fcd2d04a00611ab96693ee7c171e4fe347e13bb606e12ff699956086458d510",
+        "result": {
+          "old": {
+            "path": "target/ghost-weight-certificate/migration/vacuum-old-l4.log",
+            "sha256": "02f14cd862fcc03f73cfd7e53a3edd4a871e2b91a22d271e1ad07e46c060b7cd",
+            "exitCode": 101,
+            "target": "failed at old literal",
+            "testCount": {
+              "passed": 0,
+              "failed": 1
+            }
+          },
+          "new": {
+            "path": "target/ghost-weight-certificate/migration/vacuum-new-l4.log",
+            "sha256": "8619f55543999ad02fc40130335f32d757587070874abc1dc7e0fdd3c33ec0c8",
+            "exitCode": 0,
+            "target": "passed",
+            "testCount": {
+              "passed": 1,
+              "failed": 0
+            }
+          }
+        }
+      }
+    ],
+    "diffSource": {
+      "path": "docs/architecture/evidence/generation-integration/wp3/ghost-weight-migration/check-five-row-diff.mjs",
+      "sha256": "eedc91e17eb1e159deb1d236ed1432e70669a8c5b58b7a77bd2dcf300a475e04"
+    },
+    "exactDiff": {
+      "path": "target/ghost-weight-certificate/migration/five-row-diff.json",
+      "sha256": "80cbeea3d49ff090b134b0760ae0286db752932ed0b2f6d10f4da73c5e16c377"
+    },
+    "negativeInventory": {
+      "allOtherLinesByteEqual": true,
+      "distinctFailingAaRowStillApproved": true,
+      "groupedSunsetAndOtherGroupedSnapshotLinesChanged": 0,
+      "productionSourceFilesChanged": 0,
+      "setupModelCommandFilterWorkerAndStateLinesChanged": 0,
+      "earlierAndOtherAssertionsChanged": 0
+    }
+  },
+  "vacuumHarness": {
+    "attribution": "task-local observational assertion harness, generated from exact old/new owner source and using existing scalar generation helpers; original grouped prefix unexecuted",
+    "generator": {
+      "path": "docs/architecture/evidence/generation-integration/wp3/ghost-weight-migration/make-vacuum-harness.mjs",
+      "sha256": "be05769c243ed348e55c37c09f81825ad9b320effd21f07f5ce97878c8a86fc5"
+    },
+    "sourceBinding": {
+      "path": "target/ghost-weight-certificate/migration/vacuum-harness-source.json",
+      "sha256": "fb829507f4a0388b138b73aa555ec4126f1d01901c944bc6ab25f9a9474eb7c4"
+    },
+    "oldSource": {
+      "path": "target/ghost-weight-certificate/migration/vacuum-old-assertions.rs",
+      "sha256": "84de1cc7eb7ddb6e692cb1be421d3542b80285a297791c21136f79067fb94104"
+    },
+    "newSource": {
+      "path": "target/ghost-weight-certificate/migration/vacuum-new-assertions.rs",
+      "sha256": "13341980b87122c83519b7c3426a74dd5ea5494db9a454e248b002c8160b232f"
+    },
+    "oldBinary": {
+      "path": "target/ghost-weight-certificate/migration/vacuum-old-assertions",
+      "sha256": "7814396a5193f17f5d8860b9c55f39a37231d7590be820128bdd210e8196e7fd"
+    },
+    "newBinary": {
+      "path": "target/ghost-weight-certificate/migration/vacuum-new-assertions",
+      "sha256": "187b386da353003365f309e04778a68fa7d86ae1faefe622eab614270e63b364"
+    },
+    "buildScript": {
+      "path": "target/ghost-weight-certificate/migration/build-vacuum-harness.sh",
+      "sha256": "1174ac4eae61fe08ada8a8567403a8cce8ed76a5af811c859eee0790b360be2d"
+    },
+    "successfulBuildLog": {
+      "path": "target/ghost-weight-certificate/migration/vacuum-harness-build-attempt3.log",
+      "sha256": "1a8e260ca0371e2c1f1aa458658413325afa4079afabf39da0a43a578918752f"
+    },
+    "sourceOwnerHelperHashes": [
+      {
+        "sha256": "906cf40377dd679c54323f78bd76cee72e0b34bfab4119c869f9500a4f8392ca",
+        "bytes": 2398
+      },
+      {
+        "sha256": "2d8d5c900850bc6beea8c0b7bc5bc869a4543020d489337a263cba6cbf250747",
+        "bytes": 1634
+      }
+    ],
+    "originalSetup": [
+      "        let mut cli = get_test_cli(None, get_tests_workspace_path().join(\"feyn_gen_generation_test\"), Some(\"feyngen\".to_string()),true)?;",
+      "        cli.run_command(\"import model sm.json\")?;",
+      "        cli.run_command(\"set global kv global.n_cores.feyngen=16\")?;"
+    ],
+    "exactCommands": [
+      "{} > {} | g ghg t u d QED==0 [{2}] --filter-zero-color --numerator-grouping no_grouping --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",
+      "{} > {} | g ghg t u d QED==0 [{3}] --filter-zero-color --numerator-grouping no_grouping --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",
+      "{} > {} | g ghg t u d QED==0 [{4}] --filter-zero-color --numerator-grouping no_grouping --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1"
+    ],
+    "originalWorkerChoice": 16,
+    "currentPinnedSymbolicaRlib": {
+      "path": "/common/build-cache/lcnbr/9c/5e5e2f7a370b0f/ci-optim/deps/libsymbolica-219a1a53d9363ef7.rlib",
+      "sha256": "766f1539bb86a9cfb648278feb7dc9ab152df923ec142123acec3e95c1e1edf4"
+    }
+  },
+  "testExecution": {
+    "verificationSource": {
+      "path": "docs/architecture/evidence/generation-integration/wp3/ghost-weight-migration/verify-test-logs.mjs",
+      "sha256": "5e5bcf8f5b08b344c5851412a2f3df36e52e5a205ca26948ae405039d98d6201"
+    },
+    "structuredResults": {
+      "path": "target/ghost-weight-certificate/migration/test-results.json",
+      "sha256": "b23521d8dd9eda5616eff9604762dee53d04ecae4d547373865124f9914d8c77"
+    },
+    "commands": [
+      {
+        "id": "old-epem",
+        "replayCommand": "nix develop -c env -u INSTA_FORCE_PASS INSTA_UPDATE=no TESTS_GAMMALOOP_STATE_PATH=<isolated-old-epem-state> target/ghost-weight-certificate/migration/old-literals-test_feyngen --exact slow::test_generate_epem_a_qqh --nocapture --test-threads=1",
+        "actualTestArgv": [
+          "--exact",
+          "slow::test_generate_epem_a_qqh",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "executable": {
+          "path": "target/ghost-weight-certificate/migration/old-literals-test_feyngen",
+          "sha256": "fc4cccfde6411b2036b20a3c0e58189618f667e4b696aba50da5faed5c66d948"
+        },
+        "log": {
+          "path": "target/ghost-weight-certificate/migration/old-epem.log",
+          "sha256": "efb0239798158f0383d83e58827b7e25f0e672e06e6ed3a41c85723e5cfe6225"
+        },
+        "environment": {
+          "INSTA_UPDATE": "no",
+          "INSTA_FORCE_PASS": "unset",
+          "TESTS_GAMMALOOP_STATE_PATH": "target/ghost-weight-certificate/migration/old-epem-state"
+        }
+      },
+      {
+        "id": "new-epem",
+        "replayCommand": "nix develop -c env -u INSTA_FORCE_PASS INSTA_UPDATE=no TESTS_GAMMALOOP_STATE_PATH=<isolated-new-epem-state> target/ghost-weight-certificate/migration/new-literals-test_feyngen --exact slow::test_generate_epem_a_qqh --nocapture --test-threads=1",
+        "actualTestArgv": [
+          "--exact",
+          "slow::test_generate_epem_a_qqh",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "executable": {
+          "path": "target/ghost-weight-certificate/migration/new-literals-test_feyngen",
+          "sha256": "811bc93ca99e97497cf7b0397fed9418761886e8b449b3b2602b480e62631da3"
+        },
+        "log": {
+          "path": "target/ghost-weight-certificate/migration/new-epem.log",
+          "sha256": "649a6f408580ee31cf8930aacef8bf463fa3cb3d556610801ebfa2de23fe1258"
+        },
+        "environment": {
+          "INSTA_UPDATE": "no",
+          "INSTA_FORCE_PASS": "unset",
+          "TESTS_GAMMALOOP_STATE_PATH": "target/ghost-weight-certificate/migration/new-epem-state"
+        }
+      },
+      {
+        "id": "old-aa",
+        "replayCommand": "nix develop -c env -u INSTA_FORCE_PASS INSTA_UPDATE=no TESTS_GAMMALOOP_STATE_PATH=<isolated-old-aa-state> target/ghost-weight-certificate/migration/old-literals-test_feyngen --exact slow::test_generate_aa_ttx_cross_section --nocapture --test-threads=1",
+        "actualTestArgv": [
+          "--exact",
+          "slow::test_generate_aa_ttx_cross_section",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "executable": {
+          "path": "target/ghost-weight-certificate/migration/old-literals-test_feyngen",
+          "sha256": "fc4cccfde6411b2036b20a3c0e58189618f667e4b696aba50da5faed5c66d948"
+        },
+        "log": {
+          "path": "target/ghost-weight-certificate/migration/old-aa.log",
+          "sha256": "918fc96be5ea6c3dae0039d4f883b7737e5d552228ad400ec633b884b9cb36a6"
+        },
+        "environment": {
+          "INSTA_UPDATE": "no",
+          "INSTA_FORCE_PASS": "unset",
+          "TESTS_GAMMALOOP_STATE_PATH": "target/ghost-weight-certificate/migration/old-aa-state"
+        }
+      },
+      {
+        "id": "new-aa",
+        "replayCommand": "nix develop -c env -u INSTA_FORCE_PASS INSTA_UPDATE=no TESTS_GAMMALOOP_STATE_PATH=<isolated-new-aa-state> target/ghost-weight-certificate/migration/new-literals-test_feyngen --exact slow::test_generate_aa_ttx_cross_section --nocapture --test-threads=1",
+        "actualTestArgv": [
+          "--exact",
+          "slow::test_generate_aa_ttx_cross_section",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "executable": {
+          "path": "target/ghost-weight-certificate/migration/new-literals-test_feyngen",
+          "sha256": "811bc93ca99e97497cf7b0397fed9418761886e8b449b3b2602b480e62631da3"
+        },
+        "log": {
+          "path": "target/ghost-weight-certificate/migration/new-aa.log",
+          "sha256": "f1e0bf61c12a9f2c6c42441ad3483838db9963fb92fb44af0210340dccbe4fa8"
+        },
+        "environment": {
+          "INSTA_UPDATE": "no",
+          "INSTA_FORCE_PASS": "unset",
+          "TESTS_GAMMALOOP_STATE_PATH": "target/ghost-weight-certificate/migration/new-aa-state"
+        }
+      },
+      {
+        "id": "vacuum-old-l2",
+        "replayCommand": "nix develop -c env -u INSTA_FORCE_PASS INSTA_UPDATE=no TESTS_GAMMALOOP_STATE_PATH=<isolated-vacuum-old-l2-state> target/ghost-weight-certificate/migration/vacuum-old-assertions --exact scoped_vacuum_l2 --nocapture --test-threads=1",
+        "actualTestArgv": [
+          "--exact",
+          "scoped_vacuum_l2",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "executable": {
+          "path": "target/ghost-weight-certificate/migration/vacuum-old-assertions",
+          "sha256": "7814396a5193f17f5d8860b9c55f39a37231d7590be820128bdd210e8196e7fd"
+        },
+        "log": {
+          "path": "target/ghost-weight-certificate/migration/vacuum-old-l2.log",
+          "sha256": "3df9f967a53bdb062c82a3e47464232c3e2b7564c1f0ccf6d95ae55d93f6a74b"
+        },
+        "environment": {
+          "INSTA_UPDATE": "no",
+          "INSTA_FORCE_PASS": "unset",
+          "TESTS_GAMMALOOP_STATE_PATH": "target/ghost-weight-certificate/migration/vacuum-old-l2-state"
+        }
+      },
+      {
+        "id": "vacuum-new-l2",
+        "replayCommand": "nix develop -c env -u INSTA_FORCE_PASS INSTA_UPDATE=no TESTS_GAMMALOOP_STATE_PATH=<isolated-vacuum-new-l2-state> target/ghost-weight-certificate/migration/vacuum-new-assertions --exact scoped_vacuum_l2 --nocapture --test-threads=1",
+        "actualTestArgv": [
+          "--exact",
+          "scoped_vacuum_l2",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "executable": {
+          "path": "target/ghost-weight-certificate/migration/vacuum-new-assertions",
+          "sha256": "187b386da353003365f309e04778a68fa7d86ae1faefe622eab614270e63b364"
+        },
+        "log": {
+          "path": "target/ghost-weight-certificate/migration/vacuum-new-l2.log",
+          "sha256": "79fb3dc25ef2c2204c77842bcc34440c2a997d1fa4ac51be3a5e27c40b8905cb"
+        },
+        "environment": {
+          "INSTA_UPDATE": "no",
+          "INSTA_FORCE_PASS": "unset",
+          "TESTS_GAMMALOOP_STATE_PATH": "target/ghost-weight-certificate/migration/vacuum-new-l2-state"
+        }
+      },
+      {
+        "id": "vacuum-old-l3",
+        "replayCommand": "nix develop -c env -u INSTA_FORCE_PASS INSTA_UPDATE=no TESTS_GAMMALOOP_STATE_PATH=<isolated-vacuum-old-l3-state> target/ghost-weight-certificate/migration/vacuum-old-assertions --exact scoped_vacuum_l3 --nocapture --test-threads=1",
+        "actualTestArgv": [
+          "--exact",
+          "scoped_vacuum_l3",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "executable": {
+          "path": "target/ghost-weight-certificate/migration/vacuum-old-assertions",
+          "sha256": "7814396a5193f17f5d8860b9c55f39a37231d7590be820128bdd210e8196e7fd"
+        },
+        "log": {
+          "path": "target/ghost-weight-certificate/migration/vacuum-old-l3.log",
+          "sha256": "203b9351ea54465721d2cde54c28ade8238ace0c4bffe0e9b91a1d50e8969a5f"
+        },
+        "environment": {
+          "INSTA_UPDATE": "no",
+          "INSTA_FORCE_PASS": "unset",
+          "TESTS_GAMMALOOP_STATE_PATH": "target/ghost-weight-certificate/migration/vacuum-old-l3-state"
+        }
+      },
+      {
+        "id": "vacuum-new-l3",
+        "replayCommand": "nix develop -c env -u INSTA_FORCE_PASS INSTA_UPDATE=no TESTS_GAMMALOOP_STATE_PATH=<isolated-vacuum-new-l3-state> target/ghost-weight-certificate/migration/vacuum-new-assertions --exact scoped_vacuum_l3 --nocapture --test-threads=1",
+        "actualTestArgv": [
+          "--exact",
+          "scoped_vacuum_l3",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "executable": {
+          "path": "target/ghost-weight-certificate/migration/vacuum-new-assertions",
+          "sha256": "187b386da353003365f309e04778a68fa7d86ae1faefe622eab614270e63b364"
+        },
+        "log": {
+          "path": "target/ghost-weight-certificate/migration/vacuum-new-l3.log",
+          "sha256": "4eafdd6b2cbe0b6bd83b4a9700a0de9052b538d44b28d7c12c52a62d1cf9534c"
+        },
+        "environment": {
+          "INSTA_UPDATE": "no",
+          "INSTA_FORCE_PASS": "unset",
+          "TESTS_GAMMALOOP_STATE_PATH": "target/ghost-weight-certificate/migration/vacuum-new-l3-state"
+        }
+      },
+      {
+        "id": "vacuum-old-l4",
+        "replayCommand": "nix develop -c env -u INSTA_FORCE_PASS INSTA_UPDATE=no TESTS_GAMMALOOP_STATE_PATH=<isolated-vacuum-old-l4-state> target/ghost-weight-certificate/migration/vacuum-old-assertions --exact scoped_vacuum_l4 --nocapture --test-threads=1",
+        "actualTestArgv": [
+          "--exact",
+          "scoped_vacuum_l4",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "executable": {
+          "path": "target/ghost-weight-certificate/migration/vacuum-old-assertions",
+          "sha256": "7814396a5193f17f5d8860b9c55f39a37231d7590be820128bdd210e8196e7fd"
+        },
+        "log": {
+          "path": "target/ghost-weight-certificate/migration/vacuum-old-l4.log",
+          "sha256": "02f14cd862fcc03f73cfd7e53a3edd4a871e2b91a22d271e1ad07e46c060b7cd"
+        },
+        "environment": {
+          "INSTA_UPDATE": "no",
+          "INSTA_FORCE_PASS": "unset",
+          "TESTS_GAMMALOOP_STATE_PATH": "target/ghost-weight-certificate/migration/vacuum-old-l4-state"
+        }
+      },
+      {
+        "id": "vacuum-new-l4",
+        "replayCommand": "nix develop -c env -u INSTA_FORCE_PASS INSTA_UPDATE=no TESTS_GAMMALOOP_STATE_PATH=<isolated-vacuum-new-l4-state> target/ghost-weight-certificate/migration/vacuum-new-assertions --exact scoped_vacuum_l4 --nocapture --test-threads=1",
+        "actualTestArgv": [
+          "--exact",
+          "scoped_vacuum_l4",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "executable": {
+          "path": "target/ghost-weight-certificate/migration/vacuum-new-assertions",
+          "sha256": "187b386da353003365f309e04778a68fa7d86ae1faefe622eab614270e63b364"
+        },
+        "log": {
+          "path": "target/ghost-weight-certificate/migration/vacuum-new-l4.log",
+          "sha256": "8619f55543999ad02fc40130335f32d757587070874abc1dc7e0fdd3c33ec0c8"
+        },
+        "environment": {
+          "INSTA_UPDATE": "no",
+          "INSTA_FORCE_PASS": "unset",
+          "TESTS_GAMMALOOP_STATE_PATH": "target/ghost-weight-certificate/migration/vacuum-new-l4-state"
+        }
+      },
+      {
+        "id": "new-original-vacuum",
+        "replayCommand": "nix develop -c env -u INSTA_FORCE_PASS INSTA_UPDATE=no TESTS_GAMMALOOP_STATE_PATH=<isolated-new-original-vacuum-state> target/ghost-weight-certificate/migration/new-literals-test_feyngen --exact slow::test_vacuum_amplitude_generation --nocapture --test-threads=1",
+        "actualTestArgv": [
+          "--exact",
+          "slow::test_vacuum_amplitude_generation",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "executable": {
+          "path": "target/ghost-weight-certificate/migration/new-literals-test_feyngen",
+          "sha256": "811bc93ca99e97497cf7b0397fed9418761886e8b449b3b2602b480e62631da3"
+        },
+        "log": {
+          "path": "target/ghost-weight-certificate/migration/new-original-vacuum.log",
+          "sha256": "b46073bb35fa780e546439c444abe69ac192b1645a73ea5c6f32f188f91a42e2"
+        },
+        "environment": {
+          "INSTA_UPDATE": "no",
+          "INSTA_FORCE_PASS": "unset",
+          "TESTS_GAMMALOOP_STATE_PATH": "target/ghost-weight-certificate/migration/new-original-vacuum-state"
+        }
+      },
+      {
+        "id": "final-diagnostic",
+        "replayCommand": "nix develop -c env -u INSTA_FORCE_PASS INSTA_UPDATE=no TESTS_GAMMALOOP_STATE_PATH=<isolated-final-diagnostic-state> target/ghost-weight-certificate/migration/new-literals-test_feyngen --ignored --exact diagnose_source44_ungrouped_weights --nocapture --test-threads=1",
+        "actualTestArgv": [
+          "--ignored",
+          "--exact",
+          "diagnose_source44_ungrouped_weights",
+          "--nocapture",
+          "--test-threads=1"
+        ],
+        "executable": {
+          "path": "target/ghost-weight-certificate/migration/new-literals-test_feyngen",
+          "sha256": "811bc93ca99e97497cf7b0397fed9418761886e8b449b3b2602b480e62631da3"
+        },
+        "log": {
+          "path": "target/ghost-weight-certificate/migration/final-diagnostic.log",
+          "sha256": "f75dc65300fbce69ff2947873f1a6447898d3ef11c4538a8990b30946dce012f"
+        },
+        "environment": {
+          "INSTA_UPDATE": "no",
+          "INSTA_FORCE_PASS": "unset",
+          "TESTS_GAMMALOOP_STATE_PATH": "target/ghost-weight-certificate/migration/final-diagnostic-state"
+        }
+      }
+    ],
+    "results": {
+      "schema": 1,
+      "cases": {
+        "epem_bbh_qcd2": {
+          "old": {
+            "path": "target/ghost-weight-certificate/migration/old-epem.log",
+            "sha256": "efb0239798158f0383d83e58827b7e25f0e672e06e6ed3a41c85723e5cfe6225",
+            "exitCode": 101,
+            "target": "failed",
+            "testCount": {
+              "passed": 0,
+              "failed": 1
+            }
+          },
+          "new": {
+            "path": "target/ghost-weight-certificate/migration/new-epem.log",
+            "sha256": "649a6f408580ee31cf8930aacef8bf463fa3cb3d556610801ebfa2de23fe1258",
+            "exitCode": 101,
+            "target": "passed; subsequent unchanged grouped row failed",
+            "laterFailure": "generate_epem_a_qqh-7",
+            "testCount": {
+              "passed": 0,
+              "failed": 1
+            }
+          }
+        },
+        "slow_aa_ttx_qcd2": {
+          "old": {
+            "path": "target/ghost-weight-certificate/migration/old-aa.log",
+            "sha256": "918fc96be5ea6c3dae0039d4f883b7737e5d552228ad400ec633b884b9cb36a6",
+            "exitCode": 101,
+            "target": "failed",
+            "testCount": {
+              "passed": 0,
+              "failed": 1
+            }
+          },
+          "new": {
+            "path": "target/ghost-weight-certificate/migration/new-aa.log",
+            "sha256": "f1e0bf61c12a9f2c6c42441ad3483838db9963fb92fb44af0210340dccbe4fa8",
+            "exitCode": 101,
+            "target": "passed; subsequent unchanged grouped row failed",
+            "laterFailure": "generate_aa_ttx_cross_section-4",
+            "testCount": {
+              "passed": 0,
+              "failed": 1
+            }
+          }
+        },
+        "vacuum_l2": {
+          "old": {
+            "path": "target/ghost-weight-certificate/migration/vacuum-old-l2.log",
+            "sha256": "3df9f967a53bdb062c82a3e47464232c3e2b7564c1f0ccf6d95ae55d93f6a74b",
+            "exitCode": 101,
+            "target": "failed at old literal",
+            "testCount": {
+              "passed": 0,
+              "failed": 1
+            }
+          },
+          "new": {
+            "path": "target/ghost-weight-certificate/migration/vacuum-new-l2.log",
+            "sha256": "79fb3dc25ef2c2204c77842bcc34440c2a997d1fa4ac51be3a5e27c40b8905cb",
+            "exitCode": 0,
+            "target": "passed",
+            "testCount": {
+              "passed": 1,
+              "failed": 0
+            }
+          }
+        },
+        "vacuum_l3": {
+          "old": {
+            "path": "target/ghost-weight-certificate/migration/vacuum-old-l3.log",
+            "sha256": "203b9351ea54465721d2cde54c28ade8238ace0c4bffe0e9b91a1d50e8969a5f",
+            "exitCode": 101,
+            "target": "failed at old literal",
+            "testCount": {
+              "passed": 0,
+              "failed": 1
+            }
+          },
+          "new": {
+            "path": "target/ghost-weight-certificate/migration/vacuum-new-l3.log",
+            "sha256": "4eafdd6b2cbe0b6bd83b4a9700a0de9052b538d44b28d7c12c52a62d1cf9534c",
+            "exitCode": 0,
+            "target": "passed",
+            "testCount": {
+              "passed": 1,
+              "failed": 0
+            }
+          }
+        },
+        "vacuum_l4": {
+          "old": {
+            "path": "target/ghost-weight-certificate/migration/vacuum-old-l4.log",
+            "sha256": "02f14cd862fcc03f73cfd7e53a3edd4a871e2b91a22d271e1ad07e46c060b7cd",
+            "exitCode": 101,
+            "target": "failed at old literal",
+            "testCount": {
+              "passed": 0,
+              "failed": 1
+            }
+          },
+          "new": {
+            "path": "target/ghost-weight-certificate/migration/vacuum-new-l4.log",
+            "sha256": "8619f55543999ad02fc40130335f32d757587070874abc1dc7e0fdd3c33ec0c8",
+            "exitCode": 0,
+            "target": "passed",
+            "testCount": {
+              "passed": 1,
+              "failed": 0
+            }
+          }
+        }
+      },
+      "originalVacuumFunction": {
+        "path": "target/ghost-weight-certificate/migration/new-original-vacuum.log",
+        "sha256": "b46073bb35fa780e546439c444abe69ac192b1645a73ea5c6f32f188f91a42e2",
+        "exitCode": 101,
+        "firstFailure": "unchanged grouped two-loop assertion at line 2391, before nonfactorizable rows",
+        "testCount": {
+          "passed": 0,
+          "failed": 1
+        }
+      },
+      "finalDiagnostic": {
+        "path": "target/ghost-weight-certificate/migration/final-diagnostic.log",
+        "sha256": "f75dc65300fbce69ff2947873f1a6447898d3ef11c4538a8990b30946dce012f",
+        "exitCode": 0,
+        "testCount": {
+          "passed": 1,
+          "failed": 0
+        }
+      },
+      "scope": "Two exact named cross-section tests; six independent scoped vacuum assertion tests; one original vacuum-prefix control; one ignored physical witness capture."
+    },
+    "oldTargetFailures": 5,
+    "newTargetPasses": 5,
+    "completeNamedCrossSectionTestPasses": 0,
+    "originalVacuumWholeTestPasses": 0,
+    "laterUnchangedGroupedFailuresRetained": [
+      "generate_epem_a_qqh-7",
+      "generate_aa_ttx_cross_section-4",
+      "vacuum_amplitude_generation-2"
+    ],
+    "recordAndUpdateModes": {
+      "INSTA_UPDATE": "no",
+      "INSTA_FORCE_PASS": "unset",
+      "INSTA_RECORD": "unset"
+    }
+  },
+  "physicalPreservation": {
+    "freshFinalBinaryCapture": {
+      "path": "target/ghost-weight-certificate/migration/final-diagnostic.log",
+      "sha256": "f75dc65300fbce69ff2947873f1a6447898d3ef11c4538a8990b30946dce012f"
+    },
+    "comparisonSource": {
+      "path": "docs/architecture/evidence/generation-integration/wp3/ghost-weight-migration/verify-final-capture.mjs",
+      "sha256": "62fc3375373a7a2737c9ead2da21e361f9b4042b35048d75d8bab712665d88e9"
+    },
+    "comparison": {
+      "path": "target/ghost-weight-certificate/migration/final-capture-comparison.json",
+      "sha256": "c4ba0c1482d4bde44d401677209c8d7c2804c7324fac6ef8ed83010034044c53"
+    },
+    "counts": {
+      "dots": 4239,
+      "graphWitnesses": 15,
+      "processDefinitions": 15,
+      "live": 63
+    },
+    "finalVsApprovedTreeSha256": "233215e9b75d29f4b4e87912e9f958220cc79f2d553866b7175e4bca9d8cdd32",
+    "proofGuardSource": {
+      "path": "docs/architecture/evidence/generation-integration/wp3/ghost-weight-migration/validate-proof.mjs",
+      "sha256": "829f193a06f15e2403f4df02d6e3b82ca6fc54e184f047433eecabf1b95cc4b1"
+    },
+    "proofGuard": {
+      "path": "target/ghost-weight-certificate/migration/proof-guard.json",
+      "sha256": "52f761c00ebd70293cf62656825061c03b0a1caadbc043426c7acae7962e504b"
+    },
+    "approvedReviewArtifactsRehashed": 92,
+    "frozenBindingsRehashed": {
+      "round1": 199,
+      "round2": 40,
+      "approved": 44
+    },
+    "round1JoinSha256": "1562ae44ef80613286f24b6784ea2abbd1d430844cb962ba9aa09662d8078bd6",
+    "round2AndRound3JoinSha256": "7df7aac4a48754ac23c6f8dfa0c177cb40d82972f4d12cff2675ee140a3fa747",
+    "modelAndResolvedParameters": {
+      "liveModelSha256": "7e250b3ff20c98277ee19af863cc030c7a5fd47fea979931b28aba744f8a9de3",
+      "resolvedCardSha256": "232964f2b9783482f8ccb0e8812eb6e34a0d2dd6d5e8a8905a5b98377ae7fe1d"
+    }
+  },
+  "documentation": {
+    "note": {
+      "path": "docs/architecture/generation-ghost-weight-migration.typ",
+      "sha256": "6020261d502d9759ef77efe3ed8ab073bf3e1cb20f6991a3ddb2a2620e06233e"
+    },
+    "registry": {
+      "path": "docs/developers.toml",
+      "sha256": "d55d4359e9f7557cc4073e4049a44a84ad1b35a87432adb7728cbefa31eacc7b"
+    },
+    "pdf": {
+      "path": "target/ghost-weight-certificate/migration/migration.pdf",
+      "sha256": "5f4044ed24aa90227406993328d8035e1b63b0f08c86c61b55720849b381f578"
+    },
+    "html": {
+      "path": "target/ghost-weight-certificate/migration/migration.html",
+      "sha256": "5f2b3a2abdeb5b5227db59f5a49b346148437efb8c105244f6bf51e5a916ea56"
+    },
+    "scopedAudit": {
+      "path": "target/ghost-weight-certificate/migration/migration-doc-audit.json",
+      "sha256": "7ced9288b5929e1d3b1ca681bd7c183988772f7145200de37072ab033234b719"
+    },
+    "scopedCheckLog": {
+      "path": "target/ghost-weight-certificate/migration/migration-doc-check.log",
+      "sha256": "37135899772a72855c7c496e22aa5ebaa869c474997f34467637af2d18a6a031"
+    },
+    "registryCheckLog": {
+      "path": "target/ghost-weight-certificate/migration/docs-builder-check.log",
+      "sha256": "c8d6b35807718827755caa1f6cd9909d52be329e55aa39e891db5405d98478ac"
+    }
+  },
+  "retainedFailedAttempts": [
+    {
+      "stage": "direct scratch rustfmt outside Nix",
+      "result": "rustfmt unavailable outside development shell; no source changed"
+    },
+    {
+      "stage": "first scoped-harness Nix build",
+      "log": {
+        "path": "target/ghost-weight-certificate/migration/vacuum-harness-build.log",
+        "sha256": "a508e90ee5a100a2505ec326d6e50525e1fa350c2a8259a6106f0867d4d1f5cc"
+      },
+      "result": "rustfmt import ordering only; corrected in scratch generator"
+    },
+    {
+      "stage": "second scoped-harness Nix build",
+      "log": {
+        "path": "target/ghost-weight-certificate/migration/vacuum-harness-build-attempt2.log",
+        "sha256": "06d3a078cb2d20a7a5fafe5890718b62a81fbbddb1d2880ae9344ba6299949ab"
+      },
+      "result": "scratch rustc lacked Cargo macro environment and one extern path typo; corrected in task-owned build script"
+    }
+  ],
+  "limitations": [
+    "The named slow cross-section tests pass the migrated cells but stop at later unchanged grouped assertions; no whole-test pass is claimed.",
+    "The original vacuum function stops at an earlier unchanged grouped assertion; isolated 16-worker harnesses validate only the three original ungrouped cells.",
+    "Whole-file rustfmt still reports pre-existing formatting differences outside these five rustfmt-skipped snapshot lines; the scoped harness formatting and final targeted Clippy pass are recorded separately.",
+    "Grouped sunset rows, other grouped references and source46 combined color-cycle validation remain outside this migration.",
+    "No graph numerator expansion, broad snapshot rerecording, production fix, main integration or generation gate approval is implied."
+  ]
+}

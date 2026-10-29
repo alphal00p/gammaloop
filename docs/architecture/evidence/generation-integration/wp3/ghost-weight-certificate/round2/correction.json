@@ -1,0 +1,244 @@
+{
+  "schema": 2,
+  "status": "corrected five-row certificate; new independent Astra A/B correction reviews required",
+  "change": "vswwmovz",
+  "parent": "decb85d4a15c66b6c69675cfd641465dfbb70757",
+  "round1Bookmark": "generation-ghost-weight-certificate-round1",
+  "candidateBookmark": "generation-ghost-weight-certificate",
+  "approvedMigrationBookmark": "generation-pocket-weight-diagnosis-approved-migration",
+  "approvedMigrationCommit": "309631912ff5693ab38df4c748e5edfa3f94cd00",
+  "source43": "74fcd8e57e9fe256d4bc34b5d8ad93c97fc28848",
+  "source44": "087bda82ce5a14dab092776ea470e66278dda12d",
+  "reviewInputs": {
+    "scopeA": {
+      "path": "target/pocket-weight-diagnosis/review-astra-ghost-scope-a-L13RwH/review.json",
+      "sha256": "845646bc8127fa844d5d0ea402ae870cd350e6cb0fd360aa89638f710aeb7c26"
+    },
+    "scopeB": {
+      "path": "target/ghost-weight-certificate/review-astra-scope-b-8wU1pd/review.json",
+      "sha256": "c9f889c962881c71f7c8e3a1ed55950a25bb6a8592d768d0b0393e3260d38afd"
+    },
+    "scopeBOldControls": {
+      "path": "target/ghost-weight-certificate/review-astra-scope-b-8wU1pd/controls.json",
+      "sha256": "5178a5bdcd23e2653a33a5c08fb2ea950734983a27b94afa766ed715bfa324d2"
+    },
+    "scopeBOldFactorRepro": {
+      "path": "target/ghost-weight-certificate/review-astra-scope-b-8wU1pd/factor-repro.json",
+      "sha256": "60cf977a97115ba8c03129115c50346f22d5bdbf87e8643cb0648039d7b38c59"
+    },
+    "scopeBSupplement": {
+      "path": "target/ghost-weight-certificate/review-astra-scope-b-8wU1pd/supplement.json",
+      "sha256": "c640cc3ee56c1a466f8103af000378273b7b30388672f874c385aa51e2b15f4b"
+    },
+    "scopeBIndependentAnalyzer": {
+      "path": "target/ghost-weight-certificate/review-astra-scope-b-8wU1pd/independent.mjs",
+      "sha256": "46e477f1c7eacfd5fc4fc461ccd2001c051f4bc8d463da8e1f8758a7d6a00690"
+    },
+    "scopeAOldAccessibilityFailure": {
+      "path": "target/pocket-weight-diagnosis/review-astra-ghost-scope-a-L13RwH/semantic-table-reproducer.log",
+      "sha256": "fb3be6570e2f738c1b75887408aa72b0f10230703d698d69b12921bf18f49337"
+    },
+    "scopeADocumentCommands": {
+      "path": "target/pocket-weight-diagnosis/review-astra-ghost-scope-a-L13RwH/docs-commands.json",
+      "sha256": "79935903fa8b773f20643bcc0792a4ca97725fff2179dbb74cd3390063102cc0"
+    }
+  },
+  "round1": {
+    "receipt": {
+      "path": "docs/architecture/evidence/generation-integration/wp3/ghost-weight-certificate/receipt.json",
+      "sha256": "0e3679012f92c565f7d9895fd20a56a61c5243102bdd0003b433e8f3e96d19b7"
+    },
+    "summary": {
+      "path": "docs/architecture/evidence/generation-integration/wp3/ghost-weight-certificate/physical-summary.json",
+      "sha256": "48709016e63adbb9c0c755ac99b9287b611d438375adbc557f0c3d0e873edd6f"
+    },
+    "fullPhysicalJoin": {
+      "path": "target/ghost-weight-certificate/full-physical-joins.json",
+      "sha256": "1562ae44ef80613286f24b6784ea2abbd1d430844cb962ba9aa09662d8078bd6"
+    },
+    "sourceAnalyzerSha256AtRound1": "9717c217adb39cfeae8fcaf5b869c9ec5ae9ea96840554ed78246cab45d3ae97",
+    "preEditReceiptValidation": {
+      "path": "target/ghost-weight-certificate/round2/round1-receipt-validation.log",
+      "sha256": "df49bca7091b06250503dc36d7544f14e0cc7bfb8708b5a6b5c8bd1c4b5a756c"
+    }
+  },
+  "corrected": {
+    "analyzer": {
+      "path": "docs/architecture/evidence/generation-integration/wp3/ghost-weight-certificate/analyze-graphs.mjs",
+      "sha256": "819195f9a24d7b3300455f339e69d52f2f61c4617be76e39b5cec1ddbb1db041"
+    },
+    "source44Mapping": {
+      "path": "docs/architecture/evidence/generation-integration/wp3/ghost-weight-certificate/source44-rows.json",
+      "sha256": "cb54dd47cc31a7af875152816cd15883a25b22126f16377722adb23ede445759"
+    },
+    "report": {
+      "path": "docs/architecture/generation-ghost-weight-certificate.typ",
+      "sha256": "6e479cefa9fea5ae5ce80f0df23d7ce381215bd85420e85beccfd83a535976aa"
+    },
+    "registry": {
+      "path": "docs/developers.toml",
+      "sha256": "a098431d5aefcee5d3a96663f5e5786cdb7d5485605285222ff305ffd33b8d40"
+    },
+    "summary": {
+      "path": "docs/architecture/evidence/generation-integration/wp3/ghost-weight-certificate/round2/physical-summary.json",
+      "sha256": "f221b65d41240752189c8327a4db165c8865f9de585e52155e37312f97d80739"
+    },
+    "fullPhysicalJoin": {
+      "path": "target/ghost-weight-certificate/round2/full-physical-joins.json",
+      "sha256": "7df7aac4a48754ac23c6f8dfa0c177cb40d82972f4d12cff2675ee140a3fa747"
+    },
+    "analyzerReplayLog": {
+      "path": "target/ghost-weight-certificate/round2/analyzer-replay.log",
+      "sha256": "7219dcc45cdb9c242a018f9024200e172745a385de8502952d94a0a905090dcb"
+    },
+    "semanticControls": {
+      "path": "target/ghost-weight-certificate/round2/controls.json",
+      "sha256": "c9818f98126dd358b748c33b5cbd5a8171751144c9ffc3da680ada39bfe11ff0"
+    },
+    "rawGuard": {
+      "path": "target/ghost-weight-certificate/round2/raw-guard.json",
+      "sha256": "661974d990da8334986c722b1243a678ef7129d9f80b01054e5f1a5deb165ad6"
+    },
+    "scopedHtml": {
+      "path": "target/ghost-weight-certificate/round2/certificate.html",
+      "sha256": "8f41727bb99ba812c7fa3d5b7e36128551d442e12aa7b8e7b5122b9f5b962549"
+    },
+    "scopedPdf": {
+      "path": "target/ghost-weight-certificate/round2/certificate.pdf",
+      "sha256": "a4a8b8d06a6399f36ddaf3b79732818c865d1bce0386aca8eb851f46c14f1695"
+    },
+    "scopedAccessibility": {
+      "path": "target/ghost-weight-certificate/round2/semantic-table.json",
+      "sha256": "6a01215295517efbaf793a77d2db97f1473acba03f53b9b021d34e38e181a9ee"
+    },
+    "scopedDocCheckLog": {
+      "path": "target/ghost-weight-certificate/round2/scoped-doc-check.log",
+      "sha256": "a036e70ca502922e7494fa76cdf379f7adf8d9b573e699147ee406c4ff2a33c1"
+    },
+    "registryTitleCheckLog": {
+      "path": "target/ghost-weight-certificate/round2/docs-builder-check.log",
+      "sha256": "9378658ffd151e3027cd67d4e960f31f85ceac11141bd4f76b3b2e85d648558a"
+    },
+    "pinnedJsSyntaxAndWhitespaceLog": {
+      "path": "target/ghost-weight-certificate/round2/js-checks.log",
+      "sha256": "5ec8ff8b76d6959072895c252bb841b92d960a8959d11930ceb41e67f5b1389e"
+    },
+    "accessibilityRegexAttempt": {
+      "path": "target/ghost-weight-certificate/round2/semantic-table-attempt1.json",
+      "sha256": "a0248b24779344eeedb2da6ccff128bcbff340c6461024f32a9b11b6bcf9e2db"
+    }
+  },
+  "dispositions": {
+    "B1": "Complete bounded scalar grammar consumes every TSV and DOT factor token; exact BigInt rational evaluation, structural head occurrence and argument checks, both recorded scalar values and graph-derived factor checks; all six reviewer factor mutations and full mirrored readCase corruption rejected without hash guards; valid equivalent spellings accepted.",
+    "B2": "Open Grassmann chains require one directed incoming and outgoing edge at internal vertices and model/role-correct source/sink external endpoints; reversed incoming positron arrow rejected locally; valid two-edge ghost-circuit reversal accepted.",
+    "B3": "Both cut sides and crossing arrays have unique known half-edges; physical and selected-subgraph thresholds require exact paired crossing incidence; proper subgraphs remain valid, missing mate rejected locally.",
+    "B4": "Vacuum prose now states ExternalFermionOrderingSign(1) is retained, no external legs and no AntiFermionSpinSumSign head.",
+    "A1": "Six unchanged table label texts wrapped in table.header; scoped Typst HTML contains one table and six th cells; DocumentAudit.errors empty versus retained old failure."
+  },
+  "preservedInputs": {
+    "rawGuard": {
+      "schema": 1,
+      "oldReceiptSha256": "0e3679012f92c565f7d9895fd20a56a61c5243102bdd0003b433e8f3e96d19b7",
+      "oldSummarySha256": "48709016e63adbb9c0c755ac99b9287b611d438375adbc557f0c3d0e873edd6f",
+      "oldFullSha256": "1562ae44ef80613286f24b6784ea2abbd1d430844cb962ba9aa09662d8078bd6",
+      "oldAnalyzerFromRef": "generation-ghost-weight-certificate-round1",
+      "originalBoundFiles": 199,
+      "unchangedOriginalRawAndDerivedFields": true,
+      "graphRecords": 8318,
+      "joins": 4159,
+      "cuts": 26368,
+      "thresholds": 73964,
+      "properSubgraphThresholds": 47716,
+      "correctedFullSha256": "7df7aac4a48754ac23c6f8dfa0c177cb40d82972f4d12cff2675ee140a3fa747",
+      "correctedSummarySha256": "f221b65d41240752189c8327a4db165c8865f9de585e52155e37312f97d80739",
+      "controlsSha256": "c9818f98126dd358b748c33b5cbd5a8171751144c9ffc3da680ada39bfe11ff0"
+    },
+    "currentDiagnosticSource": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-diagnosis/tests/tests/test_feyngen.rs",
+      "sha256": "2b54ae424c91044cb8992a02159ddfb302d20279a2bb17abf3affc1a8222cb30"
+    },
+    "source43DiagnosticSource": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-historical-source43/target/ghost-weight-certificate/historical-diagnostic-source.rs",
+      "sha256": "781b1b61e00b2665e183d03dfd3eb878c6aa8d9ef2eacaef65182f811ec0f9b2"
+    },
+    "currentBinary": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-diagnosis/target/ghost-weight-certificate/current-test_feyngen",
+      "sha256": "fc4cccfde6411b2036b20a3c0e58189618f667e4b696aba50da5faed5c66d948"
+    },
+    "source43Binary": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-historical-source43/target/ghost-weight-certificate/historical-test_feyngen",
+      "sha256": "5ff22fa8f7015f91bf758ff15d1a410c1679353cacc78b0b4e30b997468b3885"
+    },
+    "currentKernel": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+    "source43Kernel": "c78cffc20f318df1fce50539a587cbe8ffc717c0",
+    "modelSha256": "7e250b3ff20c98277ee19af863cc030c7a5fd47fea979931b28aba744f8a9de3",
+    "resolvedParametersSha256": "232964f2b9783482f8ccb0e8812eb6e34a0d2dd6d5e8a8905a5b98377ae7fe1d",
+    "sourceModelSha256": "a0193ae09a6f920c8fcfbe8231c6a70e820b82b573257e07c216bdcd8e57acd9"
+  },
+  "sourceBoundSixteenWorkerControls": {
+    "attribution": "reused independent Astra scope A review evidence, not rerun by this correction",
+    "current": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-diagnosis/target/pocket-weight-diagnosis/review-astra-ghost-scope-a-L13RwH/vacuum16-test_feyngen",
+      "sha256": "ce28a6cd2330bb3e47d58bc15b3fef4a517865d9b7bde359ba41f3cc2a7b2b70"
+    },
+    "historical": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-diagnosis/target/pocket-weight-diagnosis/review-astra-ghost-scope-a-L13RwH/historical16-test_feyngen",
+      "sha256": "8d6a746d3a61e70db6ec8fc0c5a81017204dd5a03ab9dac7c11ec8d9ef23b96e"
+    },
+    "currentScratchSource": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-diagnosis/target/pocket-weight-diagnosis/review-astra-ghost-scope-a-L13RwH/vacuum16.rs",
+      "sha256": "61e1abd29a53419f66091b1b3e403f91e0612beaf741ae61573439bb7de58cb6"
+    },
+    "historicalScratchSource": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-diagnosis/target/pocket-weight-diagnosis/review-astra-ghost-scope-a-L13RwH/historical16.rs",
+      "sha256": "61e1abd29a53419f66091b1b3e403f91e0612beaf741ae61573439bb7de58cb6"
+    },
+    "commands": [
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-diagnosis/target/pocket-weight-diagnosis/review-astra-ghost-scope-a-L13RwH/vacuum16-commands.json",
+        "sha256": "94ae9e5d857d7f286d11fada298966a1d355f134c7dbb46a9880c44065ee03cc"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-diagnosis/target/pocket-weight-diagnosis/review-astra-ghost-scope-a-L13RwH/historical16-commands.json",
+        "sha256": "50e208e0cdd19b488ba0f6a24e415ff36526d214a50d36e51894315373b637f2"
+      }
+    ],
+    "result": "Both scratch harnesses pass exactly one scoped diagnostic test at the original 16-worker selection. For each producer all 476 vacuum DOT files, six witnesses and six process definitions are byte-identical to its fresh two-worker captures; all 24 live input files agree after only output-folder and worker normalization. The filtered 5/30/200 cases and zero-color-off 5/30/206 cases are all covered."
+  },
+  "sourceMatchedRustChecks": {
+    "attribution": "reused independent Astra scope A checks because test_feyngen.rs SHA-256 is unchanged",
+    "helperSourceSha256": "2b54ae424c91044cb8992a02159ddfb302d20279a2bb17abf3affc1a8222cb30",
+    "rustfmtReadOnly": {
+      "path": "target/pocket-weight-diagnosis/review-astra-ghost-scope-a-L13RwH/rustfmt-readonly.log",
+      "sha256": "42732a614d33ae52f827ba59d17876ddf84df85bb4bf62c134c3ae9792477613"
+    },
+    "targetedClippy": {
+      "path": "target/pocket-weight-diagnosis/review-astra-ghost-scope-a-L13RwH/clippy.log",
+      "sha256": "f2ab6f0fea4088f6ec3bccf5378131b608759f8149b963e58c60442e4ce45c33"
+    },
+    "result": "The entire new helper is unchanged by pinned rustfmt. Whole-file formatting differs outside the added helper, including pre-existing import formatting; no whole-file fmt pass is claimed.",
+    "clippyResult": "Fresh targeted Cargo clippy exit 0 with -D warnings. Two existing dependency warnings in vendor/clarabel remain; no new helper warning."
+  },
+  "checks": {
+    "analyzer": "complete historical/current filtered and zero-color-off replay passed all ten datasets",
+    "originalControls": 7,
+    "newControls": 33,
+    "newRejectingControls": 27,
+    "newAcceptingControls": 6,
+    "oldCheckerFactorEscapes": "scope B controls.json and factor-repro.json retain accepted invalid factors and mirrored full readCase corruption",
+    "oldAccessibilityFailure": "scope A semantic-table-reproducer.log reports one table and zero th cells",
+    "newAccessibility": {
+      "scoped": true,
+      "errors": [],
+      "table_count": 1,
+      "th_count": 6
+    }
+  },
+  "verdict": "Unchanged captured graph mathematics is now checked by complete scalar parsing and local Grassmann/cut invariants. Five proposed sums and ghost-only omission counterfactuals remain exact. The first observed unequal boundary remains historical snapshot versus its own producer, without a claimed first buggy production commit.",
+  "limitations": [
+    "No expectation migration or production physics edit is authorized by this correction.",
+    "The scoped 16-worker harnesses do not execute the pristine vacuum test’s grouped prefix or establish a whole-test pass.",
+    "Zero-color-off membership is bound; a symbolic proof of each removed color-zero graph is not claimed.",
+    "No graph numerator expansion, grouped source44 row, source46 color-cycle combined validation, main integration or gate approval is claimed."
+  ]
+}

@@ -1,0 +1,2207 @@
+{
+  "schema": 1,
+  "status": "bounded preparation certificate; new independent Astra proof review required",
+  "physicalParent": "59b57cead76e576fa9f23e3996f5614de939fe35",
+  "source43": "74fcd8e57e9fe256d4bc34b5d8ad93c97fc28848",
+  "source44": "087bda82ce5a14dab092776ea470e66278dda12d",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate",
+  "historicalWorkspace": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43",
+  "changeId": "plkmzuwm",
+  "bookmark": "generation-sunset-certificate",
+  "historicalBookmark": "generation-sunset-historical-source43",
+  "sourceInputs": {
+    "currentModel": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/assets/models/json/sm/sm.json",
+      "bytes": 108517,
+      "sha256": "a0193ae09a6f920c8fcfbe8231c6a70e820b82b573257e07c216bdcd8e57acd9"
+    },
+    "historicalModel": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/assets/models/json/sm/sm.json",
+      "bytes": 108517,
+      "sha256": "a0193ae09a6f920c8fcfbe8231c6a70e820b82b573257e07c216bdcd8e57acd9"
+    },
+    "currentRestriction": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/assets/models/json/sm/restrict_default.json",
+      "bytes": 829,
+      "sha256": "c683f9abb9459375865ef694edea38890ffd78a0b8f118a25db3c3de09a8a1cb"
+    },
+    "historicalRestriction": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/assets/models/json/sm/restrict_default.json",
+      "bytes": 829,
+      "sha256": "c683f9abb9459375865ef694edea38890ffd78a0b8f118a25db3c3de09a8a1cb"
+    },
+    "currentLock": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/Cargo.lock",
+      "bytes": 219131,
+      "sha256": "def8dd7be5f208f4a290a4556081f7a63d10a5ae070c5df1808c1d350fa6161e"
+    },
+    "historicalLock": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/Cargo.lock",
+      "bytes": 218485,
+      "sha256": "29abed8df55accfd70d23546274008d42a694c26018b58c7a76bba2e907604b5"
+    },
+    "currentFlakeLock": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/flake.lock",
+      "bytes": 3531,
+      "sha256": "e10c5893b513d4c7120d841b47fbfddffb3ac4f1f5cb46a18c0f7542cbde8534"
+    },
+    "historicalFlakeLock": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/flake.lock",
+      "bytes": 3531,
+      "sha256": "e10c5893b513d4c7120d841b47fbfddffb3ac4f1f5cb46a18c0f7542cbde8534"
+    }
+  },
+  "documentation": {
+    "note": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/docs/architecture/generation-sunset-certificate.typ",
+      "bytes": 14218,
+      "sha256": "efe4fcb1ef1498f5349c8bbfb294b01cf2c37e46d95580c6f3f65d3ebcaac9c9"
+    },
+    "registry": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/docs/developers.toml",
+      "bytes": 171032,
+      "sha256": "b2792277483788692338825b9ba2d368259045a8824e968fc20d0941e2f0420d"
+    }
+  },
+  "kernels": {
+    "source43": "c78cffc20f318df1fce50539a587cbe8ffc717c0",
+    "current": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3"
+  },
+  "compile": {
+    "features": "Cargo defaults, no explicit feature flags",
+    "profile": "ci-optim",
+    "workers": 16,
+    "cargoBuildJobs": 2
+  },
+  "binaries": {
+    "source43Pristine": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/binaries/source43-pristine-test_feyngen",
+      "bytes": 191643888,
+      "sha256": "5e09a8dc940f56bbde9c9484f70bf76537892ebc39e094491e2981c6285d7f69"
+    },
+    "source43Diagnostic": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/binaries/source43-diagnostic-test_feyngen",
+      "bytes": 192286320,
+      "sha256": "b58dea4f73cfd7c28a2f72b2e743f1f1b8ce1e8d10158a623b5a00783e8c0358"
+    },
+    "currentDiagnostic": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/binaries/current-diagnostic-test_feyngen",
+      "bytes": 199653240,
+      "sha256": "ada5c1c77ce8c8fe42ab2c4aad4c982f7e3f55503a217992455d3d5a83d316dd"
+    },
+    "source43FrameDiagnostic": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/binaries/source43-frame-diagnostic-test_feyngen",
+      "bytes": 192372696,
+      "sha256": "734dd778ff0334340a97b5e33dfe6aecacbb2fe2b56f1fd34346614bb2f7f8c2"
+    },
+    "currentFrameDiagnostic": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/binaries/current-frame-diagnostic-test_feyngen",
+      "bytes": 199743896,
+      "sha256": "9e873c0af39b155bad7b9661dfd950c2ee213c6fef7d70335a07be8cbc04243a"
+    }
+  },
+  "diagnosticSources": {
+    "source43": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/source43-diagnostic-source.rs",
+      "bytes": 1181828,
+      "sha256": "95b7383c5c0553ce62639ecaf173baef982dc2372c8d8f5a75f7920a7fb62e61"
+    },
+    "current": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/current-diagnostic-source.rs",
+      "bytes": 1182489,
+      "sha256": "471e2af3171af92839f8e632f98cc4a85dcfec063c60318c83531f2da4458cfa"
+    }
+  },
+  "frameObservationPatches": {
+    "source43": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/source43-frame-observation.patch",
+      "bytes": 5808,
+      "sha256": "542de93ed9dc7b788dd4379a93c0dfc1e782e0d0deb0c7f9ba050b5430983e5f"
+    },
+    "current": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/current-frame-observation.patch",
+      "bytes": 5928,
+      "sha256": "2cf8fe07be37020326c34ae4899405a47a48500c558df10c41fb1b411da10ba1"
+    }
+  },
+  "commands": {
+    "build": "CARGO_BUILD_JOBS=2 nix develop -c cargo test --locked -p gammaloop-integration-tests --test test_feyngen --profile ci-optim --no-run",
+    "historicalPristine": "nix develop -c target/sunset-certificate/binaries/source43-pristine-test_feyngen slow::test_vacuum_amplitude_generation --exact --nocapture",
+    "diagnostic": "nix develop -c target/sunset-certificate/binaries/<producer>-diagnostic-test_feyngen diagnose_two_loop_vacuum_sunsets --exact --ignored --nocapture",
+    "currentAssertion": "nix develop -c target/sunset-certificate/binaries/current-diagnostic-test_feyngen slow::test_vacuum_amplitude_generation --exact --nocapture",
+    "frameDiagnostic": "nix develop -c env SUNSET_FRAME_CAPTURE=<task-owned-frame-root> target/sunset-certificate/binaries/<producer>-frame-diagnostic-test_feyngen diagnose_two_loop_vacuum_sunsets --exact --ignored --nocapture",
+    "replayOrder": [
+      "inputs.mjs",
+      "model.mjs",
+      "join.mjs",
+      "frame.mjs",
+      "mutations.mjs",
+      "internal-frame.mjs",
+      "internal-mutations.mjs",
+      "positive.mjs",
+      "receipt.mjs",
+      "verify-receipt.mjs"
+    ]
+  },
+  "exits": {
+    "source43Pristine": 101,
+    "currentAssertion": 101,
+    "source43Diagnostic": 0,
+    "currentDiagnostic": 0,
+    "source43FrameDiagnostic": 0,
+    "currentFrameDiagnostic": 0,
+    "firstFrameBuildSource43": 101,
+    "firstFrameBuildCurrent": 101,
+    "firstFrameBuildReason": "serde_json was a dev-dependency; corrected to existing FeynmanDiagram::to_json without manifest changes",
+    "positiveControls": 7,
+    "rejectedSemanticMutations": 22,
+    "rejectedInternalFrameMutations": 8
+  },
+  "logs": {
+    "source43Pristine": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/source43-pristine.log",
+      "bytes": 4096,
+      "sha256": "a7f70ba6e0be71e614bb818954088d279264ceb2ff9042e3efad35de90515bdb"
+    },
+    "source43Build": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/source43-build.log",
+      "bytes": 16585,
+      "sha256": "5f1a79acf65dd39a8f9cc4586db696a5bba99d9c01a332b05b9476499e828395"
+    },
+    "source43Capture": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/source43-capture.log",
+      "bytes": 5219,
+      "sha256": "149e62fe2259cd737bc23889586a0e08b517fe02de69f950b56af327892529b7"
+    },
+    "currentBuild": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/current-build.log",
+      "bytes": 16596,
+      "sha256": "41496b9b5cbe236211bbd1aec8bc4af713c98f201aa2737e723b5597ed1cfcfc"
+    },
+    "currentCapture": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/current-capture.log",
+      "bytes": 5155,
+      "sha256": "776b43972e80d53f5e823ae8d57b40c85d3e747bfafa939212eba138da974efc"
+    },
+    "currentAssertion": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/current-assertion-control.log",
+      "bytes": 4365,
+      "sha256": "1a7a59dae7d7f42676c900e5e1b932ee8e86e3041fd1607773592cd4fac0b4b4"
+    },
+    "source43FirstFrameBuildFailure": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/source43-frame-build.log",
+      "bytes": 2791,
+      "sha256": "55a8a15f623128581d43306a3655f7559214b3f64e659657c73292f6ac4cb35a"
+    },
+    "currentFirstFrameBuildFailure": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/current-frame-build.log",
+      "bytes": 2783,
+      "sha256": "b35483f59ee449074af0036ba4f969d3a056e8c2d70233d5b7b806806fb6e918"
+    },
+    "source43FrameBuild": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/source43-frame-build-final.log",
+      "bytes": 2471,
+      "sha256": "321606a787326443907c60b1e8540852a1c8d2154ed18f3f1c035ef256c263d6"
+    },
+    "currentFrameBuild": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/current-frame-build-final.log",
+      "bytes": 2439,
+      "sha256": "915714fd2d37fdd4504740fd96d3b243c0aa094a693480ba6631e08847a22901"
+    },
+    "source43FrameCapture": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/source43-frame-capture.log",
+      "bytes": 5219,
+      "sha256": "ee1df34df117695d65012ca22b5ccd494e184651a2bc94f1a4bb6bc3f447a04a"
+    },
+    "currentFrameCapture": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/current-frame-capture.log",
+      "bytes": 5155,
+      "sha256": "0ac9367c134c74cdcbcaded65dee0006aad359e2b1d9cdced36c8378195e606b"
+    }
+  },
+  "validation": {
+    "targetedClippy": {
+      "exit": 0,
+      "command": "CARGO_BUILD_JOBS=2 nix develop -c cargo clippy --locked -p gammaloop-integration-tests --test test_feyngen --profile ci-optim -- -D warnings",
+      "log": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/clippy.log",
+        "bytes": 13844,
+        "sha256": "badc6f6b1a166d238460259990374e51b67976bc305eb85bfc29792dd6287a24"
+      }
+    },
+    "finalFormattingTypstAndDocs": {
+      "exit": 0,
+      "command": "nix develop -c bash -c 'cargo fmt --all -- --check && typst compile docs/architecture/generation-sunset-certificate.typ target/sunset-certificate/proof/note.pdf && cargo run --locked -p alphal00p-docs-builder -- check'",
+      "log": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/final-static-doc-check.log",
+        "bytes": 10000,
+        "sha256": "a12311f3b7b0a8077892bdd57ad0352949b62ed748510468e0bf1648bf64dcdf"
+      }
+    },
+    "pythonRuff": {
+      "changedPythonFiles": 0,
+      "firstAttempt": {
+        "exit": 127,
+        "command": "nix develop -c ruff check tests/resources/python/tests/unit/test_process_generation.py",
+        "log": {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/ruff.log",
+          "bytes": 301,
+          "sha256": "db8a1aff4fb6e29ef290cb04ad2f051f4a543129f2ad6cf677c7989760d5f8e8"
+        }
+      },
+      "pinnedAttempt": {
+        "exit": 1,
+        "version": "0.16.3",
+        "command": "nix develop -c /nix/store/sddv779f9zwcm72i0nsa8sgy1zjcl2n4-ruff-0.16.3/bin/ruff check tests/resources/python/tests/unit/test_process_generation.py",
+        "log": {
+          "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/ruff-pinned.log",
+          "bytes": 3602,
+          "sha256": "7f621b526b3679a4c37f1769dbb043940ed7c6c5a5cb199632e53608711bfc0d"
+        }
+      },
+      "inheritedFindings": "4 in unchanged historical Python test: I001 import order, F401 Path, F401 parse_python_expression, F841 exception binding"
+    }
+  },
+  "liveInputs": {
+    "modelSha256": "7e250b3ff20c98277ee19af863cc030c7a5fd47fea979931b28aba744f8a9de3",
+    "parametersSha256": "232964f2b9783482f8ccb0e8812eb6e34a0d2dd6d5e8a8905a5b98377ae7fe1d",
+    "normalizedSettingsSha256": "19b1b81969cef7b6e8e5357f0c53c6689f9e9e81b8ca45a42d85978f2b7fbb01",
+    "processDefinitions": {
+      "all-raw": "957246acb24761f144ee00e954822a905ed613d5212abf2b141f208861c02eb1",
+      "all-grouped": "d381f9c400b834ad80ed95d9c77be0ad2047c1ea8772aa2b83ffb522707fe863",
+      "nonfactorizable-raw": "c8ab946a0f84959c63576ac8b7ab034c755c248f13a8eba71bb0883edbf9af54",
+      "nonfactorizable-grouped": "d8244f0cf4bb0ab0ee2286804a05ca1a165d3233f380d9e8c66a1ac2a4aea00d"
+    }
+  },
+  "summaries": {
+    "source43": {
+      "all": {
+        "sourceCount": 6,
+        "finalCount": 5,
+        "rawTotal": "-43/24",
+        "groupedTotal": "-43/24",
+        "singletonConstant": "-19/24",
+        "lightPairAxes": [
+          {
+            "name": "GL2",
+            "axes": {
+              "bis:4:hedge:0": 2,
+              "bis:4:hedge:1": 2,
+              "bis:4:hedge:2": 2,
+              "bis:4:hedge:3": 2,
+              "coad:8:hedge:4": 2,
+              "coad:8:hedge:5": 2,
+              "cof:3:hedge:0": 2,
+              "cof:3:hedge:1": 2,
+              "cof:3:hedge:2": 2,
+              "cof:3:hedge:3": 2,
+              "mink:4:edge:0": 2,
+              "mink:4:edge:1": 2,
+              "mink:4:hedge:4": 2,
+              "mink:4:hedge:5": 2
+            }
+          },
+          {
+            "name": "GL4",
+            "axes": {
+              "bis:4:hedge:0": 2,
+              "bis:4:hedge:1": 2,
+              "bis:4:hedge:2": 2,
+              "bis:4:hedge:3": 2,
+              "coad:8:hedge:4": 2,
+              "coad:8:hedge:5": 2,
+              "cof:3:hedge:0": 2,
+              "cof:3:hedge:1": 2,
+              "cof:3:hedge:2": 2,
+              "cof:3:hedge:3": 2,
+              "mink:4:edge:0": 2,
+              "mink:4:edge:1": 2,
+              "mink:4:hedge:4": 2,
+              "mink:4:hedge:5": 2
+            }
+          }
+        ],
+        "groups": [
+          {
+            "master": "GL5",
+            "members": [
+              {
+                "source_diagram": 5,
+                "source_name": "GL5",
+                "ratio": "1"
+              }
+            ]
+          },
+          {
+            "master": "GL0",
+            "members": [
+              {
+                "source_diagram": 0,
+                "source_name": "GL0",
+                "ratio": "1"
+              }
+            ]
+          },
+          {
+            "master": "GL1",
+            "members": [
+              {
+                "source_diagram": 1,
+                "source_name": "GL1",
+                "ratio": "1"
+              }
+            ]
+          },
+          {
+            "master": "GL4",
+            "members": [
+              {
+                "source_diagram": 4,
+                "source_name": "GL4",
+                "ratio": "1"
+              },
+              {
+                "source_diagram": 2,
+                "source_name": "GL2",
+                "ratio": "1"
+              }
+            ]
+          },
+          {
+            "master": "GL3",
+            "members": [
+              {
+                "source_diagram": 3,
+                "source_name": "GL3",
+                "ratio": "1"
+              }
+            ]
+          }
+        ]
+      },
+      "nonfactorizable": {
+        "sourceCount": 5,
+        "finalCount": 4,
+        "rawTotal": "-23/12",
+        "groupedTotal": "-23/12",
+        "singletonConstant": "-11/12",
+        "lightPairAxes": [
+          {
+            "name": "GL2",
+            "axes": {
+              "bis:4:hedge:0": 2,
+              "bis:4:hedge:1": 2,
+              "bis:4:hedge:2": 2,
+              "bis:4:hedge:3": 2,
+              "coad:8:hedge:4": 2,
+              "coad:8:hedge:5": 2,
+              "cof:3:hedge:0": 2,
+              "cof:3:hedge:1": 2,
+              "cof:3:hedge:2": 2,
+              "cof:3:hedge:3": 2,
+              "mink:4:edge:0": 2,
+              "mink:4:edge:1": 2,
+              "mink:4:hedge:4": 2,
+              "mink:4:hedge:5": 2
+            }
+          },
+          {
+            "name": "GL4",
+            "axes": {
+              "bis:4:hedge:0": 2,
+              "bis:4:hedge:1": 2,
+              "bis:4:hedge:2": 2,
+              "bis:4:hedge:3": 2,
+              "coad:8:hedge:4": 2,
+              "coad:8:hedge:5": 2,
+              "cof:3:hedge:0": 2,
+              "cof:3:hedge:1": 2,
+              "cof:3:hedge:2": 2,
+              "cof:3:hedge:3": 2,
+              "mink:4:edge:0": 2,
+              "mink:4:edge:1": 2,
+              "mink:4:hedge:4": 2,
+              "mink:4:hedge:5": 2
+            }
+          }
+        ],
+        "groups": [
+          {
+            "master": "GL0",
+            "members": [
+              {
+                "source_diagram": 0,
+                "source_name": "GL0",
+                "ratio": "1"
+              }
+            ]
+          },
+          {
+            "master": "GL1",
+            "members": [
+              {
+                "source_diagram": 1,
+                "source_name": "GL1",
+                "ratio": "1"
+              }
+            ]
+          },
+          {
+            "master": "GL4",
+            "members": [
+              {
+                "source_diagram": 4,
+                "source_name": "GL4",
+                "ratio": "1"
+              },
+              {
+                "source_diagram": 2,
+                "source_name": "GL2",
+                "ratio": "1"
+              }
+            ]
+          },
+          {
+            "master": "GL3",
+            "members": [
+              {
+                "source_diagram": 3,
+                "source_name": "GL3",
+                "ratio": "1"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "current": {
+      "all": {
+        "sourceCount": 6,
+        "finalCount": 5,
+        "rawTotal": "-43/24",
+        "groupedTotal": "-43/24",
+        "singletonConstant": "-19/24",
+        "lightPairAxes": [
+          {
+            "name": "GL2",
+            "axes": {
+              "bis:4:hedge:0": 2,
+              "bis:4:hedge:1": 2,
+              "bis:4:hedge:2": 2,
+              "bis:4:hedge:3": 2,
+              "coad:8:hedge:4": 2,
+              "coad:8:hedge:5": 2,
+              "cof:3:hedge:0": 2,
+              "cof:3:hedge:1": 2,
+              "cof:3:hedge:2": 2,
+              "cof:3:hedge:3": 2,
+              "mink:4:edge:0": 2,
+              "mink:4:edge:1": 2,
+              "mink:4:hedge:4": 2,
+              "mink:4:hedge:5": 2
+            }
+          },
+          {
+            "name": "GL4",
+            "axes": {
+              "bis:4:hedge:0": 2,
+              "bis:4:hedge:1": 2,
+              "bis:4:hedge:2": 2,
+              "bis:4:hedge:3": 2,
+              "coad:8:hedge:4": 2,
+              "coad:8:hedge:5": 2,
+              "cof:3:hedge:0": 2,
+              "cof:3:hedge:1": 2,
+              "cof:3:hedge:2": 2,
+              "cof:3:hedge:3": 2,
+              "mink:4:edge:0": 2,
+              "mink:4:edge:1": 2,
+              "mink:4:hedge:4": 2,
+              "mink:4:hedge:5": 2
+            }
+          }
+        ],
+        "groups": [
+          {
+            "master": "GL5",
+            "members": [
+              {
+                "source_diagram": 5,
+                "source_name": "GL5",
+                "ratio": "1"
+              }
+            ]
+          },
+          {
+            "master": "GL0",
+            "members": [
+              {
+                "source_diagram": 0,
+                "source_name": "GL0",
+                "ratio": "1"
+              }
+            ]
+          },
+          {
+            "master": "GL1",
+            "members": [
+              {
+                "source_diagram": 1,
+                "source_name": "GL1",
+                "ratio": "1"
+              }
+            ]
+          },
+          {
+            "master": "GL4",
+            "members": [
+              {
+                "source_diagram": 4,
+                "source_name": "GL4",
+                "ratio": "1"
+              },
+              {
+                "source_diagram": 2,
+                "source_name": "GL2",
+                "ratio": "1"
+              }
+            ]
+          },
+          {
+            "master": "GL3",
+            "members": [
+              {
+                "source_diagram": 3,
+                "source_name": "GL3",
+                "ratio": "1"
+              }
+            ]
+          }
+        ]
+      },
+      "nonfactorizable": {
+        "sourceCount": 5,
+        "finalCount": 4,
+        "rawTotal": "-23/12",
+        "groupedTotal": "-23/12",
+        "singletonConstant": "-11/12",
+        "lightPairAxes": [
+          {
+            "name": "GL2",
+            "axes": {
+              "bis:4:hedge:0": 2,
+              "bis:4:hedge:1": 2,
+              "bis:4:hedge:2": 2,
+              "bis:4:hedge:3": 2,
+              "coad:8:hedge:4": 2,
+              "coad:8:hedge:5": 2,
+              "cof:3:hedge:0": 2,
+              "cof:3:hedge:1": 2,
+              "cof:3:hedge:2": 2,
+              "cof:3:hedge:3": 2,
+              "mink:4:edge:0": 2,
+              "mink:4:edge:1": 2,
+              "mink:4:hedge:4": 2,
+              "mink:4:hedge:5": 2
+            }
+          },
+          {
+            "name": "GL4",
+            "axes": {
+              "bis:4:hedge:0": 2,
+              "bis:4:hedge:1": 2,
+              "bis:4:hedge:2": 2,
+              "bis:4:hedge:3": 2,
+              "coad:8:hedge:4": 2,
+              "coad:8:hedge:5": 2,
+              "cof:3:hedge:0": 2,
+              "cof:3:hedge:1": 2,
+              "cof:3:hedge:2": 2,
+              "cof:3:hedge:3": 2,
+              "mink:4:edge:0": 2,
+              "mink:4:edge:1": 2,
+              "mink:4:hedge:4": 2,
+              "mink:4:hedge:5": 2
+            }
+          }
+        ],
+        "groups": [
+          {
+            "master": "GL0",
+            "members": [
+              {
+                "source_diagram": 0,
+                "source_name": "GL0",
+                "ratio": "1"
+              }
+            ]
+          },
+          {
+            "master": "GL1",
+            "members": [
+              {
+                "source_diagram": 1,
+                "source_name": "GL1",
+                "ratio": "1"
+              }
+            ]
+          },
+          {
+            "master": "GL4",
+            "members": [
+              {
+                "source_diagram": 4,
+                "source_name": "GL4",
+                "ratio": "1"
+              },
+              {
+                "source_diagram": 2,
+                "source_name": "GL2",
+                "ratio": "1"
+              }
+            ]
+          },
+          {
+            "master": "GL3",
+            "members": [
+              {
+                "source_diagram": 3,
+                "source_name": "GL3",
+                "ratio": "1"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "proofArtifacts": {
+    "frame.json": {
+      "path": "target/sunset-certificate/proof/frame.json",
+      "bytes": 41436,
+      "sha256": "9f107fea688b54b255cdfe3ba7bf9ae0ffa168c5809580e223875bb24d3c677a"
+    },
+    "inputs.json": {
+      "path": "target/sunset-certificate/proof/inputs.json",
+      "bytes": 3773,
+      "sha256": "726840e7fb906f213c88218815a3ced46e4a4ab4c2be76761e6ebf546207bee2"
+    },
+    "internal-frame.json": {
+      "path": "target/sunset-certificate/proof/internal-frame.json",
+      "bytes": 20596,
+      "sha256": "fbe2e6e2fb0a83ad10d991623d05a7e985061cf4b0a17f86084ec52406f5da1c"
+    },
+    "internal-mutations.json": {
+      "path": "target/sunset-certificate/proof/internal-mutations.json",
+      "bytes": 1035,
+      "sha256": "d4a83c1ab532af63b4cf6261f323508ebfa3446a901da49ed6814b6d90d63362"
+    },
+    "join.json": {
+      "path": "target/sunset-certificate/proof/join.json",
+      "bytes": 188441,
+      "sha256": "2188bbe93a44544d43a90daf7553ec7af04f1e5a9df45aae6e1a964d120a971f"
+    },
+    "model.json": {
+      "path": "target/sunset-certificate/proof/model.json",
+      "bytes": 6402,
+      "sha256": "48a2b358b08bb3e1761b6d96628c1ee6545c818c6c8c78d16310a406279f5137"
+    },
+    "mutations.json": {
+      "path": "target/sunset-certificate/proof/mutations.json",
+      "bytes": 3489,
+      "sha256": "ce8e05ed3cae752655a9d865da6119f9139644c001b13d4512645465715b3e4f"
+    },
+    "positive.json": {
+      "path": "target/sunset-certificate/proof/positive.json",
+      "bytes": 1271,
+      "sha256": "b250df6a97aba8376efa3ef5f0d26c685781f70e66a2c60df1365b1fabc7927d"
+    }
+  },
+  "proofScripts": {
+    "factor.mjs": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/docs/architecture/evidence/generation-integration/wp3/sunset-certificate/factor.mjs",
+      "bytes": 5438,
+      "sha256": "0e5b795a62dc826c0652a6c6c812c3ad5a7d690adbe8ea0a0dd6cff8ffca2c49"
+    },
+    "frame.mjs": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/docs/architecture/evidence/generation-integration/wp3/sunset-certificate/frame.mjs",
+      "bytes": 4583,
+      "sha256": "8e2714fc5b69e1fdcf06dc774e0b6b396d776d6b0fde558aab1f79ccc902671b"
+    },
+    "inputs.mjs": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/docs/architecture/evidence/generation-integration/wp3/sunset-certificate/inputs.mjs",
+      "bytes": 2626,
+      "sha256": "605690462c7a9803bec9d7ff7c7486826eadddbe3bb91d371663123aad50c227"
+    },
+    "internal-frame.mjs": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/docs/architecture/evidence/generation-integration/wp3/sunset-certificate/internal-frame.mjs",
+      "bytes": 17176,
+      "sha256": "9f06ea586183addb1a4b0d1009acc2d9f5b62bef62d745325e7f7291f73d63ba"
+    },
+    "internal-mutations.mjs": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/docs/architecture/evidence/generation-integration/wp3/sunset-certificate/internal-mutations.mjs",
+      "bytes": 3743,
+      "sha256": "c57cef12102b03e36817bc6dbcb2db9460b5b7c381f311ed7e6a8ae49a49c913"
+    },
+    "join.mjs": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/docs/architecture/evidence/generation-integration/wp3/sunset-certificate/join.mjs",
+      "bytes": 26886,
+      "sha256": "74b4efd37f6a836869d7fda5aff8d7dbd389f9e67ec100e9fde3a81c6411631a"
+    },
+    "model.mjs": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/docs/architecture/evidence/generation-integration/wp3/sunset-certificate/model.mjs",
+      "bytes": 3959,
+      "sha256": "fea7411154219dd33b21dbab1e9fb4cf2838a99ffc9f94fc7c09e864b21d8ab1"
+    },
+    "mutations.mjs": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/docs/architecture/evidence/generation-integration/wp3/sunset-certificate/mutations.mjs",
+      "bytes": 9675,
+      "sha256": "29a94591fa64515b1aa8a881884355fb9a6c0e79883eeef192a7778d69cd888b"
+    },
+    "positive.mjs": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/docs/architecture/evidence/generation-integration/wp3/sunset-certificate/positive.mjs",
+      "bytes": 2207,
+      "sha256": "7c6e471ef551b0a065aea35d0b1bc9ff072c637aefafd36a689f32bba603b3bc"
+    },
+    "receipt.mjs": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/docs/architecture/evidence/generation-integration/wp3/sunset-certificate/receipt.mjs",
+      "bytes": 11346,
+      "sha256": "01e43aad78f2d4793522c08c29003b28c9cdf7d6b8033d943eb54906ff4b54eb"
+    },
+    "verify-receipt.mjs": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/docs/architecture/evidence/generation-integration/wp3/sunset-certificate/verify-receipt.mjs",
+      "bytes": 1143,
+      "sha256": "c83649bd8144ec9f331396baabe412c372d384d345a3d2830de1209bdba06327"
+    }
+  },
+  "captures": {
+    "source43": [
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/all-grouped-after-model.json",
+        "bytes": 112688,
+        "sha256": "7e250b3ff20c98277ee19af863cc030c7a5fd47fea979931b28aba744f8a9de3"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/all-grouped-after-parameters.json",
+        "bytes": 540,
+        "sha256": "232964f2b9783482f8ccb0e8812eb6e34a0d2dd6d5e8a8905a5b98377ae7fe1d"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/all-grouped-after-settings.json",
+        "bytes": 398,
+        "sha256": "9461262a5bfd84ad0b122bbb8e65662a532888651b795c577c33e541b7bb1df9"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/all-grouped-definition.json",
+        "bytes": 2677,
+        "sha256": "d381f9c400b834ad80ed95d9c77be0ad2047c1ea8772aa2b83ffb522707fe863"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/all-grouped-dot/justfile",
+        "bytes": 5870,
+        "sha256": "dded2416eb9ba91652086c974162d7b17e72974b0a56ac27bd4efa6f5d71fe3e"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/all-grouped-dot/processes/amplitudes/empty_empty/default/GL0.dot",
+        "bytes": 2359,
+        "sha256": "99d6dac808384cc3b438037fdebd85d6ec070b1adb5092cf357ed872dc7d43e3"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/all-grouped-dot/processes/amplitudes/empty_empty/default/GL1.dot",
+        "bytes": 1144,
+        "sha256": "f3611fbe01870eb780a1f117feb257d82e5e547d33435e9a965cab852451a67f"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/all-grouped-dot/processes/amplitudes/empty_empty/default/GL3.dot",
+        "bytes": 1705,
+        "sha256": "95262f28c8fffe19bcb9e667fe7d1de804b5e17d9a5ab223cca758a3b047efca"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/all-grouped-dot/processes/amplitudes/empty_empty/default/GL4.dot",
+        "bytes": 1823,
+        "sha256": "93a5f5f7a2604f9b96557272bdb5e80267fc4fd1a1636a3339b01c0fe02f63bf"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/all-grouped-dot/processes/amplitudes/empty_empty/default/GL5.dot",
+        "bytes": 2088,
+        "sha256": "ad2243d122f9011c99a12f414d58bb9db7c1430b143e5f92691a4cf762e76e5a"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/all-grouped-graphs.tsv",
+        "bytes": 635,
+        "sha256": "3db780e61b71e0000fc57c419f5100c0f904cae8dc772643615905ecd3014c12"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/all-grouped-native-final.json",
+        "bytes": 63100,
+        "sha256": "dfac62808fb0ab9d4f1328390988769113e0bfc5a580ab370bfe35f96e9c81f4"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/all-grouped-native-groups.json",
+        "bytes": 3102,
+        "sha256": "43f9fe7f8eff2503f409b3a7597c742d6042899a4bc77987aec00a2d07e4c765"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/all-grouped-native-source.json",
+        "bytes": 73234,
+        "sha256": "d7d1a42ee417b631f3dd4980635b34d9d8e5afff69c89598ca9554f89e0498b0"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/all-raw-after-model.json",
+        "bytes": 112688,
+        "sha256": "7e250b3ff20c98277ee19af863cc030c7a5fd47fea979931b28aba744f8a9de3"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/all-raw-after-parameters.json",
+        "bytes": 540,
+        "sha256": "232964f2b9783482f8ccb0e8812eb6e34a0d2dd6d5e8a8905a5b98377ae7fe1d"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/all-raw-after-settings.json",
+        "bytes": 398,
+        "sha256": "9461262a5bfd84ad0b122bbb8e65662a532888651b795c577c33e541b7bb1df9"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/all-raw-definition.json",
+        "bytes": 2399,
+        "sha256": "957246acb24761f144ee00e954822a905ed613d5212abf2b141f208861c02eb1"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/all-raw-dot/justfile",
+        "bytes": 5870,
+        "sha256": "dded2416eb9ba91652086c974162d7b17e72974b0a56ac27bd4efa6f5d71fe3e"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/all-raw-dot/processes/amplitudes/empty_empty/default/GL0.dot",
+        "bytes": 2359,
+        "sha256": "99d6dac808384cc3b438037fdebd85d6ec070b1adb5092cf357ed872dc7d43e3"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/all-raw-dot/processes/amplitudes/empty_empty/default/GL1.dot",
+        "bytes": 1144,
+        "sha256": "f3611fbe01870eb780a1f117feb257d82e5e547d33435e9a965cab852451a67f"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/all-raw-dot/processes/amplitudes/empty_empty/default/GL2.dot",
+        "bytes": 1559,
+        "sha256": "a9ff3b9716bc118121d6ccb98decc3f0b737327671fb056a09535f760ccdc4ec"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/all-raw-dot/processes/amplitudes/empty_empty/default/GL3.dot",
+        "bytes": 1705,
+        "sha256": "95262f28c8fffe19bcb9e667fe7d1de804b5e17d9a5ab223cca758a3b047efca"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/all-raw-dot/processes/amplitudes/empty_empty/default/GL4.dot",
+        "bytes": 1557,
+        "sha256": "022d00da6ddf87ee9d37097a864556c0153295b06e0b055bac6ff9d39def61e1"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/all-raw-dot/processes/amplitudes/empty_empty/default/GL5.dot",
+        "bytes": 2088,
+        "sha256": "ad2243d122f9011c99a12f414d58bb9db7c1430b143e5f92691a4cf762e76e5a"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/all-raw-graphs.tsv",
+        "bytes": 576,
+        "sha256": "eb07f3d3f98178dbfc327649e8762ac3aa030413538c16ea93a7111448f4afe7"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/nonfactorizable-grouped-after-model.json",
+        "bytes": 112688,
+        "sha256": "7e250b3ff20c98277ee19af863cc030c7a5fd47fea979931b28aba744f8a9de3"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/nonfactorizable-grouped-after-parameters.json",
+        "bytes": 540,
+        "sha256": "232964f2b9783482f8ccb0e8812eb6e34a0d2dd6d5e8a8905a5b98377ae7fe1d"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/nonfactorizable-grouped-after-settings.json",
+        "bytes": 398,
+        "sha256": "9461262a5bfd84ad0b122bbb8e65662a532888651b795c577c33e541b7bb1df9"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/nonfactorizable-grouped-definition.json",
+        "bytes": 2768,
+        "sha256": "d8244f0cf4bb0ab0ee2286804a05ca1a165d3233f380d9e8c66a1ac2a4aea00d"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/nonfactorizable-grouped-dot/justfile",
+        "bytes": 5870,
+        "sha256": "dded2416eb9ba91652086c974162d7b17e72974b0a56ac27bd4efa6f5d71fe3e"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/nonfactorizable-grouped-dot/processes/amplitudes/empty_empty/default/GL0.dot",
+        "bytes": 2359,
+        "sha256": "99d6dac808384cc3b438037fdebd85d6ec070b1adb5092cf357ed872dc7d43e3"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/nonfactorizable-grouped-dot/processes/amplitudes/empty_empty/default/GL1.dot",
+        "bytes": 1144,
+        "sha256": "f3611fbe01870eb780a1f117feb257d82e5e547d33435e9a965cab852451a67f"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/nonfactorizable-grouped-dot/processes/amplitudes/empty_empty/default/GL3.dot",
+        "bytes": 1705,
+        "sha256": "95262f28c8fffe19bcb9e667fe7d1de804b5e17d9a5ab223cca758a3b047efca"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/nonfactorizable-grouped-dot/processes/amplitudes/empty_empty/default/GL4.dot",
+        "bytes": 1823,
+        "sha256": "93a5f5f7a2604f9b96557272bdb5e80267fc4fd1a1636a3339b01c0fe02f63bf"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/nonfactorizable-grouped-graphs.tsv",
+        "bytes": 562,
+        "sha256": "1060681b357674233d30f67d8a46513c030d361dd185396c0a89e78377d9e173"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/nonfactorizable-grouped-native-final.json",
+        "bytes": 48121,
+        "sha256": "48530ca16afa5df73023b8be4db3b7d6321a7476a93d4859726498328125a78e"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/nonfactorizable-grouped-native-groups.json",
+        "bytes": 2654,
+        "sha256": "e29ccf24c8774962adb360557805b54479d2219343a5d66979098905cc64b248"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/nonfactorizable-grouped-native-source.json",
+        "bytes": 58255,
+        "sha256": "84799078bdfc72f76bfbed65dfca20c7570527dfb5d2ec5081a3fca2ff2c27e2"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/nonfactorizable-raw-after-model.json",
+        "bytes": 112688,
+        "sha256": "7e250b3ff20c98277ee19af863cc030c7a5fd47fea979931b28aba744f8a9de3"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/nonfactorizable-raw-after-parameters.json",
+        "bytes": 540,
+        "sha256": "232964f2b9783482f8ccb0e8812eb6e34a0d2dd6d5e8a8905a5b98377ae7fe1d"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/nonfactorizable-raw-after-settings.json",
+        "bytes": 398,
+        "sha256": "9461262a5bfd84ad0b122bbb8e65662a532888651b795c577c33e541b7bb1df9"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/nonfactorizable-raw-definition.json",
+        "bytes": 2490,
+        "sha256": "c8ab946a0f84959c63576ac8b7ab034c755c248f13a8eba71bb0883edbf9af54"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/nonfactorizable-raw-dot/justfile",
+        "bytes": 5870,
+        "sha256": "dded2416eb9ba91652086c974162d7b17e72974b0a56ac27bd4efa6f5d71fe3e"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/nonfactorizable-raw-dot/processes/amplitudes/empty_empty/default/GL0.dot",
+        "bytes": 2359,
+        "sha256": "99d6dac808384cc3b438037fdebd85d6ec070b1adb5092cf357ed872dc7d43e3"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/nonfactorizable-raw-dot/processes/amplitudes/empty_empty/default/GL1.dot",
+        "bytes": 1144,
+        "sha256": "f3611fbe01870eb780a1f117feb257d82e5e547d33435e9a965cab852451a67f"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/nonfactorizable-raw-dot/processes/amplitudes/empty_empty/default/GL2.dot",
+        "bytes": 1559,
+        "sha256": "a9ff3b9716bc118121d6ccb98decc3f0b737327671fb056a09535f760ccdc4ec"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/nonfactorizable-raw-dot/processes/amplitudes/empty_empty/default/GL3.dot",
+        "bytes": 1705,
+        "sha256": "95262f28c8fffe19bcb9e667fe7d1de804b5e17d9a5ab223cca758a3b047efca"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/nonfactorizable-raw-dot/processes/amplitudes/empty_empty/default/GL4.dot",
+        "bytes": 1557,
+        "sha256": "022d00da6ddf87ee9d37097a864556c0153295b06e0b055bac6ff9d39def61e1"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/nonfactorizable-raw-graphs.tsv",
+        "bytes": 503,
+        "sha256": "34dcd14e2ef31eb5df19bbb700d2e4ba795ac87d33637936ea89148fefeb6ad0"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/post-import-model.json",
+        "bytes": 112688,
+        "sha256": "7e250b3ff20c98277ee19af863cc030c7a5fd47fea979931b28aba744f8a9de3"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/post-import-parameters.json",
+        "bytes": 540,
+        "sha256": "232964f2b9783482f8ccb0e8812eb6e34a0d2dd6d5e8a8905a5b98377ae7fe1d"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/tests/artifacts/sunset_certificate/post-import-settings.json",
+        "bytes": 398,
+        "sha256": "9461262a5bfd84ad0b122bbb8e65662a532888651b795c577c33e541b7bb1df9"
+      }
+    ],
+    "current": [
+      {
+        "path": "tests/artifacts/sunset_certificate/all-grouped-after-model.json",
+        "bytes": 112688,
+        "sha256": "7e250b3ff20c98277ee19af863cc030c7a5fd47fea979931b28aba744f8a9de3"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/all-grouped-after-parameters.json",
+        "bytes": 540,
+        "sha256": "232964f2b9783482f8ccb0e8812eb6e34a0d2dd6d5e8a8905a5b98377ae7fe1d"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/all-grouped-after-settings.json",
+        "bytes": 390,
+        "sha256": "c8dc9c56a274f0a7c97580006446e37c7831303c5e8943314f205d8b7d232048"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/all-grouped-definition.json",
+        "bytes": 2677,
+        "sha256": "d381f9c400b834ad80ed95d9c77be0ad2047c1ea8772aa2b83ffb522707fe863"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/all-grouped-dot/justfile",
+        "bytes": 5870,
+        "sha256": "dded2416eb9ba91652086c974162d7b17e72974b0a56ac27bd4efa6f5d71fe3e"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/all-grouped-dot/processes/amplitudes/empty_empty/default/GL0.dot",
+        "bytes": 2359,
+        "sha256": "99d6dac808384cc3b438037fdebd85d6ec070b1adb5092cf357ed872dc7d43e3"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/all-grouped-dot/processes/amplitudes/empty_empty/default/GL1.dot",
+        "bytes": 1144,
+        "sha256": "f3611fbe01870eb780a1f117feb257d82e5e547d33435e9a965cab852451a67f"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/all-grouped-dot/processes/amplitudes/empty_empty/default/GL3.dot",
+        "bytes": 3993,
+        "sha256": "cc58b628a61038048ddd19976f17cf40383f67e904d0433171361a539fe0aaa0"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/all-grouped-dot/processes/amplitudes/empty_empty/default/GL4.dot",
+        "bytes": 4111,
+        "sha256": "670763582e3e1b75923aee1bc30c71f69092cb819d78de7b902a3b8950f03922"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/all-grouped-dot/processes/amplitudes/empty_empty/default/GL5.dot",
+        "bytes": 2088,
+        "sha256": "ad2243d122f9011c99a12f414d58bb9db7c1430b143e5f92691a4cf762e76e5a"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/all-grouped-graphs.tsv",
+        "bytes": 635,
+        "sha256": "3db780e61b71e0000fc57c419f5100c0f904cae8dc772643615905ecd3014c12"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/all-grouped-native-final.json",
+        "bytes": 66792,
+        "sha256": "8f8ba1fd211ff60e5ab664b6fcd2bccc7f16175bc658a422f8fdc95ef8aed451"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/all-grouped-native-groups.json",
+        "bytes": 3102,
+        "sha256": "43f9fe7f8eff2503f409b3a7597c742d6042899a4bc77987aec00a2d07e4c765"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/all-grouped-native-source.json",
+        "bytes": 79226,
+        "sha256": "a8817e6ab0cf2c68d0c09e3f09eee7f5ebc518d0ff3a60edeecb7282257368fa"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/all-raw-after-model.json",
+        "bytes": 112688,
+        "sha256": "7e250b3ff20c98277ee19af863cc030c7a5fd47fea979931b28aba744f8a9de3"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/all-raw-after-parameters.json",
+        "bytes": 540,
+        "sha256": "232964f2b9783482f8ccb0e8812eb6e34a0d2dd6d5e8a8905a5b98377ae7fe1d"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/all-raw-after-settings.json",
+        "bytes": 390,
+        "sha256": "c8dc9c56a274f0a7c97580006446e37c7831303c5e8943314f205d8b7d232048"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/all-raw-definition.json",
+        "bytes": 2399,
+        "sha256": "957246acb24761f144ee00e954822a905ed613d5212abf2b141f208861c02eb1"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/all-raw-dot/justfile",
+        "bytes": 5870,
+        "sha256": "dded2416eb9ba91652086c974162d7b17e72974b0a56ac27bd4efa6f5d71fe3e"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/all-raw-dot/processes/amplitudes/empty_empty/default/GL0.dot",
+        "bytes": 2359,
+        "sha256": "99d6dac808384cc3b438037fdebd85d6ec070b1adb5092cf357ed872dc7d43e3"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/all-raw-dot/processes/amplitudes/empty_empty/default/GL1.dot",
+        "bytes": 1144,
+        "sha256": "f3611fbe01870eb780a1f117feb257d82e5e547d33435e9a965cab852451a67f"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/all-raw-dot/processes/amplitudes/empty_empty/default/GL2.dot",
+        "bytes": 3847,
+        "sha256": "d363f9c0b52f9e5c6a7817f44fa661f7f2855b2769c700b478d9bff8c7f5da34"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/all-raw-dot/processes/amplitudes/empty_empty/default/GL3.dot",
+        "bytes": 3993,
+        "sha256": "cc58b628a61038048ddd19976f17cf40383f67e904d0433171361a539fe0aaa0"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/all-raw-dot/processes/amplitudes/empty_empty/default/GL4.dot",
+        "bytes": 3845,
+        "sha256": "1b9cf938c183734ef0a1d8a5a128916994b2a8d7cac0e711ca3956f36a86d8be"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/all-raw-dot/processes/amplitudes/empty_empty/default/GL5.dot",
+        "bytes": 2088,
+        "sha256": "ad2243d122f9011c99a12f414d58bb9db7c1430b143e5f92691a4cf762e76e5a"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/all-raw-graphs.tsv",
+        "bytes": 576,
+        "sha256": "eb07f3d3f98178dbfc327649e8762ac3aa030413538c16ea93a7111448f4afe7"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/nonfactorizable-grouped-after-model.json",
+        "bytes": 112688,
+        "sha256": "7e250b3ff20c98277ee19af863cc030c7a5fd47fea979931b28aba744f8a9de3"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/nonfactorizable-grouped-after-parameters.json",
+        "bytes": 540,
+        "sha256": "232964f2b9783482f8ccb0e8812eb6e34a0d2dd6d5e8a8905a5b98377ae7fe1d"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/nonfactorizable-grouped-after-settings.json",
+        "bytes": 390,
+        "sha256": "c8dc9c56a274f0a7c97580006446e37c7831303c5e8943314f205d8b7d232048"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/nonfactorizable-grouped-definition.json",
+        "bytes": 2768,
+        "sha256": "d8244f0cf4bb0ab0ee2286804a05ca1a165d3233f380d9e8c66a1ac2a4aea00d"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/nonfactorizable-grouped-dot/justfile",
+        "bytes": 5870,
+        "sha256": "dded2416eb9ba91652086c974162d7b17e72974b0a56ac27bd4efa6f5d71fe3e"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/nonfactorizable-grouped-dot/processes/amplitudes/empty_empty/default/GL0.dot",
+        "bytes": 2359,
+        "sha256": "99d6dac808384cc3b438037fdebd85d6ec070b1adb5092cf357ed872dc7d43e3"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/nonfactorizable-grouped-dot/processes/amplitudes/empty_empty/default/GL1.dot",
+        "bytes": 1144,
+        "sha256": "f3611fbe01870eb780a1f117feb257d82e5e547d33435e9a965cab852451a67f"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/nonfactorizable-grouped-dot/processes/amplitudes/empty_empty/default/GL3.dot",
+        "bytes": 3993,
+        "sha256": "cc58b628a61038048ddd19976f17cf40383f67e904d0433171361a539fe0aaa0"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/nonfactorizable-grouped-dot/processes/amplitudes/empty_empty/default/GL4.dot",
+        "bytes": 4111,
+        "sha256": "670763582e3e1b75923aee1bc30c71f69092cb819d78de7b902a3b8950f03922"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/nonfactorizable-grouped-graphs.tsv",
+        "bytes": 562,
+        "sha256": "1060681b357674233d30f67d8a46513c030d361dd185396c0a89e78377d9e173"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/nonfactorizable-grouped-native-final.json",
+        "bytes": 52077,
+        "sha256": "5332dc18d8f0d66cc3f9f25014f5734df53e0a067b0e2c4fd2583d1eadde918b"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/nonfactorizable-grouped-native-groups.json",
+        "bytes": 2654,
+        "sha256": "e29ccf24c8774962adb360557805b54479d2219343a5d66979098905cc64b248"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/nonfactorizable-grouped-native-source.json",
+        "bytes": 64511,
+        "sha256": "5006f2ca15026b8d5f4bfadf9b8f456e0c0e0eca1958924f04ac9ac159137610"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/nonfactorizable-raw-after-model.json",
+        "bytes": 112688,
+        "sha256": "7e250b3ff20c98277ee19af863cc030c7a5fd47fea979931b28aba744f8a9de3"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/nonfactorizable-raw-after-parameters.json",
+        "bytes": 540,
+        "sha256": "232964f2b9783482f8ccb0e8812eb6e34a0d2dd6d5e8a8905a5b98377ae7fe1d"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/nonfactorizable-raw-after-settings.json",
+        "bytes": 390,
+        "sha256": "c8dc9c56a274f0a7c97580006446e37c7831303c5e8943314f205d8b7d232048"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/nonfactorizable-raw-definition.json",
+        "bytes": 2490,
+        "sha256": "c8ab946a0f84959c63576ac8b7ab034c755c248f13a8eba71bb0883edbf9af54"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/nonfactorizable-raw-dot/justfile",
+        "bytes": 5870,
+        "sha256": "dded2416eb9ba91652086c974162d7b17e72974b0a56ac27bd4efa6f5d71fe3e"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/nonfactorizable-raw-dot/processes/amplitudes/empty_empty/default/GL0.dot",
+        "bytes": 2359,
+        "sha256": "99d6dac808384cc3b438037fdebd85d6ec070b1adb5092cf357ed872dc7d43e3"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/nonfactorizable-raw-dot/processes/amplitudes/empty_empty/default/GL1.dot",
+        "bytes": 1144,
+        "sha256": "f3611fbe01870eb780a1f117feb257d82e5e547d33435e9a965cab852451a67f"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/nonfactorizable-raw-dot/processes/amplitudes/empty_empty/default/GL2.dot",
+        "bytes": 3847,
+        "sha256": "d363f9c0b52f9e5c6a7817f44fa661f7f2855b2769c700b478d9bff8c7f5da34"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/nonfactorizable-raw-dot/processes/amplitudes/empty_empty/default/GL3.dot",
+        "bytes": 3993,
+        "sha256": "cc58b628a61038048ddd19976f17cf40383f67e904d0433171361a539fe0aaa0"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/nonfactorizable-raw-dot/processes/amplitudes/empty_empty/default/GL4.dot",
+        "bytes": 3845,
+        "sha256": "1b9cf938c183734ef0a1d8a5a128916994b2a8d7cac0e711ca3956f36a86d8be"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/nonfactorizable-raw-graphs.tsv",
+        "bytes": 503,
+        "sha256": "34dcd14e2ef31eb5df19bbb700d2e4ba795ac87d33637936ea89148fefeb6ad0"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/post-import-model.json",
+        "bytes": 112688,
+        "sha256": "7e250b3ff20c98277ee19af863cc030c7a5fd47fea979931b28aba744f8a9de3"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/post-import-parameters.json",
+        "bytes": 540,
+        "sha256": "232964f2b9783482f8ccb0e8812eb6e34a0d2dd6d5e8a8905a5b98377ae7fe1d"
+      },
+      {
+        "path": "tests/artifacts/sunset_certificate/post-import-settings.json",
+        "bytes": 390,
+        "sha256": "c8dc9c56a274f0a7c97580006446e37c7831303c5e8943314f205d8b7d232048"
+      }
+    ]
+  },
+  "internalFrames": {
+    "source43": [
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-0/source-0-comparison.json",
+        "bytes": 18257,
+        "sha256": "952b6610827073e438509e62e5260b5b5d39e5f0cdfae05b32c3a2bfe2da7a14"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-0/source-0-representative.json",
+        "bytes": 18257,
+        "sha256": "952b6610827073e438509e62e5260b5b5d39e5f0cdfae05b32c3a2bfe2da7a14"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-0/source-0-source.json",
+        "bytes": 18257,
+        "sha256": "952b6610827073e438509e62e5260b5b5d39e5f0cdfae05b32c3a2bfe2da7a14"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-0/source-0.txt",
+        "bytes": 1153,
+        "sha256": "9d3b22b9fba6d7bdae390a31877e01d5c74f8cf07ee5922af6d105ac0d40ca72"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-0/source-1-comparison.json",
+        "bytes": 7004,
+        "sha256": "a836d6f5a418d2b0c0ae178fd2342e0da2c60013228a5c56a60f0611b8aeb13d"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-0/source-1-representative.json",
+        "bytes": 7000,
+        "sha256": "dde05f547541923f619670c421d4d840643e5127f40b80fefed5878a11422744"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-0/source-1-source.json",
+        "bytes": 7000,
+        "sha256": "dde05f547541923f619670c421d4d840643e5127f40b80fefed5878a11422744"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-0/source-1.txt",
+        "bytes": 1159,
+        "sha256": "4f3642951572c22d54ff3495bf35894a0156516c7a3a7d1edb52039dbd7a6128"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-0/source-2-comparison.json",
+        "bytes": 10090,
+        "sha256": "50555a281472cf12ab8f633773ded96790801b73ff74fdaeb942851fc592aa88"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-0/source-2-representative.json",
+        "bytes": 10086,
+        "sha256": "4e41513828e26275487a4b3102148ffdaced1c06547a3993a4c4064c8e93d27d"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-0/source-2-source.json",
+        "bytes": 10086,
+        "sha256": "4e41513828e26275487a4b3102148ffdaced1c06547a3993a4c4064c8e93d27d"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-0/source-2.txt",
+        "bytes": 1165,
+        "sha256": "b200990ec8dfa92164dc104322f849db1f1a9903da7a18bc9b054d6eea591775"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-0/source-3-comparison.json",
+        "bytes": 11154,
+        "sha256": "10b07e443fb32889533221c6242138ddb23afd07b1429f5e1e34aca19a7ffea2"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-0/source-3-representative.json",
+        "bytes": 11146,
+        "sha256": "5bdbdc673f468873fb3933f3a0ae9c8fbb51a1bd2270f32bd951faa647e05df7"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-0/source-3-source.json",
+        "bytes": 11146,
+        "sha256": "5bdbdc673f468873fb3933f3a0ae9c8fbb51a1bd2270f32bd951faa647e05df7"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-0/source-3.txt",
+        "bytes": 1165,
+        "sha256": "bec921966b99ffdff51617fc2840a0d2a6ebb06d01574cf6ea010f3166bc56d3"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-0/source-4-comparison.json",
+        "bytes": 10086,
+        "sha256": "7fdb676465338d297b1ee0d8fd7462c5ab25900081790054698aabab6d39e577"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-0/source-4-representative.json",
+        "bytes": 10084,
+        "sha256": "ee17a07526323000f93d41aa338a397f5e58514987176e632fc04ca25b2c2878"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-0/source-4-source.json",
+        "bytes": 10084,
+        "sha256": "ee17a07526323000f93d41aa338a397f5e58514987176e632fc04ca25b2c2878"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-0/source-4.txt",
+        "bytes": 1159,
+        "sha256": "12c5ed7e41c9e8d4e42cac2f8f86a490fef8b102d5340a54d79d7d1173fce08d"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-0/source-5-comparison.json",
+        "bytes": 14719,
+        "sha256": "aafb5d6c0ae6da8e6f08bb00d5adb3b642b8eee4821593b9b85547e8eff63045"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-0/source-5-representative.json",
+        "bytes": 14719,
+        "sha256": "aafb5d6c0ae6da8e6f08bb00d5adb3b642b8eee4821593b9b85547e8eff63045"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-0/source-5-source.json",
+        "bytes": 14719,
+        "sha256": "aafb5d6c0ae6da8e6f08bb00d5adb3b642b8eee4821593b9b85547e8eff63045"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-0/source-5.txt",
+        "bytes": 749,
+        "sha256": "d94ecf72d2da24234d4f159288ec6ca371b89763df1323d4521b7d5d91cfdaa1"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-1/source-0-comparison.json",
+        "bytes": 18257,
+        "sha256": "952b6610827073e438509e62e5260b5b5d39e5f0cdfae05b32c3a2bfe2da7a14"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-1/source-0-representative.json",
+        "bytes": 18257,
+        "sha256": "952b6610827073e438509e62e5260b5b5d39e5f0cdfae05b32c3a2bfe2da7a14"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-1/source-0-source.json",
+        "bytes": 18257,
+        "sha256": "952b6610827073e438509e62e5260b5b5d39e5f0cdfae05b32c3a2bfe2da7a14"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-1/source-0.txt",
+        "bytes": 1153,
+        "sha256": "5c742069a756b1a10dcc90650d50239eb8804c01b5107862a44048216b319a8a"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-1/source-1-comparison.json",
+        "bytes": 7004,
+        "sha256": "a836d6f5a418d2b0c0ae178fd2342e0da2c60013228a5c56a60f0611b8aeb13d"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-1/source-1-representative.json",
+        "bytes": 7000,
+        "sha256": "dde05f547541923f619670c421d4d840643e5127f40b80fefed5878a11422744"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-1/source-1-source.json",
+        "bytes": 7000,
+        "sha256": "dde05f547541923f619670c421d4d840643e5127f40b80fefed5878a11422744"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-1/source-1.txt",
+        "bytes": 1159,
+        "sha256": "4b91b694688793f54921be39b18a60a0fc0307a5be392f528713a4e7e29107fe"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-1/source-2-comparison.json",
+        "bytes": 10090,
+        "sha256": "50555a281472cf12ab8f633773ded96790801b73ff74fdaeb942851fc592aa88"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-1/source-2-representative.json",
+        "bytes": 10086,
+        "sha256": "4e41513828e26275487a4b3102148ffdaced1c06547a3993a4c4064c8e93d27d"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-1/source-2-source.json",
+        "bytes": 10086,
+        "sha256": "4e41513828e26275487a4b3102148ffdaced1c06547a3993a4c4064c8e93d27d"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-1/source-2.txt",
+        "bytes": 1165,
+        "sha256": "28d3ed28a9b01dc49b1fc4f50b870971ce6523d994ac18cc001c2555b7c8802e"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-1/source-3-comparison.json",
+        "bytes": 11154,
+        "sha256": "10b07e443fb32889533221c6242138ddb23afd07b1429f5e1e34aca19a7ffea2"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-1/source-3-representative.json",
+        "bytes": 11146,
+        "sha256": "5bdbdc673f468873fb3933f3a0ae9c8fbb51a1bd2270f32bd951faa647e05df7"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-1/source-3-source.json",
+        "bytes": 11146,
+        "sha256": "5bdbdc673f468873fb3933f3a0ae9c8fbb51a1bd2270f32bd951faa647e05df7"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-1/source-3.txt",
+        "bytes": 1165,
+        "sha256": "5a1d756246e737660a8865ec7261f520bf3c73ee5a58208f236d9de76aabd830"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-1/source-4-comparison.json",
+        "bytes": 10086,
+        "sha256": "7fdb676465338d297b1ee0d8fd7462c5ab25900081790054698aabab6d39e577"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-1/source-4-representative.json",
+        "bytes": 10084,
+        "sha256": "ee17a07526323000f93d41aa338a397f5e58514987176e632fc04ca25b2c2878"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-1/source-4-source.json",
+        "bytes": 10084,
+        "sha256": "ee17a07526323000f93d41aa338a397f5e58514987176e632fc04ca25b2c2878"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-1/source-4.txt",
+        "bytes": 1159,
+        "sha256": "d9b4e4732713edc13d9d51d1782bfdd2398b5f44c6be0547d34b5ff34d6ababc"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-1/source-5-comparison.json",
+        "bytes": 14719,
+        "sha256": "aafb5d6c0ae6da8e6f08bb00d5adb3b642b8eee4821593b9b85547e8eff63045"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-1/source-5-representative.json",
+        "bytes": 14719,
+        "sha256": "aafb5d6c0ae6da8e6f08bb00d5adb3b642b8eee4821593b9b85547e8eff63045"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-1/source-5-source.json",
+        "bytes": 14719,
+        "sha256": "aafb5d6c0ae6da8e6f08bb00d5adb3b642b8eee4821593b9b85547e8eff63045"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-1/source-5.txt",
+        "bytes": 749,
+        "sha256": "d79bb4d82ac6433b044883a75d780165201211fa1401d70fad39cb5eb4108d57"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-2/source-0-comparison.json",
+        "bytes": 18257,
+        "sha256": "952b6610827073e438509e62e5260b5b5d39e5f0cdfae05b32c3a2bfe2da7a14"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-2/source-0-representative.json",
+        "bytes": 18257,
+        "sha256": "952b6610827073e438509e62e5260b5b5d39e5f0cdfae05b32c3a2bfe2da7a14"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-2/source-0-source.json",
+        "bytes": 18257,
+        "sha256": "952b6610827073e438509e62e5260b5b5d39e5f0cdfae05b32c3a2bfe2da7a14"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-2/source-0.txt",
+        "bytes": 1153,
+        "sha256": "19cccb5b3d600be3a9f929b04c595e9240365edee81fa0d49caa31c85d3ec919"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-2/source-1-comparison.json",
+        "bytes": 7004,
+        "sha256": "a836d6f5a418d2b0c0ae178fd2342e0da2c60013228a5c56a60f0611b8aeb13d"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-2/source-1-representative.json",
+        "bytes": 7000,
+        "sha256": "dde05f547541923f619670c421d4d840643e5127f40b80fefed5878a11422744"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-2/source-1-source.json",
+        "bytes": 7000,
+        "sha256": "dde05f547541923f619670c421d4d840643e5127f40b80fefed5878a11422744"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-2/source-1.txt",
+        "bytes": 1159,
+        "sha256": "30442afa289464969f48a2942f99b5907a5c67b560a760d86a8e1483ab0471c9"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-2/source-2-comparison.json",
+        "bytes": 10090,
+        "sha256": "50555a281472cf12ab8f633773ded96790801b73ff74fdaeb942851fc592aa88"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-2/source-2-representative.json",
+        "bytes": 10086,
+        "sha256": "4e41513828e26275487a4b3102148ffdaced1c06547a3993a4c4064c8e93d27d"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-2/source-2-source.json",
+        "bytes": 10086,
+        "sha256": "4e41513828e26275487a4b3102148ffdaced1c06547a3993a4c4064c8e93d27d"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-2/source-2.txt",
+        "bytes": 1165,
+        "sha256": "46bc87e5ec63d6d4407168c00b42a3ff07dbfe6b775519fe0e5b887b3f3a2e02"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-2/source-3-comparison.json",
+        "bytes": 11154,
+        "sha256": "10b07e443fb32889533221c6242138ddb23afd07b1429f5e1e34aca19a7ffea2"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-2/source-3-representative.json",
+        "bytes": 11146,
+        "sha256": "5bdbdc673f468873fb3933f3a0ae9c8fbb51a1bd2270f32bd951faa647e05df7"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-2/source-3-source.json",
+        "bytes": 11146,
+        "sha256": "5bdbdc673f468873fb3933f3a0ae9c8fbb51a1bd2270f32bd951faa647e05df7"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-2/source-3.txt",
+        "bytes": 1165,
+        "sha256": "3be7f601050729743f13c550a6457a05443a6851ac9c4d3b0f371c2f70524231"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-2/source-4-comparison.json",
+        "bytes": 10086,
+        "sha256": "7fdb676465338d297b1ee0d8fd7462c5ab25900081790054698aabab6d39e577"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-2/source-4-representative.json",
+        "bytes": 10084,
+        "sha256": "ee17a07526323000f93d41aa338a397f5e58514987176e632fc04ca25b2c2878"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-2/source-4-source.json",
+        "bytes": 10084,
+        "sha256": "ee17a07526323000f93d41aa338a397f5e58514987176e632fc04ca25b2c2878"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-2/source-4.txt",
+        "bytes": 1159,
+        "sha256": "24379bd0632a6a3ceb48d0618cab12a9b5c3d54c28343f2eef12b5aa10f768a6"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-3/source-0-comparison.json",
+        "bytes": 18257,
+        "sha256": "952b6610827073e438509e62e5260b5b5d39e5f0cdfae05b32c3a2bfe2da7a14"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-3/source-0-representative.json",
+        "bytes": 18257,
+        "sha256": "952b6610827073e438509e62e5260b5b5d39e5f0cdfae05b32c3a2bfe2da7a14"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-3/source-0-source.json",
+        "bytes": 18257,
+        "sha256": "952b6610827073e438509e62e5260b5b5d39e5f0cdfae05b32c3a2bfe2da7a14"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-3/source-0.txt",
+        "bytes": 1153,
+        "sha256": "d2add031f8b358079e47147afce6078878fd862b60932f8862b0d83910b5bd00"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-3/source-1-comparison.json",
+        "bytes": 7004,
+        "sha256": "a836d6f5a418d2b0c0ae178fd2342e0da2c60013228a5c56a60f0611b8aeb13d"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-3/source-1-representative.json",
+        "bytes": 7000,
+        "sha256": "dde05f547541923f619670c421d4d840643e5127f40b80fefed5878a11422744"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-3/source-1-source.json",
+        "bytes": 7000,
+        "sha256": "dde05f547541923f619670c421d4d840643e5127f40b80fefed5878a11422744"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-3/source-1.txt",
+        "bytes": 1159,
+        "sha256": "8a1df16ccb6c31fa020be468353452a4645f7bd2968fa01708d9305ace969344"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-3/source-2-comparison.json",
+        "bytes": 10090,
+        "sha256": "50555a281472cf12ab8f633773ded96790801b73ff74fdaeb942851fc592aa88"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-3/source-2-representative.json",
+        "bytes": 10086,
+        "sha256": "4e41513828e26275487a4b3102148ffdaced1c06547a3993a4c4064c8e93d27d"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-3/source-2-source.json",
+        "bytes": 10086,
+        "sha256": "4e41513828e26275487a4b3102148ffdaced1c06547a3993a4c4064c8e93d27d"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-3/source-2.txt",
+        "bytes": 1165,
+        "sha256": "81337484815a3572442978cc8545f7e470168a0d4b7df25d79387a686ab39999"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-3/source-3-comparison.json",
+        "bytes": 11154,
+        "sha256": "10b07e443fb32889533221c6242138ddb23afd07b1429f5e1e34aca19a7ffea2"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-3/source-3-representative.json",
+        "bytes": 11146,
+        "sha256": "5bdbdc673f468873fb3933f3a0ae9c8fbb51a1bd2270f32bd951faa647e05df7"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-3/source-3-source.json",
+        "bytes": 11146,
+        "sha256": "5bdbdc673f468873fb3933f3a0ae9c8fbb51a1bd2270f32bd951faa647e05df7"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-3/source-3.txt",
+        "bytes": 1165,
+        "sha256": "1a9bab286d4e9edf7f3094088bdef461c199847ec03265e49fa4bbbae8466d24"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-3/source-4-comparison.json",
+        "bytes": 10086,
+        "sha256": "7fdb676465338d297b1ee0d8fd7462c5ab25900081790054698aabab6d39e577"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-3/source-4-representative.json",
+        "bytes": 10084,
+        "sha256": "ee17a07526323000f93d41aa338a397f5e58514987176e632fc04ca25b2c2878"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-3/source-4-source.json",
+        "bytes": 10084,
+        "sha256": "ee17a07526323000f93d41aa338a397f5e58514987176e632fc04ca25b2c2878"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-historical-source43/target/sunset-certificate/frames/source43/run-3/source-4.txt",
+        "bytes": 1159,
+        "sha256": "1201e113f7dd864af093e1188bbebd1a3eb95417ee35165bf77e43f17b009f89"
+      }
+    ],
+    "current": [
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-0/source-0-comparison.json",
+        "bytes": 17705,
+        "sha256": "fa1544dcb9105092377f624d1ae7be0ed40bb511b2ef8a4455ebe09ea6bad592"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-0/source-0-representative.json",
+        "bytes": 17705,
+        "sha256": "fa1544dcb9105092377f624d1ae7be0ed40bb511b2ef8a4455ebe09ea6bad592"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-0/source-0-source.json",
+        "bytes": 17705,
+        "sha256": "fa1544dcb9105092377f624d1ae7be0ed40bb511b2ef8a4455ebe09ea6bad592"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-0/source-0.txt",
+        "bytes": 1153,
+        "sha256": "9d3b22b9fba6d7bdae390a31877e01d5c74f8cf07ee5922af6d105ac0d40ca72"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-0/source-1-comparison.json",
+        "bytes": 6912,
+        "sha256": "c9c3a0723bbcddb7941e68fa53114644d5d61443dc70f0cab85e290cc13fc94f"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-0/source-1-representative.json",
+        "bytes": 6908,
+        "sha256": "477e514620a903bafca2d54d9594097e6f62f471465a7ab7ef3877ae852a9664"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-0/source-1-source.json",
+        "bytes": 6908,
+        "sha256": "477e514620a903bafca2d54d9594097e6f62f471465a7ab7ef3877ae852a9664"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-0/source-1.txt",
+        "bytes": 1159,
+        "sha256": "4f3642951572c22d54ff3495bf35894a0156516c7a3a7d1edb52039dbd7a6128"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-0/source-2-comparison.json",
+        "bytes": 12334,
+        "sha256": "e86150308649abc65f7f943e9a30ec9358d0685ef84ce3397f9a5159203b0157"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-0/source-2-representative.json",
+        "bytes": 12330,
+        "sha256": "bfd9f37a95624a6a9526eb8f2632ab4322f8c6c9f0ef9deb081888c4fe13565c"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-0/source-2-source.json",
+        "bytes": 12330,
+        "sha256": "bfd9f37a95624a6a9526eb8f2632ab4322f8c6c9f0ef9deb081888c4fe13565c"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-0/source-2.txt",
+        "bytes": 1165,
+        "sha256": "b200990ec8dfa92164dc104322f849db1f1a9903da7a18bc9b054d6eea591775"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-0/source-3-comparison.json",
+        "bytes": 13398,
+        "sha256": "f3d4be9ce79f10ac5235345fd7b9f5d51a0435606caa4fb7ef1bb0a1270d2e92"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-0/source-3-representative.json",
+        "bytes": 13390,
+        "sha256": "cd22681021759bda15c0ba83030e43ab2b9b6f379164ad80d8dae3685c1ae611"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-0/source-3-source.json",
+        "bytes": 13390,
+        "sha256": "cd22681021759bda15c0ba83030e43ab2b9b6f379164ad80d8dae3685c1ae611"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-0/source-3.txt",
+        "bytes": 1165,
+        "sha256": "bec921966b99ffdff51617fc2840a0d2a6ebb06d01574cf6ea010f3166bc56d3"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-0/source-4-comparison.json",
+        "bytes": 12330,
+        "sha256": "79fda8c2b63cee218ffaadfce39f16cfa16d698314e7eed6d9e90d7ce4ee5b6f"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-0/source-4-representative.json",
+        "bytes": 12328,
+        "sha256": "740013728a5c314a662e421127c6ba112cdcfbe848a52cad696f7d4bd0c985be"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-0/source-4-source.json",
+        "bytes": 12328,
+        "sha256": "740013728a5c314a662e421127c6ba112cdcfbe848a52cad696f7d4bd0c985be"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-0/source-4.txt",
+        "bytes": 1159,
+        "sha256": "12c5ed7e41c9e8d4e42cac2f8f86a490fef8b102d5340a54d79d7d1173fce08d"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-0/source-5-comparison.json",
+        "bytes": 14455,
+        "sha256": "cc9303982a8d353aeb34398defc49fa181b454eca645022d43ec5c6f4cff42e8"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-0/source-5-representative.json",
+        "bytes": 14455,
+        "sha256": "cc9303982a8d353aeb34398defc49fa181b454eca645022d43ec5c6f4cff42e8"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-0/source-5-source.json",
+        "bytes": 14455,
+        "sha256": "cc9303982a8d353aeb34398defc49fa181b454eca645022d43ec5c6f4cff42e8"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-0/source-5.txt",
+        "bytes": 749,
+        "sha256": "d94ecf72d2da24234d4f159288ec6ca371b89763df1323d4521b7d5d91cfdaa1"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-1/source-0-comparison.json",
+        "bytes": 17705,
+        "sha256": "fa1544dcb9105092377f624d1ae7be0ed40bb511b2ef8a4455ebe09ea6bad592"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-1/source-0-representative.json",
+        "bytes": 17705,
+        "sha256": "fa1544dcb9105092377f624d1ae7be0ed40bb511b2ef8a4455ebe09ea6bad592"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-1/source-0-source.json",
+        "bytes": 17705,
+        "sha256": "fa1544dcb9105092377f624d1ae7be0ed40bb511b2ef8a4455ebe09ea6bad592"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-1/source-0.txt",
+        "bytes": 1153,
+        "sha256": "5c742069a756b1a10dcc90650d50239eb8804c01b5107862a44048216b319a8a"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-1/source-1-comparison.json",
+        "bytes": 6912,
+        "sha256": "c9c3a0723bbcddb7941e68fa53114644d5d61443dc70f0cab85e290cc13fc94f"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-1/source-1-representative.json",
+        "bytes": 6908,
+        "sha256": "477e514620a903bafca2d54d9594097e6f62f471465a7ab7ef3877ae852a9664"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-1/source-1-source.json",
+        "bytes": 6908,
+        "sha256": "477e514620a903bafca2d54d9594097e6f62f471465a7ab7ef3877ae852a9664"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-1/source-1.txt",
+        "bytes": 1159,
+        "sha256": "4b91b694688793f54921be39b18a60a0fc0307a5be392f528713a4e7e29107fe"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-1/source-2-comparison.json",
+        "bytes": 12334,
+        "sha256": "e86150308649abc65f7f943e9a30ec9358d0685ef84ce3397f9a5159203b0157"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-1/source-2-representative.json",
+        "bytes": 12330,
+        "sha256": "bfd9f37a95624a6a9526eb8f2632ab4322f8c6c9f0ef9deb081888c4fe13565c"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-1/source-2-source.json",
+        "bytes": 12330,
+        "sha256": "bfd9f37a95624a6a9526eb8f2632ab4322f8c6c9f0ef9deb081888c4fe13565c"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-1/source-2.txt",
+        "bytes": 1165,
+        "sha256": "28d3ed28a9b01dc49b1fc4f50b870971ce6523d994ac18cc001c2555b7c8802e"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-1/source-3-comparison.json",
+        "bytes": 13398,
+        "sha256": "f3d4be9ce79f10ac5235345fd7b9f5d51a0435606caa4fb7ef1bb0a1270d2e92"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-1/source-3-representative.json",
+        "bytes": 13390,
+        "sha256": "cd22681021759bda15c0ba83030e43ab2b9b6f379164ad80d8dae3685c1ae611"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-1/source-3-source.json",
+        "bytes": 13390,
+        "sha256": "cd22681021759bda15c0ba83030e43ab2b9b6f379164ad80d8dae3685c1ae611"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-1/source-3.txt",
+        "bytes": 1165,
+        "sha256": "5a1d756246e737660a8865ec7261f520bf3c73ee5a58208f236d9de76aabd830"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-1/source-4-comparison.json",
+        "bytes": 12330,
+        "sha256": "79fda8c2b63cee218ffaadfce39f16cfa16d698314e7eed6d9e90d7ce4ee5b6f"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-1/source-4-representative.json",
+        "bytes": 12328,
+        "sha256": "740013728a5c314a662e421127c6ba112cdcfbe848a52cad696f7d4bd0c985be"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-1/source-4-source.json",
+        "bytes": 12328,
+        "sha256": "740013728a5c314a662e421127c6ba112cdcfbe848a52cad696f7d4bd0c985be"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-1/source-4.txt",
+        "bytes": 1159,
+        "sha256": "d9b4e4732713edc13d9d51d1782bfdd2398b5f44c6be0547d34b5ff34d6ababc"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-1/source-5-comparison.json",
+        "bytes": 14455,
+        "sha256": "cc9303982a8d353aeb34398defc49fa181b454eca645022d43ec5c6f4cff42e8"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-1/source-5-representative.json",
+        "bytes": 14455,
+        "sha256": "cc9303982a8d353aeb34398defc49fa181b454eca645022d43ec5c6f4cff42e8"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-1/source-5-source.json",
+        "bytes": 14455,
+        "sha256": "cc9303982a8d353aeb34398defc49fa181b454eca645022d43ec5c6f4cff42e8"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-1/source-5.txt",
+        "bytes": 749,
+        "sha256": "d79bb4d82ac6433b044883a75d780165201211fa1401d70fad39cb5eb4108d57"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-2/source-0-comparison.json",
+        "bytes": 17705,
+        "sha256": "fa1544dcb9105092377f624d1ae7be0ed40bb511b2ef8a4455ebe09ea6bad592"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-2/source-0-representative.json",
+        "bytes": 17705,
+        "sha256": "fa1544dcb9105092377f624d1ae7be0ed40bb511b2ef8a4455ebe09ea6bad592"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-2/source-0-source.json",
+        "bytes": 17705,
+        "sha256": "fa1544dcb9105092377f624d1ae7be0ed40bb511b2ef8a4455ebe09ea6bad592"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-2/source-0.txt",
+        "bytes": 1153,
+        "sha256": "19cccb5b3d600be3a9f929b04c595e9240365edee81fa0d49caa31c85d3ec919"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-2/source-1-comparison.json",
+        "bytes": 6912,
+        "sha256": "c9c3a0723bbcddb7941e68fa53114644d5d61443dc70f0cab85e290cc13fc94f"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-2/source-1-representative.json",
+        "bytes": 6908,
+        "sha256": "477e514620a903bafca2d54d9594097e6f62f471465a7ab7ef3877ae852a9664"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-2/source-1-source.json",
+        "bytes": 6908,
+        "sha256": "477e514620a903bafca2d54d9594097e6f62f471465a7ab7ef3877ae852a9664"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-2/source-1.txt",
+        "bytes": 1159,
+        "sha256": "30442afa289464969f48a2942f99b5907a5c67b560a760d86a8e1483ab0471c9"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-2/source-2-comparison.json",
+        "bytes": 12334,
+        "sha256": "e86150308649abc65f7f943e9a30ec9358d0685ef84ce3397f9a5159203b0157"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-2/source-2-representative.json",
+        "bytes": 12330,
+        "sha256": "bfd9f37a95624a6a9526eb8f2632ab4322f8c6c9f0ef9deb081888c4fe13565c"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-2/source-2-source.json",
+        "bytes": 12330,
+        "sha256": "bfd9f37a95624a6a9526eb8f2632ab4322f8c6c9f0ef9deb081888c4fe13565c"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-2/source-2.txt",
+        "bytes": 1165,
+        "sha256": "46bc87e5ec63d6d4407168c00b42a3ff07dbfe6b775519fe0e5b887b3f3a2e02"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-2/source-3-comparison.json",
+        "bytes": 13398,
+        "sha256": "f3d4be9ce79f10ac5235345fd7b9f5d51a0435606caa4fb7ef1bb0a1270d2e92"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-2/source-3-representative.json",
+        "bytes": 13390,
+        "sha256": "cd22681021759bda15c0ba83030e43ab2b9b6f379164ad80d8dae3685c1ae611"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-2/source-3-source.json",
+        "bytes": 13390,
+        "sha256": "cd22681021759bda15c0ba83030e43ab2b9b6f379164ad80d8dae3685c1ae611"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-2/source-3.txt",
+        "bytes": 1165,
+        "sha256": "3be7f601050729743f13c550a6457a05443a6851ac9c4d3b0f371c2f70524231"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-2/source-4-comparison.json",
+        "bytes": 12330,
+        "sha256": "79fda8c2b63cee218ffaadfce39f16cfa16d698314e7eed6d9e90d7ce4ee5b6f"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-2/source-4-representative.json",
+        "bytes": 12328,
+        "sha256": "740013728a5c314a662e421127c6ba112cdcfbe848a52cad696f7d4bd0c985be"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-2/source-4-source.json",
+        "bytes": 12328,
+        "sha256": "740013728a5c314a662e421127c6ba112cdcfbe848a52cad696f7d4bd0c985be"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-2/source-4.txt",
+        "bytes": 1159,
+        "sha256": "24379bd0632a6a3ceb48d0618cab12a9b5c3d54c28343f2eef12b5aa10f768a6"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-3/source-0-comparison.json",
+        "bytes": 17705,
+        "sha256": "fa1544dcb9105092377f624d1ae7be0ed40bb511b2ef8a4455ebe09ea6bad592"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-3/source-0-representative.json",
+        "bytes": 17705,
+        "sha256": "fa1544dcb9105092377f624d1ae7be0ed40bb511b2ef8a4455ebe09ea6bad592"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-3/source-0-source.json",
+        "bytes": 17705,
+        "sha256": "fa1544dcb9105092377f624d1ae7be0ed40bb511b2ef8a4455ebe09ea6bad592"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-3/source-0.txt",
+        "bytes": 1153,
+        "sha256": "d2add031f8b358079e47147afce6078878fd862b60932f8862b0d83910b5bd00"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-3/source-1-comparison.json",
+        "bytes": 6912,
+        "sha256": "c9c3a0723bbcddb7941e68fa53114644d5d61443dc70f0cab85e290cc13fc94f"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-3/source-1-representative.json",
+        "bytes": 6908,
+        "sha256": "477e514620a903bafca2d54d9594097e6f62f471465a7ab7ef3877ae852a9664"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-3/source-1-source.json",
+        "bytes": 6908,
+        "sha256": "477e514620a903bafca2d54d9594097e6f62f471465a7ab7ef3877ae852a9664"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-3/source-1.txt",
+        "bytes": 1159,
+        "sha256": "8a1df16ccb6c31fa020be468353452a4645f7bd2968fa01708d9305ace969344"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-3/source-2-comparison.json",
+        "bytes": 12334,
+        "sha256": "e86150308649abc65f7f943e9a30ec9358d0685ef84ce3397f9a5159203b0157"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-3/source-2-representative.json",
+        "bytes": 12330,
+        "sha256": "bfd9f37a95624a6a9526eb8f2632ab4322f8c6c9f0ef9deb081888c4fe13565c"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-3/source-2-source.json",
+        "bytes": 12330,
+        "sha256": "bfd9f37a95624a6a9526eb8f2632ab4322f8c6c9f0ef9deb081888c4fe13565c"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-3/source-2.txt",
+        "bytes": 1165,
+        "sha256": "81337484815a3572442978cc8545f7e470168a0d4b7df25d79387a686ab39999"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-3/source-3-comparison.json",
+        "bytes": 13398,
+        "sha256": "f3d4be9ce79f10ac5235345fd7b9f5d51a0435606caa4fb7ef1bb0a1270d2e92"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-3/source-3-representative.json",
+        "bytes": 13390,
+        "sha256": "cd22681021759bda15c0ba83030e43ab2b9b6f379164ad80d8dae3685c1ae611"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-3/source-3-source.json",
+        "bytes": 13390,
+        "sha256": "cd22681021759bda15c0ba83030e43ab2b9b6f379164ad80d8dae3685c1ae611"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-3/source-3.txt",
+        "bytes": 1165,
+        "sha256": "1a9bab286d4e9edf7f3094088bdef461c199847ec03265e49fa4bbbae8466d24"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-3/source-4-comparison.json",
+        "bytes": 12330,
+        "sha256": "79fda8c2b63cee218ffaadfce39f16cfa16d698314e7eed6d9e90d7ce4ee5b6f"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-3/source-4-representative.json",
+        "bytes": 12328,
+        "sha256": "740013728a5c314a662e421127c6ba112cdcfbe848a52cad696f7d4bd0c985be"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-3/source-4-source.json",
+        "bytes": 12328,
+        "sha256": "740013728a5c314a662e421127c6ba112cdcfbe848a52cad696f7d4bd0c985be"
+      },
+      {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-certificate/frames/current/run-3/source-4.txt",
+        "bytes": 1159,
+        "sha256": "1201e113f7dd864af093e1188bbebd1a3eb95417ee35165bf77e43f17b009f89"
+      }
+    ]
+  },
+  "limits": [
+    "Only two grouped two-loop vacuum rows and paired raw controls; other source44 rows excluded.",
+    "Original whole tests fail at the first old grouped label and never reach the later row.",
+    "Source44 historical labels are provenance, not accepted expectations.",
+    "Finite production 4D/SU(3) local-factor and tensor certificate; no whole-graph expansion.",
+    "Preparation parent only; ordered-head validation and new Astra proof review remain.",
+    "No production, assertion, lock, NixCI, upload, push, fetch or PR change."
+  ]
+}

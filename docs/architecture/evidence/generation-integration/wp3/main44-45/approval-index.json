@@ -1,0 +1,49 @@
+{
+  "schema": 1,
+  "base_main39_43": "158f4e1f8cdbea4d13b55f7c1fa828f75ab566f9",
+  "source44": "087bda82ce5a14dab092776ea470e66278dda12d",
+  "source45": "dfe6387606e44a96f110c1ce03f52d92824dbdb1",
+  "approvals": [
+    {
+      "scope": "five ungrouped rows certificate",
+      "candidate": "121ac233d5ab014f4fadefccce702041bbbdf487",
+      "path": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-diagnosis/target/ghost-weight-certificate/review-astra-round3-combined-5LJwn8/review.json",
+      "sha256": "0b6cd82de5010fb58ba391f8e5af536536c9c1fdd4d22deb72bcb9d78eccc8ef"
+    },
+    {
+      "scope": "five ungrouped rows migration",
+      "candidate": "7a9f24095862a1edd98fd929800fa6665c65f16b",
+      "path": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-diagnosis/target/ghost-weight-certificate/review-astra-migration-pKOhyL/review.json",
+      "sha256": "6be6504a530710e88bc18fcf7c01ca4bbe3fa7bf3857c3d1b5f5bdbb11d8ed64"
+    },
+    {
+      "scope": "two grouped rows certificate",
+      "candidate": "9ede0c12fd0bd70458d10eeaaf636cb51c39543a",
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-review-combined-round5-NGQS7n/review.json",
+      "sha256": "5ec4ca228fdc12d0fe6cbace36aa1feab87ce0adabfc9125a83c3fe21bfed76d"
+    },
+    {
+      "scope": "two grouped rows migration round1 negative control",
+      "candidate": "a202e83bc94954d4d1f900b4518febce7338b2f1",
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-migration-astra-review-M9ve1U/review.json",
+      "sha256": "d7285534a6fd8269684a3e3b9cd4529725577572ec265f4d1a5f5592154ebf25"
+    },
+    {
+      "scope": "two grouped rows migration round2 approval",
+      "candidate": "6d982cb76090a123bce1f3a5da3cbd3040184e98",
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-migration-astra-round2-euFoo6/review.json",
+      "sha256": "66be1de3a399351a059472dbbdacd7ae2ab8177616785c0c8572251911efd627"
+    },
+    {
+      "scope": "two grouped rows corrected command record",
+      "candidate": "6d982cb76090a123bce1f3a5da3cbd3040184e98",
+      "path": "/shared/lcnbr/dev/gammaloop/generation-sunset-certificate/target/sunset-migration-astra-round2-euFoo6/commands.json",
+      "sha256": "42148fa590346d35f0f7fb66ca6f215cc206e6bab1dc526017e136c62dd1e3c9"
+    }
+  ],
+  "source45_accounting": {
+    "covered_by_integrated_commit": "c0abf0822fb1c71339892d88113262818e3fe883",
+    "approved_donor": "309631912ff5693ab38df4c748e5edfa3f94cd00",
+    "scope": "named failing::test_generate_aa_ttx_cross_section_slow_filter only; no duplicate edit"
+  }
+}

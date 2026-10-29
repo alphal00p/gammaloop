@@ -1,0 +1,324 @@
+//! Replay the finite sunset fragments through their production rule owner.
+//!
+//! No contraction, Dirac preparation or graph expansion is requested. The caller first
+//! checks the factorized aggregate structurally, before diagram import validation.
+use feynkit_generator::{FeynmanDiagramRulesExt, GenerationError};
+use feynkit_graph::{DiagramError, FeynmanDiagram, NumeratorInterface};
+use feynkit_model::{Model, ModelError, ParameterCard, ParameterNature};
+use idenso::tensor::SymbolicTensor;
+use linnet::half_edge::involution::{HedgePair, Orientation};
+use linnet::parser::{DotGraph, HedgeParseError};
+use serde_json::{Error as JsonError, Value, json};
+use spenso::structure::partial::{PartialIndex, PartialStructure, PartialStructureExt};
+use std::collections::BTreeMap;
+use std::env;
+use std::fs;
+use std::io::Error as IoError;
+use std::path::Path;
+use std::sync::Arc;
+use symbolica::atom::Atom;
+use symbolica::parser::ParseSettings;
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+enum ProbeError {
+    #[error(transparent)]
+    Io(#[from] IoError),
+    #[error(transparent)]
+    Json(#[from] JsonError),
+    #[error(transparent)]
+    Dot(#[from] HedgeParseError<(), (), (), ()>),
+    #[error(transparent)]
+    Model(#[from] ModelError),
+    #[error(transparent)]
+    Diagram(#[from] DiagramError),
+    #[error(transparent)]
+    Generation(#[from] GenerationError),
+    #[error("{0}")]
+    Evidence(String),
+}
+
+struct Probe {
+    model: Arc<Model>,
+}
+
+impl Probe {
+    fn parsed_interface(
+        attributes: &BTreeMap<String, String>,
+        name: &str,
+    ) -> Result<Option<Value>, ProbeError> {
+        attributes
+            .get(name)
+            .map(|source| {
+                let interface = NumeratorInterface::parse(source)?;
+                Ok(serde_json::from_str(&interface.to_json())?)
+            })
+            .transpose()
+    }
+
+    fn dot(file: &Path) -> Result<Value, ProbeError> {
+        let graph: DotGraph = DotGraph::from_file(file)?;
+        let vertices = graph
+            .iter_nodes()
+            .map(|(owner, _, vertex)| {
+                Ok(json!({
+                    "id": vertex.name,
+                    "owner": owner.0,
+                    "attributes": vertex.statements,
+                    "numInterface": Self::parsed_interface(&vertex.statements, "num_interface")?,
+                }))
+            })
+            .collect::<Result<Vec<_>, ProbeError>>()?;
+        let edges = graph
+            .iter_edges()
+            .map(|(pair, id, edge)| {
+                let HedgePair::Paired { source, sink } = pair else {
+                    return Err(ProbeError::Evidence(format!(
+                        "{}: expected an internal vacuum edge",
+                        file.display()
+                    )));
+                };
+                let from = graph[graph.node_id(source)].name.as_ref();
+                let to = graph[graph.node_id(sink)].name.as_ref();
+                if from.is_none() || to.is_none() {
+                    return Err(ProbeError::Evidence(format!(
+                        "{}: unnamed vacuum endpoint",
+                        file.display()
+                    )));
+                }
+                Ok(json!({
+                    "id": id.0.to_string(),
+                    "edgeId": id.0,
+                    "from": from,
+                    "fromOwner": graph.node_id(source).0,
+                    "fromPort": source.0,
+                    "fromPortLabel": graph[source].port_label,
+                    "to": to,
+                    "toOwner": graph.node_id(sink).0,
+                    "toPort": sink.0,
+                    "toPortLabel": graph[sink].port_label,
+                    "dir": match edge.orientation {
+                        Orientation::Default => "forward",
+                        Orientation::Reversed => "back",
+                        Orientation::Undirected => "none",
+                    },
+                    "attributes": edge.data.statements,
+                    "numInterface": Self::parsed_interface(&edge.data.statements, "num_interface")?,
+                }))
+            })
+            .collect::<Result<Vec<_>, ProbeError>>()?;
+        Ok(json!({
+            "name": graph.global_data.name,
+            "global": graph.global_data.statements,
+            "globalInterfaces": {
+                "numeratorPrefactor": Self::parsed_interface(
+                    &graph.global_data.statements, "numerator_prefactor_interface")?,
+                "projector": Self::parsed_interface(
+                    &graph.global_data.statements, "projector_interface")?,
+            },
+            "vertices": vertices,
+            "edges": edges,
+        }))
+    }
+
+    fn check(&self, value: &Value, file: &Path, index: usize) -> Result<(), ProbeError> {
+        let diagram = FeynmanDiagram::from_json(Arc::clone(&self.model), &value.to_string())?;
+        let ruled = diagram.apply_feynman_rules()?;
+        for ((id, original), (_, replayed)) in diagram.vertices().zip(ruled.vertices()) {
+            Self::check_tensor(
+                &original.numerator,
+                &replayed.numerator,
+                value["vertices"][id.0].get("num_interface").is_none(),
+                &format!("{}[{index}]/vertex/{}", file.display(), id.0),
+            )?;
+        }
+        for ((id, _, original), (_, _, replayed)) in diagram.edges().zip(ruled.edges()) {
+            Self::check_tensor(
+                &original.numerator,
+                &replayed.numerator,
+                value["edges"][id.0][1].get("num_interface").is_none(),
+                &format!("{}[{index}]/edge/{}", file.display(), id.0),
+            )?;
+        }
+        Self::check_tensor(
+            diagram.numerator()?,
+            ruled.numerator()?,
+            false,
+            &format!("{}[{index}]/aggregate", file.display()),
+        )?;
+        Ok(())
+    }
+
+    fn check_tensor(
+        original: &SymbolicTensor<PartialStructure>,
+        replayed: &SymbolicTensor<PartialStructure>,
+        inferred: bool,
+        where_: &str,
+    ) -> Result<(), ProbeError> {
+        if original.same_value(replayed) {
+            return Ok(());
+        }
+        if !inferred {
+            return Err(ProbeError::Evidence(format!(
+                "{where_}: declared tensor/layout differs"
+            )));
+        }
+        let source = original.structure().logical_slots();
+        let target = replayed.structure().logical_slots();
+        if source.len() != target.len()
+            || source
+                .iter()
+                .any(|slot| !matches!(slot.aind, PartialIndex::Explicit(_)))
+        {
+            return Err(ProbeError::Evidence(format!(
+                "{where_}: unsupported inferred ports"
+            )));
+        }
+        let permutation = target
+            .iter()
+            .map(|slot| source.iter().position(|entry| entry == slot))
+            .collect::<Option<Vec<_>>>()
+            .ok_or_else(|| ProbeError::Evidence(format!("{where_}: inferred port mismatch")))?;
+        let mut coverage = permutation.clone();
+        coverage.sort_unstable();
+        if coverage != (0..source.len()).collect::<Vec<_>>() {
+            return Err(ProbeError::Evidence(format!(
+                "{where_}: inferred port map is not bijective"
+            )));
+        }
+        let transported = original.permuted(&permutation).map_err(|error| {
+            ProbeError::Evidence(format!("{where_}: layout transport failed: {error}"))
+        })?;
+        if !transported.same_value(replayed) {
+            return Err(ProbeError::Evidence(format!(
+                "{where_}: complete live local rule differs"
+            )));
+        }
+        println!("inferred named-port transport {where_}: {permutation:?}");
+        Ok(())
+    }
+
+    fn check_card(&self, file: &Path) -> Result<(), ProbeError> {
+        let card = ParameterCard::from_path(file)?;
+        let expected = self
+            .model
+            .parameters()
+            .iter()
+            .filter(|parameter| parameter.nature == ParameterNature::External)
+            .map(|parameter| {
+                parameter
+                    .value
+                    .map(|value| (parameter.name.clone(), value))
+                    .ok_or_else(|| {
+                        ProbeError::Evidence(format!(
+                            "external parameter {} has no value",
+                            parameter.name
+                        ))
+                    })
+            })
+            .collect::<Result<ParameterCard, ProbeError>>()?;
+        if card != expected {
+            return Err(ProbeError::Evidence(format!(
+                "{}: complete external parameter card differs from live Model",
+                file.display()
+            )));
+        }
+        println!("external card passed: {} entries", expected.len());
+        Ok(())
+    }
+
+    fn check_globals(file: &Path) -> Result<(), ProbeError> {
+        let rows: Vec<Value> = serde_json::from_str(&fs::read_to_string(file)?)?;
+        let unit = NumeratorInterface::admit(Atom::one(), None)?;
+        for (index, row) in rows.iter().enumerate() {
+            let expression = row
+                .get("expression")
+                .and_then(Value::as_str)
+                .ok_or_else(|| ProbeError::Evidence("missing global expression".to_owned()))?;
+            let expression =
+                Atom::parse(expression, "sunset_certificate", ParseSettings::default()).map_err(
+                    |error| ProbeError::Evidence(format!("global expression parse: {error}")),
+                )?;
+            let interface = row
+                .get("interface")
+                .map(|ports| NumeratorInterface::parse(&ports.to_string()))
+                .transpose()?;
+            let admitted = NumeratorInterface::admit(expression, interface)?;
+            if !admitted.same_value(&unit) {
+                return Err(ProbeError::Evidence(format!(
+                    "global owner {index}: expected complete unit closed tensor"
+                )));
+            }
+        }
+        println!("global owners passed: {} unit closed tensors", rows.len());
+        Ok(())
+    }
+
+    fn check_file(&self, file: &Path) -> Result<usize, ProbeError> {
+        let input: Value = serde_json::from_str(&fs::read_to_string(file)?)?;
+        if let Some(diagrams) = input.as_array() {
+            for (index, diagram) in diagrams.iter().enumerate() {
+                self.check(diagram, file, index)?;
+            }
+            Ok(diagrams.len())
+        } else {
+            self.check(&input, file, 0)?;
+            Ok(1)
+        }
+    }
+}
+
+fn main() -> Result<(), ProbeError> {
+    let mut args = env::args_os().skip(1);
+    let model_path = args.next().ok_or_else(|| ProbeError::Evidence(
+        "usage: sunset_live_rule_probe <post-import-model.json> <post-import-settings.json> <diagram files>...".to_owned(),
+    ))?;
+    if model_path == "--globals" {
+        let file = args
+            .next()
+            .ok_or_else(|| ProbeError::Evidence("missing global owner file".to_owned()))?;
+        return Probe::check_globals(Path::new(&file));
+    }
+    if model_path == "--dot" {
+        let dots = args
+            .map(|file| Probe::dot(Path::new(&file)))
+            .collect::<Result<Vec<_>, ProbeError>>()?;
+        if dots.is_empty() {
+            return Err(ProbeError::Evidence("no DOT files supplied".to_owned()));
+        }
+        println!("{}", serde_json::to_string(&dots)?);
+        return Ok(());
+    }
+    let settings_path = args
+        .next()
+        .ok_or_else(|| ProbeError::Evidence("missing settings".to_owned()))?;
+    let probe = Probe {
+        model: Arc::new(Model::from_json(&fs::read_to_string(model_path)?)?),
+    };
+    if settings_path == "--fingerprint" {
+        println!("{}", probe.model.fingerprint());
+        return Ok(());
+    }
+    if settings_path == "--cards" {
+        for file in args {
+            probe.check_card(Path::new(&file))?;
+        }
+        return Ok(());
+    }
+    let settings: Value = serde_json::from_str(&fs::read_to_string(settings_path)?)?;
+    let fingerprint = probe.model.fingerprint().to_string();
+    if settings.get("model_fingerprint").and_then(Value::as_str) != Some(fingerprint.as_str()) {
+        return Err(ProbeError::Evidence(
+            "captured settings fingerprint differs from the complete live model".to_owned(),
+        ));
+    }
+    let mut count = 0;
+    for file in args {
+        count += probe.check_file(Path::new(&file))?;
+    }
+    if count == 0 {
+        return Err(ProbeError::Evidence("no diagrams supplied".to_owned()));
+    }
+    println!("production live-rule replay passed: {count} diagrams; model {fingerprint}");
+    Ok(())
+}

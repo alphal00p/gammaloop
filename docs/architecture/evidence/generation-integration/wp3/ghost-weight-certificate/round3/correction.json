@@ -1,0 +1,473 @@
+{
+  "schema": 3,
+  "status": "corrected five-row scalar checker; NEW independent Astra correction review required",
+  "change": "tqlnmrvv",
+  "parent": "91b04d891860087f2bf9c363d12683f1c8dcabd3",
+  "author": "Lucien Huber <im@lcnbr.ch>",
+  "bookmarks": {
+    "candidate": "generation-ghost-weight-certificate",
+    "round2": "generation-ghost-weight-certificate-round2",
+    "round1": "generation-ghost-weight-certificate-round1",
+    "approvedMigration": "generation-pocket-weight-diagnosis-approved-migration",
+    "approvedCertificate": "generation-pocket-weight-diagnosis-approved-certificate"
+  },
+  "scope": "five source44 ungrouped rows only; no expectation or production edit",
+  "reviews": {
+    "scopeAApprovedRound2": {
+      "path": "target/ghost-weight-certificate/review-astra-round2-scope-a-uZNf9j/review.json",
+      "sha256": "ebab6680d14e5dc37f13e5fdd036d2ca68536dabcfe26120b79d93ba9bfaa211"
+    },
+    "scopeBChangesRound2": {
+      "path": "target/ghost-weight-certificate/review-astra-round2-scope-b-EuYuaM/review.json",
+      "sha256": "a4c38a2ac5c3ad813a58a247c7ae76e32adbc49ba4350b62903498344748fd71"
+    },
+    "oldPrecedenceAndInitialReproducer": {
+      "path": "target/ghost-weight-certificate/review-astra-round2-scope-b-EuYuaM/finding-repro.json",
+      "sha256": "8428e930ed7319ac3facb7a21f61ddd7b20ff8e331c5bed62ca67211f808acc4"
+    },
+    "oldReproducerSource": {
+      "path": "target/ghost-weight-certificate/review-astra-round2-scope-b-EuYuaM/finding-repro.mjs",
+      "sha256": "ea2d83693c3b9cc0f27ce581ef4b5036384b1b79e1525b1812d2fd094f0e1161"
+    },
+    "oldExtraControlResults": {
+      "path": "target/ghost-weight-certificate/review-astra-round2-scope-b-EuYuaM/extra-controls.json",
+      "sha256": "191cda815e2bc881a30bb1614ad6900b70ba59f0b99cc4e6007e0fc853bac579"
+    },
+    "pinnedParserTokenLog": {
+      "path": "target/ghost-weight-certificate/review-astra-round2-scope-b-EuYuaM/precedence.log",
+      "sha256": "8b2dbc70ab351d74a140883945cd8a9f771ae129cea576b8739307dcea89ba37"
+    }
+  },
+  "frozen": {
+    "round1Receipt": {
+      "path": "docs/architecture/evidence/generation-integration/wp3/ghost-weight-certificate/receipt.json",
+      "sha256": "0e3679012f92c565f7d9895fd20a56a61c5243102bdd0003b433e8f3e96d19b7"
+    },
+    "round1Summary": {
+      "path": "docs/architecture/evidence/generation-integration/wp3/ghost-weight-certificate/physical-summary.json",
+      "sha256": "48709016e63adbb9c0c755ac99b9287b611d438375adbc557f0c3d0e873edd6f"
+    },
+    "round1FullJoin": {
+      "path": "target/ghost-weight-certificate/full-physical-joins.json",
+      "sha256": "1562ae44ef80613286f24b6784ea2abbd1d430844cb962ba9aa09662d8078bd6"
+    },
+    "round2Receipt": {
+      "path": "docs/architecture/evidence/generation-integration/wp3/ghost-weight-certificate/round2/correction.json",
+      "sha256": "ff3befa605c9a4eee915c3a0007eaee1ddd2a456b00683d5a7815f7d75e6c2ba"
+    },
+    "round2Summary": {
+      "path": "docs/architecture/evidence/generation-integration/wp3/ghost-weight-certificate/round2/physical-summary.json",
+      "sha256": "f221b65d41240752189c8327a4db165c8865f9de585e52155e37312f97d80739"
+    },
+    "round2FullJoin": {
+      "path": "target/ghost-weight-certificate/round2/full-physical-joins.json",
+      "sha256": "7df7aac4a48754ac23c6f8dfa0c177cb40d82972f4d12cff2675ee140a3fa747"
+    }
+  },
+  "corrected": {
+    "analyzer": {
+      "path": "docs/architecture/evidence/generation-integration/wp3/ghost-weight-certificate/analyze-graphs.mjs",
+      "sha256": "ebed29204f4d954db6581f3fb7323781c0465cf89e6c916b033b4faf8ac3cd68"
+    },
+    "parserDifferentialSource": {
+      "path": "docs/architecture/evidence/generation-integration/wp3/ghost-weight-certificate/round3/parser-differential.mjs",
+      "sha256": "78ab7f205facdb977ae78a1a47688782c1b4e07e43a0617164360f45db119cde"
+    },
+    "receiptGeneratorSource": {
+      "path": "docs/architecture/evidence/generation-integration/wp3/ghost-weight-certificate/round3/make-receipt.mjs",
+      "sha256": "683c25323097a97391d2d608a5dde8c4f72b462e759d5a6659006c7d0d19b4a0"
+    },
+    "receiptValidatorSource": {
+      "path": "docs/architecture/evidence/generation-integration/wp3/ghost-weight-certificate/round3/validate-receipt.mjs",
+      "sha256": "a6651dd48b6af1184a3687711f1aa2ad24d52b42be89eb6f7f76e9457d5603ef"
+    },
+    "parserDifferential": {
+      "path": "target/ghost-weight-certificate/round3/parser-differential.json",
+      "sha256": "df41503c588f9e52633e707edaa08c794c53f0c657adb1624efe85be17094201"
+    },
+    "pinnedScalarOracleSource": {
+      "path": "target/ghost-weight-certificate/round3/scalar-oracle.rs",
+      "sha256": "fac6f5522314ce3057af3a3b87de6911283d46264ace241371a60cf2fb4b5ae4"
+    },
+    "pinnedScalarOracleBinary": {
+      "path": "target/ghost-weight-certificate/round3/scalar-oracle",
+      "sha256": "ebd36d06ccdd1f21877f715feed76bc9d329e3b4643a493eba77e1d687eff343"
+    },
+    "pinnedScalarOracleBuildLog": {
+      "path": "target/ghost-weight-certificate/round3/scalar-oracle-initial-pass.log",
+      "sha256": "7caa68121dc71c4a57bd1f2fc1f222b2a53b8b3255cd3828005355c71b5fc96b"
+    },
+    "pinnedScalarOracleProbeLog": {
+      "path": "target/ghost-weight-certificate/round3/scalar-oracle-probes.log",
+      "sha256": "657d46e9288b9aff3727de3662ee98d274796dab107c36e49525d2314b7cb007"
+    },
+    "priorControlsReplaySource": {
+      "path": "docs/architecture/evidence/generation-integration/wp3/ghost-weight-certificate/round3/replay-prior-controls.mjs",
+      "sha256": "ced503a0c0f8d3f8ac40356fc43e50e227003a643a31f06ddd5be3cb89169a8b"
+    },
+    "priorControlsReplay": {
+      "path": "target/ghost-weight-certificate/round3/prior-controls-replay.json",
+      "sha256": "c87d7850e6d709a5f41fdd805b90cf58da481ea335810de11fba0eb17a0549e7"
+    },
+    "newControlsSource": {
+      "path": "docs/architecture/evidence/generation-integration/wp3/ghost-weight-certificate/round3/controls.mjs",
+      "sha256": "246afdf12051a545ed1cb5bf23e1a5e2d3458c3b7359f267929aac4edec9e937"
+    },
+    "newControls": {
+      "path": "target/ghost-weight-certificate/round3/controls.json",
+      "sha256": "8fdcf9dde52741b98320cd39928108e2d23e2187e51c4b5c2c2f2e690553757b"
+    },
+    "rawGuardSource": {
+      "path": "docs/architecture/evidence/generation-integration/wp3/ghost-weight-certificate/round3/validate-guard.mjs",
+      "sha256": "85c8d1b43c3b426348fb67956c757c61a9a50870beeaad71a7f9f7bd597c18c7"
+    },
+    "rawGuard": {
+      "path": "target/ghost-weight-certificate/round3/raw-guard.json",
+      "sha256": "58773d838d43597da9a628701a53bc87ec53c1bfd736389b738b24b53c6970d8"
+    },
+    "fullJoin": {
+      "path": "target/ghost-weight-certificate/round3/full-physical-joins.json",
+      "sha256": "7df7aac4a48754ac23c6f8dfa0c177cb40d82972f4d12cff2675ee140a3fa747"
+    },
+    "summary": {
+      "path": "docs/architecture/evidence/generation-integration/wp3/ghost-weight-certificate/round3/physical-summary.json",
+      "sha256": "bb0efa47bc28bca3ac2ba5b7828de47a28b4d9f8655ccd15ff1dae6908095ffa"
+    },
+    "analyzerLog": {
+      "path": "target/ghost-weight-certificate/round3/analyzer-replay.log",
+      "sha256": "7219dcc45cdb9c242a018f9024200e172745a385de8502952d94a0a905090dcb"
+    },
+    "report": {
+      "path": "docs/architecture/generation-ghost-weight-certificate.typ",
+      "sha256": "fcffd7f9a2cdd488408320ea2926b060b123ceac3e3a521b149dd727e3c587c8"
+    },
+    "registry": {
+      "path": "docs/developers.toml",
+      "sha256": "acb7858368ea8a379197c4a310b012e151606ea8fc0a28eccc198e5a25ffe31f"
+    },
+    "html": {
+      "path": "target/ghost-weight-certificate/round3/certificate.html",
+      "sha256": "503ca9a21ba0d406d88eefd715eb77890f2096f91680d7a25b34386dbe6834f3"
+    },
+    "pdf": {
+      "path": "target/ghost-weight-certificate/round3/certificate.pdf",
+      "sha256": "b603958c52bfb5e13931ce5531c11ac40e8232e3d3fea651a61b240ad76b3813"
+    },
+    "accessibility": {
+      "path": "target/ghost-weight-certificate/round3/semantic-table.json",
+      "sha256": "20a6ed9a07f0466bf2305828a89e7c7176fc077de9e31dd917b4396903b9bee7"
+    },
+    "docsCheckLog": {
+      "path": "target/ghost-weight-certificate/round3/scoped-doc-check.log",
+      "sha256": "0e7bd6984dbea2182dcf6b4b0b61d7ec9bf3d41d73764146da0f2201994c7dba"
+    },
+    "registryCheckLog": {
+      "path": "target/ghost-weight-certificate/round3/docs-builder-check.log",
+      "sha256": "d9ba3285a3e47009a02f4e9d674ba897fbb67433164a7bedf1b4256777b2d3ab"
+    },
+    "pinnedSourceChecksLog": {
+      "path": "target/ghost-weight-certificate/round3/source-checks.log",
+      "sha256": "739fb8c574425d1b1ea50e66dc3f703216ca0264e4f212aa27cd6ff97d1da63d"
+    }
+  },
+  "reusedProducersAndInputs": {
+    "attribution": "immutable round1/round2 receipts and independent Astra A qualifications; not rebuilt or rerun for this checker correction",
+    "currentDiagnosticSource": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-diagnosis/tests/tests/test_feyngen.rs",
+      "sha256": "2b54ae424c91044cb8992a02159ddfb302d20279a2bb17abf3affc1a8222cb30"
+    },
+    "historicalDiagnosticSource": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-historical-source43/target/ghost-weight-certificate/historical-diagnostic-source.rs",
+      "sha256": "781b1b61e00b2665e183d03dfd3eb878c6aa8d9ef2eacaef65182f811ec0f9b2"
+    },
+    "currentElf": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-diagnosis/target/ghost-weight-certificate/current-test_feyngen",
+      "sha256": "fc4cccfde6411b2036b20a3c0e58189618f667e4b696aba50da5faed5c66d948"
+    },
+    "historicalElf": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-historical-source43/target/ghost-weight-certificate/historical-test_feyngen",
+      "sha256": "5ff22fa8f7015f91bf758ff15d1a410c1679353cacc78b0b4e30b997468b3885"
+    },
+    "currentKernel": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+    "historicalKernel": "c78cffc20f318df1fce50539a587cbe8ffc717c0",
+    "liveModelSha256": "7e250b3ff20c98277ee19af863cc030c7a5fd47fea979931b28aba744f8a9de3",
+    "resolvedParametersSha256": "232964f2b9783482f8ccb0e8812eb6e34a0d2dd6d5e8a8905a5b98377ae7fe1d",
+    "scopedSixteenWorkerCurrent": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-diagnosis/target/pocket-weight-diagnosis/review-astra-ghost-scope-a-L13RwH/vacuum16-test_feyngen",
+      "sha256": "ce28a6cd2330bb3e47d58bc15b3fef4a517865d9b7bde359ba41f3cc2a7b2b70"
+    },
+    "scopedSixteenWorkerHistorical": {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-pocket-weight-diagnosis/target/pocket-weight-diagnosis/review-astra-ghost-scope-a-L13RwH/historical16-test_feyngen",
+      "sha256": "8d6a746d3a61e70db6ec8fc0c5a81017204dd5a03ab9dac7c11ec8d9ef23b96e"
+    }
+  },
+  "findings": {
+    "B1-R2": "Unary minus now applies after power; -2^0 and (-2)^0 are distinct. Multiplication/division, signed bounded exponents, exact tokens, parentheses and full consumption are checked. Additive/chained/undefined/out-of-scope forms reject. The real GL1 mutation fails locally, on TSV-only/DOT-only/simultaneous reads for both routes, and in the mirrored route setup without hash guards.",
+    "B5-R2": "Initial left/right arrays require unique valid physical half-edges and exact sewn incidence on each side. Duplicate, missing, wrong and out-of-domain entries fail locally; reordering and prior relabel controls pass.",
+    "closedPrior": "B1-R1 complete factor parsing, B2 open directed Grassmann flow, B3 selected-subgraph threshold pairing, B4 vacuum sign-head prose and A1 table headers remain closed; table markup is byte identical to approved round2."
+  },
+  "oldCheckerFailNewCheckerPass": {
+    "oldChecker": {
+      "tsvOnly": "accepted",
+      "dotOnly": "accepted",
+      "both": "accepted",
+      "mirroredHistoricalCurrent": {
+        "accepted": true,
+        "joins": 5,
+        "recordedSum": "-23/12",
+        "trueMutatedSum": "-11/12"
+      },
+      "duplicateInitialLocal": "accepted"
+    },
+    "newChecker": {
+      "controls": [
+        {
+          "name": "raw parser gives Symbolica value for *-2^0",
+          "expected": "accepted",
+          "outcome": "accepted",
+          "error": null,
+          "detail": "1/2 rather than recorded -1/2"
+        },
+        {
+          "name": "local factor checker rejects *-2^0",
+          "expected": "rejected",
+          "outcome": "rejected",
+          "error": "complete raw scalar factor versus graph-derived weight\n+ actual - expected\n\n  {\n    d: 2n,\n+   n: 1n\n-   n: -1n\n  }\n",
+          "detail": null
+        },
+        {
+          "name": "historical full readCase TSV *-2^0",
+          "expected": "rejected",
+          "outcome": "rejected",
+          "error": "complete raw scalar factor versus graph-derived weight\n+ actual - expected\n\n  {\n    d: 2n,\n+   n: 1n\n-   n: -1n\n  }\n",
+          "detail": null
+        },
+        {
+          "name": "historical full readCase DOT *-2^0",
+          "expected": "rejected",
+          "outcome": "rejected",
+          "error": "complete raw scalar factor versus graph-derived weight\n+ actual - expected\n\n  {\n    d: 2n,\n+   n: 1n\n-   n: -1n\n  }\n",
+          "detail": null
+        },
+        {
+          "name": "historical full readCase both *-2^0",
+          "expected": "rejected",
+          "outcome": "rejected",
+          "error": "complete raw scalar factor versus graph-derived weight\n+ actual - expected\n\n  {\n    d: 2n,\n+   n: 1n\n-   n: -1n\n  }\n",
+          "detail": null
+        },
+        {
+          "name": "current full readCase TSV *-2^0",
+          "expected": "rejected",
+          "outcome": "rejected",
+          "error": "complete raw scalar factor versus graph-derived weight\n+ actual - expected\n\n  {\n    d: 2n,\n+   n: 1n\n-   n: -1n\n  }\n",
+          "detail": null
+        },
+        {
+          "name": "current full readCase DOT *-2^0",
+          "expected": "rejected",
+          "outcome": "rejected",
+          "error": "complete raw scalar factor versus graph-derived weight\n+ actual - expected\n\n  {\n    d: 2n,\n+   n: 1n\n-   n: -1n\n  }\n",
+          "detail": null
+        },
+        {
+          "name": "current full readCase both *-2^0",
+          "expected": "rejected",
+          "outcome": "rejected",
+          "error": "complete raw scalar factor versus graph-derived weight\n+ actual - expected\n\n  {\n    d: 2n,\n+   n: 1n\n-   n: -1n\n  }\n",
+          "detail": null
+        },
+        {
+          "name": "mirrored historical/current full join *-2^0",
+          "expected": "rejected",
+          "outcome": "rejected",
+          "error": "complete raw scalar factor versus graph-derived weight\n+ actual - expected\n\n  {\n    d: 2n,\n+   n: 1n\n-   n: -1n\n  }\n",
+          "detail": null
+        },
+        {
+          "name": "raw parser gives Symbolica value for /-2^0",
+          "expected": "accepted",
+          "outcome": "accepted",
+          "error": null,
+          "detail": "1/2 rather than recorded -1/2"
+        },
+        {
+          "name": "local factor checker rejects /-2^0",
+          "expected": "rejected",
+          "outcome": "rejected",
+          "error": "complete raw scalar factor versus graph-derived weight\n+ actual - expected\n\n  {\n    d: 2n,\n+   n: 1n\n-   n: -1n\n  }\n",
+          "detail": null
+        },
+        {
+          "name": "historical full readCase TSV /-2^0",
+          "expected": "rejected",
+          "outcome": "rejected",
+          "error": "complete raw scalar factor versus graph-derived weight\n+ actual - expected\n\n  {\n    d: 2n,\n+   n: 1n\n-   n: -1n\n  }\n",
+          "detail": null
+        },
+        {
+          "name": "historical full readCase DOT /-2^0",
+          "expected": "rejected",
+          "outcome": "rejected",
+          "error": "complete raw scalar factor versus graph-derived weight\n+ actual - expected\n\n  {\n    d: 2n,\n+   n: 1n\n-   n: -1n\n  }\n",
+          "detail": null
+        },
+        {
+          "name": "historical full readCase both /-2^0",
+          "expected": "rejected",
+          "outcome": "rejected",
+          "error": "complete raw scalar factor versus graph-derived weight\n+ actual - expected\n\n  {\n    d: 2n,\n+   n: 1n\n-   n: -1n\n  }\n",
+          "detail": null
+        },
+        {
+          "name": "current full readCase TSV /-2^0",
+          "expected": "rejected",
+          "outcome": "rejected",
+          "error": "complete raw scalar factor versus graph-derived weight\n+ actual - expected\n\n  {\n    d: 2n,\n+   n: 1n\n-   n: -1n\n  }\n",
+          "detail": null
+        },
+        {
+          "name": "current full readCase DOT /-2^0",
+          "expected": "rejected",
+          "outcome": "rejected",
+          "error": "complete raw scalar factor versus graph-derived weight\n+ actual - expected\n\n  {\n    d: 2n,\n+   n: 1n\n-   n: -1n\n  }\n",
+          "detail": null
+        },
+        {
+          "name": "current full readCase both /-2^0",
+          "expected": "rejected",
+          "outcome": "rejected",
+          "error": "complete raw scalar factor versus graph-derived weight\n+ actual - expected\n\n  {\n    d: 2n,\n+   n: 1n\n-   n: -1n\n  }\n",
+          "detail": null
+        },
+        {
+          "name": "mirrored historical/current full join /-2^0",
+          "expected": "rejected",
+          "outcome": "rejected",
+          "error": "complete raw scalar factor versus graph-derived weight\n+ actual - expected\n\n  {\n    d: 2n,\n+   n: 1n\n-   n: -1n\n  }\n",
+          "detail": null
+        },
+        {
+          "name": "negative base parenthesized zero power",
+          "expected": "accepted",
+          "outcome": "accepted",
+          "error": null,
+          "detail": "-1/2"
+        },
+        {
+          "name": "negative base nested parentheses",
+          "expected": "accepted",
+          "outcome": "accepted",
+          "error": null,
+          "detail": "-1/2"
+        },
+        {
+          "name": "explicit negative power value",
+          "expected": "accepted",
+          "outcome": "accepted",
+          "error": null,
+          "detail": "-1/2"
+        },
+        {
+          "name": "initial left duplicate occurrence",
+          "expected": "rejected",
+          "outcome": "rejected",
+          "error": "duplicate initial left half-edge\n\n2 !== 3\n",
+          "detail": null
+        },
+        {
+          "name": "initial right duplicate occurrence",
+          "expected": "rejected",
+          "outcome": "rejected",
+          "error": "duplicate initial right half-edge\n\n2 !== 3\n",
+          "detail": null
+        },
+        {
+          "name": "initial left unknown half-edge",
+          "expected": "rejected",
+          "outcome": "rejected",
+          "error": "initial cut uses unknown physical half-edge",
+          "detail": null
+        },
+        {
+          "name": "initial left missing seam mate",
+          "expected": "rejected",
+          "outcome": "rejected",
+          "error": "initial left seam incidence\n+ actual - expected\n\n  [\n    0,\n-   1\n  ]\n",
+          "detail": null
+        },
+        {
+          "name": "initial left wrong in-domain mate",
+          "expected": "rejected",
+          "outcome": "rejected",
+          "error": "initial left seam incidence\n+ actual - expected\n\n  [\n-   0,\n    1,\n+   2\n  ]\n",
+          "detail": null
+        },
+        {
+          "name": "initial right unknown half-edge",
+          "expected": "rejected",
+          "outcome": "rejected",
+          "error": "initial cut uses unknown physical half-edge",
+          "detail": null
+        },
+        {
+          "name": "initial right missing seam mate",
+          "expected": "rejected",
+          "outcome": "rejected",
+          "error": "initial right seam incidence\n+ actual - expected\n\n  [\n    28,\n-   29\n  ]\n",
+          "detail": null
+        },
+        {
+          "name": "initial right wrong in-domain mate",
+          "expected": "rejected",
+          "outcome": "rejected",
+          "error": "initial right seam incidence\n+ actual - expected\n\n  [\n+   2,\n-   28,\n    29\n  ]\n",
+          "detail": null
+        },
+        {
+          "name": "initial seam-side reordering remains neutral",
+          "expected": "accepted",
+          "outcome": "accepted",
+          "error": null
+        }
+      ],
+      "parserDifferential": {
+        "admitted": 44,
+        "rejected": 24
+      }
+    }
+  },
+  "checks": {
+    "completeReplay": "ten historical/current filtered and zero-color-off datasets pass; same five exact sums and ghost-only omission totals",
+    "fullJoinByteEqualToRound2": true,
+    "frozenBindings": [
+      199,
+      40
+    ],
+    "originalControls": 7,
+    "round2Controls": 33,
+    "reviewerPriorControls": 31,
+    "reviewerExtraControls": 111,
+    "generatedScalarExpressions": 2000,
+    "newControls": 30,
+    "newRejected": 24,
+    "newAccepted": 6,
+    "differential": [
+      44,
+      24
+    ],
+    "scopedAccessibility": {
+      "scoped": true,
+      "errors": [],
+      "table_count": 1,
+      "th_count": 6,
+      "table_markup_byte_equal_to_round2": true
+    }
+  },
+  "limitations": [
+    "The scalar grammar is deliberately bounded and its 44-case differential is a scope certificate, not a general Symbolica parser equivalence theorem.",
+    "The full pristine vacuum test and grouped prefix remain unclaimed; scoped 16-worker command evidence is reused from independent A.",
+    "Zero-color-off membership is bound, without symbolic proof of every removed color-zero graph.",
+    "No numerator expansion, grouped source44 row, source46 combined validation, expectation migration, production fix, main integration or gate release is implied."
+  ]
+}
