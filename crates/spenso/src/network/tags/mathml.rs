@@ -18,6 +18,7 @@ use crate::shadowing::{CYCLIC, SYM};
 use crate::structure::abstract_index::AIND_SYMBOLS;
 use crate::structure::representation::{IndexRow, RepresentationClass, RepresentationMetadata};
 use crate::structure::slot::{SlotMatch, SlotMatcher};
+use std::borrow::Cow;
 use std::cell::Cell;
 use std::num::ParseFloatError;
 use symbolica::atom::{Atom, AtomCore, AtomView, Symbol, UserData};
@@ -940,6 +941,21 @@ impl<'a> Render<'a> {
             .collect()
     }
 
+    fn script_box(source: &str) -> Cow<'_, str> {
+        // Plain identifiers already occupy one MathML child slot. Avoid adding
+        // a row around each tensor head/index; keep grouping for every other
+        // fragment, including annotated rows, operators and multiple children.
+        if source
+            .strip_prefix("<mi>")
+            .and_then(|text| text.strip_suffix("</mi>"))
+            .is_some_and(|text| !text.contains('<'))
+        {
+            Cow::Borrowed(source)
+        } else {
+            Cow::Owned(format!("<mrow>{source}</mrow>"))
+        }
+    }
+
     fn attachment(&self, base: String, columns: &[(String, IndexRow)]) -> String {
         if columns.is_empty() {
             return base;
@@ -959,7 +975,9 @@ impl<'a> Render<'a> {
                 IndexRow::Top => "msup",
                 IndexRow::Bottom => "msub",
             };
-            return format!("<{tag}><mrow>{base}</mrow><mrow>{scripts}</mrow></{tag}>");
+            let base = Self::script_box(&base);
+            let scripts = Self::script_box(&scripts);
+            return format!("<{tag}>{base}{scripts}</{tag}>");
         }
         let mut scripts = String::new();
         for (position, (source, row)) in columns.iter().enumerate() {
@@ -968,12 +986,20 @@ impl<'a> Render<'a> {
             } else {
                 Self::space(&self.index_gap)
             };
-            scripts.push_str(&match row {
-                IndexRow::Top => format!("<none/><mrow>{gap}{source}</mrow>"),
-                IndexRow::Bottom => format!("<mrow>{gap}{source}</mrow><none/>"),
-            });
+            let script = if position == 0 {
+                Self::script_box(source)
+            } else {
+                Cow::Owned(format!("<mrow>{gap}{source}</mrow>"))
+            };
+            let (lower, upper) = match row {
+                IndexRow::Top => ("<none/>", script.as_ref()),
+                IndexRow::Bottom => (script.as_ref(), "<none/>"),
+            };
+            scripts.push_str(lower);
+            scripts.push_str(upper);
         }
-        format!("<mmultiscripts><mrow>{base}</mrow>{scripts}</mmultiscripts>")
+        let base = Self::script_box(&base);
+        format!("<mmultiscripts>{base}{scripts}</mmultiscripts>")
     }
 
     fn call(&self, base: String, columns: &[(String, IndexRow)]) -> String {
@@ -1314,6 +1340,7 @@ mod tests {
     use crate::structure::representation::{IndexPalette, LibraryRep, Minkowski};
     use crate::{dind, euc, lor, mink, tensor_symbol, vector_symbol};
     use ahash::HashMap;
+    use std::slice;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::{Arc, Mutex};
     use symbolica::atom::{
@@ -1332,6 +1359,52 @@ mod tests {
 
     fn scoped(atom: &Atom, options: &PrintOptions) -> String {
         render(atom.as_view(), options, &PrintState::new(), &|_, _| None).unwrap()
+    }
+
+    #[test]
+    fn script_boxes_keep_compound_and_annotated_children_together() {
+        for source in ["<mi>γ</mi>", "<mi>&lt;</mi>"] {
+            assert_eq!(Render::script_box(source), source);
+        }
+        for source in [
+            "<mi>a</mi><mi>b</mi>",
+            "<mi>a</mi><mo>+</mo><mi>b</mi>",
+            "<mo>∑</mo>",
+            "<mrow title=\"index\"><mi>μ</mi></mrow>",
+            "<mi mathvariant=\"bold\">k</mi>",
+        ] {
+            assert_eq!(Render::script_box(source), format!("<mrow>{source}</mrow>"));
+        }
+    }
+
+    #[test]
+    fn compact_attachments_preserve_script_pairs_and_index_spacing() {
+        let options = options();
+        let render = Render::new(&options, &|_, _| None).unwrap();
+        let upper = ("<mi>μ</mi>".to_owned(), IndexRow::Top);
+        let lower = ("<mi>a</mi>".to_owned(), IndexRow::Bottom);
+        assert_eq!(
+            render.attachment("<mi>g</mi>".to_owned(), slice::from_ref(&upper)),
+            "<msup><mi>g</mi><mi>μ</mi></msup>"
+        );
+        let gap = Render::space(&render.index_gap);
+        assert_eq!(
+            render.attachment("<mi>γ</mi>".to_owned(), &[upper, lower]),
+            format!(
+                "<mmultiscripts><mi>γ</mi><none/><mi>μ</mi>\
+                 <mrow>{gap}<mi>a</mi></mrow><none/></mmultiscripts>"
+            )
+        );
+        assert_eq!(
+            render.attachment(
+                "<mi>g</mi>".to_owned(),
+                &[
+                    ("<mi>μ</mi>".to_owned(), IndexRow::Top),
+                    ("<mi>ν</mi>".to_owned(), IndexRow::Top),
+                ],
+            ),
+            format!("<msup><mi>g</mi><mrow><mi>μ</mi>{gap}<mi>ν</mi></mrow></msup>")
+        );
     }
 
     #[test]
@@ -2493,10 +2566,7 @@ mod tests {
                 scoped(value, &options),
                 expression(value.as_view(), &options, &PrintState::new(), &|_, _| None).unwrap(),
             ] {
-                assert!(
-                    html.contains(&format!("<{tag}><mrow><mi>T</mi></mrow>")),
-                    "{html}"
-                );
+                assert!(html.contains(&format!("<{tag}><mi>T</mi>")), "{html}");
                 assert!(!html.contains("<mmultiscripts>"), "{html}");
                 assert!(!html.contains("<none/>"), "{html}");
                 assert!(html.contains("<mspace width=\"0.2em\"/>"), "{html}");
@@ -2559,7 +2629,7 @@ mod tests {
             function!(q, 3, mink!(4))
         );
         let html = render(valid.as_view(), &options, &state, &|_, _| None).unwrap();
-        assert!(html.contains("<msub><mrow><mi>p</mi></mrow>"), "{html}");
+        assert!(html.contains("<msub><mi>p</mi>"), "{html}");
         assert!(html.contains("<mn>2</mn>"), "{html}");
         assert!(html.contains(">·</mo>"), "{html}");
         assert!(!html.contains("□"), "{html}");
@@ -2771,19 +2841,15 @@ mod tests {
             assert_eq!(ordered.len(), 2);
             if first_lower == second_lower {
                 let tag = if first_lower { "msub" } else { "msup" };
-                assert!(
-                    html.contains(&format!("<{tag}><mrow><mi>g</mi></mrow>")),
-                    "{html}"
-                );
+                assert!(html.contains(&format!("<{tag}><mi>g</mi>")), "{html}");
                 assert!(!html.contains("<none/>"), "{html}");
             } else {
                 for (position, (label, lower)) in ordered.iter().copied().enumerate() {
-                    let gap = if position == 0 {
-                        ""
+                    let index = if position == 0 {
+                        format!("<mi>{label}</mi>")
                     } else {
-                        "<mspace width=\"0.08em\"/>"
+                        format!("<mrow><mspace width=\"0.08em\"/><mi>{label}</mi></mrow>")
                     };
-                    let index = format!("<mrow>{gap}<mi>{label}</mi></mrow>");
                     let expected = if lower {
                         format!("{index}<none/>")
                     } else {
@@ -2868,10 +2934,7 @@ mod tests {
         let dual = dind!(function!(rep.symbol(), 3, index));
         let html = render(dual.as_view(), &options, &PrintState::new(), &|_, _| None).unwrap();
         assert!(html.contains("<mo>*</mo>"), "{html}");
-        assert!(
-            html.ends_with("<mrow><mi>standalone_i</mi></mrow></msub>"),
-            "{html}"
-        );
+        assert!(html.ends_with("<mi>standalone_i</mi></msub>"), "{html}");
         let mut power = PrintState::new();
         power.in_exp_base = true;
         assert_eq!(
