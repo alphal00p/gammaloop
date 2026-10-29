@@ -815,11 +815,16 @@ The user-facing contract and worked GL297/GL638 examples live in
   sums correlated fills before squaring. Zero coefficients still count one attempted sample.
   The native integrator explicitly performs this accumulation after evaluation; numerical
   caches and stability diagnostics remain attached to the evaluator.
+  Native batch evaluation currently retains event contributions until the complete batch
+  has been evaluated, then accumulates them. Peak event storage therefore depends on batch
+  size; separating evaluation from accumulation does not itself require this buffering.
 + Raw snapshots merge independent draws within a population. Summing independent
   population estimates is a distinct operation: it sums means and variances while keeping
   sample counts separate. The derived estimates cannot be used as raw checkpoints.
   Rust and Python continuous/discrete fill helpers share sample-level grouping, including
   underflow, overflow and empty samples.
+  `observables/sample.rs` owns sample-level fill reduction and its errors;
+  `observables/estimates.rs` owns the independent-population estimate combination.
 + `havana_integrate` runs iterative Monte Carlo updates, merges
   worker-local observable accumulators, and writes integration
   artifacts.
