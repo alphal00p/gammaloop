@@ -270,7 +270,7 @@ impl TensorReducer {
             .all(|slot| slot.rep().rep != LibraryRep::from(Minkowski {}));
         Ok(TensorReduction {
             terms,
-            zero: source.with_checked_expression(Atom::Zero)?,
+            source: source.clone(),
             max_rank,
             fully_contracted,
         })

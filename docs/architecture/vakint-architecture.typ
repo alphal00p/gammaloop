@@ -237,7 +237,13 @@ its separate Atom coefficient is the exact scalar orbit or projector weight.
 Foreign-representation spectators remain tensors during selected Lorentz
 reduction and composition. `TensorReduction` also retains the source interface
 for an empty or identically vanishing result, including odd-rank moments.
-Typed addition and multiplication preserve declared logical ports. Only the
+Its borrowed `expression()` and consuming `into_expression()` use generic typed
+addition for compatibility and algebra. Positional sums retain the established
+logical correspondence owned by that checked addition. Named sums, whose generic
+arithmetic intentionally publishes canonical axes, are validated against the
+reducer-owned source carrier to restore its declared logical layout. This is a
+caller-owned boundary; arbitrary positional rewrites still require their own
+identity witness. Only the
 adapter's return to Vakint's raw projector/index ABI decodes the completed
 result; raw `VakintTerm` storage remains that backend boundary.
 

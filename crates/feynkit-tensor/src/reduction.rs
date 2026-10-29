@@ -231,7 +231,7 @@ impl TensorReductionTerm {
 #[derive(Clone, Debug)]
 pub struct TensorReduction {
     terms: Vec<TensorReductionTerm>,
-    zero: SymbolicTensor<PartialStructure>,
+    source: SymbolicTensor<PartialStructure>,
     max_rank: usize,
     fully_contracted: bool,
 }
@@ -252,7 +252,12 @@ impl TensorReduction {
         self.fully_contracted
     }
 
-    /// Materialize all terms as one standard Spenso/Symbolica expression.
+    /// Materialize all terms while preserving the reducer-owned declared interface.
+    ///
+    /// Generic named tensor arithmetic canonicalizes result axes, so this caller-specific
+    /// boundary validates named sums against the reduction source and restores their
+    /// declared logical order. Positional sums already retain their established logical
+    /// correspondence through checked addition and are returned without detaching it.
     ///
     /// # Examples
     ///
@@ -268,16 +273,36 @@ impl TensorReduction {
     /// }
     /// ```
     pub fn expression(&self) -> Result<SymbolicTensor<PartialStructure>, TensorReductionError> {
-        self.terms.iter().try_fold(self.zero.clone(), |sum, term| {
-            Ok(sum.try_add(&term.expression()?)?)
-        })
+        let zero = self.source.with_checked_expression(Atom::Zero)?;
+        let sum =
+            self.terms
+                .iter()
+                .try_fold(zero, |sum, term| -> Result<_, TensorReductionError> {
+                    Ok(sum.try_add(&term.expression()?)?)
+                })?;
+        Self::finish_expression(&self.source, sum)
     }
 
-    /// Consume the compact result and materialize its expression.
+    /// Consume the compact result while preserving its declared source interface.
     pub fn into_expression(self) -> Result<SymbolicTensor<PartialStructure>, TensorReductionError> {
-        self.terms
-            .into_iter()
-            .try_fold(self.zero, |sum, term| Ok(sum.try_add(&term.expression()?)?))
+        let zero = self.source.with_checked_expression(Atom::Zero)?;
+        let sum = self.terms.into_iter().try_fold(
+            zero,
+            |sum, term| -> Result<_, TensorReductionError> {
+                Ok(sum.try_add(&term.expression()?)?)
+            },
+        )?;
+        Self::finish_expression(&self.source, sum)
+    }
+
+    fn finish_expression(
+        source: &SymbolicTensor<PartialStructure>,
+        sum: SymbolicTensor<PartialStructure>,
+    ) -> Result<SymbolicTensor<PartialStructure>, TensorReductionError> {
+        if sum.structure().has_unresolved_ports() {
+            return Ok(sum);
+        }
+        Ok(source.with_checked_expression(sum.into_expression())?)
     }
 }
 
@@ -561,8 +586,7 @@ impl TensorReducer {
                 });
             }
         }
-        let zero = source.with_checked_expression(Atom::Zero)?;
-        let fully_contracted = zero
+        let fully_contracted = source
             .structure()
             .logical_slots()
             .iter()
@@ -570,7 +594,7 @@ impl TensorReducer {
 
         Ok(TensorReduction {
             terms,
-            zero,
+            source: source.clone(),
             max_rank,
             fully_contracted,
         })
@@ -1844,8 +1868,10 @@ mod tests {
     use crate::CosetType;
     use feynkit_graph::{DiagramEdge, DiagramVertex, FeynmanDiagramBuilder, NumeratorInterface};
     use feynkit_model::Model;
+    use idenso::representations::Bispinor;
     use idenso::shorthands::UndoShorthands;
     use spenso::structure::abstract_index::AbstractIndex;
+    use spenso::structure::representation::RepName;
     use spenso::vector_symbol;
     use symbolica::symbol;
 
@@ -1988,8 +2014,6 @@ mod tests {
 
     #[test]
     fn reduction_keeps_declared_spectator_axes_and_zero_interfaces() {
-        use idenso::representations::Bispinor;
-        use spenso::structure::representation::RepName;
         let (k, _, _, _) = vectors();
         let dimension = Atom::num(4);
         let mu = Atom::var(symbol!("retained_reduction_mu"));
@@ -2014,6 +2038,9 @@ mod tests {
         let reducer = TensorReducer::new(dimension.clone()).with_integrated_head(k);
         let reduced = reducer.reduce(&source).unwrap();
         let result = reduced.expression().unwrap();
+        let consumed = reduced.clone().into_expression().unwrap();
+        assert_eq!(consumed.expression(), result.expression());
+        assert_eq!(consumed.structure(), result.structure());
         assert_eq!(result.structure(), source.structure());
         assert_eq!(result.rank(), 4);
         assert!(result.expression().contains(&spectator));
@@ -2025,6 +2052,50 @@ mod tests {
             &spectator * dot(&vector, &vector) * metric(&dimension, &mu, &nu) / &dimension;
         assert!((result.expression() - expected).together().is_zero());
 
+        let parameter = Atom::var(symbol!("retained_reduction_parameter"));
+        let q = vectors().1;
+        let p = vectors().2;
+        let indices = (0..6)
+            .map(|index| Atom::var(symbol!(format!("retained_reduction_multi_{index}"))))
+            .collect::<Vec<_>>();
+        let integrated = [k, k, q, q, q, q].map(|head| compact(head, 1, &dimension));
+        let projectors = [p; 6].map(|head| compact(head, 1, &dimension));
+        let mut multi_expression = &spectator * &parameter;
+        for (position, index) in indices.iter().enumerate() {
+            let head = if position < 2 { k } else { q };
+            multi_expression *= indexed(head, 1, &dimension, index);
+            multi_expression *= indexed(p, 1, &dimension, index);
+        }
+        let multi_source = SymbolicTensor::infer(multi_expression).unwrap();
+        let mut slots = multi_source.structure().logical_slots();
+        slots.reverse();
+        let multi_source = SymbolicTensor::from_declared_parts(
+            multi_source.expression().clone(),
+            PartialStructure::from_logical_slots(slots),
+        )
+        .unwrap();
+        let multi_reducer = TensorReducer::new(dimension.clone())
+            .with_integrated_head(k)
+            .with_integrated_head(q);
+        let multi = multi_reducer.reduce(&multi_source).unwrap();
+        assert_eq!(multi.terms().len(), 2);
+        for term in multi.terms() {
+            assert_eq!(term.tensor().structure(), multi_source.structure());
+            assert_eq!(
+                term.expression().unwrap().structure(),
+                multi_source.structure()
+            );
+        }
+        let borrowed = multi.expression().unwrap();
+        let consumed = multi.into_expression().unwrap();
+        assert_eq!(borrowed.expression(), consumed.expression());
+        assert_eq!(borrowed.structure(), multi_source.structure());
+        assert_eq!(consumed.structure(), multi_source.structure());
+        let expected = parameter
+            * &spectator
+            * brute_projected_expression(&integrated, &projectors, &dimension);
+        assert!((borrowed.expression() - expected).together().is_zero());
+
         let zero = source.with_checked_expression(Atom::Zero).unwrap();
         let result = reducer.reduce(&zero).unwrap().into_expression().unwrap();
         assert!(result.is_zero());
@@ -2035,6 +2106,157 @@ mod tests {
         let result = reduced.into_expression().unwrap();
         assert!(result.is_zero());
         assert_eq!(result.structure(), odd.structure());
+    }
+
+    #[test]
+    fn reduction_materializes_positional_spectators_with_actual_witnesses() {
+        let (k, q, p, _) = vectors();
+        let dimension = Atom::num(4);
+        let spin = Bispinor {}.new_rep(4);
+        let anonymous = FunctionBuilder::new(
+            SPENSO_TAG.tensor_symbol("retained_reduction_anonymous_spectator"),
+        )
+        .add_arg(spin.to_symbolic([]))
+        .finish();
+        let k_vector = compact(k, 1, &dimension);
+        let p_vector = compact(p, 1, &dimension);
+        let source =
+            SymbolicTensor::infer(&anonymous * dot(&k_vector, &p_vector).pow(Atom::num(2)))
+                .unwrap();
+        assert!(source.structure().has_unresolved_ports());
+        let reducer = TensorReducer::new(dimension.clone()).with_integrated_head(k);
+        let reduction = reducer.reduce(&source).unwrap();
+        assert_eq!(reduction.terms().len(), 1);
+        let weighted = reduction.terms()[0].expression().unwrap();
+        assert_eq!(weighted.structure(), source.structure());
+        let original_fold = reduction
+            .terms()
+            .iter()
+            .try_fold(
+                source.with_checked_expression(Atom::Zero).unwrap(),
+                |sum, term| sum.try_add(&term.expression().unwrap()),
+            )
+            .unwrap();
+        assert_eq!(original_fold.structure(), source.structure());
+        let borrowed = reduction.expression().unwrap();
+        let consumed = reduction.into_expression().unwrap();
+        assert_eq!(borrowed.expression(), consumed.expression());
+        assert_eq!(borrowed.structure(), source.structure());
+        assert_eq!(consumed.structure(), source.structure());
+        let expected =
+            &anonymous * dot(&k_vector, &k_vector) * dot(&p_vector, &p_vector) / &dimension;
+        assert!((borrowed.expression() - expected).together().is_zero());
+        let positional_zero = source.with_checked_expression(Atom::Zero).unwrap();
+        let zero_reduction = reducer.reduce(&positional_zero).unwrap();
+        let borrowed_zero = zero_reduction.expression().unwrap();
+        let consumed_zero = zero_reduction.into_expression().unwrap();
+        assert!(borrowed_zero.is_zero());
+        assert!(consumed_zero.is_zero());
+        assert_eq!(borrowed_zero.structure(), positional_zero.structure());
+        assert_eq!(consumed_zero.structure(), positional_zero.structure());
+
+        let repeated = FunctionBuilder::new(
+            SPENSO_TAG.tensor_symbol("retained_reduction_repeated_anonymous_spectator"),
+        )
+        .add_arg(spin.to_symbolic([]))
+        .add_arg(spin.to_symbolic([]))
+        .finish();
+        let q_vector = compact(q, 1, &dimension);
+        let repeated_source = SymbolicTensor::infer(
+            &repeated
+                * dot(&k_vector, &p_vector).pow(Atom::num(2))
+                * dot(&q_vector, &p_vector).pow(Atom::num(2)),
+        )
+        .unwrap();
+        let repeated_reducer = TensorReducer::new(dimension.clone())
+            .with_integrated_head(k)
+            .with_integrated_head(q);
+        let repeated_reduction = repeated_reducer.reduce(&repeated_source).unwrap();
+        assert_eq!(repeated_reduction.terms().len(), 2);
+        let original_fold = repeated_reduction
+            .terms()
+            .iter()
+            .try_fold(
+                repeated_source.with_checked_expression(Atom::Zero).unwrap(),
+                |sum, term| sum.try_add(&term.expression().unwrap()),
+            )
+            .unwrap();
+        assert_eq!(original_fold.structure(), repeated_source.structure());
+        let borrowed = repeated_reduction.expression().unwrap();
+        let consumed = repeated_reduction.into_expression().unwrap();
+        assert_eq!(borrowed.expression(), consumed.expression());
+        assert_eq!(borrowed.structure(), repeated_source.structure());
+        assert_eq!(consumed.structure(), repeated_source.structure());
+        let expected = &repeated
+            * dot(&p_vector, &p_vector).pow(Atom::num(2))
+            * (dot(&k_vector, &k_vector) * dot(&q_vector, &q_vector)
+                + Atom::num(2) * dot(&k_vector, &q_vector).pow(Atom::num(2)))
+            / Atom::num(24);
+        assert!((borrowed.expression() - expected).together().is_zero());
+
+        let named = Atom::var(symbol!("retained_reduction_mixed_named"));
+        let mixed =
+            FunctionBuilder::new(SPENSO_TAG.tensor_symbol("retained_reduction_mixed_spectator"))
+                .add_arg(spin.to_symbolic([]))
+                .add_arg(spin.to_symbolic([named]))
+                .finish();
+        let mixed_source =
+            SymbolicTensor::infer(&mixed * dot(&k_vector, &p_vector).pow(Atom::num(2))).unwrap();
+        assert!(mixed_source.structure().has_unresolved_ports());
+        let mixed_reduction = reducer.reduce(&mixed_source).unwrap();
+        let borrowed = mixed_reduction.expression().unwrap();
+        let consumed = mixed_reduction.into_expression().unwrap();
+        assert_eq!(borrowed.expression(), consumed.expression());
+        assert_eq!(borrowed.structure(), mixed_source.structure());
+        assert_eq!(consumed.structure(), mixed_source.structure());
+
+        let rank_six_dimension = Atom::num(6);
+        let k_vector = compact(k, 1, &rank_six_dimension);
+        let q_vector = compact(q, 1, &rank_six_dimension);
+        let p_vector = compact(p, 1, &rank_six_dimension);
+        let parameter = Atom::var(symbol!("retained_reduction_positional_parameter"));
+        let first = FunctionBuilder::new(
+            SPENSO_TAG.tensor_symbol("retained_reduction_first_anonymous_spectator"),
+        )
+        .add_arg(spin.to_symbolic([]))
+        .finish();
+        let second = FunctionBuilder::new(
+            SPENSO_TAG.tensor_symbol("retained_reduction_second_anonymous_spectator"),
+        )
+        .add_arg(spin.to_symbolic([]))
+        .finish();
+        let multi_reducer = TensorReducer::new(rank_six_dimension.clone())
+            .with_integrated_head(k)
+            .with_integrated_head(q);
+        for spectator in [anonymous, repeated, mixed, first * second] {
+            let multi_source = SymbolicTensor::infer(
+                &spectator
+                    * &parameter
+                    * dot(&k_vector, &p_vector).pow(Atom::num(2))
+                    * dot(&q_vector, &p_vector).pow(Atom::num(4)),
+            )
+            .unwrap();
+            let multi = multi_reducer.reduce(&multi_source).unwrap();
+            assert_eq!(multi.terms().len(), 2);
+            let borrowed = multi.expression().unwrap();
+            let consumed = multi.into_expression().unwrap();
+            assert_eq!(borrowed.expression(), consumed.expression());
+            assert_eq!(borrowed.structure(), multi_source.structure());
+            assert_eq!(consumed.structure(), multi_source.structure());
+            let expected = spectator
+                * &parameter
+                * dot(&p_vector, &p_vector).pow(Atom::num(3))
+                * (Atom::num(3)
+                    * dot(&k_vector, &k_vector)
+                    * dot(&q_vector, &q_vector).pow(Atom::num(2))
+                    + Atom::num(12)
+                        * dot(&k_vector, &q_vector).pow(Atom::num(2))
+                        * dot(&q_vector, &q_vector))
+                / (&rank_six_dimension
+                    * (&rank_six_dimension + Atom::num(2))
+                    * (&rank_six_dimension + Atom::num(4)));
+            assert!((borrowed.expression() - expected).together().is_zero());
+        }
     }
 
     #[test]
