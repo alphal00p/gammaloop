@@ -2075,6 +2075,7 @@ fn symmetric_trace_d44_full_contraction() {
 mod adjoint_box;
 mod feyncalc_reference;
 mod form_reference;
+mod label_order;
 
 fn colored_matrix_element() -> (Atom, Atom) {
     (

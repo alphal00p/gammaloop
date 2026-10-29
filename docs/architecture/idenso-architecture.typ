@@ -602,15 +602,27 @@ cycle. This lets the same structure-constant identities act on explicit products
 and compact chains without distributing spectator factors or losing the logical
 ports of a zero result.
 
-A two-matrix adjoint word can also close a loop through its opposite endpoint:
-`chain(A,B; F(B),F(C))` represents `f(A,u,B) f(u,B,C) = C_A g(A,C)`.
-The chain owner exposes only that local word and reuses the existing two-f
-contraction, including its matrix phases. Shared structure-constant positions
-represent summed edges only when their indices are abstract; equal fixed
-components do not authorize a sum. Fixed uncontracted spectators are preserved
-by the local identity. Public symbolic tensor admission currently rejects the
-raw fixed-color chain and structure-constant forms used in these controls, so
-their fixed-index guard is tested directly at the identity owner.
+An adjoint word is a path of structure constants, and the structure-constant
+loop identities read it as one. Which structure constants the contractor
+collects into a word depends on symbol registration order: Symbolica stores
+the arguments of the antisymmetric `f` in that order, and chainification takes
+the first stored argument as the generator. One closed network can therefore
+arrive as explicit structure constants, as a word closed on its own labels,
+such as `chain(A,B; F(B),F(C))` for `f(A,u,B) f(u,B,C) = C_A g(A,C)` or the
+triangle `chain(A,X; F(C),F(D),F(A))`, or as words closed through each other
+and through structure constants. A word lies on a cycle when a summed label
+repeats among its endpoints and generator labels, or when two of its summed
+ports reach the same connected part of the other adjoint words and structure
+constants. Only such words are exposed through the reserved dummy allocator;
+the existing two-f and shortest-cycle contractions apply, including the matrix
+phases, and only a reduction is committed. An open network keeps a word whose
+spelling can still depend on registration order; its value does not. Shared
+structure-constant positions represent summed edges only when their indices are
+abstract; equal fixed components do not authorize a sum. Fixed uncontracted
+spectators are preserved by the local identity. Public symbolic tensor admission
+currently rejects the raw fixed-color chain and structure-constant forms used in
+these controls, so their fixed-index guard is tested directly at the identity
+owner.
 Identical materialized factors can normalize to a square. The ordinary and
 squared forms share this contraction owner, retaining scalar weights and the
 same summed-index guards without distributing sums.
