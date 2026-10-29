@@ -1,0 +1,181 @@
+{
+  "schema": 1,
+  "status": "prepared one-row migration; NEW independent Astra migration/test review pending",
+  "scope": {
+    "test": "failing::test_generate_aa_ttx_cross_section_slow_filter",
+    "only_row": "QCD=2",
+    "old_literal": "874 | -266 = -266",
+    "new_literal": "874 | -186 = -186",
+    "qcd0_literal": "4 | -4 = -4",
+    "qcd1_literal": "40 | -40 = -40",
+    "other_snapshots_changed": false,
+    "production_code_changed": false
+  },
+  "source": {
+    "frozen_physics_parent": "59b57cead76e576fa9f23e3996f5614de939fe35",
+    "approved_certificate_commit": "5f7d96ba675f76dcb7e814e085c5f66ece13cb2b",
+    "approved_certificate_bookmark": "generation-pocket-weight-diagnosis-approved-certificate",
+    "helper_change": "wtoqwxkqxpqkztnnxzzurpusmlrpxmwu",
+    "helper_commit": "bd473ae5dcee599346b0e2e802f5b5fec696de65",
+    "helper_bookmark": "generation-pocket-weight-diagnosis-helper-cleanup",
+    "migration_change": "xvqrsxnttxtylsxltsqkqpnknprntrky",
+    "migration_bookmark": "generation-pocket-weight-diagnosis",
+    "approved_test_source_sha256": "93ec878421c384058aa88291c89050c632310169e39283b6a10fa081406ec572",
+    "helper_test_source_sha256": "69881d3464ba3fd4e86650333e473ca4348686a2d6371feac85a4cc94dcb2fa9",
+    "migration_test_source_sha256": "b1a5e9fa88f351e941455f98155e196322aa7da8a9cd1ffd6442d7f80e419d59",
+    "tests_manifest_sha256": "98edb855bb8bd3b2098c183c20470445a7dccdfc9e5812144044a6fae643923e",
+    "model_import_owner_sha256": "068217d4a90fe28f21bc6ffa3e372206ebfc3ce9b919526788c4068dad6fa701"
+  },
+  "approvals": {
+    "scope_a": {
+      "review": "target/pocket-weight-diagnosis/review-astra-scope-a-round2-JOlXh9/review.json",
+      "sha256": "c209f30fad0bf9a624851b284ccad2e4cd629fd67d5338ca563b310674791a78",
+      "verdict": "APPROVE_CERTIFICATE",
+      "candidate": "5f7d96ba675f76dcb7e814e085c5f66ece13cb2b"
+    },
+    "scope_b": {
+      "review": "target/pocket-weight-diagnosis/review-astra-scope-b-YmoQie/review.json",
+      "sha256": "89715339a8572c8dd0e23b5e9bb518422fdec5ecfe88b7b560c83f3c29f67254",
+      "verdict": "APPROVE_CERTIFICATE",
+      "candidate": "a8c5a11e1d3266faa478dc78db85cc111a3a05a6",
+      "reuse": "only unchanged 874/1106 fixed-case raw bindings; no new broad physics claim"
+    }
+  },
+  "inputs": {
+    "model_command": "import model sm.json",
+    "generate_commands": [
+      "generate xs a a > t t~ | a t g b ghg QED^2==4 [{{1}} QCD=0] --filter-zero-color --numerator-grouping no_grouping --filter-selfenergies true --filter-snails true --filter-tadpoles true --n-cut-blobs 1 1 --n-cut-spectators 0 0 --clear-existing-processes --only-diagrams",
+      "generate xs a a > t t~ | a t g b ghg QED^2==4 [{{2}} QCD=1] --filter-zero-color --numerator-grouping no_grouping --filter-selfenergies true --filter-snails true --filter-tadpoles true --n-cut-blobs 1 1 --n-cut-spectators 0 0 --clear-existing-processes --only-diagrams",
+      "generate xs a a > t t~ | a t g b ghg QED^2==4 [{{3}} QCD=2] --filter-zero-color --numerator-grouping no_grouping --filter-selfenergies true --filter-snails true --filter-tadpoles true --n-cut-blobs 1 1 --n-cut-spectators 0 0 --clear-existing-processes --only-diagrams"
+    ],
+    "old_new_command_text_byte_equal": true,
+    "grouping": "none",
+    "zero_color_filter": true,
+    "self_energy_tadpole_veto": "massive and massless enabled",
+    "snail_veto": "massless enabled, massive disabled",
+    "blob_range": [
+      1,
+      1
+    ],
+    "spectator_range": [
+      0,
+      0
+    ],
+    "only_diagrams": true,
+    "clear_existing_processes": true,
+    "clean_state": true,
+    "source_model_sha256": "a0193ae09a6f920c8fcfbe8231c6a70e820b82b573257e07c216bdcd8e57acd9",
+    "default_restriction_source_sha256": "c683f9abb9459375865ef694edea38890ffd78a0b8f118a25db3c3de09a8a1cb",
+    "approved_live_model_sha256": "7e250b3ff20c98277ee19af863cc030c7a5fd47fea979931b28aba744f8a9de3",
+    "approved_live_parameters_sha256": "232964f2b9783482f8ccb0e8812eb6e34a0d2dd6d5e8a8905a5b98377ae7fe1d",
+    "approved_filtered_process_definition_sha256": "ecafb0b7998630157c3e83b928cc0a8f2cf029e99d2daec43f283af355be1aae",
+    "symbolica_numerica_graphica_kernel": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+    "cargo_lock_sha256": "def8dd7be5f208f4a290a4556081f7a63d10a5ae070c5df1808c1d350fa6161e",
+    "flake_lock_sha256": "e10c5893b513d4c7120d841b47fbfddffb3ac4f1f5cb46a18c0f7542cbde8534",
+    "nix_ci_sha256": "e031749e51a33ee48bc5c653d13c2dc7e7d3a51bddea77fc3c67d01ac217c540",
+    "nix_ci_enable": false,
+    "profile": "ci-optim",
+    "features": "default; no --features or --no-default-features",
+    "cargo_build_jobs": 2,
+    "environment": "existing SYMBOLICA_LICENSE or current-user configured license; INSTA_UPDATE and INSTA_FORCE_PASS unset; isolated TESTS_GAMMALOOP_STATE_PATH, INSTA_PENDING_DIR, GL_TEST_LOG_DIR; no target override"
+  },
+  "controls": {
+    "approved_old_fail": {
+      "source_commit": "5f7d96ba675f76dcb7e814e085c5f66ece13cb2b",
+      "binary": "target/pocket-weight-diagnosis/round2/current-live-capture-final-test_feyngen",
+      "binary_sha256": "a4afd64bbcbfc96afe46b7348c532317df81b1fb6c3450e67cfd8db7cbfef254",
+      "log": "target/pocket-weight-diagnosis/migration/approved-old-fail.log",
+      "log_sha256": "acbeca2c2bf61c758e14dd11f194f4ea08436ef226c58316ed9ded6b082c9423",
+      "test_count": 1,
+      "exit": 101,
+      "result": "QCD0 and QCD1 snapshots pass; QCD2 actual 874|-186 conflicts with old -266"
+    },
+    "helper_cleanup": {
+      "binary": "target/pocket-weight-diagnosis/migration/helper-cleanup-test_feyngen",
+      "binary_sha256": "a655caf828330e39901454f77249716798fc5f163c2c9e1f03224dd8bdeea938",
+      "log": "target/pocket-weight-diagnosis/migration/helper-diagnostic.log",
+      "log_sha256": "a12b595d6ac941ff78e3205c813132d112d7dea0b5480ad0cad8bd2a082cc313",
+      "test_count": 1,
+      "exit": 0,
+      "filtered_graphs": 874,
+      "unfiltered_graphs": 1106,
+      "exact_original_capture_reproduction": true
+    },
+    "migration_new_pass": {
+      "binary": "target/pocket-weight-diagnosis/migration/named-new-pass-test_feyngen",
+      "binary_sha256": "0e6361f0e8a4d3e78c332a4263827c2310864e05d94bc25659b9bf9523cd838e",
+      "producer_path": "/common/build-cache/lcnbr/9c/5e5e2f7a370b0f/ci-optim/deps/test_feyngen-9581d43dfd98ca33",
+      "log": "target/pocket-weight-diagnosis/migration/named-new-pass.log",
+      "log_sha256": "b6c7cfbc32173e813a5fe48cea807eee52525f80a2e98d5e9c850df2c4b2eafc",
+      "test_count": 1,
+      "exit": 0,
+      "cells": [
+        {
+          "qcd": 0,
+          "graphs": 4,
+          "weight": -4
+        },
+        {
+          "qcd": 1,
+          "graphs": 40,
+          "weight": -40
+        },
+        {
+          "qcd": 2,
+          "graphs": 874,
+          "weight": -186
+        }
+      ]
+    }
+  },
+  "approved_evidence_frozen": {
+    "diagnosis_json_sha256": "838eb89a349234e019770d4e18a6a5e4ea8a3ad994ed58f1272d88099b1772c8",
+    "live_import_json_sha256": "e3f1f42421dc2c1c2d11a4c7817d354b5de5fd20c4d47de6e33bf3252982c080",
+    "graph_join_index_sha256": "9cf9142426477b93aaf9fb7f88b962b346b0bce120738e16a52f7658b95dbe62",
+    "filtered_tsv_sha256": "ae5fd00fd9efd09e262a46f839f9fd8abee88328f98008cceaa164e26d3433f0",
+    "unfiltered_tsv_sha256": "6a9d3d28b73c6099125c6748f392f3d0e2da071d50c38359a744b563e5bbc6e4",
+    "historical_pristine_binary_sha256": "5e09a8dc940f56bbde9c9484f70bf76537892ebc39e094491e2981c6285d7f69",
+    "historical_baseline_commit": "81f7e3c0dcf9909472d22cc70a2bb2a79cef4c7c",
+    "historical_round1_baseline_commit": "aa411da5fae5eaaf20e825fd5386af62436d15f8",
+    "scope_b_raw_bindings_path": "target/pocket-weight-diagnosis/review-astra-scope-b-YmoQie/raw-input-bindings.json",
+    "scope_b_raw_bindings_sha256": "6616253307354d853e094fae964a6873525a08bb592ac9719bdfbe42cb7cfa24",
+    "scope_b_raw_binding_count": 3969
+  },
+  "named_row_history": {
+    "source43": "74fcd8e57e9fe256d4bc34b5d8ad93c97fc28848: named failing row -266",
+    "first_descendant": "087bda82ce5a14dab092776ea470e66278dda12d: separate slow row -266 to -186; named failing row remains -266",
+    "second_descendant": "dfe6387606e44a96f110c1ce03f52d92824dbdb1: named failing row -266 to -186"
+  },
+  "checks": {
+    "format": "passed: Nix-backed cargo fmt --all --check on final Rust source",
+    "clippy": "passed: nix develop -c cargo clippy --locked -p gammaloop-integration-tests --test test_feyngen --profile ci-optim -- -D warnings",
+    "typst": "passed: Nix-backed Typst compile of the migration note",
+    "registry_title": "passed: Nix-backed TOML parse, exact Typst title match and approved-certificate review_ref",
+    "receipt_validator": "passed: source-diff, exact producer/log hashes, all 3969 Scope B raw bindings, frozen certificate files and helper capture comparison",
+    "failed_attempts": [
+      "First migration validator invocation failed with Node execFileSync ENOBUFS on the large existing test source; maxBuffer was raised and the exact-source validator passed."
+    ],
+    "logs": {
+      "focused-clippy.log": "0e6d04f9d268cce733ae9a5e1c6dd75d117b92f91dea3ea26bc327abf4f39861",
+      "final-format-check.log": "9464a53e4daf37cd0daaaeb42f50edc10a5da3ffac6c4f240981125db29d14e8",
+      "typst-check.log": "a25ab331ccb54484bfe614b9b44fc49671db2df516b50e30083d5a5df30b81e1",
+      "registry-check.log": "caf6518fd1411fedb401e99995b51d0c958c702f9cbf4faa711dfbd356f8cdd5",
+      "receipt-check.log": "80226178b316dee0bc081fa47576f796dbbc840db32e67f0d8c9fb0ff208c9ac"
+    }
+  },
+  "gate": "NEW independent Astra MIGRATION/TEST review required; no integration or publication",
+  "limitations": [
+    "Only the named aa-to-top-pair QCD2 snapshot is changed",
+    "No source44/45 or older frame/drawing/callback row is approved by this migration",
+    "No general physics correctness, color-zero symbolic proof, or complete graph-numerator expansion is claimed",
+    "No main integration, NixCI enablement, push, PR, upload, or publication"
+  ],
+  "file_inventory": [
+    "tests/tests/test_feyngen.rs",
+    "docs/developers.toml",
+    "docs/architecture/generation-pocket-weight-migration.typ",
+    "docs/architecture/evidence/generation-integration/wp3/pocket-weight-migration/migration.json",
+    "docs/architecture/evidence/generation-integration/wp3/pocket-weight-migration/validate-migration.mjs"
+  ],
+  "retained_artifacts": "target/pocket-weight-diagnosis/migration; frozen original and independent-review evidence remain in target/pocket-weight-diagnosis and tests/artifacts; historical source43 workspace remains clean"
+}
