@@ -267,8 +267,17 @@ impl InterfaceInference {
                 // visible to the surrounding product. Observe never normalizes
                 // leaves or allocates dummy indices.
                 for (position, term) in [base, exponent].into_iter().enumerate() {
+                    let child = if position == 1 {
+                        ObservationScope {
+                            owner: None,
+                            inside_factor: false,
+                            ..scope
+                        }
+                    } else {
+                        scope
+                    };
                     let mut branch =
-                        Self::observe_indices(term, slots, cache, scope, exclude_tensor_leaf)?;
+                        Self::observe_indices(term, slots, cache, child, exclude_tensor_leaf)?;
                     if position == 0 && !branch.is_empty() && branch.validate().is_ok() {
                         result.selected_pair |= branch.selected_pair;
                         let interface =
@@ -294,6 +303,32 @@ impl InterfaceInference {
                             let repetitions = exponent.numerator().abs();
                             let repetitions = usize::try_from(repetitions).unwrap_or(3).min(3);
                             branch.repeat(repetitions);
+                        }
+                    }
+                    if position == 1 && branch.validate().is_ok() {
+                        // The exponent is an independent scalar scope. Keep
+                        // invalid local multiplicities visible to validation,
+                        // but never expose its closed contractions outside it.
+                        if !Self::has_structured_syntax(exponent) {
+                            continue;
+                        }
+                        let interface =
+                            match Self::scope_explicit_occurrences(exponent, &mut branch, slots) {
+                                Ok(interface) => Some(interface),
+                                Err(error) if scope.validate => return Err(error),
+                                Err(_) => None,
+                            };
+                        if interface
+                            .as_ref()
+                            .is_some_and(|interface| interface.canonical().is_scalar())
+                        {
+                            result.selected_pair |= branch.selected_pair;
+                            continue;
+                        }
+                        if scope.validate && interface.is_some() {
+                            return Err(TensorInferenceError::invalid(
+                                "a tensor exponent must be scalar",
+                            ));
                         }
                     }
                     result.branch_max(&branch);
@@ -366,6 +401,8 @@ impl InterfaceInference {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::bis;
+    use crate::representations::Bispinor;
     use crate::tensor::SymbolicTensor;
     use crate::test_support;
     use spenso::network::library::symbolic::ETS;
@@ -655,6 +692,161 @@ mod tests {
             .validate()
             .is_err()
         );
+    }
+
+    #[test]
+    fn closed_exponents_keep_their_contractions_independent_of_outer_indices() {
+        test_support::test_initialize();
+        let mu = mink!(4, 99621);
+        let nu = mink!(4, 99623);
+        let leaf = |name, slot: &Atom| {
+            FunctionBuilder::new(SPENSO_TAG.tensor_symbol(name))
+                .add_arg(slot)
+                .finish()
+        };
+        let c = leaf("exponent_scope_C", &mu);
+        let d = leaf("exponent_scope_D", &mu);
+        for inner in [&mu, &nu] {
+            let exponent = leaf("exponent_scope_A", inner) * leaf("exponent_scope_B", inner);
+            let power = Atom::var(Symbol::E).pow(&exponent);
+            for (outer, count, rank) in [(c.clone(), 1, 1), (&c * &d, 2, 0)] {
+                let expression = &power * outer;
+                let occurrences = InterfaceInference::scoped_occurrences(
+                    expression.as_view(),
+                    &mut SlotMatcher::default(),
+                )
+                .unwrap();
+                assert_eq!(
+                    occurrences
+                        .entries()
+                        .map(|(_, count)| count)
+                        .collect::<Vec<_>>(),
+                    vec![count]
+                );
+                occurrences.validate().unwrap();
+                let value = SymbolicTensor::infer(expression.clone()).unwrap();
+                assert_eq!(value.expression(), &expression);
+                assert_eq!(
+                    value.structure().canonical().external_structure().len(),
+                    rank
+                );
+                SymbolicTensor::<PartialStructure>::validate_atom(&expression).unwrap();
+            }
+            assert!(
+                InterfaceInference::scoped_occurrences(
+                    power.as_view(),
+                    &mut SlotMatcher::default(),
+                )
+                .unwrap()
+                .is_empty()
+            );
+            assert!(
+                InterfaceInference::has_explicit_index_pairs(
+                    power.as_view(),
+                    Minkowski {}.into(),
+                    |_| false,
+                )
+                .unwrap()
+            );
+        }
+        let metadata = symbol!("exponent_scope_metadata"; Scalar);
+        let exponent = FunctionBuilder::new(metadata).add_arg(&c * &d).finish();
+        let power = Atom::var(Symbol::E).pow(exponent);
+        let expression = &power * &c * &d;
+        assert_eq!(
+            SymbolicTensor::infer(expression.clone())
+                .unwrap()
+                .expression(),
+            &expression
+        );
+        assert!(
+            !InterfaceInference::has_explicit_index_pairs(
+                power.as_view(),
+                Minkowski {}.into(),
+                |_| false,
+            )
+            .unwrap()
+        );
+    }
+
+    #[test]
+    fn exponent_scoping_cannot_hide_open_ports_or_invalid_local_multiplicity() {
+        test_support::test_initialize();
+        let mu = mink!(4, 99631);
+        let leaf = |name, slot| {
+            FunctionBuilder::new(SPENSO_TAG.tensor_symbol(name))
+                .add_arg(slot)
+                .finish()
+        };
+        let a = leaf("exponent_invalid_A", mu.clone());
+        let b = leaf("exponent_invalid_B", mu.clone());
+        let c = leaf("exponent_invalid_C", mu);
+        let open = leaf("exponent_invalid_open", mink!(4));
+        for exponent in [
+            a.clone(),
+            open,
+            &a * &b * &c,
+            Atom::var(SPENSO_TAG.chain_in),
+        ] {
+            let expression = Atom::var(Symbol::E).pow(exponent);
+            assert!(SymbolicTensor::<PartialStructure>::validate_atom(&expression).is_err());
+            assert!(SymbolicTensor::infer(expression.clone()).is_err());
+            assert!(
+                InterfaceInference::has_explicit_index_pairs(
+                    expression.as_view(),
+                    Minkowski {}.into(),
+                    |_| true,
+                )
+                .is_err()
+            );
+        }
+        let invalid = Atom::var(Symbol::E).pow(&a * &b * &c);
+        assert!(
+            InterfaceInference::index_occurrences(
+                invalid.as_view(),
+                &mut SlotMatcher::default(),
+                &mut Cache::default(),
+            )
+            .validate()
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn exponents_have_independent_chain_placeholder_scopes() {
+        test_support::test_initialize();
+        let matrix = FunctionBuilder::new(SPENSO_TAG.tensor_symbol("exponent_scope_matrix"))
+            .add_args([SPENSO_TAG.chain_in, SPENSO_TAG.chain_out])
+            .finish();
+        let trace = FunctionBuilder::new(SPENSO_TAG.trace)
+            .add_arg(Bispinor {}.new_rep(4).to_symbolic([]))
+            .add_arg(&matrix)
+            .finish();
+        let chain = |exponent| {
+            FunctionBuilder::new(SPENSO_TAG.chain)
+                .add_args([bis!(4, 99641), bis!(4, 99643)])
+                .add_arg(Atom::var(Symbol::E).pow(exponent) * &matrix)
+                .finish()
+        };
+        let valid = chain(trace);
+        let value = SymbolicTensor::infer(valid.clone()).unwrap();
+        assert_eq!(value.structure().canonical().external_structure().len(), 2);
+        SymbolicTensor::<PartialStructure>::validate_atom(&valid).unwrap();
+        // The same tensor ports are legal as outer matrix factors, but cannot
+        // borrow that scope when used as a naked exponent.
+        let malformed = FunctionBuilder::new(SPENSO_TAG.trace)
+            .add_arg(Bispinor {}.new_rep(4).to_symbolic([]))
+            .add_arg(
+                FunctionBuilder::new(SPENSO_TAG.tensor_symbol("exponent_scope_bad_matrix"))
+                    .add_args([SPENSO_TAG.chain_in, SPENSO_TAG.chain_in])
+                    .finish(),
+            )
+            .finish();
+        for exponent in [matrix.clone(), malformed] {
+            let invalid = chain(exponent);
+            assert!(SymbolicTensor::infer(invalid.clone()).is_err());
+            assert!(SymbolicTensor::<PartialStructure>::validate_atom(&invalid).is_err());
+        }
     }
 
     #[test]
