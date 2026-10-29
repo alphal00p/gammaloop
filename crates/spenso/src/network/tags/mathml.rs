@@ -1223,9 +1223,10 @@ impl<'a> Render<'a> {
         {
             return None;
         }
-        Some(group(format!(
+        // A contraction binds more tightly than scalar arithmetic, including powers.
+        Some(format!(
             "<mrow>{a}<mo lspace=\"0\" rspace=\"0\">·</mo>{b}</mrow>"
-        )))
+        ))
     }
 
     fn chain(&self, atom: AtomView<'_>, state: &PrintState) -> Option<String> {
@@ -2414,7 +2415,7 @@ mod tests {
     }
 
     #[test]
-    fn scoped_special_heads_and_dot_power_bases_keep_their_grouping() {
+    fn scoped_special_heads_keep_their_grouping() {
         let mut state = PrintState::new();
         state.in_exp_base = true;
         for (name, label) in [
@@ -2439,6 +2440,10 @@ mod tests {
                 assert_eq!(power, group(html));
             }
         }
+    }
+
+    #[test]
+    fn scoped_dots_are_atomic_in_scalar_arithmetic() {
         let p = vector_symbol!("scoped_mathml::dot_p");
         let q = vector_symbol!("scoped_mathml::dot_q");
         let value = function!(
@@ -2447,12 +2452,24 @@ mod tests {
             function!(q, 2, mink!(4))
         );
         let html = scoped(&value, &options());
-        assert!(html.starts_with("<mrow><mo>(</mo>"), "{html}");
+        assert!(html.starts_with("<mrow><msub>"), "{html}");
+        assert!(!html.contains("<mo>(</mo>"), "{html}");
         assert!(!html.contains('□'), "{html}");
-        assert_eq!(
-            render(value.as_view(), &options(), &state, &|_, _| None),
-            Some(html)
-        );
+        for (in_product, in_sum, in_exp_base) in [
+            (false, false, false),
+            (true, false, false),
+            (false, true, false),
+            (false, false, true),
+        ] {
+            let mut state = PrintState::new();
+            state.in_product = in_product;
+            state.in_sum = in_sum;
+            state.in_exp_base = in_exp_base;
+            assert_eq!(
+                render(value.as_view(), &options(), &state, &|_, _| None).as_deref(),
+                Some(html.as_str())
+            );
+        }
     }
 
     #[test]

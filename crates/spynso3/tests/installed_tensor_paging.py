@@ -1000,6 +1000,47 @@ class BrowserPagingTests(PagingAssertions):
 
 
 class TensorNotationTests(PagingAssertions):
+    def test_dot_products_omit_redundant_fences_in_static_and_paged_mathml(self):
+        rep = Representation.mink(4)
+        p, q, r = [
+            TensorName.vector(f"paging_dot_fences::{name}")(rep)
+            for name in ("p", "q", "r")
+        ]
+        left, right = dot(p, q), dot(p, r)
+        for name, value, dots, fences in (
+            ("dot", left, 1, 0),
+            ("coefficient", 2 * left, 1, 0),
+            ("sum", left + right, 2, 0),
+            ("product", left * right, 2, 0),
+            ("power", left**2, 1, 0),
+            ("sum factor", (left + 1) * right, 2, 1),
+        ):
+            with self.subTest(case=name):
+                original = self.tensorState(value)
+                html = value.to_html()
+                roots = self.notationRoots(value)
+                roots.append(
+                    ET.fromstring(
+                        re.search(r"<math\b.*?</math>", html, re.DOTALL).group()
+                    )
+                )
+                for root in roots:
+                    text = self.visible(root).replace("⋅", "·")
+                    self.assertEqual(text.count("·"), dots, text)
+                    self.assertEqual(text.count("("), fences, text)
+                    self.assertEqual(text.count(")"), fences, text)
+                self.assertEqual(self.tensorState(value), original)
+        viewer = (left * right).paged(page_size=1)
+        self.addCleanup(viewer.close)
+        page = viewer.page()
+        field, preview = viewer.handle_message(
+            {"action": "preview", "value": page["markers"][-1][0]}
+        )
+        self.assertEqual(field, "preview")
+        text = self.visible(self.assertPage(preview)[0]).replace("⋅", "·")
+        self.assertEqual(text.count("·"), 1, text)
+        self.assertNotIn("(", text)
+
     @staticmethod
     def notationCases():
         mink, spin = Representation.mink(4), Representation.bis(4)
@@ -1295,7 +1336,7 @@ class TensorNotationTests(PagingAssertions):
                 n for n in self.visibleNodes(root) if n.tag.rsplit("}", 1)[-1] == "msup"
             ]
             self.assertEqual(len(powers), 1)
-            self.assertIn(self.visible(powers[0][0]), ("(p·q)", "(p⋅q)"))
+            self.assertIn(self.visible(powers[0][0]), ("p·q", "p⋅q"))
             self.assertEqual(self.visible(powers[0][1]), "2")
         gamma = TensorExpression.dirac_gamma(4)
         # Factor gaps apply inside semantic chains. Arithmetic between distinct
