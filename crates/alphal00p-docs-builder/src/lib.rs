@@ -1,5 +1,6 @@
 //! Build and validate the six independently rendered product manuals.
 
+mod generated_evidence;
 #[cfg(feature = "watch")]
 mod server;
 mod typst_render;
@@ -29,6 +30,7 @@ use alphal00p_docs_schema::{
 use chrono::{NaiveDate, Utc};
 use clap::ValueEnum;
 use eyre::{Context, ContextCompat, Result, bail, ensure};
+use generated_evidence::{GeneratedEvidenceRegistry, RepositorySources};
 use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -646,6 +648,7 @@ pub struct SiteBuilder {
     talks: TalksConfig,
     developers: DeveloperConfig,
     legacy_prose: LegacyProseConfig,
+    generated_evidence: GeneratedEvidenceRegistry,
     publications: PublicationCache,
 }
 
@@ -695,6 +698,11 @@ impl SiteBuilder {
             .wrap_err_with(|| format!("failed to read {}", legacy_prose_path.display()))?;
         let legacy_prose = toml::from_str(&source)
             .wrap_err_with(|| format!("failed to parse {}", legacy_prose_path.display()))?;
+        let generated_evidence_path = root.join("docs/generated-rendered-evidence.toml");
+        let source = fs::read_to_string(&generated_evidence_path)
+            .wrap_err_with(|| format!("failed to read {}", generated_evidence_path.display()))?;
+        let generated_evidence = toml::from_str(&source)
+            .wrap_err_with(|| format!("failed to parse {}", generated_evidence_path.display()))?;
         let publications_path = root.join("docs/data/publications.json");
         let publications = serde_json::from_slice(
             &fs::read(&publications_path)
@@ -715,6 +723,7 @@ impl SiteBuilder {
             talks,
             developers,
             legacy_prose,
+            generated_evidence,
             publications,
         })
     }
@@ -1662,6 +1671,16 @@ impl SiteBuilder {
     }
 
     fn check_prose_sources(&self) -> Result<()> {
+        let canonical_sources = self
+            .developers
+            .section
+            .iter()
+            .flat_map(|section| &section.note)
+            .map(|note| note.source.clone())
+            .collect();
+        let generated_evidence = self
+            .generated_evidence
+            .validate(&self.root, &canonical_sources)?;
         ensure!(
             self.legacy_prose.schema == LEGACY_PROSE_SCHEMA_VERSION,
             "legacy prose schema {} does not match checker schema {}",
@@ -1715,20 +1734,25 @@ impl SiteBuilder {
         );
 
         let mut actual = BTreeSet::new();
+        let repository_sources = RepositorySources::discover(&self.root)?;
         for entry in WalkDir::new(&self.root).into_iter().filter_entry(|entry| {
-            let top_level = entry
+            let relative = entry
                 .path()
                 .strip_prefix(&self.root)
-                .is_ok_and(|path| path.components().count() == 1);
+                .unwrap_or(entry.path());
+            let vcs_metadata = matches!(
+                relative.components().next(),
+                Some(Component::Normal(name)) if name == ".git" || name == ".jj"
+            );
             !entry.file_type().is_dir()
-                || !top_level
-                || !matches!(
-                    entry.file_name().to_str(),
-                    Some(".git" | ".jj" | ".direnv" | ".venv" | "node_modules" | "target" | "dist")
-                )
+                || (!vcs_metadata && repository_sources.may_contain(relative))
         }) {
             let entry = entry?;
             if !entry.file_type().is_file() && !entry.file_type().is_symlink() {
+                continue;
+            }
+            let source = entry.path().strip_prefix(&self.root)?.to_path_buf();
+            if !repository_sources.contains(&source) {
                 continue;
             }
             let file_name = entry.file_name().to_string_lossy();
@@ -1771,7 +1795,6 @@ impl SiteBuilder {
             ) {
                 continue;
             }
-            let source = entry.path().strip_prefix(&self.root)?.to_path_buf();
             let mut typst = source.clone();
             typst.set_extension("typ");
             ensure!(
@@ -1794,6 +1817,9 @@ impl SiteBuilder {
                         | "examples/layout/impred/playground.html"
                 )
             ) {
+                continue;
+            }
+            if generated_evidence.contains(&source) {
                 continue;
             }
             if !matches!(
@@ -5362,7 +5388,7 @@ fn rewrite_developer_source_links(
         .into_owned())
 }
 
-fn normalize_repository_path(path: &Path) -> Option<PathBuf> {
+pub(crate) fn normalize_repository_path(path: &Path) -> Option<PathBuf> {
     let mut normalized = PathBuf::new();
     for component in path.components() {
         match component {
@@ -9737,6 +9763,16 @@ fn resolve_local_link(
 mod tests {
     use super::*;
 
+    fn first_scope_bearing_developer_scope(builder: &mut SiteBuilder) -> &mut DeveloperScope {
+        builder
+            .developers
+            .section
+            .iter_mut()
+            .flat_map(|section| &mut section.note)
+            .find_map(|note| note.scope.first_mut())
+            .expect("checked-in registry has a scope-bearing developer note")
+    }
+
     fn write_test_portal(
         builder: &SiteBuilder,
         output: &Path,
@@ -10516,6 +10552,7 @@ mod tests {
             schema: LEGACY_PROSE_SCHEMA_VERSION,
             source: Vec::new(),
         };
+        builder.generated_evidence = GeneratedEvidenceRegistry::empty_for_tests();
         assert!(builder.check_prose_sources().is_err());
 
         builder.legacy_prose.source.push("new-note.md".into());
@@ -10546,6 +10583,7 @@ mod tests {
             schema: LEGACY_PROSE_SCHEMA_VERSION,
             source: Vec::new(),
         };
+        builder.generated_evidence = GeneratedEvidenceRegistry::empty_for_tests();
         builder.check_prose_sources().unwrap();
 
         for source in [
@@ -10592,6 +10630,7 @@ mod tests {
             schema: LEGACY_PROSE_SCHEMA_VERSION,
             source: Vec::new(),
         };
+        builder.generated_evidence = GeneratedEvidenceRegistry::empty_for_tests();
         assert!(builder.check_prose_sources().is_ok());
         // On a case-insensitive filesystem, writing readme.md over README.md
         // preserves the original directory entry's allowed spelling.
@@ -10620,6 +10659,152 @@ mod tests {
         fs::write(temporary.path().join("README.md"), "Compatibility readme").unwrap();
         fs::write(temporary.path().join("README.typ"), "= Duplicate readme").unwrap();
         assert!(builder.check_prose_sources().is_err());
+    }
+
+    #[test]
+    fn prose_source_gate_uses_repository_membership_before_typst_spelling_checks() {
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path();
+        assert!(
+            Command::new("git")
+                .arg("init")
+                .current_dir(root)
+                .status()
+                .unwrap()
+                .success()
+        );
+        fs::write(root.join(".gitignore"), ".local/\ntarget/\n").unwrap();
+        fs::create_dir(root.join(".local")).unwrap();
+        fs::write(root.join(".local/README.typ"), "ignored").unwrap();
+        fs::write(root.join(".local/draft.TYP"), "ignored").unwrap();
+        let mut builder = SiteBuilder::discover().unwrap();
+        builder.root = root.to_path_buf();
+        builder.legacy_prose = LegacyProseConfig {
+            schema: LEGACY_PROSE_SCHEMA_VERSION,
+            source: Vec::new(),
+        };
+        builder.generated_evidence = GeneratedEvidenceRegistry::empty_for_tests();
+        builder.check_prose_sources().unwrap();
+
+        assert!(
+            Command::new("git")
+                .args(["add", "-f", ".local/README.typ"])
+                .current_dir(root)
+                .status()
+                .unwrap()
+                .success()
+        );
+        assert!(builder.check_prose_sources().is_err());
+    }
+
+    #[test]
+    fn prose_source_gate_checks_tracked_and_metadata_free_output_directories() {
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path();
+        assert!(
+            Command::new("git")
+                .arg("init")
+                .current_dir(root)
+                .status()
+                .unwrap()
+                .success()
+        );
+        fs::write(
+            root.join(".gitignore"),
+            "target/\ndist/\nnode_modules/\n.venv/\n.direnv/\n",
+        )
+        .unwrap();
+        for directory in ["target", "dist", "node_modules", ".venv", ".direnv"] {
+            fs::create_dir(root.join(directory)).unwrap();
+            fs::write(root.join(directory).join("unauthorized.html"), "prose").unwrap();
+            assert!(
+                Command::new("git")
+                    .args(["add", "-f"])
+                    .arg(format!("{directory}/unauthorized.html"))
+                    .current_dir(root)
+                    .status()
+                    .unwrap()
+                    .success()
+            );
+        }
+        let mut builder = SiteBuilder::discover().unwrap();
+        builder.root = root.to_path_buf();
+        builder.legacy_prose = LegacyProseConfig {
+            schema: LEGACY_PROSE_SCHEMA_VERSION,
+            source: Vec::new(),
+        };
+        builder.generated_evidence = GeneratedEvidenceRegistry::empty_for_tests();
+        assert!(builder.check_prose_sources().is_err());
+
+        let archive = tempfile::tempdir().unwrap();
+        fs::create_dir(archive.path().join("target")).unwrap();
+        fs::write(archive.path().join("target/unauthorized.html"), "prose").unwrap();
+        builder.root = archive.path().to_path_buf();
+        assert!(builder.check_prose_sources().is_err());
+    }
+
+    #[test]
+    fn prose_source_gate_does_not_mutate_dirty_jj_state() {
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path();
+        let init = Command::new("jj")
+            .args(["git", "init", "--no-colocate", "."])
+            .current_dir(root)
+            .output()
+            .unwrap();
+        assert!(init.status.success(), "{init:?}");
+        let configure = Command::new("jj")
+            .args(["config", "set", "--repo", "snapshot.auto-track", "none()"])
+            .current_dir(root)
+            .output()
+            .unwrap();
+        assert!(configure.status.success(), "{configure:?}");
+        let bookmark = Command::new("jj")
+            .args(["bookmark", "create", "frozen", "-r", "@"])
+            .current_dir(root)
+            .output()
+            .unwrap();
+        assert!(bookmark.status.success(), "{bookmark:?}");
+        fs::write(root.join("accepted.typ"), "= Accepted").unwrap();
+        let before = jj_test_state(root);
+        let mut builder = SiteBuilder::discover().unwrap();
+        builder.root = root.to_path_buf();
+        builder.legacy_prose = LegacyProseConfig {
+            schema: LEGACY_PROSE_SCHEMA_VERSION,
+            source: Vec::new(),
+        };
+        builder.generated_evidence = GeneratedEvidenceRegistry::empty_for_tests();
+        builder.check_prose_sources().unwrap();
+        assert_eq!(jj_test_state(root), before);
+
+        fs::write(root.join("rejected.html"), "rejected").unwrap();
+        assert!(builder.check_prose_sources().is_err());
+        assert_eq!(jj_test_state(root), before);
+    }
+
+    fn jj_test_state(root: &Path) -> (Vec<u8>, Vec<u8>, Vec<u8>) {
+        let run = |arguments: &[&str]| {
+            let output = Command::new("jj")
+                .args(arguments)
+                .current_dir(root)
+                .output()
+                .unwrap();
+            assert!(output.status.success(), "{output:?}");
+            output.stdout
+        };
+        (
+            run(&[
+                "--ignore-working-copy",
+                "log",
+                "-r",
+                "@",
+                "--no-graph",
+                "-T",
+                "commit_id",
+            ]),
+            run(&["--ignore-working-copy", "op", "log", "-n", "1"]),
+            run(&["--ignore-working-copy", "bookmark", "list"]),
+        )
     }
 
     #[test]
@@ -12512,8 +12697,9 @@ mod tests {
         let mut builder = SiteBuilder::discover().unwrap();
         let directory = tempfile::tempdir_in(builder.root.join("target")).unwrap();
         let path = directory.path().join("scope.rs");
-        let scope = &mut builder.developers.section[0].note[0].scope[0];
-        scope.path = path.strip_prefix(&builder.root).unwrap().to_path_buf();
+        let relative_path = path.strip_prefix(&builder.root).unwrap().to_path_buf();
+        let scope = first_scope_bearing_developer_scope(&mut builder);
+        scope.path = relative_path;
         scope.anchor = "review-start\n".to_owned();
         scope.end_anchor = Some("review-end\n".to_owned());
         scope.digest = "42446349c33c38def204961159a7530e81db9dbc".to_owned();
@@ -12553,8 +12739,9 @@ mod tests {
         let mut builder = SiteBuilder::discover().unwrap();
         let directory = tempfile::tempdir_in(builder.root.join("target")).unwrap();
         let path = directory.path().join("scope.rs");
-        let scope = &mut builder.developers.section[0].note[0].scope[0];
-        scope.path = path.strip_prefix(&builder.root).unwrap().to_path_buf();
+        let relative_path = path.strip_prefix(&builder.root).unwrap().to_path_buf();
+        let scope = first_scope_bearing_developer_scope(&mut builder);
+        scope.path = relative_path;
         scope.anchor = "review-start".to_owned();
         scope.end_anchor = Some("review-end".to_owned());
         builder.watching = true;
@@ -12580,9 +12767,23 @@ mod tests {
             assert!(format!("{error:#}").contains(diagnostic), "{error:#}");
         }
         fs::write(&path, "review-start\nreview-end").unwrap();
-        builder.developers.section[0].note[0].scope[0].end_anchor = Some(String::new());
+        first_scope_bearing_developer_scope(&mut builder).end_anchor = Some(String::new());
         let error = builder.check().unwrap_err();
         assert!(format!("{error:#}").contains("end anchor is missing or ambiguous"));
+    }
+
+    #[test]
+    fn investigation_notes_may_deliberately_have_no_verified_scope() {
+        let builder = SiteBuilder::discover().unwrap();
+        let note = builder
+            .developers
+            .section
+            .iter()
+            .flat_map(|section| &section.note)
+            .find(|note| note.id == "generation-color-cycles")
+            .expect("generation color cycles note is registered");
+        assert_eq!(note.lifecycle, "investigation");
+        assert!(note.scope.is_empty());
     }
 
     #[test]

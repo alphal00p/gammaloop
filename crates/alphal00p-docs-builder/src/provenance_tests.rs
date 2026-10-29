@@ -1,6 +1,6 @@
 use std::{env, fs, process::Command};
 
-use super::SiteBuilder;
+use super::{GeneratedEvidenceRegistry, SiteBuilder};
 
 #[test]
 fn provenance_uses_the_documented_checkout_and_explicit_overrides() {
@@ -213,12 +213,23 @@ fn each_build_captures_one_revision_before_rendering() {
         for entry in fs::read_dir(checkout.root).unwrap() {
             let entry = entry.unwrap();
             if !matches!(entry.file_name().to_str(), Some(".git" | ".jj" | "target")) {
-                symlink(entry.path(), root.join(entry.file_name())).unwrap();
+                if entry.file_name() == ".gitignore" {
+                    fs::copy(entry.path(), root.join(entry.file_name())).unwrap();
+                } else {
+                    symlink(entry.path(), root.join(entry.file_name())).unwrap();
+                }
             }
         }
         fs::create_dir(root.join(".jj")).unwrap();
         let bin = temporary.path().join("bin");
         fs::create_dir(&bin).unwrap();
+        let git_backend = temporary.path().join("git-backend");
+        let initialized = Command::new("git")
+            .args(["init", "--bare"])
+            .arg(&git_backend)
+            .output()
+            .unwrap();
+        assert!(initialized.status.success(), "{initialized:?}");
         let shell = Command::new("sh")
             .args(["-c", "command -v sh"])
             .output()
@@ -231,6 +242,8 @@ fn each_build_captures_one_revision_before_rendering() {
             format!(
                 r#"#!{}
 case "$*" in
+    *"file list"*) ;;
+    *"git root"*) printf '%s' '{}' ;;
     *committer.timestamp*)
         case "$*" in
             *1111111111111111111111111111111111111111*) printf 123 ;;
@@ -246,7 +259,8 @@ case "$*" in
         fi ;;
 esac
 "#,
-                shell.trim()
+                shell.trim(),
+                git_backend.display()
             ),
         )
         .unwrap();
@@ -277,6 +291,7 @@ esac
 
     let mut builder = SiteBuilder::discover().unwrap();
     builder.root = root.into();
+    builder.generated_evidence = GeneratedEvidenceRegistry::empty_for_tests();
     for (commit, timestamp) in [
         ("1111111111111111111111111111111111111111", 123),
         ("2222222222222222222222222222222222222222", 456),

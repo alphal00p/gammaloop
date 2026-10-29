@@ -588,6 +588,7 @@
     ];
     # Unit and integration tests embed these graph fixtures and snapshots with include_str!.
     "gammaloop-api" = [
+      "benchmarks/performance/gg-hhh-topology.toml"
       "tests/resources/graphs"
       "examples/cli/epem_a_ttxh/NNLO/graphs/GL638.dot"
     ];

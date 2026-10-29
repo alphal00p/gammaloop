@@ -1,0 +1,157 @@
+schema = 1
+
+# These are immutable rendered review artifacts, not editable documentation sources.
+# Historical source hashes intentionally describe the retained render inputs rather
+# than today's canonical Typst bytes.
+
+[[artifact]]
+path = "docs/architecture/evidence/generation-integration/mark-geometry/generation-drawing-notices-html/index.html"
+sha256 = "36afa697b9acc1f99643309a0999b38f705d1454047c97fccfabecd38e5388ea"
+format = "wrapped-html"
+role = "historical-render-proof"
+source = "docs/architecture/generation-drawing-notices.typ"
+source_sha256 = "cfb2704f29c536bfb021bb0c64122e9b55fd5430a735d616ed78c2a7f8291847"
+artifact_owner = "docs/architecture/evidence/generation-integration/mark-geometry/receipt.json"
+artifact_owner_sha256 = "cd75b3f0d3cda6977856d186bb758a3ca80c8900a467a9582e812815be3b458f"
+artifact_binding = { kind = "receipt-evidence-sha256", key = "generation-drawing-notices-html/index.html" }
+source_owner = "docs/architecture/evidence/generation-integration/mark-geometry/receipt.json"
+source_owner_sha256 = "cd75b3f0d3cda6977856d186bb758a3ca80c8900a467a9582e812815be3b458f"
+source_binding = { kind = "implementation-file", index = 15 }
+producer_binding = "source-mapping-code-commit"
+producer_revision = "69d730c1276a9ec4e4b65b4a4f41cf3578668fd1"
+tool_owner = "docs/architecture/evidence/generation-integration/mark-geometry/typst-version.log"
+tool_owner_sha256 = "20ad20e86d85d168643624dc3e3388e7cbcc5a8384d17835db3a0ab04c496fba"
+tool = "typst 0.15.1 (9dfd3a08)"
+
+[[artifact]]
+path = "docs/architecture/evidence/generation-integration/mark-geometry/generation-drawing-ports-html/index.html"
+sha256 = "70c42af6271d4be82c9ac19a988ebfeb9eebae5e85b57e83e2706584c59ca9df"
+format = "wrapped-html"
+role = "historical-render-proof"
+source = "docs/architecture/generation-drawing-ports.typ"
+source_sha256 = "22fa09e4541953dfaa84c7b7964b72ebc0d92a9134f33aa00b2bf0eb4ea488cf"
+artifact_owner = "docs/architecture/evidence/generation-integration/mark-geometry/receipt.json"
+artifact_owner_sha256 = "cd75b3f0d3cda6977856d186bb758a3ca80c8900a467a9582e812815be3b458f"
+artifact_binding = { kind = "receipt-evidence-sha256", key = "generation-drawing-ports-html/index.html" }
+source_owner = "docs/architecture/evidence/generation-integration/mark-geometry/receipt.json"
+source_owner_sha256 = "cd75b3f0d3cda6977856d186bb758a3ca80c8900a467a9582e812815be3b458f"
+source_binding = { kind = "implementation-file", index = 16 }
+producer_binding = "source-mapping-code-commit"
+producer_revision = "69d730c1276a9ec4e4b65b4a4f41cf3578668fd1"
+tool_owner = "docs/architecture/evidence/generation-integration/mark-geometry/typst-version.log"
+tool_owner_sha256 = "20ad20e86d85d168643624dc3e3388e7cbcc5a8384d17835db3a0ab04c496fba"
+tool = "typst 0.15.1 (9dfd3a08)"
+
+[[artifact]]
+path = "docs/architecture/evidence/generation-integration/mark-geometry/generation-mark-geometry-html/index.html"
+sha256 = "8479036d3b29782abba47b9874ee8509d0ba5d9e5fcb0b489e6c1661b637275f"
+format = "wrapped-html"
+role = "historical-render-proof"
+source = "docs/architecture/generation-mark-geometry.typ"
+source_sha256 = "88142989c7e3604f77a9d1d530d04fa8673a9000fef60cebf1ed6a4a32f7dd99"
+artifact_owner = "docs/architecture/evidence/generation-integration/mark-geometry/receipt.json"
+artifact_owner_sha256 = "cd75b3f0d3cda6977856d186bb758a3ca80c8900a467a9582e812815be3b458f"
+artifact_binding = { kind = "receipt-evidence-sha256", key = "generation-mark-geometry-html/index.html" }
+source_owner = "docs/architecture/evidence/generation-integration/mark-geometry/receipt.json"
+source_owner_sha256 = "cd75b3f0d3cda6977856d186bb758a3ca80c8900a467a9582e812815be3b458f"
+source_binding = { kind = "implementation-file", index = 17 }
+producer_binding = "source-mapping-code-commit"
+producer_revision = "69d730c1276a9ec4e4b65b4a4f41cf3578668fd1"
+tool_owner = "docs/architecture/evidence/generation-integration/mark-geometry/typst-version.log"
+tool_owner_sha256 = "20ad20e86d85d168643624dc3e3388e7cbcc5a8384d17835db3a0ab04c496fba"
+tool = "typst 0.15.1 (9dfd3a08)"
+
+[[artifact]]
+path = "docs/architecture/evidence/generation-integration/mark-geometry/kurvst-arrowhead-engine-html/index.html"
+sha256 = "6caebc21754293a4bac0cf20c625c5c1f62db90bf4ab4e78cd89207fdba72eb1"
+format = "wrapped-html"
+role = "historical-render-proof"
+source = "docs/architecture/kurvst-arrowhead-engine.typ"
+source_sha256 = "0cdbe48a8533f5e42c369677a14b8536c40d2c7bef1ad9e727fe45d39b5b13d6"
+artifact_owner = "docs/architecture/evidence/generation-integration/mark-geometry/receipt.json"
+artifact_owner_sha256 = "cd75b3f0d3cda6977856d186bb758a3ca80c8900a467a9582e812815be3b458f"
+artifact_binding = { kind = "receipt-evidence-sha256", key = "kurvst-arrowhead-engine-html/index.html" }
+source_owner = "docs/architecture/evidence/generation-integration/mark-geometry/receipt.json"
+source_owner_sha256 = "cd75b3f0d3cda6977856d186bb758a3ca80c8900a467a9582e812815be3b458f"
+source_binding = { kind = "implementation-file", index = 18 }
+producer_binding = "source-mapping-code-commit"
+producer_revision = "69d730c1276a9ec4e4b65b4a4f41cf3578668fd1"
+tool_owner = "docs/architecture/evidence/generation-integration/mark-geometry/typst-version.log"
+tool_owner_sha256 = "20ad20e86d85d168643624dc3e3388e7cbcc5a8384d17835db3a0ab04c496fba"
+tool = "typst 0.15.1 (9dfd3a08)"
+
+[[artifact]]
+path = "docs/architecture/evidence/generation-integration/mark-geometry/nix-crane-cache-reuse-html/index.html"
+sha256 = "aa2ea90cbd1cba018361276c94346a5dbf452c06adba8bf30c274610230383c3"
+format = "wrapped-html"
+role = "historical-render-proof"
+source = "docs/architecture/nix-crane-cache-reuse.typ"
+source_sha256 = "834c82e32f932131029abc2e8d080b0d1179aa036191a872879796f5718ba95e"
+artifact_owner = "docs/architecture/evidence/generation-integration/mark-geometry/receipt.json"
+artifact_owner_sha256 = "cd75b3f0d3cda6977856d186bb758a3ca80c8900a467a9582e812815be3b458f"
+artifact_binding = { kind = "receipt-evidence-sha256", key = "nix-crane-cache-reuse-html/index.html" }
+source_owner = "docs/architecture/evidence/generation-integration/mark-geometry/receipt.json"
+source_owner_sha256 = "cd75b3f0d3cda6977856d186bb758a3ca80c8900a467a9582e812815be3b458f"
+source_binding = { kind = "implementation-file", index = 19 }
+producer_binding = "source-mapping-code-commit"
+producer_revision = "69d730c1276a9ec4e4b65b4a4f41cf3578668fd1"
+tool_owner = "docs/architecture/evidence/generation-integration/mark-geometry/typst-version.log"
+tool_owner_sha256 = "20ad20e86d85d168643624dc3e3388e7cbcc5a8384d17835db3a0ab04c496fba"
+tool = "typst 0.15.1 (9dfd3a08)"
+
+[[artifact]]
+path = "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/generation-mark-geometry-html/index.html"
+sha256 = "d0cc3b9484f57024068f0516cfb0a3df0562e496e82cf9aa016dac9d77cd21a7"
+format = "wrapped-html"
+role = "historical-render-proof"
+source = "docs/architecture/generation-mark-geometry.typ"
+source_sha256 = "111bb6f19b60c2b1c1fc77567d0d241c30c8179e9b75aad6a81a11a7c9f99675"
+artifact_owner = "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/receipt.json"
+artifact_owner_sha256 = "f009fe3018ca9242325b88f605792f20d8b23033792e22790ca065987f0926c1"
+artifact_binding = { kind = "receipt-evidence-sha256", key = "generation-mark-geometry-html/index.html" }
+source_owner = "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/receipt.json"
+source_owner_sha256 = "f009fe3018ca9242325b88f605792f20d8b23033792e22790ca065987f0926c1"
+source_binding = { kind = "implementation-file", index = 6 }
+producer_binding = "code-commit"
+producer_revision = "7940545709071a51d2dd1675ec2c6728ec034833"
+tool_owner = "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/typst-version.log"
+tool_owner_sha256 = "20ad20e86d85d168643624dc3e3388e7cbcc5a8384d17835db3a0ab04c496fba"
+tool = "typst 0.15.1 (9dfd3a08)"
+
+[[artifact]]
+path = "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/note-first-html/index.html"
+sha256 = "261002bcc3739e62edb90eb1762b77cae531d06e01867da9c8ab65a6c657ca43"
+format = "wrapped-html"
+role = "historical-render-proof"
+source = "docs/architecture/generation-mark-geometry.typ"
+source_sha256 = "fb7030d7c3c476167a11a8261ce41ce8d5f5d538667c297c8ff1f3d706ebf314"
+artifact_owner = "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/evidence-inventory.json"
+artifact_owner_sha256 = "9fdb4ef1d23ce389f348630b2881750407b0d2c6aa5797325bbc4e6593e23704"
+artifact_binding = { kind = "inventory-entry", index = 113 }
+source_owner = "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/receipt.json"
+source_owner_sha256 = "dff3d8752de2cbe61d5d7b8b7fec28e143f32754c6a9b1cd667ae4cff6132667"
+source_binding = { kind = "changed-code-file", index = 7 }
+producer_binding = "code"
+producer_revision = "f35643bae1a67fb6ec0c30151e3624f661cf5f96"
+tool_owner = "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/typst-version.log"
+tool_owner_sha256 = "20ad20e86d85d168643624dc3e3388e7cbcc5a8384d17835db3a0ab04c496fba"
+tool = "typst 0.15.1 (9dfd3a08)"
+
+[[artifact]]
+path = "docs/architecture/evidence/generation-integration/mark-geometry/round3-attribution/note-html/index.html"
+sha256 = "06fba8ec5ca274c0172c435d67f0a142fea9c0d69c0be537f18edb9017c995ec"
+format = "wrapped-html"
+role = "historical-render-proof"
+source = "docs/architecture/generation-mark-geometry.typ"
+source_sha256 = "d3feb0f14219d5518f69b49765c4b02faea2b492829206a40b3e7b668b82cd84"
+artifact_owner = "docs/architecture/evidence/generation-integration/mark-geometry/round3-attribution/inventory.json"
+artifact_owner_sha256 = "a35462b1a26584acb4dc1c284c9bb2fcdf812f3e57e6ca1e0c6635cc801816cc"
+artifact_binding = { kind = "inventory-entry", index = 7 }
+source_owner = "docs/architecture/evidence/generation-integration/mark-geometry/round3-attribution/receipt.json"
+source_owner_sha256 = "c699764df51cf842c666e7b04fb76f8dea008eae051ae340b2d5c5105b3849d2"
+source_binding = { kind = "render-binding" }
+producer_binding = "preserved-candidate"
+producer_revision = "7da9e92de733f544957f724ababeb87c7684c02e"
+tool_owner = "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/typst-version.log"
+tool_owner_sha256 = "20ad20e86d85d168643624dc3e3388e7cbcc5a8384d17835db3a0ab04c496fba"
+tool = "typst 0.15.1 (9dfd3a08)"

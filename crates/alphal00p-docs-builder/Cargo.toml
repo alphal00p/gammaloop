@@ -28,6 +28,7 @@ percent-encoding.workspace = true
 regex.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
+sha2 = "0.10"
 tempfile = "3.8"
 tiny_http = { workspace = true, optional = true }
 toml.workspace = true

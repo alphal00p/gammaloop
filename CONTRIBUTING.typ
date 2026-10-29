@@ -634,6 +634,12 @@ validation performed and any checks that could not be completed.
   of retaining both formats.
 - Build outputs may use a downstream-required format, but generated output is
   not a second source and must not be checked in as hand-maintained prose.
+  Retained rendered review evidence is classified separately in
+  `docs/generated-rendered-evidence.toml`; the documentation check accepts only
+  normalized evidence paths whose artifact, historical Typst source, owning
+  receipt or inventory, producer revision, role, format, and tool bindings all
+  validate. The historical source hash records the render input and does not
+  claim that today's canonical note reproduces an older render.
 - Architecture docs live in `docs/architecture/` and are classified by
   `docs/developers.toml`. New entries must point directly to `.typ` sources.
   Each source begins with exactly one `= Title`, matching its registry title;

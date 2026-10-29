@@ -28,6 +28,22 @@ topics = ["generation", "integration", "color", "testing"]
 review_triggers = ["crates/idenso/src/color/**", "nix/rust-workspace.nix", "docs/architecture/evidence/generation-integration/color-cycles/**"]
 
 [[section.note]]
+id = "generation-integration-source46"
+title = "Source46 adjoint colour-cycle integration"
+summary = "Historical MAIN46 integration record for the approved source46 adjoint colour-cycle implementation and its bounded validation evidence."
+source = "docs/architecture/generation-integration-source46.typ"
+kind = "Integration record"
+status = "Approved MAIN46 at 79dfeaab by final independent Opus round 4; source46 only, WP3 incomplete"
+lifecycle = "investigation"
+owner = "unassigned"
+reviewed_at = "2026-10-29"
+review_ref = "79dfeaab77958064bf802bc88db23eb86ac2f8ce"
+products = ["idenso", "gammaloop"]
+topics = ["generation", "integration", "color", "validation"]
+review_triggers = ["crates/idenso/src/color/**", "nix/rust-workspace.nix", "docs/architecture/evidence/generation-integration/wp3/main46/**"]
+evidence_revision = "79dfeaab77958064bf802bc88db23eb86ac2f8ce"
+
+[[section.note]]
 id = "generation-integration-core-test-inference"
 title = "Core test-inference integration"
 summary = "Reviewed BTreeSet inference annotations and fresh combined-head inference/BRST execution without production changes."
@@ -110,7 +126,7 @@ source = "docs/architecture/generation-sunset-certificate.typ"
 kind = "Correctness investigation"
 status = "Bounded certificate approved at 9ede0c12 for two-row expectation migration"
 lifecycle = "investigation"
-owner = "lucien-huber"
+owner = "unassigned"
 reviewed_at = "2026-10-29"
 review_ref = "9ede0c12fd0bd70458d10eeaaf636cb51c39543a"
 products = ["feynkit", "gammaloop"]
@@ -125,7 +141,7 @@ source = "docs/architecture/generation-sunset-migration.typ"
 kind = "Correctness investigation"
 status = "Approved migration · integrated in MAIN44–45 candidate"
 lifecycle = "investigation"
-owner = "lucien-huber"
+owner = "unassigned"
 reviewed_at = "2026-10-29"
 review_ref = "6d982cb76090a123bce1f3a5da3cbd3040184e98"
 products = ["feynkit", "gammaloop"]
@@ -287,7 +303,11 @@ path = "nix/rust-workspace.nix"
 symbol = "generation compile-time test source owners"
 anchor = "  workspacePackageExtraSourceRoots.compileTimeTest = {"
 end_anchor = "  workspacePackageExtraSourceRoots.runtimeTest = {"
-digest = "51720341de64b4bd1a32becfcb74389754dbbfef"
+# Core/API fixture integration attestation 2026-10-29: approved preparation
+# a33052fa adds only the existing gg-hhh topology card to gammaloop-api's
+# compile-time test source owner. The card and consumer bytes are unchanged;
+# the reviewed complete15-site include audit finds no other omitted input.
+digest = "9f26523be340699df1b29b8144f5aa1f7a1e1c7f"
 
 
 [[section.note.scope]]
@@ -2713,7 +2733,11 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # Source38 ownership attestation 2026-10-28: remove only replaced-geometry
 # Tiptoe source/payload inputs; existing producer/runtime boundaries and required
 # MIT, Clarabel and NetworkX notice source ownership are retained.
-digest = "6e72967b5a8ebf4da6830f9d90e64cb9fe42c684"
+# Core/API fixture integration attestation 2026-10-29: the sole range change
+# declares benchmarks/performance/gg-hhh-topology.toml as gammaloop-api
+# compile-time test input. Production/runtime partitions, Cargo target selection,
+# Nextest scheduling and all other package source owners remain unchanged.
+digest = "be1f856bd75cbdac5fcd3c511d3bb691462b44b7"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"
