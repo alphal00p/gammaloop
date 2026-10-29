@@ -1,0 +1,146 @@
+--- upstream/kurbo-0.13.1/src/stroke.rs
++++ local/kurbo-0.13.1/src/stroke.rs
+@@ -440,11 +440,35 @@
+         self.backward_path.truncate(0);
+     }
+ 
++    // A power-of-two rescaling retains direction bits without underflowing
++    // cross products or overflowing dot products of finite tangents.
++    fn scaled_tangent(tangent: Vec2) -> Vec2 {
++        let largest = tangent.x.abs().max(tangent.y.abs());
++        if largest == 0.0 {
++            return tangent;
++        }
++        let bits = largest.to_bits();
++        let exponent = (bits >> 52) & 0x7ff;
++        let scale = if exponent == 0 {
++            f64::from_bits(1_u64 << (63 - bits.leading_zeros()))
++        } else {
++            f64::from_bits(exponent << 52)
++        };
++        Vec2::new(tangent.x / scale, tangent.y / scale)
++    }
++
++    // Preserve the small turning angle when the two products nearly cancel.
++    fn tangent_cross(a: Vec2, b: Vec2) -> f64 {
++        let product = a.y * b.x;
++        a.x.mul_add(b.y, -product) - a.y.mul_add(b.x, -product)
++    }
++
+     fn do_join(&mut self, style: &Stroke, tan0: Vec2) {
+         // TODO: scale
+         let tolerance = 1e-3;
+-        let scale = 0.5 * style.width / tan0.hypot();
+-        let norm = scale * Vec2::new(-tan0.y, tan0.x);
++        let cd = Self::scaled_tangent(tan0);
++        let scale = 0.5 * style.width / cd.hypot();
++        let norm = scale * Vec2::new(-cd.y, cd.x);
+         let p0 = self.last_pt;
+         if self.forward_path.elements().is_empty() {
+             self.forward_path.move_to(p0 - norm);
+@@ -452,9 +476,8 @@
+             self.start_tan = tan0;
+             self.start_norm = norm;
+         } else {
+-            let ab = self.last_tan;
+-            let cd = tan0;
+-            let cross = ab.cross(cd);
++            let ab = Self::scaled_tangent(self.last_tan);
++            let cross = Self::tangent_cross(ab, cd);
+             let dot = ab.dot(cd);
+             let hypot = cross.hypot(dot);
+             // possible TODO: a minor speedup could be squaring both sides
+@@ -465,22 +488,30 @@
+                         self.backward_path.line_to(p0 + norm);
+                     }
+                     Join::Miter => {
+-                        if 2.0 * hypot < (hypot + dot) * style.miter_limit.powi(2) {
++                        // Rationalize 1 + cos(theta) near a half-turn. The
++                        // direct sum hypot + dot can round to zero even when
++                        // the finite miter is within the requested limit.
++                        let miter_ratio = if dot < 0.0 {
++                            (2.0 * hypot).sqrt() * (hypot - dot).sqrt() / cross.abs()
++                        } else {
++                            (2.0 * hypot / (hypot + dot)).sqrt()
++                        };
++                        if miter_ratio < style.miter_limit {
+                             // TODO: maybe better to store last_norm or derive from path?
+                             let last_scale = 0.5 * style.width / ab.hypot();
+                             let last_norm = last_scale * Vec2::new(-ab.y, ab.x);
+                             if cross > 0.0 {
+-                                let fp_last = p0 - last_norm;
+-                                let fp_this = p0 - norm;
+-                                let h = ab.cross(fp_this - fp_last) / cross;
+-                                let miter_pt = fp_this - cd * h;
++                                // Intersect offsets in the vertex's local
++                                // frame before translating: subtracting two
++                                // already translated points loses the offset
++                                // at large coordinates and deep notches.
++                                let h = Self::tangent_cross(ab, last_norm - norm) / cross;
++                                let miter_pt = p0 + (-norm - cd * h);
+                                 self.forward_path.line_to(miter_pt);
+                                 self.backward_path.line_to(p0);
+                             } else if cross < 0.0 {
+-                                let fp_last = p0 + last_norm;
+-                                let fp_this = p0 + norm;
+-                                let h = ab.cross(fp_this - fp_last) / cross;
+-                                let miter_pt = fp_this - cd * h;
++                                let h = Self::tangent_cross(ab, norm - last_norm) / cross;
++                                let miter_pt = p0 + (norm - cd * h);
+                                 self.backward_path.line_to(miter_pt);
+                                 self.forward_path.line_to(p0);
+                             }
+@@ -899,6 +930,53 @@
+         BezPath, Cap::Butt, CubicBez, Join::Miter, Line, PathEl, PathSeg, Shape, Stroke,
+         StrokeOpts, dash, segments, stroke,
+     };
++
++    #[test]
++    fn finite_near_half_turn_miters_survive_scaling_and_translation() {
++        for scale in [1e-6, 1.0, 1e6] {
++            for angle in [1e-4, 1e-8, 1e-10] {
++                let origin = 1e6 * scale;
++                let mut path = BezPath::new();
++                path.move_to((origin - scale, angle * scale));
++                path.line_to((origin, 0.0));
++                path.line_to((origin - scale, -angle * scale));
++                let pen = Stroke::new(scale)
++                    .with_join(Miter)
++                    .with_miter_limit(3.0 / angle);
++                let paint = stroke(
++                    path.elements().iter().copied(),
++                    &pen,
++                    &StrokeOpts::default(),
++                    1e-6,
++                );
++                // Intersect the two offset lines analytically for this
++                // symmetric V, using the actual represented edge length.
++                let dx = origin - (origin - scale);
++                let height = angle * scale;
++                let expected = origin + 0.5 * scale * dx.hypot(height) / height;
++                assert!((paint.bounding_box().x1 - expected).abs() < 1e-12 * expected.abs());
++                let clipped = stroke(
++                    path,
++                    &pen.with_miter_limit(2.0),
++                    &StrokeOpts::default(),
++                    1e-6,
++                );
++                assert!(clipped.bounding_box().x1 <= origin + scale);
++            }
++        }
++        let mut line = BezPath::new();
++        line.move_to((-1.0, 0.0));
++        line.line_to((0.0, 0.0));
++        line.line_to((-1.0, 0.0));
++        let paint = stroke(
++            line,
++            &Stroke::new(1.0).with_join(Miter),
++            &StrokeOpts::default(),
++            1e-6,
++        );
++        assert!(paint.is_finite());
++        assert!(paint.bounding_box().x1 <= 0.5);
++    }
+ 
+     // A degenerate stroke with a cusp at the endpoint.
+     #[test]

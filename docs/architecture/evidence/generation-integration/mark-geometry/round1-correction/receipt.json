@@ -1,0 +1,518 @@
+{
+  "schema": 1,
+  "date": "2026-10-28",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports",
+  "base_candidate": "cc7bc03ab97edade07532a586f5830f933451b07",
+  "original_code": "69d730c1276a9ec4e4b65b4a4f41cf3578668fd1",
+  "code_commit": "7940545709071a51d2dd1675ec2c6728ec034833",
+  "code_change": "ykzsopuvntuupmsquuxpvyptvzxukyxn",
+  "evidence_change": "nqkxzywxwmzpmssnwxmwsnozvpytmtkq",
+  "bookmark": "generation-mark-geometry",
+  "status": "Corrected source38 candidate; STOP for NEW independent Astra geometry and artifact-binding reviews before integration",
+  "preserved_refs": {
+    "generation-mark-geometry-round1": "cc7bc03ab97edade07532a586f5830f933451b07",
+    "generation-drawing-ports": "98cbf5b8f984e702f4699b1b176fbebfee059d3a"
+  },
+  "finding_responses": [
+    {
+      "finding": "A P2 polygon numerical failures mistaken for degeneracy",
+      "response": "Normalized polygon construction retains scale and nominal positive-area classification from parameters. Binary-power vector normalization and compensated determinants stabilize near-opposite edge turns. Half-angle identities avoid the angular cutoff; analytic linear edge contraction replaces fixed 64-step absolute bisection. Uniform grow-then-inset preserves nominal paint/contact invariants on accepted positive cases. Exact zero dimensions/100% notch retain the as-given exception. Truly nonrepresentable offset results raise an explicit error, never nominal success. No clamp, alternate mark or endless growth.",
+      "regressions": "Both original review mechanisms, closest float below inset1, 1e-200 and smallest-positive uniform size, thin positive triangle, tiny square/diamond; exact degeneracy/zero stroke and unrepresentable aspect controls."
+    },
+    {
+      "finding": "A P2 full-turn barb contact",
+      "response": "Enumerate multiples of pi inside the signed arc interval and derive all axis crossings. Full signed turns stop at the circle rear; open neighboring turns retain their gap/front crossing. Existing reversal span transforms both front/rear, and composites inherit actual contact. Public range/wire unchanged.",
+      "regressions": "Signed full turns, adjacent representable and degree-neighbor turns, zero/partial sweeps, reversal, line/curve and composite contacts in actual native and public Typst/WASM owners."
+    },
+    {
+      "finding": "A P3 PathSeg import",
+      "response": "PathSeg imported at test-module scope; both new type patterns use imported name. No behavior or expectation changed."
+    },
+    {
+      "finding": "Scope B approval",
+      "response": "Original source/notice/asset evidence remains frozen and approved for its old source. No notice, license expression, selector, package/sync ownership or legal conclusion changed. Corrected source and artifact bindings require fresh B review."
+    }
+  ],
+  "old_fail_new_pass": {
+    "before_any_new_build": "Retained native regression executable was hash-qualified and freshly reproduced 3 failures/1 passing control. Actual checkout old WASM hash qualified; public boundary query and expanded fixture reproduce failure before replacement.",
+    "old_native": {
+      "rlib": {
+        "retained": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-round1-producers/libkurvst.rlib",
+        "sha256": "c7adad438ff11600f98b33ddea5827c850ccfeed06cea6026aa5b2913b016454"
+      },
+      "probe": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/review-mark-geometry-a/probe",
+        "sha256": "56c37841fa7211dd03a3c9840c42d2978a0038a907289f33cfae646e6b655056",
+        "exit_code": 0
+      },
+      "regressions": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/review-mark-geometry-a/regressions",
+        "sha256": "84dc9ac13ac0850b329c82b399bf4b1e5ef50c3611ca76efa97b24854c22173f",
+        "exit_code": 101
+      },
+      "kurvst": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/kurvst/typst/kurvst.wasm",
+        "sha256": "4b640fe5a66ba07877fbd18e189b1d26e75aa5772e04a9d66a03922d94405055",
+        "immutable_copy": "/nix/store/2311zgm13mbrpnazihzd2v7x8p4303kc-linnest-wasm-0.1.0/kurvst.wasm"
+      },
+      "linnest": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/linnest/typst/linnest.wasm",
+        "sha256": "3dd9220e32902c906a8a50539d44ff20f7139427d6542442f1be6bba71bddc9f",
+        "immutable_copy": "/nix/store/2311zgm13mbrpnazihzd2v7x8p4303kc-linnest-wasm-0.1.0/linnest.wasm"
+      },
+      "typst_query_exit": 0
+    },
+    "new_native": {
+      "probe": {
+        "source_sha256": "a05b852ff2262b8426a97ea2d85df2e888eaa7c8d0ab3ba9d328b9afedc48789",
+        "executable_sha256": "0bd025c59889aaeefb6dbee95fb7598187c5a29b4bad031632a14245c4bdc517",
+        "command": [
+          "rustc",
+          "--edition=2024",
+          "-L",
+          "dependency=/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps",
+          "--extern",
+          "kurvst=/shared/lcnbr/dev/gammaloop/generation-drawing-ports/target/dev-optim/libkurvst.rlib",
+          "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/review-mark-geometry-a/probe.rs",
+          "-o",
+          "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/target/mark-geometry-corrected/new-probe"
+        ]
+      },
+      "new_regressions_exit": 0,
+      "regressions": {
+        "source_sha256": "f6e1a104cf9f88ac48633f6f3e6e04146becb0ee58b90601b7c32cf5fea69822",
+        "executable_sha256": "d89bef58f83883ea450a0d2de1f107f9b133ac3bb2f714e963e67647c806d555",
+        "command": [
+          "rustc",
+          "--test",
+          "--edition=2024",
+          "-L",
+          "dependency=/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps",
+          "--extern",
+          "kurvst=/shared/lcnbr/dev/gammaloop/generation-drawing-ports/target/dev-optim/libkurvst.rlib",
+          "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/review-mark-geometry-a/regressions.rs",
+          "-o",
+          "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/target/mark-geometry-corrected/new-regressions"
+        ]
+      },
+      "rlib": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/target/dev-optim/libkurvst.rlib",
+        "sha256": "4902bbc3bc690d113af78ffe3cfecfe1944fe280be548f317f5c847c75e58f07",
+        "cargo_artifact": {
+          "reason": "compiler-artifact",
+          "package_id": "path+file:///shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/kurvst#0.1.0",
+          "manifest_path": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/kurvst/Cargo.toml",
+          "target": {
+            "kind": [
+              "cdylib",
+              "rlib"
+            ],
+            "crate_types": [
+              "cdylib",
+              "rlib"
+            ],
+            "name": "kurvst",
+            "src_path": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/kurvst/src/lib.rs",
+            "edition": "2024",
+            "doc": true,
+            "doctest": true,
+            "test": true
+          },
+          "profile": {
+            "opt_level": "2",
+            "debuginfo": 2,
+            "debug_assertions": true,
+            "overflow_checks": true,
+            "test": false
+          },
+          "features": [],
+          "filenames": [
+            "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/target/dev-optim/libkurvst.so",
+            "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/target/dev-optim/libkurvst.rlib"
+          ],
+          "executable": null,
+          "fresh": true
+        }
+      }
+    },
+    "same_review_regression_source": "Exact source in frozen-review-producer-sources.json; freshly compiled/link-qualified corrected native owner passes4/4, without expectation edits.",
+    "public_wasm": "Old/new boundary JSONs and exact module hashes in provenance; expanded existing public fixture freshly passes with corrected selected module.",
+    "case_matrix": "old-new-cases.json",
+    "old_native_retention": "Original standalone probe/regressions and a pre-build c7adad43 rlib copy remain in .local/mark-geometry-round1-producers / original review directory. Round1 immutable package has a dedicated GC root. Mutable shared test-cache paths are not claimed frozen."
+  },
+  "fresh_validation": {
+    "geometry_native": "347 passed, 1 original tracked-fixture writer skipped; original344 assertions preserved and3 added tests exercise adversarial matrices.",
+    "clinnet": "46 passed,0 skipped; real constructors/current native/WASM parity and all public fixture controls.",
+    "runtime": "3 passed,0 skipped.",
+    "packaging": "5 passed; unchanged notice and payload regressions.",
+    "clippy_format": "Scoped clippy --all-targets --deny warnings with linnest/svg and workspace fmt pass; unchanged vendored Clarabel emits existing2 dependency lifetime warnings.",
+    "registry": "104 scopes/66 titles/16 canonical controls pass; whole-file marks scope updated only after code/contract review. Semantic source31 table headers unchanged.",
+    "curved_public_new_control": "Geometric9.5 chord retained at1e-8; new shaft/contact comparison derives1e-6 drawing-unit accuracy from unchanged PreparedCarrier/PathTrimmer arclength inversion. This calibrates a newly introduced assertion, not a relaxation of any original344/46/3 assertion; curve_api.rs unchanged.",
+    "stub_contract": "All23 protected lock/uv/NixCI/stub paths match original approved base; public names/options/wire/stub sources unchanged, no regeneration required."
+  },
+  "asset_validation": {
+    "existing_inventory": "asset-inventory.json",
+    "observed_existing_assets": 40,
+    "changed_existing_assets": [
+      "crates/kurvst/typst/docs/manual.pdf",
+      "crates/kurvst/typst/kurvst.wasm"
+    ],
+    "result": "All34 canonical SVGs independently regenerated and byte-reproduced; all34 remain unchanged vs round1. Manual PDF changed from updated arc contract and reproduces;3example PDFs and ordinary gallery SVG/PNG/PDF reproduce; exact observed deltas are in gallery-inventory.json. New boundary gallery two themes SVG/PNG/PDF reproduce.",
+    "visual": "Ordinary two-theme gallery and diagram inspected. New full-circle/signed/reversed/composite/curved contacts visible and consistent. Extreme thin/deep whole extents are below raster resolution; explicit display-only zoom/crops inspect the near-flat tip and are paired with strict numeric geometry bounds. No claim of exhaustive GPU precision qualification.",
+    "no_old_binaries_imported": "Canonical current producers regenerate; old host core never substituted.",
+    "ordinary_gallery_inventory": "gallery-inventory.json",
+    "ordinary_gallery_changed_outputs": [
+      "marks-light.svg",
+      "marks-light.pdf",
+      "marks-dark.svg",
+      "marks-dark.pdf"
+    ]
+  },
+  "selected_artifact_binding": {
+    "code_input_commit": "7940545709071a51d2dd1675ec2c6728ec034833",
+    "clean_flake": "git+file:///shared/lcnbr/dev/gammaloop/main?rev=7940545709071a51d2dd1675ec2c6728ec034833&shallow=1&allRefs=1",
+    "derivation": "/nix/store/l3djqdwd6mhl5vh7dnnz01j7mh7nb5r0-linnest-wasm-0.1.0.drv",
+    "source": "/nix/store/kbv4c7szmbjlmqha7spcwxlnmbkrybff-source",
+    "source_files_matching_versioned_commit": 1402,
+    "output": "/nix/store/mhfxkzmsxic59k0lfy3zq6qr23mky526-linnest-wasm-0.1.0",
+    "package": {
+      "/nix/store/mhfxkzmsxic59k0lfy3zq6qr23mky526-linnest-wasm-0.1.0": {
+        "ca": null,
+        "deriver": "/nix/store/l3djqdwd6mhl5vh7dnnz01j7mh7nb5r0-linnest-wasm-0.1.0.drv",
+        "narHash": "sha256-pW8UR4uWNXW/cYF418P3A6PwoZAYa4O4UQAvndBinz4=",
+        "narSize": 12592304,
+        "references": [],
+        "registrationTime": 1793215425,
+        "signatures": [],
+        "storeDir": "/nix/store",
+        "ultimate": true,
+        "version": 1
+      }
+    },
+    "wasm_sha256": {
+      "linnest": "3dd9220e32902c906a8a50539d44ff20f7139427d6542442f1be6bba71bddc9f",
+      "kurvst": "31f7fbb7da4520f7c200e5ae7ead5a462c20e1c1bea9c6c020458a6bad04e27d"
+    },
+    "delivered_files": 29,
+    "same_bytes_as_fresh_runtime_tested_output": true,
+    "clean_build_check_rebuild": "All exit0; complete clean final-producer output independently byte-reproduced. Exact dependency artifacts normally reused.",
+    "qualification": "Initial plain-path flake included2 ignored, noncompiled review Rust inputs. Chose commit-addressed clean flake using shallow=1/allRefs=1 instead, with no filter/ownership change. All1402 input paths/bytes match committed code; all29 clean payload bytes equal freshly tested canonical path payload. The unchanged bytes make duplicate runtime/render reruns unnecessary."
+  },
+  "limits": [
+    "NEW independent Astra A geometry and B affected artifact-binding reviews required; not integrated.",
+    "No cold-dependency/general AHash determinism or historical data/name mismatch resolution claimed.",
+    "No final repaired/compressed native/Pyodide/Community or restored standalone wheels; fixture wheels are packaging-only. WP11/13 final gates remain open.",
+    "No full-site/browser/physics/performance, source39+, callback or exact frame/weight changes. Prior a372 site qualification stays source-bound."
+  ],
+  "implementation_files": [
+    {
+      "status": "M",
+      "path": "crates/kurvst/src/marks.rs",
+      "sha256": "436a62c231b0bbf49fae9101eb0f89edd2bbad888df0c593fa126d1f9f5c3f49"
+    },
+    {
+      "status": "M",
+      "path": "crates/kurvst/typst/docs/manual.pdf",
+      "sha256": "4b9adf3fe97d6772b9d5fc2ef634c3bd6721e14185b0282b3a2f2f10154817eb"
+    },
+    {
+      "status": "M",
+      "path": "crates/kurvst/typst/docs/manual.typ",
+      "sha256": "8eaa4789741b08635964ba199056f92347339365d3362a3c7692e417ae35bbda"
+    },
+    {
+      "status": "A",
+      "path": "crates/kurvst/typst/examples/mark-boundaries.typ",
+      "sha256": "a851f3e42abdbb36263ee2a13db8b786a93658ff3848f16b57bccfefd1090676"
+    },
+    {
+      "status": "M",
+      "path": "crates/kurvst/typst/kurvst.wasm",
+      "sha256": "31f7fbb7da4520f7c200e5ae7ead5a462c20e1c1bea9c6c020458a6bad04e27d"
+    },
+    {
+      "status": "M",
+      "path": "crates/kurvst/typst/tests/mark-geometry.typ",
+      "sha256": "1600db9047307da2fad1eb2839eeae73c16f2b684d7585cac3d698815d833bff"
+    },
+    {
+      "status": "M",
+      "path": "docs/architecture/generation-mark-geometry.typ",
+      "sha256": "111bb6f19b60c2b1c1fc77567d0d241c30c8179e9b75aad6a81a11a7c9f99675"
+    },
+    {
+      "status": "M",
+      "path": "docs/developers.toml",
+      "sha256": "5b0211f5e31f40c5a38814cd24fdb491ae135ff7e93a80b4ea348f017bd6b191"
+    }
+  ],
+  "successful_final_exit_codes": {
+    "boundaries-light-pdf": 0,
+    "diagram-dark": 0,
+    "example-soft-triangle": 0,
+    "assets": 0,
+    "note-html-reproduction": 0,
+    "kernel": 0,
+    "new-public-fixture": 0,
+    "gallery-dark-pdf": 0,
+    "boundaries-light-png-reproduction": 0,
+    "html-kurvst-arrowhead-engine": 0,
+    "clean-build": 0,
+    "boundaries-dark-svg": 0,
+    "gallery-light-svg-reproduction": 0,
+    "example-xbox-sum-reproduction": 0,
+    "gallery-light-svg": 0,
+    "gallery-dark-svg-reproduction": 0,
+    "clean-check": 0,
+    "docs-generation-drawing-notices": 0,
+    "boundaries-light-svg": 0,
+    "gallery-light-png-reproduction": 0,
+    "diagram-light": 0,
+    "docs-generation-mark-geometry": 0,
+    "boundaries-dark-pdf-reproduction": 0,
+    "new-boundaries-wasm": 0,
+    "boundaries-light-svg-reproduction": 0,
+    "gallery-dark-png-reproduction": 0,
+    "gallery-dark-svg": 0,
+    "html-generation-mark-geometry": 0,
+    "boundaries-dark-pdf": 0,
+    "geometry-native": 0,
+    "registry": 0,
+    "gallery-light-pdf": 0,
+    "clinnet": 0,
+    "note-reproduction": 0,
+    "docs-kurvst-arrowhead-engine": 0,
+    "html-generation-drawing-notices": 0,
+    "wasm-check": 0,
+    "docs-generation-drawing-ports": 0,
+    "public-boundary-first": 0,
+    "boundaries-light-png": 0,
+    "manual-reproduction": 0,
+    "website-assets": 0,
+    "manual": 0,
+    "boundaries-light-pdf-reproduction": 0,
+    "html-generation-drawing-ports": 0,
+    "docs-nix-crane-cache-reuse": 0,
+    "boundaries-dark-svg-reproduction": 0,
+    "runtime": 0,
+    "gallery-dark-png": 0,
+    "example-soft-triangle-reproduction": 0,
+    "html-nix-crane-cache-reuse": 0,
+    "gallery-dark-pdf-reproduction": 0,
+    "example-thrown-out-reproduction": 0,
+    "clippy": 0,
+    "boundaries-dark-png": 0,
+    "packaging": 0,
+    "gallery-light-pdf-reproduction": 0,
+    "website-reproduction": 0,
+    "gallery-light-png": 0,
+    "boundaries-dark-png-reproduction": 0,
+    "wasm-reproduction": 0,
+    "clean-reproduction": 0,
+    "example-thrown-out": 0,
+    "example-xbox-sum": 0,
+    "format": 0,
+    "native-test-binaries": 0,
+    "native-probe": 0
+  },
+  "tooling_and_intermediate_qualification": [
+    "Initial standalone rustc dependency lookup used the convenience target path; corrected using normal Cargo/nextest reported build directory, without cache seeding/target override.",
+    "Additional closest-to1 probes exposed arbitrary-normalization rounding, fixed with binary scaling before final qualification; retained intermediate probe JSON is diagnostic only.",
+    "The new curved public assertion initially demanded1e-8 shaft inversion from a1e-6 owner; corrected to the existing documented accuracy without changing curve code or any prior assertion.",
+    "A first boundary figure filled the coverage compound through CeTZ incorrectly; final figure uses the existing per-path cap/join/miter paint contract and labeled display-only clipping, no geometric clamp.",
+    "Known bare-note bundle harness invocation was replaced with the canonical document wrapper. Clean Git flake required shallow=1 for this local shallow backing repository. No failed intermediate check is credited as final success."
+  ],
+  "retained": [
+    "All old candidate/code/asset/review revisions under durable refs; original A/B directories untouched",
+    "Old exact failing standalone producers/rlib and GC-rooted round1 WASM package; corrected copied native test/standalone producers and GC-rooted selected clean package",
+    "This receipt, exact source/artifact and file inventories/hashes, reproduced figures and canonical check harnesses; normal shared caches untouched"
+  ],
+  "cleanup": "Only consumed task-owned scratch/duplicate renders removed after evidence capture. No task-owned process retained. No push/PR/upload/publication or other-workspace edits.",
+  "environment": {
+    "author": "Lucien Huber <im@lcnbr.ch>",
+    "kernel": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3",
+    "nixci_enable": false,
+    "license": "Existing export preserved or silently loaded; no values printed/committed",
+    "cache": "Normal shared Cargo/Nix cache; no target override/manual seeding/deletion",
+    "concurrency": "Cargo2,nextest2,Rayon2,Nix cores2/max-jobs1"
+  },
+  "evidence_files": [
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/additional-scale-probes.json",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/asset-inventory.json",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/boundaries-dark.pdf",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/boundaries-dark.png",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/boundaries-dark.svg",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/boundaries-light.pdf",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/boundaries-light.png",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/boundaries-light.svg",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/cargo-version.log",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/check-docs.py",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/check-docs.sh",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/check-payload.sh",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/check-rust.sh",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/clean-build.log",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/clean-check.log",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/clean-derivation.json",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/clean-input-proof.json",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/clean-package.json",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/clean-producer.sh",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/clean-reproduction.log",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/clinnet-binaries.json",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/clinnet-binaries.log",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/clinnet.log",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/clippy.log",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/diagram-dark.png",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/diagram-light.png",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/environment.sh",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/example-soft-triangle.log",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/example-thrown-out.log",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/example-xbox-sum.log",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/final-artifacts.sh",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/format.log",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/frozen-review-producer-sources.json",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/generation-mark-geometry-html/index.html",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/generation-mark-geometry-wrapper.typ",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/generation-mark-geometry.pdf",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/geometry-native.log",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/html-generation-mark-geometry.log",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/kernel.log",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/manual.log",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/marks-dark.pdf",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/marks-dark.png",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/marks-dark.svg",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/marks-light.pdf",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/marks-light.png",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/marks-light.svg",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/native-build.log",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/native-probe.log",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/native-probe.py",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/native-test-binaries.json",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/native-test-binaries.log",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/new-boundaries-wasm.json",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/new-boundaries-wasm.log",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/new-native-binaries.json",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/new-native-identities.json",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/new-public-fixture.log",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/new-regressions.log",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/note-html-reproduction.log",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/old-boundaries-wasm.json",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/old-new-cases.json",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/old-producer-identities.json",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/old-public-fixture.log",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/old-regressions.log",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/packaging.log",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/provenance.json",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/provenance.py",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/registry.json",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/registry.log",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/render-assets.sh",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/render-boundaries.sh",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/render-html.sh",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/retained-corrected-store.log",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/retained-producers.json",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/retained-round1-store.log",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/review-a-verification.json",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/review-a.json",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/review-b.json",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/runtime.log",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/rustc-version.log",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/typst-version.log",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/website-assets.log",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/website-reproduction.log",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/receipt.json",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/gallery-inventory.json"
+  ],
+  "evidence_sha256": {
+    "additional-scale-probes.json": "e3af07f697de4818352ba198d71bd23abcf03889bcbde2e7185e487a0d16cb6f",
+    "asset-inventory.json": "b2f0c9f3cebe87ba305d60165ebd4fb78f42dd061ad5592e0c3195a4fb88a14a",
+    "boundaries-dark.pdf": "ddc98d70216726a5adfcda908b1afe287093f55c86e6926b888c24248f4b3425",
+    "boundaries-dark.png": "55c5eb42e1f75e48c70a5d3eee20ad7819f560fb892c97e872406f61622701e6",
+    "boundaries-dark.svg": "6ab5a424a1d6c8a59dbbb89dd185e90546b59b788465ca1e3e896e015f5122a1",
+    "boundaries-light.pdf": "12fa4f3914d9a46fc065f21d00064561e1a2906f0cc2f87cc529983ff3f9395f",
+    "boundaries-light.png": "df16b0fe0e2ad76fba63d88067add6aa164ac1db573970685ad783bc991171a8",
+    "boundaries-light.svg": "eca5f8dcdc3dbf5a4b025318878c6d0ff63a55e2c8aa331acc78171e27324f97",
+    "cargo-version.log": "9950bbb2d5c3417b1a068f0e81f6d3cac991a363193bdf2a22d447f5acf8b503",
+    "check-docs.py": "8500ed16bfb87f59e8ba6e30dcaa5418e490d159a854354655ce25a8a23fec34",
+    "check-docs.sh": "eb4f075119aa16eb758aff3b6c37cdace97226641aa9e085a65a94333a1cbf42",
+    "check-payload.sh": "e15fb29f0ec974a29f811d0c2bbbbcdac9654cdae6f6edc63295f82d3704d3eb",
+    "check-rust.sh": "e33e285357ed706df4b870739eb1df51893deee257468140dd2ee79ee6799b48",
+    "clean-build.log": "53c050bf7dfe79af8000a2afecc1e78163b2facdc75da49dbed1c9a0c6d695e2",
+    "clean-check.log": "736569f6deedc180fbdf63d9fc5c943dc9566c8d1b9598d23a3fd954a63ffd03",
+    "clean-derivation.json": "c2f122dc3f2c7692e8578f2a79e230299661f89308650f649a44c508eb41dd00",
+    "clean-input-proof.json": "ce4cf587d24702f79f3e503d7a44f331c22421754e114f3e92726453c2e92ec0",
+    "clean-package.json": "92a3bd04f767158276abd18432409908594746b72f51b3ee5d562f640467553e",
+    "clean-producer.sh": "0270d5efd5e389d8c89021e19de41904d02c6e0962793e5bf0f7a781e50c8e3c",
+    "clean-reproduction.log": "d53b3a03d89be88ff37f9303f6ccb8f5e85256f81d5d2a7cfe13936cfb6d2f72",
+    "clinnet-binaries.json": "125c37d5f4f87c8c9bfd93cd72a51939ec9bd59d5e5b57c2d5b294b5683a8408",
+    "clinnet-binaries.log": "901f84fbc65a48996ea296732f8fc9c48722b5e0fa454909371910c1b688131a",
+    "clinnet.log": "83f2e3c3efb59f07615d8acdbcd57f11147ca5978926f4932b95e1f94d440420",
+    "clippy.log": "7fe8e419e55e50a531566a8e53c471c697edb40f2002e339157be1bb6b4d5b47",
+    "diagram-dark.png": "c1303f9f480bb704b0c51561caacfa84d7470ba3da686270b4ed54bb27ce0384",
+    "diagram-light.png": "b1c5cc6e0b3cf5cb52f35aa58b4bcc0e8be320bd9fbf9446abdcb10f3d1a45c0",
+    "environment.sh": "5f21ad593d8ed6aebd6bf5337382361218a8518ab1f365ec92aa5268c33e8774",
+    "example-soft-triangle.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "example-thrown-out.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "example-xbox-sum.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "final-artifacts.sh": "5e329f73091d5e89036097aef607946892e9336daaf3e5b5b4557e17de0a36b9",
+    "format.log": "1dadf1b63f3fc19e19b1e9fb9a6c3f7772d8ba250861dcced4346f892ae2fca3",
+    "frozen-review-producer-sources.json": "eed47c7308b6360832c05834639d54082cc3f9b7565cb0feaafa0e32dca0166c",
+    "generation-mark-geometry-html/index.html": "d0cc3b9484f57024068f0516cfb0a3df0562e496e82cf9aa016dac9d77cd21a7",
+    "generation-mark-geometry-wrapper.typ": "04968950f00c842f0698d7f5b2d7634f2068462a4032a210e40cf9ce10217cb6",
+    "generation-mark-geometry.pdf": "fdb7c2acf8043f5db44e9f8b7d84039edc8f5efe7cb13952b337d477638d0a95",
+    "geometry-native.log": "549e629d70b25620e1572ce91447ff3d892e39c59b6c65f64c2fa752c8194a84",
+    "html-generation-mark-geometry.log": "f6291bee2aca5f6a6694512616225bc21e5352431485b391daf60be2898ee573",
+    "kernel.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "manual.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "marks-dark.pdf": "7154592804fd93de182e8f6ecc7522eeeaed4276e812f74f15b04cc43f566227",
+    "marks-dark.png": "b379dd37d59be5865286c6464954a9572ede2a420d26f4ded5c9395f6fcf798e",
+    "marks-dark.svg": "a92dc11bc522f113f95591825cd0b071d56ed62883982af76c5592943fb53e05",
+    "marks-light.pdf": "bf5f928d572b9f3eab4b8261b635223fd871c6c6b0f8d23bf4c8fd8d7b239add",
+    "marks-light.png": "9237790f72188a4430df7556f52d4de2284c7ce2bd1774e3ae91816c0c31ebdc",
+    "marks-light.svg": "524865e90c436f4bfbffd9432c060ad3ee43dd1439c2bc22b44ca9f15666bc37",
+    "native-build.log": "57465d4a7eaaf149dbad94f97cb04fe391a7feea7313a43ae41b4e45e27dfb46",
+    "native-probe.log": "6e530923e7c7be65ab43735b3b781d2b23e496353773ac33ab869cd3516a0171",
+    "native-probe.py": "bd3360a5139eca22f102cf3a4c4985903016c18dc58e7875577f84a0f46133ec",
+    "native-test-binaries.json": "546840a3bbf053af60395c6e7313ef2fa7641298c1013adae2757aaf7958a271",
+    "native-test-binaries.log": "b6ecf9f5c375ab185da802b0957e3aabf5e10c8ae8f9a653cfbddc5ea4d1065f",
+    "new-boundaries-wasm.json": "71bd0d072e7afb5ebd183a46f68d3e75a62f2cd875a17f181e628f8e47b92355",
+    "new-boundaries-wasm.log": "72ae6598a94fd6cec878a42daf3d0563ca5bb5b19b8f54b761995a2d46b1a7b9",
+    "new-native-binaries.json": "903d23a6e5333152605997ba3f3196bd846a60f901c785cd60d00eaf33c87c83",
+    "new-native-identities.json": "477738ce248b713f14a59a44a19fbe4a2b6268f59742a69f6e64e111b0f0517d",
+    "new-public-fixture.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "new-regressions.log": "c4dc70d39f775773353a544e28472c23398fa3f0ae59f694451de41b0fe053ec",
+    "note-html-reproduction.log": "f6291bee2aca5f6a6694512616225bc21e5352431485b391daf60be2898ee573",
+    "old-boundaries-wasm.json": "64e656b47fc9d674b84559c66df4f0de09ce2f10d8f5a95ba764c51ffa5c1fbf",
+    "old-new-cases.json": "4f75103b8ff52bc6cac127923c2cd2ddf8d3e438a0e6d4c3086b96cdc9e53689",
+    "old-producer-identities.json": "9a0278713ed1aec96d0b94453912bf6e9e6af6c4234df0cf981883ed2ee3c423",
+    "old-public-fixture.log": "4b02fcd016e803f2e069c0a8bb7867dd4de0479a20ab073dff7d465fea333f05",
+    "old-regressions.log": "6a8bdff2dad881bb22bf2fb003fc1ed56be0e619ce6b5d0d1ad6dfc855b6f785",
+    "packaging.log": "f56e710c65e418931ef28b6ec521cbe29f6281d46c483d809e8492f70acb36c3",
+    "provenance.json": "b4692c72866720a72cfb47a2414bc6a28e6befb83598118f737b0d31569bc827",
+    "provenance.py": "57a76e124475c198042e20da2d688462e292a591228d75289afdad9700d9be78",
+    "registry.json": "1c21e59d66e6864ab01613973ebc9e0ef877e9693ac99cd0b18dad828685b894",
+    "registry.log": "c6f881d15071828383d831ddb409082f891b68e6d7457f4fb125c8fb15f10cb7",
+    "render-assets.sh": "82535f9aa3c3e4806f5cd433ed0393ba1250e51483f7102c0be0d31d05668a27",
+    "render-boundaries.sh": "d0aabb85e9f4909c679fc5fd0d0e39952111bf0ba2d8c87d31a4a614644c8c32",
+    "render-html.sh": "30c705a01581fa4f3d904ae71e1cb3fa91ce73585b141b2ea46e48569a889ebe",
+    "retained-corrected-store.log": "1508753e616f72a370fb42408a46448b5181f011e809ba02263c52e05dde37e2",
+    "retained-producers.json": "2b4a6b07f8b4e84249a41dd42f370c9b8f7cf9e020375fec0abf2cb609d72203",
+    "retained-round1-store.log": "485b4efeabb342d157353f52b71bce06919db15712f4664220d8b31b6cc5d649",
+    "review-a-verification.json": "4da5cc4930008fc5090083481253fdb6f553db8a2735e7836c4c86cd4ca0bb7a",
+    "review-a.json": "be33e87a0a7d13b909649b6d19a71682645444af0eb76560d06c618ea500fac2",
+    "review-b.json": "3dde5a431d9c4c221576b3da38aaf0a1c48b091a38bad6ab467bf091904b6602",
+    "runtime.log": "04d471602d3c55ac71b60d47d65b506d4c1fec5dad5f7f5048b41bc87b5aa919",
+    "rustc-version.log": "778fbc643a806f0dd123c056e66201d7e8a56a61928ec0a33171be8d6c2d5a37",
+    "typst-version.log": "20ad20e86d85d168643624dc3e3388e7cbcc5a8384d17835db3a0ab04c496fba",
+    "website-assets.log": "3757b81634c5214999d42eb1e2fed267cce6f6e2bcbdc138d6ee6210ae5e3913",
+    "website-reproduction.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "gallery-inventory.json": "de0d17ac75840af4cabefcc5083f40b44614153c3d270040956efd99a01cfc7c"
+  },
+  "source_mapping": {
+    "source38": "15dd7e1b188dad112d7887bdc6d769125b2697a1",
+    "original_port_code": "69d730c1276a9ec4e4b65b4a4f41cf3578668fd1",
+    "round1_candidate": "cc7bc03ab97edade07532a586f5830f933451b07",
+    "correction_code": "7940545709071a51d2dd1675ec2c6728ec034833",
+    "correction_change": "ykzsopuvntuupmsquuxpvyptvzxukyxn",
+    "evidence_change": "nqkxzywxwmzpmssnwxmwsnozvpytmtkq"
+  }
+}

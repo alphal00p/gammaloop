@@ -1499,7 +1499,7 @@ documentation renderer receives its package tree from `docsTypst` for MiTeX and
 other page assets. Embedded inputs enter only their owning package's producer
 source key; Python runtime dependencies remain in the terminal closure.
 
-Drawing package inputs track the current Kurvst and Linnest plugins and their Tiptoe,
+Drawing package inputs track the current Kurvst and Linnest plugins and their MIT,
 Clarabel and NetworkX license files, replacing the retired ec-layout plugin inputs. Clinnet
 also receives its mark and layout fixtures and the portal theme used by its render tests.
 Linnet's runtime corpus input is limited to DOT files in the declared graph roots, alongside

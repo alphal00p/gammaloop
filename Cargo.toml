@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
 members = ["crates/*", "tests"]
-exclude = ["vendor/clarabel"]
+exclude = ["vendor/clarabel", "vendor/kurbo"]
 default-members = ["crates/gammaloop-api"]
 
 [workspace.package]
@@ -91,6 +91,8 @@ which = "8.0.0"
 
 # Consuming workspaces select the Typst payload through their own root patch.
 [patch.crates-io]
+# Stable finite miter evaluation for native and Wasm drawing coverage.
+kurbo = { path = "vendor/kurbo" }
 # Typst plugins have no JavaScript clock; retain infinite-time Clarabel solves.
 clarabel = { path = "vendor/clarabel" }
 # Shared lazy FormattedOutput; see examples/reproducers/symbolic-display in Feynkit.

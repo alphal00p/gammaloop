@@ -1,5 +1,10 @@
 = Generation drawing ports
 
+Current continuation: after approved prerequisites through source36, source38
+is prepared in the separate #link("generation-mark-geometry.typ")[mark geometry lane].
+The original approved bookmark and evidence below remain preserved historical
+source15/16 records; later absence/deferment statements describe their old base.
+
 == Scope and source dispositions
 
 This record describes the isolated drawing lane based on approved prefix

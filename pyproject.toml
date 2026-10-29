@@ -57,6 +57,7 @@ build-backend = "maturin"
 [tool.maturin]
 no-default-features = true
 include = [
+  { path = "vendor/kurbo/**/*", format = "sdist" },
   { path = "crates/linnest/build_assets.rs", format = "sdist" },
   { path = "crates/linnest/Cargo.toml", format = "sdist" },
   { path = "crates/linnest/src/**/*.rs", format = "sdist" },

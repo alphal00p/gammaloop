@@ -1,0 +1,77 @@
+{
+  "candidate": "cc7bc03ab97edade07532a586f5830f933451b07",
+  "code": "69d730c1276a9ec4e4b65b4a4f41cf3578668fd1",
+  "source38": "15dd7e1b188dad112d7887bdc6d769125b2697a1",
+  "base": "100da20603a083d031c31bd4e8c6970fc44dda2f",
+  "tracked_files_hashed": 3664,
+  "changed_tracked_files": [],
+  "source_files_checked": 1402,
+  "source_mismatches": [],
+  "payload_files_checked": 29,
+  "payload_mismatches": [],
+  "protected_files_checked": 23,
+  "protected_mismatches": [],
+  "implementation_hash_mismatches": [],
+  "diff_categories": {
+    "implementation_entries": 49,
+    "generated_delivery_files": 30,
+    "source_test_doc_config_notice_entries": 19,
+    "review_evidence_files": 81
+  },
+  "native_binaries": {
+    "kurvst": {
+      "path": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/kurvst-d3764c82a75b72bc",
+      "sha256": "8d8a0e1329caf8abd528c19d891f11b478998dbbff90c01c78d8c45046b9e614"
+    },
+    "linnest": {
+      "path": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/linnest-69fa6561a9dd3077",
+      "sha256": "c96feba824069cd492cbf99f24e8f689dc78f36040b8163272ebe6be09b28979"
+    },
+    "clinnet": {
+      "path": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/clinnet-eded01f8aae0b814",
+      "sha256": "98aed2b7340806234fa6472b79b45785da67b3a7fb9ba0e71ba09093317603f8"
+    },
+    "clinnet::kurvst_marks": {
+      "path": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/kurvst_marks-eb66a1b494ad56eb",
+      "sha256": "595918ea11a89a0da6a2e79617b26211317f31e3644ed5d482246bc541b88a7d"
+    },
+    "clinnet::public_typst_behavior": {
+      "path": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/public_typst_behavior-305da6a74aa1a1db",
+      "sha256": "06f0332f2757fbf96f67b9e11eda8a1c55b2712140250b73073c7c358a838aec"
+    },
+    "clinnet::bin/linnet": {
+      "path": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/linnet-37a41a4de59f8ec0",
+      "sha256": "88a0f1fd0000dd8f2ab93a8cf9b83e3aff6edf339a1dbc433e71a6df55e64749"
+    }
+  },
+  "wasm": {
+    "kurvst": "4b640fe5a66ba07877fbd18e189b1d26e75aa5772e04a9d66a03922d94405055",
+    "linnest": "3dd9220e32902c906a8a50539d44ff20f7139427d6542442f1be6bba71bddc9f"
+  },
+  "refs": "@  cc7bc03ab97edade07532a586f5830f933451b07 rwmwllultrvkrzuplovkplxuymuynlpn record mark geometry provenance audit and bounded validation\n\u2502\n~\n\n\u25cb  98cbf5b8f984e702f4699b1b176fbebfee059d3a pwowvnrptzopqmzmomontywsxomsppss attest test-only drawing template scope changes\n\u2502\n~\n",
+  "nix_source": "/nix/store/00ahch8yyhn0q11m87rl62m1lmy1kb21-source",
+  "nix_output": "/nix/store/2311zgm13mbrpnazihzd2v7x8p4303kc-linnest-wasm-0.1.0",
+  "nix_derivation": "/nix/store/9vbk12yrd64s095px6g254rypcr0pkyk-linnest-wasm-0.1.0.drv",
+  "nix_package": {
+    "/nix/store/2311zgm13mbrpnazihzd2v7x8p4303kc-linnest-wasm-0.1.0": {
+      "ca": null,
+      "deriver": "/nix/store/9vbk12yrd64s095px6g254rypcr0pkyk-linnest-wasm-0.1.0.drv",
+      "narHash": "sha256-2vzD5NO37s8/o3duE86ILSmnr1jnIz7h6JF7SX/HEUA=",
+      "narSize": 12587728,
+      "references": [],
+      "registrationTime": 1793208743,
+      "signatures": [],
+      "storeDir": "/nix/store",
+      "ultimate": true,
+      "version": 1
+    }
+  },
+  "geometry_source_sha256": "0b48afb13f70af591e154874d5c76427245515da47862e0e959dda1dab20edc6",
+  "test_exit_codes": {
+    "geometry-native": 0,
+    "clinnet": 0,
+    "runtime": 0,
+    "catalogue": 0,
+    "regressions": 101
+  }
+}

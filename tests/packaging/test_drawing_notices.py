@@ -23,9 +23,8 @@ LINNEST_LICENSE = "MIT AND Apache-2.0 AND BSD-3-Clause"
 SOURCES = {
     "clarabel-LICENSE": ROOT / "vendor/clarabel/LICENSE.md",
     "networkx-LICENSE": ROOT / "crates/linnest/layout/native/LICENSE.networkx",
-    "tiptoe-LICENSE": ROOT / "crates/kurvst/typst/LICENSE.tiptoe",
 }
-PACKAGES = {"clarabel": "linnest", "networkx": "linnest", "tiptoe": "kurvst"}
+PACKAGES = {"clarabel": "linnest", "networkx": "linnest"}
 EMBED_MANIFEST = (
     '[package]\nname = "drawing-embed-fixture"\nversion = "0.1.0"\n'
     'edition = "2021"\n[workspace]\n[dependencies]\n'
@@ -63,7 +62,7 @@ class DrawingNotices(unittest.TestCase):
 
     def test_development_sync_upgrades_notice_payload(self):
         # Execute each recipe's actual source-copy helpers, avoiding unrelated
-        # WASM rebuilds. Start with an older extracted bundle without Tiptoe.
+        # WASM rebuilds. Upgrade an old bundle with obsolete generated attribution.
         recipes = (ROOT / "just/drawing.just").read_text()
         scratch = ROOT / "target/notice-validation"
         scratch.mkdir(parents=True, exist_ok=True)
@@ -77,8 +76,11 @@ class DrawingNotices(unittest.TestCase):
                     destination = target / f"crates/{package}/typst"
                     shutil.copytree(ROOT / f"crates/{package}/typst", destination)
                 tiptoe = target / "crates/kurvst/typst/LICENSE.tiptoe"
-                tiptoe.unlink()
-                self.assertFalse(tiptoe.exists())
+                tiptoe.write_text("obsolete generated notice")
+                unrelated = target / "crates/kurvst/typst/LICENSE.custom"
+                unrelated.write_text("user-owned notice")
+                missing_notice = target / "crates/kurvst/typst/LICENSE"
+                missing_notice.unlink()
                 body = recipes.split(recipe + ":\n", 1)[1].split("\n#", 1)[0]
                 helpers = re.findall(r"^    \w+\(\) \{\n.*?^    \}", body, re.M | re.S)
                 self.assertEqual(len(helpers), 6)
@@ -93,6 +95,22 @@ class DrawingNotices(unittest.TestCase):
                     cwd=ROOT,
                     check=True,
                 )
+                self.assertFalse(tiptoe.exists())
+                self.assertEqual(unrelated.read_text(), "user-owned notice")
+                # The upgrade is idempotent and preserves unrelated user files.
+                subprocess.run(
+                    [
+                        "bash",
+                        "-euc",
+                        "\n".join(helpers) + '\ncopy_package_sources "$1"',
+                        recipe,
+                        str(target),
+                    ],
+                    cwd=ROOT,
+                    check=True,
+                )
+                self.assertFalse(tiptoe.exists())
+                self.assertEqual(unrelated.read_text(), "user-owned notice")
                 for package in ["linnest", "kurvst"]:
                     source = ROOT / f"crates/{package}/typst"
                     for notice in source.glob("LICENSE*"):
@@ -130,6 +148,24 @@ class DrawingNotices(unittest.TestCase):
             self.assertEqual(len(archives), 1, archives)
             with tarfile.open(archives[0]) as archive:
                 prefix = archive.getnames()[0].split("/")[0] + "/"
+                # Cargo parses a root path patch even when the selected API
+                # feature set only embeds prebuilt drawing WASM. Preserve its
+                # complete published source, metadata and both license texts.
+                for source in (ROOT / "vendor/kurbo").rglob("*"):
+                    if (
+                        source.is_file()
+                        and "target"
+                        not in source.relative_to(ROOT / "vendor/kurbo").parts
+                    ):
+                        relative = source.relative_to(ROOT).as_posix()
+                        with self.subTest(vendored_source=relative):
+                            self.assertEqual(
+                                archive.extractfile(prefix + relative).read(),
+                                source.read_bytes(),
+                            )
+                self.assertNotIn(
+                    prefix + "crates/kurvst/typst/LICENSE.tiptoe", archive.getnames()
+                )
                 metadata = archive.extractfile(
                     prefix + "crates/linnest/typst/typst.toml"
                 ).read()
@@ -142,7 +178,6 @@ class DrawingNotices(unittest.TestCase):
                     "crates/linnest/typst/LICENSE.networkx",
                     "crates/linnest/typst/LICENSE",
                     "crates/kurvst/typst/LICENSE",
-                    "crates/kurvst/typst/LICENSE.tiptoe",
                 ]:
                     with self.subTest(path=relative):
                         self.assertEqual(
@@ -185,6 +220,7 @@ class DrawingNotices(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, result.stdout)
             extracted = api / "extracted/drawings/templates/crates"
+            self.assertFalse((extracted / "kurvst/typst/LICENSE.tiptoe").exists())
             self.assertEqual(
                 tomllib.loads((extracted / "linnest/typst/typst.toml").read_text())[
                     "package"
@@ -266,6 +302,10 @@ class DrawingNotices(unittest.TestCase):
             with ZipFile(wheels[0]) as wheel:
                 prefix = "symbolica-3.0.1.dist-info/"
                 metadata = wheel.read(prefix + "METADATA").decode()
+                self.assertFalse(
+                    any("tiptoe" in name.lower() for name in wheel.namelist())
+                )
+                self.assertNotIn("tiptoe-LICENSE", metadata)
                 records = {
                     row[0]: row[1:]
                     for row in csv.reader(

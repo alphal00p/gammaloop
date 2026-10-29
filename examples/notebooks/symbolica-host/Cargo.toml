@@ -24,6 +24,8 @@ native = ["feynkit-py/native", "spynso3/native"]
 wasm = ["feynkit-py/wasm", "spynso3/wasm"]
 
 [patch.crates-io]
+# Use the same authoritative stroke owner as the drawing workspace.
+kurbo = { path = "../../../vendor/kurbo" }
 # Match the workspace's native and Wasm Clarabel clock handling.
 clarabel = { path = "../../../vendor/clarabel" }
 # Shared lazy FormattedOutput; see examples/reproducers/symbolic-display in Feynkit.

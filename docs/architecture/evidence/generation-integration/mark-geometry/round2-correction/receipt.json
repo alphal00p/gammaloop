@@ -1,0 +1,808 @@
+{
+  "schema": 1,
+  "date": "2026-10-28",
+  "scope": "Source38 round2 correction: authoritative Kurbo miter evaluation, dependency/source delivery and source-qualified drawing outputs; NOT wholesale WP11 completion",
+  "status": "IMPLEMENTED CANDIDATE; STOP for NEW independent Astra geometry and dependency/artifact reviews before integration",
+  "prior_candidate": "e426ff5fcbe1487c9bf2cf1ed5aaaa03cabf8722",
+  "prior_code": "7940545709071a51d2dd1675ec2c6728ec034833",
+  "code": "f35643bae1a67fb6ec0c30151e3624f661cf5f96",
+  "code_change": "vvwwnloulqpnmrmxpkyspwunkwsxsspu",
+  "evidence_change": "wxvylowxozslnysyxwnsnnyrulnpvpmp",
+  "candidate_bookmark": "generation-mark-geometry",
+  "author": "Lucien Huber <im@lcnbr.ch>",
+  "source_dispositions": {
+    "711f9440b323166cbba92df4bea632b20121aa06": "Source15 retained approved at generation-drawing-ports 98cbf5b8; unchanged by this correction",
+    "9e737a18274991e8dc0542f777a6063acaf72fe8": "Source16 retained approved at generation-drawing-ports 98cbf5b8; unchanged by this correction",
+    "15dd7e1b188dad112d7887bdc6d769125b2697a1": "Source38 implemented on reviewed prerequisite 100da206, now corrected through code f35643bae1a67fb6ec0c30151e3624f661cf5f96; new independent review pending. No39+ imports."
+  },
+  "P2_response": {
+    "id": "A2-P2-1",
+    "cause": "Upstream Kurbo hypot+dot cancels for nearly opposite tangents, suppressing finite allowed miters; translated offset-point subtraction also loses small offsets. Polygon construction/metadata alone cannot repair actual paint.",
+    "repair": "Patch authoritative Kurbo 0.13.1 only: power-of-two tangent scaling, compensated determinant, rationalized miter ratio and vertex-local offset intersection. Preserve clipping and true-degenerate controls; no increased limit, clamping, bevel substitution, rejected reviewed finite input or parallel stroke engine.",
+    "closed_findings_preserved": "Previous four regressions, signed/full-turn barb shaft/composite contacts and module-scope PathSeg import remain fixed."
+  },
+  "dependency_exception": {
+    "authorization": "The root coordinator authorized the narrow exact Kurbo 0.13.1 vendor patch and necessary root/notebook-host patch-selection entries within the accepted correctness task, preserving all unrelated dependency versions, pins and locks.",
+    "upstream_version": "0.13.1",
+    "registry_archive_sha256": "4b60dfc32f652b926df6192e55525b16d186c69d47876c3ead4da5cc9f8450e2",
+    "upstream_git": "838b69ef35f3381cefc007d86aa8364f5a6dc673",
+    "published_files_verified": 53,
+    "only_local_upstream_delta": "src/stroke.rs; easily reviewed kurbo.patch",
+    "lock_package_changes": {
+      "Cargo.lock": [
+        {
+          "before": {
+            "name": "kurbo",
+            "version": "0.13.1",
+            "source": "registry+https://github.com/rust-lang/crates.io-index",
+            "checksum": "4b60dfc32f652b926df6192e55525b16d186c69d47876c3ead4da5cc9f8450e2",
+            "dependencies": [
+              "arrayvec",
+              "euclid",
+              "polycool",
+              "smallvec"
+            ]
+          },
+          "after": {
+            "name": "kurbo",
+            "version": "0.13.1",
+            "dependencies": [
+              "arrayvec",
+              "euclid",
+              "polycool",
+              "smallvec"
+            ]
+          }
+        }
+      ],
+      "examples/notebooks/symbolica-host/Cargo.lock": [
+        {
+          "before": {
+            "name": "kurbo",
+            "version": "0.13.1",
+            "source": "registry+https://github.com/rust-lang/crates.io-index",
+            "checksum": "4b60dfc32f652b926df6192e55525b16d186c69d47876c3ead4da5cc9f8450e2",
+            "dependencies": [
+              "arrayvec",
+              "euclid",
+              "polycool",
+              "smallvec"
+            ]
+          },
+          "after": {
+            "name": "kurbo",
+            "version": "0.13.1",
+            "dependencies": [
+              "arrayvec",
+              "euclid",
+              "polycool",
+              "smallvec"
+            ]
+          }
+        }
+      ],
+      "tydenso/Cargo.lock": []
+    },
+    "nix_wiring": "Existing source30 declared-vendor-patch and dummy-source owner suffices; no Nix source modification. Complete needed sources/licenses verified in production/test inputs; only clarabel/kurbo vendor directories.",
+    "regeneration": "Hakari generate+verify and just ci-update pass without generated tracked changes.",
+    "notice_boundary": "Both upstream Kurbo license files/provenance/metadata retained and delivered in actual source archive. Clarabel/NetworkX notices/common selector/sync recipes/package license expression remain exact. No expanded legal clearance claim."
+  },
+  "old_fail_new_pass": {
+    "old_native": {
+      "rlib": {
+        "path": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-corrected-producers/libkurvst.rlib",
+        "sha256": "4902bbc3bc690d113af78ffe3cfecfe1944fe280be548f317f5c847c75e58f07"
+      },
+      "command": [
+        "rustc",
+        "--test",
+        "--edition=2024",
+        "-L",
+        "dependency=/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps",
+        "--extern",
+        "kurvst=/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-corrected-producers/libkurvst.rlib",
+        ".local/review-mark-geometry-round2-a-astra/adversarial.rs",
+        "-o",
+        ".local/review-mark-geometry-round2-a-astra/adversarial"
+      ],
+      "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\n",
+      "source_sha256": "adcd755260ea8118343b8ee1b1a057c20e3a42b81f6360ada49307fc8d11a134",
+      "executable_sha256": "7ed4bbf644e79745aff224ced379cd4976944d689f96f463d7b040ec7a29842c",
+      "exit": 101
+    },
+    "new_native": {
+      "binary_id": "new-adversarial",
+      "retained": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-round3-producers/new-adversarial",
+      "sha256": "10219f855715cbfb00b81016455f4cb2133a5aa26d7488722c2a7f8340ed9132"
+    },
+    "original_round1_regressions": "Current qualified producer passes all4 unchanged tests; old retained failures/reviews remain frozen.",
+    "round2_regressions": "Same five-test source: old2 fail/3 controls pass; corrected5 pass.",
+    "public": [
+      {
+        "name": "triangle-thinner",
+        "old": {
+          "left": -100999900.505,
+          "right": -99999900.0,
+          "top": 0.505000002525
+        },
+        "corrected": {
+          "left": -100999900.505,
+          "right": 100.00000013411045,
+          "top": 0.505000002525
+        },
+        "old_wasm_sha256": "31f7fbb7da4520f7c200e5ae7ead5a462c20e1c1bea9c6c020458a6bad04e27d",
+        "corrected_wasm_sha256": "d10e65de25d32dcc64eb7dac6830a52b2bca23abcc8a5cb8055211961ad71569"
+      },
+      {
+        "name": "stealth-deeper",
+        "old": {
+          "left": -2692483.910418358,
+          "right": 100.0,
+          "top": 1077033.4156110627
+        },
+        "corrected": {
+          "left": -271950718.24859023,
+          "right": 100.0,
+          "top": 108780327.29943514
+        },
+        "old_wasm_sha256": "31f7fbb7da4520f7c200e5ae7ead5a462c20e1c1bea9c6c020458a6bad04e27d",
+        "corrected_wasm_sha256": "d10e65de25d32dcc64eb7dac6830a52b2bca23abcc8a5cb8055211961ad71569"
+      },
+      {
+        "name": "triangle-near-control",
+        "old": {
+          "left": -1009900.5050001263,
+          "right": 99.99999999627471,
+          "top": 0.5050002525000633
+        },
+        "corrected": {
+          "left": -1009900.5050001263,
+          "right": 99.99999999627471,
+          "top": 0.5050002525000633
+        },
+        "old_wasm_sha256": "31f7fbb7da4520f7c200e5ae7ead5a462c20e1c1bea9c6c020458a6bad04e27d",
+        "corrected_wasm_sha256": "d10e65de25d32dcc64eb7dac6830a52b2bca23abcc8a5cb8055211961ad71569"
+      },
+      {
+        "name": "stealth-near-control",
+        "old": {
+          "left": -2719407.055074317,
+          "right": 99.99999999999999,
+          "top": 1087802.822029735
+        },
+        "corrected": {
+          "left": -2719407.055121738,
+          "right": 99.99999999999999,
+          "top": 1087802.8220487034
+        },
+        "old_wasm_sha256": "31f7fbb7da4520f7c200e5ae7ead5a462c20e1c1bea9c6c020458a6bad04e27d",
+        "corrected_wasm_sha256": "d10e65de25d32dcc64eb7dac6830a52b2bca23abcc8a5cb8055211961ad71569"
+      }
+    ],
+    "high_precision": "15 exact-emitted-edge cases at 100 decimal digits. Complete paint vertices compared against independently intersected offset lines with explicit edge-subtraction conditioning bounds; separate analytic lobe inradius matrix and actual interior winding, not same production algorithm oracle."
+  },
+  "fresh_checks": {
+    "upstream_kurbo": "188 library tests pass, including generic thin-turn scaling/translation, miter-limit clipping and true half-turn controls.",
+    "geometry_native_svg": "348 pass,1 original fixture-writing test skipped; all previous344 assertions retained.",
+    "clinnet": "46 pass; after final public shaft/composite assertions, both actual fixture owners rerun and2 pass.",
+    "typst_wasm_runtime": "3 pass; full appended public conditioning/degeneracy/barb/curve/composite fixture compiles.",
+    "packaging": "5 pass, including all53 vendored source/license bytes in real sdist; actual missing-source archive retained as a rejected negative control. Fixture wheel is NOT final release-wheel evidence.",
+    "clippy_format": "Root Kurvst/Linnest/Clinnet all-targets Clippy --deny warnings and just fmt --check pass; Python formatting passes. Standalone Kurbo strict Clippy reports an untouched upstream clippy::needless_late_init in common.rs:389, exact upstream bytes retained; no unrelated cleanup or blanket lint suppression.",
+    "registry": "107 actual scopes,66 titles,16 canonical controls pass; source31 semantic manual table headers preserved.",
+    "kernel_locks": "Aligned kernel fixed; host subset and offline lock resolution pass. Only2 Kurbo selection entries differ; no version/checksum churn elsewhere.",
+    "producer": "Final clean commit-addressed source and independent final Nix producer rebuild match all29 payload bytes. Normally source-qualified dependency artifacts reused; no cold-dependency claim."
+  },
+  "assets": {
+    "inventory": "asset-inventory.json:40 entries; only Kurvst and Linnest WASMs change",
+    "web_svg": "All34 regenerated, independently reproduced and unchanged",
+    "manual_examples": "Manual and3 examples timestamp-zero regenerated/reproduced, unchanged",
+    "galleries": [
+      {
+        "path": "marks-light.svg",
+        "before_sha256": "524865e90c436f4bfbffd9432c060ad3ee43dd1439c2bc22b44ca9f15666bc37",
+        "sha256": "524865e90c436f4bfbffd9432c060ad3ee43dd1439c2bc22b44ca9f15666bc37",
+        "changed": false,
+        "reproduced": true
+      },
+      {
+        "path": "marks-light.png",
+        "before_sha256": "9237790f72188a4430df7556f52d4de2284c7ce2bd1774e3ae91816c0c31ebdc",
+        "sha256": "9237790f72188a4430df7556f52d4de2284c7ce2bd1774e3ae91816c0c31ebdc",
+        "changed": false,
+        "reproduced": true
+      },
+      {
+        "path": "marks-light.pdf",
+        "before_sha256": "bf5f928d572b9f3eab4b8261b635223fd871c6c6b0f8d23bf4c8fd8d7b239add",
+        "sha256": "bf5f928d572b9f3eab4b8261b635223fd871c6c6b0f8d23bf4c8fd8d7b239add",
+        "changed": false,
+        "reproduced": true
+      },
+      {
+        "path": "marks-dark.svg",
+        "before_sha256": "a92dc11bc522f113f95591825cd0b071d56ed62883982af76c5592943fb53e05",
+        "sha256": "a92dc11bc522f113f95591825cd0b071d56ed62883982af76c5592943fb53e05",
+        "changed": false,
+        "reproduced": true
+      },
+      {
+        "path": "marks-dark.png",
+        "before_sha256": "b379dd37d59be5865286c6464954a9572ede2a420d26f4ded5c9395f6fcf798e",
+        "sha256": "b379dd37d59be5865286c6464954a9572ede2a420d26f4ded5c9395f6fcf798e",
+        "changed": false,
+        "reproduced": true
+      },
+      {
+        "path": "marks-dark.pdf",
+        "before_sha256": "7154592804fd93de182e8f6ecc7522eeeaed4276e812f74f15b04cc43f566227",
+        "sha256": "7154592804fd93de182e8f6ecc7522eeeaed4276e812f74f15b04cc43f566227",
+        "changed": false,
+        "reproduced": true
+      },
+      {
+        "path": "boundaries-light.svg",
+        "before_sha256": "eca5f8dcdc3dbf5a4b025318878c6d0ff63a55e2c8aa331acc78171e27324f97",
+        "sha256": "de11c8192d85938a78481d11aa42fbfee44c9dc0928927155e0505f13dfd8ad3",
+        "changed": true,
+        "reproduced": true
+      },
+      {
+        "path": "boundaries-light.png",
+        "before_sha256": "df16b0fe0e2ad76fba63d88067add6aa164ac1db573970685ad783bc991171a8",
+        "sha256": "e61ffda81baac35d10ac5740b945b14383b1c31922e5e307b37af19b770b2441",
+        "changed": true,
+        "reproduced": true
+      },
+      {
+        "path": "boundaries-light.pdf",
+        "before_sha256": "12fa4f3914d9a46fc065f21d00064561e1a2906f0cc2f87cc529983ff3f9395f",
+        "sha256": "a7cf192d94afb84b4a3ff06fc129f15322db252b6f461728ac4b5d99db4527c0",
+        "changed": true,
+        "reproduced": true
+      },
+      {
+        "path": "boundaries-dark.svg",
+        "before_sha256": "6ab5a424a1d6c8a59dbbb89dd185e90546b59b788465ca1e3e896e015f5122a1",
+        "sha256": "9027ab8b8df53f2f9f21e1296692aa1538720fb48c10417731edf2afe93dd8dc",
+        "changed": true,
+        "reproduced": true
+      },
+      {
+        "path": "boundaries-dark.png",
+        "before_sha256": "55c5eb42e1f75e48c70a5d3eee20ad7819f560fb892c97e872406f61622701e6",
+        "sha256": "a497f0f85b87cc1d49c8af6c3c18f2bf14e862101663504c23eda4c53913b66b",
+        "changed": true,
+        "reproduced": true
+      },
+      {
+        "path": "boundaries-dark.pdf",
+        "before_sha256": "ddc98d70216726a5adfcda908b1afe287093f55c86e6926b888c24248f4b3425",
+        "sha256": "a00fc697c411cfb5798aa179ab7c0e8eb7eabd27fbe65d8ca28771df3347a9da",
+        "changed": true,
+        "reproduced": true
+      }
+    ],
+    "note": "Changed note PDF and wrapped HTML reproduce at creation timestamp0",
+    "visual_inspection": "Ordinary and extreme galleries plus diagram inspected in both themes; full/open/signed/reversed barbs, curve and composites remain readable. Extreme gallery adds two reviewed cases, full/cropped views and numeric bounds. Skinny-triangle crop remains blank in pinned raster renderer; it is explicitly NOT coverage proof. Numeric native/winding/public owner checks qualify coverage, within stated floating-point conditioning."
+  },
+  "source_bindings": {
+    "provenance": "provenance.json",
+    "source_files": 1455,
+    "delivered_files": 29,
+    "final_source_commit": "f35643bae1a67fb6ec0c30151e3624f661cf5f96",
+    "derivation": "/nix/store/8iq7qvzf38wcw165afivy6ipcw4sdlq9-linnest-wasm-0.1.0.drv",
+    "package": {
+      "/nix/store/88qva12y43c0fig08mslcrmjbb3ydxa9-linnest-wasm-0.1.0": {
+        "ca": null,
+        "deriver": "/nix/store/8iq7qvzf38wcw165afivy6ipcw4sdlq9-linnest-wasm-0.1.0.drv",
+        "narHash": "sha256-GBMop/R/i6hSu9DGsZlmo7yv7YR7uSdj9QtYhvrizZc=",
+        "narSize": 12593968,
+        "references": [],
+        "registrationTime": 1793220307,
+        "signatures": [],
+        "storeDir": "/nix/store",
+        "ultimate": true,
+        "version": 1
+      }
+    },
+    "qualification": "Intermediate0bc build retained separately; it predates final registry/sdist metadata. Final code source is qualified independently; selected delivered package bytes match the runtime/asset-tested package. Evidence-only commit adds no generic Cargo source files."
+  },
+  "changed_code_files": [
+    {
+      "path": "Cargo.lock",
+      "sha256": "0d896231393016a4df0ac9a8a2b8eddee545b4a8d62bc87cdfbd1f2e3230a2cd",
+      "new": false
+    },
+    {
+      "path": "Cargo.toml",
+      "sha256": "bf968d49de81d06aa62e12793cfb6d66b46064d55090c2bb3413f883765e63dd",
+      "new": false
+    },
+    {
+      "path": "crates/kurvst/src/marks.rs",
+      "sha256": "fb945d5e0f4c97a30622b9a5e7d870e0fde4b6d4c5d0daf5a63d3b05ff83c064",
+      "new": false
+    },
+    {
+      "path": "crates/kurvst/typst/examples/mark-boundaries.typ",
+      "sha256": "e0a106ca8d0707700f9ef89297bae7be813318291586a3f9019ab5590a6145e0",
+      "new": false
+    },
+    {
+      "path": "crates/kurvst/typst/kurvst.wasm",
+      "sha256": "d10e65de25d32dcc64eb7dac6830a52b2bca23abcc8a5cb8055211961ad71569",
+      "new": false
+    },
+    {
+      "path": "crates/kurvst/typst/tests/mark-geometry.typ",
+      "sha256": "12700ab3c61c35b964e93e9a6d00ff4c1aa8c35f0528f80b32e2476019fc1f9b",
+      "new": false
+    },
+    {
+      "path": "crates/linnest/typst/linnest.wasm",
+      "sha256": "05c310283710ecc6bd2815f1e41aa4254e00d016fd44d7a93a96765d6e0ac7a8",
+      "new": false
+    },
+    {
+      "path": "docs/architecture/generation-mark-geometry.typ",
+      "sha256": "fb7030d7c3c476167a11a8261ce41ce8d5f5d538667c297c8ff1f3d706ebf314",
+      "new": false
+    },
+    {
+      "path": "docs/developers.toml",
+      "sha256": "ccfcf4500fdcccf6a530481065e74b95522096c58654535c42b43064c617c7e2",
+      "new": false
+    },
+    {
+      "path": "examples/notebooks/symbolica-host/Cargo.lock",
+      "sha256": "2cd05b4adab441a607d0a7f6fb12780c017e28f2cf04f5ea9cc05edae0714d05",
+      "new": false
+    },
+    {
+      "path": "examples/notebooks/symbolica-host/Cargo.toml",
+      "sha256": "39a2cdd396e129ef8b9c0a1f547d8816eee1db9ba4f46363024f4338c5bece35",
+      "new": false
+    },
+    {
+      "path": "pyproject.toml",
+      "sha256": "fef6ccc1238349636953d4e9ddec31dd56d52cf6d258a21fca0539e70891f131",
+      "new": false
+    },
+    {
+      "path": "tests/packaging/test_drawing_notices.py",
+      "sha256": "4c72e78911120164b3370924a62b44435c8d9fd865562a78105798a96ad9d386",
+      "new": false
+    },
+    {
+      "path": "vendor/kurbo/.cargo_vcs_info.json",
+      "sha256": "4bfe3d4ab606efdb8e558db546ae666decc53fa3caa34865b4f66ffa67449a66",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/Cargo.lock",
+      "sha256": "1f13e8fcd58e548bb2130320c3ed5addb20ff658722d3f20b697c2a6a0b27e90",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/Cargo.toml",
+      "sha256": "3c5b41c42b588b750fbca3109b48438288586c2b22fdda571ea0fc188b6e08b0",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/Cargo.toml.orig",
+      "sha256": "20e9fc1c17fd24b20c7eba09b657f999cc503999b18051dcdf7770e581fab175",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/LICENSE-APACHE",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/LICENSE-MIT",
+      "sha256": "23c23145f6eac25c28cdcc03d38506a5712a9a8cffb5bd5301457f6173ea696e",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/README.md",
+      "sha256": "d731f0edd82b188d9156cfbd909a1fdce6dd7424299b5d9ab540135d20693aab",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/benches/cubic.rs",
+      "sha256": "753d2822c69a8684032a3b4a5f40e3b03ea4b4553cd8aba39fe6afd159711ab9",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/benches/cubic_arclen.rs",
+      "sha256": "93ad92e94f421ef9b7ee60ed3b59909a59554ade76a18279ccacf8bfcd715477",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/benches/nearest.rs",
+      "sha256": "8cbf5ead45bce5ea79d1234f72fae704042162a934228b3af9611cf0932ef5fd",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/benches/quad_arclen.rs",
+      "sha256": "f447a066c32703cbbba14bed66f419841cca1cb83e01ca7511e6f09a5d115e20",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/benches/quartic.rs",
+      "sha256": "3535c44734c559992b3f62077e5d933300777e248251b883b1451457280df1f3",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/benches/rect_expand.rs",
+      "sha256": "496b987a239680b61b2d65b0ab91cbfab55c807cc1831476bcb08129c092f8de",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/examples/arclen_accuracy.rs",
+      "sha256": "7bf354d4d34b42e915e082774d74177209b2997b09ee6972a38cb32dfaf385b2",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/examples/circle.rs",
+      "sha256": "1416fe74c7a82b15b1d2ee4166d09a75cf8cc9ac6744dddc7df338881258ded3",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/examples/cubic_arclen.rs",
+      "sha256": "467bcf52b26e3480ad05dddbd06374ce219df54b7dc1fa7fb96367eed41e1d5b",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/examples/ellipse.rs",
+      "sha256": "22db083067328d2d4f80a2be1ba1cf7e5478950ecde99142563a4cd9fa6dfaca",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/examples/fit_poly.rs",
+      "sha256": "ed1d8adaf2e0adcee445cfd4fd06a110f064455ef382354ec2a99d3450442654",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/examples/quad_intersect.rs",
+      "sha256": "56becf3a522316e1c54eaae7d2d75365fa275bbfc17bb2bf6884d63bf887d88a",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/examples/simplify.rs",
+      "sha256": "7bd3fdcfd60fe9094b9f5da51be4a70061f3df760a62a0ae62e7e8c77f649558",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/examples/stroke.rs",
+      "sha256": "f055edc18fc05c55c2a3f9ad2e3caa6b997e2d9cd7c5781959d752182afe1b90",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/src/affine.rs",
+      "sha256": "7288c89bb5ce16acd7d1b046f189df5855cfafa0454d667fc7b0dc4454fa2663",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/src/arc.rs",
+      "sha256": "f1479f3e54c7e4717424920f128ebfda59ea2984c08b43291411072072eb1475",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/src/axis.rs",
+      "sha256": "6ccf1f4cca904fa43f54d9d71a6511927fdab171a8d00382ab311cd2776ef781",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/src/bezpath.rs",
+      "sha256": "6d9d5769715dfc4c10f90c1de500fca7a2ca35c0d673d2e05d7ddd615a987be4",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/src/circle.rs",
+      "sha256": "434d23a89e13ad22be300c383cdf027e41a9ccfbd8a3f9152c1e97a5ad330491",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/src/common.rs",
+      "sha256": "5d32994b9832dc34738a0d34464d9b2435398404bfd576c838584c301359d062",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/src/cubicbez.rs",
+      "sha256": "de793f84444c55467a4669de64b4a06209f97540362c2da1fe0ad2b2367f5b80",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/src/ellipse.rs",
+      "sha256": "991e9830a32643d2aa5c34c57330323e65f3b15231c80b086eb715b0665fc41d",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/src/expand.rs",
+      "sha256": "f0ef21c91790097498bfacd2cc624f6ac86b32bc2600aa78c57583e46c5d0ae6",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/src/fit.rs",
+      "sha256": "3d7dace4a4452ce6a5eff3186a48f8dc0d0d625029feae78c24017fb5b68695b",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/src/insets.rs",
+      "sha256": "cf6019c2ab0783ede641ef61677b60d4c2cf4f721317024a0944e8c66373dc98",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/src/interop_euclid.rs",
+      "sha256": "bc94da5023b455df685b74cd942d569e1ee5025191c64ff4217f068d845b9418",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/src/lib.rs",
+      "sha256": "f513dc1a758bc061cc2a177fa98a1d566003d6c83e36d3befbc9bbea2e4349e7",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/src/line.rs",
+      "sha256": "66fba2df6d9653aa03adfda457a5059a7cbdd1ae29fa2c2db4ba5aefb1d4db28",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/src/mindist.rs",
+      "sha256": "3f6e98e5cc25395e042bcd3138abd237176034cbddb13d48a11b66f581d724e4",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/src/moments.rs",
+      "sha256": "decf10b9116aacab2bab47c8b331a6a5e3ba16b3c63527710289cedc5df930a0",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/src/offset.rs",
+      "sha256": "8999fdb31334a6c08c260f2ae360aba3b091652e26454b735ea985c99a545cd9",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/src/param_curve.rs",
+      "sha256": "5cac1495643a9cb5f4af7ea618265a9deb87e7f82ee9628fdb46c49fd970a553",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/src/point.rs",
+      "sha256": "4311047b9497b4fbd38022eb62ebaa9771c05e55e1bafb9431f2243949515ca7",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/src/quadbez.rs",
+      "sha256": "37ab1037750d32eed6b3664b250a8c14c78419a1567e790695c0e46544263bbd",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/src/quadspline.rs",
+      "sha256": "cfa129dd52d23a7852be3a1103e8022cc792cb2bd481440d3ebc1221a635e28d",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/src/rect.rs",
+      "sha256": "20c0bca0e79ab1b69321bf5d7e2db618cb4582bb29f47854faa5979a38a9ff2a",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/src/rounded_rect.rs",
+      "sha256": "495d08f409456a97cd8c228f84624383922c4ef01e4d2edf624a40765a12b3c4",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/src/rounded_rect_radii.rs",
+      "sha256": "ac42ee920ff31c6b5524ea9ae22e9da8ad2a8d17572e9ade1c369d827b8004d7",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/src/shape.rs",
+      "sha256": "226a32a1996d298e9587cc921b7cc8644ca6e04b2c740732e0a63ab00d3351ae",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/src/simplify.rs",
+      "sha256": "771fc68a2dd0a00d994906176641bcb17c9351b3d1205e037a78a5893b51a684",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/src/size.rs",
+      "sha256": "645a1f7ba1528b1b10e5881d53019eac428e556c1d9bdea8d3f42ce351c00950",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/src/stroke.rs",
+      "sha256": "4523a0e08fe3ce324986450a83e16a654520951f17c1f132f30f802f0d6768d7",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/src/svg.rs",
+      "sha256": "b403a258614b3e287c3e5210b0745814f08acda92e95696bdddbf50e341fa3be",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/src/translate_scale.rs",
+      "sha256": "8b82eb5f46744cb9a044263e200d79d797270616320337e4230356942ab85f1a",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/src/triangle.rs",
+      "sha256": "27a6cddb109ae36ef55c470261c689d085502ab72a47f3a32ca22e771df7b03e",
+      "new": true
+    },
+    {
+      "path": "vendor/kurbo/src/vec2.rs",
+      "sha256": "05b37bf834417a040012fef380aa9eb10925324ea1a07fba3328839a56c9a060",
+      "new": true
+    }
+  ],
+  "retained": {
+    "refs": [
+      "generation-drawing-ports at98cbf5b8",
+      "generation-mark-geometry-round1 atcc7bc03a",
+      "generation-mark-geometry-round2 ate426ff5f",
+      "generation-mark-geometry-round3-build-input at0bc96be6 (intermediate)",
+      "generation-mark-geometry-round3-code atf35643bae1a67fb6ec0c30151e3624f661cf5f96"
+    ],
+    "producers": {
+      "binaries": [
+        {
+          "binary_id": "kurvst",
+          "source": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/kurvst-4420f083be818467",
+          "retained": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-round3-producers/kurvst-4420f083be818467",
+          "sha256": "3d09dfed40ad05da252f54281df1bf8d67fb148783a2d8066956cb2392ed6874"
+        },
+        {
+          "binary_id": "linnest",
+          "source": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/linnest-497faa96f1e545c4",
+          "retained": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-round3-producers/linnest-497faa96f1e545c4",
+          "sha256": "b1ec8890be4ebab47b3f66542dd2d6cd01209febd458c865b47a91f6c1ea04f1"
+        },
+        {
+          "binary_id": "clinnet",
+          "source": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/clinnet-ef5848560bd88e11",
+          "retained": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-round3-producers/clinnet-ef5848560bd88e11",
+          "sha256": "e62d184f76371df577f6bddf2e437960668339dc6a882b30548b00bc5b8f24e1"
+        },
+        {
+          "binary_id": "clinnet::kurvst_marks",
+          "source": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/kurvst_marks-3e1afd4d2821fcfa",
+          "retained": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-round3-producers/kurvst_marks-3e1afd4d2821fcfa",
+          "sha256": "58edb6dd397ca5934c41396c485e4167c032ec32d65d2ebe025b96799bac00ef"
+        },
+        {
+          "binary_id": "clinnet::public_typst_behavior",
+          "source": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/public_typst_behavior-2b6a9f9b73212efe",
+          "retained": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-round3-producers/public_typst_behavior-2b6a9f9b73212efe",
+          "sha256": "409334cb165fbd0bec1f43b12d45220ca145a88bd60c14ef5e5fa26410ad724a"
+        },
+        {
+          "binary_id": "clinnet::bin/linnet",
+          "source": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/linnet-46b494d66ab98bb9",
+          "retained": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-round3-producers/linnet-46b494d66ab98bb9",
+          "sha256": "00c58a24e0876434b037fd265d488a6f5c7179c97a37fcdc66d8d75968768633"
+        },
+        {
+          "binary_id": "new-probe",
+          "retained": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-round3-producers/new-probe",
+          "sha256": "95ae49da036e6eb7d99be198df3981a5aea1fae15216290bc83b5103f8598290"
+        },
+        {
+          "binary_id": "new-adversarial",
+          "retained": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-round3-producers/new-adversarial",
+          "sha256": "10219f855715cbfb00b81016455f4cb2133a5aa26d7488722c2a7f8340ed9132"
+        },
+        {
+          "binary_id": "new-regressions",
+          "retained": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-round3-producers/new-regressions",
+          "sha256": "f20e6547f40414d61758fcb627b5a5443a1910b1833f0c213853042989993235"
+        }
+      ],
+      "rlibs": [
+        {
+          "package": "path+file:///shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/kurvst#0.1.0",
+          "retained": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-round3-producers/libkurvst.rlib",
+          "sha256": "285a03c1a8b7851f6ad056cf0367a7bd0647b0a643e503954309a68991397459",
+          "build_artifact": {
+            "reason": "compiler-artifact",
+            "package_id": "path+file:///shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/kurvst#0.1.0",
+            "manifest_path": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/kurvst/Cargo.toml",
+            "target": {
+              "kind": [
+                "cdylib",
+                "rlib"
+              ],
+              "crate_types": [
+                "cdylib",
+                "rlib"
+              ],
+              "name": "kurvst",
+              "src_path": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/kurvst/src/lib.rs",
+              "edition": "2024",
+              "doc": true,
+              "doctest": true,
+              "test": true
+            },
+            "profile": {
+              "opt_level": "2",
+              "debuginfo": 2,
+              "debug_assertions": true,
+              "overflow_checks": true,
+              "test": false
+            },
+            "features": [],
+            "filenames": [
+              "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/target/dev-optim/libkurvst.so",
+              "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/target/dev-optim/libkurvst.rlib"
+            ],
+            "executable": null,
+            "fresh": true
+          }
+        },
+        {
+          "package": "path+file:///shared/lcnbr/dev/gammaloop/generation-drawing-ports/vendor/kurbo#0.13.1",
+          "retained": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-round3-producers/libkurbo.rlib",
+          "sha256": "ebe0df1d8e58dce131d4d7ebc2d58df0bcfaa8ec11afb82e812e98141392158c",
+          "build_artifact": {
+            "reason": "compiler-artifact",
+            "package_id": "path+file:///shared/lcnbr/dev/gammaloop/generation-drawing-ports/vendor/kurbo#0.13.1",
+            "manifest_path": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/vendor/kurbo/Cargo.toml",
+            "target": {
+              "kind": [
+                "lib"
+              ],
+              "crate_types": [
+                "lib"
+              ],
+              "name": "kurbo",
+              "src_path": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/vendor/kurbo/src/lib.rs",
+              "edition": "2024",
+              "doc": true,
+              "doctest": true,
+              "test": true
+            },
+            "profile": {
+              "opt_level": "3",
+              "debuginfo": 2,
+              "debug_assertions": true,
+              "overflow_checks": true,
+              "test": false
+            },
+            "features": [
+              "default",
+              "std"
+            ],
+            "filenames": [
+              "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/libkurbo-4a01bfa744f3e486.rlib",
+              "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/libkurbo-4a01bfa744f3e486.rmeta"
+            ],
+            "executable": null,
+            "fresh": true
+          }
+        }
+      ],
+      "wasm_gc_root": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-round3-producers/wasm-bundle",
+      "wasm_output": "/nix/store/88qva12y43c0fig08mslcrmjbb3ydxa9-linnest-wasm-0.1.0",
+      "qualification": "Task-owned copies retain source-qualified native producers; shared Cargo outputs remain mutable and are not claimed immutable."
+    },
+    "old_kurbo": "Old registry Kurbo rlib/archive in .local/mark-geometry-round2-producers; all previous native/WASM/rooted stores/reviews remain.",
+    "scratch": "Useful target/mark-geometry-round3 scripts, probes, actual old/new source archives and source bindings retained for review; no shared cache deletion/override/seeding.",
+    "cleanup": "Only owned unused vendor/kurbo/target placeholder/lock scratch and temporary guidance copy removed; useful producers, reviews, source archives, scripts and images retained. No task-owned background processes retained."
+  },
+  "remaining_gates": [
+    "NEW independent Astra geometry and dependency/artifact-binding reviews before parent integration",
+    "Full repaired/compressed native/Pyodide/externally locked Community wheels, RECORD/METADATA/notices and installed behavior",
+    "Browser/full-site qualification remains frozen at a372; this is bounded changed-note/assets evidence",
+    "Extreme pinned raster-render limitation remains explicit; no universal f64/rasterizer guarantee",
+    "No cold-dependency/general historical determinism, solver replacement, callback/frame/weight, physics or publication qualification"
+  ],
+  "intermediate_diagnostics": {
+    "new-matrix.log": "Superseded development control before final conditioning-aware oracle/expectations and valid lobe interior point; final 348-test geometry log and independent 100-digit oracle are authoritative. No pre-existing assertion/tolerance was relaxed.",
+    "test-source-realize.log": "An attempted nix build of a libCleanSourceWith attrset was invalid. The proper .outPath evaluation materializes the filtered source; final-source-paths.json and source-selection-audit.json verify the actual production/test bytes.",
+    "kurbo-clippy.log": "Strict standalone lint fails in exact unchanged upstream common.rs; root scoped all-targets Clippy passes.",
+    "intermediate-0bc": "Earlier source-bound package retained, superseded by final f356 exact source derivation. All29 payload bytes are equal; final-payload-bindings.json records this."
+  }
+}

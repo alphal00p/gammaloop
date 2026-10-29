@@ -1,0 +1,331 @@
+{
+  "reference_package": "/nix/store/v7rw00hg1wwrr7gcl128yh9nw4v3dgrg-typst-package-tiptoe-0.4.0/lib/typst-packages/tiptoe/0.4.0",
+  "reference_package_files": {
+    "LICENSE.txt": "d66fa6047eae941af8c532d6361f73dc36423deb0c50b73094cebb63b36e5b4d",
+    "README.md": "92b92b69eecc450c96a102365c43ada613e78ebf0ff65bf8a7d418ac625d80ae",
+    "src/arc-impl.typ": "586f3710c3ea79c2b83752f7f6d6b085cec7b3a8a8d9984e6d74e4f7fe62504d",
+    "src/arc.typ": "b727d2dc81b547fa6358517b3d101308d324d318bb73d6f3e27cda8479a9f2c6",
+    "src/assert.typ": "fd05ad7067d10cf039c310c39065b38e5dbee02ff27323f3dc17a047a57012f9",
+    "src/curve.typ": "725971d9c6ab02d2dfb7da219128b366c3b41de766752b4861610658126fdd17",
+    "src/line.typ": "7d97456fa1fc0c85fc1289639739c01d1f8d5de1fecdb67f4def5b151a1d8e3a",
+    "src/marks.typ": "96ff1588387a4b9755b7240754d78c4ce5907316e0835539d745f10ae5abfa95",
+    "src/path-to-curve.typ": "893e4883a3cd10050c9d8d375b41d702e6370ad38560601452717a4671932e6a",
+    "src/path.typ": "02065fd5b1c016acce9db6e80236dc69c03c29159ee9397f976c5cb3641badf8",
+    "src/ring.typ": "4e714ce5849d3122f9f0f4397b7208016da6c6dc77c808bc2cccfb5a28a1c894",
+    "src/tiptoe.typ": "511aa84c793cb9f315d53a34336ce8928c9150a4d127f256c551eff246af6dd1",
+    "src/utility.typ": "a9c290a97a9b91970dd183b09e08f2acf751a2376e1718710383a4a7abf08b55",
+    "typst.toml": "91c21e1567e4f2bf3fab1049df9d33a7789d79c55b67936c5caed850995616bd"
+  },
+  "reference_license_sha256": "d66fa6047eae941af8c532d6361f73dc36423deb0c50b73094cebb63b36e5b4d",
+  "actual_provenance": "Ported original source38, whose parent marks.rs exactly equals this approved base. Inspected original/current mark code and pinned Tiptoe marks/line/curve/utility/license sources. No Tiptoe source was downloaded into or vendored with the package.",
+  "replacement_constructions": {
+    "triangle_stealth": "Generic offset-line intersections/corner bisectors and edge-direction tests replace Tiptoe trigonometric x1/x2/x3 special cases.",
+    "straight": "Tangent from the tip to round endpoint caps replaces old fixed-angle inset.",
+    "round_tikz": "Inner-box dart and two Kurbo quarter arcs replace old L-thickness special case and 0.42/0.32/0.1 control points.",
+    "barb_hooks_circle": "Kurbo Arc/Ellipse geometry from local centre/radius definitions and stroke growth; no Tiptoe path/arc renderer retained. Elementary shape meaning and public arc fields remain.",
+    "bar_bracket_square_diamond": "Local symmetric lines/polygon vertex definitions, generic offsets/miter and exact sqrt(2) diamond default. Elementary endpoints retain shape semantics, not a retained material Tiptoe implementation.",
+    "rays_composite": "Evenly spaced vector spokes and typed Rust composite accumulation through existing MarkSpec owners; explicit public phase and signed gaps retained.",
+    "transport_fitting": "Existing Rust CBOR schemas, packed paths, Kurbo carrier/chord/refinement/stroke footprint owners preserved. They are not copied Tiptoe rendering/resource code."
+  },
+  "retained_compatibility": "Shape names, option vocabulary and dimensional default data retain the earlier Tiptoe-inspired public API. This is not a clean-room claim. Engineering source audit found no material Tiptoe package implementation/resource remaining in runtime geometry; old source/credits remain in immutable history and historical notes for independent review.",
+  "retired": [
+    {
+      "path": "crates/kurvst/typst/LICENSE.tiptoe",
+      "present_in_base": true,
+      "prior_sha256": "d66fa6047eae941af8c532d6361f73dc36423deb0c50b73094cebb63b36e5b4d",
+      "disposition": "removed with replaced geometry"
+    },
+    {
+      "path": "examples/notebooks/symbolica-host/licenses/tiptoe-LICENSE",
+      "present_in_base": true,
+      "prior_sha256": "d66fa6047eae941af8c532d6361f73dc36423deb0c50b73094cebb63b36e5b4d",
+      "disposition": "removed with replaced geometry"
+    },
+    {
+      "path": "crates/linnet-py/licenses/tiptoe-LICENSE",
+      "present_in_base": false,
+      "prior_sha256": null,
+      "disposition": "already absent; standalone packaging not restored"
+    }
+  ],
+  "retained_notice_sha256": {
+    "vendor/clarabel/LICENSE.md": "6e2f382771f8aab58e4868ddd0afe0c2fefe6b54f9681493a9c3d0f32906cfe1",
+    "crates/linnest/layout/native/LICENSE.networkx": "6025f323ea29dc2f0ee0abd9523bf910186f55b0e148e6ebf646c55566278e2e",
+    "crates/linnest/typst/LICENSE.clarabel": "6e2f382771f8aab58e4868ddd0afe0c2fefe6b54f9681493a9c3d0f32906cfe1",
+    "crates/linnest/typst/LICENSE.networkx": "6025f323ea29dc2f0ee0abd9523bf910186f55b0e148e6ebf646c55566278e2e",
+    "crates/kurvst/typst/LICENSE": "397f68dfabb4c82acba023b23a640974a8444f8fca6a6655475ea3c3f902f22a",
+    "crates/linnest/typst/LICENSE": "397f68dfabb4c82acba023b23a640974a8444f8fca6a6655475ea3c3f902f22a",
+    "examples/notebooks/symbolica-host/licenses/clarabel-LICENSE": "6e2f382771f8aab58e4868ddd0afe0c2fefe6b54f9681493a9c3d0f32906cfe1",
+    "examples/notebooks/symbolica-host/licenses/networkx-LICENSE": "6025f323ea29dc2f0ee0abd9523bf910186f55b0e148e6ebf646c55566278e2e",
+    "crates/linnest/build_assets.rs": "563cb2fe49034d946366cdd723f1f7fa779ec6494de9a898717c4a01cccd3936"
+  },
+  "remaining_text_references": [
+    {
+      "path": "crates/clinnet/src/lib.rs",
+      "line": 882,
+      "text": "assert!(KURVST_PACKAGE_ASSETS.get_file(\"LICENSE.tiptoe\").is_none());",
+      "kind": "negative payload/upgrade control"
+    },
+    {
+      "path": "crates/gammaloop-api/src/templates.rs",
+      "line": 73,
+      "text": ".join(\"crates/kurvst/typst/LICENSE.tiptoe\")",
+      "kind": "negative payload/upgrade control"
+    },
+    {
+      "path": "docs/architecture/generation-asset-diagnostics-staged.typ",
+      "line": 50,
+      "text": "NetworkX, Tiptoe, font notices and package paths remain untouched.",
+      "kind": "historical provenance, source-bound record or current audit explanation"
+    },
+    {
+      "path": "docs/architecture/generation-documentation-reconcile.typ",
+      "line": 46,
+      "text": "two pinned renders agree byte-for-byte. Its mark-specification and Tiptoe section",
+      "kind": "historical provenance, source-bound record or current audit explanation"
+    },
+    {
+      "path": "docs/architecture/generation-documentation-reconcile.typ",
+      "line": 67,
+      "text": "and current Tiptoe obligations. Browser qualification requires the repository's",
+      "kind": "historical provenance, source-bound record or current audit explanation"
+    },
+    {
+      "path": "docs/architecture/generation-drawing-notices.typ",
+      "line": 4,
+      "text": "Tiptoe-derived runtime geometry and removes its obsolete copies after source audit.",
+      "kind": "historical provenance, source-bound record or current audit explanation"
+    },
+    {
+      "path": "docs/architecture/generation-drawing-notices.typ",
+      "line": 95,
+      "text": "all Kurvst root licenses, including retained Tiptoe attribution, alongside the",
+      "kind": "historical provenance, source-bound record or current audit explanation"
+    },
+    {
+      "path": "docs/architecture/generation-drawing-notices.typ",
+      "line": 97,
+      "text": "bundle with its Tiptoe notice deliberately absent and compares every restored",
+      "kind": "historical provenance, source-bound record or current audit explanation"
+    },
+    {
+      "path": "docs/architecture/generation-drawing-notices.typ",
+      "line": 99,
+      "text": "authoritative Clarabel, NetworkX and Tiptoe license texts remain unchanged.",
+      "kind": "historical provenance, source-bound record or current audit explanation"
+    },
+    {
+      "path": "docs/architecture/generation-drawing-notices.typ",
+      "line": 125,
+      "text": "licenses, including Tiptoe while this engine remains present.",
+      "kind": "historical provenance, source-bound record or current audit explanation"
+    },
+    {
+      "path": "docs/architecture/generation-drawing-ports.typ",
+      "line": 17,
+      "text": "engine and retains Tiptoe attribution. Source38 remains unimplemented.",
+      "kind": "historical provenance, source-bound record or current audit explanation"
+    },
+    {
+      "path": "docs/architecture/generation-drawing-ports.typ",
+      "line": 48,
+      "text": "exports, or Tiptoe license copies. Its native SVG renderer still owns its",
+      "kind": "historical provenance, source-bound record or current audit explanation"
+    },
+    {
+      "path": "docs/architecture/generation-drawing-ports.typ",
+      "line": 54,
+      "text": "remove Tiptoe notices only once their owning code is replaced. No historical WASM, SVG or PDF output",
+      "kind": "historical provenance, source-bound record or current audit explanation"
+    },
+    {
+      "path": "docs/architecture/generation-integration-wp3-staged.typ",
+      "line": 58,
+      "text": "the source17 Tiptoe notice through the existing Nix, API, sdist and host-license",
+      "kind": "historical provenance, source-bound record or current audit explanation"
+    },
+    {
+      "path": "docs/architecture/generation-mark-geometry.typ",
+      "line": 52,
+      "text": "Tiptoe 0.4.0 and reproduces its per-shape geometry. The pinned Nix Tiptoe source",
+      "kind": "historical provenance, source-bound record or current audit explanation"
+    },
+    {
+      "path": "docs/architecture/generation-mark-geometry.typ",
+      "line": 56,
+      "text": "Tiptoe or LGPL CeTZ code. It removes the old trigonometric dart formula, fixed",
+      "kind": "historical provenance, source-bound record or current audit explanation"
+    },
+    {
+      "path": "docs/architecture/generation-mark-geometry.typ",
+      "line": 61,
+      "text": "and elementary constructions are documented provenance; no Tiptoe package source,",
+      "kind": "historical provenance, source-bound record or current audit explanation"
+    },
+    {
+      "path": "docs/architecture/generation-mark-geometry.typ",
+      "line": 64,
+      "text": "are GammaLoop/Kurvst implementation, not the Tiptoe renderer. Historical notes,",
+      "kind": "historical provenance, source-bound record or current audit explanation"
+    },
+    {
+      "path": "docs/architecture/generation-mark-geometry.typ",
+      "line": 67,
+      "text": "Consequently the obsolete Kurvst and notebook-host Tiptoe license copies are",
+      "kind": "historical provenance, source-bound record or current audit explanation"
+    },
+    {
+      "path": "docs/architecture/generation-mark-geometry.typ",
+      "line": 71,
+      "text": "Both sync recipes remove only the obsolete generated Tiptoe notice, copy every",
+      "kind": "historical provenance, source-bound record or current audit explanation"
+    },
+    {
+      "path": "docs/architecture/kurvst-arrowhead-engine.typ",
+      "line": 10,
+      "text": "and Tiptoe comparisons below remain historical provenance, not current geometry",
+      "kind": "historical provenance, source-bound record or current audit explanation"
+    },
+    {
+      "path": "docs/architecture/kurvst-arrowhead-engine.typ",
+      "line": 40,
+      "text": "#link(\"https://typst.app/universe/package/tiptoe/0.4.0/\")[tiptoe 0.4.0 (MIT)],",
+      "kind": "historical provenance, source-bound record or current audit explanation"
+    },
+    {
+      "path": "docs/architecture/kurvst-arrowhead-engine.typ",
+      "line": 70,
+      "text": "The tiptoe end distance defines the shaft stop, including the stealth inset",
+      "kind": "historical provenance, source-bound record or current audit explanation"
+    },
+    {
+      "path": "docs/architecture/kurvst-arrowhead-engine.typ",
+      "line": 95,
+      "text": "`shorten`, retaining the control points as tiptoe does. Default `shorten`",
+      "kind": "historical provenance, source-bound record or current audit explanation"
+    },
+    {
+      "path": "docs/architecture/kurvst-arrowhead-engine.typ",
+      "line": 160,
+      "text": "sizes: tiptoe defaults are larger (roughly 7.5pt for straight at a 1pt line,",
+      "kind": "historical provenance, source-bound record or current audit explanation"
+    },
+    {
+      "path": "docs/architecture/kurvst-arrowhead-engine.typ",
+      "line": 223,
+      "text": "distances with tiptoe; test bend/shorten including short last segments,",
+      "kind": "historical provenance, source-bound record or current audit explanation"
+    },
+    {
+      "path": "docs/architecture/kurvst-arrowhead-engine.typ",
+      "line": 352,
+      "text": "Bend must match tiptoe within the recorded tolerance; chord must match current",
+      "kind": "historical provenance, source-bound record or current audit explanation"
+    },
+    {
+      "path": "docs/architecture/kurvst-arrowhead-engine.typ",
+      "line": 365,
+      "text": "- Licensing: fresh MIT geometry with tiptoe attribution, not copied LGPL",
+      "kind": "historical provenance, source-bound record or current audit explanation"
+    },
+    {
+      "path": "docs/developers.toml",
+      "line": 1057,
+      "text": "# Integration attestation 2026-10-27: production extraction is byte-identical to8430e701; the added test checks exact Tiptoe notice bytes through the existing common selector.",
+      "kind": "historical provenance, source-bound record or current audit explanation"
+    },
+    {
+      "path": "docs/developers.toml",
+      "line": 1059,
+      "text": "# tests now reject the obsolete Tiptoe copy while retaining required notice bytes.",
+      "kind": "historical provenance, source-bound record or current audit explanation"
+    },
+    {
+      "path": "docs/developers.toml",
+      "line": 2459,
+      "text": "# Integration attestation 2026-10-27: this filter adds the source17 Tiptoe notice to required inputs; producer/runtime and per-crate cache ownership are unchanged. Nix WASM/bundle byte checks passed.",
+      "kind": "historical provenance, source-bound record or current audit explanation"
+    },
+    {
+      "path": "docs/developers.toml",
+      "line": 2468,
+      "text": "# Tiptoe source/payload inputs; existing producer/runtime boundaries and required",
+      "kind": "historical provenance, source-bound record or current audit explanation"
+    },
+    {
+      "path": "nix/rust-workspace.nix",
+      "line": 3188,
+      "text": "test ! -e ${linnest-wasm}/templates/crates/kurvst/typst/LICENSE.tiptoe",
+      "kind": "negative payload/upgrade control"
+    },
+    {
+      "path": "tests/packaging/test_drawing_notices.py",
+      "line": 78,
+      "text": "tiptoe = target / \"crates/kurvst/typst/LICENSE.tiptoe\"",
+      "kind": "negative payload/upgrade control"
+    },
+    {
+      "path": "tests/packaging/test_drawing_notices.py",
+      "line": 79,
+      "text": "tiptoe.write_text(\"obsolete generated notice\")",
+      "kind": "negative payload/upgrade control"
+    },
+    {
+      "path": "tests/packaging/test_drawing_notices.py",
+      "line": 98,
+      "text": "self.assertFalse(tiptoe.exists())",
+      "kind": "negative payload/upgrade control"
+    },
+    {
+      "path": "tests/packaging/test_drawing_notices.py",
+      "line": 112,
+      "text": "self.assertFalse(tiptoe.exists())",
+      "kind": "negative payload/upgrade control"
+    },
+    {
+      "path": "tests/packaging/test_drawing_notices.py",
+      "line": 152,
+      "text": "prefix + \"crates/kurvst/typst/LICENSE.tiptoe\", archive.getnames()",
+      "kind": "negative payload/upgrade control"
+    },
+    {
+      "path": "tests/packaging/test_drawing_notices.py",
+      "line": 208,
+      "text": "self.assertFalse((extracted / \"kurvst/typst/LICENSE.tiptoe\").exists())",
+      "kind": "negative payload/upgrade control"
+    },
+    {
+      "path": "tests/packaging/test_drawing_notices.py",
+      "line": 291,
+      "text": "any(\"tiptoe\" in name.lower() for name in wheel.namelist())",
+      "kind": "negative payload/upgrade control"
+    },
+    {
+      "path": "tests/packaging/test_drawing_notices.py",
+      "line": 293,
+      "text": "self.assertNotIn(\"tiptoe-LICENSE\", metadata)",
+      "kind": "negative payload/upgrade control"
+    },
+    {
+      "path": "just/drawing.just",
+      "line": 58,
+      "text": "rm -f \"$target/crates/kurvst/typst/LICENSE.tiptoe\"",
+      "kind": "known obsolete generated-notice cleanup; unrelated files preserved"
+    },
+    {
+      "path": "just/drawing.just",
+      "line": 150,
+      "text": "rm -f \"$target/crates/kurvst/typst/LICENSE.tiptoe\"",
+      "kind": "known obsolete generated-notice cleanup; unrelated files preserved"
+    }
+  ],
+  "source_owner_reconciliation": [
+    "Current Clinnet/API embed selectors are generic; only obsolete positive assertions become absence controls.",
+    "Common build_assets.rs root-license selector unchanged byte-for-byte.",
+    "Both actual sync recipe helpers remove only known obsolete generated license and preserve missing-license upgrade, idempotence and unrelated user notice controls.",
+    "Existing host license-files glob and root sdist owner retained; absent standalone wheel not revived.",
+    "Nix source filters drop only obsolete Tiptoe paths; check asserts absence plus exact retained notice bytes and approved expression.",
+    "Current API prose/README already reflects Spec/Community owners and contains no obsolete attribution, so not overwritten by historical patch.",
+    "Historical frozen architecture/receipt text remains historical; current prefaces point at this separate implementation."
+  ]
+}

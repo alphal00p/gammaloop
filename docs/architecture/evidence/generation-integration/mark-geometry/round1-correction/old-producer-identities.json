@@ -1,0 +1,27 @@
+{
+  "rlib": {
+    "retained": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-round1-producers/libkurvst.rlib",
+    "sha256": "c7adad438ff11600f98b33ddea5827c850ccfeed06cea6026aa5b2913b016454"
+  },
+  "probe": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/review-mark-geometry-a/probe",
+    "sha256": "56c37841fa7211dd03a3c9840c42d2978a0038a907289f33cfae646e6b655056",
+    "exit_code": 0
+  },
+  "regressions": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/review-mark-geometry-a/regressions",
+    "sha256": "84dc9ac13ac0850b329c82b399bf4b1e5ef50c3611ca76efa97b24854c22173f",
+    "exit_code": 101
+  },
+  "kurvst": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/kurvst/typst/kurvst.wasm",
+    "sha256": "4b640fe5a66ba07877fbd18e189b1d26e75aa5772e04a9d66a03922d94405055",
+    "immutable_copy": "/nix/store/2311zgm13mbrpnazihzd2v7x8p4303kc-linnest-wasm-0.1.0/kurvst.wasm"
+  },
+  "linnest": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/linnest/typst/linnest.wasm",
+    "sha256": "3dd9220e32902c906a8a50539d44ff20f7139427d6542442f1be6bba71bddc9f",
+    "immutable_copy": "/nix/store/2311zgm13mbrpnazihzd2v7x8p4303kc-linnest-wasm-0.1.0/linnest.wasm"
+  },
+  "typst_query_exit": 0
+}

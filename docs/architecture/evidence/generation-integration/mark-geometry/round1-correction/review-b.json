@@ -1,0 +1,452 @@
+{
+  "schema": 1,
+  "decision": "APPROVE",
+  "scope": "B only: source/notice audit, packaging/sync, generated artifacts and evidence for manifest38",
+  "reviewer": "NEW independent Astra review; read-only frozen workspace; no nested agents",
+  "at": "2026-10-28T18:08:26.710267+00:00",
+  "findings": [],
+  "identities": {
+    "workspace": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports",
+    "candidate": "cc7bc03ab97edade07532a586f5830f933451b07",
+    "candidate_change": "rwmwllultrvkrzuplovkplxuymuynlpn",
+    "code": "69d730c1276a9ec4e4b65b4a4f41cf3578668fd1",
+    "code_change": "pnnxrytkwoqmnpkmpwvrszsomuqlxvkx",
+    "approved_base": "100da20603a083d031c31bd4e8c6970fc44dda2f",
+    "historical_source38": "15dd7e1b188dad112d7887bdc6d769125b2697a1",
+    "bookmark": "generation-mark-geometry",
+    "old_approved_drawing": "98cbf5b8f984e702f4699b1b176fbebfee059d3a",
+    "author": "Lucien Huber <im@lcnbr.ch>",
+    "nix_source": "/nix/store/00ahch8yyhn0q11m87rl62m1lmy1kb21-source",
+    "nix_derivation": "/nix/store/9vbk12yrd64s095px6g254rypcr0pkyk-linnest-wasm-0.1.0.drv",
+    "nix_output": "/nix/store/2311zgm13mbrpnazihzd2v7x8p4303kc-linnest-wasm-0.1.0",
+    "nix_package": {
+      "/nix/store/2311zgm13mbrpnazihzd2v7x8p4303kc-linnest-wasm-0.1.0": {
+        "ca": null,
+        "deriver": "/nix/store/9vbk12yrd64s095px6g254rypcr0pkyk-linnest-wasm-0.1.0.drv",
+        "narHash": "sha256-2vzD5NO37s8/o3duE86ILSmnr1jnIz7h6JF7SX/HEUA=",
+        "narSize": 12587728,
+        "references": [],
+        "registrationTime": 1793208743,
+        "signatures": [],
+        "storeDir": "/nix/store",
+        "ultimate": true,
+        "version": 1
+      }
+    },
+    "wasm": {
+      "linnest": "3dd9220e32902c906a8a50539d44ff20f7139427d6542442f1be6bba71bddc9f",
+      "kurvst": "4b640fe5a66ba07877fbd18e189b1d26e75aa5772e04a9d66a03922d94405055"
+    },
+    "wasm_toolchain": "/nix/store/k18y2b9cpvn9szc9i7ac1dahipsg2dyk-rust-mixed",
+    "dependency_artifacts": "/nix/store/h4wd59kik80s4njbv6a18qfljf39ma2w-linnest-wasm-deps-deps-0.1.0",
+    "review_shell": "/nix/store/akp2f8cnvmklnxvfllrd1bbnqz2ymg6d-nix-shell-env.drv",
+    "typst": "/nix/store/vnjry04dnavpyvl41mz607ir21pjb2hp-typst-0.15.1-env/bin/typst (0.15.1 9dfd3a08)"
+  },
+  "assessment": [
+    {
+      "path": "crates/kurvst/src/marks.rs",
+      "lines": [
+        1,
+        725,
+        764,
+        817,
+        866,
+        1130,
+        1169
+      ],
+      "conclusion": "Compared pinned Tiptoe0.4 marks/utility/line/curve sources, old attributed Rust owner, source38 and candidate. Base marks equals source38 parent. Candidate differs from original source38 marks only in Rust-policy imports and Debug derives. Polygon offsets/corner normals, tangent chevron, Kurbo Arc/Ellipse, local contacts replace material per-shape implementation. Retained names/defaults and simple bar/bracket/arc geometry preserve compatibility; no material Tiptoe renderer/resource code found. Engineering source audit supports notice retirement; no clean-room or general legal-policy conclusion."
+    },
+    {
+      "path": "crates/kurvst/typst/src/mark.typ",
+      "lines": [
+        1,
+        6,
+        59,
+        172
+      ],
+      "conclusion": "Body is unchanged data-only validation/serialization and constructors, distinct from Tiptoe drawing functions. Historical provenance is explicitly retained in current implementation note and old notes/history. Active-source Tiptoe references are only absence and upgrade controls."
+    },
+    {
+      "path": "just/drawing.just",
+      "lines": [
+        46,
+        58,
+        138,
+        150
+      ],
+      "conclusion": "Both actual source-copy helper bodies remove only generated LICENSE.tiptoe. Fresh upgrades restore missing MIT root notice, preserve exact current notices and LICENSE.custom, and remain idempotent. Other existing flat-layout cleanup unchanged."
+    },
+    {
+      "path": "crates/linnest/build_assets.rs",
+      "lines": [
+        67,
+        92
+      ],
+      "conclusion": "Common root LICENSE and LICENSE.* selector byte-identical to approved base, as are all9 audited notice/selector files. Complete Clarabel and NetworkX source/package/host text comparisons passed."
+    },
+    {
+      "path": "crates/clinnet/src/lib.rs",
+      "lines": [
+        882,
+        900,
+        1000
+      ],
+      "conclusion": "Current generic staging retains every required notice and current WASM. Obsolete positive Tiptoe checks replaced by absence controls; exact current payload checks remain. All46 current Clinnet tests freshly pass."
+    },
+    {
+      "path": "crates/gammaloop-api/src/templates.rs",
+      "lines": [
+        69,
+        73,
+        126
+      ],
+      "conclusion": "Production extraction unchanged. Fresh packaging fixture compiles actual build.rs and extraction owner and verifies embedded WASM, metadata and all current notices against frozen source. This is not a full installed API/physics qualification."
+    },
+    {
+      "path": "tests/packaging/test_drawing_notices.py",
+      "lines": [
+        63,
+        134,
+        174,
+        246,
+        289
+      ],
+      "conclusion": "Five fresh tests pass, no skips: upstream-copy bytes, both real sync helpers, actual root sdist, actual API embedding owner, and Maturin fixture wheel using real host Python/pyproject/licenses with correct license METADATA and RECORD. Tiptoe removal does not weaken required notice delivery. Fixture Rust payload is explicitly not a final host distribution."
+    },
+    {
+      "path": "crates/linnet-py/Cargo.toml",
+      "lines": [
+        9,
+        22
+      ],
+      "conclusion": "Existing Community binding rlib remains. Standalone pyproject/wheel owner and standalone Tiptoe copy are absent; no old standalone package or API restored. README correctly identifies current Community delivery."
+    },
+    {
+      "path": "nix/rust-workspace.nix",
+      "lines": [
+        118,
+        200,
+        462,
+        482,
+        2665,
+        2676,
+        2681,
+        3174
+      ],
+      "conclusion": "Only obsolete Tiptoe inputs removed. Current source30 filtering, patches, source/test selections and dependency owners otherwise unchanged. Re-evaluated producer derivation equals retained derivation exactly. All1402 source files equal code69d730c1 and checkout; no WASM is an input. All29 delivered files equal checkout, actual NAR equals receipt, metadata exact. Fresh execution of canonical Nix check buildCommand validates both WASMs and exact notice/payload bytes."
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/wasm-reproduction.log",
+      "lines": [
+        5
+      ],
+      "conclusion": "Retained executed --rebuild output names exact producer; receipt exit0 and daemon build log show actual compilation/install from bound source with ordinary dependency artifacts. Accepted as executed final-producer reproduction, not a new review rebuild or cold dependency proof. Both historical source38/source39 WASM blobs independently differ from candidate."
+    },
+    {
+      "path": "scripts/render-docs-svg-assets.sh",
+      "lines": [
+        21,
+        63
+      ],
+      "conclusion": "Fresh canonical script rendered all34 SVGs into review directory; every byte matches candidate. Inventory independently confirms24 changed/10 unchanged. Manual,3 examples and both-theme SVG/PNG/PDF galleries also freshly reproduce timestamp0. Fresh gallery and representative diagram images inspected in both themes; no visible new clipping or text contacts in samples."
+    },
+    {
+      "path": "docs/developers.toml",
+      "lines": [
+        16,
+        1058,
+        2467
+      ],
+      "conclusion": "All104 scopes/66 titles/16 controls freshly pass canonical unique-start/end/range Git-blob rules, independently hashed. Canonical oracle compared with production SiteBuilder. Only prior2 scope digests change, with reviewed semantic attestations; all other prior note objects preserved. New source38 note truthfully bounded. Earlier7 table.header bodies exact; five changed-note PDF/HTML renders exactly reproduced."
+    },
+    {
+      "path": "docs/architecture/evidence/generation-integration/mark-geometry/receipt.json",
+      "lines": [
+        14,
+        23,
+        274,
+        399,
+        417,
+        437
+      ],
+      "conclusion": "130-file inventory exact:49 implementation/generated-asset paths and81 evidence paths. Code-to-candidate diff contains only81 evidence files; all80 explicit evidence hashes and implementation/deletion hashes pass. Corrected failed HTML/path-info attempts retained and not credited. Historic mismatch and final distribution limits remain explicit."
+    }
+  ],
+  "fresh_checks": {
+    "packaging": {
+      "tests": 5,
+      "skips": 0,
+      "result": "PASS"
+    },
+    "clinnet": {
+      "tests": 46,
+      "skips": 0,
+      "result": "PASS",
+      "nextest_run_id": "70e5b73f-ec7c-4f7f-8486-31923db83620",
+      "compilation": "Cargo source/feature-matching cached binaries, preparation0.26s; fresh test executions",
+      "binary_identities": [
+        {
+          "binary-id": "clinnet",
+          "binary-name": "clinnet",
+          "package-id": "path+file:///shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/clinnet#0.1.8",
+          "kind": "lib",
+          "binary-path": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/clinnet-eded01f8aae0b814",
+          "build-platform": "target",
+          "id": "clinnet",
+          "sha256": "98aed2b7340806234fa6472b79b45785da67b3a7fb9ba0e71ba09093317603f8"
+        },
+        {
+          "binary-id": "clinnet::kurvst_marks",
+          "binary-name": "kurvst_marks",
+          "package-id": "path+file:///shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/clinnet#0.1.8",
+          "kind": "test",
+          "binary-path": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/kurvst_marks-eb66a1b494ad56eb",
+          "build-platform": "target",
+          "id": "clinnet::kurvst_marks",
+          "sha256": "595918ea11a89a0da6a2e79617b26211317f31e3644ed5d482246bc541b88a7d"
+        },
+        {
+          "binary-id": "clinnet::public_typst_behavior",
+          "binary-name": "public_typst_behavior",
+          "package-id": "path+file:///shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/clinnet#0.1.8",
+          "kind": "test",
+          "binary-path": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/public_typst_behavior-305da6a74aa1a1db",
+          "build-platform": "target",
+          "id": "clinnet::public_typst_behavior",
+          "sha256": "06f0332f2757fbf96f67b9e11eda8a1c55b2712140250b73073c7c358a838aec"
+        },
+        {
+          "binary-id": "clinnet::bin/linnet",
+          "binary-name": "linnet",
+          "package-id": "path+file:///shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/clinnet#0.1.8",
+          "kind": "bin",
+          "binary-path": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/linnet-37a41a4de59f8ec0",
+          "build-platform": "target",
+          "id": "clinnet::bin/linnet",
+          "sha256": "88a0f1fd0000dd8f2ab93a8cf9b83e3aff6edf339a1dbc433e71a6df55e64749"
+        }
+      ]
+    },
+    "actual_typst_wasm_runtime": {
+      "tests": 3,
+      "skips": 0,
+      "result": "PASS"
+    },
+    "nix_payload": "Actual canonical buildCommand freshly executed with derivation-pinned wasm-tools; PASS",
+    "nix_nar": "Independent nix hash path exact",
+    "kernel": "Official feature-isolation/three-lock/host-subset check PASS",
+    "registry": {
+      "scopes": 104,
+      "titles": 66,
+      "controls": 16,
+      "result": "PASS"
+    },
+    "renders": "34 SVGs, manual+3example PDFs, both themes of gallery SVG/PNG/PDF, diagram PNG, five changed-note PDF/HTML all exact",
+    "integrity": {
+      "candidate": "cc7bc03ab97edade07532a586f5830f933451b07",
+      "code": "69d730c1276a9ec4e4b65b4a4f41cf3578668fd1",
+      "base": "100da20603a083d031c31bd4e8c6970fc44dda2f",
+      "total_changes": 130,
+      "implementation_generated_asset_files": 49,
+      "evidence_files": 81,
+      "evidence_hashes": 80,
+      "nix_source_files_verified_against_code_and_checkout": 1402,
+      "payload_files": 29,
+      "svg_files": 34,
+      "svg_changed": 24,
+      "protected": 23,
+      "notice_files_and_selector": 9,
+      "scopes": 104,
+      "titles": 66,
+      "historical_source_parent_geometry_exact": true,
+      "all_checks_passed": true
+    }
+  },
+  "reused_evidence": [
+    "Sol executed final-producer --rebuild and original producer logs, source/derivation/NAR/artifact bound; not redundantly rerun by reviewer.",
+    "Nix check attribute initially reused existing successful output /nix/store/0ya51md2qkfcnl0y0r8q4x11hrapx8dc-linnest-wasm-check; actual buildCommand subsequently executed freshly.",
+    "344 native geometry tests, scoped Clippy/fmt and deep mathematical acceptance belong to retained Sol evidence and peerA scope; not claimed as fresh B tests.",
+    "Previous source31\u201336 approvals remain source-bound prerequisite evidence, not broad current physics/distribution/site qualification."
+  ],
+  "limitations": [
+    "Approval is scopeB only; peerA must independently approve before parent integrates38.",
+    "No cold-dependency/AHash/general historical reproducibility claim. Historical Linnest data/name mismatch not retroactively cleared.",
+    "No fullWP3, WP11/13 final distribution, complete installed host/native/Pyodide/Community/repaired/compressed or restored standalone qualification.",
+    "No full-site/browser, performance, physics, graph-numerator expansion, source39+, callback or frame/weight approval.",
+    "Visual inspection is representative rather than exhaustive."
+  ],
+  "final_guard": {
+    "tracked_entries_verified": 3665,
+    "initial_hashes_unchanged": 3664,
+    "all_bookmarks_unchanged": false,
+    "all_preexisting_bookmarks_unchanged": true,
+    "new_shared_bookmarks_observed": {
+      "generation-pocket-weight-diagnosis": [
+        "generation-pocket-weight-diagnosis: sntlnluq a8c5a11e certify source43 top-pair snapshot mismatch with exact graph and cut joins"
+      ]
+    },
+    "ref_mutations_by_this_reviewer": false,
+    "evidence_commit_contains_only_81_evidence_files": true,
+    "registry_semantic_changes_exact": [
+      "gammaloop-draw-style-migration",
+      "nix-crane-cache-reuse"
+    ],
+    "all_other_prior_note_objects_unchanged": true,
+    "seven_headers_unchanged": {
+      "docs/architecture/generation-integration-plan.typ": 3,
+      "docs/architecture/generation-integration-wp1.typ": 1,
+      "docs/architecture/kurvst-arrowhead-engine.typ": 3
+    },
+    "source38_39_binaries_not_imported": {
+      "15dd7e1b188dad112d7887bdc6d769125b2697a1": {
+        "kurvst": {
+          "historical_sha256": "0a3696137284b7b585b043aba94d475da201180df9a2760fde7de83a431f3cca",
+          "candidate_sha256": "4b640fe5a66ba07877fbd18e189b1d26e75aa5772e04a9d66a03922d94405055",
+          "different": true
+        },
+        "linnest": {
+          "historical_sha256": "a9438c1db350a56ebbae55a852bb83a33d55cea490c8b067cadd61ecd1283ce4",
+          "candidate_sha256": "3dd9220e32902c906a8a50539d44ff20f7139427d6542442f1be6bba71bddc9f",
+          "different": true
+        }
+      },
+      "854c4a7a4ac22ef6987e9446092560a3363f5d77": {
+        "kurvst": {
+          "historical_sha256": "0a3696137284b7b585b043aba94d475da201180df9a2760fde7de83a431f3cca",
+          "candidate_sha256": "4b640fe5a66ba07877fbd18e189b1d26e75aa5772e04a9d66a03922d94405055",
+          "different": true
+        },
+        "linnest": {
+          "historical_sha256": "c0fff773f791cf3db026b36a2f35ecccdb4ef12d6750846a390c297b237fdc15",
+          "candidate_sha256": "3dd9220e32902c906a8a50539d44ff20f7139427d6542442f1be6bba71bddc9f",
+          "different": true
+        }
+      }
+    },
+    "nix_source_contains_wasm": [],
+    "standalone_absent": true,
+    "nixci_enable": false
+  },
+  "environment": {
+    "license": "Preserved existing export or loaded silently from user configuration; no values printed",
+    "cache": "Normal shared caches; no target override/manual seeding/deletion",
+    "setup": "Initial default Nix shell entry realized current Clinnet prerequisites; checks used recorded pinned shell. Setup builds are not claimed as final distribution qualification.",
+    "review_tooling_correction": "Initial review-only assertion incorrectly expected whole linnet-py directory absent; corrected to actual absent standalone pyproject/license and retained rlib after inspecting current owner. Failed log retained; no candidate change."
+  },
+  "retention": "Review-owned ignored directory retains scripts, logs, exact inventories, fresh outputs and fixture wheel for parent review; temporary fixtures self-cleaned. Shared caches and frozen files/refs retained.",
+  "processes_retained": [],
+  "tracked_edits": false,
+  "ref_changes": false,
+  "integration_or_publication": false,
+  "nested_agents": false,
+  "review_artifact_sha256": {
+    "actual-nar-hash.txt": "365d344e3c700b1f29f856e8885f8339e8baba6a86494ecc4f489d95d197263f",
+    "bookmarks-after.txt": "eb5954119a1d981abccef149931225670d53bd3fa63392245c01abd26f4dcf8e",
+    "bookmarks-before.txt": "5191a5a788fce3afb504ac692e9fdd50e2ff56eaddc0da32d14e3db3a89fbbb9",
+    "bookmarks-current.txt": "4972963b894fdd9a7fe9a90627fd27573e1d79f78c129a6778c62468018d24be",
+    "check-derivation.json": "951d8d85ca0c27932bfc0aad084a053960557584043a54b821da601f98ccfaa4",
+    "checks.log": "e0d6929d06ecea9eacd42bd221260b701b28bca5d9d3a12a85b964fa6f48cff3",
+    "clinnet-binaries.json": "125c37d5f4f87c8c9bfd93cd72a51939ec9bd59d5e5b57c2d5b294b5683a8408",
+    "clinnet-binaries.log": "c925ea9915100a60cc4c8d4fcf369859aa9fdf27643e5147dc27a508f8939abe",
+    "clinnet-binary-hashes.json": "e16bcc1d0884359e5e3d17c55a8a3d1de852b1d1093f3db8f8f73148f15a6d2e",
+    "clinnet.log": "8e2745a6968eaec4a218bbba8402916c719372199588bd6d2c4500fd9ca25c1d",
+    "derivation.json": "1f2d4064d267406d7193cf6c0d0cd89f804c7ea66a496568b70ba2360073fa32",
+    "diagram-dark.png": "c1303f9f480bb704b0c51561caacfa84d7470ba3da686270b4ed54bb27ce0384",
+    "diagram-light.png": "b1c5cc6e0b3cf5cb52f35aa58b4bcc0e8be320bd9fbf9446abdcb10f3d1a45c0",
+    "docs.log": "29cdb04d8552993ac0e23dac5a267f871f7b9c4d8fe74d161f7efc5a55d9cf86",
+    "docs.sh": "b9f6e0cdabab296ebdc7fbf95313db570269c4560d2da48a5b599a5f175e7c5c",
+    "extra-audit-initial.log": "ea4f23c119670439cac75c9ff3be6f3cf7c52212ebbcba17093530925fb3d32e",
+    "extra-audit-shared-ref-event.log": "e3cebf91c0da6bb93bc9a4974bdd4600072056e3c93d01e3f4db2d01ef0d3620",
+    "extra-audit.json": "f675d0f8880711cc58a641cd592ec6dec01eb4a40f369602b2fe3cb759528647",
+    "extra-audit.log": "f675d0f8880711cc58a641cd592ec6dec01eb4a40f369602b2fe3cb759528647",
+    "extra-audit.py": "36b4546537b9771985665b8f5edc86d6cde12ac97ad47beb8977b7b2e4aabf41",
+    "frozen-tracked-sha256.json": "333288f2e13afe268807ae2655d3741b890cd01816de060e3da8664f9fadc05a",
+    "generation-drawing-notices-html/index.html": "36afa697b9acc1f99643309a0999b38f705d1454047c97fccfabecd38e5388ea",
+    "generation-drawing-notices-wrapper.typ": "3d8e009af701d4622df621748e8f0fdbd5499a4a457673139661d49e462258de",
+    "generation-drawing-notices.pdf": "ae8133a8d02a7817ae4aacc16e020616b60f13feae12900a629026c284c4df7d",
+    "generation-drawing-ports-html/index.html": "70c42af6271d4be82c9ac19a988ebfeb9eebae5e85b57e83e2706584c59ca9df",
+    "generation-drawing-ports-wrapper.typ": "f20c65abfee4db5a76b63e40e3eb00cd33890027b5d589842251eefc485cbe88",
+    "generation-drawing-ports.pdf": "6f26d5e3f190d01e1bb6eadab27cc194309261de5aa811695b3e3819f65ed3f9",
+    "generation-mark-geometry-html/index.html": "8479036d3b29782abba47b9874ee8509d0ba5d9e5fcb0b489e6c1661b637275f",
+    "generation-mark-geometry-wrapper.typ": "04968950f00c842f0698d7f5b2d7634f2068462a4032a210e40cf9ce10217cb6",
+    "generation-mark-geometry.pdf": "da006528cf68c74f07e6b7fa6c0614ef45a90c3e777dda75f84d99f369d20734",
+    "kernel.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "kurvst-arrowhead-engine-html/index.html": "6caebc21754293a4bac0cf20c625c5c1f62db90bf4ab4e78cd89207fdba72eb1",
+    "kurvst-arrowhead-engine-wrapper.typ": "f37322a063f17f0d6c41e35f865d3b8c15215d6dbe9d1bfaba8d9f9e0d4ba632",
+    "kurvst-arrowhead-engine.pdf": "3bff48f179e97914eeac7515d3e7cf7d2224954f378b83ebaeec2927be444733",
+    "manual.pdf": "9a2067588ab45dfda5a896a3639a2b1a5d1d5b9be596ed06b6503aba33b3100b",
+    "marks-dark.pdf": "9a863a5400de6188b73a1a15b059227a919813083d64e1fae528891e674e4b38",
+    "marks-dark.png": "b379dd37d59be5865286c6464954a9572ede2a420d26f4ded5c9395f6fcf798e",
+    "marks-dark.svg": "625044189a1eb3aa89dc0e8de72b7f86995d4dea25a1f8fb54709dffeb158645",
+    "marks-light.pdf": "cb0162857cc55d3eafa63e26e79be5974e9f33c2ca21c749856a49e5c43e2a25",
+    "marks-light.png": "9237790f72188a4430df7556f52d4de2284c7ce2bd1774e3ae91816c0c31ebdc",
+    "marks-light.svg": "d10a9d53ab88c4ed228d0731bde5e66b09c9a8893c37a164769a4d9c6259b1e7",
+    "marks.diff": "88876aef5e00086fd782a3e28d5300c3e1b1542b2fad3e4209c4344c0275e38e",
+    "nix-audit.log": "750d4e877187a8395031cc472375009f6b5ce452d5feff23743f1d97b8c45057",
+    "nix-audit.sh": "4522722727c9b9d91d0fad4b089fc7c449c836481e81e1ed018e65198498f078",
+    "nix-crane-cache-reuse-html/index.html": "aa2ea90cbd1cba018361276c94346a5dbf452c06adba8bf30c274610230383c3",
+    "nix-crane-cache-reuse-wrapper.typ": "5e412dbab4648c5a5dc98cb45ff227f4bdc89329244ae864389a45b72db5ef30",
+    "nix-crane-cache-reuse.pdf": "5fe84b17e0203f1bbda2cd32585ab31a41d442347de1c93d460afe6d89872f16",
+    "package.json": "288038c3149d695d9cc6dbed85a23b83cc36ab7a958cff463e2458c63d2ba940",
+    "packaging.log": "5efdb7534527b6a3eb219ab90193bea2c0f79b2c8517077c3151106cde5a92c3",
+    "producer-log.txt": "24f9b01fa66d2d471fbc3b11aa743c37032bc89406786e05c2a429ba8101a896",
+    "registry.json": "74eafd7ed8e016a4e30aa506504bf551e785810386d04aa333acc85c35eb5dad",
+    "render.log": "7c7628eb7271f56979140d5b94f80353097d47ab3e0b43aa7802a120dbf8564b",
+    "render.sh": "eedea0d5d6157ed3cb38c338d481d75148751b647339722a2e284ee2edb6a1bd",
+    "reproduced/assets/gammalooplogo-dark.svg": "e28af00c367da275a79b553e45ab80d41bd6deed679a10f5c661ef389863f69a",
+    "reproduced/assets/gammalooplogo-light.svg": "e78140c9608f98347c83e9864b235536f70d9d84558efefc705b2be680946151",
+    "reproduced/assets/gammalooplogo.svg": "e78140c9608f98347c83e9864b235536f70d9d84558efefc705b2be680946151",
+    "reproduced/docs/assets/about-double-triangle-dark.svg": "743ef396b8b2925f5ce31f8e73f5bf824321ccd5dd7366005341e8ce84113bc8",
+    "reproduced/docs/assets/about-double-triangle-light.svg": "59bed8b804c8d5fd96873fa15fafda3eeaf7d448d902d852d8d51c6facc0e743",
+    "reproduced/docs/assets/about-local-unitarity-equation-dark.svg": "d2a87c82f66973b7e19ea6d967e85261437ad7ca3a85eb095b00314de5dc655a",
+    "reproduced/docs/assets/about-local-unitarity-equation-light.svg": "4b01c8dc7519047f8d1189a5cac9c0258eb689c8e32d7d0f820dcbd548929a24",
+    "reproduced/docs/assets/gammaloop-construction-dark.svg": "025bb78a74d74e26199e2294ee0fbfa0e454bb734e5a10b43d121ad39770aed5",
+    "reproduced/docs/assets/gammaloop-construction-light.svg": "2b460630e6209d14be36dccb5733659b6e16646d0e09772cf1f4153e30463999",
+    "reproduced/docs/assets/graphs/portal-graph-aa-2l-gl00-dark.svg": "117144eb86297987e82867cbbb662dc933702fadf270196fa5dd5d6527248276",
+    "reproduced/docs/assets/graphs/portal-graph-aa-2l-gl00-light.svg": "cddab5ac2b1b4ab4f647e7fcdbd2bab16a6661450553ed583defa8f06c40449f",
+    "reproduced/docs/assets/graphs/portal-graph-aa-2l-gl08-dark.svg": "849a20daead42265d46773b48949359aa41e0269ccdb6a7aea4fe22ce5cb7b1b",
+    "reproduced/docs/assets/graphs/portal-graph-aa-2l-gl08-light.svg": "59142f94b1c4d1c0fab05afd2c80543e1ed2b6404fea3bc23c4921c68a144c7e",
+    "reproduced/docs/assets/graphs/portal-graph-aa-3l-gl000-dark.svg": "6a2a656d1fa004ff07484865bcc31aa10c0f2eedc7e0018527e97ea49775617d",
+    "reproduced/docs/assets/graphs/portal-graph-aa-3l-gl000-light.svg": "578133bcaf23d2d023ad217a63fb29690208bb586b7a7b7e142e429f6c97800c",
+    "reproduced/docs/assets/graphs/portal-graph-aa-3l-gl150-dark.svg": "5019c15ff3de8b8dd0e4c938789a7c4b800c348df93a2b5c1f0619809a3a564a",
+    "reproduced/docs/assets/graphs/portal-graph-aa-3l-gl150-light.svg": "256826261da46dcb6e41a06968a8f44b04b74a05ba9f4973342740e4ba7f5600",
+    "reproduced/docs/assets/graphs/portal-graph-aa-3l-gl300-dark.svg": "6ef332a1117e342611935b797f9a215d84dc536558915e18360a9e01251526c5",
+    "reproduced/docs/assets/graphs/portal-graph-aa-3l-gl300-light.svg": "c92f773bf3d61d746e75f3237152e16fb23628ce0ff527f2717ab3fa20942e72",
+    "reproduced/docs/assets/graphs/portal-graph-ad-ad-gluon-dark.svg": "49a3cf650b9062735f617ff08c44c194a4ee7a04d53b6198e923696626992549",
+    "reproduced/docs/assets/graphs/portal-graph-ad-ad-gluon-light.svg": "0ceb501d521e96dfd2b4e28febb68cd6f78dd69af0ff5ac1e08af530b053ca0f",
+    "reproduced/docs/assets/graphs/portal-graph-epem-bbx-dark.svg": "0ddfda7d286acf8f50617f2652e0652f2a96ccf0e4b0b70759e463151b95e7dc",
+    "reproduced/docs/assets/graphs/portal-graph-epem-bbx-light.svg": "110cf9d8ea3b4d498d7fe53ac7ebba6f3da714fd143e4f7966fc59755cd90b89",
+    "reproduced/docs/assets/graphs/portal-graph-epem-ttbar-cut-dark.svg": "3bb12d1a3885a9e7cd39b903a5ef9266730e4aded529bfdbff19da3dd4a66910",
+    "reproduced/docs/assets/graphs/portal-graph-epem-ttbar-cut-light.svg": "31d75bd7d6afe78555793d9321f1dbe7f45b699fd355bd38aba60e89145c5c0a",
+    "reproduced/docs/assets/graphs/portal-graph-gg-hhh-1l-dark.svg": "f05c53cdcae2d7bed3c188c3ae608ca2c914e757c0b789137c990fd67bd8da38",
+    "reproduced/docs/assets/graphs/portal-graph-gg-hhh-1l-light.svg": "98dcd8bba6bb6d4ccdc439588f3ccc049190ca93ebd182fa405586dc2750e59c",
+    "reproduced/docs/assets/graphs/portal-graph-gg-hhh-3l-dark.svg": "1b355493d24c171dd97860716775a2666b4ce60826a072170bde936847891565",
+    "reproduced/docs/assets/graphs/portal-graph-gg-hhh-3l-light.svg": "72cc477667d6464a4883f2e084c252513565852087600a50d3421507def9d3e8",
+    "reproduced/docs/assets/graphs/portal-graph-qq-aaa-pentabox-dark.svg": "1dfc1e3cc36445a979d6bc4042f9a2aa2f3a5ce5bc455ca0aaccaee1afd1422f",
+    "reproduced/docs/assets/graphs/portal-graph-qq-aaa-pentabox-light.svg": "6ec0f9620047e13eddd04b9cda62367f07c7ecd61c9cfeb28997cb4096c36582",
+    "reproduced/docs/assets/local-unitarity-dark.svg": "e11babfb62351592aff175ece63b886f34a50cf98356b4c5c545419f553a9a5b",
+    "reproduced/docs/assets/local-unitarity-light.svg": "209f6acd1bf2a3b35f0e7255b1a25d5ff1d3fc5d616a99c4021f90f6b022fcb2",
+    "reproduced/docs/assets/spensologo.svg": "0031f9fbf4229c538f42ee932e72f3e1212c343083514e82a38e591ba6a5f1c8",
+    "run-checks.sh": "f0a34eb85b93c244d169ae91f182f50e3c5f4230bcc7cbf409a4128b37732070",
+    "runtime.log": "9e5760a3a975cd2202d374d8b96f0d0f4cec1054fa88e319dd946643ad9e66c5",
+    "soft-triangle.pdf": "f59585af65c33363ba25010da820bc288e8b4ee7e2ea0e716a30ba4139e9a7d2",
+    "thrown-out.pdf": "5a48822462759734e461001383b7bf6300da5f2c1ec14493ae3433229f0db33b",
+    "tracked-files.txt": "e41fbaf1fbc32bf5a760ae42062ad0408d42ebfc2feb41dbe3fa193a4e19e190",
+    "verification.json": "f0f0cf575e3b1e4f5bd0a736cafad5e0f5feb03ec574e020b9fe20a7c891090f",
+    "verify.log": "4d158354c172c2101ccbc8e872bcf97b058ee8e9d55f983891a6f83597f5c583",
+    "verify.py": "0affc657ab69cbe15aeae5f6943a8d490dc8522549df0f38b69ef1fe3ccd28db",
+    "wasm-check.log": "10de99e86a81fb99f0beb5dcdcc6fc584384573021cf24e77834261d57f46ef0",
+    "wheels/symbolica-3.0.1-cp310-abi3-linux_x86_64.whl": "2574088db0982134932923f4819d7a41dd163c6feb5e6bb2d648c04c8daa1907",
+    "write-review.py": "f7092003f450e3d5f79e7ace6118df3d4942c75714ee12644313504b6e51b2d7",
+    "xbox-sum.pdf": "92cfb13205e5cbd75feea037ab910751ff06640be1ad89ed931261aac13adc3f"
+  },
+  "peer_a_coordination": {
+    "candidate_wasm_hashes_match": true,
+    "reported_fresh_runtime": "344 native+SVG (1 fixture-rewriter skipped),46 Clinnet,3 Typst/WASM; two-theme visual reproductions",
+    "unresolved_geometry_probes": [
+      "positive-area polygon fallback",
+      "full-turn barb contact"
+    ],
+    "disposition": "PeerA is checking conclusions. ScopeB approval does not close these geometry objections or authorize integration. Require separate A approval and any resulting source/artifact requalification."
+  }
+}

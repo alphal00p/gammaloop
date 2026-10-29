@@ -1,0 +1,86 @@
+[
+  {
+    "path": "marks-light.svg",
+    "before_sha256": "524865e90c436f4bfbffd9432c060ad3ee43dd1439c2bc22b44ca9f15666bc37",
+    "sha256": "524865e90c436f4bfbffd9432c060ad3ee43dd1439c2bc22b44ca9f15666bc37",
+    "changed": false,
+    "reproduced": true
+  },
+  {
+    "path": "marks-light.png",
+    "before_sha256": "9237790f72188a4430df7556f52d4de2284c7ce2bd1774e3ae91816c0c31ebdc",
+    "sha256": "9237790f72188a4430df7556f52d4de2284c7ce2bd1774e3ae91816c0c31ebdc",
+    "changed": false,
+    "reproduced": true
+  },
+  {
+    "path": "marks-light.pdf",
+    "before_sha256": "bf5f928d572b9f3eab4b8261b635223fd871c6c6b0f8d23bf4c8fd8d7b239add",
+    "sha256": "bf5f928d572b9f3eab4b8261b635223fd871c6c6b0f8d23bf4c8fd8d7b239add",
+    "changed": false,
+    "reproduced": true
+  },
+  {
+    "path": "marks-dark.svg",
+    "before_sha256": "a92dc11bc522f113f95591825cd0b071d56ed62883982af76c5592943fb53e05",
+    "sha256": "a92dc11bc522f113f95591825cd0b071d56ed62883982af76c5592943fb53e05",
+    "changed": false,
+    "reproduced": true
+  },
+  {
+    "path": "marks-dark.png",
+    "before_sha256": "b379dd37d59be5865286c6464954a9572ede2a420d26f4ded5c9395f6fcf798e",
+    "sha256": "b379dd37d59be5865286c6464954a9572ede2a420d26f4ded5c9395f6fcf798e",
+    "changed": false,
+    "reproduced": true
+  },
+  {
+    "path": "marks-dark.pdf",
+    "before_sha256": "7154592804fd93de182e8f6ecc7522eeeaed4276e812f74f15b04cc43f566227",
+    "sha256": "7154592804fd93de182e8f6ecc7522eeeaed4276e812f74f15b04cc43f566227",
+    "changed": false,
+    "reproduced": true
+  },
+  {
+    "path": "boundaries-light.svg",
+    "before_sha256": "eca5f8dcdc3dbf5a4b025318878c6d0ff63a55e2c8aa331acc78171e27324f97",
+    "sha256": "de11c8192d85938a78481d11aa42fbfee44c9dc0928927155e0505f13dfd8ad3",
+    "changed": true,
+    "reproduced": true
+  },
+  {
+    "path": "boundaries-light.png",
+    "before_sha256": "df16b0fe0e2ad76fba63d88067add6aa164ac1db573970685ad783bc991171a8",
+    "sha256": "e61ffda81baac35d10ac5740b945b14383b1c31922e5e307b37af19b770b2441",
+    "changed": true,
+    "reproduced": true
+  },
+  {
+    "path": "boundaries-light.pdf",
+    "before_sha256": "12fa4f3914d9a46fc065f21d00064561e1a2906f0cc2f87cc529983ff3f9395f",
+    "sha256": "a7cf192d94afb84b4a3ff06fc129f15322db252b6f461728ac4b5d99db4527c0",
+    "changed": true,
+    "reproduced": true
+  },
+  {
+    "path": "boundaries-dark.svg",
+    "before_sha256": "6ab5a424a1d6c8a59dbbb89dd185e90546b59b788465ca1e3e896e015f5122a1",
+    "sha256": "9027ab8b8df53f2f9f21e1296692aa1538720fb48c10417731edf2afe93dd8dc",
+    "changed": true,
+    "reproduced": true
+  },
+  {
+    "path": "boundaries-dark.png",
+    "before_sha256": "55c5eb42e1f75e48c70a5d3eee20ad7819f560fb892c97e872406f61622701e6",
+    "sha256": "a497f0f85b87cc1d49c8af6c3c18f2bf14e862101663504c23eda4c53913b66b",
+    "changed": true,
+    "reproduced": true
+  },
+  {
+    "path": "boundaries-dark.pdf",
+    "before_sha256": "ddc98d70216726a5adfcda908b1afe287093f55c86e6926b888c24248f4b3425",
+    "sha256": "a00fc697c411cfb5798aa179ab7c0e8eb7eabd27fbe65d8ca28771df3347a9da",
+    "changed": true,
+    "reproduced": true
+  }
+]

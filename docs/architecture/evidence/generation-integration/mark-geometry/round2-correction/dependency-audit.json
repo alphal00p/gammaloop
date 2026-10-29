@@ -1,0 +1,411 @@
+{
+  "crate_archive": "/home/lcnbr/.cargo/registry/cache/index.crates.io-1949cf8c6b5b557f/kurbo-0.13.1.crate",
+  "archive_sha256": "4b60dfc32f652b926df6192e55525b16d186c69d47876c3ead4da5cc9f8450e2",
+  "upstream_git": "838b69ef35f3381cefc007d86aa8364f5a6dc673",
+  "version": "0.13.1",
+  "files": [
+    {
+      "path": ".cargo_vcs_info.json",
+      "upstream_sha256": "4bfe3d4ab606efdb8e558db546ae666decc53fa3caa34865b4f66ffa67449a66",
+      "local_sha256": "4bfe3d4ab606efdb8e558db546ae666decc53fa3caa34865b4f66ffa67449a66",
+      "changed": false
+    },
+    {
+      "path": "Cargo.lock",
+      "upstream_sha256": "1f13e8fcd58e548bb2130320c3ed5addb20ff658722d3f20b697c2a6a0b27e90",
+      "local_sha256": "1f13e8fcd58e548bb2130320c3ed5addb20ff658722d3f20b697c2a6a0b27e90",
+      "changed": false
+    },
+    {
+      "path": "Cargo.toml",
+      "upstream_sha256": "3c5b41c42b588b750fbca3109b48438288586c2b22fdda571ea0fc188b6e08b0",
+      "local_sha256": "3c5b41c42b588b750fbca3109b48438288586c2b22fdda571ea0fc188b6e08b0",
+      "changed": false
+    },
+    {
+      "path": "Cargo.toml.orig",
+      "upstream_sha256": "20e9fc1c17fd24b20c7eba09b657f999cc503999b18051dcdf7770e581fab175",
+      "local_sha256": "20e9fc1c17fd24b20c7eba09b657f999cc503999b18051dcdf7770e581fab175",
+      "changed": false
+    },
+    {
+      "path": "LICENSE-APACHE",
+      "upstream_sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "local_sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "changed": false
+    },
+    {
+      "path": "LICENSE-MIT",
+      "upstream_sha256": "23c23145f6eac25c28cdcc03d38506a5712a9a8cffb5bd5301457f6173ea696e",
+      "local_sha256": "23c23145f6eac25c28cdcc03d38506a5712a9a8cffb5bd5301457f6173ea696e",
+      "changed": false
+    },
+    {
+      "path": "README.md",
+      "upstream_sha256": "d731f0edd82b188d9156cfbd909a1fdce6dd7424299b5d9ab540135d20693aab",
+      "local_sha256": "d731f0edd82b188d9156cfbd909a1fdce6dd7424299b5d9ab540135d20693aab",
+      "changed": false
+    },
+    {
+      "path": "benches/cubic.rs",
+      "upstream_sha256": "753d2822c69a8684032a3b4a5f40e3b03ea4b4553cd8aba39fe6afd159711ab9",
+      "local_sha256": "753d2822c69a8684032a3b4a5f40e3b03ea4b4553cd8aba39fe6afd159711ab9",
+      "changed": false
+    },
+    {
+      "path": "benches/cubic_arclen.rs",
+      "upstream_sha256": "93ad92e94f421ef9b7ee60ed3b59909a59554ade76a18279ccacf8bfcd715477",
+      "local_sha256": "93ad92e94f421ef9b7ee60ed3b59909a59554ade76a18279ccacf8bfcd715477",
+      "changed": false
+    },
+    {
+      "path": "benches/nearest.rs",
+      "upstream_sha256": "8cbf5ead45bce5ea79d1234f72fae704042162a934228b3af9611cf0932ef5fd",
+      "local_sha256": "8cbf5ead45bce5ea79d1234f72fae704042162a934228b3af9611cf0932ef5fd",
+      "changed": false
+    },
+    {
+      "path": "benches/quad_arclen.rs",
+      "upstream_sha256": "f447a066c32703cbbba14bed66f419841cca1cb83e01ca7511e6f09a5d115e20",
+      "local_sha256": "f447a066c32703cbbba14bed66f419841cca1cb83e01ca7511e6f09a5d115e20",
+      "changed": false
+    },
+    {
+      "path": "benches/quartic.rs",
+      "upstream_sha256": "3535c44734c559992b3f62077e5d933300777e248251b883b1451457280df1f3",
+      "local_sha256": "3535c44734c559992b3f62077e5d933300777e248251b883b1451457280df1f3",
+      "changed": false
+    },
+    {
+      "path": "benches/rect_expand.rs",
+      "upstream_sha256": "496b987a239680b61b2d65b0ab91cbfab55c807cc1831476bcb08129c092f8de",
+      "local_sha256": "496b987a239680b61b2d65b0ab91cbfab55c807cc1831476bcb08129c092f8de",
+      "changed": false
+    },
+    {
+      "path": "examples/arclen_accuracy.rs",
+      "upstream_sha256": "7bf354d4d34b42e915e082774d74177209b2997b09ee6972a38cb32dfaf385b2",
+      "local_sha256": "7bf354d4d34b42e915e082774d74177209b2997b09ee6972a38cb32dfaf385b2",
+      "changed": false
+    },
+    {
+      "path": "examples/circle.rs",
+      "upstream_sha256": "1416fe74c7a82b15b1d2ee4166d09a75cf8cc9ac6744dddc7df338881258ded3",
+      "local_sha256": "1416fe74c7a82b15b1d2ee4166d09a75cf8cc9ac6744dddc7df338881258ded3",
+      "changed": false
+    },
+    {
+      "path": "examples/cubic_arclen.rs",
+      "upstream_sha256": "467bcf52b26e3480ad05dddbd06374ce219df54b7dc1fa7fb96367eed41e1d5b",
+      "local_sha256": "467bcf52b26e3480ad05dddbd06374ce219df54b7dc1fa7fb96367eed41e1d5b",
+      "changed": false
+    },
+    {
+      "path": "examples/ellipse.rs",
+      "upstream_sha256": "22db083067328d2d4f80a2be1ba1cf7e5478950ecde99142563a4cd9fa6dfaca",
+      "local_sha256": "22db083067328d2d4f80a2be1ba1cf7e5478950ecde99142563a4cd9fa6dfaca",
+      "changed": false
+    },
+    {
+      "path": "examples/fit_poly.rs",
+      "upstream_sha256": "ed1d8adaf2e0adcee445cfd4fd06a110f064455ef382354ec2a99d3450442654",
+      "local_sha256": "ed1d8adaf2e0adcee445cfd4fd06a110f064455ef382354ec2a99d3450442654",
+      "changed": false
+    },
+    {
+      "path": "examples/quad_intersect.rs",
+      "upstream_sha256": "56becf3a522316e1c54eaae7d2d75365fa275bbfc17bb2bf6884d63bf887d88a",
+      "local_sha256": "56becf3a522316e1c54eaae7d2d75365fa275bbfc17bb2bf6884d63bf887d88a",
+      "changed": false
+    },
+    {
+      "path": "examples/simplify.rs",
+      "upstream_sha256": "7bd3fdcfd60fe9094b9f5da51be4a70061f3df760a62a0ae62e7e8c77f649558",
+      "local_sha256": "7bd3fdcfd60fe9094b9f5da51be4a70061f3df760a62a0ae62e7e8c77f649558",
+      "changed": false
+    },
+    {
+      "path": "examples/stroke.rs",
+      "upstream_sha256": "f055edc18fc05c55c2a3f9ad2e3caa6b997e2d9cd7c5781959d752182afe1b90",
+      "local_sha256": "f055edc18fc05c55c2a3f9ad2e3caa6b997e2d9cd7c5781959d752182afe1b90",
+      "changed": false
+    },
+    {
+      "path": "src/affine.rs",
+      "upstream_sha256": "7288c89bb5ce16acd7d1b046f189df5855cfafa0454d667fc7b0dc4454fa2663",
+      "local_sha256": "7288c89bb5ce16acd7d1b046f189df5855cfafa0454d667fc7b0dc4454fa2663",
+      "changed": false
+    },
+    {
+      "path": "src/arc.rs",
+      "upstream_sha256": "f1479f3e54c7e4717424920f128ebfda59ea2984c08b43291411072072eb1475",
+      "local_sha256": "f1479f3e54c7e4717424920f128ebfda59ea2984c08b43291411072072eb1475",
+      "changed": false
+    },
+    {
+      "path": "src/axis.rs",
+      "upstream_sha256": "6ccf1f4cca904fa43f54d9d71a6511927fdab171a8d00382ab311cd2776ef781",
+      "local_sha256": "6ccf1f4cca904fa43f54d9d71a6511927fdab171a8d00382ab311cd2776ef781",
+      "changed": false
+    },
+    {
+      "path": "src/bezpath.rs",
+      "upstream_sha256": "6d9d5769715dfc4c10f90c1de500fca7a2ca35c0d673d2e05d7ddd615a987be4",
+      "local_sha256": "6d9d5769715dfc4c10f90c1de500fca7a2ca35c0d673d2e05d7ddd615a987be4",
+      "changed": false
+    },
+    {
+      "path": "src/circle.rs",
+      "upstream_sha256": "434d23a89e13ad22be300c383cdf027e41a9ccfbd8a3f9152c1e97a5ad330491",
+      "local_sha256": "434d23a89e13ad22be300c383cdf027e41a9ccfbd8a3f9152c1e97a5ad330491",
+      "changed": false
+    },
+    {
+      "path": "src/common.rs",
+      "upstream_sha256": "5d32994b9832dc34738a0d34464d9b2435398404bfd576c838584c301359d062",
+      "local_sha256": "5d32994b9832dc34738a0d34464d9b2435398404bfd576c838584c301359d062",
+      "changed": false
+    },
+    {
+      "path": "src/cubicbez.rs",
+      "upstream_sha256": "de793f84444c55467a4669de64b4a06209f97540362c2da1fe0ad2b2367f5b80",
+      "local_sha256": "de793f84444c55467a4669de64b4a06209f97540362c2da1fe0ad2b2367f5b80",
+      "changed": false
+    },
+    {
+      "path": "src/ellipse.rs",
+      "upstream_sha256": "991e9830a32643d2aa5c34c57330323e65f3b15231c80b086eb715b0665fc41d",
+      "local_sha256": "991e9830a32643d2aa5c34c57330323e65f3b15231c80b086eb715b0665fc41d",
+      "changed": false
+    },
+    {
+      "path": "src/expand.rs",
+      "upstream_sha256": "f0ef21c91790097498bfacd2cc624f6ac86b32bc2600aa78c57583e46c5d0ae6",
+      "local_sha256": "f0ef21c91790097498bfacd2cc624f6ac86b32bc2600aa78c57583e46c5d0ae6",
+      "changed": false
+    },
+    {
+      "path": "src/fit.rs",
+      "upstream_sha256": "3d7dace4a4452ce6a5eff3186a48f8dc0d0d625029feae78c24017fb5b68695b",
+      "local_sha256": "3d7dace4a4452ce6a5eff3186a48f8dc0d0d625029feae78c24017fb5b68695b",
+      "changed": false
+    },
+    {
+      "path": "src/insets.rs",
+      "upstream_sha256": "cf6019c2ab0783ede641ef61677b60d4c2cf4f721317024a0944e8c66373dc98",
+      "local_sha256": "cf6019c2ab0783ede641ef61677b60d4c2cf4f721317024a0944e8c66373dc98",
+      "changed": false
+    },
+    {
+      "path": "src/interop_euclid.rs",
+      "upstream_sha256": "bc94da5023b455df685b74cd942d569e1ee5025191c64ff4217f068d845b9418",
+      "local_sha256": "bc94da5023b455df685b74cd942d569e1ee5025191c64ff4217f068d845b9418",
+      "changed": false
+    },
+    {
+      "path": "src/lib.rs",
+      "upstream_sha256": "f513dc1a758bc061cc2a177fa98a1d566003d6c83e36d3befbc9bbea2e4349e7",
+      "local_sha256": "f513dc1a758bc061cc2a177fa98a1d566003d6c83e36d3befbc9bbea2e4349e7",
+      "changed": false
+    },
+    {
+      "path": "src/line.rs",
+      "upstream_sha256": "66fba2df6d9653aa03adfda457a5059a7cbdd1ae29fa2c2db4ba5aefb1d4db28",
+      "local_sha256": "66fba2df6d9653aa03adfda457a5059a7cbdd1ae29fa2c2db4ba5aefb1d4db28",
+      "changed": false
+    },
+    {
+      "path": "src/mindist.rs",
+      "upstream_sha256": "3f6e98e5cc25395e042bcd3138abd237176034cbddb13d48a11b66f581d724e4",
+      "local_sha256": "3f6e98e5cc25395e042bcd3138abd237176034cbddb13d48a11b66f581d724e4",
+      "changed": false
+    },
+    {
+      "path": "src/moments.rs",
+      "upstream_sha256": "decf10b9116aacab2bab47c8b331a6a5e3ba16b3c63527710289cedc5df930a0",
+      "local_sha256": "decf10b9116aacab2bab47c8b331a6a5e3ba16b3c63527710289cedc5df930a0",
+      "changed": false
+    },
+    {
+      "path": "src/offset.rs",
+      "upstream_sha256": "8999fdb31334a6c08c260f2ae360aba3b091652e26454b735ea985c99a545cd9",
+      "local_sha256": "8999fdb31334a6c08c260f2ae360aba3b091652e26454b735ea985c99a545cd9",
+      "changed": false
+    },
+    {
+      "path": "src/param_curve.rs",
+      "upstream_sha256": "5cac1495643a9cb5f4af7ea618265a9deb87e7f82ee9628fdb46c49fd970a553",
+      "local_sha256": "5cac1495643a9cb5f4af7ea618265a9deb87e7f82ee9628fdb46c49fd970a553",
+      "changed": false
+    },
+    {
+      "path": "src/point.rs",
+      "upstream_sha256": "4311047b9497b4fbd38022eb62ebaa9771c05e55e1bafb9431f2243949515ca7",
+      "local_sha256": "4311047b9497b4fbd38022eb62ebaa9771c05e55e1bafb9431f2243949515ca7",
+      "changed": false
+    },
+    {
+      "path": "src/quadbez.rs",
+      "upstream_sha256": "37ab1037750d32eed6b3664b250a8c14c78419a1567e790695c0e46544263bbd",
+      "local_sha256": "37ab1037750d32eed6b3664b250a8c14c78419a1567e790695c0e46544263bbd",
+      "changed": false
+    },
+    {
+      "path": "src/quadspline.rs",
+      "upstream_sha256": "cfa129dd52d23a7852be3a1103e8022cc792cb2bd481440d3ebc1221a635e28d",
+      "local_sha256": "cfa129dd52d23a7852be3a1103e8022cc792cb2bd481440d3ebc1221a635e28d",
+      "changed": false
+    },
+    {
+      "path": "src/rect.rs",
+      "upstream_sha256": "20c0bca0e79ab1b69321bf5d7e2db618cb4582bb29f47854faa5979a38a9ff2a",
+      "local_sha256": "20c0bca0e79ab1b69321bf5d7e2db618cb4582bb29f47854faa5979a38a9ff2a",
+      "changed": false
+    },
+    {
+      "path": "src/rounded_rect.rs",
+      "upstream_sha256": "495d08f409456a97cd8c228f84624383922c4ef01e4d2edf624a40765a12b3c4",
+      "local_sha256": "495d08f409456a97cd8c228f84624383922c4ef01e4d2edf624a40765a12b3c4",
+      "changed": false
+    },
+    {
+      "path": "src/rounded_rect_radii.rs",
+      "upstream_sha256": "ac42ee920ff31c6b5524ea9ae22e9da8ad2a8d17572e9ade1c369d827b8004d7",
+      "local_sha256": "ac42ee920ff31c6b5524ea9ae22e9da8ad2a8d17572e9ade1c369d827b8004d7",
+      "changed": false
+    },
+    {
+      "path": "src/shape.rs",
+      "upstream_sha256": "226a32a1996d298e9587cc921b7cc8644ca6e04b2c740732e0a63ab00d3351ae",
+      "local_sha256": "226a32a1996d298e9587cc921b7cc8644ca6e04b2c740732e0a63ab00d3351ae",
+      "changed": false
+    },
+    {
+      "path": "src/simplify.rs",
+      "upstream_sha256": "771fc68a2dd0a00d994906176641bcb17c9351b3d1205e037a78a5893b51a684",
+      "local_sha256": "771fc68a2dd0a00d994906176641bcb17c9351b3d1205e037a78a5893b51a684",
+      "changed": false
+    },
+    {
+      "path": "src/size.rs",
+      "upstream_sha256": "645a1f7ba1528b1b10e5881d53019eac428e556c1d9bdea8d3f42ce351c00950",
+      "local_sha256": "645a1f7ba1528b1b10e5881d53019eac428e556c1d9bdea8d3f42ce351c00950",
+      "changed": false
+    },
+    {
+      "path": "src/stroke.rs",
+      "upstream_sha256": "9ae69c57571d653a34ded745e176869ef587e4ff5c3dcb1607a398df7e029498",
+      "local_sha256": "4523a0e08fe3ce324986450a83e16a654520951f17c1f132f30f802f0d6768d7",
+      "changed": true
+    },
+    {
+      "path": "src/svg.rs",
+      "upstream_sha256": "b403a258614b3e287c3e5210b0745814f08acda92e95696bdddbf50e341fa3be",
+      "local_sha256": "b403a258614b3e287c3e5210b0745814f08acda92e95696bdddbf50e341fa3be",
+      "changed": false
+    },
+    {
+      "path": "src/translate_scale.rs",
+      "upstream_sha256": "8b82eb5f46744cb9a044263e200d79d797270616320337e4230356942ab85f1a",
+      "local_sha256": "8b82eb5f46744cb9a044263e200d79d797270616320337e4230356942ab85f1a",
+      "changed": false
+    },
+    {
+      "path": "src/triangle.rs",
+      "upstream_sha256": "27a6cddb109ae36ef55c470261c689d085502ab72a47f3a32ca22e771df7b03e",
+      "local_sha256": "27a6cddb109ae36ef55c470261c689d085502ab72a47f3a32ca22e771df7b03e",
+      "changed": false
+    },
+    {
+      "path": "src/vec2.rs",
+      "upstream_sha256": "05b37bf834417a040012fef380aa9eb10925324ea1a07fba3328839a56c9a060",
+      "local_sha256": "05b37bf834417a040012fef380aa9eb10925324ea1a07fba3328839a56c9a060",
+      "changed": false
+    }
+  ],
+  "local_patch_sha256": "87b97aa705ab12878f9d7df71b9c59afa4716ee4956e0f761ab91ad86c887e92",
+  "locks": {
+    "Cargo.lock": {
+      "before_sha256": "def8dd7be5f208f4a290a4556081f7a63d10a5ae070c5df1808c1d350fa6161e",
+      "sha256": "0d896231393016a4df0ac9a8a2b8eddee545b4a8d62bc87cdfbd1f2e3230a2cd",
+      "package_changes": [
+        {
+          "before": {
+            "name": "kurbo",
+            "version": "0.13.1",
+            "source": "registry+https://github.com/rust-lang/crates.io-index",
+            "checksum": "4b60dfc32f652b926df6192e55525b16d186c69d47876c3ead4da5cc9f8450e2",
+            "dependencies": [
+              "arrayvec",
+              "euclid",
+              "polycool",
+              "smallvec"
+            ]
+          },
+          "after": {
+            "name": "kurbo",
+            "version": "0.13.1",
+            "dependencies": [
+              "arrayvec",
+              "euclid",
+              "polycool",
+              "smallvec"
+            ]
+          }
+        }
+      ]
+    },
+    "examples/notebooks/symbolica-host/Cargo.lock": {
+      "before_sha256": "03e18f00dbba096e08978063fd857d6558659f9f75e0ab09d73be3e543882c5a",
+      "sha256": "2cd05b4adab441a607d0a7f6fb12780c017e28f2cf04f5ea9cc05edae0714d05",
+      "package_changes": [
+        {
+          "before": {
+            "name": "kurbo",
+            "version": "0.13.1",
+            "source": "registry+https://github.com/rust-lang/crates.io-index",
+            "checksum": "4b60dfc32f652b926df6192e55525b16d186c69d47876c3ead4da5cc9f8450e2",
+            "dependencies": [
+              "arrayvec",
+              "euclid",
+              "polycool",
+              "smallvec"
+            ]
+          },
+          "after": {
+            "name": "kurbo",
+            "version": "0.13.1",
+            "dependencies": [
+              "arrayvec",
+              "euclid",
+              "polycool",
+              "smallvec"
+            ]
+          }
+        }
+      ]
+    },
+    "tydenso/Cargo.lock": {
+      "before_sha256": "f1f0573d5f1c02d4ddb73d4491514cd291ae94ded7d84627342226917ca41dd0",
+      "sha256": "f1f0573d5f1c02d4ddb73d4491514cd291ae94ded7d84627342226917ca41dd0",
+      "package_changes": []
+    },
+    "uv.lock": {
+      "before_sha256": "0ad8d1a18d9c520d298ff36ec20a746f9a63c7e0fdebe14e739a574cbb4fabf8",
+      "sha256": "0ad8d1a18d9c520d298ff36ec20a746f9a63c7e0fdebe14e739a574cbb4fabf8"
+    },
+    "flake.lock": {
+      "before_sha256": "e10c5893b513d4c7120d841b47fbfddffb3ac4f1f5cb46a18c0f7542cbde8534",
+      "sha256": "e10c5893b513d4c7120d841b47fbfddffb3ac4f1f5cb46a18c0f7542cbde8534"
+    },
+    "nix/ufo-runtime/uv.lock": {
+      "before_sha256": "64346083774003783f7e462ed184909d2b4985277d43787c40409891eadbfc39",
+      "sha256": "64346083774003783f7e462ed184909d2b4985277d43787c40409891eadbfc39"
+    },
+    "crates/linnest/layout/uv.lock": {
+      "before_sha256": "13e6776cb8fe40f9ceccf37e00504b8b69c30c9f395e3d72d06138ce866008e7",
+      "sha256": "13e6776cb8fe40f9ceccf37e00504b8b69c30c9f395e3d72d06138ce866008e7"
+    }
+  },
+  "licenses": "Both exact upstream license files retained; existing shipped package license/notice owners unchanged. No broader legal clearance claimed."
+}

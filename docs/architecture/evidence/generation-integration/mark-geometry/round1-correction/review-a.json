@@ -1,0 +1,306 @@
+{
+  "decision": "REQUEST_CHANGES",
+  "scope": "A — geometry mathematics, implementation, native SVG and Typst behavior",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports",
+  "identities": {
+    "candidate": "cc7bc03ab97edade07532a586f5830f933451b07",
+    "code": "69d730c1276a9ec4e4b65b4a4f41cf3578668fd1",
+    "source38": "15dd7e1b188dad112d7887bdc6d769125b2697a1",
+    "base": "100da20603a083d031c31bd4e8c6970fc44dda2f",
+    "geometry_source_sha256": "0b48afb13f70af591e154874d5c76427245515da47862e0e959dda1dab20edc6",
+    "wasm": {
+      "kurvst": "4b640fe5a66ba07877fbd18e189b1d26e75aa5772e04a9d66a03922d94405055",
+      "linnest": "3dd9220e32902c906a8a50539d44ff20f7139427d6542442f1be6bba71bddc9f"
+    },
+    "nix_source": "/nix/store/00ahch8yyhn0q11m87rl62m1lmy1kb21-source",
+    "nix_output": "/nix/store/2311zgm13mbrpnazihzd2v7x8p4303kc-linnest-wasm-0.1.0",
+    "nix_derivation": "/nix/store/9vbk12yrd64s095px6g254rypcr0pkyk-linnest-wasm-0.1.0.drv",
+    "nix_package": {
+      "/nix/store/2311zgm13mbrpnazihzd2v7x8p4303kc-linnest-wasm-0.1.0": {
+        "ca": null,
+        "deriver": "/nix/store/9vbk12yrd64s095px6g254rypcr0pkyk-linnest-wasm-0.1.0.drv",
+        "narHash": "sha256-2vzD5NO37s8/o3duE86ILSmnr1jnIz7h6JF7SX/HEUA=",
+        "narSize": 12587728,
+        "references": [],
+        "registrationTime": 1793208743,
+        "signatures": [],
+        "storeDir": "/nix/store",
+        "ultimate": true,
+        "version": 1
+      }
+    },
+    "native_binaries": {
+      "kurvst": {
+        "path": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/kurvst-d3764c82a75b72bc",
+        "sha256": "8d8a0e1329caf8abd528c19d891f11b478998dbbff90c01c78d8c45046b9e614"
+      },
+      "linnest": {
+        "path": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/linnest-69fa6561a9dd3077",
+        "sha256": "c96feba824069cd492cbf99f24e8f689dc78f36040b8163272ebe6be09b28979"
+      },
+      "clinnet": {
+        "path": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/clinnet-eded01f8aae0b814",
+        "sha256": "98aed2b7340806234fa6472b79b45785da67b3a7fb9ba0e71ba09093317603f8"
+      },
+      "clinnet::kurvst_marks": {
+        "path": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/kurvst_marks-eb66a1b494ad56eb",
+        "sha256": "595918ea11a89a0da6a2e79617b26211317f31e3644ed5d482246bc541b88a7d"
+      },
+      "clinnet::public_typst_behavior": {
+        "path": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/public_typst_behavior-305da6a74aa1a1db",
+        "sha256": "06f0332f2757fbf96f67b9e11eda8a1c55b2712140250b73073c7c358a838aec"
+      },
+      "clinnet::bin/linnet": {
+        "path": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/linnet-37a41a4de59f8ec0",
+        "sha256": "88a0f1fd0000dd8f2ab93a8cf9b83e3aff6edf339a1dbc433e71a6df55e64749"
+      }
+    }
+  },
+  "code_change": "pnnxrytkwoqmnpkmpwvrszsomuqlxvkx",
+  "evidence_change": "rwmwllultrvkrzuplovkplxuymuynlpn",
+  "findings": [
+    {
+      "severity": "P2",
+      "path": "crates/kurvst/src/marks.rs",
+      "line": 1191,
+      "end_line": 1201,
+      "title": "Do not silently treat a positive-area polygon as uninset geometry when the inset calculation fails",
+      "related_lines": [
+        1227,
+        1229,
+        1255,
+        1256,
+        1262
+      ],
+      "semantics": "corner_slide rejects every corner with spread <= 1e-12, including finite nondegenerate narrow/deep-notch shapes. Separately the 64-step absolute bisection cannot find positive insets below bound/2^64. In either case largest_inset returns zero, grow becomes infinite, and stroked_head silently returns the nominal polygon. This skips the specified grow-then-inset rule, loses the intended miter or nominal shape, and can paint past the tip. The zero-area exception does not apply to these examples.",
+      "reproducers": [
+        {
+          "mark": "stealth(length: 10pt, width: 8pt, inset: 99.9999%, fill: false, stroke: true)",
+          "context": {
+            "units-per-pt": 1,
+            "line-thickness": 1
+          },
+          "native_end": 9.999999999621423e-06,
+          "native_painted_front": 1.346291201783626,
+          "typst_line_tip": 100,
+          "typst_painted_front": 101.34629120178363
+        },
+        {
+          "mark": "triangle(length: 1e-20pt, width: 1e-20pt, fill: false, stroke: true)",
+          "context": {
+            "units-per-pt": 1,
+            "line-thickness": 1
+          },
+          "native_end": 1e-20,
+          "native_painted_front": 1.118033988749895,
+          "typst_painted_front": 101.1180339887499
+        },
+        {
+          "mark": "triangle(length: 10pt, width: 1e-5pt, fill: false, stroke: true)",
+          "native_end": 10,
+          "native_miter_limit": 1.4156281298425444,
+          "observation": "Sharp tip is dropped from the miter computation; width is dominated by stroke rather than uniform growth of the positive-area head."
+        }
+      ],
+      "requested_change": "Separate true zero-area geometry from numerical failure. Use stable corner geometry and scale-aware inset/growth; if a supported construction cannot be represented, propagate an explicit error instead of claiming successful nominal geometry. Add adversarial tests for both the angle cutoff and scale ratio while preserving current assertions.",
+      "evidence": [
+        "probe-results.log",
+        "regressions.rs",
+        "regressions.log",
+        "boundaries.typ",
+        "boundaries-wasm.json"
+      ]
+    },
+    {
+      "severity": "P2",
+      "path": "crates/kurvst/src/marks.rs",
+      "line": 935,
+      "end_line": 938,
+      "title": "Use the drawn rear crossing for a full-turn barb",
+      "semantics": "The validator accepts |arc| <= 2*pi. A barb with width 10 and stroke 1 at arc=2*pi is a circle centered at x=-5 with radius 4.5. Its rear drawn crossing is -9.5, but LocalHead::open hardcodes rear=front=-0.5. The shaft therefore runs across the circle to its front; a following composite child is also placed nine drawing units too far forward. This is a retained boundary-case contact assumption in the rewritten owner, inconsistent with the requested/new documented drawn-rear invariant; the default semicircle is correct.",
+      "reproducer": "mark.barb(width: 10pt, arc: 360deg), units-per-pt=1, line-thickness=1, carrier=(0,0)..(100,0): back and shaft-contact are (99.5,0); the drawn rear is (90.5,0).",
+      "requested_change": "Compute rear/front and reversal/composite contact consistently for the complete accepted arc domain, including +/-360deg, without narrowing the public option range as a hidden compatibility change. Add native and Typst regression coverage.",
+      "evidence": [
+        "probe-results.log",
+        "regressions.rs",
+        "regressions.log",
+        "boundaries.typ",
+        "boundaries-wasm.json"
+      ]
+    },
+    {
+      "severity": "P3",
+      "path": "crates/kurvst/src/marks.rs",
+      "line": 2425,
+      "end_line": 2428,
+      "title": "Import PathSeg at test-module scope",
+      "semantics": "The newly added quarter-circle test names kurbo::PathSeg::Cubic twice. The selected CONTRIBUTING.typ Imports And Paths policy mandates imported names, including in tests; only qualified free functions and macro-hygiene expansion are excepted. This type pattern is neither.",
+      "requested_change": "Import kurbo::PathSeg at test-module scope and match PathSeg::Cubic. No behavior or expectation change is needed."
+    }
+  ],
+  "fresh_evidence": {
+    "geometry_native": {
+      "passed": 344,
+      "skipped": 1,
+      "excluded": "ec_seed::tests::regenerate_split_seeds (ignored tracked-fixture writer)",
+      "features": "linnest/svg",
+      "profile": "dev-optim",
+      "run_id": "e374754b-056a-4d77-b414-4e7e81c26893",
+      "log": "geometry-native.log"
+    },
+    "clinnet": {
+      "passed": 46,
+      "skipped": 0,
+      "profile": "dev-optim",
+      "required_typst_env": "TYPST_TEST_EXECUTABLE set to the available pinned Typst executable",
+      "run_id": "16f3d4a7-3f25-4b76-9753-ad1ba3d965cf",
+      "log": "clinnet.log",
+      "includes": "Actual current native/WASM parity, packed/native paths, constructors, options, staged assets and public Typst geometry behavior"
+    },
+    "wasm_runtime": {
+      "passed": 3,
+      "skipped": 0,
+      "log": "runtime.log"
+    },
+    "independent_adversarial_native": {
+      "passed": 1,
+      "failed": 3,
+      "exit": 101,
+      "meaning": "Failures establish review findings; they are not credited as passes. Unmodified current rlib linked by pinned rustc; no library reimplementation.",
+      "logs": [
+        "probe-build-identity.json",
+        "probe-results.log",
+        "regressions.log"
+      ]
+    },
+    "independent_adversarial_typst": {
+      "query_exit": 0,
+      "meaning": "Public constructors and actual checkout Kurvst WASM reproduce the native issues",
+      "source": "boundaries.typ",
+      "result": "boundaries-wasm.json"
+    },
+    "catalogue": {
+      "exit": 0,
+      "source": "catalogue.typ",
+      "rays_counts_checked": 27,
+      "checks": "Default diamond path equals default square rotated 45 degrees to 1e-11 coordinate tolerance; default ray sets change iff n >= 8 and n divisible by 4, representative counts 1..24,100,4094,4096; explicit phase=17deg remains honored."
+    },
+    "visual": {
+      "reproduced_byte_exact": [
+        "marks-light.svg",
+        "marks-dark.svg",
+        "marks-light.png",
+        "marks-dark.png",
+        "diagram-light.png",
+        "diagram-dark.png"
+      ],
+      "timestamp": 0,
+      "inspected": "Light/dark galleries and representative ttbar cut diagram; sharp/stroked heads, deep 90% notch, curved chord heads, reversed stealth and both composites. No clipping or contact defect found in those retained nominal examples. Boundary counterexamples are separately recorded.",
+      "log": "render.log"
+    },
+    "freeze_verification": {
+      "candidate": "cc7bc03ab97edade07532a586f5830f933451b07",
+      "code": "69d730c1276a9ec4e4b65b4a4f41cf3578668fd1",
+      "source38": "15dd7e1b188dad112d7887bdc6d769125b2697a1",
+      "base": "100da20603a083d031c31bd4e8c6970fc44dda2f",
+      "tracked_files_hashed": 3664,
+      "changed_tracked_files": [],
+      "source_files_checked": 1402,
+      "source_mismatches": [],
+      "payload_files_checked": 29,
+      "payload_mismatches": [],
+      "protected_files_checked": 23,
+      "protected_mismatches": [],
+      "implementation_hash_mismatches": [],
+      "diff_categories": {
+        "implementation_entries": 49,
+        "generated_delivery_files": 30,
+        "source_test_doc_config_notice_entries": 19,
+        "review_evidence_files": 81
+      },
+      "native_binaries": {
+        "kurvst": {
+          "path": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/kurvst-d3764c82a75b72bc",
+          "sha256": "8d8a0e1329caf8abd528c19d891f11b478998dbbff90c01c78d8c45046b9e614"
+        },
+        "linnest": {
+          "path": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/linnest-69fa6561a9dd3077",
+          "sha256": "c96feba824069cd492cbf99f24e8f689dc78f36040b8163272ebe6be09b28979"
+        },
+        "clinnet": {
+          "path": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/clinnet-eded01f8aae0b814",
+          "sha256": "98aed2b7340806234fa6472b79b45785da67b3a7fb9ba0e71ba09093317603f8"
+        },
+        "clinnet::kurvst_marks": {
+          "path": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/kurvst_marks-eb66a1b494ad56eb",
+          "sha256": "595918ea11a89a0da6a2e79617b26211317f31e3644ed5d482246bc541b88a7d"
+        },
+        "clinnet::public_typst_behavior": {
+          "path": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/public_typst_behavior-305da6a74aa1a1db",
+          "sha256": "06f0332f2757fbf96f67b9e11eda8a1c55b2712140250b73073c7c358a838aec"
+        },
+        "clinnet::bin/linnet": {
+          "path": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/linnet-37a41a4de59f8ec0",
+          "sha256": "88a0f1fd0000dd8f2ab93a8cf9b83e3aff6edf339a1dbc433e71a6df55e64749"
+        }
+      },
+      "wasm": {
+        "kurvst": "4b640fe5a66ba07877fbd18e189b1d26e75aa5772e04a9d66a03922d94405055",
+        "linnest": "3dd9220e32902c906a8a50539d44ff20f7139427d6542442f1be6bba71bddc9f"
+      },
+      "refs": "@  cc7bc03ab97edade07532a586f5830f933451b07 rwmwllultrvkrzuplovkplxuymuynlpn record mark geometry provenance audit and bounded validation\n│\n~\n\n○  98cbf5b8f984e702f4699b1b176fbebfee059d3a pwowvnrptzopqmzmomontywsxomsppss attest test-only drawing template scope changes\n│\n~\n",
+      "nix_source": "/nix/store/00ahch8yyhn0q11m87rl62m1lmy1kb21-source",
+      "nix_output": "/nix/store/2311zgm13mbrpnazihzd2v7x8p4303kc-linnest-wasm-0.1.0",
+      "nix_derivation": "/nix/store/9vbk12yrd64s095px6g254rypcr0pkyk-linnest-wasm-0.1.0.drv",
+      "nix_package": {
+        "/nix/store/2311zgm13mbrpnazihzd2v7x8p4303kc-linnest-wasm-0.1.0": {
+          "ca": null,
+          "deriver": "/nix/store/9vbk12yrd64s095px6g254rypcr0pkyk-linnest-wasm-0.1.0.drv",
+          "narHash": "sha256-2vzD5NO37s8/o3duE86ILSmnr1jnIz7h6JF7SX/HEUA=",
+          "narSize": 12587728,
+          "references": [],
+          "registrationTime": 1793208743,
+          "signatures": [],
+          "storeDir": "/nix/store",
+          "ultimate": true,
+          "version": 1
+        }
+      },
+      "geometry_source_sha256": "0b48afb13f70af591e154874d5c76427245515da47862e0e959dda1dab20edc6",
+      "test_exit_codes": {
+        "geometry-native": 0,
+        "clinnet": 0,
+        "runtime": 0,
+        "catalogue": 0,
+        "regressions": 101
+      }
+    }
+  },
+  "source_assessment": [
+    "The 130 changed entries consist of 19 source/test/prose/config/notice entries, 30 delivered generated assets and 81 explicit review-evidence files; not 130 implementation changes.",
+    "Original source38 geometry is reconciled essentially verbatim; differences in marks.rs are explicit module-scope imports and Debug derives. Public shape names, options, fields, serde schemas and Python/Typst transport remain owned by the existing implementation. Only mark.typ introductory comment changes; public stubs are protected and hash-unchanged.",
+    "For regular nondegenerate heads, adjacent inward normals divided by 1+dot give offset-line intersections; their norm supplies the miter ratio. Positive edge direction prevents reversal for the symmetric polygon families. The bounded search terminates, but its absolute resolution and angular cutoff cause finding 1.",
+    "Leaf/composite enum dispatch is exhaustive. Default contacts, signed gaps, shape-specific reversal, straight cap tangency, quarter-circle TikZ construction, round inner-box geometry, chord fitting and existing carrier clamping have meaningful executed coverage. Remaining accepted-domain counterexamples are the findings.",
+    "Ray proof: for even n != 4, new-old phase difference divided by spoke spacing is (n+2)/4. It is integral for n=4k+2 and half-integral for n=4k; n=4 and odd cases are unchanged. Default diamond uses 4*sqrt(2), preserving the rotated square geometry.",
+    "The native SVG adapter forwards mark geometry and miter/cap/join fields from Kurvst; Typst calls the actual shared WASM engine. Clinnet parity tests exercised these current owners with no old notebook-host extension substitution.",
+    "All changed arithmetic is in the intentional f64 drawing boundary. No precision-generic physics, graph numerator expansion, kernel pin, or unrelated generation owner is changed.",
+    "Existing String transport diagnostics remain; no new public error API or fallback shape is introduced. The numerical-success fallback inside Polygon is the substantive error-handling defect. New ordinary imports are otherwise explicit; PathSeg test patterns are the identified policy exception.",
+    "Compared the pinned Tiptoe marks source and old/current Rust constructions: trigonometric dart special cases, fixed miter limits, TikZ control-point constants and hand-written arc building are replaced. Some elementary bar/bracket/arc coordinates and public defaults remain recognizably continuous. This is source-level observation only; peer B owns material-derived-code attribution and package/legal conclusions. No clean-room claim is made."
+  ],
+  "reused_evidence_and_limits": [
+    "Native test binaries/dependency artifacts were source/feature-qualified and reused where Cargo considered them fresh; the tests themselves were freshly executed. Native binary hashes and the standalone probe rlib hash are recorded.",
+    "Verified all 1402 retained source files against both checkout and exact Nix source and all 29 payload files against checkout and exact Nix output. Receipt evidence hashes and all 23 protected paths matched. This is identity verification, not a new cold build.",
+    "Sol final-producer --rebuild evidence, scoped Clippy/fmt, full 34 SVG/manual/PDF reproduction and package/registry audit are read/reused here. This scope did not claim freshly rerunning those producer or broad package checks.",
+    "Initial bare python was absent; switched to Nix. Initial Git inspection used a non-colocated workspace path and was corrected to read-only jj. Standalone rustc initially lacked the shared build-directory dependency search path; the failed attempts are retained and not credited. Successful native probe compilation uses exact rlib and qualified shared dependency path.",
+    "A plain nix develop invocation realized an additional final WASM/Clinnet/dev-shell closure from the path-based workspace. It was not a requested --rebuild, no target override or cache seeding/deletion was used, and it is not credited as determinism evidence. Subsequent commands reused immutable /nix/store/akp2f8cnvmklnxvfllrd1bbnqz2ymg6d-nix-shell-env.drv. Normal cache outputs remain intact.",
+    "No fresh installed host/full wheel/browser/widget qualification, repaired/compressed native/Pyodide/Community artifact approval, full WP3 approval, physics, generation or performance approval. No general cold-dependency/AHash determinism claim or retroactive clearance of historical Linnest data/name mismatch.",
+    "Parent integration remains blocked until scope A fixes receive a fresh independent review and scope B also approves."
+  ],
+  "cleanup": {
+    "tracked_files_unchanged": true,
+    "refs_mutated": false,
+    "task_processes_retained": false,
+    "retained_directory": ".local/review-mark-geometry-a",
+    "reason": "Useful independent reproduction sources, native probe executables, failed/successful logs, byte-exact visuals and identity records for the requested next implementation/review round; ignored by existing .gitignore. Shared caches and all frozen evidence retained."
+  }
+}

@@ -1,0 +1,123 @@
+{
+  "runtime_asset_tested_output": "/nix/store/jb60kv6fd4av316ysxl5ag2raz5dgahg-linnest-wasm-0.1.0",
+  "final_source_qualified_output": "/nix/store/88qva12y43c0fig08mslcrmjbb3ydxa9-linnest-wasm-0.1.0",
+  "files": [
+    {
+      "path": "kurvst.wasm",
+      "sha256": "d10e65de25d32dcc64eb7dac6830a52b2bca23abcc8a5cb8055211961ad71569"
+    },
+    {
+      "path": "linnest.wasm",
+      "sha256": "05c310283710ecc6bd2815f1e41aa4254e00d016fd44d7a93a96765d6e0ac7a8"
+    },
+    {
+      "path": "templates/crates/kurvst/typst/LICENSE",
+      "sha256": "397f68dfabb4c82acba023b23a640974a8444f8fca6a6655475ea3c3f902f22a"
+    },
+    {
+      "path": "templates/crates/kurvst/typst/kurvst.wasm",
+      "sha256": "d10e65de25d32dcc64eb7dac6830a52b2bca23abcc8a5cb8055211961ad71569"
+    },
+    {
+      "path": "templates/crates/kurvst/typst/src/impl.typ",
+      "sha256": "f806baf392faba6276b52b35ebfe131e00d4e6ca2f3137a50cfb227cf6d6605f"
+    },
+    {
+      "path": "templates/crates/kurvst/typst/src/lib.typ",
+      "sha256": "282a812920ff335731696ac5b92240bcc148ae9ab073408f10e2c3b2018e14f1"
+    },
+    {
+      "path": "templates/crates/kurvst/typst/src/mark.typ",
+      "sha256": "a9e3d510e3cdf49539ef6996b6afea4fb67018bee6f4cc3ca9add46c70589ad0"
+    },
+    {
+      "path": "templates/crates/kurvst/typst/typst.toml",
+      "sha256": "0d7eec512c399c0beeee8402393b32e489856fbdeb30945feff0ed298dd8bbbd"
+    },
+    {
+      "path": "templates/crates/linnest/typst/LICENSE",
+      "sha256": "397f68dfabb4c82acba023b23a640974a8444f8fca6a6655475ea3c3f902f22a"
+    },
+    {
+      "path": "templates/crates/linnest/typst/LICENSE.clarabel",
+      "sha256": "6e2f382771f8aab58e4868ddd0afe0c2fefe6b54f9681493a9c3d0f32906cfe1"
+    },
+    {
+      "path": "templates/crates/linnest/typst/LICENSE.networkx",
+      "sha256": "6025f323ea29dc2f0ee0abd9523bf910186f55b0e148e6ebf646c55566278e2e"
+    },
+    {
+      "path": "templates/crates/linnest/typst/linnest.wasm",
+      "sha256": "05c310283710ecc6bd2815f1e41aa4254e00d016fd44d7a93a96765d6e0ac7a8"
+    },
+    {
+      "path": "templates/crates/linnest/typst/src/curve.typ",
+      "sha256": "4350dfbe4a8e825396e4f476731b9862935d87fb6630c24425350f4071b9e590"
+    },
+    {
+      "path": "templates/crates/linnest/typst/src/draw.typ",
+      "sha256": "f610e3db09f6f168e5e8f5ada9a2cd717570569c26cbf699a69c950357efde2a"
+    },
+    {
+      "path": "templates/crates/linnest/typst/src/graph.typ",
+      "sha256": "65576d7f31cd8d192eb9486f51a6e4c25513f9dab0cee21ff8930450e0f8918c"
+    },
+    {
+      "path": "templates/crates/linnest/typst/src/impl/draw.typ",
+      "sha256": "f593888872327627b84b0d05812d60cd0e16d7c318acc83f2e9e17129b3b5bd0"
+    },
+    {
+      "path": "templates/crates/linnest/typst/src/impl/graph.typ",
+      "sha256": "196e000f9a624555ed757cf2ad5a2a2ce31b3ea78b9a025472efde41a49f6026"
+    },
+    {
+      "path": "templates/crates/linnest/typst/src/impl/identity-targets.typ",
+      "sha256": "47cd66a101f5b50c9a3c93347cec8e1069dd7009faa4bcd100d054e8c496f174"
+    },
+    {
+      "path": "templates/crates/linnest/typst/src/impl/subgraph.typ",
+      "sha256": "f0895d110356e7a419d62d9abcc89fd30662c97d2bfa27c9a9c404d0156cf292"
+    },
+    {
+      "path": "templates/crates/linnest/typst/src/layout.typ",
+      "sha256": "3556d544142368c37cf9faf1d719356335e6b5afb35bf2b62348851ff26be885"
+    },
+    {
+      "path": "templates/crates/linnest/typst/src/lib.typ",
+      "sha256": "5247fce31a688f7685bc63ce4706fab324def42ebcb46e4046d750b03e2ed4ed"
+    },
+    {
+      "path": "templates/crates/linnest/typst/src/render/figure.typ",
+      "sha256": "67ec68df077830ca82eedbca3379f6b0d6b20dd0c42e4f1960d1e0a926620673"
+    },
+    {
+      "path": "templates/crates/linnest/typst/src/render/layout.typ",
+      "sha256": "50611fc11df558fa8a398cddcb0d75435446f1aef8830ebba4de7a064fa18103"
+    },
+    {
+      "path": "templates/crates/linnest/typst/src/render/network.typ",
+      "sha256": "78e9b21e10aa6729552763a246bb62fd9f73810ea8226a38ef6d906c4df79cfb"
+    },
+    {
+      "path": "templates/crates/linnest/typst/src/subgraph.typ",
+      "sha256": "9ed319aecae410ebc32c66c64869aa12a1a1459b4c98df02f908f35dd879e389"
+    },
+    {
+      "path": "templates/crates/linnest/typst/typst.toml",
+      "sha256": "1d168d083b81937145b85076274a5fb2dce8e94e704c01d90324f3bd5f4ee398"
+    },
+    {
+      "path": "templates/figure.typ",
+      "sha256": "ae430d33870f0f22a37a6d5fb582a03276b91e5f148e5b46016458168a1461bc"
+    },
+    {
+      "path": "templates/grid.typ",
+      "sha256": "9d0ddb6cc6fbf9853d82263b5a66e04e7c785fb36f3bce45848d18155026806a"
+    },
+    {
+      "path": "templates/layout.typ",
+      "sha256": "a4fb115a7f4397cd796d08a7d798424378c7dc30b2bcf4e953fd8c91f74da6f5"
+    }
+  ],
+  "all29_byte_identical": true
+}

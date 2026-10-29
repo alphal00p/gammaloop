@@ -15,7 +15,8 @@ and this project adheres to #link("https://semver.org/spec/v2.0.0.html")[Semanti
   `outline` for converting a stroked path into its filled outline.
 - The bundled Kurvst package adds `mark`: data-only constructors for thirteen arrowhead and
   marker shapes plus `combine`, and one batched geometry call shared with native rendering.
-  The shapes follow tiptoe 0.4, whose MIT notice the package carries as `LICENSE.tiptoe`.
+  A head paints its nominal length and width, stroked or not, unless it is too small to
+  hold its stroke, when it grows just enough.
 
 === Changed
 

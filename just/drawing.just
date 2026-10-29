@@ -54,6 +54,8 @@ sync-drawing-assets:
       install_asset crates/kurvst/typst/typst.toml "$target/crates/kurvst/typst/typst.toml"
       install_assets "$target/crates/kurvst/typst" crates/kurvst/typst/LICENSE*
       cp -R crates/kurvst/typst/src/. "$target/crates/kurvst/typst/src/"
+      # This generated notice belonged only to the replaced mark implementation.
+      rm -f "$target/crates/kurvst/typst/LICENSE.tiptoe"
     }
 
     copy_wasm_bundles() {
@@ -144,6 +146,8 @@ sync-drawing-assets-cargo:
       install_asset crates/kurvst/typst/typst.toml "$target/crates/kurvst/typst/typst.toml"
       install_assets "$target/crates/kurvst/typst" crates/kurvst/typst/LICENSE*
       cp -R crates/kurvst/typst/src/. "$target/crates/kurvst/typst/src/"
+      # This generated notice belonged only to the replaced mark implementation.
+      rm -f "$target/crates/kurvst/typst/LICENSE.tiptoe"
     }
 
     copy_wasm_bundles() {

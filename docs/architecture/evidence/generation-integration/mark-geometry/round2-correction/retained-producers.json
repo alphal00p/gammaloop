@@ -1,0 +1,141 @@
+{
+  "binaries": [
+    {
+      "binary_id": "kurvst",
+      "source": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/kurvst-4420f083be818467",
+      "retained": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-round3-producers/kurvst-4420f083be818467",
+      "sha256": "3d09dfed40ad05da252f54281df1bf8d67fb148783a2d8066956cb2392ed6874"
+    },
+    {
+      "binary_id": "linnest",
+      "source": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/linnest-497faa96f1e545c4",
+      "retained": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-round3-producers/linnest-497faa96f1e545c4",
+      "sha256": "b1ec8890be4ebab47b3f66542dd2d6cd01209febd458c865b47a91f6c1ea04f1"
+    },
+    {
+      "binary_id": "clinnet",
+      "source": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/clinnet-ef5848560bd88e11",
+      "retained": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-round3-producers/clinnet-ef5848560bd88e11",
+      "sha256": "e62d184f76371df577f6bddf2e437960668339dc6a882b30548b00bc5b8f24e1"
+    },
+    {
+      "binary_id": "clinnet::kurvst_marks",
+      "source": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/kurvst_marks-3e1afd4d2821fcfa",
+      "retained": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-round3-producers/kurvst_marks-3e1afd4d2821fcfa",
+      "sha256": "58edb6dd397ca5934c41396c485e4167c032ec32d65d2ebe025b96799bac00ef"
+    },
+    {
+      "binary_id": "clinnet::public_typst_behavior",
+      "source": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/public_typst_behavior-2b6a9f9b73212efe",
+      "retained": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-round3-producers/public_typst_behavior-2b6a9f9b73212efe",
+      "sha256": "409334cb165fbd0bec1f43b12d45220ca145a88bd60c14ef5e5fa26410ad724a"
+    },
+    {
+      "binary_id": "clinnet::bin/linnet",
+      "source": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/linnet-46b494d66ab98bb9",
+      "retained": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-round3-producers/linnet-46b494d66ab98bb9",
+      "sha256": "00c58a24e0876434b037fd265d488a6f5c7179c97a37fcdc66d8d75968768633"
+    },
+    {
+      "binary_id": "new-probe",
+      "retained": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-round3-producers/new-probe",
+      "sha256": "95ae49da036e6eb7d99be198df3981a5aea1fae15216290bc83b5103f8598290"
+    },
+    {
+      "binary_id": "new-adversarial",
+      "retained": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-round3-producers/new-adversarial",
+      "sha256": "10219f855715cbfb00b81016455f4cb2133a5aa26d7488722c2a7f8340ed9132"
+    },
+    {
+      "binary_id": "new-regressions",
+      "retained": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-round3-producers/new-regressions",
+      "sha256": "f20e6547f40414d61758fcb627b5a5443a1910b1833f0c213853042989993235"
+    }
+  ],
+  "rlibs": [
+    {
+      "package": "path+file:///shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/kurvst#0.1.0",
+      "retained": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-round3-producers/libkurvst.rlib",
+      "sha256": "285a03c1a8b7851f6ad056cf0367a7bd0647b0a643e503954309a68991397459",
+      "build_artifact": {
+        "reason": "compiler-artifact",
+        "package_id": "path+file:///shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/kurvst#0.1.0",
+        "manifest_path": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/kurvst/Cargo.toml",
+        "target": {
+          "kind": [
+            "cdylib",
+            "rlib"
+          ],
+          "crate_types": [
+            "cdylib",
+            "rlib"
+          ],
+          "name": "kurvst",
+          "src_path": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/kurvst/src/lib.rs",
+          "edition": "2024",
+          "doc": true,
+          "doctest": true,
+          "test": true
+        },
+        "profile": {
+          "opt_level": "2",
+          "debuginfo": 2,
+          "debug_assertions": true,
+          "overflow_checks": true,
+          "test": false
+        },
+        "features": [],
+        "filenames": [
+          "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/target/dev-optim/libkurvst.so",
+          "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/target/dev-optim/libkurvst.rlib"
+        ],
+        "executable": null,
+        "fresh": true
+      }
+    },
+    {
+      "package": "path+file:///shared/lcnbr/dev/gammaloop/generation-drawing-ports/vendor/kurbo#0.13.1",
+      "retained": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-round3-producers/libkurbo.rlib",
+      "sha256": "ebe0df1d8e58dce131d4d7ebc2d58df0bcfaa8ec11afb82e812e98141392158c",
+      "build_artifact": {
+        "reason": "compiler-artifact",
+        "package_id": "path+file:///shared/lcnbr/dev/gammaloop/generation-drawing-ports/vendor/kurbo#0.13.1",
+        "manifest_path": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/vendor/kurbo/Cargo.toml",
+        "target": {
+          "kind": [
+            "lib"
+          ],
+          "crate_types": [
+            "lib"
+          ],
+          "name": "kurbo",
+          "src_path": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/vendor/kurbo/src/lib.rs",
+          "edition": "2024",
+          "doc": true,
+          "doctest": true,
+          "test": true
+        },
+        "profile": {
+          "opt_level": "3",
+          "debuginfo": 2,
+          "debug_assertions": true,
+          "overflow_checks": true,
+          "test": false
+        },
+        "features": [
+          "default",
+          "std"
+        ],
+        "filenames": [
+          "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/libkurbo-4a01bfa744f3e486.rlib",
+          "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/libkurbo-4a01bfa744f3e486.rmeta"
+        ],
+        "executable": null,
+        "fresh": true
+      }
+    }
+  ],
+  "wasm_gc_root": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-round3-producers/wasm-bundle",
+  "wasm_output": "/nix/store/88qva12y43c0fig08mslcrmjbb3ydxa9-linnest-wasm-0.1.0",
+  "qualification": "Task-owned copies retain source-qualified native producers; shared Cargo outputs remain mutable and are not claimed immutable."
+}

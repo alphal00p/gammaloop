@@ -879,6 +879,7 @@ mod tests {
 
     #[test]
     fn embedded_packages_include_nested_sources() {
+        assert!(KURVST_PACKAGE_ASSETS.get_file("LICENSE.tiptoe").is_none());
         assert!(LINNEST_PACKAGE_ASSETS.get_file("ec-layout.wasm").is_none());
         assert!(
             LINNEST_PACKAGE_ASSETS
@@ -896,14 +897,12 @@ mod tests {
                 .is_some()
         );
         assert!(KURVST_PACKAGE_ASSETS.get_file("src/impl.typ").is_some());
-        // linnest.wasm compiles Clarabel and NetworkX-derived code; kurvst.wasm
-        // compiles mark geometry derived from tiptoe.
+        // linnest.wasm compiles Clarabel and NetworkX-derived code.
         for (package, name) in [
             (&LINNEST_PACKAGE_ASSETS, "linnest.wasm"),
             (&LINNEST_PACKAGE_ASSETS, "LICENSE.clarabel"),
             (&LINNEST_PACKAGE_ASSETS, "LICENSE.networkx"),
             (&KURVST_PACKAGE_ASSETS, "kurvst.wasm"),
-            (&KURVST_PACKAGE_ASSETS, "LICENSE.tiptoe"),
         ] {
             assert!(
                 !package.get_file(name).unwrap().contents().is_empty(),
@@ -923,7 +922,6 @@ mod tests {
                                 | "kurvst.wasm"
                                 | "LICENSE.clarabel"
                                 | "LICENSE.networkx"
-                                | "LICENSE.tiptoe"
                                 | "LICENSE"
                         )
                     )
@@ -1013,11 +1011,6 @@ mod tests {
                 KURVST_PACKAGE_DIR,
                 "LICENSE",
                 include_bytes!("../../kurvst/typst/LICENSE").as_slice(),
-            ),
-            (
-                KURVST_PACKAGE_DIR,
-                "LICENSE.tiptoe",
-                include_bytes!("../../kurvst/typst/LICENSE.tiptoe").as_slice(),
             ),
         ] {
             assert_eq!(

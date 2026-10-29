@@ -1,0 +1,50 @@
+[
+  {
+    "path": "marks-light.png",
+    "before_sha256": "9237790f72188a4430df7556f52d4de2284c7ce2bd1774e3ae91816c0c31ebdc",
+    "sha256": "9237790f72188a4430df7556f52d4de2284c7ce2bd1774e3ae91816c0c31ebdc",
+    "changed": false
+  },
+  {
+    "path": "marks-light.svg",
+    "before_sha256": "d10a9d53ab88c4ed228d0731bde5e66b09c9a8893c37a164769a4d9c6259b1e7",
+    "sha256": "524865e90c436f4bfbffd9432c060ad3ee43dd1439c2bc22b44ca9f15666bc37",
+    "changed": true
+  },
+  {
+    "path": "marks-light.pdf",
+    "before_sha256": "cb0162857cc55d3eafa63e26e79be5974e9f33c2ca21c749856a49e5c43e2a25",
+    "sha256": "bf5f928d572b9f3eab4b8261b635223fd871c6c6b0f8d23bf4c8fd8d7b239add",
+    "changed": true
+  },
+  {
+    "path": "diagram-light.png",
+    "before_sha256": "b1c5cc6e0b3cf5cb52f35aa58b4bcc0e8be320bd9fbf9446abdcb10f3d1a45c0",
+    "sha256": "b1c5cc6e0b3cf5cb52f35aa58b4bcc0e8be320bd9fbf9446abdcb10f3d1a45c0",
+    "changed": false
+  },
+  {
+    "path": "marks-dark.png",
+    "before_sha256": "b379dd37d59be5865286c6464954a9572ede2a420d26f4ded5c9395f6fcf798e",
+    "sha256": "b379dd37d59be5865286c6464954a9572ede2a420d26f4ded5c9395f6fcf798e",
+    "changed": false
+  },
+  {
+    "path": "marks-dark.svg",
+    "before_sha256": "625044189a1eb3aa89dc0e8de72b7f86995d4dea25a1f8fb54709dffeb158645",
+    "sha256": "a92dc11bc522f113f95591825cd0b071d56ed62883982af76c5592943fb53e05",
+    "changed": true
+  },
+  {
+    "path": "marks-dark.pdf",
+    "before_sha256": "9a863a5400de6188b73a1a15b059227a919813083d64e1fae528891e674e4b38",
+    "sha256": "7154592804fd93de182e8f6ecc7522eeeaed4276e812f74f15b04cc43f566227",
+    "changed": true
+  },
+  {
+    "path": "diagram-dark.png",
+    "before_sha256": "c1303f9f480bb704b0c51561caacfa84d7470ba3da686270b4ed54bb27ce0384",
+    "sha256": "c1303f9f480bb704b0c51561caacfa84d7470ba3da686270b4ed54bb27ce0384",
+    "changed": false
+  }
+]

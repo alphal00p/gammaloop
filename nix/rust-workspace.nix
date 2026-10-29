@@ -118,7 +118,6 @@
     (workspaceRoot + "/crates/kurvst/typst/src")
     (workspaceRoot + "/crates/kurvst/typst/typst.toml")
     (workspaceRoot + "/crates/kurvst/typst/LICENSE")
-    (workspaceRoot + "/crates/kurvst/typst/LICENSE.tiptoe")
     (workspaceRoot + "/crates/linnest/typst/linnest.wasm")
     (workspaceRoot + "/crates/linnest/typst/LICENSE")
     (workspaceRoot + "/crates/linnest/typst/LICENSE.clarabel")
@@ -202,7 +201,6 @@
       (workspaceRoot + "/crates/kurvst/typst/src")
       (workspaceRoot + "/crates/kurvst/typst/typst.toml")
       (workspaceRoot + "/crates/kurvst/typst/LICENSE")
-      (workspaceRoot + "/crates/kurvst/typst/LICENSE.tiptoe")
       (workspaceRoot + "/crates/linnest/typst/src")
       (workspaceRoot + "/crates/linnest/typst/typst.toml")
       (workspaceRoot + "/crates/linnest/typst/LICENSE")
@@ -465,7 +463,6 @@
       "crates/kurvst/typst/src"
       "crates/kurvst/typst/typst.toml"
       "crates/kurvst/typst/LICENSE"
-      "crates/kurvst/typst/LICENSE.tiptoe"
       "crates/linnest/typst/linnest.wasm"
       "crates/linnest/typst/LICENSE.clarabel"
       "crates/linnest/typst/LICENSE"
@@ -486,7 +483,6 @@
       "crates/kurvst/typst/src"
       "crates/kurvst/typst/typst.toml"
       "crates/kurvst/typst/LICENSE"
-      "crates/kurvst/typst/LICENSE.tiptoe"
       "crates/linnest/typst/linnest.wasm"
       "crates/linnest/typst/LICENSE.clarabel"
       "crates/linnest/typst/LICENSE"
@@ -3194,8 +3190,8 @@
         cmp ${workspaceRoot + "/crates/linnest/layout/native/LICENSE.networkx"} ${linnest-wasm}/templates/crates/linnest/typst/LICENSE.networkx
         cmp ${workspaceRoot + "/crates/linnest/typst/LICENSE"} ${linnest-wasm}/templates/crates/linnest/typst/LICENSE
         cmp ${workspaceRoot + "/crates/kurvst/typst/LICENSE"} ${linnest-wasm}/templates/crates/kurvst/typst/LICENSE
-        cmp ${workspaceRoot + "/crates/kurvst/typst/LICENSE.tiptoe"} ${linnest-wasm}/templates/crates/kurvst/typst/LICENSE.tiptoe
         grep -Fx 'license = "MIT AND Apache-2.0 AND BSD-3-Clause"' ${linnest-wasm}/templates/crates/linnest/typst/typst.toml
+        test ! -e ${linnest-wasm}/templates/crates/kurvst/typst/LICENSE.tiptoe
         wasm-tools validate ${linnest-wasm}/linnest.wasm
         wasm-tools validate ${linnest-wasm}/kurvst.wasm
         test -s ${linnest-wasm}/templates/layout.typ

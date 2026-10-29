@@ -1,0 +1,82 @@
+[
+  {
+    "path": "bind.sh",
+    "sha256": "2d0d044a8c69a8d5fd361295051859e243b068ad81b5302847177e1fc0e18834",
+    "size": 567
+  },
+  {
+    "path": "binding.json",
+    "sha256": "3365f422b9bbb30b61bb83138d22accdeafbd6383b3c35f2c8cc4411829f6b65",
+    "size": 4264
+  },
+  {
+    "path": "check-docs.py",
+    "sha256": "f5b4c08852b3b0606478afb8b2204b35e634db70fbbb2b94ab567f8e3d2f5b0a",
+    "size": 2837
+  },
+  {
+    "path": "correct.py",
+    "sha256": "1a02c053c442ca353ba7895caa4fac8b613249478351ab1362e9f825c06c9665",
+    "size": 1816
+  },
+  {
+    "path": "generation-mark-geometry-wrapper.typ",
+    "sha256": "04968950f00c842f0698d7f5b2d7634f2068462a4032a210e40cf9ce10217cb6",
+    "size": 84
+  },
+  {
+    "path": "note-first-html.log",
+    "sha256": "f6291bee2aca5f6a6694512616225bc21e5352431485b391daf60be2898ee573",
+    "size": 148
+  },
+  {
+    "path": "note-first.log",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "size": 0
+  },
+  {
+    "path": "note-html/index.html",
+    "sha256": "06fba8ec5ca274c0172c435d67f0a142fea9c0d69c0be537f18edb9017c995ec",
+    "size": 13664
+  },
+  {
+    "path": "note.pdf",
+    "sha256": "376dabda35155dfda103bea7f7801a83ca7223f4ceb8cb118b39c83c90f81212",
+    "size": 52685
+  },
+  {
+    "path": "receipt.json",
+    "sha256": "c699764df51cf842c666e7b04fb76f8dea008eae051ae340b2d5c5105b3849d2",
+    "size": 2402
+  },
+  {
+    "path": "registry.log",
+    "sha256": "65c5df09c0e3202ba5522037cd96a30344788eff58bb841a91f6fa7ae8ea9ca0",
+    "size": 82
+  },
+  {
+    "path": "render-note.sh",
+    "sha256": "31aa9e7191eb9ba7dd4693d8c9481099fd82a4255db1aa50551495255d96881e",
+    "size": 900
+  },
+  {
+    "path": "round3-a-review.json",
+    "sha256": "70758643a1eca19731cbc412513399839ab42f8131b837146af9dcb527dcd8c7",
+    "size": 25278
+  },
+  {
+    "path": "round3-b-review.json",
+    "sha256": "9e3124ec592ed45ea8dfb531d5c6ce8bf5cd18d1e5009a3a8f3a6a6ac3a1bb60",
+    "size": 31794
+  },
+  {
+    "path": "runtime-source.log",
+    "sha256": "63fb17a659f13585ae788898e612a294c4bcd430e62452dfed2ec4cd867a1602",
+    "size": 342
+  },
+  {
+    "path": "verify.py",
+    "sha256": "7e5254b4776587d5a916c8b0794a1ea3bb88af77ea54b4c5422cec189798b93c",
+    "size": 3410
+  }
+]

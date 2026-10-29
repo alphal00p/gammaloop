@@ -5,8 +5,10 @@ preserved from frozen `a517ca563d78d161cff17fe60e661f80529c9a83`. Status,
 “today” and migration statements below describe their original staged context,
 not a fresh certification of every API example. Current native graph construction
 uses Node/Edge/HalfEdge Spec values and `symbolica.community.graph`; current
-rendering owns native SVG and static fallbacks. Source38 geometry and notice
-changes are not included. Reported measurements retain their stated old baseline.
+rendering owns native SVG and static fallbacks. Source38 geometry and notice changes now have a separate
+#link("generation-mark-geometry.typ")[execution record]. The original design
+and Tiptoe comparisons below remain historical provenance, not current geometry
+or notice requirements. Reported measurements retain their stated old baseline.
 The current Kurvst manual and registered drawing architecture own usage guidance.
 
 #quote(block: true)[

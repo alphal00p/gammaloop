@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "date": "2026-10-29",
+  "finding": "B3-P3-1",
+  "status": "Attribution corrected; NEW independent focused Astra review required before integration",
+  "preserved_candidate": "7da9e92de733f544957f724ababeb87c7684c02e",
+  "preserved_ref": "generation-mark-geometry-round3",
+  "qualified_runtime_code": "f35643bae1a67fb6ec0c30151e3624f661cf5f96",
+  "attribution": "The root coordinator authorized the narrow exact Kurbo 0.13.1 vendor patch and necessary root/notebook-host patch-selection entries within the accepted correctness task, preserving all unrelated dependency versions, pins and locks.",
+  "intent_check": "The prior receipt JSON differs at dependency_exception.authorization only. Generator differs by the identical string replacement only. Typst paragraph changes only attribution/scope wording; all production, dependency, lock, API, notice and test semantics unchanged.",
+  "reused_review_evidence": {
+    "geometry_A": "APPROVE on7da9e92d/codef356; raw review retained byte-exact",
+    "dependency_artifact_B": "All technical checks pass on7da9e92d/codef356; sole P3 attribution finding corrected here. No fresh technical-suite rerun claimed."
+  },
+  "render_binding": {
+    "source": "docs/architecture/generation-mark-geometry.typ",
+    "source_sha256": "d3feb0f14219d5518f69b49765c4b02faea2b492829206a40b3e7b668b82cd84",
+    "pdf_sha256": "376dabda35155dfda103bea7f7801a83ca7223f4ceb8cb118b39c83c90f81212",
+    "html_sha256": "06fba8ec5ca274c0172c435d67f0a142fea9c0d69c0be537f18edb9017c995ec",
+    "timestamp": 0,
+    "pinned_typst": "0.15.1",
+    "reproduction": "Independent two-pass PDF and wrapped HTML output byte-identical",
+    "old_render_proofs": "round2-correction/note-* and all older renders remain unchanged and bound to7da9e92d/codef356; these new renders alone describe corrected prose."
+  },
+  "registry": "107 scopes,66 titles,16 controls pass with canonical validator; registry itself unchanged",
+  "technical_identity": "Runtime source/derivation, retained ELF/rlib, NAR and29 payload identities are checked in binding.json. Reused producer qualification remains f356; no new WASM, package or runtime build claimed.",
+  "limits": "Focused attribution/evidence review pending. Prior raster, standalone upstream lint, release-wheel, browser/full-site and cold/historical-determinism limitations remain. No integration/publication or WP11 closure."
+}

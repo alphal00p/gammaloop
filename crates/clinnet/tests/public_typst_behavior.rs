@@ -422,11 +422,14 @@ fn public_linnest_arrow_shafts_and_crossing_gaps() {
     let shaft_span = shaft[0];
     let shaft_reference_span = shaft_reference[0];
     assert_close(shaft_span.0 - shaft_reference_span.0, 10.0, 1e-3);
-    // A 9pt stealth with 40% inset stops at its painted notch, not at the
-    // first SVG polygon vertex (whose export translation is not an anchor).
+    // A 9pt stealth with 40% inset and a 0.8pt stroke stops the shaft at the
+    // notch of its drawn outline, not at the first SVG polygon vertex (whose
+    // export translation is not an anchor). That outline runs 0.4pt inside the
+    // painted one, so its notch lies 0.4 / sin(rear edge angle) further ahead.
+    let notch_inset = 0.4 / 3.375_f64.atan2(3.6).sin();
     assert_close(
         shaft_span.1,
-        shaft_reference_span.1 + 10.0 - 9.0 * (1.0 - 0.4),
+        shaft_reference_span.1 + 10.0 - (9.0 * (1.0 - 0.4) - notch_inset),
         1e-3,
     );
 

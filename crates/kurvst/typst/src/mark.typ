@@ -1,5 +1,5 @@
-// Shape vocabulary and parameter definitions follow tiptoe 0.4 (MIT licensed,
-// shape API). Independently implemented; no CeTZ code.
+// Data-only mark constructors: they validate and normalize options, while the
+// shared engine in kurvst.wasm owns every shape's geometry and defaults.
 
 #let _plugin = plugin("../kurvst.wasm")
 

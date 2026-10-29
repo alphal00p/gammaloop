@@ -1,0 +1,157 @@
+{
+  "candidate": "e426ff5fcbe1487c9bf2cf1ed5aaaa03cabf8722",
+  "code": "7940545709071a51d2dd1675ec2c6728ec034833",
+  "tracked_files": 3750,
+  "tracked_hash_changes": [],
+  "protected_files_verified": {
+    "Cargo.lock": "def8dd7be5f208f4a290a4556081f7a63d10a5ae070c5df1808c1d350fa6161e",
+    "crates/feynkit-py/python/symbolica/community/hepkit/__init__.pyi": "965481a91de1044265f1590d4d4e3499b37f366268c96a2c88ca57b478e3696b",
+    "crates/linnest/layout/uv.lock": "13e6776cb8fe40f9ceccf37e00504b8b69c30c9f395e3d72d06138ce866008e7",
+    "crates/linnet-py/python/symbolica/community/graph/__init__.pyi": "477e03af0b1b104ba5a9b8ffad4ec5efa9f5cfce5e0a5043a039efd80820a224",
+    "crates/linnet-render-py/python/symbolica/community/graph/__init__.pyi": "cf53002684d9873407c8404bb8121d248f97c0771c11eef59a74a52d59a93611",
+    "docs/api/python/feynkit-community.pyi": "965481a91de1044265f1590d4d4e3499b37f366268c96a2c88ca57b478e3696b",
+    "docs/api/python/gammaloop-python.pyi": "94d1757c267fb6ec45b2af8cb79a3d3988038e0a7bd344e8bd51c3a5ae82cc30",
+    "docs/api/python/linnet-graph.pyi": "477e03af0b1b104ba5a9b8ffad4ec5efa9f5cfce5e0a5043a039efd80820a224",
+    "docs/api/python/spynso3.pyi": "709d0e36b20d1322b45a855d429d3f43bff742adf447c1754db0e5beab691504",
+    "docs/api/python/vakint-community.pyi": "db3920266c281de2dcb06737c2f1e386e03d9d914c8749332cbf153bd4dce10b",
+    "examples/layout/embedding_constraints/uv.lock": "c7445c7a9e99487c70b12a40e1e79727624541ec57c5f0ffd979b6a1ffa52478",
+    "examples/notebooks/symbolica-host/Cargo.lock": "03e18f00dbba096e08978063fd857d6558659f9f75e0ab09d73be3e543882c5a",
+    "examples/notebooks/symbolica-host/python/symbolica/community/graph/__init__.pyi": "477e03af0b1b104ba5a9b8ffad4ec5efa9f5cfce5e0a5043a039efd80820a224",
+    "examples/notebooks/symbolica-host/python/symbolica/community/hepkit/__init__.pyi": "965481a91de1044265f1590d4d4e3499b37f366268c96a2c88ca57b478e3696b",
+    "examples/notebooks/symbolica-host/python/symbolica/community/tensor/__init__.pyi": "709d0e36b20d1322b45a855d429d3f43bff742adf447c1754db0e5beab691504",
+    "examples/reproducers/symbolica-aliases/Cargo.lock": "ec2fd376d03a54ae954224344ab4b012b093014dd34f3914dc9bfbd50f683c0f",
+    "examples/reproducers/symbolica-atom-access/Cargo.lock": "ab733c71fb1811f2735a6bd9d1645fce683742a165f95272d35f542a588c583e",
+    "examples/reproducers/symbolica-expansion/Cargo.lock": "ee6691611b3e268a0650b9c355cd1aa8c4ffe8e86044cd14d695887b2123ac7c",
+    "flake.lock": "e10c5893b513d4c7120d841b47fbfddffb3ac4f1f5cb46a18c0f7542cbde8534",
+    "nix/ufo-runtime/uv.lock": "64346083774003783f7e462ed184909d2b4985277d43787c40409891eadbfc39",
+    "nix-ci.nix": "e031749e51a33ee48bc5c653d13c2dc7e7d3a51bddea77fc3c67d01ac217c540",
+    "tydenso/Cargo.lock": "f1f0573d5f1c02d4ddb73d4491514cd291ae94ded7d84627342226917ca41dd0",
+    "uv.lock": "0ad8d1a18d9c520d298ff36ec20a746f9a63c7e0fdebe14e739a574cbb4fabf8"
+  },
+  "candidate_unchanged": true,
+  "protected_drawing_refs": {
+    "generation-drawing-ports": "generation-drawing-ports: pwowvnrp 98cbf5b8 attest test-only drawing template scope changes",
+    "generation-mark-geometry": "generation-mark-geometry: nqkxzywx e426ff5f record corrected mark boundaries and source-qualified artifact bindings",
+    "generation-mark-geometry-round1": "generation-mark-geometry-round1: rwmwllul cc7bc03a record mark geometry provenance audit and bounded validation"
+  },
+  "all_bookmarks_identical": false,
+  "unrelated_concurrent_bookmark_diff": [
+    "--- before",
+    "+++ after",
+    "@@ -94,8 +94,8 @@",
+    "   @git: rpvkvznn 00df0507 ship drawing dependency notices in packaged payloads",
+    " generation-drawing-ports: pwowvnrp 98cbf5b8 attest test-only drawing template scope changes",
+    "   @git: pwowvnrp 98cbf5b8 attest test-only drawing template scope changes",
+    "-generation-frame-certificate: rrpznzzy 6fadcaa7 certify bounded grouping-frame numerator equivalence",
+    "-generation-frame-historical-diagnostic: nuxnpxxx d60ae049 capture frozen frame grouping inputs and outputs",
+    "+generation-frame-certificate: rrpznzzy 7dd0b0c1 certify bounded grouping-frame numerator equivalence",
+    "+generation-frame-historical-diagnostic: nuxnpxxx 31190878 capture frozen frame grouping inputs and outputs",
+    " generation-frame-progress-ports: oklkkrzs 595a2f4d retain callback cancellation across progress deliveries",
+    " generation-frame-progress-ports-round1: wqyxrulo 59b57cea cover terminal pocket cuts and record inherited weight gate",
+    " generation-frame-progress-ports-round2: prsuouym d6ddba2d deliver terminal progress after callback cancellation"
+  ],
+  "ref_mutations_by_reviewer": false,
+  "fresh_cargo_selected_native_binaries_match_retained": [
+    {
+      "binary_id": "kurvst",
+      "path": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/kurvst-d3764c82a75b72bc",
+      "sha256": "0ab86fc0fc1dea4ef356862e01e4cd1290408887959c20afbde4eb91cdc18086"
+    },
+    {
+      "binary_id": "linnest",
+      "path": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/linnest-69fa6561a9dd3077",
+      "sha256": "d8ecd105785ef918c8fd26c5d6598c6e5255fd07ffebebce0cf8c543cda522ed"
+    },
+    {
+      "binary_id": "clinnet",
+      "path": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/clinnet-eded01f8aae0b814",
+      "sha256": "7422d6ccfa620b5640b70c6c9fd6df33507b19a0c281a55953e815ea385435fe"
+    },
+    {
+      "binary_id": "clinnet::kurvst_marks",
+      "path": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/kurvst_marks-eb66a1b494ad56eb",
+      "sha256": "03db3ae58bfd915312a400bebf02c26361f1cc53e195a843fb2ef9c08b2c0171"
+    },
+    {
+      "binary_id": "clinnet::public_typst_behavior",
+      "path": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/public_typst_behavior-305da6a74aa1a1db",
+      "sha256": "8cc83f0abdc58f99e79f5581eb02a9a74f5601d2ea7091a191f0a54f8cb02e80"
+    },
+    {
+      "binary_id": "clinnet::bin/linnet",
+      "path": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/linnet-37a41a4de59f8ec0",
+      "sha256": "88a0f1fd0000dd8f2ab93a8cf9b83e3aff6edf339a1dbc433e71a6df55e64749"
+    }
+  ],
+  "current_native_owner": {
+    "artifact": {
+      "reason": "compiler-artifact",
+      "package_id": "path+file:///shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/kurvst#0.1.0",
+      "manifest_path": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/kurvst/Cargo.toml",
+      "target": {
+        "kind": [
+          "cdylib",
+          "rlib"
+        ],
+        "crate_types": [
+          "cdylib",
+          "rlib"
+        ],
+        "name": "kurvst",
+        "src_path": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/kurvst/src/lib.rs",
+        "edition": "2024",
+        "doc": true,
+        "doctest": true,
+        "test": true
+      },
+      "profile": {
+        "opt_level": "2",
+        "debuginfo": 2,
+        "debug_assertions": true,
+        "overflow_checks": true,
+        "test": false
+      },
+      "features": [],
+      "filenames": [
+        "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/target/dev-optim/libkurvst.so",
+        "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/target/dev-optim/libkurvst.rlib"
+      ],
+      "executable": null,
+      "fresh": true
+    },
+    "rlib_sha256": "4902bbc3bc690d113af78ffe3cfecfe1944fe280be548f317f5c847c75e58f07",
+    "matches_retained_corrected_rlib": true,
+    "marks_source_sha256": "436a62c231b0bbf49fae9101eb0f89edd2bbad888df0c593fa126d1f9f5c3f49"
+  },
+  "wasm_sha256": {
+    "kurvst": "31f7fbb7da4520f7c200e5ae7ead5a462c20e1c1bea9c6c020458a6bad04e27d",
+    "linnest": "3dd9220e32902c906a8a50539d44ff20f7139427d6542442f1be6bba71bddc9f"
+  },
+  "selected_nar": {
+    "/nix/store/mhfxkzmsxic59k0lfy3zq6qr23mky526-linnest-wasm-0.1.0": {
+      "ca": null,
+      "deriver": "/nix/store/l3djqdwd6mhl5vh7dnnz01j7mh7nb5r0-linnest-wasm-0.1.0.drv",
+      "narHash": "sha256-pW8UR4uWNXW/cYF418P3A6PwoZAYa4O4UQAvndBinz4=",
+      "narSize": 12592304,
+      "references": [],
+      "registrationTime": 1793215425,
+      "signatures": [],
+      "storeDir": "/nix/store",
+      "ultimate": true,
+      "version": 1
+    }
+  },
+  "routine_check_exits": {
+    "geometry-native": 0,
+    "clinnet": 0,
+    "runtime": 0,
+    "public-fixture": 0,
+    "native-build": 0,
+    "clippy": 0,
+    "format": 0,
+    "native-list": 0,
+    "clinnet-list": 0
+  },
+  "own_background_processes_remaining": false,
+  "cleanup": "Removed only own copied old Typst/WASM package, superseded single-case scripts/fixtures, and unnecessary fixture PDF; original retained assets/binaries and shared caches untouched."
+}

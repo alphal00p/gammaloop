@@ -1,0 +1,16 @@
+[
+  {
+    "owner": "gammaloop-draw-style-migration",
+    "path": "crates/gammaloop-api/src/templates.rs",
+    "anchor": "pub fn extract_templates<P: AsRef<Path>>",
+    "old": "fafea3ec0a3203e2932cce7ce3134c0a8963c149",
+    "new": "7fe2b4f32ea4277a6aa32f08395f48a2ce097b7e"
+  },
+  {
+    "owner": "nix-crane-cache-reuse",
+    "path": "nix/rust-workspace.nix",
+    "anchor": "documentationCatalogAnnotatedItemSourcePaths =",
+    "old": "8450390593797e6fc5c8399df468e4f0025dfe4e",
+    "new": "6e72967b5a8ebf4da6830f9d90e64cb9fe42c684"
+  }
+]

@@ -69,6 +69,9 @@ mod tests {
         Assets::extract_templates(tempdir.path())?;
 
         let templates = tempdir.path().join("drawings/templates");
+        assert!(!templates
+            .join("crates/kurvst/typst/LICENSE.tiptoe")
+            .exists());
         assert!(templates.join("figure.typ").is_file());
         assert!(templates.join("grid.typ").is_file());
         assert!(templates.join("layout.typ").is_file());
@@ -122,10 +125,6 @@ mod tests {
             (
                 "crates/kurvst/typst/LICENSE",
                 include_bytes!("../../kurvst/typst/LICENSE").as_slice(),
-            ),
-            (
-                "crates/kurvst/typst/LICENSE.tiptoe",
-                include_bytes!("../../kurvst/typst/LICENSE.tiptoe").as_slice(),
             ),
         ] {
             assert_eq!(fs::read(templates.join(relative))?, expected, "{relative}");

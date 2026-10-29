@@ -1,0 +1,242 @@
+[
+  {
+    "path": "assets/gammalooplogo-dark.svg",
+    "before_sha256": "e28af00c367da275a79b553e45ab80d41bd6deed679a10f5c661ef389863f69a",
+    "sha256": "e28af00c367da275a79b553e45ab80d41bd6deed679a10f5c661ef389863f69a",
+    "changed": false
+  },
+  {
+    "path": "assets/gammalooplogo-light.svg",
+    "before_sha256": "e78140c9608f98347c83e9864b235536f70d9d84558efefc705b2be680946151",
+    "sha256": "e78140c9608f98347c83e9864b235536f70d9d84558efefc705b2be680946151",
+    "changed": false
+  },
+  {
+    "path": "assets/gammalooplogo.svg",
+    "before_sha256": "e78140c9608f98347c83e9864b235536f70d9d84558efefc705b2be680946151",
+    "sha256": "e78140c9608f98347c83e9864b235536f70d9d84558efefc705b2be680946151",
+    "changed": false
+  },
+  {
+    "path": "crates/kurvst/typst/docs/manual.pdf",
+    "before_sha256": "9a2067588ab45dfda5a896a3639a2b1a5d1d5b9be596ed06b6503aba33b3100b",
+    "sha256": "4b9adf3fe97d6772b9d5fc2ef634c3bd6721e14185b0282b3a2f2f10154817eb",
+    "changed": true
+  },
+  {
+    "path": "crates/kurvst/typst/kurvst.wasm",
+    "before_sha256": "4b640fe5a66ba07877fbd18e189b1d26e75aa5772e04a9d66a03922d94405055",
+    "sha256": "31f7fbb7da4520f7c200e5ae7ead5a462c20e1c1bea9c6c020458a6bad04e27d",
+    "changed": true
+  },
+  {
+    "path": "crates/linnest/typst/examples/soft-triangle.pdf",
+    "before_sha256": "f59585af65c33363ba25010da820bc288e8b4ee7e2ea0e716a30ba4139e9a7d2",
+    "sha256": "f59585af65c33363ba25010da820bc288e8b4ee7e2ea0e716a30ba4139e9a7d2",
+    "changed": false
+  },
+  {
+    "path": "crates/linnest/typst/examples/thrown-out.pdf",
+    "before_sha256": "5a48822462759734e461001383b7bf6300da5f2c1ec14493ae3433229f0db33b",
+    "sha256": "5a48822462759734e461001383b7bf6300da5f2c1ec14493ae3433229f0db33b",
+    "changed": false
+  },
+  {
+    "path": "crates/linnest/typst/examples/xbox-sum.pdf",
+    "before_sha256": "92cfb13205e5cbd75feea037ab910751ff06640be1ad89ed931261aac13adc3f",
+    "sha256": "92cfb13205e5cbd75feea037ab910751ff06640be1ad89ed931261aac13adc3f",
+    "changed": false
+  },
+  {
+    "path": "crates/linnest/typst/linnest.wasm",
+    "before_sha256": "3dd9220e32902c906a8a50539d44ff20f7139427d6542442f1be6bba71bddc9f",
+    "sha256": "3dd9220e32902c906a8a50539d44ff20f7139427d6542442f1be6bba71bddc9f",
+    "changed": false
+  },
+  {
+    "path": "docs/assets/about-double-triangle-dark.svg",
+    "before_sha256": "743ef396b8b2925f5ce31f8e73f5bf824321ccd5dd7366005341e8ce84113bc8",
+    "sha256": "743ef396b8b2925f5ce31f8e73f5bf824321ccd5dd7366005341e8ce84113bc8",
+    "changed": false
+  },
+  {
+    "path": "docs/assets/about-double-triangle-light.svg",
+    "before_sha256": "59bed8b804c8d5fd96873fa15fafda3eeaf7d448d902d852d8d51c6facc0e743",
+    "sha256": "59bed8b804c8d5fd96873fa15fafda3eeaf7d448d902d852d8d51c6facc0e743",
+    "changed": false
+  },
+  {
+    "path": "docs/assets/about-local-unitarity-equation-dark.svg",
+    "before_sha256": "d2a87c82f66973b7e19ea6d967e85261437ad7ca3a85eb095b00314de5dc655a",
+    "sha256": "d2a87c82f66973b7e19ea6d967e85261437ad7ca3a85eb095b00314de5dc655a",
+    "changed": false
+  },
+  {
+    "path": "docs/assets/about-local-unitarity-equation-light.svg",
+    "before_sha256": "4b01c8dc7519047f8d1189a5cac9c0258eb689c8e32d7d0f820dcbd548929a24",
+    "sha256": "4b01c8dc7519047f8d1189a5cac9c0258eb689c8e32d7d0f820dcbd548929a24",
+    "changed": false
+  },
+  {
+    "path": "docs/assets/gammaloop-construction-dark.svg",
+    "before_sha256": "025bb78a74d74e26199e2294ee0fbfa0e454bb734e5a10b43d121ad39770aed5",
+    "sha256": "025bb78a74d74e26199e2294ee0fbfa0e454bb734e5a10b43d121ad39770aed5",
+    "changed": false
+  },
+  {
+    "path": "docs/assets/gammaloop-construction-light.svg",
+    "before_sha256": "2b460630e6209d14be36dccb5733659b6e16646d0e09772cf1f4153e30463999",
+    "sha256": "2b460630e6209d14be36dccb5733659b6e16646d0e09772cf1f4153e30463999",
+    "changed": false
+  },
+  {
+    "path": "docs/assets/graphs/portal-graph-aa-2l-gl00-dark.svg",
+    "before_sha256": "117144eb86297987e82867cbbb662dc933702fadf270196fa5dd5d6527248276",
+    "sha256": "117144eb86297987e82867cbbb662dc933702fadf270196fa5dd5d6527248276",
+    "changed": false
+  },
+  {
+    "path": "docs/assets/graphs/portal-graph-aa-2l-gl00-light.svg",
+    "before_sha256": "cddab5ac2b1b4ab4f647e7fcdbd2bab16a6661450553ed583defa8f06c40449f",
+    "sha256": "cddab5ac2b1b4ab4f647e7fcdbd2bab16a6661450553ed583defa8f06c40449f",
+    "changed": false
+  },
+  {
+    "path": "docs/assets/graphs/portal-graph-aa-2l-gl08-dark.svg",
+    "before_sha256": "849a20daead42265d46773b48949359aa41e0269ccdb6a7aea4fe22ce5cb7b1b",
+    "sha256": "849a20daead42265d46773b48949359aa41e0269ccdb6a7aea4fe22ce5cb7b1b",
+    "changed": false
+  },
+  {
+    "path": "docs/assets/graphs/portal-graph-aa-2l-gl08-light.svg",
+    "before_sha256": "59142f94b1c4d1c0fab05afd2c80543e1ed2b6404fea3bc23c4921c68a144c7e",
+    "sha256": "59142f94b1c4d1c0fab05afd2c80543e1ed2b6404fea3bc23c4921c68a144c7e",
+    "changed": false
+  },
+  {
+    "path": "docs/assets/graphs/portal-graph-aa-3l-gl000-dark.svg",
+    "before_sha256": "6a2a656d1fa004ff07484865bcc31aa10c0f2eedc7e0018527e97ea49775617d",
+    "sha256": "6a2a656d1fa004ff07484865bcc31aa10c0f2eedc7e0018527e97ea49775617d",
+    "changed": false
+  },
+  {
+    "path": "docs/assets/graphs/portal-graph-aa-3l-gl000-light.svg",
+    "before_sha256": "578133bcaf23d2d023ad217a63fb29690208bb586b7a7b7e142e429f6c97800c",
+    "sha256": "578133bcaf23d2d023ad217a63fb29690208bb586b7a7b7e142e429f6c97800c",
+    "changed": false
+  },
+  {
+    "path": "docs/assets/graphs/portal-graph-aa-3l-gl150-dark.svg",
+    "before_sha256": "5019c15ff3de8b8dd0e4c938789a7c4b800c348df93a2b5c1f0619809a3a564a",
+    "sha256": "5019c15ff3de8b8dd0e4c938789a7c4b800c348df93a2b5c1f0619809a3a564a",
+    "changed": false
+  },
+  {
+    "path": "docs/assets/graphs/portal-graph-aa-3l-gl150-light.svg",
+    "before_sha256": "256826261da46dcb6e41a06968a8f44b04b74a05ba9f4973342740e4ba7f5600",
+    "sha256": "256826261da46dcb6e41a06968a8f44b04b74a05ba9f4973342740e4ba7f5600",
+    "changed": false
+  },
+  {
+    "path": "docs/assets/graphs/portal-graph-aa-3l-gl300-dark.svg",
+    "before_sha256": "6ef332a1117e342611935b797f9a215d84dc536558915e18360a9e01251526c5",
+    "sha256": "6ef332a1117e342611935b797f9a215d84dc536558915e18360a9e01251526c5",
+    "changed": false
+  },
+  {
+    "path": "docs/assets/graphs/portal-graph-aa-3l-gl300-light.svg",
+    "before_sha256": "c92f773bf3d61d746e75f3237152e16fb23628ce0ff527f2717ab3fa20942e72",
+    "sha256": "c92f773bf3d61d746e75f3237152e16fb23628ce0ff527f2717ab3fa20942e72",
+    "changed": false
+  },
+  {
+    "path": "docs/assets/graphs/portal-graph-ad-ad-gluon-dark.svg",
+    "before_sha256": "49a3cf650b9062735f617ff08c44c194a4ee7a04d53b6198e923696626992549",
+    "sha256": "49a3cf650b9062735f617ff08c44c194a4ee7a04d53b6198e923696626992549",
+    "changed": false
+  },
+  {
+    "path": "docs/assets/graphs/portal-graph-ad-ad-gluon-light.svg",
+    "before_sha256": "0ceb501d521e96dfd2b4e28febb68cd6f78dd69af0ff5ac1e08af530b053ca0f",
+    "sha256": "0ceb501d521e96dfd2b4e28febb68cd6f78dd69af0ff5ac1e08af530b053ca0f",
+    "changed": false
+  },
+  {
+    "path": "docs/assets/graphs/portal-graph-epem-bbx-dark.svg",
+    "before_sha256": "0ddfda7d286acf8f50617f2652e0652f2a96ccf0e4b0b70759e463151b95e7dc",
+    "sha256": "0ddfda7d286acf8f50617f2652e0652f2a96ccf0e4b0b70759e463151b95e7dc",
+    "changed": false
+  },
+  {
+    "path": "docs/assets/graphs/portal-graph-epem-bbx-light.svg",
+    "before_sha256": "110cf9d8ea3b4d498d7fe53ac7ebba6f3da714fd143e4f7966fc59755cd90b89",
+    "sha256": "110cf9d8ea3b4d498d7fe53ac7ebba6f3da714fd143e4f7966fc59755cd90b89",
+    "changed": false
+  },
+  {
+    "path": "docs/assets/graphs/portal-graph-epem-ttbar-cut-dark.svg",
+    "before_sha256": "3bb12d1a3885a9e7cd39b903a5ef9266730e4aded529bfdbff19da3dd4a66910",
+    "sha256": "3bb12d1a3885a9e7cd39b903a5ef9266730e4aded529bfdbff19da3dd4a66910",
+    "changed": false
+  },
+  {
+    "path": "docs/assets/graphs/portal-graph-epem-ttbar-cut-light.svg",
+    "before_sha256": "31d75bd7d6afe78555793d9321f1dbe7f45b699fd355bd38aba60e89145c5c0a",
+    "sha256": "31d75bd7d6afe78555793d9321f1dbe7f45b699fd355bd38aba60e89145c5c0a",
+    "changed": false
+  },
+  {
+    "path": "docs/assets/graphs/portal-graph-gg-hhh-1l-dark.svg",
+    "before_sha256": "f05c53cdcae2d7bed3c188c3ae608ca2c914e757c0b789137c990fd67bd8da38",
+    "sha256": "f05c53cdcae2d7bed3c188c3ae608ca2c914e757c0b789137c990fd67bd8da38",
+    "changed": false
+  },
+  {
+    "path": "docs/assets/graphs/portal-graph-gg-hhh-1l-light.svg",
+    "before_sha256": "98dcd8bba6bb6d4ccdc439588f3ccc049190ca93ebd182fa405586dc2750e59c",
+    "sha256": "98dcd8bba6bb6d4ccdc439588f3ccc049190ca93ebd182fa405586dc2750e59c",
+    "changed": false
+  },
+  {
+    "path": "docs/assets/graphs/portal-graph-gg-hhh-3l-dark.svg",
+    "before_sha256": "1b355493d24c171dd97860716775a2666b4ce60826a072170bde936847891565",
+    "sha256": "1b355493d24c171dd97860716775a2666b4ce60826a072170bde936847891565",
+    "changed": false
+  },
+  {
+    "path": "docs/assets/graphs/portal-graph-gg-hhh-3l-light.svg",
+    "before_sha256": "72cc477667d6464a4883f2e084c252513565852087600a50d3421507def9d3e8",
+    "sha256": "72cc477667d6464a4883f2e084c252513565852087600a50d3421507def9d3e8",
+    "changed": false
+  },
+  {
+    "path": "docs/assets/graphs/portal-graph-qq-aaa-pentabox-dark.svg",
+    "before_sha256": "1dfc1e3cc36445a979d6bc4042f9a2aa2f3a5ce5bc455ca0aaccaee1afd1422f",
+    "sha256": "1dfc1e3cc36445a979d6bc4042f9a2aa2f3a5ce5bc455ca0aaccaee1afd1422f",
+    "changed": false
+  },
+  {
+    "path": "docs/assets/graphs/portal-graph-qq-aaa-pentabox-light.svg",
+    "before_sha256": "6ec0f9620047e13eddd04b9cda62367f07c7ecd61c9cfeb28997cb4096c36582",
+    "sha256": "6ec0f9620047e13eddd04b9cda62367f07c7ecd61c9cfeb28997cb4096c36582",
+    "changed": false
+  },
+  {
+    "path": "docs/assets/local-unitarity-dark.svg",
+    "before_sha256": "e11babfb62351592aff175ece63b886f34a50cf98356b4c5c545419f553a9a5b",
+    "sha256": "e11babfb62351592aff175ece63b886f34a50cf98356b4c5c545419f553a9a5b",
+    "changed": false
+  },
+  {
+    "path": "docs/assets/local-unitarity-light.svg",
+    "before_sha256": "209f6acd1bf2a3b35f0e7255b1a25d5ff1d3fc5d616a99c4021f90f6b022fcb2",
+    "sha256": "209f6acd1bf2a3b35f0e7255b1a25d5ff1d3fc5d616a99c4021f90f6b022fcb2",
+    "changed": false
+  },
+  {
+    "path": "docs/assets/spensologo.svg",
+    "before_sha256": "0031f9fbf4229c538f42ee932e72f3e1212c343083514e82a38e591ba6a5f1c8",
+    "sha256": "0031f9fbf4229c538f42ee932e72f3e1212c343083514e82a38e591ba6a5f1c8",
+    "changed": false
+  }
+]

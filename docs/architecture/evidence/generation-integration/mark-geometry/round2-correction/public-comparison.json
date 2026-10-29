@@ -1,0 +1,62 @@
+[
+  {
+    "name": "triangle-thinner",
+    "old": {
+      "left": -100999900.505,
+      "right": -99999900.0,
+      "top": 0.505000002525
+    },
+    "corrected": {
+      "left": -100999900.505,
+      "right": 100.00000013411045,
+      "top": 0.505000002525
+    },
+    "old_wasm_sha256": "31f7fbb7da4520f7c200e5ae7ead5a462c20e1c1bea9c6c020458a6bad04e27d",
+    "corrected_wasm_sha256": "d10e65de25d32dcc64eb7dac6830a52b2bca23abcc8a5cb8055211961ad71569"
+  },
+  {
+    "name": "stealth-deeper",
+    "old": {
+      "left": -2692483.910418358,
+      "right": 100.0,
+      "top": 1077033.4156110627
+    },
+    "corrected": {
+      "left": -271950718.24859023,
+      "right": 100.0,
+      "top": 108780327.29943514
+    },
+    "old_wasm_sha256": "31f7fbb7da4520f7c200e5ae7ead5a462c20e1c1bea9c6c020458a6bad04e27d",
+    "corrected_wasm_sha256": "d10e65de25d32dcc64eb7dac6830a52b2bca23abcc8a5cb8055211961ad71569"
+  },
+  {
+    "name": "triangle-near-control",
+    "old": {
+      "left": -1009900.5050001263,
+      "right": 99.99999999627471,
+      "top": 0.5050002525000633
+    },
+    "corrected": {
+      "left": -1009900.5050001263,
+      "right": 99.99999999627471,
+      "top": 0.5050002525000633
+    },
+    "old_wasm_sha256": "31f7fbb7da4520f7c200e5ae7ead5a462c20e1c1bea9c6c020458a6bad04e27d",
+    "corrected_wasm_sha256": "d10e65de25d32dcc64eb7dac6830a52b2bca23abcc8a5cb8055211961ad71569"
+  },
+  {
+    "name": "stealth-near-control",
+    "old": {
+      "left": -2719407.055074317,
+      "right": 99.99999999999999,
+      "top": 1087802.822029735
+    },
+    "corrected": {
+      "left": -2719407.055121738,
+      "right": 99.99999999999999,
+      "top": 1087802.8220487034
+    },
+    "old_wasm_sha256": "31f7fbb7da4520f7c200e5ae7ead5a462c20e1c1bea9c6c020458a6bad04e27d",
+    "corrected_wasm_sha256": "d10e65de25d32dcc64eb7dac6830a52b2bca23abcc8a5cb8055211961ad71569"
+  }
+]

@@ -1,0 +1,125 @@
+{
+  "schema": 1,
+  "round": 2,
+  "scope": "A: substantive geometry correction and public behavior",
+  "reviewer": "NEW independent Astra review; no nested agents",
+  "verdict": "REQUEST_CHANGES",
+  "candidate": "e426ff5fcbe1487c9bf2cf1ed5aaaa03cabf8722",
+  "code": "7940545709071a51d2dd1675ec2c6728ec034833",
+  "workspace": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports",
+  "review_directory": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/review-mark-geometry-round2-a-astra",
+  "findings": [
+    {
+      "id": "A2-P2-1",
+      "priority": "P2",
+      "title": "Stable polygon inset still loses representable miters in painted coverage",
+      "file": "crates/kurvst/src/marks.rs",
+      "line_start": 1285,
+      "line_end": 1288,
+      "related_owner": "MarkSpec::leaf lines 781-793 passes the resulting path/miter to kurbo::stroke; kurbo 0.13.1 src/stroke.rs lines 457-468 still uses hypot + dot to decide whether to keep a miter.",
+      "body": "The new normalized offset succeeds and returns a finite head, but setting head.miter does not make the downstream stroke miter test numerically stable. For nearly opposite edges, hypot + dot rounds to zero and Kurbo drops a mathematically permitted miter. Public MarkDrawable.outline/outline-bounds and placement footprints silently describe a bevelled/truncated polygon instead of the promised grown polygon. The new public checks only require right <= tip + tolerance, so a missing tip or missing wings passes.",
+      "reproducers": [
+        {
+          "shape": "triangle",
+          "length": 10,
+          "width": 1e-07,
+          "stroke": 1,
+          "units_per_pt": 1,
+          "native_actual_right": -100000000.0,
+          "expected_right": 0,
+          "public_carrier_tip": [
+            100,
+            0
+          ],
+          "public_actual_right": -99999900.0,
+          "miter_limit": 200199999.99999997,
+          "result": "prepare/geometry return success; finite outline stops 100 million drawing units short of its nominal tip"
+        },
+        {
+          "shape": "stealth",
+          "length": 10,
+          "width": 8,
+          "inset": 0.99999999,
+          "stroke": 1,
+          "native_actual_left": -2692583.910418358,
+          "native_expected_left": -271950820.2216032,
+          "native_actual_top": 1077033.4156110627,
+          "native_expected_top": 108780328.08864129,
+          "result": "the outer wing extent is about 1/101 of the uniformly grown polygon; right-only assertions still pass"
+        }
+      ],
+      "proof": "100-digit independent lobe-inradius calculation establishes the required uniform growth. Independent offset-line intersections of the exact emitted f64 path establish finite convex miter points and verify every such miter is below the emitted limit. Nearby 10x1e-5 triangle and 99.9999% stealth controls pass. Both failures reproduce in hash-qualified current native and exact selected public WASM.",
+      "requested_change": "Carry the stable miter construction through actual painted-outline/footprint generation for these representable accepted polygons. Add complete bounds or corner-coverage regressions for thin triangles and deep stealth wings, rather than only upper-bounding the front. Preserve accepted geometry; do not classify these finite cases as true degeneracy or silently substitute bevels.",
+      "evidence": [
+        "adversarial.rs",
+        "adversarial-native.log",
+        "adversarial-identity.json",
+        "adversarial-public.typ",
+        "adversarial-public.json",
+        "numeric-oracle.py",
+        "numeric-oracle.json",
+        "current-native-owner.json"
+      ]
+    }
+  ],
+  "round1_findings": [
+    {
+      "finding": "P2 numerical inset failure/degenerate fallback",
+      "closure": "PARTIAL, still blocking",
+      "detail": "Identical old review executable freshly gives 3 failures / 1 passing control; corrected executable passes all four unchanged assertions. The two old numerical examples also pass public WASM. The normalized offset eliminates the fallback and fixed-resolution bisection, but the same accepted positive-polygon contract fails downstream as A2-P2-1."
+    },
+    {
+      "finding": "P2 signed full-turn barb rear contact",
+      "closure": "CLOSED within scope",
+      "detail": "Actual signed interval [-sweep/2,+sweep/2] always contains crossing 0; bounded |sweep|<=TAU makes integer enumeration safe and finite. Exact signed turns include +/-PI and rear contact 9.5, adjacent open turns retain front contact .5; reversal maps both contacts and gives 4.5. Fresh native/public tests cover signed full/nearest-float-open/zero/partial/reversal/curve/composite cases. Native next-after-outside-domain controls reject as before."
+    },
+    {
+      "finding": "P3 PathSeg module import",
+      "closure": "CLOSED",
+      "detail": "Imported at test module scope; both patterns use the imported type. No unrelated Rust policy departures found in the correction."
+    }
+  ],
+  "geometry_audit": {
+    "normalized_construction": "Parameter-derived positive_area is independent of underflowed products. Normalized dart notch retains inset-1, binary vector scaling avoids avoidable vector-normalization rounding, compensated determinant and half-angle forms replace the previous 1+cos cutoff. Linear edge contraction removes the 64-step absolute bisection. No growth iteration/nontermination, no uninset success fallback for positive stroked polygons.",
+    "degeneracy_and_limits": "Fresh minimum-positive uniform triangle/square/diamond with unit stroke remain accepted and finite; zero dimensions/100% notch retain their explicit as-given exception, zero stroke preserves tiny coordinates. A 1 x minimum-positive triangle reports explicit unrepresentable offset error. This does not qualify all f64 dynamic ranges or all rasterizers. Four public +/-minimum-subnormal-radian barb cases fail explicitly at placement with nonfinite geometry on BOTH old and corrected WASM; they are a pre-existing limit, not credited as passing contacts.",
+    "curve_tolerance": "New public curved control keeps the geometric 9.5 chord at 1e-8 and shaft/back comparison at 1e-6. PreparedCarrier::new calls unchanged PathTrimmer::new(...,1e-6). curve_api.rs unchanged. All pre-existing native and public assertions are unchanged; the new tolerance is justified by the existing owner.",
+    "public_and_source_scope": "R2 production Rust changes are confined to marks.rs; public names/options/validation/wire/stubs stay unchanged. Three unit tests and appended public boundary controls are added; PathSeg usages are corrected. No unrelated physics/numerator/callback expansion. Current source file hash 436a62c231b0bbf49fae9101eb0f89edd2bbad888df0c593fa126d1f9f5c3f49.",
+    "visual_inspection": "Fresh ordinary and boundary gallery SVG/PNG renders byte-match the candidate in both themes and were viewed. Ordinary marks, full/signed/reversed barbs, composites and curve contacts appear consistent. Full extents of extreme thin/deep cases are subpixel; near-flat cropped tip is visible, thin cropped tip remains visually empty at that display scale. These views do not certify extreme coverage; strict numerical controls found A2-P2-1."
+  },
+  "fresh_checks": {
+    "original_native_regressions": "old: 3 fail,1 pass; corrected:4 pass; exact original source/executable identities verified",
+    "original_public_replay": "8 original rows queried against immutable old WASM and current WASM, with identical public Typst source; both original polygon failures and full-turn contact reproduce old-fail/new-pass",
+    "geometry_native": "347 passed,1 original tracked-fixture writer skipped; linnest/svg enabled, dev-optim",
+    "clinnet": "46 passed,0 skipped; dev-optim; 324.354 seconds",
+    "runtime": "3 actual Typst/WASM tests passed,0 skipped",
+    "public_fixture": "Complete current mark-geometry.typ compiled successfully",
+    "adversarial_native": "2 newly exposed failures,3 passing controls; expected process exit101",
+    "adversarial_public": "Both new coverage failures reproduced; nearby controls pass",
+    "additional_signed_public": "14 full/closest-open/zero/+/-1e-10/reversal cases pass;4 +/-min-subnormal controls explicitly error on both versions",
+    "clippy_format": "Scoped all-targets clippy --deny warnings and workspace just fmt --check pass; unchanged vendored Clarabel has2 dependency lifetime warnings",
+    "galleries": "8 fresh renders: ordinary/boundary x light/dark x SVG/PNG, all byte-identical to retained corrected evidence",
+    "guards": "3750 tracked file hashes unchanged and exactly candidate-qualified; all23 protected files and3 drawing refs unchanged; current selected native executables/rlib match retained corrected producer hashes; actual NAR/deriver and WASM bytes verified"
+  },
+  "fresh_vs_reused": {
+    "fresh": "All executions listed above, native/public old-new replays, independent tests and high-precision oracle, gallery rendering and visual inspection, post-check source/ref/artifact guards.",
+    "reused": "Pinned Nix tool environment, source-qualified ordinary shared dependencies, old and corrected immutable native producers, selected clean WASM package. Fresh Cargo selects the corrected rlib SHA4902bbc3bc690d113af78ffe3cfecfe1944fe280be548f317f5c847c75e58f07 with features[]; no old compiled rlib or notebook host substituted for current behavior.",
+    "wasm_binding": {
+      "kurvst": "31f7fbb7da4520f7c200e5ae7ead5a462c20e1c1bea9c6c020458a6bad04e27d",
+      "linnest": "3dd9220e32902c906a8a50539d44ff20f7139427d6542442f1be6bba71bddc9f",
+      "output": "/nix/store/mhfxkzmsxic59k0lfy3zq6qr23mky526-linnest-wasm-0.1.0",
+      "derivation": "/nix/store/l3djqdwd6mhl5vh7dnnz01j7mh7nb5r0-linnest-wasm-0.1.0.drv",
+      "narHash": "sha256-pW8UR4uWNXW/cYF418P3A6PwoZAYa4O4UQAvndBinz4=",
+      "source_commit": "7940545709071a51d2dd1675ec2c6728ec034833",
+      "build_flags": "--release --locked -p linnest -p kurvst --features linnest/typst-plugin,kurvst/typst-plugin --target wasm32-unknown-unknown"
+    },
+    "scope_b_boundary": "Deep1402-source/29-payload provenance, notices, packaging and independent final Nix producer rebuild belong to reviewer B and were not duplicated. No cold-cache/cold-dependency claim."
+  },
+  "limits": [
+    "Scope A only; request changes blocks geometry approval and integration regardless of scope B verdict.",
+    "No full WP3, general physics, performance, distribution, full site/browser, final native/Pyodide/Community/repaired-compressed wheels or historical determinism approval.",
+    "No arbitrary-f64/exhaustive GPU precision guarantee; recorded finite representable counterexamples are enough to block.",
+    "Two unrelated generation-frame refs moved concurrently; reviewer performed no ref mutations and the frozen candidate/drawing refs remained unchanged."
+  ],
+  "cleanup": "Removed only own copied old Typst/WASM package, superseded single-case scripts/fixtures, and unnecessary fixture PDF; original retained assets/binaries and shared caches untouched.",
+  "retained": "This ignored review directory retains independent regression sources/executable, numeric/public outputs, gallery images, commands, review and guards for implementation/re-review. No owned background processes, tracked edits, integrations, publication or nested agents."
+}

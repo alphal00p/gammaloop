@@ -1,0 +1,362 @@
+{
+  "schema": 1,
+  "date": "2026-10-28",
+  "reviewer": "NEW independent Astra ROUND2 scope B",
+  "decision": "APPROVE",
+  "scope": "Corrected source/artifact binding and preserved notices/docs only",
+  "candidate": "e426ff5fcbe1487c9bf2cf1ed5aaaa03cabf8722",
+  "candidate_change": "nqkxzywxwmzpmssnwxmwsnozvpytmtkq",
+  "code": "7940545709071a51d2dd1675ec2c6728ec034833",
+  "code_change": "ykzsopuvntuupmsquuxpvyptvzxukyxn",
+  "round1": "cc7bc03ab97edade07532a586f5830f933451b07",
+  "base": "100da20603a083d031c31bd4e8c6970fc44dda2f",
+  "bookmark": "generation-mark-geometry",
+  "findings": [],
+  "old_finding_disposition": [
+    "Round1 B had no blocking findings. Its notice/source-retirement conclusion still applies: owner/license/sync files are byte-identical, the correction introduces only numerical owner changes, tests, a CeTZ gallery using the existing dependency and documentation/evidence. No new material third-party source or legal assertion found in the correction.",
+    "A polygon/full-turn findings: frozen probe sources, old/new native producers, immutable WASM modules and old-fail/new-pass evidence verified by hash; fresh public/native-WASM integration checks pass. Deep geometry closure remains exclusively with NEW scope A.",
+    "A PathSeg policy finding: module-scope import and both type-pattern replacements are present. Existing native assertions are retained; the public fixture is an exact prefix extension of round1.",
+    "The new curved assertion is explicitly calibrated to the unchanged PreparedCarrier/PathTrimmer 1e-6 drawing-unit accuracy; the new 9.5 chord check remains 1e-8. Documentation identifies the intermediate failure and does not claim relaxation of a pre-existing assertion."
+  ],
+  "assessment": [
+    {
+      "paths": [
+        "crates/kurvst/src/marks.rs",
+        "crates/kurvst/typst/tests/mark-geometry.typ",
+        "docs/developers.toml"
+      ],
+      "conclusion": "Round1 to correction inventory is exactly eight implementation/generated paths and 84 added evidence files. Code794 to candidate contains only the 84 evidence files. No unrelated physics, numerator, API/stub or package owner change. Whole-file mark attestation is the sole semantic registry change and is consistent with the documented correction."
+    },
+    {
+      "paths": [
+        "nix",
+        "flake.nix",
+        "crates/linnest/build_assets.rs",
+        "just/drawing.just",
+        "crates/linnest/typst/typst.toml",
+        "tests/packaging"
+      ],
+      "conclusion": "Filters, builder/install phases, common selector, package expressions, embedded assets, sync/idempotency and notice tests unchanged. Complete Clarabel/NetworkX/root notices remain byte-exact and pass real packaging checks. Existing source-retirement engineering audit remains applicable; no broader legal/clean-room conclusion."
+    },
+    {
+      "paths": [
+        "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/clean-input-proof.json",
+        "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/provenance.json"
+      ],
+      "conclusion": "Independently resolved the clean Git flake at exact commit794, compared all1402 selected paths/bytes with Git and checkout, all29 clean payload files with checkout and the fresh-runtime-tested path output, exact derivation/source/toolchain/features/dependency input identity, NAR/deriver and every WASM section hash. Initial1404-source path input differs only by the two ignored old review Rust files. No filter weakening."
+    },
+    {
+      "paths": [
+        "docs/architecture/evidence/generation-integration/mark-geometry/round1-correction/clean-reproduction.log"
+      ],
+      "conclusion": "Read retained successful --rebuild receipt plus actual daemon producer log: unpacked selected source, reused exact dependency artifact, compiled current Kurvst/Linnest owners and completed build/install/fixup. This is final-producer reproduction with warm dependencies; cached store identity alone is not credited and no cold/historical determinism conclusion follows."
+    },
+    {
+      "paths": [
+        "crates/kurvst/typst/docs/manual.typ",
+        "crates/kurvst/typst/examples/mark-boundaries.typ",
+        "docs/architecture/generation-mark-geometry.typ"
+      ],
+      "conclusion": "Fresh34 canonical SVGs are byte-identical to corrected checkout and round1. Manual/Kurvst WASM changes and four ordinary-gallery SVG/PDF changes are recorded; three example PDFs, ordinary gallery PNGs and two diagram PNGs stay byte-identical. Both-theme boundary SVG/PNG/PDF and changed-note PDF/HTML reproduce exactly. Visual review confirms readable full-turn/reversal/composite/curve examples; extreme thin/near-flat whole views are below raster resolution and display-only zoom/crops are explicitly qualified, not exhaustive GPU validation."
+    }
+  ],
+  "fresh_checks": {
+    "integrity": {
+      "candidate": "e426ff5fcbe1487c9bf2cf1ed5aaaa03cabf8722",
+      "code": "7940545709071a51d2dd1675ec2c6728ec034833",
+      "base": "100da20603a083d031c31bd4e8c6970fc44dda2f",
+      "round1": "cc7bc03ab97edade07532a586f5830f933451b07",
+      "tracked_entries": 3750,
+      "implementation_generated_files": 8,
+      "new_evidence_files": 84,
+      "validated_evidence_hash_counts": {
+        "mark-geometry": 80,
+        "round1-correction": 83
+      },
+      "selected_sources": 1402,
+      "payload_files": 29,
+      "payload_equals_runtime_tested": true,
+      "assets": 40,
+      "svg_assets_unchanged": 34,
+      "gallery_changed": 4,
+      "notices_and_selector": 9,
+      "protected": 23,
+      "prior_review_artifact_hashes": 99,
+      "ownership_unchanged": [
+        "flake.nix",
+        "nix",
+        "just/drawing.just",
+        "crates/linnest/build_assets.rs",
+        "crates/linnest/typst/typst.toml",
+        "crates/kurvst/typst/typst.toml",
+        "crates/kurvst/typst/src",
+        "crates/kurvst/src/curve_api.rs",
+        "crates/clinnet",
+        "crates/gammaloop-api/src/templates.rs",
+        "tests/packaging",
+        "docs/architecture/generation-drawing-notices.typ"
+      ],
+      "passed": true
+    },
+    "nix": {
+      "nix_derivation_exact": true,
+      "commit_addressed_flake_revision_exact": true,
+      "nar_recomputed": "sha256-pW8UR4uWNXW/cYF418P3A6PwoZAYa4O4UQAvndBinz4=",
+      "path_source_count": 1404,
+      "clean_source_count": 1402,
+      "excluded_only": [
+        ".local/review-mark-geometry-a/probe.rs",
+        ".local/review-mark-geometry-a/regressions.rs"
+      ],
+      "filters_build_install_toolchain_dependencies_unchanged": true,
+      "section_hashes_verified": true,
+      "retained_native_producers_verified": true,
+      "canonical_check_freshly_executed": true,
+      "producer_log_shows_compilation_and_dependency_reuse": true,
+      "sol_rebuild_receipt_source_bound": true,
+      "reviewer_reran_final_producer": false,
+      "cold_dependency_claim": false
+    },
+    "historical_identity": {
+      "prior_source_files": 1402,
+      "prior_payload_files": 29,
+      "prior_immutable_wasm_old_native_probe_regressions_rlib_verified": true,
+      "frozen_review_producer_sources_verified": 3,
+      "pinned_tiptoe_reference_files_verified": 14,
+      "original_source38_parent_equals_approved_base_marks": true,
+      "original_review_evidence_reused_with_source_identity": true,
+      "historical_data_name_mismatches_cleared": false
+    },
+    "packaging": {
+      "passed": 5,
+      "skipped": 0,
+      "log": "packaging.log"
+    },
+    "clinnet": {
+      "passed": 46,
+      "skipped": 0,
+      "nextest_run": "7c3d77cd-16c3-4d1a-8e52-39a70a9f097a",
+      "log": "clinnet.log",
+      "native_binary_hashes": [
+        {
+          "binary-id": "clinnet",
+          "binary-name": "clinnet",
+          "package-id": "path+file:///shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/clinnet#0.1.8",
+          "kind": "lib",
+          "binary-path": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/clinnet-eded01f8aae0b814",
+          "build-platform": "target",
+          "sha256": "7422d6ccfa620b5640b70c6c9fd6df33507b19a0c281a55953e815ea385435fe",
+          "matches_retained_corrected_producer": true
+        },
+        {
+          "binary-id": "clinnet::kurvst_marks",
+          "binary-name": "kurvst_marks",
+          "package-id": "path+file:///shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/clinnet#0.1.8",
+          "kind": "test",
+          "binary-path": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/kurvst_marks-eb66a1b494ad56eb",
+          "build-platform": "target",
+          "sha256": "03db3ae58bfd915312a400bebf02c26361f1cc53e195a843fb2ef9c08b2c0171",
+          "matches_retained_corrected_producer": true
+        },
+        {
+          "binary-id": "clinnet::public_typst_behavior",
+          "binary-name": "public_typst_behavior",
+          "package-id": "path+file:///shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/clinnet#0.1.8",
+          "kind": "test",
+          "binary-path": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/public_typst_behavior-305da6a74aa1a1db",
+          "build-platform": "target",
+          "sha256": "8cc83f0abdc58f99e79f5581eb02a9a74f5601d2ea7091a191f0a54f8cb02e80",
+          "matches_retained_corrected_producer": true
+        },
+        {
+          "binary-id": "clinnet::bin/linnet",
+          "binary-name": "linnet",
+          "package-id": "path+file:///shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/clinnet#0.1.8",
+          "kind": "bin",
+          "binary-path": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/linnet-37a41a4de59f8ec0",
+          "build-platform": "target",
+          "sha256": "88a0f1fd0000dd8f2ab93a8cf9b83e3aff6edf339a1dbc433e71a6df55e64749",
+          "matches_retained_corrected_producer": true
+        }
+      ]
+    },
+    "actual_typst_wasm_runtime": {
+      "passed": 3,
+      "skipped": 0,
+      "log": "runtime.log"
+    },
+    "public_geometry_fixture": "PASS; actual current selected WASM bytes",
+    "kernel_feature_isolation": "PASS; official just owner",
+    "registry": {
+      "scopes": 104,
+      "titles": 66,
+      "canonical_controls": 16,
+      "prior_semantic_headers": 7,
+      "manual_headers_preserved": true,
+      "log": "registry.json"
+    },
+    "renders": "All34 SVGs, manual+3example PDFs, both themes ordinary/boundary SVG+PNG+PDF and diagram PNG, changed-note PDF/HTML byte-reproduced; render-hashes.json",
+    "wasm_sha256": {
+      "linnest": "3dd9220e32902c906a8a50539d44ff20f7139427d6542442f1be6bba71bddc9f",
+      "kurvst": "31f7fbb7da4520f7c200e5ae7ead5a462c20e1c1bea9c6c020458a6bad04e27d"
+    }
+  },
+  "reused_checks": [
+    "Sol final-producer --rebuild at exact clean794 input inspected and source/artifact-bound; not redundantly rerun by B. Actual canonical Nix payload/wasm-tools validation was executed fresh by B.",
+    "Sol347 geometry/native-SVG tests (one original fixture writer skipped), scoped Clippy/fmt, old3fail+1control/new4pass standalone comparison retained as source/feature/producer-qualified evidence; not called fresh B geometry execution. Peer A owns adversarial mathematical approval.",
+    "Ordinary Nix/Cargo dependencies and matching native test binaries reused; fresh runtime tests actually executed. Current shell prerequisite realization is not a cold build or final distribution test.",
+    "Prior Tiptoe source-retirement engineering audit, original immutable receipt and99 prior B artifact hashes retained and verified. Prior full-site/browser or distribution results are not relabelled as current artifact certification."
+  ],
+  "limits": [
+    "Scope B approval only. Integration still requires NEW independent scope A approval; no integration/publication performed.",
+    "No full WP3 or general generation/physics/performance/numerator-expansion/source39+ approval.",
+    "No final repaired/compressed native/Pyodide/Community/installed-host or restored standalone wheel qualification; packaging fixtures validate payload mechanics only. WP11/13 final gates remain open.",
+    "No full-site/browser/widget/GPU-exhaustive visual approval.",
+    "No cold-dependency/AHash determinism or retroactive clearance of historical Linnest data/name mismatches; no old host core used.",
+    "Native shared-cache paths remain mutable. Retained immutable copies/hashes carry reused native evidence; future integration changes need their own binding."
+  ],
+  "guards": {
+    "tracked_entries": 3750,
+    "all_tracked_bytes_modes_submodule_unchanged": true,
+    "candidate_and_change_unchanged": true,
+    "all_bookmarks_unchanged": false,
+    "protected_review_bookmarks_unchanged": true,
+    "all_git_refs_unchanged": false,
+    "shared_bookmark_lines_added": [
+      "generation-frame-certificate: rrpznzzy 7dd0b0c1 certify bounded grouping-frame numerator equivalence",
+      "generation-frame-historical-diagnostic: nuxnpxxx 31190878 capture frozen frame grouping inputs and outputs"
+    ],
+    "shared_bookmark_lines_removed": [
+      "generation-frame-certificate: rrpznzzy 6fadcaa7 certify bounded grouping-frame numerator equivalence",
+      "generation-frame-historical-diagnostic: nuxnpxxx d60ae049 capture frozen frame grouping inputs and outputs"
+    ],
+    "ref_mutations_by_reviewer": false,
+    "nixci_enable": false,
+    "protected_file_count": 23,
+    "kernel": "1a1829b1f3d0a88b53b44085b3b9f34ef77945b3"
+  },
+  "tracked_edits": false,
+  "ref_changes": false,
+  "integration_or_publication": false,
+  "nested_agents": false,
+  "tooling_qualification": "extra.py initially expected the old round1 registry note ID; changed review-only assertion to generation-mark-geometry after inspecting the actual eight-file correction diff. Failed log retained as extra-initial.log; no candidate code or expectation edited.",
+  "retention": {
+    "directory": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/review-mark-geometry-b-round2-astra",
+    "reason": "Requested review.json, scripts/commands, hashes, guards and byte-exact reproduced outputs retained for parent review; no abandoned candidate edits; self-cleaning fixtures removed their scratch. Original evidence/binaries and shared caches untouched.",
+    "processes_retained": []
+  },
+  "review_artifact_sha256": {
+    "actual-nar.txt": "dff7e10f2e5bccb74f7564a24a5e80c07da872de23e6389acd227307f1cbc32c",
+    "bookmarks-after.txt": "be05a2a003e47710b5c86a196d3dec465233d1232fb9e935308ce31e6caac054",
+    "bookmarks-before.txt": "be9425286aca0b0af75600ee7733153fc877d2e59111295215f5b408b9092b7b",
+    "boundaries-dark.pdf": "ddc98d70216726a5adfcda908b1afe287093f55c86e6926b888c24248f4b3425",
+    "boundaries-dark.png": "55c5eb42e1f75e48c70a5d3eee20ad7819f560fb892c97e872406f61622701e6",
+    "boundaries-dark.svg": "6ab5a424a1d6c8a59dbbb89dd185e90546b59b788465ca1e3e896e015f5122a1",
+    "boundaries-light.pdf": "12fa4f3914d9a46fc065f21d00064561e1a2906f0cc2f87cc529983ff3f9395f",
+    "boundaries-light.png": "df16b0fe0e2ad76fba63d88067add6aa164ac1db573970685ad783bc991171a8",
+    "boundaries-light.svg": "eca5f8dcdc3dbf5a4b025318878c6d0ff63a55e2c8aa331acc78171e27324f97",
+    "candidate-after.txt": "f1cbd52d402a58b3b28811246734bb5c542252117cb9fd6120b214abf49b4c5f",
+    "candidate-before.txt": "f1cbd52d402a58b3b28811246734bb5c542252117cb9fd6120b214abf49b4c5f",
+    "cargo-version.log": "9950bbb2d5c3417b1a068f0e81f6d3cac991a363193bdf2a22d447f5acf8b503",
+    "check-derivation.json": "16d9df010c834551f061c6ec7d3ac00309d46a0b028037953b701b61d7712af4",
+    "check-eval.log": "63fb17a659f13585ae788898e612a294c4bcd430e62452dfed2ec4cd867a1602",
+    "checks.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "checks.log": "557e7d361cd4f05f311eb002fa97c2f325cdc8dfa0950f91e29f13dc5574b973",
+    "checks.sh": "fe93f2fea431efac76a2a8250af894a6000adef0b44046d7610ce07218160385",
+    "clinnet-binaries.json": "125c37d5f4f87c8c9bfd93cd72a51939ec9bd59d5e5b57c2d5b294b5683a8408",
+    "clinnet-binaries.log": "d101dfecc7ac1091af525b072e4d99f524ebe91f1e0a87b470a2f4212335a0ec",
+    "clinnet-binary-hashes.json": "bf7a5afc44daf1c3812ccfe0b4de3d51c89ad30133e899af55be6c42630ab1c6",
+    "clinnet.log": "1b7f1b8ba11bbfea9a020de4269c8f8b0cb39280e70763460b1051550ded220d",
+    "commands.json": "16fea2369d6d8c1adbd7a7407933357c784b2f8c4cac53bbaa7a874af44cd0af",
+    "derivation.json": "c2f122dc3f2c7692e8578f2a79e230299661f89308650f649a44c508eb41dd00",
+    "diagram-dark.png": "c1303f9f480bb704b0c51561caacfa84d7470ba3da686270b4ed54bb27ce0384",
+    "diagram-light.png": "b1c5cc6e0b3cf5cb52f35aa58b4bcc0e8be320bd9fbf9446abdcb10f3d1a45c0",
+    "environment.log": "f8c2c22c9551f9ba6947b39ac907d131c5d488726d0d120675e3294b0864db6d",
+    "extra-initial.log": "8d923b15daf1148345b5143be22f81a550f55be9d5aae6dc43d23ac80714dfc4",
+    "extra.log": "7a73b96d277e35aa8120705b59587dc0a7d324ff2559ddc39ca9f277c8ce1308",
+    "extra.py": "111673bf6ce8e931e3ee2457bd8348b41f2d551ca41f47b784231d6da22b76f6",
+    "final-guard.log": "8eef8e18dd57e0aded36547e06ad432827dfa4341389138569f8f39d790aef9c",
+    "flake-metadata.json": "056f2c54f36a510d4f6c79eab7ba00f84f022b1d93a078ab27980442b51b658d",
+    "flake-metadata.log": "613228d48dd639e1d9f8b8151506f09d8e9b9b27166687df7ff4c947e219cb15",
+    "fresh-canonical-wasm-check.log": "8728bd8c8959e929f113f212e3358d055c363587d52910114347cb9ef1cef6d3",
+    "generation-mark-geometry-html/index.html": "d0cc3b9484f57024068f0516cfb0a3df0562e496e82cf9aa016dac9d77cd21a7",
+    "generation-mark-geometry.pdf": "fdb7c2acf8043f5db44e9f8b7d84039edc8f5efe7cb13952b337d477638d0a95",
+    "git-refs-after.txt": "0fde370268f8b4cb13c29a79445ceae0bd4afc623120a4cd4e45121a6af12eb4",
+    "git-refs-before.txt": "4e35d1b1633db02c3296795d5f2fcb8135c9799f4de75bdb96aeb43d826ee849",
+    "guards.json": "ca7264003f11f861b0d86e3c36c82011e40cfaf17a5657db4a81a124113dc343",
+    "history-verification.json": "367a7124b1046d104f67b8672d280810d8ff66a00a25a38fb1c0ca0e40e49074",
+    "history.log": "367a7124b1046d104f67b8672d280810d8ff66a00a25a38fb1c0ca0e40e49074",
+    "history.py": "e5850e5f675f596503890dda66309ad03df842f64786656d659c61035294daaa",
+    "kernel.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "manual.pdf": "4b9adf3fe97d6772b9d5fc2ef634c3bd6721e14185b0282b3a2f2f10154817eb",
+    "marks-dark.pdf": "7154592804fd93de182e8f6ecc7522eeeaed4276e812f74f15b04cc43f566227",
+    "marks-dark.png": "b379dd37d59be5865286c6464954a9572ede2a420d26f4ded5c9395f6fcf798e",
+    "marks-dark.svg": "a92dc11bc522f113f95591825cd0b071d56ed62883982af76c5592943fb53e05",
+    "marks-light.pdf": "bf5f928d572b9f3eab4b8261b635223fd871c6c6b0f8d23bf4c8fd8d7b239add",
+    "marks-light.png": "9237790f72188a4430df7556f52d4de2284c7ce2bd1774e3ae91816c0c31ebdc",
+    "marks-light.svg": "524865e90c436f4bfbffd9432c060ad3ee43dd1439c2bc22b44ca9f15666bc37",
+    "marks.diff": "b8ec730f8fc423d5491e8e8debccac52fb3f6db3316ddb7b4da8d1fb1cc74dfe",
+    "nix-eval.log": "63fb17a659f13585ae788898e612a294c4bcd430e62452dfed2ec4cd867a1602",
+    "nix-verification.json": "1f8d9c71f73421f0abdefb5aa42b6a525564bce272d36ddc200eba61bad6366f",
+    "package.json": "92a3bd04f767158276abd18432409908594746b72f51b3ee5d562f640467553e",
+    "packaging.log": "c64ad8a14a5708fc04c6b4c7cc5db8d8bc2b17f47bcae8f0777dbe6e4ce3f5af",
+    "pinned-environment.log": "bcd630c8976610dd6839d2f1aacea13aa983cb138e73c421668e6146f09621fa",
+    "producer.log": "35dac5c0c55d5e7681ae93dfa1300fef83d1d8b4ea21113a6b5fb9d16dd0251c",
+    "public-geometry.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "public-geometry.pdf": "47aaa18de43bb5cdcd3a90cb32b284e8d873e8b78631755b7d4772333d33e0a4",
+    "registry.json": "075bd58814b80ed69f8ede82cb4b9f0cddb0909d3896ff626c0ffaca58f9e6bd",
+    "render-hashes.json": "9cb3ccf87ba621c7de47a191cc3bb7ae3901b2af486f4f586aee1f413623259b",
+    "render.exit": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "render.log": "91fafc56921b1b0dfc97494eb70aa32a0ce72bc52834809b0a487b7a33d8cb12",
+    "render.sh": "152fb2fb0f9a1557535bc97a1ce5a76d9b753d97a44ae7e7d9206000a1c82384",
+    "reproduced/assets/gammalooplogo-dark.svg": "e28af00c367da275a79b553e45ab80d41bd6deed679a10f5c661ef389863f69a",
+    "reproduced/assets/gammalooplogo-light.svg": "e78140c9608f98347c83e9864b235536f70d9d84558efefc705b2be680946151",
+    "reproduced/assets/gammalooplogo.svg": "e78140c9608f98347c83e9864b235536f70d9d84558efefc705b2be680946151",
+    "reproduced/docs/assets/about-double-triangle-dark.svg": "743ef396b8b2925f5ce31f8e73f5bf824321ccd5dd7366005341e8ce84113bc8",
+    "reproduced/docs/assets/about-double-triangle-light.svg": "59bed8b804c8d5fd96873fa15fafda3eeaf7d448d902d852d8d51c6facc0e743",
+    "reproduced/docs/assets/about-local-unitarity-equation-dark.svg": "d2a87c82f66973b7e19ea6d967e85261437ad7ca3a85eb095b00314de5dc655a",
+    "reproduced/docs/assets/about-local-unitarity-equation-light.svg": "4b01c8dc7519047f8d1189a5cac9c0258eb689c8e32d7d0f820dcbd548929a24",
+    "reproduced/docs/assets/gammaloop-construction-dark.svg": "025bb78a74d74e26199e2294ee0fbfa0e454bb734e5a10b43d121ad39770aed5",
+    "reproduced/docs/assets/gammaloop-construction-light.svg": "2b460630e6209d14be36dccb5733659b6e16646d0e09772cf1f4153e30463999",
+    "reproduced/docs/assets/graphs/portal-graph-aa-2l-gl00-dark.svg": "117144eb86297987e82867cbbb662dc933702fadf270196fa5dd5d6527248276",
+    "reproduced/docs/assets/graphs/portal-graph-aa-2l-gl00-light.svg": "cddab5ac2b1b4ab4f647e7fcdbd2bab16a6661450553ed583defa8f06c40449f",
+    "reproduced/docs/assets/graphs/portal-graph-aa-2l-gl08-dark.svg": "849a20daead42265d46773b48949359aa41e0269ccdb6a7aea4fe22ce5cb7b1b",
+    "reproduced/docs/assets/graphs/portal-graph-aa-2l-gl08-light.svg": "59142f94b1c4d1c0fab05afd2c80543e1ed2b6404fea3bc23c4921c68a144c7e",
+    "reproduced/docs/assets/graphs/portal-graph-aa-3l-gl000-dark.svg": "6a2a656d1fa004ff07484865bcc31aa10c0f2eedc7e0018527e97ea49775617d",
+    "reproduced/docs/assets/graphs/portal-graph-aa-3l-gl000-light.svg": "578133bcaf23d2d023ad217a63fb29690208bb586b7a7b7e142e429f6c97800c",
+    "reproduced/docs/assets/graphs/portal-graph-aa-3l-gl150-dark.svg": "5019c15ff3de8b8dd0e4c938789a7c4b800c348df93a2b5c1f0619809a3a564a",
+    "reproduced/docs/assets/graphs/portal-graph-aa-3l-gl150-light.svg": "256826261da46dcb6e41a06968a8f44b04b74a05ba9f4973342740e4ba7f5600",
+    "reproduced/docs/assets/graphs/portal-graph-aa-3l-gl300-dark.svg": "6ef332a1117e342611935b797f9a215d84dc536558915e18360a9e01251526c5",
+    "reproduced/docs/assets/graphs/portal-graph-aa-3l-gl300-light.svg": "c92f773bf3d61d746e75f3237152e16fb23628ce0ff527f2717ab3fa20942e72",
+    "reproduced/docs/assets/graphs/portal-graph-ad-ad-gluon-dark.svg": "49a3cf650b9062735f617ff08c44c194a4ee7a04d53b6198e923696626992549",
+    "reproduced/docs/assets/graphs/portal-graph-ad-ad-gluon-light.svg": "0ceb501d521e96dfd2b4e28febb68cd6f78dd69af0ff5ac1e08af530b053ca0f",
+    "reproduced/docs/assets/graphs/portal-graph-epem-bbx-dark.svg": "0ddfda7d286acf8f50617f2652e0652f2a96ccf0e4b0b70759e463151b95e7dc",
+    "reproduced/docs/assets/graphs/portal-graph-epem-bbx-light.svg": "110cf9d8ea3b4d498d7fe53ac7ebba6f3da714fd143e4f7966fc59755cd90b89",
+    "reproduced/docs/assets/graphs/portal-graph-epem-ttbar-cut-dark.svg": "3bb12d1a3885a9e7cd39b903a5ef9266730e4aded529bfdbff19da3dd4a66910",
+    "reproduced/docs/assets/graphs/portal-graph-epem-ttbar-cut-light.svg": "31d75bd7d6afe78555793d9321f1dbe7f45b699fd355bd38aba60e89145c5c0a",
+    "reproduced/docs/assets/graphs/portal-graph-gg-hhh-1l-dark.svg": "f05c53cdcae2d7bed3c188c3ae608ca2c914e757c0b789137c990fd67bd8da38",
+    "reproduced/docs/assets/graphs/portal-graph-gg-hhh-1l-light.svg": "98dcd8bba6bb6d4ccdc439588f3ccc049190ca93ebd182fa405586dc2750e59c",
+    "reproduced/docs/assets/graphs/portal-graph-gg-hhh-3l-dark.svg": "1b355493d24c171dd97860716775a2666b4ce60826a072170bde936847891565",
+    "reproduced/docs/assets/graphs/portal-graph-gg-hhh-3l-light.svg": "72cc477667d6464a4883f2e084c252513565852087600a50d3421507def9d3e8",
+    "reproduced/docs/assets/graphs/portal-graph-qq-aaa-pentabox-dark.svg": "1dfc1e3cc36445a979d6bc4042f9a2aa2f3a5ce5bc455ca0aaccaee1afd1422f",
+    "reproduced/docs/assets/graphs/portal-graph-qq-aaa-pentabox-light.svg": "6ec0f9620047e13eddd04b9cda62367f07c7ecd61c9cfeb28997cb4096c36582",
+    "reproduced/docs/assets/local-unitarity-dark.svg": "e11babfb62351592aff175ece63b886f34a50cf98356b4c5c545419f553a9a5b",
+    "reproduced/docs/assets/local-unitarity-light.svg": "209f6acd1bf2a3b35f0e7255b1a25d5ff1d3fc5d616a99c4021f90f6b022fcb2",
+    "reproduced/docs/assets/spensologo.svg": "0031f9fbf4229c538f42ee932e72f3e1212c343083514e82a38e591ba6a5f1c8",
+    "round1-diff.txt": "0d22f1a2abf3b535b7a243e51fe06b2a2ddb4a1e3510f8846a140d61672c5e6f",
+    "runtime.log": "1615d98970a50d296cba27acd2db7e2f3b45e190268cb391b1ddf746fd2f6712",
+    "rustc-version.log": "778fbc643a806f0dd123c056e66201d7e8a56a61928ec0a33171be8d6c2d5a37",
+    "soft-triangle.pdf": "f59585af65c33363ba25010da820bc288e8b4ee7e2ea0e716a30ba4139e9a7d2",
+    "tested-path-derivation.json": "0af8fa5350db6ff5546ccf39d3dc14201739f3f91a14f89a4107cd73edfbd0b2",
+    "thrown-out.pdf": "5a48822462759734e461001383b7bf6300da5f2c1ec14493ae3433229f0db33b",
+    "tracked-after.json": "8ee226b31f093b099eb5453c346eae0716827b67a3797614af999fc6546c39fd",
+    "tracked-before.json": "8ee226b31f093b099eb5453c346eae0716827b67a3797614af999fc6546c39fd",
+    "typst-version.log": "20ad20e86d85d168643624dc3e3388e7cbcc5a8384d17835db3a0ab04c496fba",
+    "verification.json": "762e19786d165dc472c8fc60623c3e4664d4646748c85d7b3d7f0fc522ca8455",
+    "verify.log": "a1730ea22c7fd87a69058016bfcabe51bd5936ff3eee4eb3bdb87567fa6bf3d5",
+    "verify.py": "61e1295f7cf959f95f66c31b59352e5af79bc45e0873818eaca5010bcdbbef69",
+    "write-review.log": "e84044944ae20769636bdd707e901057306620450f0d0467ecf1308c4401b3bb",
+    "write-review.py": "ecc0c1dcb39fe8768a179e3b7c2904fe9881d7d9661a6971bbc47c4c4911c777",
+    "xbox-sum.pdf": "92cfb13205e5cbd75feea037ab910751ff06640be1ad89ed931261aac13adc3f"
+  }
+}

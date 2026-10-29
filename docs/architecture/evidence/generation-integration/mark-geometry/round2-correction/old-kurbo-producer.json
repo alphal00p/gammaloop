@@ -1,0 +1,8 @@
+[
+  {
+    "old_package_id": "registry+https://github.com/rust-lang/crates.io-index#kurbo@0.13.1",
+    "source": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/libkurbo-1309ca05f6beec5a.rlib",
+    "retained": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-round2-producers/libkurbo-1309ca05f6beec5a.rlib",
+    "sha256": "a80296b104b890e3a6d178aeed885fec59b374015c0e708eeb0e4dec65a568e8"
+  }
+]

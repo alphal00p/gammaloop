@@ -13,6 +13,61 @@ title = "Implemented architecture"
 summary = "How the current runtime, physics layers, parsers, and symbolic engines are organized."
 
 [[section.note]]
+id = "generation-mark-geometry"
+title = "First-principles mark geometry"
+summary = "Source38 geometry, source/notice audit, rebuilt artifacts and bounded validation on the reviewed source36 base."
+source = "docs/architecture/generation-mark-geometry.typ"
+kind = "Implementation record"
+status = "Implemented candidate; NEW independent Astra review required"
+lifecycle = "investigation"
+owner = "unassigned"
+reviewed_at = "2026-10-28"
+review_ref = "100da20603a083d031c31bd4e8c6970fc44dda2f"
+products = ["gammaloop", "linnet", "feynkit"]
+topics = ["drawing", "geometry", "licenses"]
+review_triggers = ["vendor/kurbo/**", "crates/kurvst/**", "crates/linnest/src/svg/**", "tests/packaging/test_drawing_notices.py", "just/drawing.just", "nix/rust-workspace.nix"]
+
+[[section.note.scope]]
+path = "crates/kurvst/src/marks.rs"
+symbol = "MarkSpec local geometry and existing transport/carrier owners"
+anchor = "impl MarkSpec {"
+# Source38 audit: local-frame polygon offsets/tangent construction/Kurbo arcs;
+# current tests certify contact, miter, growth and composite/curve invariants.
+# Round1 geometry correction attestation 2026-10-28: reviewed normalized
+# polygon construction, compensated corner determinants, analytic collapse
+# limits and sweep-interval contacts against the documented grow/rear contract.
+# New adversarial/native/public-WASM controls retain all prior assertions.
+# Test-only no-architecture-impact attestation 2026-10-28: complete painted
+# bounds/interior conditioning controls added; production MarkSpec contract unchanged.
+digest = "fd8561f45d257ecadfcb8e0fa1ed0e48696ef733"
+
+[[section.note.scope]]
+path = "vendor/kurbo/src/stroke.rs"
+symbol = "Kurbo authoritative stroke join evaluation"
+anchor = "    fn do_join("
+# Semantic attestation 2026-10-28: reviewed scaled tangents, compensated
+# determinant, rationalized miter ratio and local offset intersection against
+# the documented actual-paint contract; clipping and genuine degeneracy retained.
+digest = "8c50e774ab4464366a23681a0b3129c3249f76e6"
+
+[[section.note.scope]]
+path = "tests/packaging/test_drawing_notices.py"
+symbol = "Drawing sdist complete patched-source regression"
+anchor = "class DrawingNotices"
+# Semantic attestation 2026-10-28: complete Kurbo source/license delivery
+# through the existing Maturin owner; fixture-wheel limits remain explicit.
+digest = "96b8f399d4a259e5a832cbb3d837a63276059f22"
+
+[[section.note.scope]]
+path = "pyproject.toml"
+symbol = "Maturin drawing source distribution closure"
+anchor = "[tool.maturin]"
+end_anchor = "[tool.mypy]"
+# Semantic attestation 2026-10-28: complete Kurbo source/license delivery
+# through the existing Maturin owner; fixture-wheel limits remain explicit.
+digest = "406bd3acc6261b911adc5547a81ca3befc05ac75"
+
+[[section.note]]
 id = "generation-test-source-closure"
 title = "Compile-time generation test source closure"
 summary = "Source30 filtered-source ownership, exact copied-file boundaries and validation limits."
@@ -1032,7 +1087,9 @@ anchor = "pub fn extract_templates<P: AsRef<Path>>"
 # historical below its implemented preface.
 # Drawing integration: approved test-only package-layout attestation; production extraction unchanged.
 # Integration attestation 2026-10-27: production extraction is byte-identical to8430e701; the added test checks exact Tiptoe notice bytes through the existing common selector.
-digest = "fafea3ec0a3203e2932cce7ce3134c0a8963c149"
+# Source38 no-impact attestation 2026-10-28: production extraction is unchanged;
+# tests now reject the obsolete Tiptoe copy while retaining required notice bytes.
+digest = "7fe2b4f32ea4277a6aa32f08395f48a2ce097b7e"
 
 [[section.note]]
 id = "gammaloop-drawing-architecture"
@@ -2439,7 +2496,10 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # incidental directories, select local patch sources (covered by the paired scope).
 # Source30 approval at 7587d0c7 certifies bounded input sensitivity and exact
 # producer identities. It does not certify full NixCI, physics or distributions.
-digest = "8450390593797e6fc5c8399df468e4f0025dfe4e"
+# Source38 ownership attestation 2026-10-28: remove only replaced-geometry
+# Tiptoe source/payload inputs; existing producer/runtime boundaries and required
+# MIT, Clarabel and NetworkX notice source ownership are retained.
+digest = "6e72967b5a8ebf4da6830f9d90e64cb9fe42c684"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"

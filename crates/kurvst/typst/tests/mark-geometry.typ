@@ -196,3 +196,81 @@
 }
 
 Mark geometry passed.
+
+// Positive-area cases formerly confused with numerical inset failure. These
+// are public constructors and the real WASM geometry, not a copied algorithm.
+#let boundary-head(spec) = mark.geometry(
+  ((mark: spec, "context": ctx),), (line,),
+  ((template: 0, carrier: 0, station: (kind: "end")),),
+).marks.first()
+#for spec in (
+  mark.stealth(length: 10pt, width: 8pt, inset: 99.9999%, fill: false, stroke: true),
+  mark.stealth(length: 10pt, width: 8pt, inset: 99.99999%, fill: false, stroke: true),
+  mark.stealth(length: 10pt, width: 8pt, inset: float("0.9999999999999999") * 100%, fill: false, stroke: true),
+  mark.triangle(length: 0.00000000000000000001pt, width: 0.00000000000000000001pt, fill: false, stroke: true),
+  mark.triangle(length: float("1e-200") * 1pt, width: float("1e-200") * 1pt, fill: false, stroke: true),
+  mark.triangle(length: 10pt, width: 0.00001pt, fill: false, stroke: true),
+) {
+  let head = boundary-head(spec)
+  assert(head.paths.first().outline-bounds.all(box => box.right <= 100.0 + 1e-8))
+  assert(head.end > 0)
+}
+// Exact degeneracy is still accepted, including the doubled-back 100% notch.
+#for spec in (
+  mark.triangle(length: 0pt, width: 8pt, stroke: true),
+  mark.triangle(length: 10pt, width: 0pt, stroke: true),
+  mark.stealth(length: 10pt, width: 8pt, inset: 100%, stroke: true),
+) {
+  let head = boundary-head(spec)
+  assert(head.paths.first().outline-bounds.all(box => box.right < calc.inf))
+}
+#for angle in (-360deg, -359.999999deg, -270deg, -180deg, 0deg, 180deg, 270deg, 359.999999deg, 360deg) {
+  for reverse in (false, true) {
+    let spec = mark.barb(width: 10pt, arc: angle, rev: reverse)
+    let expected = if reverse { 4.5 } else if calc.abs(angle) == 360deg { 9.5 } else { 0.5 }
+    let head = boundary-head(spec)
+    assert(calc.abs(head.end - expected) < 1e-10)
+    assert(calc.abs(head.back.at(0) - (100 - expected)) < 1e-10)
+    assert(calc.abs(head.shaft-contact.at(0) - (100 - expected)) < 1e-10)
+    let combined = boundary-head(mark.combine(spec, mark.bar(width: 4pt)))
+    assert(calc.abs(combined.end - expected) < 1e-10)
+    let bar-points = kurvst.points(combined.paths.at(1).path)
+    assert(bar-points.all(point => calc.abs(point.at(0) - (100 - expected)) < 1e-10))
+  }
+}
+#let full-curve = kurvst.cubic((0, 0), (0, 40), (60, 40), (60, 0))
+#let curved-full = mark.geometry(
+  ((mark: mark.combine(mark.barb(width: 10pt, arc: 360deg), mark.bar(width: 4pt)), "context": ctx),),
+  (full-curve,), ((template: 0, carrier: 0, station: (kind: "end")),),
+).marks.first()
+#let distance(a, b) = calc.sqrt(a.zip(b).map(((x, y)) => (x - y) * (x - y)).sum())
+#assert(calc.abs(distance(curved-full.tip, curved-full.back) - 9.5) < 1e-8)
+// The carrier owner converts the refined circle contact back through arc-length
+// inversion at 1e-6 drawing-unit accuracy (PreparedCarrier::new). Keep that
+// existing contract; the full-size geometric chord above remains much tighter.
+#assert(distance(curved-full.back, curved-full.shaft-contact) < 1e-6)
+
+// Complete paint extents, independently predicted from each dart lobe's
+// area/semiperimeter inradius. Exercise the public WASM owner, not metadata.
+#for scale in (0.000001, 1.0, 1000000.0) {
+  for (shape, width, inset) in (("triangle", 1e-7, 0.0), ("triangle", 1e-9, 0.0), ("stealth", 8.0, float("0.99999999"))) {
+    let length = 10.0
+    let half = width / 2
+    let radius = half * length * (1 - inset) / (calc.sqrt(length * length + half * half) + calc.sqrt(length * length * inset * inset + half * half))
+    let grow = calc.max(1.0, 1.01 * 0.5 / radius)
+    let spec = if shape == "triangle" { mark.triangle(length: length * scale * 1pt, width: width * scale * 1pt, fill: false, stroke: true) } else { mark.stealth(length: length * scale * 1pt, width: width * scale * 1pt, inset: inset * 100%, fill: false, stroke: true) }
+    let head = mark.geometry(((mark: spec, "context": (units-per-pt: 1, line-thickness: scale)),), (line,), ((template: 0, carrier: 0, station: (kind: "end")),)).marks.first()
+    let boxes = head.paths.first().outline-bounds
+    let extent = grow * length * scale
+    let wing-error = 32 * float("2.220446049250313e-16") / (1 - inset)
+    let tip-error = 128 * float("2.220446049250313e-16") * extent + 1e-12
+    assert(calc.abs(calc.max(..boxes.map(box => box.right)) - 100) <= tip-error)
+    assert(calc.abs(calc.min(..boxes.map(box => box.left)) - (100 - extent)) <= wing-error * extent + tip-error)
+    assert(calc.abs(calc.max(..boxes.map(box => box.top)) - grow * half * scale) <= wing-error * grow * half * scale + tip-error)
+    assert(calc.abs(head.back.at(0) - (100 - head.end)) <= tip-error)
+    assert(calc.abs(head.shaft-contact.at(0) - calc.max(0, 100 - head.end)) <= tip-error)
+    let combined = mark.geometry(((mark: mark.combine(spec, mark.bar(width: 4pt)), "context": (units-per-pt: 1, line-thickness: scale)),), (line,), ((template: 0, carrier: 0, station: (kind: "end")),)).marks.first()
+    assert(calc.abs(combined.end - head.end) <= tip-error)
+    assert(kurvst.points(combined.paths.at(1).path).all(point => calc.abs(point.at(0) - (100 - head.end)) <= tip-error))
+  }
+}

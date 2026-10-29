@@ -1,0 +1,71 @@
+{
+  "schema": 1,
+  "preserved_round3": "7da9e92de733f544957f724ababeb87c7684c02e",
+  "qualified_code": "f35643bae1a67fb6ec0c30151e3624f661cf5f96",
+  "runtime_source_identity_unchanged": {
+    "derivation": "/nix/store/8iq7qvzf38wcw165afivy6ipcw4sdlq9-linnest-wasm-0.1.0.drv",
+    "source": "/nix/store/j37nl8sqz8h325npwj3h3c1kwsv7a82p-source"
+  },
+  "matching_runtime_sources": 1455,
+  "matching_payload_files": 29,
+  "retained_native_identities": [
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-round3-producers/kurvst-4420f083be818467",
+      "sha256": "3d09dfed40ad05da252f54281df1bf8d67fb148783a2d8066956cb2392ed6874"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-round3-producers/linnest-497faa96f1e545c4",
+      "sha256": "b1ec8890be4ebab47b3f66542dd2d6cd01209febd458c865b47a91f6c1ea04f1"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-round3-producers/clinnet-ef5848560bd88e11",
+      "sha256": "e62d184f76371df577f6bddf2e437960668339dc6a882b30548b00bc5b8f24e1"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-round3-producers/kurvst_marks-3e1afd4d2821fcfa",
+      "sha256": "58edb6dd397ca5934c41396c485e4167c032ec32d65d2ebe025b96799bac00ef"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-round3-producers/public_typst_behavior-2b6a9f9b73212efe",
+      "sha256": "409334cb165fbd0bec1f43b12d45220ca145a88bd60c14ef5e5fa26410ad724a"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-round3-producers/linnet-46b494d66ab98bb9",
+      "sha256": "00c58a24e0876434b037fd265d488a6f5c7179c97a37fcdc66d8d75968768633"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-round3-producers/new-probe",
+      "sha256": "95ae49da036e6eb7d99be198df3981a5aea1fae15216290bc83b5103f8598290"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-round3-producers/new-adversarial",
+      "sha256": "10219f855715cbfb00b81016455f4cb2133a5aa26d7488722c2a7f8340ed9132"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-round3-producers/new-regressions",
+      "sha256": "f20e6547f40414d61758fcb627b5a5443a1910b1833f0c213853042989993235"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-round3-producers/libkurvst.rlib",
+      "sha256": "285a03c1a8b7851f6ad056cf0367a7bd0647b0a643e503954309a68991397459"
+    },
+    {
+      "path": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-round3-producers/libkurbo.rlib",
+      "sha256": "ebe0df1d8e58dce131d4d7ebc2d58df0bcfaa8ec11afb82e812e98141392158c"
+    }
+  ],
+  "reused_qualified_package": "/nix/store/88qva12y43c0fig08mslcrmjbb3ydxa9-linnest-wasm-0.1.0",
+  "reused_qualified_nar": "sha256-GBMop/R/i6hSu9DGsZlmo7yv7YR7uSdj9QtYhvrizZc=",
+  "fresh_read_only_nar_hash_matches": true,
+  "runtime_build_performed": false,
+  "technical_tests_reused_from_round3_reviews": true,
+  "changed_existing_files": [
+    "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/receipt.json",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/package-evidence.py",
+    "docs/architecture/evidence/generation-integration/mark-geometry/round2-correction/evidence-inventory.json",
+    "docs/architecture/generation-mark-geometry.typ"
+  ],
+  "new_documentation_outputs": "New note.pdf/note-html qualify only the corrected Typst prose at the source SHA in receipt.json; prior f356 note renders and raw proofs remain frozen.",
+  "parsed_receipt_change": "Exactly dependency_exception.authorization; all other parsed data identical. Generator exact attribution-string replacement only.",
+  "protected_files": "Entire1455 runtime-source list and all29 delivered-owner hashes match old qualification, including production Rust, vendor, all selected manifests/locks, notices and tests; diff whitelist additionally excludes all other modifications."
+}

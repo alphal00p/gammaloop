@@ -110,8 +110,7 @@
   `kurvst.mark` provides named-only `triangle`, `straight`, `stealth`, `round`,
   `tikz`, `barb`, `hooks`, `bar`, `bracket`, `circle`, `square`, `diamond`,
   and `rays` constructors, plus positional `combine`. They return plain dictionaries tagged
-  `kind: "kurvst-mark"`; they do not draw anything. Shape vocabulary and
-  parameter definitions follow MIT-licensed tiptoe 0.4. Linnest and the native
+  `kind: "kurvst-mark"`; they do not draw anything. Linnest and the native
   FeynKit renderer consume these specifications through the same geometry
   engine; stock CeTZ only paints the Typst route's finished geometry.
 
@@ -120,11 +119,57 @@
   `shorten: 100%` is supported. `arc` and `phase` are angles, `rev` is boolean,
   `n` is a positive integer, `align` is `"center"` or `"end"`, and `fit` is
   `"chord"` (the engine default) or `"bend"`. Constructors omit defaults so the
-  shared engine owns geometry. Deliberate differences from tiptoe 0.4 are
-  geometry-consistent reversed triangle/stealth contact and rejection of the
-  unused `tikz.arc` option. Normal stealth shortening remains
-  `length - inset * length`; the reversed auto-filled half-length shortcut is
-  replaced by contact derived from the actual geometry.
+  shared engine owns geometry.
+
+  Each head is built with its tip on the marked point and the line arriving
+  from behind. Its paint keeps the nominal `length` along the line and `width`
+  across it whether or not it is stroked: a stroke runs half its width inside
+  the outline, and every mitred corner keeps its point however sharp. A head
+  too small to hold its stroke that way grows just enough to hold it, keeping
+  its tip (a centred shape its centre) in place: a `triangle`, `stealth`,
+  `square`, or `diamond` keeps its shape, and the other shapes grow only the
+  dimension that is too small. A `triangle` or `stealth` without area (zero
+  length or width, or a 100% inset) cannot hold a stroke and is stroked as
+  given. The shaft stops where the head's drawn path (its outline, or the
+  stroke's centre line when stroked) meets the line at the rear; that distance
+  is the mark's end, and a composite places each part at the previous part's
+  end.
+
+  - `triangle`, `stealth`: a dart whose rear notch is `inset` of the length
+    deep (defaults 0% and 40%). A stroked outline runs half a stroke inside the
+    dart, so the mitred paint is exactly the dart.
+  - `round`: a dart with round joins. Its outline sits half a stroke inside
+    every side of the box, so the rounded paint still touches the tip and the
+    box, and its notch is `inset` (default 40%) of that inner dart's length.
+  - `straight`: an open chevron with round caps. Each arm's outer edge is the
+    tangent from the tip to its end cap, so the mitred point lands on the tip.
+  - `tikz`: two quarter circles that leave the tip along the line in a cusp and
+    curl out to the full width.
+  - `barb`: an arc of the full width bulging toward the tip, swept `arc`
+    (default 180deg) symmetrically about the line. Complete positive or negative
+    turns stop the shaft at the rear axis crossing; an open neighboring turn
+    retains its gap and front crossing.
+  - `hooks`: two hooks, each half the width, that leave one root on the line
+    toward the tip and curl away from it by `arc` (default 180deg).
+  - `bar`: a stroke across the line. `bracket`: a spine across the line at the
+    front with arms running `length` back.
+  - `circle`, `square`, `diamond`: centred on the tip, or ending at it with
+    `align: "end"`; `bar` aligns the same way.
+  - `rays`: `n` spokes of `length` from a hub on the tip, or one `length`
+    behind it with `align: "end"`, the first at `phase`. By default no spoke
+    runs along the line, where the shaft would hide it: an even count starts at
+    180deg / n and is symmetric about the line, and an odd count starts at
+    -90deg, across the line, and is symmetric about that perpendicular.
+
+  `rev` turns a head end for end within its own length. Defaults scale with the
+  line thickness: pointed heads (`triangle`, `stealth`, `round`, `straight`)
+  are `3pt + 450%` long and 80% as wide; `tikz`, `barb`, and `hooks` are
+  `3pt + 450%` wide; `bar` and `bracket` are `2.4pt + 360%` wide, a bracket 30%
+  as long; `circle` and `square` are 400% wide and long, the `diamond` is that
+  square turned by 45deg; `rays` are 280% long, four by default. Unnamed
+  `triangle` and `stealth` heads are filled without a stroke; naming `fill` or
+  `stroke` selects the general defaults, which fill closed shapes and stroke
+  every shape.
 
   Available shape fields:
   - triangle, stealth, round: length, width, inset, fill, stroke, rev;

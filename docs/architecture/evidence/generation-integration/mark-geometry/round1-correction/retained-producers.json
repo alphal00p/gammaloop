@@ -1,0 +1,55 @@
+{
+  "tests": [
+    {
+      "binary_id": "kurvst",
+      "source": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/kurvst-d3764c82a75b72bc",
+      "retained": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-corrected-producers/kurvst-d3764c82a75b72bc",
+      "sha256": "0ab86fc0fc1dea4ef356862e01e4cd1290408887959c20afbde4eb91cdc18086"
+    },
+    {
+      "binary_id": "linnest",
+      "source": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/linnest-69fa6561a9dd3077",
+      "retained": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-corrected-producers/linnest-69fa6561a9dd3077",
+      "sha256": "d8ecd105785ef918c8fd26c5d6598c6e5255fd07ffebebce0cf8c543cda522ed"
+    },
+    {
+      "binary_id": "clinnet",
+      "source": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/clinnet-eded01f8aae0b814",
+      "retained": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-corrected-producers/clinnet-eded01f8aae0b814",
+      "sha256": "7422d6ccfa620b5640b70c6c9fd6df33507b19a0c281a55953e815ea385435fe"
+    },
+    {
+      "binary_id": "clinnet::kurvst_marks",
+      "source": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/kurvst_marks-eb66a1b494ad56eb",
+      "retained": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-corrected-producers/kurvst_marks-eb66a1b494ad56eb",
+      "sha256": "03db3ae58bfd915312a400bebf02c26361f1cc53e195a843fb2ef9c08b2c0171"
+    },
+    {
+      "binary_id": "clinnet::public_typst_behavior",
+      "source": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/public_typst_behavior-305da6a74aa1a1db",
+      "retained": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-corrected-producers/public_typst_behavior-305da6a74aa1a1db",
+      "sha256": "8cc83f0abdc58f99e79f5581eb02a9a74f5601d2ea7091a191f0a54f8cb02e80"
+    },
+    {
+      "binary_id": "clinnet::bin/linnet",
+      "source": "/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps/linnet-37a41a4de59f8ec0",
+      "retained": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-corrected-producers/linnet-37a41a4de59f8ec0",
+      "sha256": "88a0f1fd0000dd8f2ab93a8cf9b83e3aff6edf339a1dbc433e71a6df55e64749"
+    }
+  ],
+  "rlib": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-corrected-producers/libkurvst.rlib",
+    "sha256": "4902bbc3bc690d113af78ffe3cfecfe1944fe280be548f317f5c847c75e58f07"
+  },
+  "probe": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-corrected-producers/new-probe",
+    "sha256": "0bd025c59889aaeefb6dbee95fb7598187c5a29b4bad031632a14245c4bdc517"
+  },
+  "regressions": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-corrected-producers/new-regressions",
+    "sha256": "d89bef58f83883ea450a0d2de1f107f9b133ac3bb2f714e963e67647c806d555"
+  },
+  "old_regression_executable": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/review-mark-geometry-a/regressions",
+  "old_retained_rlib": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/mark-geometry-round1-producers/libkurvst.rlib",
+  "qualification": "Task-owned immutable copies preserve final producers; normal shared Cargo cache paths remain mutable and are not claimed frozen."
+}

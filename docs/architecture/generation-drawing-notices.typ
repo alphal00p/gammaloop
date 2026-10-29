@@ -1,5 +1,10 @@
 = Generation drawing notice delivery
 
+The #link("generation-mark-geometry.typ")[separate source38 lane] replaces the
+Tiptoe-derived runtime geometry and removes its obsolete copies after source audit.
+The staged correction and earlier artifact statements below retain their original
+source-bound context. Clarabel/NetworkX notice delivery remains required.
+
 == Scope and ownership
 
 This is the notices portion of WP11, implementing the accepted decision to retain

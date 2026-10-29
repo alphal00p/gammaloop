@@ -1,0 +1,73 @@
+{
+  "probe": {
+    "source_sha256": "a05b852ff2262b8426a97ea2d85df2e888eaa7c8d0ab3ba9d328b9afedc48789",
+    "executable_sha256": "0bd025c59889aaeefb6dbee95fb7598187c5a29b4bad031632a14245c4bdc517",
+    "command": [
+      "rustc",
+      "--edition=2024",
+      "-L",
+      "dependency=/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps",
+      "--extern",
+      "kurvst=/shared/lcnbr/dev/gammaloop/generation-drawing-ports/target/dev-optim/libkurvst.rlib",
+      "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/review-mark-geometry-a/probe.rs",
+      "-o",
+      "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/target/mark-geometry-corrected/new-probe"
+    ]
+  },
+  "new_regressions_exit": 0,
+  "regressions": {
+    "source_sha256": "f6e1a104cf9f88ac48633f6f3e6e04146becb0ee58b90601b7c32cf5fea69822",
+    "executable_sha256": "d89bef58f83883ea450a0d2de1f107f9b133ac3bb2f714e963e67647c806d555",
+    "command": [
+      "rustc",
+      "--test",
+      "--edition=2024",
+      "-L",
+      "dependency=/common/build-cache/lcnbr/27/a9f23b22bfc92f/dev-optim/deps",
+      "--extern",
+      "kurvst=/shared/lcnbr/dev/gammaloop/generation-drawing-ports/target/dev-optim/libkurvst.rlib",
+      "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/.local/review-mark-geometry-a/regressions.rs",
+      "-o",
+      "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/target/mark-geometry-corrected/new-regressions"
+    ]
+  },
+  "rlib": {
+    "path": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/target/dev-optim/libkurvst.rlib",
+    "sha256": "4902bbc3bc690d113af78ffe3cfecfe1944fe280be548f317f5c847c75e58f07",
+    "cargo_artifact": {
+      "reason": "compiler-artifact",
+      "package_id": "path+file:///shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/kurvst#0.1.0",
+      "manifest_path": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/kurvst/Cargo.toml",
+      "target": {
+        "kind": [
+          "cdylib",
+          "rlib"
+        ],
+        "crate_types": [
+          "cdylib",
+          "rlib"
+        ],
+        "name": "kurvst",
+        "src_path": "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/crates/kurvst/src/lib.rs",
+        "edition": "2024",
+        "doc": true,
+        "doctest": true,
+        "test": true
+      },
+      "profile": {
+        "opt_level": "2",
+        "debuginfo": 2,
+        "debug_assertions": true,
+        "overflow_checks": true,
+        "test": false
+      },
+      "features": [],
+      "filenames": [
+        "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/target/dev-optim/libkurvst.so",
+        "/shared/lcnbr/dev/gammaloop/generation-drawing-ports/target/dev-optim/libkurvst.rlib"
+      ],
+      "executable": null,
+      "fresh": true
+    }
+  }
+}

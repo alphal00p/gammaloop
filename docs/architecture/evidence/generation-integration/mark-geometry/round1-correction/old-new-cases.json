@@ -1,0 +1,100 @@
+{
+  "old_exe_sha256": "56c37841fa7211dd03a3c9840c42d2978a0038a907289f33cfae646e6b655056",
+  "new_exe_sha256": "0bd025c59889aaeefb6dbee95fb7598187c5a29b4bad031632a14245c4bdc517",
+  "cases": [
+    {
+      "arguments": [
+        "stealth",
+        "10",
+        "8",
+        "1",
+        "0.999999"
+      ],
+      "old": {
+        "exit": 0,
+        "stdout": "end=9.999999999621423e-6\nmiter=2.695274985970818 path_finite=true outline_finite=true\npath=[MoveTo((0.0, 0.0)), LineTo((-10.0, 4.0)), LineTo((-9.999999999621423e-6, 0.0)), LineTo((-10.0, -4.0)), ClosePath]\noutline_bounds=[MarkBounds { left: -10.185695498259367, right: 1.346291201783626, bottom: -4.46423834544263, top: 4.46423834544263 }, MarkBounds { left: -10.185695338177052, right: 1.3462800411878428, bottom: -4.4642382814096715, top: 4.4642382814096715 }]\n",
+        "max_painted_front": 1.346291201783626
+      },
+      "new": {
+        "exit": 0,
+        "stdout": "end=1.3732170142133415\nmiter=5805794.994833309 path_finite=true outline_finite=true\npath=[MoveTo((-1.3462912017836262, -1.1102230246251565e-16)), LineTo((-26927.15872014278, 10770.32497157648)), LineTo((-1.3732170142133415, 5.551115123125783e-17)), LineTo((-26927.158720142175, -10770.324971576329)), ClosePath]\noutline_bounds=[MarkBounds { left: -2719507.055074317, right: -1.354472090042691e-14, bottom: -1087802.8220296968, top: 1087802.822029735 }, MarkBounds { left: -26927.344415480955, right: -0.02692697302551239, bottom: -10770.789209857738, top: 10770.789209857889 }]\n",
+        "max_painted_front": -1.354472090042691e-14
+      }
+    },
+    {
+      "arguments": [
+        "triangle",
+        "1e-20",
+        "1e-20",
+        "1"
+      ],
+      "old": {
+        "exit": 0,
+        "stdout": "end=1e-20\nmiter=2.2383040454772893 path_finite=true outline_finite=true\npath=[MoveTo((0.0, 0.0)), LineTo((-1e-20, 5e-21)), LineTo((-1e-20, 0.0)), LineTo((-1e-20, -5e-21)), ClosePath]\noutline_bounds=[MarkBounds { left: -0.5, right: 1.118033988749895, bottom: -0.8090169943749475, top: 0.8090169943749472 }, MarkBounds { left: -0.22360679774997896, right: 0.5, bottom: -0.4472135954999579, top: 0.4472135954999579 }]\n",
+        "max_painted_front": 1.118033988749895
+      },
+      "new": {
+        "exit": 0,
+        "stdout": "end=1.134214328637394\nmiter=2.23830404547729 path_finite=true outline_finite=true\npath=[MoveTo((-1.1180339887498951, -1.1102230246251565e-16)), LineTo((-1.134214328637394, 0.008090169943749483)), LineTo((-1.134214328637394, 0.0)), LineTo((-1.134214328637394, -0.008090169943749483)), ClosePath]\noutline_bounds=[MarkBounds { left: -1.6342143286373942, right: -4.3298697960381105e-15, bottom: -0.8171071643186936, top: 0.8171071643187033 }, MarkBounds { left: -1.3578211263873763, right: -0.634214328637394, bottom: -0.44721359549995643, top: 0.4472135954999587 }]\n",
+        "max_painted_front": -4.3298697960381105e-15
+      }
+    },
+    {
+      "arguments": [
+        "triangle",
+        "10",
+        "1e-5",
+        "1"
+      ],
+      "old": {
+        "exit": 0,
+        "stdout": "end=10.0\nmiter=1.4156281298425444 path_finite=true outline_finite=true\npath=[MoveTo((0.0, 0.0)), LineTo((-10.0, 5e-6)), LineTo((-10.0, 0.0)), LineTo((-10.0, -5e-6)), ClosePath]\noutline_bounds=[MarkBounds { left: -10.5, right: 2.4999999999996875e-7, bottom: -0.5000052500000625, top: 0.5000052500000625 }, MarkBounds { left: -10.00000025, right: -2.4999999999996875e-7, bottom: -0.49999999999993744, top: 0.49999999999993744 }]\n",
+        "max_painted_front": 2.4999999999996875e-07
+      },
+      "new": {
+        "exit": 0,
+        "stdout": "end=1010000.0050001263\nmiter=2002000.0000002496 path_finite=true outline_finite=true\npath=[MoveTo((-1000000.0000001248, -5.551115123125783e-17)), LineTo((-1010000.0050001263, 0.0050000025000007785)), LineTo((-1010000.0050001263, 0.0)), LineTo((-1010000.0050001263, -0.0050000025000007785)), ClosePath]\noutline_bounds=[MarkBounds { left: -1010000.5050001263, right: -3.725290298461914e-9, bottom: -0.5050002525000632, top: 0.5050002525000633 }, MarkBounds { left: -1010000.0050003763, right: -1000000.0000001248, bottom: -0.49999999999993755, top: 0.49999999999993744 }]\n",
+        "max_painted_front": -3.725290298461914e-09
+      }
+    },
+    {
+      "arguments": [
+        "stealth",
+        "10",
+        "8",
+        "1",
+        "0.9999999999999999"
+      ],
+      "old": {
+        "exit": 0,
+        "stdout": "end=1.7763568394002505e-15\nmiter=2.695274985970818 path_finite=true outline_finite=true\npath=[MoveTo((0.0, 0.0)), LineTo((-10.0, 4.0)), LineTo((-1.7763568394002505e-15, 0.0)), LineTo((-10.0, -4.0)), ClosePath]\noutline_bounds=[MarkBounds { left: -10.185695338177052, right: 1.346291201783626, bottom: -4.46423834544263, top: 4.46423834544263 }, MarkBounds { left: -10.185695338177052, right: 1.346291201783624, bottom: -4.46423834544263, top: 4.46423834544263 }]\n",
+        "max_painted_front": 1.346291201783626
+      },
+      "new": {
+        "exit": 0,
+        "stdout": "end=1.3597541138014626\nmiter=5.229399743317524e16 path_finite=true outline_finite=true\npath=[MoveTo((-1.3462912017836262, -1.1102230246251565e-16)), LineTo((-242526262187407.78, 97010504874961.47)), LineTo((-1.3732170258192993, -5.551115123125783e-17)), LineTo((-242526262187402.3, -97010504874960.11)), ClosePath]\noutline_bounds=[MarkBounds { left: -242526262187407.97, right: 8.659739592076221e-15, bottom: -97010504874960.58, top: 97010504874961.94 }, MarkBounds { left: -242526262187407.97, right: -0.026925824035665125, bottom: -97010504874960.58, top: 97010504874961.94 }]\n",
+        "max_painted_front": 8.659739592076221e-15
+      }
+    },
+    {
+      "arguments": [
+        "barb",
+        "none",
+        "10",
+        "1",
+        "none",
+        "6.283185307179586"
+      ],
+      "old": {
+        "exit": 0,
+        "stdout": "end=0.5\nmiter=1.001 path_finite=true outline_finite=true\npath=[MoveTo((-9.5, -5.51091059616309e-16)), CurveTo((-9.5, -2.4852813742385704), (-7.4852813742385695, -4.5), (-5.0, -4.5)), CurveTo((-2.5147186257614296, -4.5), (-0.5, -2.48528137423857), (-0.5, 0.0)), CurveTo((-0.5, 2.48528137423857), (-2.5147186257614296, 4.5), (-5.0, 4.5)), CurveTo((-7.4852813742385695, 4.5), (-9.5, 2.4852813742385704), (-9.5, 5.51091059616309e-16))]\noutline_bounds=[MarkBounds { left: -10.0, right: 0.0, bottom: -5.0, top: 5.0 }]\n",
+        "max_painted_front": 0.0
+      },
+      "new": {
+        "exit": 0,
+        "stdout": "end=9.5\nmiter=1.001 path_finite=true outline_finite=true\npath=[MoveTo((-9.5, -5.51091059616309e-16)), CurveTo((-9.5, -2.4852813742385704), (-7.4852813742385695, -4.5), (-5.0, -4.5)), CurveTo((-2.5147186257614296, -4.5), (-0.5, -2.48528137423857), (-0.5, 0.0)), CurveTo((-0.5, 2.48528137423857), (-2.5147186257614296, 4.5), (-5.0, 4.5)), CurveTo((-7.4852813742385695, 4.5), (-9.5, 2.4852813742385704), (-9.5, 5.51091059616309e-16))]\noutline_bounds=[MarkBounds { left: -10.0, right: 0.0, bottom: -5.0, top: 5.0 }]\n",
+        "max_painted_front": 0.0
+      }
+    }
+  ]
+}
