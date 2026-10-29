@@ -41,6 +41,7 @@ use symbolica::symbol;
 use thiserror::Error;
 
 use feynkit_amplitude::ColorRepresentation;
+use spenso::structure::dimension::Dimension;
 
 use crate::{
     FilterScope, GenerationFilter, GenerationFilterKind, GenerationOptions, GenerationType,
@@ -354,6 +355,7 @@ impl fmt::Display for NumeratorOwner {
 struct NumeratorInstantiation<'a> {
     owner: NumeratorOwner,
     legs: &'a [NumeratorHalfEdge],
+    lorentz_dimension: Dimension,
 }
 
 impl NumeratorInstantiation<'_> {
@@ -712,12 +714,20 @@ impl NumeratorInstantiation<'_> {
             let mut arguments = function.iter();
             let edge = arguments.next().expect("the arity was checked");
             let index = arguments.next().expect("the arity was checked");
-            if Self::is_representation(index, "mink") {
-                return;
-            }
+            let slot = if let AtomView::Fun(representation) = index
+                && Self::is_representation(index, "mink")
+            {
+                // Authored compact momenta, such as P(mink(4)) in a covariant
+                // propagator denominator, belong to this construction dimension too.
+                Minkowski {}
+                    .new_rep(self.lorentz_dimension)
+                    .to_symbolic(representation.iter().skip(1).map(|index| index.to_owned()))
+            } else {
+                self.minkowski(index.to_owned())
+            };
             **out = FunctionBuilder::new(momentum_symbol())
                 .add_arg(edge)
-                .add_arg(self.minkowski(index.to_owned()))
+                .add_arg(slot)
                 .finish();
         });
         self.reject_residual_tensors(&atom)?;
@@ -1130,7 +1140,9 @@ impl NumeratorInstantiation<'_> {
     }
 
     fn minkowski(&self, index: Atom) -> Atom {
-        Minkowski {}.new_rep(4).to_symbolic([index])
+        Minkowski {}
+            .new_rep(self.lorentz_dimension)
+            .to_symbolic([index])
     }
 
     fn is_representation(index: AtomView<'_>, name: &str) -> bool {
@@ -1386,11 +1398,12 @@ impl NumeratorInstantiation<'_> {
 #[derive(Clone)]
 pub(crate) struct Generator {
     model: Arc<Model>,
+    lorentz_dimension: Dimension,
     numerators: Arc<NumeratorCache>,
 }
 
-/// Localized factors depend on the immutable model and their index assignment,
-/// not on the rest of the diagram. Keep them for this generator's lifetime.
+/// Localized factors depend on the immutable model, Lorentz dimension and index
+/// assignment. Each new generator owns a fresh cache; clones share that dimension.
 #[derive(Default)]
 struct NumeratorCache {
     interactions: RwLock<HashMap<InteractionNumeratorKey, SymbolicTensor<PartialStructure>>>,
@@ -1605,6 +1618,36 @@ pub trait FeynmanDiagramRulesExt {
     /// model's Feynman rules, just as during diagram generation.
     fn apply_feynman_rules(&self) -> Result<FeynmanDiagram, GenerationError>;
 
+    /// Instantiate Lorentz slots at `dimension` before tensor normalization and
+    /// source admission, preserving local dimension-dependent contractions.
+    /// Bispinor slots remain four-dimensional. Routing, scalar factors and the
+    /// existing projector are retained, as in [`Self::apply_feynman_rules`].
+    /// External wavefunctions from [`Self::external_state_projector`] remain 4D.
+    /// This does not define a dimensional prescription for gamma5 or epsilon.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// # use feynkit_generator::{FeynmanDiagramRulesExt, GenerationError};
+    /// # use feynkit_graph::FeynmanDiagram;
+    /// use spenso::structure::dimension::Dimension;
+    /// use symbolica::symbol;
+    /// # fn construct(diagram: &FeynmanDiagram) -> Result<(), GenerationError> {
+    /// let dimension = Dimension::from(symbol!("example::D"));
+    /// let numerator_d = diagram.apply_feynman_rules_in_dimension(dimension)?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the topology is invalid or its model rules cannot be
+    /// instantiated or admitted as compatible tensors.
+    fn apply_feynman_rules_in_dimension(
+        &self,
+        dimension: Dimension,
+    ) -> Result<FeynmanDiagram, GenerationError>;
+
     /// Construct the external wavefunctions in the finalized half-edge frame.
     /// Callers with an explicit projector retain that supplied expression.
     fn external_state_projector(&self)
@@ -1613,8 +1656,15 @@ pub trait FeynmanDiagramRulesExt {
 
 impl FeynmanDiagramRulesExt for FeynmanDiagram {
     fn apply_feynman_rules(&self) -> Result<FeynmanDiagram, GenerationError> {
+        self.apply_feynman_rules_in_dimension(Dimension::Concrete(4))
+    }
+
+    fn apply_feynman_rules_in_dimension(
+        &self,
+        dimension: Dimension,
+    ) -> Result<FeynmanDiagram, GenerationError> {
         self.validate()?;
-        Generator::new(self.model_arc()).construct_numerators(self.clone())
+        Generator::new_in_dimension(self.model_arc(), dimension).construct_numerators(self.clone())
     }
 
     fn external_state_projector(
@@ -1660,8 +1710,13 @@ impl FeynmanDiagramRulesExt for FeynmanDiagram {
 
 impl Generator {
     pub fn new(model: impl Into<Arc<Model>>) -> Self {
+        Self::new_in_dimension(model, Dimension::Concrete(4))
+    }
+
+    fn new_in_dimension(model: impl Into<Arc<Model>>, lorentz_dimension: Dimension) -> Self {
         Self {
             model: model.into(),
+            lorentz_dimension,
             numerators: Arc::default(),
         }
     }
@@ -3302,6 +3357,7 @@ impl Generator {
                 .map(|leg| leg.expect("assigned interaction slot"))
                 .collect::<Vec<_>>();
             let instantiation = NumeratorInstantiation {
+                lorentz_dimension: self.lorentz_dimension,
                 owner: NumeratorOwner::Vertex(vertex.0),
                 legs: &legs,
             };
@@ -3574,6 +3630,7 @@ impl Generator {
             None
         };
         let instantiation = NumeratorInstantiation {
+            lorentz_dimension: self.lorentz_dimension,
             owner: key.owner,
             legs: &key.legs,
         };
@@ -3690,6 +3747,7 @@ impl Generator {
             color: particle.color,
         });
         let instantiation = NumeratorInstantiation {
+            lorentz_dimension: self.lorentz_dimension,
             owner: NumeratorOwner::Edge(edge),
             legs: &legs,
         };
@@ -3714,6 +3772,7 @@ impl Generator {
                     })
                     .collect::<Vec<_>>();
                 let instantiation = NumeratorInstantiation {
+                    lorentz_dimension: self.lorentz_dimension,
                     owner: NumeratorOwner::Edge(0),
                     legs: &canonical,
                 };
@@ -5329,12 +5388,15 @@ impl ResolvedProcess {
 mod tests {
     use crate::{CancellationToken, GraphGroupingOptions, NumeratorGrouping};
     use feynkit_model::Model;
+    use idenso::dirac::GammaSimplifySettings;
+    use idenso::tensor::AlgebraSettings;
+    use serde_json::json;
+    use spenso::structure::representation::LibraryRep;
     use symbolica::parser::ParseSettings;
 
     use super::*;
     use idenso::tensor::composition::TensorCompositionError;
     use idenso::tensor::inference::TensorInferenceError;
-    use serde_json::json;
     use spenso::tensor_symbol;
     use std::array;
 
@@ -7093,6 +7155,7 @@ mod tests {
             },
         ];
         let localized = NumeratorInstantiation {
+            lorentz_dimension: Dimension::Concrete(4),
             owner: NumeratorOwner::Edge(internal_edge),
             legs: &legs,
         }
@@ -7307,6 +7370,7 @@ mod tests {
                 color: 1,
             });
             NumeratorInstantiation {
+                lorentz_dimension: Dimension::Concrete(4),
                 owner: NumeratorOwner::Edge(0),
                 legs: &legs,
             }
@@ -7436,6 +7500,7 @@ mod tests {
         let generator = Generator::new(model.clone());
         let legs = tensor_test_legs();
         let instantiation = NumeratorInstantiation {
+            lorentz_dimension: Dimension::Concrete(4),
             owner: NumeratorOwner::Vertex(7),
             legs: &legs[..3],
         };
@@ -7462,6 +7527,7 @@ mod tests {
         let generator = Generator::new(model.clone());
         let legs = tensor_test_legs();
         let instantiation = NumeratorInstantiation {
+            lorentz_dimension: Dimension::Concrete(4),
             owner: NumeratorOwner::Vertex(7),
             legs: &legs[..3],
         };
@@ -7506,6 +7572,7 @@ mod tests {
                 leg.color = 1;
             }
             let instantiation = NumeratorInstantiation {
+                lorentz_dimension: Dimension::Concrete(4),
                 owner: NumeratorOwner::Vertex(owner),
                 legs: &legs,
             };
@@ -7555,6 +7622,7 @@ mod tests {
         let mut numerators = Vec::new();
         for owner in [7, 12] {
             let instantiation = NumeratorInstantiation {
+                lorentz_dimension: Dimension::Concrete(4),
                 owner: NumeratorOwner::Vertex(owner),
                 legs: &legs,
             };
@@ -7616,6 +7684,7 @@ mod tests {
         let head = tensor_symbol!("generation_cancelled_template_probe");
         for owner in [4, 9] {
             let instantiation = NumeratorInstantiation {
+                lorentz_dimension: Dimension::Concrete(4),
                 owner: NumeratorOwner::Vertex(owner),
                 legs: &legs,
             };
@@ -7676,6 +7745,7 @@ mod tests {
         legs[1].edge = legs[0].edge;
         for owner in [4, 9] {
             let instantiation = NumeratorInstantiation {
+                lorentz_dimension: Dimension::Concrete(4),
                 owner: NumeratorOwner::Vertex(owner),
                 legs: &legs,
             };
@@ -7740,6 +7810,7 @@ mod tests {
                     color: particle.color,
                 });
                 let instantiation = NumeratorInstantiation {
+                    lorentz_dimension: Dimension::Concrete(4),
                     owner: NumeratorOwner::Edge(edge),
                     legs: &legs,
                 };
@@ -7793,6 +7864,7 @@ mod tests {
                     color: 1,
                 });
                 let instantiation = NumeratorInstantiation {
+                    lorentz_dimension: Dimension::Concrete(4),
                     owner: NumeratorOwner::Vertex(owner),
                     legs: &legs,
                 };
@@ -7849,6 +7921,7 @@ mod tests {
                     color: particle.color,
                 });
                 let instantiation = NumeratorInstantiation {
+                    lorentz_dimension: Dimension::Concrete(4),
                     owner: NumeratorOwner::Edge(edge),
                     legs: &legs,
                 };
@@ -7906,6 +7979,7 @@ mod tests {
                     color: 1,
                 });
                 let instantiation = NumeratorInstantiation {
+                    lorentz_dimension: Dimension::Concrete(4),
                     owner: NumeratorOwner::Vertex(7),
                     legs: &legs,
                 };
@@ -7984,6 +8058,7 @@ mod tests {
                     color: particle.color,
                 });
                 let instantiation = NumeratorInstantiation {
+                    lorentz_dimension: Dimension::Concrete(4),
                     owner: NumeratorOwner::Edge(edge),
                     legs: &legs,
                 };
@@ -8055,6 +8130,7 @@ mod tests {
         let mut legs = tensor_test_legs()[..3].to_vec();
         for owner in [3, 6] {
             let instantiation = NumeratorInstantiation {
+                lorentz_dimension: Dimension::Concrete(4),
                 owner: NumeratorOwner::Vertex(owner),
                 legs: &legs,
             };
@@ -8097,6 +8173,7 @@ mod tests {
             let mut owner_indices = Vec::new();
             for owner in [7, 12] {
                 let instantiation = NumeratorInstantiation {
+                    lorentz_dimension: Dimension::Concrete(4),
                     owner: NumeratorOwner::Vertex(owner),
                     legs: &legs,
                 };
@@ -8178,6 +8255,7 @@ mod tests {
         let generator = Generator::new(model);
         let legs = tensor_test_legs();
         let instantiation = NumeratorInstantiation {
+            lorentz_dimension: Dimension::Concrete(4),
             owner: NumeratorOwner::Vertex(7),
             legs: &legs[..3],
         };
@@ -8226,6 +8304,7 @@ mod tests {
         let legs = tensor_test_legs();
         for owner in [3, 6] {
             let instantiation = NumeratorInstantiation {
+                lorentz_dimension: Dimension::Concrete(4),
                 owner: NumeratorOwner::Vertex(owner),
                 legs: &legs[..3],
             };
@@ -8292,6 +8371,7 @@ mod tests {
         let zero = source.with_checked_expression(Atom::Zero).unwrap();
         let legs = tensor_test_legs();
         let instantiation = NumeratorInstantiation {
+            lorentz_dimension: Dimension::Concrete(4),
             owner: NumeratorOwner::Vertex(7),
             legs: &legs[..2],
         };
@@ -8338,6 +8418,7 @@ mod tests {
         assert_eq!(source.rank(), 0);
         let legs = tensor_test_legs();
         let instantiation = NumeratorInstantiation {
+            lorentz_dimension: Dimension::Concrete(4),
             owner: NumeratorOwner::Vertex(7),
             legs: &legs[..2],
         };
@@ -8368,6 +8449,7 @@ mod tests {
     fn lowers_ufo_lorentz_tensors_to_spenso_structures() {
         let legs = tensor_test_legs();
         let instantiation = NumeratorInstantiation {
+            lorentz_dimension: Dimension::Concrete(4),
             owner: NumeratorOwner::Vertex(7),
             legs: &legs,
         };
@@ -8409,6 +8491,7 @@ mod tests {
 
         let legs = tensor_test_legs();
         let instantiation = NumeratorInstantiation {
+            lorentz_dimension: Dimension::Concrete(4),
             owner: NumeratorOwner::Edge(30),
             legs: &legs[2..],
         };
@@ -8465,6 +8548,7 @@ mod tests {
             leg.spin = 3;
         }
         let instantiation = NumeratorInstantiation {
+            lorentz_dimension: Dimension::Concrete(4),
             owner: NumeratorOwner::Vertex(7),
             legs: &legs,
         };
@@ -8560,6 +8644,7 @@ mod tests {
             color: 1,
         });
         let instantiation = NumeratorInstantiation {
+            lorentz_dimension: Dimension::Concrete(4),
             owner: NumeratorOwner::Vertex(7),
             legs: &legs,
         };
@@ -8602,6 +8687,7 @@ mod tests {
     fn lowers_ufo_charge_conjugation_and_rejects_invalid_arity() {
         let legs = tensor_test_legs();
         let instantiation = NumeratorInstantiation {
+            lorentz_dimension: Dimension::Concrete(4),
             owner: NumeratorOwner::Vertex(7),
             legs: &legs,
         };
@@ -8637,6 +8723,7 @@ mod tests {
     fn lowers_ufo_color_tensors_with_dual_representations() {
         let legs = tensor_test_legs();
         let instantiation = NumeratorInstantiation {
+            lorentz_dimension: Dimension::Concrete(4),
             owner: NumeratorOwner::Vertex(7),
             legs: &legs,
         };
@@ -8671,6 +8758,7 @@ mod tests {
             },
         ];
         let instantiation = NumeratorInstantiation {
+            lorentz_dimension: Dimension::Concrete(4),
             owner: NumeratorOwner::Edge(5),
             legs: &legs,
         };
@@ -8685,6 +8773,253 @@ mod tests {
             test_atom(
                 "spenso::gamma(spenso::bis(4,gammalooprs::hedge(11,1)),spenso::bis(4,gammalooprs::hedge(10,1)),spenso::mink(4,gammalooprs::edge(5,5)))*gammalooprs::Q(5,spenso::mink(4,gammalooprs::edge(5,5)))*spenso::g(spenso::mink(4,gammalooprs::edge(5,4)),spenso::mink(4,gammalooprs::edge(5,4)))"
             )
+        );
+    }
+
+    #[test]
+    fn dimension_local_traces_survive_source_admission() {
+        let legs = tensor_test_legs();
+        for dimension in [Dimension::from(symbol!("UFO::D")), Dimension::Concrete(4)] {
+            let instantiation = NumeratorInstantiation {
+                owner: NumeratorOwner::Vertex(7),
+                legs: &legs,
+                lorentz_dimension: dimension,
+            };
+            for (source, expected) in [
+                ("Metric(dummy(1),dummy(1))", dimension.to_symbolic()),
+                ("Identity(dummy(1),dummy(1))", Atom::num(4)),
+            ] {
+                let lowered = instantiation
+                    .instantiate(&test_atom(source), NumeratorSector::Spin)
+                    .unwrap();
+                let admitted = NumeratorInterface::admit(lowered, None).unwrap();
+                assert!(admitted.is_scalar());
+                assert_eq!(admitted.expression(), &expected);
+            }
+        }
+    }
+
+    #[test]
+    fn dimension_pslash_and_momentum_slots_are_constructed_before_admission() {
+        let legs = tensor_test_legs();
+        let instantiation = NumeratorInstantiation {
+            owner: NumeratorOwner::Edge(5),
+            legs: &legs,
+            lorentz_dimension: Dimension::from(symbol!("UFO::D")),
+        };
+        let source = instantiation
+            .instantiate(
+                &test_atom("PSlash(2,1)*Metric(dummy(4),dummy(4))"),
+                NumeratorSector::Spin,
+            )
+            .unwrap();
+        let admitted = NumeratorInterface::admit(source, None).unwrap();
+        let expected = NumeratorInterface::admit(
+            test_atom(
+                "D*spenso::gamma(spenso::bis(4,gammalooprs::hedge(41,1)),spenso::bis(4,gammalooprs::hedge(20,1)),spenso::mink(UFO::D,gammalooprs::edge(5,5)))*gammalooprs::Q(10,spenso::mink(UFO::D,gammalooprs::edge(5,5)))",
+            ),
+            None,
+        )
+        .unwrap();
+        assert_eq!(admitted, expected);
+        assert_eq!(
+            instantiation
+                .instantiate(&test_atom("P(3,3)"), NumeratorSector::Spin)
+                .unwrap(),
+            test_atom("-gammalooprs::Q(30,spenso::mink(UFO::D,gammalooprs::hedge(60,1)))"),
+        );
+        let covariant = instantiation
+            .instantiate(
+                &test_atom(
+                    "P(idx(1,1))*P(idx(1,2))/spenso::dot(P(spenso::mink(4)),P(spenso::mink(4)))",
+                ),
+                NumeratorSector::Spin,
+            )
+            .unwrap();
+        assert_eq!(
+            covariant,
+            test_atom(
+                "gammalooprs::Q(10,spenso::mink(UFO::D,gammalooprs::hedge(20,1)))*gammalooprs::Q(10,spenso::mink(UFO::D,gammalooprs::hedge(41,1)))/spenso::dot(gammalooprs::Q(10,spenso::mink(UFO::D)),gammalooprs::Q(10,spenso::mink(UFO::D)))"
+            ),
+        );
+        assert_eq!(
+            instantiation.lower_spin(covariant.clone()).unwrap(),
+            covariant
+        );
+    }
+
+    #[test]
+    fn dimension_gamma_sandwich_keeps_four_component_bispinors() {
+        let legs = tensor_test_legs();
+        let settings = AlgebraSettings {
+            gamma: Some(GammaSimplifySettings::canonical()),
+            ..Default::default()
+        };
+        for dimension in [Dimension::from(symbol!("UFO::D")), Dimension::Concrete(4)] {
+            let instantiation = NumeratorInstantiation {
+                owner: NumeratorOwner::Vertex(7),
+                legs: &legs,
+                lorentz_dimension: dimension,
+            };
+            let sandwich = instantiation
+                .instantiate(
+                    &test_atom("Gamma(dummy(1),2,dummy(2))*Gamma(3,dummy(2),dummy(3))*Gamma(dummy(1),dummy(3),1)"),
+                    NumeratorSector::Spin,
+                )
+                .unwrap();
+            let reduced = NumeratorInterface::admit(sandwich, None)
+                .unwrap()
+                .simplify_algebra(&settings)
+                .unwrap();
+            let gamma = instantiation
+                .instantiate(&test_atom("Gamma(3,2,1)"), NumeratorSector::Spin)
+                .unwrap();
+            let expected =
+                NumeratorInterface::admit((Atom::num(2) - dimension.to_symbolic()) * gamma, None)
+                    .unwrap()
+                    .simplify_algebra(&settings)
+                    .unwrap();
+            assert_eq!(
+                (reduced.expression() - expected.expression()).expand(),
+                Atom::Zero
+            );
+            assert_eq!(
+                reduced.structure().canonical(),
+                expected.structure().canonical()
+            );
+        }
+    }
+
+    #[test]
+    fn dimension_rules_preserve_defaults_and_isolate_cached_factors() {
+        let mut definition = serde_json::to_value(scalar_model()).unwrap();
+        definition["lorentz_structures"][0]["structure"] = json!("Metric(dummy(1),dummy(1))");
+        definition["propagators"][0]["numerator"] = json!("Metric(dummy(1),dummy(1))");
+        let model = Arc::new(Model::from_json(&definition.to_string()).unwrap());
+        let topology = FeynmanDiagram::from_dot(
+            Arc::clone(&model),
+            r#"digraph bubble {
+                ext [style=invis];
+                ext -> a [particle="phi"];
+                a -> b [particle="phi", lmb_id=0];
+                a -> b [particle="phi"];
+                b -> ext [particle="phi"];
+            }"#,
+        )
+        .unwrap();
+        let four = topology.apply_feynman_rules().unwrap();
+        assert_eq!(four.numerator().expression(), &test_atom("256*GC1^2"));
+        let symbolic = topology
+            .apply_feynman_rules_in_dimension(Dimension::from(symbol!("UFO::D")))
+            .unwrap();
+        assert_eq!(symbolic.numerator().expression(), &test_atom("D^4*GC1^2"));
+        assert_eq!(
+            symbolic.loop_momentum_basis(),
+            topology.loop_momentum_basis()
+        );
+        assert_eq!(symbolic.id(), topology.id());
+        assert_eq!(symbolic.overall_factor(), topology.overall_factor());
+        assert_eq!(
+            symbolic.numerator_prefactor(),
+            topology.numerator_prefactor()
+        );
+        assert_eq!(symbolic.projector(), topology.projector());
+        assert_eq!(
+            symbolic.apply_feynman_rules().unwrap().to_json().unwrap(),
+            four.to_json().unwrap(),
+        );
+        assert_eq!(
+            topology
+                .apply_feynman_rules_in_dimension(Dimension::Concrete(4))
+                .unwrap()
+                .to_json()
+                .unwrap(),
+            four.to_json().unwrap(),
+        );
+
+        let four_generator = Generator::new(Arc::clone(&model));
+        let d_generator = Generator::new_in_dimension(model, Dimension::from(symbol!("UFO::D")));
+        assert!(!Arc::ptr_eq(
+            &four_generator.numerators,
+            &d_generator.numerators
+        ));
+        for generator in [&four_generator, &d_generator, &d_generator.clone()] {
+            let diagram = generator.construct_numerators(topology.clone()).unwrap();
+            let expected = if generator.lorentz_dimension == Dimension::Concrete(4) {
+                &four
+            } else {
+                &symbolic
+            };
+            assert_eq!(diagram.to_json().unwrap(), expected.to_json().unwrap());
+        }
+        assert!(
+            !four_generator
+                .numerators
+                .interactions
+                .read()
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            !d_generator
+                .numerators
+                .propagators
+                .read()
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn dimension_rules_construct_fermion_vector_slots_and_keep_external_states_at_four() {
+        let topology = FeynmanDiagram::from_dot(
+            Arc::new(fermion_model()),
+            r#"digraph fermion_exchange {
+                ext [style=invis];
+                ext -> a [particle="f"];
+                a -> b [particle="f"];
+                b -> ext [particle="f"];
+                a -> ext [particle="a"];
+                b -> ext [particle="a"];
+            }"#,
+        )
+        .unwrap();
+        let four = topology.apply_feynman_rules().unwrap();
+        let dimension = Dimension::from(symbol!("UFO::D"));
+        let symbolic = topology
+            .apply_feynman_rules_in_dimension(dimension)
+            .unwrap();
+        let mut lorentz_slots = 0;
+        let mut spinor_slots = 0;
+        symbolic
+            .numerator()
+            .map_representation_dimensions(|representation, current| {
+                if representation == LibraryRep::from(Minkowski {}) {
+                    lorentz_slots += 1;
+                    assert_eq!(current, dimension.to_symbolic().as_view());
+                } else if representation == LibraryRep::from(Bispinor {}) {
+                    spinor_slots += 1;
+                    assert_eq!(current, Atom::num(4).as_view());
+                }
+                current.to_owned()
+            })
+            .unwrap();
+        assert!(lorentz_slots > 0 && spinor_slots > 0);
+        assert_eq!(
+            symbolic.external_state_projector().unwrap(),
+            four.external_state_projector().unwrap(),
+        );
+        assert_eq!(
+            symbolic.apply_feynman_rules().unwrap().to_json().unwrap(),
+            four.to_json().unwrap(),
+        );
+        assert_eq!(
+            symbolic
+                .apply_feynman_rules_in_dimension(dimension)
+                .unwrap()
+                .to_json()
+                .unwrap(),
+            symbolic.to_json().unwrap(),
         );
     }
 
@@ -8720,6 +9055,7 @@ mod tests {
             color: 8,
         });
         let instantiation = NumeratorInstantiation {
+            lorentz_dimension: Dimension::Concrete(4),
             owner: NumeratorOwner::Vertex(0),
             legs: &legs,
         };
@@ -8759,6 +9095,7 @@ mod tests {
         );
         legs[0].color = 3;
         let incompatible = NumeratorInstantiation {
+            lorentz_dimension: Dimension::Concrete(4),
             owner: NumeratorOwner::Vertex(0),
             legs: &legs,
         };
@@ -8795,6 +9132,7 @@ mod tests {
                 color,
             });
             let instantiation = NumeratorInstantiation {
+                lorentz_dimension: Dimension::Concrete(4),
                 owner: NumeratorOwner::Vertex(0),
                 legs: &legs,
             };
@@ -8847,6 +9185,7 @@ mod tests {
             assert_eq!(sum, Atom::num(2) * tensor);
         }
         let closed = NumeratorInstantiation {
+            lorentz_dimension: Dimension::Concrete(4),
             owner: NumeratorOwner::Vertex(3),
             legs: &[],
         };
@@ -8885,6 +9224,7 @@ mod tests {
             color: 8,
         });
         let instantiation = NumeratorInstantiation {
+            lorentz_dimension: Dimension::Concrete(4),
             owner: NumeratorOwner::Vertex(2),
             legs: &legs,
         };
@@ -8939,6 +9279,7 @@ mod tests {
             },
         ];
         let instantiation = NumeratorInstantiation {
+            lorentz_dimension: Dimension::Concrete(4),
             owner: NumeratorOwner::Vertex(9),
             legs: &legs,
         };
